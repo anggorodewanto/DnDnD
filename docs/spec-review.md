@@ -117,9 +117,9 @@ A character hitting 0 HP is unaddressed. The spec shows "bloodied" and "dead" to
 
 ## Minor Issues
 
-### 13. Diagonal Movement Rule
+### 13. Diagonal Movement Rule ✅ **Resolved**
 
-The spec states diagonals cost 5ft, "same as cardinal movement." This is the *optional simplified rule*. The PHB variant (5ft/10ft alternating) is more commonly used at tables. Should either acknowledge this is a deliberate simplification or make it configurable.
+- Diagonals cost 5ft — deliberate simplification for async play. PHB alternating 5/10 variant not supported.
 
 ### 14. Data Model Is Implied but Not Defined
 

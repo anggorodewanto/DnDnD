@@ -630,8 +630,9 @@ The DM dashboard is the correction mechanism. Discord messages are an append-onl
 
 ### Minor — Good to Decide
 
-**13. Diagonal Movement Rule**
-Spec uses the simplified rule (all diagonals = 5ft). The PHB variant (5ft/10ft alternating) is more commonly used. Should this be configurable or is the simplification intentional?
+**13. Diagonal Movement Rule** ✅
+
+Diagonals cost 5ft — same as cardinal movement. This is a deliberate simplification for async play, where easy mental math matters more than geometric precision. The PHB alternating 5/10 variant is not supported.
 
 **14. Data Model / Schema**
 No ERD or schema. Key relationships are ambiguous:
