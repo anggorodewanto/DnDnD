@@ -51,10 +51,19 @@ Discord is the **display and input terminal**, not the source of truth. The syst
 Enemies are assigned short stable IDs at the start of combat. Unique enemies get an abbreviated code; duplicates are numbered.
 
 ```
-Goblin #1  (G1)  HP: 12/12  [B4]
-Goblin #2  (G2)  HP:  8/12  [C6]
-Orc Shaman (OS)  HP: 28/28  [D5]
+Goblin #1  (G1)  [B4]  Uninjured
+Goblin #2  (G2)  [C6]  Bloodied
+Orc Shaman (OS)  [D5]  Uninjured
 ```
+
+**Enemy HP is hidden from players.** The bot never reveals exact HP numbers, AC values, or stat block details for enemies in any player-visible channel. Instead, enemies show a **descriptive health tier:**
+- **Uninjured** — 100% HP
+- **Scratched** — 75–99% HP
+- **Bloodied** — 25–74% HP (standard 5e convention: below half)
+- **Critical** — 1–24% HP
+- **Dying / Dead** — 0 HP
+
+The DM sees exact numbers in the dashboard. This preserves tension and prevents metagaming around kill thresholds.
 
 **Rules:**
 - IDs are stable for the entire encounter — if G1 dies, G2 stays G2
@@ -148,9 +157,9 @@ Bot output in `#combat-log`:
 ```
 🗺️  Aria moves from C3 → D4  (25ft used of 30ft)
 ⚔️  Aria attacks Goblin #1 with Longsword (attack 1 of 2)
-    → Roll to hit: 19 (14 + 5) vs AC 13 — HIT
+    → Roll to hit: 19 (14 + 5) — HIT
     → Damage: 9 slashing
-    → Goblin #1: 12 HP → 3 HP  ⚠️ Bloodied
+    → Goblin #1 is now Bloodied
     ℹ️  1 attack remaining
 ```
 
@@ -604,8 +613,20 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 - ~~Vertical dimension: flying, multi-level terrain, elevation~~ **Resolved** — tokens carry altitude (integer feet), displayed as label suffix (e.g., `AR↑30`). 3D distance for range checks. See "Altitude & Elevation" section.
 - ~~Map creation/import workflow for the DM~~ **Resolved** — blank grid + terrain/wall tools + image import (Phase 1), tileset painting + Tiled import (Phase 2). Maps stored as Tiled-compatible JSON. See "Map Creation & Authoring" section.
 
-**12. Rollback / Undo**
-No mistake recovery. Can the DM undo the last action, revert a turn, or correct a misapplied rule? Since Discord is read-only output, corrections need a system-level mechanism.
+**12. Rollback / Undo** ✅
+
+The DM dashboard is the correction mechanism. Discord messages are an append-only log — corrections are posted as new messages, not edits or deletions.
+
+**Action log:** every state mutation (HP change, position move, condition applied/removed, spell slot spent, etc.) is recorded in an append-only `action_log` table (`action_id`, `turn_id`, `timestamp`, `action_type`, `before_state`, `after_state`). This enables single-step undo and provides an audit trail.
+
+**DM correction tools (dashboard):**
+- **Undo last action** — reverts the most recent mutation by restoring its `before_state`. Only the DM can undo. Can be applied repeatedly to walk back multiple steps within the current turn.
+- **Manual state override** — DM can directly edit any value at any time: set HP, move a token, add/remove conditions, adjust spell slots, change initiative order. Overrides go through the same per-turn lock as normal commands.
+- **Discord correction message** — every undo or manual override posts a correction to `#combat-log`: "⚠️ **DM Correction:** Goblin #1 HP adjusted (resistance to fire was missed)". Original messages are never edited or deleted.
+
+**Not in MVP:**
+- Full turn rewind (reverting an entire multi-action turn across multiple affected creatures is complex and error-prone — DM uses manual overrides instead)
+- Player-initiated undo (all corrections are DM-only)
 
 ### Minor — Good to Decide
 

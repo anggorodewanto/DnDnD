@@ -105,14 +105,13 @@ A character hitting 0 HP is unaddressed. The spec shows "bloodied" and "dead" to
 - **Embed character limits** — Resolved: bot uses plain text messages for most output; uploads text file attachments for very large output instead of embeds.
 - **Bot permissions** — Resolved: required permissions documented (`Send Messages`, `Attach Files`, `Manage Messages`, `Use Application Commands`, `Mention Everyone`). `/setup` command auto-creates channel structure with permission overrides.
 
-### 12. Rollback / Undo
+### 12. Rollback / Undo ✅ **Resolved**
 
-No mention of mistake recovery. Can the DM:
-- Undo the last action?
-- Revert a full turn?
-- Correct a misapplied rule?
-
-Since "Discord is read-only output," you can't just delete a message and pretend it didn't happen. The system needs a correction mechanism.
+- **Action log** — append-only table records every state mutation with `before_state`/`after_state`, enabling single-step undo and audit trail.
+- **Undo last action** — DM can revert the most recent mutation from the dashboard. Repeatable to walk back multiple steps within a turn.
+- **Manual state override** — DM can directly edit any value (HP, position, conditions, spell slots) at any time via dashboard.
+- **Discord corrections** — overrides post a correction message to `#combat-log`; original messages are never edited or deleted.
+- **No full turn rewind in MVP** — DM uses manual overrides instead. No player-initiated undo.
 
 ---
 
