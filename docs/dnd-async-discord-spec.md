@@ -233,8 +233,24 @@ The following items need resolution before or during implementation. Refer to th
 
 ### Critical — Resolve Before Building
 
-**1. Turn Timeout / AFK Handling**
-The system is async, but there's no mechanism for when a player simply doesn't take their turn. Needs: timeout duration (e.g., 24h), reminder pings, DM override to skip/delay, and what happens to initiative order during prolonged absence.
+**1. Turn Timeout / AFK Handling** ✅
+
+Turn timeout: **24 hours**, DM-configurable per campaign (1h–72h range).
+
+**Escalation:**
+- Reminder ping at 50% of timeout (e.g., 12h) in `#your-turn`
+- Final warning at 75% (e.g., 18h) — "your turn will be skipped in 6 hours"
+- Auto-skip at 100% — player takes the **Dodge action with no movement**
+
+**DM manual overrides (via dashboard):**
+- **Skip now** — immediately advance past a player
+- **Extend timer** — grant more time without changing the campaign default
+- **Pause combat** — freeze all timers (real life happens)
+
+**Prolonged absence:**
+- After 3 consecutive auto-skips, the character is flagged as "absent" in the dashboard
+- DM decides: auto-pilot the character, narrate a retreat, or remove from initiative
+- Initiative slot stays reserved so the player can return seamlessly
 
 **2. Full Turn Action Model**
 A 5e turn can include movement, action, bonus action, reaction, and free object interaction. The spec only models `/move` + one action. Specifically:
