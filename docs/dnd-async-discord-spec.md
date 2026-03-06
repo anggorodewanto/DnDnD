@@ -312,6 +312,7 @@ Each command validates against remaining resources. If a player tries to use som
 | `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
 | `/deathsave` | `/deathsave` | Roll a death saving throw (only available while dying at 0 HP) |
 | `/done` | `/done` | Explicitly end turn, advance to next in initiative |
+| `/register` | `/register Thorn` | Link your Discord account to a character (DM must approve) |
 
 **Ending a turn:**
 - **Explicit:** player sends `/done`
@@ -411,11 +412,29 @@ When a character drops to 0 HP, they fall **unconscious** and begin making death
 
 **Token states (updated):** normal / bloodied / **dying** / **stable** / dead
 
-**6. Authentication & Authorization**
-- How does the system map a Discord user to a character?
-- How is out-of-turn command submission prevented?
-- How does the DM authenticate to the web dashboard?
-- Can one bot instance serve multiple campaigns / Discord servers?
+**6. Authentication & Authorization** ✅
+
+**Discord user → Character mapping:**
+- Player runs `/register <character_name>` in the Discord server
+- Bot creates a `discord_user_id → character_id` mapping in the database
+- DM confirms/approves the registration via the dashboard
+- One player = one character per campaign (DM can override in dashboard if needed)
+
+**Out-of-turn prevention:**
+- On every command (`/move`, `/attack`, `/cast`, `/bonus`, `/interact`, `/action`, `/done`, `/deathsave`), the backend validates that the requesting player's Discord user ID matches the active turn's character owner
+- If not their turn, bot replies: "It's not your turn. Current turn: **[Character]** (@player)"
+- Exception: `/reaction` can be submitted at any time — it's a declaration, not a turn action
+
+**DM dashboard authentication:**
+- Discord OAuth2 — DM logs in with their Discord account
+- System verifies the authenticated Discord user ID matches the campaign's designated DM
+- No separate passwords or accounts to manage
+
+**Multi-campaign support:**
+- One bot instance serves multiple Discord servers (multi-tenant)
+- All database queries are scoped by `guild_id` / `campaign_id`
+- One campaign per Discord server (keeps channel structure clean and unambiguous)
+- Multiple campaigns in a single server is not MVP scope
 
 ### Significant — Will Hit During Development
 
