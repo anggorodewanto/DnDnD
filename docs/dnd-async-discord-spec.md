@@ -191,12 +191,13 @@ The DM manages everything through a web app — they never type raw commands int
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| Discord Bot | discord.js (Node) | Bot logic, slash commands, message editing |
-| Backend API | Node/Express or FastAPI | Game state management, command processing |
-| Database | PostgreSQL + Prisma | Characters, campaigns, combat state, maps |
-| DM Web App | React (Next.js) | DM dashboard UI |
-| Map Rendering | Node Canvas or Python Pillow | Server-side PNG generation |
-| Real-time Sync | WebSockets | Live DM dashboard ↔ backend updates |
+| Discord Bot | [discordgo](https://github.com/bwmarrin/discordgo) | Bot logic, slash commands, message editing |
+| Backend API | Go stdlib `net/http` + Chi router | Game state management, command processing |
+| Database | PostgreSQL + [sqlc](https://sqlc.dev) | Type-safe Go from raw SQL — characters, campaigns, combat state, maps |
+| DM Web App | Vanilla JS + Go templates (`html/template`) | DM dashboard UI, served by the Go backend |
+| Map Rendering | Go `image/draw` stdlib + [gg](https://github.com/fogleman/gg) | Server-side PNG generation for grid maps |
+| Real-time Sync | [nhooyr/websocket](https://github.com/nhooyr/websocket) | Live DM dashboard ↔ backend updates |
+| Deployment | Single Go binary (dashboard embedded via `embed.FS`) | One artifact to deploy |
 
 ---
 
@@ -365,5 +366,6 @@ No ERD or schema. Key relationships are ambiguous:
 **15. Non-Combat Gameplay (Future)**
 Even for future planning, no mention of: skill/ability checks, social encounters, exploration/travel, short/long rest mechanics, leveling up.
 
-**16. Tech Stack Decision**
-"Node/Express **or** FastAPI" — this needs to be a firm choice. It affects map rendering (Node Canvas vs Pillow), ORM, and deployment. Mixing Node bot + Python backend adds operational complexity.
+**16. Tech Stack Decision** ✅
+
+Go for everything. discordgo for the bot, stdlib `net/http` + Chi for the API, sqlc for type-safe database access, Go `image` stdlib for map rendering. DM dashboard is vanilla JS + Go `html/template`, embedded into the binary via `embed.FS` for single-artifact deployment. No Node, no Python, no ORM magic.
