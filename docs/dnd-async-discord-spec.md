@@ -167,7 +167,7 @@ DM reviews, resolves any queued actions in dashboard
 - Grid images are generated **server-side** as PNGs on every state change
 - Bot **appends a new message** in `#combat-map` (dedicated channel) — creates a visual combat log that players can scroll through to see how the fight unfolded
 - Token labels display enemy IDs (G1, OS, etc.) and player initials
-- Token visual states: normal / bloodied / dead
+- Token visual states: normal / bloodied / dying / stable / dead
 - Tile size: 32–48px per square to stay within Discord's 8MB file limit
 - Obstacles and difficult terrain are drawn as part of the base map layer
 
@@ -310,6 +310,7 @@ Each command validates against remaining resources. If a player tries to use som
 | `/interact` | `/interact draw longsword` | Free object interaction — routed to `#dm-queue` for DM resolution |
 | `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent — persists until used, cancelled, or encounter ends. Routed to `#dm-queue` |
 | `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
+| `/deathsave` | `/deathsave` | Roll a death saving throw (only available while dying at 0 HP) |
 | `/done` | `/done` | Explicitly end turn, advance to next in initiative |
 
 **Ending a turn:**
@@ -368,13 +369,47 @@ Each enemy takes its own turn in initiative order. The DM resolves enemy turns t
 
 **Complexity:** low — suggested move reuses pathfinding already needed for `/move` validation, suggested target is nearest-by-distance sort, suggested action is the first entry in the creature's stat block. It's pre-filling form fields, not AI.
 
-**5. Death Saves & Unconsciousness (0 HP)**
-No mechanic for when a character drops to 0 HP:
-- Death saving throws on the downed player's turn
-- Tracking successes/failures
-- Stabilization and healing from 0 HP
-- Instant death from massive damage
-- Token state: "bloodied" and "dead" exist, but "dying/unconscious" does not
+**5. Death Saves & Unconsciousness (0 HP)** ✅
+
+When a character drops to 0 HP, they fall **unconscious** and begin making death saving throws. The system fully tracks this state.
+
+**Dropping to 0 HP:**
+- Character status becomes **Dying** (unconscious, prone)
+- Concentration is broken automatically
+- All commands except `/deathsave` are blocked on their turn
+- Token state changes to "dying" on the map (distinct visual from bloodied/dead)
+
+**Instant death check:**
+- On every damage application, the system checks: if damage remaining after reaching 0 HP ≥ character's max HP, the character dies instantly
+- Token state → "dead", no death saves occur
+
+**Death saving throws:**
+- When initiative reaches a dying player, the bot pings them in `#your-turn` to send `/deathsave`
+- Player sends `/deathsave` → system rolls d20 (no modifiers unless granted by a feature like Diamond Soul)
+- ≥10 = success, <10 = failure
+- **Nat 20** → regain 1 HP, conscious, still prone. Death save tallies reset
+- **Nat 1** → counts as 2 failures
+- 3 successes → **stabilized** (unconscious at 0 HP, no more death saves; token state → "stable")
+- 3 failures → **dead** (token state → "dead")
+- Rolls and results are posted **publicly** in `#combat-log`
+- If the player doesn't send `/deathsave` before the AFK timeout, the system auto-rolls for them
+
+**Taking damage while at 0 HP:**
+- Each hit = 1 automatic death save failure
+- Critical hit (attacker within 5ft of unconscious target) = 2 failures
+- System auto-applies these when damage targets a dying character
+
+**Stabilization:**
+- 3 death save successes, or Medicine check (DC 10), or Spare the Dying cantrip
+- Stable characters remain unconscious at 0 HP, make no further death saves
+- Regain 1 HP after 1d4 hours (post-combat only)
+
+**Healing from 0 HP:**
+- Any healing (Healing Word, potion, Lay on Hands, etc.) sets HP to 0 + healing amount
+- Status → conscious, still **prone** (costs half movement to stand)
+- All death save successes and failures reset to zero
+
+**Token states (updated):** normal / bloodied / **dying** / **stable** / dead
 
 **6. Authentication & Authorization**
 - How does the system map a Discord user to a character?
