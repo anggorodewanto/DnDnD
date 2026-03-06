@@ -93,11 +93,14 @@ If invalid, the bot replies with a specific reason in `#combat-log` before DM in
 
 | Command | Example | Description |
 |---|---|---|
-| `/move` | `/move D4` | Move token to grid coordinate |
-| `/attack` | `/attack G2` | Attack a target by ID |
-| `/cast` | `/cast fireball G1 G2` | Cast a spell, optionally with targets |
+| `/move` | `/move D4` | Move token to grid coordinate (repeatable for split movement) |
+| `/attack` | `/attack G2` | Attack a target by ID (repeatable for Extra Attack) |
+| `/cast` | `/cast fireball D5` | Cast a spell, with target coordinate or enemy ID |
+| `/bonus` | `/bonus cunning-action dash` | Bonus action |
 | `/shove` | `/shove OS` | Shove a target by ID |
+| `/interact` | `/interact draw longsword` | Free object interaction, routed to DM |
 | `/action` | `/action flip the table at B3 for cover` | Freeform action, routed to DM |
+| `/done` | `/done` | End turn, advance initiative |
 
 ### Freeform Actions — `/action`
 
@@ -252,12 +255,36 @@ Turn timeout: **24 hours**, DM-configurable per campaign (1h–72h range).
 - DM decides: auto-pilot the character, narrate a retreat, or remove from initiative
 - Initiative slot stays reserved so the player can return seamlessly
 
-**2. Full Turn Action Model**
-A 5e turn can include movement, action, bonus action, reaction, and free object interaction. The spec only models `/move` + one action. Specifically:
-- Can a player split movement (move → attack → move again)?
-- How are bonus actions handled? (Cunning Action, Spiritual Weapon, Flurry of Blows)
-- How are free object interactions handled? (draw weapon, open door)
-- Should a player submit all parts of their turn at once, or sequentially? When is a turn "done"?
+**2. Full Turn Action Model** ✅
+
+Turns are **sequential** — players send commands one at a time and see results before deciding their next action.
+
+**Turn resources tracked by the backend:**
+- Movement (feet remaining out of speed)
+- Action (used / not used)
+- Bonus action (used / not used)
+- Free object interaction (used / not used)
+
+Each command validates against remaining resources. If a player tries to use something they've already spent, the bot replies with a specific error (e.g., "You've already used your action this turn").
+
+**Commands (updated):**
+
+| Command | Example | Description |
+|---|---|---|
+| `/move` | `/move D4` | Move to coordinate. Can be used multiple times (split movement) as long as total ≤ speed |
+| `/attack` | `/attack G1` | Attack a target. Repeatable for Extra Attack (backend tracks attacks remaining by class) |
+| `/cast` | `/cast fireball D5` | Cast a spell (uses action or bonus action depending on spell) |
+| `/bonus` | `/bonus cunning-action dash` | Bonus action |
+| `/interact` | `/interact draw longsword` | Free object interaction — routed to `#dm-queue` for DM resolution |
+| `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
+| `/done` | `/done` | Explicitly end turn, advance to next in initiative |
+
+**Ending a turn:**
+- **Explicit:** player sends `/done`
+- **DM override:** DM can end any player's turn from the dashboard at any time
+- **Timeout:** if the player goes silent mid-turn, the #1 timeout system applies — remaining unused actions are forfeited
+
+**Split movement** works naturally: `/move D4` → `/attack G1` → `/move E5` — each `/move` deducts from remaining movement.
 
 **3. Reactions**
 Reactions interrupt other creatures' turns and are the hardest async D&D problem. Unaddressed cases:
