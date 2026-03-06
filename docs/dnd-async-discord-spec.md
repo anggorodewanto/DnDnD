@@ -164,11 +164,41 @@ DM reviews, resolves any queued actions in dashboard
 ## Map Rendering
 
 - Grid images are generated **server-side** as PNGs on every state change
-- Bot **edits the existing message** in `#combat-map` (no new message spam)
+- Bot **appends a new message** in `#combat-map` (dedicated channel) — creates a visual combat log that players can scroll through to see how the fight unfolded
 - Token labels display enemy IDs (G1, OS, etc.) and player initials
 - Token visual states: normal / bloodied / dead
 - Tile size: 32–48px per square to stay within Discord's 8MB file limit
 - Obstacles and difficult terrain are drawn as part of the base map layer
+
+### Dynamic Fog of War
+
+Fog of war is computed automatically based on **shared party vision** — the union of all player tokens' visible cells. One map image is rendered per update (no per-player maps).
+
+**How it works:**
+1. Each token carries vision properties: `base_vision_ft`, `darkvision_ft`, `blindsight_ft`, `truesight_ft`
+2. Server runs **shadowcasting** from each player token's position against walls and obstacles
+3. Visible cells for all party tokens are unioned → the "party known" area
+4. Previously seen but currently out-of-range cells are rendered as **dim/greyed out** (explored but not active)
+5. Never-seen cells are **fully fogged** (black)
+6. Enemy tokens in fogged cells are **hidden**; enemies in dim cells are visible but greyed
+
+**Vision sources & modifiers:**
+- **Darkvision** (60/120/300ft by race/feat) — darkness → dim, dim → normal
+- **Light sources** — torches (20ft bright + 20ft dim), Light cantrip, Daylight spell — added as point lights on the grid
+- **Blindsight / Tremorsense / Truesight** — ignore fog/obstacles within range
+- **Devil's Sight** — sees through magical darkness
+
+**Obscurement zones (DM-placed on grid):**
+- `Darkness` spell → blocks all vision including darkvision (except Devil's Sight)
+- `Fog Cloud` → heavily obscured area, blocks line of sight
+- `Wall of Fire / Stone` → blocks line of sight through the wall
+- Heavy foliage / smoke → light or heavy obscurement
+
+**Rendering layers (bottom to top):**
+1. Base map (terrain, walls, obstacles)
+2. Fog overlay (black for unknown, semi-transparent grey for explored-but-not-visible)
+3. Tokens (only drawn if their cell is in the party's current visible set or explored set)
+4. Grid lines and labels
 
 ---
 
@@ -337,14 +367,14 @@ No mechanic for when a character drops to 0 HP:
 - Needs: command queuing, optimistic locking, or turn-state locking
 
 **10. Discord API Constraints**
-- Message edit rate limits (~5 edits/5s/channel) — rapid state changes could bottleneck
+- ~~Message edit rate limits (~5 edits/5s/channel) — rapid state changes could bottleneck~~ **Mitigated** — map images are appended as new messages in `#combat-map` instead of editing, avoiding edit rate limits
 - Slash command registration limits (100 global) and propagation delays
 - Embed character limits (6000 chars) — large parties could overflow initiative tracker or character cards
 - Required bot permissions and server setup not documented
 
 **11. Map & Grid Limitations**
 - Grid size: A–Z = 26 columns max; is this enough for large outdoor maps?
-- Fog of war: can players see the entire map? Hidden enemies?
+- ~~Fog of war: can players see the entire map? Hidden enemies?~~ **Resolved** — dynamic fog of war using shared party vision (union of all player tokens' shadowcast results). Enemies in fogged cells are hidden. See "Dynamic Fog of War" section.
 - Vertical dimension: flying, multi-level terrain, elevation
 - Map creation/import workflow for the DM
 
