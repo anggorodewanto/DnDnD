@@ -94,13 +94,14 @@ If invalid, the bot replies with a specific reason in `#combat-log` before DM in
 | Command | Example | Description |
 |---|---|---|
 | `/move` | `/move D4` | Move token to grid coordinate (repeatable for split movement) |
-| `/attack` | `/attack G2` | Attack a target by ID (repeatable for Extra Attack) |
+| `/attack` | `/attack G2` or `/attack G2 handaxe` | Attack a target by ID, optionally specifying a weapon (defaults to equipped weapon). Repeatable for Extra Attack — one `/attack` per swing |
 | `/cast` | `/cast fireball D5` | Cast a spell, with target coordinate or enemy ID |
 | `/bonus` | `/bonus cunning-action dash` | Bonus action |
 | `/shove` | `/shove OS` | Shove a target by ID |
 | `/reaction` | `/reaction Shield if I get hit` | Pre-declare a reaction intent, posted to `#dm-queue` for DM to resolve |
 | `/interact` | `/interact draw longsword` | Free object interaction, routed to DM |
 | `/action` | `/action flip the table at B3 for cover` | Freeform action, routed to DM |
+| `/equip` | `/equip longsword` | Set primary weapon (persists between turns) |
 | `/done` | `/done` | End turn, advance initiative |
 
 ### Freeform Actions — `/action`
@@ -118,7 +119,7 @@ These post to `#dm-queue`. The DM resolves them in the dashboard, applies any st
 
 ## A Full Player Turn — Example
 
-Player inputs:
+Player inputs (level 5 Fighter with longsword equipped, 2 attacks per action):
 ```
 /move D4
 /attack G1
@@ -127,10 +128,22 @@ Player inputs:
 Bot output in `#combat-log`:
 ```
 🗺️  Aria moves from C3 → D4  (25ft used of 30ft)
-⚔️  Aria attacks Goblin #1
+⚔️  Aria attacks Goblin #1 with Longsword (attack 1 of 2)
     → Roll to hit: 19 (14 + 5) vs AC 13 — HIT
     → Damage: 9 slashing
     → Goblin #1: 12 HP → 3 HP  ⚠️ Bloodied
+    ℹ️  1 attack remaining
+```
+
+Player sees the result and decides to finish off G1 or switch targets:
+```
+/attack G2
+```
+
+```
+⚔️  Aria attacks Goblin #2 with Longsword (attack 2 of 2)
+    → Roll to hit: 11 (6 + 5) vs AC 13 — MISS
+    ℹ️  No attacks remaining
 ```
 
 Then:
@@ -304,13 +317,14 @@ Each command validates against remaining resources. If a player tries to use som
 | Command | Example | Description |
 |---|---|---|
 | `/move` | `/move D4` | Move to coordinate. Can be used multiple times (split movement) as long as total ≤ speed |
-| `/attack` | `/attack G1` | Attack a target. Repeatable for Extra Attack (backend tracks attacks remaining by class) |
+| `/attack` | `/attack G1` or `/attack G1 handaxe --gwm` | Attack a target with equipped weapon (or specify weapon). One `/attack` per swing; backend tracks attacks remaining by class. Supports flags: `--gwm`, `--sharpshooter`, `--reckless` |
 | `/cast` | `/cast fireball D5` | Cast a spell (uses action or bonus action depending on spell) |
 | `/bonus` | `/bonus cunning-action dash` | Bonus action |
 | `/interact` | `/interact draw longsword` | Free object interaction — routed to `#dm-queue` for DM resolution |
 | `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent — persists until used, cancelled, or encounter ends. Routed to `#dm-queue` |
 | `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
 | `/deathsave` | `/deathsave` | Roll a death saving throw (only available while dying at 0 HP) |
+| `/equip` | `/equip longsword` | Set primary weapon (persists between turns, usable any time) |
 | `/done` | `/done` | Explicitly end turn, advance to next in initiative |
 | `/register` | `/register Thorn` | Link your Discord account to a character (DM must approve) |
 
@@ -450,11 +464,32 @@ When a character drops to 0 HP, they fall **unconscious** and begin making death
 - **Spell slots** — tracked and enforced in MVP. Backend knows each character's slots per level, deducts on cast, rejects `/cast` if no slots remaining. `/cast` without slot management would break caster balance.
 - **Spell range** — enforced by backend. Spell data includes range; backend validates target is within range. Touch spells require adjacency (5ft), self spells need no target.
 
-**8. `/attack` Weapon & Option Selection**
-- Multiple weapons — `/attack G2` doesn't specify *with what*
-- Extra Attack — fighters get 2–4 attacks per action
-- Attack modifiers — Great Weapon Master (-5/+10), Sharpshooter, Reckless Attack
-- Advantage/disadvantage — does the system auto-detect conditions (prone, flanking, invisible)?
+**8. `/attack` Weapon & Option Selection** ✅
+
+**Command syntax:** `/attack <target> [weapon] [--flags]`
+
+Examples:
+- `/attack G2` — attack with equipped weapon
+- `/attack G2 handaxe` — attack with a specific weapon
+- `/attack G2 --gwm` — attack with Great Weapon Master (-5 to hit, +10 damage)
+- `/attack G2 longbow --sharpshooter` — attack with longbow using Sharpshooter (-5/+10)
+- `/attack G1 --reckless` — Reckless Attack (advantage, enemies get advantage on you until next turn)
+
+**Weapon selection** — each character has an equipped/primary weapon (set during character setup or via `/equip <weapon>`). `/attack G2` uses the equipped weapon; `/attack G2 handaxe` overrides for that swing. Backend validates the character actually has the specified weapon.
+
+**Extra Attack** — resolved one swing at a time. Each `/attack` command resolves a single attack roll. The backend tracks attacks remaining per turn based on class/level (e.g., Fighter 5 = 2, Fighter 11 = 3, Fighter 20 = 4). After each `/attack`, the bot reports remaining attacks. The player can retarget freely between swings — see the result of attack 1 before choosing where to aim attack 2. If the player sends `/done` with unused attacks, those attacks are forfeited.
+
+**Attack modifier flags** — opt-in per swing:
+- `--gwm` — Great Weapon Master: -5 to hit, +10 damage. Backend validates a heavy melee weapon is equipped.
+- `--sharpshooter` — Sharpshooter: -5 to hit, +10 damage. Backend validates a ranged weapon is being used.
+- `--reckless` — Reckless Attack (Barbarian): grants advantage on all melee STR attacks this turn, but enemies get advantage on attacks against you until your next turn. Only valid on the first attack of the turn. Backend validates Barbarian class.
+- Invalid flags return an error explaining why (e.g., "GWM requires a heavy weapon; Longsword is not heavy").
+
+**Advantage/disadvantage** — auto-detected from tracked conditions:
+- **Auto-detected (system knows):** target is prone (melee adv / ranged disadv), attacker is prone (disadv), target is restrained/stunned/paralyzed/unconscious (adv), attacker is restrained/blinded/poisoned (disadv), Reckless Attack flag (adv), attacker/target invisible (adv/disadv as appropriate)
+- **Not auto-detected in MVP:** flanking (optional rule, not all tables use it — may add as campaign setting toggle later)
+- **DM override:** DM can force advantage or disadvantage via the dashboard for situations the system can't detect (creative tactics, terrain, narrative). Override posts to `#combat-log`: "DM grants advantage to Kael's attack (high ground)."
+- **Stacking:** when both advantage and disadvantage apply from any combination of sources, they cancel out per 5e rules — system rolls normally regardless of how many sources of each exist.
 
 **9. Concurrency & Race Conditions**
 - Player submits two commands before the first resolves

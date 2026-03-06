@@ -78,12 +78,12 @@ A character hitting 0 HP is unaddressed. The spec shows "bloodied" and "dead" to
 - **Spell slots** — tracked and enforced in MVP (not deferred to future phase)
 - **Spell range** — enforced by backend using spell range data
 
-### 8. `/attack` Lacks Weapon/Option Selection
+### 8. `/attack` Lacks Weapon/Option Selection ✅ **Resolved**
 
-- Multiple weapons — `/attack G2` doesn't specify *with what*.
-- **Extra Attack** — Fighters, monks, etc. get multiple attacks per action. How?
-- Attack modifiers — Great Weapon Master, Sharpshooter, Reckless Attack.
-- **Advantage/disadvantage** — Does the system auto-detect conditions (prone, flanking, invisible)?
+- **Weapon selection** — default equipped weapon + optional override: `/attack G2` or `/attack G2 handaxe`. Primary weapon set via `/equip`.
+- **Extra Attack** — one `/attack` per swing. Backend tracks attacks remaining by class/level. Player sees result of each attack before choosing the next target/weapon. Unused attacks forfeited on `/done`.
+- **Attack modifiers** — opt-in flags per swing: `--gwm`, `--sharpshooter`, `--reckless`. Backend validates eligibility (weapon type, class).
+- **Advantage/disadvantage** — auto-detected from tracked conditions (prone, restrained, stunned, paralyzed, unconscious, blinded, poisoned, invisible, Reckless Attack). No auto-flanking in MVP. DM override via dashboard for edge cases. Multiple sources of adv/disadv cancel per 5e rules.
 
 ### 9. Concurrency and Race Conditions
 
