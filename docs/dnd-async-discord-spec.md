@@ -63,7 +63,9 @@ Orc Shaman (OS)  HP: 28/28  [D5]
 
 ### Grid Movement — Chess Notation
 
-The map uses a standard chess-style coordinate grid: **columns as letters (A–Z), rows as numbers**.
+The map uses a standard chess-style coordinate grid: **columns as letters, rows as numbers**.
+
+Columns use spreadsheet-style lettering: A–Z for the first 26 columns, then AA, AB, … AZ, BA, BB, … for larger maps. This allows grids of any practical size while keeping coordinates human-readable.
 
 ```
   A   B   C   D   E   F
@@ -78,6 +80,7 @@ Movement is expressed as a single destination coordinate:
 ```
 /move D4
 /move E6
+/move AA12     ← valid on maps wider than 26 columns
 ```
 
 The backend validates every movement command:
@@ -88,6 +91,22 @@ The backend validates every movement command:
 If invalid, the bot replies with a specific reason in `#combat-log` before DM intervention is needed.
 
 **Diagonal movement:** Follows 5e standard rules — diagonals cost 5ft, same as cardinal movement. This is enforced by the validator.
+
+### Altitude & Elevation
+
+Tokens carry an **altitude** value (integer, in feet, default 0) representing height above the ground plane.
+
+```
+/fly 30        ← rise to 30ft altitude (costs 30ft of movement)
+/fly 0         ← descend to ground level
+/move D4       ← horizontal movement while maintaining current altitude
+```
+
+- Ascending and descending costs movement **1:1** (flying 30ft up costs 30ft of movement speed)
+- A token's altitude is displayed as a **suffix on the map label**: `AR↑30` means Aria at 30ft altitude
+- **Distance calculation** uses 3D Euclidean distance (rounded to nearest 5ft) for range checks — a creature 20ft away horizontally at 30ft altitude is ~36ft away (rounded to 35ft)
+- Tokens at different altitudes **do not block** each other's ground tile — multiple tokens can occupy the same column at different heights
+- Falling: if a flying creature is knocked prone or loses its fly speed, it falls. Fall damage is 1d6 per 10ft fallen (standard 5e rules), applied automatically
 
 ### Structured Commands
 
@@ -214,6 +233,46 @@ Fog of war is computed automatically based on **shared party vision** — the un
 3. Tokens (only drawn if their cell is in the party's current visible set or explored set)
 4. Grid lines and labels
 
+### Map Creation & Authoring
+
+The DM creates and edits maps through the **Svelte-based map editor** in the web dashboard.
+
+**Creating a new map:**
+1. DM specifies grid dimensions (width × height in squares, e.g., 30×20)
+2. Editor opens a blank grid with the default terrain (open ground)
+3. DM paints terrain, walls, and obstacles using the map-making tools (see below)
+4. DM optionally imports a background image to use as a visual underlay
+5. Map is saved and available for use in encounters
+
+**Map-making tools (in the Svelte editor):**
+- **Terrain brush** — paint terrain types per tile: open ground, difficult terrain, water, lava, pit, etc.
+- **Wall tool** — draw walls along tile edges (not tile centers). Walls block movement and line of sight for fog of war
+- **Object placement** — place doors (open/closed/locked), traps, furniture, and other interactables. Objects carry custom properties (e.g., a door's DC to pick the lock)
+- **Elevation painting** — set ground elevation per tile (for cliffs, raised platforms, stairs)
+- **Spawn zones** — mark areas where player tokens and enemy tokens are placed at encounter start
+
+**Image import:**
+- DM can upload a pre-made battle map image (PNG/JPG) as a **background layer** beneath the grid
+- The grid is overlaid on top with adjustable opacity so hand-drawn or purchased maps can be used
+- Walls and terrain still need to be defined with the tools (the image is purely visual; the server needs structured data for pathfinding and fog of war)
+
+**Storage format — Tiled-compatible JSON:**
+
+Maps are stored internally using a format based on the **Tiled map editor's JSON specification** (`.tmj`). This provides:
+- **Tile layers** — terrain types stored as tile GIDs referencing a tileset
+- **Object layers** — walls, doors, spawn points, traps stored as typed objects with custom properties
+- **Tileset references** — external `.tsj` files defining tile images and their properties (terrain type, blocks-movement, blocks-sight, etc.)
+- **Custom properties** — arbitrary key-value data on any element (tile, object, layer)
+
+Adopting the Tiled JSON format means:
+- DMs can **import maps created in the Tiled desktop editor** (a free, open-source tool widely used in the TTRPG and game dev communities)
+- Future support for **tileset-based map painting** — DMs load a tileset (dungeon tiles, forest tiles, cave tiles) and paint maps tile-by-tile, like in game development
+- The Go backend parses maps using [`github.com/lafriks/go-tiled`](https://github.com/lafriks/go-tiled) for TMX or standard `encoding/json` for the JSON variant
+- Maps export cleanly for backup, sharing between campaigns, or community map packs
+
+**Phase 1 (MVP):** blank grid + terrain/wall tools + image import. Maps stored as Tiled-compatible JSON.
+**Phase 2:** tileset support — load `.tsj` tilesets, paint with tile brushes, import full `.tmj` maps from Tiled desktop.
+
 ---
 
 ## DM Dashboard
@@ -226,7 +285,8 @@ The DM manages everything through a web app — they never type raw commands int
 - **Turn Queue** — shows current initiative order; "End Turn" auto-advances and pings the next player
 - **Action Resolver** — view `#dm-queue` items, apply outcomes with a click
 - **Stat Block Library** — preloaded monster stat blocks, reusable across encounters
-- **Asset Library** — maps, token images, custom monsters
+- **Asset Library** — maps, token images, tilesets, custom monsters
+- **Map Editor** — create and edit battle maps (see "Map Creation & Authoring" above)
 - **Character Overview** — read-only view of all player character sheets
 
 ---
@@ -528,11 +588,11 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 - Embed character limits (6000 chars) — large parties could overflow initiative tracker or character cards
 - Required bot permissions and server setup not documented
 
-**11. Map & Grid Limitations**
-- Grid size: A–Z = 26 columns max; is this enough for large outdoor maps?
+**11. Map & Grid Limitations** ✅
+- ~~Grid size: A–Z = 26 columns max~~ **Resolved** — extended to spreadsheet-style lettering (A–Z, AA, AB, …) for arbitrarily large maps
 - ~~Fog of war: can players see the entire map? Hidden enemies?~~ **Resolved** — dynamic fog of war using shared party vision (union of all player tokens' shadowcast results). Enemies in fogged cells are hidden. See "Dynamic Fog of War" section.
-- Vertical dimension: flying, multi-level terrain, elevation
-- Map creation/import workflow for the DM
+- ~~Vertical dimension: flying, multi-level terrain, elevation~~ **Resolved** — tokens carry altitude (integer feet), displayed as label suffix (e.g., `AR↑30`). 3D distance for range checks. See "Altitude & Elevation" section.
+- ~~Map creation/import workflow for the DM~~ **Resolved** — blank grid + terrain/wall tools + image import (Phase 1), tileset painting + Tiled import (Phase 2). Maps stored as Tiled-compatible JSON. See "Map Creation & Authoring" section.
 
 **12. Rollback / Undo**
 No mistake recovery. Can the DM undo the last action, revert a turn, or correct a misapplied rule? Since Discord is read-only output, corrections need a system-level mechanism.

@@ -91,12 +91,12 @@ A character hitting 0 HP is unaddressed. The spec shows "bloodied" and "dead" to
 - **DM + player concurrency** — DM dashboard mutations go through the same lock. No special conflict resolution needed; contention is inherently low (one player per turn, short lock duration).
 - **WebSocket sync** — server-authoritative, push-only. Dashboard renders server state; no client-side game state to conflict. Active DM form inputs are not clobbered by incoming updates (optimistic UI with "value changed" indicator).
 
-### 10. Map/Grid Design Limitations
+### 10. Map/Grid Design Limitations ✅ **Resolved**
 
-- **Grid size** — Chess notation A–Z gives 26 columns max. Sufficient for most encounters, but large outdoor maps?
-- **Fog of war** — No mention. Can players see the entire map?
-- **Vertical dimension** — Flying, multi-level terrain, elevation not addressed.
-- **Map creation** — How does the DM author/import maps? "Asset Library" is mentioned but the workflow isn't defined.
+- **Grid size** — Extended to spreadsheet-style lettering (A–Z, AA, AB, …). No practical column limit.
+- **Fog of war** — Previously resolved (dynamic shadowcasting, shared party vision).
+- **Vertical dimension** — Tokens carry altitude as integer feet, displayed as label suffix (`AR↑30`). 3D Euclidean distance for range checks. Ascending/descending costs movement 1:1.
+- **Map creation** — Full authoring workflow defined: blank grid → terrain/wall tools → image import (Phase 1). Tileset painting + Tiled desktop import (Phase 2). Maps stored as Tiled-compatible JSON (`.tmj` format), parsed via `go-tiled` or `encoding/json`.
 
 ### 11. Discord API Constraints
 
