@@ -224,3 +224,103 @@ A first playable version includes:
 **Estimated build time (solo developer): 6–10 weeks**
 
 Future phases: full asset library, character sheet integration, spell slot tracking, inventory management, campaign/session management.
+
+---
+
+## Open Questions & Gaps
+
+The following items need resolution before or during implementation. Refer to them by number.
+
+### Critical — Resolve Before Building
+
+**1. Turn Timeout / AFK Handling**
+The system is async, but there's no mechanism for when a player simply doesn't take their turn. Needs: timeout duration (e.g., 24h), reminder pings, DM override to skip/delay, and what happens to initiative order during prolonged absence.
+
+**2. Full Turn Action Model**
+A 5e turn can include movement, action, bonus action, reaction, and free object interaction. The spec only models `/move` + one action. Specifically:
+- Can a player split movement (move → attack → move again)?
+- How are bonus actions handled? (Cunning Action, Spiritual Weapon, Flurry of Blows)
+- How are free object interactions handled? (draw weapon, open door)
+- Should a player submit all parts of their turn at once, or sequentially? When is a turn "done"?
+
+**3. Reactions**
+Reactions interrupt other creatures' turns and are the hardest async D&D problem. Unaddressed cases:
+- Opportunity Attacks — enemy moves away from a fighter; does the system pause and ping?
+- Counterspell / Shield — these interrupt *during* another creature's action
+- Readied Actions — "I attack when the goblin moves"
+- Possible approaches: auto-skip with a short window, pre-declare reactions at start of turn, DM resolves manually, or remove reactions entirely.
+
+**4. Enemy / NPC Turn Workflow**
+How does the DM execute enemy turns?
+- Manual click-by-click per enemy in the dashboard?
+- Batch actions for groups of identical enemies?
+- Does the bot auto-resolve enemy attacks (roll to hit, damage)?
+- How are enemy actions posted to `#combat-log`?
+
+**5. Death Saves & Unconsciousness (0 HP)**
+No mechanic for when a character drops to 0 HP:
+- Death saving throws on the downed player's turn
+- Tracking successes/failures
+- Stabilization and healing from 0 HP
+- Instant death from massive damage
+- Token state: "bloodied" and "dead" exist, but "dying/unconscious" does not
+
+**6. Authentication & Authorization**
+- How does the system map a Discord user to a character?
+- How is out-of-turn command submission prevented?
+- How does the DM authenticate to the web dashboard?
+- Can one bot instance serve multiple campaigns / Discord servers?
+
+### Significant — Will Hit During Development
+
+**7. `/cast` Spell Handling**
+- AoE spells target a *point*, not creatures — `/cast fireball D5` not `/cast fireball G1 G2`; backend calculates who's in the radius
+- Who rolls spell saves? Auto-rolled for enemies?
+- Concentration tracking — what happens when casting a new concentration spell while concentrating?
+- Spell slot validation — `/cast` is MVP but slot tracking is "future phase"; does MVP ignore limits?
+- Spell range validation
+
+**8. `/attack` Weapon & Option Selection**
+- Multiple weapons — `/attack G2` doesn't specify *with what*
+- Extra Attack — fighters get 2–4 attacks per action
+- Attack modifiers — Great Weapon Master (-5/+10), Sharpshooter, Reckless Attack
+- Advantage/disadvantage — does the system auto-detect conditions (prone, flanking, invisible)?
+
+**9. Concurrency & Race Conditions**
+- Player submits two commands before the first resolves
+- DM applies dashboard changes while a player is mid-turn
+- WebSockets for sync but no conflict resolution strategy
+- Needs: command queuing, optimistic locking, or turn-state locking
+
+**10. Discord API Constraints**
+- Message edit rate limits (~5 edits/5s/channel) — rapid state changes could bottleneck
+- Slash command registration limits (100 global) and propagation delays
+- Embed character limits (6000 chars) — large parties could overflow initiative tracker or character cards
+- Required bot permissions and server setup not documented
+
+**11. Map & Grid Limitations**
+- Grid size: A–Z = 26 columns max; is this enough for large outdoor maps?
+- Fog of war: can players see the entire map? Hidden enemies?
+- Vertical dimension: flying, multi-level terrain, elevation
+- Map creation/import workflow for the DM
+
+**12. Rollback / Undo**
+No mistake recovery. Can the DM undo the last action, revert a turn, or correct a misapplied rule? Since Discord is read-only output, corrections need a system-level mechanism.
+
+### Minor — Good to Decide
+
+**13. Diagonal Movement Rule**
+Spec uses the simplified rule (all diagonals = 5ft). The PHB variant (5ft/10ft alternating) is more commonly used. Should this be configurable or is the simplification intentional?
+
+**14. Data Model / Schema**
+No ERD or schema. Key relationships are ambiguous:
+- Campaign → Encounter → Combat State → Turns
+- Character ↔ Player (Discord user)
+- Spell lists, class features, ability storage
+- Character creation workflow
+
+**15. Non-Combat Gameplay (Future)**
+Even for future planning, no mention of: skill/ability checks, social encounters, exploration/travel, short/long rest mechanics, leveling up.
+
+**16. Tech Stack Decision**
+"Node/Express **or** FastAPI" — this needs to be a firm choice. It affects map rendering (Node Canvas vs Pillow), ORM, and deployment. Mixing Node bot + Python backend adds operational complexity.
