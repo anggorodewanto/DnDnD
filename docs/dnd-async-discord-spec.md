@@ -342,12 +342,31 @@ DM resolves all reactions manually. Players can pre-declare reaction intent at a
 - DM has full control over timing and adjudication
 - Readied Actions use the same flow: `/reaction I attack when the goblin moves past me`
 
-**4. Enemy / NPC Turn Workflow**
-How does the DM execute enemy turns?
-- Manual click-by-click per enemy in the dashboard?
-- Batch actions for groups of identical enemies?
-- Does the bot auto-resolve enemy attacks (roll to hit, damage)?
-- How are enemy actions posted to `#combat-log`?
+**4. Enemy / NPC Turn Workflow** ✅
+
+Each enemy takes its own turn in initiative order. The DM resolves enemy turns through the dashboard with **smart defaults** — the system pre-fills suggestions, DM confirms or overrides.
+
+**Dashboard flow when it's an enemy's turn:**
+1. Dashboard highlights the active enemy and pre-fills:
+   - **Suggested move:** shortest path toward nearest hostile (reuses existing pathfinding)
+   - **Suggested attack:** nearest target in range; defaults to creature's primary attack from stat block
+   - **Suggested ability:** if the creature has a special ability (e.g. Breath Weapon), suggest it when conditions are met (multiple targets in cone/line)
+2. DM clicks **Confirm** to accept defaults, or overrides any field (different target, different ability, hold position, etc.)
+3. System auto-rolls to-hit vs target AC, rolls damage, applies HP changes
+4. DM sees the roll results and can adjust before posting (e.g. fudge a crit that would one-shot a level 2 player)
+5. On confirm, results are posted to `#combat-log` and map is updated
+
+**`#combat-log` output** — same format as player actions:
+```
+🏃 Goblin 1 moves to D5
+⚔️ Goblin 1 attacks Thorn — 🎲 14 vs AC 18 — Miss!
+🏃 Goblin 2 moves to E4
+⚔️ Goblin 2 attacks Kael — 🎲 19 vs AC 15 — Hit! 7 slashing damage
+```
+
+**Pending reactions:** if a player has a pre-declared `/reaction` that triggers during the enemy turn (e.g. Opportunity Attack on enemy movement, Shield on being hit), the dashboard surfaces it to the DM before confirming that step. DM resolves the reaction inline.
+
+**Complexity:** low — suggested move reuses pathfinding already needed for `/move` validation, suggested target is nearest-by-distance sort, suggested action is the first entry in the creature's stat block. It's pre-filling form fields, not AI.
 
 **5. Death Saves & Unconsciousness (0 HP)**
 No mechanic for when a character drops to 0 HP:
