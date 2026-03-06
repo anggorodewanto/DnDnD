@@ -194,7 +194,7 @@ The DM manages everything through a web app — they never type raw commands int
 | Discord Bot | [discordgo](https://github.com/bwmarrin/discordgo) | Bot logic, slash commands, message editing |
 | Backend API | Go stdlib `net/http` + Chi router | Game state management, command processing |
 | Database | PostgreSQL + [sqlc](https://sqlc.dev) | Type-safe Go from raw SQL — characters, campaigns, combat state, maps |
-| DM Web App | Vanilla JS + Go templates (`html/template`) | DM dashboard UI, served by the Go backend |
+| DM Web App | Go templates for admin pages, [Svelte](https://svelte.dev) SPA for map editor | Svelte compiles to static JS/CSS — embedded in Go binary via `embed.FS`, no separate deployment |
 | Map Rendering | Go `image/draw` stdlib + [gg](https://github.com/fogleman/gg) | Server-side PNG generation for grid maps |
 | Real-time Sync | [nhooyr/websocket](https://github.com/nhooyr/websocket) | Live DM dashboard ↔ backend updates |
 | Deployment | Single Go binary (dashboard embedded via `embed.FS`) | One artifact to deploy |
@@ -368,4 +368,4 @@ Even for future planning, no mention of: skill/ability checks, social encounters
 
 **16. Tech Stack Decision** ✅
 
-Go for everything. discordgo for the bot, stdlib `net/http` + Chi for the API, sqlc for type-safe database access, Go `image` stdlib for map rendering. DM dashboard is vanilla JS + Go `html/template`, embedded into the binary via `embed.FS` for single-artifact deployment. No Node, no Python, no ORM magic.
+Go for everything. discordgo for the bot, stdlib `net/http` + Chi for the API, sqlc for type-safe database access, Go `image` stdlib for map rendering. DM dashboard is split: Go `html/template` for admin/combat management pages, Svelte SPA for the interactive map editor (drag-and-drop tokens, fog of war). Svelte compiles to static JS/CSS at build time — embedded into the Go binary via `embed.FS` for single-artifact deployment. Node is a dev-only build dependency, not a runtime dependency.
