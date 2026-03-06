@@ -98,6 +98,7 @@ If invalid, the bot replies with a specific reason in `#combat-log` before DM in
 | `/cast` | `/cast fireball D5` | Cast a spell, with target coordinate or enemy ID |
 | `/bonus` | `/bonus cunning-action dash` | Bonus action |
 | `/shove` | `/shove OS` | Shove a target by ID |
+| `/reaction` | `/reaction Shield if I get hit` | Pre-declare a reaction intent, posted to `#dm-queue` for DM to resolve |
 | `/interact` | `/interact draw longsword` | Free object interaction, routed to DM |
 | `/action` | `/action flip the table at B3 for cover` | Freeform action, routed to DM |
 | `/done` | `/done` | End turn, advance initiative |
@@ -307,6 +308,7 @@ Each command validates against remaining resources. If a player tries to use som
 | `/cast` | `/cast fireball D5` | Cast a spell (uses action or bonus action depending on spell) |
 | `/bonus` | `/bonus cunning-action dash` | Bonus action |
 | `/interact` | `/interact draw longsword` | Free object interaction — routed to `#dm-queue` for DM resolution |
+| `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent — persists until used, cancelled, or encounter ends. Routed to `#dm-queue` |
 | `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
 | `/done` | `/done` | Explicitly end turn, advance to next in initiative |
 
@@ -317,12 +319,28 @@ Each command validates against remaining resources. If a player tries to use som
 
 **Split movement** works naturally: `/move D4` → `/attack G1` → `/move E5` — each `/move` deducts from remaining movement.
 
-**3. Reactions**
-Reactions interrupt other creatures' turns and are the hardest async D&D problem. Unaddressed cases:
-- Opportunity Attacks — enemy moves away from a fighter; does the system pause and ping?
-- Counterspell / Shield — these interrupt *during* another creature's action
-- Readied Actions — "I attack when the goblin moves"
-- Possible approaches: auto-skip with a short window, pre-declare reactions at start of turn, DM resolves manually, or remove reactions entirely.
+**3. Reactions** ✅
+
+DM resolves all reactions manually. Players can pre-declare reaction intent at any time using `/reaction`, which posts to `#dm-queue` for the DM to act on when the trigger occurs.
+
+**`/reaction <description>`** — declare a reaction intent
+- `/reaction Shield if I get hit` → posts to `#dm-queue`: "🛡️ **Thorn** wants to react: *Shield if I get hit*"
+- `/reaction OA if goblin moves away` → posts to `#dm-queue`: "⚔️ **Kael** wants to react: *OA if goblin moves away*"
+- `/reaction Counterspell if enemy casts` → posts to `#dm-queue`: "✋ **Lyra** wants to react: *Counterspell if enemy casts*"
+- Reaction declarations persist until used, cancelled (`/reaction cancel`), or the encounter ends
+- One reaction per round per player (per D&D rules) — system tracks whether it's been spent
+
+**DM workflow:**
+1. DM sees reaction declarations in `#dm-queue` or the dashboard
+2. When the trigger condition occurs during enemy/NPC turns, DM decides whether it fires
+3. DM resolves the reaction in the dashboard (rolls, applies effects) and posts the result
+4. System marks the player's reaction as spent for the round
+
+**Why this works for async:**
+- Zero stalling — combat never pauses waiting for a reaction response
+- Players declare intent on their own time, even between turns
+- DM has full control over timing and adjudication
+- Readied Actions use the same flow: `/reaction I attack when the goblin moves past me`
 
 **4. Enemy / NPC Turn Workflow**
 How does the DM execute enemy turns?
