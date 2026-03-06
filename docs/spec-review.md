@@ -121,13 +121,9 @@ A character hitting 0 HP is unaddressed. The spec shows "bloodied" and "dead" to
 
 - Diagonals cost 5ft — deliberate simplification for async play. PHB alternating 5/10 variant not supported.
 
-### 14. Data Model Is Implied but Not Defined
+### 14. Data Model Is Implied but Not Defined ✅ **Resolved**
 
-No schema or ERD. Key relationships are ambiguous:
-- Campaign → Encounter → Combat State → Turns
-- Character ↔ Player (Discord user)
-- How are spell lists, class features, and abilities stored/modeled?
-- What's the character creation workflow?
+Full database schema defined in the main spec ("Data Model" section). Covers: campaigns, characters (full 5e with SRD races/classes/features), encounters, combatants (instance state), turns, action log, reaction declarations, maps, and all reference data tables (creatures, spells, weapons, armor, classes, races, conditions). Character creation via dashboard with D&D Beyond import. SRD data seeded from [5e-bits/5e-database](https://github.com/5e-bits/5e-database). Internal format based on [BrianWendt/dnd5e_json_schema](https://github.com/BrianWendt/dnd5e_json_schema).
 
 ### 15. Non-Combat Gameplay
 

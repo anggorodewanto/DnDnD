@@ -284,6 +284,99 @@ Adopting the Tiled JSON format means:
 
 ---
 
+## Character Creation & Import
+
+Characters are fully 5e-compatible — all SRD races, classes, backgrounds, and features are supported. Characters can be created manually via the DM dashboard or imported from D&D Beyond.
+
+### Internal Character Format
+
+Characters are stored using a schema based on [BrianWendt/dnd5e_json_schema](https://github.com/BrianWendt/dnd5e_json_schema) — the closest thing to a community-standard JSON schema for 5e character data. The schema covers ability scores, class features, spells, equipment, and all mechanical fields needed for combat resolution.
+
+The internal format is not exposed directly to users — it's the canonical storage representation that the dashboard UI and D&D Beyond importer both write to.
+
+### Manual Character Creation (DM Dashboard)
+
+The DM creates characters through a guided workflow in the web dashboard:
+
+1. **Basics** — name, race, class, level, background
+2. **Ability scores** — manual entry (rolled or point-buy, DM's choice — the system doesn't enforce a generation method)
+3. **Derived stats** — HP, AC, proficiency bonus, saving throws, skill proficiencies are auto-calculated from race + class + ability scores + level using SRD rules
+4. **Equipment** — select from SRD weapons/armor/items; set equipped weapon and worn armor
+5. **Spells** — for caster classes, select known/prepared spells from the class spell list (filtered by level). Spell slots auto-calculated by class + level
+6. **Features** — racial traits and class features are auto-populated from SRD data based on race + class + level selections
+
+After creation, the character appears in the campaign and the player links to it via `/register <character_name>` in Discord (DM approves).
+
+**Class/subclass/feat interactions:** the system implements SRD class features mechanically (Extra Attack, Sneak Attack damage, Rage bonus, etc.) and auto-applies them during combat. Non-SRD subclasses, feats, and multiclass combinations can be added manually by the DM as custom features with mechanical effects (bonus to hit, extra damage dice, etc.).
+
+### D&D Beyond Import
+
+Players with D&D Beyond character sheets can import directly:
+
+1. Player provides their D&D Beyond character URL (e.g., `https://www.dndbeyond.com/characters/12345678`)
+2. The system fetches character data from D&D Beyond's undocumented character API (`https://character-service.dndbeyond.com/character/v5/character/{id}`)
+3. A parser converts the DDB JSON into the internal character format — mapping ability scores, class features, equipment, spells, HP, AC, and all combat-relevant fields
+4. The DM reviews and approves the imported character in the dashboard before it enters play
+
+**Implementation reference:** [MrPrimate/ddb-importer](https://github.com/MrPrimate/ddb-importer) (Foundry VTT's DDB import module) is the most mature open-source implementation of DDB character parsing. Its source code is the primary reference for handling DDB's data quirks (derived stats that need client-side calculation, nested feature structures, equipment attunement).
+
+**Caveats:**
+- D&D Beyond has no official public API — the character endpoint is undocumented and may change without notice
+- Character must be set to **public** sharing on D&D Beyond for the fetch to work
+- Rate limiting and CAPTCHAs may apply; the importer includes exponential backoff
+- Non-SRD content (paid sourcebook subclasses, feats, spells) imports as names/descriptions but may need DM manual setup for mechanical effects not in our SRD data
+
+**Re-sync:** players can re-import at any time to pull updates (level-ups, new equipment purchased in DDB). The system diffs against the existing character and shows the DM what changed before applying.
+
+### Character Leveling
+
+Level-ups are handled through the same creation workflow:
+- DM edits the character's level in the dashboard
+- System auto-recalculates HP, proficiency bonus, spell slots, attacks per action
+- DM selects new class features / spells if applicable
+- For DDB-imported characters, the player levels up in D&D Beyond and re-imports
+
+---
+
+## Reference Data Sources
+
+### SRD Content (Seeded at Startup)
+
+The system ships with the full **D&D 5e SRD** (Systems Reference Document) content, seeded into PostgreSQL on first run. Data is sourced from [5e-bits/5e-database](https://github.com/5e-bits/5e-database) — a comprehensive, MIT-licensed JSON dataset of all SRD content.
+
+**Included SRD data:**
+- **Monsters** — ~325 creature stat blocks (name, HP formula, AC, speed, attacks, abilities, CR)
+- **Spells** — ~320 spells (name, level, school, range, components, duration, area, damage, save type, concentration)
+- **Weapons** — all SRD weapons (damage, damage type, properties: finesse, heavy, ranged, thrown, etc.)
+- **Armor** — all SRD armor (AC formula, type, stealth disadvantage, strength requirement)
+- **Equipment** — adventuring gear, tools, packs
+- **Classes** — all 12 SRD classes with features by level, hit dice, proficiencies, spell lists
+- **Races** — all SRD races with traits, ability score bonuses, speed, darkvision
+- **Conditions** — all 15 standard conditions with mechanical effects
+- **Skills** — all 18 skills mapped to ability scores
+
+**Licensing:** SRD 5.1 content is dual-licensed under OGL 1.0a and **CC-BY-4.0**. The system uses CC-BY-4.0, which requires attribution only (included in the app's about/credits page).
+
+### Extended Content (Open5e)
+
+For content beyond the core SRD (third-party OGL publisher content), the system can optionally pull from the [Open5e API](https://api.open5e.com/):
+- ~3,200 monsters (vs ~325 in SRD alone)
+- ~1,400 spells
+- Content from Tome of Beasts, Creature Codex, Deep Magic, and other OGL publishers
+
+Open5e data is fetched on-demand and cached locally. DM enables/disables third-party sources per campaign in settings.
+
+### Homebrew Content
+
+DMs can create custom entries for any reference data type via the dashboard:
+- Custom monsters (full stat block editor)
+- Custom spells, weapons, items
+- Custom races and class features (name + mechanical effect)
+
+Homebrew entries are scoped to the campaign and stored alongside SRD data with a `homebrew: true` flag.
+
+---
+
 ## DM Dashboard
 
 The DM manages everything through a web app — they never type raw commands into Discord.
@@ -314,6 +407,267 @@ The DM manages everything through a web app — they never type raw commands int
 
 ---
 
+## Data Model
+
+The database schema below defines the core entities and their relationships. All tables use UUID primary keys and include `created_at` / `updated_at` timestamps (omitted for brevity).
+
+### Campaign & Player Tables
+
+```sql
+campaigns
+  id              UUID PK
+  guild_id        TEXT NOT NULL UNIQUE   -- Discord server ID (one campaign per server)
+  dm_user_id      TEXT NOT NULL          -- Discord user ID of the DM
+  name            TEXT NOT NULL
+  settings        JSONB                  -- turn_timeout_hours, diagonal_rule, open5e_sources[], etc.
+  status          TEXT NOT NULL          -- 'active', 'paused', 'archived'
+
+characters
+  id              UUID PK
+  campaign_id     UUID FK → campaigns
+  name            TEXT NOT NULL
+  race            TEXT NOT NULL          -- FK → reference race or homebrew
+  class           TEXT NOT NULL          -- FK → reference class or homebrew
+  level           INTEGER NOT NULL DEFAULT 1
+  ability_scores  JSONB NOT NULL         -- { str, dex, con, int, wis, cha }
+  hp_max          INTEGER NOT NULL
+  hp_current      INTEGER NOT NULL
+  temp_hp         INTEGER NOT NULL DEFAULT 0
+  ac              INTEGER NOT NULL
+  speed_ft        INTEGER NOT NULL DEFAULT 30
+  proficiency_bonus INTEGER NOT NULL
+  equipped_weapon TEXT                   -- FK → weapons
+  equipped_armor  TEXT                   -- FK → armor
+  spell_slots     JSONB                  -- { "1": {current: 2, max: 4}, "2": {current: 3, max: 3}, ... }
+  features        JSONB                  -- [{name, source, level, description, mechanical_effect}]
+  proficiencies   JSONB                  -- {saves: [str, con], skills: [athletics, perception], weapons: [...], armor: [...]}
+  inventory       JSONB                  -- [{item_id, quantity, equipped}]
+  character_data  JSONB                  -- full dnd5e_json_schema blob for import/export fidelity
+  ddb_url         TEXT                   -- D&D Beyond URL if imported
+  homebrew        BOOLEAN DEFAULT false
+
+player_characters
+  id              UUID PK
+  campaign_id     UUID FK → campaigns
+  character_id    UUID FK → characters   UNIQUE per campaign
+  discord_user_id TEXT NOT NULL
+  approved        BOOLEAN DEFAULT false  -- DM must approve /register
+  UNIQUE(campaign_id, discord_user_id)   -- one character per player per campaign
+```
+
+### Encounter & Combat Tables
+
+```sql
+encounters
+  id              UUID PK
+  campaign_id     UUID FK → campaigns
+  map_id          UUID FK → maps
+  name            TEXT
+  status          TEXT NOT NULL          -- 'preparing', 'active', 'completed'
+  round_number    INTEGER DEFAULT 0
+  current_turn_id UUID FK → turns        -- nullable; set when combat is active
+
+combatants
+  id              UUID PK
+  encounter_id    UUID FK → encounters
+  character_id    UUID FK → characters   -- NULL for creatures
+  creature_ref_id TEXT                   -- FK → creatures reference data; NULL for PCs
+  short_id        TEXT NOT NULL          -- "G1", "OS", "AR" — stable for entire encounter
+  display_name    TEXT NOT NULL          -- "Goblin #1", "Orc Shaman", "Aria"
+  initiative_roll INTEGER NOT NULL
+  initiative_order INTEGER NOT NULL      -- tiebreaker ordering
+  position_col    TEXT NOT NULL          -- grid column: "A", "AA", etc.
+  position_row    INTEGER NOT NULL       -- grid row: 1, 2, ...
+  altitude_ft     INTEGER DEFAULT 0
+  hp_max          INTEGER NOT NULL       -- instance HP (creatures may vary from template)
+  hp_current      INTEGER NOT NULL
+  temp_hp         INTEGER DEFAULT 0
+  ac              INTEGER NOT NULL
+  conditions      JSONB DEFAULT '[]'     -- [{condition, source, duration_rounds, started_round}]
+  death_saves     JSONB                  -- {successes: 0, failures: 0} — PCs only
+  is_visible      BOOLEAN DEFAULT true   -- hidden enemies (ambush, stealth)
+  is_alive        BOOLEAN DEFAULT true
+  is_npc          BOOLEAN DEFAULT false  -- DM-controlled ally vs enemy
+
+turns
+  id              UUID PK
+  encounter_id    UUID FK → encounters
+  combatant_id    UUID FK → combatants
+  round_number    INTEGER NOT NULL
+  status          TEXT NOT NULL          -- 'active', 'completed', 'skipped'
+  movement_remaining_ft INTEGER NOT NULL
+  action_used     BOOLEAN DEFAULT false
+  bonus_action_used BOOLEAN DEFAULT false
+  reaction_used   BOOLEAN DEFAULT false  -- per-round, not per-turn
+  free_interact_used BOOLEAN DEFAULT false
+  attacks_remaining INTEGER NOT NULL DEFAULT 1
+  started_at      TIMESTAMPTZ
+  timeout_at      TIMESTAMPTZ           -- started_at + campaign timeout setting
+  completed_at    TIMESTAMPTZ
+
+action_log
+  id              UUID PK
+  turn_id         UUID FK → turns
+  encounter_id    UUID FK → encounters   -- denormalized for fast queries
+  action_type     TEXT NOT NULL          -- 'move', 'attack', 'cast', 'damage', 'heal', 'condition_add', 'condition_remove', 'death_save', 'dm_override', etc.
+  actor_id        UUID FK → combatants
+  target_id       UUID FK → combatants   -- nullable
+  description     TEXT                   -- human-readable summary
+  before_state    JSONB NOT NULL         -- snapshot of affected fields before mutation
+  after_state     JSONB NOT NULL         -- snapshot after mutation
+  dice_rolls      JSONB                  -- [{die, count, results[], modifier, total, purpose}]
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### Reaction Declarations
+
+```sql
+reaction_declarations
+  id              UUID PK
+  encounter_id    UUID FK → encounters
+  combatant_id    UUID FK → combatants
+  description     TEXT NOT NULL          -- "Shield if I get hit", "OA if goblin moves away"
+  status          TEXT NOT NULL          -- 'active', 'used', 'cancelled'
+  created_at      TIMESTAMPTZ NOT NULL
+  resolved_at     TIMESTAMPTZ
+  resolution_note TEXT                   -- DM's note on how it resolved
+```
+
+### Maps
+
+```sql
+maps
+  id              UUID PK
+  campaign_id     UUID FK → campaigns
+  name            TEXT NOT NULL
+  width_squares   INTEGER NOT NULL
+  height_squares  INTEGER NOT NULL
+  tiled_json      JSONB NOT NULL         -- full Tiled-compatible .tmj data
+  background_image_url TEXT              -- optional uploaded battle map image
+  tileset_refs    JSONB                  -- [{name, source_url, first_gid}]
+```
+
+### Reference Data (SRD + Homebrew)
+
+```sql
+creatures
+  id              TEXT PK               -- slug: "goblin", "adult-red-dragon"
+  campaign_id     UUID FK → campaigns   -- NULL for SRD entries
+  name            TEXT NOT NULL
+  size            TEXT NOT NULL
+  type            TEXT NOT NULL          -- beast, humanoid, undead, etc.
+  alignment       TEXT
+  ac              INTEGER NOT NULL
+  ac_type         TEXT                   -- "natural armor", "chain mail", etc.
+  hp_formula      TEXT NOT NULL          -- "2d6+2"
+  hp_average      INTEGER NOT NULL
+  speed           JSONB NOT NULL         -- {walk: 30, fly: 60, swim: 30}
+  ability_scores  JSONB NOT NULL         -- {str, dex, con, int, wis, cha}
+  saving_throws   JSONB                  -- {dex: 4, wis: 2}
+  skills          JSONB                  -- {perception: 4, stealth: 6}
+  damage_resistances   TEXT[]
+  damage_immunities    TEXT[]
+  condition_immunities TEXT[]
+  senses          JSONB                  -- {darkvision: 60, passive_perception: 14}
+  languages       TEXT[]
+  cr              TEXT NOT NULL          -- "1/4", "1", "17"
+  attacks         JSONB NOT NULL         -- [{name, to_hit, damage, damage_type, reach_ft, range_ft, description}]
+  abilities       JSONB                  -- [{name, description, recharge}] — special abilities, legendary actions
+  homebrew        BOOLEAN DEFAULT false
+  source          TEXT DEFAULT 'srd'     -- 'srd', 'open5e:tome-of-beasts', 'homebrew'
+
+spells
+  id              TEXT PK               -- slug: "fireball", "cure-wounds"
+  campaign_id     UUID FK → campaigns   -- NULL for SRD entries
+  name            TEXT NOT NULL
+  level           INTEGER NOT NULL       -- 0 for cantrips
+  school          TEXT NOT NULL          -- evocation, abjuration, etc.
+  casting_time    TEXT NOT NULL          -- "1 action", "1 bonus action", "1 reaction"
+  range_ft        INTEGER                -- NULL for "self", "touch" = 5
+  range_type      TEXT NOT NULL          -- 'ranged', 'touch', 'self'
+  components      JSONB NOT NULL         -- {v: true, s: true, m: "a tiny ball of bat guano"}
+  duration        TEXT NOT NULL          -- "instantaneous", "1 minute", "concentration, up to 1 hour"
+  concentration   BOOLEAN DEFAULT false
+  ritual          BOOLEAN DEFAULT false
+  area            JSONB                  -- {shape: "sphere", radius_ft: 20} or {shape: "cone", length_ft: 15}
+  save_type       TEXT                   -- "dex", "wis", etc. NULL if no save
+  damage          JSONB                  -- {dice: "8d6", type: "fire", higher_levels: "1d6 per slot above 3rd"}
+  healing         JSONB                  -- {dice: "1d8+mod", higher_levels: "1d8 per slot above 1st"}
+  effects         TEXT                   -- description of non-damage effects
+  classes         TEXT[] NOT NULL        -- ["wizard", "sorcerer"]
+  homebrew        BOOLEAN DEFAULT false
+  source          TEXT DEFAULT 'srd'
+
+weapons
+  id              TEXT PK               -- slug: "longsword", "longbow"
+  name            TEXT NOT NULL
+  damage          TEXT NOT NULL          -- "1d8"
+  damage_type     TEXT NOT NULL          -- slashing, piercing, bludgeoning
+  weight_lb       REAL
+  properties      TEXT[] NOT NULL        -- ["versatile", "finesse", "heavy", "two-handed", "ranged", "thrown", "light", "ammunition", "reach", "loading"]
+  range_normal_ft INTEGER               -- 80 for longbow, NULL for melee
+  range_long_ft   INTEGER               -- 320 for longbow
+  versatile_damage TEXT                  -- "1d10" for longsword
+  weapon_type     TEXT NOT NULL          -- 'simple_melee', 'simple_ranged', 'martial_melee', 'martial_ranged'
+
+armor
+  id              TEXT PK
+  name            TEXT NOT NULL
+  ac_base         INTEGER NOT NULL       -- 11 for leather, 18 for plate
+  ac_dex_bonus    BOOLEAN DEFAULT true   -- false for heavy armor
+  ac_dex_max      INTEGER                -- 2 for medium armor, NULL for light
+  strength_req    INTEGER                -- 15 for plate
+  stealth_disadv  BOOLEAN DEFAULT false
+  armor_type      TEXT NOT NULL          -- 'light', 'medium', 'heavy', 'shield'
+  weight_lb       REAL
+
+classes
+  id              TEXT PK               -- "fighter", "wizard"
+  name            TEXT NOT NULL
+  hit_die         TEXT NOT NULL          -- "d10"
+  primary_ability TEXT NOT NULL          -- "str" or "dex"
+  save_proficiencies TEXT[] NOT NULL     -- ["str", "con"]
+  armor_proficiencies TEXT[]
+  weapon_proficiencies TEXT[]
+  skill_choices   JSONB                  -- {choose: 2, from: ["athletics", "perception", ...]}
+  spellcasting    JSONB                  -- {ability: "int", slot_progression: "full"} or NULL
+  features_by_level JSONB NOT NULL       -- {"1": [{name, description, mechanical_effect}], "2": [...], ...}
+  attacks_per_action JSONB NOT NULL      -- {"1": 1, "5": 2, "11": 3, "20": 4} (Fighter example)
+
+races
+  id              TEXT PK               -- "elf", "dwarf", "human"
+  name            TEXT NOT NULL
+  speed_ft        INTEGER NOT NULL
+  size            TEXT NOT NULL          -- "Medium", "Small"
+  ability_bonuses JSONB NOT NULL         -- {dex: 2} or {all: 1}
+  darkvision_ft   INTEGER DEFAULT 0
+  traits          JSONB NOT NULL         -- [{name, description, mechanical_effect}]
+  languages       TEXT[]
+  subraces        JSONB                  -- [{id, name, ability_bonuses, traits}]
+
+conditions_ref
+  id              TEXT PK               -- "blinded", "prone", "stunned"
+  name            TEXT NOT NULL
+  description     TEXT NOT NULL
+  mechanical_effects JSONB NOT NULL      -- [{effect_type: "disadvantage_on_attack", ...}, {effect_type: "advantage_against", ...}]
+```
+
+### Key Design Decisions
+
+1. **Combatants as instances** — the `combatants` table joins encounters to characters/creatures with instance-level state (position, current HP, conditions). A single creature template spawns multiple combatants (G1, G2, G3) each tracking independent HP and conditions.
+
+2. **JSONB for flexible data** — ability scores, features, spell slots, and inventory use JSONB columns rather than normalized tables. This matches the nested structure of 5e character data and avoids dozens of join tables for rarely-queried data. Combat-critical fields (HP, AC, position) remain as typed columns for indexed queries.
+
+3. **Reference data with campaign scope** — SRD entries have `campaign_id = NULL` (global). Homebrew entries are scoped to a campaign. Queries use `WHERE campaign_id = $1 OR campaign_id IS NULL` to merge both.
+
+4. **Action log for undo** — every mutation records `before_state` / `after_state` as JSONB snapshots. The DM's undo operation restores `before_state`. The log also serves as the audit trail for `#combat-log` and `#roll-history` Discord channels.
+
+5. **Character data blob** — the `character_data` JSONB column stores the full dnd5e_json_schema representation. This preserves import fidelity (D&D Beyond data that doesn't map to our typed columns) and enables future export. The typed columns (`hp_max`, `ac`, `ability_scores`, etc.) are the source of truth for gameplay; `character_data` is the source of truth for display and re-export.
+
+6. **No separate combat state table** — the encounter itself tracks `status` and `current_turn_id`. The current combat state is derived from the encounter's combatants + the active turn row. Simpler than a separate state machine.
+
+---
+
 ## Risks & Mitigations
 
 | Risk | Mitigation |
@@ -337,10 +691,11 @@ A first playable version includes:
 - All dice rolls auto-logged to `#roll-history`
 - Turn notification pings
 - Minimal DM web UI: grid view, token drag-drop, HP management, turn advancement
+- Character creation in dashboard (full 5e SRD: race, class, abilities, equipment, spells)
+- D&D Beyond character import (paste URL → parse → DM approves)
+- SRD reference data seeded at startup (monsters, spells, weapons, armor, classes, races)
 
-**Estimated build time (solo developer): 6–10 weeks**
-
-Future phases: full asset library, character sheet integration, inventory management, campaign/session management. (Note: spell slot tracking is included in MVP — see resolved issue #7.)
+Future phases: full asset library, Open5e third-party content integration, inventory management, campaign/session management, non-combat gameplay. (Note: spell slot tracking is included in MVP — see resolved issue #7.)
 
 ---
 
@@ -634,12 +989,16 @@ The DM dashboard is the correction mechanism. Discord messages are an append-onl
 
 Diagonals cost 5ft — same as cardinal movement. This is a deliberate simplification for async play, where easy mental math matters more than geometric precision. The PHB alternating 5/10 variant is not supported.
 
-**14. Data Model / Schema**
-No ERD or schema. Key relationships are ambiguous:
-- Campaign → Encounter → Combat State → Turns
-- Character ↔ Player (Discord user)
-- Spell lists, class features, ability storage
-- Character creation workflow
+**14. Data Model / Schema** ✅
+
+Full database schema defined — see "Data Model" section. Key decisions:
+- Campaign → Encounter → Combatants → Turns hierarchy with instance-level combat state
+- Character ↔ Player mapping via `player_characters` table with DM approval
+- SRD reference data (creatures, spells, weapons, armor, classes, races) seeded from [5e-bits/5e-database](https://github.com/5e-bits/5e-database), extensible with homebrew per campaign
+- Full 5e character creation in dashboard + D&D Beyond import via undocumented character API
+- Internal character format based on [BrianWendt/dnd5e_json_schema](https://github.com/BrianWendt/dnd5e_json_schema)
+- JSONB for flexible nested data (features, inventory, spell slots); typed columns for combat-critical fields (HP, AC, position)
+- Action log with before/after state snapshots for undo and audit trail
 
 **15. Non-Combat Gameplay (Future)**
 Even for future planning, no mention of: skill/ability checks, social encounters, exploration/travel, short/long rest mechanics, leveling up.
