@@ -582,11 +582,21 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 - Command queues (Redis, channels) add infrastructure; the database lock achieves the same serial execution within the single-binary deployment
 - Contention is inherently low: only one player acts per turn, DM interventions during a player's command are rare, and lock duration is a single fast DB transaction
 
-**10. Discord API Constraints**
+**10. Discord API Constraints** ✅
+
 - ~~Message edit rate limits (~5 edits/5s/channel) — rapid state changes could bottleneck~~ **Mitigated** — map images are appended as new messages in `#combat-map` instead of editing, avoiding edit rate limits
-- Slash command registration limits (100 global) and propagation delays
-- Embed character limits (6000 chars) — large parties could overflow initiative tracker or character cards
-- Required bot permissions and server setup not documented
+- ~~Slash command registration limits (100 global) and propagation delays~~ **Not a risk** — the command set is ~12 commands using arguments for variation (e.g., `/cast fireball D5`), well under the 100-command cap. Commands are registered per-guild (instant propagation) rather than globally.
+- ~~Embed character limits (6000 chars) — large parties could overflow initiative tracker or character cards~~ **Resolved** — embeds are not required. The bot uses **plain text messages** for most output (combat log, initiative order, turn pings). For very large output (full initiative order with 20+ combatants, detailed character cards), the bot uploads a **text file attachment** instead. This avoids the 6000-char embed limit entirely while keeping output readable.
+- ~~Required bot permissions and server setup not documented~~ **Resolved** — see below.
+
+**Required bot permissions:**
+- `Send Messages` — post to all bot-managed channels
+- `Attach Files` — upload map PNGs and text file attachments
+- `Manage Messages` — pin/edit the initiative tracker message
+- `Use Application Commands` — register and respond to slash commands
+- `Mention Everyone` — ping players on turn start (or a configurable `@combat` role)
+
+**Server setup:** a `/setup` slash command auto-creates the channel structure (`#initiative-tracker`, `#combat-log`, `#roll-history`, `#the-story`, `#player-chat`, `#combat-map`, `#your-turn`, `#character-cards`, `#dm-queue`) with appropriate permission overrides (e.g., `#the-story` is DM-write-only, `#combat-map` is bot-write-only). DM runs `/setup` once after inviting the bot. Channels that already exist are skipped.
 
 **11. Map & Grid Limitations** ✅
 - ~~Grid size: A–Z = 26 columns max~~ **Resolved** — extended to spreadsheet-style lettering (A–Z, AA, AB, …) for arbitrarily large maps

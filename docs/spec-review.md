@@ -98,12 +98,12 @@ A character hitting 0 HP is unaddressed. The spec shows "bloodied" and "dead" to
 - **Vertical dimension** — Tokens carry altitude as integer feet, displayed as label suffix (`AR↑30`). 3D Euclidean distance for range checks. Ascending/descending costs movement 1:1.
 - **Map creation** — Full authoring workflow defined: blank grid → terrain/wall tools → image import (Phase 1). Tileset painting + Tiled desktop import (Phase 2). Maps stored as Tiled-compatible JSON (`.tmj` format), parsed via `go-tiled` or `encoding/json`.
 
-### 11. Discord API Constraints
+### 11. Discord API Constraints ✅ **Resolved**
 
-- **Message edit rate limits** — Discord rate-limits to ~5 edits per 5 seconds per channel. Rapid state changes could hit this.
-- **Slash command limits** — Discord caps at 100 global commands with propagation delays.
-- **Embed character limits** — Initiative tracker, character cards could exceed Discord's 6000-character embed limit with large parties.
-- **Bot permissions** — Required Discord permissions and server setup not documented.
+- **Message edit rate limits** — Mitigated: map images appended as new messages, not edited.
+- **Slash command limits** — Not a risk: ~12 commands using arguments, registered per-guild for instant propagation.
+- **Embed character limits** — Resolved: bot uses plain text messages for most output; uploads text file attachments for very large output instead of embeds.
+- **Bot permissions** — Resolved: required permissions documented (`Send Messages`, `Attach Files`, `Manage Messages`, `Use Application Commands`, `Mention Everyone`). `/setup` command auto-creates channel structure with permission overrides.
 
 ### 12. Rollback / Undo
 
