@@ -85,12 +85,11 @@ A character hitting 0 HP is unaddressed. The spec shows "bloodied" and "dead" to
 - **Attack modifiers** — opt-in flags per swing: `--gwm`, `--sharpshooter`, `--reckless`. Backend validates eligibility (weapon type, class).
 - **Advantage/disadvantage** — auto-detected from tracked conditions (prone, restrained, stunned, paralyzed, unconscious, blinded, poisoned, invisible, Reckless Attack). No auto-flanking in MVP. DM override via dashboard for edge cases. Multiple sources of adv/disadv cancel per 5e rules.
 
-### 9. Concurrency and Race Conditions
+### 9. Concurrency and Race Conditions ✅ **Resolved**
 
-- Player submits two `/attack` commands before the first resolves
-- DM applies changes in the dashboard while a player is mid-turn
-- WebSockets mentioned for "live sync" but no conflict resolution strategy
-- Need command queuing or optimistic locking
+- **Per-turn pessimistic locking** — PostgreSQL advisory lock keyed on `turn_id` serializes all combat state mutations. Rapid player commands block (wait) rather than fail; second command processes against updated state.
+- **DM + player concurrency** — DM dashboard mutations go through the same lock. No special conflict resolution needed; contention is inherently low (one player per turn, short lock duration).
+- **WebSocket sync** — server-authoritative, push-only. Dashboard renders server state; no client-side game state to conflict. Active DM form inputs are not clobbered by incoming updates (optimistic UI with "value changed" indicator).
 
 ### 10. Map/Grid Design Limitations
 

@@ -491,11 +491,36 @@ Examples:
 - **DM override:** DM can force advantage or disadvantage via the dashboard for situations the system can't detect (creative tactics, terrain, narrative). Override posts to `#combat-log`: "DM grants advantage to Kael's attack (high ground)."
 - **Stacking:** when both advantage and disadvantage apply from any combination of sources, they cancel out per 5e rules — system rolls normally regardless of how many sources of each exist.
 
-**9. Concurrency & Race Conditions**
-- Player submits two commands before the first resolves
-- DM applies dashboard changes while a player is mid-turn
-- WebSockets for sync but no conflict resolution strategy
-- Needs: command queuing, optimistic locking, or turn-state locking
+**9. Concurrency & Race Conditions** ✅
+
+All combat state mutations are serialized through a **per-turn pessimistic lock** using PostgreSQL advisory locks keyed on `turn_id`.
+
+**Rapid player commands** (e.g., two `/attack` commands sent before the first resolves):
+- Each command acquires the turn lock before processing
+- If the lock is held, the second command **blocks** (waits) rather than failing
+- Once the first command completes and releases the lock, the second command processes against the updated state (correct attacks-remaining count, movement left, etc.)
+- Player experiences at most a few hundred milliseconds of delay — no "conflict, retry" errors
+
+**DM + player concurrent actions** (e.g., DM edits creature HP while player attacks that creature):
+- DM dashboard mutations go through the same backend and acquire the same per-turn lock
+- If a player's `/attack` is processing, the DM's edit blocks until the attack resolves, then applies against post-attack HP
+- If the DM ends a player's turn, any in-flight player command either completes first (if it holds the lock) or fails with "It's no longer your turn" (if the DM's end-turn acquired the lock first)
+
+**WebSocket state sync** — server-authoritative, push-only:
+- The Go backend + PostgreSQL is the single source of truth for all game state
+- The DM dashboard renders state received via WebSocket pushes; it does not maintain its own game state copy
+- All mutations (from Discord commands or the dashboard) go through the backend API
+- Flow: command → backend acquires lock → resolves → releases lock → pushes updated state over WebSocket → dashboard re-renders
+
+**Dashboard optimistic UI** — when a WebSocket push arrives while the DM has a form open:
+- Read-only display areas (initiative tracker, HP bars) update immediately
+- Active form inputs are **not clobbered** — the DM's draft is preserved with a subtle indicator: "HP updated to 3 by player action"
+- On form submit, the DM's intended value is sent to the backend and applied through the lock
+
+**Why pessimistic locking over alternatives:**
+- Optimistic locking (version numbers, retry-on-conflict) creates bad UX — players get conflict errors for normal rapid commands
+- Command queues (Redis, channels) add infrastructure; the database lock achieves the same serial execution within the single-binary deployment
+- Contention is inherently low: only one player acts per turn, DM interventions during a player's command are rare, and lock duration is a single fast DB transaction
 
 **10. Discord API Constraints**
 - ~~Message edit rate limits (~5 edits/5s/channel) — rapid state changes could bottleneck~~ **Mitigated** — map images are appended as new messages in `#combat-map` instead of editing, avoiding edit rate limits
