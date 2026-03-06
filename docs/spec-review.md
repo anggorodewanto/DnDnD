@@ -70,13 +70,13 @@ A character hitting 0 HP is unaddressed. The spec shows "bloodied" and "dead" to
 
 ## Significant Gaps (Will Hit During Development)
 
-### 7. `/cast` Command is Too Vague
+### ~~7. `/cast` Command is Too Vague~~ Resolved
 
-- **AoE targeting** — `/cast fireball G1 G2` targets creatures, but Fireball targets a *point* and hits everyone in a 20ft radius. Should be `/cast fireball D5` (a coordinate), with the backend calculating who's in the blast.
-- **Spell save DCs** — Who rolls the save? Is it auto-rolled for enemies?
-- **Concentration** — No mention. What happens when a player casts a concentration spell while already concentrating on another?
-- **Spell slots** — `/cast` is in MVP but spell slot tracking is listed as a "future phase." Does MVP ignore slot limits?
-- **Spell range** — Does the backend validate range to target?
+- **AoE targeting** — target a coordinate, backend calculates affected creatures by shape/radius from spell data
+- **Spell saves** — auto-rolled for all affected creatures (enemies and allies)
+- **Concentration** — fully tracked: one spell at a time, auto-drop on new cast, auto-roll CON save on damage
+- **Spell slots** — tracked and enforced in MVP (not deferred to future phase)
+- **Spell range** — enforced by backend using spell range data
 
 ### 8. `/attack` Lacks Weapon/Option Selection
 

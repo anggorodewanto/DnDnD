@@ -258,7 +258,7 @@ A first playable version includes:
 
 **Estimated build time (solo developer): 6–10 weeks**
 
-Future phases: full asset library, character sheet integration, spell slot tracking, inventory management, campaign/session management.
+Future phases: full asset library, character sheet integration, inventory management, campaign/session management. (Note: spell slot tracking is included in MVP — see resolved issue #7.)
 
 ---
 
@@ -438,12 +438,17 @@ When a character drops to 0 HP, they fall **unconscious** and begin making death
 
 ### Significant — Will Hit During Development
 
-**7. `/cast` Spell Handling**
-- AoE spells target a *point*, not creatures — `/cast fireball D5` not `/cast fireball G1 G2`; backend calculates who's in the radius
-- Who rolls spell saves? Auto-rolled for enemies?
-- Concentration tracking — what happens when casting a new concentration spell while concentrating?
-- Spell slot validation — `/cast` is MVP but slot tracking is "future phase"; does MVP ignore limits?
-- Spell range validation
+~~**7. `/cast` Spell Handling**~~ **Resolved**
+
+- **AoE targeting** — `/cast fireball D5` targets a coordinate; backend calculates affected creatures by shape/radius from spell data. Spell data includes area definitions: `{ shape: "sphere", radius_ft: 20 }`, `{ shape: "cone", length_ft: 15 }`, `{ shape: "line", length_ft: 60, width_ft: 5 }`. Cones originate from the caster and fan toward the target coordinate. All affected creatures (including allies) are listed in `#combat-log` — no confirmation prompt.
+- **Spell saves** — auto-rolled for all affected creatures (enemies and allies). Saves are mechanical (d20 + modifier vs DC) with no decision-making, so auto-rolling keeps async moving. Results posted to `#combat-log`.
+- **Concentration** — fully tracked by the backend:
+  - Only one concentration spell active per character at a time
+  - Casting a new concentration spell auto-drops the previous one (notified in `#combat-log`)
+  - Taking damage while concentrating triggers an auto-rolled CON save (DC = max(10, half damage taken)); failure breaks concentration
+  - Active concentration effects (e.g., Fog Cloud zone, Spirit Guardians aura) are tracked on the map
+- **Spell slots** — tracked and enforced in MVP. Backend knows each character's slots per level, deducts on cast, rejects `/cast` if no slots remaining. `/cast` without slot management would break caster balance.
+- **Spell range** — enforced by backend. Spell data includes range; backend validates target is within range. Touch spells require adjacency (5ft), self spells need no target.
 
 **8. `/attack` Weapon & Option Selection**
 - Multiple weapons — `/attack G2` doesn't specify *with what*
