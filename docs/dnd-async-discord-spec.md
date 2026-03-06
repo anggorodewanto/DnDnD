@@ -131,6 +131,9 @@ Tokens carry an **altitude** value (integer, in feet, default 0) representing he
 | `/action` | `/action flip the table at B3 for cover` | Freeform action, routed to DM |
 | `/equip` | `/equip longsword` | Set primary weapon (persists between turns) |
 | `/done` | `/done` | End turn, advance initiative |
+| `/check` | `/check perception` or `/check athletics --adv` | Roll a skill/ability check (out of combat) |
+| `/save` | `/save dex` | Roll a saving throw (out of combat, DM-prompted) |
+| `/rest` | `/rest short` or `/rest long` | Initiate a short or long rest (DM must approve) |
 
 ### Freeform Actions — `/action`
 
@@ -377,6 +380,78 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
 
 ---
 
+## Non-Combat Gameplay
+
+### Skill & Ability Checks
+
+Skill checks are the backbone of non-combat D&D. The system supports them through a simple command + DM resolution flow.
+
+**Player-initiated checks:**
+```
+/check perception           ← rolls d20 + WIS mod + proficiency (if proficient)
+/check athletics --adv      ← roll with advantage
+/check stealth --disadv     ← roll with disadvantage
+/check dexterity            ← raw ability check (no skill proficiency)
+```
+
+**DM-prompted checks:**
+The DM can request a check from the dashboard, which pings the player in `#your-turn`:
+- "Kael, roll a Perception check" → player uses `/check perception`
+- "Everyone roll Dexterity saves" → DM triggers a group save; each player is pinged and uses `/save dex`
+
+**Mechanics:**
+- Roll formula: `d20 + ability_modifier + proficiency_bonus` (if proficient in the skill)
+- Expertise (Rogue, Bard): doubles proficiency bonus — tracked in `characters.proficiencies` as `{skill: "expertise"}`
+- Jack of All Trades (Bard): adds half proficiency to non-proficient checks — detected from class features
+- Passive checks: calculated as `10 + modifier` and displayed on the character card. DM uses passive Perception for hidden checks without alerting the player
+- All rolls post to `#roll-history`; the DM sees the result in the dashboard and narrates the outcome in `#the-story`
+
+**Group checks:** When the DM triggers a group check (e.g., "group Stealth"), all players are pinged simultaneously. The system waits for all responses (subject to the campaign's turn timeout), then reports results to the DM. Per 5e rules, the group succeeds if at least half the individuals succeed.
+
+**Contested checks:** The DM triggers these from the dashboard (e.g., grapple: player Athletics vs target Athletics/Acrobatics). Both parties roll; the system compares and reports the winner.
+
+### Short & Long Rests
+
+Rests reset character resources. A player initiates a rest; the DM approves it from the dashboard (to prevent resting in unsafe situations).
+
+**Short Rest** (`/rest short`):
+1. Player types `/rest short` → request posts to `#dm-queue`
+2. DM approves from dashboard
+3. System prompts the player to spend hit dice: `/spend-hd 2` (spend 2 hit dice)
+   - Each hit die heals `1dX + CON modifier` (X = class hit die size)
+   - System rolls and applies healing automatically, capped at `hp_max`
+   - Player can spend 0 to `hit_dice_remaining` dice
+4. System resets all features with `recharge: "short"` in `feature_uses` (e.g., Action Surge, Channel Divinity, Second Wind)
+5. Results posted to `#combat-log`: "Short rest: Kael spends 2 hit dice, heals 14 HP. Action Surge recharged."
+
+**Long Rest** (`/rest long`):
+1. Player types `/rest long` → request posts to `#dm-queue`
+2. DM approves from dashboard
+3. System automatically applies:
+   - HP restored to `hp_max`
+   - All spell slots restored to max
+   - All features with `recharge: "short"` or `recharge: "long"` reset
+   - Hit dice restored: regain up to half character level (minimum 1), capped at max (= character level)
+   - Death save tallies reset to 0/0
+4. Results posted to `#combat-log`: "Long rest: Aria fully healed. Spell slots restored. 3 hit dice recovered."
+
+**Constraints:**
+- Only one long rest per 24 in-game hours (DM tracks narrative time; system does not enforce calendar)
+- Rests cannot be initiated during active combat (system checks `encounter.status != 'active'`)
+- If interrupted (DM cancels mid-rest from dashboard), partial benefits may apply at DM discretion via manual override
+
+### Exploration, Social & Travel
+
+These modes are narrative-driven and don't need dedicated mechanical systems in MVP. The existing Discord channel structure handles them naturally:
+
+- **Exploration:** DM narrates in `#the-story`, players describe actions in `#player-chat` or `/action`. DM calls for checks as needed (Perception, Investigation, Survival). If combat breaks out, DM starts an encounter from the dashboard.
+- **Social encounters:** Players roleplay in `#the-story` or `#player-chat`. DM calls for Charisma checks (Persuasion, Deception, Intimidation) when the outcome is uncertain. No special NPC dialogue system needed — Discord's text format is ideal for RP.
+- **Travel:** DM narrates distance and terrain. Random encounters are DM-triggered. Forced march / exhaustion checks can use `/check constitution` if the DM calls for them.
+
+The `#dm-queue` channel serves as the universal escape hatch — any player action that doesn't map to a command goes there for DM resolution.
+
+---
+
 ## DM Dashboard
 
 The DM manages everything through a web app — they never type raw commands into Discord.
@@ -439,6 +514,8 @@ characters
   equipped_weapon TEXT                   -- FK → weapons
   equipped_armor  TEXT                   -- FK → armor
   spell_slots     JSONB                  -- { "1": {current: 2, max: 4}, "2": {current: 3, max: 3}, ... }
+  hit_dice_remaining INTEGER NOT NULL     -- current pool; max = character level. Hit die size from class.hit_die
+  feature_uses    JSONB                  -- { "action-surge": {current: 1, max: 1, recharge: "short"}, ... }
   features        JSONB                  -- [{name, source, level, description, mechanical_effect}]
   proficiencies   JSONB                  -- {saves: [str, con], skills: [athletics, perception], weapons: [...], armor: [...]}
   inventory       JSONB                  -- [{item_id, quantity, equipped}]
@@ -695,7 +772,10 @@ A first playable version includes:
 - D&D Beyond character import (paste URL → parse → DM approves)
 - SRD reference data seeded at startup (monsters, spells, weapons, armor, classes, races)
 
-Future phases: full asset library, Open5e third-party content integration, inventory management, campaign/session management, non-combat gameplay. (Note: spell slot tracking is included in MVP — see resolved issue #7.)
+- Skill/ability checks (`/check`, `/save`) and short/long rest mechanics (`/rest`)
+- Feature use tracking with short/long rest recharge
+
+Future phases: full asset library, Open5e third-party content integration, inventory management, campaign/session management. (Note: spell slot tracking is included in MVP — see resolved issue #7. Basic non-combat gameplay — skill checks and rests — is included in MVP; see resolved issue #15.)
 
 ---
 
@@ -1000,8 +1080,9 @@ Full database schema defined — see "Data Model" section. Key decisions:
 - JSONB for flexible nested data (features, inventory, spell slots); typed columns for combat-critical fields (HP, AC, position)
 - Action log with before/after state snapshots for undo and audit trail
 
-**15. Non-Combat Gameplay (Future)**
-Even for future planning, no mention of: skill/ability checks, social encounters, exploration/travel, short/long rest mechanics, leveling up.
+**15. Non-Combat Gameplay** ✅
+
+Skill/ability checks and short/long rest mechanics are now in MVP scope — see "Non-Combat Gameplay" section. `/check`, `/save`, and `/rest` commands added. Hit dice tracking and feature-use recharge (`feature_uses` column) added to the data model. Exploration, social, and travel are handled narratively through existing Discord channels and `#dm-queue`. Leveling was already covered (see "Character Leveling" section).
 
 **16. Tech Stack Decision** ✅
 

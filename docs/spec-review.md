@@ -125,14 +125,14 @@ A character hitting 0 HP is unaddressed. The spec shows "bloodied" and "dead" to
 
 Full database schema defined in the main spec ("Data Model" section). Covers: campaigns, characters (full 5e with SRD races/classes/features), encounters, combatants (instance state), turns, action log, reaction declarations, maps, and all reference data tables (creatures, spells, weapons, armor, classes, races, conditions). Character creation via dashboard with D&D Beyond import. SRD data seeded from [5e-bits/5e-database](https://github.com/5e-bits/5e-database). Internal format based on [BrianWendt/dnd5e_json_schema](https://github.com/BrianWendt/dnd5e_json_schema).
 
-### 15. Non-Combat Gameplay
+### ~~15. Non-Combat Gameplay~~ ✅ Resolved
 
-Acknowledged as out of MVP scope, but even the future phases list is thin. No mention of:
-- Skill checks / ability checks
-- Social encounters / NPC dialogue
-- Exploration / travel
-- Short and long rest mechanics
-- Leveling up
+- **Skill/ability checks** — `/check <skill>` and `/save <ability>` commands added to MVP. Supports advantage/disadvantage flags, expertise, Jack of All Trades. DM-prompted checks, group checks, contested checks, and passive checks all defined.
+- **Short & long rests** — `/rest short` and `/rest long` commands added to MVP. Short rest: DM-approved, hit dice spending with auto-heal. Long rest: full HP restore, spell slots reset, feature uses recharged, hit dice partially recovered.
+- **Feature use tracking** — new `feature_uses` JSONB column on characters tracks uses and recharge cadence (`"short"` or `"long"`).
+- **Hit dice** — new `hit_dice_remaining` column on characters.
+- **Exploration/social/travel** — handled narratively through existing Discord channels (`#the-story`, `#player-chat`, `#dm-queue`). No dedicated mechanical system needed.
+- **Leveling** — was already covered in "Character Leveling" section (DDB re-import or dashboard edit).
 
 ### 16. Tech Stack Indecision
 
