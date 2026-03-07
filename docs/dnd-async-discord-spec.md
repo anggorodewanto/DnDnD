@@ -221,16 +221,19 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 - Invalid flags return an error explaining why.
 
 **Advantage/disadvantage** — auto-detected from tracked conditions:
-- **Auto-detected:** target prone (melee adv / ranged disadv), attacker prone (disadv), target restrained/stunned/paralyzed/unconscious (adv), attacker restrained/blinded/poisoned (disadv), Reckless Attack (adv), invisible (adv/disadv as appropriate)
+- **Auto-detected:** target prone (melee adv / ranged disadv), attacker prone (disadv), target restrained/stunned/paralyzed/unconscious (adv), attacker restrained/blinded/poisoned (disadv), Reckless Attack (adv), invisible (adv/disadv as appropriate), ranged attack while hostile within 5ft (disadv), ranged attack beyond normal range (disadv)
 - **Not auto-detected in MVP:** flanking (optional rule — may add as campaign toggle later)
 - **DM override:** DM can force advantage or disadvantage from the dashboard for edge cases. Posts to `#combat-log`.
 - **Stacking:** when both apply, they cancel out per 5e rules — rolled normally regardless of source count.
 
-**Sneak Attack** (Rogue) — auto-detected by the backend:
-- Triggers when the rogue has advantage on the attack, OR an ally is within 5ft of the target and the rogue doesn't have disadvantage
-- Backend checks combatant positions to detect the ally-adjacent condition automatically
-- Extra damage dice (based on rogue level) are added to the damage roll
-- Once per turn — system tracks whether Sneak Attack has been used this turn
+**Auto-crit:** melee attacks within 5ft against paralyzed or unconscious targets are automatic critical hits (per 5e rules). System auto-doubles damage dice when this condition is detected.
+
+**Auto-detected class/creature features:**
+
+- **Sneak Attack** (Rogue) — triggers when the rogue has advantage on the attack, OR an ally is within 5ft of the target and the rogue doesn't have disadvantage. Backend checks combatant positions automatically. Extra damage dice added based on rogue level. Once per turn.
+- **Rage damage bonus** (Barbarian) — extra damage on STR-based melee attacks while raging. Rage tracked as a condition on the combatant; bonus auto-applied to qualifying attacks.
+- **Evasion** (Rogue 7+ / Monk 7+) — on DEX saving throws, success means no damage (instead of half), failure means half damage (instead of full). Auto-detected from class features by level.
+- **Pack Tactics** (wolves, kobolds, etc.) — creature gets advantage when an ally is within 5ft of the target. Same position-checking logic as Sneak Attack, applied to creatures with the Pack Tactics ability.
 
 ### Spell Casting Details
 
