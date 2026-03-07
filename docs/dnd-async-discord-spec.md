@@ -347,6 +347,26 @@ Turns are **sequential** — players send commands one at a time and see results
 
 Each command validates against remaining resources. If a player tries to use something already spent, the bot replies with a specific error.
 
+**Turn status prompt:** the bot shows available resources at two points:
+
+1. **Turn start** — included in the ping message in `#your-turn`:
+```
+🔔 @Aria — it's your turn!
+📋 Available: 🏃 30ft move | ⚔️ 2 attacks | 🎁 Bonus action | 🤚 Free interact | 🛡️ Reaction
+```
+
+2. **After every command** — appended to the command's response in `#combat-log`:
+```
+⚔️  Aria attacks Goblin #1 with Longsword (attack 1 of 2)
+    → Roll to hit: 19 (14 + 5) — HIT
+    → Damage: 9 slashing
+    → Goblin #1 is now Bloodied
+
+📋 Remaining: 🏃 5ft move | ⚔️ 1 attack | 🎁 Bonus action | 🤚 Free interact
+```
+
+Spent resources are omitted from the list. When nothing remains, the prompt shows: "📋 All actions spent — type `/done` to end your turn."
+
 **Ending a turn:**
 - **Explicit:** player sends `/done`
 - **DM override:** DM can end any turn from the dashboard
