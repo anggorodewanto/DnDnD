@@ -188,6 +188,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/action help` | `/action help Thorn G1` | Help — grant ally advantage on next attack/check (auto-resolved) |
 | `/action ready` | `/action ready I attack when the goblin moves past me` | Ready — hold action for a trigger (see Reactions) |
 | `/action hide` | `/action hide` | Hide — Stealth vs passive Perception (auto-resolved) |
+| `/action escape` | `/action escape` or `/action escape --acrobatics` | Escape a grapple — contested check (auto-resolved) |
 | `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
 | `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent (usable any time) — routed to `#dm-queue` |
 | `/deathsave` | `/deathsave` | Roll a death saving throw (only at 0 HP) |
@@ -327,6 +328,8 @@ The following standard actions are recognized by `/action` and resolved automati
 **Dodge:** `/action dodge` grants two benefits until the start of the character's next turn: attacks against the character have disadvantage, and the character has advantage on DEX saving throws. Tracked via a "dodge" condition with 1-round duration. Already referenced in Turn Timeout (auto-skip applies Dodge).
 
 **Help:** `/action help [ally] [target]` grants an ally advantage on their next attack roll against the specified target, or advantage on their next ability check. Costs the action. For attack help, the helper must be within 5ft of the target. The advantage applies to the next qualifying roll only, then expires. Tracked as a temporary effect: `{condition: "helped", source_combatant_id: [helper], target_combatant_id: [enemy], duration: "next_roll"}`.
+
+**Escape:** `/action escape` allows a grappled (or creature-restrained) character to break free. Costs the action (`action_used = true`). System runs a contested check: the escaping character's Athletics (STR) or Acrobatics (DEX) vs the grappler's Athletics (STR). By default the system uses whichever of the character's two modifiers is higher; use `--athletics` or `--acrobatics` to override. On success, the grappled condition is removed and speed is restored. On failure, the character remains grappled and the action is spent. Rejected if the character is not currently grappled or restrained by a creature.
 
 **Hide:** `/action hide` is described in the Stealth & Hiding section.
 
@@ -520,7 +523,7 @@ Grapple and shove are contested ability check actions available via `/action gra
 - Contested check: attacker Athletics (STR) vs target's choice of Athletics (STR) or Acrobatics (DEX)
 - Success: target gains the "grappled" condition (`{condition: "grappled", source_combatant_id: [grappler]}`)
 - Grappled creature's speed becomes 0; grappler can drag the target at half speed
-- Escape: target uses action to repeat the contested check; success removes the condition
+- Escape: target uses `/action escape` (costs their action) to repeat the contested check; success removes the grappled condition. See Standard Actions below
 
 **Shove:**
 - Target must be no more than one size category larger
@@ -1482,7 +1485,7 @@ conditions_ref
 - Weapon mechanics: finesse auto-select, loading, versatile, reach validation, heavy weapon size restriction, ammunition tracking, thrown weapon range
 - Condition/spell duration auto-expiration
 - Equipment enforcement (armor STR requirements, stealth disadvantage, free object interaction limits)
-- Standard actions: Dash, Dodge, Help, Hide, Ready (auto-resolved where deterministic)
+- Standard actions: Dash, Disengage, Dodge, Escape, Help, Hide, Ready (auto-resolved where deterministic)
 
 **Future phases:**
 - Tileset-based map painting + Tiled desktop import
