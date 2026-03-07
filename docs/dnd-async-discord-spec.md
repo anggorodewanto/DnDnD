@@ -228,6 +228,51 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Auto-crit:** melee attacks within 5ft against paralyzed or unconscious targets are automatic critical hits (per 5e rules). System auto-doubles damage dice when this condition is detected.
 
+**Save auto-resolution from conditions:**
+
+| Condition | Effect |
+|-----------|--------|
+| Paralyzed | Auto-fail STR and DEX saves |
+| Stunned | Auto-fail STR and DEX saves |
+| Unconscious | Auto-fail STR and DEX saves |
+| Petrified | Auto-fail STR and DEX saves |
+| Restrained | Disadvantage on DEX saves |
+
+When a save is triggered (spell, concentration check, etc.) and the target has one of these conditions, the system auto-resolves the save as failed (or applies disadvantage) without prompting the player to roll. Auto-fails are logged to `#combat-log`.
+
+**Condition effects on ability checks:**
+
+| Condition | Effect |
+|-----------|--------|
+| Frightened | Disadvantage on ability checks while source of fear is within line of sight |
+| Poisoned | Disadvantage on ability checks |
+
+Auto-applied when `/check` is used. System checks active conditions and applies disadvantage automatically.
+
+**Condition effects on speed:**
+
+| Condition | Effect |
+|-----------|--------|
+| Grappled | Speed becomes 0 |
+| Restrained | Speed becomes 0 |
+
+When a grappled or restrained condition is applied, the combatant's effective speed is set to 0. `/move` commands are rejected with an explanation (e.g., "You can't move — you are grappled"). Speed restores when the condition is removed.
+
+**Damage resistance, immunity, and vulnerability auto-application:**
+
+When damage is dealt, the system checks the target's `damage_resistances`, `damage_immunities`, and `damage_vulnerabilities` arrays:
+- **Resistance**: damage of that type is halved (rounded down)
+- **Immunity**: damage of that type is reduced to 0
+- **Vulnerability**: damage of that type is doubled
+
+Applied automatically during damage resolution. Logged to `#combat-log` (e.g., "Fire Elemental takes 7 fire damage → 0 (immune to fire)").
+
+**Condition immunity auto-blocking:**
+
+When a condition is being applied to a creature, the system checks `condition_immunities`:
+- If the creature is immune, the condition is **not applied**
+- A message is posted to `#combat-log` (e.g., "Elf is immune to charmed — condition not applied")
+
 **Auto-detected class/creature features:**
 
 - **Sneak Attack** (Rogue) — triggers when the rogue has advantage on the attack, OR an ally is within 5ft of the target and the rogue doesn't have disadvantage. Backend checks combatant positions automatically. Extra damage dice added based on rogue level. Once per turn.
@@ -905,6 +950,7 @@ creatures
   skills          JSONB                  -- {perception: 4, stealth: 6}
   damage_resistances   TEXT[]
   damage_immunities    TEXT[]
+  damage_vulnerabilities TEXT[]
   condition_immunities TEXT[]
   senses          JSONB                  -- {darkvision: 60, passive_perception: 14}
   languages       TEXT[]
@@ -987,7 +1033,14 @@ conditions_ref
   id              TEXT PK               -- "blinded", "prone", "stunned"
   name            TEXT NOT NULL
   description     TEXT NOT NULL
-  mechanical_effects JSONB NOT NULL      -- [{effect_type: "disadvantage_on_attack", ...}, {effect_type: "advantage_against", ...}]
+  mechanical_effects JSONB NOT NULL      -- [{effect_type, ...}]
+  -- effect_type values:
+  --   "disadvantage_on_attack"    — attacker has this condition
+  --   "advantage_against"         — attacks against target with this condition
+  --   "auto_fail_save"            — with {abilities: ["str", "dex"]}
+  --   "disadvantage_on_save"      — with {abilities: ["dex"]}
+  --   "disadvantage_on_check"     — with {conditional: "source_visible"} for frightened
+  --   "speed_zero"                — movement reduced to 0
 ```
 
 ### Key Design Decisions
