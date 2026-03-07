@@ -221,7 +221,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 - Invalid flags return an error explaining why.
 
 **Advantage/disadvantage** — auto-detected from tracked conditions:
-- **Auto-detected:** target prone (melee adv / ranged disadv), attacker prone (disadv), target restrained/stunned/paralyzed/unconscious (adv), attacker restrained/blinded/poisoned (disadv), Reckless Attack (adv), invisible (adv/disadv as appropriate), ranged attack while hostile within 5ft (disadv), ranged attack beyond normal range (disadv)
+- **Auto-detected:** target prone (melee adv / ranged disadv), attacker prone (disadv), target restrained/stunned/paralyzed/unconscious (adv), attacker restrained/blinded/poisoned (disadv), Reckless Attack (adv), invisible (adv/disadv as appropriate), ranged attack while hostile within 5ft (disadv), ranged attack beyond normal range (disadv), target has taken the Dodge action (attacks against have disadv)
 - **Not auto-detected in MVP:** flanking (optional rule — may add as campaign toggle later)
 - **DM override:** DM can force advantage or disadvantage from the dashboard for edge cases. Posts to `#combat-log`.
 - **Stacking:** when both apply, they cancel out per 5e rules — rolled normally regardless of source count.
@@ -237,8 +237,9 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 | Unconscious | Auto-fail STR and DEX saves |
 | Petrified | Auto-fail STR and DEX saves |
 | Restrained | Disadvantage on DEX saves |
+| Dodge action | Advantage on DEX saves |
 
-When a save is triggered (spell, concentration check, etc.) and the target has one of these conditions, the system auto-resolves the save as failed (or applies disadvantage) without prompting the player to roll. Auto-fails are logged to `#combat-log`.
+When a save is triggered (spell, concentration check, etc.) and the target has one of these conditions, the system auto-resolves the save as failed (or applies disadvantage/advantage) without prompting the player to roll. Dodge action grants advantage on DEX saves, making the auto-skip Dodge action (for AFK/timeout) mechanically meaningful. Auto-fails and advantage/disadvantage from conditions are logged to `#combat-log`.
 
 **Condition effects on ability checks:**
 
@@ -246,8 +247,9 @@ When a save is triggered (spell, concentration check, etc.) and the target has o
 |-----------|--------|
 | Frightened | Disadvantage on ability checks while source of fear is within line of sight |
 | Poisoned | Disadvantage on ability checks |
+| Blinded | Auto-fail ability checks requiring sight |
 
-Auto-applied when `/check` is used. System checks active conditions and applies disadvantage automatically.
+Auto-applied when `/check` is used. System checks active conditions and applies disadvantage automatically. For blinded creatures, checks that require sight (e.g., Perception checks to spot something visual) are auto-failed. The DM flags which checks require sight via the dashboard.
 
 **Condition effects on speed:**
 
@@ -255,8 +257,29 @@ Auto-applied when `/check` is used. System checks active conditions and applies 
 |-----------|--------|
 | Grappled | Speed becomes 0 |
 | Restrained | Speed becomes 0 |
+| Frightened | Can't move closer to source of fear |
 
-When a grappled or restrained condition is applied, the combatant's effective speed is set to 0. `/move` commands are rejected with an explanation (e.g., "You can't move — you are grappled"). Speed restores when the condition is removed.
+When a grappled or restrained condition is applied, the combatant's effective speed is set to 0. `/move` commands are rejected with an explanation (e.g., "You can't move — you are grappled"). Speed restores when the condition is removed. For frightened creatures, `/move` commands that would decrease distance to the fear source are rejected (e.g., "You can't move closer to the source of your fear"). The fear source is tracked as metadata on the frightened condition (`{source_combatant_id}`).
+
+**Prone movement cost:**
+
+Standing from prone costs half the combatant's movement speed. When a prone combatant issues `/move`, the system deducts half their speed before calculating remaining movement. If the combatant has insufficient movement remaining, standing is still allowed but no further movement is possible. Logged to `#combat-log` (e.g., "Rogue stands from prone (15ft movement spent). 15ft movement remaining.").
+
+**Condition-based action blocking:**
+
+| Condition | Effect |
+|-----------|--------|
+| Incapacitated | Can't take actions or reactions |
+| Stunned | Can't take actions or reactions (includes incapacitated) |
+| Paralyzed | Can't take actions or reactions (includes incapacitated) |
+| Unconscious | Can't take actions or reactions (includes incapacitated) |
+| Petrified | Can't take actions or reactions (includes incapacitated) |
+
+When a combatant with one of these conditions attempts `/attack`, `/cast`, `/action`, or `/reaction`, the command is rejected with an explanation (e.g., "You can't act — you are stunned"). The combatant's turn is auto-skipped with a `#combat-log` message (e.g., "Fighter's turn skipped — paralyzed"). Already handled for unconscious at 0 HP via death save rules; this generalizes to all incapacitating conditions.
+
+**Charmed attack restriction:**
+
+Charmed creatures can't attack the charmer or target them with harmful abilities. `/attack` and `/cast` (harmful) commands targeting the charm source are rejected (e.g., "You can't attack the source of your charm"). The charm source is tracked as metadata on the charmed condition (`{source_combatant_id}`). Non-harmful interactions with the charmer are still allowed.
 
 **Damage resistance, immunity, and vulnerability auto-application:**
 
@@ -266,6 +289,8 @@ When damage is dealt, the system checks the target's `damage_resistances`, `dama
 - **Vulnerability**: damage of that type is doubled
 
 Applied automatically during damage resolution. Logged to `#combat-log` (e.g., "Fire Elemental takes 7 fire damage → 0 (immune to fire)").
+
+Petrified creatures have resistance to all damage types. This is auto-applied in addition to any existing resistances on the creature. If the creature already has resistance to a damage type, the petrified resistance does not stack (resistance is not applied twice).
 
 **Condition immunity auto-blocking:**
 
@@ -1041,6 +1066,14 @@ conditions_ref
   --   "disadvantage_on_save"      — with {abilities: ["dex"]}
   --   "disadvantage_on_check"     — with {conditional: "source_visible"} for frightened
   --   "speed_zero"                — movement reduced to 0
+  --   "block_actions"             — can't take actions or reactions
+  --   "block_attack_target"       — with {target: "source"} for charmed
+  --   "block_move_toward"         — with {target: "source"} for frightened
+  --   "auto_fail_check"           — with {conditional: "requires_sight"} for blinded
+  --   "resistance_all"            — resistance to all damage types (petrified)
+  --   "prone_stand_cost"          — standing costs half movement
+  --   "dodge_disadvantage_against" — attacks against have disadvantage
+  --   "dodge_advantage_save"      — with {abilities: ["dex"]}
 ```
 
 ### Key Design Decisions
