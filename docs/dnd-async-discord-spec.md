@@ -883,7 +883,7 @@ Player sees the result and decides to finish off G1 or switch targets:
 
 ```
 ⚔️  Aria attacks Goblin #2 with Longsword (attack 2 of 2)
-    → Roll to hit: 11 (6 + 5) vs AC 13 — MISS
+    → Roll to hit: 11 (6 + 5) — MISS
     ℹ️  No attacks remaining
 ```
 
