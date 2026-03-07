@@ -312,7 +312,7 @@ Players pre-declare reaction intent using `/reaction`. The DM resolves all react
 
 **Readied Actions:** a player can use their action to ready a response to a trigger via `/action ready [description]` (e.g., `/action ready I attack when the goblin moves past me`). This costs the action for the turn. When the trigger occurs, the readied action fires using the creature's reaction (`reaction_used = true`). If the trigger never occurs before the creature's next turn, the readied action is lost. For readied spells: the spell slot is expended when readying (not when releasing), and the caster must hold concentration on the readied spell until the trigger fires — if concentration is broken, the spell is lost along with the slot. Readied actions follow the same DM-resolution flow as other `/reaction` declarations.
 
-**System-generated reaction triggers:** opportunity attacks (see Opportunity Attacks section) bypass the `/reaction` declaration flow — the system auto-detects and prompts directly.
+**System-generated reaction triggers:** opportunity attacks (see Opportunity Attacks section) bypass the `/reaction` declaration flow — the system auto-detects and prompts directly. Unlike other reactions, OA prompts use a queue-and-continue model: movement is not paused, and the hostile has until end-of-round to respond (see Opportunity Attacks).
 
 **Why this works for async:** zero stalling — combat never pauses for a reaction response. Players declare intent on their own time. DM has full control over timing and adjudication.
 
@@ -532,11 +532,13 @@ When a creature moves out of a hostile creature's melee reach without taking the
 2. Threatened area = `reach_ft` from the hostile's position (default 5ft; 10ft for reach weapons)
 3. If the moving creature used `/action disengage` (costs their action) or `/bonus cunning-action disengage` (Rogue Cunning Action), no opportunity attacks are triggered — the system tracks `has_disengaged` on the `turns` table
 
-**Resolution:**
-- For **player-controlled hostiles:** the bot pings the player in `#your-turn` with a reaction prompt: "⚔️ [Enemy] is moving out of your reach — use your reaction for an opportunity attack? `/reaction oa [target]`"
+**Resolution (queue-and-continue):**
+Movement is **not** paused when an OA triggers. The moving creature completes its full `/move`, and the system records the OA trigger point (the tile where the creature left the hostile's reach). The hostile then has until end-of-round to respond:
+- For **player-controlled hostiles:** the bot pings the player in `#your-turn`: "⚔️ [Enemy] moved out of your reach (left [tile]) — use your reaction for an opportunity attack? `/reaction oa [target]`"
 - For **DM-controlled hostiles:** the dashboard surfaces the opportunity attack option; DM confirms or declines
 - Opportunity attacks use the hostile's reaction for the round (`reaction_used = true`)
-- Movement is paused at the trigger point until the opportunity attack is resolved (hit or declined), then continues
+- If the OA hits and reduces the target to 0 HP, the system notifies the DM that the creature should have dropped at the trigger point. The DM retroactively corrects the creature's position and any subsequent effects via the dashboard. The system does not auto-invalidate movement.
+- If the hostile does not respond by end-of-round, the OA opportunity is forfeited
 
 **Interaction with reactions:** opportunity attacks are system-generated reaction triggers — they consume the creature's reaction and follow the same one-per-round limit.
 
@@ -1587,7 +1589,7 @@ conditions_ref
 | Complex player actions breaking automation | `/action` routes to DM; no attempt to auto-parse freeform intent |
 | D&D Beyond API instability | Undocumented endpoint may change; importer includes fallback to manual creation |
 | Turn stalls from AFK players | 24h configurable timeout with escalating pings and auto-skip to Dodge |
-| Reaction timing in async | Pre-declaration model — no combat pauses; DM resolves manually |
+| Reaction timing in async | Pre-declaration model — no combat pauses; DM resolves manually. OA uses queue-and-continue: movement completes, hostile responds by end-of-round, DM handles retroactive correction if OA drops target to 0 HP |
 | Concurrent commands corrupting state | Per-turn PostgreSQL advisory locks serialize all mutations |
 
 ---
