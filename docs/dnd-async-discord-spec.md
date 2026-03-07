@@ -177,8 +177,8 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 |---|---|---|
 | `/move` | `/move D4` | Move to coordinate. Repeatable for split movement as long as total ≤ speed |
 | `/fly` | `/fly 30` | Set altitude in feet. Costs movement 1:1 |
-| `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` | Attack a target. One `/attack` per swing; backend tracks attacks remaining |
-| `/cast` | `/cast fireball D5` | Cast a spell at a target coordinate or enemy ID |
+| `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` or `/attack G2 --twohanded` | Attack a target. One `/attack` per swing; backend tracks attacks remaining. `--twohanded` for versatile weapons |
+| `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting |
 | `/bonus` | `/bonus cunning-action dash` | Bonus action |
 | `/shove` | `/shove OS` | Shove a target (push or knock prone) |
 | `/interact` | `/interact draw longsword` | Free object interaction — routed to `#dm-queue` |
@@ -214,6 +214,16 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Extra Attack:** resolved one swing at a time. Each `/attack` resolves a single attack roll. Backend tracks attacks remaining by class/level (Fighter 5 = 2, Fighter 11 = 3, Fighter 20 = 4). After each swing, the bot reports remaining attacks. Players retarget freely between swings. Unused attacks forfeited on `/done`.
 
+**Two-Weapon Fighting:** when a character attacks with a light melee weapon, they can use their bonus action to attack with a different light melee weapon held in the other hand. Invoked via `/bonus offhand`. The off-hand attack does not add the ability modifier to damage unless the character has the Two-Weapon Fighting fighting style. System validates both weapons have the "light" property.
+
+**Finesse weapons:** weapons with the "finesse" property (rapier, dagger, shortsword, etc.) allow the attacker to use either STR or DEX for attack and damage rolls. The system auto-selects the higher of the two modifiers — no player input required.
+
+**Loading property:** weapons with the "loading" property (crossbows) can only fire once per action, bonus action, or reaction regardless of Extra Attack, unless the character has the Crossbow Expert feat. System limits attacks to 1 when a loading weapon is used.
+
+**Versatile weapons:** weapons with the "versatile" property can be used one-handed or two-handed for increased damage. Use `/attack [target] --twohanded` to roll the `versatile_damage` die instead of the base damage die. The `--twohanded` flag is rejected if the character has a shield equipped (shield occupies the off-hand).
+
+**Reach weapons:** weapons with the "reach" property (glaive, halberd, pike) extend melee range to 10ft instead of the standard 5ft. The system validates attack distance against the weapon's reach when processing `/attack`. If the target is beyond reach, the command is rejected: "Target is out of melee range (10ft reach)."
+
 **Attack modifier flags** (opt-in per swing):
 - `--gwm` — Great Weapon Master: -5 to hit, +10 damage. Requires a heavy melee weapon.
 - `--sharpshooter` — Sharpshooter: -5 to hit, +10 damage. Requires a ranged weapon.
@@ -226,7 +236,9 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 - **DM override:** DM can force advantage or disadvantage from the dashboard for edge cases. Posts to `#combat-log`.
 - **Stacking:** when both apply, they cancel out per 5e rules — rolled normally regardless of source count.
 
-**Auto-crit:** melee attacks within 5ft against paralyzed or unconscious targets are automatic critical hits (per 5e rules). System auto-doubles damage dice when this condition is detected.
+**Critical hits:** a natural 20 on the attack roll is always a hit regardless of AC, and all damage dice are doubled (roll twice as many dice, then add modifiers once). The system auto-detects nat 20s and doubles the dice in the damage formula.
+
+**Auto-crit:** melee attacks within 5ft against paralyzed or unconscious targets are automatic critical hits (per 5e rules) — the attack auto-hits and damage dice are doubled, same as a nat 20.
 
 ### Spell Casting Details
 
@@ -243,7 +255,15 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Bonus action spell restriction:** If a player casts a spell with a casting time of "1 bonus action" (e.g., Healing Word, Misty Step), the only other spell they can cast that turn is a cantrip with a casting time of 1 action. If they attempt `/cast` with a non-cantrip after using a bonus action spell, the command is rejected: "You already cast a bonus action spell this turn — you can only cast a cantrip with your action."
 
+**Spell save DC:** calculated as `8 + proficiency_bonus + spellcasting_ability_modifier`. The spellcasting ability varies by class (referenced from `classes.spellcasting.ability`): INT for Wizards, WIS for Clerics/Druids/Rangers, CHA for Bards/Paladins/Sorcerers/Warlocks. Creature stat blocks store the DC directly in their abilities data.
+
+**Spell attack rolls:** some spells require a spell attack roll instead of a saving throw. The attack roll is `d20 + proficiency_bonus + spellcasting_ability_modifier` vs the target's AC. Spells are categorized by `attack_type` on the `spells` table: `'melee'` (e.g., Shocking Grasp), `'ranged'` (e.g., Fire Bolt), or `NULL` (save-based or auto-hit). Melee spell attacks within 5ft of a prone target get advantage; ranged spell attacks against a prone target get disadvantage (same as weapon attacks).
+
 **Spell slots:** tracked and enforced. Backend knows slots per level, deducts on cast, rejects `/cast` if no slots remaining.
+
+**Upcasting:** spells can be cast at higher levels for increased effect by specifying `/cast fireball D5 --slot 5` to use a 5th-level slot. The system parses the spell's `higher_levels` field (e.g., "1d6 per slot level above 3rd") and auto-calculates the scaled damage or healing. If `--slot` is omitted, the system defaults to the lowest available slot of sufficient level. The `--slot` value must be ≥ the spell's base level and the character must have a slot available at that level.
+
+**Ritual casting:** spells with `ritual: true` can be cast without expending a spell slot by using `/cast detect-magic --ritual`. Ritual casting adds 10 minutes to the casting time and is only available outside active combat (`encounter.status != 'active'`). Only classes with the Ritual Casting feature (Wizard, Cleric, Druid, Bard with Ritual Casting) can use this option. The system checks both the spell's `ritual` flag and the character's class features.
 
 **Spell range:** enforced by backend. Touch spells require adjacency (5ft), self spells need no target.
 
@@ -265,6 +285,8 @@ Players pre-declare reaction intent using `/reaction`. The DM resolves all react
 4. System marks the player's reaction as spent for the round
 
 Readied Actions use the same flow: `/reaction I attack when the goblin moves past me`.
+
+**System-generated reaction triggers:** opportunity attacks (see Opportunity Attacks section) bypass the `/reaction` declaration flow — the system auto-detects and prompts directly.
 
 **Why this works for async:** zero stalling — combat never pauses for a reaction response. Players declare intent on their own time. DM has full control over timing and adjudication.
 
@@ -340,6 +362,27 @@ When a combatant with one of these conditions attempts `/attack`, `/cast`, `/act
 
 Charmed creatures can't attack the charmer or target them with harmful abilities. `/attack` and `/cast` (harmful) commands targeting the charm source are rejected. The charm source is tracked as metadata on the charmed condition (`{source_combatant_id}`). Non-harmful interactions with the charmer are still allowed.
 
+### Duration Tracking & Auto-Expiration
+
+Conditions and spell effects with limited durations are tracked via `duration_rounds` and `started_round` on each condition entry. At specific trigger points, the system checks for expired effects:
+
+**Expiration check timing:**
+- **Start of source creature's turn:** compare `encounters.round_number` against `started_round + duration_rounds`. If expired, auto-remove the condition and post to `#combat-log`: "⏱️ [Effect] on [Target] has expired (placed by [Source])."
+- **End of source creature's turn:** same check, for effects with `expires_on: "end_of_turn"`.
+
+**Duration tracking fields** (on each condition in `combatants.conditions` JSONB):
+- `duration_rounds` — NULL for indefinite (e.g., grappled until escape); integer for timed effects
+- `started_round` — the `encounters.round_number` when applied
+- `source_combatant_id` — who applied it (determines whose turn triggers expiration)
+- `expires_on` — `"start_of_turn"` (default) or `"end_of_turn"`
+
+**Turn-start sequence** (updated):
+1. Check for expired conditions/spell effects on this combatant → auto-remove and log
+2. Apply start-of-turn effects (e.g., ongoing damage zones)
+3. Ping player with available resources
+
+**Indefinite conditions** (grappled, prone, charmed without duration) have `duration_rounds: NULL` and are only removed by specific actions (escape, standing up, spell ending).
+
 ### Damage Processing
 
 **Resistance, immunity, and vulnerability:**
@@ -348,8 +391,18 @@ When damage is dealt, the system checks the target's `damage_resistances`, `dama
 - **Resistance**: damage of that type is halved (rounded down)
 - **Immunity**: damage of that type is reduced to 0
 - **Vulnerability**: damage of that type is doubled
+- **Resistance + Vulnerability:** if a creature has both resistance and vulnerability to the same damage type, they cancel out — normal damage is dealt
+- **Immunity precedence:** immunity always takes priority over resistance and vulnerability — damage is reduced to 0 regardless of other modifiers
 
 Petrified creatures have resistance to all damage types, auto-applied in addition to existing resistances (no double-stacking).
+
+**Temporary hit points:**
+
+Temp HP acts as a damage buffer and follows these rules:
+- Damage is absorbed by `temp_hp` before `hp_current` — system deducts temp HP first, then applies remainder to real HP
+- Temp HP **does not stack** — if a new source grants temp HP, the creature keeps the higher value (current remaining or new grant)
+- Temp HP **cannot be healed** — healing spells and effects only restore `hp_current`, never `temp_hp`
+- Temp HP expires at the end of the duration specified by the granting effect (tracked via the condition/effect system), or on long rest if no duration specified
 
 **Exhaustion (progressive condition):**
 
@@ -374,12 +427,234 @@ Exhaustion increases from forced march, starvation, environmental effects — ap
 
 When a condition is being applied to a creature, the system checks `condition_immunities`. If immune, the condition is not applied and a message is posted to `#combat-log`.
 
+### Cover
+
+Cover is computed dynamically from map geometry — walls, obstacles, and other creatures in `tiled_json` between attacker and target. Cover is not stored on combatants; it is calculated at the moment of each attack or spell.
+
+| Cover Type | AC Bonus | DEX Save Bonus | Determination |
+|------------|----------|----------------|---------------|
+| Half cover | +2 | +2 | Target is behind an obstacle that covers at least half their body (low wall, furniture, another creature) |
+| Three-quarters cover | +5 | +5 | Target is behind an obstacle covering at least three-quarters of their body (portcullis, arrow slit) |
+| Full cover | — | — | Target is completely concealed — cannot be targeted by attacks or spells requiring line of sight |
+
+**Calculation (DMG grid variant):** the system picks a corner of the attacker's square and draws lines to each corner of the target's square. If 1–2 lines are blocked by obstacles, half cover applies. If 3 lines are blocked, three-quarters cover. If all 4 are blocked, full cover. The system tests from the corner that gives the attacker the best (least) cover result. Creature-granted cover (another creature between attacker and target) counts as half cover.
+
+**Integration with attacks:** cover AC bonus is added to the target's effective AC during attack resolution. If full cover applies, `/attack` and targeted `/cast` commands are rejected: "Target has full cover — no line of sight."
+
+**Integration with saves:** cover DEX save bonus applies to area-of-effect spells (e.g., Fireball). The system checks cover between the spell's point of origin and each affected creature.
+
 ### Auto-Detected Class & Creature Features
 
-- **Sneak Attack** (Rogue) — triggers when the rogue has advantage on the attack, OR an ally is within 5ft of the target and the rogue doesn't have disadvantage. Backend checks combatant positions automatically. Extra damage dice added based on rogue level. Once per turn.
-- **Rage damage bonus** (Barbarian) — extra damage on STR-based melee attacks while raging. Rage tracked as a condition on the combatant; bonus auto-applied to qualifying attacks.
-- **Evasion** (Rogue 7+ / Monk 7+) — on DEX saving throws, success means no damage (instead of half), failure means half damage (instead of full). Auto-detected from class features by level.
-- **Pack Tactics** (wolves, kobolds, etc.) — creature gets advantage when an ally is within 5ft of the target. Same position-checking logic as Sneak Attack, applied to creatures with the Pack Tactics ability.
+The following features are resolved automatically via the Feature Effect System (see Example Declarations for full JSON) — their behavior is driven by effect declarations in `mechanical_effect`, not hardcoded logic:
+
+- **Sneak Attack** (Rogue) — `extra_damage_dice` on hit; requires advantage or ally within 5ft. Dice scale by rogue level. Once per turn.
+- **Rage** (Barbarian) — `modify_damage_roll` on STR melee + `grant_resistance` to B/P/S while raging.
+- **Evasion** (Rogue 7+ / Monk 7+) — `modify_save` on DEX saves: success = no damage, failure = half.
+- **Pack Tactics** (wolves, kobolds, etc.) — `conditional_advantage` on attacks when ally within 5ft of target.
+
+### Opportunity Attacks
+
+When a creature moves out of a hostile creature's melee reach without taking the Disengage action, the system auto-detects the trigger and prompts the hostile for an opportunity attack.
+
+**Detection logic:**
+1. On each `/move` command, the system checks whether the moving creature leaves any hostile creature's threatened area
+2. Threatened area = `reach_ft` from the hostile's position (default 5ft; 10ft for reach weapons)
+3. If the moving creature used `/action disengage` (costs their action) or `/bonus cunning-action disengage` (Rogue Cunning Action), no opportunity attacks are triggered — the system tracks `has_disengaged` on the `turns` table
+
+**Resolution:**
+- For **player-controlled hostiles:** the bot pings the player in `#your-turn` with a reaction prompt: "⚔️ [Enemy] is moving out of your reach — use your reaction for an opportunity attack? `/reaction oa [target]`"
+- For **DM-controlled hostiles:** the dashboard surfaces the opportunity attack option; DM confirms or declines
+- Opportunity attacks use the hostile's reaction for the round (`reaction_used = true`)
+- Movement is paused at the trigger point until the opportunity attack is resolved (hit or declined), then continues
+
+**Interaction with reactions:** opportunity attacks are system-generated reaction triggers — they consume the creature's reaction and follow the same one-per-round limit.
+
+### Grapple & Shove
+
+Grapple and shove are contested ability check actions available via `/action grapple [target]` and `/shove [target]`.
+
+**Grapple:**
+- Requires a free hand (system checks equipped items — rejected if both hands occupied)
+- Target must be no more than one size category larger than the grappler
+- Contested check: attacker Athletics (STR) vs target's choice of Athletics (STR) or Acrobatics (DEX)
+- Success: target gains the "grappled" condition (`{condition: "grappled", source_combatant_id: [grappler]}`)
+- Grappled creature's speed becomes 0; grappler can drag the target at half speed
+- Escape: target uses action to repeat the contested check; success removes the condition
+
+**Shove:**
+- Target must be no more than one size category larger
+- Contested check: attacker Athletics (STR) vs target's choice of Athletics (STR) or Acrobatics (DEX)
+- Attacker chooses mode via flag: `/shove OS --prone` or `/shove OS --push`
+  - `--prone`: target is knocked prone
+  - `--push`: target is pushed 5ft away from the attacker (system validates destination is unoccupied)
+
+### Stealth & Hiding
+
+The Hide action allows a creature to become unseen during combat.
+
+**Hiding:**
+- Player uses their action: `/action hide`
+- System rolls Stealth (DEX) check for the hider vs **passive Perception** of each hostile creature with line of sight
+- If the Stealth result beats all hostiles' passive Perception: `is_visible` is set to `false` on the combatant; token is hidden from the player-facing map
+- If any hostile's passive Perception meets or exceeds the roll: hide fails, `is_visible` remains `true`
+
+**While hidden:**
+- Attacks against the hidden creature have disadvantage (attacker can't see target)
+- The hidden creature's first attack has advantage (unseen attacker)
+- After attacking (hit or miss), the creature is automatically revealed: `is_visible = true`
+- Making noise (casting a spell with verbal components, etc.) may reveal the creature — DM adjudicates via dashboard
+
+**Passive Perception:** calculated as `10 + Perception modifier` (including proficiency if proficient). Stored on the combatant for quick lookup.
+
+### Equipment Enforcement
+
+The system enforces armor-related penalties automatically during combat.
+
+**Heavy armor strength requirement:**
+- If a character's STR score is below their equipped armor's `strength_req`, their effective speed is reduced by 10ft
+- Checked when combat begins and when equipment changes
+- Example: Plate armor requires STR 15; a character with STR 13 moves at `speed_ft - 10`
+
+**Stealth disadvantage:**
+- Armor with `stealth_disadv: true` (e.g., chain mail, plate) automatically applies disadvantage to Stealth checks
+- Applied when the character uses `/action hide` or rolls `/check stealth`
+- Stacks with other sources of disadvantage per standard 5e rules (multiple disadvantage sources still result in a single disadvantage)
+
+---
+
+## Feature Effect System
+
+Class features, racial traits, creature abilities, and spell effects share a common data-driven resolution system. Rather than hardcoding each feature individually, features declare their mechanical effects using a vocabulary of **effect types** and **trigger points**. The combat engine processes these declarations at the appropriate moments.
+
+### Effect Types
+
+Each feature declares one or more effects from this vocabulary:
+
+| Effect Type | Description | Example |
+|-------------|-------------|---------|
+| `modify_attack_roll` | Add/subtract from attack rolls | Archery fighting style (+2 ranged) |
+| `modify_damage_roll` | Add/subtract flat damage | Rage damage bonus (+2/+3/+4) |
+| `extra_damage_dice` | Add extra dice to damage | Sneak Attack (1d6–10d6), Divine Smite (2d8) |
+| `modify_ac` | Add/subtract from AC | Shield of Faith (+2), Unarmored Defense |
+| `modify_save` | Add/subtract from saving throws | Aura of Protection (CHA mod to saves) |
+| `modify_check` | Add/subtract from ability checks | Guidance (+1d4), Jack of All Trades |
+| `modify_speed` | Add/subtract from speed | Barbarian Fast Movement (+10ft) |
+| `grant_resistance` | Grant damage type resistance | Rage (resistance to B/P/S), Tiefling (fire) |
+| `grant_immunity` | Grant condition or damage immunity | Paladin Aura of Courage (immunity to frightened) |
+| `extra_attack` | Grant additional attacks per action | Extra Attack, Thirsting Blade |
+| `modify_hp` | Modify HP maximum or temporary HP | Tough feat (+2 per level), Heroism (temp HP) |
+| `conditional_advantage` | Grant advantage/disadvantage on rolls | Reckless Attack (advantage on STR melee) |
+| `resource_on_hit` | Trigger resource use on hit/damage | Battlemaster maneuvers, Divine Smite on hit |
+| `reaction_trigger` | Define automatic reaction prompts | Shield spell, Uncanny Dodge, Sentinel |
+| `aura` | Apply effects to creatures within radius | Paladin auras, Spirit Guardians |
+
+### Trigger Points
+
+Effects are evaluated at specific moments during combat resolution:
+
+| Trigger | When Evaluated | Examples |
+|---------|---------------|----------|
+| `on_attack_roll` | After rolling d20, before comparing to AC | Archery, conditional advantage |
+| `on_damage_roll` | After hit confirmed, calculating damage | Rage bonus, Sneak Attack |
+| `on_take_damage` | When receiving damage, before applying | Resistance, Uncanny Dodge |
+| `on_save` | When making a saving throw | Aura of Protection, Evasion |
+| `on_check` | When making an ability check | Jack of All Trades, Expertise |
+| `on_turn_start` | At the start of the creature's turn | Regeneration, ongoing damage |
+| `on_turn_end` | At the end of the creature's turn | End-of-turn saves, aura damage |
+| `on_rest` | When completing a short or long rest | Feature use recharge |
+
+### Condition Filters
+
+Each effect can specify conditions that must be true for it to apply:
+
+```json
+{
+  "effect_type": "modify_damage_roll",
+  "modifier": 2,
+  "conditions": {
+    "when_raging": true,
+    "attack_type": "melee",
+    "ability_used": "str"
+  }
+}
+```
+
+Common condition filters:
+- `when_raging`, `when_concentrating` — active state checks
+- `weapon_property: "heavy"` / `"finesse"` / `"ranged"` — weapon type constraints
+- `attack_type: "melee"` / `"ranged"` — attack category (includes both weapon and spell attacks of that type)
+- `ability_used: "str"` / `"dex"` — ability score used for the roll
+- `target_condition: "frightened"` — target must have a specific condition
+- `ally_within: 5` — an ally within N feet of the target (for Sneak Attack, Pack Tactics)
+- `uses_remaining: true` — feature has remaining uses (checked against `feature_uses`)
+
+### Resolution Priority
+
+When multiple effects apply to the same roll, they are resolved in this order:
+
+1. **Immunities** — condition immunities prevent effects from applying
+2. **Resistances / Vulnerabilities** — damage type modifications (see Damage Processing for cancel/immunity rules)
+3. **Flat modifiers** — summed (+2 from Archery, +CHA from Aura of Protection)
+4. **Dice modifiers** — additional dice added (Sneak Attack, Divine Smite)
+5. **Advantage / Disadvantage** — cancel out if both apply (see Attack Mechanics for details)
+
+### Example Declarations
+
+**Rage (Barbarian):**
+```json
+{
+  "feature": "Rage",
+  "effects": [
+    {"type": "modify_damage_roll", "modifier": 2, "trigger": "on_damage_roll",
+     "conditions": {"when_raging": true, "attack_type": "melee", "ability_used": "str"}},
+    {"type": "grant_resistance", "damage_types": ["bludgeoning", "piercing", "slashing"],
+     "trigger": "on_take_damage", "conditions": {"when_raging": true}},
+    {"type": "conditional_advantage", "on": "str_check", "trigger": "on_check",
+     "conditions": {"when_raging": true, "ability_used": "str"}}
+  ]
+}
+```
+
+**Sneak Attack (Rogue):**
+```json
+{
+  "feature": "Sneak Attack",
+  "effects": [
+    {"type": "extra_damage_dice", "dice": "level_scaled", "trigger": "on_damage_roll",
+     "conditions": {"weapon_property": "finesse_or_ranged", "once_per_turn": true,
+                    "any_of": [{"has_advantage": true}, {"ally_within": 5}]}}
+  ]
+}
+```
+
+**Aura of Protection (Paladin 6+):**
+```json
+{
+  "feature": "Aura of Protection",
+  "effects": [
+    {"type": "modify_save", "modifier": "cha_mod", "trigger": "on_save",
+     "conditions": {"aura_radius": 10, "target": "self_and_allies"}}
+  ]
+}
+```
+
+**Bless (Spell):**
+```json
+{
+  "feature": "Bless",
+  "effects": [
+    {"type": "modify_attack_roll", "modifier": "1d4", "trigger": "on_attack_roll"},
+    {"type": "modify_save", "modifier": "1d4", "trigger": "on_save"}
+  ]
+}
+```
+
+### Integration with Existing Systems
+
+- **`conditions_ref.mechanical_effects`** uses the same effect type vocabulary — condition effects (e.g., blinded → `disadvantage_on_attack`) are processed alongside feature effects
+- **`classes.features_by_level`** and **`characters.features`** store effect declarations in the `mechanical_effect` field using this format
+- **Auto-Detected Class & Creature Features** (Sneak Attack, Rage, Evasion, Pack Tactics) are specific instances of this general system — their logic is driven by their effect declarations, not hardcoded
+- The combat engine processes all applicable effects at each trigger point using a **single-pass processor**: collect all active effects for the trigger → filter by conditions → apply in priority order → return modified result
 
 ---
 
@@ -404,6 +679,23 @@ DM reviews, resolves any queued actions in dashboard
   → bot regenerates map image in #combat-map
   → bot pings next player in #your-turn
 ```
+
+### Surprise
+
+When combat begins from an ambush or when some combatants are unaware, the DM marks specific combatants as **surprised** during encounter setup in the dashboard.
+
+**Implementation:**
+- Surprise is applied as a condition: `{condition: "surprised", duration_rounds: 1, started_round: 0}`
+- Surprised combatants cannot move, take actions, use bonus actions, or use reactions during round 1
+- The system auto-skips surprised combatants' turns in round 1 (no Dodge action — they are fully inert)
+- A surprised creature can use reactions after its turn ends in round 1 (the "surprised" condition is removed at the end of their skipped turn)
+
+**Combat log output:**
+```
+⏭️ Goblin #2 is surprised — turn skipped
+```
+
+**Interaction with initiative:** surprised creatures still roll initiative normally. Their position in the initiative order matters because it determines when during round 1 they stop being surprised (and can start using reactions).
 
 ### Player Turns
 
@@ -918,7 +1210,7 @@ combatants
   hp_current      INTEGER NOT NULL
   temp_hp         INTEGER DEFAULT 0
   ac              INTEGER NOT NULL
-  conditions      JSONB DEFAULT '[]'     -- [{condition, source, duration_rounds, started_round}]
+  conditions      JSONB DEFAULT '[]'     -- [{condition, source_combatant_id, duration_rounds, started_round, expires_on}]
   exhaustion_level INTEGER DEFAULT 0    -- 0-6; effects are cumulative (see Exhaustion)
   death_saves     JSONB                  -- {successes: 0, failures: 0} — PCs only
   is_visible      BOOLEAN DEFAULT true   -- hidden enemies (ambush, stealth)
@@ -938,6 +1230,7 @@ turns
   reaction_used   BOOLEAN DEFAULT false  -- per-round, not per-turn
   free_interact_used BOOLEAN DEFAULT false
   attacks_remaining INTEGER NOT NULL DEFAULT 1
+  has_disengaged  BOOLEAN DEFAULT false   -- tracks Disengage action for opportunity attack suppression
   started_at      TIMESTAMPTZ
   timeout_at      TIMESTAMPTZ           -- started_at + campaign timeout setting
   completed_at    TIMESTAMPTZ
@@ -1028,6 +1321,7 @@ spells
   concentration   BOOLEAN DEFAULT false
   ritual          BOOLEAN DEFAULT false
   area            JSONB                  -- {shape: "sphere", radius_ft: 20} or {shape: "cone", length_ft: 15}
+  attack_type     TEXT                   -- 'melee', 'ranged', or NULL (save-based/auto-hit)
   save_type       TEXT                   -- "dex", "wis", etc. NULL if no save
   damage          JSONB                  -- {dice: "8d6", type: "fire", higher_levels: "1d6 per slot above 3rd"}
   healing         JSONB                  -- {dice: "1d8+mod", higher_levels: "1d8 per slot above 1st"}
@@ -1120,6 +1414,8 @@ conditions_ref
 
 6. **No separate combat state table** — the encounter tracks `status` and `current_turn_id`. Current combat state is derived from the encounter's combatants + the active turn row.
 
+7. **Single-pass effect processor** — all combat modifiers (conditions, class features, spell effects, racial traits) are resolved through one unified pipeline using the Feature Effect System's effect type vocabulary. At each trigger point, the processor collects all applicable effects, filters by conditions, and applies them in priority order. This avoids scattered hardcoded checks and makes new features data-driven.
+
 ---
 
 ## Risks & Mitigations
@@ -1153,6 +1449,12 @@ conditions_ref
 - Skill/ability checks and rest mechanics with feature-use recharge
 - Dice rolls auto-logged to `#roll-history`
 - Map editor: blank grid + terrain/wall tools + image import (Tiled-compatible JSON)
+- Data-driven Feature Effect System for class features, racial traits, and spell effects
+- Core combat rules: opportunity attacks, cover, surprise, critical hits, temp HP, two-weapon fighting, grapple/shove, stealth/hiding
+- Spell mechanics: spell save DC, spell attack rolls, upcasting, ritual casting
+- Weapon mechanics: finesse auto-select, loading, versatile, reach validation
+- Condition/spell duration auto-expiration
+- Equipment enforcement (armor STR requirements, stealth disadvantage)
 
 **Future phases:**
 - Tileset-based map painting + Tiled desktop import
