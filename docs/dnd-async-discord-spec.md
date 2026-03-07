@@ -384,6 +384,23 @@ When a save is triggered (spell, concentration check, etc.) and the target has o
 
 Auto-applied when `/check` is used. For blinded creatures, checks that require sight (e.g., Perception checks to spot something visual) are auto-failed. For deafened creatures, checks that require hearing (e.g., Perception checks to hear something) are auto-failed. The DM flags which checks require sight or hearing via the dashboard.
 
+**Effects on attack rolls:**
+
+| Condition | Effect on attacker | Effect on attacks against |
+|-----------|-------------------|--------------------------|
+| Blinded | Disadvantage on attack rolls | Advantage on attacks against |
+| Frightened | No direct attack effect | — |
+| Invisible | Advantage on attack rolls | Disadvantage on attacks against |
+| Poisoned | Disadvantage on attack rolls | — |
+| Prone | Disadvantage on attack rolls | Advantage (within 5ft) / Disadvantage (beyond 5ft) |
+| Restrained | Disadvantage on attack rolls | Advantage on attacks against |
+| Stunned | — | Advantage on attacks against |
+| Paralyzed | — | Advantage on attacks against; auto-crit within 5ft |
+| Unconscious | — | Advantage on attacks against; auto-crit within 5ft |
+| Petrified | — | Advantage on attacks against |
+
+Auto-applied when `/attack` is processed. The system checks conditions on both the attacker and the target. Multiple sources of advantage or disadvantage cancel per 5e rules (see Attack Mechanics).
+
 **Effects on speed:**
 
 | Condition | Effect |
@@ -784,6 +801,107 @@ Each command validates against remaining resources. If a player tries to use som
 ```
 
 Spent resources are omitted from the list. When nothing remains, the prompt shows: "📋 All actions spent — type `/done` to end your turn."
+
+### Combat Log Output Reference
+
+Every auto-resolved action, auto-detected modifier, and auto-rejected command posts a clear message to `#combat-log` so all players can follow the action — not just the active player.
+
+**Standard actions:**
+```
+💨  Aria takes the Disengage action
+🏃  Aria takes the Dash action (+30ft movement this turn)
+🛡️  Aria takes the Dodge action (attacks against her have disadvantage until next turn)
+🤝  Aria takes the Help action — granting Thorn advantage on next attack against Goblin #1
+🙈  Aria attempts to Hide — 🎲 Stealth: 17 — Hidden from all hostiles
+🙈  Aria attempts to Hide — 🎲 Stealth: 8 — Failed (spotted by Orc Shaman)
+💪  Aria attempts to escape Goblin #1's grapple — 🎲 Acrobatics: 14 vs Athletics: 11 — Escaped!
+💪  Aria attempts to escape Goblin #1's grapple — 🎲 Athletics: 9 vs Athletics: 15 — Failed
+⏳  Aria readies an action: "I attack when the goblin moves past me"
+```
+
+**Grapple and shove:**
+```
+🤼  Aria grapples Goblin #1 — 🎲 Athletics: 16 vs Acrobatics: 12 — Grappled!
+🤼  Aria attempts to grapple Orc Shaman — 🎲 Athletics: 10 vs Athletics: 18 — Failed
+📌  Aria shoves Goblin #1 (push) — 🎲 Athletics: 15 vs Athletics: 10 — Pushed to E4
+📌  Aria shoves Goblin #1 (prone) — 🎲 Athletics: 15 vs Acrobatics: 12 — Knocked prone!
+📌  Aria attempts to shove Orc Shaman (push) — 🎲 Athletics: 8 vs Athletics: 14 — Failed
+```
+
+**Auto-detected advantage/disadvantage on attacks** (appended to the attack roll line):
+```
+⚔️  Aria attacks Goblin #1 with Longbow (disadvantage — hostile within 5ft)
+    → Roll to hit: 8 / 14 (lower: 8 + 5 = 13) — MISS
+⚔️  Aria attacks Goblin #1 with Longsword (advantage — target prone within 5ft)
+    → Roll to hit: 7 / 18 (higher: 18 + 5 = 23) — HIT
+⚔️  Aria attacks Goblin #1 with Greatsword (disadvantage — Heavy weapon, Small creature)
+    → Roll to hit: 15 / 4 (lower: 4 + 5 = 9) — MISS
+⚔️  Aria attacks Goblin #1 with Longsword (advantage — target blinded)
+    → Roll to hit: 11 / 16 (higher: 16 + 5 = 21) — HIT
+⚔️  Aria attacks Goblin #1 with Longbow (disadvantage — target prone, beyond 5ft)
+    → Roll to hit: 17 / 6 (lower: 6 + 5 = 11) — MISS
+⚔️  Aria attacks Goblin #1 with Longsword (advantage + disadvantage cancel — normal roll)
+    → Roll to hit: 14 (14 + 5 = 19) — HIT
+```
+
+**Auto-detected critical hits:**
+```
+⚔️  Aria attacks Goblin #1 with Longsword
+    → Roll to hit: 🎯 NAT 20 — CRITICAL HIT!
+    → Damage: 18 slashing (doubled dice: 2d8 + 5)
+⚔️  Aria attacks Goblin #1 with Longsword (auto-crit — target paralyzed within 5ft)
+    → Damage: 18 slashing (doubled dice: 2d8 + 5)
+```
+
+**Auto-detected saving throw modifiers:**
+```
+🎲  Aria rolls CON save — 15 (12 + 3) — DC 10 — Concentration maintained
+🎲  Aria rolls DEX save — auto-fail (paralyzed)
+🎲  Aria rolls STR save — auto-fail (stunned)
+🎲  Aria rolls DEX save (advantage — Dodge active) — 8 / 16 (higher: 16 + 2 = 18) — DC 15 — Success!
+🎲  Aria rolls DEX save (disadvantage — restrained) — 14 / 6 (lower: 6 + 2 = 8) — DC 15 — Failure
+```
+
+**Condition application and removal:**
+```
+⚠️  Aria is now Grappled (by Goblin #1)
+⚠️  Aria is now Prone
+⚠️  Aria is now Frightened (source: Orc Shaman)
+✅  Grappled removed from Aria (escaped)
+⏱️  Dodge on Aria has expired (start of next turn)
+```
+
+**Concentration:**
+```
+🔮  Aria loses concentration on Bless (incapacitated — stunned)
+🔮  Aria loses concentration on Fog Cloud (failed CON save)
+🔮  Aria drops concentration on Hold Person (cast new concentration spell: Bless)
+```
+
+**Auto-rejected commands** (shown only to the acting player, not in `#combat-log`):
+```
+❌  You can't move — you are grappled
+❌  You can't act — you are stunned
+❌  You can't attack Orc Shaman — you are charmed by them
+❌  You can't move closer to Orc Shaman — you are frightened of them
+❌  Target has full cover — no line of sight
+❌  Target is out of melee range (10ft reach)
+❌  Not enough movement — path requires 40ft (includes difficult terrain), 25ft remaining
+❌  No arrows remaining
+❌  You already cast a bonus action spell this turn — you can only cast a cantrip with your action
+❌  You already cast a leveled spell with your action this turn — you cannot cast a bonus action spell
+❌  You can't end your turn in another creature's space — use /move to leave Goblin #1's tile
+❌  Free interaction already used and action is spent
+❌  Can't use --twohanded — off-hand is not free
+❌  You aren't grappled or restrained by a creature
+```
+
+**Turn auto-skip (incapacitated or AFK):**
+```
+⏭️  Aria's turn is auto-skipped (stunned — can't take actions)
+⏭️  Aria's turn is auto-skipped (timed out — Dodge action applied)
+💀  Aria auto-rolls death save (timed out) — 🎲 14 — Success (2 of 3)
+```
 
 **Ending a turn:**
 - **Explicit:** player sends `/done`

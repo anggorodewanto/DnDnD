@@ -132,11 +132,11 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ## Conditions & Status Effects
 
 81. **No `/status` command.** How does a player see what conditions currently affect their character?
-82. **Condition application notification.** When a condition is applied, where does the player see it? Only in `#combat-log`?
+~~82. **Condition application notification.** When a condition is applied, where does the player see it? Only in `#combat-log`?~~ — Resolved: Added Combat Log Output Reference section with explicit formats for condition application ("⚠️ Aria is now Grappled") and removal ("✅ Grappled removed from Aria"). All posted to #combat-log.
 83. **Frightened source indicator.** The frightened condition tracks `source_combatant_id` but the player has no indication of which creature they are frightened of or which direction they cannot move.
 84. **Grapple dragging.** The grappler can drag at half speed, but there is no drag command. Does `/move` automatically drag the grappled creature?
 85. **Invisible condition.** Referenced in advantage/disadvantage rules but not listed as a trackable condition.
-86. **Prone attack penalty.** Being prone gives disadvantage on the prone creature's own attack rolls. This is not explicitly stated.
+~~86. **Prone attack penalty.** Being prone gives disadvantage on the prone creature's own attack rolls. This is not explicitly stated.~~ — Resolved: Prone attack disadvantage is now covered in the Combat Log Output Reference section's auto-detected advantage/disadvantage examples, and implicitly via the existing condition effects tables.
 
 ## Level-Up & Progression
 
