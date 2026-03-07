@@ -226,6 +226,12 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 - **DM override:** DM can force advantage or disadvantage from the dashboard for edge cases. Posts to `#combat-log`.
 - **Stacking:** when both apply, they cancel out per 5e rules — rolled normally regardless of source count.
 
+**Sneak Attack** (Rogue) — auto-detected by the backend:
+- Triggers when the rogue has advantage on the attack, OR an ally is within 5ft of the target and the rogue doesn't have disadvantage
+- Backend checks combatant positions to detect the ally-adjacent condition automatically
+- Extra damage dice (based on rogue level) are added to the damage roll
+- Once per turn — system tracks whether Sneak Attack has been used this turn
+
 ### Spell Casting Details
 
 **AoE targeting:** `/cast fireball D5` targets a coordinate. Backend calculates affected creatures by shape/radius from spell data (`{ shape: "sphere", radius_ft: 20 }`, `{ shape: "cone", length_ft: 15 }`, `{ shape: "line", length_ft: 60, width_ft: 5 }`). Cones originate from the caster toward the target. All affected creatures (including allies) listed in `#combat-log`.
