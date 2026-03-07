@@ -31,7 +31,8 @@ Discord is the **display and input terminal**, not the source of truth. The syst
 - On every combat command (`/move`, `/attack`, `/cast`, `/bonus`, `/interact`, `/action`, `/done`, `/deathsave`), the backend validates that the requesting Discord user ID matches the active turn's character owner
 - If not their turn, bot replies: "It's not your turn. Current turn: **[Character]** (@player)"
 - Exception: `/reaction` can be submitted at any time — it's a declaration, not a turn action
-- Exception: `/check`, `/save`, `/rest` operate outside combat turn order
+- Exception: `/check`, `/save` are usable any time (in or out of combat, no turn required — DM may call for checks mid-combat)
+- Exception: `/rest` operates outside active combat only
 
 **DM dashboard authentication:**
 - Discord OAuth2 — DM logs in with their Discord account
@@ -186,13 +187,15 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/deathsave` | `/deathsave` | Roll a death saving throw (only at 0 HP) |
 | `/done` | `/done` | End turn, advance initiative |
 
-**Non-combat commands** (usable outside active combat):
+**Anytime commands** (usable in or out of combat, no turn required):
 
 | Command | Example | Description |
 |---|---|---|
-| `/check` | `/check perception` or `/check athletics --adv` | Skill/ability check |
+| `/check` | `/check perception` or `/check athletics --adv` | Skill/ability check (DM-prompted or player-initiated) |
 | `/save` | `/save dex` | Saving throw (DM-prompted) |
-| `/rest` | `/rest short` or `/rest long` | Initiate a rest (DM must approve) |
+| `/rest` | `/rest short` or `/rest long` | Initiate a rest (DM must approve, not during combat) |
+
+Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) are **auto-rolled** by the system — no player command needed. `/save` is for DM-prompted saves outside that flow (e.g., environmental hazards, traps).
 
 **Utility commands** (usable any time):
 
