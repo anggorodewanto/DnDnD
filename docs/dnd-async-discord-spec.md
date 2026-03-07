@@ -231,7 +231,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 - Invalid flags return an error explaining why.
 
 **Advantage/disadvantage** — auto-detected from tracked conditions:
-- **Auto-detected:** target prone (melee adv / ranged disadv), attacker prone (disadv), target restrained/stunned/paralyzed/unconscious (adv), attacker restrained/blinded/poisoned (disadv), Reckless Attack (adv), invisible (adv/disadv as appropriate), ranged attack while hostile within 5ft (disadv), ranged attack beyond normal range (disadv), target has taken the Dodge action (attacks against have disadv)
+- **Auto-detected:** target prone (melee adv / ranged disadv), attacker prone (disadv), target restrained/stunned/paralyzed/unconscious/blinded/petrified (adv), attacker restrained/blinded/poisoned (disadv), Reckless Attack (adv), invisible (adv/disadv as appropriate), ranged attack while hostile within 5ft (disadv), ranged attack beyond normal range (disadv), target has taken the Dodge action (attacks against have disadv)
 - **Not auto-detected in MVP:** flanking (optional rule — may add as campaign toggle later)
 - **DM override:** DM can force advantage or disadvantage from the dashboard for edge cases. Posts to `#combat-log`.
 - **Stacking:** when both apply, they cancel out per 5e rules — rolled normally regardless of source count.
