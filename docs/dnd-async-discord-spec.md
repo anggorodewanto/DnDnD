@@ -195,7 +195,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/save` | `/save dex` | Saving throw (DM-prompted) |
 | `/rest` | `/rest short` or `/rest long` | Initiate a rest (DM must approve, not during combat) |
 
-Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) are **auto-rolled** by the system — no player command needed. `/save` is for DM-prompted saves outside that flow (e.g., environmental hazards, traps).
+Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) prompt affected players to roll via `/save` — the bot pings them in `#your-turn`. Enemy saves are rolled by the DM from the dashboard.
 
 **Utility commands** (usable any time):
 
@@ -230,11 +230,11 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **AoE targeting:** `/cast fireball D5` targets a coordinate. Backend calculates affected creatures by shape/radius from spell data (`{ shape: "sphere", radius_ft: 20 }`, `{ shape: "cone", length_ft: 15 }`, `{ shape: "line", length_ft: 60, width_ft: 5 }`). Cones originate from the caster toward the target. All affected creatures (including allies) listed in `#combat-log`.
 
-**Spell saves:** auto-rolled for all affected creatures. Saves are mechanical (d20 + modifier vs DC) with no decision-making, so auto-rolling keeps async play moving.
+**Spell saves:** when a spell requires saves, the bot pings each affected player in `#your-turn` to roll `/save <ability>`. Enemy saves are rolled by the DM from the dashboard. Spell damage/effects are applied once all saves are resolved.
 
 **Concentration:** fully tracked by backend:
 - One concentration spell at a time; new cast auto-drops the previous
-- Taking damage triggers auto-rolled CON save (DC = max(10, half damage)); failure breaks concentration
+- Taking damage triggers a concentration check — bot pings the caster to roll `/save con` (DC = max(10, half damage)); failure breaks concentration
 - Active effects (Fog Cloud zone, Spirit Guardians aura) tracked on the map
 
 **Spell slots:** tracked and enforced. Backend knows slots per level, deducts on cast, rejects `/cast` if no slots remaining.
@@ -362,7 +362,7 @@ Each enemy takes its own turn in initiative order. The DM resolves enemy turns t
    - **Suggested attack:** nearest target in range; defaults to creature's primary attack from stat block
    - **Suggested ability:** if the creature has a special ability (e.g. Breath Weapon), suggest it when conditions are met (multiple targets in cone/line)
 2. DM clicks **Confirm** to accept defaults, or overrides any field
-3. System auto-rolls to-hit vs target AC, rolls damage, applies HP changes
+3. DM rolls to-hit and damage from the dashboard; system applies HP changes
 4. DM sees results and can adjust before posting (e.g. fudge a crit that would one-shot a level 2 player)
 5. On confirm, results post to `#combat-log` and map updates
 
@@ -418,7 +418,7 @@ When a character drops to 0 HP, they fall **unconscious** and begin making death
 - 3 successes → **stabilized** (unconscious at 0 HP, no more death saves)
 - 3 failures → **dead**
 - Rolls posted publicly in `#combat-log`
-- If the player doesn't send `/deathsave` before timeout, system auto-rolls for them
+- If the player doesn't send `/deathsave` before timeout, the turn is skipped (no roll — DM decides outcome)
 
 **Taking damage while at 0 HP:**
 - Each hit = 1 automatic death save failure
