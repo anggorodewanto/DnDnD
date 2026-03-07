@@ -19,6 +19,53 @@ Discord is the **display and input terminal**, not the source of truth. The syst
 ### Guiding Rule
 > Game state lives in the database. Discord is read-only output. Any state change goes through the bot or DM dashboard — never manually through Discord.
 
+### Authentication & Authorization
+
+**Discord user → Character mapping:**
+- Player runs `/register <character_name>` in the Discord server
+- Bot creates a `discord_user_id → character_id` mapping in the database
+- DM confirms/approves the registration via the dashboard
+- One player = one character per campaign (DM can override in dashboard if needed)
+
+**Out-of-turn prevention:**
+- On every combat command (`/move`, `/attack`, `/cast`, `/bonus`, `/interact`, `/action`, `/done`, `/deathsave`), the backend validates that the requesting Discord user ID matches the active turn's character owner
+- If not their turn, bot replies: "It's not your turn. Current turn: **[Character]** (@player)"
+- Exception: `/reaction` can be submitted at any time — it's a declaration, not a turn action
+- Exception: `/check`, `/save`, `/rest` operate outside combat turn order
+
+**DM dashboard authentication:**
+- Discord OAuth2 — DM logs in with their Discord account
+- System verifies the authenticated Discord user ID matches the campaign's designated DM
+- No separate passwords or accounts to manage
+
+**Multi-campaign support:**
+- One bot instance serves multiple Discord servers (multi-tenant)
+- All database queries are scoped by `guild_id` / `campaign_id`
+- One campaign per Discord server (keeps channel structure clean and unambiguous)
+
+### Concurrency Model
+
+All combat state mutations are serialized through a **per-turn pessimistic lock** using PostgreSQL advisory locks keyed on `turn_id`.
+
+**Rapid player commands** (e.g., two `/attack` commands sent before the first resolves):
+- Each command acquires the turn lock before processing
+- If the lock is held, the second command **blocks** (waits) rather than failing
+- Once the first command completes and releases the lock, the second processes against updated state
+- Player experiences at most a few hundred milliseconds of delay — no "conflict, retry" errors
+
+**DM + player concurrent actions:**
+- DM dashboard mutations go through the same backend and acquire the same per-turn lock
+- If the DM ends a player's turn, any in-flight player command either completes first (if it holds the lock) or fails with "It's no longer your turn"
+
+**WebSocket state sync** — server-authoritative, push-only:
+- The Go backend + PostgreSQL is the single source of truth
+- The DM dashboard renders state received via WebSocket pushes; it does not maintain its own game state copy
+- Flow: command → backend acquires lock → resolves → releases lock → pushes state over WebSocket → dashboard re-renders
+
+**Dashboard optimistic UI** — when a WebSocket push arrives while the DM has a form open:
+- Read-only display areas (initiative tracker, HP bars) update immediately
+- Active form inputs are **not clobbered** — the DM's draft is preserved with a subtle indicator: "HP updated to 3 by player action"
+
 ---
 
 ## Discord Server Structure
@@ -34,13 +81,27 @@ Discord is the **display and input terminal**, not the source of truth. The syst
   #player-chat          ← out-of-character chatter
 
 ⚔️ COMBAT
-  #combat-map           ← bot posts/edits the grid image each turn
+  #combat-map           ← bot posts the grid image each turn
   #your-turn            ← bot pings the active player
 
 🎒 REFERENCE
-  #character-cards      ← auto-updated embeds per player
+  #character-cards      ← auto-updated character info per player
   #dm-queue             ← freeform player actions awaiting DM resolution
 ```
+
+### Bot Permissions
+
+- `Send Messages` — post to all bot-managed channels
+- `Attach Files` — upload map PNGs and text file attachments
+- `Manage Messages` — pin/edit the initiative tracker message
+- `Use Application Commands` — register and respond to slash commands
+- `Mention Everyone` — ping players on turn start (or a configurable `@combat` role)
+
+### Server Setup
+
+The `/setup` slash command auto-creates the channel structure with appropriate permission overrides (e.g., `#the-story` is DM-write-only, `#combat-map` is bot-write-only). DM runs `/setup` once after inviting the bot. Channels that already exist are skipped.
+
+The bot uses **plain text messages** for most output. For very large output (20+ combatant initiative orders, detailed character cards), the bot uploads a **text file attachment** instead. No embeds required.
 
 ---
 
@@ -56,25 +117,18 @@ Goblin #2  (G2)  [C6]  Bloodied
 Orc Shaman (OS)  [D5]  Uninjured
 ```
 
-**Enemy HP is hidden from players.** The bot never reveals exact HP numbers, AC values, or stat block details for enemies in any player-visible channel. Instead, enemies show a **descriptive health tier:**
+**Enemy HP is hidden from players.** The bot never reveals exact HP, AC, or stat block details in player-visible channels. Instead, enemies show a **descriptive health tier:**
 - **Uninjured** — 100% HP
 - **Scratched** — 75–99% HP
 - **Bloodied** — 25–74% HP (standard 5e convention: below half)
 - **Critical** — 1–24% HP
 - **Dying / Dead** — 0 HP
 
-The DM sees exact numbers in the dashboard. This preserves tension and prevents metagaming around kill thresholds.
+The DM sees exact numbers in the dashboard. IDs are stable for the entire encounter — if G1 dies, G2 stays G2. Token labels on the map display these IDs so players can target by sight.
 
-**Rules:**
-- IDs are stable for the entire encounter — if G1 dies, G2 stays G2
-- Token labels on the map image display these IDs so players can target by sight
-- The combat log confirms the reference in every response
+### Grid Movement
 
-### Grid Movement — Chess Notation
-
-The map uses a standard chess-style coordinate grid: **columns as letters, rows as numbers**.
-
-Columns use spreadsheet-style lettering: A–Z for the first 26 columns, then AA, AB, … AZ, BA, BB, … for larger maps. This allows grids of any practical size while keeping coordinates human-readable.
+The map uses a standard chess-style coordinate grid: **columns as letters, rows as numbers**. Columns use spreadsheet-style lettering: A–Z for the first 26, then AA, AB, … AZ, BA, BB, … for larger maps.
 
 ```
   A   B   C   D   E   F
@@ -84,7 +138,7 @@ Columns use spreadsheet-style lettering: A–Z for the first 26 columns, then AA
 4 [ ] [ ] [ ] [OS] [ ] [ ]
 ```
 
-Movement is expressed as a single destination coordinate:
+Movement is expressed as a destination coordinate:
 
 ```
 /move D4
@@ -92,18 +146,13 @@ Movement is expressed as a single destination coordinate:
 /move AA12     ← valid on maps wider than 26 columns
 ```
 
-The backend validates every movement command:
-- Is the destination within the character's remaining movement speed?
-- Is the tile occupied?
-- Is there difficult terrain or an obstacle?
+The backend validates every movement command: remaining speed, tile occupancy, difficult terrain, and obstacles. Invalid moves return a specific reason. Movement can be split across actions: `/move D4` → `/attack G1` → `/move E5` — each `/move` deducts from remaining speed.
 
-If invalid, the bot replies with a specific reason in `#combat-log` before DM intervention is needed.
-
-**Diagonal movement:** Follows 5e standard rules — diagonals cost 5ft, same as cardinal movement. This is enforced by the validator.
+**Diagonal movement:** diagonals cost 5ft, same as cardinal movement. Deliberate simplification for async play — the PHB alternating 5/10 variant is not supported.
 
 ### Altitude & Elevation
 
-Tokens carry an **altitude** value (integer, in feet, default 0) representing height above the ground plane.
+Tokens carry an **altitude** value (integer feet, default 0) representing height above the ground plane.
 
 ```
 /fly 30        ← rise to 30ft altitude (costs 30ft of movement)
@@ -111,40 +160,110 @@ Tokens carry an **altitude** value (integer, in feet, default 0) representing he
 /move D4       ← horizontal movement while maintaining current altitude
 ```
 
-- Ascending and descending costs movement **1:1** (flying 30ft up costs 30ft of movement speed)
-- A token's altitude is displayed as a **suffix on the map label**: `AR↑30` means Aria at 30ft altitude
-- **Distance calculation** uses 3D Euclidean distance (rounded to nearest 5ft) for range checks — a creature 20ft away horizontally at 30ft altitude is ~36ft away (rounded to 35ft)
-- Tokens at different altitudes **do not block** each other's ground tile — multiple tokens can occupy the same column at different heights
-- Falling: if a flying creature is knocked prone or loses its fly speed, it falls. Fall damage is 1d6 per 10ft fallen (standard 5e rules), applied automatically
+- Ascending and descending costs movement **1:1**
+- Altitude displayed as a **label suffix**: `AR↑30` means Aria at 30ft
+- **Distance calculation** uses 3D Euclidean distance (rounded to nearest 5ft) for range checks
+- Tokens at different altitudes **do not block** each other's ground tile
+- Falling: if a flying creature is knocked prone or loses fly speed, fall damage is 1d6 per 10ft (standard 5e), applied automatically
 
 ### Structured Commands
 
+**Combat commands** (only usable on your turn, except `/reaction`):
+
 | Command | Example | Description |
 |---|---|---|
-| `/move` | `/move D4` | Move token to grid coordinate (repeatable for split movement) |
-| `/attack` | `/attack G2` or `/attack G2 handaxe` | Attack a target by ID, optionally specifying a weapon (defaults to equipped weapon). Repeatable for Extra Attack — one `/attack` per swing |
-| `/cast` | `/cast fireball D5` | Cast a spell, with target coordinate or enemy ID |
+| `/move` | `/move D4` | Move to coordinate. Repeatable for split movement as long as total ≤ speed |
+| `/fly` | `/fly 30` | Set altitude in feet. Costs movement 1:1 |
+| `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` | Attack a target. One `/attack` per swing; backend tracks attacks remaining |
+| `/cast` | `/cast fireball D5` | Cast a spell at a target coordinate or enemy ID |
 | `/bonus` | `/bonus cunning-action dash` | Bonus action |
-| `/shove` | `/shove OS` | Shove a target by ID |
-| `/reaction` | `/reaction Shield if I get hit` | Pre-declare a reaction intent, posted to `#dm-queue` for DM to resolve |
-| `/interact` | `/interact draw longsword` | Free object interaction, routed to DM |
-| `/action` | `/action flip the table at B3 for cover` | Freeform action, routed to DM |
-| `/equip` | `/equip longsword` | Set primary weapon (persists between turns) |
+| `/shove` | `/shove OS` | Shove a target (push or knock prone) |
+| `/interact` | `/interact draw longsword` | Free object interaction — routed to `#dm-queue` |
+| `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
+| `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent (usable any time) — routed to `#dm-queue` |
+| `/deathsave` | `/deathsave` | Roll a death saving throw (only at 0 HP) |
 | `/done` | `/done` | End turn, advance initiative |
-| `/check` | `/check perception` or `/check athletics --adv` | Roll a skill/ability check (out of combat) |
-| `/save` | `/save dex` | Roll a saving throw (out of combat, DM-prompted) |
-| `/rest` | `/rest short` or `/rest long` | Initiate a short or long rest (DM must approve) |
 
-### Freeform Actions — `/action`
+**Non-combat commands** (usable outside active combat):
 
-For anything that can't be expressed through coordinates and IDs, `/action` routes to the DM rather than the bot:
+| Command | Example | Description |
+|---|---|---|
+| `/check` | `/check perception` or `/check athletics --adv` | Skill/ability check |
+| `/save` | `/save dex` | Saving throw (DM-prompted) |
+| `/rest` | `/rest short` or `/rest long` | Initiate a rest (DM must approve) |
+
+**Utility commands** (usable any time):
+
+| Command | Example | Description |
+|---|---|---|
+| `/equip` | `/equip longsword` | Set primary weapon (persists between turns) |
+| `/register` | `/register Thorn` | Link Discord account to a character (DM approves) |
+| `/setup` | `/setup` | Auto-create channel structure (DM only, run once) |
+
+### Attack Details
+
+**Weapon selection:** each character has an equipped weapon (set via `/equip`). `/attack G2` uses it; `/attack G2 handaxe` overrides for that swing. Backend validates the character has the weapon.
+
+**Extra Attack:** resolved one swing at a time. Each `/attack` resolves a single attack roll. Backend tracks attacks remaining by class/level (Fighter 5 = 2, Fighter 11 = 3, Fighter 20 = 4). After each swing, the bot reports remaining attacks. Players retarget freely between swings. Unused attacks forfeited on `/done`.
+
+**Attack modifier flags** (opt-in per swing):
+- `--gwm` — Great Weapon Master: -5 to hit, +10 damage. Requires a heavy melee weapon.
+- `--sharpshooter` — Sharpshooter: -5 to hit, +10 damage. Requires a ranged weapon.
+- `--reckless` — Reckless Attack (Barbarian): advantage on melee STR attacks this turn, enemies get advantage against you until next turn. First attack only. Requires Barbarian class.
+- Invalid flags return an error explaining why.
+
+**Advantage/disadvantage** — auto-detected from tracked conditions:
+- **Auto-detected:** target prone (melee adv / ranged disadv), attacker prone (disadv), target restrained/stunned/paralyzed/unconscious (adv), attacker restrained/blinded/poisoned (disadv), Reckless Attack (adv), invisible (adv/disadv as appropriate)
+- **Not auto-detected in MVP:** flanking (optional rule — may add as campaign toggle later)
+- **DM override:** DM can force advantage or disadvantage from the dashboard for edge cases. Posts to `#combat-log`.
+- **Stacking:** when both apply, they cancel out per 5e rules — rolled normally regardless of source count.
+
+### Spell Casting Details
+
+**AoE targeting:** `/cast fireball D5` targets a coordinate. Backend calculates affected creatures by shape/radius from spell data (`{ shape: "sphere", radius_ft: 20 }`, `{ shape: "cone", length_ft: 15 }`, `{ shape: "line", length_ft: 60, width_ft: 5 }`). Cones originate from the caster toward the target. All affected creatures (including allies) listed in `#combat-log`.
+
+**Spell saves:** auto-rolled for all affected creatures. Saves are mechanical (d20 + modifier vs DC) with no decision-making, so auto-rolling keeps async play moving.
+
+**Concentration:** fully tracked by backend:
+- One concentration spell at a time; new cast auto-drops the previous
+- Taking damage triggers auto-rolled CON save (DC = max(10, half damage)); failure breaks concentration
+- Active effects (Fog Cloud zone, Spirit Guardians aura) tracked on the map
+
+**Spell slots:** tracked and enforced. Backend knows slots per level, deducts on cast, rejects `/cast` if no slots remaining.
+
+**Spell range:** enforced by backend. Touch spells require adjacency (5ft), self spells need no target.
+
+### Reactions
+
+Players pre-declare reaction intent using `/reaction`. The DM resolves all reactions manually.
+
+**Declaration:**
+- `/reaction Shield if I get hit`
+- `/reaction OA if goblin moves away`
+- `/reaction Counterspell if enemy casts`
+- Declarations persist until used, cancelled (`/reaction cancel`), or the encounter ends
+- One reaction per round per player (per 5e rules) — tracked by system
+
+**DM workflow:**
+1. DM sees declarations in `#dm-queue` or the dashboard
+2. When the trigger occurs during enemy/NPC turns, DM decides whether it fires
+3. DM resolves in the dashboard (rolls, applies effects) and posts the result
+4. System marks the player's reaction as spent for the round
+
+Readied Actions use the same flow: `/reaction I attack when the goblin moves past me`.
+
+**Why this works for async:** zero stalling — combat never pauses for a reaction response. Players declare intent on their own time. DM has full control over timing and adjudication.
+
+### Freeform Actions
+
+For anything that can't be expressed through structured commands, `/action` routes to the DM:
 
 ```
 /action I want to flip the table at B3 for half cover and duck behind it
 /action I grab the chandelier and swing across to F2
 ```
 
-These post to `#dm-queue`. The DM resolves them in the dashboard, applies any state changes, and the bot posts the result. Structured commands handle ~90% of combat; `/action` is the escape hatch for creative play.
+These post to `#dm-queue`. The DM resolves them in the dashboard, applies state changes, and the bot posts the result. Structured commands handle ~90% of combat; `/action` is the escape hatch for creative play.
 
 ---
 
@@ -186,12 +305,14 @@ Then:
 
 ## Combat Turn Flow
 
+### Overview
+
 ```
 DM clicks "Start Combat" in dashboard
   → backend initializes combat state, rolls initiative
   → bot posts initiative order to #initiative-tracker
   → bot posts map image to #combat-map
-  → bot pings first player in #your-turn
+  → bot pings first player/enemy in #your-turn
 
 Player logs in, sees ping, submits commands
   → bot validates and resolves mechanical actions
@@ -200,20 +321,125 @@ Player logs in, sees ping, submits commands
 
 DM reviews, resolves any queued actions in dashboard
   → clicks "Apply", "Next Turn"
-  → bot regenerates and edits map image in #combat-map
+  → bot regenerates map image in #combat-map
   → bot pings next player in #your-turn
 ```
 
+### Player Turns
+
+Turns are **sequential** — players send commands one at a time and see results before deciding their next action.
+
+**Turn resources tracked by the backend:**
+- Movement (feet remaining out of speed)
+- Action (used / not used)
+- Bonus action (used / not used)
+- Free object interaction (used / not used)
+- Attacks remaining (by class/level)
+- Reaction (used / not used, per round)
+
+Each command validates against remaining resources. If a player tries to use something already spent, the bot replies with a specific error.
+
+**Ending a turn:**
+- **Explicit:** player sends `/done`
+- **DM override:** DM can end any turn from the dashboard
+- **Timeout:** remaining unused actions are forfeited (see Turn Timeout below)
+
+### Enemy / NPC Turns
+
+Each enemy takes its own turn in initiative order. The DM resolves enemy turns through the dashboard with **smart defaults** — the system pre-fills suggestions, DM confirms or overrides.
+
+**Dashboard flow:**
+1. Dashboard highlights the active enemy and pre-fills:
+   - **Suggested move:** shortest path toward nearest hostile (reuses pathfinding)
+   - **Suggested attack:** nearest target in range; defaults to creature's primary attack from stat block
+   - **Suggested ability:** if the creature has a special ability (e.g. Breath Weapon), suggest it when conditions are met (multiple targets in cone/line)
+2. DM clicks **Confirm** to accept defaults, or overrides any field
+3. System auto-rolls to-hit vs target AC, rolls damage, applies HP changes
+4. DM sees results and can adjust before posting (e.g. fudge a crit that would one-shot a level 2 player)
+5. On confirm, results post to `#combat-log` and map updates
+
+**`#combat-log` output** for enemy turns (same format as player actions):
+```
+🏃 Goblin 1 moves to D5
+⚔️ Goblin 1 attacks Thorn — 🎲 14 vs AC 18 — Miss!
+🏃 Goblin 2 moves to E4
+⚔️ Goblin 2 attacks Kael — 🎲 19 vs AC 15 — Hit! 7 slashing damage
+```
+
+**Pending reactions:** if a player has a pre-declared `/reaction` that triggers during the enemy turn, the dashboard surfaces it to the DM before confirming that step. DM resolves the reaction inline.
+
+### Turn Timeout & AFK Handling
+
+Turn timeout: **24 hours**, DM-configurable per campaign (1h–72h range).
+
+**Escalation:**
+- Reminder ping at 50% of timeout (e.g., 12h) in `#your-turn`
+- Final warning at 75% (e.g., 18h) — "your turn will be skipped in 6 hours"
+- Auto-skip at 100% — player takes the **Dodge action with no movement**
+
+**DM manual overrides (via dashboard):**
+- **Skip now** — immediately advance past a player
+- **Extend timer** — grant more time without changing the campaign default
+- **Pause combat** — freeze all timers
+
+**Prolonged absence:**
+- After 3 consecutive auto-skips, the character is flagged as "absent" in the dashboard
+- DM decides: auto-pilot the character, narrate a retreat, or remove from initiative
+- Initiative slot stays reserved so the player can return seamlessly
+
+### Death Saves & Unconsciousness
+
+When a character drops to 0 HP, they fall **unconscious** and begin making death saving throws.
+
+**Dropping to 0 HP:**
+- Character status becomes **Dying** (unconscious, prone)
+- Concentration is broken automatically
+- All commands except `/deathsave` are blocked on their turn
+- Token state changes to "dying" on the map (distinct visual)
+
+**Instant death check:**
+- If damage remaining after reaching 0 HP ≥ character's max HP → instant death
+- Token state → "dead", no death saves
+
+**Death saving throws:**
+- When initiative reaches a dying player, bot pings them to send `/deathsave`
+- System rolls d20 (no modifiers unless granted by a feature like Diamond Soul)
+- ≥10 = success, <10 = failure
+- **Nat 20** → regain 1 HP, conscious, still prone. Tallies reset
+- **Nat 1** → counts as 2 failures
+- 3 successes → **stabilized** (unconscious at 0 HP, no more death saves)
+- 3 failures → **dead**
+- Rolls posted publicly in `#combat-log`
+- If the player doesn't send `/deathsave` before timeout, system auto-rolls for them
+
+**Taking damage while at 0 HP:**
+- Each hit = 1 automatic death save failure
+- Critical hit (attacker within 5ft) = 2 failures
+
+**Stabilization:**
+- 3 death save successes, Medicine check (DC 10), or Spare the Dying cantrip
+- Stable characters remain unconscious at 0 HP, no further death saves
+- Regain 1 HP after 1d4 hours (post-combat only)
+
+**Healing from 0 HP:**
+- Any healing sets HP to 0 + healing amount
+- Status → conscious, still **prone** (costs half movement to stand)
+- Death save tallies reset to zero
+
+**Token states:** normal / bloodied / dying / stable / dead
+
 ---
 
-## Map Rendering
+## Map System
 
-- Grid images are generated **server-side** as PNGs on every state change
-- Bot **appends a new message** in `#combat-map` (dedicated channel) — creates a visual combat log that players can scroll through to see how the fight unfolded
-- Token labels display enemy IDs (G1, OS, etc.) and player initials
+### Map Rendering
+
+- Grid images generated **server-side** as PNGs on every state change
+- Bot **appends a new message** in `#combat-map` — creates a visual log players can scroll through
+- Token labels display enemy IDs (G1, OS) and player initials
 - Token visual states: normal / bloodied / dying / stable / dead
 - Tile size: 32–48px per square to stay within Discord's 8MB file limit
-- Obstacles and difficult terrain are drawn as part of the base map layer
+- Obstacles and difficult terrain drawn as part of the base map layer
 
 ### Dynamic Fog of War
 
@@ -223,26 +449,26 @@ Fog of war is computed automatically based on **shared party vision** — the un
 1. Each token carries vision properties: `base_vision_ft`, `darkvision_ft`, `blindsight_ft`, `truesight_ft`
 2. Server runs **shadowcasting** from each player token's position against walls and obstacles
 3. Visible cells for all party tokens are unioned → the "party known" area
-4. Previously seen but currently out-of-range cells are rendered as **dim/greyed out** (explored but not active)
+4. Previously seen but currently out-of-range cells rendered as **dim/greyed out** (explored but not active)
 5. Never-seen cells are **fully fogged** (black)
 6. Enemy tokens in fogged cells are **hidden**; enemies in dim cells are visible but greyed
 
 **Vision sources & modifiers:**
 - **Darkvision** (60/120/300ft by race/feat) — darkness → dim, dim → normal
-- **Light sources** — torches (20ft bright + 20ft dim), Light cantrip, Daylight spell — added as point lights on the grid
+- **Light sources** — torches (20ft bright + 20ft dim), Light cantrip, Daylight spell — point lights on the grid
 - **Blindsight / Tremorsense / Truesight** — ignore fog/obstacles within range
 - **Devil's Sight** — sees through magical darkness
 
 **Obscurement zones (DM-placed on grid):**
 - `Darkness` spell → blocks all vision including darkvision (except Devil's Sight)
-- `Fog Cloud` → heavily obscured area, blocks line of sight
+- `Fog Cloud` → heavily obscured, blocks line of sight
 - `Wall of Fire / Stone` → blocks line of sight through the wall
 - Heavy foliage / smoke → light or heavy obscurement
 
 **Rendering layers (bottom to top):**
 1. Base map (terrain, walls, obstacles)
 2. Fog overlay (black for unknown, semi-transparent grey for explored-but-not-visible)
-3. Tokens (only drawn if their cell is in the party's current visible set or explored set)
+3. Tokens (only drawn if their cell is visible or explored)
 4. Grid lines and labels
 
 ### Map Creation & Authoring
@@ -251,93 +477,90 @@ The DM creates and edits maps through the **Svelte-based map editor** in the web
 
 **Creating a new map:**
 1. DM specifies grid dimensions (width × height in squares, e.g., 30×20)
-2. Editor opens a blank grid with the default terrain (open ground)
-3. DM paints terrain, walls, and obstacles using the map-making tools (see below)
-4. DM optionally imports a background image to use as a visual underlay
-5. Map is saved and available for use in encounters
+2. Editor opens a blank grid with default terrain (open ground)
+3. DM paints terrain, walls, and obstacles
+4. DM optionally imports a background image as a visual underlay
+5. Map is saved and available for encounters
 
-**Map-making tools (in the Svelte editor):**
-- **Terrain brush** — paint terrain types per tile: open ground, difficult terrain, water, lava, pit, etc.
-- **Wall tool** — draw walls along tile edges (not tile centers). Walls block movement and line of sight for fog of war
-- **Object placement** — place doors (open/closed/locked), traps, furniture, and other interactables. Objects carry custom properties (e.g., a door's DC to pick the lock)
-- **Elevation painting** — set ground elevation per tile (for cliffs, raised platforms, stairs)
-- **Spawn zones** — mark areas where player tokens and enemy tokens are placed at encounter start
+**Map-making tools:**
+- **Terrain brush** — paint per tile: open ground, difficult terrain, water, lava, pit, etc.
+- **Wall tool** — draw walls along tile edges (block movement and line of sight)
+- **Object placement** — doors (open/closed/locked), traps, furniture, interactables with custom properties
+- **Elevation painting** — set ground elevation per tile (cliffs, platforms, stairs)
+- **Spawn zones** — mark player and enemy token placement areas at encounter start
 
 **Image import:**
-- DM can upload a pre-made battle map image (PNG/JPG) as a **background layer** beneath the grid
-- The grid is overlaid on top with adjustable opacity so hand-drawn or purchased maps can be used
-- Walls and terrain still need to be defined with the tools (the image is purely visual; the server needs structured data for pathfinding and fog of war)
+- Upload a pre-made battle map image (PNG/JPG) as a **background layer** beneath the grid
+- Grid overlaid with adjustable opacity
+- Walls and terrain still need tool definitions (the image is purely visual; server needs structured data for pathfinding and fog of war)
 
 **Storage format — Tiled-compatible JSON:**
 
-Maps are stored internally using a format based on the **Tiled map editor's JSON specification** (`.tmj`). This provides:
-- **Tile layers** — terrain types stored as tile GIDs referencing a tileset
-- **Object layers** — walls, doors, spawn points, traps stored as typed objects with custom properties
-- **Tileset references** — external `.tsj` files defining tile images and their properties (terrain type, blocks-movement, blocks-sight, etc.)
-- **Custom properties** — arbitrary key-value data on any element (tile, object, layer)
+Maps are stored using a format based on the **Tiled map editor's JSON specification** (`.tmj`):
+- **Tile layers** — terrain types as tile GIDs referencing a tileset
+- **Object layers** — walls, doors, spawn points, traps as typed objects with custom properties
+- **Tileset references** — external `.tsj` files defining tile images and properties
+- **Custom properties** — arbitrary key-value data on any element
 
-Adopting the Tiled JSON format means:
-- DMs can **import maps created in the Tiled desktop editor** (a free, open-source tool widely used in the TTRPG and game dev communities)
-- Future support for **tileset-based map painting** — DMs load a tileset (dungeon tiles, forest tiles, cave tiles) and paint maps tile-by-tile, like in game development
-- The Go backend parses maps using [`github.com/lafriks/go-tiled`](https://github.com/lafriks/go-tiled) for TMX or standard `encoding/json` for the JSON variant
-- Maps export cleanly for backup, sharing between campaigns, or community map packs
+Benefits:
+- DMs can **import maps from the Tiled desktop editor** (free, widely used in TTRPG/game dev)
+- Future support for **tileset-based map painting**
+- Go backend parses via [`go-tiled`](https://github.com/lafriks/go-tiled) or `encoding/json`
+- Maps export for backup, sharing, or community map packs
 
 **Phase 1 (MVP):** blank grid + terrain/wall tools + image import. Maps stored as Tiled-compatible JSON.
-**Phase 2:** tileset support — load `.tsj` tilesets, paint with tile brushes, import full `.tmj` maps from Tiled desktop.
+**Phase 2:** tileset support — load `.tsj` tilesets, paint with tile brushes, import full `.tmj` maps from Tiled.
 
 ---
 
 ## Character Creation & Import
 
-Characters are fully 5e-compatible — all SRD races, classes, backgrounds, and features are supported. Characters can be created manually via the DM dashboard or imported from D&D Beyond.
+Characters are fully 5e-compatible — all SRD races, classes, backgrounds, and features. Characters can be created manually via the DM dashboard or imported from D&D Beyond.
 
 ### Internal Character Format
 
-Characters are stored using a schema based on [BrianWendt/dnd5e_json_schema](https://github.com/BrianWendt/dnd5e_json_schema) — the closest thing to a community-standard JSON schema for 5e character data. The schema covers ability scores, class features, spells, equipment, and all mechanical fields needed for combat resolution.
+Characters are stored using a schema based on [BrianWendt/dnd5e_json_schema](https://github.com/BrianWendt/dnd5e_json_schema). The schema covers ability scores, class features, spells, equipment, and all mechanical fields needed for combat resolution.
 
 The internal format is not exposed directly to users — it's the canonical storage representation that the dashboard UI and D&D Beyond importer both write to.
 
 ### Manual Character Creation (DM Dashboard)
 
-The DM creates characters through a guided workflow in the web dashboard:
+The DM creates characters through a guided workflow:
 
 1. **Basics** — name, race, class, level, background
-2. **Ability scores** — manual entry (rolled or point-buy, DM's choice — the system doesn't enforce a generation method)
-3. **Derived stats** — HP, AC, proficiency bonus, saving throws, skill proficiencies are auto-calculated from race + class + ability scores + level using SRD rules
+2. **Ability scores** — manual entry (rolled or point-buy, DM's choice — system doesn't enforce a generation method)
+3. **Derived stats** — HP, AC, proficiency bonus, saving throws, skill proficiencies auto-calculated from race + class + ability scores + level using SRD rules
 4. **Equipment** — select from SRD weapons/armor/items; set equipped weapon and worn armor
-5. **Spells** — for caster classes, select known/prepared spells from the class spell list (filtered by level). Spell slots auto-calculated by class + level
-6. **Features** — racial traits and class features are auto-populated from SRD data based on race + class + level selections
+5. **Spells** — for caster classes, select known/prepared spells from class spell list (filtered by level). Spell slots auto-calculated
+6. **Features** — racial traits and class features auto-populated from SRD data based on race + class + level
 
-After creation, the character appears in the campaign and the player links to it via `/register <character_name>` in Discord (DM approves).
+After creation, the player links to the character via `/register <character_name>` in Discord (DM approves).
 
-**Class/subclass/feat interactions:** the system implements SRD class features mechanically (Extra Attack, Sneak Attack damage, Rage bonus, etc.) and auto-applies them during combat. Non-SRD subclasses, feats, and multiclass combinations can be added manually by the DM as custom features with mechanical effects (bonus to hit, extra damage dice, etc.).
+**Class/subclass/feat interactions:** the system implements SRD class features mechanically (Extra Attack, Sneak Attack damage, Rage bonus, etc.) and auto-applies them during combat. Non-SRD content can be added manually by the DM as custom features with mechanical effects.
 
 ### D&D Beyond Import
 
-Players with D&D Beyond character sheets can import directly:
-
 1. Player provides their D&D Beyond character URL (e.g., `https://www.dndbeyond.com/characters/12345678`)
-2. The system fetches character data from D&D Beyond's undocumented character API (`https://character-service.dndbeyond.com/character/v5/character/{id}`)
-3. A parser converts the DDB JSON into the internal character format — mapping ability scores, class features, equipment, spells, HP, AC, and all combat-relevant fields
-4. The DM reviews and approves the imported character in the dashboard before it enters play
+2. System fetches from DDB's undocumented character API (`character-service.dndbeyond.com/character/v5/character/{id}`)
+3. Parser converts DDB JSON into internal format — mapping ability scores, features, equipment, spells, HP, AC
+4. DM reviews and approves in the dashboard
 
-**Implementation reference:** [MrPrimate/ddb-importer](https://github.com/MrPrimate/ddb-importer) (Foundry VTT's DDB import module) is the most mature open-source implementation of DDB character parsing. Its source code is the primary reference for handling DDB's data quirks (derived stats that need client-side calculation, nested feature structures, equipment attunement).
+**Implementation reference:** [MrPrimate/ddb-importer](https://github.com/MrPrimate/ddb-importer) (Foundry VTT's DDB import module) — the most mature open-source DDB character parser.
 
 **Caveats:**
-- D&D Beyond has no official public API — the character endpoint is undocumented and may change without notice
-- Character must be set to **public** sharing on D&D Beyond for the fetch to work
-- Rate limiting and CAPTCHAs may apply; the importer includes exponential backoff
-- Non-SRD content (paid sourcebook subclasses, feats, spells) imports as names/descriptions but may need DM manual setup for mechanical effects not in our SRD data
+- No official public API — endpoint is undocumented and may change
+- Character must be set to **public** sharing on D&D Beyond
+- Rate limiting/CAPTCHAs possible; importer includes exponential backoff
+- Non-SRD content imports as names/descriptions but may need DM manual setup for mechanics
 
-**Re-sync:** players can re-import at any time to pull updates (level-ups, new equipment purchased in DDB). The system diffs against the existing character and shows the DM what changed before applying.
+**Re-sync:** players can re-import to pull updates (level-ups, new equipment). System diffs and shows DM what changed before applying.
 
 ### Character Leveling
 
-Level-ups are handled through the same creation workflow:
-- DM edits the character's level in the dashboard
+- DM edits character level in the dashboard
 - System auto-recalculates HP, proficiency bonus, spell slots, attacks per action
 - DM selects new class features / spells if applicable
-- For DDB-imported characters, the player levels up in D&D Beyond and re-imports
+- For DDB-imported characters, player levels up in D&D Beyond and re-imports
 
 ---
 
@@ -345,9 +568,9 @@ Level-ups are handled through the same creation workflow:
 
 ### SRD Content (Seeded at Startup)
 
-The system ships with the full **D&D 5e SRD** (Systems Reference Document) content, seeded into PostgreSQL on first run. Data is sourced from [5e-bits/5e-database](https://github.com/5e-bits/5e-database) — a comprehensive, MIT-licensed JSON dataset of all SRD content.
+The system ships with the full **D&D 5e SRD** content, seeded into PostgreSQL on first run. Data sourced from [5e-bits/5e-database](https://github.com/5e-bits/5e-database) — a comprehensive, MIT-licensed JSON dataset.
 
-**Included SRD data:**
+**Included:**
 - **Monsters** — ~325 creature stat blocks (name, HP formula, AC, speed, attacks, abilities, CR)
 - **Spells** — ~320 spells (name, level, school, range, components, duration, area, damage, save type, concentration)
 - **Weapons** — all SRD weapons (damage, damage type, properties: finesse, heavy, ranged, thrown, etc.)
@@ -358,20 +581,20 @@ The system ships with the full **D&D 5e SRD** (Systems Reference Document) conte
 - **Conditions** — all 15 standard conditions with mechanical effects
 - **Skills** — all 18 skills mapped to ability scores
 
-**Licensing:** SRD 5.1 content is dual-licensed under OGL 1.0a and **CC-BY-4.0**. The system uses CC-BY-4.0, which requires attribution only (included in the app's about/credits page).
+**Licensing:** SRD 5.1 content used under **CC-BY-4.0** (attribution only, included in about/credits page).
 
 ### Extended Content (Open5e)
 
-For content beyond the core SRD (third-party OGL publisher content), the system can optionally pull from the [Open5e API](https://api.open5e.com/):
+For content beyond the core SRD, the system can optionally pull from the [Open5e API](https://api.open5e.com/):
 - ~3,200 monsters (vs ~325 in SRD alone)
 - ~1,400 spells
 - Content from Tome of Beasts, Creature Codex, Deep Magic, and other OGL publishers
 
-Open5e data is fetched on-demand and cached locally. DM enables/disables third-party sources per campaign in settings.
+Fetched on-demand and cached locally. DM enables/disables third-party sources per campaign.
 
 ### Homebrew Content
 
-DMs can create custom entries for any reference data type via the dashboard:
+DMs create custom entries for any reference data type via the dashboard:
 - Custom monsters (full stat block editor)
 - Custom spells, weapons, items
 - Custom races and class features (name + mechanical effect)
@@ -384,71 +607,64 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
 
 ### Skill & Ability Checks
 
-Skill checks are the backbone of non-combat D&D. The system supports them through a simple command + DM resolution flow.
-
-**Player-initiated checks:**
+**Player-initiated:**
 ```
-/check perception           ← rolls d20 + WIS mod + proficiency (if proficient)
+/check perception           ← d20 + WIS mod + proficiency (if proficient)
 /check athletics --adv      ← roll with advantage
 /check stealth --disadv     ← roll with disadvantage
 /check dexterity            ← raw ability check (no skill proficiency)
 ```
 
-**DM-prompted checks:**
-The DM can request a check from the dashboard, which pings the player in `#your-turn`:
-- "Kael, roll a Perception check" → player uses `/check perception`
-- "Everyone roll Dexterity saves" → DM triggers a group save; each player is pinged and uses `/save dex`
+**DM-prompted:** DM requests a check from the dashboard, pinging the player in `#your-turn`.
 
 **Mechanics:**
-- Roll formula: `d20 + ability_modifier + proficiency_bonus` (if proficient in the skill)
-- Expertise (Rogue, Bard): doubles proficiency bonus — tracked in `characters.proficiencies` as `{skill: "expertise"}`
-- Jack of All Trades (Bard): adds half proficiency to non-proficient checks — detected from class features
-- Passive checks: calculated as `10 + modifier` and displayed on the character card. DM uses passive Perception for hidden checks without alerting the player
-- All rolls post to `#roll-history`; the DM sees the result in the dashboard and narrates the outcome in `#the-story`
+- Roll formula: `d20 + ability_modifier + proficiency_bonus` (if proficient)
+- Expertise (Rogue, Bard): doubles proficiency bonus — tracked as `{skill: "expertise"}`
+- Jack of All Trades (Bard): adds half proficiency to non-proficient checks
+- Passive checks: `10 + modifier`, displayed on character card. DM uses passive Perception for hidden checks
+- All rolls post to `#roll-history`; DM narrates outcome in `#the-story`
 
-**Group checks:** When the DM triggers a group check (e.g., "group Stealth"), all players are pinged simultaneously. The system waits for all responses (subject to the campaign's turn timeout), then reports results to the DM. Per 5e rules, the group succeeds if at least half the individuals succeed.
+**Group checks:** DM triggers (e.g., "group Stealth"). All players pinged simultaneously. System waits for responses (subject to timeout), reports results. Group succeeds if at least half succeed (per 5e).
 
-**Contested checks:** The DM triggers these from the dashboard (e.g., grapple: player Athletics vs target Athletics/Acrobatics). Both parties roll; the system compares and reports the winner.
+**Contested checks:** DM triggers from dashboard (e.g., grapple: Athletics vs Athletics/Acrobatics). Both roll; system compares and reports.
 
 ### Short & Long Rests
 
-Rests reset character resources. A player initiates a rest; the DM approves it from the dashboard (to prevent resting in unsafe situations).
-
 **Short Rest** (`/rest short`):
-1. Player types `/rest short` → request posts to `#dm-queue`
+1. Player types `/rest short` → posts to `#dm-queue`
 2. DM approves from dashboard
 3. System prompts the player to spend hit dice: `/spend-hd 2` (spend 2 hit dice)
    - Each hit die heals `1dX + CON modifier` (X = class hit die size)
    - System rolls and applies healing automatically, capped at `hp_max`
    - Player can spend 0 to `hit_dice_remaining` dice
-4. System resets all features with `recharge: "short"` in `feature_uses` (e.g., Action Surge, Channel Divinity, Second Wind)
-5. Results posted to `#combat-log`: "Short rest: Kael spends 2 hit dice, heals 14 HP. Action Surge recharged."
+4. System resets all features with `recharge: "short"` (e.g., Action Surge, Channel Divinity, Second Wind)
+5. Results posted to `#combat-log`
 
 **Long Rest** (`/rest long`):
-1. Player types `/rest long` → request posts to `#dm-queue`
+1. Player types `/rest long` → posts to `#dm-queue`
 2. DM approves from dashboard
-3. System automatically applies:
+3. System applies:
    - HP restored to `hp_max`
-   - All spell slots restored to max
-   - All features with `recharge: "short"` or `recharge: "long"` reset
-   - Hit dice restored: regain up to half character level (minimum 1), capped at max (= character level)
+   - All spell slots restored
+   - All features with `recharge: "short"` or `"long"` reset
+   - Hit dice restored: regain up to half character level (minimum 1), capped at max
    - Death save tallies reset to 0/0
-4. Results posted to `#combat-log`: "Long rest: Aria fully healed. Spell slots restored. 3 hit dice recovered."
+4. Results posted to `#combat-log`
 
 **Constraints:**
 - Only one long rest per 24 in-game hours (DM tracks narrative time; system does not enforce calendar)
 - Rests cannot be initiated during active combat (system checks `encounter.status != 'active'`)
-- If interrupted (DM cancels mid-rest from dashboard), partial benefits may apply at DM discretion via manual override
+- If interrupted (DM cancels mid-rest from dashboard), partial benefits at DM discretion via manual override
 
 ### Exploration, Social & Travel
 
-These modes are narrative-driven and don't need dedicated mechanical systems in MVP. The existing Discord channel structure handles them naturally:
+Narrative-driven — no dedicated mechanical systems needed in MVP:
 
-- **Exploration:** DM narrates in `#the-story`, players describe actions in `#player-chat` or `/action`. DM calls for checks as needed (Perception, Investigation, Survival). If combat breaks out, DM starts an encounter from the dashboard.
-- **Social encounters:** Players roleplay in `#the-story` or `#player-chat`. DM calls for Charisma checks (Persuasion, Deception, Intimidation) when the outcome is uncertain. No special NPC dialogue system needed — Discord's text format is ideal for RP.
-- **Travel:** DM narrates distance and terrain. Random encounters are DM-triggered. Forced march / exhaustion checks can use `/check constitution` if the DM calls for them.
+- **Exploration:** DM narrates in `#the-story`, players describe actions in `#player-chat` or `/action`. DM calls for checks as needed. If combat breaks out, DM starts an encounter from the dashboard.
+- **Social:** Players roleplay in `#the-story` or `#player-chat`. DM calls for Charisma checks when uncertain. Discord's text format is ideal for RP.
+- **Travel:** DM narrates distance and terrain. Random encounters DM-triggered. Forced march / exhaustion checks via `/check constitution`.
 
-The `#dm-queue` channel serves as the universal escape hatch — any player action that doesn't map to a command goes there for DM resolution.
+`#dm-queue` serves as the universal escape hatch for anything that doesn't map to a command.
 
 ---
 
@@ -457,14 +673,22 @@ The `#dm-queue` channel serves as the universal escape hatch — any player acti
 The DM manages everything through a web app — they never type raw commands into Discord.
 
 **Features:**
-- **Combat Manager** — drag tokens on a grid, click to move, auto-calculates distance and range
+- **Combat Manager** — drag tokens on a grid, click to move, auto-calculate distance and range
 - **HP & Condition Tracker** — click to apply damage, healing, and status conditions
-- **Turn Queue** — shows current initiative order; "End Turn" auto-advances and pings the next player
+- **Turn Queue** — shows initiative order; "End Turn" auto-advances and pings next player
 - **Action Resolver** — view `#dm-queue` items, apply outcomes with a click
 - **Stat Block Library** — preloaded monster stat blocks, reusable across encounters
 - **Asset Library** — maps, token images, tilesets, custom monsters
-- **Map Editor** — create and edit battle maps (see "Map Creation & Authoring" above)
+- **Map Editor** — create and edit battle maps (see Map System)
 - **Character Overview** — read-only view of all player character sheets
+
+### Undo & Corrections
+
+- **Undo Last Action** — reverts the most recent mutation by restoring its `before_state` from the action log. Repeatable to walk back multiple steps within a turn. DM-only.
+- **Manual State Override** — directly edit any value at any time: HP, position, conditions, spell slots, initiative order. Overrides go through the per-turn lock.
+- **Discord Corrections** — every undo or override posts a correction to `#combat-log`: "⚠️ **DM Correction:** Goblin #1 HP adjusted (resistance to fire was missed)". Original messages are never edited or deleted.
+
+**Not in MVP:** full turn rewind (reverting an entire multi-action turn) or player-initiated undo. DM uses manual overrides instead.
 
 ---
 
@@ -474,10 +698,10 @@ The DM manages everything through a web app — they never type raw commands int
 |---|---|---|
 | Discord Bot | [discordgo](https://github.com/bwmarrin/discordgo) | Bot logic, slash commands, message editing |
 | Backend API | Go stdlib `net/http` + Chi router | Game state management, command processing |
-| Database | PostgreSQL + [sqlc](https://sqlc.dev) | Type-safe Go from raw SQL — characters, campaigns, combat state, maps |
-| DM Web App | Go templates for admin pages, [Svelte](https://svelte.dev) SPA for map editor | Svelte compiles to static JS/CSS — embedded in Go binary via `embed.FS`, no separate deployment |
-| Map Rendering | Go `image/draw` stdlib + [gg](https://github.com/fogleman/gg) | Server-side PNG generation for grid maps |
-| Real-time Sync | [nhooyr/websocket](https://github.com/nhooyr/websocket) | Live DM dashboard ↔ backend updates |
+| Database | PostgreSQL + [sqlc](https://sqlc.dev) | Type-safe Go from raw SQL |
+| DM Web App | Go templates for admin pages, [Svelte](https://svelte.dev) SPA for map editor | Svelte compiles to static JS/CSS, embedded in Go binary via `embed.FS` |
+| Map Rendering | Go `image/draw` stdlib + [gg](https://github.com/fogleman/gg) | Server-side PNG generation |
+| Real-time Sync | [nhooyr/websocket](https://github.com/nhooyr/websocket) | Live dashboard ↔ backend updates |
 | Deployment | Single Go binary (dashboard embedded via `embed.FS`) | One artifact to deploy |
 
 ---
@@ -739,9 +963,9 @@ conditions_ref
 
 4. **Action log for undo** — every mutation records `before_state` / `after_state` as JSONB snapshots. The DM's undo operation restores `before_state`. The log also serves as the audit trail for `#combat-log` and `#roll-history` Discord channels.
 
-5. **Character data blob** — the `character_data` JSONB column stores the full dnd5e_json_schema representation. This preserves import fidelity (D&D Beyond data that doesn't map to our typed columns) and enables future export. The typed columns (`hp_max`, `ac`, `ability_scores`, etc.) are the source of truth for gameplay; `character_data` is the source of truth for display and re-export.
+5. **Character data blob** — the `character_data` JSONB column stores the full dnd5e_json_schema representation. This preserves import fidelity (D&D Beyond data that doesn't map to typed columns) and enables future export. The typed columns are the source of truth for gameplay; `character_data` is the source of truth for display and re-export.
 
-6. **No separate combat state table** — the encounter itself tracks `status` and `current_turn_id`. The current combat state is derived from the encounter's combatants + the active turn row. Simpler than a separate state machine.
+6. **No separate combat state table** — the encounter tracks `status` and `current_turn_id`. Current combat state is derived from the encounter's combatants + the active turn row.
 
 ---
 
@@ -752,338 +976,34 @@ conditions_ref
 | State drift from manual Discord edits | Enforce read-only Discord policy; all state changes via bot or dashboard only |
 | Map images exceeding 8MB | Cap tile size at 48px; compress PNGs; limit grid size |
 | Enemy ID ambiguity | IDs are stable, map-labeled, and confirmed in every combat log response |
-| Complex player actions breaking automation | `/action` command routes to DM; no attempt to auto-parse freeform intent |
-| Scope creep | Build MVP (combat only), then layer in inventory/spells/character sheets |
+| Complex player actions breaking automation | `/action` routes to DM; no attempt to auto-parse freeform intent |
+| D&D Beyond API instability | Undocumented endpoint may change; importer includes fallback to manual creation |
+| Turn stalls from AFK players | 24h configurable timeout with escalating pings and auto-skip to Dodge |
+| Reaction timing in async | Pre-declaration model — no combat pauses; DM resolves manually |
+| Concurrent commands corrupting state | Per-turn PostgreSQL advisory locks serialize all mutations |
 
 ---
 
 ## MVP Scope
 
-A first playable version includes:
-
-- Discord bot posting to the correct channels
-- Combat state in the database (HP, position, turn order, conditions)
-- Server-side map PNG generation and Discord message editing
-- Validated `/move`, `/attack`, `/cast`, `/action` slash commands
-- All dice rolls auto-logged to `#roll-history`
-- Turn notification pings
-- Minimal DM web UI: grid view, token drag-drop, HP management, turn advancement
-- Character creation in dashboard (full 5e SRD: race, class, abilities, equipment, spells)
-- D&D Beyond character import (paste URL → parse → DM approves)
-- SRD reference data seeded at startup (monsters, spells, weapons, armor, classes, races)
-
-- Skill/ability checks (`/check`, `/save`) and short/long rest mechanics (`/rest`)
-- Feature use tracking with short/long rest recharge
-
-Future phases: full asset library, Open5e third-party content integration, inventory management, campaign/session management. (Note: spell slot tracking is included in MVP — see resolved issue #7. Basic non-combat gameplay — skill checks and rests — is included in MVP; see resolved issue #15.)
-
----
-
-## Open Questions & Gaps
-
-The following items need resolution before or during implementation. Refer to them by number.
-
-### Critical — Resolve Before Building
-
-**1. Turn Timeout / AFK Handling** ✅
-
-Turn timeout: **24 hours**, DM-configurable per campaign (1h–72h range).
-
-**Escalation:**
-- Reminder ping at 50% of timeout (e.g., 12h) in `#your-turn`
-- Final warning at 75% (e.g., 18h) — "your turn will be skipped in 6 hours"
-- Auto-skip at 100% — player takes the **Dodge action with no movement**
-
-**DM manual overrides (via dashboard):**
-- **Skip now** — immediately advance past a player
-- **Extend timer** — grant more time without changing the campaign default
-- **Pause combat** — freeze all timers (real life happens)
-
-**Prolonged absence:**
-- After 3 consecutive auto-skips, the character is flagged as "absent" in the dashboard
-- DM decides: auto-pilot the character, narrate a retreat, or remove from initiative
-- Initiative slot stays reserved so the player can return seamlessly
-
-**2. Full Turn Action Model** ✅
-
-Turns are **sequential** — players send commands one at a time and see results before deciding their next action.
-
-**Turn resources tracked by the backend:**
-- Movement (feet remaining out of speed)
-- Action (used / not used)
-- Bonus action (used / not used)
-- Free object interaction (used / not used)
-
-Each command validates against remaining resources. If a player tries to use something they've already spent, the bot replies with a specific error (e.g., "You've already used your action this turn").
-
-**Commands (updated):**
-
-| Command | Example | Description |
-|---|---|---|
-| `/move` | `/move D4` | Move to coordinate. Can be used multiple times (split movement) as long as total ≤ speed |
-| `/attack` | `/attack G1` or `/attack G1 handaxe --gwm` | Attack a target with equipped weapon (or specify weapon). One `/attack` per swing; backend tracks attacks remaining by class. Supports flags: `--gwm`, `--sharpshooter`, `--reckless` |
-| `/cast` | `/cast fireball D5` | Cast a spell (uses action or bonus action depending on spell) |
-| `/bonus` | `/bonus cunning-action dash` | Bonus action |
-| `/interact` | `/interact draw longsword` | Free object interaction — routed to `#dm-queue` for DM resolution |
-| `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent — persists until used, cancelled, or encounter ends. Routed to `#dm-queue` |
-| `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
-| `/deathsave` | `/deathsave` | Roll a death saving throw (only available while dying at 0 HP) |
-| `/equip` | `/equip longsword` | Set primary weapon (persists between turns, usable any time) |
-| `/done` | `/done` | Explicitly end turn, advance to next in initiative |
-| `/register` | `/register Thorn` | Link your Discord account to a character (DM must approve) |
-
-**Ending a turn:**
-- **Explicit:** player sends `/done`
-- **DM override:** DM can end any player's turn from the dashboard at any time
-- **Timeout:** if the player goes silent mid-turn, the #1 timeout system applies — remaining unused actions are forfeited
-
-**Split movement** works naturally: `/move D4` → `/attack G1` → `/move E5` — each `/move` deducts from remaining movement.
-
-**3. Reactions** ✅
-
-DM resolves all reactions manually. Players can pre-declare reaction intent at any time using `/reaction`, which posts to `#dm-queue` for the DM to act on when the trigger occurs.
-
-**`/reaction <description>`** — declare a reaction intent
-- `/reaction Shield if I get hit` → posts to `#dm-queue`: "🛡️ **Thorn** wants to react: *Shield if I get hit*"
-- `/reaction OA if goblin moves away` → posts to `#dm-queue`: "⚔️ **Kael** wants to react: *OA if goblin moves away*"
-- `/reaction Counterspell if enemy casts` → posts to `#dm-queue`: "✋ **Lyra** wants to react: *Counterspell if enemy casts*"
-- Reaction declarations persist until used, cancelled (`/reaction cancel`), or the encounter ends
-- One reaction per round per player (per D&D rules) — system tracks whether it's been spent
-
-**DM workflow:**
-1. DM sees reaction declarations in `#dm-queue` or the dashboard
-2. When the trigger condition occurs during enemy/NPC turns, DM decides whether it fires
-3. DM resolves the reaction in the dashboard (rolls, applies effects) and posts the result
-4. System marks the player's reaction as spent for the round
-
-**Why this works for async:**
-- Zero stalling — combat never pauses waiting for a reaction response
-- Players declare intent on their own time, even between turns
-- DM has full control over timing and adjudication
-- Readied Actions use the same flow: `/reaction I attack when the goblin moves past me`
-
-**4. Enemy / NPC Turn Workflow** ✅
-
-Each enemy takes its own turn in initiative order. The DM resolves enemy turns through the dashboard with **smart defaults** — the system pre-fills suggestions, DM confirms or overrides.
-
-**Dashboard flow when it's an enemy's turn:**
-1. Dashboard highlights the active enemy and pre-fills:
-   - **Suggested move:** shortest path toward nearest hostile (reuses existing pathfinding)
-   - **Suggested attack:** nearest target in range; defaults to creature's primary attack from stat block
-   - **Suggested ability:** if the creature has a special ability (e.g. Breath Weapon), suggest it when conditions are met (multiple targets in cone/line)
-2. DM clicks **Confirm** to accept defaults, or overrides any field (different target, different ability, hold position, etc.)
-3. System auto-rolls to-hit vs target AC, rolls damage, applies HP changes
-4. DM sees the roll results and can adjust before posting (e.g. fudge a crit that would one-shot a level 2 player)
-5. On confirm, results are posted to `#combat-log` and map is updated
-
-**`#combat-log` output** — same format as player actions:
-```
-🏃 Goblin 1 moves to D5
-⚔️ Goblin 1 attacks Thorn — 🎲 14 vs AC 18 — Miss!
-🏃 Goblin 2 moves to E4
-⚔️ Goblin 2 attacks Kael — 🎲 19 vs AC 15 — Hit! 7 slashing damage
-```
-
-**Pending reactions:** if a player has a pre-declared `/reaction` that triggers during the enemy turn (e.g. Opportunity Attack on enemy movement, Shield on being hit), the dashboard surfaces it to the DM before confirming that step. DM resolves the reaction inline.
-
-**Complexity:** low — suggested move reuses pathfinding already needed for `/move` validation, suggested target is nearest-by-distance sort, suggested action is the first entry in the creature's stat block. It's pre-filling form fields, not AI.
-
-**5. Death Saves & Unconsciousness (0 HP)** ✅
-
-When a character drops to 0 HP, they fall **unconscious** and begin making death saving throws. The system fully tracks this state.
-
-**Dropping to 0 HP:**
-- Character status becomes **Dying** (unconscious, prone)
-- Concentration is broken automatically
-- All commands except `/deathsave` are blocked on their turn
-- Token state changes to "dying" on the map (distinct visual from bloodied/dead)
-
-**Instant death check:**
-- On every damage application, the system checks: if damage remaining after reaching 0 HP ≥ character's max HP, the character dies instantly
-- Token state → "dead", no death saves occur
-
-**Death saving throws:**
-- When initiative reaches a dying player, the bot pings them in `#your-turn` to send `/deathsave`
-- Player sends `/deathsave` → system rolls d20 (no modifiers unless granted by a feature like Diamond Soul)
-- ≥10 = success, <10 = failure
-- **Nat 20** → regain 1 HP, conscious, still prone. Death save tallies reset
-- **Nat 1** → counts as 2 failures
-- 3 successes → **stabilized** (unconscious at 0 HP, no more death saves; token state → "stable")
-- 3 failures → **dead** (token state → "dead")
-- Rolls and results are posted **publicly** in `#combat-log`
-- If the player doesn't send `/deathsave` before the AFK timeout, the system auto-rolls for them
-
-**Taking damage while at 0 HP:**
-- Each hit = 1 automatic death save failure
-- Critical hit (attacker within 5ft of unconscious target) = 2 failures
-- System auto-applies these when damage targets a dying character
-
-**Stabilization:**
-- 3 death save successes, or Medicine check (DC 10), or Spare the Dying cantrip
-- Stable characters remain unconscious at 0 HP, make no further death saves
-- Regain 1 HP after 1d4 hours (post-combat only)
-
-**Healing from 0 HP:**
-- Any healing (Healing Word, potion, Lay on Hands, etc.) sets HP to 0 + healing amount
-- Status → conscious, still **prone** (costs half movement to stand)
-- All death save successes and failures reset to zero
-
-**Token states (updated):** normal / bloodied / **dying** / **stable** / dead
-
-**6. Authentication & Authorization** ✅
-
-**Discord user → Character mapping:**
-- Player runs `/register <character_name>` in the Discord server
-- Bot creates a `discord_user_id → character_id` mapping in the database
-- DM confirms/approves the registration via the dashboard
-- One player = one character per campaign (DM can override in dashboard if needed)
-
-**Out-of-turn prevention:**
-- On every command (`/move`, `/attack`, `/cast`, `/bonus`, `/interact`, `/action`, `/done`, `/deathsave`), the backend validates that the requesting player's Discord user ID matches the active turn's character owner
-- If not their turn, bot replies: "It's not your turn. Current turn: **[Character]** (@player)"
-- Exception: `/reaction` can be submitted at any time — it's a declaration, not a turn action
-
-**DM dashboard authentication:**
-- Discord OAuth2 — DM logs in with their Discord account
-- System verifies the authenticated Discord user ID matches the campaign's designated DM
-- No separate passwords or accounts to manage
-
-**Multi-campaign support:**
-- One bot instance serves multiple Discord servers (multi-tenant)
-- All database queries are scoped by `guild_id` / `campaign_id`
-- One campaign per Discord server (keeps channel structure clean and unambiguous)
-- Multiple campaigns in a single server is not MVP scope
-
-### Significant — Will Hit During Development
-
-~~**7. `/cast` Spell Handling**~~ **Resolved**
-
-- **AoE targeting** — `/cast fireball D5` targets a coordinate; backend calculates affected creatures by shape/radius from spell data. Spell data includes area definitions: `{ shape: "sphere", radius_ft: 20 }`, `{ shape: "cone", length_ft: 15 }`, `{ shape: "line", length_ft: 60, width_ft: 5 }`. Cones originate from the caster and fan toward the target coordinate. All affected creatures (including allies) are listed in `#combat-log` — no confirmation prompt.
-- **Spell saves** — auto-rolled for all affected creatures (enemies and allies). Saves are mechanical (d20 + modifier vs DC) with no decision-making, so auto-rolling keeps async moving. Results posted to `#combat-log`.
-- **Concentration** — fully tracked by the backend:
-  - Only one concentration spell active per character at a time
-  - Casting a new concentration spell auto-drops the previous one (notified in `#combat-log`)
-  - Taking damage while concentrating triggers an auto-rolled CON save (DC = max(10, half damage taken)); failure breaks concentration
-  - Active concentration effects (e.g., Fog Cloud zone, Spirit Guardians aura) are tracked on the map
-- **Spell slots** — tracked and enforced in MVP. Backend knows each character's slots per level, deducts on cast, rejects `/cast` if no slots remaining. `/cast` without slot management would break caster balance.
-- **Spell range** — enforced by backend. Spell data includes range; backend validates target is within range. Touch spells require adjacency (5ft), self spells need no target.
-
-**8. `/attack` Weapon & Option Selection** ✅
-
-**Command syntax:** `/attack <target> [weapon] [--flags]`
-
-Examples:
-- `/attack G2` — attack with equipped weapon
-- `/attack G2 handaxe` — attack with a specific weapon
-- `/attack G2 --gwm` — attack with Great Weapon Master (-5 to hit, +10 damage)
-- `/attack G2 longbow --sharpshooter` — attack with longbow using Sharpshooter (-5/+10)
-- `/attack G1 --reckless` — Reckless Attack (advantage, enemies get advantage on you until next turn)
-
-**Weapon selection** — each character has an equipped/primary weapon (set during character setup or via `/equip <weapon>`). `/attack G2` uses the equipped weapon; `/attack G2 handaxe` overrides for that swing. Backend validates the character actually has the specified weapon.
-
-**Extra Attack** — resolved one swing at a time. Each `/attack` command resolves a single attack roll. The backend tracks attacks remaining per turn based on class/level (e.g., Fighter 5 = 2, Fighter 11 = 3, Fighter 20 = 4). After each `/attack`, the bot reports remaining attacks. The player can retarget freely between swings — see the result of attack 1 before choosing where to aim attack 2. If the player sends `/done` with unused attacks, those attacks are forfeited.
-
-**Attack modifier flags** — opt-in per swing:
-- `--gwm` — Great Weapon Master: -5 to hit, +10 damage. Backend validates a heavy melee weapon is equipped.
-- `--sharpshooter` — Sharpshooter: -5 to hit, +10 damage. Backend validates a ranged weapon is being used.
-- `--reckless` — Reckless Attack (Barbarian): grants advantage on all melee STR attacks this turn, but enemies get advantage on attacks against you until your next turn. Only valid on the first attack of the turn. Backend validates Barbarian class.
-- Invalid flags return an error explaining why (e.g., "GWM requires a heavy weapon; Longsword is not heavy").
-
-**Advantage/disadvantage** — auto-detected from tracked conditions:
-- **Auto-detected (system knows):** target is prone (melee adv / ranged disadv), attacker is prone (disadv), target is restrained/stunned/paralyzed/unconscious (adv), attacker is restrained/blinded/poisoned (disadv), Reckless Attack flag (adv), attacker/target invisible (adv/disadv as appropriate)
-- **Not auto-detected in MVP:** flanking (optional rule, not all tables use it — may add as campaign setting toggle later)
-- **DM override:** DM can force advantage or disadvantage via the dashboard for situations the system can't detect (creative tactics, terrain, narrative). Override posts to `#combat-log`: "DM grants advantage to Kael's attack (high ground)."
-- **Stacking:** when both advantage and disadvantage apply from any combination of sources, they cancel out per 5e rules — system rolls normally regardless of how many sources of each exist.
-
-**9. Concurrency & Race Conditions** ✅
-
-All combat state mutations are serialized through a **per-turn pessimistic lock** using PostgreSQL advisory locks keyed on `turn_id`.
-
-**Rapid player commands** (e.g., two `/attack` commands sent before the first resolves):
-- Each command acquires the turn lock before processing
-- If the lock is held, the second command **blocks** (waits) rather than failing
-- Once the first command completes and releases the lock, the second command processes against the updated state (correct attacks-remaining count, movement left, etc.)
-- Player experiences at most a few hundred milliseconds of delay — no "conflict, retry" errors
-
-**DM + player concurrent actions** (e.g., DM edits creature HP while player attacks that creature):
-- DM dashboard mutations go through the same backend and acquire the same per-turn lock
-- If a player's `/attack` is processing, the DM's edit blocks until the attack resolves, then applies against post-attack HP
-- If the DM ends a player's turn, any in-flight player command either completes first (if it holds the lock) or fails with "It's no longer your turn" (if the DM's end-turn acquired the lock first)
-
-**WebSocket state sync** — server-authoritative, push-only:
-- The Go backend + PostgreSQL is the single source of truth for all game state
-- The DM dashboard renders state received via WebSocket pushes; it does not maintain its own game state copy
-- All mutations (from Discord commands or the dashboard) go through the backend API
-- Flow: command → backend acquires lock → resolves → releases lock → pushes updated state over WebSocket → dashboard re-renders
-
-**Dashboard optimistic UI** — when a WebSocket push arrives while the DM has a form open:
-- Read-only display areas (initiative tracker, HP bars) update immediately
-- Active form inputs are **not clobbered** — the DM's draft is preserved with a subtle indicator: "HP updated to 3 by player action"
-- On form submit, the DM's intended value is sent to the backend and applied through the lock
-
-**Why pessimistic locking over alternatives:**
-- Optimistic locking (version numbers, retry-on-conflict) creates bad UX — players get conflict errors for normal rapid commands
-- Command queues (Redis, channels) add infrastructure; the database lock achieves the same serial execution within the single-binary deployment
-- Contention is inherently low: only one player acts per turn, DM interventions during a player's command are rare, and lock duration is a single fast DB transaction
-
-**10. Discord API Constraints** ✅
-
-- ~~Message edit rate limits (~5 edits/5s/channel) — rapid state changes could bottleneck~~ **Mitigated** — map images are appended as new messages in `#combat-map` instead of editing, avoiding edit rate limits
-- ~~Slash command registration limits (100 global) and propagation delays~~ **Not a risk** — the command set is ~12 commands using arguments for variation (e.g., `/cast fireball D5`), well under the 100-command cap. Commands are registered per-guild (instant propagation) rather than globally.
-- ~~Embed character limits (6000 chars) — large parties could overflow initiative tracker or character cards~~ **Resolved** — embeds are not required. The bot uses **plain text messages** for most output (combat log, initiative order, turn pings). For very large output (full initiative order with 20+ combatants, detailed character cards), the bot uploads a **text file attachment** instead. This avoids the 6000-char embed limit entirely while keeping output readable.
-- ~~Required bot permissions and server setup not documented~~ **Resolved** — see below.
-
-**Required bot permissions:**
-- `Send Messages` — post to all bot-managed channels
-- `Attach Files` — upload map PNGs and text file attachments
-- `Manage Messages` — pin/edit the initiative tracker message
-- `Use Application Commands` — register and respond to slash commands
-- `Mention Everyone` — ping players on turn start (or a configurable `@combat` role)
-
-**Server setup:** a `/setup` slash command auto-creates the channel structure (`#initiative-tracker`, `#combat-log`, `#roll-history`, `#the-story`, `#player-chat`, `#combat-map`, `#your-turn`, `#character-cards`, `#dm-queue`) with appropriate permission overrides (e.g., `#the-story` is DM-write-only, `#combat-map` is bot-write-only). DM runs `/setup` once after inviting the bot. Channels that already exist are skipped.
-
-**11. Map & Grid Limitations** ✅
-- ~~Grid size: A–Z = 26 columns max~~ **Resolved** — extended to spreadsheet-style lettering (A–Z, AA, AB, …) for arbitrarily large maps
-- ~~Fog of war: can players see the entire map? Hidden enemies?~~ **Resolved** — dynamic fog of war using shared party vision (union of all player tokens' shadowcast results). Enemies in fogged cells are hidden. See "Dynamic Fog of War" section.
-- ~~Vertical dimension: flying, multi-level terrain, elevation~~ **Resolved** — tokens carry altitude (integer feet), displayed as label suffix (e.g., `AR↑30`). 3D distance for range checks. See "Altitude & Elevation" section.
-- ~~Map creation/import workflow for the DM~~ **Resolved** — blank grid + terrain/wall tools + image import (Phase 1), tileset painting + Tiled import (Phase 2). Maps stored as Tiled-compatible JSON. See "Map Creation & Authoring" section.
-
-**12. Rollback / Undo** ✅
-
-The DM dashboard is the correction mechanism. Discord messages are an append-only log — corrections are posted as new messages, not edits or deletions.
-
-**Action log:** every state mutation (HP change, position move, condition applied/removed, spell slot spent, etc.) is recorded in an append-only `action_log` table (`action_id`, `turn_id`, `timestamp`, `action_type`, `before_state`, `after_state`). This enables single-step undo and provides an audit trail.
-
-**DM correction tools (dashboard):**
-- **Undo last action** — reverts the most recent mutation by restoring its `before_state`. Only the DM can undo. Can be applied repeatedly to walk back multiple steps within the current turn.
-- **Manual state override** — DM can directly edit any value at any time: set HP, move a token, add/remove conditions, adjust spell slots, change initiative order. Overrides go through the same per-turn lock as normal commands.
-- **Discord correction message** — every undo or manual override posts a correction to `#combat-log`: "⚠️ **DM Correction:** Goblin #1 HP adjusted (resistance to fire was missed)". Original messages are never edited or deleted.
-
-**Not in MVP:**
-- Full turn rewind (reverting an entire multi-action turn across multiple affected creatures is complex and error-prone — DM uses manual overrides instead)
-- Player-initiated undo (all corrections are DM-only)
-
-### Minor — Good to Decide
-
-**13. Diagonal Movement Rule** ✅
-
-Diagonals cost 5ft — same as cardinal movement. This is a deliberate simplification for async play, where easy mental math matters more than geometric precision. The PHB alternating 5/10 variant is not supported.
-
-**14. Data Model / Schema** ✅
-
-Full database schema defined — see "Data Model" section. Key decisions:
-- Campaign → Encounter → Combatants → Turns hierarchy with instance-level combat state
-- Character ↔ Player mapping via `player_characters` table with DM approval
-- SRD reference data (creatures, spells, weapons, armor, classes, races) seeded from [5e-bits/5e-database](https://github.com/5e-bits/5e-database), extensible with homebrew per campaign
-- Full 5e character creation in dashboard + D&D Beyond import via undocumented character API
-- Internal character format based on [BrianWendt/dnd5e_json_schema](https://github.com/BrianWendt/dnd5e_json_schema)
-- JSONB for flexible nested data (features, inventory, spell slots); typed columns for combat-critical fields (HP, AC, position)
-- Action log with before/after state snapshots for undo and audit trail
-
-**15. Non-Combat Gameplay** ✅
-
-Skill/ability checks and short/long rest mechanics are now in MVP scope — see "Non-Combat Gameplay" section. `/check`, `/save`, and `/rest` commands added. Hit dice tracking and feature-use recharge (`feature_uses` column) added to the data model. Exploration, social, and travel are handled narratively through existing Discord channels and `#dm-queue`. Leveling was already covered (see "Character Leveling" section).
-
-**16. Tech Stack Decision** ✅
-
-Go for everything. discordgo for the bot, stdlib `net/http` + Chi for the API, sqlc for type-safe database access, Go `image` stdlib for map rendering. DM dashboard is split: Go `html/template` for admin/combat management pages, Svelte SPA for the interactive map editor (drag-and-drop tokens, fog of war). Svelte compiles to static JS/CSS at build time — embedded into the Go binary via `embed.FS` for single-artifact deployment. Node is a dev-only build dependency, not a runtime dependency.
+**Included:**
+- Discord bot with full channel structure (`/setup` auto-creates)
+- All slash commands: `/move`, `/attack`, `/cast`, `/bonus`, `/shove`, `/fly`, `/interact`, `/action`, `/reaction`, `/deathsave`, `/done`, `/equip`, `/register`, `/check`, `/save`, `/rest`
+- Combat state: HP, position, turn order, conditions, death saves, spell slots, concentration
+- Turn timeout with escalating pings and auto-skip
+- Enemy/NPC turns with smart-default suggestions for DM
+- Server-side map PNG generation with dynamic fog of war
+- DM web dashboard: grid view, token drag-drop, HP management, turn advancement, undo, manual overrides
+- Character creation (full 5e SRD: race, class, abilities, equipment, spells)
+- D&D Beyond character import
+- SRD reference data seeded at startup (monsters, spells, weapons, armor, classes, races, conditions)
+- Skill/ability checks and rest mechanics with feature-use recharge
+- Dice rolls auto-logged to `#roll-history`
+- Map editor: blank grid + terrain/wall tools + image import (Tiled-compatible JSON)
+
+**Future phases:**
+- Tileset-based map painting + Tiled desktop import
+- Full asset library
+- Open5e third-party content integration
+- Inventory management
+- Campaign/session management
