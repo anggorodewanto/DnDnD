@@ -39,7 +39,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 22. **Counterspell timing in async.** Does the player see what spell is being cast before deciding to Counterspell? Do they know the level?
 23. **Spell targeting syntax.** For single-target beneficial spells (Healing Word, Bless), can a player target allies by name or short ID?
 24. **Warlock spell slots.** Warlocks have unique slots (fewer, all same level, recharge on short rest). The `spell_slots` JSONB and rest mechanics do not explicitly address this.
-25. **Bonus action spell restriction — reverse direction.** The spec enforces "bonus action spell = only cantrip with action." But per 5e, casting a leveled action spell also prevents bonus action spells. Is this enforced?
+~~25. **Bonus action spell restriction — reverse direction.** The spec enforces "bonus action spell = only cantrip with action." But per 5e, casting a leveled action spell also prevents bonus action spells. Is this enforced?~~ — Resolved: Both directions enforced. Added `action_spell_cast` boolean to turns table. Casting a leveled action spell blocks subsequent bonus action spells, and vice versa.
 26. **Casting in Silence.** The spec mentions Silence breaking concentration but not blocking new V/S spells from being cast inside the zone.
 
 ## Movement & Positioning

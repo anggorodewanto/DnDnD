@@ -267,7 +267,9 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 - Entering a Silence zone (or similar effect preventing verbal/somatic components) breaks concentration on spells requiring those components — auto-detected when a concentrating caster's position overlaps a Silence zone
 - Active effects (Fog Cloud zone, Spirit Guardians aura) tracked on the map
 
-**Bonus action spell restriction:** If a player casts a spell with a casting time of "1 bonus action" (e.g., Healing Word, Misty Step), the only other spell they can cast that turn is a cantrip with a casting time of 1 action. If they attempt `/cast` with a non-cantrip after using a bonus action spell, the command is rejected: "You already cast a bonus action spell this turn — you can only cast a cantrip with your action."
+**Bonus action spell restriction (both directions):** Per 5e rules (Sage Advice Compendium), if a player casts any spell as a bonus action on their turn, the only other spell they can cast that turn is a cantrip with a casting time of 1 action — and this applies regardless of casting order:
+- **Bonus action spell first:** If a bonus action spell was cast (`bonus_action_spell_cast = true`), `/cast` with a non-cantrip action spell is rejected: "You already cast a bonus action spell this turn — you can only cast a cantrip with your action."
+- **Leveled action spell first:** If a leveled (non-cantrip) action spell was cast (`action_spell_cast = true`), `/bonus cast` or `/cast` with a bonus action spell is rejected: "You already cast a leveled spell with your action this turn — you cannot cast a bonus action spell."
 
 **Spell save DC:** calculated as `8 + proficiency_bonus + spellcasting_ability_modifier`. The spellcasting ability varies by class (referenced from `classes.spellcasting.ability`): INT for Wizards, WIS for Clerics/Druids/Rangers, CHA for Bards/Paladins/Sorcerers/Warlocks. Creature stat blocks store the DC directly in their abilities data.
 
@@ -1271,7 +1273,8 @@ turns
   movement_remaining_ft INTEGER NOT NULL
   action_used     BOOLEAN DEFAULT false
   bonus_action_used BOOLEAN DEFAULT false
-  bonus_action_spell_cast BOOLEAN DEFAULT false  -- tracks bonus action spell restriction
+  bonus_action_spell_cast BOOLEAN DEFAULT false  -- tracks bonus action spell restriction (forward direction)
+  action_spell_cast BOOLEAN DEFAULT false        -- tracks leveled action spell cast (reverse direction of bonus action spell restriction)
   reaction_used   BOOLEAN DEFAULT false  -- per-round, not per-turn
   free_interact_used BOOLEAN DEFAULT false
   attacks_remaining INTEGER NOT NULL DEFAULT 1
