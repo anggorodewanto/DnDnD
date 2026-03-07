@@ -208,7 +208,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Command discoverability:** Discord's built-in slash command UI is the primary discovery mechanism — typing `/` shows all registered commands with parameter hints. The `/help` command supplements this with usage examples, available flags (e.g., `--gwm`, `--adv`), and context-specific tips (e.g., remaining attacks, available spell slots).
 
-### Attack Details
+### Attack Mechanics
 
 **Weapon selection:** each character has an equipped weapon (set via `/equip`). `/attack G2` uses it; `/attack G2 handaxe` overrides for that swing. Backend validates the character has the weapon.
 
@@ -227,83 +227,6 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 - **Stacking:** when both apply, they cancel out per 5e rules — rolled normally regardless of source count.
 
 **Auto-crit:** melee attacks within 5ft against paralyzed or unconscious targets are automatic critical hits (per 5e rules). System auto-doubles damage dice when this condition is detected.
-
-**Save auto-resolution from conditions:**
-
-| Condition | Effect |
-|-----------|--------|
-| Paralyzed | Auto-fail STR and DEX saves |
-| Stunned | Auto-fail STR and DEX saves |
-| Unconscious | Auto-fail STR and DEX saves |
-| Petrified | Auto-fail STR and DEX saves |
-| Restrained | Disadvantage on DEX saves |
-| Dodge action | Advantage on DEX saves |
-
-When a save is triggered (spell, concentration check, etc.) and the target has one of these conditions, the system auto-resolves the save as failed (or applies disadvantage/advantage) without prompting the player to roll. Dodge action grants advantage on DEX saves, making the auto-skip Dodge action (for AFK/timeout) mechanically meaningful. Auto-fails and advantage/disadvantage from conditions are logged to `#combat-log`.
-
-**Condition effects on ability checks:**
-
-| Condition | Effect |
-|-----------|--------|
-| Frightened | Disadvantage on ability checks while source of fear is within line of sight |
-| Poisoned | Disadvantage on ability checks |
-| Blinded | Auto-fail ability checks requiring sight |
-
-Auto-applied when `/check` is used. System checks active conditions and applies disadvantage automatically. For blinded creatures, checks that require sight (e.g., Perception checks to spot something visual) are auto-failed. The DM flags which checks require sight via the dashboard.
-
-**Condition effects on speed:**
-
-| Condition | Effect |
-|-----------|--------|
-| Grappled | Speed becomes 0 |
-| Restrained | Speed becomes 0 |
-| Frightened | Can't move closer to source of fear |
-
-When a grappled or restrained condition is applied, the combatant's effective speed is set to 0. `/move` commands are rejected with an explanation (e.g., "You can't move — you are grappled"). Speed restores when the condition is removed. For frightened creatures, `/move` commands that would decrease distance to the fear source are rejected (e.g., "You can't move closer to the source of your fear"). The fear source is tracked as metadata on the frightened condition (`{source_combatant_id}`).
-
-**Prone movement cost:**
-
-Standing from prone costs half the combatant's movement speed. When a prone combatant issues `/move`, the system deducts half their speed before calculating remaining movement. If the combatant has insufficient movement remaining, standing is still allowed but no further movement is possible. Logged to `#combat-log` (e.g., "Rogue stands from prone (15ft movement spent). 15ft movement remaining.").
-
-**Condition-based action blocking:**
-
-| Condition | Effect |
-|-----------|--------|
-| Incapacitated | Can't take actions or reactions |
-| Stunned | Can't take actions or reactions (includes incapacitated) |
-| Paralyzed | Can't take actions or reactions (includes incapacitated) |
-| Unconscious | Can't take actions or reactions (includes incapacitated) |
-| Petrified | Can't take actions or reactions (includes incapacitated) |
-
-When a combatant with one of these conditions attempts `/attack`, `/cast`, `/action`, or `/reaction`, the command is rejected with an explanation (e.g., "You can't act — you are stunned"). The combatant's turn is auto-skipped with a `#combat-log` message (e.g., "Fighter's turn skipped — paralyzed"). Already handled for unconscious at 0 HP via death save rules; this generalizes to all incapacitating conditions.
-
-**Charmed attack restriction:**
-
-Charmed creatures can't attack the charmer or target them with harmful abilities. `/attack` and `/cast` (harmful) commands targeting the charm source are rejected (e.g., "You can't attack the source of your charm"). The charm source is tracked as metadata on the charmed condition (`{source_combatant_id}`). Non-harmful interactions with the charmer are still allowed.
-
-**Damage resistance, immunity, and vulnerability auto-application:**
-
-When damage is dealt, the system checks the target's `damage_resistances`, `damage_immunities`, and `damage_vulnerabilities` arrays:
-- **Resistance**: damage of that type is halved (rounded down)
-- **Immunity**: damage of that type is reduced to 0
-- **Vulnerability**: damage of that type is doubled
-
-Applied automatically during damage resolution. Logged to `#combat-log` (e.g., "Fire Elemental takes 7 fire damage → 0 (immune to fire)").
-
-Petrified creatures have resistance to all damage types. This is auto-applied in addition to any existing resistances on the creature. If the creature already has resistance to a damage type, the petrified resistance does not stack (resistance is not applied twice).
-
-**Condition immunity auto-blocking:**
-
-When a condition is being applied to a creature, the system checks `condition_immunities`:
-- If the creature is immune, the condition is **not applied**
-- A message is posted to `#combat-log` (e.g., "Elf is immune to charmed — condition not applied")
-
-**Auto-detected class/creature features:**
-
-- **Sneak Attack** (Rogue) — triggers when the rogue has advantage on the attack, OR an ally is within 5ft of the target and the rogue doesn't have disadvantage. Backend checks combatant positions automatically. Extra damage dice added based on rogue level. Once per turn.
-- **Rage damage bonus** (Barbarian) — extra damage on STR-based melee attacks while raging. Rage tracked as a condition on the combatant; bonus auto-applied to qualifying attacks.
-- **Evasion** (Rogue 7+ / Monk 7+) — on DEX saving throws, success means no damage (instead of half), failure means half damage (instead of full). Auto-detected from class features by level.
-- **Pack Tactics** (wolves, kobolds, etc.) — creature gets advantage when an ally is within 5ft of the target. Same position-checking logic as Sneak Attack, applied to creatures with the Pack Tactics ability.
 
 ### Spell Casting Details
 
@@ -354,39 +277,85 @@ These post to `#dm-queue`. The DM resolves them in the dashboard, applies state 
 
 ---
 
-## A Full Player Turn — Example
+## Conditions & Combat Mechanics
 
-Player inputs (level 5 Fighter with longsword equipped, 2 attacks per action):
-```
-/move D4
-/attack G1
-```
+Conditions and combat modifiers are auto-applied by the backend whenever a relevant command is processed. All auto-applied effects are logged to `#combat-log`.
 
-Bot output in `#combat-log`:
-```
-🗺️  Aria moves from C3 → D4  (25ft used of 30ft)
-⚔️  Aria attacks Goblin #1 with Longsword (attack 1 of 2)
-    → Roll to hit: 19 (14 + 5) — HIT
-    → Damage: 9 slashing
-    → Goblin #1 is now Bloodied
-    ℹ️  1 attack remaining
-```
+### Condition Effects
 
-Player sees the result and decides to finish off G1 or switch targets:
-```
-/attack G2
-```
+**Effects on saving throws:**
 
-```
-⚔️  Aria attacks Goblin #2 with Longsword (attack 2 of 2)
-    → Roll to hit: 11 (6 + 5) vs AC 13 — MISS
-    ℹ️  No attacks remaining
-```
+| Condition | Effect |
+|-----------|--------|
+| Paralyzed | Auto-fail STR and DEX saves |
+| Stunned | Auto-fail STR and DEX saves |
+| Unconscious | Auto-fail STR and DEX saves |
+| Petrified | Auto-fail STR and DEX saves |
+| Restrained | Disadvantage on DEX saves |
+| Dodge action | Advantage on DEX saves |
 
-Then:
-- Map image regenerates with Aria at D4
-- G1's token gets a visual indicator (color shift or damage overlay)
-- Bot pings next player in `#your-turn`
+When a save is triggered (spell, concentration check, etc.) and the target has one of these conditions, the system auto-resolves the save as failed (or applies disadvantage/advantage) without prompting the player to roll. Dodge action grants advantage on DEX saves, making the auto-skip Dodge action (for AFK/timeout) mechanically meaningful.
+
+**Effects on ability checks:**
+
+| Condition | Effect |
+|-----------|--------|
+| Frightened | Disadvantage on ability checks while source of fear is within line of sight |
+| Poisoned | Disadvantage on ability checks |
+| Blinded | Auto-fail ability checks requiring sight |
+
+Auto-applied when `/check` is used. For blinded creatures, checks that require sight (e.g., Perception checks to spot something visual) are auto-failed. The DM flags which checks require sight via the dashboard.
+
+**Effects on speed:**
+
+| Condition | Effect |
+|-----------|--------|
+| Grappled | Speed becomes 0 |
+| Restrained | Speed becomes 0 |
+| Prone | Standing costs half movement speed |
+| Frightened | Can't move closer to source of fear |
+
+When a grappled or restrained condition is applied, the combatant's effective speed is set to 0. `/move` commands are rejected with an explanation (e.g., "You can't move — you are grappled"). Speed restores when the condition is removed. For frightened creatures, `/move` commands that would decrease distance to the fear source are rejected. The fear source is tracked as metadata on the frightened condition (`{source_combatant_id}`).
+
+Standing from prone: when a prone combatant issues `/move`, the system deducts half their speed before calculating remaining movement. If insufficient movement remains, standing is still allowed but no further movement is possible.
+
+**Action blocking:**
+
+| Condition | Effect |
+|-----------|--------|
+| Incapacitated | Can't take actions or reactions |
+| Stunned | Can't take actions or reactions (includes incapacitated) |
+| Paralyzed | Can't take actions or reactions (includes incapacitated) |
+| Unconscious | Can't take actions or reactions (includes incapacitated) |
+| Petrified | Can't take actions or reactions (includes incapacitated) |
+
+When a combatant with one of these conditions attempts `/attack`, `/cast`, `/action`, or `/reaction`, the command is rejected (e.g., "You can't act — you are stunned"). The combatant's turn is auto-skipped with a `#combat-log` message. This generalizes the unconscious-at-0-HP behavior to all incapacitating conditions.
+
+**Charmed attack restriction:**
+
+Charmed creatures can't attack the charmer or target them with harmful abilities. `/attack` and `/cast` (harmful) commands targeting the charm source are rejected. The charm source is tracked as metadata on the charmed condition (`{source_combatant_id}`). Non-harmful interactions with the charmer are still allowed.
+
+### Damage Processing
+
+**Resistance, immunity, and vulnerability:**
+
+When damage is dealt, the system checks the target's `damage_resistances`, `damage_immunities`, and `damage_vulnerabilities` arrays:
+- **Resistance**: damage of that type is halved (rounded down)
+- **Immunity**: damage of that type is reduced to 0
+- **Vulnerability**: damage of that type is doubled
+
+Petrified creatures have resistance to all damage types, auto-applied in addition to existing resistances (no double-stacking).
+
+**Condition immunity:**
+
+When a condition is being applied to a creature, the system checks `condition_immunities`. If immune, the condition is not applied and a message is posted to `#combat-log`.
+
+### Auto-Detected Class & Creature Features
+
+- **Sneak Attack** (Rogue) — triggers when the rogue has advantage on the attack, OR an ally is within 5ft of the target and the rogue doesn't have disadvantage. Backend checks combatant positions automatically. Extra damage dice added based on rogue level. Once per turn.
+- **Rage damage bonus** (Barbarian) — extra damage on STR-based melee attacks while raging. Rage tracked as a condition on the combatant; bonus auto-applied to qualifying attacks.
+- **Evasion** (Rogue 7+ / Monk 7+) — on DEX saving throws, success means no damage (instead of half), failure means half damage (instead of full). Auto-detected from class features by level.
+- **Pack Tactics** (wolves, kobolds, etc.) — creature gets advantage when an ally is within 5ft of the target. Same position-checking logic as Sneak Attack, applied to creatures with the Pack Tactics ability.
 
 ---
 
@@ -534,6 +503,40 @@ When a character drops to 0 HP, they fall **unconscious** and begin making death
 - Death save tallies reset to zero
 
 **Token states:** normal / bloodied / dying / stable / dead
+
+### Example: A Full Player Turn
+
+Player inputs (level 5 Fighter with longsword equipped, 2 attacks per action):
+```
+/move D4
+/attack G1
+```
+
+Bot output in `#combat-log`:
+```
+🗺️  Aria moves from C3 → D4  (25ft used of 30ft)
+⚔️  Aria attacks Goblin #1 with Longsword (attack 1 of 2)
+    → Roll to hit: 19 (14 + 5) — HIT
+    → Damage: 9 slashing
+    → Goblin #1 is now Bloodied
+    ℹ️  1 attack remaining
+```
+
+Player sees the result and decides to finish off G1 or switch targets:
+```
+/attack G2
+```
+
+```
+⚔️  Aria attacks Goblin #2 with Longsword (attack 2 of 2)
+    → Roll to hit: 11 (6 + 5) vs AC 13 — MISS
+    ℹ️  No attacks remaining
+```
+
+Then:
+- Map image regenerates with Aria at D4
+- G1's token gets a visual indicator (color shift or damage overlay)
+- Bot pings next player in `#your-turn`
 
 ---
 
