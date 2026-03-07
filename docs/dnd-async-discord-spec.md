@@ -149,6 +149,12 @@ Movement is expressed as a destination coordinate:
 
 The backend validates every movement command: remaining speed, tile occupancy, difficult terrain, and obstacles. Invalid moves return a specific reason. Movement can be split across actions: `/move D4` → `/attack G1` → `/move E5` — each `/move` deducts from remaining speed.
 
+**Moving through occupied tiles (5e rules):**
+- **Allied creatures:** you can move through an allied creature's space freely, but you cannot end your turn there
+- **Hostile creatures:** you cannot move through a hostile creature's space, unless it is two or more sizes larger or smaller than you (e.g., a Medium character can move through a Huge dragon's space)
+- **Ending movement:** you can never end your turn in another creature's space, ally or enemy. If `/done` is issued while sharing a tile, the command is rejected: "You can't end your turn in another creature's space — use `/move` to leave [Creature]'s tile"
+- Size comparison uses `races.size` (PCs) and `creatures.size` (NPCs/monsters). Size categories: Tiny, Small, Medium, Large, Huge, Gargantuan
+
 **Diagonal movement:** diagonals cost 5ft, same as cardinal movement. Deliberate simplification for async play — the PHB alternating 5/10 variant is not supported.
 
 ### Altitude & Elevation
