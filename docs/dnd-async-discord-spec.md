@@ -82,7 +82,7 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 
 ⚔️ COMBAT
   #combat-map           ← bot posts the grid image each turn
-  #your-turn            ← bot pings the active player
+  #your-turn            ← bot pings the active player; players submit commands here
 
 🎒 REFERENCE
   #character-cards      ← auto-updated character info per player
@@ -167,6 +167,8 @@ Tokens carry an **altitude** value (integer feet, default 0) representing height
 - Falling: if a flying creature is knocked prone or loses fly speed, fall damage is 1d6 per 10ft (standard 5e), applied automatically
 
 ### Structured Commands
+
+Players submit slash commands in `#your-turn` (where they receive their turn ping), but commands work from any channel in the server — the bot validates and routes output to the correct channels regardless.
 
 **Combat commands** (only usable on your turn, except `/reaction`):
 
