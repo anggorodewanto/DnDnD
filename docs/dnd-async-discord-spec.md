@@ -179,9 +179,10 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/fly` | `/fly 30` | Set altitude in feet. Costs movement 1:1 |
 | `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` or `/attack G2 --twohanded` | Attack a target. One `/attack` per swing; backend tracks attacks remaining. `--twohanded` for versatile weapons |
 | `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting |
-| `/bonus` | `/bonus cunning-action dash` | Bonus action |
+| `/bonus` | `/bonus cunning-action dash` or `/bonus cunning-action disengage` | Bonus action |
 | `/shove` | `/shove OS` | Shove a target (push or knock prone) |
 | `/interact` | `/interact draw longsword` | Object interaction (first per turn is free; see Free Object Interaction) |
+| `/action disengage` | `/action disengage` | Disengage — move without provoking opportunity attacks (auto-resolved) |
 | `/action dash` | `/action dash` | Dash — double movement this turn (auto-resolved) |
 | `/action dodge` | `/action dodge` | Dodge — attacks against you have disadvantage until next turn (auto-resolved) |
 | `/action help` | `/action help Thorn G1` | Help — grant ally advantage on next attack/check (auto-resolved) |
@@ -318,6 +319,8 @@ These post to `#dm-queue`. The DM resolves them in the dashboard, applies state 
 ### Standard Actions (Auto-Resolved)
 
 The following standard actions are recognized by `/action` and resolved automatically without routing to `#dm-queue`:
+
+**Disengage:** `/action disengage` prevents the character from provoking opportunity attacks for the rest of the turn. Costs the action (`action_used = true`). Tracked via `has_disengaged = true` on the `turns` table. Rogues can Disengage as a bonus action via `/bonus cunning-action disengage` (costs bonus action instead). Monks can Disengage as a bonus action by spending 1 ki point via `/bonus step-of-the-wind`.
 
 **Dash:** `/action dash` adds the character's speed to their remaining movement for the turn. Costs the action (`action_used = true`). Rogues can Dash as a bonus action via `/bonus cunning-action dash` (costs bonus action instead). Monks can Dash as a bonus action by spending 1 ki point via `/bonus step-of-the-wind`. The extra movement is subject to difficult terrain, prone costs, and all other movement modifiers.
 

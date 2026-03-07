@@ -16,7 +16,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 6. **No explicit stand/prone toggle.** Standing from prone auto-deducts movement on `/move`, but can a player choose to stay prone? How do they intentionally drop prone?
 7. **No crawl mechanic.** Crawling while prone is mentioned (double cost) but there is no command to crawl vs. stand-then-move.
-8. **Disengage is missing from the command table.** Referenced under Opportunity Attacks and Cunning Action but never formally listed. Players would not discover it.
+~~8. **Disengage is missing from the command table.** Referenced under Opportunity Attacks and Cunning Action but never formally listed. Players would not discover it.~~ — Resolved: Added `/action disengage` to command table and Standard Actions section. Added `/bonus cunning-action disengage` example to bonus action row for Rogue discoverability.
 9. **`/done` has no safety net.** If a player has unused attacks or bonus actions and types `/done`, is there a confirmation prompt, or does the turn just end?
 10. **Movement cost is invisible.** When a player types `/move D4`, can they see the path cost and remaining movement before committing? Can they query "how far is D4?" without committing?
 11. **No `/map` command.** The map posts to `#combat-map` on state change. Can a player request a fresh map view on demand?
