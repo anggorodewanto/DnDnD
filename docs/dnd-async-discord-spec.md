@@ -201,6 +201,9 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/equip` | `/equip longsword` | Set primary weapon (persists between turns) |
 | `/register` | `/register Thorn` | Link Discord account to a character (DM approves) |
 | `/setup` | `/setup` | Auto-create channel structure (DM only, run once) |
+| `/help` | `/help` or `/help attack` | Show command list, or detailed usage for a specific command |
+
+**Command discoverability:** Discord's built-in slash command UI is the primary discovery mechanism — typing `/` shows all registered commands with parameter hints. The `/help` command supplements this with usage examples, available flags (e.g., `--gwm`, `--adv`), and context-specific tips (e.g., remaining attacks, available spell slots).
 
 ### Attack Details
 
