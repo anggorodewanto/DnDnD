@@ -227,6 +227,8 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Loading property:** weapons with the "loading" property (crossbows) can only fire once per action, bonus action, or reaction regardless of Extra Attack, unless the character has the Crossbow Expert feat. System limits attacks to 1 when a loading weapon is used.
 
+**Unarmed strikes:** every creature can make an unarmed strike. Represented as a built-in pseudo-weapon in the weapons table (`id: "unarmed-strike"`, `damage: "0"`, `damage_type: "bludgeoning"`, `weapon_type: "simple_melee"`). Damage is 1 + STR modifier (the flat 1 is inherent to unarmed strikes, not a die roll). When `equipped_main_hand` is null, `/attack` defaults to unarmed strike; players can also explicitly use `/attack [target] unarmed`. Monks' Martial Arts feature overrides the damage via the Feature Effect System, replacing the flat 1 with their Martial Arts die (e.g., 1d4 → 1d6 → 1d8 → 1d10 by level).
+
 **Versatile weapons:** weapons with the "versatile" property can be used one-handed or two-handed for increased damage. Use `/attack [target] --twohanded` to roll the `versatile_damage` die instead of the base damage die. The `--twohanded` flag is rejected if `equipped_off_hand` is not null (off-hand must be free to grip with both hands).
 
 **Reach weapons:** weapons with the "reach" property (glaive, halberd, pike) extend melee range to 10ft instead of the standard 5ft. The system validates attack distance against the weapon's reach when processing `/attack`. If the target is beyond reach, the command is rejected: "Target is out of melee range (10ft reach)."

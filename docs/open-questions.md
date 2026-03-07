@@ -25,7 +25,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ## Combat Mechanics
 
 ~~13. **Grapple escape has no command.** "Target uses action to repeat the contested check" — but what command does the grappled player type? `/action escape`?~~ — Resolved: Added `/action escape` as an auto-resolved standard action. Runs contested Athletics/Acrobatics vs grappler's Athletics. Auto-selects higher modifier; `--athletics` or `--acrobatics` to override.
-14. **No unarmed strike.** The spec covers weapons extensively but never mentions unarmed strikes (1 + STR mod bludgeoning).
+~~14. **No unarmed strike.** The spec covers weapons extensively but never mentions unarmed strikes (1 + STR mod bludgeoning).~~ — Resolved: Added unarmed strike as a built-in pseudo-weapon in the weapons table (damage: "0", 1 + STR mod bludgeoning). Defaults when no weapon equipped. Monk Martial Arts overrides damage die via Feature Effect System.
 15. **Improvised weapons.** Not mentioned. What if a player wants to hit someone with a chair?
 16. **Ranged spell attacks in melee.** Disadvantage for ranged attacks while hostile within 5ft — does this apply to ranged spell attacks too? Crossbow Expert exception not mentioned.
 17. **Natural armor / unarmored defense.** AC is stored as a single integer. How are Monk (10+DEX+WIS) or Barbarian (10+DEX+CON) unarmored defense recalculated when stats change?
