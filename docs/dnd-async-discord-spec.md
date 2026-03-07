@@ -237,7 +237,11 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 **Concentration:** fully tracked by backend:
 - One concentration spell at a time; new cast auto-drops the previous
 - Taking damage triggers a concentration check — bot pings the caster to roll `/save con` (DC = max(10, half damage)); failure breaks concentration
+- Being incapacitated (stunned, paralyzed, unconscious, petrified) auto-breaks concentration immediately — no save prompted
+- Entering a Silence zone (or similar effect preventing verbal/somatic components) breaks concentration on spells requiring those components — auto-detected when a concentrating caster's position overlaps a Silence zone
 - Active effects (Fog Cloud zone, Spirit Guardians aura) tracked on the map
+
+**Bonus action spell restriction:** If a player casts a spell with a casting time of "1 bonus action" (e.g., Healing Word, Misty Step), the only other spell they can cast that turn is a cantrip with a casting time of 1 action. If they attempt `/cast` with a non-cantrip after using a bonus action spell, the command is rejected: "You already cast a bonus action spell this turn — you can only cast a cantrip with your action."
 
 **Spell slots:** tracked and enforced. Backend knows slots per level, deducts on cast, rejects `/cast` if no slots remaining.
 
@@ -303,8 +307,9 @@ When a save is triggered (spell, concentration check, etc.) and the target has o
 | Frightened | Disadvantage on ability checks while source of fear is within line of sight |
 | Poisoned | Disadvantage on ability checks |
 | Blinded | Auto-fail ability checks requiring sight |
+| Deafened | Auto-fail ability checks requiring hearing |
 
-Auto-applied when `/check` is used. For blinded creatures, checks that require sight (e.g., Perception checks to spot something visual) are auto-failed. The DM flags which checks require sight via the dashboard.
+Auto-applied when `/check` is used. For blinded creatures, checks that require sight (e.g., Perception checks to spot something visual) are auto-failed. For deafened creatures, checks that require hearing (e.g., Perception checks to hear something) are auto-failed. The DM flags which checks require sight or hearing via the dashboard.
 
 **Effects on speed:**
 
@@ -345,6 +350,25 @@ When damage is dealt, the system checks the target's `damage_resistances`, `dama
 - **Vulnerability**: damage of that type is doubled
 
 Petrified creatures have resistance to all damage types, auto-applied in addition to existing resistances (no double-stacking).
+
+**Exhaustion (progressive condition):**
+
+| Level | Effect |
+|-------|--------|
+| 1 | Disadvantage on ability checks |
+| 2 | Speed halved |
+| 3 | Disadvantage on attack rolls and saving throws |
+| 4 | Hit point maximum halved |
+| 5 | Speed reduced to 0 |
+| 6 | Death |
+
+Effects are cumulative. Exhaustion level is tracked as an integer (0–6) on the combatant. Each level's effects auto-apply:
+- Levels 1, 3: system applies disadvantage to relevant rolls
+- Level 2, 5: system modifies effective speed
+- Level 4: system reduces max HP (and current HP if above new max)
+- Level 6: character dies immediately
+
+Exhaustion increases from forced march, starvation, environmental effects — applied by DM from dashboard. Decreases by 1 level per long rest (with food/water).
 
 **Condition immunity:**
 
@@ -895,6 +919,7 @@ combatants
   temp_hp         INTEGER DEFAULT 0
   ac              INTEGER NOT NULL
   conditions      JSONB DEFAULT '[]'     -- [{condition, source, duration_rounds, started_round}]
+  exhaustion_level INTEGER DEFAULT 0    -- 0-6; effects are cumulative (see Exhaustion)
   death_saves     JSONB                  -- {successes: 0, failures: 0} — PCs only
   is_visible      BOOLEAN DEFAULT true   -- hidden enemies (ambush, stealth)
   is_alive        BOOLEAN DEFAULT true
@@ -909,6 +934,7 @@ turns
   movement_remaining_ft INTEGER NOT NULL
   action_used     BOOLEAN DEFAULT false
   bonus_action_used BOOLEAN DEFAULT false
+  bonus_action_spell_cast BOOLEAN DEFAULT false  -- tracks bonus action spell restriction
   reaction_used   BOOLEAN DEFAULT false  -- per-round, not per-turn
   free_interact_used BOOLEAN DEFAULT false
   attacks_remaining INTEGER NOT NULL DEFAULT 1
@@ -1073,6 +1099,7 @@ conditions_ref
   --   "block_attack_target"       — with {target: "source"} for charmed
   --   "block_move_toward"         — with {target: "source"} for frightened
   --   "auto_fail_check"           — with {conditional: "requires_sight"} for blinded
+  --                                 or {conditional: "requires_hearing"} for deafened
   --   "resistance_all"            — resistance to all damage types (petrified)
   --   "prone_stand_cost"          — standing costs half movement
   --   "dodge_disadvantage_against" — attacks against have disadvantage
