@@ -181,7 +181,12 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting |
 | `/bonus` | `/bonus cunning-action dash` | Bonus action |
 | `/shove` | `/shove OS` | Shove a target (push or knock prone) |
-| `/interact` | `/interact draw longsword` | Free object interaction — routed to `#dm-queue` |
+| `/interact` | `/interact draw longsword` | Object interaction (first per turn is free; see Free Object Interaction) |
+| `/action dash` | `/action dash` | Dash — double movement this turn (auto-resolved) |
+| `/action dodge` | `/action dodge` | Dodge — attacks against you have disadvantage until next turn (auto-resolved) |
+| `/action help` | `/action help Thorn G1` | Help — grant ally advantage on next attack/check (auto-resolved) |
+| `/action ready` | `/action ready I attack when the goblin moves past me` | Ready — hold action for a trigger (see Reactions) |
+| `/action hide` | `/action hide` | Hide — Stealth vs passive Perception (auto-resolved) |
 | `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
 | `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent (usable any time) — routed to `#dm-queue` |
 | `/deathsave` | `/deathsave` | Roll a death saving throw (only at 0 HP) |
@@ -224,16 +229,23 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Reach weapons:** weapons with the "reach" property (glaive, halberd, pike) extend melee range to 10ft instead of the standard 5ft. The system validates attack distance against the weapon's reach when processing `/attack`. If the target is beyond reach, the command is rejected: "Target is out of melee range (10ft reach)."
 
+**Heavy weapons:** weapons with the "heavy" property (greataxe, greatsword, heavy crossbow, etc.) are unwieldy for small creatures. Small or Tiny creatures have disadvantage on attack rolls with heavy weapons. Auto-detected from the creature/character's `size` (via `races.size` or `creatures.size`) and the weapon's `properties` array.
+
+**Ammunition:** weapons with the "ammunition" property (longbow, crossbow, etc.) consume one piece of ammunition per attack. The system auto-deducts from the character's `inventory` on each `/attack` with an ammunition weapon. If no ammunition remains, the command is rejected: "No arrows remaining." After combat ends, half of expended ammunition can be recovered — the DM triggers recovery from the dashboard, and the system restores half (rounded down) to inventory.
+
+**Thrown weapons:** weapons with the "thrown" property (handaxe, javelin, dagger, etc.) can be thrown for a ranged attack using `range_normal_ft` / `range_long_ft`. Beyond normal range: disadvantage (per standard ranged rules). Beyond long range: attack auto-rejected. After a thrown attack, the weapon is removed from the character's hand. The character must draw another weapon (free object interaction) or retrieve the thrown weapon (requires movement to the target's square + free object interaction).
+
 **Attack modifier flags** (opt-in per swing):
 - `--gwm` — Great Weapon Master: -5 to hit, +10 damage. Requires a heavy melee weapon.
 - `--sharpshooter` — Sharpshooter: -5 to hit, +10 damage. Requires a ranged weapon.
 - `--reckless` — Reckless Attack (Barbarian): advantage on melee STR attacks this turn, enemies get advantage against you until next turn. First attack only. Requires Barbarian class.
 - Invalid flags return an error explaining why.
 
-**Advantage/disadvantage** — auto-detected from tracked conditions:
-- **Auto-detected:** target prone (melee adv / ranged disadv), attacker prone (disadv), target restrained/stunned/paralyzed/unconscious/blinded/petrified (adv), attacker restrained/blinded/poisoned (disadv), Reckless Attack (adv), invisible (adv/disadv as appropriate), ranged attack while hostile within 5ft (disadv), ranged attack beyond normal range (disadv), target has taken the Dodge action (attacks against have disadv)
+**Advantage/disadvantage** — auto-detected from game state:
+- **From conditions:** applied automatically per the Condition Effects tables (e.g., blinded attacker → disadv, stunned target → adv, prone target within 5ft → adv / beyond 5ft → disadv). See Conditions & Combat Mechanics for full details.
+- **From combat context:** Reckless Attack (adv), invisible attacker/target (adv/disadv as appropriate), ranged attack while hostile within 5ft (disadv), ranged attack beyond normal range (disadv), Small/Tiny creature using a Heavy weapon (disadv)
 - **Not auto-detected in MVP:** flanking (optional rule — may add as campaign toggle later)
-- **DM override:** DM can force advantage or disadvantage from the dashboard for edge cases. Posts to `#combat-log`.
+- **DM override:** DM can force advantage or disadvantage from the dashboard. Posts to `#combat-log`.
 - **Stacking:** when both apply, they cancel out per 5e rules — rolled normally regardless of source count.
 
 **Critical hits:** a natural 20 on the attack roll is always a hit regardless of AC, and all damage dice are doubled (roll twice as many dice, then add modifiers once). The system auto-detects nat 20s and doubles the dice in the damage formula.
@@ -267,6 +279,8 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Spell range:** enforced by backend. Touch spells require adjacency (5ft), self spells need no target.
 
+**Cantrip damage scaling:** cantrip damage dice scale automatically based on character level — 2 dice at level 5, 3 dice at level 11, 4 dice at level 17. The system auto-calculates the correct number of dice from the caster's character level using the spell's `damage` JSONB field (`cantrip_scaling: true` flag). No player input required. Example: Fire Bolt deals 1d10 at levels 1–4, 2d10 at 5–10, 3d10 at 11–16, 4d10 at 17+.
+
 ### Reactions
 
 Players pre-declare reaction intent using `/reaction`. The DM resolves all reactions manually.
@@ -276,7 +290,7 @@ Players pre-declare reaction intent using `/reaction`. The DM resolves all react
 - `/reaction OA if goblin moves away`
 - `/reaction Counterspell if enemy casts`
 - Declarations persist until used, cancelled (`/reaction cancel`), or the encounter ends
-- One reaction per round per player (per 5e rules) — tracked by system
+- One reaction per round per player (per 5e rules) — tracked by `turns.reaction_used`. Reaction resets at the start of the creature's turn (not the start of the round), matching 5e rules and ensuring correct sequencing in async play
 
 **DM workflow:**
 1. DM sees declarations in `#dm-queue` or the dashboard
@@ -284,7 +298,7 @@ Players pre-declare reaction intent using `/reaction`. The DM resolves all react
 3. DM resolves in the dashboard (rolls, applies effects) and posts the result
 4. System marks the player's reaction as spent for the round
 
-Readied Actions use the same flow: `/reaction I attack when the goblin moves past me`.
+**Readied Actions:** a player can use their action to ready a response to a trigger via `/action ready [description]` (e.g., `/action ready I attack when the goblin moves past me`). This costs the action for the turn. When the trigger occurs, the readied action fires using the creature's reaction (`reaction_used = true`). If the trigger never occurs before the creature's next turn, the readied action is lost. For readied spells: the spell slot is expended when readying (not when releasing), and the caster must hold concentration on the readied spell until the trigger fires — if concentration is broken, the spell is lost along with the slot. Readied actions follow the same DM-resolution flow as other `/reaction` declarations.
 
 **System-generated reaction triggers:** opportunity attacks (see Opportunity Attacks section) bypass the `/reaction` declaration flow — the system auto-detects and prompts directly.
 
@@ -300,6 +314,27 @@ For anything that can't be expressed through structured commands, `/action` rout
 ```
 
 These post to `#dm-queue`. The DM resolves them in the dashboard, applies state changes, and the bot posts the result. Structured commands handle ~90% of combat; `/action` is the escape hatch for creative play.
+
+### Standard Actions (Auto-Resolved)
+
+The following standard actions are recognized by `/action` and resolved automatically without routing to `#dm-queue`:
+
+**Dash:** `/action dash` adds the character's speed to their remaining movement for the turn. Costs the action (`action_used = true`). Rogues can Dash as a bonus action via `/bonus cunning-action dash` (costs bonus action instead). Monks can Dash as a bonus action by spending 1 ki point via `/bonus step-of-the-wind`. The extra movement is subject to difficult terrain, prone costs, and all other movement modifiers.
+
+**Dodge:** `/action dodge` grants two benefits until the start of the character's next turn: attacks against the character have disadvantage, and the character has advantage on DEX saving throws. Tracked via a "dodge" condition with 1-round duration. Already referenced in Turn Timeout (auto-skip applies Dodge).
+
+**Help:** `/action help [ally] [target]` grants an ally advantage on their next attack roll against the specified target, or advantage on their next ability check. Costs the action. For attack help, the helper must be within 5ft of the target. The advantage applies to the next qualifying roll only, then expires. Tracked as a temporary effect: `{condition: "helped", source_combatant_id: [helper], target_combatant_id: [enemy], duration: "next_roll"}`.
+
+**Hide:** `/action hide` is described in the Stealth & Hiding section.
+
+### Free Object Interaction
+
+Each creature gets one free object interaction per turn — drawing or sheathing a weapon, opening a door, picking up a dropped item, etc. Tracked via `turns.free_interact_used`.
+
+**Enforcement:**
+- First `/interact` per turn: free (sets `free_interact_used = true`, does not cost the action)
+- Second `/interact` per turn: costs the action (`action_used = true`). If the action is already spent, the command is rejected: "Free interaction already used and action is spent."
+- Simple interactions that the DM has pre-flagged as auto-resolvable (draw/sheathe weapon, open unlocked door) are resolved immediately. All others route to `#dm-queue` for DM adjudication.
 
 ---
 
@@ -443,14 +478,17 @@ Cover is computed dynamically from map geometry — walls, obstacles, and other 
 
 **Integration with saves:** cover DEX save bonus applies to area-of-effect spells (e.g., Fireball). The system checks cover between the spell's point of origin and each affected creature.
 
-### Auto-Detected Class & Creature Features
+### Difficult Terrain
 
-The following features are resolved automatically via the Feature Effect System (see Example Declarations for full JSON) — their behavior is driven by effect declarations in `mechanical_effect`, not hardcoded logic:
+Difficult terrain (rubble, undergrowth, mud, shallow water, etc.) doubles movement cost — each foot of movement in difficult terrain costs 2 feet of speed. Defined per tile in the map's `tiled_json` data using a terrain property (`difficult: true`).
 
-- **Sneak Attack** (Rogue) — `extra_damage_dice` on hit; requires advantage or ally within 5ft. Dice scale by rogue level. Once per turn.
-- **Rage** (Barbarian) — `modify_damage_roll` on STR melee + `grant_resistance` to B/P/S while raging.
-- **Evasion** (Rogue 7+ / Monk 7+) — `modify_save` on DEX saves: success = no damage, failure = half.
-- **Pack Tactics** (wolves, kobolds, etc.) — `conditional_advantage` on attacks when ally within 5ft of target.
+**Enforcement:** on each `/move`, the system calculates the path cost including difficult terrain multipliers. If the character lacks sufficient remaining movement, the command is rejected with the shortfall: "Not enough movement — path requires 40ft (includes difficult terrain), 25ft remaining."
+
+**Interactions:**
+- Stacks with prone stand-up cost (half speed deducted first, then difficult terrain doubles remaining path cost)
+- Dash action grants extra movement that is also subject to difficult terrain costs
+- Difficult terrain does not affect flying creatures above ground level (altitude > 0) unless the difficult terrain is airborne (e.g., Wind Wall)
+- Crawling (moving while prone without standing) also costs double, stacking with difficult terrain for 3x total cost
 
 ### Opportunity Attacks
 
@@ -1323,7 +1361,7 @@ spells
   area            JSONB                  -- {shape: "sphere", radius_ft: 20} or {shape: "cone", length_ft: 15}
   attack_type     TEXT                   -- 'melee', 'ranged', or NULL (save-based/auto-hit)
   save_type       TEXT                   -- "dex", "wis", etc. NULL if no save
-  damage          JSONB                  -- {dice: "8d6", type: "fire", higher_levels: "1d6 per slot above 3rd"}
+  damage          JSONB                  -- {dice: "8d6", type: "fire", higher_levels: "1d6 per slot above 3rd", cantrip_scaling: true}
   healing         JSONB                  -- {dice: "1d8+mod", higher_levels: "1d8 per slot above 1st"}
   effects         TEXT                   -- description of non-damage effects
   classes         TEXT[] NOT NULL        -- ["wizard", "sorcerer"]
@@ -1381,23 +1419,8 @@ conditions_ref
   id              TEXT PK               -- "blinded", "prone", "stunned"
   name            TEXT NOT NULL
   description     TEXT NOT NULL
-  mechanical_effects JSONB NOT NULL      -- [{effect_type, ...}]
-  -- effect_type values:
-  --   "disadvantage_on_attack"    — attacker has this condition
-  --   "advantage_against"         — attacks against target with this condition
-  --   "auto_fail_save"            — with {abilities: ["str", "dex"]}
-  --   "disadvantage_on_save"      — with {abilities: ["dex"]}
-  --   "disadvantage_on_check"     — with {conditional: "source_visible"} for frightened
-  --   "speed_zero"                — movement reduced to 0
-  --   "block_actions"             — can't take actions or reactions
-  --   "block_attack_target"       — with {target: "source"} for charmed
-  --   "block_move_toward"         — with {target: "source"} for frightened
-  --   "auto_fail_check"           — with {conditional: "requires_sight"} for blinded
-  --                                 or {conditional: "requires_hearing"} for deafened
-  --   "resistance_all"            — resistance to all damage types (petrified)
-  --   "prone_stand_cost"          — standing costs half movement
-  --   "dodge_disadvantage_against" — attacks against have disadvantage
-  --   "dodge_advantage_save"      — with {abilities: ["dex"]}
+  mechanical_effects JSONB NOT NULL      -- [{effect_type, ...}] — uses Feature Effect System vocabulary
+                                         -- see Condition Effects section for full mechanics per condition
 ```
 
 ### Key Design Decisions
@@ -1450,11 +1473,12 @@ conditions_ref
 - Dice rolls auto-logged to `#roll-history`
 - Map editor: blank grid + terrain/wall tools + image import (Tiled-compatible JSON)
 - Data-driven Feature Effect System for class features, racial traits, and spell effects
-- Core combat rules: opportunity attacks, cover, surprise, critical hits, temp HP, two-weapon fighting, grapple/shove, stealth/hiding
-- Spell mechanics: spell save DC, spell attack rolls, upcasting, ritual casting
-- Weapon mechanics: finesse auto-select, loading, versatile, reach validation
+- Core combat rules: opportunity attacks, cover, difficult terrain, surprise, critical hits, temp HP, two-weapon fighting, grapple/shove, stealth/hiding
+- Spell mechanics: spell save DC, spell attack rolls, upcasting, ritual casting, cantrip damage scaling
+- Weapon mechanics: finesse auto-select, loading, versatile, reach validation, heavy weapon size restriction, ammunition tracking, thrown weapon range
 - Condition/spell duration auto-expiration
-- Equipment enforcement (armor STR requirements, stealth disadvantage)
+- Equipment enforcement (armor STR requirements, stealth disadvantage, free object interaction limits)
+- Standard actions: Dash, Dodge, Help, Hide, Ready (auto-resolved where deterministic)
 
 **Future phases:**
 - Tileset-based map painting + Tiled desktop import
