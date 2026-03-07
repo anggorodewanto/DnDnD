@@ -59,7 +59,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ## Death & Healing
 
-36. **Death save timeout has no default rule.** "If the player doesn't send `/deathsave` before timeout, the turn is skipped — DM decides outcome." This is life-or-death with pure DM fiat. Should there be a default (e.g., auto-roll)?
+~~36. **Death save timeout has no default rule.** "If the player doesn't send `/deathsave` before timeout, the turn is skipped — DM decides outcome." This is life-or-death with pure DM fiat. Should there be a default (e.g., auto-roll)?~~ — Resolved: System auto-rolls the death save on timeout using standard d20 rules. Result posted to #combat-log as "(auto-rolled — player timed out)".
 37. **Targeting unconscious allies.** How does another player target an unconscious ally with a healing spell? Is there a visual indicator on the map distinguishing dying from dead?
 38. **Medicine check to stabilize.** Listed as an option but `/check` has no target parameter. How do you target a specific dying creature with a skill check?
 39. **Spare the Dying.** Mentioned as a stabilization option but has no specific implementation detail. Is adjacency validated for touch range?

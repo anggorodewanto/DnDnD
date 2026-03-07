@@ -843,7 +843,7 @@ When a character drops to 0 HP, they fall **unconscious** and begin making death
 - 3 successes → **stabilized** (unconscious at 0 HP, no more death saves)
 - 3 failures → **dead**
 - Rolls posted publicly in `#combat-log`
-- If the player doesn't send `/deathsave` before timeout, the turn is skipped (no roll — DM decides outcome)
+- If the player doesn't send `/deathsave` before timeout, the system auto-rolls the death save on their behalf — same d20 rules apply (nat 1 = 2 failures, nat 20 = regain 1 HP). Result posts to `#combat-log` marked as "(auto-rolled — player timed out)"
 
 **Taking damage while at 0 HP:**
 - Each hit = 1 automatic death save failure
