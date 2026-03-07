@@ -220,13 +220,13 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Extra Attack:** resolved one swing at a time. Each `/attack` resolves a single attack roll. Backend tracks attacks remaining by class/level (Fighter 5 = 2, Fighter 11 = 3, Fighter 20 = 4). After each swing, the bot reports remaining attacks. Players retarget freely between swings. Unused attacks forfeited on `/done`.
 
-**Two-Weapon Fighting:** when a character attacks with a light melee weapon, they can use their bonus action to attack with a different light melee weapon held in the other hand. Invoked via `/bonus offhand`. The off-hand attack does not add the ability modifier to damage unless the character has the Two-Weapon Fighting fighting style. System validates both weapons have the "light" property.
+**Two-Weapon Fighting:** when a character attacks with a light melee weapon in their main hand (`equipped_main_hand`), they can use their bonus action to attack with a different light melee weapon held in the off-hand (`equipped_off_hand`). Invoked via `/bonus offhand`. The off-hand attack does not add the ability modifier to damage unless the character has the Two-Weapon Fighting fighting style. System validates both `equipped_main_hand` and `equipped_off_hand` have the "light" property.
 
 **Finesse weapons:** weapons with the "finesse" property (rapier, dagger, shortsword, etc.) allow the attacker to use either STR or DEX for attack and damage rolls. The system auto-selects the higher of the two modifiers — no player input required.
 
 **Loading property:** weapons with the "loading" property (crossbows) can only fire once per action, bonus action, or reaction regardless of Extra Attack, unless the character has the Crossbow Expert feat. System limits attacks to 1 when a loading weapon is used.
 
-**Versatile weapons:** weapons with the "versatile" property can be used one-handed or two-handed for increased damage. Use `/attack [target] --twohanded` to roll the `versatile_damage` die instead of the base damage die. The `--twohanded` flag is rejected if the character has a shield equipped (shield occupies the off-hand).
+**Versatile weapons:** weapons with the "versatile" property can be used one-handed or two-handed for increased damage. Use `/attack [target] --twohanded` to roll the `versatile_damage` die instead of the base damage die. The `--twohanded` flag is rejected if `equipped_off_hand` is not null (off-hand must be free to grip with both hands).
 
 **Reach weapons:** weapons with the "reach" property (glaive, halberd, pike) extend melee range to 10ft instead of the standard 5ft. The system validates attack distance against the weapon's reach when processing `/attack`. If the target is beyond reach, the command is rejected: "Target is out of melee range (10ft reach)."
 
@@ -1202,8 +1202,9 @@ characters
   ac              INTEGER NOT NULL
   speed_ft        INTEGER NOT NULL DEFAULT 30
   proficiency_bonus INTEGER NOT NULL
-  equipped_weapon TEXT                   -- FK → weapons
-  equipped_armor  TEXT                   -- FK → armor
+  equipped_main_hand TEXT                -- FK → weapons (primary weapon)
+  equipped_off_hand  TEXT                -- FK → weapons or armor (second weapon or shield; null = free hand)
+  equipped_armor  TEXT                   -- FK → armor (body armor only, not shield)
   spell_slots     JSONB                  -- { "1": {current: 2, max: 4}, "2": {current: 3, max: 3}, ... }
   hit_dice_remaining INTEGER NOT NULL     -- current pool; max = character level. Hit die size from class.hit_die
   feature_uses    JSONB                  -- { "action-surge": {current: 1, max: 1, recharge: "short"}, ... }

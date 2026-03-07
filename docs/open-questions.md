@@ -30,7 +30,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 16. **Ranged spell attacks in melee.** Disadvantage for ranged attacks while hostile within 5ft — does this apply to ranged spell attacks too? Crossbow Expert exception not mentioned.
 17. **Natural armor / unarmored defense.** AC is stored as a single integer. How are Monk (10+DEX+WIS) or Barbarian (10+DEX+CON) unarmored defense recalculated when stats change?
 18. **Shield equip/unequip.** Shields are in the armor table, but how does a player equip one? Does donning/doffing take an action?
-19. **Dual wielding.** `equipped_weapon` is a single field. How does the system track two weapons in two hands?
+~~19. **Dual wielding.** `equipped_weapon` is a single field. How does the system track two weapons in two hands?~~ — Resolved: Replaced `equipped_weapon` with `equipped_main_hand` and `equipped_off_hand`. Off-hand holds second light weapon or shield; null = free hand. Two-handed/versatile requires off-hand to be empty.
 
 ## Spellcasting
 
