@@ -253,7 +253,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Advantage/disadvantage** — auto-detected from game state:
 - **From conditions:** applied automatically per the Condition Effects tables (e.g., blinded attacker → disadv, stunned target → adv, prone target within 5ft → adv / beyond 5ft → disadv). See Conditions & Combat Mechanics for full details.
-- **From combat context:** Reckless Attack (adv), invisible attacker/target (adv/disadv as appropriate), ranged attack while hostile within 5ft (disadv), ranged attack beyond normal range (disadv), Small/Tiny creature using a Heavy weapon (disadv)
+- **From combat context:** Reckless Attack (adv), invisible attacker/target (adv/disadv as appropriate), ranged attack while hostile within 5ft (disadv — applies to both ranged weapon attacks and ranged spell attacks; Crossbow Expert feat removes this penalty for ranged weapon attacks only), ranged attack beyond normal range (disadv), Small/Tiny creature using a Heavy weapon (disadv)
 - **Not auto-detected in MVP:** flanking (optional rule — may add as campaign toggle later)
 - **DM override:** DM can force advantage or disadvantage from the dashboard. Posts to `#combat-log`.
 - **Stacking:** when both apply, they cancel out per 5e rules — rolled normally regardless of source count.
