@@ -249,6 +249,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 | `/use` | `/use healing-potion` | Use a consumable item |
 | `/give` | `/give healing-potion AR` | Give an item to an adjacent ally |
 | `/loot` | `/loot` | Pick up items from the loot pool after combat |
+| `/prepare` | `/prepare` | Change prepared spells (prepared casters only, out of combat) |
 | `/register` | `/register Thorn` | Link Discord account to a character (DM approves) |
 | `/setup` | `/setup` | Auto-create channel structure (DM only, run once) |
 | `/help` | `/help` or `/help attack` | Show command list, or detailed usage for a specific command |
@@ -331,6 +332,23 @@ The gold fallback represents the assumption that components can be acquired from
 **Spell slots:** tracked and enforced. Backend knows slots per level, deducts on cast, rejects `/cast` if no slots remaining.
 
 **Pact Magic (Warlock):** Warlocks use a separate slot pool (`pact_magic_slots`) instead of standard `spell_slots`. Pact Magic slots are fewer (1-4 depending on level), all at the same level (scaling with Warlock level per the Warlock table), and recharge on short rest. When a Warlock casts a spell, `/cast` draws from `pact_magic_slots` by default. If the Warlock is multiclassed and has both pools, the system uses Pact Magic slots first; the player can override with `--spell-slot` to draw from regular `spell_slots` instead. Upcasting with `--slot` must still be ≤ the pact slot level. For multiclass casters, both pools are tracked and displayed separately in the spell slot UI.
+
+**Spell preparation** (`/prepare`): Prepared casters (Cleric, Druid, Paladin) can change their prepared spell list after completing a long rest. Per 5e, they choose from their full class spell list (filtered by slots they have), up to a maximum of ability modifier + class level (minimum 1). Rangers and Wizards are known-spell casters — they change spells on level-up, not daily.
+
+How `/prepare` works:
+1. Player types `/prepare` (only available out of combat, i.e., `encounter.status != 'active'`)
+2. Bot responds with an ephemeral message showing:
+   - Current prepared spells (checked)
+   - Full class spell list for available slot levels (unchecked), with spell school and brief description
+   - Remaining preparation slots: "**N / M** spells prepared"
+3. Player selects/deselects spells via Discord select menus (paginated by spell level)
+4. Player clicks **Confirm** to save, or **Cancel** to discard changes
+5. System validates: count ≤ max prepared, all spells are on the class spell list, character has slots of that level
+6. Updated list stored in character data; confirmation posted as ephemeral message
+
+After a long rest, the system reminds prepared casters: "You can change your prepared spells with `/prepare`." This is a hint, not a requirement — players keep their existing list if they don't act.
+
+Domain/Oath/Circle spells (always-prepared subclass spells) are shown separately and cannot be removed. They do not count against the preparation limit.
 
 **Upcasting:** spells can be cast at higher levels for increased effect by specifying `/cast fireball D5 --slot 5` to use a 5th-level slot. The system parses the spell's `higher_levels` field (e.g., "1d6 per slot level above 3rd") and auto-calculates the scaled damage or healing. If `--slot` is omitted, the system defaults to the lowest available slot of sufficient level. The `--slot` value must be ≥ the spell's base level and the character must have a slot available at that level.
 
@@ -1370,6 +1388,7 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
    - Hit dice restored: regain up to half character level (minimum 1), capped at max
    - Death save tallies reset to 0/0
 4. Results posted to `#combat-log`
+5. Prepared casters (Cleric, Druid, Paladin) receive a reminder: "You can change your prepared spells with `/prepare`."
 
 **Constraints:**
 - Only one long rest per 24 in-game hours (DM tracks narrative time; system does not enforce calendar)
