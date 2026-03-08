@@ -47,7 +47,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ~~27. **Moving through occupied tiles.** 5e allows moving through allied spaces but not hostile spaces (unless 2+ sizes different). The spec says "tile occupancy" is validated but does not explain the rules.~~ — Resolved: Added full 5e occupied tile rules. Allies: pass through but can't end turn there. Hostiles: blocked unless 2+ sizes different. Can never end turn in another creature's space.
 28. **Map readability.** On a 30x20 map at 32-48px/tile, coordinate labels may be too small. Mobile viewing could be very difficult.
 29. **Multiple floors / z-levels.** The altitude system handles flying. What about multi-story buildings, stairs, or dungeons with different levels?
-30. **Teleportation spells.** Misty Step, Dimension Door, Thunder Step — the movement system is path-based. Does teleportation bypass path validation?
+~~30. **Teleportation spells.** Misty Step, Dimension Door, Thunder Step — the movement system is path-based. Does teleportation bypass path validation?~~ — Resolved: Added `teleport JSONB` field to spells table. Teleportation spells bypass all path validation (no movement cost, no difficult terrain, no OA). System validates only destination occupancy, range, and line of sight (when required). Full SRD teleportation spell data included.
 
 ## Reactions
 

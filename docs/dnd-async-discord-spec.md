@@ -294,6 +294,30 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Spell range:** enforced by backend. Touch spells require adjacency (5ft), self spells need no target.
 
+**Teleportation spells:** spells with a non-null `teleport` JSONB field bypass all path validation — no movement cost, no difficult terrain, no occupied-tile checks, no opportunity attacks. The `/cast` handler reads the `teleport` field to determine relocation behavior:
+
+- `teleport.target`: `"self"` (caster teleports), `"creature"` (target creature teleports), `"self+creature"` (caster + one willing companion)
+- `teleport.requires_sight`: `true` if the destination must be visible to the caster (e.g., Misty Step), `false` if not (e.g., Dimension Door to described location)
+- `teleport.companion_range_ft`: for `"self+creature"` spells, max distance the companion must be from the caster (e.g., Dimension Door = 5)
+- `teleport.additional_effects`: optional — e.g., Thunder Step deals 3d10 thunder damage to creatures within 10ft of the departure point
+
+**Validation:** the system checks only: (1) destination tile is unoccupied, (2) destination is within spell range, (3) line of sight to destination if `requires_sight = true`, (4) companion is willing and within `companion_range_ft` if applicable. Path between origin and destination is **not** validated.
+
+**SRD teleportation spells:**
+
+| Spell | Level | `teleport` data |
+|---|---|---|
+| Misty Step | 2 | `{target: "self", requires_sight: true}` |
+| Thunder Step | 3 | `{target: "self+creature", requires_sight: true, companion_range_ft: 5, additional_effects: "3d10 thunder to creatures within 10ft of departure"}` |
+| Dimension Door | 4 | `{target: "self+creature", requires_sight: false, companion_range_ft: 5}` |
+| Far Step | 5 | `{target: "self", requires_sight: true}` |
+| Arcane Gate | 6 | `{target: "portal", requires_sight: true}` |
+| Teleport | 7 | `{target: "party", requires_sight: false}` |
+| Scatter | 6 | `{target: "creatures", requires_sight: true}` |
+| Word of Recall | 6 | `{target: "party", requires_sight: false}` |
+
+Note: higher-level teleportation spells (Teleport, Word of Recall) that move beyond the current map are resolved via `#dm-queue` as narrative events rather than grid repositioning.
+
 **Cantrip damage scaling:** cantrip damage dice scale automatically based on character level — 2 dice at level 5, 3 dice at level 11, 4 dice at level 17. The system auto-calculates the correct number of dice from the caster's character level using the spell's `damage` JSONB field (`cantrip_scaling: true` flag). No player input required. Example: Fire Bolt deals 1d10 at levels 1–4, 2d10 at 5–10, 3d10 at 11–16, 4d10 at 17+.
 
 ### Reactions
@@ -1525,6 +1549,7 @@ spells
   damage          JSONB                  -- {dice: "8d6", type: "fire", higher_levels: "1d6 per slot above 3rd", cantrip_scaling: true}
   healing         JSONB                  -- {dice: "1d8+mod", higher_levels: "1d8 per slot above 1st"}
   effects         TEXT                   -- description of non-damage effects
+  teleport        JSONB                  -- NULL for non-teleport spells. See Teleportation Spells below for schema
   classes         TEXT[] NOT NULL        -- ["wizard", "sorcerer"]
   homebrew        BOOLEAN DEFAULT false
   source          TEXT DEFAULT 'srd'
