@@ -946,6 +946,15 @@ When combat begins from an ambush or when some combatants are unaware, the DM ma
 
 **Interaction with initiative:** surprised creatures still roll initiative normally. Their position in the initiative order matters because it determines when during round 1 they stop being surprised (and can start using reactions).
 
+### Initiative Tiebreaking
+
+When two or more combatants roll the same initiative total, ties are broken automatically:
+
+1. **Higher DEX modifier** goes first
+2. If DEX modifiers are also tied, **alphabetical by display name**
+
+The system assigns `initiative_order` deterministically during encounter setup — no DM input or roll-off needed.
+
 ### Player Turns
 
 Turns are **sequential** — players send commands one at a time and see results before deciding their next action.

@@ -162,7 +162,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [ ] 100. **Carrying capacity.** Not mentioned. Can a player carry 500 arrows?
 - [ ] 101. **Languages.** In the data model but no mechanic for understanding or not understanding speech.
 - [ ] 102. **Darkvision and dim light.** Darkvision lets you see in darkness as dim light, but dim light imposes disadvantage on Perception. Is this auto-applied?
-- [ ] 103. **Initiative ties.** How are ties resolved? DEX score? DM choice? Roll-off?
+- [x] 103. **Initiative ties.** — Resolved: DEX modifier tiebreaker, then alphabetical by name. Fully automatic, no DM input needed.
 - [x] 104. **Summoned creatures and companions.** — Resolved: All summoned creatures are player-controlled via `/command [creature-id] [action]`. Creatures get their own combatant entries with short IDs, initiative placement per spell rules, and standard turn resource tracking. `summoner_id` field links creatures to their summoner.
 - [ ] 105. **Combat recap.** In async play, a single combat can span days. Is there a recap feature for a player returning after 3 days?
 - [ ] 106. **Simultaneous encounters.** Can two encounters run at once (party split)? The data model supports it but Discord channels (`#combat-map`, `#your-turn`) do not.
