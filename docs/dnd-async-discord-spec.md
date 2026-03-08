@@ -227,6 +227,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` or `/attack G2 --twohanded` | Attack a target. One `/attack` per swing; backend tracks attacks remaining. `--twohanded` for versatile weapons |
 | `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting. Bonus action spells (e.g., Healing Word) are auto-detected from `spells_ref.casting_time` — no need for `/bonus cast`; the system deducts the bonus action instead of the action |
 | `/bonus` | `/bonus cunning-action dash` or `/bonus cunning-action disengage` | Bonus action |
+| `/bonus rage` | `/bonus rage` | Enter rage — Barbarian only, costs bonus action (auto-resolved) |
 | `/shove` | `/shove OS` | Shove a target (push or knock prone) |
 | `/interact` | `/interact draw longsword` | Object interaction (first per turn is free; see Free Object Interaction) |
 | `/action disengage` | `/action disengage` | Disengage — move without provoking opportunity attacks (auto-resolved) |
@@ -285,6 +286,23 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 **Extra Attack:** resolved one swing at a time. Each `/attack` resolves a single attack roll. Backend tracks attacks remaining by class/level (Fighter 5 = 2, Fighter 11 = 3, Fighter 20 = 4). After each swing, the bot reports remaining attacks. Players retarget freely between swings. Unused attacks forfeited on `/done`. Extra Attack does not stack across multiclassed classes — the system uses the highest `attacks_per_action` value from all class entries at their respective levels.
 
 **Two-Weapon Fighting:** when a character attacks with a light melee weapon in their main hand (`equipped_main_hand`), they can use their bonus action to attack with a different light melee weapon held in the off-hand (`equipped_off_hand`). Invoked via `/bonus offhand`. The off-hand attack does not add the ability modifier to damage unless the character has the Two-Weapon Fighting fighting style. System validates both `equipped_main_hand` and `equipped_off_hand` have the "light" property.
+
+**Rage (Barbarian):** `/bonus rage` activates rage. Costs the bonus action (`bonus_action_used = true`). Sets `is_raging = true` on the combatant. Requires Barbarian class and remaining rage uses in `feature_uses["rage"]` (2/day at level 1, scaling to 6/day at level 17, unlimited at level 20). While raging, all Rage effects from the Feature Effect System are active (damage bonus on melee STR attacks, resistance to B/P/S, advantage on STR checks/saves). Rage lasts up to 1 minute (10 rounds), tracked via `rage_rounds_remaining` on the combatant. Rage ends early if:
+- The Barbarian's turn ends and they have neither attacked a hostile nor taken damage since their last turn — the system auto-tracks `rage_attacked_this_round` and `rage_took_damage_this_round` (reset at turn start, checked at turn end). If neither is true, rage ends automatically with a combat log message.
+- The Barbarian falls unconscious (`hp_current = 0`) — rage ends immediately.
+- The Barbarian chooses to end it: `/bonus end-rage` (free, no action cost).
+- 10 rounds elapse — system auto-ends at turn start.
+
+Cannot rage while wearing heavy armor (system validates `equipped_armor` weight class). Cannot cast spells or concentrate on spells while raging (system blocks `/cast` and drops active concentration when rage activates).
+
+Combat log output:
+```
+🔥  Kael enters a Rage! (3 rages remaining today)
+📋 Remaining: 🏃 30ft move | ⚔️ 2 attacks | 🤚 Free interact | 🛡️ Reaction
+
+🔥  Kael's Rage ends — didn't attack or take damage this round
+🔥  Kael ends their Rage
+```
 
 **Finesse weapons:** weapons with the "finesse" property (rapier, dagger, shortsword, etc.) allow the attacker to use either STR or DEX for attack and damage rolls. The system auto-selects the higher of the two modifiers — no player input required.
 
@@ -1719,6 +1737,10 @@ combatants
   is_visible      BOOLEAN DEFAULT true   -- hidden enemies (ambush, stealth)
   is_alive        BOOLEAN DEFAULT true
   is_npc          BOOLEAN DEFAULT false  -- DM-controlled ally vs enemy
+  is_raging       BOOLEAN DEFAULT false  -- Barbarian rage state
+  rage_rounds_remaining INTEGER          -- countdown from 10; NULL when not raging
+  rage_attacked_this_round BOOLEAN DEFAULT false  -- reset at turn start, set on melee attack
+  rage_took_damage_this_round BOOLEAN DEFAULT false  -- reset at turn start, set on taking damage
   summoner_id     UUID FK → combatants   -- nullable; links summoned creature to summoning player's combatant
 
 turns
