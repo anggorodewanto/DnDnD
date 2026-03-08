@@ -20,7 +20,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ~~9. **`/done` has no safety net.** If a player has unused attacks or bonus actions and types `/done`, is there a confirmation prompt, or does the turn just end?~~ — Resolved: `/done` shows an ephemeral confirmation prompt listing unused resources (action, bonus action, remaining attacks) before ending the turn. If all resources are spent, `/done` ends immediately with no prompt.
 ~~10. **Movement cost is invisible.** When a player types `/move D4`, can they see the path cost and remaining movement before committing? Can they query "how far is D4?" without committing?~~ — Resolved: `/move` shows an ephemeral confirmation prompt with path cost and remaining movement before committing. Player clicks Confirm or Cancel. Invalid moves are rejected immediately with no confirmation step.
 ~~11. **No `/map` command.** The map posts to `#combat-map` on state change. Can a player request a fresh map view on demand?~~ — Resolved: Already addressed by design. `#combat-map` appends a new message on every state change, so the latest message is always the current map. No additional command needed.
-12. **No `/initiative` query command.** Players can see `#initiative-tracker`, but can they query turn order with a command?
+~~12. **No `/initiative` query command.** Players can see `#initiative-tracker`, but can they query turn order with a command?~~ — Resolved: Already addressed by design, same as #11. `#initiative-tracker` is a persistent bot-managed channel showing current turn order. The latest message is always current. No additional command needed.
 
 ## Combat Mechanics
 
@@ -95,13 +95,13 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ~~57. **Character card contents undefined.** `#character-cards` is mentioned but its contents are never specified. What does it show?~~ — Resolved: Defined character card contents in spec. Each card shows: name, short ID, level, race, class, HP, AC, speed, ability scores, equipped weapons, spell slots, active conditions with duration, concentration, temp HP, exhaustion, and gold. Auto-updated on state changes.
 ~~58. **Allied HP visibility.** Enemy HP is hidden (health tiers). Can players see exact HP for their allies?~~ — Resolved: Already addressed in spec. Player character HP is visible to all players as exact values in `#initiative-tracker`, character tokens, and `#character-cards`. Allied HP and conditions are public information.
 ~~59. **Creature identification.** Do players see creature names ("Goblin") or just token labels ("G1")?~~ — Resolved: Already addressed in spec. Players see full creature names in `#initiative-tracker` (e.g., "Goblin #1 (G1)") and `#combat-log`. Map tokens show short IDs only (G1, OS) for space. Names and IDs are cross-referenced everywhere.
-60. **Hidden enemy detection.** Enemies with `is_visible = false` are hidden. Beyond passive Perception, how does a player actively search for hidden enemies?
+~~60. **Hidden enemy detection.** Enemies with `is_visible = false` are hidden. Beyond passive Perception, how does a player actively search for hidden enemies?~~ — Resolved: Already addressed by existing mechanics. Players use `/action search for hidden enemies` (freeform action → DM queue) or `/check perception` to actively search. DM resolves via dashboard using active Perception vs Stealth. Passive Perception handles automatic detection.
 
 ## Error Recovery
 
 61. **No player undo.** If a player targets the wrong enemy or moves to the wrong tile, the spec says no undo in MVP. How does the player request a correction from the DM?
 62. **Disconnection handling.** If a player's Discord client crashes mid-turn, the turn timer continues. Any reconnection awareness?
-63. **Invalid command feedback.** Is there a consistent error format for bad arguments, missing targets, etc.?
+~~63. **Invalid command feedback.** Is there a consistent error format for bad arguments, missing targets, etc.?~~ — Resolved: Already addressed throughout the spec. All error messages use a consistent `❌ [reason]` format as ephemeral replies (e.g., "❌ Not enough movement — path requires 40ft", "❌ You can't move — you are grappled"). Dozens of examples across all command sections.
 64. **Cancelling queued freeform actions.** `/action flip the table` goes to `#dm-queue`. Can the player edit or cancel it before the DM resolves it?
 
 ## Notifications & Awareness
@@ -125,7 +125,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 75. **Action Surge.** Fighter gets a whole additional action. How is this expressed? Does the system grant another full action's worth of attacks?
 76. **Bardic Inspiration.** A Bard grants a die to an ally. How is this targeted and applied?
 77. **Divine Smite on hit.** The Feature Effect System has `resource_on_hit`, but does the system prompt "Apply Divine Smite?" after hitting? Or must the player pre-declare it?
-78. **Evasion.** Rogue/Monk Evasion (DEX save success = no damage, fail = half) — is this implemented?
+~~78. **Evasion.** Rogue/Monk Evasion (DEX save success = no damage, fail = half) — is this implemented?~~ — Resolved: Already addressed via the Feature Effect System. Evasion is explicitly listed as an `on_save` trigger effect and named as an auto-detected class feature driven by effect declarations.
 79. **Cunning Action: Hide.** Is hiding as a bonus action supported (`/bonus cunning-action hide`)? Hide is not listed as a Cunning Action option.
 80. **Channel Divinity.** Mentioned as a short-rest recharge example but specific options (Turn Undead, class-specific) have no implementation guidance.
 
@@ -152,7 +152,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 93. **No distance indicator.** Can a player see range rings or distance to a target without counting squares on a PNG?
 94. **Token overlap at same tile.** If flying creatures share a tile at different altitudes, how are they visually distinguished on a 2D map?
 95. **Spell effect visualization.** "Active effects tracked on map" but no description of how they are rendered (circles, overlays, labels?).
-96. **Duplicate initials.** Player tokens show "initials." What if two players share initials?
+~~96. **Duplicate initials.** Player tokens show "initials." What if two players share initials?~~ — Resolved: Already addressed in spec. Short IDs are derived from character name initials; duplicates are disambiguated by appending a number (e.g., AR and AR1). Defined in the Combatant Targeting section.
 97. **Color-blind accessibility.** Health tiers use "color shift." Are there non-color indicators for color-blind players?
 
 ## Miscellaneous
