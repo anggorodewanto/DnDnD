@@ -245,6 +245,10 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 | Command | Example | Description |
 |---|---|---|
 | `/equip` | `/equip longsword` | Set primary weapon (persists between turns) |
+| `/inventory` | `/inventory` | View your inventory, equipment, and gold |
+| `/use` | `/use healing-potion` | Use a consumable item |
+| `/give` | `/give healing-potion AR` | Give an item to an adjacent ally |
+| `/loot` | `/loot` | Pick up items from the loot pool after combat |
 | `/register` | `/register Thorn` | Link Discord account to a character (DM approves) |
 | `/setup` | `/setup` | Auto-create channel structure (DM only, run once) |
 | `/help` | `/help` or `/help attack` | Show command list, or detailed usage for a specific command |
@@ -1361,6 +1365,44 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
 - Rests cannot be initiated during active combat (system checks `encounter.status != 'active'`)
 - If interrupted (DM cancels mid-rest from dashboard), partial benefits at DM discretion via manual override
 
+### Inventory Management
+
+Player inventory is stored in the `inventory` JSONB field on the characters table. Each entry has `{item_id, quantity, equipped, type}`. Gold is tracked as a separate `gold` INTEGER field on the characters table.
+
+**Viewing inventory:** `/inventory` shows an ephemeral message listing all carried items grouped by type (weapons, armor, consumables, other), quantities, equipped status, and current gold. Example:
+
+```
+🎒 Aria's Inventory (23 gp)
+⚔️ Weapons: Longsword (equipped, main hand), Shortbow
+🛡️ Armor: Chain Mail (equipped), Shield (equipped, off-hand)
+🧪 Consumables: Healing Potion ×2, Antitoxin ×1
+🏹 Ammunition: Arrows ×18
+📦 Other: Rope (50ft), Torch ×3
+```
+
+**Using consumables:** `/use healing-potion` consumes one item and applies its effect. The system auto-resolves items with defined effects:
+- **Healing Potion:** roll 2d4+2, apply healing. Result posted to `#combat-log` in combat or `#roll-history` out of combat
+- **Greater Healing Potion:** roll 4d4+4
+- **Antitoxin:** grants advantage on saves vs poison for 1 hour (tracked as timed condition)
+- Items without auto-resolve effects (e.g., "Ball Bearings") are routed to `#dm-queue` for DM adjudication
+
+Using a consumable in combat costs an action (`action_used = true`). The DM can configure whether drinking a potion costs an action or a bonus action via a campaign setting (`potion_bonus_action: true/false`, default: action).
+
+**Giving items:** `/give healing-potion AR` transfers one item to an adjacent ally (within 5ft). Both inventories are updated. In combat, giving an item uses the free object interaction (or costs an action if already used). Out of combat, no action cost.
+
+**Looting:** after an encounter ends (`encounter.status = 'completed'`), the DM can populate a **loot pool** from the dashboard — selecting items from defeated creatures' inventories or adding custom loot. The system posts the loot pool to `#combat-log`:
+
+```
+💰 Loot available: Shortsword ×2, 15 gp, Healing Potion ×1, Mysterious Key
+Type /loot to claim items
+```
+
+Players type `/loot` to see the loot pool and claim items via Discord buttons. Each item can only be claimed once. Unclaimed items remain in the pool until the DM clears it. Gold can be split evenly (DM clicks "Split Gold" in dashboard) or claimed individually.
+
+**Gold tracking:** the `gold` field on characters is an integer representing total gold pieces. The DM can add/remove gold from the dashboard. Gold changes are logged to `#combat-log` or `#the-story`. Electrum, silver, copper, and platinum are converted to gold equivalents for simplicity (DM handles narrative flavor).
+
+**DM inventory management:** the DM can add, remove, or transfer items between any characters from the dashboard. All DM-initiated changes are logged to `#combat-log`.
+
 ### Exploration, Social & Travel
 
 Narrative-driven — no dedicated mechanical systems needed in MVP:
@@ -1452,7 +1494,8 @@ characters
   feature_uses    JSONB                  -- { "action-surge": {current: 1, max: 1, recharge: "short"}, ... }
   features        JSONB                  -- [{name, source, level, description, mechanical_effect}]
   proficiencies   JSONB                  -- {saves: [str, con], skills: [athletics, perception], weapons: [...], armor: [...]}
-  inventory       JSONB                  -- [{item_id, quantity, equipped}]
+  gold            INTEGER NOT NULL DEFAULT 0  -- total gold pieces (all currency converted to gp)
+  inventory       JSONB                  -- [{item_id, quantity, equipped, type}] type: weapon/armor/consumable/ammunition/other
   character_data  JSONB                  -- full dnd5e_json_schema blob for import/export fidelity
   ddb_url         TEXT                   -- D&D Beyond URL if imported
   homebrew        BOOLEAN DEFAULT false
@@ -1708,7 +1751,7 @@ conditions_ref
 
 **Included:**
 - Discord bot with full channel structure (`/setup` auto-creates)
-- All slash commands: `/move`, `/attack`, `/cast`, `/bonus`, `/shove`, `/fly`, `/interact`, `/action`, `/reaction`, `/deathsave`, `/done`, `/equip`, `/register`, `/check`, `/save`, `/rest`
+- All slash commands: `/move`, `/attack`, `/cast`, `/bonus`, `/shove`, `/fly`, `/interact`, `/action`, `/reaction`, `/deathsave`, `/done`, `/equip`, `/inventory`, `/use`, `/give`, `/loot`, `/register`, `/check`, `/save`, `/rest`
 - Combat state: HP, position, turn order, conditions, death saves, spell slots, concentration
 - Turn timeout with escalating pings and auto-skip
 - Enemy/NPC turns with smart-default suggestions for DM
@@ -1727,10 +1770,10 @@ conditions_ref
 - Condition/spell duration auto-expiration
 - Equipment enforcement (armor STR requirements, stealth disadvantage, free object interaction limits)
 - Standard actions: Dash, Disengage, Dodge, Escape, Help, Hide, Ready (auto-resolved where deterministic)
+- Inventory management: `/inventory`, `/use`, `/give`, `/loot`, gold tracking, consumable auto-resolution, post-combat loot pool
 
 **Future phases:**
 - Tileset-based map painting + Tiled desktop import
 - Full asset library
 - Open5e third-party content integration
-- Inventory management
 - Campaign/session management

@@ -67,11 +67,11 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ## Inventory & Equipment
 
-41. **Inventory management is "future phases" but MVP depends on it.** Ammunition tracking, thrown weapons, and equipment are all in MVP scope. What is the actual MVP inventory scope?
-42. **No `/inventory` command.** Players cannot view their inventory in Discord.
-43. **No looting workflow.** After combat, how do players pick up items from defeated enemies?
-44. **No consumables system.** How does a player drink a healing potion? There is no `/use` command.
-45. **No gold or currency tracking.** Not in the data model at all.
+~~41. **Inventory management is "future phases" but MVP depends on it.** Ammunition tracking, thrown weapons, and equipment are all in MVP scope. What is the actual MVP inventory scope?~~ — Resolved: Full inventory system in MVP. Added `/inventory`, `/use`, `/give`, `/loot` commands, gold tracking, consumable auto-resolution, and post-combat loot pool. Moved from Future Phases to Included.
+~~42. **No `/inventory` command.** Players cannot view their inventory in Discord.~~ — Resolved: `/inventory` shows ephemeral message with items grouped by type, equipped status, and gold.
+~~43. **No looting workflow.** After combat, how do players pick up items from defeated enemies?~~ — Resolved: DM populates loot pool from dashboard after encounter ends. Players `/loot` to claim items via Discord buttons. Gold can be split evenly.
+~~44. **No consumables system.** How does a player drink a healing potion? There is no `/use` command.~~ — Resolved: `/use healing-potion` consumes item and auto-resolves effects. Costs action in combat (DM can configure potions as bonus action). Items without defined effects route to DM queue.
+~~45. **No gold or currency tracking.** Not in the data model at all.~~ — Resolved: Added `gold INTEGER` field to characters table. All currency simplified to gold pieces. DM manages via dashboard; changes logged to combat log.
 46. **Equipping armor timing.** Donning/doffing armor takes 1-10 minutes in 5e. Is this enforced or is `/equip` instant?
 
 ## Out-of-Combat Gameplay
