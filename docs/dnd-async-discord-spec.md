@@ -149,6 +149,14 @@ Movement is expressed as a destination coordinate:
 
 The backend validates every movement command: remaining speed, tile occupancy, difficult terrain, and obstacles. Invalid moves return a specific reason. Movement can be split across actions: `/move D4` → `/attack G1` → `/move E5` — each `/move` deducts from remaining speed.
 
+**Movement confirmation prompt:** every valid `/move` command responds with an ephemeral confirmation before committing:
+
+```
+🏃 Move to D4 — 20ft (includes difficult terrain), 10ft remaining after. [✅ Confirm] [❌ Cancel]
+```
+
+The player clicks **Confirm** to commit the move or **Cancel** to abort. The prompt shows total path cost (noting difficult terrain if applicable) and remaining movement after the move. If the move is invalid, the rejection message is shown immediately with no confirmation step. The confirmation uses Discord buttons and is visible only to the acting player.
+
 **Moving through occupied tiles (5e rules):**
 - **Allied creatures:** you can move through an allied creature's space freely, but you cannot end your turn there
 - **Hostile creatures:** you cannot move through a hostile creature's space, unless it is two or more sizes larger or smaller than you (e.g., a Medium character can move through a Huge dragon's space)
@@ -181,7 +189,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 
 | Command | Example | Description |
 |---|---|---|
-| `/move` | `/move D4` | Move to coordinate. Repeatable for split movement as long as total ≤ speed |
+| `/move` | `/move D4` | Move to coordinate. Shows path cost and remaining movement, then asks for confirmation before committing. Repeatable for split movement as long as total ≤ speed |
 | `/fly` | `/fly 30` | Set altitude in feet. Costs movement 1:1 |
 | `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` or `/attack G2 --twohanded` | Attack a target. One `/attack` per swing; backend tracks attacks remaining. `--twohanded` for versatile weapons |
 | `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting. Bonus action spells (e.g., Healing Word) are auto-detected from `spells_ref.casting_time` — no need for `/bonus cast`; the system deducts the bonus action instead of the action |
