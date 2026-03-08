@@ -92,7 +92,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ## Information Asymmetry & Visibility
 
 ~~56. **Enemy AC exposure contradiction.** The spec says "AC is hidden" but the miss example shows "11 (6 + 5) vs AC 13 — MISS" revealing the AC. Which is correct?~~ — Resolved: Enemy AC is hidden. Attack results show only Hit/Miss without revealing the target's AC. Fixed the miss example to omit AC.
-57. **Character card contents undefined.** `#character-cards` is mentioned but its contents are never specified. What does it show?
+~~57. **Character card contents undefined.** `#character-cards` is mentioned but its contents are never specified. What does it show?~~ — Resolved: Defined character card contents in spec. Each card shows: name, short ID, level, race, class, HP, AC, speed, ability scores, equipped weapons, spell slots, active conditions with duration, concentration, temp HP, exhaustion, and gold. Auto-updated on state changes.
 58. **Allied HP visibility.** Enemy HP is hidden (health tiers). Can players see exact HP for their allies?
 59. **Creature identification.** Do players see creature names ("Goblin") or just token labels ("G1")?
 60. **Hidden enemy detection.** Enemies with `is_visible = false` are hidden. Beyond passive Perception, how does a player actively search for hidden enemies?
@@ -131,7 +131,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ## Conditions & Status Effects
 
-81. **No `/status` command.** How does a player see what conditions currently affect their character?
+~~81. **No `/status` command.** How does a player see what conditions currently affect their character?~~ — Resolved: Added `/status` command (ephemeral summary of active conditions, concentration, temp HP, exhaustion, reaction declarations). Also defined `#character-cards` as auto-updated persistent character state including conditions. Both work together: cards for passive awareness, `/status` for on-demand query.
 ~~82. **Condition application notification.** When a condition is applied, where does the player see it? Only in `#combat-log`?~~ — Resolved: Added Combat Log Output Reference section with explicit formats for condition application ("⚠️ Aria is now Grappled") and removal ("✅ Grappled removed from Aria"). All posted to #combat-log.
 83. **Frightened source indicator.** The frightened condition tracks `source_combatant_id` but the player has no indication of which creature they are frightened of or which direction they cannot move.
 84. **Grapple dragging.** The grappler can drag at half speed, but there is no drag command. Does `/move` automatically drag the grappled creature?

@@ -104,6 +104,23 @@ The `/setup` slash command auto-creates the channel structure with appropriate p
 
 The bot uses **plain text messages** for most output. For very large output (20+ combatant initiative orders, detailed character cards), the bot uploads a **text file attachment** instead. No embeds required.
 
+### Character Cards (`#character-cards`)
+
+The bot maintains one auto-updated message per registered character in `#character-cards`. Each card shows the character's current state and is re-edited whenever relevant state changes (level up, equipment change, condition applied/removed, rest completed, etc.):
+
+```
+⚔️ Aria (AR) — Level 5 Half-Elf Ranger
+HP: 38/45 | AC: 16 | Speed: 30ft
+STR 10 | DEX 18 | CON 14 | WIS 14 | INT 12 | CHA 10
+Equipped: Longbow (main) | Shortsword (off-hand)
+Spell Slots: 1st: 3/4 | 2nd: 1/2
+Conditions: Blessed (2 rounds remaining)
+Concentration: —
+Gold: 47gp
+```
+
+Fields shown: name, short ID, level, race, class, HP (current/max), AC, speed, ability scores, equipped weapons, spell slots (if caster), active conditions with remaining duration, concentration spell (if any), temp HP (if any), exhaustion level (if any), and gold. Cards are visible to all players — allied HP and conditions are public information.
+
 ---
 
 ## Player Input Model
@@ -244,6 +261,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 | Command | Example | Description |
 |---|---|---|
+| `/status` | `/status` | View your active conditions, concentration, temp HP, exhaustion, and reaction declarations (ephemeral) |
 | `/equip` | `/equip longsword` | Set primary weapon (persists between turns) |
 | `/inventory` | `/inventory` | View your inventory, equipment, and gold |
 | `/use` | `/use healing-potion` | Use a consumable item |
@@ -1787,7 +1805,7 @@ conditions_ref
 
 **Included:**
 - Discord bot with full channel structure (`/setup` auto-creates)
-- All slash commands: `/move`, `/attack`, `/cast`, `/bonus`, `/shove`, `/fly`, `/interact`, `/action`, `/reaction`, `/deathsave`, `/done`, `/equip`, `/inventory`, `/use`, `/give`, `/loot`, `/register`, `/check`, `/save`, `/rest`
+- All slash commands: `/move`, `/attack`, `/cast`, `/bonus`, `/shove`, `/fly`, `/interact`, `/action`, `/reaction`, `/deathsave`, `/done`, `/equip`, `/status`, `/inventory`, `/use`, `/give`, `/loot`, `/register`, `/check`, `/save`, `/rest`
 - Combat state: HP, position, turn order, conditions, death saves, spell slots, concentration
 - Turn timeout with escalating pings and auto-skip
 - Enemy/NPC turns with smart-default suggestions for DM
