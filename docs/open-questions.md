@@ -134,7 +134,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [x] 81. **No `/status` command.** — Resolved: Added `/status` command (ephemeral summary of active conditions, concentration, temp HP, exhaustion, reaction declarations). Also defined `#character-cards` as auto-updated persistent character state including conditions. Both work together: cards for passive awareness, `/status` for on-demand query.
 - [x] 82. **Condition application notification.** — Resolved: Added Combat Log Output Reference section with explicit formats for condition application ("⚠️ Aria is now Grappled") and removal ("✅ Grappled removed from Aria"). All posted to #combat-log.
 - [ ] 83. **Frightened source indicator.** The frightened condition tracks `source_combatant_id` but the player has no indication of which creature they are frightened of or which direction they cannot move.
-- [ ] 84. **Grapple dragging.** The grappler can drag at half speed, but there is no drag command. Does `/move` automatically drag the grappled creature?
+- [x] 84. **Grapple dragging.** — Resolved: `/move` detects grappled targets and prompts with Discord buttons to Drag (×2 movement cost, targets follow) or Release & Move (breaks grapple, normal speed).
 - [x] 85. **Invisible condition.** — Resolved: Added Invisible as a full trackable condition in `conditions_ref`, distinct from `is_visible` (stealth). Documented mechanical effects, interaction with hiding, and auto-removal for non-Greater Invisibility on attack/cast.
 - [x] 86. **Prone attack penalty.** — Resolved: Prone attack disadvantage is now covered in the Combat Log Output Reference section's auto-detected advantage/disadvantage examples, and implicitly via the existing condition effects tables.
 

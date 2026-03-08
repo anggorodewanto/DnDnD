@@ -722,8 +722,21 @@ Grapple and shove are contested ability check actions available via `/action gra
 - Target must be no more than one size category larger than the grappler
 - Contested check: attacker Athletics (STR) vs target's choice of Athletics (STR) or Acrobatics (DEX)
 - Success: target gains the "grappled" condition (`{condition: "grappled", source_combatant_id: [grappler]}`)
-- Grappled creature's speed becomes 0; grappler can drag the target at half speed
+- Grappled creature's speed becomes 0; grappler can drag the target (see Dragging below)
 - Escape: target uses `/action escape` (costs their action) to repeat the contested check; success removes the grappled condition. See Standard Actions below
+
+**Dragging:**
+
+When a grappler uses `/move`, the system detects grappled targets and adds a drag confirmation step before the standard movement confirmation. The prompt lists all creatures grappled by the mover:
+
+```
+🤼 You are grappling: Goblin #1, Orc Shaman. Drag them with you? [✅ Drag] [❌ Release & Move]
+```
+
+- **Drag:** movement costs double (half speed). The standard `/move` confirmation follows with adjusted cost: `🏃 Move to D4 — 20ft (10ft × 2 dragging), 10ft remaining after. [✅ Confirm] [❌ Cancel]`. All grappled creatures move to the grappler's destination tile.
+- **Release & Move:** grapple condition is removed from all listed targets before the move. Grappler moves at normal speed.
+
+If the doubled movement cost exceeds remaining speed, the Drag option is still shown but the subsequent `/move` confirmation will reflect the shortfall and the player can Cancel or pick a closer destination. Multiple grappled creatures do not further multiply cost — dragging always costs ×2 regardless of how many targets are held.
 
 **Shove:**
 - Target must be no more than one size category larger
@@ -1013,6 +1026,8 @@ Every auto-resolved action, auto-detected modifier, and auto-rejected command po
 📌  Aria shoves Goblin #1 (push) — 🎲 Athletics: 15 vs Athletics: 10 — Pushed to E4
 📌  Aria shoves Goblin #1 (prone) — 🎲 Athletics: 15 vs Acrobatics: 12 — Knocked prone!
 📌  Aria attempts to shove Orc Shaman (push) — 🎲 Athletics: 8 vs Athletics: 14 — Failed
+🤼  Aria drags Goblin #1 to D4
+🤼  Aria releases Goblin #1 (grapple ended)
 ```
 
 **Auto-detected advantage/disadvantage on attacks** (appended to the attack roll line):
