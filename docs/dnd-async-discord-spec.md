@@ -109,7 +109,7 @@ The bot uses **plain text messages** for most output. For very large output (20+
 The bot maintains one auto-updated message per registered character in `#character-cards`. Each card shows the character's current state and is re-edited whenever relevant state changes (level up, equipment change, condition applied/removed, rest completed, etc.):
 
 ```
-⚔️ Aria (AR) — Level 5 Half-Elf Ranger
+⚔️ Aria (AR) — Level 8 Half-Elf Fighter 5 (Champion) / Rogue 3 (Thief)
 HP: 38/45 | AC: 16 | Speed: 30ft
 STR 10 | DEX 18 | CON 14 | WIS 14 | INT 12 | CHA 10
 Equipped: Longbow (main) | Shortsword (off-hand)
@@ -119,7 +119,7 @@ Concentration: —
 Gold: 47gp
 ```
 
-Fields shown: name, short ID, level, race, class, HP (current/max), AC, speed, ability scores, equipped weapons, spell slots (if caster), active conditions with remaining duration, concentration spell (if any), temp HP (if any), exhaustion level (if any), and gold. Cards are visible to all players — allied HP and conditions are public information.
+Fields shown: name, short ID, total level, race, class/subclass (multiclass shows all, e.g., "Fighter 5 (Champion) / Rogue 3 (Thief)"), HP (current/max), AC, speed, ability scores, equipped weapons, spell slots (if caster), active conditions with remaining duration, concentration spell (if any), temp HP (if any), exhaustion level (if any), and gold. Cards are visible to all players — allied HP and conditions are public information.
 
 ---
 
@@ -278,7 +278,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Weapon selection:** each character has an equipped weapon (set via `/equip`). `/attack G2` uses it; `/attack G2 handaxe` overrides for that swing. Backend validates the character has the weapon.
 
-**Extra Attack:** resolved one swing at a time. Each `/attack` resolves a single attack roll. Backend tracks attacks remaining by class/level (Fighter 5 = 2, Fighter 11 = 3, Fighter 20 = 4). After each swing, the bot reports remaining attacks. Players retarget freely between swings. Unused attacks forfeited on `/done`.
+**Extra Attack:** resolved one swing at a time. Each `/attack` resolves a single attack roll. Backend tracks attacks remaining by class/level (Fighter 5 = 2, Fighter 11 = 3, Fighter 20 = 4). After each swing, the bot reports remaining attacks. Players retarget freely between swings. Unused attacks forfeited on `/done`. Extra Attack does not stack across multiclassed classes — the system uses the highest `attacks_per_action` value from all class entries at their respective levels.
 
 **Two-Weapon Fighting:** when a character attacks with a light melee weapon in their main hand (`equipped_main_hand`), they can use their bonus action to attack with a different light melee weapon held in the off-hand (`equipped_off_hand`). Invoked via `/bonus offhand`. The off-hand attack does not add the ability modifier to damage unless the character has the Two-Weapon Fighting fighting style. System validates both `equipped_main_hand` and `equipped_off_hand` have the "light" property.
 
@@ -1278,16 +1278,17 @@ The internal format is not exposed directly to users — it's the canonical stor
 
 The DM creates characters through a guided workflow:
 
-1. **Basics** — name, race, class, level, background
-2. **Ability scores** — manual entry (rolled or point-buy, DM's choice — system doesn't enforce a generation method)
-3. **Derived stats** — HP, AC, proficiency bonus, saving throws, skill proficiencies auto-calculated from race + class + ability scores + level using SRD rules
-4. **Equipment** — select from SRD weapons/armor/items; set equipped weapon and worn armor
-5. **Spells** — for caster classes, select known/prepared spells from class spell list (filtered by level). Spell slots auto-calculated
-6. **Features** — racial traits and class features auto-populated from SRD data based on race + class + level
+1. **Basics** — name, race, background
+2. **Classes** — add one or more class entries: class, subclass (if available at current level), and class level. Multiclass characters add multiple entries (e.g., Fighter 5 / Rogue 3)
+3. **Ability scores** — manual entry (rolled or point-buy, DM's choice — system doesn't enforce a generation method)
+4. **Derived stats** — HP, AC, proficiency bonus, saving throws, skill proficiencies auto-calculated from race + classes + ability scores + total level using SRD rules
+5. **Equipment** — select from SRD weapons/armor/items; set equipped weapon and worn armor
+6. **Spells** — for caster classes, select known/prepared spells from class spell list (filtered by level). Spell slots auto-calculated using 5e multiclass spellcasting table when applicable
+7. **Features** — racial traits, class features, and subclass features auto-populated from SRD data based on race + class/subclass + level
 
 After creation, the player links to the character via `/register <character_name>` in Discord (DM approves).
 
-**Class/subclass/feat interactions:** the system implements SRD class features mechanically (Extra Attack, Sneak Attack damage, Rage bonus, etc.) and auto-applies them during combat. Non-SRD content can be added manually by the DM as custom features with mechanical effects.
+**Class/subclass/feat interactions:** the system implements SRD class and subclass features mechanically (Extra Attack, Sneak Attack damage, Rage bonus, Champion's Improved Critical, Life Domain's Disciple of Life, etc.) and auto-applies them during combat. Subclass features are loaded from `classes.subclasses[subclass_id].features_by_level` and merged into the character's `features` array alongside base class features. Non-SRD content can be added manually by the DM as custom features with mechanical effects.
 
 ### D&D Beyond Import
 
@@ -1308,10 +1309,15 @@ After creation, the player links to the character via `/register <character_name
 
 ### Character Leveling
 
-- DM edits character level in the dashboard
-- System auto-recalculates HP, proficiency bonus, spell slots (and pact magic slots for Warlocks), attacks per action
-- DM selects new class features / spells if applicable
+- DM edits a specific class entry's level in the dashboard (e.g., increase Fighter from 5 → 6, or add a new class entry for multiclassing)
+- System auto-recalculates total `level`, HP (`hp_max` adds the new class's hit die + CON mod), proficiency bonus, spell slots (using 5e multiclass spellcasting table if multiclassed), attacks per action
+- DM selects subclass when class level reaches the subclass threshold (varies by class: 1 for Cleric, 2 for Wizard, 3 for most others)
+- DM selects new class/subclass features and spells if applicable
 - For DDB-imported characters, player levels up in D&D Beyond and re-imports
+
+**Multiclass spell slots:** for characters with multiple spellcasting classes, spell slot totals are calculated from the 5e multiclass spellcasting table. Each class contributes a caster level based on its progression: full casters (Wizard, Cleric, Druid, Bard, Sorcerer) contribute class level × 1, half casters (Paladin, Ranger) contribute class level × ½ (rounded down), third casters (Eldritch Knight, Arcane Trickster) contribute class level × ⅓ (rounded down). The sum determines slots from the multiclass table. Warlock pact slots remain separate and are not included in this calculation.
+
+**Multiclass spellcasting ability:** each spell belongs to one or more class spell lists. When a multiclass character casts a spell, the system uses the spellcasting ability of the class that provides that spell. If a spell appears on multiple of the character's class lists, the system uses the higher modifier.
 
 ---
 
@@ -1388,10 +1394,11 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
 1. Player types `/rest short` → posts to `#dm-queue`
 2. DM approves from dashboard
 3. System prompts the player with a Discord button menu to spend hit dice:
-   - Bot posts: "You have **N** hit dice remaining (d**X**). Spend how many?" with buttons `[0] [1] [2] … [N]`
-   - Each hit die heals `1dX + CON modifier` (X = class hit die size)
+   - Single-class: Bot posts "You have **N** hit dice remaining (d**X**). Spend how many?" with buttons `[0] [1] [2] … [N]`
+   - Multiclass: Bot posts hit dice grouped by type — "You have **3** d10 (Fighter) and **2** d8 (Rogue). Spend how many?" with separate button rows per die type
+   - Each hit die heals `1dX + CON modifier` (X = hit die size for that class)
    - System rolls and applies healing automatically, capped at `hp_max`
-   - Player selects 0 to `hit_dice_remaining` dice; selecting 0 skips hit dice spending
+   - Player selects 0 to remaining dice per type; selecting 0 for all skips hit dice spending
 4. System resets all features with `recharge: "short"` (e.g., Action Surge, Channel Divinity, Second Wind)
 5. Warlock `pact_magic_slots.current` restored to `pact_magic_slots.max`
 6. Results posted to `#combat-log`
@@ -1403,7 +1410,7 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
    - HP restored to `hp_max`
    - All spell slots restored (both `spell_slots` and `pact_magic_slots`)
    - All features with `recharge: "short"` or `"long"` reset
-   - Hit dice restored: regain up to half character level (minimum 1), capped at max
+   - Hit dice restored: regain up to half total character level (minimum 1) worth of hit dice, player's choice of which types to restore
    - Death save tallies reset to 0/0
 4. Results posted to `#combat-log`
 5. Prepared casters (Cleric, Druid, Paladin) receive a reminder: "You can change your prepared spells with `/prepare`."
@@ -1542,8 +1549,10 @@ characters
   campaign_id     UUID FK → campaigns
   name            TEXT NOT NULL
   race            TEXT NOT NULL          -- FK → reference race or homebrew
-  class           TEXT NOT NULL          -- FK → reference class or homebrew
-  level           INTEGER NOT NULL DEFAULT 1
+  classes         JSONB NOT NULL         -- [{class: "fighter", subclass: "champion", level: 5}, {class: "rogue", subclass: "thief", level: 3}]
+                                         -- single-class example: [{class: "wizard", subclass: "evocation", level: 8}]
+                                         -- subclass may be null if class level hasn't reached subclass threshold
+  level           INTEGER NOT NULL DEFAULT 1  -- cached total (sum of all class levels); indexed for queries
   ability_scores  JSONB NOT NULL         -- { str, dex, con, int, wis, cha }
   hp_max          INTEGER NOT NULL
   hp_current      INTEGER NOT NULL
@@ -1562,7 +1571,7 @@ characters
                                          -- NULL for non-Warlocks. Separate pool from spell_slots.
                                          -- Recharges on short rest (not long rest only like spell_slots).
                                          -- For multiclass Warlocks, both pools exist independently.
-  hit_dice_remaining INTEGER NOT NULL     -- current pool; max = character level. Hit die size from class.hit_die
+  hit_dice_remaining JSONB NOT NULL       -- {"d10": 3, "d8": 2} — keyed by die size, tracks remaining per class die type
   feature_uses    JSONB                  -- { "action-surge": {current: 1, max: 1, recharge: "short"}, ... }
   features        JSONB                  -- [{name, source, level, description, mechanical_effect}]
   proficiencies   JSONB                  -- {saves: [str, con], skills: [athletics, perception], weapons: [...], armor: [...]}
@@ -1768,6 +1777,12 @@ classes
   spellcasting    JSONB                  -- {ability: "int", slot_progression: "full"} or NULL
   features_by_level JSONB NOT NULL       -- {"1": [{name, description, mechanical_effect}], "2": [...], ...}
   attacks_per_action JSONB NOT NULL      -- {"1": 1, "5": 2, "11": 3, "20": 4} (Fighter example)
+  subclass_level  INTEGER NOT NULL       -- level at which subclass is chosen (1 for Cleric, 2 for Wizard, 3 for most)
+  subclasses      JSONB NOT NULL         -- {"champion": {name: "Champion", features_by_level: {"3": [...], "7": [...], ...}},
+                                         --  "battle-master": {name: "Battle Master", features_by_level: {...}}}
+                                         -- subclass features are merged into character's features array at the appropriate levels
+  multiclass_prereqs JSONB               -- {str: 13} or {dex: 13, wis: 13} — ability score requirements to multiclass into this class
+  multiclass_proficiencies JSONB          -- proficiencies gained when multiclassing into this class (subset of base class proficiencies per 5e rules)
 
 races
   id              TEXT PK               -- "elf", "dwarf", "human"

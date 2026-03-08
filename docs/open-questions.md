@@ -141,9 +141,9 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ## Level-Up & Progression
 
 87. **No player notification of level-up.** DM edits level in dashboard, system recalculates, but the player is never told.
-88. **Multiclassing.** The `class` field is a single TEXT column. How would Fighter 5 / Rogue 3 work?
+~~88. **Multiclassing.** The `class` field is a single TEXT column. How would Fighter 5 / Rogue 3 work?~~ — Resolved: Replaced `class TEXT` with `classes JSONB` array of `{class, subclass, level}` entries. `level` kept as cached total. `hit_dice_remaining` changed to JSONB keyed by die size. Spell slots use 5e multiclass spellcasting table. Extra Attack doesn't stack. Spellcasting ability resolved per-spell from class list. Multiclass prereqs and proficiency subsets added to classes table.
 89. **Feat selection.** Some ASI levels allow feats. How is this handled? Dashboard-only?
-90. **Subclass not in data model.** No subclass column on characters or classes table.
+~~90. **Subclass not in data model.** No subclass column on characters or classes table.~~ — Resolved: Subclass stored per class entry in `characters.classes` JSONB (e.g., `{class: "fighter", subclass: "champion", level: 5}`). Classes table gains `subclasses JSONB` with features_by_level per subclass, and `subclass_level` indicating when subclass is chosen. Subclass features merged into character's features array.
 91. **XP vs milestone.** Experience points are not mentioned anywhere. Is it milestone-only?
 
 ## Map & Visual Feedback
