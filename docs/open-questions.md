@@ -34,7 +34,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ## Spellcasting
 
-20. **Material components with gold cost.** The spec tracks `{v, s, m}` but never addresses consumed components or costly material components (e.g., Revivify's 300gp diamond). Is a focus/component pouch assumed?
+~~20. **Material components with gold cost.** The spec tracks `{v, s, m}` but never addresses consumed components or costly material components (e.g., Revivify's 300gp diamond). Is a focus/component pouch assumed?~~ — Resolved: Focus/component pouch assumed for non-costly components. Costly components checked in inventory first; if missing, player can buy with gold via prompt. `material_cost_gp` and `material_consumed` fields added to spells table. DM can stock components via dashboard or in-game merchant shops.
 21. **No `/prepare` command.** How does a Cleric/Druid/Paladin change prepared spells after a long rest? Dashboard-only?
 ~~22. **Counterspell timing in async.** Does the player see what spell is being cast before deciding to Counterspell? Do they know the level?~~ — Resolved: Spell name is revealed but cast level is hidden. Player picks Counterspell slot via buttons. If slot < cast level, player rolls a spellcasting ability check (DC 10 + spell level). Enemy turn continues async; success retroactively removes spell effects.
 23. **Spell targeting syntax.** For single-target beneficial spells (Healing Word, Bless), can a player target allies by name or short ID?

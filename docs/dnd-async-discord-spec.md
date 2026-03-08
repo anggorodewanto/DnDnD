@@ -310,6 +310,14 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 - **Casting blocked in Silence:** on `/cast`, the system checks if the caster's position overlaps an active Silence zone. If the spell has verbal or somatic components (`components.v = true` or `components.s = true`), the cast is rejected: "You cannot cast [spell] — you are inside a zone of Silence (requires verbal/somatic components)." Spells with only material components (no V or S) are unaffected.
 - Active effects (Fog Cloud zone, Spirit Guardians aura) tracked on the map
 
+**Material components:** a spellcasting focus or component pouch is assumed for all casters — ordinary material components (no gold cost) are automatically satisfied and never block casting. For spells with **costly material components** (gold value in `material_cost_gp`), the system checks on `/cast`:
+
+1. **Component in inventory:** if the character has the required item (e.g., "diamond" for Revivify), the cast proceeds. If `material_consumed = true`, the item is removed from inventory after casting.
+2. **No component, but sufficient gold:** if the item is missing but the character has enough gold, the system offers a fallback prompt: "You don't have a diamond (300gp) — buy one for 300gp? [✅ Buy & Cast] [❌ Cancel]". Clicking Buy & Cast deducts the gold and proceeds. If `material_consumed = true`, no item is added to inventory (it's immediately consumed). If not consumed, the item is added to inventory for future casts.
+3. **Neither component nor gold:** the cast is rejected: "Requires a diamond worth 300gp — you don't have one and can't afford it (current gold: 50gp)."
+
+The gold fallback represents the assumption that components can be acquired from merchants, temples, or other sources available in the game world. The DM can also stock components directly in player inventories via the dashboard, and players can buy items from in-game merchants (DM creates a shop via the dashboard, posts available items to `#the-story`, and transfers purchased items/deducts gold through the dashboard).
+
 **Bonus action spell auto-detection:** `/cast` is the only command needed for all spells. The system reads `spells_ref.casting_time`; if it is `'bonus action'`, the cast deducts the bonus action (`bonus_action_used = true`) instead of the action. The bot confirms in the response: "🎁 Cast as bonus action." There is no `/bonus cast` syntax.
 
 **Bonus action spell restriction (both directions):** Per 5e rules (Sage Advice Compendium), if a player casts any spell as a bonus action on their turn, the only other spell they can cast that turn is a cantrip with a casting time of 1 action — and this applies regardless of casting order:
@@ -1645,6 +1653,8 @@ spells
   range_ft        INTEGER                -- NULL for "self", "touch" = 5
   range_type      TEXT NOT NULL          -- 'ranged', 'touch', 'self'
   components      JSONB NOT NULL         -- {v: true, s: true, m: "a tiny ball of bat guano"}
+  material_cost_gp INTEGER               -- NULL if no costly component; gold value if costly (e.g., 300 for Revivify)
+  material_consumed BOOLEAN DEFAULT false -- true if the material component is consumed on cast
   duration        TEXT NOT NULL          -- "instantaneous", "1 minute", "concentration, up to 1 hour"
   concentration   BOOLEAN DEFAULT false
   ritual          BOOLEAN DEFAULT false
