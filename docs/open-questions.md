@@ -122,7 +122,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [ ] 72. **Rage activation and tracking.** How does a Barbarian enter rage (`/bonus rage`?)? How do they end it? Rage ends if they don't attack or take damage — is this auto-tracked?
 - [ ] 73. **Wild Shape.** Not mentioned anywhere. Replaces stats, HP, and available actions. Massive mechanical change with no workflow.
 - [ ] 74. **Metamagic.** Sorcerer's Twinned Spell, Quickened Spell, Subtle Spell, etc. — not mentioned. These fundamentally alter how spells work.
-- [ ] 75. **Action Surge.** Fighter gets a whole additional action. How is this expressed? Does the system grant another full action's worth of attacks?
+- [x] 75. **Action Surge.** — Resolved: Added `/action surge` command for Fighters. Resets action and attacks remaining, tracked via `action_surged` on turns table. 1 use per short rest (2 at level 17). Action Surge availability shown in turn status prompt.
 - [ ] 76. **Bardic Inspiration.** A Bard grants a die to an ally. How is this targeted and applied?
 - [ ] 77. **Divine Smite on hit.** The Feature Effect System has `resource_on_hit`, but does the system prompt "Apply Divine Smite?" after hitting? Or must the player pre-declare it?
 - [x] 78. **Evasion.** — Resolved: Already addressed via the Feature Effect System. Evasion is explicitly listed as an `on_save` trigger effect and named as an auto-detected class feature driven by effect declarations.

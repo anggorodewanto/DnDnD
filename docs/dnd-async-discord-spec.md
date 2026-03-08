@@ -242,6 +242,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent (usable any time) — routed to `#dm-queue` |
 | `/deathsave` | `/deathsave` | Roll a death saving throw (only at 0 HP) |
 | `/command` | `/command FAM attack G1` or `/command SW attack G2` | Issue a command to a summoned creature you control (see Summoned Creatures & Companions) |
+| `/action surge` | `/action surge` | Action Surge — gain an additional action this turn (Fighter only, auto-resolved) |
 | `/done` | `/done` | End turn, advance initiative |
 
 **Anytime commands** (usable in or out of combat, no turn required):
@@ -468,6 +469,14 @@ The following standard actions are recognized by `/action` and resolved automati
 **Drop Prone:** `/action drop-prone` causes the character to voluntarily drop prone. Costs no action and no movement (per 5e RAW, dropping prone uses zero movement). Applies the prone condition. If the character is already prone, the command is rejected: "❌ You are already prone." Useful tactically to impose disadvantage on incoming ranged attacks beyond 5ft.
 
 **Hide:** `/action hide` is described in the Stealth & Hiding section.
+
+**Action Surge (Fighter):** `/action surge` grants an additional action on the current turn. Available to Fighters at level 2+ (1 use per short rest; 2 uses at level 17+). The command deducts one use from `feature_uses["action-surge"]` and resets `action_used = false` and `attacks_remaining` to the character's full attacks per action. Sets `action_surged = true` on the `turns` table (prevents using Action Surge twice in the same turn). The surge action can be used for any standard action: Attack (with full Extra Attack sequence), Cast a Spell, Dash, Disengage, Dodge, Help, Hide, or Use an Object. Action Surge does not grant an additional bonus action or reaction. Recharges on short rest (already handled by `recharge: "short"` in `feature_uses`). Rejected if: no uses remaining ("❌ No Action Surge uses remaining"), already surged this turn ("❌ Already used Action Surge this turn"), or character is not a Fighter ("❌ Action Surge is a Fighter feature").
+
+Combat log output:
+```
+⚡  Aria uses Action Surge! (1 use remaining)
+📋 Remaining: 🏃 15ft move | ⚔️ 2 attacks | 🎁 Bonus action | 🤚 Free interact
+```
 
 ### Free Object Interaction
 
@@ -928,7 +937,7 @@ Each command validates against remaining resources. If a player tries to use som
 1. **Turn start** — included in the ping message in `#your-turn`:
 ```
 🔔 @Aria — it's your turn!
-📋 Available: 🏃 30ft move | ⚔️ 2 attacks | 🎁 Bonus action | 🤚 Free interact | 🛡️ Reaction
+📋 Available: 🏃 30ft move | ⚔️ 2 attacks | 🎁 Bonus action | 🤚 Free interact | 🛡️ Reaction | ⚡ Action Surge (1)
 ```
 
 2. **After every command** — appended to the command's response in `#combat-log`:
@@ -941,7 +950,7 @@ Each command validates against remaining resources. If a player tries to use som
 📋 Remaining: 🏃 5ft move | ⚔️ 1 attack | 🎁 Bonus action | 🤚 Free interact
 ```
 
-Spent resources are omitted from the list. When nothing remains, the prompt shows: "📋 All actions spent — type `/done` to end your turn."
+Spent resources are omitted from the list. For Fighters with Action Surge available, `⚡ Action Surge (N)` is appended (where N = remaining uses). When nothing remains (and no Action Surge available), the prompt shows: "📋 All actions spent — type `/done` to end your turn."
 
 ### Combat Log Output Reference
 
@@ -1702,6 +1711,7 @@ turns
   free_interact_used BOOLEAN DEFAULT false
   attacks_remaining INTEGER NOT NULL DEFAULT 1
   has_disengaged  BOOLEAN DEFAULT false   -- tracks Disengage action for opportunity attack suppression
+  action_surged   BOOLEAN DEFAULT false   -- tracks Action Surge used this turn (prevents double surge)
   started_at      TIMESTAMPTZ
   timeout_at      TIMESTAMPTZ           -- started_at + campaign timeout setting
   completed_at    TIMESTAMPTZ
