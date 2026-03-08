@@ -108,15 +108,27 @@ The bot uses **plain text messages** for most output. For very large output (20+
 
 ## Player Input Model
 
-### Enemy Targeting
+### Combatant Targeting
 
-Enemies are assigned short stable IDs at the start of combat. Unique enemies get an abbreviated code; duplicates are numbered.
+All combatants — enemies and player characters — are assigned short stable IDs at the start of combat. The same ID system is used for all targeting: attacks, spells, shoves, and any command that takes a target.
+
+**Enemy IDs:** unique enemies get an abbreviated code; duplicates are numbered.
 
 ```
 Goblin #1  (G1)  [B4]  Uninjured
 Goblin #2  (G2)  [C6]  Bloodied
 Orc Shaman (OS)  [D5]  Uninjured
 ```
+
+**Player character IDs:** derived from character name initials. Duplicates are disambiguated by appending a number.
+
+```
+Aria       (AR)  [E3]  Uninjured
+Thorn      (TH)  [F4]  Bloodied
+Kael       (KA)  [G2]  Uninjured
+```
+
+All combatant IDs appear on map token labels and in `#initiative-tracker`, so players can target by sight. Examples: `/attack G1`, `/cast healing-word AR`, `/cast cure-wounds TH`.
 
 **Enemy HP is hidden from players.** The bot never reveals exact HP, AC, or stat block details in player-visible channels. Instead, enemies show a **descriptive health tier:**
 - **Uninjured** — 100% HP
@@ -125,7 +137,11 @@ Orc Shaman (OS)  [D5]  Uninjured
 - **Critical** — 1–24% HP
 - **Dying / Dead** — 0 HP
 
-The DM sees exact numbers in the dashboard. IDs are stable for the entire encounter — if G1 dies, G2 stays G2. Token labels on the map display these IDs so players can target by sight.
+**Player character HP** is visible to all players as exact values (allies can see each other's current and max HP in `#initiative-tracker` and on character tokens).
+
+**Dying vs dead on map:** dying characters (0 HP, making death saves) and dead characters use distinct token visual states — `dying` shows the token dimmed with a heartbeat icon; `dead` shows the token greyed out with an X. Both are clearly distinguishable at a glance.
+
+The DM sees exact numbers for all combatants in the dashboard. IDs are stable for the entire encounter — if G1 dies, G2 stays G2.
 
 ### Grid Movement
 
