@@ -113,7 +113,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ## Bonus Actions & Free Actions
 
-69. **Bonus action spell casting syntax.** Is `/cast healing-word AR` auto-detected as bonus action? Or must the player use `/bonus cast healing-word AR`?
+~~69. **Bonus action spell casting syntax.** Is `/cast healing-word AR` auto-detected as bonus action? Or must the player use `/bonus cast healing-word AR`?~~ — Resolved: Auto-detected. `/cast` checks `spells_ref.casting_time`; bonus action spells deduct the bonus action automatically. No `/bonus cast` syntax exists.
 70. **Monk ki abilities.** Flurry of Blows needs unarmed strikes, but there is no unarmed strike mechanic. Patient Defense and Step of the Wind — only Step of the Wind is mentioned.
 71. **Free action speaking.** Can players speak in-character during combat without using any action resource?
 

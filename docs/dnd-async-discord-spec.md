@@ -184,7 +184,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/move` | `/move D4` | Move to coordinate. Repeatable for split movement as long as total ≤ speed |
 | `/fly` | `/fly 30` | Set altitude in feet. Costs movement 1:1 |
 | `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` or `/attack G2 --twohanded` | Attack a target. One `/attack` per swing; backend tracks attacks remaining. `--twohanded` for versatile weapons |
-| `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting |
+| `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting. Bonus action spells (e.g., Healing Word) are auto-detected from `spells_ref.casting_time` — no need for `/bonus cast`; the system deducts the bonus action instead of the action |
 | `/bonus` | `/bonus cunning-action dash` or `/bonus cunning-action disengage` | Bonus action |
 | `/shove` | `/shove OS` | Shove a target (push or knock prone) |
 | `/interact` | `/interact draw longsword` | Object interaction (first per turn is free; see Free Object Interaction) |
@@ -276,9 +276,11 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 - **Casting blocked in Silence:** on `/cast`, the system checks if the caster's position overlaps an active Silence zone. If the spell has verbal or somatic components (`components.v = true` or `components.s = true`), the cast is rejected: "You cannot cast [spell] — you are inside a zone of Silence (requires verbal/somatic components)." Spells with only material components (no V or S) are unaffected.
 - Active effects (Fog Cloud zone, Spirit Guardians aura) tracked on the map
 
+**Bonus action spell auto-detection:** `/cast` is the only command needed for all spells. The system reads `spells_ref.casting_time`; if it is `'bonus action'`, the cast deducts the bonus action (`bonus_action_used = true`) instead of the action. The bot confirms in the response: "🎁 Cast as bonus action." There is no `/bonus cast` syntax.
+
 **Bonus action spell restriction (both directions):** Per 5e rules (Sage Advice Compendium), if a player casts any spell as a bonus action on their turn, the only other spell they can cast that turn is a cantrip with a casting time of 1 action — and this applies regardless of casting order:
 - **Bonus action spell first:** If a bonus action spell was cast (`bonus_action_spell_cast = true`), `/cast` with a non-cantrip action spell is rejected: "You already cast a bonus action spell this turn — you can only cast a cantrip with your action."
-- **Leveled action spell first:** If a leveled (non-cantrip) action spell was cast (`action_spell_cast = true`), `/bonus cast` or `/cast` with a bonus action spell is rejected: "You already cast a leveled spell with your action this turn — you cannot cast a bonus action spell."
+- **Leveled action spell first:** If a leveled (non-cantrip) action spell was cast (`action_spell_cast = true`), `/cast` with a bonus action spell is rejected: "You already cast a leveled spell with your action this turn — you cannot cast a bonus action spell."
 
 **Spell save DC:** calculated as `8 + proficiency_bonus + spellcasting_ability_modifier`. The spellcasting ability varies by class (referenced from `classes.spellcasting.ability`): INT for Wizards, WIS for Clerics/Druids/Rangers, CHA for Bards/Paladins/Sorcerers/Warlocks. Creature stat blocks store the DC directly in their abilities data.
 
