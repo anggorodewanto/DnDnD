@@ -63,7 +63,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 37. **Targeting unconscious allies.** How does another player target an unconscious ally with a healing spell? Is there a visual indicator on the map distinguishing dying from dead?
 38. **Medicine check to stabilize.** Listed as an option but `/check` has no target parameter. How do you target a specific dying creature with a skill check?
 39. **Spare the Dying.** Mentioned as a stabilization option but has no specific implementation detail. Is adjacency validated for touch range?
-40. **Massive damage / instant death.** What does the player see when their character is instantly killed? Is there a distinct message vs. dropping to 0 HP?
+~~40. **Massive damage / instant death.** What does the player see when their character is instantly killed? Is there a distinct message vs. dropping to 0 HP?~~ — Resolved: Added full combat log output formats for all death-related events. Instant death shows overflow damage vs max HP. Distinct messages for dropping to 0 HP (dying), instant death, death save results (including nat 1/nat 20), damage at 0 HP, and healing from 0 HP.
 
 ## Inventory & Equipment
 

@@ -925,6 +925,19 @@ Every auto-resolved action, auto-detected modifier, and auto-rejected command po
 ⏱️  Dodge on Aria has expired (start of next turn)
 ```
 
+**Dropping to 0 HP and death:**
+```
+💔  Aria drops to 0 HP — unconscious and dying (death saves begin next turn)
+💀  Aria is killed outright! (26 overflow damage ≥ 24 max HP — instant death, no death saves)
+💀  Aria fails 3 death saves — dead
+🎲  Aria rolls death save — 14 — Success (2S / 1F)
+🎲  Aria rolls death save — 🎯 NAT 20 — Aria regains 1 HP and is conscious! (tallies reset)
+🎲  Aria rolls death save — 💥 NAT 1 — 2 failures! (1S / 3F) — dead
+⚠️  Aria takes damage at 0 HP — 1 death save failure (1S / 2F)
+⚠️  Aria takes a critical hit at 0 HP — 2 death save failures (1S / 3F) — dead
+💚  Aria receives 7 HP of healing — conscious at 7 HP (death save tallies reset)
+```
+
 **Concentration:**
 ```
 🔮  Aria loses concentration on Bless (incapacitated — stunned)
