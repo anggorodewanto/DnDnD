@@ -14,7 +14,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ## Turn Flow & Action Economy
 
-6. **No explicit stand/prone toggle.** Standing from prone auto-deducts movement on `/move`, but can a player choose to stay prone? How do they intentionally drop prone?
+~~6. **No explicit stand/prone toggle.** Standing from prone auto-deducts movement on `/move`, but can a player choose to stay prone? How do they intentionally drop prone?~~ — Resolved: Added `/action stand` (costs half movement, no action) and `/action drop-prone` (no cost) as auto-resolved commands. Staying prone is the default; standing can be explicit or implicit via `/move`.
 7. **No crawl mechanic.** Crawling while prone is mentioned (double cost) but there is no command to crawl vs. stand-then-move.
 ~~8. **Disengage is missing from the command table.** Referenced under Opportunity Attacks and Cunning Action but never formally listed. Players would not discover it.~~ — Resolved: Added `/action disengage` to command table and Standard Actions section. Added `/bonus cunning-action disengage` example to bonus action row for Rogue discoverability.
 ~~9. **`/done` has no safety net.** If a player has unused attacks or bonus actions and types `/done`, is there a confirmation prompt, or does the turn just end?~~ — Resolved: `/done` shows an ephemeral confirmation prompt listing unused resources (action, bonus action, remaining attacks) before ending the turn. If all resources are spent, `/done` ends immediately with no prompt.

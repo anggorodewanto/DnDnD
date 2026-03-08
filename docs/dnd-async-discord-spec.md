@@ -236,6 +236,8 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/action ready` | `/action ready I attack when the goblin moves past me` | Ready — hold action for a trigger (see Reactions) |
 | `/action hide` | `/action hide` | Hide — Stealth vs passive Perception (auto-resolved) |
 | `/action escape` | `/action escape` or `/action escape --acrobatics` | Escape a grapple — contested check (auto-resolved) |
+| `/action stand` | `/action stand` | Stand up from prone — costs half your movement speed, no action (auto-resolved) |
+| `/action drop-prone` | `/action drop-prone` | Drop prone voluntarily — no action or movement cost (auto-resolved) |
 | `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
 | `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent (usable any time) — routed to `#dm-queue` |
 | `/deathsave` | `/deathsave` | Roll a death saving throw (only at 0 HP) |
@@ -461,6 +463,10 @@ The following standard actions are recognized by `/action` and resolved automati
 
 **Escape:** `/action escape` allows a grappled (or creature-restrained) character to break free. Costs the action (`action_used = true`). System runs a contested check: the escaping character's Athletics (STR) or Acrobatics (DEX) vs the grappler's Athletics (STR). By default the system uses whichever of the character's two modifiers is higher; use `--athletics` or `--acrobatics` to override. On success, the grappled condition is removed and speed is restored. On failure, the character remains grappled and the action is spent. Rejected if the character is not currently grappled or restrained by a creature.
 
+**Stand:** `/action stand` allows a prone character to stand up. Costs half the character's maximum movement speed (deducted from remaining movement for the turn), but does not cost the action. If the character has insufficient remaining movement, the command is rejected: "❌ Not enough movement to stand — requires 15ft, 10ft remaining." Standing removes the prone condition. If the character is not prone, the command is rejected: "❌ You are not prone." Standing can also happen implicitly when a prone character issues `/move` (existing behavior), but `/action stand` allows standing without moving.
+
+**Drop Prone:** `/action drop-prone` causes the character to voluntarily drop prone. Costs no action and no movement (per 5e RAW, dropping prone uses zero movement). Applies the prone condition. If the character is already prone, the command is rejected: "❌ You are already prone." Useful tactically to impose disadvantage on incoming ranged attacks beyond 5ft.
+
 **Hide:** `/action hide` is described in the Stealth & Hiding section.
 
 ### Free Object Interaction
@@ -532,7 +538,7 @@ Auto-applied when `/attack` is processed. The system checks conditions on both t
 
 When a grappled or restrained condition is applied, the combatant's effective speed is set to 0. `/move` commands are rejected with an explanation (e.g., "You can't move — you are grappled"). Speed restores when the condition is removed. For frightened creatures, `/move` commands that would decrease distance to the fear source are rejected. The fear source is tracked as metadata on the frightened condition (`{source_combatant_id}`).
 
-Standing from prone: when a prone combatant issues `/move`, the system deducts half their speed before calculating remaining movement. If insufficient movement remains, standing is still allowed but no further movement is possible.
+Standing from prone: a prone combatant can stand explicitly via `/action stand` (costs half their max speed from remaining movement, no action cost) or implicitly when issuing `/move` (half speed deducted before calculating remaining movement). If insufficient movement remains for `/action stand`, the command is rejected. If insufficient movement remains when standing via `/move`, standing is still allowed but no further movement is possible. Dropping prone voluntarily is done via `/action drop-prone` (no movement or action cost).
 
 **Action blocking:**
 
