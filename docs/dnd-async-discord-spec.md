@@ -602,6 +602,11 @@ The system enforces armor-related penalties automatically during combat.
 **Stealth disadvantage:**
 - Armor with `stealth_disadv: true` (e.g., chain mail, plate) automatically applies disadvantage to Stealth checks
 - Applied when the character uses `/action hide` or rolls `/check stealth`
+
+**AC calculation:**
+- **Standard (armor-based):** `ac_formula` is NULL. AC is computed from `equipped_armor` using the armor table (`ac_base` + DEX modifier, capped by `ac_dex_max` for medium armor, ignored for heavy armor) + 2 if a shield is in `equipped_off_hand`. The `ac` field is updated when equipment changes.
+- **Unarmored Defense / Natural Armor:** `ac_formula` is set (e.g., `"10 + DEX + WIS"` for Monk, `"10 + DEX + CON"` for Barbarian, `"13 + DEX"` for Lizardfolk natural armor). The system evaluates the formula against current `ability_scores` and updates the `ac` field whenever ability scores change (ASI, magic item, effect). If the character equips armor, standard armor AC is used instead — Unarmored Defense only applies when no armor is worn (shield is allowed). The system takes the higher of formula AC and armor AC if armor is equipped, matching 5e rules.
+- **`modify_ac` effects** (Shield of Faith, Shield spell, etc.) are applied on top of the base AC at resolution time, not baked into the cached `ac` value.
 - Stacks with other sources of disadvantage per standard 5e rules (multiple disadvantage sources still result in a single disadvantage)
 
 ---
@@ -1344,7 +1349,10 @@ characters
   hp_max          INTEGER NOT NULL
   hp_current      INTEGER NOT NULL
   temp_hp         INTEGER NOT NULL DEFAULT 0
-  ac              INTEGER NOT NULL
+  ac              INTEGER NOT NULL       -- effective/cached AC value
+  ac_formula      TEXT                   -- NULL = standard armor-based AC; set for Unarmored Defense / natural armor
+                                         -- e.g., "10 + DEX + WIS" (Monk), "10 + DEX + CON" (Barbarian), "13 + DEX" (Lizardfolk)
+                                         -- when non-null, system recalculates `ac` on ability score changes
   speed_ft        INTEGER NOT NULL DEFAULT 30
   proficiency_bonus INTEGER NOT NULL
   equipped_main_hand TEXT                -- FK → weapons (primary weapon)
