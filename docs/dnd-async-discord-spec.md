@@ -979,7 +979,11 @@ Every auto-resolved action, auto-detected modifier, and auto-rejected command po
 ```
 
 **Ending a turn:**
-- **Explicit:** player sends `/done`
+- **Explicit:** player sends `/done`. If the player has unused resources (action, bonus action, or remaining attacks), the system shows an ephemeral confirmation prompt before ending the turn:
+  ```
+  ⚠️ You still have: ⚔️ 1 attack | 🎁 Bonus action. End turn? [✅ End Turn] [❌ Cancel]
+  ```
+  If all resources are spent, `/done` ends the turn immediately with no prompt.
 - **DM override:** DM can end any turn from the dashboard
 - **Timeout:** remaining unused actions are forfeited (see Turn Timeout below)
 
