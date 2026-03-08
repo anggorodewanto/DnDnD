@@ -239,6 +239,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
 | `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent (usable any time) — routed to `#dm-queue` |
 | `/deathsave` | `/deathsave` | Roll a death saving throw (only at 0 HP) |
+| `/command` | `/command FAM attack G1` or `/command SW attack G2` | Issue a command to a summoned creature you control (see Summoned Creatures & Companions) |
 | `/done` | `/done` | End turn, advance initiative |
 
 **Anytime commands** (usable in or out of combat, no turn required):
@@ -1083,6 +1084,60 @@ Each enemy takes its own turn in initiative order. The DM resolves enemy turns t
 
 **Pending reactions:** if a player has a pre-declared `/reaction` that triggers during the enemy turn, the dashboard surfaces it to the DM before confirming that step. DM resolves the reaction inline.
 
+### Summoned Creatures & Companions
+
+Summoned creatures (familiars, animal companions, Spiritual Weapon, conjured creatures, animated undead, etc.) are **player-controlled** via the `/command` slash command. The summoning player issues actions on behalf of their creatures.
+
+**Summoning flow:**
+1. Player casts a summoning spell (e.g., `/cast find-familiar`, `/cast spiritual-weapon D5`, `/cast conjure-animals`)
+2. System creates combatant entries for summoned creatures using reference stat blocks. Each gets a short ID (e.g., `FAM`, `SW`, `WF1`–`WF8` for wolves)
+3. Summoned creatures appear on the initiative tracker and map
+
+**Initiative placement:**
+- Creatures with their own turns (familiars, conjured animals, animated dead) roll initiative and act on their own turn in the initiative order
+- Spell effects that act on the caster's turn (Spiritual Weapon, Flaming Sphere) are commanded during the caster's turn using `/command`
+- Companion creatures (Ranger's companion) act on the player's turn immediately after the player's actions
+
+**`/command` syntax:**
+```
+/command [creature-id] [action] [target?] [flags?]
+```
+
+Examples:
+```
+/command FAM help Thorn G1     -- familiar uses Help action
+/command SW attack G2           -- Spiritual Weapon attacks target
+/command WF1 attack G3          -- wolf #1 attacks goblin
+/command FAM move C5            -- familiar moves to C5
+/command FAM done               -- end familiar's turn
+```
+
+**Validation:**
+- `/command` only works for creatures the player summoned (`summoner_id` matches)
+- Actions are validated against the creature's stat block (available attacks, movement speed, abilities)
+- Turn resources (action, movement, bonus action) are tracked per creature, same as any combatant
+- The summoning player must be the one issuing `/command` — other players cannot control another player's summons
+
+**Turn flow for summoned creatures with their own initiative:**
+1. When the summoned creature's turn comes up, the summoning player is pinged in `#your-turn`: "🔔 @PlayerName — your Wolf #1 (WF1)'s turn!"
+2. Player issues `/command WF1 move ...`, `/command WF1 attack ...`, etc.
+3. Player types `/command WF1 done` to end the creature's turn
+4. Same timeout rules apply — if the player doesn't act for their summoned creature, the turn is skipped
+
+**Dismissal and death:**
+- Summoned creatures that drop to 0 HP are removed from the encounter (no death saves)
+- Concentration-based summons (Conjure Animals, Animate Dead while active) are dismissed when concentration ends
+- Player can dismiss voluntarily: `/command FAM dismiss`
+- Dismissed/dead creatures are removed from initiative and map
+
+**Combat log output:**
+```
+🐾  Aria's Owl (FAM) uses Help on Thorn targeting Goblin #1
+⚔️  Kael's Spiritual Weapon (SW) attacks Goblin #2 — 🎲 17 vs AC 13 — Hit! 9 force damage
+🐺  Aria's Wolf #1 (WF1) attacks Goblin #3 — 🎲 12 vs AC 13 — Miss!
+💨  Aria dismisses Owl (FAM)
+```
+
 ### Turn Timeout & AFK Handling
 
 Turn timeout: **24 hours**, DM-configurable per campaign (1h–72h range).
@@ -1624,6 +1679,7 @@ combatants
   is_visible      BOOLEAN DEFAULT true   -- hidden enemies (ambush, stealth)
   is_alive        BOOLEAN DEFAULT true
   is_npc          BOOLEAN DEFAULT false  -- DM-controlled ally vs enemy
+  summoner_id     UUID FK → combatants   -- nullable; links summoned creature to summoning player's combatant
 
 turns
   id              UUID PK
@@ -1840,7 +1896,7 @@ conditions_ref
 
 **Included:**
 - Discord bot with full channel structure (`/setup` auto-creates)
-- All slash commands: `/move`, `/attack`, `/cast`, `/bonus`, `/shove`, `/fly`, `/interact`, `/action`, `/reaction`, `/deathsave`, `/done`, `/equip`, `/status`, `/inventory`, `/use`, `/give`, `/loot`, `/register`, `/check`, `/save`, `/rest`
+- All slash commands: `/move`, `/attack`, `/cast`, `/bonus`, `/shove`, `/fly`, `/interact`, `/action`, `/reaction`, `/deathsave`, `/done`, `/command`, `/equip`, `/status`, `/inventory`, `/use`, `/give`, `/loot`, `/register`, `/check`, `/save`, `/rest`
 - Combat state: HP, position, turn order, conditions, death saves, spell slots, concentration
 - Turn timeout with escalating pings and auto-skip
 - Enemy/NPC turns with smart-default suggestions for DM
@@ -1859,6 +1915,7 @@ conditions_ref
 - Condition/spell duration auto-expiration
 - Equipment enforcement (armor STR requirements, stealth disadvantage, free object interaction limits)
 - Standard actions: Dash, Disengage, Dodge, Escape, Help, Hide, Ready (auto-resolved where deterministic)
+- Summoned creatures & companions: player-controlled via `/command`, initiative tracking, dismissal
 - Inventory management: `/inventory`, `/use`, `/give`, `/loot`, gold tracking, consumable auto-resolution, post-combat loot pool
 
 **Future phases:**
