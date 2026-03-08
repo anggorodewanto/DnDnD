@@ -319,6 +319,16 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 
 **Auto-crit:** melee attacks within 5ft against paralyzed or unconscious targets are automatic critical hits (per 5e rules) — the attack auto-hits and damage dice are doubled, same as a nat 20.
 
+**Divine Smite (Paladin):** after a melee weapon attack hits, if the Paladin has spell slots remaining, the bot posts an ephemeral prompt with Discord buttons: "⚡ Divine Smite? [1st] [2nd] [3rd] [No]" — only showing slot levels the Paladin currently has available. The Paladin picks a slot level or declines. On selection:
+- The chosen spell slot is consumed (`spell_slots` decremented)
+- Smite damage is `2d8 radiant` at 1st level, +1d8 per slot level above 1st (max 5d8 at 4th-level slot)
+- +1d8 bonus damage if the target is undead or fiend (auto-detected from `creatures.creature_type`)
+- On a critical hit, all smite dice are doubled (the prompt notes: "🎯 Critical — smite dice doubled!")
+- Smite damage is appended to the original attack's combat log entry
+- If the Paladin declines or the prompt times out (30 seconds), no smite is applied and the turn continues
+- The prompt only appears on melee weapon hits — not ranged attacks, not misses
+- Driven by the `resource_on_hit` effect type in the Feature Effect System, so future on-hit features (e.g., Battlemaster maneuvers) follow the same prompt pattern
+
 ### Spell Casting Details
 
 **AoE targeting:** `/cast fireball D5` targets a coordinate. Backend calculates affected creatures by shape/radius from spell data (`{ shape: "sphere", radius_ft: 20 }`, `{ shape: "cone", length_ft: 15 }`, `{ shape: "line", length_ft: 60, width_ft: 5 }`). Cones originate from the caster toward the target. All affected creatures (including allies) listed in `#combat-log`.
@@ -1001,6 +1011,21 @@ Every auto-resolved action, auto-detected modifier, and auto-rejected command po
     → Damage: 18 slashing (doubled dice: 2d8 + 5)
 ⚔️  Aria attacks Goblin #1 with Longsword (auto-crit — target paralyzed within 5ft)
     → Damage: 18 slashing (doubled dice: 2d8 + 5)
+```
+
+**Divine Smite (on-hit prompt result):**
+```
+⚔️  Aria attacks Goblin #1 with Longsword
+    → Roll to hit: 17 (12 + 5) — HIT
+    → Damage: 8 slashing (1d8 + 5)
+    ⚡ Divine Smite (2nd-level slot) — 3d8 radiant: 14
+    → Total: 22 damage — Goblin #1 is now Bloodied
+
+⚔️  Aria attacks Zombie #1 with Warhammer
+    → Roll to hit: 🎯 NAT 20 — CRITICAL HIT!
+    → Damage: 19 bludgeoning (doubled dice: 2d8 + 4)
+    ⚡ Divine Smite (1st-level slot, crit) — 4d8 radiant (doubled) +2d8 vs undead: 28
+    → Total: 47 damage — Zombie #1 is destroyed!
 ```
 
 **Auto-detected saving throw modifiers:**
