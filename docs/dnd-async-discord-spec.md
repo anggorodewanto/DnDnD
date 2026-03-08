@@ -302,12 +302,14 @@ Players pre-declare reaction intent using `/reaction`. The DM resolves all react
 - `/reaction Shield if I get hit`
 - `/reaction OA if goblin moves away`
 - `/reaction Counterspell if enemy casts`
-- Declarations persist until used, cancelled (`/reaction cancel`), or the encounter ends
+- Players can have **multiple active declarations** simultaneously (e.g., Shield and Counterspell both active)
+- Declarations persist until used, cancelled (`/reaction cancel [description]` to cancel a specific one, `/reaction cancel-all` to clear all), or the encounter ends
 - One reaction per round per player (per 5e rules) — tracked by `turns.reaction_used`. Reaction resets at the start of the creature's turn (not the start of the round), matching 5e rules and ensuring correct sequencing in async play
+- When multiple declarations trigger from the same event (e.g., enemy casts a spell at you — both Shield and Counterspell could fire), the DM chooses which to surface and resolve. After one fires, `reaction_used = true` and remaining declarations stay active but dormant until the reaction resets next round.
 
 **DM workflow:**
-1. DM sees declarations in `#dm-queue` or the dashboard
-2. When the trigger occurs during enemy/NPC turns, DM decides whether it fires
+1. DM sees all active declarations in the dashboard's **Active Reactions Panel** (see DM Dashboard) — grouped by combatant, showing declaration text and status
+2. When the trigger occurs during enemy/NPC turns, DM decides whether it fires (and which one, if multiple match)
 3. DM resolves in the dashboard (rolls, applies effects) and posts the result
 4. System marks the player's reaction as spent for the round
 
@@ -1278,6 +1280,7 @@ The DM manages everything through a web app — they never type raw commands int
 - **HP & Condition Tracker** — click to apply damage, healing, and status conditions
 - **Turn Queue** — shows initiative order; "End Turn" auto-advances and pings next player
 - **Action Resolver** — view `#dm-queue` items, apply outcomes with a click
+- **Active Reactions Panel** — always-visible sidebar showing all active `/reaction` declarations grouped by combatant. Each entry shows the player name, declaration text, and status (active / used this round / dormant). When the DM is resolving an enemy turn, matching declarations are highlighted. DM clicks to resolve or dismiss. Consumed reactions are greyed out until the creature's next turn resets them.
 - **Stat Block Library** — preloaded monster stat blocks, reusable across encounters
 - **Asset Library** — maps, token images, tilesets, custom monsters
 - **Map Editor** — create and edit battle maps (see Map System)

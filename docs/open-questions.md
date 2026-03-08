@@ -52,7 +52,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ## Reactions
 
 31. **No way to view active declarations.** Declarations persist until used, cancelled, or encounter ends. Can a player list their current active declarations?
-32. **Multiple simultaneous declarations.** Can a player have Shield AND Counterspell declared? If both trigger in the same round (only one reaction allowed), which fires?
+~~32. **Multiple simultaneous declarations.** Can a player have Shield AND Counterspell declared? If both trigger in the same round (only one reaction allowed), which fires?~~ — Resolved: Multiple active declarations allowed. When multiple trigger from the same event, DM picks which fires via the Active Reactions Panel in the dashboard. After one fires, rest stay dormant until reaction resets next round.
 33. **Freeform declaration ambiguity.** `/reaction OA if goblin moves away` — which goblin? Declarations are freeform text; there is no structured targeting.
 ~~34. **OA prompts stall combat.** The system prompts players for opportunity attacks when an enemy moves away. Does combat pause until the player responds? What is the timeout? This conflicts with the "zero stalling" design goal.~~ — Resolved: Queue-and-continue model. Movement is not paused; hostile has until end-of-round to take the OA. If OA drops target to 0 HP, system notifies DM to retroactively correct position. No auto-invalidation.
 35. **Readied action reminders.** A readied action could persist for days of real time in async play. Is the player reminded it is still held?
