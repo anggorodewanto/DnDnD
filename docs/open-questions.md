@@ -93,7 +93,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ~~56. **Enemy AC exposure contradiction.** The spec says "AC is hidden" but the miss example shows "11 (6 + 5) vs AC 13 — MISS" revealing the AC. Which is correct?~~ — Resolved: Enemy AC is hidden. Attack results show only Hit/Miss without revealing the target's AC. Fixed the miss example to omit AC.
 ~~57. **Character card contents undefined.** `#character-cards` is mentioned but its contents are never specified. What does it show?~~ — Resolved: Defined character card contents in spec. Each card shows: name, short ID, level, race, class, HP, AC, speed, ability scores, equipped weapons, spell slots, active conditions with duration, concentration, temp HP, exhaustion, and gold. Auto-updated on state changes.
-58. **Allied HP visibility.** Enemy HP is hidden (health tiers). Can players see exact HP for their allies?
+~~58. **Allied HP visibility.** Enemy HP is hidden (health tiers). Can players see exact HP for their allies?~~ — Resolved: Already addressed in spec. Player character HP is visible to all players as exact values in `#initiative-tracker`, character tokens, and `#character-cards`. Allied HP and conditions are public information.
 59. **Creature identification.** Do players see creature names ("Goblin") or just token labels ("G1")?
 60. **Hidden enemy detection.** Enemies with `is_visible = false` are hidden. Beyond passive Perception, how does a player actively search for hidden enemies?
 
