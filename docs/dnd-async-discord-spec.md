@@ -433,6 +433,14 @@ When a combatant with one of these conditions attempts `/attack`, `/cast`, `/act
 
 Charmed creatures can't attack the charmer or target them with harmful abilities. `/attack` and `/cast` (harmful) commands targeting the charm source are rejected. The charm source is tracked as metadata on the charmed condition (`{source_combatant_id}`). Non-harmful interactions with the charmer are still allowed.
 
+**Invisible condition:**
+
+The Invisible condition is a trackable condition in `conditions_ref` (id: `"invisible"`), distinct from the `is_visible` stealth flag:
+- **Invisible condition** (from spells like Invisibility, Greater Invisibility, Gloom Stalker's Umbral Sight): creature is magically unseen. Grants advantage on own attack rolls, disadvantage on attacks against. Spells requiring the caster to "see the target" cannot target an Invisible creature. Area-of-effect spells still affect them (no targeting required). Enemies may still know the creature's location from noise or tracks — the creature is unseen, not undetectable.
+- **`is_visible = false`** (from `/action hide`): creature is hidden via Stealth. Position is concealed from the map. Broken by attacking, making noise, or being detected.
+- **Interaction:** a creature can be Invisible but not hidden (enemies hear it and know its square, but can't see it — attacks still have disadvantage). A creature can be hidden but not Invisible (mundane stealth). Both can be active simultaneously (Invisible + Hide = unseen and unlocated).
+- **Breaking Invisibility:** the Invisibility spell (non-Greater) ends when the creature attacks or casts a spell. The system auto-removes the Invisible condition after `/attack` or `/cast` if the source spell is "Invisibility" (tracked via `source_combatant_id` and source spell metadata on the condition). Greater Invisibility does not break on attack — it only expires via duration or concentration loss.
+
 ### Duration Tracking & Auto-Expiration
 
 Conditions and spell effects with limited durations are tracked via `duration_rounds` and `started_round` on each condition entry. At specific trigger points, the system checks for expired effects:
