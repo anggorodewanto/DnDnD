@@ -157,7 +157,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ## Miscellaneous
 
-98. **Saving throw modifiers.** When prompted to `/save dex`, are all bonuses (proficiency, Paladin aura, magic items) automatically included?
+~~98. **Saving throw modifiers.** When prompted to `/save dex`, are all bonuses (proficiency, Paladin aura, magic items) automatically included?~~ — Resolved: Yes, all modifiers auto-included (proficiency, ability mod, feature bonuses, spell effects, conditions, magic items). Combat log shows full breakdown so players can verify the math.
 99. **Magic items.** Not mentioned at all — no attunement, no magic weapon bonuses, no tracking.
 100. **Carrying capacity.** Not mentioned. Can a player carry 500 arrows?
 101. **Languages.** In the data model but no mechanic for understanding or not understanding speech.

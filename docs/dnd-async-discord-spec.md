@@ -234,6 +234,12 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 
 Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) prompt affected players to roll via `/save` — the bot pings them in `#your-turn`. Enemy saves are rolled by the DM from the dashboard.
 
+**Save modifier auto-calculation:** `/save` automatically includes all applicable modifiers — proficiency (if proficient in that save), ability modifier, feature bonuses (e.g., Paladin's Aura of Protection via `modify_save`), spell effects (e.g., Bless +1d4), condition effects (e.g., Exhaustion 3 disadvantage, Dodge advantage on DEX saves), and magic item bonuses. The combat log shows a full breakdown so players can verify:
+```
+🎲  Aria rolls DEX save — 18 (11 + 2 DEX + 3 prof + 2 Aura) vs DC 15 — Success!
+🎲  Kael rolls WIS save — 9 (7 + 2 WIS) vs DC 14 — Fail!
+```
+
 **Utility commands** (usable any time):
 
 | Command | Example | Description |
