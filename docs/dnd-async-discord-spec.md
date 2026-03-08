@@ -339,6 +339,16 @@ Players pre-declare reaction intent using `/reaction`. The DM resolves all react
 3. DM resolves in the dashboard (rolls, applies effects) and posts the result
 4. System marks the player's reaction as spent for the round
 
+**Counterspell resolution:** when a Counterspell declaration triggers (an enemy casts a spell within 60ft), the system follows a two-step flow that does not stall combat:
+
+1. **DM triggers Counterspell** from the Active Reactions Panel. The system pings the declaring player in `#your-turn` with: "Enemy is casting **[Spell Name]**. Use Counterspell? Pick a slot level:" followed by Discord buttons `[3] [4] [5] … [max available]` and `[Pass]`.
+   - The spell **name** is revealed, but the **cast level** is not — preserving the strategic tension of slot selection.
+   - If the player picks Pass, the enemy spell resolves normally and the reaction is not consumed.
+2. **If the player's Counterspell slot level ≥ enemy cast level:** the enemy spell is automatically countered. Posted to `#combat-log`: "[Player] counters [Enemy]'s [Spell]!"
+3. **If the player's Counterspell slot level < enemy cast level:** the system immediately prompts the player to roll an ability check: "Your Counterspell must overcome a level [N] spell — roll `/check spellcasting`" (DC = 10 + enemy spell level). The player rolls using their spellcasting ability modifier (no proficiency — per 5e RAW). Success counters the spell; failure means the enemy spell resolves and the Counterspell slot is still expended.
+   - The enemy cast level is revealed only at this step — after the player has committed their slot.
+4. **Async timing:** the enemy turn continues while the Counterspell prompt is pending. If the Counterspell succeeds, the DM retroactively removes the spell's effects (same pattern as opportunity attacks). If the player does not respond within the turn timeout, the Counterspell is forfeited and the enemy spell resolves.
+
 **Readied Actions:** a player can use their action to ready a response to a trigger via `/action ready [description]` (e.g., `/action ready I attack when the goblin moves past me`). This costs the action for the turn. When the trigger occurs, the readied action fires using the creature's reaction (`reaction_used = true`). If the trigger never occurs before the creature's next turn, the readied action is lost. For readied spells: the spell slot is expended when readying (not when releasing), and the caster must hold concentration on the readied spell until the trigger fires — if concentration is broken, the spell is lost along with the slot. Readied actions follow the same DM-resolution flow as other `/reaction` declarations.
 
 **System-generated reaction triggers:** opportunity attacks (see Opportunity Attacks section) bypass the `/reaction` declaration flow — the system auto-detects and prompts directly. Unlike other reactions, OA prompts use a queue-and-continue model: movement is not paused, and the hostile has until end-of-round to respond (see Opportunity Attacks).

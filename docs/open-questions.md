@@ -36,7 +36,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 20. **Material components with gold cost.** The spec tracks `{v, s, m}` but never addresses consumed components or costly material components (e.g., Revivify's 300gp diamond). Is a focus/component pouch assumed?
 21. **No `/prepare` command.** How does a Cleric/Druid/Paladin change prepared spells after a long rest? Dashboard-only?
-22. **Counterspell timing in async.** Does the player see what spell is being cast before deciding to Counterspell? Do they know the level?
+~~22. **Counterspell timing in async.** Does the player see what spell is being cast before deciding to Counterspell? Do they know the level?~~ — Resolved: Spell name is revealed but cast level is hidden. Player picks Counterspell slot via buttons. If slot < cast level, player rolls a spellcasting ability check (DC 10 + spell level). Enemy turn continues async; success retroactively removes spell effects.
 23. **Spell targeting syntax.** For single-target beneficial spells (Healing Word, Bless), can a player target allies by name or short ID?
 24. **Warlock spell slots.** Warlocks have unique slots (fewer, all same level, recharge on short rest). The `spell_slots` JSONB and rest mechanics do not explicitly address this.
 ~~25. **Bonus action spell restriction — reverse direction.** The spec enforces "bonus action spell = only cantrip with action." But per 5e, casting a leveled action spell also prevents bonus action spells. Is this enforced?~~ — Resolved: Both directions enforced. Added `action_spell_cast` boolean to turns table. Casting a leveled action spell blocks subsequent bonus action spells, and vice versa.
