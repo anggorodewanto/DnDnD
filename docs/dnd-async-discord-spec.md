@@ -228,7 +228,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 
 | Command | Example | Description |
 |---|---|---|
-| `/check` | `/check perception` or `/check athletics --adv` | Skill/ability check (DM-prompted or player-initiated) |
+| `/check` | `/check perception` or `/check athletics --adv` or `/check medicine AR` | Skill/ability check (DM-prompted or player-initiated). Optional target for targeted checks (e.g., stabilization) |
 | `/save` | `/save dex` | Saving throw (DM-prompted) |
 | `/rest` | `/rest short` or `/rest long` | Initiate a rest (DM must approve, not during combat) |
 
@@ -1077,6 +1077,8 @@ When a character drops to 0 HP, they fall **unconscious** and begin making death
 
 **Stabilization:**
 - 3 death save successes, Medicine check (DC 10), or Spare the Dying cantrip
+- **Medicine check:** `/check medicine AR` — the target parameter specifies the dying creature. System validates: target must be at 0 HP (dying), and the checker must be adjacent (within 5ft). Costs the character's action (`action_used = true`). On success (DC 10), the target is stabilized. On failure, the target's death save state is unchanged (no penalty)
+- **Spare the Dying:** `/cast spare-the-dying AR` — uses the standard `/cast` flow. System validates touch range (adjacent, within 5ft). Costs the action (cantrip with casting time of 1 action). Auto-succeeds with no roll — the target is stabilized immediately. Grave Domain Clerics can cast at 30ft range (handled via Feature Effect System `modify_range`)
 - Stable characters remain unconscious at 0 HP, no further death saves
 - Regain 1 HP after 1d4 hours (post-combat only)
 
@@ -1306,7 +1308,10 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
 /check athletics --adv      ← roll with advantage
 /check stealth --disadv     ← roll with disadvantage
 /check dexterity            ← raw ability check (no skill proficiency)
+/check medicine AR          ← targeted check (e.g., stabilize a dying ally)
 ```
+
+**Targeted checks:** some checks require a target, specified as a combatant ID after the skill name. The system validates adjacency and target state as appropriate. During combat, targeted checks that require physical contact (e.g., Medicine to stabilize) cost the character's action.
 
 **DM-prompted:** DM requests a check from the dashboard, pinging the player in `#your-turn`.
 
