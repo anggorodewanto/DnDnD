@@ -87,7 +87,7 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 
 🎒 REFERENCE
   #character-cards      ← auto-updated character info per player
-  #dm-queue             ← freeform player actions awaiting DM resolution
+  #dm-queue             ← bot pings DM for every event requiring their attention
 ```
 
 ### Bot Permissions
@@ -1460,6 +1460,26 @@ Narrative-driven — no dedicated mechanical systems needed in MVP:
 - **Travel:** DM narrates distance and terrain. Random encounters DM-triggered. Forced march / exhaustion checks via `/check constitution`.
 
 `#dm-queue` serves as the universal escape hatch for anything that doesn't map to a command.
+
+### DM Notification System
+
+`#dm-queue` is the DM's single notification hub. The bot posts a structured message and pings the DM (or a configurable `@dm` role) for **every event requiring DM attention**:
+
+| Event | Trigger | Example message |
+|---|---|---|
+| Freeform action | Player uses `/action` with non-auto-resolvable text | **🎭 Action** — Thorn: "flip the table" |
+| Reaction declaration | Player uses `/reaction` | **⚡ Reaction** — Aria: "Shield if I get hit" |
+| Rest request | Player uses `/rest short` or `/rest long` | **🛏️ Rest** — Kael requests a short rest |
+| Skill check narration | Auto-resolved `/check` completes | **🎲 Check** — Thorn: Athletics 18 (awaiting narration) |
+| Consumable without effect | Player uses `/use` on item without auto-resolve | **🧪 Item** — Aria uses Ball Bearings |
+| Enemy turn ready | Initiative advances to a DM-controlled combatant | **⚔️ Enemy Turn** — Goblin G2 is up |
+| Narrative teleport | Teleportation spell beyond current map | **✨ Spell** — Kael casts Teleport (narrative resolution) |
+
+Each notification includes the player name, action context, and a **"Resolve →"** link to the relevant dashboard panel.
+
+**Resolved items** are edited by the bot to show ✅ and a brief outcome summary, so the DM can scan `#dm-queue` history and see what's been handled.
+
+**DM-only channel:** `#dm-queue` is not visible to players. The DM configures Discord notifications for this channel to match their preferred responsiveness (push notifications, desktop alerts, etc.).
 
 ---
 

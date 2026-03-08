@@ -87,7 +87,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 52. **No in-character channel for players.** `#the-story` is DM-write-only. `#player-chat` is OOC. Where do players write in-character?
 53. **No private DM whisper.** How does a player secretly communicate with the DM (e.g., "I want to steal from the party")?
 54. **No private player-to-player communication.** Characters cannot whisper to each other without the whole party seeing.
-55. **DM notification workflow.** After skill checks and freeform actions, "DM narrates outcome in `#the-story`" — but how is the DM notified? A queue item?
+~~55. **DM notification workflow.** After skill checks and freeform actions, "DM narrates outcome in `#the-story`" — but how is the DM notified? A queue item?~~ — Resolved: `#dm-queue` expanded to be the DM's single notification hub. Bot posts structured messages and pings DM for every event requiring attention (freeform actions, rest requests, skill check narrations, enemy turns, reaction declarations, unresolved consumables). Each notification includes context and a dashboard link. Resolved items are marked ✅.
 
 ## Information Asymmetry & Visibility
 
