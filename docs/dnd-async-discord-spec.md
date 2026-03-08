@@ -1249,10 +1249,11 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
 **Short Rest** (`/rest short`):
 1. Player types `/rest short` → posts to `#dm-queue`
 2. DM approves from dashboard
-3. System prompts the player to spend hit dice: `/spend-hd 2` (spend 2 hit dice)
+3. System prompts the player with a Discord button menu to spend hit dice:
+   - Bot posts: "You have **N** hit dice remaining (d**X**). Spend how many?" with buttons `[0] [1] [2] … [N]`
    - Each hit die heals `1dX + CON modifier` (X = class hit die size)
    - System rolls and applies healing automatically, capped at `hp_max`
-   - Player can spend 0 to `hit_dice_remaining` dice
+   - Player selects 0 to `hit_dice_remaining` dice; selecting 0 skips hit dice spending
 4. System resets all features with `recharge: "short"` (e.g., Action Surge, Channel Divinity, Second Wind)
 5. Results posted to `#combat-log`
 

@@ -80,7 +80,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 48. **Secret skill checks.** All rolls post to `#roll-history`. What about Insight, Perception, Stealth checks that should sometimes be hidden from other players?
 49. **No downtime activities.** Crafting, training, research not mentioned.
 50. **Rest interruption is vague.** "Partial benefits at DM discretion via manual override" — the player has no idea what they will or won't get.
-51. **Short rest hit dice command.** The player is prompted to `/spend-hd 2` but this command is not in any command table. Is it real?
+~~51. **Short rest hit dice command.** The player is prompted to `/spend-hd 2` but this command is not in any command table. Is it real?~~ — Resolved: Replaced `/spend-hd` with a Discord button menu prompt during the `/rest short` flow. No separate command needed; player selects how many hit dice to spend via buttons.
 
 ## Communication
 
