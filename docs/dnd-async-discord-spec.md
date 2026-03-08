@@ -273,6 +273,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 - Taking damage triggers a concentration check — bot pings the caster to roll `/save con` (DC = max(10, half damage)); failure breaks concentration
 - Being incapacitated (stunned, paralyzed, unconscious, petrified) auto-breaks concentration immediately — no save prompted
 - Entering a Silence zone (or similar effect preventing verbal/somatic components) breaks concentration on spells requiring those components — auto-detected when a concentrating caster's position overlaps a Silence zone
+- **Casting blocked in Silence:** on `/cast`, the system checks if the caster's position overlaps an active Silence zone. If the spell has verbal or somatic components (`components.v = true` or `components.s = true`), the cast is rejected: "You cannot cast [spell] — you are inside a zone of Silence (requires verbal/somatic components)." Spells with only material components (no V or S) are unaffected.
 - Active effects (Fog Cloud zone, Spirit Guardians aura) tracked on the map
 
 **Bonus action spell restriction (both directions):** Per 5e rules (Sage Advice Compendium), if a player casts any spell as a bonus action on their turn, the only other spell they can cast that turn is a cantrip with a casting time of 1 action — and this applies regardless of casting order:
