@@ -330,6 +330,8 @@ The gold fallback represents the assumption that components can be acquired from
 
 **Spell slots:** tracked and enforced. Backend knows slots per level, deducts on cast, rejects `/cast` if no slots remaining.
 
+**Pact Magic (Warlock):** Warlocks use a separate slot pool (`pact_magic_slots`) instead of standard `spell_slots`. Pact Magic slots are fewer (1-4 depending on level), all at the same level (scaling with Warlock level per the Warlock table), and recharge on short rest. When a Warlock casts a spell, `/cast` draws from `pact_magic_slots` by default. If the Warlock is multiclassed and has both pools, the system uses Pact Magic slots first; the player can override with `--spell-slot` to draw from regular `spell_slots` instead. Upcasting with `--slot` must still be ≤ the pact slot level. For multiclass casters, both pools are tracked and displayed separately in the spell slot UI.
+
 **Upcasting:** spells can be cast at higher levels for increased effect by specifying `/cast fireball D5 --slot 5` to use a 5th-level slot. The system parses the spell's `higher_levels` field (e.g., "1d6 per slot level above 3rd") and auto-calculates the scaled damage or healing. If `--slot` is omitted, the system defaults to the lowest available slot of sufficient level. The `--slot` value must be ≥ the spell's base level and the character must have a slot available at that level.
 
 **Ritual casting:** spells with `ritual: true` can be cast without expending a spell slot by using `/cast detect-magic --ritual`. Ritual casting adds 10 minutes to the casting time and is only available outside active combat (`encounter.status != 'active'`). Only classes with the Ritual Casting feature (Wizard, Cleric, Druid, Bard with Ritual Casting) can use this option. The system checks both the spell's `ritual` flag and the character's class features.
@@ -1271,7 +1273,7 @@ After creation, the player links to the character via `/register <character_name
 ### Character Leveling
 
 - DM edits character level in the dashboard
-- System auto-recalculates HP, proficiency bonus, spell slots, attacks per action
+- System auto-recalculates HP, proficiency bonus, spell slots (and pact magic slots for Warlocks), attacks per action
 - DM selects new class features / spells if applicable
 - For DDB-imported characters, player levels up in D&D Beyond and re-imports
 
@@ -1355,14 +1357,15 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
    - System rolls and applies healing automatically, capped at `hp_max`
    - Player selects 0 to `hit_dice_remaining` dice; selecting 0 skips hit dice spending
 4. System resets all features with `recharge: "short"` (e.g., Action Surge, Channel Divinity, Second Wind)
-5. Results posted to `#combat-log`
+5. Warlock `pact_magic_slots.current` restored to `pact_magic_slots.max`
+6. Results posted to `#combat-log`
 
 **Long Rest** (`/rest long`):
 1. Player types `/rest long` → posts to `#dm-queue`
 2. DM approves from dashboard
 3. System applies:
    - HP restored to `hp_max`
-   - All spell slots restored
+   - All spell slots restored (both `spell_slots` and `pact_magic_slots`)
    - All features with `recharge: "short"` or `"long"` reset
    - Hit dice restored: regain up to half character level (minimum 1), capped at max
    - Death save tallies reset to 0/0
@@ -1498,6 +1501,10 @@ characters
   equipped_off_hand  TEXT                -- FK → weapons or armor (second weapon or shield; null = free hand)
   equipped_armor  TEXT                   -- FK → armor (body armor only, not shield)
   spell_slots     JSONB                  -- { "1": {current: 2, max: 4}, "2": {current: 3, max: 3}, ... }
+  pact_magic_slots JSONB                 -- Warlock only: { "slot_level": 3, "current": 2, "max": 2 }
+                                         -- NULL for non-Warlocks. Separate pool from spell_slots.
+                                         -- Recharges on short rest (not long rest only like spell_slots).
+                                         -- For multiclass Warlocks, both pools exist independently.
   hit_dice_remaining INTEGER NOT NULL     -- current pool; max = character level. Hit die size from class.hit_die
   feature_uses    JSONB                  -- { "action-surge": {current: 1, max: 1, recharge: "short"}, ... }
   features        JSONB                  -- [{name, source, level, description, mechanical_effect}]
