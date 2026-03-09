@@ -28,6 +28,11 @@ Discord is the **display and input terminal**, not the source of truth. The syst
 - DM confirms/approves via the dashboard (character approval queue)
 - One player = one character per campaign (DM can override in dashboard if needed)
 
+**Registration feedback:**
+- On `/register`, `/import`, or `/create-character` submission, the bot immediately replies with an ephemeral confirmation: "✅ Registration submitted — [character name] is pending DM approval. You'll be pinged when approved."
+- When the DM approves, requests changes, or rejects, the bot pings the player via Discord DM with the outcome and any DM feedback
+- Before approval, any game command replies with the player's current registration status instead of a generic error: "⏳ [character name] — pending DM approval since [relative time]. You'll be pinged when approved." If the DM requested changes: "🔄 [character name] — DM requested changes: [dm_feedback]. Use `/create-character` or `/import` to resubmit."
+
 **Out-of-turn prevention:**
 - On every combat command (`/move`, `/attack`, `/cast`, `/bonus`, `/interact`, `/action`, `/done`, `/deathsave`), the backend validates that the requesting Discord user ID matches the active turn's character owner
 - If not their turn, bot replies: "It's not your turn. Current turn: **[Character]** (@player)"
@@ -123,7 +128,7 @@ Welcome to [Campaign Name]! Here's how to get started:
 Type /help for a full command list.
 ```
 
-If the player runs any game command before being approved, the bot replies: "❌ Your character hasn't been approved yet. Use `/create-character`, `/import`, or `/register` to get started."
+If the player runs any game command before registering, the bot replies: "❌ No character found. Use `/create-character`, `/import`, or `/register` to get started." If they have a pending or changes-requested registration, the bot shows their current status (see Registration feedback above).
 
 The bot uses **plain text messages** for most output. For very large output (20+ combatant initiative orders, detailed character cards), the bot uploads a **text file attachment** instead. No embeds required.
 
