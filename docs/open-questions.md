@@ -79,7 +79,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [ ] 47. **No structured exploration mode.** No marching order, trap detection, or environmental interaction system.
 - [x] 48. **Secret skill checks.** — Resolved: All rolls remain public in `#roll-history`. Players are trusted not to metagame; the DM controls information flow through narration in `#the-story`. No secret roll mechanism needed.
 - [ ] 49. **No downtime activities.** Crafting, training, research not mentioned.
-- [ ] 50. **Rest interruption is vague.** "Partial benefits at DM discretion via manual override" — the player has no idea what they will or won't get.
+- [x] 50. **Rest interruption is vague.** — Resolved: 5e RAW rules with clear player messaging. Short rest interrupted: no benefits. Long rest interrupted: short rest benefits if 1+ hour elapsed, otherwise nothing. Combat ≤1 hour doesn't break long rest. Bot notifies player with reason and outcome.
 - [x] 51. **Short rest hit dice command.** — Resolved: Replaced `/spend-hd` with a Discord button menu prompt during the `/rest short` flow. No separate command needed; player selects how many hit dice to spend via buttons.
 
 ## Communication

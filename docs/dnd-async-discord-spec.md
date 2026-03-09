@@ -2251,7 +2251,12 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
 **Constraints:**
 - Only one long rest per 24 in-game hours (DM tracks narrative time; system does not enforce calendar)
 - Rests cannot be initiated during active combat (system checks `encounter.status != 'active'`)
-- If interrupted (DM cancels mid-rest from dashboard), partial benefits at DM discretion via manual override
+- **Rest interruption (5e RAW):**
+  - DM cancels a rest mid-progress from the dashboard, selecting an interruption reason (e.g., "Ambush", "Alarm", custom text)
+  - **Short rest interrupted:** No benefits granted. The player must start a new `/rest short` after the interruption is resolved.
+  - **Long rest interrupted:** If at least 1 hour of the long rest had been completed, the player receives short rest benefits (hit dice spending prompt + short-rest feature recharges). Otherwise, no benefits.
+  - Combat lasting 1 hour or less does not break a long rest (5e RAW); the long rest resumes automatically after the encounter ends.
+  - Bot notifies the player in `#your-turn`: "⚠️ Your [short/long] rest was interrupted — [reason]. [You receive short rest benefits. / No benefits granted.]"
 
 ### Inventory Management
 
