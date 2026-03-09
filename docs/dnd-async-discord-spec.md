@@ -79,6 +79,7 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 
 🎭 NARRATION
   #the-story            ← DM narration only, clean prose
+  #in-character         ← player roleplay, dialogue, and actions (IC)
   #player-chat          ← out-of-character chatter (OOC)
 
 ⚔️ COMBAT
@@ -100,7 +101,7 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 
 ### Server Setup
 
-The `/setup` slash command auto-creates the channel structure with appropriate permission overrides (e.g., `#the-story` is DM-write-only, `#combat-map` is bot-write-only). DM runs `/setup` once after inviting the bot. Channels that already exist are skipped.
+The `/setup` slash command auto-creates the channel structure with appropriate permission overrides (e.g., `#the-story` is DM-write-only, `#combat-map` is bot-write-only, `#in-character` is player-and-DM writable). DM runs `/setup` once after inviting the bot. Channels that already exist are skipped.
 
 The bot uses **plain text messages** for most output. For very large output (20+ combatant initiative orders, detailed character cards), the bot uploads a **text file attachment** instead. No embeds required.
 
@@ -219,6 +220,8 @@ Tokens carry an **altitude** value (integer feet, default 0) representing height
 Players submit slash commands in `#your-turn` (where they receive their turn ping), but commands work from any channel in the server — the bot validates and routes output to the correct channels regardless.
 
 **In-character speech:** players can speak in-character during combat by typing plain messages (non-commands) in `#your-turn`. Speaking is free per 5e rules — it costs no action, bonus action, or any other resource. Players can speak on their own turn or briefly on others' turns. Out-of-character discussion goes in `#player-chat`. The bot ignores non-command messages in `#your-turn` (they're just player chat).
+
+**Out-of-combat roleplay:** outside of combat, players use `#in-character` for all in-character dialogue, emotes, and actions. The DM reads `#in-character` to follow what the party is doing and narrates outcomes in `#the-story`. Players can describe what their character says, does, or attempts — anything that requires a mechanical resolution (skill check, attack, etc.) should use the appropriate slash command or be picked up by the DM from context. The flow is: players act in `#in-character` → DM narrates results in `#the-story` → players react in `#in-character`.
 
 **Combat commands** (only usable on your turn, except `/reaction`):
 
@@ -2095,9 +2098,9 @@ Passive effects are processed alongside class features and spell effects — the
 
 Narrative-driven — no dedicated mechanical systems needed in MVP:
 
-- **Exploration:** DM narrates in `#the-story`, players describe actions in `#player-chat` or `/action`. DM calls for checks as needed. If combat breaks out, DM starts an encounter from the dashboard.
-- **Social:** Players roleplay in `#the-story` or `#player-chat`. DM calls for Charisma checks when uncertain. Discord's text format is ideal for RP.
-- **Travel:** DM narrates distance and terrain. Random encounters DM-triggered. Forced march / exhaustion checks via `/check constitution`.
+- **Exploration:** DM narrates in `#the-story`, players describe actions in `#in-character` or via `/action`. DM calls for checks as needed. If combat breaks out, DM starts an encounter from the dashboard.
+- **Social:** Players roleplay in `#in-character`. DM reads player dialogue and actions there, then narrates outcomes in `#the-story`. DM calls for Charisma checks when uncertain. Discord's text format is ideal for RP.
+- **Travel:** DM narrates distance and terrain in `#the-story`. Players describe travel activities in `#in-character`. Random encounters DM-triggered. Forced march / exhaustion checks via `/check constitution`.
 
 `#dm-queue` serves as the universal escape hatch for anything that doesn't map to a command.
 
