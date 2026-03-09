@@ -251,6 +251,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent (usable any time) — routed to `#dm-queue` |
 | `/deathsave` | `/deathsave` | Roll a death saving throw (only at 0 HP) |
 | `/command` | `/command FAM attack G1` or `/command SW attack G2` | Issue a command to a summoned creature you control (see Summoned Creatures & Companions) |
+| `/action channel-divinity` | `/action channel-divinity turn-undead` or `/action channel-divinity preserve-life` | Channel Divinity — Cleric (lvl 2+) / Paladin (lvl 3+), costs action (auto-resolved or DM queue, see Channel Divinity) |
 | `/action surge` | `/action surge` | Action Surge — gain an additional action this turn (Fighter only, auto-resolved) |
 | `/done` | `/done` | End turn, advance initiative |
 
@@ -528,6 +529,95 @@ Combat log output:
 - If the Paladin declines or the prompt times out (30 seconds), no smite is applied and the turn continues
 - The prompt only appears on melee weapon hits — not ranged attacks, not misses
 - Driven by the `resource_on_hit` effect type in the Feature Effect System, so future on-hit features (e.g., Battlemaster maneuvers) follow the same prompt pattern
+
+### Channel Divinity (Cleric / Paladin)
+
+Clerics (level 2+) and Paladins (level 3+) can invoke Channel Divinity to produce powerful effects. Uses are tracked in `feature_uses["channel-divinity"]` with `recharge: "short"`:
+
+| Class | Uses | Progression |
+|-------|------|-------------|
+| Cleric | 1 (lvl 2), 2 (lvl 6), 3 (lvl 18) | `max` increases at listed levels |
+| Paladin | 1 (lvl 3), 2 (lvl 15) | `max` increases at listed levels |
+
+**Command:** `/action channel-divinity [option]` — costs the action (`action_used = true`). System validates: correct class, level requirement met, uses remaining (`feature_uses["channel-divinity"].current ≥ 1`).
+
+**Turn Undead (all Clerics):** `/action channel-divinity turn-undead` — auto-resolved:
+- Each undead within 30ft that can see or hear the Cleric must make a WIS saving throw vs the Cleric's spell save DC
+- Auto-detected from `creatures.creature_type = "undead"` and distance calculation
+- On fail: Turned condition applied for 1 minute (10 rounds). Turned creature must Dash away from the Cleric; can't willingly move closer or take reactions. Ends early if the creature takes damage
+- On success: no effect
+- Combat log: "✝️ Thorn channels Turn Undead — Skeleton #1 🎲 WIS save: 8 vs DC 14 — Turned! | Zombie #2 🎲 WIS save: 16 vs DC 14 — Resists!"
+
+**Destroy Undead (Cleric 5+):** when Turn Undead is used and the Cleric is level 5+, undead that fail the save and are below the CR threshold are instantly destroyed instead of Turned:
+
+| Cleric Level | Destroys CR |
+|-------------|-------------|
+| 5 | ½ or lower |
+| 8 | 1 or lower |
+| 11 | 2 or lower |
+| 14 | 3 or lower |
+| 17 | 4 or lower |
+
+Combat log: "✝️ Skeleton #1 (CR ¼) is destroyed by Turn Undead!"
+
+**Subclass Channel Divinity options:** each subclass gains one or more Channel Divinity options, declared in `classes.subclasses[].features_by_level` using the Feature Effect System. Options fall into two categories:
+
+1. **Auto-resolved** — options with clear mechanical effects use the standard effect type vocabulary:
+   - *Preserve Life (Life Domain):* distribute up to `5 × cleric_level` HP among creatures within 30ft, each restored to at most half their max HP. Bot prompts with eligible targets and HP budget via Discord buttons
+   - *Sacred Weapon (Devotion Paladin):* add CHA modifier to attack rolls for 1 minute. Applied via `modify_attack_roll` effect with duration tracking
+   - *Vow of Enmity (Vengeance Paladin):* advantage on attack rolls against one creature within 10ft for 1 minute. Applied via `conditional_advantage` effect on target
+
+2. **DM-resolved** — options that are narrative, conditional, or open-ended route to `#dm-queue`:
+   - *Knowledge of the Ages (Knowledge Domain):* gain proficiency in a skill or tool for 10 minutes — DM confirms
+   - *Charm Animals and Plants (Nature Domain):* charm creatures within 30ft — DM adjudicates targets and effects
+   - The DM resolves from the dashboard and the system applies any mechanical changes
+
+**`/help cleric` output** (ephemeral, shown when a Cleric types `/help cleric`):
+```
+✝️ Cleric Abilities
+
+  Channel Divinity (action, level 2+):
+    /action channel-divinity turn-undead    Force undead within 30ft to flee (WIS save)
+    /action channel-divinity [subclass]     Use your domain's Channel Divinity option
+
+    Destroy Undead (lvl 5+): undead below CR threshold are destroyed on failed save
+    Uses: 1 (lvl 2) → 2 (lvl 6) → 3 (lvl 18)    Recharge: short rest
+
+  Spellcasting:
+    /cast [spell] [target]       Cast a prepared spell
+    /prepare                     Change prepared spells (after long rest)
+    /cast [spell] --ritual       Ritual cast without expending a slot (out of combat)
+
+  Domain spells: always prepared, don't count against your limit (shown separately in /prepare)
+
+  Use /status to check Channel Divinity uses and active effects
+```
+
+**`/help paladin` output** (ephemeral, shown when a Paladin types `/help paladin`):
+```
+⚔️ Paladin Abilities
+
+  Channel Divinity (action, level 3+):
+    /action channel-divinity [option]       Use your oath's Channel Divinity option
+    Uses: 1 (lvl 3) → 2 (lvl 15)           Recharge: short rest
+
+  Divine Smite (on melee hit, prompted automatically):
+    Spend a spell slot for extra radiant damage (2d8 + 1d8 per slot above 1st)
+    +1d8 bonus vs undead and fiends — doubled on crit
+
+  Lay on Hands (action):
+    /action lay-on-hands [target] [hp]      Restore HP from your healing pool
+    Pool: 5 × Paladin level HP              Recharge: long rest
+
+  Spellcasting:
+    /cast [spell] [target]       Cast a prepared spell
+    /prepare                     Change prepared spells (after long rest)
+
+  Aura of Protection (lvl 6+): you and allies within 10ft add your CHA mod to saves (auto-applied)
+  Oath spells: always prepared, don't count against your limit
+
+  Use /status to check Channel Divinity uses, smite slots, and lay on hands pool
+```
 
 ### Equipment Management
 
