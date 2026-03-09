@@ -225,11 +225,12 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/move` | `/move D4` | Move to coordinate. Shows path cost and remaining movement, then asks for confirmation before committing. Repeatable for split movement as long as total ≤ speed |
 | `/fly` | `/fly 30` | Set altitude in feet. Costs movement 1:1 |
 | `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` or `/attack G2 --twohanded` | Attack a target. One `/attack` per swing; backend tracks attacks remaining. `--twohanded` for versatile weapons |
-| `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting. Bonus action spells (e.g., Healing Word) are auto-detected from `spells_ref.casting_time` — no need for `/bonus cast`; the system deducts the bonus action instead of the action |
+| `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` or `/cast fireball D5 --quickened` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting. Bonus action spells (e.g., Healing Word) are auto-detected from `spells_ref.casting_time` — no need for `/bonus cast`; the system deducts the bonus action instead of the action. Sorcerers can add Metamagic flags (e.g., `--quickened`, `--twinned [target]`, `--subtle`) — see Metamagic |
 | `/bonus` | `/bonus cunning-action dash` or `/bonus cunning-action disengage` | Bonus action |
 | `/bonus rage` | `/bonus rage` | Enter rage — Barbarian only, costs bonus action (auto-resolved) |
 | `/bonus wild-shape` | `/bonus wild-shape wolf` or `/bonus wild-shape brown-bear` | Wild Shape — Druid only, transform into a beast (auto-resolved, see Wild Shape) |
 | `/bonus revert` | `/bonus revert` | Revert from Wild Shape to true form — Druid only, costs bonus action (auto-resolved) |
+| `/bonus font-of-magic` | `/bonus font-of-magic convert --slot 2` or `/bonus font-of-magic create --level 3` | Sorcerer only — convert spell slots to sorcery points or vice versa (auto-resolved) |
 | `/shove` | `/shove OS` | Shove a target (push or knock prone) |
 | `/interact` | `/interact draw longsword` | Object interaction (first per turn is free; see Free Object Interaction) |
 | `/action disengage` | `/action disengage` | Disengage — move without provoking opportunity attacks (auto-resolved) |
@@ -475,6 +476,91 @@ The gold fallback represents the assumption that components can be acquired from
 **Bonus action spell restriction (both directions):** Per 5e rules (Sage Advice Compendium), if a player casts any spell as a bonus action on their turn, the only other spell they can cast that turn is a cantrip with a casting time of 1 action — and this applies regardless of casting order:
 - **Bonus action spell first:** If a bonus action spell was cast (`bonus_action_spell_cast = true`), `/cast` with a non-cantrip action spell is rejected: "You already cast a bonus action spell this turn — you can only cast a cantrip with your action."
 - **Leveled action spell first:** If a leveled (non-cantrip) action spell was cast (`action_spell_cast = true`), `/cast` with a bonus action spell is rejected: "You already cast a leveled spell with your action this turn — you cannot cast a bonus action spell."
+
+**Metamagic (Sorcerer):** Sorcerers can modify spells using Metamagic options, powered by sorcery points. Tracked in `feature_uses["sorcery-points"]` with `max` equal to Sorcerer class level (e.g., `{current: 5, max: 5, recharge: "long"}`). Sorcerers learn Metamagic options at level 3 (2 options), level 10 (3rd), and level 17 (4th), stored in the character's `features` array.
+
+**Syntax:** Metamagic is applied via flags on `/cast`:
+```
+/cast fireball D5 --quickened          ← cast as bonus action (2 SP)
+/cast haste AR --twinned TH            ← twin to second target (3 SP)
+/cast fireball D5 --empowered          ← reroll low damage dice (1 SP)
+/cast counterspell --subtle            ← no V/S components (1 SP)
+/cast fireball D5 --careful            ← allies auto-succeed on save (1 SP)
+/cast fire-bolt G1 --distant           ← double range (1 SP)
+/cast mage-armor --extended            ← double duration (1 SP)
+/cast hold-person G1 --heightened      ← target has disadv on first save (3 SP)
+```
+
+Only one Metamagic option per spell unless otherwise noted (Empowered can combine with another).
+
+**Metamagic options (all 8 SRD options, auto-resolved):**
+
+| Option | Flag | Cost | Effect | Validation |
+|---|---|---|---|---|
+| Careful Spell | `--careful` | 1 SP | Choose up to CHA mod creatures in the AoE — they auto-succeed on the spell's saving throw | Spell must have an area and a save. Bot prompts: "Pick allies to protect: [AR] [TH] [KL]" via buttons |
+| Distant Spell | `--distant` | 1 SP | Double the spell's range. Touch spells become 30ft range | Spell must have range > 0 or be touch. System doubles `range_ft` (or sets 30 for touch) for this cast |
+| Empowered Spell | `--empowered` | 1 SP | Reroll up to CHA mod damage dice, must use new rolls | Spell must deal damage. Bot shows rolled dice and prompts: "Reroll which dice? [4] [2] [1] [6] [3]" via buttons. Can combine with another Metamagic option |
+| Extended Spell | `--extended` | 1 SP | Double the spell's duration (max 24 hours) | Spell must have duration ≥ 1 minute. System doubles duration for tracking/expiration |
+| Heightened Spell | `--heightened` | 3 SP | One target has disadvantage on its first saving throw against the spell | Spell must require a save. If multiple targets, bot prompts which target to heighten |
+| Quickened Spell | `--quickened` | 2 SP | Change casting time from 1 action to 1 bonus action | Spell must have casting time of "1 action". Deducts bonus action instead of action. **Bonus action spell restriction still applies** — casting a quickened leveled spell means the caster can only use their action for a cantrip |
+| Subtle Spell | `--subtle` | 1 SP | Remove verbal and somatic components | No restrictions. Spell bypasses Silence zones and cannot be Counterspelled (Counterspell requires seeing a creature casting — with no V/S, there is nothing to perceive) |
+| Twinned Spell | `--twinned [target]` | SP = spell level (1 for cantrips) | Target a second creature with a single-target spell | Spell must target only one creature and not have a range of Self. Rejects AoE spells and self-only spells. Second target must be in range. Both targets resolved independently (separate attack rolls or saves) |
+
+**Sorcery point validation:** if insufficient points remain, the cast is rejected: "❌ Not enough sorcery points — Twinned Spell costs 3 SP (you have 2 remaining)."
+
+**Font of Magic** (`/bonus font-of-magic`): Sorcerers can convert between spell slots and sorcery points as a bonus action. Available at Sorcerer level 2+.
+
+- **Slots → points:** `/bonus font-of-magic convert --slot 2` — expend a 2nd-level spell slot, gain 2 sorcery points. Points gained = slot level. Cannot exceed sorcery point maximum.
+- **Points → slots:** `/bonus font-of-magic create --level 3` — spend sorcery points to create a spell slot. Cost follows the table: 1st = 2 SP, 2nd = 3 SP, 3rd = 5 SP, 4th = 6 SP, 5th = 7 SP. Cannot create slots above 5th level. Created slots vanish on long rest.
+
+Combat log output:
+```
+✨  Elara casts Fireball at D5 — Quickened Spell! (2 SP, 3 remaining)
+    🎁 Cast as bonus action
+    💥 8d6 fire → 28 damage (DEX save DC 15 for half)
+
+✨  Elara casts Haste on Aria — Twinned Spell → also targets Thorn! (3 SP, 2 remaining)
+    🛡️ Aria: +2 AC, doubled speed, extra action
+    🛡️ Thorn: +2 AC, doubled speed, extra action
+
+✨  Elara casts Counterspell — Subtle Spell! (1 SP, 4 remaining)
+    🤫 No verbal/somatic components — cannot be countered
+
+✨  Elara casts Fireball at D5 — Careful Spell! (1 SP, 4 remaining)
+    💥 8d6 fire → 31 damage (DEX save DC 15 for half)
+    🛡️ Aria and Thorn auto-succeed on the save
+
+✨  Elara casts Fire Bolt at G1 — Empowered Spell! (1 SP, 4 remaining)
+    🎲 Rerolled: [2, 1] → [8, 5]
+    💥 2d10 fire → 13 damage
+
+🔮  Elara converts a 2nd-level spell slot → 2 sorcery points (5 SP remaining)
+🔮  Elara creates a 3rd-level spell slot (5 SP → 0 SP)
+```
+
+**`/help metamagic` output** (ephemeral, shown when a Sorcerer types `/help metamagic`):
+```
+⚡ Metamagic — Sorcery Point Options
+
+Apply Metamagic by adding a flag to /cast:
+
+  --careful     (1 SP)  Allies in AoE auto-succeed on save
+  --distant     (1 SP)  Double spell range (touch → 30ft)
+  --empowered   (1 SP)  Reroll up to CHA mod damage dice (combinable)
+  --extended    (1 SP)  Double spell duration (max 24h)
+  --heightened  (3 SP)  One target has disadvantage on first save
+  --quickened   (2 SP)  Cast action spell as bonus action
+  --subtle      (1 SP)  No V/S components (bypasses Silence & Counterspell)
+  --twinned     (Lvl SP) Second target for single-target spell (1 SP for cantrips)
+
+Only one option per cast (except --empowered, which stacks).
+
+Convert resources:
+  /bonus font-of-magic convert --slot N   Slot → SP (gain = slot level)
+  /bonus font-of-magic create --level N   SP → Slot (cost: 1st=2, 2nd=3, 3rd=5, 4th=6, 5th=7)
+
+Current SP: use /status to check    Recharge: long rest
+```
 
 **Spell save DC:** calculated as `8 + proficiency_bonus + spellcasting_ability_modifier`. The spellcasting ability varies by class (referenced from `classes.spellcasting.ability`): INT for Wizards, WIS for Clerics/Druids/Rangers, CHA for Bards/Paladins/Sorcerers/Warlocks. Creature stat blocks store the DC directly in their abilities data.
 
@@ -2157,6 +2243,7 @@ conditions_ref
 - Condition/spell duration auto-expiration
 - Equipment enforcement (armor STR requirements, stealth disadvantage, free object interaction limits)
 - Standard actions: Dash, Disengage, Dodge, Escape, Help, Hide, Ready (auto-resolved where deterministic)
+- Metamagic: all 8 SRD options via `--metamagic` flags on `/cast`, sorcery points, Font of Magic slot/point conversion
 - Wild Shape: `/bonus wild-shape`, `/bonus revert`, beast stat swap, dual HP pool, CR validation, auto-revert
 - Summoned creatures & companions: player-controlled via `/command`, initiative tracking, dismissal
 - Inventory management: `/inventory`, `/use`, `/give`, `/loot`, gold tracking, consumable auto-resolution, post-combat loot pool
