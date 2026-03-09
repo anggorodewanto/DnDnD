@@ -231,6 +231,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/bonus wild-shape` | `/bonus wild-shape wolf` or `/bonus wild-shape brown-bear` | Wild Shape — Druid only, transform into a beast (auto-resolved, see Wild Shape) |
 | `/bonus revert` | `/bonus revert` | Revert from Wild Shape to true form — Druid only, costs bonus action (auto-resolved) |
 | `/bonus font-of-magic` | `/bonus font-of-magic convert --slot 2` or `/bonus font-of-magic create --level 3` | Sorcerer only — convert spell slots to sorcery points or vice versa (auto-resolved) |
+| `/bonus bardic-inspiration` | `/bonus bardic-inspiration AR` | Bard only — grant an inspiration die to an ally (auto-resolved, see Bardic Inspiration) |
 | `/bonus martial-arts` | `/bonus martial-arts` | Monk only — free unarmed strike after Attack action, no ki cost (auto-resolved) |
 | `/bonus flurry-of-blows` | `/bonus flurry-of-blows` | Monk only — 2 unarmed strikes after Attack action, costs 1 ki (auto-resolved) |
 | `/bonus patient-defense` | `/bonus patient-defense` | Monk only — Dodge as bonus action, costs 1 ki (auto-resolved) |
@@ -438,6 +439,27 @@ Combat log output:
   Martial Arts die: 1d4 (lvl 1) → 1d6 (5) → 1d8 (11) → 1d10 (17)
   Unarmored Movement: +10ft (lvl 2) → +15ft (6) → +20ft (10) → +25ft (14) → +30ft (18)
 ```
+
+**Bardic Inspiration (Bard):** Bards can grant an inspiration die to an ally as a bonus action. Uses are tracked in `feature_uses["bardic-inspiration"]` with `max` equal to CHA modifier (minimum 1), e.g., `{current: 3, max: 3, recharge: "long"}`. At Bard level 5+ (Font of Inspiration), recharge changes to `"short"`.
+
+**Granting:** `/bonus bardic-inspiration [target-short-id]` (e.g., `/bonus bardic-inspiration AR`). System validates: Bard class, bonus action available, uses remaining, target is an ally (not self). On success:
+- Bonus action consumed (`bonus_action_used = true`)
+- `feature_uses["bardic-inspiration"].current` decremented
+- Target's combatant gains `bardic_inspiration` field: `{die: "d6", source: "Thorn"}`
+- Target receives a notification in `#your-turn`: "🎵 You received Bardic Inspiration (d6) from Thorn! You can add it to one attack roll, ability check, or saving throw."
+- Combat log: "🎵 Thorn grants Bardic Inspiration (d6) to Aria"
+
+**Die scaling:** d6 (level 1), d8 (level 5), d10 (level 10), d12 (level 15). Die size derived from Bard class level.
+
+**Using the die:** when a creature with Bardic Inspiration makes an attack roll, ability check, or saving throw, the bot posts an ephemeral prompt after the roll: "🎵 Use Bardic Inspiration? [Yes — +d6] [No]". The player can see the initial roll result before deciding (per 5e RAW). On use:
+- The inspiration die is rolled and added to the total
+- `bardic_inspiration` field is cleared from the combatant
+- Combat log appends: "🎵 Aria uses Bardic Inspiration — +4 (d6) → new total: 18"
+- If the prompt times out (30 seconds), the die is not used and remains available
+
+**Turn status visibility:** when a character has Bardic Inspiration, `🎵 Bardic Inspiration (d6)` is appended to their turn status prompt (both at turn start and after each command), so the player never forgets it is available.
+
+**Expiration:** Bardic Inspiration expires after 10 minutes. In async play, the system tracks grant time; if the die is unused after 10 minutes of real time, it is auto-removed and the bot notifies the holder: "🎵 Your Bardic Inspiration from Thorn has expired." The DM can extend or waive the timer from the dashboard for long async gaps.
 
 **Finesse weapons:** weapons with the "finesse" property (rapier, dagger, shortsword, etc.) allow the attacker to use either STR or DEX for attack and damage rolls. The system auto-selects the higher of the two modifiers — no player input required.
 
@@ -1280,10 +1302,10 @@ Each command validates against remaining resources. If a player tries to use som
     → Damage: 9 slashing
     → Goblin #1 is now Bloodied
 
-📋 Remaining: 🏃 5ft move | ⚔️ 1 attack | 🎁 Bonus action | 🤚 Free interact
+📋 Remaining: 🏃 5ft move | ⚔️ 1 attack | 🎁 Bonus action | 🤚 Free interact | 🎵 Bardic Inspiration (d8)
 ```
 
-Spent resources are omitted from the list. For Fighters with Action Surge available, `⚡ Action Surge (N)` is appended (where N = remaining uses). When nothing remains (and no Action Surge available), the prompt shows: "📋 All actions spent — type `/done` to end your turn."
+Spent resources are omitted from the list. For Fighters with Action Surge available, `⚡ Action Surge (N)` is appended (where N = remaining uses). If the character holds Bardic Inspiration, `🎵 Bardic Inspiration (die)` is appended. When nothing remains (and no Action Surge or Bardic Inspiration available), the prompt shows: "📋 All actions spent — type `/done` to end your turn."
 
 ### Combat Log Output Reference
 
