@@ -107,7 +107,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ## Notifications & Awareness
 
 - [ ] 65. **No backup notification system.** Discord mobile notifications can be unreliable. Any fallback (email, webhook)?
-- [ ] 66. **Turn reminder content.** Do the 50%/75% timeout reminders re-state available actions, conditions, and battlefield context, or just say "hurry up"?
+- [x] 66. **Turn reminder content.** — Resolved: Two-tier approach. 50% reminder is a light nudge with `/recap` hint. 75% final warning includes full tactical summary (HP, conditions, remaining resources, adjacent enemies) so the player can act immediately.
 - [ ] 67. **Between-turn awareness.** When it is not your turn, how do you stay informed? Is there a summary of what happened since your last turn?
 - [ ] 68. **Ping fatigue.** In 8+ combatant fights, `#your-turn` could get very noisy with OA prompts, save prompts, reaction prompts. Any batching or filtering?
 

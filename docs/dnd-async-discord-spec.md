@@ -1689,9 +1689,23 @@ Examples:
 Turn timeout: **24 hours**, DM-configurable per campaign (1h–72h range).
 
 **Escalation:**
-- Reminder ping at 50% of timeout (e.g., 12h) in `#your-turn`
-- Final warning at 75% (e.g., 18h) — "your turn will be skipped in 6 hours"
-- Auto-skip at 100% — player takes the **Dodge action with no movement**
+
+- **50% reminder** — light nudge in `#your-turn`:
+```
+⏰ @Aria — it's still your turn! 12h remaining. Use /recap to catch up.
+```
+
+- **75% final warning** — context-rich tactical summary in `#your-turn`:
+```
+⚠️ @Aria — your turn will be skipped in 6 hours!
+❤️ HP: 28/45 | 🛡️ AC: 16 | ⚠️ Conditions: Poisoned
+📋 Available: 🏃 30ft move | ⚔️ 2 attacks | 🎁 Bonus action | 🤚 Free interact
+🎯 Adjacent enemies: Goblin #1 (G1), Orc Shaman (OS)
+💡 Check #combat-map for current positions.
+```
+The 75% warning includes: HP and AC, active conditions, remaining turn resources, adjacent enemies, and a pointer to `#combat-map`. This mirrors the turn-start prompt with added battlefield context so the player can act immediately without extra commands. If the character has concentration, Bardic Inspiration, or Action Surge, those are included as in the normal turn status prompt.
+
+- **100% auto-skip** — player takes the **Dodge action with no movement**
 
 **DM manual overrides (via dashboard):**
 - **Skip now** — immediately advance past a player
