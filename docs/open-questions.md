@@ -77,7 +77,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ## Out-of-Combat Gameplay
 
 - [ ] 47. **No structured exploration mode.** No marching order, trap detection, or environmental interaction system.
-- [ ] 48. **Secret skill checks.** All rolls post to `#roll-history`. What about Insight, Perception, Stealth checks that should sometimes be hidden from other players?
+- [x] 48. **Secret skill checks.** — Resolved: All rolls remain public in `#roll-history`. Players are trusted not to metagame; the DM controls information flow through narration in `#the-story`. No secret roll mechanism needed.
 - [ ] 49. **No downtime activities.** Crafting, training, research not mentioned.
 - [ ] 50. **Rest interruption is vague.** "Partial benefits at DM discretion via manual override" — the player has no idea what they will or won't get.
 - [x] 51. **Short rest hit dice command.** — Resolved: Replaced `/spend-hd` with a Discord button menu prompt during the `/rest short` flow. No separate command needed; player selects how many hit dice to spend via buttons.
