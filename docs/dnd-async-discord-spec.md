@@ -519,7 +519,7 @@ Combat log output:
 
 **Advantage/disadvantage** — auto-detected from game state:
 - **From conditions:** applied automatically per the Condition Effects tables (e.g., blinded attacker → disadv, stunned target → adv, prone target within 5ft → adv / beyond 5ft → disadv). See Conditions & Combat Mechanics for full details.
-- **From combat context:** Reckless Attack (adv), invisible attacker/target (adv/disadv as appropriate), ranged attack while hostile within 5ft (disadv — applies to both ranged weapon attacks and ranged spell attacks; Crossbow Expert feat removes this penalty for ranged weapon attacks only), ranged attack beyond normal range (disadv), Small/Tiny creature using a Heavy weapon (disadv)
+- **From combat context:** Reckless Attack (adv), invisible attacker/target (adv/disadv as appropriate), ranged attack while hostile within 5ft (disadv — applies to both ranged weapon attacks and ranged spell attacks; Crossbow Expert feat removes this penalty for ranged weapon attacks only), ranged attack beyond normal range (disadv), Small/Tiny creature using a Heavy weapon (disadv), attacking into/from heavily obscured zone without appropriate vision (disadv/adv per Blinded rules — see Obscurement & Lighting Zones)
 - **Not auto-detected in MVP:** flanking (optional rule — may add as campaign toggle later)
 - **DM override:** DM can force advantage or disadvantage from the dashboard. Posts to `#combat-log`.
 - **Stacking:** when both apply, they cancel out per 5e rules — rolled normally regardless of source count.
@@ -1804,11 +1804,35 @@ Fog of war is computed automatically based on **shared party vision** — the un
 - **Blindsight / Tremorsense / Truesight** — ignore fog/obstacles within range
 - **Devil's Sight** — sees through magical darkness
 
-**Obscurement zones (DM-placed on grid):**
-- `Darkness` spell → blocks all vision including darkvision (except Devil's Sight)
-- `Fog Cloud` → heavily obscured, blocks line of sight
+**Obscurement & lighting zones (DM-placed on grid):**
+
+The DM places zones from the dashboard to define areas of non-standard lighting or obscurement. Each zone has a type and optional source label (spell, terrain feature, etc.). Zones affect combat mechanics automatically.
+
+| Zone type | Visibility | Combat effects | Darkvision interaction |
+|---|---|---|---|
+| **Dim light** | Lightly obscured | Disadvantage on Perception (sight) checks; `/action hide` is available | Darkvision treats as bright light (no penalty) |
+| **Darkness** | Heavily obscured | Effectively Blinded — auto-disadvantage on attacks, auto-advantage for attackers against you; blocks line-of-sight spells | Darkvision treats as dim light (Perception disadvantage only, not Blinded) |
+| **Magical darkness** | Heavily obscured | Same as Darkness, but Darkvision does not help — only Devil's Sight, Blindsight, or Truesight penetrate | Darkvision has no effect |
+| **Fog / heavy obscurement** | Heavily obscured | Same as Darkness (effectively Blinded); blocks line of sight | Darkvision has no effect (fog is not darkness) |
+| **Light obscurement** | Lightly obscured | Same as Dim light (Perception disadvantage, Hide available) | No special interaction |
+
+**Zone sources:**
+- `Darkness` spell → magical darkness zone
+- `Fog Cloud` → heavy obscurement zone
 - `Wall of Fire / Stone` → blocks line of sight through the wall
 - Heavy foliage / smoke → light or heavy obscurement
+- Unlit dungeon rooms, nighttime outdoors → darkness or dim light zones
+
+**Auto-applied combat modifiers:** when a creature is in an obscurement/lighting zone, the system checks the creature's vision capabilities (`darkvision_ft`, `blindsight_ft`, `truesight_ft`, Devil's Sight) and applies the effective visibility level. Modifiers are added to the existing advantage/disadvantage auto-detection pipeline:
+- Attacks from or into heavily obscured zones: disadvantage/advantage per Blinded rules (unless attacker has appropriate vision)
+- `/check perception` in lightly obscured zones: disadvantage (unless Darkvision negates)
+- `/action hide` available in lightly or heavily obscured zones (normally requires something to hide behind)
+
+Combat log shows the lighting modifier when it applies:
+```
+⚔️  Thorn attacks Goblin #1 — 🎲 14 (disadv: dim light, no darkvision) — Miss!
+⚔️  Aria attacks Goblin #1 — 🎲 18 (darkvision: darkness → dim, no attack penalty) — Hit!
+```
 
 **Rendering layers (bottom to top):**
 1. Base map (terrain, walls, obstacles)
