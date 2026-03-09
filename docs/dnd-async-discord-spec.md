@@ -228,6 +228,8 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting. Bonus action spells (e.g., Healing Word) are auto-detected from `spells_ref.casting_time` — no need for `/bonus cast`; the system deducts the bonus action instead of the action |
 | `/bonus` | `/bonus cunning-action dash` or `/bonus cunning-action disengage` | Bonus action |
 | `/bonus rage` | `/bonus rage` | Enter rage — Barbarian only, costs bonus action (auto-resolved) |
+| `/bonus wild-shape` | `/bonus wild-shape wolf` or `/bonus wild-shape brown-bear` | Wild Shape — Druid only, transform into a beast (auto-resolved, see Wild Shape) |
+| `/bonus revert` | `/bonus revert` | Revert from Wild Shape to true form — Druid only, costs bonus action (auto-resolved) |
 | `/shove` | `/shove OS` | Shove a target (push or knock prone) |
 | `/interact` | `/interact draw longsword` | Object interaction (first per turn is free; see Free Object Interaction) |
 | `/action disengage` | `/action disengage` | Disengage — move without provoking opportunity attacks (auto-resolved) |
@@ -303,6 +305,58 @@ Combat log output:
 
 🔥  Kael's Rage ends — didn't attack or take damage this round
 🔥  Kael ends their Rage
+```
+
+**Wild Shape (Druid):** `/bonus wild-shape [beast-name]` transforms the Druid into a beast form. Costs the bonus action (`bonus_action_used = true`). Requires Druid class and remaining Wild Shape uses in `feature_uses["wild-shape"]` (2 uses, recharges on short rest).
+
+**Validation:** the system checks:
+- Beast exists in the `creatures` table with `type = 'beast'`
+- Beast CR ≤ the Druid's Wild Shape CR limit (CR ¼ at level 2, CR ½ at level 4, CR 1 at level 8; Circle of the Moon: CR 1 at level 2, CR scaling to class level ÷ 3 at level 6+)
+- Swimming speed: beast can't have a swim speed unless Druid is level 4+
+- Flying speed: beast can't have a fly speed unless Druid is level 8+
+- If validation fails: "❌ Can't Wild Shape into [beast] — CR too high (max CR ¼ at Druid level 2)" or similar
+
+**Stat swap on transformation:** the system snapshots the Druid's current state into `wild_shape_original` JSONB on the combatant, then overwrites combat-relevant stats from the beast's creature entry:
+- `hp_max` and `hp_current` → beast's `hp_average` (original HP preserved in snapshot)
+- `ac` → beast's `ac`
+- `ability_scores` (STR, DEX, CON) → beast's scores. INT, WIS, CHA remain the Druid's own
+- `speed_ft` → beast's `speed.walk`; flying/swimming speeds available if the beast has them
+- `attacks` available via `/attack` pulled from beast's `attacks` JSONB (bite, claw, etc.)
+- Equipped weapons and armor are suppressed (cannot use equipment in beast form)
+
+**Retained from Druid form:** INT, WIS, CHA scores; skill proficiencies and saving throw proficiencies (use beast's physical stats but Druid's proficiency bonus if higher); class features, racial traits, and feats (as long as the beast form can physically perform them — e.g., can't cast spells unless level 18+ with Beast Spells feature); personality, alignment, language comprehension (but can't speak)
+
+**Spellcasting restriction:** while in Wild Shape, `/cast` is blocked: "❌ Can't cast spells in Wild Shape." Exception: Druids with the Beast Spells feature (level 18+) can cast spells with somatic and verbal components in beast form. Concentration on pre-existing spells is maintained — the Druid does not lose concentration on transformation.
+
+**HP and damage in beast form:**
+- Damage reduces beast form HP first
+- When beast form HP reaches 0, the Druid reverts to true form and excess damage carries over to original HP
+- If overflow damage reduces original HP to 0, the Druid falls unconscious and begins death saves
+- Healing in beast form applies to beast form HP (capped at beast `hp_max`)
+
+**Reverting:**
+- `/bonus revert` — voluntary revert, costs bonus action. Restores original stats from `wild_shape_original` snapshot
+- Automatic revert when beast form HP drops to 0 (no action cost)
+- Automatic revert when the Druid falls unconscious, is incapacitated, or dies
+- On revert, `wild_shape_original` is cleared from the combatant
+
+**Map token:** while in Wild Shape, the combatant's token changes to indicate beast form (beast icon with the Druid's short ID). On revert, the token returns to normal.
+
+**Edge cases routed to DM queue:**
+- "Can I use my equipment in this form?" — `/action` freeform → DM queue
+- "Can I speak to my allies?" — RAW no, but DM may allow gestures/signals
+- "Can I open a door with paws?" — depends on the beast; DM adjudicates
+
+Combat log output:
+```
+🐺  Elara Wild Shapes into a Wolf! (1 use remaining)
+     ❤️  HP: 11 | 🛡️ AC: 13 | 🏃 40ft
+     ⚔️  Attacks: Bite (+4, 2d4+2 piercing, DC 11 STR save or prone)
+📋 Remaining: 🏃 40ft move | ⚔️ 1 attack | 🤚 Free interact | 🛡️ Reaction
+
+🐺  Elara's wolf form drops to 0 HP! Reverts to Druid form (5 overflow damage → 23/28 HP)
+
+🐺  Elara reverts from Wild Shape
 ```
 
 **Finesse weapons:** weapons with the "finesse" property (rapier, dagger, shortsword, etc.) allow the attacker to use either STR or DEX for attack and damage rolls. The system auto-selects the higher of the two modifiers — no player input required.
@@ -1863,6 +1917,9 @@ combatants
   rage_rounds_remaining INTEGER          -- countdown from 10; NULL when not raging
   rage_attacked_this_round BOOLEAN DEFAULT false  -- reset at turn start, set on melee attack
   rage_took_damage_this_round BOOLEAN DEFAULT false  -- reset at turn start, set on taking damage
+  is_wild_shaped  BOOLEAN DEFAULT false  -- Druid Wild Shape state
+  wild_shape_creature_ref TEXT            -- FK → creatures; beast form creature ID; NULL when not shifted
+  wild_shape_original JSONB               -- snapshot of pre-transformation stats (hp_max, hp_current, ac, ability_scores, speed_ft, attacks); NULL when not shifted
   summoner_id     UUID FK → combatants   -- nullable; links summoned creature to summoning player's combatant
 
 turns
@@ -2100,6 +2157,7 @@ conditions_ref
 - Condition/spell duration auto-expiration
 - Equipment enforcement (armor STR requirements, stealth disadvantage, free object interaction limits)
 - Standard actions: Dash, Disengage, Dodge, Escape, Help, Hide, Ready (auto-resolved where deterministic)
+- Wild Shape: `/bonus wild-shape`, `/bonus revert`, beast stat swap, dual HP pool, CR validation, auto-revert
 - Summoned creatures & companions: player-controlled via `/command`, initiative tracking, dismissal
 - Inventory management: `/inventory`, `/use`, `/give`, `/loot`, gold tracking, consumable auto-resolution, post-combat loot pool
 

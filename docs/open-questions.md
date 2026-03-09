@@ -120,7 +120,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ## Class-Specific Features
 
 - [x] 72. **Rage activation and tracking.** — Resolved: `/bonus rage` activates rage (costs bonus action). `is_raging` tracked on combatants table with round countdown and per-round attack/damage flags. Auto-ends if no attack or damage taken, on unconscious, or after 10 rounds. `/bonus end-rage` to end early. Blocks spellcasting and drops concentration.
-- [ ] 73. **Wild Shape.** Not mentioned anywhere. Replaces stats, HP, and available actions. Massive mechanical change with no workflow.
+- [x] 73. **Wild Shape.** — Resolved: `/bonus wild-shape [beast]` auto-resolves with CR/level validation, stat swap from creatures table, dual HP pool with overflow damage on revert. `/bonus revert` to end early. Spellcasting blocked (except Beast Spells at 18). Edge cases (equipment in form, speaking) route to DM queue.
 - [ ] 74. **Metamagic.** Sorcerer's Twinned Spell, Quickened Spell, Subtle Spell, etc. — not mentioned. These fundamentally alter how spells work.
 - [x] 75. **Action Surge.** — Resolved: Added `/action surge` command for Fighters. Resets action and attacks remaining, tracked via `action_surged` on turns table. 1 use per short rest (2 at level 17). Action Surge availability shown in turn status prompt.
 - [ ] 76. **Bardic Inspiration.** A Bard grants a die to an ally. How is this targeted and applied?
