@@ -271,7 +271,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 |---|---|---|
 | `/move` | `/move D4` | Move to coordinate. Shows path cost and remaining movement, then asks for confirmation before committing. Repeatable for split movement as long as total ≤ speed |
 | `/fly` | `/fly 30` | Set altitude in feet. Costs movement 1:1 |
-| `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` or `/attack G2 --twohanded` | Attack a target. One `/attack` per swing; backend tracks attacks remaining. `--twohanded` for versatile weapons |
+| `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` or `/attack G2 --twohanded` or `/attack G2 improvised` | Attack a target. One `/attack` per swing; backend tracks attacks remaining. `--twohanded` for versatile weapons. `improvised` for improvised weapons (1d4 bludgeoning, no proficiency) |
 | `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` or `/cast fireball D5 --quickened` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting. Bonus action spells (e.g., Healing Word) are auto-detected from `spells_ref.casting_time` — no need for `/bonus cast`; the system deducts the bonus action instead of the action. Sorcerers can add Metamagic flags (e.g., `--quickened`, `--twinned [target]`, `--subtle`) — see Metamagic |
 | `/bonus` | `/bonus cunning-action dash` or `/bonus cunning-action disengage` or `/bonus cunning-action hide` | Bonus action |
 | `/bonus rage` | `/bonus rage` | Enter rage — Barbarian only, costs bonus action (auto-resolved) |
@@ -559,6 +559,14 @@ Combat log output:
 
 **Thrown weapons:** weapons with the "thrown" property (handaxe, javelin, dagger, etc.) can be thrown for a ranged attack using `range_normal_ft` / `range_long_ft`. Beyond normal range: disadvantage (per standard ranged rules). Beyond long range: attack auto-rejected. After a thrown attack, the weapon is removed from the character's hand. The character must draw another weapon (free object interaction) or retrieve the thrown weapon (requires movement to the target's square + free object interaction).
 
+**Improvised weapons:** any object not designed as a weapon — a chair, a bottle, a rock — can be used as an improvised weapon via `/attack [target] improvised`. Per 5e rules:
+- **Damage:** 1d4 + STR modifier, bludgeoning by default. No proficiency bonus on the attack roll (unless the character has Tavern Brawler feat, which grants proficiency with improvised weapons).
+- **Melee range:** 5ft (standard melee).
+- **Thrown:** improvised weapons can be thrown with `/attack [target] improvised --thrown`, range 20/60ft. Beyond 20ft: disadvantage. Beyond 60ft: rejected.
+- **Auto-resolved:** the attack rolls and resolves immediately using 1d4 bludgeoning defaults. The DM can retroactively adjust damage type, damage amount, or other details from the dashboard (e.g., a broken bottle might deal slashing, a heavy barstool might deal 1d6).
+- **Resembles a real weapon:** if the DM rules that an improvised weapon is similar enough to an existing weapon (e.g., a table leg resembles a club), the DM can override from the dashboard to use that weapon's stats instead.
+- **No inventory required:** improvised weapons are grabbed from the environment; they don't need to be in the character's inventory. The system does not track or consume them.
+
 **Attack modifier flags** (opt-in per swing):
 - `--gwm` — Great Weapon Master: -5 to hit, +10 damage. Requires a heavy melee weapon.
 - `--sharpshooter` — Sharpshooter: -5 to hit, +10 damage. Requires a ranged weapon.
@@ -585,6 +593,44 @@ Combat log output:
 - If the Paladin declines or the prompt times out (30 seconds), no smite is applied and the turn continues
 - The prompt only appears on melee weapon hits — not ranged attacks, not misses
 - Driven by the `resource_on_hit` effect type in the Feature Effect System, so future on-hit features (e.g., Battlemaster maneuvers) follow the same prompt pattern
+
+**`/help attack` output** (ephemeral, shown when a player types `/help attack`):
+```
+/attack — Attack a Target
+
+Usage:
+  /attack [target]                    Attack with equipped weapon
+  /attack [target] [weapon]           Attack with a specific weapon
+  /attack [target] improvised         Improvised weapon (1d4 bludgeoning, no proficiency)
+  /attack [target] unarmed            Unarmed strike (1 + STR mod bludgeoning)
+
+Flags:
+  --twohanded         Use versatile weapon's two-handed damage (off-hand must be free)
+  --gwm               Great Weapon Master: -5 to hit, +10 damage (heavy melee only)
+  --sharpshooter      Sharpshooter: -5 to hit, +10 damage (ranged only)
+  --reckless          Reckless Attack: advantage on melee STR attacks, enemies get
+                      advantage against you until next turn (Barbarian only, first attack)
+  --thrown             Throw a weapon with the thrown property (or improvised, range 20/60)
+
+Extra Attack:
+  Each /attack resolves one swing. Your remaining attacks are shown after each hit.
+  Retarget freely between swings. Unused attacks are forfeited on /done.
+
+Two-Weapon Fighting:
+  /bonus offhand      Off-hand attack with a light weapon (no ability mod to damage
+                      unless you have the Two-Weapon Fighting fighting style)
+
+Improvised Weapons:
+  Grab an object from the environment — no inventory needed.
+  1d4 + STR bludgeoning, no proficiency bonus (Tavern Brawler grants proficiency).
+  Throw with --thrown (range 20/60). DM can adjust damage type/amount after the fact.
+
+Tips:
+• Advantage/disadvantage is auto-detected from conditions, position, and lighting
+• Finesse weapons auto-select the higher of STR or DEX
+• Critical hit on nat 20 — all damage dice doubled
+• Divine Smite prompt appears automatically after a Paladin melee hit
+```
 
 ### Channel Divinity (Cleric / Paladin)
 
