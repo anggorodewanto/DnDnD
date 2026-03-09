@@ -267,7 +267,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 | Command | Example | Description |
 |---|---|---|
 | `/status` | `/status` | View your active conditions, concentration, temp HP, exhaustion, and reaction declarations (ephemeral) |
-| `/equip` | `/equip longsword` | Set primary weapon (persists between turns) |
+| `/equip` | `/equip longsword`, `/equip shield`, `/equip shortsword --offhand` | Equip a weapon or shield (see Equipment Management below) |
 | `/inventory` | `/inventory` | View your inventory, equipment, and gold |
 | `/use` | `/use healing-potion` | Use a consumable item |
 | `/give` | `/give healing-potion AR` | Give an item to an adjacent ally |
@@ -346,6 +346,38 @@ Combat log output:
 - If the Paladin declines or the prompt times out (30 seconds), no smite is applied and the turn continues
 - The prompt only appears on melee weapon hits — not ranged attacks, not misses
 - Driven by the `resource_on_hit` effect type in the Feature Effect System, so future on-hit features (e.g., Battlemaster maneuvers) follow the same prompt pattern
+
+### Equipment Management
+
+**Weapon equipping:**
+- `/equip longsword` — equips to main hand (`equipped_main_hand`)
+- `/equip shortsword --offhand` — equips to off-hand (`equipped_off_hand`)
+- `/equip none` — unequips main hand (defaults to unarmed strike)
+- `/equip none --offhand` — unequips off-hand (frees hand)
+
+Weapon equipping costs the **free object interaction** in combat (drawing/stowing). If the free interaction is already spent, the system rejects: "❌ Free object interaction already used this turn." Out of combat, equipping is instant.
+
+**Shield equipping:**
+- `/equip shield` — equips shield to off-hand (`equipped_off_hand`), AC recalculated (+2)
+- `/equip none --offhand` — unequips shield, AC recalculated (−2)
+
+Shields follow 5e donning/doffing rules:
+- **In combat:** equipping or unequipping a shield costs an **action**. The system deducts the action resource and rejects if already spent: "❌ Action already used — donning/doffing a shield requires an action."
+- **Out of combat:** instant, no cost.
+- Equipping a shield while the off-hand already holds a weapon automatically stows the weapon (no extra cost). Equipping an off-hand weapon while a shield is equipped requires doffing the shield first (action cost).
+
+**Validation rules:**
+- Two-handed weapons (`--twohanded` flag) require `equipped_off_hand` to be null
+- Grappling requires a free hand — rejected if both hands occupied
+- Somatic spell components require a free hand (or the hand holding the focus/shield with War Caster feat)
+
+Combat log output:
+```
+🔄  Aria equips Shield (+2 AC)
+🔄  Aria doffs Shield (−2 AC)
+🔄  Aria draws Shortsword (off-hand)
+🔄  Aria stows Longsword
+```
 
 ### Spell Casting Details
 

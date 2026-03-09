@@ -29,7 +29,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [ ] 15. **Improvised weapons.** Not mentioned. What if a player wants to hit someone with a chair?
 - [x] 16. **Ranged spell attacks in melee.** — Resolved: Yes, disadvantage applies to both ranged weapon attacks and ranged spell attacks per 5e RAW. Crossbow Expert removes the penalty for ranged weapon attacks only, not spell attacks.
 - [x] 17. **Natural armor / unarmored defense.** — Resolved: Added `ac_formula TEXT` to characters table. When non-null (e.g., "10 + DEX + WIS"), system recalculates `ac` on ability score changes. Standard armor-based characters keep `ac_formula = NULL`. Unarmored Defense only applies when no armor is worn; system takes higher of formula vs armor AC.
-- [ ] 18. **Shield equip/unequip.** Shields are in the armor table, but how does a player equip one? Does donning/doffing take an action?
+- [x] 18. **Shield equip/unequip.** — Resolved: `/equip shield` and `/equip none --offhand`. Donning/doffing costs an action in combat (5e RAW), instant out of combat. `/equip` expanded with `--offhand` flag for off-hand weapon/shield management.
 - [x] 19. **Dual wielding.** — Resolved: Replaced `equipped_weapon` with `equipped_main_hand` and `equipped_off_hand`. Off-hand holds second light weapon or shield; null = free hand. Two-handed/versatile requires off-hand to be empty.
 
 ## Spellcasting
@@ -133,7 +133,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 - [x] 81. **No `/status` command.** — Resolved: Added `/status` command (ephemeral summary of active conditions, concentration, temp HP, exhaustion, reaction declarations). Also defined `#character-cards` as auto-updated persistent character state including conditions. Both work together: cards for passive awareness, `/status` for on-demand query.
 - [x] 82. **Condition application notification.** — Resolved: Added Combat Log Output Reference section with explicit formats for condition application ("⚠️ Aria is now Grappled") and removal ("✅ Grappled removed from Aria"). All posted to #combat-log.
-- [ ] 83. **Frightened source indicator.** The frightened condition tracks `source_combatant_id` but the player has no indication of which creature they are frightened of or which direction they cannot move.
+- [x] 83. **Frightened source indicator.** — Resolved: Already addressed in spec. Combat log shows source on application ("⚠️ Aria is now Frightened (source: Orc Shaman)"), movement rejections name the source, and condition metadata tracks `source_combatant_id`.
 - [x] 84. **Grapple dragging.** — Resolved: `/move` detects grappled targets and prompts with Discord buttons to Drag (×2 movement cost, targets follow) or Release & Move (breaks grapple, normal speed).
 - [x] 85. **Invisible condition.** — Resolved: Added Invisible as a full trackable condition in `conditions_ref`, distinct from `is_visible` (stealth). Documented mechanical effects, interaction with hiding, and auto-removal for non-Greater Invisibility on attack/cast.
 - [x] 86. **Prone attack penalty.** — Resolved: Prone attack disadvantage is now covered in the Combat Log Output Reference section's auto-detected advantage/disadvantage examples, and implicitly via the existing condition effects tables.
