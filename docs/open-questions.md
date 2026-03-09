@@ -115,7 +115,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 - [x] 69. **Bonus action spell casting syntax.** — Resolved: Auto-detected. `/cast` checks `spells_ref.casting_time`; bonus action spells deduct the bonus action automatically. No `/bonus cast` syntax exists.
 - [x] 70. **Monk ki abilities.** — Resolved: Full ki system with ki points tracked in `feature_uses["ki"]` (recharges on short rest). `/bonus flurry-of-blows` (2 unarmed strikes, 1 ki), `/bonus patient-defense` (Dodge, 1 ki), `/bonus step-of-the-wind` (Dash/Disengage, 1 ki). Stunning Strike as post-hit prompt (1 ki, CON save or Stunned). Martial Arts bonus attack (`/bonus martial-arts`, free). Full `/help ki` output defined.
-- [ ] 71. **Free action speaking.** Can players speak in-character during combat without using any action resource?
+- [x] 71. **Free action speaking.** — Resolved: Players type plain messages (non-commands) in `#your-turn` for in-character speech during combat — free, no action cost. Out-of-character goes in `#player-chat`. Bot ignores non-command messages. No new command needed.
 
 ## Class-Specific Features
 

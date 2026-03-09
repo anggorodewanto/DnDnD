@@ -79,11 +79,11 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 
 🎭 NARRATION
   #the-story            ← DM narration only, clean prose
-  #player-chat          ← out-of-character chatter
+  #player-chat          ← out-of-character chatter (OOC)
 
 ⚔️ COMBAT
   #combat-map           ← bot posts the grid image each turn
-  #your-turn            ← bot pings the active player; players submit commands here
+  #your-turn            ← bot pings the active player; players submit commands and in-character speech here
 
 🎒 REFERENCE
   #character-cards      ← auto-updated character info per player
@@ -217,6 +217,8 @@ Tokens carry an **altitude** value (integer feet, default 0) representing height
 ### Structured Commands
 
 Players submit slash commands in `#your-turn` (where they receive their turn ping), but commands work from any channel in the server — the bot validates and routes output to the correct channels regardless.
+
+**In-character speech:** players can speak in-character during combat by typing plain messages (non-commands) in `#your-turn`. Speaking is free per 5e rules — it costs no action, bonus action, or any other resource. Players can speak on their own turn or briefly on others' turns. Out-of-character discussion goes in `#player-chat`. The bot ignores non-command messages in `#your-turn` (they're just player chat).
 
 **Combat commands** (only usable on your turn, except `/reaction`):
 
