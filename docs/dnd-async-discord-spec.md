@@ -2402,9 +2402,10 @@ Passive effects are processed alongside class features and spell effects — the
 
 ### Exploration, Social & Travel
 
-Narrative-driven — no dedicated mechanical systems needed in MVP:
+No dedicated exploration mechanics — existing commands cover both modes:
 
-- **Exploration:** DM narrates in `#the-story`, players describe actions in `#in-character` or via `/action`. DM calls for checks as needed. If combat breaks out, DM starts an encounter from the dashboard.
+- **Theater-of-mind exploration (no map):** DM narrates in `#the-story`. Players respond in `#in-character` with roleplay, `/check` for skill checks, and `/action` for freeform actions. DM calls for checks as needed. If combat breaks out, DM starts an encounter from the dashboard.
+- **Map-based exploration:** DM loads an exploration map from the dashboard (no encounter/initiative needed). Players use the same commands as combat — `/move` to navigate, `/check` for skill checks, `/action` for freeform interactions — but without turn order or action economy. All players can act freely at any time. If combat breaks out, DM starts an encounter on the current map, which adds initiative and turn structure.
 - **Social:** Players roleplay in `#in-character`. DM reads player dialogue and actions there, then narrates outcomes in `#the-story`. DM calls for Charisma checks when uncertain. Discord's text format is ideal for RP.
 - **Travel:** DM narrates distance and terrain in `#the-story`. Players describe travel activities in `#in-character`. Random encounters DM-triggered. Forced march / exhaustion checks via `/check constitution`.
 
