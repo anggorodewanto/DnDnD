@@ -55,7 +55,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [x] 32. **Multiple simultaneous declarations.** — Resolved: Multiple active declarations allowed. When multiple trigger from the same event, DM picks which fires via the Active Reactions Panel in the dashboard. After one fires, rest stay dormant until reaction resets next round.
 - [x] 33. **Freeform declaration ambiguity.** — Resolved: Declarations stay fully freeform. Players encouraged to use short IDs for clarity; DM resolves ambiguity using battlefield context, pinging the player for clarification if needed.
 - [x] 34. **OA prompts stall combat.** — Resolved: Queue-and-continue model. Movement is not paused; hostile has until end-of-round to take the OA. If OA drops target to 0 HP, system notifies DM to retroactively correct position. No auto-invalidation.
-- [ ] 35. **Readied action reminders.** A readied action could persist for days of real time in async play. Is the player reminded it is still held?
+- [x] 35. **Readied action reminders.** — Resolved: Automatic expiry notice at turn start if a readied action went unused. For readied spells, confirms concentration ended and slot was lost. No mid-round reminders; `/status` available for on-demand checks.
 
 ## Death & Healing
 

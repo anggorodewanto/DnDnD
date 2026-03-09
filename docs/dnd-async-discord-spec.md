@@ -876,6 +876,17 @@ Players pre-declare reaction intent using `/reaction`. The DM resolves all react
 
 **Readied Actions:** a player can use their action to ready a response to a trigger via `/action ready [description]` (e.g., `/action ready I attack when the goblin moves past me`). This costs the action for the turn. When the trigger occurs, the readied action fires using the creature's reaction (`reaction_used = true`). If the trigger never occurs before the creature's next turn, the readied action is lost. For readied spells: the spell slot is expended when readying (not when releasing), and the caster must hold concentration on the readied spell until the trigger fires — if concentration is broken, the spell is lost along with the slot. Readied actions follow the same DM-resolution flow as other `/reaction` declarations.
 
+**Readied action expiry notice:** when a player's turn starts and they had a readied action that expired unused, the turn-start prompt includes a notice:
+```
+⏳ Your readied action expired unused: "I attack when the goblin moves past me"
+```
+For readied spells, the notice also confirms the consequence:
+```
+⏳ Your readied action expired unused: "Cast Hold Person if shaman moves"
+   → Concentration on Hold Person ended. 2nd-level spell slot lost.
+```
+This ensures the player is never surprised by a lost action or spell slot in async play, where a single round can span hours or days. Players can also check active readied actions mid-round via `/status`.
+
 **System-generated reaction triggers:** opportunity attacks (see Opportunity Attacks section) bypass the `/reaction` declaration flow — the system auto-detects and prompts directly. Unlike other reactions, OA prompts use a queue-and-continue model: movement is not paused, and the hostile has until end-of-round to respond (see Opportunity Attacks).
 
 **Why this works for async:** zero stalling — combat never pauses for a reaction response. Players declare intent on their own time. DM has full control over timing and adjudication.
