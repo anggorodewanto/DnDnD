@@ -166,9 +166,10 @@ Spell Slots: 1st: 3/4 | 2nd: 1/2
 Conditions: Blessed (2 rounds remaining)
 Concentration: —
 Gold: 47gp
+Languages: Common, Elvish
 ```
 
-Fields shown: name, short ID, total level, race, class/subclass (multiclass shows all, e.g., "Fighter 5 (Champion) / Rogue 3 (Thief)"), HP (current/max), AC, speed, ability scores, equipped weapons, spell slots (if caster), active conditions with remaining duration, concentration spell (if any), temp HP (if any), exhaustion level (if any), and gold. Cards are visible to all players — allied HP and conditions are public information.
+Fields shown: name, short ID, total level, race, class/subclass (multiclass shows all, e.g., "Fighter 5 (Champion) / Rogue 3 (Thief)"), HP (current/max), AC, speed, ability scores, equipped weapons, spell slots (if caster), active conditions with remaining duration, concentration spell (if any), temp HP (if any), exhaustion level (if any), gold, and languages. Cards are visible to all players — allied HP and conditions are public information.
 
 ---
 
@@ -2097,7 +2098,7 @@ A web-based player portal provides character creation, viewing, and management. 
 
 On submit, the character enters the DM approval queue with status `pending`. The player is pinged in Discord when the DM approves or requests changes.
 
-**Character Sheet View** — read-only web page showing full character details: ability scores and modifiers, skills, features (with descriptions), spell list, inventory, and all mechanical state. Accessible to the owning player any time. Same data as `#character-cards` but with full detail.
+**Character Sheet View** — read-only web page showing full character details: ability scores and modifiers, skills, languages, features (with descriptions), spell list, inventory, and all mechanical state. Accessible to the owning player any time. Same data as `#character-cards` but with full detail.
 
 **Discord integration:**
 - `/create-character` — bot replies with an ephemeral message containing a one-time link to the player portal character builder (link expires after 24 hours, scoped to the player's Discord ID and campaign)
@@ -2450,7 +2451,7 @@ The DM manages everything through a web app — they never type raw commands int
 - **Stat Block Library** — preloaded monster stat blocks, reusable across encounters
 - **Asset Library** — maps, token images, tilesets, custom monsters
 - **Map Editor** — create and edit battle maps (see Map System)
-- **Character Overview** — read-only view of all player character sheets
+- **Character Overview** — read-only view of all player character sheets. Includes a **Party Languages** summary showing every language known by at least one party member and which characters speak it (e.g., "Elvish — Aria, Fenwick"), so the DM can quickly see language coverage when writing NPC dialogue or placing written clues
 - **Character Approval Queue** — pending characters from `/import`, `/create-character`, and `/register`, plus retirement requests from `/retire`. DM reviews the full sheet, approves, requests changes (with a message sent to the player via Discord DM), or rejects. Approved characters are immediately linked to the player and their `#character-cards` entry is created. Approved retirements unlink the player and mark the character as retired
 
 ### Undo & Corrections
@@ -2538,6 +2539,7 @@ characters
   proficiencies   JSONB                  -- {saves: [str, con], skills: [athletics, perception], weapons: [...], armor: [...]}
   gold            INTEGER NOT NULL DEFAULT 0  -- total gold pieces (all currency converted to gp)
   attunement_slots JSONB                 -- [{item_id, name}] max 3 entries; tracks attuned magic items
+  languages       TEXT[] NOT NULL         -- known languages (populated from race + class + background + feats; e.g., ["Common", "Elvish", "Dwarvish"])
   inventory       JSONB                  -- [{item_id, quantity, equipped, type, is_magic, magic_bonus, magic_properties, requires_attunement, rarity}] type: weapon/armor/consumable/ammunition/other
   character_data  JSONB                  -- full dnd5e_json_schema blob for import/export fidelity
   ddb_url         TEXT                   -- D&D Beyond URL if imported
