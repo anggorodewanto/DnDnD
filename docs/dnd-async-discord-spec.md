@@ -310,6 +310,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/check` | `/check perception` or `/check athletics --adv` or `/check medicine AR` | Skill/ability check (DM-prompted or player-initiated). Optional target for targeted checks (e.g., stabilization) |
 | `/save` | `/save dex` | Saving throw (DM-prompted) |
 | `/rest` | `/rest short` or `/rest long` | Initiate a rest (DM must approve, not during combat) |
+| `/whisper` | `/whisper I want to pickpocket the merchant` | Private message to the DM — ephemeral to the player, posted to `#dm-queue` |
 
 Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) prompt affected players to roll via `/save` — the bot pings them in `#your-turn`. Enemy saves are rolled by the DM from the dashboard.
 
@@ -2364,8 +2365,11 @@ Narrative-driven — no dedicated mechanical systems needed in MVP:
 | Consumable without effect | Player uses `/use` on item without auto-resolve | **🧪 Item** — Aria uses Ball Bearings |
 | Enemy turn ready | Initiative advances to a DM-controlled combatant | **⚔️ Enemy Turn** — Goblin G2 is up |
 | Narrative teleport | Teleportation spell beyond current map | **✨ Spell** — Kael casts Teleport (narrative resolution) |
+| Player whisper | Player uses `/whisper` | **🤫 Whisper** — Aria: "I want to pickpocket the merchant" |
 
 Each notification includes the player name, action context, and a **"Resolve →"** link to the relevant dashboard panel.
+
+**Whisper replies:** When the DM resolves a whisper from the dashboard, the bot sends the DM's reply as a Discord DM to the player. The `#dm-queue` entry is marked ✅ with the reply text. Players can continue the private conversation by sending additional `/whisper` messages.
 
 **Resolved items** are edited by the bot to show ✅ and a brief outcome summary, so the DM can scan `#dm-queue` history and see what's been handled.
 
