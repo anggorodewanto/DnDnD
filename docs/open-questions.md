@@ -46,7 +46,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 - [x] 27. **Moving through occupied tiles.** — Resolved: Added full 5e occupied tile rules. Allies: pass through but can't end turn there. Hostiles: blocked unless 2+ sizes different. Can never end turn in another creature's space.
 - [ ] 28. **Map readability.** On a 30x20 map at 32-48px/tile, coordinate labels may be too small. Mobile viewing could be very difficult.
-- [ ] 29. **Multiple floors / z-levels.** The altitude system handles flying. What about multi-story buildings, stairs, or dungeons with different levels?
+- [x] 29. **Multiple floors / z-levels.** — Resolved: Separate maps per floor. DM loads each floor as a distinct map; stairs/ladders are marked tiles with DM-specified movement cost. Cross-floor combat resolved via DM adjudication. Altitude system reserved for flying/falling within a single floor.
 - [x] 30. **Teleportation spells.** — Resolved: Added `teleport JSONB` field to spells table. Teleportation spells bypass all path validation (no movement cost, no difficult terrain, no OA). System validates only destination occupancy, range, and line of sight (when required). Full SRD teleportation spell data included.
 
 ## Reactions

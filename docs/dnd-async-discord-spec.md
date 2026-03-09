@@ -264,6 +264,17 @@ Tokens carry an **altitude** value (integer feet, default 0) representing height
 - Tokens at different altitudes **do not block** each other's ground tile
 - Falling: if a flying creature is knocked prone or loses fly speed, fall damage is 1d6 per 10ft (standard 5e), applied automatically
 
+### Multiple Floors & Z-Levels
+
+Multi-story environments (towers, dungeons, multi-level buildings) use **separate maps per floor**. The altitude system above is for flying/falling within a single floor only.
+
+- Each floor is a distinct map the DM loads independently
+- Stairs, ladders, and other floor transitions are marked tiles on the map (visual indicator only — no special tile type)
+- The DM narrates floor transitions in `#the-story` and loads the new floor's map when the party moves between levels
+- Movement cost to traverse stairs/ladders is set by the DM (typically 10–15ft of movement per floor)
+- **Cross-floor combat** (e.g., shooting through a hole in the floor, casting spells between levels) is resolved by the DM via `#dm-queue` — the system does not enforce line-of-sight or targeting across separate maps
+- During map-based exploration, only one floor's map is active at a time; the DM switches maps as needed
+
 ### Structured Commands
 
 Players submit slash commands in `#your-turn` (where they receive their turn ping), but commands work from any channel in the server — the bot validates and routes output to the correct channels regardless.
