@@ -2352,6 +2352,8 @@ Players type `/loot` to see the loot pool and claim items via Discord buttons. E
 
 **Gold tracking:** the `gold` field on characters is an integer representing total gold pieces. The DM can add/remove gold from the dashboard. Gold changes are logged to `#combat-log` or `#the-story`. Electrum, silver, copper, and platinum are converted to gold equivalents for simplicity (DM handles narrative flavor).
 
+**Carrying capacity:** not enforced by the system. Players can carry any number of items without weight or slot limits. The DM controls what items are available through loot pools, shops, and rewards — inventory size is self-regulating. Weight data (`weight_lb`) exists on weapons and armor reference tables for informational purposes but has no mechanical effect.
+
 **DM inventory management:** the DM can add, remove, or transfer items between any characters from the dashboard. All DM-initiated changes are logged to `#combat-log`.
 
 ### Magic Items
