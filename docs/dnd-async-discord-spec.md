@@ -253,6 +253,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/action stand` | `/action stand` | Stand up from prone — costs half your movement speed, no action (auto-resolved) |
 | `/action drop-prone` | `/action drop-prone` | Drop prone voluntarily — no action or movement cost (auto-resolved) |
 | `/action` | `/action flip the table` | Freeform action — routed to `#dm-queue` |
+| `/action cancel` | `/action cancel` | Cancel your pending freeform action before the DM resolves it |
 | `/reaction` | `/reaction Shield if I get hit` | Pre-declare reaction intent (usable any time) — routed to `#dm-queue` |
 | `/deathsave` | `/deathsave` | Roll a death saving throw (only at 0 HP) |
 | `/command` | `/command FAM attack G1` or `/command SW attack G2` | Issue a command to a summoned creature you control (see Summoned Creatures & Companions) |
@@ -890,6 +891,8 @@ For anything that can't be expressed through structured commands, `/action` rout
 
 These post to `#dm-queue`. The DM resolves them in the dashboard, applies state changes, and the bot posts the result. Structured commands handle ~90% of combat; `/action` is the escape hatch for creative play.
 
+**Cancelling a pending freeform action:** `/action cancel` withdraws the player's most recent pending freeform action, as long as the DM has not yet started resolving it. The bot marks the `#dm-queue` message with ~~strikethrough~~ and "Cancelled by player", then confirms to the player with an ephemeral message: "✅ Pending action cancelled: *flip the table*". If there is no pending freeform action, the command is rejected: "❌ No pending action to cancel." If the DM has already resolved it, the command is rejected: "❌ That action has already been resolved — use `/undo` to request a correction instead."
+
 ### Standard Actions (Auto-Resolved)
 
 The following standard actions are recognized by `/action` and resolved automatically without routing to `#dm-queue`:
@@ -916,6 +919,37 @@ Combat log output:
 ```
 ⚡  Aria uses Action Surge! (1 use remaining)
 📋 Remaining: 🏃 15ft move | ⚔️ 2 attacks | 🎁 Bonus action | 🤚 Free interact
+```
+
+**`/help action` output** (ephemeral, shown when a player types `/help action`):
+```
+/action — Actions on Your Turn
+
+Standard actions (auto-resolved):
+  /action disengage       Move without provoking opportunity attacks
+  /action dash            Double your movement this turn
+  /action dodge           Attacks against you have disadvantage until next turn
+  /action help [ally] [target]  Give an ally advantage on their next attack/check
+  /action hide            Stealth vs passive Perception (must have cover/obscurement)
+  /action escape          Break free from a grapple (contested check)
+  /action stand           Stand up from prone (costs half your movement)
+  /action drop-prone      Drop prone voluntarily (no cost)
+  /action ready [trigger] Hold your action for a trigger (uses your reaction)
+  /action surge           Extra action this turn (Fighter only)
+  /action channel-divinity [option]  Channel Divinity (Cleric/Paladin)
+
+Freeform actions (DM-resolved):
+  /action [anything]      Describe a creative action — sent to DM for resolution
+                          Examples: /action flip the table for cover
+                                   /action grab the chandelier and swing to F2
+
+Cancel:
+  /action cancel          Withdraw your pending freeform action (before DM resolves it)
+
+Tips:
+• Standard actions cost your action for the turn (except stand/drop-prone)
+• Freeform actions also cost your action — the DM decides the outcome
+• Use /undo if you need to correct an already-resolved action
 ```
 
 ### Free Object Interaction
@@ -2199,6 +2233,7 @@ Narrative-driven — no dedicated mechanical systems needed in MVP:
 | Event | Trigger | Example message |
 |---|---|---|
 | Freeform action | Player uses `/action` with non-auto-resolvable text | **🎭 Action** — Thorn: "flip the table" |
+| Action cancelled | Player uses `/action cancel` on a pending freeform action | ~~🎭 Action — Thorn: "flip the table"~~ Cancelled by player |
 | Reaction declaration | Player uses `/reaction` | **⚡ Reaction** — Aria: "Shield if I get hit" |
 | Rest request | Player uses `/rest short` or `/rest long` | **🛏️ Rest** — Kael requests a short rest |
 | Skill check narration | Auto-resolved `/check` completes | **🎲 Check** — Thorn: Athletics 18 (awaiting narration) |

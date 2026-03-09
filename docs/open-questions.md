@@ -102,7 +102,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [x] 61. **No player undo.** — Resolved: `/undo` command posts a structured correction request to `#dm-queue` with last action details and optional reason. DM reviews and applies undo from dashboard. No automatic reversal.
 - [ ] 62. **Disconnection handling.** If a player's Discord client crashes mid-turn, the turn timer continues. Any reconnection awareness?
 - [x] 63. **Invalid command feedback.** — Resolved: Already addressed throughout the spec. All error messages use a consistent `❌ [reason]` format as ephemeral replies (e.g., "❌ Not enough movement — path requires 40ft", "❌ You can't move — you are grappled"). Dozens of examples across all command sections.
-- [ ] 64. **Cancelling queued freeform actions.** `/action flip the table` goes to `#dm-queue`. Can the player edit or cancel it before the DM resolves it?
+- [x] 64. **Cancelling queued freeform actions.** — Resolved: Added `/action cancel` to withdraw pending freeform actions before DM resolves them. DM queue message marked as cancelled. Rejected if no pending action or already resolved. Full `/help action` output added.
 
 ## Notifications & Awareness
 
