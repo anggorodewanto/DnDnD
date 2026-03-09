@@ -164,6 +164,6 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [ ] 102. **Darkvision and dim light.** Darkvision lets you see in darkness as dim light, but dim light imposes disadvantage on Perception. Is this auto-applied?
 - [x] 103. **Initiative ties.** — Resolved: DEX modifier tiebreaker, then alphabetical by name. Fully automatic, no DM input needed.
 - [x] 104. **Summoned creatures and companions.** — Resolved: All summoned creatures are player-controlled via `/command [creature-id] [action]`. Creatures get their own combatant entries with short IDs, initiative placement per spell rules, and standard turn resource tracking. `summoner_id` field links creatures to their summoner.
-- [ ] 105. **Combat recap.** In async play, a single combat can span days. Is there a recap feature for a player returning after 3 days?
+- [x] 105. **Combat recap.** — Resolved: `/recap` command shows `#combat-log` entries since the player's last turn (or `/recap N` for last N rounds) as an ephemeral message. Direct replay of combat log grouped by round/turn — no summarization. Works during or after combat from any channel.
 - [ ] 106. **Simultaneous encounters.** Can two encounters run at once (party split)? The data model supports it but Discord channels (`#combat-map`, `#your-turn`) do not.
 - [ ] 107. **Campaign pause UX.** Campaigns can be paused (`status: 'paused'`). What does the player see? Are commands disabled?

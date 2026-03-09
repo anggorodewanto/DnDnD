@@ -292,6 +292,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 | `/prepare` | `/prepare` | Change prepared spells (prepared casters only, out of combat) |
 | `/register` | `/register Thorn` | Link Discord account to a character (DM approves) |
 | `/setup` | `/setup` | Auto-create channel structure (DM only, run once) |
+| `/recap` | `/recap` or `/recap 3` | Show combat log entries since your last turn (or last N rounds). Ephemeral |
 | `/help` | `/help` or `/help attack` | Show command list, or detailed usage for a specific command |
 
 **Command discoverability:** Discord's built-in slash command UI is the primary discovery mechanism — typing `/` shows all registered commands with parameter hints. The `/help` command supplements this with usage examples, available flags (e.g., `--gwm`, `--adv`), and context-specific tips (e.g., remaining attacks, available spell slots).
@@ -1666,6 +1667,34 @@ Turn timeout: **24 hours**, DM-configurable per campaign (1h–72h range).
 - After 3 consecutive auto-skips, the character is flagged as "absent" in the dashboard
 - DM decides: auto-pilot the character, narrate a retreat, or remove from initiative
 - Initiative slot stays reserved so the player can return seamlessly
+
+### Combat Recap
+
+In async play, combat can span days of real time. `#combat-log` serves as the persistent record of everything that happened, and `/recap` gives players a filtered view of it.
+
+**`/recap`** (no arguments) — shows all `#combat-log` entries since the player's last turn as an ephemeral message. Covers every turn that occurred while the player was waiting: attacks, damage, movement, conditions applied/removed, deaths, spells cast, and reactions triggered.
+
+**`/recap N`** — shows `#combat-log` entries from the last N rounds (e.g., `/recap 3` for the last 3 rounds).
+
+The recap is a direct replay of combat log entries — no summarization or AI rewriting. Entries are grouped by round and turn for readability:
+
+```
+📜 Recap — Rounds 4–6 (since your last turn)
+
+── Round 4 ──
+Goblin #1 (G1): attacked Thorn — 🎲 11 vs AC 18 — Miss!
+Thorn: attacked Goblin #1 with Greatsword — 🎲 19 — Hit! 14 slashing → Goblin #1 Bloodied
+Aria: cast Fireball at E5 — Goblin #2 💀 killed | Goblin #3 🎲 DEX save 8 — fail, 28 fire
+  ⚠️ Goblin #3 is now Dead
+
+── Round 5 ──
+Goblin #1 (G1): Disengaged, moved to H3
+Thorn: moved to G3, attacked Goblin #1 — 🎲 22 — Hit! 11 slashing → Goblin #1 💀 killed
+
+🏁 Combat ended — all hostiles defeated
+```
+
+Usable from any channel, during or after combat (until the encounter is archived). If no combat is active and the most recent encounter is completed, `/recap` shows the final rounds of that encounter.
 
 ### Death Saves & Unconsciousness
 
