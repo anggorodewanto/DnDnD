@@ -9,7 +9,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [x] 1. **No player-facing character creation.** — Resolved: Hybrid approach. Web-based player portal for character creation (`/create-character` links to builder) and viewing (`/character` shows sheet). `/import <ddb-url>` for self-service D&D Beyond import. All paths require DM approval. Welcome DM sent on server join with getting-started instructions.
 - [x] 2. **Registration approval is opaque.** — Resolved: Immediate ephemeral confirmation on submit. Bot DMs the player when DM approves, requests changes, or rejects. Pre-approval game commands show current registration status with relative timestamp and any DM feedback, rather than a generic error.
 - [ ] 3. **No `/unregister` or character swap.** What if a player wants to switch characters mid-campaign? The spec says "DM can override" but there is no player-facing flow.
-- [ ] 4. **No onboarding message.** When a player joins the server, is there an automated welcome explaining channels, commands, and how to get started?
+- [x] 4. **No onboarding message.** — Resolved: Already addressed by #1. Welcome DM sent on server join with getting-started instructions (character creation paths, DM approval flow, channel overview).
 - [ ] 5. **Mistyped character name on `/register`.** What error does the player get? Is it fuzzy-matched against existing characters?
 
 ## Turn Flow & Action Economy
@@ -165,5 +165,5 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [x] 103. **Initiative ties.** — Resolved: DEX modifier tiebreaker, then alphabetical by name. Fully automatic, no DM input needed.
 - [x] 104. **Summoned creatures and companions.** — Resolved: All summoned creatures are player-controlled via `/command [creature-id] [action]`. Creatures get their own combatant entries with short IDs, initiative placement per spell rules, and standard turn resource tracking. `summoner_id` field links creatures to their summoner.
 - [x] 105. **Combat recap.** — Resolved: `/recap` command shows `#combat-log` entries since the player's last turn (or `/recap N` for last N rounds) as an ephemeral message. Direct replay of combat log grouped by round/turn — no summarization. Works during or after combat from any channel.
-- [ ] 106. **Simultaneous encounters.** Can two encounters run at once (party split)? The data model supports it but Discord channels (`#combat-map`, `#your-turn`) do not.
+- [x] 106. **Simultaneous encounters.** — Resolved: Shared channels with encounter-labeled messages. All bot messages to combat channels are prefixed with the encounter name and round number. Multiple encounters interleave in the same `#combat-map`, `#your-turn`, `#combat-log`, and `#initiative-tracker` channels. Players read the labels to identify relevant messages. Per-turn locks scoped per encounter so commands don't block across encounters.
 - [ ] 107. **Campaign pause UX.** Campaigns can be paused (`status: 'paused'`). What does the player see? Are commands disabled?

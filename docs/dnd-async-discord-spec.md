@@ -49,10 +49,11 @@ Discord is the **display and input terminal**, not the source of truth. The syst
 - One bot instance serves multiple Discord servers (multi-tenant)
 - All database queries are scoped by `guild_id` / `campaign_id`
 - One campaign per Discord server (keeps channel structure clean and unambiguous)
+- Multiple encounters can be active simultaneously (e.g., party split) — see Simultaneous Encounters
 
 ### Concurrency Model
 
-All combat state mutations are serialized through a **per-turn pessimistic lock** using PostgreSQL advisory locks keyed on `turn_id`.
+All combat state mutations are serialized through a **per-turn pessimistic lock** using PostgreSQL advisory locks keyed on `turn_id`. Locks are scoped per encounter — commands in different simultaneous encounters do not block each other.
 
 **Rapid player commands** (e.g., two `/attack` commands sent before the first resolves):
 - Each command acquires the turn lock before processing
@@ -1432,19 +1433,19 @@ When multiple effects apply to the same roll, they are resolved in this order:
 ```
 DM clicks "Start Combat" in dashboard
   → backend initializes combat state, rolls initiative
-  → bot posts initiative order to #initiative-tracker
-  → bot posts map image to #combat-map
-  → bot pings first player/enemy in #your-turn
+  → bot posts initiative order to #initiative-tracker (labeled with encounter name)
+  → bot posts map image to #combat-map (labeled with encounter name)
+  → bot pings first player/enemy in #your-turn (labeled with encounter name + round)
 
 Player logs in, sees ping, submits commands
   → bot validates and resolves mechanical actions
-  → results posted to #combat-log, rolls to #roll-history
+  → results posted to #combat-log (labeled with encounter name), rolls to #roll-history
   → freeform /action posts to #dm-queue if needed
 
 DM reviews, resolves any queued actions in dashboard
   → clicks "Apply", "Next Turn"
-  → bot regenerates map image in #combat-map
-  → bot pings next player in #your-turn
+  → bot regenerates map image in #combat-map (labeled with encounter name)
+  → bot pings next player in #your-turn (labeled with encounter name + round)
 ```
 
 ### Surprise
@@ -1473,6 +1474,33 @@ When two or more combatants roll the same initiative total, ties are broken auto
 
 The system assigns `initiative_order` deterministically during encounter setup — no DM input or roll-off needed.
 
+### Simultaneous Encounters
+
+Multiple encounters can be active at the same time (e.g., party split, multi-room dungeon). All encounters share the same Discord channels — `#combat-map`, `#your-turn`, `#combat-log`, `#initiative-tracker`. Messages are distinguished by an **encounter name label** prefixed to every bot message.
+
+**Message labeling:** every bot message to a combat channel is prefixed with the encounter name and round number:
+```
+⚔️ Rooftop Ambush — Round 3
+🔔 @Aria — it's your turn!
+```
+
+```
+⚔️ Basement Escape — Round 1
+🗺️ [map image]
+```
+
+**How it works:**
+- The DM creates and starts encounters independently from the dashboard
+- Each encounter has its own turn order, round counter, and map
+- Bot messages for all encounters interleave in the shared channels
+- Players read the encounter name label to identify which messages are relevant to them
+- Commands from a player are routed to the encounter they belong to (based on their combatant entry)
+- Per-turn advisory locks are scoped per encounter — commands in different encounters do not block each other
+
+**Constraints:**
+- A character can only be a combatant in one active encounter at a time
+- The DM manages all active encounters from the dashboard, which shows each encounter in its own panel
+
 ### Player Turns
 
 Turns are **sequential** — players send commands one at a time and see results before deciding their next action.
@@ -1491,6 +1519,7 @@ Each command validates against remaining resources. If a player tries to use som
 
 1. **Turn start** — included in the ping message in `#your-turn`:
 ```
+⚔️ Rooftop Ambush — Round 3
 🔔 @Aria — it's your turn!
 📋 Available: 🏃 30ft move | ⚔️ 2 attacks | 🎁 Bonus action | 🤚 Free interact | 🛡️ Reaction | ⚡ Action Surge (1)
 ```
