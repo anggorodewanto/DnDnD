@@ -1515,6 +1515,24 @@ After creation, the player links to the character via `/register <character_name
 - DM selects new class/subclass features and spells if applicable
 - For DDB-imported characters, player levels up in D&D Beyond and re-imports
 
+**Level-up notification:** when the DM applies a level-up, the bot sends two messages:
+
+1. **Public announcement** in `#the-story`:
+```
+🎉  Aria has reached Level 6!
+```
+
+2. **Private detail ping** in `#your-turn` (pings the player):
+```
+🎉  Aria leveled up! Fighter 5 → Fighter 6
+   ❤️  HP: 38 → 44 (+6)
+   📈  Proficiency bonus: +3
+   ⚔️  New feature: Extra Attack (2 attacks per action)
+   🎓  ASI/Feat available — DM will apply your choice
+```
+
+The private message lists all mechanical changes (HP increase, new features, new spell slots, proficiency bonus changes) and flags any pending player choices (ASI/feat, new spells, subclass selection). The character card in `#character-cards` auto-updates as usual.
+
 **Multiclass spell slots:** for characters with multiple spellcasting classes, spell slot totals are calculated from the 5e multiclass spellcasting table. Each class contributes a caster level based on its progression: full casters (Wizard, Cleric, Druid, Bard, Sorcerer) contribute class level × 1, half casters (Paladin, Ranger) contribute class level × ½ (rounded down), third casters (Eldritch Knight, Arcane Trickster) contribute class level × ⅓ (rounded down). The sum determines slots from the multiclass table. Warlock pact slots remain separate and are not included in this calculation.
 
 **Multiclass spellcasting ability:** each spell belongs to one or more class spell lists. When a multiclass character casts a spell, the system uses the spellcasting ability of the class that provides that spell. If a spell appears on multiple of the character's class lists, the system uses the higher modifier.
