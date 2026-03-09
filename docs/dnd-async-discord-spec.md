@@ -1510,6 +1510,9 @@ After creation, the player links to the character via `/register <character_name
 
 ### Character Leveling
 
+**Progression model:** milestone only. The DM decides when characters level up based on story progression — there is no XP tracking, no XP rewards, and no XP fields in the data model. This keeps async play simple and avoids bookkeeping between sessions.
+
+**Leveling workflow:**
 - DM edits a specific class entry's level in the dashboard (e.g., increase Fighter from 5 → 6, or add a new class entry for multiclassing)
 - System auto-recalculates total `level`, HP (`hp_max` adds the new class's hit die + CON mod), proficiency bonus, spell slots (using 5e multiclass spellcasting table if multiclassed), attacks per action
 - DM selects subclass when class level reaches the subclass threshold (varies by class: 1 for Cleric, 2 for Wizard, 3 for most others)

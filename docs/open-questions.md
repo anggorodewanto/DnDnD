@@ -144,7 +144,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [x] 88. **Multiclassing.** — Resolved: Replaced `class TEXT` with `classes JSONB` array of `{class, subclass, level}` entries. `level` kept as cached total. `hit_dice_remaining` changed to JSONB keyed by die size. Spell slots use 5e multiclass spellcasting table. Extra Attack doesn't stack. Spellcasting ability resolved per-spell from class list. Multiclass prereqs and proficiency subsets added to classes table.
 - [ ] 89. **Feat selection.** Some ASI levels allow feats. How is this handled? Dashboard-only?
 - [x] 90. **Subclass not in data model.** — Resolved: Subclass stored per class entry in `characters.classes` JSONB (e.g., `{class: "fighter", subclass: "champion", level: 5}`). Classes table gains `subclasses JSONB` with features_by_level per subclass, and `subclass_level` indicating when subclass is chosen. Subclass features merged into character's features array.
-- [ ] 91. **XP vs milestone.** Experience points are not mentioned anywhere. Is it milestone-only?
+- [x] 91. **XP vs milestone.** — Resolved: Milestone only. No XP tracking, no XP fields in the data model. DM decides when characters level up based on story progression.
 
 ## Map & Visual Feedback
 
