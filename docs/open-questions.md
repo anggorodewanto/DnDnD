@@ -51,7 +51,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ## Reactions
 
-- [ ] 31. **No way to view active declarations.** Declarations persist until used, cancelled, or encounter ends. Can a player list their current active declarations?
+- [x] 31. **No way to view active declarations.** — Resolved: Already addressed. `/status` shows active reaction declarations. `/reaction cancel [description]` and `/reaction cancel-all` manage them. DM sees all declarations in the Active Reactions Panel.
 - [x] 32. **Multiple simultaneous declarations.** — Resolved: Multiple active declarations allowed. When multiple trigger from the same event, DM picks which fires via the Active Reactions Panel in the dashboard. After one fires, rest stay dormant until reaction resets next round.
 - [ ] 33. **Freeform declaration ambiguity.** `/reaction OA if goblin moves away` — which goblin? Declarations are freeform text; there is no structured targeting.
 - [x] 34. **OA prompts stall combat.** — Resolved: Queue-and-continue model. Movement is not paused; hostile has until end-of-round to take the OA. If OA drops target to 0 HP, system notifies DM to retroactively correct position. No auto-invalidation.
@@ -72,7 +72,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [x] 43. **No looting workflow.** — Resolved: DM populates loot pool from dashboard after encounter ends. Players `/loot` to claim items via Discord buttons. Gold can be split evenly.
 - [x] 44. **No consumables system.** — Resolved: `/use healing-potion` consumes item and auto-resolves effects. Costs action in combat (DM can configure potions as bonus action). Items without defined effects route to DM queue.
 - [x] 45. **No gold or currency tracking.** — Resolved: Added `gold INTEGER` field to characters table. All currency simplified to gold pieces. DM manages via dashboard; changes logged to combat log.
-- [ ] 46. **Equipping armor timing.** Donning/doffing armor takes 1-10 minutes in 5e. Is this enforced or is `/equip` instant?
+- [x] 46. **Equipping armor timing.** — Resolved: Blocked in combat ("can't don/doff armor during combat"), instant out of combat with no time tracking. DM can override from dashboard. `/equip [armor] --armor` and `/equip none --armor` added.
 
 ## Out-of-Combat Gameplay
 

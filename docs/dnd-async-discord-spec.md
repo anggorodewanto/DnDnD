@@ -366,6 +366,20 @@ Shields follow 5e donning/doffing rules:
 - **Out of combat:** instant, no cost.
 - Equipping a shield while the off-hand already holds a weapon automatically stows the weapon (no extra cost). Equipping an off-hand weapon while a shield is equipped requires doffing the shield first (action cost).
 
+**Armor equipping:**
+- `/equip chain-mail --armor` — equips body armor (`equipped_armor`), AC recalculated
+- `/equip none --armor` — unequips body armor, AC falls back to base (10 + DEX or `ac_formula`)
+
+Armor donning/doffing takes minutes in 5e, so:
+- **In combat:** blocked. "❌ You can't don or doff armor during combat." DM can override from the dashboard if the narrative allows it (e.g., a multi-round lull).
+- **Out of combat:** instant, no time tracking. DM handles timing narratively for ambush scenarios (e.g., sleeping without armor).
+
+Combat log output:
+```
+🔄  Aria equips Plate Armor (AC → 18)
+🔄  Aria removes Chain Mail (AC → 12)
+```
+
 **Validation rules:**
 - Two-handed weapons (`--twohanded` flag) require `equipped_off_hand` to be null
 - Grappling requires a free hand — rejected if both hands occupied
