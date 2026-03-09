@@ -226,7 +226,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/fly` | `/fly 30` | Set altitude in feet. Costs movement 1:1 |
 | `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` or `/attack G2 --twohanded` | Attack a target. One `/attack` per swing; backend tracks attacks remaining. `--twohanded` for versatile weapons |
 | `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` or `/cast fireball D5 --quickened` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting. Bonus action spells (e.g., Healing Word) are auto-detected from `spells_ref.casting_time` — no need for `/bonus cast`; the system deducts the bonus action instead of the action. Sorcerers can add Metamagic flags (e.g., `--quickened`, `--twinned [target]`, `--subtle`) — see Metamagic |
-| `/bonus` | `/bonus cunning-action dash` or `/bonus cunning-action disengage` | Bonus action |
+| `/bonus` | `/bonus cunning-action dash` or `/bonus cunning-action disengage` or `/bonus cunning-action hide` | Bonus action |
 | `/bonus rage` | `/bonus rage` | Enter rage — Barbarian only, costs bonus action (auto-resolved) |
 | `/bonus wild-shape` | `/bonus wild-shape wolf` or `/bonus wild-shape brown-bear` | Wild Shape — Druid only, transform into a beast (auto-resolved, see Wild Shape) |
 | `/bonus revert` | `/bonus revert` | Revert from Wild Shape to true form — Druid only, costs bonus action (auto-resolved) |
@@ -460,6 +460,31 @@ Combat log output:
 **Turn status visibility:** when a character has Bardic Inspiration, `🎵 Bardic Inspiration (d6)` is appended to their turn status prompt (both at turn start and after each command), so the player never forgets it is available.
 
 **Expiration:** Bardic Inspiration expires after 10 minutes. In async play, the system tracks grant time; if the die is unused after 10 minutes of real time, it is auto-removed and the bot notifies the holder: "🎵 Your Bardic Inspiration from Thorn has expired." The DM can extend or waive the timer from the dashboard for long async gaps.
+
+**`/help rogue` output** (ephemeral, shown when a Rogue types `/help rogue`):
+```
+🗡️ Rogue Abilities
+
+  Cunning Action (bonus action, level 2+):
+    /bonus cunning-action dash          Dash as bonus action
+    /bonus cunning-action disengage     Disengage as bonus action (no OAs this turn)
+    /bonus cunning-action hide          Hide as bonus action (Stealth vs passive Perception)
+
+  Sneak Attack (automatic, once per turn):
+    Triggered on hit with finesse or ranged weapon when you have advantage
+    OR when an ally is within 5ft of the target (and you don't have disadvantage)
+    Damage: 1d6 per 2 Rogue levels (rounded up) — e.g., 3d6 at level 5
+
+  Expertise (passive):
+    Double proficiency on selected skills — auto-applied to all checks
+
+  Uncanny Dodge (lvl 5+, reaction):
+    /reaction uncanny-dodge             Halve damage from one attack you can see
+    (Prompted automatically when hit by an attack)
+
+  Evasion (lvl 7+, passive):
+    DEX saves: success = no damage, fail = half damage (auto-applied)
+```
 
 **Finesse weapons:** weapons with the "finesse" property (rapier, dagger, shortsword, etc.) allow the attacker to use either STR or DEX for attack and damage rolls. The system auto-selects the higher of the two modifiers — no player input required.
 
@@ -1056,6 +1081,7 @@ The Hide action allows a creature to become unseen during combat.
 
 **Hiding:**
 - Player uses their action: `/action hide`
+- Rogues can Hide as a bonus action via `/bonus cunning-action hide` (costs bonus action instead of action). Requires Rogue class (level 2+, when Cunning Action is gained)
 - System rolls Stealth (DEX) check for the hider vs **passive Perception** of each hostile creature with line of sight
 - If the Stealth result beats all hostiles' passive Perception: `is_visible` is set to `false` on the combatant; token is hidden from the player-facing map
 - If any hostile's passive Perception meets or exceeds the roll: hide fails, `is_visible` remains `true`

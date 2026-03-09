@@ -126,7 +126,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [x] 76. **Bardic Inspiration.** — Resolved: `/bonus bardic-inspiration [target]` grants die to ally (CHA mod uses, long rest recharge, short rest at 5+). Die scales d6→d8→d10→d12 by level. Auto-prompt on recipient's attack rolls, checks, and saves. Shown in turn status prompt so players never forget it. 10-minute expiration with DM override for async.
 - [x] 77. **Divine Smite on hit.** — Resolved: Post-hit ephemeral prompt with Discord buttons showing available slot levels. Paladin picks slot or declines. Smite dice doubled on crits, +1d8 vs undead/fiend. Uses `resource_on_hit` effect type pattern for future on-hit features.
 - [x] 78. **Evasion.** — Resolved: Already addressed via the Feature Effect System. Evasion is explicitly listed as an `on_save` trigger effect and named as an auto-detected class feature driven by effect declarations.
-- [ ] 79. **Cunning Action: Hide.** Is hiding as a bonus action supported (`/bonus cunning-action hide`)? Hide is not listed as a Cunning Action option.
+- [x] 79. **Cunning Action: Hide.** — Resolved: Added `/bonus cunning-action hide` as a bonus action Hide for Rogues (level 2+). Uses same Stealth vs passive Perception flow as `/action hide`. Added to command table, Stealth & Hiding section, and full `/help rogue` output covering all Rogue abilities.
 - [ ] 80. **Channel Divinity.** Mentioned as a short-rest recharge example but specific options (Turn Undead, class-specific) have no implementation guidance.
 
 ## Conditions & Status Effects
