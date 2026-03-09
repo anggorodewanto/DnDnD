@@ -1881,6 +1881,7 @@ After creation, the player links to the character via `/register <character_name
 - System auto-recalculates total `level`, HP (`hp_max` adds the new class's hit die + CON mod), proficiency bonus, spell slots (using 5e multiclass spellcasting table if multiclassed), attacks per action
 - DM selects subclass when class level reaches the subclass threshold (varies by class: 1 for Cleric, 2 for Wizard, 3 for most others)
 - DM selects new class/subclass features and spells if applicable
+- If the level grants an ASI, the bot prompts the player with interactive buttons (see ASI/Feat selection below); the player's choice goes to `#dm-queue` for DM approval
 - For DDB-imported characters, player levels up in D&D Beyond and re-imports
 
 **Level-up notification:** when the DM applies a level-up, the bot sends two messages:
@@ -1896,10 +1897,42 @@ After creation, the player links to the character via `/register <character_name
    ❤️  HP: 38 → 44 (+6)
    📈  Proficiency bonus: +3
    ⚔️  New feature: Extra Attack (2 attacks per action)
-   🎓  ASI/Feat available — DM will apply your choice
+   🎓  ASI/Feat available — choose below!
 ```
 
 The private message lists all mechanical changes (HP increase, new features, new spell slots, proficiency bonus changes) and flags any pending player choices (ASI/feat, new spells, subclass selection). The character card in `#character-cards` auto-updates as usual.
+
+**ASI/Feat selection:** when a level-up grants an Ability Score Improvement (typically class levels 4, 8, 12, 16, 19), the bot appends an interactive prompt to the level-up notification in `#your-turn`:
+
+```
+🎓  Ability Score Improvement available!
+    [+2 to One Score]  [+1 to Two Scores]  [Choose a Feat]
+```
+
+**ASI path:** player clicks `[+2 to One Score]` or `[+1 to Two Scores]`. The bot shows a follow-up with Discord select menus listing ability scores and their current values (e.g., "STR (16 → 18)"). Scores are capped at 20. If a player tries to exceed 20, the bot rejects with "❌ STR is already 20 — choose a different ability."
+
+**Feat path:** player clicks `[Choose a Feat]`. The bot shows a paginated select menu of SRD feats the character qualifies for (prerequisites checked automatically — e.g., Heavy Armor Master requires heavy armor proficiency, Ritual Caster requires INT or WIS 13+). Each feat shows its name and a one-line summary. Feats the character already has are excluded.
+
+After the player selects, the bot posts a structured request to `#dm-queue`:
+
+```
+🎓 ASI/Feat — Aria (Fighter 8) chose: Great Weapon Master
+   Prerequisites: ✅ met
+   Effects: -5 attack / +10 damage option on heavy weapons; bonus attack on crit/kill
+   [Approve]  [Deny — message player]
+```
+
+The DM reviews and clicks `[Approve]` from the dashboard. On approval:
+- **ASI:** ability scores updated, all derived stats recalculated (AC, attack/damage modifiers, save DCs, skill bonuses, HP if CON changed)
+- **Feat:** added to the character's `features` array with its `mechanical_effect` declarations (processed via the Feature Effect System). Feats granting a +1 ASI (e.g., Resilient, Actor) apply the score increase simultaneously
+- Character card in `#character-cards` auto-updates
+- Bot confirms to the player in `#your-turn`: "✅ Great Weapon Master applied!"
+
+If the DM denies (e.g., campaign doesn't allow certain feats), the player receives a message with the DM's reason and the prompt re-appears for a new selection.
+
+**Feats with choices:** some feats require an additional selection (e.g., Resilient — choose an ability score; Elemental Adept — choose a damage type; Skilled — choose three proficiencies). The bot presents a follow-up select menu for these choices before posting to `#dm-queue`.
+
+**Pending state:** until the ASI/feat choice is approved, the character card shows "⏳ ASI/Feat pending" and the player can re-trigger the prompt by clicking the original buttons. Pending choices do not block gameplay — the character can still participate in combat and exploration.
 
 **Multiclass spell slots:** for characters with multiple spellcasting classes, spell slot totals are calculated from the 5e multiclass spellcasting table. Each class contributes a caster level based on its progression: full casters (Wizard, Cleric, Druid, Bard, Sorcerer) contribute class level × 1, half casters (Paladin, Ranger) contribute class level × ½ (rounded down), third casters (Eldritch Knight, Arcane Trickster) contribute class level × ⅓ (rounded down). The sum determines slots from the multiclass table. Warlock pact slots remain separate and are not included in this calculation.
 
@@ -1920,6 +1953,7 @@ The system ships with the full **D&D 5e SRD** content, seeded into PostgreSQL on
 - **Armor** — all SRD armor (AC formula, type, stealth disadvantage, strength requirement)
 - **Equipment** — adventuring gear, tools, packs
 - **Classes** — all 12 SRD classes with features by level, hit dice, proficiencies, spell lists
+- **Feats** — all SRD feats with prerequisites, mechanical effects, and ASI bonuses
 - **Races** — all SRD races with traits, ability score bonuses, speed, darkvision
 - **Conditions** — all 15 standard conditions with mechanical effects
 - **Skills** — all 18 skills mapped to ability scores
@@ -2423,6 +2457,15 @@ armor
   stealth_disadv  BOOLEAN DEFAULT false
   armor_type      TEXT NOT NULL          -- 'light', 'medium', 'heavy', 'shield'
   weight_lb       REAL
+
+feats
+  id              TEXT PK               -- slug: "great-weapon-master", "sentinel"
+  name            TEXT NOT NULL
+  description     TEXT NOT NULL
+  prerequisites   JSONB                  -- NULL (no prereqs) or {ability: {str: 13}, proficiency: "heavy_armor", spellcasting: true}
+  asi_bonus       JSONB                  -- NULL or {choose_ability: 1, from: ["str", "con"]} for feats granting +1 to a score
+  mechanical_effect JSONB               -- [{effect_type, ...}] uses Feature Effect System vocabulary
+                                         -- e.g., Sentinel: [{type: "on_hit", trigger: "opportunity_attack", effect: "set_speed_0"}]
 
 classes
   id              TEXT PK               -- "fighter", "wizard"
