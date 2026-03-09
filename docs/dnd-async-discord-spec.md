@@ -26,7 +26,21 @@ Discord is the **display and input terminal**, not the source of truth. The syst
 - Alternatively, player runs `/import <ddb-url>` to import from D&D Beyond, or `/create-character` to build one via the web portal — both submit to the DM approval queue
 - Bot creates a `discord_user_id → character_id` mapping in the database
 - DM confirms/approves via the dashboard (character approval queue)
-- One player = one character per campaign (DM can override in dashboard if needed)
+- One player = one active character per campaign
+- Player can retire their current character with `/retire [reason]` — see Character Retirement below
+
+**Character Retirement:**
+- `/retire [reason]` posts a retirement request to `#dm-queue` for DM approval:
+  ```
+  🏠 **Retirement Request** — Aria (@player)
+     Reason: "Character arc complete"
+  ```
+- Bot replies with ephemeral confirmation: "✅ Retirement request sent to DM."
+- DM approves or denies from the dashboard (Character Approval Queue)
+- On approval: character's `player_characters.status` is set to `'retired'`, the character card in `#character-cards` is updated with a "Retired" badge, and the player is unlinked — they can now `/create-character`, `/import`, or `/register` a new character
+- On denial: player is pinged via Discord DM with the DM's reason
+- `/retire` is blocked during active combat ("❌ You can't retire mid-combat.")
+- Retired characters remain in the database for story continuity — the DM can re-activate them from the dashboard if needed
 
 **Registration feedback:**
 - On `/register`, `/import`, or `/create-character` submission, the bot immediately replies with an ephemeral confirmation: "✅ Registration submitted — [character name] is pending DM approval. You'll be pinged when approved."
@@ -319,6 +333,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 | `/attune` | `/attune cloak-of-protection` | Attune to a magic item (requires short rest, max 3 attuned items) |
 | `/unattune` | `/unattune cloak-of-protection` | End attunement with a magic item (frees an attunement slot) |
 | `/prepare` | `/prepare` | Change prepared spells (prepared casters only, out of combat) |
+| `/retire` | `/retire "character arc complete"` | Retire your current character (DM approves). Unlinks you so you can create/register a new one |
 | `/register` | `/register Thorn` | Link Discord account to a character (DM approves) |
 | `/import` | `/import https://www.dndbeyond.com/characters/12345678` | Import a character from D&D Beyond (DM approves) |
 | `/create-character` | `/create-character` | Open the web portal character builder (DM approves) |
@@ -2372,7 +2387,7 @@ The DM manages everything through a web app — they never type raw commands int
 - **Asset Library** — maps, token images, tilesets, custom monsters
 - **Map Editor** — create and edit battle maps (see Map System)
 - **Character Overview** — read-only view of all player character sheets
-- **Character Approval Queue** — pending characters from `/import`, `/create-character`, and `/register`. DM reviews the full sheet, approves, requests changes (with a message sent to the player via Discord DM), or rejects. Approved characters are immediately linked to the player and their `#character-cards` entry is created
+- **Character Approval Queue** — pending characters from `/import`, `/create-character`, and `/register`, plus retirement requests from `/retire`. DM reviews the full sheet, approves, requests changes (with a message sent to the player via Discord DM), or rejects. Approved characters are immediately linked to the player and their `#character-cards` entry is created. Approved retirements unlink the player and mark the character as retired
 
 ### Undo & Corrections
 
@@ -2469,7 +2484,7 @@ player_characters
   campaign_id     UUID FK → campaigns
   character_id    UUID FK → characters   UNIQUE per campaign
   discord_user_id TEXT NOT NULL
-  status          TEXT NOT NULL DEFAULT 'pending'  -- 'pending', 'approved', 'changes_requested', 'rejected'
+  status          TEXT NOT NULL DEFAULT 'pending'  -- 'pending', 'approved', 'changes_requested', 'rejected', 'retired'
   dm_feedback     TEXT                   -- DM message when requesting changes or rejecting
   created_via     TEXT NOT NULL          -- 'register', 'import', 'create', 'dm_dashboard'
   UNIQUE(campaign_id, discord_user_id)   -- one character per player per campaign
@@ -2762,7 +2777,7 @@ conditions_ref
 
 **Included:**
 - Discord bot with full channel structure (`/setup` auto-creates)
-- All slash commands: `/move`, `/attack`, `/cast`, `/bonus`, `/shove`, `/fly`, `/interact`, `/action`, `/reaction`, `/deathsave`, `/done`, `/command`, `/equip`, `/status`, `/inventory`, `/use`, `/give`, `/loot`, `/register`, `/check`, `/save`, `/rest`
+- All slash commands: `/move`, `/attack`, `/cast`, `/bonus`, `/shove`, `/fly`, `/interact`, `/action`, `/reaction`, `/deathsave`, `/done`, `/command`, `/equip`, `/status`, `/inventory`, `/use`, `/give`, `/loot`, `/register`, `/retire`, `/check`, `/save`, `/rest`
 - Combat state: HP, position, turn order, conditions, death saves, spell slots, concentration
 - Turn timeout with escalating pings and auto-skip
 - Enemy/NPC turns with smart-default suggestions for DM
