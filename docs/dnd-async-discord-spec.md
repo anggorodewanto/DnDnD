@@ -1585,12 +1585,14 @@ Each command validates against remaining resources. If a player tries to use som
 
 **Turn status prompt:** the bot shows available resources at two points:
 
-1. **Turn start** — included in the ping message in `#your-turn`:
+1. **Turn start** — included in the ping message in `#your-turn`. The prompt includes a **personal impact summary** listing only events since the player's last turn that directly affected them (damage taken, healing received, conditions applied/removed, enemies entering/leaving their reach, saves forced on them). For full round-by-round details, players use `/recap`.
 ```
 ⚔️ Rooftop Ambush — Round 3
 🔔 @Aria — it's your turn!
+⚠️ Since your last turn: Orc Shaman cast Hold Person on you (CON save pending). You took 8 dmg from Goblin #2. Goblin #1 moved into your reach.
 📋 Available: 🏃 30ft move | ⚔️ 2 attacks | 🎁 Bonus action | 🤚 Free interact | 🛡️ Reaction | ⚡ Action Surge (1)
 ```
+If nothing directly affected the player since their last turn, the `⚠️` line is omitted.
 
 2. **After every command** — appended to the command's response in `#combat-log`:
 ```
