@@ -231,6 +231,10 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/bonus wild-shape` | `/bonus wild-shape wolf` or `/bonus wild-shape brown-bear` | Wild Shape — Druid only, transform into a beast (auto-resolved, see Wild Shape) |
 | `/bonus revert` | `/bonus revert` | Revert from Wild Shape to true form — Druid only, costs bonus action (auto-resolved) |
 | `/bonus font-of-magic` | `/bonus font-of-magic convert --slot 2` or `/bonus font-of-magic create --level 3` | Sorcerer only — convert spell slots to sorcery points or vice versa (auto-resolved) |
+| `/bonus martial-arts` | `/bonus martial-arts` | Monk only — free unarmed strike after Attack action, no ki cost (auto-resolved) |
+| `/bonus flurry-of-blows` | `/bonus flurry-of-blows` | Monk only — 2 unarmed strikes after Attack action, costs 1 ki (auto-resolved) |
+| `/bonus patient-defense` | `/bonus patient-defense` | Monk only — Dodge as bonus action, costs 1 ki (auto-resolved) |
+| `/bonus step-of-the-wind` | `/bonus step-of-the-wind` | Monk only — Dash or Disengage as bonus action, costs 1 ki (auto-resolved) |
 | `/shove` | `/shove OS` | Shove a target (push or knock prone) |
 | `/interact` | `/interact draw longsword` | Object interaction (first per turn is free; see Free Object Interaction) |
 | `/action disengage` | `/action disengage` | Disengage — move without provoking opportunity attacks (auto-resolved) |
@@ -358,6 +362,81 @@ Combat log output:
 🐺  Elara's wolf form drops to 0 HP! Reverts to Druid form (5 overflow damage → 23/28 HP)
 
 🐺  Elara reverts from Wild Shape
+```
+
+**Monk Ki & Martial Arts:** Monks use ki points to fuel special abilities. Tracked in `feature_uses["ki"]` with `max` equal to Monk class level (e.g., `{current: 4, max: 4, recharge: "short"}`). Ki points are available starting at Monk level 2 and recharge on short or long rest.
+
+**Martial Arts (passive, level 1+):** when a Monk attacks with an unarmed strike or a monk weapon (any simple melee weapon without the heavy or two-handed property, plus shortswords), the following apply automatically via the Feature Effect System:
+- Can use DEX instead of STR for attack and damage rolls (system auto-selects the higher modifier, same as finesse)
+- Damage die is replaced by the Martial Arts die (1d4 at level 1, 1d6 at level 5, 1d8 at level 11, 1d10 at level 17) if it would be higher than the weapon's base damage die
+- **Martial Arts bonus attack:** after taking the Attack action with an unarmed strike or monk weapon, the Monk can make one unarmed strike as a bonus action at no cost — invoked via `/bonus martial-arts`. This is separate from and mutually exclusive with Flurry of Blows (if you use Flurry, you don't also get the free Martial Arts bonus attack)
+
+**Ki abilities (level 2+):**
+
+| Ability | Command | Cost | Effect |
+|---|---|---|---|
+| Flurry of Blows | `/bonus flurry-of-blows` | 1 ki | Immediately after taking the Attack action, make 2 unarmed strikes as a bonus action (replaces the free Martial Arts bonus attack) |
+| Patient Defense | `/bonus patient-defense` | 1 ki | Take the Dodge action as a bonus action (attacks against you have disadvantage until your next turn, tracked via `is_dodging` on combatant) |
+| Step of the Wind | `/bonus step-of-the-wind` | 1 ki | Take the Dash or Disengage action as a bonus action. Also doubles jump distance for the turn |
+
+**Flurry of Blows workflow:**
+1. Monk takes at least one `/attack` with an unarmed strike or monk weapon
+2. Monk uses `/bonus flurry-of-blows` — system validates: Attack action was used this turn, Monk class, ki ≥ 1
+3. System deducts 1 ki point, sets `bonus_action_used = true`, and grants 2 unarmed strike attacks
+4. Monk resolves each strike with `/attack [target] unarmed` (can retarget between strikes)
+5. If Flurry is used, the free Martial Arts bonus attack is no longer available
+
+**Stunning Strike (level 5+):** after a Monk hits a creature with a melee weapon attack, the bot posts an ephemeral prompt: "💫 Stunning Strike? [Yes — 1 ki] [No]" (only if `feature_uses["ki"].current ≥ 1`). On selection:
+- 1 ki point is deducted
+- Target must make a CON saving throw (DC = 8 + proficiency bonus + WIS modifier)
+- On failure: target is Stunned until the end of the Monk's next turn (condition added with `duration_rounds: 1`)
+- On success: no effect, ki is still spent
+- The prompt appears on every melee hit (including Flurry of Blows strikes), but the Monk can decline
+- Driven by the `resource_on_hit` effect type in the Feature Effect System, same pattern as Divine Smite
+
+**Ki point validation:** if insufficient ki remains, the ability is rejected: "❌ Not enough ki — Flurry of Blows costs 1 ki (you have 0 remaining)."
+
+**Monk Unarmored Defense:** already handled by `ac_formula = "10 + DEX + WIS"` on the character (see question #17). Only applies when the Monk wears no armor and has no shield equipped.
+
+**Monk Unarmored Movement (level 2+):** speed bonus (+10ft at level 2, scaling to +30ft at level 18) applied automatically via the Feature Effect System's `modify_speed` effect type when the Monk is not wearing armor or a shield.
+
+Combat log output:
+```
+👊  Ren uses Flurry of Blows! (1 ki, 3 remaining)
+📋 Remaining: 🏃 20ft move | ⚔️ 2 unarmed strikes | 🛡️ Reaction
+
+👊  Ren hits Goblin #1 — 1d6+4 bludgeoning → 8 damage
+    💫 Stunning Strike! Goblin #1 CON save DC 14... rolled 9 — STUNNED until end of Ren's next turn
+
+👊  Ren hits Goblin #2 — 1d6+4 bludgeoning → 6 damage
+    💫 Stunning Strike? [Yes — 1 ki] [No] → declined
+
+🛡️  Ren uses Patient Defense! (1 ki, 2 remaining)
+    Dodge active — attacks against Ren have disadvantage
+
+💨  Ren uses Step of the Wind — Dash! (1 ki, 2 remaining)
+    🏃 Movement: 40ft → 80ft this turn
+```
+
+**`/help ki` output** (ephemeral, shown when a Monk types `/help ki`):
+```
+👊 Ki Abilities — Monk
+
+  Martial Arts (free):
+    /bonus martial-arts              Free unarmed strike after Attack action (no ki cost)
+
+  Ki abilities (1 ki each, recharge on short rest):
+    /bonus flurry-of-blows           2 unarmed strikes after Attack action (replaces martial-arts)
+    /bonus patient-defense            Dodge as bonus action (disadv on attacks against you)
+    /bonus step-of-the-wind           Dash or Disengage as bonus action + double jump
+
+  On-hit (prompted automatically):
+    Stunning Strike (lvl 5+)         1 ki — target CON save or Stunned (prompted on melee hit)
+
+  Ki points: Monk level (use /status to check)    Recharge: short rest
+
+  Martial Arts die: 1d4 (lvl 1) → 1d6 (5) → 1d8 (11) → 1d10 (17)
+  Unarmored Movement: +10ft (lvl 2) → +15ft (6) → +20ft (10) → +25ft (14) → +30ft (18)
 ```
 
 **Finesse weapons:** weapons with the "finesse" property (rapier, dagger, shortsword, etc.) allow the attacker to use either STR or DEX for attack and damage rolls. The system auto-selects the higher of the two modifiers — no player input required.
@@ -2243,6 +2322,7 @@ conditions_ref
 - Condition/spell duration auto-expiration
 - Equipment enforcement (armor STR requirements, stealth disadvantage, free object interaction limits)
 - Standard actions: Dash, Disengage, Dodge, Escape, Help, Hide, Ready (auto-resolved where deterministic)
+- Monk Ki: Martial Arts bonus attack, Flurry of Blows, Patient Defense, Step of the Wind, Stunning Strike, ki point tracking
 - Metamagic: all 8 SRD options via `--metamagic` flags on `/cast`, sorcery points, Font of Magic slot/point conversion
 - Wild Shape: `/bonus wild-shape`, `/bonus revert`, beast stat swap, dual HP pool, CR validation, auto-revert
 - Summoned creatures & companions: player-controlled via `/command`, initiative tracking, dismissal

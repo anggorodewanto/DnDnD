@@ -114,7 +114,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ## Bonus Actions & Free Actions
 
 - [x] 69. **Bonus action spell casting syntax.** — Resolved: Auto-detected. `/cast` checks `spells_ref.casting_time`; bonus action spells deduct the bonus action automatically. No `/bonus cast` syntax exists.
-- [ ] 70. **Monk ki abilities.** Flurry of Blows needs unarmed strikes, but there is no unarmed strike mechanic. Patient Defense and Step of the Wind — only Step of the Wind is mentioned.
+- [x] 70. **Monk ki abilities.** — Resolved: Full ki system with ki points tracked in `feature_uses["ki"]` (recharges on short rest). `/bonus flurry-of-blows` (2 unarmed strikes, 1 ki), `/bonus patient-defense` (Dodge, 1 ki), `/bonus step-of-the-wind` (Dash/Disengage, 1 ki). Stunning Strike as post-hit prompt (1 ki, CON save or Stunned). Martial Arts bonus attack (`/bonus martial-arts`, free). Full `/help ki` output defined.
 - [ ] 71. **Free action speaking.** Can players speak in-character during combat without using any action resource?
 
 ## Class-Specific Features
