@@ -42,6 +42,12 @@ Discord is the **display and input terminal**, not the source of truth. The syst
 - `/retire` is blocked during active combat ("❌ You can't retire mid-combat.")
 - Retired characters remain in the database for story continuity — the DM can re-activate them from the dashboard if needed
 
+**Registration name matching:**
+- `/register` performs a case-insensitive exact match against DM-created character names in the campaign
+- If no exact match is found, the bot suggests up to 3 close matches (fuzzy/Levenshtein): `❌ No character named "Thron" found. Did you mean: **Thorn**? Use /register Thorn to confirm.`
+- If multiple close matches exist, all are listed: `❌ No exact match for "Thron". Did you mean: **Thorn**, **Thorin**, **Thora**?`
+- If no close matches exist: `❌ No character named "Xyzzy" found. Check with your DM — they may not have created your character yet.`
+
 **Registration feedback:**
 - On `/register`, `/import`, or `/create-character` submission, the bot immediately replies with an ephemeral confirmation: "✅ Registration submitted — [character name] is pending DM approval. You'll be pinged when approved."
 - When the DM approves, requests changes, or rejects, the bot pings the player via Discord DM with the outcome and any DM feedback

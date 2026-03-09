@@ -10,7 +10,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [x] 2. **Registration approval is opaque.** — Resolved: Immediate ephemeral confirmation on submit. Bot DMs the player when DM approves, requests changes, or rejects. Pre-approval game commands show current registration status with relative timestamp and any DM feedback, rather than a generic error.
 - [x] 3. **No `/unregister` or character swap.** — Resolved: Added `/retire [reason]` command. Posts retirement request to `#dm-queue` for DM approval. On approval, character status set to `retired`, player unlinked, can then `/create-character`, `/import`, or `/register` a new character. Blocked during combat. Retired characters remain in DB; DM can re-activate from dashboard.
 - [x] 4. **No onboarding message.** — Resolved: Already addressed by #1. Welcome DM sent on server join with getting-started instructions (character creation paths, DM approval flow, channel overview).
-- [ ] 5. **Mistyped character name on `/register`.** What error does the player get? Is it fuzzy-matched against existing characters?
+- [x] 5. **Mistyped character name on `/register`.** — Resolved: Case-insensitive exact match first; on failure, fuzzy match suggests up to 3 close names. No auto-selection — player must re-run `/register` with the correct name.
 
 ## Turn Flow & Action Economy
 
