@@ -621,7 +621,24 @@ Auto-applied when `/attack` is processed. The system checks conditions on both t
 
 When a grappled or restrained condition is applied, the combatant's effective speed is set to 0. `/move` commands are rejected with an explanation (e.g., "You can't move — you are grappled"). Speed restores when the condition is removed. For frightened creatures, `/move` commands that would decrease distance to the fear source are rejected. The fear source is tracked as metadata on the frightened condition (`{source_combatant_id}`).
 
-Standing from prone: a prone combatant can stand explicitly via `/action stand` (costs half their max speed from remaining movement, no action cost) or implicitly when issuing `/move` (half speed deducted before calculating remaining movement). If insufficient movement remains for `/action stand`, the command is rejected. If insufficient movement remains when standing via `/move`, standing is still allowed but no further movement is possible. Dropping prone voluntarily is done via `/action drop-prone` (no movement or action cost).
+Standing from prone: a prone combatant can stand explicitly via `/action stand` (costs half their max speed from remaining movement, no action cost) or by choosing to stand when issuing `/move` (see below). If insufficient movement remains for `/action stand`, the command is rejected. Dropping prone voluntarily is done via `/action drop-prone` (no movement or action cost).
+
+**Moving while prone:** when a prone combatant uses `/move`, the system prompts with Discord buttons before the standard movement confirmation:
+
+```
+You are prone. How do you want to move? [🧍 Stand & Move] [🐛 Crawl]
+```
+
+- **Stand & Move:** half max speed is deducted for standing, then the path is calculated at normal cost from remaining movement. If insufficient movement remains after standing, standing is still allowed but no further movement is possible.
+- **Crawl:** movement costs double while staying prone (e.g., 10ft of crawling costs 20ft of movement). The character remains prone after moving. Stacks with difficult terrain for ×3 total cost.
+
+The subsequent `/move` confirmation prompt reflects the chosen mode:
+```
+🏃 Stand & move to D4 — 15ft stand + 10ft move, 5ft remaining after. [✅ Confirm] [❌ Cancel]
+🐛 Crawl to D4 — 20ft (10ft × 2 crawling), 10ft remaining after. [✅ Confirm] [❌ Cancel]
+```
+
+If the character has already stood this turn (via `/action stand` or a previous Stand & Move), subsequent `/move` commands skip the prompt and move at normal cost.
 
 **Action blocking:**
 
