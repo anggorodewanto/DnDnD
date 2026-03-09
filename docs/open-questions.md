@@ -158,7 +158,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ## Miscellaneous
 
 - [x] 98. **Saving throw modifiers.** — Resolved: Yes, all modifiers auto-included (proficiency, ability mod, feature bonuses, spell effects, conditions, magic items). Combat log shows full breakdown so players can verify the math.
-- [ ] 99. **Magic items.** Not mentioned at all — no attunement, no magic weapon bonuses, no tracking.
+- [x] 99. **Magic items.** — Resolved: Full magic item system. `magic_items` reference table with rarity, attunement, passive effects (Feature Effect System), active abilities (charges with recharge-at-dawn), and `magic_bonus` for +N weapons/armor/shields. `/attune` and `/unattune` commands with 3-slot limit. Inventory display shows rarity, attunement status, and charges. Unidentified items supported via DM toggle.
 - [ ] 100. **Carrying capacity.** Not mentioned. Can a player carry 500 arrows?
 - [ ] 101. **Languages.** In the data model but no mechanic for understanding or not understanding speech.
 - [ ] 102. **Darkvision and dim light.** Darkvision lets you see in darkness as dim light, but dim light imposes disadvantage on Perception. Is this auto-applied?

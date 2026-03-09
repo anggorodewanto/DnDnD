@@ -282,6 +282,8 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 | `/use` | `/use healing-potion` | Use a consumable item |
 | `/give` | `/give healing-potion AR` | Give an item to an adjacent ally |
 | `/loot` | `/loot` | Pick up items from the loot pool after combat |
+| `/attune` | `/attune cloak-of-protection` | Attune to a magic item (requires short rest, max 3 attuned items) |
+| `/unattune` | `/unattune cloak-of-protection` | End attunement with a magic item (frees an attunement slot) |
 | `/prepare` | `/prepare` | Change prepared spells (prepared casters only, out of combat) |
 | `/register` | `/register Thorn` | Link Discord account to a character (DM approves) |
 | `/setup` | `/setup` | Auto-create channel structure (DM only, run once) |
@@ -2007,11 +2009,14 @@ Player inventory is stored in the `inventory` JSONB field on the characters tabl
 
 ```
 🎒 Aria's Inventory (23 gp)
-⚔️ Weapons: Longsword (equipped, main hand), Shortbow
+⚔️ Weapons: +1 Longsword [uncommon] ✨ (equipped, main hand, attuned), Shortbow
 🛡️ Armor: Chain Mail (equipped), Shield (equipped, off-hand)
+💍 Magic Items: Cloak of Protection [uncommon] ✨ (attuned)
 🧪 Consumables: Healing Potion ×2, Antitoxin ×1
 🏹 Ammunition: Arrows ×18
 📦 Other: Rope (50ft), Torch ×3
+
+✨ = attuned (2/3 slots)
 ```
 
 **Using consumables:** `/use healing-potion` consumes one item and applies its effect. The system auto-resolves items with defined effects:
@@ -2036,6 +2041,53 @@ Players type `/loot` to see the loot pool and claim items via Discord buttons. E
 **Gold tracking:** the `gold` field on characters is an integer representing total gold pieces. The DM can add/remove gold from the dashboard. Gold changes are logged to `#combat-log` or `#the-story`. Electrum, silver, copper, and platinum are converted to gold equivalents for simplicity (DM handles narrative flavor).
 
 **DM inventory management:** the DM can add, remove, or transfer items between any characters from the dashboard. All DM-initiated changes are logged to `#combat-log`.
+
+### Magic Items
+
+Magic items are tracked via a `magic_items` reference table and stored in the character's `inventory` with additional fields (`is_magic`, `magic_bonus`, `magic_properties`, `requires_attunement`, `rarity`). The DM creates and assigns magic items from the dashboard, referencing existing entries from `magic_items` (SRD items pre-loaded) or creating custom/homebrew items.
+
+**Bonus weapons and armor:** items with `magic_bonus` (+1, +2, +3) auto-apply the bonus to attack rolls, damage rolls (weapons), or AC (armor/shields) via the Feature Effect System. A +1 longsword adds +1 to both attack and damage; +2 plate adds +2 to AC. These bonuses stack with all other modifiers and are shown in combat log breakdowns:
+```
+⚔️  Aria attacks Goblin #1 with +1 Longsword
+    → Roll to hit: 22 (14 + 5 STR + 2 prof + 1 magic) — HIT
+    → Damage: 12 slashing (7 + 4 STR + 1 magic)
+```
+
+**Passive effects:** magic items can declare passive effects using the Feature Effect System vocabulary. These effects are active whenever the item is equipped (and attuned, if required). Examples:
+- *Cloak of Protection:* `[{type: "modify_ac", modifier: 1}, {type: "modify_save", modifier: 1}]`
+- *Boots of Speed:* `[{type: "modify_speed", modifier: "double", trigger: "on_activate"}]`
+- *Ring of Resistance:* `[{type: "grant_resistance", damage_type: "fire"}]`
+
+Passive effects are processed alongside class features and spell effects — the combat engine treats them identically.
+
+**Active abilities:** some magic items have abilities that require activation, tracked via `feature_uses` on the character with item-specific recharge rules:
+- *Wand of Fireballs (7 charges):* `/use wand-of-fireballs` → prompts for charges to spend (1-3) → casts Fireball at corresponding level. Tracked in `feature_uses["wand-of-fireballs"]` with `{current: 7, max: 7, recharge: "dawn", recharge_dice: "1d6+1"}`
+- *Staff of Healing (10 charges):* `/use staff-of-healing` → prompts which spell to cast (Cure Wounds = 1 charge, Lesser Restoration = 2, Mass Cure Wounds = 5)
+- Recharge at dawn: system rolls `recharge_dice` and restores charges. If `destroy_on_zero: true` and current reaches 0, roll d20 — on a 1, item is destroyed (DM notified)
+- Active abilities that cast spells use the existing `/cast` infrastructure for targeting, saves, and damage
+
+**Attunement:**
+- Some magic items require attunement before their effects activate. `requires_attunement = true` on the item
+- `/attune [item]` — attunes to a magic item. Requires a short rest (can be done during `/rest short` flow). System validates: item is in inventory, item requires attunement, character has fewer than 3 attuned items, and any attunement restrictions are met (e.g., "by a cleric" checks class)
+- `/unattune [item]` — ends attunement immediately (no rest required). Item's passive effects and active abilities are deactivated. Frees an attunement slot
+- Characters can attune to a maximum of 3 items at once. Attempting a 4th returns: "❌ You already have 3 attuned items. Use `/unattune [item]` to free a slot."
+- Attunement tracked in `attunement_slots` JSONB on the characters table (array of `{item_id, name}`, max 3 entries)
+- Equipping an unattunded item that requires attunement: item can be equipped but passive effects and active abilities do not function. The system warns: "⚠️ This item requires attunement. Use `/attune [item]` during a short rest to activate its properties."
+
+**Inventory display:** `/inventory` shows magic items with rarity, attunement status, and magic bonus:
+```
+🎒 Aria's Inventory (23 gp)
+⚔️ Weapons: +1 Longsword [uncommon] ✨ (equipped, main hand, attuned), Shortbow
+🛡️ Armor: Chain Mail (equipped), Shield (equipped, off-hand)
+💍 Magic Items: Cloak of Protection [uncommon] ✨ (equipped, attuned), Wand of Fireballs [rare] ✨ (attuned, 5/7 charges)
+🧪 Consumables: Healing Potion ×2, Antitoxin ×1
+🏹 Ammunition: Arrows ×18
+📦 Other: Rope (50ft), Torch ×3
+
+✨ = attuned (3/3 slots)
+```
+
+**Identifying magic items:** by default, magic items are identified when the DM assigns them (the DM controls what information is revealed). For unidentified items, the DM can set `identified: false` on the item — it shows as "Unidentified [type]" in inventory. Players can identify items via `/cast identify` (or `/cast detect-magic` to detect magical aura), or the DM reveals properties from the dashboard.
 
 ### Exploration, Social & Travel
 
@@ -2168,7 +2220,8 @@ characters
   features        JSONB                  -- [{name, source, level, description, mechanical_effect}]
   proficiencies   JSONB                  -- {saves: [str, con], skills: [athletics, perception], weapons: [...], armor: [...]}
   gold            INTEGER NOT NULL DEFAULT 0  -- total gold pieces (all currency converted to gp)
-  inventory       JSONB                  -- [{item_id, quantity, equipped, type}] type: weapon/armor/consumable/ammunition/other
+  attunement_slots JSONB                 -- [{item_id, name}] max 3 entries; tracks attuned magic items
+  inventory       JSONB                  -- [{item_id, quantity, equipped, type, is_magic, magic_bonus, magic_properties, requires_attunement, rarity}] type: weapon/armor/consumable/ammunition/other
   character_data  JSONB                  -- full dnd5e_json_schema blob for import/export fidelity
   ddb_url         TEXT                   -- D&D Beyond URL if imported
   homebrew        BOOLEAN DEFAULT false
@@ -2395,6 +2448,25 @@ races
   traits          JSONB NOT NULL         -- [{name, description, mechanical_effect}]
   languages       TEXT[]
   subraces        JSONB                  -- [{id, name, ability_bonuses, traits}]
+
+magic_items
+  id              TEXT PK               -- slug: "longsword-plus-1", "cloak-of-protection"
+  campaign_id     UUID FK → campaigns   -- NULL for SRD entries
+  name            TEXT NOT NULL          -- "+1 Longsword", "Cloak of Protection"
+  base_item_type  TEXT                   -- "weapon", "armor", "wondrous", "ring", "wand", "staff", "rod", "potion", "scroll"
+  base_item_id    TEXT                   -- FK → weapons/armor (e.g., "longsword") if applicable, NULL for wondrous items
+  rarity          TEXT NOT NULL          -- "common", "uncommon", "rare", "very_rare", "legendary", "artifact"
+  requires_attunement BOOLEAN DEFAULT false
+  attunement_restriction TEXT            -- NULL or restriction: "by a cleric", "by a spellcaster"
+  magic_bonus     INTEGER               -- +1, +2, +3 for weapons/armor/shields; NULL for non-bonus items
+  passive_effects JSONB                  -- [{effect_type, ...}] uses Feature Effect System vocabulary
+                                         -- e.g., Cloak of Protection: [{type: "modify_ac", modifier: 1}, {type: "modify_save", modifier: 1}]
+  active_abilities JSONB                 -- [{name, description, charges_cost, action_type, spell_id, mechanical_effect}]
+                                         -- e.g., Wand of Fireballs: [{name: "Fireball", charges_cost: 1, spell_id: "fireball", action_type: "action"}]
+  charges         JSONB                  -- {max: 7, recharge: "dawn", recharge_dice: "1d6+1", destroy_on_zero: true} or NULL
+  description     TEXT NOT NULL
+  homebrew        BOOLEAN DEFAULT false
+  source          TEXT DEFAULT 'srd'
 
 conditions_ref
   id              TEXT PK               -- "blinded", "prone", "stunned"
