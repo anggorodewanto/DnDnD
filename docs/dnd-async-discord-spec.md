@@ -268,6 +268,7 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 |---|---|---|
 | `/status` | `/status` | View your active conditions, concentration, temp HP, exhaustion, and reaction declarations (ephemeral) |
 | `/equip` | `/equip longsword`, `/equip shield`, `/equip shortsword --offhand` | Equip a weapon or shield (see Equipment Management below) |
+| `/undo` | `/undo` or `/undo wrong target` | Request the DM to undo your last action (see Undo & Corrections) |
 | `/inventory` | `/inventory` | View your inventory, equipment, and gold |
 | `/use` | `/use healing-potion` | Use a consumable item |
 | `/give` | `/give healing-potion AR` | Give an item to an adjacent ally |
@@ -1725,11 +1726,24 @@ The DM manages everything through a web app — they never type raw commands int
 
 ### Undo & Corrections
 
+**Player-initiated undo request:** players use `/undo` (optionally with a reason: `/undo wrong target`) to request a correction. The bot:
+
+1. Responds with an ephemeral acknowledgment: "✅ Undo request sent to DM."
+2. Posts a structured request to `#dm-queue`:
+```
+🔄 **Undo Request** — Aria
+   Last action: ⚔️ Attack Goblin #1 with Longsword — Hit for 9 damage
+   Reason: "wrong target"
+```
+
+The DM reviews in the dashboard and either applies the undo or dismisses the request. The player is not automatically reverted — the DM always decides.
+
+**DM undo tools (dashboard):**
 - **Undo Last Action** — reverts the most recent mutation by restoring its `before_state` from the action log. Repeatable to walk back multiple steps within a turn. DM-only.
 - **Manual State Override** — directly edit any value at any time: HP, position, conditions, spell slots, initiative order. Overrides go through the per-turn lock.
 - **Discord Corrections** — every undo or override posts a correction to `#combat-log`: "⚠️ **DM Correction:** Goblin #1 HP adjusted (resistance to fire was missed)". Original messages are never edited or deleted.
 
-**Not in MVP:** full turn rewind (reverting an entire multi-action turn) or player-initiated undo. DM uses manual overrides instead.
+**Not in MVP:** full turn rewind (reverting an entire multi-action turn) or automatic player-initiated undo. DM uses manual overrides instead.
 
 ---
 

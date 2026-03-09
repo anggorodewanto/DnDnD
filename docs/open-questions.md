@@ -99,7 +99,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ## Error Recovery
 
-- [ ] 61. **No player undo.** If a player targets the wrong enemy or moves to the wrong tile, the spec says no undo in MVP. How does the player request a correction from the DM?
+- [x] 61. **No player undo.** — Resolved: `/undo` command posts a structured correction request to `#dm-queue` with last action details and optional reason. DM reviews and applies undo from dashboard. No automatic reversal.
 - [ ] 62. **Disconnection handling.** If a player's Discord client crashes mid-turn, the turn timer continues. Any reconnection awareness?
 - [x] 63. **Invalid command feedback.** — Resolved: Already addressed throughout the spec. All error messages use a consistent `❌ [reason]` format as ephemeral replies (e.g., "❌ Not enough movement — path requires 40ft", "❌ You can't move — you are grappled"). Dozens of examples across all command sections.
 - [ ] 64. **Cancelling queued freeform actions.** `/action flip the table` goes to `#dm-queue`. Can the player edit or cancel it before the DM resolves it?
