@@ -53,7 +53,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 - [x] 31. **No way to view active declarations.** — Resolved: Already addressed. `/status` shows active reaction declarations. `/reaction cancel [description]` and `/reaction cancel-all` manage them. DM sees all declarations in the Active Reactions Panel.
 - [x] 32. **Multiple simultaneous declarations.** — Resolved: Multiple active declarations allowed. When multiple trigger from the same event, DM picks which fires via the Active Reactions Panel in the dashboard. After one fires, rest stay dormant until reaction resets next round.
-- [ ] 33. **Freeform declaration ambiguity.** `/reaction OA if goblin moves away` — which goblin? Declarations are freeform text; there is no structured targeting.
+- [x] 33. **Freeform declaration ambiguity.** — Resolved: Declarations stay fully freeform. Players encouraged to use short IDs for clarity; DM resolves ambiguity using battlefield context, pinging the player for clarification if needed.
 - [x] 34. **OA prompts stall combat.** — Resolved: Queue-and-continue model. Movement is not paused; hostile has until end-of-round to take the OA. If OA drops target to 0 HP, system notifies DM to retroactively correct position. No auto-invalidation.
 - [ ] 35. **Readied action reminders.** A readied action could persist for days of real time in async play. Is the player reminded it is still held?
 

@@ -849,8 +849,9 @@ Players pre-declare reaction intent using `/reaction`. The DM resolves all react
 
 **Declaration:**
 - `/reaction Shield if I get hit`
-- `/reaction OA if goblin moves away`
+- `/reaction OA if G1 moves away`
 - `/reaction Counterspell if enemy casts`
+- Declarations are **freeform text** — players are encouraged to use short IDs (e.g., `G1`, `OS`) for clarity, but any natural language is accepted. Ambiguous declarations (e.g., "if goblin moves away" when multiple goblins are present) are resolved by the DM using battlefield context; the DM may ping the player for clarification if intent is unclear
 - Players can have **multiple active declarations** simultaneously (e.g., Shield and Counterspell both active)
 - Declarations persist until used, cancelled (`/reaction cancel [description]` to cancel a specific one, `/reaction cancel-all` to clear all), or the encounter ends
 - One reaction per round per player (per 5e rules) — tracked by `turns.reaction_used`. Reaction resets at the start of the creature's turn (not the start of the round), matching 5e rules and ensuring correct sequencing in async play
