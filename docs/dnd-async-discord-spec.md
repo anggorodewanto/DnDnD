@@ -22,9 +22,10 @@ Discord is the **display and input terminal**, not the source of truth. The syst
 ### Authentication & Authorization
 
 **Discord user → Character mapping:**
-- Player runs `/register <character_name>` in the Discord server
+- Player runs `/register <character_name>` in the Discord server to link to an existing character
+- Alternatively, player runs `/import <ddb-url>` to import from D&D Beyond, or `/create-character` to build one via the web portal — both submit to the DM approval queue
 - Bot creates a `discord_user_id → character_id` mapping in the database
-- DM confirms/approves the registration via the dashboard
+- DM confirms/approves via the dashboard (character approval queue)
 - One player = one character per campaign (DM can override in dashboard if needed)
 
 **Out-of-turn prevention:**
@@ -102,6 +103,27 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 ### Server Setup
 
 The `/setup` slash command auto-creates the channel structure with appropriate permission overrides (e.g., `#the-story` is DM-write-only, `#combat-map` is bot-write-only, `#in-character` is player-and-DM writable). DM runs `/setup` once after inviting the bot. Channels that already exist are skipped.
+
+### Player Onboarding
+
+When a new user joins the Discord server, the bot sends them a **welcome DM** with:
+
+```
+Welcome to [Campaign Name]! Here's how to get started:
+
+1. Create or import your character:
+   • /create-character — build a character in the web portal
+   • /import <ddb-url> — import from D&D Beyond
+   • /register <name> — link to a character your DM already created
+
+2. Wait for DM approval (you'll be pinged when approved)
+
+3. Once approved, check #character-cards for your sheet and #the-story to catch up
+
+Type /help for a full command list.
+```
+
+If the player runs any game command before being approved, the bot replies: "❌ Your character hasn't been approved yet. Use `/create-character`, `/import`, or `/register` to get started."
 
 The bot uses **plain text messages** for most output. For very large output (20+ combatant initiative orders, detailed character cards), the bot uploads a **text file attachment** instead. No embeds required.
 
@@ -292,6 +314,9 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 | `/unattune` | `/unattune cloak-of-protection` | End attunement with a magic item (frees an attunement slot) |
 | `/prepare` | `/prepare` | Change prepared spells (prepared casters only, out of combat) |
 | `/register` | `/register Thorn` | Link Discord account to a character (DM approves) |
+| `/import` | `/import https://www.dndbeyond.com/characters/12345678` | Import a character from D&D Beyond (DM approves) |
+| `/create-character` | `/create-character` | Open the web portal character builder (DM approves) |
+| `/character` | `/character` | View your full character sheet (ephemeral embed + link to web sheet) |
 | `/setup` | `/setup` | Auto-create channel structure (DM only, run once) |
 | `/recap` | `/recap` or `/recap 3` | Show combat log entries since your last turn (or last N rounds). Ephemeral |
 | `/help` | `/help` or `/help attack` | Show command list, or detailed usage for a specific command |
@@ -1944,17 +1969,39 @@ Benefits:
 
 ## Character Creation & Import
 
-Characters are fully 5e-compatible — all SRD races, classes, backgrounds, and features. Characters can be created manually via the DM dashboard or imported from D&D Beyond.
+Characters are fully 5e-compatible — all SRD races, classes, backgrounds, and features. Characters can be created three ways: by the player via the web portal, imported from D&D Beyond (by player or DM), or created manually by the DM in the dashboard. All paths end with DM approval.
 
 ### Internal Character Format
 
 Characters are stored using a schema based on [BrianWendt/dnd5e_json_schema](https://github.com/BrianWendt/dnd5e_json_schema). The schema covers ability scores, class features, spells, equipment, and all mechanical fields needed for combat resolution.
 
-The internal format is not exposed directly to users — it's the canonical storage representation that the dashboard UI and D&D Beyond importer both write to.
+The internal format is not exposed directly to users — it's the canonical storage representation that the dashboard UI, player portal, and D&D Beyond importer all write to.
+
+### Player Portal (Web)
+
+A web-based player portal provides character creation, viewing, and management. Players authenticate via Discord OAuth2 (same as DM dashboard). The portal is accessed via links from Discord commands (`/create-character`, `/character`).
+
+**Character Builder** — a guided multi-step form:
+
+1. **Basics** — name, race (with subrace), background
+2. **Class** — select class, subclass (if applicable at level). Multiclass characters add additional class entries
+3. **Ability scores** — point-buy calculator or manual entry (DM campaign setting controls which methods are available)
+4. **Skills & proficiencies** — select skill proficiencies based on class/background/race allowances
+5. **Equipment** — choose from starting equipment options by class/background, or select from full SRD item list
+6. **Spells** — for caster classes, select known/prepared spells from class spell list (filtered by available level). Cantrips selected separately
+7. **Review** — summary page showing the complete character sheet with all derived stats (HP, AC, proficiency bonus, saving throws) auto-calculated
+
+On submit, the character enters the DM approval queue with status `pending`. The player is pinged in Discord when the DM approves or requests changes.
+
+**Character Sheet View** — read-only web page showing full character details: ability scores and modifiers, skills, features (with descriptions), spell list, inventory, and all mechanical state. Accessible to the owning player any time. Same data as `#character-cards` but with full detail.
+
+**Discord integration:**
+- `/create-character` — bot replies with an ephemeral message containing a one-time link to the player portal character builder (link expires after 24 hours, scoped to the player's Discord ID and campaign)
+- `/character` — bot replies with an ephemeral embed summarizing key stats (same format as `#character-cards`) plus a link to the full web character sheet
 
 ### Manual Character Creation (DM Dashboard)
 
-The DM creates characters through a guided workflow:
+The DM creates characters through a guided workflow (same steps as the player portal builder):
 
 1. **Basics** — name, race, background
 2. **Classes** — add one or more class entries: class, subclass (if available at current level), and class level. Multiclass characters add multiple entries (e.g., Fighter 5 / Rogue 3)
@@ -1964,16 +2011,19 @@ The DM creates characters through a guided workflow:
 6. **Spells** — for caster classes, select known/prepared spells from class spell list (filtered by level). Spell slots auto-calculated using 5e multiclass spellcasting table when applicable
 7. **Features** — racial traits, class features, and subclass features auto-populated from SRD data based on race + class/subclass + level
 
-After creation, the player links to the character via `/register <character_name>` in Discord (DM approves).
+DM-created characters are pre-approved. The player links via `/register <character_name>` in Discord.
 
 **Class/subclass/feat interactions:** the system implements SRD class and subclass features mechanically (Extra Attack, Sneak Attack damage, Rage bonus, Champion's Improved Critical, Life Domain's Disciple of Life, etc.) and auto-applies them during combat. Subclass features are loaded from `classes.subclasses[subclass_id].features_by_level` and merged into the character's `features` array alongside base class features. Non-SRD content can be added manually by the DM as custom features with mechanical effects.
 
 ### D&D Beyond Import
 
-1. Player provides their D&D Beyond character URL (e.g., `https://www.dndbeyond.com/characters/12345678`)
+Players can self-service import via the `/import` Discord command, or the DM can import from the dashboard.
+
+1. Player runs `/import <ddb-url>` in Discord (or DM pastes URL in dashboard)
 2. System fetches from DDB's undocumented character API (`character-service.dndbeyond.com/character/v5/character/{id}`)
 3. Parser converts DDB JSON into internal format — mapping ability scores, features, equipment, spells, HP, AC
-4. DM reviews and approves in the dashboard
+4. Bot shows the player an ephemeral preview of the imported character (name, class, level, key stats)
+5. Character enters the DM approval queue; DM reviews and approves in the dashboard
 
 **Implementation reference:** [MrPrimate/ddb-importer](https://github.com/MrPrimate/ddb-importer) (Foundry VTT's DDB import module) — the most mature open-source DDB character parser.
 
@@ -2288,6 +2338,7 @@ The DM manages everything through a web app — they never type raw commands int
 - **Asset Library** — maps, token images, tilesets, custom monsters
 - **Map Editor** — create and edit battle maps (see Map System)
 - **Character Overview** — read-only view of all player character sheets
+- **Character Approval Queue** — pending characters from `/import`, `/create-character`, and `/register`. DM reviews the full sheet, approves, requests changes (with a message sent to the player via Discord DM), or rejects. Approved characters are immediately linked to the player and their `#character-cards` entry is created
 
 ### Undo & Corrections
 
@@ -2384,7 +2435,9 @@ player_characters
   campaign_id     UUID FK → campaigns
   character_id    UUID FK → characters   UNIQUE per campaign
   discord_user_id TEXT NOT NULL
-  approved        BOOLEAN DEFAULT false  -- DM must approve /register
+  status          TEXT NOT NULL DEFAULT 'pending'  -- 'pending', 'approved', 'changes_requested', 'rejected'
+  dm_feedback     TEXT                   -- DM message when requesting changes or rejecting
+  created_via     TEXT NOT NULL          -- 'register', 'import', 'create', 'dm_dashboard'
   UNIQUE(campaign_id, discord_user_id)   -- one character per player per campaign
 ```
 

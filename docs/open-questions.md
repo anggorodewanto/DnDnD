@@ -6,7 +6,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ## Onboarding & Registration
 
-- [ ] 1. **No player-facing character creation.** Characters are created by the DM or imported from D&D Beyond. There is no workflow for a player to create or submit their own character. How does a new player know what to do after joining the Discord server?
+- [x] 1. **No player-facing character creation.** — Resolved: Hybrid approach. Web-based player portal for character creation (`/create-character` links to builder) and viewing (`/character` shows sheet). `/import <ddb-url>` for self-service D&D Beyond import. All paths require DM approval. Welcome DM sent on server join with getting-started instructions.
 - [ ] 2. **Registration approval is opaque.** After `/register Thorn`, the player waits for DM approval with no feedback — no "pending" status, no way to check, no notification when approved or rejected.
 - [ ] 3. **No `/unregister` or character swap.** What if a player wants to switch characters mid-campaign? The spec says "DM can override" but there is no player-facing flow.
 - [ ] 4. **No onboarding message.** When a player joins the server, is there an automated welcome explaining channels, commands, and how to get started?
