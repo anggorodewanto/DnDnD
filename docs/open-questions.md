@@ -38,7 +38,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **16. Map editor usability** — Undo/redo in the map editor? Copy/paste regions? Can the DM duplicate an existing map as a starting point for a new one? What about map templates (tavern, dungeon room, forest clearing)?
 
-- [ ] **17. Pre-combat preparation** — Can the DM pre-configure encounters (creature selection, placement, lighting zones) and save them as drafts before starting combat? Or must everything happen in real-time?
+- [x] **17. Pre-combat preparation** — Can the DM pre-configure encounters (creature selection, placement, lighting zones) and save them as drafts before starting combat? Or must everything happen in real-time?
 
 ---
 
