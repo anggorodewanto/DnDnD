@@ -133,6 +133,15 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 
 The `/setup` slash command auto-creates the channel structure with appropriate permission overrides (e.g., `#the-story` is DM-write-only, `#combat-map` is bot-write-only, `#in-character` is player-and-DM writable). DM runs `/setup` once after inviting the bot. Channels that already exist are skipped.
 
+### Discord Rate Limiting
+
+Discord enforces a rate limit of 5 messages per 5 seconds per channel. The bot handles this with **per-channel message queues and result batching:**
+
+- **Result batching:** a single command produces at most one message per channel. All results from one command are composed into a single message before sending (e.g., a Fireball hitting 6 creatures produces one `#combat-log` message with all saves, damage, and conditions listed together, and one `#roll-history` message with all rolls).
+- **Per-channel outbound queue:** each channel has its own FIFO queue. Messages targeting different channels are sent in parallel (since rate limits are per-channel). The queue drains at a pace that respects Discord's rate limits.
+- **Rate limit backoff:** if the bot receives a 429 response, it pauses the affected channel's queue for the duration specified in the `Retry-After` header, then resumes draining.
+- **Burst scenarios:** even rapid successive commands (e.g., two players acting in different simultaneous encounters) are safe — the queue serializes outbound messages per channel and batching keeps each command to one message per channel.
+
 ### Player Onboarding
 
 When a new user joins the Discord server, the bot sends them a **welcome DM** with:
