@@ -2540,7 +2540,24 @@ Each notification includes the player name, action context, and a **"Resolve →
 
 The DM manages everything through a web app — they never type raw commands into Discord.
 
-**Features:**
+### Layout & Navigation
+
+The dashboard uses a **sidebar navigation** with icon+label entries for each panel. The sidebar is always visible and provides access to all top-level views.
+
+**Default view — Campaign Home.** When the DM opens the dashboard (and no combat is active), they see:
+- Pending `#dm-queue` items (count and list)
+- Character Approval Queue (pending imports and retirements)
+- Active encounter summary (if any)
+- Quick-action buttons: Start Encounter, Narrate, Pause Campaign
+
+**Combat Workspace.** When an encounter is active and the DM navigates to it, the layout switches to a composite combat view:
+- **Left (~60%):** Map with tokens (Combat Manager). Clicking a token opens the HP & Condition Tracker for that combatant.
+- **Right (~40%), stacked top-to-bottom:** Turn Queue, Action Resolver, Active Reactions Panel.
+
+Non-combat panels (Character Overview, Stat Block Library, Asset Library, Map Editor, Character Approval Queue) are each full-page views accessed from the sidebar.
+
+### Features
+
 - **Combat Manager** — drag tokens on a grid, click to move, auto-calculate distance and range
 - **HP & Condition Tracker** — click to apply damage, healing, and status conditions
 - **Turn Queue** — shows initiative order; "End Turn" auto-advances and pings next player
