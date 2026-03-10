@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"database/sql"
+	"io/fs"
 	"testing"
 	"time"
 
@@ -67,5 +68,17 @@ func NewTestDB(t *testing.T) *sql.DB {
 		db.Close()
 	})
 
+	return db
+}
+
+// NewMigratedTestDB spins up a throwaway PostgreSQL container, connects to it,
+// and runs all migrations. Returns a ready-to-query *sql.DB.
+func NewMigratedTestDB(t *testing.T, migrations fs.FS) *sql.DB {
+	t.Helper()
+
+	db := NewTestDB(t)
+	if err := database.MigrateUp(db, migrations); err != nil {
+		t.Fatalf("MigrateUp failed: %v", err)
+	}
 	return db
 }

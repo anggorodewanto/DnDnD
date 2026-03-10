@@ -7,6 +7,13 @@ import (
 	"fmt"
 )
 
+const (
+	// SRD reference data counts.
+	WeaponCount    = 37
+	ArmorCount     = 13
+	ConditionCount = 15
+)
+
 // SeedAll populates all SRD reference data (weapons, armor, conditions).
 func SeedAll(ctx context.Context, db DBTX) error {
 	if db == nil {
@@ -24,6 +31,15 @@ func SeedAll(ctx context.Context, db DBTX) error {
 		return fmt.Errorf("seeding conditions: %w", err)
 	}
 
+	return nil
+}
+
+func seedEntities[P any](ctx context.Context, items []P, upsert func(context.Context, P) error, kind string) error {
+	for _, item := range items {
+		if err := upsert(ctx, item); err != nil {
+			return fmt.Errorf("upserting %s: %w", kind, err)
+		}
+	}
 	return nil
 }
 
@@ -88,12 +104,7 @@ func seedWeapons(ctx context.Context, q *Queries) error {
 		{ID: "net", Name: "Net", Damage: "0", DamageType: "none", WeightLb: optFloat(3), Properties: []string{"special", "thrown"}, RangeNormalFt: optInt(5), RangeLongFt: optInt(15), WeaponType: "martial_ranged"},
 	}
 
-	for _, w := range weapons {
-		if err := q.UpsertWeapon(ctx, w); err != nil {
-			return fmt.Errorf("upserting weapon %s: %w", w.ID, err)
-		}
-	}
-	return nil
+	return seedEntities(ctx, weapons, q.UpsertWeapon, "weapon")
 }
 
 func seedArmor(ctx context.Context, q *Queries) error {
@@ -117,15 +128,10 @@ func seedArmor(ctx context.Context, q *Queries) error {
 		{ID: "shield", Name: "Shield", AcBase: 2, AcDexBonus: optBool(false), ArmorType: "shield", WeightLb: optFloat(6)},
 	}
 
-	for _, a := range armor {
-		if err := q.UpsertArmor(ctx, a); err != nil {
-			return fmt.Errorf("upserting armor %s: %w", a.ID, err)
-		}
-	}
-	return nil
+	return seedEntities(ctx, armor, q.UpsertArmor, "armor")
 }
 
-func mustJSON(v interface{}) json.RawMessage {
+func mustJSON(v any) json.RawMessage {
 	b, err := json.Marshal(v)
 	if err != nil {
 		panic(fmt.Sprintf("failed to marshal JSON: %v", err))
@@ -306,10 +312,5 @@ func seedConditions(ctx context.Context, q *Queries) error {
 		},
 	}
 
-	for _, c := range conditions {
-		if err := q.UpsertCondition(ctx, c); err != nil {
-			return fmt.Errorf("upserting condition %s: %w", c.ID, err)
-		}
-	}
-	return nil
+	return seedEntities(ctx, conditions, q.UpsertCondition, "condition")
 }

@@ -20,7 +20,7 @@ type mockDBTX struct {
 	queryErr    error
 }
 
-func (m *mockDBTX) ExecContext(_ context.Context, _ string, _ ...interface{}) (sql.Result, error) {
+func (m *mockDBTX) ExecContext(_ context.Context, _ string, _ ...any) (sql.Result, error) {
 	m.callCount++
 	if m.failAfterN > 0 && m.callCount <= m.failAfterN {
 		return nil, nil
@@ -32,14 +32,14 @@ func (m *mockDBTX) PrepareContext(_ context.Context, _ string) (*sql.Stmt, error
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *mockDBTX) QueryContext(_ context.Context, _ string, _ ...interface{}) (*sql.Rows, error) {
+func (m *mockDBTX) QueryContext(_ context.Context, _ string, _ ...any) (*sql.Rows, error) {
 	if m.queryErr != nil {
 		return nil, m.queryErr
 	}
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *mockDBTX) QueryRowContext(_ context.Context, _ string, _ ...interface{}) *sql.Row {
+func (m *mockDBTX) QueryRowContext(_ context.Context, _ string, _ ...any) *sql.Row {
 	return nil
 }
 
@@ -106,7 +106,7 @@ func TestMechanicalEffectJSON_OmitsEmpty(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -220,8 +220,8 @@ func TestSeedAll_WeaponsErrorWrapping(t *testing.T) {
 
 func TestSeedAll_ArmorErrorWrapping(t *testing.T) {
 	dbErr := errors.New("armor exec failed")
-	// 37 weapons succeed, then armor fails on first call
-	mock := &mockDBTX{errToReturn: dbErr, failAfterN: 37}
+	// All weapons succeed, then armor fails on first call
+	mock := &mockDBTX{errToReturn: dbErr, failAfterN: WeaponCount}
 	err := SeedAll(context.Background(), mock)
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -236,8 +236,8 @@ func TestSeedAll_ArmorErrorWrapping(t *testing.T) {
 
 func TestSeedAll_ConditionsErrorWrapping(t *testing.T) {
 	dbErr := errors.New("condition exec failed")
-	// 37 weapons + 13 armor = 50 succeed, then conditions fails
-	mock := &mockDBTX{errToReturn: dbErr, failAfterN: 50}
+	// All weapons + armor succeed, then conditions fails
+	mock := &mockDBTX{errToReturn: dbErr, failAfterN: WeaponCount + ArmorCount}
 	err := SeedAll(context.Background(), mock)
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -266,9 +266,9 @@ func TestSeedAll_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	// 37 weapons + 13 armor + 15 conditions = 65 total upserts
-	if mock.callCount != 65 {
-		t.Fatalf("expected 65 ExecContext calls, got %d", mock.callCount)
+	totalUpserts := WeaponCount + ArmorCount + ConditionCount
+	if mock.callCount != totalUpserts {
+		t.Fatalf("expected %d ExecContext calls, got %d", totalUpserts, mock.callCount)
 	}
 }
 

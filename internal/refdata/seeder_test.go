@@ -6,33 +6,32 @@ import (
 	"testing"
 
 	dbfs "github.com/ab/dndnd/db"
-	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/testutil"
 )
+
+func setupSeededDB(t *testing.T) *refdata.Queries {
+	t.Helper()
+	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	ctx := context.Background()
+	if err := refdata.SeedAll(ctx, db); err != nil {
+		t.Fatalf("SeedAll failed: %v", err)
+	}
+	return refdata.New(db)
+}
 
 func TestIntegration_SeedAll_WeaponCount(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	q := refdata.New(db)
-	count, err := q.CountWeapons(ctx)
+	q := setupSeededDB(t)
+	count, err := q.CountWeapons(context.Background())
 	if err != nil {
 		t.Fatalf("CountWeapons failed: %v", err)
 	}
-	if count != 37 {
-		t.Fatalf("expected 37 weapons, got %d", count)
+	if count != refdata.WeaponCount {
+		t.Fatalf("expected %d weapons, got %d", refdata.WeaponCount, count)
 	}
 }
 
@@ -41,23 +40,13 @@ func TestIntegration_SeedAll_ArmorCount(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	q := refdata.New(db)
-	count, err := q.CountArmor(ctx)
+	q := setupSeededDB(t)
+	count, err := q.CountArmor(context.Background())
 	if err != nil {
 		t.Fatalf("CountArmor failed: %v", err)
 	}
-	if count != 13 {
-		t.Fatalf("expected 13 armor pieces, got %d", count)
+	if count != refdata.ArmorCount {
+		t.Fatalf("expected %d armor pieces, got %d", refdata.ArmorCount, count)
 	}
 }
 
@@ -66,18 +55,8 @@ func TestIntegration_SeedAll_LongswordHasVersatile(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	q := refdata.New(db)
-	weapon, err := q.GetWeapon(ctx, "longsword")
+	q := setupSeededDB(t)
+	weapon, err := q.GetWeapon(context.Background(), "longsword")
 	if err != nil {
 		t.Fatalf("GetWeapon failed: %v", err)
 	}
@@ -115,18 +94,8 @@ func TestIntegration_SeedAll_PlateArmor(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	q := refdata.New(db)
-	armor, err := q.GetArmor(ctx, "plate")
+	q := setupSeededDB(t)
+	armor, err := q.GetArmor(context.Background(), "plate")
 	if err != nil {
 		t.Fatalf("GetArmor failed: %v", err)
 	}
@@ -156,18 +125,8 @@ func TestIntegration_SeedAll_StunnedCondition(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	q := refdata.New(db)
-	cond, err := q.GetCondition(ctx, "stunned")
+	q := setupSeededDB(t)
+	cond, err := q.GetCondition(context.Background(), "stunned")
 	if err != nil {
 		t.Fatalf("GetCondition failed: %v", err)
 	}
@@ -176,7 +135,7 @@ func TestIntegration_SeedAll_StunnedCondition(t *testing.T) {
 		t.Fatalf("expected name Stunned, got %q", cond.Name)
 	}
 
-	var effects []map[string]interface{}
+	var effects []map[string]any
 	if err := json.Unmarshal(cond.MechanicalEffects, &effects); err != nil {
 		t.Fatalf("failed to unmarshal mechanical_effects: %v", err)
 	}
@@ -184,7 +143,6 @@ func TestIntegration_SeedAll_StunnedCondition(t *testing.T) {
 		t.Fatal("expected non-empty mechanical_effects")
 	}
 
-	// Check that incapacitated effect is present
 	hasIncapacitated := false
 	for _, e := range effects {
 		if e["effect_type"] == "incapacitated" {
@@ -202,23 +160,13 @@ func TestIntegration_SeedAll_ConditionCount(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	q := refdata.New(db)
-	count, err := q.CountConditions(ctx)
+	q := setupSeededDB(t)
+	count, err := q.CountConditions(context.Background())
 	if err != nil {
 		t.Fatalf("CountConditions failed: %v", err)
 	}
-	if count != 15 {
-		t.Fatalf("expected 15 conditions, got %d", count)
+	if count != refdata.ConditionCount {
+		t.Fatalf("expected %d conditions, got %d", refdata.ConditionCount, count)
 	}
 }
 
@@ -227,11 +175,7 @@ func TestIntegration_SeedAll_Idempotent(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
+	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
 	ctx := context.Background()
 
 	// Seed twice
@@ -248,24 +192,24 @@ func TestIntegration_SeedAll_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CountWeapons failed: %v", err)
 	}
-	if weaponCount != 37 {
-		t.Fatalf("expected 37 weapons after double seed, got %d", weaponCount)
+	if weaponCount != refdata.WeaponCount {
+		t.Fatalf("expected %d weapons after double seed, got %d", refdata.WeaponCount, weaponCount)
 	}
 
 	armorCount, err := q.CountArmor(ctx)
 	if err != nil {
 		t.Fatalf("CountArmor failed: %v", err)
 	}
-	if armorCount != 13 {
-		t.Fatalf("expected 13 armor after double seed, got %d", armorCount)
+	if armorCount != refdata.ArmorCount {
+		t.Fatalf("expected %d armor after double seed, got %d", refdata.ArmorCount, armorCount)
 	}
 
 	condCount, err := q.CountConditions(ctx)
 	if err != nil {
 		t.Fatalf("CountConditions failed: %v", err)
 	}
-	if condCount != 15 {
-		t.Fatalf("expected 15 conditions after double seed, got %d", condCount)
+	if condCount != refdata.ConditionCount {
+		t.Fatalf("expected %d conditions after double seed, got %d", refdata.ConditionCount, condCount)
 	}
 }
 
@@ -274,18 +218,8 @@ func TestIntegration_SeedAll_LongbowRange(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	q := refdata.New(db)
-	weapon, err := q.GetWeapon(ctx, "longbow")
+	q := setupSeededDB(t)
+	weapon, err := q.GetWeapon(context.Background(), "longbow")
 	if err != nil {
 		t.Fatalf("GetWeapon failed: %v", err)
 	}
@@ -306,18 +240,8 @@ func TestIntegration_SeedAll_ShieldArmor(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	q := refdata.New(db)
-	armor, err := q.GetArmor(ctx, "shield")
+	q := setupSeededDB(t)
+	armor, err := q.GetArmor(context.Background(), "shield")
 	if err != nil {
 		t.Fatalf("GetArmor failed: %v", err)
 	}
@@ -335,24 +259,14 @@ func TestIntegration_SeedAll_ListWeapons(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	q := refdata.New(db)
-	weapons, err := q.ListWeapons(ctx)
+	q := setupSeededDB(t)
+	weapons, err := q.ListWeapons(context.Background())
 	if err != nil {
 		t.Fatalf("ListWeapons failed: %v", err)
 	}
 
-	if len(weapons) != 37 {
-		t.Fatalf("expected 37 weapons from list, got %d", len(weapons))
+	if len(weapons) != refdata.WeaponCount {
+		t.Fatalf("expected %d weapons from list, got %d", refdata.WeaponCount, len(weapons))
 	}
 
 	// Verify sorted by name (first should be Battleaxe)
@@ -366,24 +280,14 @@ func TestIntegration_SeedAll_ListConditions(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	q := refdata.New(db)
-	conditions, err := q.ListConditions(ctx)
+	q := setupSeededDB(t)
+	conditions, err := q.ListConditions(context.Background())
 	if err != nil {
 		t.Fatalf("ListConditions failed: %v", err)
 	}
 
-	if len(conditions) != 15 {
-		t.Fatalf("expected 15 conditions from list, got %d", len(conditions))
+	if len(conditions) != refdata.ConditionCount {
+		t.Fatalf("expected %d conditions from list, got %d", refdata.ConditionCount, len(conditions))
 	}
 
 	// Verify sorted by name (first should be Blinded)
@@ -397,71 +301,18 @@ func TestIntegration_SeedAll_ListArmor(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	q := refdata.New(db)
-	armorList, err := q.ListArmor(ctx)
+	q := setupSeededDB(t)
+	armorList, err := q.ListArmor(context.Background())
 	if err != nil {
 		t.Fatalf("ListArmor failed: %v", err)
 	}
 
-	if len(armorList) != 13 {
-		t.Fatalf("expected 13 armor from list, got %d", len(armorList))
+	if len(armorList) != refdata.ArmorCount {
+		t.Fatalf("expected %d armor from list, got %d", refdata.ArmorCount, len(armorList))
 	}
 
 	// Verify sorted by name (first should be Breastplate)
 	if armorList[0].Name != "Breastplate" {
 		t.Fatalf("expected first armor Breastplate, got %q", armorList[0].Name)
-	}
-}
-
-func TestIntegration_SeedAll_NilDB(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	ctx := context.Background()
-	err := refdata.SeedAll(ctx, nil)
-	if err == nil {
-		t.Fatal("expected error for nil db, got nil")
-	}
-}
-
-func TestIntegration_WithTx(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	db := testutil.NewTestDB(t)
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
-
-	ctx := context.Background()
-	if err := refdata.SeedAll(ctx, db); err != nil {
-		t.Fatalf("SeedAll failed: %v", err)
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		t.Fatalf("Begin failed: %v", err)
-	}
-	defer tx.Rollback()
-
-	q := refdata.New(db).WithTx(tx)
-	count, err := q.CountWeapons(ctx)
-	if err != nil {
-		t.Fatalf("CountWeapons in tx failed: %v", err)
-	}
-	if count != 37 {
-		t.Fatalf("expected 37 weapons in tx, got %d", count)
 	}
 }

@@ -12,7 +12,7 @@
   - Depends on: Phase 1
   - Done when: `goose up` runs migrations, `goose down` rolls back, integration test connects to a throwaway Postgres via testcontainers.
 
-- [ ] **Phase 3: Reference Data Schema — Weapons, Armor, Conditions**
+- [x] **Phase 3: Reference Data Schema — Weapons, Armor, Conditions**
   - Scope: Migrations for `weapons`, `armor`, `conditions_ref` tables. Go structs and sqlc queries for CRUD. SRD seeder for weapons (all SRD weapons with properties), armor (all SRD armor with AC formulas), and conditions (15 standard conditions with `mechanical_effects` JSONB). Snapshot tests verifying seeded row counts.
   - Depends on: Phase 2
   - Done when: Seeder populates all SRD weapons, armor, and conditions; snapshot tests pass; sqlc-generated queries compile.

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	dbfs "github.com/ab/dndnd/db"
-	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/testutil"
 )
 
@@ -13,11 +12,7 @@ func TestIntegration_ReferenceTablesMigration(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewTestDB(t)
-
-	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateUp failed: %v", err)
-	}
+	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
 
 	// Verify weapons table exists
 	_, err := db.Exec(`INSERT INTO weapons (id, name, damage, damage_type, weapon_type) VALUES ($1, $2, $3, $4, $5)`,
