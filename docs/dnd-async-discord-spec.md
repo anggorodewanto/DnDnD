@@ -2842,6 +2842,17 @@ The `paused` status is informational — it signals a hiatus to the group withou
 | Real-time Sync | [nhooyr/websocket](https://github.com/nhooyr/websocket) | Live dashboard ↔ backend updates |
 | Deployment | Single Go binary (dashboard embedded via `embed.FS`) | One artifact to deploy |
 
+### Deployment Target — fly.io
+
+The application deploys to **[fly.io](https://fly.io)** as a single Machine:
+
+- **Machine:** 1x `shared-cpu-1x` (512MB–1GB RAM) — runs the Go binary (Discord bot + API server + dashboard)
+- **Database:** Fly Postgres (single-node) — managed by fly.io, accessible via internal DNS
+- **Asset storage:** 1x Fly Volume (1–3GB) mounted at `/data/assets` — persistent storage for DM-uploaded images, token art, tilesets, and narration attachments. Volumes survive redeploys and restarts but are pinned to one Machine in one region
+- **Deployment:** Dockerfile builds the Go binary with embedded dashboard assets, `fly deploy` pushes a new image
+- **WebSockets:** natively supported by fly.io's proxy layer — no special configuration needed for the dashboard's live sync
+- **Scaling note:** this is a single-instance deployment. The `AssetStore` interface allows swapping to S3-compatible storage (e.g., Cloudflare R2 or Tigris) if horizontal scaling is ever needed, but for a single-campaign bot a single Machine + Volume is sufficient
+
 ---
 
 ## Data Model
