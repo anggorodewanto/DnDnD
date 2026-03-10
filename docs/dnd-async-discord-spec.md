@@ -65,6 +65,14 @@ Discord is the **display and input terminal**, not the source of truth. The syst
 - System verifies the authenticated Discord user ID matches the campaign's designated DM
 - No separate passwords or accounts to manage
 
+**Session management:**
+- Server-side sessions stored in PostgreSQL (no extra dependency) — session ID in an HTTP-only, Secure, SameSite=Lax cookie
+- Discord access and refresh tokens stored server-side in the session record, never exposed to the client
+- The server transparently refreshes the Discord access token (using the stored refresh token) when it expires (~7 days), so the DM never sees a re-auth prompt during normal use
+- Session TTL: 30 days with sliding expiration (TTL resets on each authenticated request)
+- If a session expires or is revoked, the DM re-authenticates via Discord OAuth2 (typically one click since they're already logged into Discord)
+- Player portal sessions use the same mechanism
+
 **Multi-campaign support:**
 - One bot instance serves multiple Discord servers (multi-tenant)
 - All database queries are scoped by `guild_id` / `campaign_id`

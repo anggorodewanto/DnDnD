@@ -82,7 +82,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **34. SRD data seeding validation** — The 5e-database JSON is seeded into PostgreSQL. How is the mapping validated? Are there automated tests that the seeded data matches expected schema? What about data quality issues in the source dataset?
 
-- [ ] **35. Discord OAuth2 session management** — DM dashboard uses Discord OAuth2. How are sessions managed? JWT? Server-side sessions? Token refresh strategy? Session expiry during long DM sessions?
+- [x] **35. Discord OAuth2 session management** — DM dashboard uses Discord OAuth2. How are sessions managed? JWT? Server-side sessions? Token refresh strategy? Session expiry during long DM sessions?
 
 - [ ] **36. Spell effect zone lifecycle** — Spell overlays are rendered on the map. How are zones created in the database when a spell is cast? How are moving zones (Spirit Guardians anchored to a creature) updated on each movement? How are zones cleaned up when concentration breaks or duration expires?
 
