@@ -31,9 +31,25 @@ coordinate a breakdown agent and a reviewer agent through a feedback loop.
 2. Read `CLAUDE.md` for project conventions.
 3. Check if the output file already exists (resume case).
 4. Note the spec's major sections and rough size.
+5. Build a **SPEC_TOC** — a list of all ## and ### headings with their
+   line ranges. This is lightweight and can always be passed in full.
 
-Assemble this as **SPEC_CONTEXT** — the full spec content plus any
-existing phases file content.
+Assemble this as **SPEC_CONTEXT**:
+- For iteration 1: the full spec content plus any existing phases file.
+- For iteration 2+: see "Context Management" below.
+
+## Context Management (for large specs)
+
+If the spec exceeds ~2000 lines:
+- Always pass the **SPEC_TOC** (table of contents with line ranges).
+- On iteration 1: pass the full spec to the breakdown agent.
+- On iteration 2+: pass only the **sections the reviewer flagged** as
+  missing, oversized, or problematic — plus the SPEC_TOC for orientation.
+  The breakdown agent already has the phases from prior iterations and
+  only needs the relevant sections to revise.
+- Always pass the full "User Clarifications" section accumulated so far.
+
+If the spec is under ~2000 lines, pass it in full every time.
 
 # Step 1–10 — Breakdown → Review Loop
 
@@ -50,7 +66,7 @@ You are a spec breakdown specialist. Your job is to decompose a
 specification into small, numbered implementation phases.
 
 ## Spec Content
-{SPEC_CONTEXT}
+{SPEC_CONTEXT — full spec on iteration 1, or targeted sections + TOC on later iterations}
 
 ## Current Phases File
 {CURRENT_PHASES_CONTENT or "Empty — this is the first pass."}
@@ -146,19 +162,34 @@ reflects the latest state for the reviewer to inspect.
 
 ## 1c. Spawn Reviewer Agent
 
-Launch with `subagent_type: "code-reviewer"`.
+Launch with `subagent_type: "general-purpose"`.
 
-Pass this prompt (filling in the variables):
+If the phases list has **more than 20 phases**, split the review into
+batches. For each batch, the reviewer evaluates a slice of phases
+(e.g., phases 1-20, then 21-40) against the relevant spec sections.
+Merge the verdicts — if any batch has issues, the overall verdict is
+ISSUES with the combined must-fix list.
+
+For 20 or fewer phases, review all at once.
+
+Pass this prompt (filling in the variables — adjust phase range for
+batched reviews):
 
 ~~~
 You are a reviewer for a spec-to-phases breakdown. Your job is to
 ensure the phases are complete, correctly scoped, and implementable.
+You have full access to the codebase and spec file — read them
+directly to verify claims rather than relying solely on the
+breakdown agent's output.
 
 ## Original Spec
 {SPEC_CONTEXT}
 
 ## Phases Produced (iteration {N})
-{BREAKDOWN_RESULT}
+{BREAKDOWN_RESULT — or the batch slice for batched reviews}
+
+## Review Scope
+{ALL phases | Phases X–Y of Z (batch M of B)}
 
 ## Review Checklist
 
@@ -233,6 +264,7 @@ VERDICT: ISSUES
 ~~~
 
 Record the reviewer's output as **REVIEW_RESULT**.
+(For batched reviews, merge all batch results into one REVIEW_RESULT.)
 
 ## 1d. Collect Questions and Ask User
 

@@ -7,6 +7,7 @@ description: |
 argument-hint: "<phase-number> [phases-file]"
 allowed-tools:
   - Agent
+  - AskUserQuestion
   - Read
   - Edit
   - Glob
@@ -34,12 +35,16 @@ Before spawning any agent, collect the information they will need:
 2. Read the spec file referenced by the phase (check the phases file header
    or `docs/dnd-async-discord-spec.md` as default) — focus on the sections
    the phase references.
-3. Read `CLAUDE.md` for project conventions.
-4. Identify the test command, coverage command, and relevant source paths.
+3. **Always** include the spec's "Tech Stack" and "Data Model" sections
+   in the context regardless of which phase is being implemented. These
+   are foundational and every implementer needs them.
+4. Read `CLAUDE.md` for project conventions.
+5. Identify the test command, coverage command, and relevant source paths.
    - If no test framework exists yet, note this — the implementer must set one up.
-5. Run the existing test suite. Record baseline pass/fail and coverage.
-6. Summarize: phase scope, "done when" criteria, relevant spec sections,
-   dependency context from prior phases, relevant files, baseline test state.
+6. Run the existing test suite. Record baseline pass/fail and coverage.
+7. Summarize: phase scope, "done when" criteria, relevant spec sections,
+   tech stack, data model, dependency context from prior phases, relevant
+   files, baseline test state.
 
 This context is called **PHASE_CONTEXT**. You will pass it to every agent.
 
@@ -88,6 +93,21 @@ One cycle at a time.
 - If setting up a test framework for the first time, choose the idiomatic
   default for the language/ecosystem and keep configuration minimal.
 
+## Git Rules
+
+- Commit your work at the end of this iteration with a descriptive message:
+  `Phase {PHASE_NUMBER} iteration {N}: <summary of changes>`
+- Do NOT amend previous commits. Each iteration gets its own commit.
+- Make sure all files are committed — do not leave uncommitted changes.
+
+## Asking for Clarification
+
+- If the spec or phase description is ambiguous about something that affects
+  your implementation, do NOT guess. Include the question in your
+  "Questions for User" output section.
+- If the reviewer's feedback is unclear or contradictory, flag it as a
+  question rather than interpreting it.
+
 ## Output Format
 
 When done, output exactly:
@@ -107,6 +127,13 @@ When done, output exactly:
 - New code coverage: X%
 - (paste the final coverage summary)
 
+### Commit
+- (commit hash and message)
+
+### Questions for User (if any)
+- (specific questions about ambiguities — cite the spec section)
+(Leave empty if the spec was clear enough.)
+
 ### Open Concerns
 - (anything you are unsure about or could not complete)
 ~~~
@@ -115,12 +142,15 @@ Record the implementer's full output as **IMPL_RESULT**.
 
 ## 1b. Spawn Reviewer Agent
 
-Launch with `subagent_type: "code-reviewer"`.
+Launch with `subagent_type: "general-purpose"`.
 
 Pass this prompt (filling in the variables):
 
 ~~~
-You are a reviewer for a TDD-driven implementation phase.
+You are a reviewer for a TDD-driven implementation phase. You have
+full access to the codebase — read the actual files, run the tests
+yourself, and verify claims independently. Do NOT trust the
+implementer's report at face value.
 
 ## Phase Requirements
 {PHASE_CONTEXT}
@@ -128,10 +158,18 @@ You are a reviewer for a TDD-driven implementation phase.
 ## Implementer's Report (iteration {N})
 {IMPL_RESULT}
 
-## Your Review Checklist
+## Your Review Process
 
-Evaluate the work against each criterion. Be specific — cite files and
-line numbers.
+1. **Read the changed files** listed in the implementer's report.
+   Verify the code actually exists and matches what was described.
+2. **Run the full test suite** yourself. Verify pass/fail counts match
+   the report. If they don't, flag it.
+3. **Check coverage** yourself. Verify it matches the report.
+4. Then evaluate against the checklist below.
+
+## Review Checklist
+
+Be specific — cite files and line numbers.
 
 ### Correctness
 - [ ] Every acceptance criterion from the phase is met
@@ -144,8 +182,8 @@ line numbers.
 - [ ] No untested production code paths
 
 ### Test Quality & Coverage
-- [ ] Full test suite passes
-- [ ] Coverage on new code is ≥ 90%
+- [ ] Full test suite passes (verified by you)
+- [ ] Coverage on new code is ≥ 90% (verified by you)
 - [ ] Boundary/error/edge-case tests are present
 - [ ] Tests would catch regressions if code changes later
 
@@ -164,6 +202,8 @@ Respond with **exactly one** of these:
 VERDICT: APPROVED
 
 Summary: (1-2 sentences on why the work is acceptable)
+Verified test results: Total: X, Passed: X, Failed: X
+Verified coverage: X%
 ```
 
 **If issues found:**
@@ -173,6 +213,9 @@ VERDICT: ISSUES
 ### Must Fix
 - (numbered list — each item is specific and actionable)
 
+### Questions for User (if any)
+- (spec ambiguities you noticed that affect correctness — cite section)
+
 ### Suggestions (optional, non-blocking)
 - (improvements that are nice-to-have)
 ```
@@ -180,7 +223,23 @@ VERDICT: ISSUES
 
 Record the reviewer's output as **REVIEW_RESULT**.
 
-## 1c. Decision
+## 1c. Collect Questions and Ask User
+
+After each agent returns, check for a "Questions for User" section in
+IMPL_RESULT and REVIEW_RESULT. Collect all questions from both.
+
+If there are any questions:
+
+1. **Pause the loop.** Do NOT proceed to the next iteration.
+2. Present the questions to the user using `AskUserQuestion`. Group
+   related questions together. Provide context about which spec section
+   triggered the question.
+3. Wait for user answers.
+4. Add the user's answers to **PHASE_CONTEXT** as a new section called
+   "User Clarifications" so both agents see them in all future iterations.
+5. Then proceed to the decision below.
+
+## 1d. Decision
 
 - Parse the `VERDICT` line from REVIEW_RESULT.
 - If **APPROVED** → go to Step 2.
@@ -203,10 +262,10 @@ Report to the user:
 - (bullet summary from final IMPL_RESULT)
 
 ### Final Test Results
-- (pass/fail counts)
+- (pass/fail counts — from reviewer's independent verification)
 
 ### Final Coverage
-- (coverage %)
+- (coverage % — from reviewer's independent verification)
 
 ### Remaining Issues (if partial)
 - (unresolved items from last review)
@@ -224,6 +283,9 @@ If status is APPROVED:
 - Do NOT summarize away details when passing IMPL_RESULT to the reviewer —
   pass the full output.
 - Do NOT pass reviewer suggestions (non-blocking) as must-fix items.
+- Do NOT assume answers to questions. If either agent flags a question,
+  you MUST pause and ask the user before continuing. Never fabricate
+  answers, guess intent, or silently pick an interpretation.
 - If the implementer reports that ALL tests pass and coverage is high, and
   the reviewer still finds issues, those issues must be about correctness
   or TDD discipline — not stylistic nitpicks. Instruct the reviewer
