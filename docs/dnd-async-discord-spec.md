@@ -142,6 +142,15 @@ Discord enforces a rate limit of 5 messages per 5 seconds per channel. The bot h
 - **Rate limit backoff:** if the bot receives a 429 response, it pauses the affected channel's queue for the duration specified in the `Retry-After` header, then resumes draining.
 - **Burst scenarios:** even rapid successive commands (e.g., two players acting in different simultaneous encounters) are safe — the queue serializes outbound messages per channel and batching keeps each command to one message per channel.
 
+### Slash Command Registration
+
+All slash commands are registered **per-guild** (not globally). Per-guild registration provides instant command availability — no propagation delay.
+
+- **On startup**, the bot iterates all guilds it belongs to and registers (or updates) the full command set for each guild. This ensures commands are always current after a deploy.
+- **On guild join**, the bot registers commands for the new guild via the `GuildCreate` event handler.
+- **On deploy**, the bot process restarts and re-registers commands for all guilds as part of startup. Commands remain visible in Discord's slash command UI even while the bot is momentarily offline; they simply return no response until the bot reconnects. The re-registration is idempotent — Discord no-ops if the command definitions haven't changed.
+- **Command cleanup:** if commands are removed between versions, the bot deletes stale guild commands that are no longer in the current command set during the startup registration sweep.
+
 ### Player Onboarding
 
 When a new user joins the Discord server, the bot sends them a **welcome DM** with:

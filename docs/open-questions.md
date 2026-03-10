@@ -70,7 +70,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **28. Discord message size limits** — Combat log entries and turn prompts could exceed Discord's 2000-character limit (e.g., a Fireball hitting 8 creatures with saves, damage, and conditions). What's the truncation/splitting strategy? The spec mentions text file attachments for "very large output" — what's the threshold?
 
-- [ ] **29. Slash command registration** — Are commands registered globally (takes up to 1 hour to propagate) or per-guild (instant)? How are command updates deployed without downtime?
+- [x] **29. Slash command registration** — Are commands registered globally (takes up to 1 hour to propagate) or per-guild (instant)? How are command updates deployed without downtime?
 
 - [ ] **30. Advisory lock timeout & deadlock handling** — Per-turn advisory locks serialize mutations. What happens if a lock is held for too long (e.g., a slow database query)? Is there a lock timeout? What about DM dashboard + player command hitting different locks that could deadlock?
 
