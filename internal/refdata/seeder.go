@@ -8,7 +8,7 @@ import (
 )
 
 // SeedAll populates all SRD reference data (weapons, armor, conditions).
-func SeedAll(ctx context.Context, db *sql.DB) error {
+func SeedAll(ctx context.Context, db DBTX) error {
 	if db == nil {
 		return fmt.Errorf("database connection must not be nil")
 	}

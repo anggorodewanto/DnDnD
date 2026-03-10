@@ -434,3 +434,34 @@ func TestIntegration_SeedAll_NilDB(t *testing.T) {
 		t.Fatal("expected error for nil db, got nil")
 	}
 }
+
+func TestIntegration_WithTx(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := testutil.NewTestDB(t)
+	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
+		t.Fatalf("MigrateUp failed: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := refdata.SeedAll(ctx, db); err != nil {
+		t.Fatalf("SeedAll failed: %v", err)
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("Begin failed: %v", err)
+	}
+	defer tx.Rollback()
+
+	q := refdata.New(db).WithTx(tx)
+	count, err := q.CountWeapons(ctx)
+	if err != nil {
+		t.Fatalf("CountWeapons in tx failed: %v", err)
+	}
+	if count != 37 {
+		t.Fatalf("expected 37 weapons in tx, got %d", count)
+	}
+}

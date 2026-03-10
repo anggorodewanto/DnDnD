@@ -1,9 +1,47 @@
 package refdata
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 )
+
+// mockDBTX implements the DBTX interface for unit testing.
+// It returns errToReturn on every ExecContext call, or after
+// failAfterN successful calls if failAfterN > 0.
+type mockDBTX struct {
+	errToReturn error
+	failAfterN  int
+	callCount   int
+	queryErr    error
+}
+
+func (m *mockDBTX) ExecContext(_ context.Context, _ string, _ ...interface{}) (sql.Result, error) {
+	m.callCount++
+	if m.failAfterN > 0 && m.callCount <= m.failAfterN {
+		return nil, nil
+	}
+	return nil, m.errToReturn
+}
+
+func (m *mockDBTX) PrepareContext(_ context.Context, _ string) (*sql.Stmt, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockDBTX) QueryContext(_ context.Context, _ string, _ ...interface{}) (*sql.Rows, error) {
+	if m.queryErr != nil {
+		return nil, m.queryErr
+	}
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockDBTX) QueryRowContext(_ context.Context, _ string, _ ...interface{}) *sql.Row {
+	return nil
+}
 
 func TestMustJSON(t *testing.T) {
 	effects := []MechanicalEffect{
@@ -112,4 +150,185 @@ func TestOptHelpers(t *testing.T) {
 	if !b2.Valid || b2.Bool {
 		t.Fatalf("optBool(false) failed: %v", b2)
 	}
+}
+
+func TestSeedWeapons_ErrorWrapping(t *testing.T) {
+	dbErr := errors.New("exec failed")
+	mock := &mockDBTX{errToReturn: dbErr}
+	q := New(mock)
+
+	err := seedWeapons(context.Background(), q)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "upserting weapon") {
+		t.Fatalf("expected error to contain 'upserting weapon', got %q", err.Error())
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected wrapped error to contain original, got %v", err)
+	}
+}
+
+func TestSeedArmor_ErrorWrapping(t *testing.T) {
+	dbErr := errors.New("exec failed")
+	mock := &mockDBTX{errToReturn: dbErr}
+	q := New(mock)
+
+	err := seedArmor(context.Background(), q)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "upserting armor") {
+		t.Fatalf("expected error to contain 'upserting armor', got %q", err.Error())
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected wrapped error to contain original, got %v", err)
+	}
+}
+
+func TestSeedConditions_ErrorWrapping(t *testing.T) {
+	dbErr := errors.New("exec failed")
+	mock := &mockDBTX{errToReturn: dbErr}
+	q := New(mock)
+
+	err := seedConditions(context.Background(), q)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "upserting condition") {
+		t.Fatalf("expected error to contain 'upserting condition', got %q", err.Error())
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected wrapped error to contain original, got %v", err)
+	}
+}
+
+func TestSeedAll_WeaponsErrorWrapping(t *testing.T) {
+	dbErr := errors.New("weapons exec failed")
+	mock := &mockDBTX{errToReturn: dbErr}
+	err := SeedAll(context.Background(), mock)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "seeding weapons") {
+		t.Fatalf("expected error to contain 'seeding weapons', got %q", err.Error())
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected wrapped error to contain original, got %v", err)
+	}
+}
+
+func TestSeedAll_ArmorErrorWrapping(t *testing.T) {
+	dbErr := errors.New("armor exec failed")
+	// 37 weapons succeed, then armor fails on first call
+	mock := &mockDBTX{errToReturn: dbErr, failAfterN: 37}
+	err := SeedAll(context.Background(), mock)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "seeding armor") {
+		t.Fatalf("expected error to contain 'seeding armor', got %q", err.Error())
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected wrapped error to contain original, got %v", err)
+	}
+}
+
+func TestSeedAll_ConditionsErrorWrapping(t *testing.T) {
+	dbErr := errors.New("condition exec failed")
+	// 37 weapons + 13 armor = 50 succeed, then conditions fails
+	mock := &mockDBTX{errToReturn: dbErr, failAfterN: 50}
+	err := SeedAll(context.Background(), mock)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "seeding conditions") {
+		t.Fatalf("expected error to contain 'seeding conditions', got %q", err.Error())
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected wrapped error to contain original, got %v", err)
+	}
+}
+
+func TestSeedAll_NilDB(t *testing.T) {
+	err := SeedAll(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected error for nil db, got nil")
+	}
+	if !strings.Contains(err.Error(), "database connection must not be nil") {
+		t.Fatalf("expected nil db error message, got %q", err.Error())
+	}
+}
+
+func TestSeedAll_Success(t *testing.T) {
+	mock := &mockDBTX{}
+	err := SeedAll(context.Background(), mock)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	// 37 weapons + 13 armor + 15 conditions = 65 total upserts
+	if mock.callCount != 65 {
+		t.Fatalf("expected 65 ExecContext calls, got %d", mock.callCount)
+	}
+}
+
+func TestListWeapons_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListWeapons(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListArmor_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListArmor(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListConditions_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListConditions(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestMustJSON_Panic(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic, got none")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("expected string panic, got %T", r)
+		}
+		if !strings.Contains(msg, "failed to marshal JSON") {
+			t.Fatalf("expected panic message to contain 'failed to marshal JSON', got %q", msg)
+		}
+	}()
+
+	// channels are not JSON-serializable and will cause json.Marshal to fail
+	mustJSON(make(chan int))
 }
