@@ -72,7 +72,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **29. Slash command registration** — Are commands registered globally (takes up to 1 hour to propagate) or per-guild (instant)? How are command updates deployed without downtime?
 
-- [ ] **30. Advisory lock timeout & deadlock handling** — Per-turn advisory locks serialize mutations. What happens if a lock is held for too long (e.g., a slow database query)? Is there a lock timeout? What about DM dashboard + player command hitting different locks that could deadlock?
+- [x] **30. Advisory lock timeout & deadlock handling** — Per-turn advisory locks serialize mutations. What happens if a lock is held for too long (e.g., a slow database query)? Is there a lock timeout? What about DM dashboard + player command hitting different locks that could deadlock?
 
 - [ ] **31. Bot crash recovery** — If the bot process crashes and restarts, how does it recover state? Reconnect to Discord gateway, re-register commands, pick up where it left off? What about in-flight commands that were processing when the crash occurred? Are turn timers persisted in the database or in-memory?
 

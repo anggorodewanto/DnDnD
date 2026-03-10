@@ -81,6 +81,10 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 - Once the first command completes and releases the lock, the second processes against updated state
 - Player experiences at most a few hundred milliseconds of delay — no "conflict, retry" errors
 
+**Lock timeout:** each command sets `SET LOCAL lock_timeout = '5s'` before calling `pg_advisory_lock`. If the lock cannot be acquired within 5 seconds (indicating a stuck or abnormally slow preceding command), the transaction is aborted and the player receives: "⚠️ Server is busy, please try again." No automatic retry — the player reissues the command manually.
+
+**Deadlock safety:** deadlocks are impossible by design. Each command acquires exactly one advisory lock (the current turn's `turn_id`). Deadlocks require circular waits across multiple locks, which cannot occur in a single-lock-per-command architecture.
+
 **DM + player concurrent actions:**
 - DM dashboard mutations go through the same backend and acquire the same per-turn lock
 - If the DM ends a player's turn, any in-flight player command either completes first (if it holds the lock) or fails with "It's no longer your turn"
