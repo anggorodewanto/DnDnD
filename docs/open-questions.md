@@ -86,7 +86,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **36. Spell effect zone lifecycle** — Spell overlays are rendered on the map. How are zones created in the database when a spell is cast? How are moving zones (Spirit Guardians anchored to a creature) updated on each movement? How are zones cleaned up when concentration breaks or duration expires?
 
-- [ ] **37. Concurrent map image generation** — If multiple commands in different encounters trigger map regeneration simultaneously, can the image renderer handle concurrency? Is there a queue, or are renders truly parallel?
+- [x] **37. Concurrent map image generation** — If multiple commands in different encounters trigger map regeneration simultaneously, can the image renderer handle concurrency? Is there a queue, or are renders truly parallel?
 
 - [ ] **38. Character import validation depth** — D&D Beyond imports go through a parser. How deeply is the imported data validated against 5e rules? (e.g., illegal multiclass combos, ability scores exceeding 20 without magic items, invalid spell selections). Is validation the DM's responsibility, or does the system flag issues?
 

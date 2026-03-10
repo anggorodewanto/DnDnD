@@ -2161,7 +2161,8 @@ Player clicks End Turn:
 
 ### Map Rendering
 
-- Grid images generated **server-side** as PNGs on every state change — **synchronous** with the command response (the bot waits for the render to complete before replying). No caching layer; the full image is regenerated from scratch each time. At 48px tiles a 50×50 map is 2400×2400 pixels — well within what Go's `image/draw` + `gg` can produce in under a second. Optimize only if profiling shows an actual bottleneck.
+- Grid images generated **server-side** as PNGs. At 48px tiles a 50×50 map is 2400×2400 pixels — well within what Go's `image/draw` + `gg` can produce in under a second. No caching layer; the full image is regenerated from scratch each time.
+- **Per-encounter render queue with debouncing:** each encounter has a dedicated render queue (a Go channel). When a state change occurs, the command handler enqueues a render request and continues without waiting. A single goroutine per encounter drains the queue, but **only renders the final state** — if multiple requests have accumulated (e.g., an AoE spell resolving 6 saves in rapid succession), intermediate requests are discarded and only the last-enqueued state is rendered. This ensures the map image always reflects the fully-resolved state and avoids wasted CPU on throwaway intermediate frames. The rendered PNG is uploaded to `#combat-map` asynchronously; the command response (damage results, save outcomes, etc.) is posted to Discord immediately without waiting for the map image. If no commands are in flight, the queue is empty and the single pending request renders with negligible delay.
 - Bot **appends a new message** in `#combat-map` — creates a visual log players can scroll through
 - Token labels display enemy IDs (G1, OS) and player initials
 - Token visual states use dual-channel indicators for accessibility (see Combatant Targeting § Token health indicators)
