@@ -1815,15 +1815,22 @@ Every auto-resolved action, auto-detected modifier, and auto-rejected command po
 
 Each enemy takes its own turn in initiative order. The DM resolves enemy turns through the dashboard with **smart defaults** — the system pre-fills suggestions, DM confirms or overrides.
 
-**Dashboard flow:**
-1. Dashboard highlights the active enemy and pre-fills:
-   - **Suggested move:** shortest path toward nearest hostile (reuses pathfinding)
-   - **Suggested attack:** nearest target in range; defaults to creature's primary attack from stat block
-   - **Suggested ability:** if the creature has a special ability (e.g. Breath Weapon), suggest it when conditions are met (multiple targets in cone/line)
-2. DM clicks **Confirm** to accept defaults, or overrides any field
-3. DM rolls to-hit and damage from the dashboard; system applies HP changes
-4. DM sees results and can adjust before posting (e.g. fudge a crit that would one-shot a level 2 player)
-5. On confirm, results post to `#combat-log` and map updates
+**Dashboard flow — structured multi-step turn builder:**
+
+The dashboard breaks each enemy turn into discrete steps mirroring the 5e action economy. The system reads the creature's stat block to determine complexity and pre-fills each step with smart defaults. The DM confirms or overrides each step individually.
+
+1. **Movement step:** Dashboard highlights the active enemy and suggests the shortest path toward the nearest hostile (reuses pathfinding). DM confirms, overrides the destination, or skips.
+2. **Action step:** Pre-filled based on the stat block:
+   - **Simple creatures** (single attack): suggests the primary attack against the nearest target in range.
+   - **Multiattack creatures**: presents the full multiattack sequence as sub-steps (e.g., Bite → Claw → Claw for a dragon). Each sub-step shows the suggested target, to-hit roll, and damage. DM confirms each sub-step or overrides targets/actions.
+   - **Special abilities**: if the creature has a rechargeable ability (e.g., Breath Weapon) and the recharge roll succeeds, the system suggests using it when conditions are met (multiple targets in area). Otherwise defaults to the multiattack/attack routine.
+3. **Bonus action step:** If the creature has a bonus action option (rare for monsters, but possible with homebrew), it appears as a separate step.
+4. **Review & adjust:** DM sees the full turn summary with all results before posting. Can fudge any roll (e.g., downgrade a crit that would one-shot a level 2 player), re-order steps, or remove actions.
+5. **Confirm & post:** Results post to `#combat-log` and the map updates.
+
+**Legendary actions** are handled as separate mini-turns that appear between other creatures' turns in initiative order. When any creature ends its turn, the dashboard checks if any creature with remaining legendary actions wants to act and presents a "Legendary Action" prompt to the DM. The prompt shows the creature's legendary action budget (e.g., "2 of 3 remaining"), lists available options with their costs, and pre-fills a suggestion based on tactical context (e.g., tail attack if a PC is in range). The DM confirms, picks a different option, or passes. Legendary action budgets reset at the start of the creature's own turn.
+
+**Lair actions** are handled as a separate initiative entry at count 20. The system automatically inserts a "Lair Action" turn into the initiative order for any creature with lair actions. On initiative 20, the dashboard presents the available lair action options. The DM selects one (no repeats on consecutive rounds, per 5e rules — the system enforces this by greying out the last-used option).
 
 **`#combat-log` output** for enemy turns (same format as player actions):
 ```
@@ -1837,7 +1844,19 @@ Each enemy takes its own turn in initiative order. The DM resolves enemy turns t
     → Damage: 7 slashing
 ```
 
-**Pending reactions:** if a player has a pre-declared `/reaction` that triggers during the enemy turn, the dashboard surfaces it to the DM before confirming that step. DM resolves the reaction inline.
+```
+🐉  Adult Red Dragon uses Multiattack
+⚔️  Bite vs Thorn → 24 (21 + 3) — HIT → 17 piercing + 7 fire
+⚔️  Claw vs Kael → 19 (16 + 3) — HIT → 13 slashing
+⚔️  Claw vs Aria → 11 (8 + 3) — MISS
+
+👑  Adult Red Dragon uses Legendary Action: Tail Attack (1/3)
+⚔️  Tail vs Thorn → 22 (19 + 3) — HIT → 15 bludgeoning
+
+🏰  Lair Action (Initiative 20): Magma erupts — Kael and Aria DEX save DC 15
+```
+
+**Pending reactions:** if a player has a pre-declared `/reaction` that triggers during any step of the enemy turn (including legendary actions and lair actions), the dashboard surfaces it to the DM before confirming that step. DM resolves the reaction inline.
 
 ### Summoned Creatures & Companions
 

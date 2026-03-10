@@ -14,7 +14,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **4. Encounter setup workflow** — How does the DM create and start an encounter? The spec mentions "DM clicks Start Combat" but doesn't detail the setup flow: selecting creatures from the stat block library, placing tokens on spawn zones, setting surprise flags, naming the encounter. Is there an encounter preparation mode where DMs can pre-build encounters before starting them?
 
-- [ ] **5. Enemy turn smart defaults — complexity ceiling** — Smart defaults suggest "shortest path toward nearest hostile" and "primary attack." What about creatures with multiattack, legendary actions, lair actions, or complex abilities (e.g., a dragon with breath weapon recharge, tail attack, and legendary actions)? How are legendary/lair actions surfaced in the DM's turn flow?
+- [x] **5. Enemy turn smart defaults — complexity ceiling** — Smart defaults suggest "shortest path toward nearest hostile" and "primary attack." What about creatures with multiattack, legendary actions, lair actions, or complex abilities (e.g., a dragon with breath weapon recharge, tail attack, and legendary actions)? How are legendary/lair actions surfaced in the DM's turn flow?
 
 - [ ] **6. DM queue overload management** — In a busy round with multiple freeform actions, reaction declarations, whispers, and enemy turns queued, how does the DM prioritize? Is `#dm-queue` sorted chronologically or by urgency? Can items be filtered, pinned, or bulk-resolved?
 
