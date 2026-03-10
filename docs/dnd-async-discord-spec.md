@@ -1606,9 +1606,11 @@ The system assigns `initiative_order` deterministically during encounter setup �
 
 ### Simultaneous Encounters
 
-Multiple encounters can be active at the same time (e.g., party split, multi-room dungeon). All encounters share the same Discord channels — `#combat-map`, `#your-turn`, `#combat-log`, `#initiative-tracker`. Messages are distinguished by an **encounter name label** prefixed to every bot message.
+Multiple encounters can be active at the same time (e.g., party split, multi-room dungeon). All encounters share the same Discord channels — `#combat-map`, `#your-turn`, `#combat-log`, `#initiative-tracker`. Messages are distinguished by an **encounter display name** prefixed to every bot message.
 
-**Message labeling:** every bot message to a combat channel is prefixed with the encounter name and round number:
+**Display name vs. internal name:** each encounter has two names. The **internal name** (set in the Encounter Builder) is visible only to the DM on the dashboard — it can be spoilery ("Boss Fight", "Surprise Ambush"). The **display name** is what players see in Discord channel messages. It defaults to the internal name, but the DM can set it to something vague (e.g., "The Shadows Stir", "Encounter B") during encounter creation or at any point before or during combat. The DM edits the display name from the Encounter Builder or the Combat Workspace header.
+
+**Message labeling:** every bot message to a combat channel is prefixed with the encounter display name and round number:
 ```
 ⚔️ Rooftop Ambush — Round 3
 🔔 @Aria — it's your turn!
@@ -1623,7 +1625,7 @@ Multiple encounters can be active at the same time (e.g., party split, multi-roo
 - The DM creates and starts encounters independently from the dashboard
 - Each encounter has its own turn order, round counter, and map
 - Bot messages for all encounters interleave in the shared channels
-- Players read the encounter name label to identify which messages are relevant to them
+- Players read the encounter display name label to identify which messages are relevant to them
 - Commands from a player are routed to the encounter they belong to (based on their combatant entry)
 - Per-turn advisory locks are scoped per encounter — commands in different encounters do not block each other
 
@@ -2667,7 +2669,7 @@ The DM designs encounters outside of play time and saves them for later use. Enc
 **Encounter creation workflow:**
 
 1. DM opens the Encounter Builder from the sidebar (or clicks "New Encounter" on Campaign Home).
-2. **Name & map** — DM names the encounter and selects a map from the Asset Library.
+2. **Name & map** — DM names the encounter (internal name) and optionally sets a **display name** (what players see in Discord). If left blank, the display name defaults to the internal name. The DM also selects a map from the Asset Library.
 3. **Add creatures** — DM browses the Stat Block Library, selects creature types, and sets quantities. Each creature gets an auto-generated short ID (G1, G2, OS, etc.).
 4. **Place creature tokens** — DM visually drags creature tokens onto the map, same drag-and-drop UX as the Map Editor. Tokens snap to grid cells.
 5. **Save** — DM saves the encounter. No PCs are assigned at creation time.
@@ -2732,7 +2734,7 @@ The DM reviews in the dashboard and either applies the undo or dismisses the req
 6. **Turn timers** are cancelled.
 7. **Ammunition recovery** is prompted: the dashboard shows a "Recover Ammunition" button. On click, each character recovers half (rounded down) of ammunition expended during the encounter.
 8. **Loot pool** becomes available: the DM can populate the loot pool via the Item Picker, and the bot posts the loot announcement to `#the-story`.
-9. **Bot announcement** in `#the-story`: "🏁 **Combat ended** — [encounter name]." followed by a brief summary (rounds elapsed, casualties).
+9. **Bot announcement** in `#the-story`: "🏁 **Combat ended** — [encounter display name]." followed by a brief summary (rounds elapsed, casualties).
 10. **Reaction declarations** are cleared for all players.
 
 The encounter remains in `completed` status (queryable by `/recap`, visible in encounter history) until the DM archives it from the dashboard.
@@ -2840,7 +2842,8 @@ encounter_templates
   id              UUID PK
   campaign_id     UUID FK → campaigns
   map_id          UUID FK → maps
-  name            TEXT NOT NULL
+  name            TEXT NOT NULL           -- internal name (DM-only, visible on dashboard)
+  display_name    TEXT                    -- player-facing name in Discord messages; defaults to name if NULL
   creatures       JSONB NOT NULL         -- [{creature_ref_id, short_id, display_name, position_col, position_row, quantity}]
   created_at      TIMESTAMPTZ DEFAULT now()
   updated_at      TIMESTAMPTZ DEFAULT now()
@@ -2849,7 +2852,8 @@ encounters
   id              UUID PK
   campaign_id     UUID FK → campaigns
   map_id          UUID FK → maps
-  name            TEXT
+  name            TEXT                    -- internal name (DM-only)
+  display_name    TEXT                    -- player-facing name; defaults to name if NULL
   template_id     UUID FK → encounter_templates  -- source template (nullable for ad-hoc encounters)
   status          TEXT NOT NULL          -- 'preparing', 'active', 'completed'
   round_number    INTEGER DEFAULT 0
