@@ -2596,7 +2596,7 @@ Desktop-only features (not available in mobile-lite view): Map Editor, Encounter
 - **Combat Manager** — drag tokens on a grid, click to move, auto-calculate distance and range
 - **HP & Condition Tracker** — click to apply damage, healing, and status conditions
 - **Turn Queue** — shows initiative order; "End Turn" auto-advances and pings next player
-- **Action Resolver** — view `#dm-queue` items, apply outcomes with a click
+- **Action Resolver** — view `#dm-queue` items, apply outcomes with a click. Items are listed in **chronological order** (oldest first) with no priority sorting or filtering. The DM works through items top-to-bottom; the pending-count badges on encounter tabs provide sufficient cross-encounter prioritization
 - **Active Reactions Panel** — always-visible sidebar showing all active `/reaction` declarations grouped by combatant. Each entry shows the player name, declaration text, and status (active / used this round / dormant). When the DM is resolving an enemy turn, matching declarations are highlighted. DM clicks to resolve or dismiss. Consumed reactions are greyed out until the creature's next turn resets them.
 - **Stat Block Library** — preloaded monster stat blocks, reusable across encounters
 - **Asset Library** — maps, token images, tilesets, custom monsters

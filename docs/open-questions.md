@@ -16,7 +16,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **5. Enemy turn smart defaults — complexity ceiling** — Smart defaults suggest "shortest path toward nearest hostile" and "primary attack." What about creatures with multiattack, legendary actions, lair actions, or complex abilities (e.g., a dragon with breath weapon recharge, tail attack, and legendary actions)? How are legendary/lair actions surfaced in the DM's turn flow?
 
-- [ ] **6. DM queue overload management** — In a busy round with multiple freeform actions, reaction declarations, whispers, and enemy turns queued, how does the DM prioritize? Is `#dm-queue` sorted chronologically or by urgency? Can items be filtered, pinned, or bulk-resolved?
+- [x] **6. DM queue overload management** — In a busy round with multiple freeform actions, reaction declarations, whispers, and enemy turns queued, how does the DM prioritize? Is `#dm-queue` sorted chronologically or by urgency? Can items be filtered, pinned, or bulk-resolved?
 
 - [ ] **7. DM queue resolution UX from dashboard** — Each `#dm-queue` notification has a "Resolve →" link. What does the resolution interface look like? Is it a modal, inline expansion, or a separate page? Can the DM apply mechanical effects (damage, conditions, movement) directly from the resolution view?
 
