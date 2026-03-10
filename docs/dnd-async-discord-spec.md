@@ -2632,6 +2632,8 @@ Desktop-only features (not available in mobile-lite view): Map Editor, Encounter
 - **Character Overview** — read-only view of all player character sheets. Includes a **Party Languages** summary showing every language known by at least one party member and which characters speak it (e.g., "Elvish — Aria, Fenwick"), so the DM can quickly see language coverage when writing NPC dialogue or placing written clues
 - **Character Approval Queue** — pending characters from `/import`, `/create-character`, and `/register`, plus retirement requests from `/retire`. DM reviews the full sheet, approves, requests changes (with a message sent to the player via Discord DM), or rejects. Approved characters are immediately linked to the player and their `#character-cards` entry is created. Approved retirements unlink the player and mark the character as retired
 
+**Keyboard shortcuts & power-user features:** not included at MVP. The dashboard is fully mouse/touch-driven. Keyboard shortcuts, command palettes, and remappable keybindings may be added in a future release based on DM feedback.
+
 ### Encounter Builder
 
 The DM designs encounters outside of play time and saves them for later use. Encounter creation is fully separated from encounter execution — the DM can build a library of encounters in advance and start them when the story calls for it.

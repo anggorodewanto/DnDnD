@@ -28,7 +28,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **11. Loot pool management** — After combat, the DM populates a loot pool. Can the DM drag items from defeated creature inventories, or must they manually select each item? How is gold from multiple creatures aggregated? Can the DM add narrative descriptions to loot items?
 
-- [ ] **12. Dashboard keyboard shortcuts & power-user features** — For DMs running complex encounters, are there keyboard shortcuts for common actions (advance turn, apply damage, open the map)? Searchable command palette?
+- [x] **12. Dashboard keyboard shortcuts & power-user features** — For DMs running complex encounters, are there keyboard shortcuts for common actions (advance turn, apply damage, open the map)? Searchable command palette?
 
 - [ ] **13. Action log depth & undo limits** — "Undo Last Action" walks back mutations using `before_state`. How far back can the DM undo? Is there a cap on action log retention? Can the DM undo across turn boundaries (e.g., undo an action from a previous turn)?
 
