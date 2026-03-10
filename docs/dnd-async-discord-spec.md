@@ -2272,6 +2272,17 @@ Benefits:
 **Phase 1 (MVP):** blank grid + terrain/wall tools + image import. Maps stored as Tiled-compatible JSON.
 **Phase 2:** tileset support — load `.tsj` tilesets, paint with tile brushes, import full `.tmj` maps from Tiled.
 
+### Asset Storage
+
+All uploaded and generated image assets use a **local filesystem + abstraction layer** approach:
+
+- **Storage backend:** assets are stored on the server's local filesystem under a structured directory tree: `data/assets/{campaign_id}/{type}/` where `type` is one of `maps`, `tokens`, `tilesets`, `narration`, or `generated`. Each file gets a UUID filename to avoid collisions (e.g., `data/assets/abc123/maps/550e8400-e29b.png`).
+- **AssetStore interface:** all file I/O goes through an `AssetStore` Go interface (`Put`, `Get`, `Delete`, `URL`) so the storage backend can be swapped to S3-compatible object storage later without changing application code. The MVP implementation is `LocalAssetStore`.
+- **Metadata in the database:** an `assets` table tracks each file's campaign, type, original filename, MIME type, byte size, and storage path. The `background_image_url` field on the `maps` table references an asset ID rather than a raw URL.
+- **Generated map PNGs:** rendered PNGs are **ephemeral** — they are uploaded directly to Discord via `AttachFile` on every render and are **not persisted** to the asset store. The map's authoritative state is the Tiled JSON + combatant positions in the database; the PNG is a throwaway visual artifact. This avoids unbounded storage growth from per-turn renders.
+- **DM-uploaded assets** (background images, token images, tileset files, narration images) are persisted in the asset store and served to the dashboard via a `/api/assets/{id}` endpoint that streams the file from the local store.
+- **Backup:** since assets live on the local filesystem alongside the database, a single backup strategy (e.g., filesystem snapshot or rsync) covers both.
+
 ---
 
 ## Character Creation & Import
@@ -3011,8 +3022,21 @@ maps
   width_squares   INTEGER NOT NULL
   height_squares  INTEGER NOT NULL
   tiled_json      JSONB NOT NULL         -- full Tiled-compatible .tmj data
-  background_image_url TEXT              -- optional uploaded battle map image
+  background_image_id  UUID FK → assets  -- optional uploaded battle map image
   tileset_refs    JSONB                  -- [{name, source_url, first_gid}]
+```
+
+### Assets
+
+```sql
+assets
+  id              UUID PK
+  campaign_id     UUID FK → campaigns
+  type            TEXT NOT NULL          -- 'map_background', 'token', 'tileset', 'narration'
+  original_name   TEXT NOT NULL          -- original uploaded filename (e.g., "tavern-map.png")
+  mime_type       TEXT NOT NULL          -- e.g., "image/png", "image/jpeg", "application/json"
+  byte_size       BIGINT NOT NULL
+  storage_path    TEXT NOT NULL          -- relative path in local store (e.g., "abc123/maps/550e8400.png")
 ```
 
 ### Reference Data (SRD + Homebrew)
