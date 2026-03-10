@@ -22,7 +22,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **8. Lighting/obscurement zone management** — DM places zones from the dashboard, but how? A painting tool on the map? A form with coordinates? Can zones be resized, moved, or removed mid-combat? How does the DM visualize zone boundaries while editing vs. what players see?
 
-- [ ] **9. Shop/merchant workflow** — The spec mentions "DM creates a shop via the dashboard, posts available items to `#the-story`, and transfers purchased items/deducts gold through the dashboard." No details on the shop creation UI. Is it a reusable merchant template? Can players browse items interactively, or does the DM manually handle each purchase?
+- [x] **9. Shop/merchant workflow** — The spec mentions "DM creates a shop via the dashboard, posts available items to `#the-story`, and transfers purchased items/deducts gold through the dashboard." No details on the shop creation UI. Is it a reusable merchant template? Can players browse items interactively, or does the DM manually handle each purchase?
 
 - [ ] **10. DM-to-player communication** — The DM can narrate in `#the-story` and resolve whispers, but how does the DM send ad-hoc private messages to individual players from the dashboard (e.g., "you notice something the others don't")? Is there a direct message feature beyond whisper replies?
 

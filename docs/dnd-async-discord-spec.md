@@ -853,7 +853,7 @@ Combat log output:
 2. **No component, but sufficient gold:** if the item is missing but the character has enough gold, the system offers a fallback prompt: "You don't have a diamond (300gp) — buy one for 300gp? [✅ Buy & Cast] [❌ Cancel]". Clicking Buy & Cast deducts the gold and proceeds. If `material_consumed = true`, no item is added to inventory (it's immediately consumed). If not consumed, the item is added to inventory for future casts.
 3. **Neither component nor gold:** the cast is rejected: "Requires a diamond worth 300gp — you don't have one and can't afford it (current gold: 50gp)."
 
-The gold fallback represents the assumption that components can be acquired from merchants, temples, or other sources available in the game world. The DM can also stock components directly in player inventories via the dashboard, and players can buy items from in-game merchants (DM creates a shop via the dashboard, posts available items to `#the-story`, and transfers purchased items/deducts gold through the dashboard).
+The gold fallback represents the assumption that components can be acquired from merchants, temples, or other sources available in the game world. The DM can also stock components directly in player inventories via the dashboard, and players can buy items from in-game merchants (see Shops & Merchants).
 
 **Bonus action spell auto-detection:** `/cast` is the only command needed for all spells. The system reads `spells.casting_time`; if it is `'bonus action'`, the cast deducts the bonus action (`bonus_action_used = true`) instead of the action. The bot confirms in the response: "🎁 Cast as bonus action." There is no `/bonus cast` syntax.
 
@@ -2464,7 +2464,7 @@ Using a consumable in combat costs an action (`action_used = true`). The DM can 
 
 **Giving items:** `/give healing-potion AR` transfers one item to an adjacent ally (within 5ft). Both inventories are updated. In combat, giving an item uses the free object interaction (or costs an action if already used). Out of combat, no action cost.
 
-**Looting:** after an encounter ends (`encounter.status = 'completed'`), the DM can populate a **loot pool** from the dashboard — selecting items from defeated creatures' inventories or adding custom loot. The system posts the loot pool to `#combat-log`:
+**Looting:** after an encounter ends (`encounter.status = 'completed'`), the DM can populate a **loot pool** from the dashboard using the **Item Picker** (see Item Picker below) — selecting items from defeated creatures' inventories, the SRD/homebrew item tables, or adding custom entries with a name, description, and optional gold value. The system posts the loot pool to `#combat-log`:
 
 ```
 💰 Loot available: Shortsword ×2, 15 gp, Healing Potion ×1, Mysterious Key
@@ -2478,6 +2478,22 @@ Players type `/loot` to see the loot pool and claim items via Discord buttons. E
 **Carrying capacity:** not enforced by the system. Players can carry any number of items without weight or slot limits. The DM controls what items are available through loot pools, shops, and rewards — inventory size is self-regulating. Weight data (`weight_lb`) exists on weapons and armor reference tables for informational purposes but has no mechanical effect.
 
 **DM inventory management:** the DM can add, remove, or transfer items between any characters from the dashboard. All DM-initiated changes are logged to `#combat-log`.
+
+### Item Picker
+
+The **Item Picker** is a shared dashboard component used wherever the DM selects items — shop creation, loot pool population, inventory grants, and magic item assignment. It provides:
+
+- **Search** across SRD weapons, armor, gear, and magic items, plus homebrew entries
+- **Category filters** (weapons, armor, adventuring gear, potions, magic items, etc.)
+- **Creature inventory source** — when used in a loot context, a tab shows inventories of defeated creatures for quick drag-to-pool selection
+- **Custom entry** — add a freeform item with name, description, quantity, and optional gold value (for items not in the database, e.g., "Mysterious Key", "Ancient Map Fragment")
+- **Price override** — each selected item shows its default SRD price (if any), editable by the DM
+
+### Shops & Merchants
+
+**Prepared shops:** the DM creates a named shop from the dashboard (e.g., "Ironforge Smithy", "Ye Olde Potion Shoppe") using the Item Picker to select available inventory and set prices. Shops are saved as **reusable templates** — the same shop can be posted again later with updated stock. The DM clicks "Post to #the-story" to send a formatted item list (name, price, brief description) to the narrative channel. Players state what they want to buy in `#in-character` or via `/whisper`, and the DM manually transfers items and deducts gold from the dashboard.
+
+**Impromptu shopping:** for ad-hoc purchases (a player asks to buy rope at a general store mid-narrative), the DM handles it entirely through narration in `#the-story` and adjusts gold/inventory directly from the dashboard. No shop template needed.
 
 ### Magic Items
 
