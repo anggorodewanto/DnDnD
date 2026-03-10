@@ -200,9 +200,10 @@ All combatant IDs appear on map token labels and in `#initiative-tracker`, so pl
 **Enemy HP is hidden from players.** The bot never reveals exact HP, AC, or stat block details in player-visible channels. Instead, enemies show a **descriptive health tier:**
 - **Uninjured** — 100% HP
 - **Scratched** — 75–99% HP
-- **Bloodied** — 25–74% HP (standard 5e convention: below half)
+- **Bloodied** — 25–74% HP
 - **Critical** — 1–24% HP
 - **Dying / Dead** — 0 HP
+- **Stable** — 0 HP, no longer making death saves (unconscious)
 
 **Player character HP** is visible to all players as exact values (allies can see each other's current and max HP in `#initiative-tracker` and on character tokens).
 
@@ -215,6 +216,7 @@ All combatant IDs appear on map token labels and in `#initiative-tracker`, so pl
 - **Critical** — red tint, ⚠ warning icon overlay
 - **Dying** — dimmed, heartbeat icon overlay
 - **Dead** — greyed out, X icon overlay
+- **Stable** — dimmed, bandage/cross icon overlay
 
 No player configuration is required; both channels are always rendered.
 
@@ -303,7 +305,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/move` | `/move D4` | Move to coordinate. Shows path cost and remaining movement, then asks for confirmation before committing. Repeatable for split movement as long as total ≤ speed |
 | `/fly` | `/fly 30` | Set altitude in feet. Costs movement 1:1 |
 | `/attack` | `/attack G2` or `/attack G2 handaxe --gwm` or `/attack G2 --twohanded` or `/attack G2 improvised` | Attack a target. One `/attack` per swing; backend tracks attacks remaining. `--twohanded` for versatile weapons. `improvised` for improvised weapons (1d4 bludgeoning, no proficiency) |
-| `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` or `/cast fireball D5 --quickened` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting. Bonus action spells (e.g., Healing Word) are auto-detected from `spells_ref.casting_time` — no need for `/bonus cast`; the system deducts the bonus action instead of the action. Sorcerers can add Metamagic flags (e.g., `--quickened`, `--twinned [target]`, `--subtle`) — see Metamagic |
+| `/cast` | `/cast fireball D5` or `/cast fireball D5 --slot 5` or `/cast detect-magic --ritual` or `/cast fireball D5 --quickened` | Cast a spell at a target coordinate or enemy ID. `--slot N` to upcast; `--ritual` for ritual casting. Bonus action spells (e.g., Healing Word) are auto-detected from `spells.casting_time` — no need for `/bonus cast`; the system deducts the bonus action instead of the action. Sorcerers can add Metamagic flags (e.g., `--quickened`, `--twinned [target]`, `--subtle`) — see Metamagic |
 | `/bonus` | `/bonus cunning-action dash` or `/bonus cunning-action disengage` or `/bonus cunning-action hide` | Bonus action |
 | `/bonus rage` | `/bonus rage` | Enter rage — Barbarian only, costs bonus action (auto-resolved) |
 | `/bonus wild-shape` | `/bonus wild-shape wolf` or `/bonus wild-shape brown-bear` | Wild Shape — Druid only, transform into a beast (auto-resolved, see Wild Shape) |
@@ -314,6 +316,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/bonus flurry-of-blows` | `/bonus flurry-of-blows` | Monk only — 2 unarmed strikes after Attack action, costs 1 ki (auto-resolved) |
 | `/bonus patient-defense` | `/bonus patient-defense` | Monk only — Dodge as bonus action, costs 1 ki (auto-resolved) |
 | `/bonus step-of-the-wind` | `/bonus step-of-the-wind` | Monk only — Dash or Disengage as bonus action, costs 1 ki (auto-resolved) |
+| `/action grapple` | `/action grapple G1` | Grapple a target (contested Athletics check) |
 | `/shove` | `/shove OS` | Shove a target (push or knock prone) |
 | `/interact` | `/interact draw longsword` | Object interaction (first per turn is free; see Free Object Interaction) |
 | `/action disengage` | `/action disengage` | Disengage — move without provoking opportunity attacks (auto-resolved) |
@@ -332,6 +335,7 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 | `/command` | `/command FAM attack G1` or `/command SW attack G2` | Issue a command to a summoned creature you control (see Summoned Creatures & Companions) |
 | `/action channel-divinity` | `/action channel-divinity turn-undead` or `/action channel-divinity preserve-life` | Channel Divinity — Cleric (lvl 2+) / Paladin (lvl 3+), costs action (auto-resolved or DM queue, see Channel Divinity) |
 | `/action surge` | `/action surge` | Action Surge — gain an additional action this turn (Fighter only, auto-resolved) |
+| `/action lay-on-hands` | `/action lay-on-hands AR 10` | Lay on Hands — heal from pool or cure disease/poison (Paladin only, auto-resolved) |
 | `/done` | `/done` | End turn, advance initiative |
 
 **Anytime commands** (usable in or out of combat, no turn required):
@@ -481,7 +485,7 @@ Combat log output:
 | Ability | Command | Cost | Effect |
 |---|---|---|---|
 | Flurry of Blows | `/bonus flurry-of-blows` | 1 ki | Immediately after taking the Attack action, make 2 unarmed strikes as a bonus action (replaces the free Martial Arts bonus attack) |
-| Patient Defense | `/bonus patient-defense` | 1 ki | Take the Dodge action as a bonus action (attacks against you have disadvantage until your next turn, tracked via `is_dodging` on combatant) |
+| Patient Defense | `/bonus patient-defense` | 1 ki | Take the Dodge action as a bonus action (attacks against you have disadvantage until your next turn, tracked via a "dodge" condition with 1-round duration) |
 | Step of the Wind | `/bonus step-of-the-wind` | 1 ki | Take the Dash or Disengage action as a bonus action. Also doubles jump distance for the turn |
 
 **Flurry of Blows workflow:**
@@ -501,7 +505,7 @@ Combat log output:
 
 **Ki point validation:** if insufficient ki remains, the ability is rejected: "❌ Not enough ki — Flurry of Blows costs 1 ki (you have 0 remaining)."
 
-**Monk Unarmored Defense:** already handled by `ac_formula = "10 + DEX + WIS"` on the character (see question #17). Only applies when the Monk wears no armor and has no shield equipped.
+**Monk Unarmored Defense:** already handled by `ac_formula = "10 + DEX + WIS"` on the character (see Equipment Enforcement § AC calculation). Only applies when the Monk wears no armor and has no shield equipped.
 
 **Monk Unarmored Movement (level 2+):** speed bonus (+10ft at level 2, scaling to +30ft at level 18) applied automatically via the Feature Effect System's `modify_speed` effect type when the Monk is not wearing armor or a shield.
 
@@ -634,7 +638,7 @@ Combat log output:
 **Divine Smite (Paladin):** after a melee weapon attack hits, if the Paladin has spell slots remaining, the bot posts an ephemeral prompt with Discord buttons: "⚡ Divine Smite? [1st] [2nd] [3rd] [No]" — only showing slot levels the Paladin currently has available. The Paladin picks a slot level or declines. On selection:
 - The chosen spell slot is consumed (`spell_slots` decremented)
 - Smite damage is `2d8 radiant` at 1st level, +1d8 per slot level above 1st (max 5d8 at 4th-level slot)
-- +1d8 bonus damage if the target is undead or fiend (auto-detected from `creatures.creature_type`)
+- +1d8 bonus damage if the target is undead or fiend (auto-detected from `creatures.type`)
 - On a critical hit, all smite dice are doubled (the prompt notes: "🎯 Critical — smite dice doubled!")
 - Smite damage is appended to the original attack's combat log entry
 - If the Paladin declines or the prompt times out (30 seconds), no smite is applied and the turn continues
@@ -692,7 +696,7 @@ Clerics (level 2+) and Paladins (level 3+) can invoke Channel Divinity to produc
 
 **Turn Undead (all Clerics):** `/action channel-divinity turn-undead` — auto-resolved:
 - Each undead within 30ft that can see or hear the Cleric must make a WIS saving throw vs the Cleric's spell save DC
-- Auto-detected from `creatures.creature_type = "undead"` and distance calculation
+- Auto-detected from `creatures.type = "undead"` and distance calculation
 - On fail: Turned condition applied for 1 minute (10 rounds). Turned creature must Dash away from the Cleric; can't willingly move closer or take reactions. Ends early if the creature takes damage
 - On success: no effect
 - Combat log: "✝️ Thorn channels Turn Undead — Skeleton #1 🎲 WIS save: 8 vs DC 14 — Turned! | Zombie #2 🎲 WIS save: 16 vs DC 14 — Resists!"
@@ -768,6 +772,22 @@ Combat log: "✝️ Skeleton #1 (CR ¼) is destroyed by Turn Undead!"
   Use /status to check Channel Divinity uses, smite slots, and lay on hands pool
 ```
 
+### Lay on Hands (Paladin)
+
+`/action lay-on-hands [target] [hp]` — Paladin feature, costs the action (`action_used = true`).
+
+- **Healing pool:** 5 × Paladin level HP, tracked in `feature_uses["lay-on-hands"]` with `{current: N, max: N, recharge: "long"}`
+- **Healing:** restores up to `[hp]` hit points from the pool. System validates: target is adjacent (within 5ft), `[hp]` ≤ remaining pool, target is not undead or construct
+- **Cure disease/poison:** spend 5 HP from the pool per disease or poison to cure. `/action lay-on-hands AR 5 --cure-poison` or `--cure-disease`
+- **Recharges on long rest** (already handled by `recharge: "long"` in `feature_uses`)
+- If the Paladin targets themselves, short ID is optional: `/action lay-on-hands 10` heals self for 10
+
+Combat log output:
+```
+💛  Thorn uses Lay on Hands on Aria — restores 15 HP (pool: 10/25 remaining)
+💛  Thorn uses Lay on Hands — cures Aria of Poison (pool: 5/25 remaining)
+```
+
 ### Equipment Management
 
 **Weapon equipping:**
@@ -795,12 +815,6 @@ Armor donning/doffing takes minutes in 5e, so:
 - **In combat:** blocked. "❌ You can't don or doff armor during combat." DM can override from the dashboard if the narrative allows it (e.g., a multi-round lull).
 - **Out of combat:** instant, no time tracking. DM handles timing narratively for ambush scenarios (e.g., sleeping without armor).
 
-Combat log output:
-```
-🔄  Aria equips Plate Armor (AC → 18)
-🔄  Aria removes Chain Mail (AC → 12)
-```
-
 **Validation rules:**
 - Two-handed weapons (`--twohanded` flag) require `equipped_off_hand` to be null
 - Grappling requires a free hand — rejected if both hands occupied
@@ -808,6 +822,8 @@ Combat log output:
 
 Combat log output:
 ```
+🔄  Aria equips Plate Armor (AC → 18)
+🔄  Aria removes Chain Mail (AC → 12)
 🔄  Aria equips Shield (+2 AC)
 🔄  Aria doffs Shield (−2 AC)
 🔄  Aria draws Shortsword (off-hand)
@@ -839,7 +855,7 @@ Combat log output:
 
 The gold fallback represents the assumption that components can be acquired from merchants, temples, or other sources available in the game world. The DM can also stock components directly in player inventories via the dashboard, and players can buy items from in-game merchants (DM creates a shop via the dashboard, posts available items to `#the-story`, and transfers purchased items/deducts gold through the dashboard).
 
-**Bonus action spell auto-detection:** `/cast` is the only command needed for all spells. The system reads `spells_ref.casting_time`; if it is `'bonus action'`, the cast deducts the bonus action (`bonus_action_used = true`) instead of the action. The bot confirms in the response: "🎁 Cast as bonus action." There is no `/bonus cast` syntax.
+**Bonus action spell auto-detection:** `/cast` is the only command needed for all spells. The system reads `spells.casting_time`; if it is `'bonus action'`, the cast deducts the bonus action (`bonus_action_used = true`) instead of the action. The bot confirms in the response: "🎁 Cast as bonus action." There is no `/bonus cast` syntax.
 
 **Bonus action spell restriction (both directions):** Per 5e rules (Sage Advice Compendium), if a player casts any spell as a bonus action on their turn, the only other spell they can cast that turn is a cantrip with a casting time of 1 action — and this applies regardless of casting order:
 - **Bonus action spell first:** If a bonus action spell was cast (`bonus_action_spell_cast = true`), `/cast` with a non-cantrip action spell is rejected: "You already cast a bonus action spell this turn — you can only cast a cantrip with your action."
@@ -1085,12 +1101,14 @@ Standard actions (auto-resolved):
   /action dodge           Attacks against you have disadvantage until next turn
   /action help [ally] [target]  Give an ally advantage on their next attack/check
   /action hide            Stealth vs passive Perception (must have cover/obscurement)
+  /action grapple [target] Grapple a creature (contested Athletics check)
   /action escape          Break free from a grapple (contested check)
   /action stand           Stand up from prone (costs half your movement)
   /action drop-prone      Drop prone voluntarily (no cost)
   /action ready [trigger] Hold your action for a trigger (uses your reaction)
   /action surge           Extra action this turn (Fighter only)
   /action channel-divinity [option]  Channel Divinity (Cleric/Paladin)
+  /action lay-on-hands [target] [hp]  Restore HP from healing pool (Paladin only)
 
 Freeform actions (DM-resolved):
   /action [anything]      Describe a creative action — sent to DM for resolution
@@ -1112,7 +1130,7 @@ Each creature gets one free object interaction per turn — drawing or sheathing
 
 **Enforcement:**
 - First `/interact` per turn: free (sets `free_interact_used = true`, does not cost the action)
-- Second `/interact` per turn: costs the action (`action_used = true`). If the action is already spent, the command is rejected: "Free interaction already used and action is spent."
+- Second `/interact` per turn: costs the action (`action_used = true`). If the action is already spent, the command is rejected: "❌ Free object interaction already used this turn."
 - Simple interactions that the DM has pre-flagged as auto-resolvable (draw/sheathe weapon, open unlocked door) are resolved immediately. All others route to `#dm-queue` for DM adjudication.
 
 ---
@@ -1175,7 +1193,7 @@ Auto-applied when `/attack` is processed. The system checks conditions on both t
 
 When a grappled or restrained condition is applied, the combatant's effective speed is set to 0. `/move` commands are rejected with an explanation (e.g., "You can't move — you are grappled"). Speed restores when the condition is removed. For frightened creatures, `/move` commands that would decrease distance to the fear source are rejected. The fear source is tracked as metadata on the frightened condition (`{source_combatant_id}`).
 
-Standing from prone: a prone combatant can stand explicitly via `/action stand` (costs half their max speed from remaining movement, no action cost) or by choosing to stand when issuing `/move` (see below). If insufficient movement remains for `/action stand`, the command is rejected. Dropping prone voluntarily is done via `/action drop-prone` (no movement or action cost).
+Standing from prone: a prone combatant can stand explicitly via `/action stand` (see Standard Actions) or by choosing to stand when issuing `/move` (see Moving while prone). Dropping prone voluntarily is done via `/action drop-prone` (no movement or action cost).
 
 **Moving while prone:** when a prone combatant uses `/move`, the system prompts with Discord buttons before the standard movement confirmation:
 
@@ -1309,7 +1327,7 @@ Difficult terrain (rubble, undergrowth, mud, shallow water, etc.) doubles moveme
 - Stacks with prone stand-up cost (half speed deducted first, then difficult terrain doubles remaining path cost)
 - Dash action grants extra movement that is also subject to difficult terrain costs
 - Difficult terrain does not affect flying creatures above ground level (altitude > 0) unless the difficult terrain is airborne (e.g., Wind Wall)
-- Crawling (moving while prone without standing) also costs double, stacking with difficult terrain for 3x total cost
+- Crawling while prone also costs double, stacking with difficult terrain for 3x total cost (see Condition Effects § Moving while prone)
 
 ### Opportunity Attacks
 
@@ -1340,7 +1358,7 @@ Grapple and shove are contested ability check actions available via `/action gra
 - Contested check: attacker Athletics (STR) vs target's choice of Athletics (STR) or Acrobatics (DEX)
 - Success: target gains the "grappled" condition (`{condition: "grappled", source_combatant_id: [grappler]}`)
 - Grappled creature's speed becomes 0; grappler can drag the target (see Dragging below)
-- Escape: target uses `/action escape` (costs their action) to repeat the contested check; success removes the grappled condition. See Standard Actions below
+- Escape: target uses `/action escape` to break free (see Standard Actions)
 
 **Dragging:**
 
@@ -1398,7 +1416,6 @@ The system enforces armor-related penalties automatically during combat.
 - **Standard (armor-based):** `ac_formula` is NULL. AC is computed from `equipped_armor` using the armor table (`ac_base` + DEX modifier, capped by `ac_dex_max` for medium armor, ignored for heavy armor) + 2 if a shield is in `equipped_off_hand`. The `ac` field is updated when equipment changes.
 - **Unarmored Defense / Natural Armor:** `ac_formula` is set (e.g., `"10 + DEX + WIS"` for Monk, `"10 + DEX + CON"` for Barbarian, `"13 + DEX"` for Lizardfolk natural armor). The system evaluates the formula against current `ability_scores` and updates the `ac` field whenever ability scores change (ASI, magic item, effect). If the character equips armor, standard armor AC is used instead — Unarmored Defense only applies when no armor is worn (shield is allowed). The system takes the higher of formula AC and armor AC if armor is equipped, matching 5e rules.
 - **`modify_ac` effects** (Shield of Faith, Shield spell, etc.) are applied on top of the base AC at resolution time, not baked into the cached `ac` value.
-- Stacks with other sources of disadvantage per standard 5e rules (multiple disadvantage sources still result in a single disadvantage)
 
 ---
 
@@ -1809,10 +1826,14 @@ Each enemy takes its own turn in initiative order. The DM resolves enemy turns t
 
 **`#combat-log` output** for enemy turns (same format as player actions):
 ```
-🏃 Goblin 1 moves to D5
-⚔️ Goblin 1 attacks Thorn — 🎲 14 vs AC 18 — Miss!
-🏃 Goblin 2 moves to E4
-⚔️ Goblin 2 attacks Kael — 🎲 19 vs AC 15 — Hit! 7 slashing damage
+🏃  Goblin #1 moves to D5
+⚔️  Goblin #1 attacks Thorn with Scimitar
+    → Roll to hit: 14 (12 + 2) — MISS
+
+🏃  Goblin #2 moves to E4
+⚔️  Goblin #2 attacks Kael with Scimitar
+    → Roll to hit: 19 (17 + 2) — HIT
+    → Damage: 7 slashing
 ```
 
 **Pending reactions:** if a player has a pre-declared `/reaction` that triggers during the enemy turn, the dashboard surfaces it to the DM before confirming that step. DM resolves the reaction inline.
@@ -1886,7 +1907,7 @@ Turn timeout: **24 hours**, DM-configurable per campaign (1h–72h range).
 ```
 ⚠️ @Aria — your turn will be skipped in 6 hours!
 ❤️ HP: 28/45 | 🛡️ AC: 16 | ⚠️ Conditions: Poisoned
-📋 Available: 🏃 30ft move | ⚔️ 2 attacks | 🎁 Bonus action | 🤚 Free interact
+📋 Available: 🏃 30ft move | ⚔️ 2 attacks | 🎁 Bonus action | 🤚 Free interact | 🛡️ Reaction
 🎯 Adjacent enemies: Goblin #1 (G1), Orc Shaman (OS)
 💡 Check #combat-map for current positions.
 ```
@@ -1997,7 +2018,7 @@ When a character drops to 0 HP, they fall **unconscious** and begin making death
 - Status → conscious, still **prone** (costs half movement to stand)
 - Death save tallies reset to zero
 
-**Token states:** normal / scratched / bloodied / critical / dying / stable / dead
+**Token states:** see Combatant Targeting § Token health indicators for the full list and visual definitions.
 
 ### Example: A Full Player Turn
 
@@ -2014,7 +2035,8 @@ Bot output in `#combat-log`:
     → Roll to hit: 19 (14 + 5) — HIT
     → Damage: 9 slashing
     → Goblin #1 is now Bloodied
-    ℹ️  1 attack remaining
+
+📋 Remaining: 🏃 5ft move | ⚔️ 1 attack | 🎁 Bonus action | 🤚 Free interact
 ```
 
 Player sees the result and decides to finish off G1 or switch targets:
@@ -2025,10 +2047,20 @@ Player sees the result and decides to finish off G1 or switch targets:
 ```
 ⚔️  Aria attacks Goblin #2 with Longsword (attack 2 of 2)
     → Roll to hit: 11 (6 + 5) — MISS
-    ℹ️  No attacks remaining
+
+📋 Remaining: 🏃 5ft move | 🎁 Bonus action | 🤚 Free interact
 ```
 
-Then:
+Player ends their turn:
+```
+/done
+```
+
+```
+⚠️ You still have: 🏃 5ft move | 🎁 Bonus action | 🤚 Free interact. End turn? [✅ End Turn] [❌ Cancel]
+```
+
+Player clicks End Turn:
 - Map image regenerates with Aria at D4
 - G1's token gets a visual indicator (color shift and shape/icon per health tier)
 - Bot pings next player in `#your-turn`
@@ -2042,7 +2074,7 @@ Then:
 - Grid images generated **server-side** as PNGs on every state change
 - Bot **appends a new message** in `#combat-map` — creates a visual log players can scroll through
 - Token labels display enemy IDs (G1, OS) and player initials
-- Token visual states: normal / scratched / bloodied / critical / dying / stable / dead — each state uses both color and shape/icon indicators for color-blind accessibility (see Combatant Targeting § Token health indicators)
+- Token visual states use dual-channel indicators for accessibility (see Combatant Targeting § Token health indicators)
 - **Stacked tokens:** when multiple creatures occupy the same ground tile at different altitudes, tokens are offset diagonally (ground-level centered, flying tokens shifted up-right by altitude order) with altitude badges (`↑30`)
 - Tile size: 48px per square baseline; reduced to 32px only when necessary to stay within Discord's 8MB file limit. Larger tiles ensure coordinate labels remain legible and images are large enough for pinch-to-zoom on mobile
 - Obstacles and difficult terrain drawn as part of the base map layer
@@ -2364,7 +2396,7 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
    - Player selects 0 to remaining dice per type; selecting 0 for all skips hit dice spending
 4. System resets all features with `recharge: "short"` (e.g., Action Surge, Channel Divinity, Second Wind)
 5. Warlock `pact_magic_slots.current` restored to `pact_magic_slots.max`
-6. Results posted to `#combat-log`
+6. Results posted to `#roll-history`
 
 **Long Rest** (`/rest long`):
 1. Player types `/rest long` → posts to `#dm-queue`
@@ -2375,7 +2407,7 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
    - All features with `recharge: "short"` or `"long"` reset
    - Hit dice restored: regain up to half total character level (minimum 1) worth of hit dice, player's choice of which types to restore
    - Death save tallies reset to 0/0
-4. Results posted to `#combat-log`
+4. Results posted to `#roll-history`
 5. Prepared casters (Cleric, Druid, Paladin) receive a reminder: "You can change your prepared spells with `/prepare`."
 
 **Constraints:**
@@ -2390,21 +2422,9 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
 
 ### Inventory Management
 
-Player inventory is stored in the `inventory` JSONB field on the characters table. Each entry has `{item_id, quantity, equipped, type}`. Gold is tracked as a separate `gold` INTEGER field on the characters table.
+Player inventory is stored in the `inventory` JSONB field on the characters table. Each entry has `{item_id, quantity, equipped, type}` plus optional magic item fields (see Magic Items below). Gold is tracked as a separate `gold` INTEGER field on the characters table.
 
-**Viewing inventory:** `/inventory` shows an ephemeral message listing all carried items grouped by type (weapons, armor, consumables, other), quantities, equipped status, and current gold. Example:
-
-```
-🎒 Aria's Inventory (23 gp)
-⚔️ Weapons: +1 Longsword [uncommon] ✨ (equipped, main hand, attuned), Shortbow
-🛡️ Armor: Chain Mail (equipped), Shield (equipped, off-hand)
-💍 Magic Items: Cloak of Protection [uncommon] ✨ (attuned)
-🧪 Consumables: Healing Potion ×2, Antitoxin ×1
-🏹 Ammunition: Arrows ×18
-📦 Other: Rope (50ft), Torch ×3
-
-✨ = attuned (2/3 slots)
-```
+**Viewing inventory:** `/inventory` shows an ephemeral message listing all carried items grouped by type (weapons, armor, magic items, consumables, ammunition, other), quantities, equipped status, attunement, and current gold. See Magic Items below for a full example.
 
 **Using consumables:** `/use healing-potion` consumes one item and applies its effect. The system auto-resolves items with defined effects:
 - **Healing Potion:** roll 2d4+2, apply healing. Result posted to `#combat-log` in combat or `#roll-history` out of combat
@@ -2461,7 +2481,7 @@ Passive effects are processed alongside class features and spell effects — the
 - `/unattune [item]` — ends attunement immediately (no rest required). Item's passive effects and active abilities are deactivated. Frees an attunement slot
 - Characters can attune to a maximum of 3 items at once. Attempting a 4th returns: "❌ You already have 3 attuned items. Use `/unattune [item]` to free a slot."
 - Attunement tracked in `attunement_slots` JSONB on the characters table (array of `{item_id, name}`, max 3 entries)
-- Equipping an unattunded item that requires attunement: item can be equipped but passive effects and active abilities do not function. The system warns: "⚠️ This item requires attunement. Use `/attune [item]` during a short rest to activate its properties."
+- Equipping an unattuned item that requires attunement: item can be equipped but passive effects and active abilities do not function. The system warns: "⚠️ This item requires attunement. Use `/attune [item]` during a short rest to activate its properties."
 
 **Inventory display:** `/inventory` shows magic items with rarity, attunement status, and magic bonus:
 ```
@@ -2678,7 +2698,7 @@ combatants
   temp_hp         INTEGER DEFAULT 0
   ac              INTEGER NOT NULL
   conditions      JSONB DEFAULT '[]'     -- [{condition, source_combatant_id, duration_rounds, started_round, expires_on}]
-  exhaustion_level INTEGER DEFAULT 0    -- 0-6; effects are cumulative (see Exhaustion)
+  exhaustion_level INTEGER DEFAULT 0    -- 0-6; cumulative effects per 5e PHB rules
   death_saves     JSONB                  -- {successes: 0, failures: 0} — PCs only
   is_visible      BOOLEAN DEFAULT true   -- hidden enemies (ambush, stealth)
   is_alive        BOOLEAN DEFAULT true
@@ -2805,7 +2825,7 @@ spells
   damage          JSONB                  -- {dice: "8d6", type: "fire", higher_levels: "1d6 per slot above 3rd", cantrip_scaling: true}
   healing         JSONB                  -- {dice: "1d8+mod", higher_levels: "1d8 per slot above 1st"}
   effects         TEXT                   -- description of non-damage effects
-  teleport        JSONB                  -- NULL for non-teleport spells. See Teleportation Spells below for schema
+  teleport        JSONB                  -- NULL for non-teleport spells. See Spell Casting Details § Teleportation spells for schema
   classes         TEXT[] NOT NULL        -- ["wizard", "sorcerer"]
   homebrew        BOOLEAN DEFAULT false
   source          TEXT DEFAULT 'srd'
@@ -2936,7 +2956,7 @@ conditions_ref
 
 **Included:**
 - Discord bot with full channel structure (`/setup` auto-creates)
-- All slash commands: `/move`, `/attack`, `/cast`, `/bonus`, `/shove`, `/fly`, `/interact`, `/action`, `/reaction`, `/deathsave`, `/done`, `/command`, `/equip`, `/status`, `/inventory`, `/use`, `/give`, `/loot`, `/register`, `/retire`, `/check`, `/save`, `/rest`
+- All slash commands as defined in the Structured Commands section (combat, anytime, utility, and DM commands)
 - Combat state: HP, position, turn order, conditions, death saves, spell slots, concentration
 - Turn timeout with escalating pings and DM decision prompt
 - Enemy/NPC turns with smart-default suggestions for DM
@@ -2956,7 +2976,7 @@ conditions_ref
 - Equipment enforcement (armor STR requirements, stealth disadvantage, free object interaction limits)
 - Standard actions: Dash, Disengage, Dodge, Escape, Help, Hide, Ready (auto-resolved where deterministic)
 - Monk Ki: Martial Arts bonus attack, Flurry of Blows, Patient Defense, Step of the Wind, Stunning Strike, ki point tracking
-- Metamagic: all 8 SRD options via `--metamagic` flags on `/cast`, sorcery points, Font of Magic slot/point conversion
+- Metamagic: all 8 SRD options via per-option flags (`--quickened`, `--twinned`, etc.) on `/cast`, sorcery points, Font of Magic slot/point conversion
 - Wild Shape: `/bonus wild-shape`, `/bonus revert`, beast stat swap, dual HP pool, CR validation, auto-revert
 - Summoned creatures & companions: player-controlled via `/command`, initiative tracking, dismissal
 - Inventory management: `/inventory`, `/use`, `/give`, `/loot`, gold tracking, consumable auto-resolution, post-combat loot pool
