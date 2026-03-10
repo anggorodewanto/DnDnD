@@ -2443,6 +2443,20 @@ Homebrew entries are scoped to the campaign and stored alongside SRD data with a
 4. Results posted to `#roll-history`
 5. Prepared casters (Cleric, Druid, Paladin) receive a reminder: "You can change your prepared spells with `/prepare`."
 
+**DM-Initiated Party Rest:**
+
+The DM can trigger a party-wide rest from the dashboard instead of waiting for each player to individually `/rest`:
+
+1. DM clicks **"Party Rest"** on the dashboard and selects **Short** or **Long**.
+2. Dashboard shows a checklist of all characters in the campaign — all selected by default. The DM unchecks any characters who should not rest (e.g., a character keeping watch).
+3. DM confirms → the system applies rest benefits to all selected characters simultaneously.
+4. For **short rests**, each included player is prompted individually in `#your-turn` to spend hit dice (same button menu as the player-initiated flow). Players who don't respond within 10 minutes default to spending 0.
+5. For **long rests**, benefits are applied automatically (no player input needed beyond optional `/prepare` for prepared casters).
+6. A single summary message is posted to `#roll-history`: "🛏️ Party Short Rest — Kael, Aria, Thorn rested. Zara kept watch."
+7. Bot posts to `#the-story`: the DM can attach a narration (e.g., "The party makes camp in the ruined temple...") or skip for a default message.
+
+Player-initiated `/rest` commands remain available for individual rests outside the party rest flow (e.g., a Warlock wanting a solo short rest while others continue exploring).
+
 **Constraints:**
 - Only one long rest per 24 in-game hours (DM tracks narrative time; system does not enforce calendar)
 - Rests cannot be initiated during active combat (system checks `encounter.status != 'active'`)

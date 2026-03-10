@@ -44,7 +44,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 ## Player-Facing DM Experience
 
-- [ ] **18. Group rest coordination** — `/rest short` and `/rest long` are per-player. Do all players need to individually request a rest? Is there a DM-initiated "party rest" that applies to everyone simultaneously?
+- [x] **18. Group rest coordination** — `/rest short` and `/rest long` are per-player. Do all players need to individually request a rest? Is there a DM-initiated "party rest" that applies to everyone simultaneously?
 
 - [ ] **19. DM narration tools** — The DM narrates in `#the-story` but from Discord, not the dashboard. Should the dashboard have a "Narrate" panel that posts to `#the-story` (rich text, attached images, formatted boxed text)? Or is Discord sufficient?
 
