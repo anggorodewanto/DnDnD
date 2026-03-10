@@ -18,7 +18,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **6. DM queue overload management** — In a busy round with multiple freeform actions, reaction declarations, whispers, and enemy turns queued, how does the DM prioritize? Is `#dm-queue` sorted chronologically or by urgency? Can items be filtered, pinned, or bulk-resolved?
 
-- [ ] **7. DM queue resolution UX from dashboard** — Each `#dm-queue` notification has a "Resolve →" link. What does the resolution interface look like? Is it a modal, inline expansion, or a separate page? Can the DM apply mechanical effects (damage, conditions, movement) directly from the resolution view?
+- [x] **7. DM queue resolution UX from dashboard** — Each `#dm-queue` notification has a "Resolve →" link. What does the resolution interface look like? Is it a modal, inline expansion, or a separate page? Can the DM apply mechanical effects (damage, conditions, movement) directly from the resolution view?
 
 - [ ] **8. Lighting/obscurement zone management** — DM places zones from the dashboard, but how? A painting tool on the map? A form with coordinates? Can zones be resized, moved, or removed mid-combat? How does the DM visualize zone boundaries while editing vs. what players see?
 
