@@ -122,7 +122,7 @@ The bot is designed so that a process crash and restart is a non-event. All dura
 
 *In-flight commands:* if a command was mid-processing when the bot crashed, its database transaction is rolled back automatically by PostgreSQL (uncommitted transactions are aborted on disconnect). The advisory lock is released with it. The player's command simply receives no Discord response — they reissue the command. Given async play with 24-hour turn timers, a single lost response is a minor inconvenience.
 
-*Turn timers:* timers are **not** held in memory. Turn deadlines are derived from database fields (`started_at` + campaign timeout setting) and checked via a **polling goroutine** that runs every 30 seconds. On startup, the poller immediately picks up any overdue or approaching deadlines and fires the appropriate escalation (50% nudge, 75% warning, 100% DM decision prompt). The 30-second polling granularity is negligible against hour-scale turn timers.
+*Turn timers:* timers are **not** held in memory. Turn deadlines are derived from database fields (`started_at` + campaign timeout setting) and checked via a **polling goroutine** that runs every 30 seconds. On startup, the poller immediately picks up any overdue or approaching deadlines and fires the appropriate escalation (50% nudge, 75% warning, 100% DM decision prompt). The 30-second polling granularity means reminders fire within ±30 seconds of their target time — negligible against hour-scale turn timers.
 
 *Stale state scan on startup:* the bot checks for turns where the deadline has passed but no escalation was sent (i.e., the bot was down when the deadline hit). These are processed immediately in deadline order, so no timeout is silently missed.
 
