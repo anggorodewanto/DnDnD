@@ -2476,6 +2476,8 @@ If the DM denies (e.g., campaign doesn't allow certain feats), the player receiv
 
 **Multiclass spell slots:** for characters with multiple spellcasting classes, spell slot totals are calculated from the 5e multiclass spellcasting table. Each class contributes a caster level based on its progression: full casters (Wizard, Cleric, Druid, Bard, Sorcerer) contribute class level × 1, half casters (Paladin, Ranger) contribute class level × ½ (rounded down), third casters (Eldritch Knight, Arcane Trickster) contribute class level × ⅓ (rounded down). The sum determines slots from the multiclass table. Warlock pact slots remain separate and are not included in this calculation.
 
+**Multiclass slot table implementation:** the 20-row × 9-column multiclass spellcasting table is a hardcoded constant in Go code (a static map from combined caster level to slot counts per spell level). The table is fixed in the SRD and never varies per campaign, so no database storage or runtime computation is needed. The only dynamic part is computing the combined caster level from `classes.spellcasting.slot_progression` weights (`"full"` = 1×, `"half"` = ½×, `"third"` = ⅓×, rounded down per class before summing). Single-class characters skip this entirely and use their class's own slot progression directly.
+
 **Multiclass spellcasting ability:** each spell belongs to one or more class spell lists. When a multiclass character casts a spell, the system uses the spellcasting ability of the class that provides that spell. If a spell appears on multiple of the character's class lists, the system uses the higher modifier.
 
 ---

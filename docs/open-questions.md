@@ -98,7 +98,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **42. Tiled JSON import compatibility** — The map format is "Tiled-compatible." What subset of Tiled features is supported? What happens when a DM imports a `.tmj` file with unsupported features (tile animations, infinite maps, image layers, parallax)? Silent ignore, warning, or rejection?
 
-- [ ] **43. Multiclass spellcasting table** — Is the multiclass spell slot table hardcoded or data-driven? The table has specific slot counts per caster level — is this stored as reference data or computed?
+- [x] **43. Multiclass spellcasting table** — Is the multiclass spell slot table hardcoded or data-driven? The table has specific slot counts per caster level — is this stored as reference data or computed?
 
 - [ ] **44. Turn timer persistence** — Turn timeouts use `started_at` + campaign timeout setting. Are timer checks done via polling (cron job) or event-driven (scheduled task)? What's the granularity — will the 50%/75%/100% reminders fire within minutes of their target, or could they drift?
 
