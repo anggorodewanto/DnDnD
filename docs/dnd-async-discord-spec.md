@@ -2182,7 +2182,7 @@ Player clicks End Turn:
 - Token labels display enemy IDs (G1, OS) and player initials
 - Token visual states use dual-channel indicators for accessibility (see Combatant Targeting § Token health indicators)
 - **Stacked tokens:** when multiple creatures occupy the same ground tile at different altitudes, tokens are offset diagonally (ground-level centered, flying tokens shifted up-right by altitude order) with altitude badges (`↑30`)
-- Tile size: 48px per square baseline; reduced to 32px only when necessary to stay within Discord's 8MB file limit. Larger tiles ensure coordinate labels remain legible and images are large enough for pinch-to-zoom on mobile
+- Tile size: 48px per square baseline; auto-reduced to 32px for maps exceeding 100×100 (see Map Size Limits). Larger tiles ensure coordinate labels remain legible and images are large enough for pinch-to-zoom on mobile
 - Obstacles and difficult terrain drawn as part of the base map layer
 - **Unified map legend:** when the current map contains non-standard terrain or active spell effects, a legend panel is rendered below the map image. The legend has two sections (either may be omitted if empty):
   - **Terrain key:** lists each terrain type present on the map with its color/pattern swatch and label (e.g., brown hatching = Difficult Terrain, blue = Water, orange = Lava, dark grey = Pit). Standard open ground is omitted.
@@ -2311,6 +2311,23 @@ Benefits:
 
 **Phase 1 (MVP):** blank grid + terrain/wall tools + image import. Maps stored as Tiled-compatible JSON.
 **Phase 2:** tileset support — load `.tsj` tilesets, paint with tile brushes, import full `.tmj` maps from Tiled.
+
+### Map Size Limits
+
+Grid dimensions are enforced with a **tiered system** — a soft limit for optimal rendering and a hard limit as an absolute ceiling:
+
+| | Max dimensions | Tile size | Approx PNG size | Shadowcasting perf |
+|---|---|---|---|---|
+| **Standard** (soft limit) | 100×100 | 48px | ~4800×4800px (~3MB) | Fast — 10,000 cells, sub-100ms |
+| **Large** (hard limit) | 200×200 | 32px (auto-downscaled) | ~6400×6400px (~5-6MB) | Acceptable — 40,000 cells, noticeable but under 500ms |
+| **Rejected** | >200 in either dimension | — | — | — |
+
+**Behavior:**
+- Maps up to **100×100** render at the standard 48px tile size with no warnings.
+- Maps between **101–200** in either dimension auto-downscale to 32px tiles. The DM sees a one-time warning on map creation or import: *"Map exceeds 100×100 — rendering at reduced tile size (32px). Coordinate labels may be harder to read on mobile."*
+- Maps exceeding **200** in either dimension are **rejected** at creation time (map editor) and import time (Tiled `.tmj` import) with a clear error message.
+- The DM specifies grid dimensions when creating a map (see Map Creation & Authoring); the system validates against these limits before saving.
+- Typical D&D encounter maps range from 20×20 to 40×40 — the 100×100 soft limit covers virtually all use cases including large outdoor battlefields. The 200×200 hard limit accommodates extreme edge cases like full castle siege maps.
 
 **Tiled import compatibility — best-effort with hard guardrails:**
 
@@ -3392,7 +3409,7 @@ conditions_ref
 | Risk | Mitigation |
 |---|---|
 | State drift from manual Discord edits | Enforce read-only Discord policy; all state changes via bot or dashboard only |
-| Map images exceeding 8MB | Default 48px tiles; fall back to 32px for large maps; compress PNGs; limit grid size |
+| Map images exceeding 8MB | Default 48px tiles; auto-downscale to 32px for maps >100×100; hard limit at 200×200 (see Map Size Limits) |
 | Enemy ID ambiguity | IDs are stable, map-labeled, and confirmed in every combat log response |
 | Complex player actions breaking automation | `/action` routes to DM; no attempt to auto-parse freeform intent |
 | D&D Beyond API instability | Undocumented endpoint may change; importer includes fallback to manual creation |
