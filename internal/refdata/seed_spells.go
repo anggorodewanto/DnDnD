@@ -2,6 +2,7 @@ package refdata
 
 import (
 	"context"
+	"log/slog"
 )
 
 // sp is a shorthand builder for UpsertSpellParams to reduce verbosity.
@@ -9,6 +10,16 @@ type sp = UpsertSpellParams
 
 func seedSpells(ctx context.Context, q *Queries) error {
 	spells := srdSpells()
+
+	warnings := ValidateSpells(spells)
+	for _, w := range warnings {
+		slog.Warn("spell data quality issue",
+			"spell_id", w.SpellID,
+			"check", w.Check,
+			"message", w.Message,
+		)
+	}
+
 	return seedEntities(ctx, spells, q.UpsertSpell, "spell")
 }
 
