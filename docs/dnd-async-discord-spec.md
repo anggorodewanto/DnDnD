@@ -2439,6 +2439,8 @@ The system ships with the full **D&D 5e SRD** content, seeded into PostgreSQL on
 - **Conditions** — all 15 standard conditions with mechanical effects
 - **Skills** — all 18 skills mapped to ability scores
 
+**Seeding validation:** each JSON → SQL mapping is defined as a Go struct with validation tags (required fields, value ranges, enum constraints). The seeder validates every record before insertion. Records that fail validation are skipped and logged as warnings — valid records are still inserted (partial seed). A curated skip-list tracks known data quality issues in the upstream 5e-database dataset. Snapshot tests verify seeded row counts per table and spot-check specific entries against known-good values (e.g., "Fireball: level 3, 8d6, fire, 20ft radius"). CI runs the full seed against the pinned 5e-database version to catch mapping regressions.
+
 **Licensing:** SRD 5.1 content used under **CC-BY-4.0** (attribution only, included in about/credits page).
 
 ### Extended Content (Open5e)

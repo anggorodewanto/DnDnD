@@ -80,7 +80,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **33. Image/asset storage** — Map background images, token images, and generated PNGs are referenced but storage isn't specified. Local filesystem? Object storage (S3/MinIO)? Embedded in the database? How are generated map PNGs served to Discord (upload every time vs. URL)?
 
-- [ ] **34. SRD data seeding validation** — The 5e-database JSON is seeded into PostgreSQL. How is the mapping validated? Are there automated tests that the seeded data matches expected schema? What about data quality issues in the source dataset?
+- [x] **34. SRD data seeding validation** — The 5e-database JSON is seeded into PostgreSQL. How is the mapping validated? Are there automated tests that the seeded data matches expected schema? What about data quality issues in the source dataset?
 
 - [ ] **35. Discord OAuth2 session management** — DM dashboard uses Discord OAuth2. How are sessions managed? JWT? Server-side sessions? Token refresh strategy? Session expiry during long DM sessions?
 
