@@ -68,7 +68,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **27. Discord API rate limiting** — The bot posts to multiple channels on every action (combat-log, roll-history, initiative-tracker, combat-map). Discord rate limits are per-channel (5 messages/5 seconds). How does the bot handle bursts (e.g., AoE spell affecting 6 creatures, each requiring a save prompt)? Message queuing? Batching?
 
-- [ ] **28. Discord message size limits** — Combat log entries and turn prompts could exceed Discord's 2000-character limit (e.g., a Fireball hitting 8 creatures with saves, damage, and conditions). What's the truncation/splitting strategy? The spec mentions text file attachments for "very large output" — what's the threshold?
+- [x] **28. Discord message size limits** — Combat log entries and turn prompts could exceed Discord's 2000-character limit (e.g., a Fireball hitting 8 creatures with saves, damage, and conditions). What's the truncation/splitting strategy? The spec mentions text file attachments for "very large output" — what's the threshold?
 
 - [ ] **29. Slash command registration** — Are commands registered globally (takes up to 1 hour to propagate) or per-guild (instant)? How are command updates deployed without downtime?
 

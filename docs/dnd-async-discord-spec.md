@@ -137,7 +137,7 @@ The `/setup` slash command auto-creates the channel structure with appropriate p
 
 Discord enforces a rate limit of 5 messages per 5 seconds per channel. The bot handles this with **per-channel message queues and result batching:**
 
-- **Result batching:** a single command produces at most one message per channel. All results from one command are composed into a single message before sending (e.g., a Fireball hitting 6 creatures produces one `#combat-log` message with all saves, damage, and conditions listed together, and one `#roll-history` message with all rolls).
+- **Result batching:** all results from one command are composed into as few messages as possible before sending (e.g., a Fireball hitting 6 creatures produces one `#combat-log` message with all saves, damage, and conditions listed together, and one `#roll-history` message with all rolls). If the composed message exceeds Discord's 2000-character limit, it is split into up to 3 messages at logical boundaries, or uploaded as a text file attachment for extreme cases (see Message size handling above).
 - **Per-channel outbound queue:** each channel has its own FIFO queue. Messages targeting different channels are sent in parallel (since rate limits are per-channel). The queue drains at a pace that respects Discord's rate limits.
 - **Rate limit backoff:** if the bot receives a 429 response, it pauses the affected channel's queue for the duration specified in the `Retry-After` header, then resumes draining.
 - **Burst scenarios:** even rapid successive commands (e.g., two players acting in different simultaneous encounters) are safe — the queue serializes outbound messages per channel and batching keeps each command to one message per channel.
@@ -163,7 +163,15 @@ Type /help for a full command list.
 
 If the player runs any game command before registering, the bot replies: "❌ No character found. Use `/create-character`, `/import`, or `/register` to get started." If they have a pending or changes-requested registration, the bot shows their current status (see Registration feedback above).
 
-The bot uses **plain text messages** for most output. For very large output (20+ combatant initiative orders, detailed character cards), the bot uploads a **text file attachment** instead. No embeds required.
+The bot uses **plain text messages** for most output. No embeds required.
+
+**Message size handling:** Discord enforces a 2000-character limit per message. The bot handles oversized output with a hybrid split-then-attach strategy:
+
+- **≤ 2000 chars:** single message (the common case).
+- **2001–6000 chars:** split into up to 3 messages at logical boundaries (per-creature results, per-section). Messages are sent sequentially in the same channel — no "1/3" labels needed, just natural section breaks. This keeps results inline and readable.
+- **> 6000 chars:** upload the full content as a `.txt` file attachment with a short summary line in the message body (e.g., "🔥 Fireball — 8 creatures affected. See details ↓"). This handles extreme edge cases like 20+ combatant initiative orders or massive AoE results.
+
+The 3-message cap for the mid-range keeps burst output well within Discord's 5 messages/5 seconds rate limit. The per-channel outbound queue (see Discord Rate Limiting) handles sequencing.
 
 ### Character Cards (`#character-cards`)
 
