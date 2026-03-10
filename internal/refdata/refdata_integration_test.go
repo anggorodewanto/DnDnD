@@ -55,4 +55,11 @@ func TestIntegration_ReferenceTablesMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("feats table should exist: %v", err)
 	}
+
+	// Verify spells table exists
+	_, err = db.Exec(`INSERT INTO spells (id, name, level, school, casting_time, range_type, components, duration, description, resolution_mode, classes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		"test-spell", "Test Spell", 1, "evocation", "1 action", "ranged", `{V,S}`, "Instantaneous", "A test spell", "auto", `{wizard}`)
+	if err != nil {
+		t.Fatalf("spells table should exist: %v", err)
+	}
 }

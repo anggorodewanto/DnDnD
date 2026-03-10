@@ -103,6 +103,37 @@ type Session struct {
 	ExpiresAt      time.Time    `json:"expires_at"`
 }
 
+type Spell struct {
+	ID                  string                `json:"id"`
+	Name                string                `json:"name"`
+	Level               int32                 `json:"level"`
+	School              string                `json:"school"`
+	CastingTime         string                `json:"casting_time"`
+	RangeFt             sql.NullInt32         `json:"range_ft"`
+	RangeType           string                `json:"range_type"`
+	Components          []string              `json:"components"`
+	MaterialDescription sql.NullString        `json:"material_description"`
+	MaterialCostGp      sql.NullFloat64       `json:"material_cost_gp"`
+	MaterialConsumed    sql.NullBool          `json:"material_consumed"`
+	Duration            string                `json:"duration"`
+	Concentration       sql.NullBool          `json:"concentration"`
+	Ritual              sql.NullBool          `json:"ritual"`
+	Description         string                `json:"description"`
+	HigherLevels        sql.NullString        `json:"higher_levels"`
+	Damage              pqtype.NullRawMessage `json:"damage"`
+	Healing             pqtype.NullRawMessage `json:"healing"`
+	SaveAbility         sql.NullString        `json:"save_ability"`
+	SaveEffect          sql.NullString        `json:"save_effect"`
+	AttackType          sql.NullString        `json:"attack_type"`
+	AreaOfEffect        pqtype.NullRawMessage `json:"area_of_effect"`
+	ConditionsApplied   []string              `json:"conditions_applied"`
+	Teleport            pqtype.NullRawMessage `json:"teleport"`
+	ResolutionMode      string                `json:"resolution_mode"`
+	Classes             []string              `json:"classes"`
+	CreatedAt           time.Time             `json:"created_at"`
+	UpdatedAt           time.Time             `json:"updated_at"`
+}
+
 type Weapon struct {
 	ID              string          `json:"id"`
 	Name            string          `json:"name"`

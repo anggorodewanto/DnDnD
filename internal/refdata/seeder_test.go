@@ -412,6 +412,354 @@ func TestIntegration_SeedAll_ListFeats(t *testing.T) {
 	}
 }
 
+func TestIntegration_SeedAll_SpellCount(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	count, err := q.CountSpells(context.Background())
+	if err != nil {
+		t.Fatalf("CountSpells failed: %v", err)
+	}
+	if count != int64(refdata.SpellCount) {
+		t.Fatalf("expected %d spells, got %d", refdata.SpellCount, count)
+	}
+}
+
+func TestIntegration_SeedAll_FireballSpell(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	spell, err := q.GetSpell(context.Background(), "fireball")
+	if err != nil {
+		t.Fatalf("GetSpell failed: %v", err)
+	}
+
+	if spell.Name != "Fireball" {
+		t.Fatalf("expected name Fireball, got %q", spell.Name)
+	}
+	if spell.Level != 3 {
+		t.Fatalf("expected level 3, got %d", spell.Level)
+	}
+	if spell.School != "evocation" {
+		t.Fatalf("expected school evocation, got %q", spell.School)
+	}
+	if spell.ResolutionMode != "auto" {
+		t.Fatalf("expected resolution_mode auto, got %q", spell.ResolutionMode)
+	}
+	if spell.CastingTime != "1 action" {
+		t.Fatalf("expected casting_time '1 action', got %q", spell.CastingTime)
+	}
+	if !spell.RangeFt.Valid || spell.RangeFt.Int32 != 150 {
+		t.Fatalf("expected range_ft 150, got %v", spell.RangeFt)
+	}
+
+	// Check damage JSON
+	var damage map[string]any
+	if err := json.Unmarshal(spell.Damage.RawMessage, &damage); err != nil {
+		t.Fatalf("failed to unmarshal damage: %v", err)
+	}
+	if damage["dice"] != "8d6" {
+		t.Fatalf("expected damage dice 8d6, got %v", damage["dice"])
+	}
+	if damage["type"] != "fire" {
+		t.Fatalf("expected damage type fire, got %v", damage["type"])
+	}
+
+	// Check area_of_effect
+	var aoe map[string]any
+	if err := json.Unmarshal(spell.AreaOfEffect.RawMessage, &aoe); err != nil {
+		t.Fatalf("failed to unmarshal area_of_effect: %v", err)
+	}
+	if aoe["shape"] != "sphere" {
+		t.Fatalf("expected aoe shape sphere, got %v", aoe["shape"])
+	}
+
+	// Check save
+	if !spell.SaveAbility.Valid || spell.SaveAbility.String != "dex" {
+		t.Fatalf("expected save_ability dex, got %v", spell.SaveAbility)
+	}
+	if !spell.SaveEffect.Valid || spell.SaveEffect.String != "half_damage" {
+		t.Fatalf("expected save_effect half_damage, got %v", spell.SaveEffect)
+	}
+
+	// Check components
+	hasV, hasS, hasM := false, false, false
+	for _, c := range spell.Components {
+		switch c {
+		case "V":
+			hasV = true
+		case "S":
+			hasS = true
+		case "M":
+			hasM = true
+		}
+	}
+	if !hasV || !hasS || !hasM {
+		t.Fatalf("expected V,S,M components, got %v", spell.Components)
+	}
+
+	// Check classes
+	hasWizard, hasSorcerer := false, false
+	for _, c := range spell.Classes {
+		switch c {
+		case "wizard":
+			hasWizard = true
+		case "sorcerer":
+			hasSorcerer = true
+		}
+	}
+	if !hasWizard || !hasSorcerer {
+		t.Fatalf("expected wizard and sorcerer in classes, got %v", spell.Classes)
+	}
+}
+
+func TestIntegration_SeedAll_CureWoundsHealing(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	spell, err := q.GetSpell(context.Background(), "cure-wounds")
+	if err != nil {
+		t.Fatalf("GetSpell failed: %v", err)
+	}
+
+	if spell.ResolutionMode != "auto" {
+		t.Fatalf("expected resolution_mode auto, got %q", spell.ResolutionMode)
+	}
+
+	if !spell.Healing.Valid {
+		t.Fatal("expected healing to be set")
+	}
+	var healing map[string]any
+	if err := json.Unmarshal(spell.Healing.RawMessage, &healing); err != nil {
+		t.Fatalf("failed to unmarshal healing: %v", err)
+	}
+	if healing["dice"] != "1d8+mod" {
+		t.Fatalf("expected healing dice 1d8+mod, got %v", healing["dice"])
+	}
+}
+
+func TestIntegration_SeedAll_MistyStepTeleport(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	spell, err := q.GetSpell(context.Background(), "misty-step")
+	if err != nil {
+		t.Fatalf("GetSpell failed: %v", err)
+	}
+
+	if spell.ResolutionMode != "auto" {
+		t.Fatalf("expected resolution_mode auto, got %q", spell.ResolutionMode)
+	}
+
+	if !spell.Teleport.Valid {
+		t.Fatal("expected teleport to be set")
+	}
+	var teleport map[string]any
+	if err := json.Unmarshal(spell.Teleport.RawMessage, &teleport); err != nil {
+		t.Fatalf("failed to unmarshal teleport: %v", err)
+	}
+	if teleport["target"] != "self" {
+		t.Fatalf("expected teleport target self, got %v", teleport["target"])
+	}
+}
+
+func TestIntegration_SeedAll_WishIsDmRequired(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	spell, err := q.GetSpell(context.Background(), "wish")
+	if err != nil {
+		t.Fatalf("GetSpell failed: %v", err)
+	}
+
+	if spell.ResolutionMode != "dm_required" {
+		t.Fatalf("expected wish to be dm_required, got %q", spell.ResolutionMode)
+	}
+}
+
+func TestIntegration_SeedAll_PolymorphIsDmRequired(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	spell, err := q.GetSpell(context.Background(), "polymorph")
+	if err != nil {
+		t.Fatalf("GetSpell failed: %v", err)
+	}
+
+	if spell.ResolutionMode != "dm_required" {
+		t.Fatalf("expected polymorph to be dm_required, got %q", spell.ResolutionMode)
+	}
+}
+
+func TestIntegration_SeedAll_ListSpells(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	spells, err := q.ListSpells(context.Background())
+	if err != nil {
+		t.Fatalf("ListSpells failed: %v", err)
+	}
+	if len(spells) != refdata.SpellCount {
+		t.Fatalf("expected %d spells from list, got %d", refdata.SpellCount, len(spells))
+	}
+}
+
+func TestIntegration_SeedAll_ListSpellsByClass(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	spells, err := q.ListSpellsByClass(context.Background(), "wizard")
+	if err != nil {
+		t.Fatalf("ListSpellsByClass failed: %v", err)
+	}
+	if len(spells) == 0 {
+		t.Fatal("expected at least one wizard spell")
+	}
+	// All returned spells should have wizard in their classes
+	for _, s := range spells {
+		hasWizard := false
+		for _, c := range s.Classes {
+			if c == "wizard" {
+				hasWizard = true
+				break
+			}
+		}
+		if !hasWizard {
+			t.Fatalf("spell %q does not have wizard in classes: %v", s.ID, s.Classes)
+		}
+	}
+}
+
+func TestIntegration_SeedAll_ListSpellsByLevel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	cantrips, err := q.ListSpellsByLevel(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("ListSpellsByLevel failed: %v", err)
+	}
+	if len(cantrips) == 0 {
+		t.Fatal("expected at least one cantrip")
+	}
+	for _, s := range cantrips {
+		if s.Level != 0 {
+			t.Fatalf("expected level 0, got %d for %q", s.Level, s.ID)
+		}
+	}
+}
+
+func TestIntegration_SeedAll_ListSpellsByResolutionMode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	autoSpells, err := q.ListSpellsByResolutionMode(context.Background(), "auto")
+	if err != nil {
+		t.Fatalf("ListSpellsByResolutionMode failed: %v", err)
+	}
+	if len(autoSpells) == 0 {
+		t.Fatal("expected at least one auto spell")
+	}
+
+	dmSpells, err := q.ListSpellsByResolutionMode(context.Background(), "dm_required")
+	if err != nil {
+		t.Fatalf("ListSpellsByResolutionMode failed: %v", err)
+	}
+	if len(dmSpells) == 0 {
+		t.Fatal("expected at least one dm_required spell")
+	}
+
+	// Total should match
+	total := int64(len(autoSpells) + len(dmSpells))
+	if total != int64(refdata.SpellCount) {
+		t.Fatalf("auto(%d) + dm_required(%d) = %d, expected %d", len(autoSpells), len(dmSpells), total, refdata.SpellCount)
+	}
+}
+
+func TestIntegration_SeedAll_ListSpellsBySchool(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	spells, err := q.ListSpellsBySchool(context.Background(), "evocation")
+	if err != nil {
+		t.Fatalf("ListSpellsBySchool failed: %v", err)
+	}
+	if len(spells) == 0 {
+		t.Fatal("expected at least one evocation spell")
+	}
+	for _, s := range spells {
+		if s.School != "evocation" {
+			t.Fatalf("expected school evocation, got %q for %q", s.School, s.ID)
+		}
+	}
+}
+
+func TestIntegration_SeedAll_HoldPersonConditions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	spell, err := q.GetSpell(context.Background(), "hold-person")
+	if err != nil {
+		t.Fatalf("GetSpell failed: %v", err)
+	}
+
+	hasParalyzed := false
+	for _, c := range spell.ConditionsApplied {
+		if c == "paralyzed" {
+			hasParalyzed = true
+			break
+		}
+	}
+	if !hasParalyzed {
+		t.Fatalf("expected hold-person to apply paralyzed condition, got %v", spell.ConditionsApplied)
+	}
+}
+
+func TestIntegration_SeedAll_FindFamiliarMaterialCost(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	spell, err := q.GetSpell(context.Background(), "find-familiar")
+	if err != nil {
+		t.Fatalf("GetSpell failed: %v", err)
+	}
+
+	if !spell.MaterialCostGp.Valid || spell.MaterialCostGp.Float64 != 10 {
+		t.Fatalf("expected material_cost_gp 10, got %v", spell.MaterialCostGp)
+	}
+	if !spell.MaterialConsumed.Valid || !spell.MaterialConsumed.Bool {
+		t.Fatalf("expected material_consumed true, got %v", spell.MaterialConsumed)
+	}
+	if !spell.Ritual.Valid || !spell.Ritual.Bool {
+		t.Fatal("expected find-familiar to be ritual")
+	}
+}
+
 func TestIntegration_SeedAll_Idempotent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -476,6 +824,14 @@ func TestIntegration_SeedAll_Idempotent(t *testing.T) {
 	}
 	if featCount != refdata.FeatCount {
 		t.Fatalf("expected %d feats after double seed, got %d", refdata.FeatCount, featCount)
+	}
+
+	spellCount, err := q.CountSpells(ctx)
+	if err != nil {
+		t.Fatalf("CountSpells failed: %v", err)
+	}
+	if spellCount != int64(refdata.SpellCount) {
+		t.Fatalf("expected %d spells after double seed, got %d", refdata.SpellCount, spellCount)
 	}
 }
 

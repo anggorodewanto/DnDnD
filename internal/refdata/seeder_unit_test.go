@@ -337,6 +337,35 @@ func TestSeedAll_FeatsErrorWrapping(t *testing.T) {
 	}
 }
 
+func TestSeedSpells_ErrorWrapping(t *testing.T) {
+	dbErr := errors.New("exec failed")
+	mock := &mockDBTX{errToReturn: dbErr}
+	q := New(mock)
+
+	err := seedSpells(context.Background(), q)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "upserting spell") {
+		t.Fatalf("expected error to contain 'upserting spell', got %q", err.Error())
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected wrapped error to contain original, got %v", err)
+	}
+}
+
+func TestSeedAll_SpellsErrorWrapping(t *testing.T) {
+	dbErr := errors.New("spell exec failed")
+	mock := &mockDBTX{errToReturn: dbErr, failAfterN: WeaponCount + ArmorCount + ConditionCount + ClassCount + RaceCount + FeatCount}
+	err := SeedAll(context.Background(), mock)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "seeding spells") {
+		t.Fatalf("expected error to contain 'seeding spells', got %q", err.Error())
+	}
+}
+
 func TestListClasses_QueryError(t *testing.T) {
 	dbErr := errors.New("query failed")
 	mock := &mockDBTX{queryErr: dbErr}
@@ -395,7 +424,7 @@ func TestSeedAll_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	totalUpserts := WeaponCount + ArmorCount + ConditionCount + ClassCount + RaceCount + FeatCount
+	totalUpserts := WeaponCount + ArmorCount + ConditionCount + ClassCount + RaceCount + FeatCount + SpellCount
 	if mock.callCount != totalUpserts {
 		t.Fatalf("expected %d ExecContext calls, got %d", totalUpserts, mock.callCount)
 	}
@@ -435,6 +464,76 @@ func TestListConditions_QueryError(t *testing.T) {
 	q := New(mock)
 
 	_, err := q.ListConditions(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListSpells_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListSpells(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListSpellsByClass_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListSpellsByClass(context.Background(), "wizard")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListSpellsByLevel_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListSpellsByLevel(context.Background(), 1)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListSpellsBySchool_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListSpellsBySchool(context.Background(), "evocation")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListSpellsByResolutionMode_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListSpellsByResolutionMode(context.Background(), "auto")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
