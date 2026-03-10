@@ -1560,8 +1560,9 @@ When multiple effects apply to the same roll, they are resolved in this order:
 ### Overview
 
 ```
-DM clicks "Start Combat" in dashboard
-  → backend initializes combat state, rolls initiative
+DM selects a saved encounter from the Encounter Builder, assigns PCs, places PC tokens, marks surprise
+  → DM clicks "Start Combat"
+  → backend creates encounter instance from template, rolls initiative
   → bot posts initiative order to #initiative-tracker (labeled with encounter name)
   → bot posts map image to #combat-map (labeled with encounter name)
   → bot pings first player/enemy in #your-turn (labeled with encounter name + round)
@@ -2548,7 +2549,8 @@ The dashboard uses a **sidebar navigation** with icon+label entries for each pan
 - Pending `#dm-queue` items (count and list)
 - Character Approval Queue (pending imports and retirements)
 - Active encounter summary (if any)
-- Quick-action buttons: Start Encounter, Narrate, Pause Campaign
+- Saved Encounters list (with Start, Edit, Duplicate, Delete actions)
+- Quick-action buttons: New Encounter, Narrate, Pause Campaign
 
 **Combat Workspace.** When an encounter is active and the DM navigates to it, the layout switches to a composite combat view:
 - **Left (~60%):** Map with tokens (Combat Manager). Clicking a token opens the HP & Condition Tracker for that combatant.
@@ -2556,7 +2558,7 @@ The dashboard uses a **sidebar navigation** with icon+label entries for each pan
 
 **Multi-encounter view.** When multiple encounters are active simultaneously, each encounter gets its own **tab** within the Combat Workspace. The DM views and manages one encounter at a time by switching tabs. Each tab shows a badge with the count of pending `#dm-queue` items for that encounter. An **Encounter Overview bar** is displayed above the tabs, showing a one-line status for every active encounter: encounter name, current round, whose turn it is, and pending queue item count. This gives the DM cross-encounter awareness without switching tabs.
 
-Non-combat panels (Character Overview, Stat Block Library, Asset Library, Map Editor, Character Approval Queue) are each full-page views accessed from the sidebar.
+Non-combat panels (Character Overview, Encounter Builder, Stat Block Library, Asset Library, Map Editor, Character Approval Queue) are each full-page views accessed from the sidebar.
 
 ### Responsive & Mobile
 
@@ -2568,7 +2570,7 @@ The full dashboard is **desktop-optimized** (1280px+ assumed). A simplified **mo
 - **Character Approval Queue** — approve, reject, or request changes on pending characters
 - **Quick Actions** — end turn, pause/resume campaign
 
-Desktop-only features (not available in mobile-lite view): Map Editor, Combat Workspace (map + token dragging), Stat Block Library browsing, Asset Library management. The sidebar collapses to a bottom tab bar on mobile. If the DM attempts a desktop-only action on mobile, the UI shows a message: "Open the dashboard on desktop for [feature name]."
+Desktop-only features (not available in mobile-lite view): Map Editor, Encounter Builder, Combat Workspace (map + token dragging), Stat Block Library browsing, Asset Library management. The sidebar collapses to a bottom tab bar on mobile. If the DM attempts a desktop-only action on mobile, the UI shows a message: "Open the dashboard on desktop for [feature name]."
 
 ### Features
 
@@ -2579,9 +2581,36 @@ Desktop-only features (not available in mobile-lite view): Map Editor, Combat Wo
 - **Active Reactions Panel** — always-visible sidebar showing all active `/reaction` declarations grouped by combatant. Each entry shows the player name, declaration text, and status (active / used this round / dormant). When the DM is resolving an enemy turn, matching declarations are highlighted. DM clicks to resolve or dismiss. Consumed reactions are greyed out until the creature's next turn resets them.
 - **Stat Block Library** — preloaded monster stat blocks, reusable across encounters
 - **Asset Library** — maps, token images, tilesets, custom monsters
+- **Encounter Builder** — design, save, and manage reusable encounter templates (see Encounter Builder)
 - **Map Editor** — create and edit battle maps (see Map System)
 - **Character Overview** — read-only view of all player character sheets. Includes a **Party Languages** summary showing every language known by at least one party member and which characters speak it (e.g., "Elvish — Aria, Fenwick"), so the DM can quickly see language coverage when writing NPC dialogue or placing written clues
 - **Character Approval Queue** — pending characters from `/import`, `/create-character`, and `/register`, plus retirement requests from `/retire`. DM reviews the full sheet, approves, requests changes (with a message sent to the player via Discord DM), or rejects. Approved characters are immediately linked to the player and their `#character-cards` entry is created. Approved retirements unlink the player and mark the character as retired
+
+### Encounter Builder
+
+The DM designs encounters outside of play time and saves them for later use. Encounter creation is fully separated from encounter execution — the DM can build a library of encounters in advance and start them when the story calls for it.
+
+**Encounter creation workflow:**
+
+1. DM opens the Encounter Builder from the sidebar (or clicks "New Encounter" on Campaign Home).
+2. **Name & map** — DM names the encounter and selects a map from the Asset Library.
+3. **Add creatures** — DM browses the Stat Block Library, selects creature types, and sets quantities. Each creature gets an auto-generated short ID (G1, G2, OS, etc.).
+4. **Place creature tokens** — DM visually drags creature tokens onto the map, same drag-and-drop UX as the Map Editor. Tokens snap to grid cells.
+5. **Save** — DM saves the encounter. No PCs are assigned at creation time.
+
+The DM can edit saved encounters at any time (rename, swap the map, add/remove/reposition creatures). Encounters can also be duplicated to create variants (e.g., "Goblin Ambush — Easy" and "Goblin Ambush — Hard").
+
+**Saved Encounters list** — the Campaign Home and Encounter Builder sidebar show all saved encounters with their name, map name, creature count, and creation date. Each entry has actions: **Start**, **Edit**, **Duplicate**, **Delete**.
+
+**Starting an encounter:**
+
+1. DM clicks **Start** on a saved encounter (from Campaign Home or Encounter Builder).
+2. **Assign PCs** — DM selects which player characters participate in this encounter.
+3. **Place PC tokens** — DM visually places each PC token on the map using the same drag-and-drop interface.
+4. **Mark surprise** — DM optionally marks specific combatants (PCs or creatures) as surprised.
+5. **Confirm & start** — DM clicks "Start Combat." The system creates a new encounter instance (copying from the template), rolls initiative, and proceeds with the normal combat flow.
+
+The saved encounter template is **not consumed** — it remains in the library for reuse. Each start creates an independent encounter instance. This lets the DM run the same encounter design multiple times (e.g., a random encounter table, or re-running a fight for a different party).
 
 ### Undo & Corrections
 
@@ -2703,11 +2732,21 @@ player_characters
 ### Encounter & Combat Tables
 
 ```sql
+encounter_templates
+  id              UUID PK
+  campaign_id     UUID FK → campaigns
+  map_id          UUID FK → maps
+  name            TEXT NOT NULL
+  creatures       JSONB NOT NULL         -- [{creature_ref_id, short_id, display_name, position_col, position_row, quantity}]
+  created_at      TIMESTAMPTZ DEFAULT now()
+  updated_at      TIMESTAMPTZ DEFAULT now()
+
 encounters
   id              UUID PK
   campaign_id     UUID FK → campaigns
   map_id          UUID FK → maps
   name            TEXT
+  template_id     UUID FK → encounter_templates  -- source template (nullable for ad-hoc encounters)
   status          TEXT NOT NULL          -- 'preparing', 'active', 'completed'
   round_number    INTEGER DEFAULT 0
   current_turn_id UUID FK → turns        -- nullable; set when combat is active

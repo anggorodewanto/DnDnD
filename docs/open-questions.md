@@ -12,7 +12,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **3. Multi-encounter dashboard UX** — The spec says the DM manages simultaneous encounters from "its own panel." Are these side-by-side panels, tabs, or a switcher? How does the DM see cross-encounter context (e.g., total party HP across both encounters)?
 
-- [ ] **4. Encounter setup workflow** — How does the DM create and start an encounter? The spec mentions "DM clicks Start Combat" but doesn't detail the setup flow: selecting creatures from the stat block library, placing tokens on spawn zones, setting surprise flags, naming the encounter. Is there an encounter preparation mode where DMs can pre-build encounters before starting them?
+- [x] **4. Encounter setup workflow** — How does the DM create and start an encounter? The spec mentions "DM clicks Start Combat" but doesn't detail the setup flow: selecting creatures from the stat block library, placing tokens on spawn zones, setting surprise flags, naming the encounter. Is there an encounter preparation mode where DMs can pre-build encounters before starting them?
 
 - [ ] **5. Enemy turn smart defaults — complexity ceiling** — Smart defaults suggest "shortest path toward nearest hostile" and "primary attack." What about creatures with multiattack, legendary actions, lair actions, or complex abilities (e.g., a dragon with breath weapon recharge, tail attack, and legendary actions)? How are legendary/lair actions surfaced in the DM's turn flow?
 
