@@ -25,6 +25,20 @@ func getFreePort(t *testing.T) string {
 	return addr
 }
 
+// waitForServer polls until the health endpoint responds or the test fails.
+func waitForServer(t *testing.T, addr string) *http.Response {
+	t.Helper()
+	for range 30 {
+		resp, err := http.Get(fmt.Sprintf("http://%s/health", addr))
+		if err == nil {
+			return resp
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("server did not start in time")
+	return nil
+}
+
 func TestRun_ServerStartsAndStops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -82,19 +96,7 @@ func TestRun_HealthEndpointFunctional(t *testing.T) {
 		errCh <- run(ctx, &logBuf, addr)
 	}()
 
-	// Wait for server to be ready (poll after failure, not before)
-	var resp *http.Response
-	for range 20 {
-		var err error
-		resp, err = http.Get(fmt.Sprintf("http://%s/health", addr))
-		if err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if resp == nil {
-		t.Fatal("server did not start in time")
-	}
+	resp := waitForServer(t, addr)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -172,19 +174,7 @@ func TestRun_WithDatabase(t *testing.T) {
 		errCh <- run(ctx, &logBuf, addr)
 	}()
 
-	// Wait for server to be ready
-	var resp *http.Response
-	for range 30 {
-		var err error
-		resp, err = http.Get(fmt.Sprintf("http://%s/health", addr))
-		if err == nil {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if resp == nil {
-		t.Fatal("server did not start in time")
-	}
+	resp := waitForServer(t, addr)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -217,19 +207,7 @@ func TestRun_DefaultAddr(t *testing.T) {
 		errCh <- run(ctx, &logBuf, "")
 	}()
 
-	// Wait for server to be ready
-	var resp *http.Response
-	for range 20 {
-		var err error
-		resp, err = http.Get(fmt.Sprintf("http://%s/health", addr))
-		if err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if resp == nil {
-		t.Fatal("server did not start in time")
-	}
+	resp := waitForServer(t, addr)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {

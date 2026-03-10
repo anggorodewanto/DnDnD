@@ -275,6 +275,10 @@ If status is APPROVED:
 1. Mark the phase as done in the phases file: change `- [ ] **Phase N:`
    to `- [x] **Phase N:`.
 2. Run `/simplify` on the changed code.
+3. After `/simplify` completes, commit all remaining changes (phases.md
+   update + any simplify fixes) with message:
+   `Phase {PHASE_NUMBER} complete: <one-line summary>`
+4. Push to the remote: `git push`.
 
 # Rules for You (the Orchestrator)
 

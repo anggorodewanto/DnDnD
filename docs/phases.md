@@ -7,7 +7,7 @@
   - Depends on: None
   - Done when: `go build` produces a single binary, health endpoint returns 200, structured JSON logs to stdout, Docker image builds and runs.
 
-- [ ] **Phase 2: Database Connection & Migration Framework**
+- [x] **Phase 2: Database Connection & Migration Framework**
   - Scope: PostgreSQL connection pool setup, goose migration framework integration, initial migration creating the `campaigns` table, session storage table for OAuth. Testcontainers-based test helper for integration tests.
   - Depends on: Phase 1
   - Done when: `goose up` runs migrations, `goose down` rolls back, integration test connects to a throwaway Postgres via testcontainers.

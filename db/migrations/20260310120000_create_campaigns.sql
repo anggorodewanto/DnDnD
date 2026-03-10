@@ -7,7 +7,7 @@ CREATE TABLE campaigns (
     dm_user_id TEXT NOT NULL,
     name TEXT NOT NULL,
     settings JSONB,
-    status TEXT NOT NULL DEFAULT 'active',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'archived')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

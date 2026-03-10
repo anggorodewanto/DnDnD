@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/ab/dndnd/internal/database"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -58,13 +58,9 @@ func NewTestDB(t *testing.T) *sql.DB {
 
 	connStr := NewTestDBConnString(t)
 
-	db, err := sql.Open("pgx", connStr)
+	db, err := database.Connect(connStr)
 	if err != nil {
-		t.Fatalf("failed to open database: %v", err)
-	}
-
-	if err := db.Ping(); err != nil {
-		t.Fatalf("failed to ping database: %v", err)
+		t.Fatalf("failed to connect to test database: %v", err)
 	}
 
 	t.Cleanup(func() {

@@ -2,7 +2,6 @@ package database
 
 import (
 	"database/sql"
-	"io/fs"
 	"testing"
 	"testing/fstest"
 )
@@ -63,14 +62,5 @@ func TestMigrateDown_BadFS(t *testing.T) {
 	err := MigrateDown(db, emptyFS)
 	if err == nil {
 		t.Fatal("expected error for bad migration FS, got nil")
-	}
-}
-
-// Verify the fs.FS interface is accepted
-func TestMigrateUp_AcceptsFS(t *testing.T) {
-	var _ fs.FS = fstest.MapFS{}
-	// Compile-time check that our function accepts fs.FS
-	_ = func(db *sql.DB, f fs.FS) error {
-		return MigrateUp(db, f)
 	}
 }
