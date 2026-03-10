@@ -2556,6 +2556,18 @@ The dashboard uses a **sidebar navigation** with icon+label entries for each pan
 
 Non-combat panels (Character Overview, Stat Block Library, Asset Library, Map Editor, Character Approval Queue) are each full-page views accessed from the sidebar.
 
+### Responsive & Mobile
+
+The full dashboard is **desktop-optimized** (1280px+ assumed). A simplified **mobile-lite view** covers the most common on-the-go tasks so the DM can act from a phone without needing the full layout:
+
+- **DM Queue** — view and resolve pending `#dm-queue` items (approve/deny, apply outcomes)
+- **Initiative & Turn Queue** — read-only view of current initiative order and whose turn it is
+- **Narrate** — post narration to `#the-story`
+- **Character Approval Queue** — approve, reject, or request changes on pending characters
+- **Quick Actions** — end turn, pause/resume campaign
+
+Desktop-only features (not available in mobile-lite view): Map Editor, Combat Workspace (map + token dragging), Stat Block Library browsing, Asset Library management. The sidebar collapses to a bottom tab bar on mobile. If the DM attempts a desktop-only action on mobile, the UI shows a message: "Open the dashboard on desktop for [feature name]."
+
 ### Features
 
 - **Combat Manager** — drag tokens on a grid, click to move, auto-calculate distance and range

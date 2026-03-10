@@ -8,7 +8,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **1. Dashboard layout & navigation** — No wireframes, mockups, or information architecture described. How are the panels (Combat Manager, Action Resolver, Reactions Panel, Character Overview, Map Editor, etc.) organized? Tabs, sidebar nav, collapsible panels? What's the default view when the DM opens the dashboard?
 
-- [ ] **2. Dashboard mobile/responsive support** — DMs may need to resolve actions from a phone (e.g., approve a rest request while away from their desk). Is the dashboard responsive? Are any views mobile-optimized, or is it desktop-only?
+- [x] **2. Dashboard mobile/responsive support** — DMs may need to resolve actions from a phone (e.g., approve a rest request while away from their desk). Is the dashboard responsive? Are any views mobile-optimized, or is it desktop-only?
 
 - [ ] **3. Multi-encounter dashboard UX** — The spec says the DM manages simultaneous encounters from "its own panel." Are these side-by-side panels, tabs, or a switcher? How does the DM see cross-encounter context (e.g., total party HP across both encounters)?
 
