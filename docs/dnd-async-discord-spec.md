@@ -2887,7 +2887,11 @@ The application deploys to **[fly.io](https://fly.io)** as a single Machine:
 - **Asset storage:** 1x Fly Volume (1–3GB) mounted at `/data/assets` — persistent storage for DM-uploaded images, token art, tilesets, and narration attachments. Volumes survive redeploys and restarts but are pinned to one Machine in one region
 - **Deployment:** Dockerfile builds the Go binary with embedded dashboard assets, `fly deploy` pushes a new image
 - **WebSockets:** natively supported by fly.io's proxy layer — no special configuration needed for the dashboard's live sync
-- **Scaling note:** this is a single-instance deployment. The `AssetStore` interface allows swapping to S3-compatible storage (e.g., Cloudflare R2 or Tigris) if horizontal scaling is ever needed, but for a single-campaign bot a single Machine + Volume is sufficient
+- **Scaling note:** this is a single-instance deployment by design. A single-campaign bot does not need horizontal scaling, and the architecture avoids it intentionally. However, the design does not create barriers to future scaling:
+  - **State coordination:** all combat state mutations use PostgreSQL advisory locks (database-level), so lock coordination works across any number of application instances without change
+  - **Turn timers:** deadlines are derived from database fields (`started_at` + timeout setting) and checked by a polling goroutine — no in-memory timer state to coordinate
+  - **Asset storage:** the `AssetStore` interface allows swapping the local volume to S3-compatible storage (e.g., Cloudflare R2 or Tigris) with no application changes
+  - **If multi-instance is ever needed:** add Redis or NATS for WebSocket pub/sub (so state pushes reach dashboards connected to any instance), sticky sessions or a WebSocket gateway for connection affinity, and leader election (or distributed cron) for the single timer-polling goroutine. These are additive changes — no existing architecture needs to be reworked
 
 ---
 
