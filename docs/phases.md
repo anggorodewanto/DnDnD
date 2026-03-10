@@ -22,7 +22,7 @@
   - Depends on: Phase 2
   - Done when: All SRD classes (with features), races, and feats seeded; snapshot tests pass.
 
-- [ ] **Phase 5: Reference Data Schema — Spells**
+- [x] **Phase 5: Reference Data Schema — Spells**
   - Scope: Migrations for `spells` table (full schema: level, school, components, casting_time, range, area_of_effect, duration, concentration, ritual, higher_levels, material_cost, material_consumed, damage, healing, conditions_applied, teleport, resolution_mode, save_ability, save_effect). SRD seeder (~300 spells) with auto-tagging `resolution_mode` (auto vs dm_required). Go structs and sqlc queries. Snapshot tests.
   - Depends on: Phase 2
   - Done when: All SRD spells seeded with correct `resolution_mode` tags; validation warnings logged for data quality issues; snapshot tests pass.

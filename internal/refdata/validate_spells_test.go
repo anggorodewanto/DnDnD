@@ -105,7 +105,6 @@ func TestValidateSpells_DamageWithoutResolution(t *testing.T) {
 			Name:           "Test Spell",
 			Damage:         optJSON(map[string]any{"dice": "1d6", "type": "fire"}),
 			ResolutionMode: "auto",
-			// no save_ability and no attack_type
 		},
 	}
 
@@ -139,7 +138,6 @@ func TestValidateSpells_AutoWithoutMechanicalEffect(t *testing.T) {
 			ID:             "test-spell",
 			Name:           "Test Spell",
 			ResolutionMode: "auto",
-			// no damage, healing, teleport, conditions_applied
 		},
 	}
 
