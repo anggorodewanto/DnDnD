@@ -8,7 +8,8 @@ import (
 )
 
 // NewRouter creates a Chi router with panic recovery middleware and health endpoint.
-func NewRouter(logger *slog.Logger) http.Handler {
+// It returns both the router and the HealthHandler so callers can register subsystem checks.
+func NewRouter(logger *slog.Logger) (http.Handler, *HealthHandler) {
 	r := chi.NewRouter()
 
 	r.Use(PanicRecovery(logger))
@@ -16,5 +17,5 @@ func NewRouter(logger *slog.Logger) http.Handler {
 	health := NewHealthHandler()
 	r.Get("/health", health.ServeHTTP)
 
-	return r
+	return r, health
 }
