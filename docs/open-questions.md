@@ -46,7 +46,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **18. Group rest coordination** — `/rest short` and `/rest long` are per-player. Do all players need to individually request a rest? Is there a DM-initiated "party rest" that applies to everyone simultaneously?
 
-- [ ] **19. DM narration tools** — The DM narrates in `#the-story` but from Discord, not the dashboard. Should the dashboard have a "Narrate" panel that posts to `#the-story` (rich text, attached images, formatted boxed text)? Or is Discord sufficient?
+- [x] **19. DM narration tools** — The DM narrates in `#the-story` but from Discord, not the dashboard. Should the dashboard have a "Narrate" panel that posts to `#the-story` (rich text, attached images, formatted boxed text)? Or is Discord sufficient?
 
 - [ ] **20. Encounter name visibility to players** — Simultaneous encounter messages are labeled with the encounter name. Can the DM control what name players see (to avoid spoilers like "Boss Fight" or "Ambush")?
 
