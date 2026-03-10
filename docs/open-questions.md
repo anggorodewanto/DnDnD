@@ -148,7 +148,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 ## Map & Visual Feedback
 
-- [ ] 92. **No map legend.** Is there a legend showing what colors/patterns mean (difficult terrain, walls, water, etc.)?
+- [x] 92. **No map legend.** — Resolved: Unified map legend rendered below the map image when non-standard terrain or active spell effects are present. Terrain key shows color/pattern swatches with labels; active effects section shows marker, name, caster, area, and duration. Omitted entirely on simple open-ground maps.
 - [x] 93. **No distance indicator.** — Resolved: Passive distance in action feedback. `/attack` and `/cast` combat log entries include distance to target. Range rejections show actual distance vs allowed range. `/distance [target]` query command for on-demand tactical planning. No map rendering changes needed.
 - [ ] 94. **Token overlap at same tile.** If flying creatures share a tile at different altitudes, how are they visually distinguished on a 2D map?
 - [x] 95. **Spell effect visualization.** — Resolved: Colored semi-transparent tile overlays per effect, origin marker icon on center/source tile (moves with creature for anchored effects), and a map legend listing effect name, caster, area, and remaining duration. Overlapping effects use striped/hatched patterns.

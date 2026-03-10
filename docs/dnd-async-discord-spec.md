@@ -816,7 +816,7 @@ Combat log output:
 - **Active spell effect visualization:** persistent spell effects (Fog Cloud zone, Spirit Guardians aura, Wall of Fire, etc.) are rendered on the map using three visual layers:
   - **Colored tile overlays:** affected tiles are filled with a semi-transparent color overlay specific to the effect (e.g., Fog Cloud = grey, Spirit Guardians = gold, Wall of Fire = red, Darkness = dark purple). Overlapping effects use striped/hatched patterns so both are visible.
   - **Origin marker:** the origin or center tile of the effect displays a distinct marker icon or symbol (e.g., "☁" for Fog Cloud, "🔥" for Wall of Fire). For effects anchored to a creature (Spirit Guardians, Aura of Protection), the marker moves with the creature's token.
-  - **Map legend:** a legend section below the map lists all active effects with: marker symbol, effect name, caster name, affected area dimensions, and remaining duration in rounds. Example: `☁ Fog Cloud (Kael) — 20ft radius — 8 rounds remaining`
+  - **Map legend:** active spell effects appear in the unified map legend below the map image (see Map Rendering § Unified map legend). Example: `☁ Fog Cloud (Kael) — 20ft radius — 8 rounds remaining`
 
 **Material components:** a spellcasting focus or component pouch is assumed for all casters — ordinary material components (no gold cost) are automatically satisfied and never block casting. For spells with **costly material components** (gold value in `material_cost_gp`), the system checks on `/cast`:
 
@@ -2009,6 +2009,10 @@ Then:
 - Token visual states: normal / bloodied / dying / stable / dead
 - Tile size: 48px per square baseline; reduced to 32px only when necessary to stay within Discord's 8MB file limit. Larger tiles ensure coordinate labels remain legible and images are large enough for pinch-to-zoom on mobile
 - Obstacles and difficult terrain drawn as part of the base map layer
+- **Unified map legend:** when the current map contains non-standard terrain or active spell effects, a legend panel is rendered below the map image. The legend has two sections (either may be omitted if empty):
+  - **Terrain key:** lists each terrain type present on the map with its color/pattern swatch and label (e.g., brown hatching = Difficult Terrain, blue = Water, orange = Lava, dark grey = Pit). Standard open ground is omitted.
+  - **Active effects:** lists each active spell effect with its marker symbol, effect name, caster name, affected area dimensions, and remaining duration in rounds (e.g., `☁ Fog Cloud (Kael) — 20ft radius — 8 rounds remaining`).
+  - The legend is excluded entirely on maps with only open ground and no active effects, keeping simple maps clean.
 
 ### Dynamic Fog of War
 
