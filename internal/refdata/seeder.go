@@ -12,6 +12,9 @@ const (
 	WeaponCount    = 37
 	ArmorCount     = 13
 	ConditionCount = 15
+	ClassCount     = 12
+	RaceCount      = 9
+	FeatCount      = 41
 )
 
 // SeedAll populates all SRD reference data (weapons, armor, conditions).
@@ -29,6 +32,15 @@ func SeedAll(ctx context.Context, db DBTX) error {
 	}
 	if err := seedConditions(ctx, q); err != nil {
 		return fmt.Errorf("seeding conditions: %w", err)
+	}
+	if err := seedClasses(ctx, q); err != nil {
+		return fmt.Errorf("seeding classes: %w", err)
+	}
+	if err := seedRaces(ctx, q); err != nil {
+		return fmt.Errorf("seeding races: %w", err)
+	}
+	if err := seedFeats(ctx, q); err != nil {
+		return fmt.Errorf("seeding feats: %w", err)
 	}
 
 	return nil

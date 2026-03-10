@@ -38,6 +38,26 @@ type Campaign struct {
 	UpdatedAt time.Time             `json:"updated_at"`
 }
 
+type Class struct {
+	ID                      string                `json:"id"`
+	Name                    string                `json:"name"`
+	HitDie                  string                `json:"hit_die"`
+	PrimaryAbility          string                `json:"primary_ability"`
+	SaveProficiencies       []string              `json:"save_proficiencies"`
+	ArmorProficiencies      []string              `json:"armor_proficiencies"`
+	WeaponProficiencies     []string              `json:"weapon_proficiencies"`
+	SkillChoices            pqtype.NullRawMessage `json:"skill_choices"`
+	Spellcasting            pqtype.NullRawMessage `json:"spellcasting"`
+	FeaturesByLevel         json.RawMessage       `json:"features_by_level"`
+	AttacksPerAction        json.RawMessage       `json:"attacks_per_action"`
+	SubclassLevel           int32                 `json:"subclass_level"`
+	Subclasses              json.RawMessage       `json:"subclasses"`
+	MulticlassPrereqs       pqtype.NullRawMessage `json:"multiclass_prereqs"`
+	MulticlassProficiencies pqtype.NullRawMessage `json:"multiclass_proficiencies"`
+	CreatedAt               time.Time             `json:"created_at"`
+	UpdatedAt               time.Time             `json:"updated_at"`
+}
+
 type ConditionsRef struct {
 	ID                string          `json:"id"`
 	Name              string          `json:"name"`
@@ -45,6 +65,31 @@ type ConditionsRef struct {
 	MechanicalEffects json.RawMessage `json:"mechanical_effects"`
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`
+}
+
+type Feat struct {
+	ID               string                `json:"id"`
+	Name             string                `json:"name"`
+	Description      string                `json:"description"`
+	Prerequisites    pqtype.NullRawMessage `json:"prerequisites"`
+	AsiBonus         pqtype.NullRawMessage `json:"asi_bonus"`
+	MechanicalEffect pqtype.NullRawMessage `json:"mechanical_effect"`
+	CreatedAt        time.Time             `json:"created_at"`
+	UpdatedAt        time.Time             `json:"updated_at"`
+}
+
+type Race struct {
+	ID             string                `json:"id"`
+	Name           string                `json:"name"`
+	SpeedFt        int32                 `json:"speed_ft"`
+	Size           string                `json:"size"`
+	AbilityBonuses json.RawMessage       `json:"ability_bonuses"`
+	DarkvisionFt   int32                 `json:"darkvision_ft"`
+	Traits         json.RawMessage       `json:"traits"`
+	Languages      []string              `json:"languages"`
+	Subraces       pqtype.NullRawMessage `json:"subraces"`
+	CreatedAt      time.Time             `json:"created_at"`
+	UpdatedAt      time.Time             `json:"updated_at"`
 }
 
 type Session struct {

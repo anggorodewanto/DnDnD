@@ -170,6 +170,248 @@ func TestIntegration_SeedAll_ConditionCount(t *testing.T) {
 	}
 }
 
+func TestIntegration_SeedAll_ClassCount(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	count, err := q.CountClasses(context.Background())
+	if err != nil {
+		t.Fatalf("CountClasses failed: %v", err)
+	}
+	if count != refdata.ClassCount {
+		t.Fatalf("expected %d classes, got %d", refdata.ClassCount, count)
+	}
+}
+
+func TestIntegration_SeedAll_RaceCount(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	count, err := q.CountRaces(context.Background())
+	if err != nil {
+		t.Fatalf("CountRaces failed: %v", err)
+	}
+	if count != refdata.RaceCount {
+		t.Fatalf("expected %d races, got %d", refdata.RaceCount, count)
+	}
+}
+
+func TestIntegration_SeedAll_FeatCount(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	count, err := q.CountFeats(context.Background())
+	if err != nil {
+		t.Fatalf("CountFeats failed: %v", err)
+	}
+	if count != refdata.FeatCount {
+		t.Fatalf("expected %d feats, got %d", refdata.FeatCount, count)
+	}
+}
+
+func TestIntegration_SeedAll_FighterClass(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	class, err := q.GetClass(context.Background(), "fighter")
+	if err != nil {
+		t.Fatalf("GetClass failed: %v", err)
+	}
+
+	if class.Name != "Fighter" {
+		t.Fatalf("expected name Fighter, got %q", class.Name)
+	}
+	if class.HitDie != "d10" {
+		t.Fatalf("expected hit_die d10, got %q", class.HitDie)
+	}
+	if class.PrimaryAbility != "str" {
+		t.Fatalf("expected primary_ability str, got %q", class.PrimaryAbility)
+	}
+
+	// Check attacks_per_action has multiple attack tiers
+	var attacks map[string]int
+	if err := json.Unmarshal(class.AttacksPerAction, &attacks); err != nil {
+		t.Fatalf("failed to unmarshal attacks_per_action: %v", err)
+	}
+	if attacks["5"] != 2 {
+		t.Fatalf("expected fighter to get 2 attacks at level 5, got %d", attacks["5"])
+	}
+	if attacks["11"] != 3 {
+		t.Fatalf("expected fighter to get 3 attacks at level 11, got %d", attacks["11"])
+	}
+
+	// Check subclass_level
+	if class.SubclassLevel != 3 {
+		t.Fatalf("expected subclass_level 3, got %d", class.SubclassLevel)
+	}
+
+	// Check Champion subclass exists
+	var subclasses map[string]any
+	if err := json.Unmarshal(class.Subclasses, &subclasses); err != nil {
+		t.Fatalf("failed to unmarshal subclasses: %v", err)
+	}
+	if _, ok := subclasses["champion"]; !ok {
+		t.Fatal("expected Champion subclass to exist")
+	}
+}
+
+func TestIntegration_SeedAll_WizardSpellcasting(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	class, err := q.GetClass(context.Background(), "wizard")
+	if err != nil {
+		t.Fatalf("GetClass failed: %v", err)
+	}
+
+	if !class.Spellcasting.Valid {
+		t.Fatal("expected wizard to have spellcasting")
+	}
+
+	var sc map[string]any
+	if err := json.Unmarshal(class.Spellcasting.RawMessage, &sc); err != nil {
+		t.Fatalf("failed to unmarshal spellcasting: %v", err)
+	}
+	if sc["ability"] != "int" {
+		t.Fatalf("expected spellcasting ability int, got %v", sc["ability"])
+	}
+	if sc["slot_progression"] != "full" {
+		t.Fatalf("expected slot_progression full, got %v", sc["slot_progression"])
+	}
+}
+
+func TestIntegration_SeedAll_ElfRace(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	race, err := q.GetRace(context.Background(), "elf")
+	if err != nil {
+		t.Fatalf("GetRace failed: %v", err)
+	}
+
+	if race.Name != "Elf" {
+		t.Fatalf("expected name Elf, got %q", race.Name)
+	}
+	if race.SpeedFt != 30 {
+		t.Fatalf("expected speed_ft 30, got %d", race.SpeedFt)
+	}
+	if race.DarkvisionFt != 60 {
+		t.Fatalf("expected darkvision_ft 60, got %d", race.DarkvisionFt)
+	}
+
+	// Check ability_bonuses
+	var bonuses map[string]any
+	if err := json.Unmarshal(race.AbilityBonuses, &bonuses); err != nil {
+		t.Fatalf("failed to unmarshal ability_bonuses: %v", err)
+	}
+	if bonuses["dex"] != float64(2) {
+		t.Fatalf("expected dex bonus 2, got %v", bonuses["dex"])
+	}
+
+	// Check subraces
+	if !race.Subraces.Valid {
+		t.Fatal("expected elf to have subraces")
+	}
+	var subraces []map[string]any
+	if err := json.Unmarshal(race.Subraces.RawMessage, &subraces); err != nil {
+		t.Fatalf("failed to unmarshal subraces: %v", err)
+	}
+	if len(subraces) == 0 {
+		t.Fatal("expected at least one subrace")
+	}
+	if subraces[0]["id"] != "high-elf" {
+		t.Fatalf("expected first subrace id high-elf, got %v", subraces[0]["id"])
+	}
+}
+
+func TestIntegration_SeedAll_GreatWeaponMasterFeat(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	feat, err := q.GetFeat(context.Background(), "great-weapon-master")
+	if err != nil {
+		t.Fatalf("GetFeat failed: %v", err)
+	}
+
+	if feat.Name != "Great Weapon Master" {
+		t.Fatalf("expected name Great Weapon Master, got %q", feat.Name)
+	}
+	if feat.Description == "" {
+		t.Fatal("expected non-empty description")
+	}
+}
+
+func TestIntegration_SeedAll_ListClasses(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	classes, err := q.ListClasses(context.Background())
+	if err != nil {
+		t.Fatalf("ListClasses failed: %v", err)
+	}
+	if len(classes) != refdata.ClassCount {
+		t.Fatalf("expected %d classes from list, got %d", refdata.ClassCount, len(classes))
+	}
+	// Verify sorted by name (first should be Barbarian)
+	if classes[0].Name != "Barbarian" {
+		t.Fatalf("expected first class Barbarian, got %q", classes[0].Name)
+	}
+}
+
+func TestIntegration_SeedAll_ListRaces(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	races, err := q.ListRaces(context.Background())
+	if err != nil {
+		t.Fatalf("ListRaces failed: %v", err)
+	}
+	if len(races) != refdata.RaceCount {
+		t.Fatalf("expected %d races from list, got %d", refdata.RaceCount, len(races))
+	}
+	// Verify sorted by name (first should be Dragonborn)
+	if races[0].Name != "Dragonborn" {
+		t.Fatalf("expected first race Dragonborn, got %q", races[0].Name)
+	}
+}
+
+func TestIntegration_SeedAll_ListFeats(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q := setupSeededDB(t)
+	feats, err := q.ListFeats(context.Background())
+	if err != nil {
+		t.Fatalf("ListFeats failed: %v", err)
+	}
+	if len(feats) != refdata.FeatCount {
+		t.Fatalf("expected %d feats from list, got %d", refdata.FeatCount, len(feats))
+	}
+	// Verify sorted by name (first should be Alert)
+	if feats[0].Name != "Alert" {
+		t.Fatalf("expected first feat Alert, got %q", feats[0].Name)
+	}
+}
+
 func TestIntegration_SeedAll_Idempotent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -210,6 +452,30 @@ func TestIntegration_SeedAll_Idempotent(t *testing.T) {
 	}
 	if condCount != refdata.ConditionCount {
 		t.Fatalf("expected %d conditions after double seed, got %d", refdata.ConditionCount, condCount)
+	}
+
+	classCount, err := q.CountClasses(ctx)
+	if err != nil {
+		t.Fatalf("CountClasses failed: %v", err)
+	}
+	if classCount != refdata.ClassCount {
+		t.Fatalf("expected %d classes after double seed, got %d", refdata.ClassCount, classCount)
+	}
+
+	raceCount, err := q.CountRaces(ctx)
+	if err != nil {
+		t.Fatalf("CountRaces failed: %v", err)
+	}
+	if raceCount != refdata.RaceCount {
+		t.Fatalf("expected %d races after double seed, got %d", refdata.RaceCount, raceCount)
+	}
+
+	featCount, err := q.CountFeats(ctx)
+	if err != nil {
+		t.Fatalf("CountFeats failed: %v", err)
+	}
+	if featCount != refdata.FeatCount {
+		t.Fatalf("expected %d feats after double seed, got %d", refdata.FeatCount, featCount)
 	}
 }
 

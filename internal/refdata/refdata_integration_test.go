@@ -34,4 +34,25 @@ func TestIntegration_ReferenceTablesMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("conditions_ref table should exist: %v", err)
 	}
+
+	// Verify classes table exists
+	_, err = db.Exec(`INSERT INTO classes (id, name, hit_die, primary_ability, save_proficiencies, features_by_level, attacks_per_action, subclass_level, subclasses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		"test-class", "Test Class", "d10", "str", `{str,con}`, `{"1":[]}`, `{"1":1}`, 3, `{}`)
+	if err != nil {
+		t.Fatalf("classes table should exist: %v", err)
+	}
+
+	// Verify races table exists
+	_, err = db.Exec(`INSERT INTO races (id, name, speed_ft, size, ability_bonuses, traits) VALUES ($1, $2, $3, $4, $5, $6)`,
+		"test-race", "Test Race", 30, "Medium", `{"str":1}`, `[]`)
+	if err != nil {
+		t.Fatalf("races table should exist: %v", err)
+	}
+
+	// Verify feats table exists
+	_, err = db.Exec(`INSERT INTO feats (id, name, description) VALUES ($1, $2, $3)`,
+		"test-feat", "Test Feat", "A test feat")
+	if err != nil {
+		t.Fatalf("feats table should exist: %v", err)
+	}
 }

@@ -68,7 +68,12 @@ func TestIntegration_MigrateDown(t *testing.T) {
 		t.Fatalf("MigrateUp failed: %v", err)
 	}
 
-	// Roll back the reference tables migration (most recent)
+	// Roll back the classes/races/feats migration (most recent)
+	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
+		t.Fatalf("MigrateDown (classes/races/feats) failed: %v", err)
+	}
+
+	// Roll back the reference tables migration
 	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
 		t.Fatalf("MigrateDown (reference tables) failed: %v", err)
 	}
