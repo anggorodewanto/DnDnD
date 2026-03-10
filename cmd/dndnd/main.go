@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/server"
 )
@@ -47,7 +48,7 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		}
 		defer db.Close()
 
-		if err := database.MigrateUp(db, "db/migrations"); err != nil {
+		if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
 			logger.Error("database migration failed", "error", err)
 			return err
 		}

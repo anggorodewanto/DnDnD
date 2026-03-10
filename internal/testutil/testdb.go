@@ -12,10 +12,10 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// NewTestDB spins up a throwaway PostgreSQL container and returns
-// an *sql.DB connected to it. The container is automatically terminated
-// when the test completes.
-func NewTestDB(t *testing.T) *sql.DB {
+// NewTestDBConnString spins up a throwaway PostgreSQL container and returns
+// its connection string. The container is automatically terminated when the
+// test completes. Use this when the caller manages its own connection.
+func NewTestDBConnString(t *testing.T) string {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -46,6 +46,17 @@ func NewTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("failed to get connection string: %v", err)
 	}
+
+	return connStr
+}
+
+// NewTestDB spins up a throwaway PostgreSQL container and returns
+// an *sql.DB connected to it. The container is automatically terminated
+// when the test completes.
+func NewTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	connStr := NewTestDBConnString(t)
 
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {

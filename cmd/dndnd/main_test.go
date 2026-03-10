@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/ab/dndnd/internal/testutil"
 )
 
 // getFreePort asks the OS for a free port and returns it as a "host:port" string.
@@ -148,6 +150,56 @@ func TestRun_NoDatabaseURL(t *testing.T) {
 	err := <-errCh
 	if err != nil {
 		t.Fatalf("run returned error: %v", err)
+	}
+}
+
+func TestRun_WithDatabase(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	connStr := testutil.NewTestDBConnString(t)
+	t.Setenv("DATABASE_URL", connStr)
+
+	addr := getFreePort(t)
+	var logBuf bytes.Buffer
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- run(ctx, &logBuf, addr)
+	}()
+
+	// Wait for server to be ready
+	var resp *http.Response
+	for range 30 {
+		var err error
+		resp, err = http.Get(fmt.Sprintf("http://%s/health", addr))
+		if err == nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if resp == nil {
+		t.Fatal("server did not start in time")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	cancel()
+	err := <-errCh
+	if err != nil {
+		t.Fatalf("run returned error: %v", err)
+	}
+
+	// Verify log mentions database connected
+	if !bytes.Contains(logBuf.Bytes(), []byte("database connected and migrated")) {
+		t.Fatal("expected log to mention database connected and migrated")
 	}
 }
 

@@ -2,7 +2,9 @@ package database
 
 import (
 	"database/sql"
+	"io/fs"
 	"testing"
+	"testing/fstest"
 )
 
 func TestConnect_InvalidDSN(t *testing.T) {
@@ -21,34 +23,54 @@ func TestConnect_EmptyDSN(t *testing.T) {
 }
 
 func TestMigrateUp_NilDB(t *testing.T) {
-	err := MigrateUp(nil, "db/migrations")
+	err := MigrateUp(nil, fstest.MapFS{})
 	if err == nil {
 		t.Fatal("expected error for nil db, got nil")
 	}
+	if err.Error() != "database connection must not be nil" {
+		t.Fatalf("unexpected error message: %v", err)
+	}
 }
 
-func TestMigrateUp_BadDir(t *testing.T) {
-	// Use an in-memory-like approach — we need a real DB for goose, but we can test the error path
+func TestMigrateUp_BadFS(t *testing.T) {
 	db, _ := sql.Open("pgx", "postgres://invalid:5432/nonexistent")
 	defer db.Close()
-	err := MigrateUp(db, "/nonexistent/migrations/dir")
+
+	// Use an empty FS — goose should fail because there's no "migrations" dir
+	// or it will fail trying to connect to db
+	emptyFS := fstest.MapFS{}
+	err := MigrateUp(db, emptyFS)
 	if err == nil {
-		t.Fatal("expected error for bad migration dir, got nil")
+		t.Fatal("expected error for bad migration FS, got nil")
 	}
 }
 
 func TestMigrateDown_NilDB(t *testing.T) {
-	err := MigrateDown(nil, "db/migrations")
+	err := MigrateDown(nil, fstest.MapFS{})
 	if err == nil {
 		t.Fatal("expected error for nil db, got nil")
 	}
+	if err.Error() != "database connection must not be nil" {
+		t.Fatalf("unexpected error message: %v", err)
+	}
 }
 
-func TestMigrateDown_BadDir(t *testing.T) {
+func TestMigrateDown_BadFS(t *testing.T) {
 	db, _ := sql.Open("pgx", "postgres://invalid:5432/nonexistent")
 	defer db.Close()
-	err := MigrateDown(db, "/nonexistent/migrations/dir")
+
+	emptyFS := fstest.MapFS{}
+	err := MigrateDown(db, emptyFS)
 	if err == nil {
-		t.Fatal("expected error for bad migration dir, got nil")
+		t.Fatal("expected error for bad migration FS, got nil")
+	}
+}
+
+// Verify the fs.FS interface is accepted
+func TestMigrateUp_AcceptsFS(t *testing.T) {
+	var _ fs.FS = fstest.MapFS{}
+	// Compile-time check that our function accepts fs.FS
+	_ = func(db *sql.DB, f fs.FS) error {
+		return MigrateUp(db, f)
 	}
 }

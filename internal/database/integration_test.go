@@ -1,28 +1,22 @@
-//go:build integration
-
 package database_test
 
 import (
-	"path/filepath"
-	"runtime"
 	"testing"
 
+	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/testutil"
 )
 
-func projectRoot() string {
-	_, f, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(f), "..", "..")
-}
-
 func TestIntegration_ConnectAndMigrate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
 	db := testutil.NewTestDB(t)
 
-	migrationsDir := filepath.Join(projectRoot(), "db", "migrations")
-
 	// Run migrations up
-	if err := database.MigrateUp(db, migrationsDir); err != nil {
+	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
 		t.Fatalf("MigrateUp failed: %v", err)
 	}
 
@@ -33,9 +27,9 @@ func TestIntegration_ConnectAndMigrate(t *testing.T) {
 		t.Fatalf("failed to insert into campaigns: %v", err)
 	}
 
-	// Verify sessions table exists
-	_, err = db.Exec(`INSERT INTO sessions (session_id, discord_user_id, access_token, refresh_token) VALUES ($1, $2, $3, $4)`,
-		"sess-abc", "user-456", "access-tok", "refresh-tok")
+	// Verify sessions table exists (UUID PK is auto-generated)
+	_, err = db.Exec(`INSERT INTO sessions (discord_user_id, access_token, refresh_token) VALUES ($1, $2, $3)`,
+		"user-456", "access-tok", "refresh-tok")
 	if err != nil {
 		t.Fatalf("failed to insert into sessions: %v", err)
 	}
@@ -49,10 +43,13 @@ func TestIntegration_ConnectAndMigrate(t *testing.T) {
 		t.Fatalf("expected name 'Test Campaign', got %q", name)
 	}
 
-	// Verify sessions row
-	var discordUserID string
-	if err := db.QueryRow(`SELECT discord_user_id FROM sessions WHERE session_id = $1`, "sess-abc").Scan(&discordUserID); err != nil {
+	// Verify sessions row has UUID id
+	var id, discordUserID string
+	if err := db.QueryRow(`SELECT id::text, discord_user_id FROM sessions WHERE discord_user_id = $1`, "user-456").Scan(&id, &discordUserID); err != nil {
 		t.Fatalf("failed to query sessions: %v", err)
+	}
+	if id == "" {
+		t.Fatal("expected non-empty UUID id for session")
 	}
 	if discordUserID != "user-456" {
 		t.Fatalf("expected discord_user_id 'user-456', got %q", discordUserID)
@@ -60,23 +57,25 @@ func TestIntegration_ConnectAndMigrate(t *testing.T) {
 }
 
 func TestIntegration_MigrateDown(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
 	db := testutil.NewTestDB(t)
 
-	migrationsDir := filepath.Join(projectRoot(), "db", "migrations")
-
 	// Run migrations up
-	if err := database.MigrateUp(db, migrationsDir); err != nil {
+	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
 		t.Fatalf("MigrateUp failed: %v", err)
 	}
 
 	// Roll back the sessions migration (most recent)
-	if err := database.MigrateDown(db, migrationsDir); err != nil {
+	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
 		t.Fatalf("MigrateDown failed: %v", err)
 	}
 
 	// Sessions table should no longer exist
-	_, err := db.Exec(`INSERT INTO sessions (session_id, discord_user_id, access_token, refresh_token) VALUES ($1, $2, $3, $4)`,
-		"sess-abc", "user-456", "access-tok", "refresh-tok")
+	_, err := db.Exec(`INSERT INTO sessions (discord_user_id, access_token, refresh_token) VALUES ($1, $2, $3)`,
+		"user-456", "access-tok", "refresh-tok")
 	if err == nil {
 		t.Fatal("expected error inserting into dropped sessions table, got nil")
 	}
@@ -89,7 +88,7 @@ func TestIntegration_MigrateDown(t *testing.T) {
 	}
 
 	// Roll back campaigns migration
-	if err := database.MigrateDown(db, migrationsDir); err != nil {
+	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
 		t.Fatalf("second MigrateDown failed: %v", err)
 	}
 
@@ -102,11 +101,13 @@ func TestIntegration_MigrateDown(t *testing.T) {
 }
 
 func TestIntegration_CampaignsTableConstraints(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
 	db := testutil.NewTestDB(t)
 
-	migrationsDir := filepath.Join(projectRoot(), "db", "migrations")
-
-	if err := database.MigrateUp(db, migrationsDir); err != nil {
+	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
 		t.Fatalf("MigrateUp failed: %v", err)
 	}
 
@@ -144,26 +145,33 @@ func TestIntegration_CampaignsTableConstraints(t *testing.T) {
 }
 
 func TestIntegration_SessionsTableDefaults(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
 	db := testutil.NewTestDB(t)
 
-	migrationsDir := filepath.Join(projectRoot(), "db", "migrations")
-
-	if err := database.MigrateUp(db, migrationsDir); err != nil {
+	if err := database.MigrateUp(db, dbfs.Migrations); err != nil {
 		t.Fatalf("MigrateUp failed: %v", err)
 	}
 
-	// Insert a session and verify defaults
-	_, err := db.Exec(`INSERT INTO sessions (session_id, discord_user_id, access_token, refresh_token) VALUES ($1, $2, $3, $4)`,
-		"sess-defaults", "user-1", "at", "rt")
+	// Insert a session — UUID PK is auto-generated
+	var sessionID string
+	err := db.QueryRow(`INSERT INTO sessions (discord_user_id, access_token, refresh_token) VALUES ($1, $2, $3) RETURNING id::text`,
+		"user-1", "at", "rt").Scan(&sessionID)
 	if err != nil {
 		t.Fatalf("insert failed: %v", err)
 	}
+	if sessionID == "" {
+		t.Fatal("expected non-empty session UUID")
+	}
 
-	var createdAt, expiresAt string
-	if err := db.QueryRow(`SELECT created_at::text, expires_at::text FROM sessions WHERE session_id = $1`, "sess-defaults").Scan(&createdAt, &expiresAt); err != nil {
+	// Verify all timestamp defaults
+	var createdAt, updatedAt, expiresAt string
+	if err := db.QueryRow(`SELECT created_at::text, updated_at::text, expires_at::text FROM sessions WHERE id = $1::uuid`, sessionID).Scan(&createdAt, &updatedAt, &expiresAt); err != nil {
 		t.Fatalf("failed to query timestamps: %v", err)
 	}
-	if createdAt == "" || expiresAt == "" {
+	if createdAt == "" || updatedAt == "" || expiresAt == "" {
 		t.Fatal("expected non-empty default timestamps")
 	}
 }
