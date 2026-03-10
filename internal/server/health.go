@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type HealthChecker func() (status string, healthy bool)
 
 // HealthHandler serves the GET /health endpoint.
 type HealthHandler struct {
+	mu         sync.RWMutex
 	startTime  time.Time
 	subsystems map[string]HealthChecker
 }
@@ -28,13 +30,18 @@ func NewHealthHandler() *HealthHandler {
 
 // Register adds a named subsystem health checker.
 func (h *HealthHandler) Register(name string, checker HealthChecker) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.subsystems[name] = checker
 }
 
 // ServeHTTP handles the health check request.
 func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
 	uptime := time.Since(h.startTime)
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"status": "ok",
 		"uptime": formatUptime(uptime),
 	}
@@ -48,17 +55,20 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	statusCode := http.StatusOK
 	if !allHealthy {
 		resp["status"] = "degraded"
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(resp)
-		return
+		statusCode = http.StatusServiceUnavailable
 	}
 
+	data, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, `{"error":"encoding failure"}`, http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	w.WriteHeader(statusCode)
+	w.Write(data)
 }
 
 func formatUptime(d time.Duration) string {

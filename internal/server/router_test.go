@@ -22,7 +22,7 @@ func TestNewRouter_HealthEndpoint(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rec.Code)
 	}
 
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode body: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestNewRouter_ExposesHealthHandler(t *testing.T) {
 		t.Fatalf("expected status 503 after registering unhealthy subsystem, got %d", rec.Code)
 	}
 
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode body: %v", err)
 	}

@@ -26,7 +26,7 @@ func TestPanicRecovery_CatchesPanicAndReturns500(t *testing.T) {
 		t.Fatalf("expected status 500, got %d", rec.Code)
 	}
 
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode response body: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestPanicRecovery_CatchesPanicAndReturns500(t *testing.T) {
 		t.Fatal("expected panic to be logged")
 	}
 
-	var logEntry map[string]interface{}
+	var logEntry map[string]any
 	if err := json.NewDecoder(&logBuf).Decode(&logEntry); err != nil {
 		t.Fatalf("failed to decode log entry: %v", err)
 	}

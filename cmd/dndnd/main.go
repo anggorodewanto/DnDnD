@@ -16,20 +16,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, os.Stdout); err != nil {
+	if err := run(ctx, os.Stdout, ""); err != nil {
 		os.Exit(1)
 	}
 }
 
 // run starts the HTTP server and blocks until the context is cancelled.
 // It returns nil on clean shutdown or an error if the server fails.
-// addr overrides allow tests to pass a custom listen address; if empty,
-// the ADDR env var is used (defaulting to ":8080").
-func run(ctx context.Context, logOutput io.Writer, addrOverride ...string) error {
-	addr := ""
-	if len(addrOverride) > 0 && addrOverride[0] != "" {
-		addr = addrOverride[0]
-	}
+// Pass an empty addr to use the ADDR env var (defaulting to ":8080").
+func run(ctx context.Context, logOutput io.Writer, addr string) error {
 	if addr == "" {
 		addr = os.Getenv("ADDR")
 	}

@@ -1,11 +1,12 @@
 package server
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
 )
+
+var panicResponseBody = []byte(`{"error":"internal server error"}`)
 
 // PanicRecovery returns middleware that recovers from panics, logs the stack
 // trace at ERROR level, and returns a 500 JSON error response.
@@ -23,9 +24,7 @@ func PanicRecovery(logger *slog.Logger) func(http.Handler) http.Handler {
 					)
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusInternalServerError)
-					json.NewEncoder(w).Encode(map[string]string{
-						"error": "internal server error",
-					})
+					w.Write(panicResponseBody)
 				}
 			}()
 			next.ServeHTTP(w, r)

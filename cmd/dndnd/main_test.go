@@ -4,30 +4,23 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"testing"
 	"time"
 )
 
-func TestRun_HealthEndpointReturns200(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var logBuf bytes.Buffer
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- run(ctx, &logBuf, ":0")
-	}()
-
-	// Give the server a moment to start
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-
-	err := <-errCh
+// getFreePort asks the OS for a free port and returns it as a "host:port" string.
+func getFreePort(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("run returned error: %v", err)
+		t.Fatalf("failed to get free port: %v", err)
 	}
+	addr := l.Addr().String()
+	l.Close()
+	return addr
 }
 
 func TestRun_ServerStartsAndStops(t *testing.T) {
@@ -55,7 +48,7 @@ func TestRun_ServerStartsAndStops(t *testing.T) {
 	}
 
 	// Check that at least one log line is valid JSON
-	var entry map[string]interface{}
+	var entry map[string]any
 	decoder := json.NewDecoder(&logBuf)
 	if err := decoder.Decode(&entry); err != nil {
 		t.Fatalf("log output is not valid JSON: %v", err)
@@ -79,22 +72,23 @@ func TestRun_HealthEndpointFunctional(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	addr := getFreePort(t)
 	var logBuf bytes.Buffer
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- run(ctx, &logBuf, "127.0.0.1:18923")
+		errCh <- run(ctx, &logBuf, addr)
 	}()
 
-	// Wait for server to be ready
+	// Wait for server to be ready (poll after failure, not before)
 	var resp *http.Response
-	for i := 0; i < 20; i++ {
-		time.Sleep(25 * time.Millisecond)
+	for range 20 {
 		var err error
-		resp, err = http.Get("http://127.0.0.1:18923/health")
+		resp, err = http.Get(fmt.Sprintf("http://%s/health", addr))
 		if err == nil {
 			break
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if resp == nil {
 		t.Fatal("server did not start in time")
@@ -105,7 +99,7 @@ func TestRun_HealthEndpointFunctional(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode body: %v", err)
 	}
@@ -121,28 +115,28 @@ func TestRun_HealthEndpointFunctional(t *testing.T) {
 }
 
 func TestRun_DefaultAddr(t *testing.T) {
-	// Test that run uses default addr when no override provided
 	ctx, cancel := context.WithCancel(context.Background())
 
+	addr := getFreePort(t)
 	var logBuf bytes.Buffer
 
-	// Set ADDR env to a random port so we don't conflict
-	t.Setenv("ADDR", "127.0.0.1:18924")
+	// Set ADDR env so run() picks it up as default
+	t.Setenv("ADDR", addr)
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- run(ctx, &logBuf)
+		errCh <- run(ctx, &logBuf, "")
 	}()
 
 	// Wait for server to be ready
 	var resp *http.Response
-	for i := 0; i < 20; i++ {
-		time.Sleep(25 * time.Millisecond)
+	for range 20 {
 		var err error
-		resp, err = http.Get("http://127.0.0.1:18924/health")
+		resp, err = http.Get(fmt.Sprintf("http://%s/health", addr))
 		if err == nil {
 			break
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if resp == nil {
 		t.Fatal("server did not start in time")

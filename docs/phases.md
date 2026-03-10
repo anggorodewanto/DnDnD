@@ -2,7 +2,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: Project Scaffolding & Build System**
+- [x] **Phase 1: Project Scaffolding & Build System**
   - Scope: Initialize Go module, directory structure, Dockerfile, fly.toml, Makefile/taskfile, embed.FS stubs for dashboard, Chi router skeleton, slog structured logging, panic recovery middleware, `GET /health` endpoint.
   - Depends on: None
   - Done when: `go build` produces a single binary, health endpoint returns 200, structured JSON logs to stdout, Docker image builds and runs.
