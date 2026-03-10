@@ -1512,6 +1512,12 @@ Each feature declares one or more effects from this vocabulary:
 | `resource_on_hit` | Trigger resource use on hit/damage | Battlemaster maneuvers, Divine Smite on hit |
 | `reaction_trigger` | Define automatic reaction prompts | Shield spell, Uncanny Dodge, Sentinel |
 | `aura` | Apply effects to creatures within radius | Paladin auras, Spirit Guardians |
+| `replace_roll` | Substitute a d20 roll with a predetermined value | Portent (Divination Wizard), Lucky feat |
+| `grant_proficiency` | Grant proficiency or expertise in a skill, tool, or save | Third Eye, Remarkable Athlete |
+| `modify_range` | Alter the range of attacks or spells | Spell Sniper (double range), Grave Domain Spare the Dying (30ft) |
+| `dm_resolution` | Route to `#dm-queue` for manual DM adjudication | Wish, Wild Magic Surge, unique homebrew effects |
+
+**`dm_resolution` catch-all:** Features that don't fit any structured effect type declare `effect_type: "dm_resolution"` with a `description` string and an optional `trigger`. When the trigger fires, the bot posts to `#dm-queue` with the feature name, description, and combat context (acting creature, target, current HP, active conditions). The DM resolves the effect manually and applies any state changes through the dashboard. This ensures every 5e feature can be represented in the data model without requiring engine changes, while features with clear mechanical effects use the structured types for auto-resolution.
 
 ### Trigger Points
 

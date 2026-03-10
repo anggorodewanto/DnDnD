@@ -102,7 +102,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **44. Turn timer persistence** — Turn timeouts use `started_at` + campaign timeout setting. Are timer checks done via polling (cron job) or event-driven (scheduled task)? What's the granularity — will the 50%/75%/100% reminders fire within minutes of their target, or could they drift?
 
-- [ ] **45. Feature Effect System extensibility** — The effect type vocabulary has 14 types. What happens when a 5e feature doesn't fit any type (e.g., Portent dice replacing rolls, Lucky feat, Divination Wizard's third eye)? Is there a generic "custom" effect type that routes to DM queue, or must new types be added to the engine?
+- [x] **45. Feature Effect System extensibility** — The effect type vocabulary has 14 types. What happens when a 5e feature doesn't fit any type (e.g., Portent dice replacing rolls, Lucky feat, Divination Wizard's third eye)? Is there a generic "custom" effect type that routes to DM queue, or must new types be added to the engine?
 
 - [ ] **46. Spell data completeness** — The `spells` table has `damage`, `healing`, `effects`, and `teleport` fields. Many spells have complex conditional effects not easily captured in structured data (e.g., Polymorph, Banishment, Wish). How are these handled — via `effects` text field with DM resolution, or structured data?
 
