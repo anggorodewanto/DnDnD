@@ -2893,6 +2893,25 @@ The application deploys to **[fly.io](https://fly.io)** as a single Machine:
   - **Asset storage:** the `AssetStore` interface allows swapping the local volume to S3-compatible storage (e.g., Cloudflare R2 or Tigris) with no application changes
   - **If multi-instance is ever needed:** add Redis or NATS for WebSocket pub/sub (so state pushes reach dashboards connected to any instance), sticky sessions or a WebSocket gateway for connection affinity, and leader election (or distributed cron) for the single timer-polling goroutine. These are additive changes — no existing architecture needs to be reworked
 
+### Monitoring & Observability
+
+**Logging:** structured JSON via Go's `slog` stdlib package, written to stdout. Every log line includes contextual fields (`encounter_id`, `command`, `user_id`, `guild_id`, `duration_ms`) for filtering and correlation. Fly.io captures stdout natively — no external log shipper needed. Log levels: `DEBUG` (development only), `INFO` (command execution, state changes), `WARN` (retries, degraded conditions), `ERROR` (failures requiring attention).
+
+**Health check:** `GET /health` returns machine health for fly.io's built-in health monitoring:
+- **200 OK** — all systems operational. Response body: `{"status": "ok", "db": "connected", "discord": "connected", "uptime": "3d 14h 22m"}`
+- **503 Service Unavailable** — one or more subsystems degraded. Response body: `{"status": "degraded", "db": "connected", "discord": "disconnected"}`
+- The health endpoint checks: PostgreSQL connectivity (ping), Discord gateway connection status, and reports process uptime
+- Fly.io uses this endpoint to detect unhealthy machines and auto-restart on persistent failure
+
+**Metrics:** no Prometheus `/metrics` endpoint. Fly.io provides baseline machine metrics (CPU, memory, network) out of the box. Application-level observability comes from structured logs. A metrics endpoint can be added later if dashboarding needs arise.
+
+**Error surfacing — two audiences:**
+
+- **Players:** on any internal error (DB timeout, unexpected panic, Discord API failure), the bot replies with a friendly ephemeral message: "⚠️ Something went wrong processing your command. Try again or contact your DM." The error is never swallowed silently — the player always knows something failed.
+- **DM dashboard:** the dashboard displays an **error notification badge** showing the count of recent errors (last 24 hours). Clicking it opens a simple error log panel listing recent failures with timestamp, command, player, and error summary (e.g., "DB timeout on /cast by @player", "PNG generation failed for encounter X"). Errors are stored in the `action_log` table with `action_type = 'error'`. This gives the DM proactive visibility into bot health without checking external tools.
+
+**Panic recovery:** all command handlers and goroutines are wrapped in a recovery middleware that catches panics, logs the full stack trace at `ERROR` level, and returns a user-facing error message rather than crashing the process.
+
 ---
 
 ## Data Model

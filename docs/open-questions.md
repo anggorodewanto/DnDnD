@@ -92,7 +92,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **39. Horizontal scaling** — The spec describes a single Go binary. Can multiple instances run behind a load balancer? WebSocket affinity? Shared database state is fine, but what about in-memory state (lock coordination, active timers)?
 
-- [ ] **40. Monitoring & observability** — No mention of logging, metrics, alerting, or health checks. What's the observability strategy? Structured logging? Prometheus metrics? How does the DM know if the bot is healthy? How are errors surfaced (silent failure vs. user-visible error)?
+- [x] **40. Monitoring & observability** — No mention of logging, metrics, alerting, or health checks. What's the observability strategy? Structured logging? Prometheus metrics? How does the DM know if the bot is healthy? How are errors surfaced (silent failure vs. user-visible error)?
 
 - [ ] **41. Testing strategy** — No testing approach mentioned. Unit tests for combat resolution? Integration tests for the full command → state change → Discord output pipeline? How are 5e rule interactions tested (there are hundreds of edge cases)?
 
