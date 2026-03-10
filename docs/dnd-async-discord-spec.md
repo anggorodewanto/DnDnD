@@ -89,6 +89,9 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 - The Go backend + PostgreSQL is the single source of truth
 - The DM dashboard renders state received via WebSocket pushes; it does not maintain its own game state copy
 - Flow: command → backend acquires lock → resolves → releases lock → pushes state over WebSocket → dashboard re-renders
+- Every WebSocket push is a full state snapshot for the relevant encounter — there is no delta/event-log protocol
+- On disconnect, the client auto-reconnects with exponential backoff (1 s, 2 s, 4 s … capped at 30 s) and simply waits for the next push, which will contain the complete current state — no catch-up or replay logic needed
+- This "snapshot-always" design keeps the protocol stateless: the server tracks no per-client sequence numbers, and the client needs no local event log
 
 **Dashboard optimistic UI** — when a WebSocket push arrives while the DM has a form open:
 - Read-only display areas (initiative tracker, HP bars) update immediately

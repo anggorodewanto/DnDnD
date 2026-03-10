@@ -58,7 +58,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 ## Technical Implementation
 
-- [ ] **23. WebSocket reconnection & state sync** — What happens when the dashboard loses its WebSocket connection? Auto-reconnect with exponential backoff? Does the dashboard request a full state snapshot on reconnect, or does it rely on catching up from missed events?
+- [x] **23. WebSocket reconnection & state sync** — What happens when the dashboard loses its WebSocket connection? Auto-reconnect with exponential backoff? Does the dashboard request a full state snapshot on reconnect, or does it rely on catching up from missed events?
 
 - [ ] **24. Map rendering performance** — PNG generation for every state change could be expensive on large maps (e.g., 50x50 grid with fog of war, spell overlays, 20+ tokens). What's the expected rendering time? Is there a caching layer (e.g., only re-render changed tiles)? Are map images generated synchronously (blocking the command response) or asynchronously?
 
