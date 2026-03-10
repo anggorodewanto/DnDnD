@@ -60,7 +60,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **23. WebSocket reconnection & state sync** — What happens when the dashboard loses its WebSocket connection? Auto-reconnect with exponential backoff? Does the dashboard request a full state snapshot on reconnect, or does it rely on catching up from missed events?
 
-- [ ] **24. Map rendering performance** — PNG generation for every state change could be expensive on large maps (e.g., 50x50 grid with fog of war, spell overlays, 20+ tokens). What's the expected rendering time? Is there a caching layer (e.g., only re-render changed tiles)? Are map images generated synchronously (blocking the command response) or asynchronously?
+- [x] **24. Map rendering performance** — PNG generation for every state change could be expensive on large maps (e.g., 50x50 grid with fog of war, spell overlays, 20+ tokens). What's the expected rendering time? Is there a caching layer (e.g., only re-render changed tiles)? Are map images generated synchronously (blocking the command response) or asynchronously?
 
 - [ ] **25. Shadowcasting algorithm** — The spec says fog of war uses "shadowcasting" but doesn't specify which algorithm. Recursive shadowcasting? Symmetric shadowcasting (Milazzo)? Performance characteristics matter for large maps with complex geometry.
 

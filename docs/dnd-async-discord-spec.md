@@ -2096,7 +2096,7 @@ Player clicks End Turn:
 
 ### Map Rendering
 
-- Grid images generated **server-side** as PNGs on every state change
+- Grid images generated **server-side** as PNGs on every state change — **synchronous** with the command response (the bot waits for the render to complete before replying). No caching layer; the full image is regenerated from scratch each time. At 48px tiles a 50×50 map is 2400×2400 pixels — well within what Go's `image/draw` + `gg` can produce in under a second. Optimize only if profiling shows an actual bottleneck.
 - Bot **appends a new message** in `#combat-map` — creates a visual log players can scroll through
 - Token labels display enemy IDs (G1, OS) and player initials
 - Token visual states use dual-channel indicators for accessibility (see Combatant Targeting § Token health indicators)
