@@ -1925,6 +1925,9 @@ The 75% warning includes: HP and AC, active conditions, remaining turn resources
 **Disconnection / client crashes:**
 No special handling. The async-first design with generous default timers (24h) means a crashed client is functionally equivalent to being away — the player has ample time to reconnect and act. DM tools (Extend timer, Pause combat) cover edge cases where a player communicates a technical issue out-of-band. Discord does not expose reliable presence events, so bot-side disconnect detection is not feasible.
 
+**No backup notification system:**
+All notifications are Discord-only — no email, SMS, or webhook fallback. The three-tiered escalation system (50% nudge → 75% tactical summary → 100% DM decision prompt) provides multiple chances to respond before any turn is lost. DMs can extend timers or act on a player's behalf. Players experiencing missed notifications should check their Discord notification settings and mobile app configuration.
+
 ### Combat Recap
 
 In async play, combat can span days of real time. `#combat-log` serves as the persistent record of everything that happened, and `/recap` gives players a filtered view of it.
