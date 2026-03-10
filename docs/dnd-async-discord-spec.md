@@ -2453,6 +2453,7 @@ No dedicated exploration mechanics — existing commands cover both modes:
 - **Map-based exploration:** DM loads an exploration map from the dashboard (no encounter/initiative needed). Players use the same commands as combat — `/move` to navigate, `/check` for skill checks, `/action` for freeform interactions — but without turn order or action economy. All players can act freely at any time. If combat breaks out, DM starts an encounter on the current map, which adds initiative and turn structure.
 - **Social:** Players roleplay in `#in-character`. DM reads player dialogue and actions there, then narrates outcomes in `#the-story`. DM calls for Charisma checks when uncertain. Discord's text format is ideal for RP.
 - **Travel:** DM narrates distance and terrain in `#the-story`. Players describe travel activities in `#in-character`. Random encounters DM-triggered. Forced march / exhaustion checks via `/check constitution`.
+- **Downtime:** No dedicated downtime commands. Players describe downtime activities (crafting, training, research, working, carousing, etc.) in `#in-character`. DM resolves outcomes narratively via `#dm-queue`, using gold costs and time requirements at their discretion. Item grants, proficiency changes, and gold adjustments are applied from the DM Dashboard. This keeps downtime flexible and campaign-specific rather than mechanically rigid.
 
 `#dm-queue` serves as the universal escape hatch for anything that doesn't map to a command.
 

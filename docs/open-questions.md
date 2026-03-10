@@ -78,7 +78,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 - [x] 47. **No structured exploration mode.** — Resolved: No new mechanics needed. Theater-of-mind exploration uses `#the-story` + `#in-character` + `/check` + `/action`. Map-based exploration reuses combat commands (`/move`, `/check`, `/action`) on a DM-loaded map without initiative or turn order. Combat starts when the DM creates an encounter on the current map.
 - [x] 48. **Secret skill checks.** — Resolved: All rolls remain public in `#roll-history`. Players are trusted not to metagame; the DM controls information flow through narration in `#the-story`. No secret roll mechanism needed.
-- [ ] 49. **No downtime activities.** Crafting, training, research not mentioned.
+- [x] 49. **No downtime activities.** — Resolved: Freeform only. No dedicated downtime commands; players describe activities (crafting, training, research, etc.) in `#in-character`, DM resolves via `#dm-queue` and applies outcomes from dashboard. Keeps downtime flexible and campaign-specific.
 - [x] 50. **Rest interruption is vague.** — Resolved: 5e RAW rules with clear player messaging. Short rest interrupted: no benefits. Long rest interrupted: short rest benefits if 1+ hour elapsed, otherwise nothing. Combat ≤1 hour doesn't break long rest. Bot notifies player with reason and outcome.
 - [x] 51. **Short rest hit dice command.** — Resolved: Replaced `/spend-hd` with a Discord button menu prompt during the `/rest short` flow. No separate command needed; player selects how many hit dice to spend via buttons.
 
