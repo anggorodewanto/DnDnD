@@ -2611,6 +2611,7 @@ The full dashboard is **desktop-optimized** (1280px+ assumed). A simplified **mo
 - **Initiative & Turn Queue** — read-only view of current initiative order and whose turn it is
 - **Narrate** — post narration to `#the-story`
 - **Character Approval Queue** — approve, reject, or request changes on pending characters
+- **Message Player** — send a private Discord DM to a player
 - **Quick Actions** — end turn, pause/resume campaign
 
 Desktop-only features (not available in mobile-lite view): Map Editor, Encounter Builder, Combat Workspace (map + token dragging), Stat Block Library browsing, Asset Library management. The sidebar collapses to a bottom tab bar on mobile. If the DM attempts a desktop-only action on mobile, the UI shows a message: "Open the dashboard on desktop for [feature name]."
@@ -2626,6 +2627,7 @@ Desktop-only features (not available in mobile-lite view): Map Editor, Encounter
 - **Asset Library** — maps, token images, tilesets, custom monsters
 - **Encounter Builder** — design, save, and manage reusable encounter templates (see Encounter Builder)
 - **Map Editor** — create and edit battle maps (see Map System)
+- **Message Player** — DM-initiated private messages sent as Discord DMs via the bot. Accessible from a "Message" button on any player in the Character Overview, or from a quick-action in the sidebar. DM selects a player, types a message, and sends. Messages are logged in the dashboard for the DM's reference (viewable per-player) but not posted to any Discord channel. Useful for secret information ("you notice something the others don't"), patron communications, or plot-specific reveals
 - **Character Overview** — read-only view of all player character sheets. Includes a **Party Languages** summary showing every language known by at least one party member and which characters speak it (e.g., "Elvish — Aria, Fenwick"), so the DM can quickly see language coverage when writing NPC dialogue or placing written clues
 - **Character Approval Queue** — pending characters from `/import`, `/create-character`, and `/register`, plus retirement requests from `/retire`. DM reviews the full sheet, approves, requests changes (with a message sent to the player via Discord DM), or rejects. Approved characters are immediately linked to the player and their `#character-cards` entry is created. Approved retirements unlink the player and mark the character as retired
 

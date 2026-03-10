@@ -24,7 +24,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **9. Shop/merchant workflow** — The spec mentions "DM creates a shop via the dashboard, posts available items to `#the-story`, and transfers purchased items/deducts gold through the dashboard." No details on the shop creation UI. Is it a reusable merchant template? Can players browse items interactively, or does the DM manually handle each purchase?
 
-- [ ] **10. DM-to-player communication** — The DM can narrate in `#the-story` and resolve whispers, but how does the DM send ad-hoc private messages to individual players from the dashboard (e.g., "you notice something the others don't")? Is there a direct message feature beyond whisper replies?
+- [x] **10. DM-to-player communication** — The DM can narrate in `#the-story` and resolve whispers, but how does the DM send ad-hoc private messages to individual players from the dashboard (e.g., "you notice something the others don't")? Is there a direct message feature beyond whisper replies?
 
 - [ ] **11. Loot pool management** — After combat, the DM populates a loot pool. Can the DM drag items from defeated creature inventories, or must they manually select each item? How is gold from multiple creatures aggregated? Can the DM add narrative descriptions to loot items?
 
