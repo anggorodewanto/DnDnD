@@ -34,7 +34,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **14. Encounter end workflow** — What happens when the DM ends combat? Is there a confirmation step? Does the system auto-detect "all hostiles defeated" and prompt, or must the DM always manually end? What cleanup occurs (conditions removed? initiative tracker cleared? map state preserved?)?
 
-- [ ] **15. DM override audit trail** — Manual state overrides post corrections to `#combat-log`. Does the dashboard also maintain an internal audit log the DM can review? Can the DM see a history of all overrides for a given encounter or character?
+- [x] **15. DM override audit trail** — Manual state overrides post corrections to `#combat-log`. Does the dashboard also maintain an internal audit log the DM can review? Can the DM see a history of all overrides for a given encounter or character?
 
 - [ ] **16. Map editor usability** — Undo/redo in the map editor? Copy/paste regions? Can the DM duplicate an existing map as a starting point for a new one? What about map templates (tavern, dungeon room, forest clearing)?
 

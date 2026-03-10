@@ -2681,6 +2681,13 @@ The DM reviews in the dashboard and either applies the undo or dismisses the req
 
 **Action log retention:** action log rows are retained for the lifetime of the encounter and purged when the encounter is archived or deleted. The log serves as both the undo source (for the current turn) and a permanent audit trail powering `#combat-log` and `#roll-history`.
 
+**Action Log viewer (dashboard):** the dashboard includes a filterable Action Log panel for each encounter, providing a structured view over the `action_log` table. The DM can:
+- **Filter by action type** — show only specific categories (e.g., `dm_override`, `attack`, `cast`, `damage`, `condition_add`) or combine multiple filters
+- **Filter by character** — narrow to all actions affecting or performed by a specific creature (player or enemy)
+- **Filter by turn/round** — jump to a specific round or turn to review what happened
+- **Sort chronologically** — newest-first (default) or oldest-first
+- Each entry displays the action type, acting creature, target (if any), timestamp, and a before/after diff of the affected fields (rendered from `before_state` / `after_state` JSONB). Override entries are visually distinguished (e.g., highlighted or badged) for quick scanning.
+
 **Not in MVP:** full turn rewind (reverting an entire multi-action turn), cross-turn undo, or automatic player-initiated undo. DM uses manual overrides instead.
 
 ### Encounter End
