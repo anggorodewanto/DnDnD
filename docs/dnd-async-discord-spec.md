@@ -2465,7 +2465,7 @@ Player-initiated `/rest` commands remain available for individual rests outside 
 - **Rest interruption (5e RAW):**
   - DM cancels a rest mid-progress from the dashboard, selecting an interruption reason (e.g., "Ambush", "Alarm", custom text)
   - **Short rest interrupted:** No benefits granted. The player must start a new `/rest short` after the interruption is resolved.
-  - **Long rest interrupted:** If at least 1 hour of the long rest had been completed, the player receives short rest benefits (hit dice spending prompt + short-rest feature recharges). Otherwise, no benefits.
+  - **Long rest interrupted:** The DM is prompted with a simple binary toggle: "Has at least 1 hour of rest elapsed? [Yes / No]". If yes, the player receives short rest benefits (hit dice spending prompt + short-rest feature recharges). If no, no benefits are granted. A binary toggle is used rather than a free-form time input because the only mechanically relevant threshold in 5e is the 1-hour mark.
   - Combat lasting 1 hour or less does not break a long rest (5e RAW); the long rest resumes automatically after the encounter ends.
   - Bot notifies the player in `#your-turn`: "⚠️ Your [short/long] rest was interrupted — [reason]. [You receive short rest benefits. / No benefits granted.]"
 
