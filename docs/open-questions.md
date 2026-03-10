@@ -106,6 +106,6 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **46. Spell data completeness** — The `spells` table has `damage`, `healing`, `effects`, and `teleport` fields. Many spells have complex conditional effects not easily captured in structured data (e.g., Polymorph, Banishment, Wish). How are these handled — via `effects` text field with DM resolution, or structured data?
 
-- [ ] **47. JSONB query performance** — Several hot-path queries filter on JSONB fields (conditions, features, spell_slots). Are GIN indexes used? What's the query pattern for "find all combatants with condition X" or "check if feature Y has uses remaining"?
+- [x] **47. JSONB query performance** — Several hot-path queries filter on JSONB fields (conditions, features, spell_slots). Are GIN indexes used? What's the query pattern for "find all combatants with condition X" or "check if feature Y has uses remaining"?
 
 - [ ] **48. Map size limits** — Maximum grid dimensions aren't specified. What's the practical upper bound before rendering or fog-of-war computation becomes too slow? Is there a hard limit enforced by the system?
