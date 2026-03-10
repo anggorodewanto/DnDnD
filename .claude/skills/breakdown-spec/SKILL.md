@@ -8,6 +8,7 @@ description: |
 argument-hint: "<spec-file-path> [output-file-path]"
 allowed-tools:
   - Agent
+  - AskUserQuestion
   - Read
   - Write
   - Edit
@@ -107,6 +108,9 @@ General dependency order:
 - If a spec section is purely informational (e.g., "Overview", "Mental
   Model") and has no implementable work, you may skip it — but note
   which sections were skipped and why.
+- Do NOT assume or invent details that are not in the spec. If the spec
+  is ambiguous, underspecified, or contradictory on something that affects
+  how you'd scope a phase, flag it as a question (see output format below).
 
 ## Output Format
 
@@ -121,6 +125,12 @@ phases) in the exact checklist format above. Then append:
 
 ### Skipped Sections (if any)
 - (section name): (reason)
+
+### Questions for User (if any)
+- Q1: (specific question about an ambiguity, gap, or contradiction in the
+  spec that affects phase scoping — cite the relevant spec section)
+- Q2: ...
+(Leave this section empty if the spec is clear enough to proceed.)
 
 ### Notes
 - (anything the reviewer should know)
@@ -183,6 +193,13 @@ ensure the phases are complete, correctly scoped, and implementable.
 - [ ] No two phases cover the same requirement
 - [ ] No spec requirement falls between phases
 
+### No Assumptions
+- [ ] Phases do not invent requirements that aren't in the spec
+- [ ] Where the spec is ambiguous, the breakdown flags it as a
+      question rather than silently choosing an interpretation
+- [ ] Any "Questions for User" raised by the breakdown agent are
+      legitimate (the answer truly isn't in the spec)
+
 ## Output Format
 
 Respond with **exactly one** of these:
@@ -206,6 +223,10 @@ VERDICT: ISSUES
   display" or "Spec section 'Character Retirement' is not covered
   by any phase")
 
+### Questions for User (if any)
+- (spec gaps or contradictions you spotted that the breakdown agent
+  missed — cite the spec section)
+
 ### Suggestions (optional, non-blocking)
 - (improvements that are nice-to-have)
 ```
@@ -213,7 +234,23 @@ VERDICT: ISSUES
 
 Record the reviewer's output as **REVIEW_RESULT**.
 
-## 1d. Decision
+## 1d. Collect Questions and Ask User
+
+After each agent returns, check for a "Questions for User" section in
+BREAKDOWN_RESULT and REVIEW_RESULT. Collect all questions from both.
+
+If there are any questions:
+
+1. **Pause the loop.** Do NOT proceed to the next iteration.
+2. Present the questions to the user using `AskUserQuestion`. Group
+   related questions together. Provide context about which spec section
+   triggered the question.
+3. Wait for user answers.
+4. Add the user's answers to **SPEC_CONTEXT** as a new section called
+   "User Clarifications" so both agents see them in all future iterations.
+5. Then proceed to the decision below.
+
+## 1e. Decision
 
 - Parse the `VERDICT` line from REVIEW_RESULT.
 - If **APPROVED** → go to Step 2.
@@ -249,10 +286,17 @@ Report to the user:
 - Do NOT summarize away details when passing results between agents —
   pass the full output.
 - Do NOT pass reviewer suggestions (non-blocking) as must-fix items.
+- Do NOT assume answers to questions. If either agent flags a question,
+  you MUST pause and ask the user before continuing. Never fabricate
+  answers, guess intent, or silently pick an interpretation.
+- Do NOT let agents assume either. If you notice an agent made up details
+  not in the spec or the user's clarifications, treat it as a must-fix
+  issue and flag it back.
 - After iteration 5, if the reviewer is only raising minor wording or
   ordering nitpicks (not missing coverage or oversized phases), instruct
   the reviewer to focus only on completeness and size issues to avoid
-  infinite loops.
+  infinite loops. Questions for the user still always get asked regardless
+  of iteration count.
 - Always write the phases file after each breakdown iteration so the
   latest state is persisted even if the process is interrupted.
 - Keep your own output minimal. The agents do the talking.
