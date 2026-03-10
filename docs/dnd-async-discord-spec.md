@@ -2912,6 +2912,52 @@ The application deploys to **[fly.io](https://fly.io)** as a single Machine:
 
 **Panic recovery:** all command handlers and goroutines are wrapped in a recovery middleware that catches panics, logs the full stack trace at `ERROR` level, and returns a user-facing error message rather than crashing the process.
 
+### Testing Strategy
+
+Tests follow a **three-tier pyramid** targeting 90% code coverage:
+
+**1. Unit tests — pure logic (bulk of the test suite)**
+
+Fast, isolated, no database or network. Table-driven subtests cover:
+
+- Dice math (rolls, modifiers, advantage/disadvantage, critical hits)
+- Damage calculation (resistances, vulnerabilities, immunities, minimum-damage rules)
+- Condition effects (stunned skips turn, prone grants advantage to melee, etc.)
+- Spell slot tracking and multiclass slot table computation
+- Cover geometry (line-tracing from attacker corner to target corners)
+- Pathfinding (A* with difficult terrain, prone crawling, occupancy rules)
+- Shadowcasting (fog-of-war visibility from a given position)
+- Feature effect resolution (trigger matching, condition filters, priority ordering)
+- Initiative tiebreaking, death save state machine, exhaustion level stacking
+- HP arithmetic (temp HP absorption, healing, overkill-to-instant-death)
+
+Each combat mechanic gets a dedicated test file (e.g., `grapple_test.go`, `cover_test.go`, `concentration_test.go`) with subtests for edge cases.
+
+**2. Integration tests — command pipelines**
+
+Use a real PostgreSQL instance (testcontainers spins up a throwaway database per test suite). Each test exercises:
+
+- Slash command input → service layer → database mutations → expected state
+- Transaction correctness and advisory lock serialization
+- JSONB field round-tripping (conditions, features, spell slots)
+- Multi-step flows (e.g., cast spell → trigger concentration save → break concentration → remove spell effect zone)
+- Encounter lifecycle (create → start → turns → end → loot distribution)
+
+Test fixtures provide seeded campaigns, characters, and encounters. Database is reset between tests via truncation.
+
+**3. Discord interaction tests — bot output verification**
+
+The Discord session is abstracted behind an interface. Tests inject a mock implementation that captures sent messages, embeds, and components. These tests verify:
+
+- Correct channel routing (combat-log, roll-history, initiative-tracker, combat-map)
+- Message formatting and embed structure
+- Rate-limit batching (e.g., AoE spell affecting 6 creatures produces batched output, not 6 individual messages)
+- Message splitting when content exceeds Discord's 2000-character limit
+- Ephemeral vs. public message targeting
+- Map PNG attachment on state changes that trigger re-renders
+
+**5e rule interaction coverage:** complex rule interactions (e.g., grappled + prone + difficult terrain movement costs, or concentration save triggered by multiple damage sources in one reaction) are covered as unit test edge cases. Each new mechanic implementation includes tests for its interactions with existing mechanics as part of the TDD cycle.
+
 ---
 
 ## Data Model

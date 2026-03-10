@@ -94,7 +94,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **40. Monitoring & observability** — No mention of logging, metrics, alerting, or health checks. What's the observability strategy? Structured logging? Prometheus metrics? How does the DM know if the bot is healthy? How are errors surfaced (silent failure vs. user-visible error)?
 
-- [ ] **41. Testing strategy** — No testing approach mentioned. Unit tests for combat resolution? Integration tests for the full command → state change → Discord output pipeline? How are 5e rule interactions tested (there are hundreds of edge cases)?
+- [x] **41. Testing strategy** — No testing approach mentioned. Unit tests for combat resolution? Integration tests for the full command → state change → Discord output pipeline? How are 5e rule interactions tested (there are hundreds of edge cases)?
 
 - [ ] **42. Tiled JSON import compatibility** — The map format is "Tiled-compatible." What subset of Tiled features is supported? What happens when a DM imports a `.tmj` file with unsupported features (tile animations, infinite maps, image layers, parallax)? Silent ignore, warning, or rejection?
 
