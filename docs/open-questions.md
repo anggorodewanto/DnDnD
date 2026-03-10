@@ -84,7 +84,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **35. Discord OAuth2 session management** — DM dashboard uses Discord OAuth2. How are sessions managed? JWT? Server-side sessions? Token refresh strategy? Session expiry during long DM sessions?
 
-- [ ] **36. Spell effect zone lifecycle** — Spell overlays are rendered on the map. How are zones created in the database when a spell is cast? How are moving zones (Spirit Guardians anchored to a creature) updated on each movement? How are zones cleaned up when concentration breaks or duration expires?
+- [x] **36. Spell effect zone lifecycle** — Spell overlays are rendered on the map. How are zones created in the database when a spell is cast? How are moving zones (Spirit Guardians anchored to a creature) updated on each movement? How are zones cleaned up when concentration breaks or duration expires?
 
 - [ ] **37. Concurrent map image generation** — If multiple commands in different encounters trigger map regeneration simultaneously, can the image renderer handle concurrency? Is there a queue, or are renders truly parallel?
 

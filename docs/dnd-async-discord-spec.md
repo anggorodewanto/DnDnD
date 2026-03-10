@@ -2198,7 +2198,23 @@ The DM places zones from the dashboard to define areas of non-standard lighting 
 **Zone placement — hybrid model:**
 
 - **Static environmental lighting** (unlit dungeon rooms, dim forest, shadowy cavern) is painted per-tile using a **lighting brush** in the Map Editor, alongside the terrain brush. These zones are baked into the map data like terrain — they persist across encounters using the same map and are edited from the Map Editor panel.
-- **Spell-created zones** (Darkness spell, Fog Cloud, etc.) are placed as **shape objects** (rectangle or circle) that the DM can move, resize, and remove mid-combat from the Combat Manager map view. When a spell ends (concentration broken, duration expires), the system auto-removes the zone. These are stored as encounter-scoped objects, not part of the base map.
+- **Spell-created zones** (Darkness spell, Fog Cloud, etc.) are placed as **shape objects** (rectangle or circle) that the DM can move, resize, and remove mid-combat from the Combat Manager map view. When a spell ends (concentration broken, duration expires), the system auto-removes the zone. These are stored as encounter-scoped objects in the `encounter_zones` table, not part of the base map.
+
+**Spell effect zone lifecycle:**
+
+1. **Creation:** when `/cast` resolves a spell with a persistent area effect (Fog Cloud, Spirit Guardians, Wall of Fire, Darkness, etc.), the backend inserts a row into `encounter_zones` with the spell's shape, origin, visual styling, and anchor mode. The zone is immediately rendered on the next map image.
+
+2. **Anchor modes:**
+   - `static` — zone is fixed at the target coordinates (Fog Cloud, Wall of Fire, Darkness). Origin does not change unless the DM manually moves it.
+   - `combatant` — zone is anchored to a combatant (Spirit Guardians, Aura of Protection). On any movement by the anchor combatant, the system updates `origin_col/origin_row` to match the combatant's new position and re-renders the map. Enter/leave triggers (e.g., Spirit Guardians damage on first entry per turn or start of turn in the zone) are evaluated after position updates.
+
+3. **Cleanup — automatic removal triggers:**
+   - **Concentration broken:** when concentration ends (failed save, incapacitated, new concentration spell, voluntary drop), the system deletes all `encounter_zones` rows where `source_combatant_id` matches and `requires_concentration = true`.
+   - **Duration expires:** at the start of each round, the system checks `expires_at_round` against the current `round_number` and deletes expired zones.
+   - **Encounter ends:** all zones for the encounter are deleted as part of encounter-end cleanup.
+   - **DM manual removal:** the DM can remove any zone from the Combat Manager map view at any time.
+
+4. **Enter/leave triggers:** when a combatant moves into or out of a zone (or starts their turn inside one), the system evaluates zone-specific triggers. For damage zones (Spirit Guardians, Moonbeam, Cloud of Daggers), the trigger fires once per creature per turn (tracked via a `zone_triggers_this_round` JSONB field on the zone or a lightweight join table). The DM is prompted to confirm damage if the spell requires saves.
 
 **DM vs. player visibility:** zone boundaries are rendered as colored overlays in the DM's Combat Manager view (e.g., dim light = pale yellow border, darkness = dark grey fill, fog = white haze) so the DM can see zone extents. Players never see zone boundaries — they only experience the effects through the **automatically calculated fog of war** (shadowcasting adjusts visible tiles based on each creature's position and vision capabilities) and the mechanical modifiers (disadvantage, blinded, etc.) applied to their rolls.
 
@@ -3031,6 +3047,30 @@ reaction_declarations
   created_at      TIMESTAMPTZ NOT NULL
   resolved_at     TIMESTAMPTZ
   resolution_note TEXT                   -- DM's note on how it resolved
+```
+
+### Encounter Zones
+
+```sql
+encounter_zones
+  id                    UUID PK
+  encounter_id          UUID FK → encounters
+  source_combatant_id   UUID FK → combatants       -- caster who created the zone
+  source_spell          TEXT NOT NULL               -- spell name (e.g., "Fog Cloud", "Spirit Guardians")
+  shape                 TEXT NOT NULL               -- 'circle', 'rectangle', 'line', 'cone'
+  origin_col            TEXT NOT NULL               -- grid column of zone center/origin
+  origin_row            INTEGER NOT NULL            -- grid row of zone center/origin
+  dimensions            JSONB NOT NULL              -- {radius_ft} | {width_ft, height_ft} | {length_ft, width_ft}
+  anchor_mode           TEXT NOT NULL DEFAULT 'static'  -- 'static' or 'combatant'
+  anchor_combatant_id   UUID FK → combatants        -- non-null when anchor_mode = 'combatant'
+  zone_type             TEXT NOT NULL               -- 'magical_darkness', 'heavy_obscurement', 'light_obscurement', 'damage', 'control', 'buff'
+  overlay_color         TEXT NOT NULL               -- hex color for semi-transparent overlay (e.g., '#808080' for grey fog)
+  marker_icon           TEXT                        -- origin marker symbol (e.g., '☁', '🔥')
+  requires_concentration BOOLEAN NOT NULL DEFAULT false
+  expires_at_round      INTEGER                     -- round number when zone expires; NULL = no duration (manual/concentration only)
+  zone_triggers         JSONB DEFAULT '[]'          -- [{trigger: 'enter'|'start_of_turn', effect: 'damage'|'save', details: {...}}]
+  triggered_this_round  JSONB DEFAULT '{}'          -- {combatant_id: true, ...} — reset at round start
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 
 ### Maps
