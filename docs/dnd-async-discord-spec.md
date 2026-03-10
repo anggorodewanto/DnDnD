@@ -262,6 +262,7 @@ Tokens carry an **altitude** value (integer feet, default 0) representing height
 - Altitude displayed as a **label suffix**: `AR↑30` means Aria at 30ft
 - **Distance calculation** uses 3D Euclidean distance (rounded to nearest 5ft) for range checks
 - Tokens at different altitudes **do not block** each other's ground tile
+- **Stacked token rendering:** when multiple tokens share the same ground tile at different altitudes, they are rendered with a diagonal offset (fanned out like cards). The ground-level token stays centered; flying tokens shift up-right, ordered by altitude. Each flying token displays an altitude badge (`↑30`) alongside its label. This keeps all occupants visible at 48px tile size for the common case of 1–2 flyers over a ground position
 - Falling: if a flying creature is knocked prone or loses fly speed, fall damage is 1d6 per 10ft (standard 5e), applied automatically
 
 ### Multiple Floors & Z-Levels
@@ -2007,6 +2008,7 @@ Then:
 - Bot **appends a new message** in `#combat-map` — creates a visual log players can scroll through
 - Token labels display enemy IDs (G1, OS) and player initials
 - Token visual states: normal / bloodied / dying / stable / dead
+- **Stacked tokens:** when multiple creatures occupy the same ground tile at different altitudes, tokens are offset diagonally (ground-level centered, flying tokens shifted up-right by altitude order) with altitude badges (`↑30`)
 - Tile size: 48px per square baseline; reduced to 32px only when necessary to stay within Discord's 8MB file limit. Larger tiles ensure coordinate labels remain legible and images are large enough for pinch-to-zoom on mobile
 - Obstacles and difficult terrain drawn as part of the base map layer
 - **Unified map legend:** when the current map contains non-standard terrain or active spell effects, a legend panel is rendered below the map image. The legend has two sections (either may be omitted if empty):
