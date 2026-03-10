@@ -2675,11 +2675,13 @@ The saved encounter template is **not consumed** — it remains in the library f
 The DM reviews in the dashboard and either applies the undo or dismisses the request. The player is not automatically reverted — the DM always decides.
 
 **DM undo tools (dashboard):**
-- **Undo Last Action** — reverts the most recent mutation by restoring its `before_state` from the action log. Repeatable to walk back multiple steps within a turn. DM-only.
-- **Manual State Override** — directly edit any value at any time: HP, position, conditions, spell slots, initiative order. Overrides go through the per-turn lock.
+- **Undo Last Action** — reverts the most recent mutation by restoring its `before_state` from the action log. Repeatable to walk back multiple steps, but **scoped to the current turn only**. Once the turn advances, previous-turn actions cannot be undone via the undo button — the DM uses Manual State Override instead. DM-only.
+- **Manual State Override** — directly edit any value at any time: HP, position, conditions, spell slots, initiative order. Overrides go through the per-turn lock. This is the mechanism for correcting mistakes from previous turns or rounds.
 - **Discord Corrections** — every undo or override posts a correction to `#combat-log`: "⚠️ **DM Correction:** Goblin #1 HP adjusted (resistance to fire was missed)". Original messages are never edited or deleted.
 
-**Not in MVP:** full turn rewind (reverting an entire multi-action turn) or automatic player-initiated undo. DM uses manual overrides instead.
+**Action log retention:** action log rows are retained for the lifetime of the encounter and purged when the encounter is archived or deleted. The log serves as both the undo source (for the current turn) and a permanent audit trail powering `#combat-log` and `#roll-history`.
+
+**Not in MVP:** full turn rewind (reverting an entire multi-action turn), cross-turn undo, or automatic player-initiated undo. DM uses manual overrides instead.
 
 ### Campaign Pause
 
