@@ -26,7 +26,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **10. DM-to-player communication** — The DM can narrate in `#the-story` and resolve whispers, but how does the DM send ad-hoc private messages to individual players from the dashboard (e.g., "you notice something the others don't")? Is there a direct message feature beyond whisper replies?
 
-- [ ] **11. Loot pool management** — After combat, the DM populates a loot pool. Can the DM drag items from defeated creature inventories, or must they manually select each item? How is gold from multiple creatures aggregated? Can the DM add narrative descriptions to loot items?
+- [x] **11. Loot pool management** — After combat, the DM populates a loot pool. Can the DM drag items from defeated creature inventories, or must they manually select each item? How is gold from multiple creatures aggregated? Can the DM add narrative descriptions to loot items?
 
 - [ ] **12. Dashboard keyboard shortcuts & power-user features** — For DMs running complex encounters, are there keyboard shortcuts for common actions (advance turn, apply damage, open the map)? Searchable command palette?
 

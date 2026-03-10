@@ -2464,7 +2464,7 @@ Using a consumable in combat costs an action (`action_used = true`). The DM can 
 
 **Giving items:** `/give healing-potion AR` transfers one item to an adjacent ally (within 5ft). Both inventories are updated. In combat, giving an item uses the free object interaction (or costs an action if already used). Out of combat, no action cost.
 
-**Looting:** after an encounter ends (`encounter.status = 'completed'`), the DM can populate a **loot pool** from the dashboard using the **Item Picker** (see Item Picker below) — selecting items from defeated creatures' inventories, the SRD/homebrew item tables, or adding custom entries with a name, description, and optional gold value. The system posts the loot pool to `#combat-log`:
+**Looting:** after an encounter ends (`encounter.status = 'completed'`), the DM populates a **loot pool** from the dashboard. The system **auto-populates** the loot pool with all items and gold from defeated creatures' inventories as a starting point. Gold from all defeated creatures is **auto-summed** into a single editable total. The DM can then edit the pool freely — remove items, add new ones from the SRD/homebrew tables via the **Item Picker** (see Item Picker below), or add custom entries with a name, description, and optional gold value. Any item in the loot pool (including standard SRD items) supports an optional **narrative description** added by the DM (e.g., a Shortsword described as "etched with dwarven runes, faintly warm to the touch"). The system posts the loot pool to `#combat-log`:
 
 ```
 💰 Loot available: Shortsword ×2, 15 gp, Healing Potion ×1, Mysterious Key
@@ -2486,6 +2486,7 @@ The **Item Picker** is a shared dashboard component used wherever the DM selects
 - **Search** across SRD weapons, armor, gear, and magic items, plus homebrew entries
 - **Category filters** (weapons, armor, adventuring gear, potions, magic items, etc.)
 - **Creature inventory source** — when used in a loot context, a tab shows inventories of defeated creatures for quick drag-to-pool selection
+- **Narrative description** — any item (SRD or custom) can have an optional DM-written flavor note that appears alongside the item name in loot pools and shops
 - **Custom entry** — add a freeform item with name, description, quantity, and optional gold value (for items not in the database, e.g., "Mysterious Key", "Ancient Map Fragment")
 - **Price override** — each selected item shows its default SRD price (if any), editable by the DM
 
