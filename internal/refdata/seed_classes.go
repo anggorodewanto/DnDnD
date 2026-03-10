@@ -2,17 +2,12 @@ package refdata
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/sqlc-dev/pqtype"
 )
 
 func optJSON(v any) pqtype.NullRawMessage {
-	b, err := json.Marshal(v)
-	if err != nil {
-		panic("failed to marshal JSON: " + err.Error())
-	}
-	return pqtype.NullRawMessage{RawMessage: b, Valid: true}
+	return pqtype.NullRawMessage{RawMessage: mustJSON(v), Valid: true}
 }
 
 func seedClasses(ctx context.Context, q *Queries) error {

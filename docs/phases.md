@@ -17,7 +17,7 @@
   - Depends on: Phase 2
   - Done when: Seeder populates all SRD weapons, armor, and conditions; snapshot tests pass; sqlc-generated queries compile.
 
-- [ ] **Phase 4: Reference Data Schema — Classes, Races, Feats**
+- [x] **Phase 4: Reference Data Schema — Classes, Races, Feats**
   - Scope: Migrations for `classes` (with `features_by_level` JSONB, `hit_die`, `saving_throws`, `spell_ability`), `races`, `feats` tables. SRD seeder. Go structs and sqlc queries. Snapshot tests.
   - Depends on: Phase 2
   - Done when: All SRD classes (with features), races, and feats seeded; snapshot tests pass.

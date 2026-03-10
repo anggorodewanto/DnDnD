@@ -17,7 +17,7 @@ const (
 	FeatCount      = 41
 )
 
-// SeedAll populates all SRD reference data (weapons, armor, conditions).
+// SeedAll populates all SRD reference data (weapons, armor, conditions, classes, races, feats).
 func SeedAll(ctx context.Context, db DBTX) error {
 	if db == nil {
 		return fmt.Errorf("database connection must not be nil")

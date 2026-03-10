@@ -2,8 +2,6 @@ package refdata
 
 import (
 	"context"
-
-	"github.com/sqlc-dev/pqtype"
 )
 
 func seedFeats(ctx context.Context, q *Queries) error {
@@ -237,16 +235,6 @@ func seedFeats(ctx context.Context, q *Queries) error {
 			AsiBonus:    optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "dex"}}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "proficiency_4_weapons"}}),
 		},
-	}
-
-	// Null out prerequisites and asi_bonus for feats that don't have them
-	for i := range feats {
-		if !feats[i].Prerequisites.Valid {
-			feats[i].Prerequisites = pqtype.NullRawMessage{}
-		}
-		if !feats[i].AsiBonus.Valid {
-			feats[i].AsiBonus = pqtype.NullRawMessage{}
-		}
 	}
 
 	return seedEntities(ctx, feats, q.UpsertFeat, "feat")
