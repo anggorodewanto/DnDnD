@@ -208,6 +208,16 @@ All combatant IDs appear on map token labels and in `#initiative-tracker`, so pl
 
 **Dying vs dead on map:** dying characters (0 HP, making death saves) and dead characters use distinct token visual states — `dying` shows the token dimmed with a heartbeat icon; `dead` shows the token greyed out with an X. Both are clearly distinguishable at a glance.
 
+**Token health indicators are color-blind accessible.** Each health tier uses both a color shift **and** a shape/icon indicator so the information is conveyed through two independent visual channels:
+- **Uninjured** — green tint, full solid border
+- **Scratched** — yellow tint, small nick/crack in border
+- **Bloodied** — orange tint, broken/dashed border
+- **Critical** — red tint, ⚠ warning icon overlay
+- **Dying** — dimmed, heartbeat icon overlay
+- **Dead** — greyed out, X icon overlay
+
+No player configuration is required; both channels are always rendered.
+
 The DM sees exact numbers for all combatants in the dashboard. IDs are stable for the entire encounter — if G1 dies, G2 stays G2.
 
 ### Grid Movement
@@ -1984,7 +1994,7 @@ When a character drops to 0 HP, they fall **unconscious** and begin making death
 - Status → conscious, still **prone** (costs half movement to stand)
 - Death save tallies reset to zero
 
-**Token states:** normal / bloodied / dying / stable / dead
+**Token states:** normal / scratched / bloodied / critical / dying / stable / dead
 
 ### Example: A Full Player Turn
 
@@ -2017,7 +2027,7 @@ Player sees the result and decides to finish off G1 or switch targets:
 
 Then:
 - Map image regenerates with Aria at D4
-- G1's token gets a visual indicator (color shift or damage overlay)
+- G1's token gets a visual indicator (color shift and shape/icon per health tier)
 - Bot pings next player in `#your-turn`
 
 ---
@@ -2029,7 +2039,7 @@ Then:
 - Grid images generated **server-side** as PNGs on every state change
 - Bot **appends a new message** in `#combat-map` — creates a visual log players can scroll through
 - Token labels display enemy IDs (G1, OS) and player initials
-- Token visual states: normal / bloodied / dying / stable / dead
+- Token visual states: normal / scratched / bloodied / critical / dying / stable / dead — each state uses both color and shape/icon indicators for color-blind accessibility (see Combatant Targeting § Token health indicators)
 - **Stacked tokens:** when multiple creatures occupy the same ground tile at different altitudes, tokens are offset diagonally (ground-level centered, flying tokens shifted up-right by altitude order) with altitude badges (`↑30`)
 - Tile size: 48px per square baseline; reduced to 32px only when necessary to stay within Discord's 8MB file limit. Larger tiles ensure coordinate labels remain legible and images are large enough for pinch-to-zoom on mobile
 - Obstacles and difficult terrain drawn as part of the base map layer

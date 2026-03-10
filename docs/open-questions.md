@@ -153,7 +153,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [x] 94. **Token overlap at same tile.** — Resolved: Offset stacking with altitude badge. Tokens sharing a ground tile at different altitudes are rendered with a diagonal offset (ground-level centered, flyers shifted up-right by altitude). Each flying token displays an altitude badge (`↑30`).
 - [x] 95. **Spell effect visualization.** — Resolved: Colored semi-transparent tile overlays per effect, origin marker icon on center/source tile (moves with creature for anchored effects), and a map legend listing effect name, caster, area, and remaining duration. Overlapping effects use striped/hatched patterns.
 - [x] 96. **Duplicate initials.** — Resolved: Already addressed in spec. Short IDs are derived from character name initials; duplicates are disambiguated by appending a number (e.g., AR and AR1). Defined in the Combatant Targeting section.
-- [ ] 97. **Color-blind accessibility.** Health tiers use "color shift." Are there non-color indicators for color-blind players?
+- [x] 97. **Color-blind accessibility.** — Resolved: Dual-channel indicators. Every token health tier uses both a color shift and a shape/icon indicator (border style or icon overlay) so health state is conveyed through two independent visual channels. No player configuration needed.
 
 ## Miscellaneous
 
