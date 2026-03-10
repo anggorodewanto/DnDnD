@@ -1768,8 +1768,10 @@ Every auto-resolved action, auto-detected modifier, and auto-rejected command po
 **Turn auto-skip (incapacitated or AFK):**
 ```
 ⏭️  Aria's turn is auto-skipped (stunned — can't take actions)
-⏭️  Aria's turn is auto-skipped (timed out — Dodge action applied)
-💀  Aria auto-rolls death save (timed out) — 🎲 14 — Success (2 of 3)
+⏭️  Aria's turn is auto-resolved (timed out — Dodge action applied)
+🎲  Aria auto-rolls CON save (concentration) (auto-resolved — player timed out) — 🎲 15 — Success
+⚔️  Aria forfeits OA vs Goblin #1 (auto-resolved — player timed out)
+💀  Aria auto-rolls death save (auto-resolved — player timed out) — 🎲 14 — Success (2 of 3)
 ```
 
 **Ending a turn:**
@@ -1880,15 +1882,33 @@ Turn timeout: **24 hours**, DM-configurable per campaign (1h–72h range).
 ```
 The 75% warning includes: HP and AC, active conditions, remaining turn resources, adjacent enemies, and a pointer to `#combat-map`. This mirrors the turn-start prompt with added battlefield context so the player can act immediately without extra commands. If the character has concentration, Bardic Inspiration, or Action Surge, those are included as in the normal turn status prompt.
 
-- **100% auto-skip** — player takes the **Dodge action with no movement**
+- **100% — DM decision prompt** — instead of auto-resolving, the bot posts a structured notification to `#dm-queue`:
+```
+⏰ @DM — Aria's turn has timed out.
+❤️ HP: 28/45 | 🛡️ AC: 16 | ⚠️ Conditions: Poisoned
+📋 Pending: 🏃 30ft move | ⚔️ 2 attacks | 🎁 Bonus action
+🎲 Unresolved prompts: CON save (concentration), OA vs Goblin #1
+[⏳ Wait] [🎮 Roll for Player] [⚡ Auto-Resolve]
+```
+  - **Wait** — extends the timer by 50% of the original duration; player gets one more nudge. Can only be used once per timeout cycle
+  - **Roll for Player** — DM takes over the turn from the dashboard, issuing commands on the player's behalf
+  - **Auto-Resolve** — system resolves everything automatically:
+    - **Normal turn:** Dodge action, no movement
+    - **Pending saves** (DEX, WIS, concentration CON, etc.): auto-rolled with full modifiers
+    - **Death saves:** auto-rolled (standard d20 rules, nat 1/nat 20 apply)
+    - **Unanswered reaction prompts** (Counterspell, OA): forfeited
+    - **On-hit decisions** (Divine Smite, Stunning Strike): declined
+    - **Bardic Inspiration:** declined
+    - All auto-resolved results posted to `#combat-log` marked as "(auto-resolved — player timed out)"
+  - If the DM doesn't respond to the decision prompt within **1 hour**, Auto-Resolve runs automatically
 
-**DM manual overrides (via dashboard):**
-- **Skip now** — immediately advance past a player
+**DM manual overrides (via dashboard, available at any time during a player's turn):**
+- **Skip now** — immediately triggers the DM decision prompt (same 3 options)
 - **Extend timer** — grant more time without changing the campaign default
 - **Pause combat** — freeze all timers
 
 **Prolonged absence:**
-- After 3 consecutive auto-skips, the character is flagged as "absent" in the dashboard
+- After 3 consecutive auto-resolves, the character is flagged as "absent" in the dashboard
 - DM decides: auto-pilot the character, narrate a retreat, or remove from initiative
 - Initiative slot stays reserved so the player can return seamlessly
 
@@ -1946,7 +1966,7 @@ When a character drops to 0 HP, they fall **unconscious** and begin making death
 - 3 successes → **stabilized** (unconscious at 0 HP, no more death saves)
 - 3 failures → **dead**
 - Rolls posted publicly in `#combat-log`
-- If the player doesn't send `/deathsave` before timeout, the system auto-rolls the death save on their behalf — same d20 rules apply (nat 1 = 2 failures, nat 20 = regain 1 HP). Result posts to `#combat-log` marked as "(auto-rolled — player timed out)"
+- If the player doesn't send `/deathsave` before timeout, the DM decision prompt fires (same 3 options: Wait, Roll for Player, Auto-Resolve). On Auto-Resolve, the system rolls the death save on their behalf — same d20 rules apply (nat 1 = 2 failures, nat 20 = regain 1 HP). Result posts to `#combat-log` marked as "(auto-resolved — player timed out)"
 
 **Taking damage while at 0 HP:**
 - Each hit = 1 automatic death save failure
@@ -2893,7 +2913,7 @@ conditions_ref
 | Enemy ID ambiguity | IDs are stable, map-labeled, and confirmed in every combat log response |
 | Complex player actions breaking automation | `/action` routes to DM; no attempt to auto-parse freeform intent |
 | D&D Beyond API instability | Undocumented endpoint may change; importer includes fallback to manual creation |
-| Turn stalls from AFK players | 24h configurable timeout with escalating pings and auto-skip to Dodge |
+| Turn stalls from AFK players | 24h configurable timeout with escalating pings and DM decision prompt (wait / roll for player / auto-resolve) |
 | Reaction timing in async | Pre-declaration model — no combat pauses; DM resolves manually. OA uses queue-and-continue: movement completes, hostile responds by end-of-round, DM handles retroactive correction if OA drops target to 0 HP |
 | Concurrent commands corrupting state | Per-turn PostgreSQL advisory locks serialize all mutations |
 
@@ -2905,7 +2925,7 @@ conditions_ref
 - Discord bot with full channel structure (`/setup` auto-creates)
 - All slash commands: `/move`, `/attack`, `/cast`, `/bonus`, `/shove`, `/fly`, `/interact`, `/action`, `/reaction`, `/deathsave`, `/done`, `/command`, `/equip`, `/status`, `/inventory`, `/use`, `/give`, `/loot`, `/register`, `/retire`, `/check`, `/save`, `/rest`
 - Combat state: HP, position, turn order, conditions, death saves, spell slots, concentration
-- Turn timeout with escalating pings and auto-skip
+- Turn timeout with escalating pings and DM decision prompt
 - Enemy/NPC turns with smart-default suggestions for DM
 - Server-side map PNG generation with dynamic fog of war
 - DM web dashboard: grid view, token drag-drop, HP management, turn advancement, undo, manual overrides

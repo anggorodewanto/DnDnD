@@ -109,7 +109,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [ ] 65. **No backup notification system.** Discord mobile notifications can be unreliable. Any fallback (email, webhook)?
 - [x] 66. **Turn reminder content.** — Resolved: Two-tier approach. 50% reminder is a light nudge with `/recap` hint. 75% final warning includes full tactical summary (HP, conditions, remaining resources, adjacent enemies) so the player can act immediately.
 - [x] 67. **Between-turn awareness.** — Resolved: Turn-start prompt includes a personal impact summary (damage taken, conditions applied/removed, enemies entering/leaving reach, saves pending) for events since the player's last turn. Omitted if nothing affected them. Full round details available via `/recap`.
-- [ ] 68. **Ping fatigue.** In 8+ combatant fights, `#your-turn` could get very noisy with OA prompts, save prompts, reaction prompts. Any batching or filtering?
+- [x] 68. **Ping fatigue.** — Resolved: No batching or filtering. Existing timeout auto-resolution handles unresponsive players. Turn timeout changed from immediate auto-skip to a DM decision prompt (Wait / Roll for Player / Auto-Resolve). Auto-Resolve sweeps all pending prompts (saves, death saves, reactions, on-hit decisions, Bardic Inspiration) and rolls or declines each. DM has 1 hour to respond before Auto-Resolve runs automatically.
 
 ## Bonus Actions & Free Actions
 
