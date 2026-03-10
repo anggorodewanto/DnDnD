@@ -88,7 +88,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **37. Concurrent map image generation** — If multiple commands in different encounters trigger map regeneration simultaneously, can the image renderer handle concurrency? Is there a queue, or are renders truly parallel?
 
-- [ ] **38. Character import validation depth** — D&D Beyond imports go through a parser. How deeply is the imported data validated against 5e rules? (e.g., illegal multiclass combos, ability scores exceeding 20 without magic items, invalid spell selections). Is validation the DM's responsibility, or does the system flag issues?
+- [x] **38. Character import validation depth** — D&D Beyond imports go through a parser. How deeply is the imported data validated against 5e rules? (e.g., illegal multiclass combos, ability scores exceeding 20 without magic items, invalid spell selections). Is validation the DM's responsibility, or does the system flag issues?
 
 - [ ] **39. Horizontal scaling** — The spec describes a single Go binary. Can multiple instances run behind a load balancer? WebSocket affinity? Shared database state is fine, but what about in-memory state (lock coordination, active timers)?
 

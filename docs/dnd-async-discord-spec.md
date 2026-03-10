@@ -2370,6 +2370,15 @@ Players can self-service import via the `/import` Discord command, or the DM can
 
 **Implementation reference:** [MrPrimate/ddb-importer](https://github.com/MrPrimate/ddb-importer) (Foundry VTT's DDB import module) — the most mature open-source DDB character parser.
 
+**Import validation — structural + advisory warnings:**
+The parser performs two layers of validation. **Structural validation** is mandatory: required fields present, types correct, values within sane bounds (e.g., ability scores 1–30, level 1–20, HP > 0). Structurally invalid imports are rejected with a clear error message. **Advisory warnings** flag potential 5e rule issues as non-blocking notes displayed to the DM in the approval queue — the DM can approve despite any warnings. Examples:
+- "⚠ STR 22 — exceeds 20 without a detected magic item source"
+- "⚠ Multiclass Paladin — does not meet 13 CHA minimum"
+- "⚠ Wizard spell list includes Cure Wounds (not on Wizard spell list)"
+- "⚠ 4 attuned items — exceeds default attunement limit of 3"
+
+This assists the DM in catching mistakes or D&D Beyond data-entry errors without gatekeeping legitimate homebrew or optional-rule builds. The system never blocks an import on rule grounds — the DM is the final authority.
+
 **Caveats:**
 - No official public API — endpoint is undocumented and may change
 - Character must be set to **public** sharing on D&D Beyond
