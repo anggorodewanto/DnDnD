@@ -2825,6 +2825,7 @@ The `paused` status is informational — it signals a hiatus to the group withou
 | Discord Bot | [discordgo](https://github.com/bwmarrin/discordgo) | Bot logic, slash commands, message editing |
 | Backend API | Go stdlib `net/http` + Chi router | Game state management, command processing |
 | Database | PostgreSQL + [sqlc](https://sqlc.dev) | Type-safe Go from raw SQL |
+| Migrations | [goose](https://github.com/pressly/goose) | Versioned SQL migration files |
 | DM Web App | Go templates for admin pages, [Svelte](https://svelte.dev) SPA for map editor | Svelte compiles to static JS/CSS, embedded in Go binary via `embed.FS` |
 | Map Rendering | Go `image/draw` stdlib + [gg](https://github.com/fogleman/gg) | Server-side PNG generation |
 | Real-time Sync | [nhooyr/websocket](https://github.com/nhooyr/websocket) | Live dashboard ↔ backend updates |
@@ -3174,6 +3175,8 @@ conditions_ref
 6. **No separate combat state table** — the encounter tracks `status` and `current_turn_id`. Current combat state is derived from the encounter's combatants + the active turn row.
 
 7. **Single-pass effect processor** — all combat modifiers (conditions, class features, spell effects, racial traits) are resolved through one unified pipeline using the Feature Effect System's effect type vocabulary. At each trigger point, the processor collects all applicable effects, filters by conditions, and applies them in priority order. This avoids scattered hardcoded checks and makes new features data-driven.
+
+8. **Database migrations with goose** — schema changes are managed with [goose](https://github.com/pressly/goose) using versioned SQL migration files (`db/migrations/YYYYMMDDHHMMSS_description.sql`). Each migration has `-- +goose Up` and `-- +goose Down` sections. Structural changes (new tables, columns, indexes, constraints) are handled via standard SQL migrations. JSONB schema evolution uses a **hybrid approach**: additive JSONB changes (new fields) are handled at the application level — Go code treats missing fields as zero values / sensible defaults, so no migration is needed when adding an optional field to a JSONB column. Destructive or transformative JSONB changes (renaming a key, changing a value's type, restructuring nested data) use SQL migrations with `jsonb_set` / `jsonb_strip_nulls` to backfill existing rows. This keeps migrations focused on structural schema changes while letting JSONB columns evolve organically through application code.
 
 ---
 

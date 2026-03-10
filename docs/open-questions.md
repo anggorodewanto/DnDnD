@@ -76,7 +76,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **31. Bot crash recovery** — If the bot process crashes and restarts, how does it recover state? Reconnect to Discord gateway, re-register commands, pick up where it left off? What about in-flight commands that were processing when the crash occurred? Are turn timers persisted in the database or in-memory?
 
-- [ ] **32. Database migrations** — No migration strategy mentioned. How are schema changes applied? goose, atlas, golang-migrate? How are JSONB schema changes handled (e.g., adding a new field to `conditions`)?
+- [x] **32. Database migrations** — No migration strategy mentioned. How are schema changes applied? goose, atlas, golang-migrate? How are JSONB schema changes handled (e.g., adding a new field to `conditions`)?
 
 - [ ] **33. Image/asset storage** — Map background images, token images, and generated PNGs are referenced but storage isn't specified. Local filesystem? Object storage (S3/MinIO)? Embedded in the database? How are generated map PNGs served to Discord (upload every time vs. URL)?
 
