@@ -32,7 +32,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **13. Action log depth & undo limits** — "Undo Last Action" walks back mutations using `before_state`. How far back can the DM undo? Is there a cap on action log retention? Can the DM undo across turn boundaries (e.g., undo an action from a previous turn)?
 
-- [ ] **14. Encounter end workflow** — What happens when the DM ends combat? Is there a confirmation step? Does the system auto-detect "all hostiles defeated" and prompt, or must the DM always manually end? What cleanup occurs (conditions removed? initiative tracker cleared? map state preserved?)?
+- [x] **14. Encounter end workflow** — What happens when the DM ends combat? Is there a confirmation step? Does the system auto-detect "all hostiles defeated" and prompt, or must the DM always manually end? What cleanup occurs (conditions removed? initiative tracker cleared? map state preserved?)?
 
 - [ ] **15. DM override audit trail** — Manual state overrides post corrections to `#combat-log`. Does the dashboard also maintain an internal audit log the DM can review? Can the DM see a history of all overrides for a given encounter or character?
 

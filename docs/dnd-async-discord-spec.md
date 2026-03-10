@@ -2683,6 +2683,27 @@ The DM reviews in the dashboard and either applies the undo or dismisses the req
 
 **Not in MVP:** full turn rewind (reverting an entire multi-action turn), cross-turn undo, or automatic player-initiated undo. DM uses manual overrides instead.
 
+### Encounter End
+
+**Auto-detection:** when all hostile combatants reach 0 HP, the system prompts the DM in the dashboard: "All hostiles defeated — end combat?" with **End Combat** and **Continue** buttons. The DM can dismiss the prompt and continue (e.g., for RP moments, looting mid-combat, or enemies that might be revived). The prompt is non-blocking — the DM can ignore it and keep running turns.
+
+**Manual end:** the DM can also click **End Combat** in the dashboard at any time (e.g., enemies surrender, party flees, narrative conclusion). A confirmation dialog appears: "End this encounter? This will clear combat conditions and freeze the initiative tracker."
+
+**On encounter end**, the system performs the following cleanup:
+
+1. **Encounter status** is set to `completed`.
+2. **Combat-only conditions** are cleared from all combatants: stunned, frightened, charmed, restrained, grappled, prone, incapacitated, paralyzed, blinded (from spells), deafened (from spells). Conditions with non-combat durations (e.g., a curse, disease, or exhaustion) are preserved — the DM can manually clear these.
+3. **Concentration spells** end for all casters — associated spell effect zones are removed from the map.
+4. **Initiative tracker** is frozen: visible in the dashboard as read-only history, but no longer interactive. The `#initiative-tracker` Discord message is updated with a "Combat Complete" footer.
+5. **Map state** is preserved as-is (token positions, terrain, background). The DM can continue to use the map editor.
+6. **Turn timers** are cancelled.
+7. **Ammunition recovery** is prompted: the dashboard shows a "Recover Ammunition" button. On click, each character recovers half (rounded down) of ammunition expended during the encounter.
+8. **Loot pool** becomes available: the DM can populate the loot pool via the Item Picker, and the bot posts the loot announcement to `#the-story`.
+9. **Bot announcement** in `#the-story`: "🏁 **Combat ended** — [encounter name]." followed by a brief summary (rounds elapsed, casualties).
+10. **Reaction declarations** are cleared for all players.
+
+The encounter remains in `completed` status (queryable by `/recap`, visible in encounter history) until the DM archives it from the dashboard.
+
 ### Campaign Pause
 
 The DM can set the campaign status to `paused` from the dashboard. On pause:
