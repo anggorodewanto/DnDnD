@@ -2183,6 +2183,11 @@ The DM creates and edits maps through the **Svelte-based map editor** in the web
 - **Elevation painting** — set ground elevation per tile (cliffs, platforms, stairs)
 - **Spawn zones** — mark player and enemy token placement areas at encounter start
 
+**Editing conveniences:**
+- **Undo/redo** — standard undo/redo stack (Ctrl+Z / Ctrl+Y) for all map editing operations. The stack is per editing session and cleared when the editor is closed.
+- **Rectangular region select** — click-drag to select a rectangular tile region. Selected regions can be **copied and pasted** elsewhere on the same map (duplicating terrain, walls, objects, lighting, and elevation within the selection). Useful for repeating room layouts, symmetric dungeons, or tiling corridors.
+- **Duplicate map** — clone an existing map as a starting point for a new one. The duplicate gets a new ID and default name ("[Original Name] (copy)"). All layers, objects, background image, and properties are deep-copied.
+
 **Image import:**
 - Upload a pre-made battle map image (PNG/JPG) as a **background layer** beneath the grid
 - Grid overlaid with adjustable opacity

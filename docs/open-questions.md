@@ -36,7 +36,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **15. DM override audit trail** — Manual state overrides post corrections to `#combat-log`. Does the dashboard also maintain an internal audit log the DM can review? Can the DM see a history of all overrides for a given encounter or character?
 
-- [ ] **16. Map editor usability** — Undo/redo in the map editor? Copy/paste regions? Can the DM duplicate an existing map as a starting point for a new one? What about map templates (tavern, dungeon room, forest clearing)?
+- [x] **16. Map editor usability** — Undo/redo in the map editor? Copy/paste regions? Can the DM duplicate an existing map as a starting point for a new one? What about map templates (tavern, dungeon room, forest clearing)?
 
 - [ ] **17. Pre-combat preparation** — Can the DM pre-configure encounters (creature selection, placement, lighting zones) and save them as drafts before starting combat? Or must everything happen in real-time?
 
