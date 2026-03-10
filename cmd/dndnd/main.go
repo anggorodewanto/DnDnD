@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/server"
 )
 
@@ -24,6 +25,7 @@ func main() {
 // run starts the HTTP server and blocks until the context is cancelled.
 // It returns nil on clean shutdown or an error if the server fails.
 // Pass an empty addr to use the ADDR env var (defaulting to ":8080").
+// If DATABASE_URL is set, it connects to PostgreSQL and runs migrations.
 func run(ctx context.Context, logOutput io.Writer, addr string) error {
 	if addr == "" {
 		addr = os.Getenv("ADDR")
@@ -34,6 +36,23 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 
 	debug := os.Getenv("DEBUG") == "true"
 	logger := server.NewLogger(logOutput, debug)
+
+	// Optional database connection
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL != "" {
+		db, err := database.Connect(databaseURL)
+		if err != nil {
+			logger.Error("database connection failed", "error", err)
+			return err
+		}
+		defer db.Close()
+
+		if err := database.MigrateUp(db, "db/migrations"); err != nil {
+			logger.Error("database migration failed", "error", err)
+			return err
+		}
+		logger.Info("database connected and migrated")
+	}
 
 	router, _ := server.NewRouter(logger)
 

@@ -114,6 +114,43 @@ func TestRun_HealthEndpointFunctional(t *testing.T) {
 	}
 }
 
+func TestRun_InvalidDatabaseURL(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var logBuf bytes.Buffer
+
+	// Set an invalid DATABASE_URL — run() should return an error
+	t.Setenv("DATABASE_URL", "postgres://invalid:5432/nonexistent?connect_timeout=1")
+
+	err := run(ctx, &logBuf, ":0")
+	if err == nil {
+		t.Fatal("expected error for invalid DATABASE_URL, got nil")
+	}
+}
+
+func TestRun_NoDatabaseURL(t *testing.T) {
+	// When DATABASE_URL is not set, server should start without database
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var logBuf bytes.Buffer
+
+	t.Setenv("DATABASE_URL", "")
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- run(ctx, &logBuf, ":0")
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	err := <-errCh
+	if err != nil {
+		t.Fatalf("run returned error: %v", err)
+	}
+}
+
 func TestRun_DefaultAddr(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
