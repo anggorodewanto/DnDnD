@@ -151,7 +151,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 - [ ] 92. **No map legend.** Is there a legend showing what colors/patterns mean (difficult terrain, walls, water, etc.)?
 - [x] 93. **No distance indicator.** — Resolved: Passive distance in action feedback. `/attack` and `/cast` combat log entries include distance to target. Range rejections show actual distance vs allowed range. `/distance [target]` query command for on-demand tactical planning. No map rendering changes needed.
 - [ ] 94. **Token overlap at same tile.** If flying creatures share a tile at different altitudes, how are they visually distinguished on a 2D map?
-- [ ] 95. **Spell effect visualization.** "Active effects tracked on map" but no description of how they are rendered (circles, overlays, labels?).
+- [x] 95. **Spell effect visualization.** — Resolved: Colored semi-transparent tile overlays per effect, origin marker icon on center/source tile (moves with creature for anchored effects), and a map legend listing effect name, caster, area, and remaining duration. Overlapping effects use striped/hatched patterns.
 - [x] 96. **Duplicate initials.** — Resolved: Already addressed in spec. Short IDs are derived from character name initials; duplicates are disambiguated by appending a number (e.g., AR and AR1). Defined in the Combatant Targeting section.
 - [ ] 97. **Color-blind accessibility.** Health tiers use "color shift." Are there non-color indicators for color-blind players?
 

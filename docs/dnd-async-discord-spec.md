@@ -813,7 +813,10 @@ Combat log output:
 - Being incapacitated (stunned, paralyzed, unconscious, petrified) auto-breaks concentration immediately — no save prompted
 - Entering a Silence zone (or similar effect preventing verbal/somatic components) breaks concentration on spells requiring those components — auto-detected when a concentrating caster's position overlaps a Silence zone
 - **Casting blocked in Silence:** on `/cast`, the system checks if the caster's position overlaps an active Silence zone. If the spell has verbal or somatic components (`components.v = true` or `components.s = true`), the cast is rejected: "You cannot cast [spell] — you are inside a zone of Silence (requires verbal/somatic components)." Spells with only material components (no V or S) are unaffected.
-- Active effects (Fog Cloud zone, Spirit Guardians aura) tracked on the map
+- **Active spell effect visualization:** persistent spell effects (Fog Cloud zone, Spirit Guardians aura, Wall of Fire, etc.) are rendered on the map using three visual layers:
+  - **Colored tile overlays:** affected tiles are filled with a semi-transparent color overlay specific to the effect (e.g., Fog Cloud = grey, Spirit Guardians = gold, Wall of Fire = red, Darkness = dark purple). Overlapping effects use striped/hatched patterns so both are visible.
+  - **Origin marker:** the origin or center tile of the effect displays a distinct marker icon or symbol (e.g., "☁" for Fog Cloud, "🔥" for Wall of Fire). For effects anchored to a creature (Spirit Guardians, Aura of Protection), the marker moves with the creature's token.
+  - **Map legend:** a legend section below the map lists all active effects with: marker symbol, effect name, caster name, affected area dimensions, and remaining duration in rounds. Example: `☁ Fog Cloud (Kael) — 20ft radius — 8 rounds remaining`
 
 **Material components:** a spellcasting focus or component pouch is assumed for all casters — ordinary material components (no gold cost) are automatically satisfied and never block casting. For spells with **costly material components** (gold value in `material_cost_gp`), the system checks on `/cast`:
 
