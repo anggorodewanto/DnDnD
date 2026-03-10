@@ -64,7 +64,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **25. Shadowcasting algorithm** — The spec says fog of war uses "shadowcasting" but doesn't specify which algorithm. Recursive shadowcasting? Symmetric shadowcasting (Milazzo)? Performance characteristics matter for large maps with complex geometry.
 
-- [ ] **26. Pathfinding algorithm** — Movement validation checks path cost including difficult terrain and obstacles. What pathfinding algorithm is used? A* on the grid? Dijkstra? Is the path shown to the player before confirmation, or just the cost? What about diagonal movement through wall corners (wall-hugging)?
+- [x] **26. Pathfinding algorithm** — Movement validation checks path cost including difficult terrain and obstacles. What pathfinding algorithm is used? A* on the grid? Dijkstra? Is the path shown to the player before confirmation, or just the cost? What about diagonal movement through wall corners (wall-hugging)?
 
 - [ ] **27. Discord API rate limiting** — The bot posts to multiple channels on every action (combat-log, roll-history, initiative-tracker, combat-map). Discord rate limits are per-channel (5 messages/5 seconds). How does the bot handle bursts (e.g., AoE spell affecting 6 creatures, each requiring a save prompt)? Message queuing? Batching?
 

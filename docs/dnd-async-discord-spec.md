@@ -1320,6 +1320,16 @@ Cover is computed dynamically from map geometry — walls, obstacles, and other 
 
 **Integration with saves:** cover DEX save bonus applies to area-of-effect spells (e.g., Fireball). The system checks cover between the spell's point of origin and each affected creature.
 
+### Pathfinding
+
+Movement validation uses **A\* search** on the tile grid to find the shortest (cheapest) path from origin to destination. Edge weights account for difficult terrain (×2 cost), prone crawling (×2, stacking with difficult terrain for ×3), and tile occupancy rules (can move through allies but not enemies unless size difference ≥ 2). Walls block traversal along their edges.
+
+**Diagonal corner-cutting:** diagonal movement through wall corners is **allowed**. A creature can move diagonally even if two walls meet at the shared corner. This keeps movement intuitive and avoids frustrating "stuck on corners" situations in async play where the player can't easily visualize exact wall geometry.
+
+**Path display:** the `/move` confirmation prompt shows the **total path cost** and remaining movement — the actual route (sequence of tiles) is not displayed. Players see cost, not the specific path the algorithm chose.
+
+**Enemy turn pathfinding:** the DM dashboard's smart-default movement step reuses the same A\* pathfinder to suggest the shortest path toward the nearest hostile creature.
+
 ### Difficult Terrain
 
 Difficult terrain (rubble, undergrowth, mud, shallow water, etc.) doubles movement cost — each foot of movement in difficult terrain costs 2 feet of speed. Defined per tile in the map's `tiled_json` data using a terrain property (`difficult: true`).
