@@ -68,9 +68,14 @@ func TestIntegration_MigrateDown(t *testing.T) {
 		t.Fatalf("MigrateUp failed: %v", err)
 	}
 
-	// Roll back the sessions migration (most recent)
+	// Roll back the reference tables migration (most recent)
 	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateDown failed: %v", err)
+		t.Fatalf("MigrateDown (reference tables) failed: %v", err)
+	}
+
+	// Roll back the sessions migration
+	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
+		t.Fatalf("MigrateDown (sessions) failed: %v", err)
 	}
 
 	// Sessions table should no longer exist
