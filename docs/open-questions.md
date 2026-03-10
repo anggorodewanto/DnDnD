@@ -149,7 +149,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 ## Map & Visual Feedback
 
 - [ ] 92. **No map legend.** Is there a legend showing what colors/patterns mean (difficult terrain, walls, water, etc.)?
-- [ ] 93. **No distance indicator.** Can a player see range rings or distance to a target without counting squares on a PNG?
+- [x] 93. **No distance indicator.** — Resolved: Passive distance in action feedback. `/attack` and `/cast` combat log entries include distance to target. Range rejections show actual distance vs allowed range. `/distance [target]` query command for on-demand tactical planning. No map rendering changes needed.
 - [ ] 94. **Token overlap at same tile.** If flying creatures share a tile at different altitudes, how are they visually distinguished on a 2D map?
 - [ ] 95. **Spell effect visualization.** "Active effects tracked on map" but no description of how they are rendered (circles, overlays, labels?).
 - [x] 96. **Duplicate initials.** — Resolved: Already addressed in spec. Short IDs are derived from character name initials; duplicates are disambiguated by appending a number (e.g., AR and AR1). Defined in the Combatant Targeting section.

@@ -359,9 +359,25 @@ Note: saving throws triggered by spells and attacks (e.g., Fireball's DEX save) 
 | `/character` | `/character` | View your full character sheet (ephemeral embed + link to web sheet) |
 | `/setup` | `/setup` | Auto-create channel structure (DM only, run once) |
 | `/recap` | `/recap` or `/recap 3` | Show combat log entries since your last turn (or last N rounds). Ephemeral |
+| `/distance` | `/distance G1` or `/distance G1 AR` | Show distance to a target (from you, or between two combatants). Ephemeral |
 | `/help` | `/help` or `/help attack` | Show command list, or detailed usage for a specific command |
 
 **Command discoverability:** Discord's built-in slash command UI is the primary discovery mechanism — typing `/` shows all registered commands with parameter hints. The `/help` command supplements this with usage examples, available flags (e.g., `--gwm`, `--adv`), and context-specific tips (e.g., remaining attacks, available spell slots).
+
+### Distance Awareness
+
+Players always know how far away targets are without counting squares on the map. Distance information is surfaced passively in action feedback and available on demand via `/distance`.
+
+**Passive distance in action feedback:**
+- **`/attack` and `/cast`** — combat log entries include distance to target: `⚔️ Aria attacks Goblin #1 with Longbow (35ft) → Roll to hit: ...`
+- **`/move` confirmation** — already shows path cost and remaining movement
+- **Rejection messages** — all range-based rejections include the actual distance and the allowed range (e.g., `❌ Target is out of range — 65ft away (max 60ft)`)
+
+**`/distance` query command:**
+- `/distance G1` — "📏 You are 25ft from Goblin #1 (G1)."
+- `/distance G1 AR` — "📏 Goblin #1 (G1) is 15ft from Aria (AR)."
+- Ephemeral response, usable any time during combat for tactical planning
+- Distance calculated the same way as all range checks (3D Euclidean, rounded to nearest 5ft)
 
 ### Attack Mechanics
 
@@ -569,7 +585,7 @@ Combat log output:
 
 **Versatile weapons:** weapons with the "versatile" property can be used one-handed or two-handed for increased damage. Use `/attack [target] --twohanded` to roll the `versatile_damage` die instead of the base damage die. The `--twohanded` flag is rejected if `equipped_off_hand` is not null (off-hand must be free to grip with both hands).
 
-**Reach weapons:** weapons with the "reach" property (glaive, halberd, pike) extend melee range to 10ft instead of the standard 5ft. The system validates attack distance against the weapon's reach when processing `/attack`. If the target is beyond reach, the command is rejected: "Target is out of melee range (10ft reach)."
+**Reach weapons:** weapons with the "reach" property (glaive, halberd, pike) extend melee range to 10ft instead of the standard 5ft. The system validates attack distance against the weapon's reach when processing `/attack`. If the target is beyond reach, the command is rejected: "❌ Target is out of melee range — 15ft away (10ft reach)."
 
 **Heavy weapons:** weapons with the "heavy" property (greataxe, greatsword, heavy crossbow, etc.) are unwieldy for small creatures. Small or Tiny creatures have disadvantage on attack rolls with heavy weapons. Auto-detected from the creature/character's `size` (via `races.size` or `creatures.size`) and the weapon's `properties` array.
 
@@ -1648,9 +1664,9 @@ Every auto-resolved action, auto-detected modifier, and auto-rejected command po
 
 **Auto-detected advantage/disadvantage on attacks** (appended to the attack roll line):
 ```
-⚔️  Aria attacks Goblin #1 with Longbow (disadvantage — hostile within 5ft)
+⚔️  Aria attacks Goblin #1 with Longbow (35ft, disadvantage — hostile within 5ft)
     → Roll to hit: 8 / 14 (lower: 8 + 5 = 13) — MISS
-⚔️  Aria attacks Goblin #1 with Longsword (advantage — target prone within 5ft)
+⚔️  Aria attacks Goblin #1 with Longsword (5ft, advantage — target prone within 5ft)
     → Roll to hit: 7 / 18 (higher: 18 + 5 = 23) — HIT
 ⚔️  Aria attacks Goblin #1 with Greatsword (disadvantage — Heavy weapon, Small creature)
     → Roll to hit: 15 / 4 (lower: 4 + 5 = 9) — MISS
@@ -1731,7 +1747,8 @@ Every auto-resolved action, auto-detected modifier, and auto-rejected command po
 ❌  You can't attack Orc Shaman — you are charmed by them
 ❌  You can't move closer to Orc Shaman — you are frightened of them
 ❌  Target has full cover — no line of sight
-❌  Target is out of melee range (10ft reach)
+❌  Target is out of melee range — 15ft away (10ft reach)
+❌  Target is out of range — 65ft away (max 60ft)
 ❌  Not enough movement — path requires 40ft (includes difficult terrain), 25ft remaining
 ❌  No arrows remaining
 ❌  You already cast a bonus action spell this turn — you can only cast a cantrip with your action
