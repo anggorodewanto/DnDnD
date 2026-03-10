@@ -1061,6 +1061,15 @@ Note: higher-level teleportation spells (Teleport, Word of Recall) that move bey
 
 **Cantrip damage scaling:** cantrip damage dice scale automatically based on character level — 2 dice at level 5, 3 dice at level 11, 4 dice at level 17. The system auto-calculates the correct number of dice from the caster's character level using the spell's `damage` JSONB field (`cantrip_scaling: true` flag). No player input required. Example: Fire Bolt deals 1d10 at levels 1–4, 2d10 at 5–10, 3d10 at 11–16, 4d10 at 17+.
 
+**Spell resolution mode:** each spell has a `resolution_mode` field that controls how `/cast` processes its effects:
+
+- `"auto"` — the bot fully resolves the spell mechanically. Used for spells whose effects are entirely captured by the structured data fields (`damage`, `healing`, `teleport`, conditions via the Feature Effect System). Examples: Fireball, Cure Wounds, Misty Step, Shield.
+- `"dm_required"` — the bot validates targeting, range, and slot expenditure, then routes the spell to `#dm-queue` for the DM to adjudicate the outcome manually via the dashboard. Used for spells with complex conditional effects that can't be reliably encoded in structured data. Examples: Polymorph (stat block replacement, reversion on 0 HP), Banishment (plane-dependent behavior), Wish (open-ended), Wall of Force (complex zone geometry), Animate Dead (creature creation).
+
+For `dm_required` spells, the `effects` text field contains a human-readable description of the spell's mechanical effects to assist the DM during resolution. The bot's `#dm-queue` entry includes the caster, targets, slot level used, and the `effects` description. The DM applies the outcome (conditions, HP changes, creature removal, etc.) through the dashboard's resolution interface.
+
+SRD spells are pre-tagged with the appropriate `resolution_mode` during data seeding. Homebrew spells default to `"dm_required"` unless the DM explicitly sets them to `"auto"` (only possible if the spell's effects are fully captured in structured fields). The system validates that `"auto"` spells have the necessary structured data populated — a spell with `resolution_mode = "auto"` but no `damage`, `healing`, or `teleport` data and no Feature Effect System entries triggers a seeding validation warning.
+
 ### Reactions
 
 Players pre-declare reaction intent using `/reaction`. The DM resolves all reactions manually.
@@ -3262,7 +3271,8 @@ spells
   save_type       TEXT                   -- "dex", "wis", etc. NULL if no save
   damage          JSONB                  -- {dice: "8d6", type: "fire", higher_levels: "1d6 per slot above 3rd", cantrip_scaling: true}
   healing         JSONB                  -- {dice: "1d8+mod", higher_levels: "1d8 per slot above 1st"}
-  effects         TEXT                   -- description of non-damage effects
+  effects         TEXT                   -- description of non-damage effects (used by DM during dm_required resolution)
+  resolution_mode TEXT NOT NULL DEFAULT 'auto'  -- 'auto' (bot resolves mechanically) or 'dm_required' (routes to #dm-queue)
   teleport        JSONB                  -- NULL for non-teleport spells. See Spell Casting Details § Teleportation spells for schema
   classes         TEXT[] NOT NULL        -- ["wizard", "sorcerer"]
   homebrew        BOOLEAN DEFAULT false

@@ -104,7 +104,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **45. Feature Effect System extensibility** — The effect type vocabulary has 14 types. What happens when a 5e feature doesn't fit any type (e.g., Portent dice replacing rolls, Lucky feat, Divination Wizard's third eye)? Is there a generic "custom" effect type that routes to DM queue, or must new types be added to the engine?
 
-- [ ] **46. Spell data completeness** — The `spells` table has `damage`, `healing`, `effects`, and `teleport` fields. Many spells have complex conditional effects not easily captured in structured data (e.g., Polymorph, Banishment, Wish). How are these handled — via `effects` text field with DM resolution, or structured data?
+- [x] **46. Spell data completeness** — The `spells` table has `damage`, `healing`, `effects`, and `teleport` fields. Many spells have complex conditional effects not easily captured in structured data (e.g., Polymorph, Banishment, Wish). How are these handled — via `effects` text field with DM resolution, or structured data?
 
 - [ ] **47. JSONB query performance** — Several hot-path queries filter on JSONB fields (conditions, features, spell_slots). Are GIN indexes used? What's the query pattern for "find all combatants with condition X" or "check if feature Y has uses remaining"?
 
