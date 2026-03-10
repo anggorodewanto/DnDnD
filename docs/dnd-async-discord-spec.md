@@ -1628,7 +1628,7 @@ Multiple encounters can be active at the same time (e.g., party split, multi-roo
 
 **Constraints:**
 - A character can only be a combatant in one active encounter at a time
-- The DM manages all active encounters from the dashboard, which shows each encounter in its own panel
+- The DM manages all active encounters from the dashboard via tabbed Combat Workspace views (see Layout & Navigation)
 
 ### Player Turns
 
@@ -2553,6 +2553,8 @@ The dashboard uses a **sidebar navigation** with icon+label entries for each pan
 **Combat Workspace.** When an encounter is active and the DM navigates to it, the layout switches to a composite combat view:
 - **Left (~60%):** Map with tokens (Combat Manager). Clicking a token opens the HP & Condition Tracker for that combatant.
 - **Right (~40%), stacked top-to-bottom:** Turn Queue, Action Resolver, Active Reactions Panel.
+
+**Multi-encounter view.** When multiple encounters are active simultaneously, each encounter gets its own **tab** within the Combat Workspace. The DM views and manages one encounter at a time by switching tabs. Each tab shows a badge with the count of pending `#dm-queue` items for that encounter. An **Encounter Overview bar** is displayed above the tabs, showing a one-line status for every active encounter: encounter name, current round, whose turn it is, and pending queue item count. This gives the DM cross-encounter awareness without switching tabs.
 
 Non-combat panels (Character Overview, Stat Block Library, Asset Library, Map Editor, Character Approval Queue) are each full-page views accessed from the sidebar.
 

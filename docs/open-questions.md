@@ -10,7 +10,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **2. Dashboard mobile/responsive support** — DMs may need to resolve actions from a phone (e.g., approve a rest request while away from their desk). Is the dashboard responsive? Are any views mobile-optimized, or is it desktop-only?
 
-- [ ] **3. Multi-encounter dashboard UX** — The spec says the DM manages simultaneous encounters from "its own panel." Are these side-by-side panels, tabs, or a switcher? How does the DM see cross-encounter context (e.g., total party HP across both encounters)?
+- [x] **3. Multi-encounter dashboard UX** — The spec says the DM manages simultaneous encounters from "its own panel." Are these side-by-side panels, tabs, or a switcher? How does the DM see cross-encounter context (e.g., total party HP across both encounters)?
 
 - [ ] **4. Encounter setup workflow** — How does the DM create and start an encounter? The spec mentions "DM clicks Start Combat" but doesn't detail the setup flow: selecting creatures from the stat block library, placing tokens on spawn zones, setting surprise flags, naming the encounter. Is there an encounter preparation mode where DMs can pre-build encounters before starting them?
 
