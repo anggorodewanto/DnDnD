@@ -86,7 +86,7 @@ Gaps, ambiguities, and missing features identified by reviewing `dnd-async-disco
 
 - [x] 52. **No in-character channel for players.** — Resolved: Added `#in-character` channel for player roleplay, dialogue, and actions outside combat. `#the-story` stays DM-write-only narration. Flow: players act in `#in-character` → DM narrates in `#the-story` → players react. During combat, IC speech remains in `#your-turn`.
 - [x] 53. **No private DM whisper.** — Resolved: Added `/whisper` command. Ephemeral to the player, posts structured message to `#dm-queue`. DM replies from dashboard, bot sends reply as Discord DM to the player. Supports back-and-forth via additional `/whisper` messages.
-- [ ] 54. **No private player-to-player communication.** Characters cannot whisper to each other without the whole party seeing.
+- [x] 54. **No private player-to-player communication.** — Resolved: No bot mechanic. Players use Discord's native DMs for private in-character conversations and are encouraged to CC the DM on game-relevant exchanges.
 - [x] 55. **DM notification workflow.** — Resolved: `#dm-queue` expanded to be the DM's single notification hub. Bot posts structured messages and pings DM for every event requiring attention (freeform actions, rest requests, skill check narrations, enemy turns, reaction declarations, unresolved consumables). Each notification includes context and a dashboard link. Resolved items are marked ✅.
 
 ## Information Asymmetry & Visibility

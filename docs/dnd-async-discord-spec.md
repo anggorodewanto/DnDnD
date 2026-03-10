@@ -284,6 +284,8 @@ Players submit slash commands in `#your-turn` (where they receive their turn pin
 
 **Out-of-combat roleplay:** outside of combat, players use `#in-character` for all in-character dialogue, emotes, and actions. The DM reads `#in-character` to follow what the party is doing and narrates outcomes in `#the-story`. Players can describe what their character says, does, or attempts — anything that requires a mechanical resolution (skill check, attack, etc.) should use the appropriate slash command or be picked up by the DM from context. The flow is: players act in `#in-character` → DM narrates results in `#the-story` → players react in `#in-character`.
 
+**Private player-to-player communication:** for secret in-character conversations (whispers, passed notes, private scheming), players use Discord's native DMs directly. There is no bot-mediated PC-to-PC whisper command. Players are encouraged to CC the DM on private conversations that could affect the game so the DM can incorporate the results into the narrative.
+
 **Combat commands** (only usable on your turn, except `/reaction`):
 
 | Command | Example | Description |
