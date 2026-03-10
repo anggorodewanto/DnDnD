@@ -2491,6 +2491,21 @@ The DM reviews in the dashboard and either applies the undo or dismisses the req
 
 **Not in MVP:** full turn rewind (reverting an entire multi-action turn) or automatic player-initiated undo. DM uses manual overrides instead.
 
+### Campaign Pause
+
+The DM can set the campaign status to `paused` from the dashboard. On pause:
+
+1. Bot posts an announcement in `#the-story`: "⏸️ **Campaign paused by DM.** The story will continue when the DM resumes the campaign."
+2. All commands remain functional — players can still use `/inventory`, `/cast`, `/move`, etc. The DM manages expectations out-of-band.
+3. Turn timers continue to run. The DM should use existing timer tools (extend, pause individual timers) if needed.
+
+On resume (`status` set back to `active`):
+
+1. Bot posts in `#the-story`: "▶️ **Campaign resumed!**"
+2. If mid-combat, the current turn player is pinged in `#your-turn`.
+
+The `paused` status is informational — it signals a hiatus to the group without enforcing mechanical restrictions.
+
 ---
 
 ## Tech Stack
