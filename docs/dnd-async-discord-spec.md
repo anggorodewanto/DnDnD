@@ -2125,6 +2125,13 @@ Fog of war is computed automatically based on **shared party vision** — the un
 
 The DM places zones from the dashboard to define areas of non-standard lighting or obscurement. Each zone has a type and optional source label (spell, terrain feature, etc.). Zones affect combat mechanics automatically.
 
+**Zone placement — hybrid model:**
+
+- **Static environmental lighting** (unlit dungeon rooms, dim forest, shadowy cavern) is painted per-tile using a **lighting brush** in the Map Editor, alongside the terrain brush. These zones are baked into the map data like terrain — they persist across encounters using the same map and are edited from the Map Editor panel.
+- **Spell-created zones** (Darkness spell, Fog Cloud, etc.) are placed as **shape objects** (rectangle or circle) that the DM can move, resize, and remove mid-combat from the Combat Manager map view. When a spell ends (concentration broken, duration expires), the system auto-removes the zone. These are stored as encounter-scoped objects, not part of the base map.
+
+**DM vs. player visibility:** zone boundaries are rendered as colored overlays in the DM's Combat Manager view (e.g., dim light = pale yellow border, darkness = dark grey fill, fog = white haze) so the DM can see zone extents. Players never see zone boundaries — they only experience the effects through the **automatically calculated fog of war** (shadowcasting adjusts visible tiles based on each creature's position and vision capabilities) and the mechanical modifiers (disadvantage, blinded, etc.) applied to their rolls.
+
 | Zone type | Visibility | Combat effects | Darkvision interaction |
 |---|---|---|---|
 | **Dim light** | Lightly obscured | Disadvantage on Perception (sight) checks; `/action hide` is available | Darkvision treats as bright light (no penalty) |
@@ -2172,6 +2179,7 @@ The DM creates and edits maps through the **Svelte-based map editor** in the web
 - **Terrain brush** — paint per tile: open ground, difficult terrain, water, lava, pit, etc.
 - **Wall tool** — draw walls along tile edges (block movement and line of sight)
 - **Object placement** — doors (open/closed/locked), traps, furniture, interactables with custom properties
+- **Lighting brush** — paint per-tile lighting zones: dim light, darkness, magical darkness, fog/heavy obscurement, light obscurement (see Obscurement & Lighting Zones)
 - **Elevation painting** — set ground elevation per tile (cliffs, platforms, stairs)
 - **Spawn zones** — mark player and enemy token placement areas at encounter start
 

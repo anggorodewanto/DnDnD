@@ -20,7 +20,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **7. DM queue resolution UX from dashboard** — Each `#dm-queue` notification has a "Resolve →" link. What does the resolution interface look like? Is it a modal, inline expansion, or a separate page? Can the DM apply mechanical effects (damage, conditions, movement) directly from the resolution view?
 
-- [ ] **8. Lighting/obscurement zone management** — DM places zones from the dashboard, but how? A painting tool on the map? A form with coordinates? Can zones be resized, moved, or removed mid-combat? How does the DM visualize zone boundaries while editing vs. what players see?
+- [x] **8. Lighting/obscurement zone management** — DM places zones from the dashboard, but how? A painting tool on the map? A form with coordinates? Can zones be resized, moved, or removed mid-combat? How does the DM visualize zone boundaries while editing vs. what players see?
 
 - [ ] **9. Shop/merchant workflow** — The spec mentions "DM creates a shop via the dashboard, posts available items to `#the-story`, and transfers purchased items/deducts gold through the dashboard." No details on the shop creation UI. Is it a reusable merchant template? Can players browse items interactively, or does the DM manually handle each purchase?
 
