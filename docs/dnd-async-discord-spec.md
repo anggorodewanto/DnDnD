@@ -101,6 +101,23 @@ All combat state mutations are serialized through a **per-turn pessimistic lock*
 - Read-only display areas (initiative tracker, HP bars) update immediately
 - Active form inputs are **not clobbered** — the DM's draft is preserved with a subtle indicator: "HP updated to 3 by player action"
 
+**Bot crash recovery:**
+
+The bot is designed so that a process crash and restart is a non-event. All durable state lives in PostgreSQL — nothing critical is held only in memory.
+
+*Startup recovery sequence:*
+1. Connect to PostgreSQL
+2. Scan for stale state (see below)
+3. Connect to Discord gateway
+4. Re-register slash commands for all guilds (existing startup behavior)
+5. Resume timer polling
+
+*In-flight commands:* if a command was mid-processing when the bot crashed, its database transaction is rolled back automatically by PostgreSQL (uncommitted transactions are aborted on disconnect). The advisory lock is released with it. The player's command simply receives no Discord response — they reissue the command. Given async play with 24-hour turn timers, a single lost response is a minor inconvenience.
+
+*Turn timers:* timers are **not** held in memory. Turn deadlines are derived from database fields (`started_at` + campaign timeout setting) and checked via a **polling goroutine** that runs every 30 seconds. On startup, the poller immediately picks up any overdue or approaching deadlines and fires the appropriate escalation (50% nudge, 75% warning, 100% DM decision prompt). The 30-second polling granularity is negligible against hour-scale turn timers.
+
+*Stale state scan on startup:* the bot checks for turns where the deadline has passed but no escalation was sent (i.e., the bot was down when the deadline hit). These are processed immediately in deadline order, so no timeout is silently missed.
+
 ---
 
 ## Discord Server Structure
