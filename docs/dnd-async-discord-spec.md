@@ -2007,7 +2007,7 @@ Then:
 - Bot **appends a new message** in `#combat-map` — creates a visual log players can scroll through
 - Token labels display enemy IDs (G1, OS) and player initials
 - Token visual states: normal / bloodied / dying / stable / dead
-- Tile size: 32–48px per square to stay within Discord's 8MB file limit
+- Tile size: 48px per square baseline; reduced to 32px only when necessary to stay within Discord's 8MB file limit. Larger tiles ensure coordinate labels remain legible and images are large enough for pinch-to-zoom on mobile
 - Obstacles and difficult terrain drawn as part of the base map layer
 
 ### Dynamic Fog of War
@@ -2880,7 +2880,7 @@ conditions_ref
 | Risk | Mitigation |
 |---|---|
 | State drift from manual Discord edits | Enforce read-only Discord policy; all state changes via bot or dashboard only |
-| Map images exceeding 8MB | Cap tile size at 48px; compress PNGs; limit grid size |
+| Map images exceeding 8MB | Default 48px tiles; fall back to 32px for large maps; compress PNGs; limit grid size |
 | Enemy ID ambiguity | IDs are stable, map-labeled, and confirmed in every combat log response |
 | Complex player actions breaking automation | `/action` routes to DM; no attempt to auto-parse freeform intent |
 | D&D Beyond API instability | Undocumented endpoint may change; importer includes fallback to manual creation |
