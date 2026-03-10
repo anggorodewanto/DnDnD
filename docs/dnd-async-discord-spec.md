@@ -2596,6 +2596,8 @@ Each notification includes the player name, action context, and a **"Resolve →
 
 **Whisper replies:** When the DM resolves a whisper from the dashboard, the bot sends the DM's reply as a Discord DM to the player. The `#dm-queue` entry is marked ✅ with the reply text. Players can continue the private conversation by sending additional `/whisper` messages.
 
+**Whisper history:** Each `/whisper` is a standalone `#dm-queue` item — there is no threaded conversation view. The DM can scroll through `#dm-queue` history to find past whispers from a given player. This keeps the queue model simple and uniform: every item is processed independently, regardless of type.
+
 **Resolved items** are edited by the bot to show ✅ and a brief outcome summary, so the DM can scan `#dm-queue` history and see what's been handled.
 
 **DM-only channel:** `#dm-queue` is not visible to players. The DM configures Discord notifications for this channel to match their preferred responsiveness (push notifications, desktop alerts, etc.).

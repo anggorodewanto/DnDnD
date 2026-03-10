@@ -50,7 +50,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **20. Encounter name visibility to players** — Simultaneous encounter messages are labeled with the encounter name. Can the DM control what name players see (to avoid spoilers like "Boss Fight" or "Ambush")?
 
-- [ ] **21. DM view of player `/whisper` history** — Whispers post to `#dm-queue`. Can the DM see the full whisper conversation history with a player, or only individual messages? Is there a thread/conversation view?
+- [x] **21. DM view of player `/whisper` history** — Whispers post to `#dm-queue`. Can the DM see the full whisper conversation history with a player, or only individual messages? Is there a thread/conversation view?
 
 - [ ] **22. Rest interruption UX** — When the DM cancels a rest mid-progress, how does the DM specify "how much time has passed" to determine whether short rest benefits apply for interrupted long rests? Is it a simple toggle or does the DM enter elapsed time?
 
