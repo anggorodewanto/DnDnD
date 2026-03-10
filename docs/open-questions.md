@@ -96,7 +96,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **41. Testing strategy** — No testing approach mentioned. Unit tests for combat resolution? Integration tests for the full command → state change → Discord output pipeline? How are 5e rule interactions tested (there are hundreds of edge cases)?
 
-- [ ] **42. Tiled JSON import compatibility** — The map format is "Tiled-compatible." What subset of Tiled features is supported? What happens when a DM imports a `.tmj` file with unsupported features (tile animations, infinite maps, image layers, parallax)? Silent ignore, warning, or rejection?
+- [x] **42. Tiled JSON import compatibility** — The map format is "Tiled-compatible." What subset of Tiled features is supported? What happens when a DM imports a `.tmj` file with unsupported features (tile animations, infinite maps, image layers, parallax)? Silent ignore, warning, or rejection?
 
 - [ ] **43. Multiclass spellcasting table** — Is the multiclass spell slot table hardcoded or data-driven? The table has specific slot counts per caster level — is this stored as reference data or computed?
 

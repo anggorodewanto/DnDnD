@@ -2297,6 +2297,31 @@ Benefits:
 **Phase 1 (MVP):** blank grid + terrain/wall tools + image import. Maps stored as Tiled-compatible JSON.
 **Phase 2:** tileset support — load `.tsj` tilesets, paint with tile brushes, import full `.tmj` maps from Tiled.
 
+**Tiled import compatibility — best-effort with hard guardrails:**
+
+When a DM imports a `.tmj` file, the importer applies a three-tier validation:
+
+1. **Hard rejection** — features that fundamentally conflict with the system's grid model cause the import to fail with a clear error message:
+   - Infinite maps (no fixed grid dimensions)
+   - Non-orthogonal orientations (isometric, hexagonal, staggered)
+   - Maps exceeding the system's maximum grid dimensions (see Map Size Limits)
+
+2. **Supported features** — imported and used by the engine:
+   - Finite orthogonal tile layers (terrain GIDs)
+   - Object layers with typed objects (walls, doors, spawn points, traps) and custom properties
+   - Tileset references (Phase 2)
+   - Custom properties on tiles, objects, and layers (e.g., `difficult: true`)
+
+3. **Skipped with warnings** — unsupported features are stripped during import and the DM sees a summary of what was removed:
+   - Tile animations
+   - Image layers
+   - Parallax scrolling factors
+   - Group layers (children are flattened into the root layer list)
+   - Unsupported object types (text objects, point objects)
+   - Wang sets / terrain brushes (editor-only metadata)
+
+The import response lists all skipped features so the DM can adjust the map in Tiled if needed. The imported map is otherwise fully functional with the supported subset.
+
 ### Asset Storage
 
 All uploaded and generated image assets use a **local filesystem + abstraction layer** approach:
