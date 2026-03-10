@@ -62,7 +62,7 @@ Gaps and ambiguities identified from a review of `dnd-async-discord-spec.md`, fo
 
 - [x] **24. Map rendering performance** — PNG generation for every state change could be expensive on large maps (e.g., 50x50 grid with fog of war, spell overlays, 20+ tokens). What's the expected rendering time? Is there a caching layer (e.g., only re-render changed tiles)? Are map images generated synchronously (blocking the command response) or asynchronously?
 
-- [ ] **25. Shadowcasting algorithm** — The spec says fog of war uses "shadowcasting" but doesn't specify which algorithm. Recursive shadowcasting? Symmetric shadowcasting (Milazzo)? Performance characteristics matter for large maps with complex geometry.
+- [x] **25. Shadowcasting algorithm** — The spec says fog of war uses "shadowcasting" but doesn't specify which algorithm. Recursive shadowcasting? Symmetric shadowcasting (Milazzo)? Performance characteristics matter for large maps with complex geometry.
 
 - [ ] **26. Pathfinding algorithm** — Movement validation checks path cost including difficult terrain and obstacles. What pathfinding algorithm is used? A* on the grid? Dijkstra? Is the path shown to the player before confirmation, or just the cost? What about diagonal movement through wall corners (wall-hugging)?
 

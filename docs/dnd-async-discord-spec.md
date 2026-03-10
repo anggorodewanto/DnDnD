@@ -2114,7 +2114,7 @@ Fog of war is computed automatically based on **shared party vision** — the un
 
 **How it works:**
 1. Each token carries vision properties: `base_vision_ft`, `darkvision_ft`, `blindsight_ft`, `truesight_ft`
-2. Server runs **shadowcasting** from each player token's position against walls and obstacles
+2. Server runs **symmetric shadowcasting** (Albert Ford's algorithm) from each player token's position against walls and obstacles. Symmetry is required: if token A can see cell B, then a token at B can always see A. This prevents inconsistencies where a creature can see an enemy but the enemy has full cover from them. The algorithm divides the grid into 8 octants and recursively scans each, running in O(visible cells) time.
 3. Visible cells for all party tokens are unioned → the "party known" area
 4. Previously seen but currently out-of-range cells rendered as **dim/greyed out** (explored but not active)
 5. Never-seen cells are **fully fogged** (black)
