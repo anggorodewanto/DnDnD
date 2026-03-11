@@ -30,8 +30,7 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(http.Handler) 
 // MountDashboard is a convenience function that creates a Handler, sets up the hub,
 // and registers all dashboard routes on the given router.
 func MountDashboard(r chi.Router, logger *slog.Logger, hub *Hub, authMiddleware func(http.Handler) http.Handler) *Handler {
-	h := NewHandler(logger)
-	h.hub = hub
+	h := NewHandler(logger, hub)
 	RegisterRoutes(r, h, authMiddleware)
 	return h
 }

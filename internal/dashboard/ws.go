@@ -118,14 +118,3 @@ func (h *Handler) ServeWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
-
-// SetHub sets the hub for the handler. Used by router setup and tests.
-func (h *Handler) SetHub(hub *Hub) {
-	h.hub = hub
-}
-
-// GetHub returns the handler's hub.
-func (h *Handler) GetHub() *Hub {
-	return h.hub
-}
-

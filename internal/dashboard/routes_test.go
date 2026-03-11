@@ -19,16 +19,22 @@ func mockAuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func TestRegisterRoutes_DashboardEndpoint(t *testing.T) {
-	r := chi.NewRouter()
+// setupRoutesTest creates a chi router with dashboard routes registered and a running hub.
+// The caller must call the returned cleanup function (typically via defer).
+func setupRoutesTest(t *testing.T) chi.Router {
+	t.Helper()
 	hub := NewHub()
 	go hub.Run()
-	defer hub.Stop()
+	t.Cleanup(hub.Stop)
 
-	h := NewHandler(nil)
-	h.hub = hub
-
+	h := NewHandler(nil, hub)
+	r := chi.NewRouter()
 	RegisterRoutes(r, h, mockAuthMiddleware)
+	return r
+}
+
+func TestRegisterRoutes_DashboardEndpoint(t *testing.T) {
+	r := setupRoutesTest(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 	rec := httptest.NewRecorder()
@@ -39,55 +45,29 @@ func TestRegisterRoutes_DashboardEndpoint(t *testing.T) {
 }
 
 func TestRegisterRoutes_SvelteAppStub(t *testing.T) {
-	r := chi.NewRouter()
-	hub := NewHub()
-	go hub.Run()
-	defer hub.Stop()
-
-	h := NewHandler(nil)
-	h.hub = hub
-
-	RegisterRoutes(r, h, mockAuthMiddleware)
+	r := setupRoutesTest(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/app/", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, "DnDnD Map Editor")
+	assert.Contains(t, rec.Body.String(), "DnDnD Map Editor")
 }
 
 func TestRegisterRoutes_WebSocketEndpoint(t *testing.T) {
-	r := chi.NewRouter()
-	hub := NewHub()
-	go hub.Run()
-	defer hub.Stop()
-
-	h := NewHandler(nil)
-	h.hub = hub
-
-	RegisterRoutes(r, h, mockAuthMiddleware)
+	r := setupRoutesTest(t)
 
 	// Test that the websocket endpoint exists (will fail upgrade but route is found)
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/ws", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	// Should not be 404 (route exists)
 	assert.NotEqual(t, http.StatusNotFound, rec.Code)
 }
 
 func TestRegisterRoutes_DashboardIncludesWSScript(t *testing.T) {
-	r := chi.NewRouter()
-	hub := NewHub()
-	go hub.Run()
-	defer hub.Stop()
-
-	h := NewHandler(nil)
-	h.hub = hub
-
-	RegisterRoutes(r, h, mockAuthMiddleware)
+	r := setupRoutesTest(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 	rec := httptest.NewRecorder()
@@ -99,15 +79,7 @@ func TestRegisterRoutes_DashboardIncludesWSScript(t *testing.T) {
 }
 
 func TestSvelteAppStub_ContainsMountPoint(t *testing.T) {
-	r := chi.NewRouter()
-	hub := NewHub()
-	go hub.Run()
-	defer hub.Stop()
-
-	h := NewHandler(nil)
-	h.hub = hub
-
-	RegisterRoutes(r, h, mockAuthMiddleware)
+	r := setupRoutesTest(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/app/", nil)
 	rec := httptest.NewRecorder()

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/auth"
@@ -18,7 +17,7 @@ func contextWithUser(ctx context.Context, userID string) context.Context {
 }
 
 func TestDashboardHandler_ReturnsHTML(t *testing.T) {
-	h := NewHandler(nil)
+	h := NewHandler(nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 	req = req.WithContext(contextWithUser(req.Context(), "user123"))
 	rec := httptest.NewRecorder()
@@ -30,7 +29,7 @@ func TestDashboardHandler_ReturnsHTML(t *testing.T) {
 }
 
 func TestDashboardHandler_SidebarContainsNavEntries(t *testing.T) {
-	h := NewHandler(nil)
+	h := NewHandler(nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 	req = req.WithContext(contextWithUser(req.Context(), "user123"))
 	rec := httptest.NewRecorder()
@@ -48,12 +47,12 @@ func TestDashboardHandler_SidebarContainsNavEntries(t *testing.T) {
 		"Character Overview",
 	}
 	for _, entry := range expectedEntries {
-		assert.True(t, strings.Contains(body, entry), "sidebar should contain %q", entry)
+		assert.Contains(t, body, entry, "sidebar should contain %q", entry)
 	}
 }
 
 func TestDashboardHandler_RequiresAuth(t *testing.T) {
-	h := NewHandler(nil)
+	h := NewHandler(nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 	// No user in context
 	rec := httptest.NewRecorder()
@@ -63,16 +62,14 @@ func TestDashboardHandler_RequiresAuth(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestHandler_SetHub_GetHub(t *testing.T) {
-	h := NewHandler(nil)
+func TestNewHandler_SetsHub(t *testing.T) {
 	hub := NewHub()
-
-	h.SetHub(hub)
-	assert.Equal(t, hub, h.GetHub())
+	h := NewHandler(nil, hub)
+	assert.Equal(t, hub, h.hub)
 }
 
 func TestDashboardHandler_CampaignHome_ShowsPlaceholders(t *testing.T) {
-	h := NewHandler(nil)
+	h := NewHandler(nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 	req = req.WithContext(contextWithUser(req.Context(), "user123"))
 	rec := httptest.NewRecorder()

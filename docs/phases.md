@@ -77,7 +77,7 @@
   - Depends on: Phase 8, Phase 13
   - Done when: `/register` finds characters with fuzzy matching, `/import` creates pending record, all post to `#dm-queue`, status messages shown correctly.
 
-- [ ] **Phase 15: DM Dashboard — Skeleton & Campaign Home**
+- [x] **Phase 15: DM Dashboard — Skeleton & Campaign Home**
   - Scope: Go templates for dashboard shell (sidebar nav with icon+label entries). Campaign Home view: pending `#dm-queue` items count, Character Approval Queue, active encounters, saved encounters list, quick-action buttons. WebSocket connection setup (nhooyr/websocket) with reconnect + exponential backoff. Svelte SPA stub embedded via embed.FS.
   - Depends on: Phase 10, Phase 11
   - Done when: Dashboard loads with sidebar, Campaign Home shows placeholder data, WebSocket connects and reconnects.

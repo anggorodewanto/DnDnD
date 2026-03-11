@@ -43,8 +43,8 @@ type Handler struct {
 	hub    *Hub
 }
 
-// NewHandler creates a new dashboard Handler.
-func NewHandler(logger *slog.Logger) *Handler {
+// NewHandler creates a new dashboard Handler with an optional Hub for WebSocket support.
+func NewHandler(logger *slog.Logger, hub *Hub) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -52,6 +52,7 @@ func NewHandler(logger *slog.Logger) *Handler {
 	return &Handler{
 		logger: logger,
 		tmpl:   tmpl,
+		hub:    hub,
 	}
 }
 

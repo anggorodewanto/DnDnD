@@ -70,8 +70,7 @@ func TestWebSocketEndpoint_RequiresAuth(t *testing.T) {
 	go hub.Run()
 	defer hub.Stop()
 
-	h := NewHandler(nil)
-	h.hub = hub
+	h := NewHandler(nil, hub)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/ws", nil)
 	rec := httptest.NewRecorder()
@@ -86,8 +85,7 @@ func TestWebSocketEndpoint_AcceptsConnection(t *testing.T) {
 	go hub.Run()
 	defer hub.Stop()
 
-	h := NewHandler(nil)
-	h.hub = hub
+	h := NewHandler(nil, hub)
 
 	// Create a test server with auth context
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
