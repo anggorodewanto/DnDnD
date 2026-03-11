@@ -35,3 +35,22 @@ WHERE campaign_id = $1 AND LOWER(name) = LOWER($2);
 SELECT id, name FROM characters
 WHERE campaign_id = $1
 ORDER BY name;
+
+-- name: ListPlayerCharactersByStatus :many
+SELECT pc.id, pc.campaign_id, pc.character_id, pc.discord_user_id, pc.status,
+       pc.dm_feedback, pc.created_via, pc.created_at, pc.updated_at,
+       c.name AS character_name, c.race, c.level, c.classes, c.hp_max,
+       c.hp_current, c.ac, c.speed_ft, c.ability_scores, c.languages, c.ddb_url
+FROM player_characters pc
+JOIN characters c ON c.id = pc.character_id
+WHERE pc.campaign_id = $1 AND pc.status = $2
+ORDER BY pc.created_at;
+
+-- name: GetPlayerCharacterWithCharacter :one
+SELECT pc.id, pc.campaign_id, pc.character_id, pc.discord_user_id, pc.status,
+       pc.dm_feedback, pc.created_via, pc.created_at, pc.updated_at,
+       c.name AS character_name, c.race, c.level, c.classes, c.hp_max,
+       c.hp_current, c.ac, c.speed_ft, c.ability_scores, c.languages, c.ddb_url
+FROM player_characters pc
+JOIN characters c ON c.id = pc.character_id
+WHERE pc.id = $1;
