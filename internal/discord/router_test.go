@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -156,20 +157,7 @@ func TestCommandRouter_StubResponseIncludesCommandName(t *testing.T) {
 		t.Fatal("expected response content")
 	}
 	// Should mention the command name
-	if !contains(respondedContent, "attack") {
+	if !strings.Contains(respondedContent, "attack") {
 		t.Errorf("expected response to mention 'attack', got: %s", respondedContent)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

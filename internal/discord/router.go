@@ -55,16 +55,16 @@ func (r *CommandRouter) Handle(interaction *discordgo.Interaction) {
 	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
 	handler, ok := r.handlers[data.Name]
 	if !ok {
-		r.respondEphemeral(interaction, fmt.Sprintf("Unknown command: /%s", data.Name))
+		respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Unknown command: /%s", data.Name))
 		return
 	}
 
 	handler.Handle(interaction)
 }
 
-// respondEphemeral sends an ephemeral response to an interaction.
-func (r *CommandRouter) respondEphemeral(interaction *discordgo.Interaction, msg string) {
-	_ = r.bot.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
+// respondEphemeral sends an ephemeral message as an interaction response.
+func respondEphemeral(s Session, interaction *discordgo.Interaction, msg string) {
+	_ = s.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: msg,
@@ -80,12 +80,5 @@ type stubHandler struct {
 }
 
 func (h *stubHandler) Handle(interaction *discordgo.Interaction) {
-	msg := fmt.Sprintf("/%s is not yet implemented.", h.name)
-	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: msg,
-			Flags:   discordgo.MessageFlagsEphemeral,
-		},
-	})
+	respondEphemeral(h.session, interaction, fmt.Sprintf("/%s is not yet implemented.", h.name))
 }

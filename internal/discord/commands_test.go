@@ -6,6 +6,16 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// commandMap builds a lookup map from command name to definition.
+func commandMap() map[string]*discordgo.ApplicationCommand {
+	cmds := CommandDefinitions()
+	m := make(map[string]*discordgo.ApplicationCommand, len(cmds))
+	for _, cmd := range cmds {
+		m[cmd.Name] = cmd
+	}
+	return m
+}
+
 func TestCommandDefinitions_NotEmpty(t *testing.T) {
 	cmds := CommandDefinitions()
 	if len(cmds) == 0 {
@@ -22,11 +32,7 @@ func TestCommandDefinitions_AllHaveNames(t *testing.T) {
 }
 
 func TestCommandDefinitions_ParameterHints(t *testing.T) {
-	cmds := CommandDefinitions()
-	cmdMap := make(map[string]*discordgo.ApplicationCommand, len(cmds))
-	for _, cmd := range cmds {
-		cmdMap[cmd.Name] = cmd
-	}
+	cmdMap := commandMap()
 
 	tests := []struct {
 		name        string
@@ -114,11 +120,7 @@ func TestCommandDefinitions_NoParamCommands(t *testing.T) {
 		"prepare", "create-character", "character", "help",
 	}
 
-	cmds := CommandDefinitions()
-	cmdMap := make(map[string]*discordgo.ApplicationCommand, len(cmds))
-	for _, cmd := range cmds {
-		cmdMap[cmd.Name] = cmd
-	}
+	cmdMap := commandMap()
 
 	for _, name := range noParamCmds {
 		t.Run(name, func(t *testing.T) {
@@ -206,20 +208,16 @@ func TestCommandDefinitions_ContainsAllExpectedCommands(t *testing.T) {
 		"distance", "help", "setup",
 	}
 
-	cmds := CommandDefinitions()
-	nameSet := make(map[string]bool, len(cmds))
-	for _, cmd := range cmds {
-		nameSet[cmd.Name] = true
-	}
+	cmdMap := commandMap()
 
 	for _, name := range expected {
-		if !nameSet[name] {
+		if _, ok := cmdMap[name]; !ok {
 			t.Errorf("missing command: %s", name)
 		}
 	}
 
-	if len(cmds) != len(expected) {
-		t.Errorf("expected %d commands, got %d", len(expected), len(cmds))
+	if len(cmdMap) != len(expected) {
+		t.Errorf("expected %d commands, got %d", len(expected), len(cmdMap))
 	}
 }
 

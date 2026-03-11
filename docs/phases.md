@@ -67,7 +67,7 @@
   - Depends on: Phase 9a, Phase 11
   - Done when: `/setup` creates all channels with correct permissions, skips duplicates, stores channel references.
 
-- [ ] **Phase 13: Slash Command Registration — Player Commands**
+- [x] **Phase 13: Slash Command Registration — Player Commands**
   - Scope: Register all player-facing slash commands with Discord: `/move`, `/fly`, `/attack`, `/cast`, `/bonus`, `/action`, `/shove`, `/interact`, `/done`, `/deathsave`, `/command`, `/reaction`, `/check`, `/save`, `/rest`, `/whisper`, `/status`, `/equip`, `/undo`, `/inventory`, `/use`, `/give`, `/loot`, `/attune`, `/unattune`, `/prepare`, `/retire`, `/register`, `/import`, `/create-character`, `/character`, `/recap`, `/distance`, `/help`. Command routing stubs that return "not yet implemented".
   - Depends on: Phase 9a, Phase 12
   - Done when: All commands appear in Discord's slash command UI with parameter hints; stubs respond with placeholder messages.
