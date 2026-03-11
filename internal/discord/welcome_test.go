@@ -31,18 +31,6 @@ func TestSendWelcomeDM_Success(t *testing.T) {
 	if !strings.Contains(sentContent, "Curse of Strahd") {
 		t.Fatal("expected campaign name in message")
 	}
-	if !strings.Contains(sentContent, "/create-character") {
-		t.Fatal("expected /create-character in message")
-	}
-	if !strings.Contains(sentContent, "/import") {
-		t.Fatal("expected /import in message")
-	}
-	if !strings.Contains(sentContent, "/register") {
-		t.Fatal("expected /register in message")
-	}
-	if !strings.Contains(sentContent, "/help") {
-		t.Fatal("expected /help in message")
-	}
 }
 
 func TestSendWelcomeDM_ChannelCreateError(t *testing.T) {

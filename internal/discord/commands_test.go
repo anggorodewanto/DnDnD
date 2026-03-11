@@ -24,15 +24,12 @@ func TestCommandDefinitions_AllHaveNames(t *testing.T) {
 func TestRegisterCommands_BulkOverwrites(t *testing.T) {
 	var overwrittenGuild string
 	var overwrittenCmds []*discordgo.ApplicationCommand
-	mock := &MockSession{
-		ApplicationCommandBulkOverwriteFunc: func(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {
-			overwrittenGuild = guildID
-			overwrittenCmds = cmds
-			return cmds, nil
-		},
-		ApplicationCommandsFunc: func(appID, guildID string) ([]*discordgo.ApplicationCommand, error) {
-			return nil, nil // no existing commands
-		},
+
+	mock := newTestMock()
+	mock.ApplicationCommandBulkOverwriteFunc = func(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {
+		overwrittenGuild = guildID
+		overwrittenCmds = cmds
+		return cmds, nil
 	}
 
 	err := RegisterCommands(mock, "app-1", "guild-1")
@@ -49,19 +46,16 @@ func TestRegisterCommands_BulkOverwrites(t *testing.T) {
 
 func TestRegisterCommands_DeletesStaleCommands(t *testing.T) {
 	var deletedIDs []string
-	mock := &MockSession{
-		ApplicationCommandBulkOverwriteFunc: func(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {
-			return cmds, nil
-		},
-		ApplicationCommandsFunc: func(appID, guildID string) ([]*discordgo.ApplicationCommand, error) {
-			return []*discordgo.ApplicationCommand{
-				{ID: "stale-1", Name: "old-removed-command"},
-			}, nil
-		},
-		ApplicationCommandDeleteFunc: func(appID, guildID, cmdID string) error {
-			deletedIDs = append(deletedIDs, cmdID)
-			return nil
-		},
+
+	mock := newTestMock()
+	mock.ApplicationCommandsFunc = func(appID, guildID string) ([]*discordgo.ApplicationCommand, error) {
+		return []*discordgo.ApplicationCommand{
+			{ID: "stale-1", Name: "old-removed-command"},
+		}, nil
+	}
+	mock.ApplicationCommandDeleteFunc = func(appID, guildID, cmdID string) error {
+		deletedIDs = append(deletedIDs, cmdID)
+		return nil
 	}
 
 	err := RegisterCommands(mock, "app-1", "guild-1")
@@ -81,17 +75,13 @@ func TestRegisterCommands_NoDeleteForCurrentCommands(t *testing.T) {
 	}
 
 	var deletedIDs []string
-	mock := &MockSession{
-		ApplicationCommandBulkOverwriteFunc: func(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {
-			return cmds, nil
-		},
-		ApplicationCommandsFunc: func(appID, guildID string) ([]*discordgo.ApplicationCommand, error) {
-			return existing, nil
-		},
-		ApplicationCommandDeleteFunc: func(appID, guildID, cmdID string) error {
-			deletedIDs = append(deletedIDs, cmdID)
-			return nil
-		},
+	mock := newTestMock()
+	mock.ApplicationCommandsFunc = func(appID, guildID string) ([]*discordgo.ApplicationCommand, error) {
+		return existing, nil
+	}
+	mock.ApplicationCommandDeleteFunc = func(appID, guildID, cmdID string) error {
+		deletedIDs = append(deletedIDs, cmdID)
+		return nil
 	}
 
 	err := RegisterCommands(mock, "app-1", "guild-1")

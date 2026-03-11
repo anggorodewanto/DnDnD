@@ -12,21 +12,12 @@ func TestRegisterAllGuilds_RegistersEachGuild(t *testing.T) {
 	var mu sync.Mutex
 	registered := map[string]bool{}
 
-	mock := &MockSession{
-		ApplicationCommandBulkOverwriteFunc: func(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {
-			mu.Lock()
-			registered[guildID] = true
-			mu.Unlock()
-			return cmds, nil
-		},
-		ApplicationCommandsFunc: func(appID, guildID string) ([]*discordgo.ApplicationCommand, error) {
-			return nil, nil
-		},
-		StateValue: &discordgo.State{
-			Ready: discordgo.Ready{
-				User: &discordgo.User{ID: "bot-1"},
-			},
-		},
+	mock := newTestMock()
+	mock.ApplicationCommandBulkOverwriteFunc = func(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {
+		mu.Lock()
+		registered[guildID] = true
+		mu.Unlock()
+		return cmds, nil
 	}
 
 	bot := NewBot(mock, "app-1", newTestLogger())
@@ -47,21 +38,12 @@ func TestRegisterAllGuilds_RegistersEachGuild(t *testing.T) {
 }
 
 func TestRegisterAllGuilds_CollectsErrors(t *testing.T) {
-	mock := &MockSession{
-		ApplicationCommandBulkOverwriteFunc: func(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {
-			if guildID == "g-bad" {
-				return nil, errors.New("bulk overwrite failed")
-			}
-			return cmds, nil
-		},
-		ApplicationCommandsFunc: func(appID, guildID string) ([]*discordgo.ApplicationCommand, error) {
-			return nil, nil
-		},
-		StateValue: &discordgo.State{
-			Ready: discordgo.Ready{
-				User: &discordgo.User{ID: "bot-1"},
-			},
-		},
+	mock := newTestMock()
+	mock.ApplicationCommandBulkOverwriteFunc = func(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {
+		if guildID == "g-bad" {
+			return nil, errors.New("bulk overwrite failed")
+		}
+		return cmds, nil
 	}
 
 	bot := NewBot(mock, "app-1", newTestLogger())
@@ -73,15 +55,7 @@ func TestRegisterAllGuilds_CollectsErrors(t *testing.T) {
 }
 
 func TestRegisterAllGuilds_EmptyList(t *testing.T) {
-	mock := &MockSession{
-		StateValue: &discordgo.State{
-			Ready: discordgo.Ready{
-				User: &discordgo.User{ID: "bot-1"},
-			},
-		},
-	}
-
-	bot := NewBot(mock, "app-1", newTestLogger())
+	bot := NewBot(newTestMock(), "app-1", newTestLogger())
 	errs := bot.RegisterAllGuilds(nil)
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
@@ -89,21 +63,7 @@ func TestRegisterAllGuilds_EmptyList(t *testing.T) {
 }
 
 func TestRegisterAllGuilds_TracksGuilds(t *testing.T) {
-	mock := &MockSession{
-		ApplicationCommandBulkOverwriteFunc: func(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {
-			return cmds, nil
-		},
-		ApplicationCommandsFunc: func(appID, guildID string) ([]*discordgo.ApplicationCommand, error) {
-			return nil, nil
-		},
-		StateValue: &discordgo.State{
-			Ready: discordgo.Ready{
-				User: &discordgo.User{ID: "bot-1"},
-			},
-		},
-	}
-
-	bot := NewBot(mock, "app-1", newTestLogger())
+	bot := NewBot(newTestMock(), "app-1", newTestLogger())
 	bot.RegisterAllGuilds([]string{"g-1", "g-2"})
 
 	if !bot.HasGuild("g-1") || !bot.HasGuild("g-2") {

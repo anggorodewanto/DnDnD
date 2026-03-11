@@ -61,26 +61,31 @@ func (b *Bot) SetCampaignName(guildID, name string) {
 func (b *Bot) campaignName(guildID string) string {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	name := b.campaignNames[guildID]
-	if name == "" {
-		return "this campaign"
+	if name := b.campaignNames[guildID]; name != "" {
+		return name
 	}
-	return name
+	return "this campaign"
 }
 
-// HandleGuildCreate is called when the bot joins a guild or during startup enumeration.
-// It registers commands for the guild and tracks it.
-func (b *Bot) HandleGuildCreate(_ *discordgo.Session, event *discordgo.GuildCreate) {
-	guildID := event.Guild.ID
-	b.logger.Info("guild create event", "guild_id", guildID)
-
+// trackAndRegister tracks a guild and registers slash commands for it.
+// Returns an error if command registration fails.
+func (b *Bot) trackAndRegister(guildID string) error {
 	b.mu.Lock()
 	b.guilds[guildID] = true
 	b.mu.Unlock()
 
 	if err := RegisterCommands(b.session, b.appID, guildID); err != nil {
 		b.logger.Error("failed to register commands", "guild_id", guildID, "error", err)
+		return err
 	}
+	return nil
+}
+
+// HandleGuildCreate is called when the bot joins a guild or during startup enumeration.
+// It registers commands for the guild and tracks it.
+func (b *Bot) HandleGuildCreate(_ *discordgo.Session, event *discordgo.GuildCreate) {
+	b.logger.Info("guild create event", "guild_id", event.Guild.ID)
+	b.trackAndRegister(event.Guild.ID)
 }
 
 // RegisterAllGuilds registers commands for all provided guild IDs.
@@ -88,12 +93,7 @@ func (b *Bot) HandleGuildCreate(_ *discordgo.Session, event *discordgo.GuildCrea
 func (b *Bot) RegisterAllGuilds(guildIDs []string) []error {
 	var errs []error
 	for _, guildID := range guildIDs {
-		b.mu.Lock()
-		b.guilds[guildID] = true
-		b.mu.Unlock()
-
-		if err := RegisterCommands(b.session, b.appID, guildID); err != nil {
-			b.logger.Error("failed to register commands", "guild_id", guildID, "error", err)
+		if err := b.trackAndRegister(guildID); err != nil {
 			errs = append(errs, err)
 		}
 	}

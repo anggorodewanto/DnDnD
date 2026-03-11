@@ -42,7 +42,7 @@
   - Depends on: Phase 7
   - Done when: Integration tests verify name matching, status transitions, retirement, unique constraints.
 
-- [ ] **Phase 9a: Discord Bot Foundation — Core**
+- [x] **Phase 9a: Discord Bot Foundation — Core**
   - Scope: Discordgo bot setup: gateway connection, guild tracking, `GuildCreate` handler. Per-guild slash command registration (idempotent, with stale command cleanup). Welcome DM on member join. Bot permission validation. Discord session interface + mock for testing.
   - Depends on: Phase 1
   - Done when: Bot connects to Discord, registers commands per guild, sends welcome DM to new members, permission validation works, mock session available for tests.
