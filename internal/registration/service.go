@@ -122,6 +122,7 @@ func (s *Service) CreatePlaceholder(ctx context.Context, campaignID uuid.UUID, n
 		SpeedFt:          30,
 		ProficiencyBonus: 2,
 		HitDiceRemaining: []byte(`{}`),
+		Languages:        []string{"Common"},
 		DdbUrl:           ddbURLNull,
 	})
 	if err != nil {

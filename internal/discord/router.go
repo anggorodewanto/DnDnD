@@ -27,6 +27,7 @@ type RegistrationDeps struct {
 	DMQueueFunc  func(guildID string) string
 	DMUserFunc   func(guildID string) string
 	TokenFunc    func(campaignID uuid.UUID, discordUserID string) string
+	NameResolver CharacterNameResolver
 }
 
 // NewCommandRouter creates a CommandRouter with stub handlers for all player commands
@@ -59,7 +60,7 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 	if deps != nil {
 		// Wire game commands with status awareness.
 		for _, name := range gameCommands {
-			r.handlers[name] = NewStatusAwareStubHandler(bot.session, name, deps.RegService, deps.CampaignProv)
+			r.handlers[name] = NewStatusAwareStubHandler(bot.session, name, deps.RegService, deps.CampaignProv, deps.NameResolver)
 		}
 
 		// Wire registration commands to real handlers.

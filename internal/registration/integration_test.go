@@ -288,6 +288,67 @@ func TestIntegration_UniqueConstraints(t *testing.T) {
 	})
 }
 
+func TestIntegration_CreatePlaceholder_HappyPath(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx, db, queries := setupTestDB(t)
+	svc := registration.NewService(queries)
+	campaignID := createTestCampaign(t, db, "guild-placeholder-happy")
+
+	char, err := svc.CreatePlaceholder(ctx, campaignID, "Imported (https://dndbeyond.com/char/1)", "https://dndbeyond.com/characters/12345")
+	if err != nil {
+		t.Fatalf("CreatePlaceholder: %v", err)
+	}
+	if char.Name != "Imported (https://dndbeyond.com/char/1)" {
+		t.Errorf("expected name, got %s", char.Name)
+	}
+	if char.CampaignID != campaignID {
+		t.Errorf("expected campaign ID %s, got %s", campaignID, char.CampaignID)
+	}
+	if !char.DdbUrl.Valid || char.DdbUrl.String != "https://dndbeyond.com/characters/12345" {
+		t.Errorf("expected ddb_url set, got %v", char.DdbUrl)
+	}
+	if char.Level != 1 {
+		t.Errorf("expected level 1, got %d", char.Level)
+	}
+}
+
+func TestIntegration_CreatePlaceholder_EmptyDdbURL(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx, db, queries := setupTestDB(t)
+	svc := registration.NewService(queries)
+	campaignID := createTestCampaign(t, db, "guild-placeholder-empty-url")
+
+	char, err := svc.CreatePlaceholder(ctx, campaignID, "New Character", "")
+	if err != nil {
+		t.Fatalf("CreatePlaceholder: %v", err)
+	}
+	if char.Name != "New Character" {
+		t.Errorf("expected name, got %s", char.Name)
+	}
+	if char.DdbUrl.Valid {
+		t.Errorf("expected null ddb_url for empty string, got %v", char.DdbUrl)
+	}
+}
+
+func TestIntegration_CreatePlaceholder_DBError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx, _, queries := setupTestDB(t)
+	svc := registration.NewService(queries)
+
+	// Use a non-existent campaign ID to trigger a foreign key error
+	fakeCampaignID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+	_, err := svc.CreatePlaceholder(ctx, fakeCampaignID, "Bad Char", "")
+	if err == nil {
+		t.Fatal("expected error for non-existent campaign, got nil")
+	}
+}
+
 func TestIntegration_Import(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

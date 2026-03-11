@@ -2,7 +2,6 @@ package discord
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -31,6 +30,9 @@ type CampaignProvider interface {
 type CharacterCreator interface {
 	CreatePlaceholder(ctx context.Context, campaignID uuid.UUID, name string, ddbURL string) (refdata.Character, error)
 }
+
+// CharacterNameResolver resolves a character ID to its name.
+type CharacterNameResolver func(ctx context.Context, characterID uuid.UUID) (string, error)
 
 // RegisterHandler handles the /register slash command.
 type RegisterHandler struct {
@@ -85,7 +87,7 @@ func (h *RegisterHandler) Handle(interaction *discordgo.Interaction) {
 	case registration.ResultExactMatch:
 		respondEphemeral(h.session, interaction,
 			fmt.Sprintf("✅ Registration submitted — %s is pending DM approval. You'll be pinged when approved.", characterName))
-		h.postDMQueue(guildID, characterName, userID, "register")
+		postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, guildID, characterName, userID, "register")
 
 	case registration.ResultFuzzyMatch:
 		suggestions := strings.Join(result.Suggestions, ", ")
@@ -98,15 +100,6 @@ func (h *RegisterHandler) Handle(interaction *discordgo.Interaction) {
 	}
 }
 
-func (h *RegisterHandler) postDMQueue(guildID, characterName, playerUserID, via string) {
-	channelID := h.dmQueueFunc(guildID)
-	if channelID == "" {
-		return
-	}
-	dmUserID := h.dmUserFunc(guildID)
-	msg := fmt.Sprintf("🆕 <@%s> — **%s** registration by <@%s> via /%s. Pending approval.", dmUserID, characterName, playerUserID, via)
-	_, _ = h.session.ChannelMessageSend(channelID, msg)
-}
 
 // ImportHandler handles the /import slash command.
 type ImportHandler struct {
@@ -174,18 +167,9 @@ func (h *ImportHandler) Handle(interaction *discordgo.Interaction) {
 	respondEphemeral(h.session, interaction,
 		fmt.Sprintf("✅ Registration submitted — %s is pending DM approval. You'll be pinged when approved.", charName))
 
-	h.postDMQueue(guildID, charName, userID, "import")
+	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, guildID, charName, userID, "import")
 }
 
-func (h *ImportHandler) postDMQueue(guildID, characterName, playerUserID, via string) {
-	channelID := h.dmQueueFunc(guildID)
-	if channelID == "" {
-		return
-	}
-	dmUserID := h.dmUserFunc(guildID)
-	msg := fmt.Sprintf("🆕 <@%s> — **%s** registration by <@%s> via /%s. Pending approval.", dmUserID, characterName, playerUserID, via)
-	_, _ = h.session.ChannelMessageSend(channelID, msg)
-}
 
 // CreateCharacterHandler handles the /create-character slash command.
 type CreateCharacterHandler struct {
@@ -241,17 +225,19 @@ func (h *CreateCharacterHandler) Handle(interaction *discordgo.Interaction) {
 	respondEphemeral(h.session, interaction,
 		fmt.Sprintf("✅ Registration submitted — your character is pending DM approval. You'll be pinged when approved.\n\n🔗 **Character Builder:** %s\n_(Link expires in 24 hours)_", portalURL))
 
-	h.postDMQueue(guildID, charName, userID, "create-character")
+	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, guildID, charName, userID, "create-character")
 }
 
-func (h *CreateCharacterHandler) postDMQueue(guildID, characterName, playerUserID, via string) {
-	channelID := h.dmQueueFunc(guildID)
+
+// postDMQueueNotification sends a registration notification to the DM queue channel.
+func postDMQueueNotification(session Session, dmQueueFunc, dmUserFunc func(string) string, guildID, characterName, playerUserID, via string) {
+	channelID := dmQueueFunc(guildID)
 	if channelID == "" {
 		return
 	}
-	dmUserID := h.dmUserFunc(guildID)
+	dmUserID := dmUserFunc(guildID)
 	msg := fmt.Sprintf("🆕 <@%s> — **%s** registration by <@%s> via /%s. Pending approval.", dmUserID, characterName, playerUserID, via)
-	_, _ = h.session.ChannelMessageSend(channelID, msg)
+	_, _ = session.ChannelMessageSend(channelID, msg)
 }
 
 // StatusCheckResponse returns a status message for a player's current registration state.
@@ -331,7 +317,7 @@ func truncateURL(url string, maxLen int) string {
 
 // GameCommandStatusCheck checks a player's registration status before a game command.
 // Returns a status message if the player should not proceed, or empty string if OK.
-func GameCommandStatusCheck(ctx context.Context, regService RegistrationService, campaignProv CampaignProvider, guildID, discordUserID string) string {
+func GameCommandStatusCheck(ctx context.Context, regService RegistrationService, campaignProv CampaignProvider, nameResolver CharacterNameResolver, guildID, discordUserID string) string {
 	campaign, err := campaignProv.GetCampaignByGuildID(ctx, guildID)
 	if err != nil {
 		return ""
@@ -346,10 +332,14 @@ func GameCommandStatusCheck(ctx context.Context, regService RegistrationService,
 		return ""
 	}
 
-	// For non-approved statuses, we need the character name
-	// Since we have pc.CharacterID, we'd need to look it up
-	// For now, use a placeholder approach
-	return StatusCheckResponse(pc, "Your character")
+	characterName := "Your character"
+	if nameResolver != nil {
+		if name, err := nameResolver(ctx, pc.CharacterID); err == nil {
+			characterName = name
+		}
+	}
+
+	return StatusCheckResponse(pc, characterName)
 }
 
 // StatusAwareStubHandler wraps a stub handler with registration status awareness.
@@ -358,15 +348,17 @@ type StatusAwareStubHandler struct {
 	name         string
 	regService   RegistrationService
 	campaignProv CampaignProvider
+	nameResolver CharacterNameResolver
 }
 
 // NewStatusAwareStubHandler creates a handler that checks registration status before responding.
-func NewStatusAwareStubHandler(session Session, name string, regService RegistrationService, campaignProv CampaignProvider) *StatusAwareStubHandler {
+func NewStatusAwareStubHandler(session Session, name string, regService RegistrationService, campaignProv CampaignProvider, nameResolver CharacterNameResolver) *StatusAwareStubHandler {
 	return &StatusAwareStubHandler{
 		session:      session,
 		name:         name,
 		regService:   regService,
 		campaignProv: campaignProv,
+		nameResolver: nameResolver,
 	}
 }
 
@@ -374,7 +366,7 @@ func NewStatusAwareStubHandler(session Session, name string, regService Registra
 // Otherwise, falls through to the stub response.
 func (h *StatusAwareStubHandler) Handle(interaction *discordgo.Interaction) {
 	userID := interactionUserID(interaction)
-	statusMsg := GameCommandStatusCheck(context.Background(), h.regService, h.campaignProv, interaction.GuildID, userID)
+	statusMsg := GameCommandStatusCheck(context.Background(), h.regService, h.campaignProv, h.nameResolver, interaction.GuildID, userID)
 	if statusMsg != "" {
 		respondEphemeral(h.session, interaction, statusMsg)
 		return
@@ -382,10 +374,3 @@ func (h *StatusAwareStubHandler) Handle(interaction *discordgo.Interaction) {
 	respondEphemeral(h.session, interaction, fmt.Sprintf("/%s is not yet implemented.", h.name))
 }
 
-// dmFeedbackString extracts the feedback string from a NullString.
-func dmFeedbackString(ns sql.NullString) string {
-	if ns.Valid {
-		return ns.String
-	}
-	return "(no feedback provided)"
-}

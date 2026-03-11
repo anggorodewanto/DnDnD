@@ -503,7 +503,7 @@ func TestStatusAwareStubHandler_UnregisteredPlayer_ShowsNoCharMessage(t *testing
 		return nil, fmt.Errorf("not found")
 	}
 
-	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider())
+	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider(), nil)
 
 	interaction := makeInteraction("attack", "player-1", "guild-1",
 		stringOption("target", "G2"))
@@ -515,7 +515,7 @@ func TestStatusAwareStubHandler_UnregisteredPlayer_ShowsNoCharMessage(t *testing
 	}
 }
 
-func TestStatusAwareStubHandler_PendingPlayer_ShowsStatusMessage(t *testing.T) {
+func TestStatusAwareStubHandler_PendingPlayer_ShowsCharacterName(t *testing.T) {
 	mock := newTestMock()
 	var respondedContent string
 	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
@@ -525,15 +525,24 @@ func TestStatusAwareStubHandler_PendingPlayer_ShowsStatusMessage(t *testing.T) {
 		return nil
 	}
 
+	charID := testCharacterID()
 	regService := newMockRegService()
 	regService.GetStatusFunc = func(_ context.Context, _ uuid.UUID, _ string) (*refdata.PlayerCharacter, error) {
 		return &refdata.PlayerCharacter{
-			Status:    "pending",
-			CreatedAt: time.Now().Add(-2 * time.Hour),
+			Status:      "pending",
+			CharacterID: charID,
+			CreatedAt:   time.Now().Add(-2 * time.Hour),
 		}, nil
 	}
 
-	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider())
+	nameResolver := func(_ context.Context, id uuid.UUID) (string, error) {
+		if id == charID {
+			return "Thorn", nil
+		}
+		return "", fmt.Errorf("not found")
+	}
+
+	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider(), nameResolver)
 
 	interaction := makeInteraction("attack", "player-1", "guild-1",
 		stringOption("target", "G2"))
@@ -542,6 +551,9 @@ func TestStatusAwareStubHandler_PendingPlayer_ShowsStatusMessage(t *testing.T) {
 
 	if !strings.Contains(respondedContent, "pending DM approval") {
 		t.Errorf("expected pending status, got: %s", respondedContent)
+	}
+	if !strings.Contains(respondedContent, "Thorn") {
+		t.Errorf("expected character name 'Thorn' in status message, got: %s", respondedContent)
 	}
 }
 
@@ -562,7 +574,7 @@ func TestStatusAwareStubHandler_ApprovedPlayer_ShowsStubMessage(t *testing.T) {
 		}, nil
 	}
 
-	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider())
+	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider(), nil)
 
 	interaction := makeInteraction("attack", "player-1", "guild-1",
 		stringOption("target", "G2"))
@@ -592,7 +604,7 @@ func TestStatusAwareStubHandler_ChangesRequested_ShowsFeedback(t *testing.T) {
 		}, nil
 	}
 
-	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider())
+	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider(), nil)
 
 	interaction := makeInteraction("attack", "player-1", "guild-1",
 		stringOption("target", "G2"))
@@ -1000,13 +1012,55 @@ func TestStatusCheckResponse_UnknownStatus_ReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestGameCommandStatusCheck_PendingWithResolver_ShowsCharacterName(t *testing.T) {
+	charID := testCharacterID()
+	regService := newMockRegService()
+	regService.GetStatusFunc = func(_ context.Context, _ uuid.UUID, _ string) (*refdata.PlayerCharacter, error) {
+		return &refdata.PlayerCharacter{
+			Status:      "pending",
+			CharacterID: charID,
+			CreatedAt:   time.Now().Add(-5 * time.Minute),
+		}, nil
+	}
+
+	nameResolver := func(_ context.Context, id uuid.UUID) (string, error) {
+		if id == charID {
+			return "Thorn", nil
+		}
+		return "", fmt.Errorf("not found")
+	}
+
+	msg := GameCommandStatusCheck(context.Background(), regService, newMockCampaignProvider(), nameResolver, "guild-1", "user-1")
+	if !strings.Contains(msg, "Thorn") {
+		t.Errorf("expected character name 'Thorn', got: %s", msg)
+	}
+	if !strings.Contains(msg, "pending DM approval") {
+		t.Errorf("expected pending message, got: %s", msg)
+	}
+}
+
+func TestGameCommandStatusCheck_PendingWithNilResolver_FallsBack(t *testing.T) {
+	regService := newMockRegService()
+	regService.GetStatusFunc = func(_ context.Context, _ uuid.UUID, _ string) (*refdata.PlayerCharacter, error) {
+		return &refdata.PlayerCharacter{
+			Status:    "pending",
+			CreatedAt: time.Now().Add(-5 * time.Minute),
+		}, nil
+	}
+
+	msg := GameCommandStatusCheck(context.Background(), regService, newMockCampaignProvider(), nil, "guild-1", "user-1")
+	if !strings.Contains(msg, "Your character") {
+		t.Errorf("expected fallback name 'Your character', got: %s", msg)
+	}
+}
+
 func TestGameCommandStatusCheck_NoCampaign_ReturnsEmpty(t *testing.T) {
 	campProv := &mockCampaignProvider{
 		GetCampaignByGuildIDFunc: func(_ context.Context, _ string) (refdata.Campaign, error) {
 			return refdata.Campaign{}, fmt.Errorf("not found")
 		},
 	}
-	msg := GameCommandStatusCheck(context.Background(), newMockRegService(), campProv, "guild-1", "user-1")
+	msg := GameCommandStatusCheck(context.Background(), newMockRegService(), campProv, nil, "guild-1", "user-1")
 	if msg != "" {
 		t.Errorf("expected empty when no campaign, got: %s", msg)
 	}
@@ -1052,19 +1106,6 @@ func TestStatusCheckResponse_Rejected(t *testing.T) {
 	}
 }
 
-func TestDmFeedbackString_Valid(t *testing.T) {
-	ns := sql.NullString{String: "fix stuff", Valid: true}
-	if dmFeedbackString(ns) != "fix stuff" {
-		t.Errorf("expected valid string")
-	}
-}
-
-func TestDmFeedbackString_Null(t *testing.T) {
-	ns := sql.NullString{}
-	if dmFeedbackString(ns) != "(no feedback provided)" {
-		t.Errorf("expected default string")
-	}
-}
 
 func TestNewCommandRouter_WithRegDeps_WiresRealHandlers(t *testing.T) {
 	mock := newTestMock()
