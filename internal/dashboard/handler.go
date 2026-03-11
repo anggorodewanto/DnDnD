@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"bytes"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -70,11 +71,15 @@ func (h *Handler) ServeDashboard(w http.ResponseWriter, r *http.Request) {
 		SavedEncounters:  []string{},
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.Execute(w, data); err != nil {
+	var buf bytes.Buffer
+	if err := h.tmpl.Execute(&buf, data); err != nil {
 		h.logger.Error("failed to render dashboard template", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(buf.Bytes())
 }
 
 const dashboardTemplate = `<!DOCTYPE html>

@@ -45,6 +45,7 @@ func (h *Hub) Run() {
 		case client := <-h.Unregister:
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
+				close(client.Send)
 			}
 		case msg := <-h.Broadcast:
 			for client := range h.clients {
@@ -53,6 +54,7 @@ func (h *Hub) Run() {
 				default:
 					// Slow client — drop and unregister
 					delete(h.clients, client)
+					close(client.Send)
 				}
 			}
 		case <-h.stop:
@@ -91,10 +93,7 @@ func (h *Handler) ServeWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Writer goroutine: sends messages from hub to client
 	go func() {
-		defer func() {
-			h.hub.Unregister <- client
-			conn.Close(websocket.StatusNormalClosure, "")
-		}()
+		defer conn.Close(websocket.StatusNormalClosure, "")
 
 		for msg := range client.Send {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -107,12 +106,14 @@ func (h *Handler) ServeWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Reader goroutine: keeps connection alive by reading (discards messages)
+	// Reader loop: keeps connection alive by reading (discards messages).
+	// When the connection closes, unregister from the hub which closes client.Send,
+	// which in turn terminates the writer goroutine.
 	for {
 		_, _, err := conn.Read(r.Context())
 		if err != nil {
 			h.logger.Debug("websocket read closed", "error", err, "user_id", userID)
-			close(client.Send)
+			h.hub.Unregister <- client
 			return
 		}
 	}

@@ -18,7 +18,10 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(http.Handler) 
 		r.Get("/ws", h.ServeWebSocket)
 
 		// Serve the Svelte SPA stub from embedded assets
-		assetsFS, _ := fs.Sub(Assets, "assets")
+		assetsFS, err := fs.Sub(Assets, "assets")
+		if err != nil {
+			panic("dashboard: failed to create assets sub-filesystem: " + err.Error())
+		}
 		fileServer := http.FileServer(http.FS(assetsFS))
 		r.Get("/app/*", http.StripPrefix("/dashboard/app", fileServer).ServeHTTP)
 	})

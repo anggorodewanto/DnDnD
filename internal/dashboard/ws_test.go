@@ -56,16 +56,13 @@ func TestHub_UnregisterRemovesClient(t *testing.T) {
 	hub.Unregister <- client
 	time.Sleep(10 * time.Millisecond)
 
-	// Broadcast should not block or send to unregistered client
+	// After unregister, the hub closes the Send channel
+	_, open := <-ch
+	assert.False(t, open, "Send channel should be closed after unregister")
+
+	// Broadcast should not block or panic with no clients
 	hub.Broadcast <- []byte(`{"type":"test"}`)
 	time.Sleep(10 * time.Millisecond)
-
-	select {
-	case <-ch:
-		t.Fatal("should not receive message after unregister")
-	default:
-		// expected
-	}
 }
 
 func TestWebSocketEndpoint_RequiresAuth(t *testing.T) {
@@ -101,12 +98,15 @@ func TestWebSocketEndpoint_AcceptsConnection(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	conn, _, err := websocket.Dial(ctx, wsURL+"/dashboard/ws", nil)
 	require.NoError(t, err)
 	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	// Allow time for the client to be registered with the hub
+	time.Sleep(50 * time.Millisecond)
 
 	// Send a message from hub to verify client registered
 	hub.Broadcast <- []byte(`{"type":"snapshot"}`)
@@ -139,6 +139,48 @@ func TestHub_BroadcastToMultipleClients(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("expected broadcast message on all clients")
 		}
+	}
+}
+
+func TestHub_BroadcastAfterUnregister_NoPanic(t *testing.T) {
+	// This test verifies that broadcasting after a client has been unregistered
+	// does not panic (e.g., by sending on a closed channel).
+	hub := NewHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	client := &Client{UserID: "user1", Send: make(chan []byte, 1)}
+	hub.Register <- client
+	time.Sleep(10 * time.Millisecond)
+
+	// Unregister the client (hub should close the Send channel)
+	hub.Unregister <- client
+	time.Sleep(10 * time.Millisecond)
+
+	// Broadcast should not panic even though client.Send was closed by hub
+	assert.NotPanics(t, func() {
+		hub.Broadcast <- []byte(`{"type":"test"}`)
+		time.Sleep(10 * time.Millisecond)
+	})
+}
+
+func TestHub_ConcurrentUnregisterAndBroadcast_NoPanic(t *testing.T) {
+	// Stress test: concurrent broadcast and unregister should not cause a panic
+	// from sending on a closed channel. Run with -race to verify.
+	for i := 0; i < 50; i++ {
+		hub := NewHub()
+		go hub.Run()
+
+		client := &Client{UserID: "user1", Send: make(chan []byte, 1)}
+		hub.Register <- client
+		time.Sleep(1 * time.Millisecond)
+
+		// Race: broadcast and unregister concurrently
+		go func() { hub.Broadcast <- []byte(`{"type":"test"}`) }()
+		go func() { hub.Unregister <- client }()
+
+		time.Sleep(5 * time.Millisecond)
+		hub.Stop()
 	}
 }
 
