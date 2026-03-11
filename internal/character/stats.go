@@ -46,20 +46,17 @@ func CalculateHP(classes []ClassEntry, hitDice map[string]string, scores Ability
 
 // CalculateAC computes armor class.
 // If armor is nil and no formula, uses 10 + DEX.
-// If formula is set and no armor, evaluates formula.
-// If both armor and formula, takes the higher.
+// If formula is set and no armor, evaluates formula (Unarmored Defense).
+// If armor is equipped, formula is ignored (Unarmored Defense doesn't apply).
 // Shield adds +2 in all cases.
 func CalculateAC(scores AbilityScores, armor *ArmorInfo, hasShield bool, acFormula string) int {
-	armorAC := calculateArmorAC(scores, armor)
-	formulaAC := 0
+	ac := calculateArmorAC(scores, armor)
 
-	if acFormula != "" {
-		formulaAC = evaluateACFormula(scores, acFormula)
-	}
-
-	ac := armorAC
-	if formulaAC > ac {
-		ac = formulaAC
+	if armor == nil && acFormula != "" {
+		formulaAC := evaluateACFormula(scores, acFormula)
+		if formulaAC > ac {
+			ac = formulaAC
+		}
 	}
 
 	if hasShield {

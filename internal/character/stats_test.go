@@ -187,6 +187,20 @@ func TestCalculateHP_MinimumHP(t *testing.T) {
 	}
 }
 
+func TestCalculateHP_MinimumHP_Floor(t *testing.T) {
+	// Level 3 wizard with CON 1 (-5 modifier) to produce hp < 1
+	// HP = 6 (max d6 at level 1) + 2*4 (avg for levels 2-3) + (-5)*3 = 6 + 8 - 15 = -1
+	// Should be floored to 1
+	classes := []ClassEntry{{Class: "wizard", Level: 3}}
+	hitDice := map[string]string{"wizard": "d6"}
+	scores := AbilityScores{CON: 1} // -5 modifier
+
+	got := CalculateHP(classes, hitDice, scores)
+	if got != 1 {
+		t.Errorf("CalculateHP floor = %d, want 1", got)
+	}
+}
+
 func TestCalculateAC_NoArmor(t *testing.T) {
 	// No armor, no formula: 10 + DEX mod
 	scores := AbilityScores{DEX: 14}
@@ -267,15 +281,16 @@ func TestCalculateAC_UnarmoredDefense_WithShield(t *testing.T) {
 }
 
 func TestCalculateAC_FormulaIgnoredWhenArmored(t *testing.T) {
-	// If wearing armor, take higher of armor AC and formula AC
+	// Per 5e rules: Unarmored Defense does NOT apply when wearing armor.
+	// Even if formula AC would be higher, armor AC is used.
 	scores := AbilityScores{DEX: 14, CON: 20}
 	armor := &ArmorInfo{ACBase: 11, DexBonus: true, DexMax: 0}
 	// Armor AC: 11 + 2 = 13
-	// Formula AC: 10 + 2 + 5 = 17
-	// Take higher: 17
+	// Formula AC would be: 10 + 2 + 5 = 17 (but ignored)
+	// Result: 13 (armor only)
 	got := CalculateAC(scores, armor, false, "10 + DEX + CON")
-	if got != 17 {
-		t.Errorf("CalculateAC formula > armor = %d, want 17", got)
+	if got != 13 {
+		t.Errorf("CalculateAC formula ignored when armored = %d, want 13", got)
 	}
 }
 
@@ -312,13 +327,12 @@ func TestCalculateAC_FormulaWithCHA(t *testing.T) {
 }
 
 func TestCalculateAC_ArmorBetterThanFormula(t *testing.T) {
+	// When armor is equipped, formula is ignored entirely (same result here)
 	scores := AbilityScores{DEX: 10, CON: 10}
 	armor := &ArmorInfo{ACBase: 18, DexBonus: false}
-	// Armor AC: 18
-	// Formula AC: 10 + 0 + 0 = 10
-	// Take higher: 18
+	// Armor AC: 18, formula ignored
 	got := CalculateAC(scores, armor, false, "10 + DEX + CON")
 	if got != 18 {
-		t.Errorf("CalculateAC armor > formula = %d, want 18", got)
+		t.Errorf("CalculateAC armor when formula present = %d, want 18", got)
 	}
 }
