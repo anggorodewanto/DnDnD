@@ -424,7 +424,7 @@ func TestSeedAll_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	totalUpserts := WeaponCount + ArmorCount + ConditionCount + ClassCount + RaceCount + FeatCount + SpellCount
+	totalUpserts := WeaponCount + ArmorCount + ConditionCount + ClassCount + RaceCount + FeatCount + SpellCount + CreatureCount + MagicItemCount
 	if mock.callCount != totalUpserts {
 		t.Fatalf("expected %d ExecContext calls, got %d", totalUpserts, mock.callCount)
 	}
@@ -584,4 +584,160 @@ func TestOptJSON_Panic(t *testing.T) {
 	}()
 
 	optJSON(make(chan int))
+}
+
+func TestSeedCreatures_ErrorWrapping(t *testing.T) {
+	dbErr := errors.New("exec failed")
+	mock := &mockDBTX{errToReturn: dbErr}
+	q := New(mock)
+
+	err := seedCreatures(context.Background(), q)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "upserting creature") {
+		t.Fatalf("expected error to contain 'upserting creature', got %q", err.Error())
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected wrapped error to contain original, got %v", err)
+	}
+}
+
+func TestSeedMagicItems_ErrorWrapping(t *testing.T) {
+	dbErr := errors.New("exec failed")
+	mock := &mockDBTX{errToReturn: dbErr}
+	q := New(mock)
+
+	err := seedMagicItems(context.Background(), q)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "upserting magic_item") {
+		t.Fatalf("expected error to contain 'upserting magic_item', got %q", err.Error())
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected wrapped error to contain original, got %v", err)
+	}
+}
+
+func TestSeedAll_CreaturesErrorWrapping(t *testing.T) {
+	dbErr := errors.New("creature exec failed")
+	mock := &mockDBTX{errToReturn: dbErr, failAfterN: WeaponCount + ArmorCount + ConditionCount + ClassCount + RaceCount + FeatCount + SpellCount}
+	err := SeedAll(context.Background(), mock)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "seeding creatures") {
+		t.Fatalf("expected error to contain 'seeding creatures', got %q", err.Error())
+	}
+}
+
+func TestSeedAll_MagicItemsErrorWrapping(t *testing.T) {
+	dbErr := errors.New("magic_item exec failed")
+	mock := &mockDBTX{errToReturn: dbErr, failAfterN: WeaponCount + ArmorCount + ConditionCount + ClassCount + RaceCount + FeatCount + SpellCount + CreatureCount}
+	err := SeedAll(context.Background(), mock)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "seeding magic_items") {
+		t.Fatalf("expected error to contain 'seeding magic_items', got %q", err.Error())
+	}
+}
+
+func TestListCreatures_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListCreatures(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListCreaturesByType_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListCreaturesByType(context.Background(), "beast")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListCreaturesByCR_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListCreaturesByCR(context.Background(), "1")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListMagicItems_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListMagicItems(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListMagicItemsByRarity_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListMagicItemsByRarity(context.Background(), "rare")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestListMagicItemsByType_QueryError(t *testing.T) {
+	dbErr := errors.New("query failed")
+	mock := &mockDBTX{queryErr: dbErr}
+	q := New(mock)
+
+	_, err := q.ListMagicItemsByType(context.Background(), optStr("weapon"))
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected query error, got %v", err)
+	}
+}
+
+func TestSrdCreatureCount(t *testing.T) {
+	creatures := srdCreatures()
+	if len(creatures) != CreatureCount {
+		t.Fatalf("expected %d SRD creatures, got %d", CreatureCount, len(creatures))
+	}
+}
+
+func TestSrdMagicItemCount(t *testing.T) {
+	items := srdMagicItems()
+	if len(items) != MagicItemCount {
+		t.Fatalf("expected %d SRD magic items, got %d", MagicItemCount, len(items))
+	}
 }

@@ -16,6 +16,8 @@ const (
 	RaceCount      = 9
 	FeatCount      = 41
 	SpellCount     = 354
+	CreatureCount  = 327
+	MagicItemCount = 70
 )
 
 // SeedAll populates all SRD reference data (weapons, armor, conditions, classes, races, feats, spells).
@@ -45,6 +47,12 @@ func SeedAll(ctx context.Context, db DBTX) error {
 	}
 	if err := seedSpells(ctx, q); err != nil {
 		return fmt.Errorf("seeding spells: %w", err)
+	}
+	if err := seedCreatures(ctx, q); err != nil {
+		return fmt.Errorf("seeding creatures: %w", err)
+	}
+	if err := seedMagicItems(ctx, q); err != nil {
+		return fmt.Errorf("seeding magic_items: %w", err)
 	}
 
 	return nil

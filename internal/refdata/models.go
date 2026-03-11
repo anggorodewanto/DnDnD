@@ -67,6 +67,36 @@ type ConditionsRef struct {
 	UpdatedAt         time.Time       `json:"updated_at"`
 }
 
+type Creature struct {
+	ID                    string                `json:"id"`
+	CampaignID            uuid.NullUUID         `json:"campaign_id"`
+	Name                  string                `json:"name"`
+	Size                  string                `json:"size"`
+	Type                  string                `json:"type"`
+	Alignment             sql.NullString        `json:"alignment"`
+	Ac                    int32                 `json:"ac"`
+	AcType                sql.NullString        `json:"ac_type"`
+	HpFormula             string                `json:"hp_formula"`
+	HpAverage             int32                 `json:"hp_average"`
+	Speed                 json.RawMessage       `json:"speed"`
+	AbilityScores         json.RawMessage       `json:"ability_scores"`
+	SavingThrows          pqtype.NullRawMessage `json:"saving_throws"`
+	Skills                pqtype.NullRawMessage `json:"skills"`
+	DamageResistances     []string              `json:"damage_resistances"`
+	DamageImmunities      []string              `json:"damage_immunities"`
+	DamageVulnerabilities []string              `json:"damage_vulnerabilities"`
+	ConditionImmunities   []string              `json:"condition_immunities"`
+	Senses                pqtype.NullRawMessage `json:"senses"`
+	Languages             []string              `json:"languages"`
+	Cr                    string                `json:"cr"`
+	Attacks               json.RawMessage       `json:"attacks"`
+	Abilities             pqtype.NullRawMessage `json:"abilities"`
+	Homebrew              sql.NullBool          `json:"homebrew"`
+	Source                sql.NullString        `json:"source"`
+	CreatedAt             time.Time             `json:"created_at"`
+	UpdatedAt             time.Time             `json:"updated_at"`
+}
+
 type Feat struct {
 	ID               string                `json:"id"`
 	Name             string                `json:"name"`
@@ -76,6 +106,26 @@ type Feat struct {
 	MechanicalEffect pqtype.NullRawMessage `json:"mechanical_effect"`
 	CreatedAt        time.Time             `json:"created_at"`
 	UpdatedAt        time.Time             `json:"updated_at"`
+}
+
+type MagicItem struct {
+	ID                    string                `json:"id"`
+	CampaignID            uuid.NullUUID         `json:"campaign_id"`
+	Name                  string                `json:"name"`
+	BaseItemType          sql.NullString        `json:"base_item_type"`
+	BaseItemID            sql.NullString        `json:"base_item_id"`
+	Rarity                string                `json:"rarity"`
+	RequiresAttunement    sql.NullBool          `json:"requires_attunement"`
+	AttunementRestriction sql.NullString        `json:"attunement_restriction"`
+	MagicBonus            sql.NullInt32         `json:"magic_bonus"`
+	PassiveEffects        pqtype.NullRawMessage `json:"passive_effects"`
+	ActiveAbilities       pqtype.NullRawMessage `json:"active_abilities"`
+	Charges               pqtype.NullRawMessage `json:"charges"`
+	Description           string                `json:"description"`
+	Homebrew              sql.NullBool          `json:"homebrew"`
+	Source                sql.NullString        `json:"source"`
+	CreatedAt             time.Time             `json:"created_at"`
+	UpdatedAt             time.Time             `json:"updated_at"`
 }
 
 type Race struct {
