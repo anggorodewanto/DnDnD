@@ -274,8 +274,10 @@ Report to the user:
 If status is APPROVED:
 1. Mark the phase as done in the phases file: change `- [ ] **Phase N:`
    to `- [x] **Phase N:`.
-2. Run `/simplify` on the changed code.
-3. After `/simplify` completes, commit all remaining changes (phases.md
+2. Spawn a subagent (`subagent_type: "code-simplifier:code-simplifier"`) to review and
+   simplify the changed code. Pass it the list of files created/modified
+   from the final IMPL_RESULT so it knows what to focus on.
+3. After the subagent completes, commit all remaining changes (phases.md
    update + any simplify fixes) with message:
    `Phase {PHASE_NUMBER} complete: <one-line summary>`
 4. Push to the remote: `git push`.
