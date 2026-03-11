@@ -32,16 +32,29 @@ func NewSessionStore(db *sql.DB) *SessionStore {
 	return &SessionStore{db: db}
 }
 
+// sessionColumns is the column list shared by Create and GetByID.
+const sessionColumns = `id, discord_user_id, access_token, refresh_token, token_expires_at, created_at, updated_at, expires_at`
+
+// scanSession scans a full session row into a new Session struct.
+func scanSession(row interface{ Scan(dest ...any) error }) (*Session, error) {
+	sess := &Session{}
+	err := row.Scan(&sess.ID, &sess.DiscordUserID, &sess.AccessToken, &sess.RefreshToken,
+		&sess.TokenExpiresAt, &sess.CreatedAt, &sess.UpdatedAt, &sess.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+	return sess, nil
+}
+
 // Create inserts a new session and returns it.
 func (s *SessionStore) Create(ctx context.Context, discordUserID, accessToken, refreshToken string, tokenExpiresAt *time.Time) (*Session, error) {
-	sess := &Session{}
-	err := s.db.QueryRowContext(ctx,
+	row := s.db.QueryRowContext(ctx,
 		`INSERT INTO sessions (discord_user_id, access_token, refresh_token, token_expires_at)
 		 VALUES ($1, $2, $3, $4)
-		 RETURNING id, discord_user_id, access_token, refresh_token, token_expires_at, created_at, updated_at, expires_at`,
+		 RETURNING `+sessionColumns,
 		discordUserID, accessToken, refreshToken, tokenExpiresAt,
-	).Scan(&sess.ID, &sess.DiscordUserID, &sess.AccessToken, &sess.RefreshToken,
-		&sess.TokenExpiresAt, &sess.CreatedAt, &sess.UpdatedAt, &sess.ExpiresAt)
+	)
+	sess, err := scanSession(row)
 	if err != nil {
 		return nil, fmt.Errorf("creating session: %w", err)
 	}
@@ -54,13 +67,12 @@ var ErrSessionNotFound = errors.New("session not found")
 // GetByID retrieves a session by ID. Returns ErrSessionNotFound if the session
 // does not exist or has expired.
 func (s *SessionStore) GetByID(ctx context.Context, id uuid.UUID) (*Session, error) {
-	sess := &Session{}
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, discord_user_id, access_token, refresh_token, token_expires_at, created_at, updated_at, expires_at
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+sessionColumns+`
 		 FROM sessions
 		 WHERE id = $1 AND expires_at > now()`, id,
-	).Scan(&sess.ID, &sess.DiscordUserID, &sess.AccessToken, &sess.RefreshToken,
-		&sess.TokenExpiresAt, &sess.CreatedAt, &sess.UpdatedAt, &sess.ExpiresAt)
+	)
+	sess, err := scanSession(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSessionNotFound
 	}

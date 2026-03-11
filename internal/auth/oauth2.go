@@ -129,23 +129,12 @@ func (s *OAuthService) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     StateCookieName,
-		Value:    state,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   s.secure,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   300, // 5 minutes
-	})
-
-	url := s.oauth.AuthCodeURL(state)
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+	http.SetCookie(w, s.cookie(StateCookieName, state, 300))
+	http.Redirect(w, r, s.oauth.AuthCodeURL(state), http.StatusTemporaryRedirect)
 }
 
 // HandleCallback processes the OAuth2 callback from Discord.
 func (s *OAuthService) HandleCallback(w http.ResponseWriter, r *http.Request) {
-	// Validate state
 	stateCookie, err := r.Cookie(StateCookieName)
 	if err != nil {
 		http.Error(w, "missing state cookie", http.StatusBadRequest)
@@ -158,18 +147,8 @@ func (s *OAuthService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Clear state cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     StateCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   s.secure,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	})
+	http.SetCookie(w, s.cookie(StateCookieName, "", -1))
 
-	// Check for error from Discord
 	if errMsg := r.URL.Query().Get("error"); errMsg != "" {
 		s.logger.Warn("OAuth2 error from Discord", "error", errMsg)
 		http.Error(w, "authorization denied", http.StatusForbidden)
@@ -182,7 +161,6 @@ func (s *OAuthService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Exchange code for tokens
 	token, err := s.oauth.Exchange(r.Context(), code)
 	if err != nil {
 		s.logger.Error("token exchange failed", "error", err)
@@ -190,7 +168,6 @@ func (s *OAuthService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch user info
 	user, err := s.userFetcher.FetchUserInfo(r.Context(), token.AccessToken)
 	if err != nil {
 		s.logger.Error("failed to fetch user info", "error", err)
@@ -198,7 +175,6 @@ func (s *OAuthService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create session
 	sess, err := s.sessions.Create(r.Context(), user.ID, token.AccessToken, token.RefreshToken, &token.Expiry)
 	if err != nil {
 		s.logger.Error("failed to create session", "error", err)
@@ -206,43 +182,45 @@ func (s *OAuthService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set session cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     CookieName,
-		Value:    sess.ID.String(),
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   s.secure,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(SessionTTL.Seconds()),
-	})
-
+	http.SetCookie(w, s.cookie(CookieName, sess.ID.String(), int(SessionTTL.Seconds())))
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
 // HandleLogout deletes the session and clears the cookie.
 func (s *OAuthService) HandleLogout(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(CookieName)
-	if err == nil {
-		sessionID, parseErr := uuid.Parse(cookie.Value)
-		if parseErr == nil {
-			if delErr := s.sessions.Delete(r.Context(), sessionID); delErr != nil {
-				s.logger.Error("failed to delete session", "error", delErr)
-			}
-		}
-	}
+	s.deleteSessionFromCookie(r)
+	http.SetCookie(w, s.cookie(CookieName, "", -1))
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     CookieName,
-		Value:    "",
+// cookie builds an http.Cookie with the service's shared defaults.
+func (s *OAuthService) cookie(name, value string, maxAge int) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   s.secure,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	})
+		MaxAge:   maxAge,
+	}
+}
 
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+// deleteSessionFromCookie attempts to parse and delete the session referenced
+// by the request's session cookie. Errors are logged but not propagated since
+// logout must always succeed.
+func (s *OAuthService) deleteSessionFromCookie(r *http.Request) {
+	cookie, err := r.Cookie(CookieName)
+	if err != nil {
+		return
+	}
+	sessionID, err := uuid.Parse(cookie.Value)
+	if err != nil {
+		return
+	}
+	if err := s.sessions.Delete(r.Context(), sessionID); err != nil {
+		s.logger.Error("failed to delete session", "error", err)
+	}
 }
 
 func defaultGenerateState() (string, error) {

@@ -52,7 +52,7 @@
   - Depends on: Phase 9a
   - Done when: Messages split correctly at size boundaries, .txt fallback works, rate-limit 429 triggers backoff and retry, per-channel queue serializes sends.
 
-- [ ] **Phase 10: Discord OAuth2 & Session Management**
+- [x] **Phase 10: Discord OAuth2 & Session Management**
   - Scope: Discord OAuth2 flow for DM dashboard and player portal authentication. Server-side sessions in PostgreSQL (HTTP-only cookie, SameSite=Lax). Transparent token refresh. 30-day sliding TTL. Middleware to validate session and extract Discord user ID.
   - Depends on: Phase 2, Phase 9a
   - Done when: OAuth2 login/callback works, session persists across requests, expired tokens auto-refresh, session TTL slides on activity.
