@@ -15,7 +15,10 @@ func seedCreatures(ctx context.Context, q *Queries) error {
 func srdCreatures() []cr {
 	return slices.Concat(
 		srdCreaturesLowCR(),
-		srdCreaturesMidCR(),
-		srdCreaturesHighCR(),
+		srdCreaturesCR3to5(),
+		srdCreaturesCR6to7(),
+		srdCreaturesCR8to11(),
+		srdCreaturesCR12to17(),
+		srdCreaturesCR18to30(),
 	)
 }

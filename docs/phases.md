@@ -27,7 +27,7 @@
   - Depends on: Phase 2
   - Done when: All SRD spells seeded with correct `resolution_mode` tags; validation warnings logged for data quality issues; snapshot tests pass.
 
-- [ ] **Phase 6: Reference Data Schema — Creatures & Magic Items**
+- [x] **Phase 6: Reference Data Schema — Creatures & Magic Items**
   - Scope: Migrations for `creatures` and `magic_items` tables. SRD seeder for ~325 creature stat blocks and SRD magic items. Go structs and sqlc queries.
   - Depends on: Phase 3
   - Done when: All SRD creatures and magic items seeded; snapshot tests verify counts and spot-check entries (e.g., Goblin AC/HP, +1 Longsword magic_bonus).

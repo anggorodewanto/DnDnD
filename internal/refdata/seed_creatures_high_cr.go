@@ -1,13 +1,5 @@
 package refdata
 
-// srdCreaturesHighCR returns SRD creatures with CR 8+.
-func srdCreaturesHighCR() []cr {
-	return append(
-		append(srdCreaturesCR8to11(), srdCreaturesCR12to17()...),
-		srdCreaturesCR18to30()...,
-	)
-}
-
 func srdCreaturesCR8to11() []cr {
 	return []cr{
 		// ——— CR 8 ———
