@@ -41,7 +41,7 @@ func TestIntegration_CreateAndGetCampaign(t *testing.T) {
 	assert.Equal(t, "guild-100", c.GuildID)
 	assert.Equal(t, "dm-1", c.DmUserID)
 	assert.Equal(t, "Heroes of the Realm", c.Name)
-	assert.Equal(t, "active", c.Status)
+	assert.Equal(t, campaign.StatusActive, c.Status)
 	assert.NotEqual(t, uuid.Nil, c.ID)
 
 	// Default settings should be applied
@@ -112,22 +112,22 @@ func TestIntegration_PauseResumeCampaign(t *testing.T) {
 
 	c, err := svc.CreateCampaign(ctx, "guild-400", "dm-1", "Pause Test", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "active", c.Status)
+	assert.Equal(t, campaign.StatusActive, c.Status)
 
 	// Pause
 	paused, err := svc.PauseCampaign(ctx, c.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "paused", paused.Status)
+	assert.Equal(t, campaign.StatusPaused, paused.Status)
 
 	// Verify persisted
 	got, err := svc.GetByID(ctx, c.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "paused", got.Status)
+	assert.Equal(t, campaign.StatusPaused, got.Status)
 
 	// Resume
 	resumed, err := svc.ResumeCampaign(ctx, c.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "active", resumed.Status)
+	assert.Equal(t, campaign.StatusActive, resumed.Status)
 }
 
 func TestIntegration_ArchiveCampaign(t *testing.T) {
@@ -143,7 +143,7 @@ func TestIntegration_ArchiveCampaign(t *testing.T) {
 
 	archived, err := svc.ArchiveCampaign(ctx, c.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "archived", archived.Status)
+	assert.Equal(t, campaign.StatusArchived, archived.Status)
 
 	// Cannot pause archived campaign
 	_, err = svc.PauseCampaign(ctx, c.ID)

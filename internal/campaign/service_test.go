@@ -90,7 +90,7 @@ func TestCreateCampaign_Success(t *testing.T) {
 				DmUserID: arg.DmUserID,
 				Name:     arg.Name,
 				Settings: arg.Settings,
-				Status:   "active",
+				Status:   StatusActive,
 			}, nil
 		},
 	}
@@ -102,7 +102,7 @@ func TestCreateCampaign_Success(t *testing.T) {
 	assert.Equal(t, "guild-1", c.GuildID)
 	assert.Equal(t, "dm-1", c.DmUserID)
 	assert.Equal(t, "Test Campaign", c.Name)
-	assert.Equal(t, "active", c.Status)
+	assert.Equal(t, StatusActive, c.Status)
 }
 
 func TestCreateCampaign_WithSettings(t *testing.T) {
@@ -114,7 +114,7 @@ func TestCreateCampaign_WithSettings(t *testing.T) {
 				DmUserID: arg.DmUserID,
 				Name:     arg.Name,
 				Settings: arg.Settings,
-				Status:   "active",
+				Status:   StatusActive,
 			}, nil
 		},
 	}
@@ -218,17 +218,17 @@ func TestPauseCampaign_Success(t *testing.T) {
 	}
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "active"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
 		},
 		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
-			assert.Equal(t, "paused", arg.Status)
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "paused"}, nil
+			assert.Equal(t, StatusPaused, arg.Status)
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
 		},
 	}
 	svc := NewService(store, announcer)
 	c, err := svc.PauseCampaign(context.Background(), id)
 	require.NoError(t, err)
-	assert.Equal(t, "paused", c.Status)
+	assert.Equal(t, StatusPaused, c.Status)
 	assert.True(t, announced)
 }
 
@@ -236,7 +236,7 @@ func TestPauseCampaign_AlreadyPaused(t *testing.T) {
 	id := uuid.New()
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "paused"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
 		},
 	}
 	svc := NewService(store, nil)
@@ -249,13 +249,13 @@ func TestPauseCampaign_Archived(t *testing.T) {
 	id := uuid.New()
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "archived"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusArchived}, nil
 		},
 	}
 	svc := NewService(store, nil)
 	_, err := svc.PauseCampaign(context.Background(), id)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot pause")
+	assert.Contains(t, err.Error(), "cannot transition")
 }
 
 func TestResumeCampaign_Success(t *testing.T) {
@@ -271,17 +271,17 @@ func TestResumeCampaign_Success(t *testing.T) {
 	}
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "paused"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
 		},
 		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
-			assert.Equal(t, "active", arg.Status)
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "active"}, nil
+			assert.Equal(t, StatusActive, arg.Status)
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
 		},
 	}
 	svc := NewService(store, announcer)
 	c, err := svc.ResumeCampaign(context.Background(), id)
 	require.NoError(t, err)
-	assert.Equal(t, "active", c.Status)
+	assert.Equal(t, StatusActive, c.Status)
 	assert.True(t, announced)
 }
 
@@ -289,7 +289,7 @@ func TestResumeCampaign_AlreadyActive(t *testing.T) {
 	id := uuid.New()
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "active"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
 		},
 	}
 	svc := NewService(store, nil)
@@ -302,37 +302,37 @@ func TestResumeCampaign_Archived(t *testing.T) {
 	id := uuid.New()
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "archived"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusArchived}, nil
 		},
 	}
 	svc := NewService(store, nil)
 	_, err := svc.ResumeCampaign(context.Background(), id)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot resume")
+	assert.Contains(t, err.Error(), "cannot transition")
 }
 
 func TestArchiveCampaign_Success(t *testing.T) {
 	id := uuid.New()
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "active"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
 		},
 		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
-			assert.Equal(t, "archived", arg.Status)
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "archived"}, nil
+			assert.Equal(t, StatusArchived, arg.Status)
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusArchived}, nil
 		},
 	}
 	svc := NewService(store, nil)
 	c, err := svc.ArchiveCampaign(context.Background(), id)
 	require.NoError(t, err)
-	assert.Equal(t, "archived", c.Status)
+	assert.Equal(t, StatusArchived, c.Status)
 }
 
 func TestArchiveCampaign_AlreadyArchived(t *testing.T) {
 	id := uuid.New()
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "archived"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusArchived}, nil
 		},
 	}
 	svc := NewService(store, nil)
@@ -410,17 +410,17 @@ func TestPauseCampaign_AnnounceError_StillPauses(t *testing.T) {
 	}
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "active"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
 		},
 		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "paused"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
 		},
 	}
 	svc := NewService(store, announcer)
 	c, err := svc.PauseCampaign(context.Background(), id)
 	// Should still succeed; announcement failure is non-fatal
 	require.NoError(t, err)
-	assert.Equal(t, "paused", c.Status)
+	assert.Equal(t, StatusPaused, c.Status)
 }
 
 func TestResumeCampaign_AnnounceError_StillResumes(t *testing.T) {
@@ -432,32 +432,32 @@ func TestResumeCampaign_AnnounceError_StillResumes(t *testing.T) {
 	}
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "paused"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
 		},
 		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "active"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
 		},
 	}
 	svc := NewService(store, announcer)
 	c, err := svc.ResumeCampaign(context.Background(), id)
 	require.NoError(t, err)
-	assert.Equal(t, "active", c.Status)
+	assert.Equal(t, StatusActive, c.Status)
 }
 
 func TestPauseCampaign_NilAnnouncer(t *testing.T) {
 	id := uuid.New()
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "active"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
 		},
 		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "paused"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
 		},
 	}
 	svc := NewService(store, nil)
 	c, err := svc.PauseCampaign(context.Background(), id)
 	require.NoError(t, err)
-	assert.Equal(t, "paused", c.Status)
+	assert.Equal(t, StatusPaused, c.Status)
 }
 
 func TestCreateCampaign_DefaultSettings(t *testing.T) {
@@ -474,7 +474,7 @@ func TestCreateCampaign_DefaultSettings(t *testing.T) {
 				ID:       uuid.New(),
 				GuildID:  arg.GuildID,
 				Settings: arg.Settings,
-				Status:   "active",
+				Status:   StatusActive,
 			}, nil
 		},
 	}
@@ -499,7 +499,7 @@ func TestPauseCampaign_UpdateStatusError(t *testing.T) {
 	id := uuid.New()
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "active"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
 		},
 		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
 			return refdata.Campaign{}, errors.New("db error")
@@ -527,7 +527,7 @@ func TestResumeCampaign_UpdateStatusError(t *testing.T) {
 	id := uuid.New()
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "paused"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
 		},
 		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
 			return refdata.Campaign{}, errors.New("db error")
@@ -555,17 +555,17 @@ func TestArchiveCampaign_FromPaused(t *testing.T) {
 	id := uuid.New()
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "paused"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
 		},
 		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
-			assert.Equal(t, "archived", arg.Status)
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "archived"}, nil
+			assert.Equal(t, StatusArchived, arg.Status)
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusArchived}, nil
 		},
 	}
 	svc := NewService(store, nil)
 	c, err := svc.ArchiveCampaign(context.Background(), id)
 	require.NoError(t, err)
-	assert.Equal(t, "archived", c.Status)
+	assert.Equal(t, StatusArchived, c.Status)
 }
 
 func TestUpdateSettings_StoreError(t *testing.T) {
@@ -583,16 +583,16 @@ func TestResumeCampaign_NilAnnouncer(t *testing.T) {
 	id := uuid.New()
 	store := &mockStore{
 		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "paused"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
 		},
 		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
-			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: "active"}, nil
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
 		},
 	}
 	svc := NewService(store, nil)
 	c, err := svc.ResumeCampaign(context.Background(), id)
 	require.NoError(t, err)
-	assert.Equal(t, "active", c.Status)
+	assert.Equal(t, StatusActive, c.Status)
 }
 
 func TestGetByID_StoreError(t *testing.T) {

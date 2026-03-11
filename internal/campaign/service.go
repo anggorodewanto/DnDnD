@@ -11,6 +11,13 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
+// Campaign status constants.
+const (
+	StatusActive   = "active"
+	StatusPaused   = "paused"
+	StatusArchived = "archived"
+)
+
 // Settings represents the JSONB campaign settings.
 type Settings struct {
 	TurnTimeoutHours int      `json:"turn_timeout_hours"`
@@ -99,75 +106,47 @@ func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (refdata.Campaign, 
 
 // PauseCampaign transitions a campaign from active to paused and announces to Discord.
 func (s *Service) PauseCampaign(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
-	c, err := s.store.GetCampaignByID(ctx, id)
-	if err != nil {
-		return refdata.Campaign{}, fmt.Errorf("fetching campaign: %w", err)
-	}
-	if c.Status == "paused" {
-		return refdata.Campaign{}, fmt.Errorf("campaign is already paused")
-	}
-	if c.Status == "archived" {
-		return refdata.Campaign{}, fmt.Errorf("cannot pause an archived campaign")
-	}
-
-	updated, err := s.store.UpdateCampaignStatus(ctx, refdata.UpdateCampaignStatusParams{
-		ID:     id,
-		Status: "paused",
-	})
-	if err != nil {
-		return refdata.Campaign{}, fmt.Errorf("updating status: %w", err)
-	}
-
-	// Announcement is best-effort; failure doesn't block the pause.
-	if s.announcer != nil {
-		_ = s.announcer.AnnounceToStory(c.GuildID, "The campaign has been **paused**. See you soon, adventurers!")
-	}
-
-	return updated, nil
+	return s.transitionStatus(ctx, id, StatusPaused, "The campaign has been **paused**. See you soon, adventurers!")
 }
 
 // ResumeCampaign transitions a campaign from paused to active and announces to Discord.
 func (s *Service) ResumeCampaign(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+	return s.transitionStatus(ctx, id, StatusActive, "The campaign has been **resumed**! The adventure continues!")
+}
+
+// ArchiveCampaign transitions a campaign to archived status.
+func (s *Service) ArchiveCampaign(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+	return s.transitionStatus(ctx, id, StatusArchived, "")
+}
+
+// transitionStatus handles the shared fetch-validate-update-announce pattern for status changes.
+// An empty announcement string skips the announcement step.
+func (s *Service) transitionStatus(ctx context.Context, id uuid.UUID, target, announcement string) (refdata.Campaign, error) {
 	c, err := s.store.GetCampaignByID(ctx, id)
 	if err != nil {
 		return refdata.Campaign{}, fmt.Errorf("fetching campaign: %w", err)
 	}
-	if c.Status == "active" {
-		return refdata.Campaign{}, fmt.Errorf("campaign is already active")
+	if c.Status == target {
+		return refdata.Campaign{}, fmt.Errorf("campaign is already %s", target)
 	}
-	if c.Status == "archived" {
-		return refdata.Campaign{}, fmt.Errorf("cannot resume an archived campaign")
+	if c.Status == StatusArchived {
+		return refdata.Campaign{}, fmt.Errorf("cannot transition an archived campaign")
 	}
 
 	updated, err := s.store.UpdateCampaignStatus(ctx, refdata.UpdateCampaignStatusParams{
 		ID:     id,
-		Status: "active",
+		Status: target,
 	})
 	if err != nil {
 		return refdata.Campaign{}, fmt.Errorf("updating status: %w", err)
 	}
 
-	if s.announcer != nil {
-		_ = s.announcer.AnnounceToStory(c.GuildID, "The campaign has been **resumed**! The adventure continues!")
+	// Announcement is best-effort; failure doesn't block the transition.
+	if s.announcer != nil && announcement != "" {
+		_ = s.announcer.AnnounceToStory(c.GuildID, announcement)
 	}
 
 	return updated, nil
-}
-
-// ArchiveCampaign transitions a campaign to archived status.
-func (s *Service) ArchiveCampaign(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
-	c, err := s.store.GetCampaignByID(ctx, id)
-	if err != nil {
-		return refdata.Campaign{}, fmt.Errorf("fetching campaign: %w", err)
-	}
-	if c.Status == "archived" {
-		return refdata.Campaign{}, fmt.Errorf("campaign is already archived")
-	}
-
-	return s.store.UpdateCampaignStatus(ctx, refdata.UpdateCampaignStatusParams{
-		ID:     id,
-		Status: "archived",
-	})
 }
 
 // UpdateSettings updates the campaign's settings JSONB.

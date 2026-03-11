@@ -57,7 +57,7 @@
   - Depends on: Phase 2, Phase 9a
   - Done when: OAuth2 login/callback works, session persists across requests, expired tokens auto-refresh, session TTL slides on activity.
 
-- [ ] **Phase 11: Campaign CRUD & Multi-Tenant Scoping**
+- [x] **Phase 11: Campaign CRUD & Multi-Tenant Scoping**
   - Scope: Campaign creation (one per guild), settings JSONB (turn_timeout_hours, etc.), status management (active/paused/archived). All queries scoped by guild_id/campaign_id. Campaign pause/resume with Discord announcements.
   - Depends on: Phase 2, Phase 9a
   - Done when: Campaign created on `/setup`, all queries properly scoped, pause/resume posts to `#the-story`.
