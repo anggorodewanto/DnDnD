@@ -68,7 +68,12 @@ func TestIntegration_MigrateDown(t *testing.T) {
 		t.Fatalf("MigrateUp failed: %v", err)
 	}
 
-	// Roll back the creatures/magic_items migration (most recent)
+	// Roll back the characters migration (most recent)
+	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
+		t.Fatalf("MigrateDown (characters) failed: %v", err)
+	}
+
+	// Roll back the creatures/magic_items migration
 	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
 		t.Fatalf("MigrateDown (creatures/magic_items) failed: %v", err)
 	}

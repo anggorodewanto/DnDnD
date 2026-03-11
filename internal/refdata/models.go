@@ -38,6 +38,41 @@ type Campaign struct {
 	UpdatedAt time.Time             `json:"updated_at"`
 }
 
+type Character struct {
+	ID               uuid.UUID             `json:"id"`
+	CampaignID       uuid.UUID             `json:"campaign_id"`
+	Name             string                `json:"name"`
+	Race             string                `json:"race"`
+	Classes          json.RawMessage       `json:"classes"`
+	Level            int32                 `json:"level"`
+	AbilityScores    json.RawMessage       `json:"ability_scores"`
+	HpMax            int32                 `json:"hp_max"`
+	HpCurrent        int32                 `json:"hp_current"`
+	TempHp           int32                 `json:"temp_hp"`
+	Ac               int32                 `json:"ac"`
+	AcFormula        sql.NullString        `json:"ac_formula"`
+	SpeedFt          int32                 `json:"speed_ft"`
+	ProficiencyBonus int32                 `json:"proficiency_bonus"`
+	EquippedMainHand sql.NullString        `json:"equipped_main_hand"`
+	EquippedOffHand  sql.NullString        `json:"equipped_off_hand"`
+	EquippedArmor    sql.NullString        `json:"equipped_armor"`
+	SpellSlots       pqtype.NullRawMessage `json:"spell_slots"`
+	PactMagicSlots   pqtype.NullRawMessage `json:"pact_magic_slots"`
+	HitDiceRemaining json.RawMessage       `json:"hit_dice_remaining"`
+	FeatureUses      pqtype.NullRawMessage `json:"feature_uses"`
+	Features         pqtype.NullRawMessage `json:"features"`
+	Proficiencies    pqtype.NullRawMessage `json:"proficiencies"`
+	Gold             int32                 `json:"gold"`
+	AttunementSlots  pqtype.NullRawMessage `json:"attunement_slots"`
+	Languages        []string              `json:"languages"`
+	Inventory        pqtype.NullRawMessage `json:"inventory"`
+	CharacterData    pqtype.NullRawMessage `json:"character_data"`
+	DdbUrl           sql.NullString        `json:"ddb_url"`
+	Homebrew         sql.NullBool          `json:"homebrew"`
+	CreatedAt        time.Time             `json:"created_at"`
+	UpdatedAt        time.Time             `json:"updated_at"`
+}
+
 type Class struct {
 	ID                      string                `json:"id"`
 	Name                    string                `json:"name"`
