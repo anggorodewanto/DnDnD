@@ -20,7 +20,7 @@ const (
 	MagicItemCount = 70
 )
 
-// SeedAll populates all SRD reference data (weapons, armor, conditions, classes, races, feats, spells).
+// SeedAll populates all SRD reference data (weapons, armor, conditions, classes, races, feats, spells, creatures, magic items).
 func SeedAll(ctx context.Context, db DBTX) error {
 	if db == nil {
 		return fmt.Errorf("database connection must not be nil")

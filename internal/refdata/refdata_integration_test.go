@@ -2,6 +2,7 @@ package refdata_test
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
 	dbfs "github.com/ab/dndnd/db"
@@ -160,6 +161,15 @@ func TestIntegration_SeedCreaturesAndMagicItems(t *testing.T) {
 		t.Errorf("Bag of Holding rarity: expected uncommon, got %s", bag.Rarity)
 	}
 
+	// Verify ListCreatures returns all creatures
+	allCreatures, err := q.ListCreatures(ctx)
+	if err != nil {
+		t.Fatalf("ListCreatures failed: %v", err)
+	}
+	if len(allCreatures) != refdata.CreatureCount {
+		t.Errorf("ListCreatures: expected %d, got %d", refdata.CreatureCount, len(allCreatures))
+	}
+
 	// Verify list by type/CR queries work
 	beasts, err := q.ListCreaturesByType(ctx, "beast")
 	if err != nil {
@@ -177,6 +187,15 @@ func TestIntegration_SeedCreaturesAndMagicItems(t *testing.T) {
 		t.Error("expected at least one CR 1 creature")
 	}
 
+	// Verify ListMagicItems returns all items
+	allItems, err := q.ListMagicItems(ctx)
+	if err != nil {
+		t.Fatalf("ListMagicItems failed: %v", err)
+	}
+	if len(allItems) != refdata.MagicItemCount {
+		t.Errorf("ListMagicItems: expected %d, got %d", refdata.MagicItemCount, len(allItems))
+	}
+
 	// Verify list by rarity query works
 	rareItems, err := q.ListMagicItemsByRarity(ctx, "rare")
 	if err != nil {
@@ -184,5 +203,14 @@ func TestIntegration_SeedCreaturesAndMagicItems(t *testing.T) {
 	}
 	if len(rareItems) == 0 {
 		t.Error("expected at least one rare magic item")
+	}
+
+	// Verify ListMagicItemsByType works
+	weaponItems, err := q.ListMagicItemsByType(ctx, sql.NullString{String: "weapon", Valid: true})
+	if err != nil {
+		t.Fatalf("ListMagicItemsByType(weapon) failed: %v", err)
+	}
+	if len(weaponItems) == 0 {
+		t.Error("expected at least one weapon magic item")
 	}
 }
