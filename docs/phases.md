@@ -47,7 +47,7 @@
   - Depends on: Phase 1
   - Done when: Bot connects to Discord, registers commands per guild, sends welcome DM to new members, permission validation works, mock session available for tests.
 
-- [ ] **Phase 9b: Discord Bot Foundation — Message Queue & Rate Limiting**
+- [x] **Phase 9b: Discord Bot Foundation — Message Queue & Rate Limiting**
   - Scope: Message size handling (split at 2000/6000 chars, .txt attachment fallback). Per-channel outbound message queue with rate-limit backoff (429 handling). Queue draining with jitter. Integration tests for message splitting and rate-limit retry.
   - Depends on: Phase 9a
   - Done when: Messages split correctly at size boundaries, .txt fallback works, rate-limit 429 triggers backoff and retry, per-channel queue serializes sends.

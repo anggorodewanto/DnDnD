@@ -122,7 +122,7 @@ func (mq *MessageQueue) drain(channelID string) {
 		if retryAfter > 0 {
 			// Rate limited — re-enqueue at front and set backoff
 			mq.mu.Lock()
-			cq := mq.channels[channelID]
+			cq = mq.channels[channelID]
 			cq.items = append([]queueItem{item}, cq.items...)
 			cq.backoff = mq.nowFunc().Add(retryAfter)
 			mq.mu.Unlock()
@@ -185,8 +185,4 @@ func parseRetryAfterHeader(val string) time.Duration {
 }
 
 // ErrQueueStopped is returned when the queue is stopped while messages are pending.
-var ErrQueueStopped = errQueueStopped{}
-
-type errQueueStopped struct{}
-
-func (errQueueStopped) Error() string { return "message queue stopped" }
+var ErrQueueStopped = errors.New("message queue stopped")

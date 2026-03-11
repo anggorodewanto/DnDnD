@@ -2,6 +2,7 @@ package discord
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -160,58 +161,30 @@ func TestSplitMessage_Exactly2001_SplitsIntoTwo(t *testing.T) {
 }
 
 func TestSplitMessage_EarlyNewlines_NoDataLoss(t *testing.T) {
-	// Build 5996 chars with newlines at positions ~100, ~201, ~302, etc.
-	// This triggers the bug where newline-splitting produces small parts
-	// and exits after 3 iterations, dropping remaining content.
-	var content string
-	for len(content) < 5996 {
-		remaining := 5996 - len(content)
-		lineLen := 100
-		if lineLen > remaining {
-			lineLen = remaining
-		}
-		content += makeString(lineLen)
-		if len(content) < 5996 {
-			content += "\n"
-		}
-	}
-	if len(content) > 5996 {
-		content = content[:5996]
-	}
+	// Build content with newlines every 100 chars (many small lines).
+	// This triggers fallback to hard-cut when newline-splitting
+	// would produce more than 3 parts.
+	line := makeString(100) + "\n"
+	content := strings.Repeat(line, 59) + makeString(37) // 59*101 + 37 = 5996
+	require.Len(t, content, 5996)
 
 	parts := SplitMessage(content)
 	require.NotNil(t, parts, "should not return nil for content <= 6000")
 
-	// With hard-cut fallback, concatenating parts directly should give original content
-	totalLen := 0
-	for _, p := range parts {
-		totalLen += len(p)
-	}
-	assert.Equal(t, len(content), totalLen,
-		"all content must be preserved; got %d chars across %d parts but expected %d",
-		totalLen, len(parts), len(content))
+	assertTotalLength(t, parts, len(content))
 }
 
 func TestSplitMessage_EarlyNewlines_FallsBackToHardCut(t *testing.T) {
 	// When newline splitting would produce too many small parts,
 	// the algorithm should use hard-cuts to stay within 3 parts.
-	section := makeString(100) + "\n"
-	content := ""
-	for len(content) < 4500 {
-		content += section
-	}
-	content += makeString(5996 - len(content))
+	line := makeString(100) + "\n"
+	content := strings.Repeat(line, 44) + makeString(5996-44*101) // 44*101=4444, pad to 5996
+	require.Len(t, content, 5996)
 
 	parts := SplitMessage(content)
 	require.NotNil(t, parts)
 
-	// Hard-cut preserves all content exactly
-	totalLen := 0
-	for _, p := range parts {
-		totalLen += len(p)
-	}
-	assert.Equal(t, len(content), totalLen,
-		"expected %d chars, got %d", len(content), totalLen)
+	assertTotalLength(t, parts, len(content))
 }
 
 func TestNeedsFileAttachment(t *testing.T) {
@@ -221,10 +194,16 @@ func TestNeedsFileAttachment(t *testing.T) {
 	assert.True(t, NeedsFileAttachment(makeString(6001)))
 }
 
-func makeString(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = 'a'
+func assertTotalLength(t *testing.T, parts []string, expected int) {
+	t.Helper()
+	total := 0
+	for _, p := range parts {
+		total += len(p)
 	}
-	return string(b)
+	assert.Equal(t, expected, total,
+		"all content must be preserved; got %d chars across %d parts", total, len(parts))
+}
+
+func makeString(n int) string {
+	return strings.Repeat("a", n)
 }

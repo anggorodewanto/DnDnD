@@ -37,14 +37,12 @@ func SendContent(s Session, channelID, content string) error {
 }
 
 func sendAsFile(s Session, channelID, content string) error {
-	summary := "See details below."
-	reader := strings.NewReader(content)
 	_, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
-		Content: summary,
+		Content: "See details below.",
 		Files: []*discordgo.File{
 			{
 				Name:   "details.txt",
-				Reader: reader,
+				Reader: strings.NewReader(content),
 			},
 		},
 	})
@@ -79,15 +77,11 @@ func splitAtNewlines(content string) []string {
 	remaining := content
 	for len(remaining) > 0 && len(parts) < 3 {
 		if len(remaining) <= MaxMessageLen {
-			parts = append(parts, remaining)
-			remaining = ""
-			break
+			return append(parts, remaining)
 		}
 
-		chunk := remaining[:MaxMessageLen]
-		idx := strings.LastIndex(chunk, "\n")
+		idx := strings.LastIndex(remaining[:MaxMessageLen], "\n")
 		if idx == -1 {
-			// No newline found; can't split at newline boundary here.
 			return nil
 		}
 
@@ -96,7 +90,6 @@ func splitAtNewlines(content string) []string {
 	}
 
 	if len(remaining) > 0 {
-		// Didn't fit in 3 parts via newline splitting.
 		return nil
 	}
 	return parts
