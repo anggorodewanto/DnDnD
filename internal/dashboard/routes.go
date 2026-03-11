@@ -1,0 +1,34 @@
+package dashboard
+
+import (
+	"io/fs"
+	"log/slog"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+)
+
+// RegisterRoutes mounts dashboard routes on the given Chi router.
+// The authMiddleware should validate the session and inject the discord user ID.
+func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(http.Handler) http.Handler) {
+	r.Route("/dashboard", func(r chi.Router) {
+		r.Use(authMiddleware)
+
+		r.Get("/", h.ServeDashboard)
+		r.Get("/ws", h.ServeWebSocket)
+
+		// Serve the Svelte SPA stub from embedded assets
+		assetsFS, _ := fs.Sub(Assets, "assets")
+		fileServer := http.FileServer(http.FS(assetsFS))
+		r.Get("/app/*", http.StripPrefix("/dashboard/app", fileServer).ServeHTTP)
+	})
+}
+
+// MountDashboard is a convenience function that creates a Handler, sets up the hub,
+// and registers all dashboard routes on the given router.
+func MountDashboard(r chi.Router, logger *slog.Logger, hub *Hub, authMiddleware func(http.Handler) http.Handler) *Handler {
+	h := NewHandler(logger)
+	h.hub = hub
+	RegisterRoutes(r, h, authMiddleware)
+	return h
+}

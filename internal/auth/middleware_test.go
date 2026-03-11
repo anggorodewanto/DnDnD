@@ -205,3 +205,10 @@ func TestDiscordUserIDFromContext_Missing(t *testing.T) {
 	assert.False(t, ok)
 	assert.Empty(t, id)
 }
+
+func TestContextWithDiscordUserID(t *testing.T) {
+	ctx := auth.ContextWithDiscordUserID(context.Background(), "test-user-123")
+	id, ok := auth.DiscordUserIDFromContext(ctx)
+	assert.True(t, ok)
+	assert.Equal(t, "test-user-123", id)
+}

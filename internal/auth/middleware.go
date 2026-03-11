@@ -20,6 +20,12 @@ func DiscordUserIDFromContext(ctx context.Context) (string, bool) {
 	return id, ok
 }
 
+// ContextWithDiscordUserID returns a new context with the Discord user ID set.
+// This is useful for testing and internal service calls.
+func ContextWithDiscordUserID(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, discordUserIDKey, userID)
+}
+
 // SessionMiddleware validates session cookies and injects the Discord user ID
 // into the request context. It also handles transparent token refresh and TTL sliding.
 func SessionMiddleware(sessions SessionRepository, refresher TokenRefresher, logger *slog.Logger) func(http.Handler) http.Handler {
