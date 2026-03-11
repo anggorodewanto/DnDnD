@@ -1,0 +1,37 @@
+-- name: CreatePlayerCharacter :one
+INSERT INTO player_characters (
+    campaign_id, character_id, discord_user_id, status, dm_feedback, created_via
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) RETURNING *;
+
+-- name: GetPlayerCharacter :one
+SELECT * FROM player_characters WHERE id = $1;
+
+-- name: GetPlayerCharacterByDiscordUser :one
+SELECT * FROM player_characters
+WHERE campaign_id = $1 AND discord_user_id = $2;
+
+-- name: GetPlayerCharacterByCharacter :one
+SELECT * FROM player_characters
+WHERE campaign_id = $1 AND character_id = $2;
+
+-- name: UpdatePlayerCharacterStatus :one
+UPDATE player_characters
+SET status = $2, dm_feedback = $3, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: ListPlayerCharactersByCampaign :many
+SELECT * FROM player_characters
+WHERE campaign_id = $1
+ORDER BY created_at;
+
+-- name: FindCharacterByNameCaseInsensitive :one
+SELECT * FROM characters
+WHERE campaign_id = $1 AND LOWER(name) = LOWER($2);
+
+-- name: ListCharacterNamesByCampaign :many
+SELECT id, name FROM characters
+WHERE campaign_id = $1
+ORDER BY name;
