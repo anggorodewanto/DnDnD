@@ -37,7 +37,7 @@
   - Depends on: Phase 4, Phase 5
   - Done when: Unit tests verify derived stat calculations for single-class and multiclass characters, multiclass spell slot table, AC formulas (standard, unarmored defense), proficiency bonus progression. Integration tests verify JSONB round-tripping (write and re-read classes, proficiencies, inventory, feature_uses JSONB columns with no data loss).
 
-- [ ] **Phase 8: Player Characters Table & Registration Logic**
+- [x] **Phase 8: Player Characters Table & Registration Logic**
   - Scope: Migration for `player_characters` table (status, dm_feedback, created_via, unique constraints). Service layer for registration: case-insensitive name matching, fuzzy/Levenshtein suggestions, status transitions (pending -> approved/changes_requested/rejected/retired). Character retirement logic.
   - Depends on: Phase 7
   - Done when: Integration tests verify name matching, status transitions, retirement, unique constraints.

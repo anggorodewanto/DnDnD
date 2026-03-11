@@ -1,6 +1,10 @@
 package registration
 
-import "strings"
+import (
+	"cmp"
+	"slices"
+	"strings"
+)
 
 // levenshteinDistance computes the edit distance between two strings.
 func levenshteinDistance(a, b string) int {
@@ -45,41 +49,26 @@ type FuzzyMatch struct {
 // close to query (case-insensitive comparison). Results are sorted by distance.
 func FindFuzzyMatches(query string, candidates []string, maxResults int) []FuzzyMatch {
 	queryLower := strings.ToLower(query)
-	type scored struct {
-		name     string
-		distance int
-	}
-	var matches []scored
-
 	maxDist := max(len(queryLower)/2, 3)
 
+	var matches []FuzzyMatch
 	for _, name := range candidates {
 		dist := levenshteinDistance(queryLower, strings.ToLower(name))
-		if dist == 0 {
-			continue // exact match, skip
+		if dist == 0 || dist > maxDist {
+			continue
 		}
-		if dist <= maxDist {
-			matches = append(matches, scored{name: name, distance: dist})
-		}
+		matches = append(matches, FuzzyMatch{Name: name, Distance: dist})
 	}
 
-	// Sort by distance, then alphabetically
-	for i := 0; i < len(matches); i++ {
-		for j := i + 1; j < len(matches); j++ {
-			if matches[j].distance < matches[i].distance ||
-				(matches[j].distance == matches[i].distance && matches[j].name < matches[i].name) {
-				matches[i], matches[j] = matches[j], matches[i]
-			}
+	slices.SortFunc(matches, func(a, b FuzzyMatch) int {
+		if c := cmp.Compare(a.Distance, b.Distance); c != 0 {
+			return c
 		}
-	}
+		return cmp.Compare(a.Name, b.Name)
+	})
 
 	if len(matches) > maxResults {
 		matches = matches[:maxResults]
 	}
-
-	result := make([]FuzzyMatch, len(matches))
-	for i, m := range matches {
-		result[i] = FuzzyMatch{Name: m.name, Distance: m.distance}
-	}
-	return result
+	return matches
 }

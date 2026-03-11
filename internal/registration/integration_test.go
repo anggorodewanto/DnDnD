@@ -154,12 +154,11 @@ func TestIntegration_StatusTransitions(t *testing.T) {
 	campaignID := createTestCampaign(t, db, "guild-status")
 
 	t.Run("pending to approved", func(t *testing.T) {
-		charID := createTestCharacter(t, db, campaignID, "Fighter1")
+		createTestCharacter(t, db, campaignID, "Fighter1")
 		result, err := svc.Register(ctx, campaignID, "player-approve", "Fighter1")
 		if err != nil {
 			t.Fatalf("Register: %v", err)
 		}
-		_ = charID
 
 		pc, err := svc.Approve(ctx, result.PlayerCharacter.ID)
 		if err != nil {
