@@ -103,6 +103,33 @@ func (s *Service) Register(ctx context.Context, campaignID uuid.UUID, discordUse
 	}, nil
 }
 
+// CreatePlaceholder creates a minimal character record for import/create flows.
+func (s *Service) CreatePlaceholder(ctx context.Context, campaignID uuid.UUID, name string, ddbURL string) (refdata.Character, error) {
+	ddbURLNull := sql.NullString{}
+	if ddbURL != "" {
+		ddbURLNull = sql.NullString{String: ddbURL, Valid: true}
+	}
+
+	char, err := s.queries.CreateCharacter(ctx, refdata.CreateCharacterParams{
+		CampaignID:       campaignID,
+		Name:             name,
+		Race:             "Unknown",
+		Classes:          []byte(`{}`),
+		Level:            1,
+		AbilityScores:    []byte(`{}`),
+		HpMax:            1,
+		HpCurrent:        1,
+		SpeedFt:          30,
+		ProficiencyBonus: 2,
+		HitDiceRemaining: []byte(`{}`),
+		DdbUrl:           ddbURLNull,
+	})
+	if err != nil {
+		return refdata.Character{}, fmt.Errorf("creating placeholder character: %w", err)
+	}
+	return char, nil
+}
+
 // Import creates a pending player_character via import.
 func (s *Service) Import(ctx context.Context, campaignID uuid.UUID, discordUserID string, characterID uuid.UUID) (*refdata.PlayerCharacter, error) {
 	return s.createPC(ctx, campaignID, discordUserID, characterID, "import")

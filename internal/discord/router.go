@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
 )
 
 // CommandHandler handles a slash command interaction.
@@ -17,25 +18,66 @@ type CommandRouter struct {
 	handlers map[string]CommandHandler
 }
 
+// RegistrationDeps holds the optional dependencies for registration command handlers.
+// When nil, the router uses plain stub handlers for registration commands.
+type RegistrationDeps struct {
+	RegService   RegistrationService
+	CampaignProv CampaignProvider
+	CharCreator  CharacterCreator
+	DMQueueFunc  func(guildID string) string
+	DMUserFunc   func(guildID string) string
+	TokenFunc    func(campaignID uuid.UUID, discordUserID string) string
+}
+
 // NewCommandRouter creates a CommandRouter with stub handlers for all player commands
 // and routes /setup to the provided SetupHandler.
-func NewCommandRouter(bot *Bot, setupHandler *SetupHandler) *CommandRouter {
+// If regDeps is non-nil, registration commands (/register, /import, /create-character)
+// use real handlers and game commands become status-aware.
+func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*RegistrationDeps) *CommandRouter {
 	r := &CommandRouter{
 		bot:      bot,
 		handlers: make(map[string]CommandHandler),
 	}
 
-	// Register stub handlers for all player-facing commands.
-	stubCommands := []string{
+	// Commands that are game commands (need status awareness when regDeps present).
+	gameCommands := []string{
 		"move", "fly", "attack", "cast", "bonus", "action", "shove",
 		"interact", "done", "deathsave", "command", "reaction", "check",
 		"save", "rest", "whisper", "status", "equip", "undo", "inventory",
 		"use", "give", "loot", "attune", "unattune", "prepare", "retire",
-		"register", "import", "create-character", "character", "recap",
-		"distance", "help",
+		"character", "recap", "distance", "help",
 	}
-	for _, name := range stubCommands {
-		r.handlers[name] = &stubHandler{session: bot.session, name: name}
+
+	// Registration commands handled separately when deps are provided.
+	regCommands := []string{"register", "import", "create-character"}
+
+	var deps *RegistrationDeps
+	if len(regDeps) > 0 {
+		deps = regDeps[0]
+	}
+
+	if deps != nil {
+		// Wire game commands with status awareness.
+		for _, name := range gameCommands {
+			r.handlers[name] = NewStatusAwareStubHandler(bot.session, name, deps.RegService, deps.CampaignProv)
+		}
+
+		// Wire registration commands to real handlers.
+		r.handlers["register"] = NewRegisterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.DMQueueFunc, deps.DMUserFunc)
+		r.handlers["import"] = NewImportHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc)
+		tokenFunc := deps.TokenFunc
+		if tokenFunc == nil {
+			tokenFunc = GeneratePortalToken
+		}
+		r.handlers["create-character"] = NewCreateCharacterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc, tokenFunc)
+	} else {
+		// Fallback: all stubs.
+		for _, name := range gameCommands {
+			r.handlers[name] = &stubHandler{session: bot.session, name: name}
+		}
+		for _, name := range regCommands {
+			r.handlers[name] = &stubHandler{session: bot.session, name: name}
+		}
 	}
 
 	// Route /setup to its dedicated handler if provided.
