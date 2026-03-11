@@ -34,43 +34,42 @@ type CharacterCreator interface {
 // CharacterNameResolver resolves a character ID to its name.
 type CharacterNameResolver func(ctx context.Context, characterID uuid.UUID) (string, error)
 
-// RegisterHandler handles the /register slash command.
-type RegisterHandler struct {
+// registrationBase holds shared dependencies for registration command handlers.
+type registrationBase struct {
 	session      Session
 	regService   RegistrationService
 	campaignProv CampaignProvider
-	dmQueueFunc  func(guildID string) string // returns dm-queue channel ID
-	dmUserFunc   func(guildID string) string // returns DM user ID
+	dmQueueFunc  func(guildID string) string
+	dmUserFunc   func(guildID string) string
+}
+
+// RegisterHandler handles the /register slash command.
+type RegisterHandler struct {
+	registrationBase
 }
 
 // NewRegisterHandler creates a new RegisterHandler.
 func NewRegisterHandler(session Session, regService RegistrationService, campaignProv CampaignProvider, dmQueueFunc func(string) string, dmUserFunc func(string) string) *RegisterHandler {
 	return &RegisterHandler{
-		session:      session,
-		regService:   regService,
-		campaignProv: campaignProv,
-		dmQueueFunc:  dmQueueFunc,
-		dmUserFunc:   dmUserFunc,
+		registrationBase: registrationBase{
+			session:      session,
+			regService:   regService,
+			campaignProv: campaignProv,
+			dmQueueFunc:  dmQueueFunc,
+			dmUserFunc:   dmUserFunc,
+		},
 	}
 }
 
 // Handle processes a /register interaction.
 func (h *RegisterHandler) Handle(interaction *discordgo.Interaction) {
-	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
-	var characterName string
-	for _, opt := range data.Options {
-		if opt.Name == "name" {
-			characterName = opt.StringValue()
-		}
-	}
-
+	characterName := optionString(interaction, "name")
 	if characterName == "" {
 		respondEphemeral(h.session, interaction, "Please provide a character name.")
 		return
 	}
 
-	guildID := interaction.GuildID
-	campaign, err := h.campaignProv.GetCampaignByGuildID(context.Background(), guildID)
+	campaign, err := h.campaignProv.GetCampaignByGuildID(context.Background(), interaction.GuildID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "No campaign found for this server.")
 		return
@@ -87,7 +86,7 @@ func (h *RegisterHandler) Handle(interaction *discordgo.Interaction) {
 	case registration.ResultExactMatch:
 		respondEphemeral(h.session, interaction,
 			fmt.Sprintf("✅ Registration submitted — %s is pending DM approval. You'll be pinged when approved.", characterName))
-		postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, guildID, characterName, userID, "register")
+		postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, characterName, userID, "register")
 
 	case registration.ResultFuzzyMatch:
 		suggestions := strings.Join(result.Suggestions, ", ")
@@ -100,64 +99,49 @@ func (h *RegisterHandler) Handle(interaction *discordgo.Interaction) {
 	}
 }
 
-
 // ImportHandler handles the /import slash command.
 type ImportHandler struct {
-	session      Session
-	regService   RegistrationService
-	campaignProv CampaignProvider
-	charCreator  CharacterCreator
-	dmQueueFunc  func(guildID string) string
-	dmUserFunc   func(guildID string) string
+	registrationBase
+	charCreator CharacterCreator
 }
 
 // NewImportHandler creates a new ImportHandler.
 func NewImportHandler(session Session, regService RegistrationService, campaignProv CampaignProvider, charCreator CharacterCreator, dmQueueFunc func(string) string, dmUserFunc func(string) string) *ImportHandler {
 	return &ImportHandler{
-		session:      session,
-		regService:   regService,
-		campaignProv: campaignProv,
-		charCreator:  charCreator,
-		dmQueueFunc:  dmQueueFunc,
-		dmUserFunc:   dmUserFunc,
+		registrationBase: registrationBase{
+			session:      session,
+			regService:   regService,
+			campaignProv: campaignProv,
+			dmQueueFunc:  dmQueueFunc,
+			dmUserFunc:   dmUserFunc,
+		},
+		charCreator: charCreator,
 	}
 }
 
 // Handle processes an /import interaction.
 func (h *ImportHandler) Handle(interaction *discordgo.Interaction) {
-	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
-	var ddbURL string
-	for _, opt := range data.Options {
-		if opt.Name == "ddb-url" {
-			ddbURL = opt.StringValue()
-		}
-	}
-
+	ddbURL := optionString(interaction, "ddb-url")
 	if ddbURL == "" {
 		respondEphemeral(h.session, interaction, "Please provide a D&D Beyond URL.")
 		return
 	}
 
-	guildID := interaction.GuildID
-	campaign, err := h.campaignProv.GetCampaignByGuildID(context.Background(), guildID)
+	campaign, err := h.campaignProv.GetCampaignByGuildID(context.Background(), interaction.GuildID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "No campaign found for this server.")
 		return
 	}
 
 	userID := interactionUserID(interaction)
-
-	// Extract character name from URL or use placeholder
 	charName := fmt.Sprintf("Imported (%s)", truncateURL(ddbURL, 40))
 
-	// Create placeholder character
 	char, err := h.charCreator.CreatePlaceholder(context.Background(), campaign.ID, charName, ddbURL)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Import error: %s", err))
 		return
 	}
 
-	// Create pending player_character via import
 	_, err = h.regService.Import(context.Background(), campaign.ID, userID, char.ID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Import error: %s", err))
@@ -166,39 +150,34 @@ func (h *ImportHandler) Handle(interaction *discordgo.Interaction) {
 
 	respondEphemeral(h.session, interaction,
 		fmt.Sprintf("✅ Registration submitted — %s is pending DM approval. You'll be pinged when approved.", charName))
-
-	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, guildID, charName, userID, "import")
+	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, charName, userID, "import")
 }
-
 
 // CreateCharacterHandler handles the /create-character slash command.
 type CreateCharacterHandler struct {
-	session      Session
-	regService   RegistrationService
-	campaignProv CampaignProvider
-	charCreator  CharacterCreator
-	dmQueueFunc  func(guildID string) string
-	dmUserFunc   func(guildID string) string
-	tokenFunc    func(campaignID uuid.UUID, discordUserID string) string
+	registrationBase
+	charCreator CharacterCreator
+	tokenFunc   func(campaignID uuid.UUID, discordUserID string) string
 }
 
 // NewCreateCharacterHandler creates a new CreateCharacterHandler.
 func NewCreateCharacterHandler(session Session, regService RegistrationService, campaignProv CampaignProvider, charCreator CharacterCreator, dmQueueFunc func(string) string, dmUserFunc func(string) string, tokenFunc func(uuid.UUID, string) string) *CreateCharacterHandler {
 	return &CreateCharacterHandler{
-		session:      session,
-		regService:   regService,
-		campaignProv: campaignProv,
-		charCreator:  charCreator,
-		dmQueueFunc:  dmQueueFunc,
-		dmUserFunc:   dmUserFunc,
-		tokenFunc:    tokenFunc,
+		registrationBase: registrationBase{
+			session:      session,
+			regService:   regService,
+			campaignProv: campaignProv,
+			dmQueueFunc:  dmQueueFunc,
+			dmUserFunc:   dmUserFunc,
+		},
+		charCreator: charCreator,
+		tokenFunc:   tokenFunc,
 	}
 }
 
 // Handle processes a /create-character interaction.
 func (h *CreateCharacterHandler) Handle(interaction *discordgo.Interaction) {
-	guildID := interaction.GuildID
-	campaign, err := h.campaignProv.GetCampaignByGuildID(context.Background(), guildID)
+	campaign, err := h.campaignProv.GetCampaignByGuildID(context.Background(), interaction.GuildID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "No campaign found for this server.")
 		return
@@ -224,8 +203,7 @@ func (h *CreateCharacterHandler) Handle(interaction *discordgo.Interaction) {
 
 	respondEphemeral(h.session, interaction,
 		fmt.Sprintf("✅ Registration submitted — your character is pending DM approval. You'll be pinged when approved.\n\n🔗 **Character Builder:** %s\n_(Link expires in 24 hours)_", portalURL))
-
-	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, guildID, charName, userID, "create-character")
+	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, charName, userID, "create-character")
 }
 
 
@@ -248,11 +226,7 @@ func StatusCheckResponse(pc *refdata.PlayerCharacter, characterName string) stri
 		elapsed := time.Since(pc.CreatedAt)
 		return fmt.Sprintf("⏳ %s — pending DM approval since %s. You'll be pinged when approved.", characterName, formatRelativeTime(elapsed))
 	case "changes_requested":
-		feedback := ""
-		if pc.DmFeedback.Valid {
-			feedback = pc.DmFeedback.String
-		}
-		return fmt.Sprintf("🔄 %s — DM requested changes: %s. Use `/create-character` or `/import` to resubmit.", characterName, feedback)
+		return fmt.Sprintf("🔄 %s — DM requested changes: %s. Use `/create-character` or `/import` to resubmit.", characterName, pc.DmFeedback.String)
 	case "approved":
 		return "" // no status message needed
 	case "rejected":
@@ -264,6 +238,17 @@ func StatusCheckResponse(pc *refdata.PlayerCharacter, characterName string) stri
 
 // NoRegistrationMessage is returned when a player runs a game command without registering.
 const NoRegistrationMessage = "❌ No character found. Use `/create-character`, `/import`, or `/register` to get started."
+
+// optionString extracts a named string option from an interaction's command data.
+func optionString(interaction *discordgo.Interaction, name string) string {
+	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
+	for _, opt := range data.Options {
+		if opt.Name == name {
+			return opt.StringValue()
+		}
+	}
+	return ""
+}
 
 // interactionUserID extracts the user ID from an interaction, handling both guild and DM contexts.
 func interactionUserID(interaction *discordgo.Interaction) string {

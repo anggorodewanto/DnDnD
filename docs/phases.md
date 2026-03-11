@@ -72,7 +72,7 @@
   - Depends on: Phase 9a, Phase 12
   - Done when: All commands appear in Discord's slash command UI with parameter hints; stubs respond with placeholder messages.
 
-- [ ] **Phase 14: Player Registration Commands (`/register`, `/import`, `/create-character`)**
+- [x] **Phase 14: Player Registration Commands (`/register`, `/import`, `/create-character`)**
   - Scope: Implement `/register` (name matching + fuzzy suggestions), `/import` (stub — accepts URL, creates pending record), `/create-character` (returns one-time portal link). Ephemeral confirmation messages. Status-aware responses for pre-approved commands. DM approval queue notifications to `#dm-queue`.
   - Depends on: Phase 8, Phase 13
   - Done when: `/register` finds characters with fuzzy matching, `/import` creates pending record, all post to `#dm-queue`, status messages shown correctly.

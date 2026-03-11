@@ -40,7 +40,6 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 		handlers: make(map[string]CommandHandler),
 	}
 
-	// Commands that are game commands (need status awareness when regDeps present).
 	gameCommands := []string{
 		"move", "fly", "attack", "cast", "bonus", "action", "shove",
 		"interact", "done", "deathsave", "command", "reaction", "check",
@@ -49,7 +48,6 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 		"character", "recap", "distance", "help",
 	}
 
-	// Registration commands handled separately when deps are provided.
 	regCommands := []string{"register", "import", "create-character"}
 
 	var deps *RegistrationDeps

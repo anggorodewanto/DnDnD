@@ -70,6 +70,24 @@ func testPCID() uuid.UUID {
 	return uuid.MustParse("33333333-3333-3333-3333-333333333333")
 }
 
+// responseCapture sets up a MockSession to capture interaction response content and flags.
+type responseCapture struct {
+	Content string
+	Flags   discordgo.MessageFlags
+}
+
+func captureResponse(mock *MockSession) *responseCapture {
+	rc := &responseCapture{}
+	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		if resp.Data != nil {
+			rc.Content = resp.Data.Content
+			rc.Flags = resp.Data.Flags
+		}
+		return nil
+	}
+	return rc
+}
+
 func newMockCampaignProvider() *mockCampaignProvider {
 	return &mockCampaignProvider{
 		GetCampaignByGuildIDFunc: func(ctx context.Context, guildID string) (refdata.Campaign, error) {
@@ -125,15 +143,7 @@ func stringOption(name, value string) *discordgo.ApplicationCommandInteractionDa
 
 func TestRegisterHandler_ExactMatch_SendsConfirmationAndPostsDMQueue(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	var respondedFlags discordgo.MessageFlags
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-			respondedFlags = resp.Data.Flags
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	var dmQueueChannelID, dmQueueMessage string
 	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
@@ -154,23 +164,18 @@ func TestRegisterHandler_ExactMatch_SendsConfirmationAndPostsDMQueue(t *testing.
 	}
 
 	handler := NewRegisterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc("dm-queue-chan-1"), staticDMUserFunc("dm-user-1"))
+	handler.Handle(makeInteraction("register", "player-1", "guild-1", stringOption("name", "Thorn")))
 
-	interaction := makeInteraction("register", "player-1", "guild-1",
-		stringOption("name", "Thorn"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "Registration submitted") {
-		t.Errorf("expected confirmation message, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Registration submitted") {
+		t.Errorf("expected confirmation message, got: %s", rc.Content)
 	}
-	if !strings.Contains(respondedContent, "Thorn") {
-		t.Errorf("expected character name in message, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Thorn") {
+		t.Errorf("expected character name in message, got: %s", rc.Content)
 	}
-	if respondedFlags != discordgo.MessageFlagsEphemeral {
-		t.Errorf("expected ephemeral, got %d", respondedFlags)
+	if rc.Flags != discordgo.MessageFlagsEphemeral {
+		t.Errorf("expected ephemeral, got %d", rc.Flags)
 	}
 
-	// DM Queue notification
 	if dmQueueChannelID != "dm-queue-chan-1" {
 		t.Errorf("expected dm-queue channel, got: %s", dmQueueChannelID)
 	}
@@ -187,13 +192,7 @@ func TestRegisterHandler_ExactMatch_SendsConfirmationAndPostsDMQueue(t *testing.
 
 func TestRegisterHandler_FuzzyMatch_SuggestsNames(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	regService := newMockRegService()
 	regService.RegisterFunc = func(_ context.Context, _ uuid.UUID, _, _ string) (*registration.RegisterResult, error) {
@@ -204,29 +203,19 @@ func TestRegisterHandler_FuzzyMatch_SuggestsNames(t *testing.T) {
 	}
 
 	handler := NewRegisterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc(""), staticDMUserFunc(""))
+	handler.Handle(makeInteraction("register", "player-1", "guild-1", stringOption("name", "Thron")))
 
-	interaction := makeInteraction("register", "player-1", "guild-1",
-		stringOption("name", "Thron"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "No character named") {
-		t.Errorf("expected no-match message, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "No character named") {
+		t.Errorf("expected no-match message, got: %s", rc.Content)
 	}
-	if !strings.Contains(respondedContent, "Thorn") {
-		t.Errorf("expected suggestion, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Thorn") {
+		t.Errorf("expected suggestion, got: %s", rc.Content)
 	}
 }
 
 func TestRegisterHandler_NoMatch_ShowsError(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	regService := newMockRegService()
 	regService.RegisterFunc = func(_ context.Context, _ uuid.UUID, _, _ string) (*registration.RegisterResult, error) {
@@ -236,29 +225,19 @@ func TestRegisterHandler_NoMatch_ShowsError(t *testing.T) {
 	}
 
 	handler := NewRegisterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc(""), staticDMUserFunc(""))
+	handler.Handle(makeInteraction("register", "player-1", "guild-1", stringOption("name", "Unknown")))
 
-	interaction := makeInteraction("register", "player-1", "guild-1",
-		stringOption("name", "Unknown"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "No character named") {
-		t.Errorf("expected no-match message, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "No character named") {
+		t.Errorf("expected no-match message, got: %s", rc.Content)
 	}
-	if !strings.Contains(respondedContent, "No close matches") {
-		t.Errorf("expected no-matches notice, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "No close matches") {
+		t.Errorf("expected no-matches notice, got: %s", rc.Content)
 	}
 }
 
 func TestRegisterHandler_NoCampaign_ShowsError(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	campProv := &mockCampaignProvider{
 		GetCampaignByGuildIDFunc: func(_ context.Context, _ string) (refdata.Campaign, error) {
@@ -267,35 +246,22 @@ func TestRegisterHandler_NoCampaign_ShowsError(t *testing.T) {
 	}
 
 	handler := NewRegisterHandler(mock, newMockRegService(), campProv, staticDMQueueFunc(""), staticDMUserFunc(""))
+	handler.Handle(makeInteraction("register", "player-1", "guild-1", stringOption("name", "Thorn")))
 
-	interaction := makeInteraction("register", "player-1", "guild-1",
-		stringOption("name", "Thorn"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "No campaign found") {
-		t.Errorf("expected no-campaign error, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "No campaign found") {
+		t.Errorf("expected no-campaign error, got: %s", rc.Content)
 	}
 }
 
 func TestRegisterHandler_EmptyName_ShowsError(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	handler := NewRegisterHandler(mock, newMockRegService(), newMockCampaignProvider(), staticDMQueueFunc(""), staticDMUserFunc(""))
+	handler.Handle(makeInteraction("register", "player-1", "guild-1"))
 
-	interaction := makeInteraction("register", "player-1", "guild-1")
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "character name") {
-		t.Errorf("expected name required error, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "character name") {
+		t.Errorf("expected name required error, got: %s", rc.Content)
 	}
 }
 
@@ -303,15 +269,7 @@ func TestRegisterHandler_EmptyName_ShowsError(t *testing.T) {
 
 func TestImportHandler_CreatesPlaceholderAndPendingRecord(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	var respondedFlags discordgo.MessageFlags
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-			respondedFlags = resp.Data.Flags
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	var dmQueueMessage string
 	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
@@ -328,24 +286,20 @@ func TestImportHandler_CreatesPlaceholderAndPendingRecord(t *testing.T) {
 	regService := newMockRegService()
 	regService.ImportFunc = func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*refdata.PlayerCharacter, error) {
 		return &refdata.PlayerCharacter{
-			ID:        testPCID(),
-			Status:    "pending",
+			ID:         testPCID(),
+			Status:     "pending",
 			CreatedVia: "import",
 		}, nil
 	}
 
 	handler := NewImportHandler(mock, regService, newMockCampaignProvider(), charCreator, staticDMQueueFunc("dm-queue-chan-1"), staticDMUserFunc("dm-user-1"))
+	handler.Handle(makeInteraction("import", "player-1", "guild-1", stringOption("ddb-url", "https://dndbeyond.com/characters/12345")))
 
-	interaction := makeInteraction("import", "player-1", "guild-1",
-		stringOption("ddb-url", "https://dndbeyond.com/characters/12345"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "Registration submitted") {
-		t.Errorf("expected confirmation, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Registration submitted") {
+		t.Errorf("expected confirmation, got: %s", rc.Content)
 	}
-	if respondedFlags != discordgo.MessageFlagsEphemeral {
-		t.Errorf("expected ephemeral, got %d", respondedFlags)
+	if rc.Flags != discordgo.MessageFlagsEphemeral {
+		t.Errorf("expected ephemeral, got %d", rc.Flags)
 	}
 	if !strings.Contains(dmQueueMessage, "/import") {
 		t.Errorf("expected import via in dm-queue, got: %s", dmQueueMessage)
@@ -354,22 +308,13 @@ func TestImportHandler_CreatesPlaceholderAndPendingRecord(t *testing.T) {
 
 func TestImportHandler_NoURL_ShowsError(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	handler := NewImportHandler(mock, newMockRegService(), newMockCampaignProvider(), nil, staticDMQueueFunc(""), staticDMUserFunc(""))
+	handler.Handle(makeInteraction("import", "player-1", "guild-1"))
 
-	interaction := makeInteraction("import", "player-1", "guild-1")
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "D&D Beyond URL") {
-		t.Errorf("expected URL error, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "D&D Beyond URL") {
+		t.Errorf("expected URL error, got: %s", rc.Content)
 	}
 }
 
@@ -377,15 +322,7 @@ func TestImportHandler_NoURL_ShowsError(t *testing.T) {
 
 func TestCreateCharacterHandler_CreatesRecordAndReturnsPortalLink(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	var respondedFlags discordgo.MessageFlags
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-			respondedFlags = resp.Data.Flags
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	var dmQueueMessage string
 	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
@@ -402,33 +339,28 @@ func TestCreateCharacterHandler_CreatesRecordAndReturnsPortalLink(t *testing.T) 
 	regService := newMockRegService()
 	regService.CreateFunc = func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*refdata.PlayerCharacter, error) {
 		return &refdata.PlayerCharacter{
-			ID:        testPCID(),
-			Status:    "pending",
+			ID:         testPCID(),
+			Status:     "pending",
 			CreatedVia: "create",
 		}, nil
 	}
 
-	tokenFunc := func(_ uuid.UUID, _ string) string {
-		return "test-token-123"
-	}
+	tokenFunc := func(_ uuid.UUID, _ string) string { return "test-token-123" }
 
 	handler := NewCreateCharacterHandler(mock, regService, newMockCampaignProvider(), charCreator, staticDMQueueFunc("dm-queue-chan-1"), staticDMUserFunc("dm-user-1"), tokenFunc)
+	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
 
-	interaction := makeInteraction("create-character", "player-1", "guild-1")
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "Registration submitted") {
-		t.Errorf("expected confirmation, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Registration submitted") {
+		t.Errorf("expected confirmation, got: %s", rc.Content)
 	}
-	if !strings.Contains(respondedContent, "test-token-123") {
-		t.Errorf("expected portal token in response, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "test-token-123") {
+		t.Errorf("expected portal token in response, got: %s", rc.Content)
 	}
-	if !strings.Contains(respondedContent, "24 hours") {
-		t.Errorf("expected expiry notice, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "24 hours") {
+		t.Errorf("expected expiry notice, got: %s", rc.Content)
 	}
-	if respondedFlags != discordgo.MessageFlagsEphemeral {
-		t.Errorf("expected ephemeral, got %d", respondedFlags)
+	if rc.Flags != discordgo.MessageFlagsEphemeral {
+		t.Errorf("expected ephemeral, got %d", rc.Flags)
 	}
 	if !strings.Contains(dmQueueMessage, "/create-character") {
 		t.Errorf("expected create-character via in dm-queue, got: %s", dmQueueMessage)
@@ -489,41 +421,21 @@ func TestNoRegistrationMessage_Content(t *testing.T) {
 
 func TestStatusAwareStubHandler_UnregisteredPlayer_ShowsNoCharMessage(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	regService := newMockRegService()
-	// GetStatus returns error = not registered
-	regService.GetStatusFunc = func(_ context.Context, _ uuid.UUID, _ string) (*refdata.PlayerCharacter, error) {
-		return nil, fmt.Errorf("not found")
-	}
 
 	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider(), nil)
+	handler.Handle(makeInteraction("attack", "player-1", "guild-1", stringOption("target", "G2")))
 
-	interaction := makeInteraction("attack", "player-1", "guild-1",
-		stringOption("target", "G2"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "No character found") {
-		t.Errorf("expected no-character message, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "No character found") {
+		t.Errorf("expected no-character message, got: %s", rc.Content)
 	}
 }
 
 func TestStatusAwareStubHandler_PendingPlayer_ShowsCharacterName(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	charID := testCharacterID()
 	regService := newMockRegService()
@@ -543,58 +455,36 @@ func TestStatusAwareStubHandler_PendingPlayer_ShowsCharacterName(t *testing.T) {
 	}
 
 	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider(), nameResolver)
+	handler.Handle(makeInteraction("attack", "player-1", "guild-1", stringOption("target", "G2")))
 
-	interaction := makeInteraction("attack", "player-1", "guild-1",
-		stringOption("target", "G2"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "pending DM approval") {
-		t.Errorf("expected pending status, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "pending DM approval") {
+		t.Errorf("expected pending status, got: %s", rc.Content)
 	}
-	if !strings.Contains(respondedContent, "Thorn") {
-		t.Errorf("expected character name 'Thorn' in status message, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Thorn") {
+		t.Errorf("expected character name 'Thorn' in status message, got: %s", rc.Content)
 	}
 }
 
 func TestStatusAwareStubHandler_ApprovedPlayer_ShowsStubMessage(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	regService := newMockRegService()
 	regService.GetStatusFunc = func(_ context.Context, _ uuid.UUID, _ string) (*refdata.PlayerCharacter, error) {
-		return &refdata.PlayerCharacter{
-			Status: "approved",
-		}, nil
+		return &refdata.PlayerCharacter{Status: "approved"}, nil
 	}
 
 	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider(), nil)
+	handler.Handle(makeInteraction("attack", "player-1", "guild-1", stringOption("target", "G2")))
 
-	interaction := makeInteraction("attack", "player-1", "guild-1",
-		stringOption("target", "G2"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "not yet implemented") {
-		t.Errorf("expected stub message for approved player, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "not yet implemented") {
+		t.Errorf("expected stub message for approved player, got: %s", rc.Content)
 	}
 }
 
 func TestStatusAwareStubHandler_ChangesRequested_ShowsFeedback(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	regService := newMockRegService()
 	regService.GetStatusFunc = func(_ context.Context, _ uuid.UUID, _ string) (*refdata.PlayerCharacter, error) {
@@ -605,17 +495,13 @@ func TestStatusAwareStubHandler_ChangesRequested_ShowsFeedback(t *testing.T) {
 	}
 
 	handler := NewStatusAwareStubHandler(mock, "attack", regService, newMockCampaignProvider(), nil)
+	handler.Handle(makeInteraction("attack", "player-1", "guild-1", stringOption("target", "G2")))
 
-	interaction := makeInteraction("attack", "player-1", "guild-1",
-		stringOption("target", "G2"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "DM requested changes") {
-		t.Errorf("expected changes-requested message, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "DM requested changes") {
+		t.Errorf("expected changes-requested message, got: %s", rc.Content)
 	}
-	if !strings.Contains(respondedContent, "Fix your backstory") {
-		t.Errorf("expected feedback in message, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Fix your backstory") {
+		t.Errorf("expected feedback in message, got: %s", rc.Content)
 	}
 }
 
@@ -703,13 +589,7 @@ func TestInteractionUserID_NoUser(t *testing.T) {
 
 func TestCommandRouter_RegisterHandlerRoutesCorrectly(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
 		return &discordgo.Message{}, nil
 	}
@@ -727,30 +607,18 @@ func TestCommandRouter_RegisterHandlerRoutesCorrectly(t *testing.T) {
 
 	bot := NewBot(mock, "app-1", newTestLogger())
 	router := NewCommandRouter(bot, nil)
+	router.handlers["register"] = NewRegisterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc("dm-queue-1"), staticDMUserFunc("dm-user-1"))
 
-	// Replace register handler
-	registerHandler := NewRegisterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc("dm-queue-1"), staticDMUserFunc("dm-user-1"))
-	router.handlers["register"] = registerHandler
+	router.Handle(makeInteraction("register", "player-1", "guild-1", stringOption("name", "Thorn")))
 
-	interaction := makeInteraction("register", "player-1", "guild-1",
-		stringOption("name", "Thorn"))
-
-	router.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "Registration submitted") {
-		t.Errorf("expected registration handler response, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Registration submitted") {
+		t.Errorf("expected registration handler response, got: %s", rc.Content)
 	}
 }
 
 func TestRegisterHandler_ServiceError_ShowsError(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	regService := newMockRegService()
 	regService.RegisterFunc = func(_ context.Context, _ uuid.UUID, _, _ string) (*registration.RegisterResult, error) {
@@ -758,26 +626,16 @@ func TestRegisterHandler_ServiceError_ShowsError(t *testing.T) {
 	}
 
 	handler := NewRegisterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc(""), staticDMUserFunc(""))
+	handler.Handle(makeInteraction("register", "player-1", "guild-1", stringOption("name", "Thorn")))
 
-	interaction := makeInteraction("register", "player-1", "guild-1",
-		stringOption("name", "Thorn"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "Registration error") {
-		t.Errorf("expected error message, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Registration error") {
+		t.Errorf("expected error message, got: %s", rc.Content)
 	}
 }
 
 func TestImportHandler_NoCampaign_ShowsError(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	campProv := &mockCampaignProvider{
 		GetCampaignByGuildIDFunc: func(_ context.Context, _ string) (refdata.Campaign, error) {
@@ -786,26 +644,16 @@ func TestImportHandler_NoCampaign_ShowsError(t *testing.T) {
 	}
 
 	handler := NewImportHandler(mock, newMockRegService(), campProv, nil, staticDMQueueFunc(""), staticDMUserFunc(""))
+	handler.Handle(makeInteraction("import", "player-1", "guild-1", stringOption("ddb-url", "https://dndbeyond.com/characters/123")))
 
-	interaction := makeInteraction("import", "player-1", "guild-1",
-		stringOption("ddb-url", "https://dndbeyond.com/characters/123"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "No campaign found") {
-		t.Errorf("expected campaign error, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "No campaign found") {
+		t.Errorf("expected campaign error, got: %s", rc.Content)
 	}
 }
 
 func TestCreateCharacterHandler_NoCampaign_ShowsError(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	campProv := &mockCampaignProvider{
 		GetCampaignByGuildIDFunc: func(_ context.Context, _ string) (refdata.Campaign, error) {
@@ -814,25 +662,16 @@ func TestCreateCharacterHandler_NoCampaign_ShowsError(t *testing.T) {
 	}
 
 	handler := NewCreateCharacterHandler(mock, newMockRegService(), campProv, nil, staticDMQueueFunc(""), staticDMUserFunc(""), nil)
+	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
 
-	interaction := makeInteraction("create-character", "player-1", "guild-1")
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "No campaign found") {
-		t.Errorf("expected campaign error, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "No campaign found") {
+		t.Errorf("expected campaign error, got: %s", rc.Content)
 	}
 }
 
 func TestImportHandler_CharCreatorError_ShowsError(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	charCreator := &mockCharacterCreator{
 		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
@@ -841,26 +680,16 @@ func TestImportHandler_CharCreatorError_ShowsError(t *testing.T) {
 	}
 
 	handler := NewImportHandler(mock, newMockRegService(), newMockCampaignProvider(), charCreator, staticDMQueueFunc(""), staticDMUserFunc(""))
+	handler.Handle(makeInteraction("import", "player-1", "guild-1", stringOption("ddb-url", "https://dndbeyond.com/characters/123")))
 
-	interaction := makeInteraction("import", "player-1", "guild-1",
-		stringOption("ddb-url", "https://dndbeyond.com/characters/123"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "Import error") {
-		t.Errorf("expected import error, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Import error") {
+		t.Errorf("expected import error, got: %s", rc.Content)
 	}
 }
 
 func TestCreateCharacterHandler_CharCreatorError_ShowsError(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	charCreator := &mockCharacterCreator{
 		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
@@ -869,25 +698,16 @@ func TestCreateCharacterHandler_CharCreatorError_ShowsError(t *testing.T) {
 	}
 
 	handler := NewCreateCharacterHandler(mock, newMockRegService(), newMockCampaignProvider(), charCreator, staticDMQueueFunc(""), staticDMUserFunc(""), nil)
+	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
 
-	interaction := makeInteraction("create-character", "player-1", "guild-1")
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "Error creating character") {
-		t.Errorf("expected char creation error, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Error creating character") {
+		t.Errorf("expected char creation error, got: %s", rc.Content)
 	}
 }
 
 func TestImportHandler_RegServiceError_ShowsError(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	charCreator := &mockCharacterCreator{
 		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
@@ -901,26 +721,16 @@ func TestImportHandler_RegServiceError_ShowsError(t *testing.T) {
 	}
 
 	handler := NewImportHandler(mock, regService, newMockCampaignProvider(), charCreator, staticDMQueueFunc(""), staticDMUserFunc(""))
+	handler.Handle(makeInteraction("import", "player-1", "guild-1", stringOption("ddb-url", "https://dndbeyond.com/characters/123")))
 
-	interaction := makeInteraction("import", "player-1", "guild-1",
-		stringOption("ddb-url", "https://dndbeyond.com/characters/123"))
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "Import error") {
-		t.Errorf("expected import error, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Import error") {
+		t.Errorf("expected import error, got: %s", rc.Content)
 	}
 }
 
 func TestCreateCharacterHandler_RegServiceError_ShowsError(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	charCreator := &mockCharacterCreator{
 		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
@@ -934,13 +744,10 @@ func TestCreateCharacterHandler_RegServiceError_ShowsError(t *testing.T) {
 	}
 
 	handler := NewCreateCharacterHandler(mock, regService, newMockCampaignProvider(), charCreator, staticDMQueueFunc(""), staticDMUserFunc(""), nil)
+	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
 
-	interaction := makeInteraction("create-character", "player-1", "guild-1")
-
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "Error") {
-		t.Errorf("expected error, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "Error") {
+		t.Errorf("expected error, got: %s", rc.Content)
 	}
 }
 
@@ -1068,9 +875,7 @@ func TestGameCommandStatusCheck_NoCampaign_ReturnsEmpty(t *testing.T) {
 
 func TestDMQueueNotSent_WhenChannelIDEmpty(t *testing.T) {
 	mock := newTestMock()
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		return nil
-	}
+	captureResponse(mock)
 
 	var channelMessageSent bool
 	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
@@ -1087,11 +892,7 @@ func TestDMQueueNotSent_WhenChannelIDEmpty(t *testing.T) {
 	}
 
 	handler := NewRegisterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc(""), staticDMUserFunc("dm-1"))
-
-	interaction := makeInteraction("register", "player-1", "guild-1",
-		stringOption("name", "Thorn"))
-
-	handler.Handle(interaction)
+	handler.Handle(makeInteraction("register", "player-1", "guild-1", stringOption("name", "Thorn")))
 
 	if channelMessageSent {
 		t.Error("should not send to dm-queue when channel ID is empty")
@@ -1106,16 +907,9 @@ func TestStatusCheckResponse_Rejected(t *testing.T) {
 	}
 }
 
-
 func TestNewCommandRouter_WithRegDeps_WiresRealHandlers(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
 		return &discordgo.Message{}, nil
 	}
@@ -1129,9 +923,6 @@ func TestNewCommandRouter_WithRegDeps_WiresRealHandlers(t *testing.T) {
 				Status: "pending",
 			},
 		}, nil
-	}
-	regService.GetStatusFunc = func(_ context.Context, _ uuid.UUID, _ string) (*refdata.PlayerCharacter, error) {
-		return nil, fmt.Errorf("not found")
 	}
 
 	charCreator := &mockCharacterCreator{
@@ -1150,42 +941,27 @@ func TestNewCommandRouter_WithRegDeps_WiresRealHandlers(t *testing.T) {
 	}
 	router := NewCommandRouter(bot, nil, deps)
 
-	// /register routes to real handler
-	interaction := makeInteraction("register", "player-1", "guild-1",
-		stringOption("name", "Thorn"))
-	router.Handle(interaction)
-	if !strings.Contains(respondedContent, "Registration submitted") {
-		t.Errorf("expected real register handler, got: %s", respondedContent)
+	router.Handle(makeInteraction("register", "player-1", "guild-1", stringOption("name", "Thorn")))
+	if !strings.Contains(rc.Content, "Registration submitted") {
+		t.Errorf("expected real register handler, got: %s", rc.Content)
 	}
 
-	// Game command with no registration shows status message
-	respondedContent = ""
-	interaction2 := makeInteraction("attack", "player-1", "guild-1",
-		stringOption("target", "G2"))
-	router.Handle(interaction2)
-	if !strings.Contains(respondedContent, "No character found") {
-		t.Errorf("expected status-aware response for unregistered player, got: %s", respondedContent)
+	rc.Content = ""
+	router.Handle(makeInteraction("attack", "player-1", "guild-1", stringOption("target", "G2")))
+	if !strings.Contains(rc.Content, "No character found") {
+		t.Errorf("expected status-aware response for unregistered player, got: %s", rc.Content)
 	}
 }
 
 func TestNewCommandRouter_WithoutRegDeps_UsesStubs(t *testing.T) {
 	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		if resp.Data != nil {
-			respondedContent = resp.Data.Content
-		}
-		return nil
-	}
+	rc := captureResponse(mock)
 
 	bot := NewBot(mock, "app-1", newTestLogger())
 	router := NewCommandRouter(bot, nil)
+	router.Handle(makeInteraction("register", "player-1", "guild-1", stringOption("name", "Thorn")))
 
-	interaction := makeInteraction("register", "player-1", "guild-1",
-		stringOption("name", "Thorn"))
-	router.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "not yet implemented") {
-		t.Errorf("expected stub handler without deps, got: %s", respondedContent)
+	if !strings.Contains(rc.Content, "not yet implemented") {
+		t.Errorf("expected stub handler without deps, got: %s", rc.Content)
 	}
 }
