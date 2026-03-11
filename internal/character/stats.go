@@ -1,5 +1,10 @@
 package character
 
+import (
+	"strconv"
+	"strings"
+)
+
 // TotalLevel returns the sum of all class levels.
 func TotalLevel(classes []ClassEntry) int {
 	total := 0
@@ -38,10 +43,7 @@ func CalculateHP(classes []ClassEntry, hitDice map[string]string, scores Ability
 
 	hp += conMod * totalLevel
 
-	if hp < 1 {
-		return 1
-	}
-	return hp
+	return max(hp, 1)
 }
 
 // CalculateAC computes armor class.
@@ -53,10 +55,7 @@ func CalculateAC(scores AbilityScores, armor *ArmorInfo, hasShield bool, acFormu
 	ac := calculateArmorAC(scores, armor)
 
 	if armor == nil && acFormula != "" {
-		formulaAC := evaluateACFormula(scores, acFormula)
-		if formulaAC > ac {
-			ac = formulaAC
-		}
+		ac = max(ac, evaluateACFormula(scores, acFormula))
 	}
 
 	if hasShield {
@@ -73,11 +72,11 @@ func calculateArmorAC(scores AbilityScores, armor *ArmorInfo) int {
 
 	ac := armor.ACBase
 	if armor.DexBonus {
-		dex := dexMod
-		if armor.DexMax > 0 && dex > armor.DexMax {
-			dex = armor.DexMax
+		if armor.DexMax > 0 {
+			ac += min(dexMod, armor.DexMax)
+		} else {
+			ac += dexMod
 		}
-		ac += dex
 	}
 	return ac
 }
@@ -101,13 +100,7 @@ func evaluateACFormula(scores AbilityScores, formula string) int {
 		case "CHA", "cha":
 			result += AbilityModifier(scores.CHA)
 		default:
-			// Try to parse as number
-			n := 0
-			for _, ch := range part {
-				if ch >= '0' && ch <= '9' {
-					n = n*10 + int(ch-'0')
-				}
-			}
+			n, _ := strconv.Atoi(part)
 			result += n
 		}
 	}
@@ -116,22 +109,7 @@ func evaluateACFormula(scores AbilityScores, formula string) int {
 
 // splitFormula splits "10 + DEX + WIS" into ["10", "DEX", "WIS"].
 func splitFormula(formula string) []string {
-	var parts []string
-	current := ""
-	for _, ch := range formula {
-		if ch == '+' || ch == ' ' {
-			if current != "" {
-				parts = append(parts, current)
-				current = ""
-			}
-			continue
-		}
-		current += string(ch)
-	}
-	if current != "" {
-		parts = append(parts, current)
-	}
-	return parts
+	return strings.Fields(strings.ReplaceAll(formula, "+", " "))
 }
 
 // AbilityModifier returns the modifier for a given ability score.

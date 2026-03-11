@@ -1,10 +1,12 @@
 package character
 
+import "slices"
+
 // SavingThrowModifier returns the saving throw modifier for a given ability.
 // If proficient in that save, adds proficiency bonus.
 func SavingThrowModifier(scores AbilityScores, ability string, profSaves []string, profBonus int) int {
 	mod := AbilityModifier(scores.Get(ability))
-	if contains(profSaves, ability) {
+	if slices.Contains(profSaves, ability) {
 		mod += profBonus
 	}
 	return mod
@@ -20,23 +22,14 @@ func SkillModifier(scores AbilityScores, skill string, profSkills []string, expe
 	}
 	mod := AbilityModifier(scores.Get(ability))
 
-	if contains(expertiseSkills, skill) {
+	if slices.Contains(expertiseSkills, skill) {
 		return mod + profBonus*2
 	}
-	if contains(profSkills, skill) {
+	if slices.Contains(profSkills, skill) {
 		return mod + profBonus
 	}
 	if jackOfAllTrades {
 		return mod + profBonus/2
 	}
 	return mod
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }

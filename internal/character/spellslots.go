@@ -1,5 +1,7 @@
 package character
 
+import "maps"
+
 // multiclassSpellSlotTable is the standard 5e multiclass spellcasting table.
 // Index 0 is unused; index 1-20 correspond to caster levels 1-20.
 // Each entry maps spell level to number of slots.
@@ -33,12 +35,9 @@ func MulticastSpellSlots(casterLevel int) map[int]int {
 	if casterLevel < 1 || casterLevel > 20 {
 		return nil
 	}
-	// Return a copy to prevent mutation
 	src := multiclassSpellSlotTable[casterLevel]
 	result := make(map[int]int, len(src))
-	for k, v := range src {
-		result[k] = v
-	}
+	maps.Copy(result, src)
 	return result
 }
 

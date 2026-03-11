@@ -32,7 +32,7 @@
   - Depends on: Phase 3
   - Done when: All SRD creatures and magic items seeded; snapshot tests verify counts and spot-check entries (e.g., Goblin AC/HP, +1 Longsword magic_bonus).
 
-- [ ] **Phase 7: Characters Table & Core Character Logic**
+- [x] **Phase 7: Characters Table & Core Character Logic**
   - Scope: Migration for `characters` table (full schema: ability_scores, classes JSONB, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, proficiencies, inventory, equipped items, ac_formula, gold, attunement_slots, languages). Go domain types. Derived stat calculation: proficiency bonus from total level, HP from class hit dice + CON, AC from equipped armor/formula, spell slots from class/multiclass table, saving throw modifiers, skill modifiers (including expertise, Jack of All Trades).
   - Depends on: Phase 4, Phase 5
   - Done when: Unit tests verify derived stat calculations for single-class and multiclass characters, multiclass spell slot table, AC formulas (standard, unarmored defense), proficiency bonus progression. Integration tests verify JSONB round-tripping (write and re-read classes, proficiencies, inventory, feature_uses JSONB columns with no data loss).
