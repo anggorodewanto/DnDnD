@@ -63,27 +63,56 @@ func SplitMessage(content string) []string {
 		return nil
 	}
 
+	parts := splitAtNewlines(content)
+	if parts != nil {
+		return parts
+	}
+
+	// Newline splitting didn't fit in 3 parts; fall back to hard-cuts.
+	return splitHardCut(content)
+}
+
+// splitAtNewlines tries to split content into at most 3 parts at newline boundaries.
+// Returns nil if the content doesn't fit into 3 parts this way.
+func splitAtNewlines(content string) []string {
 	var parts []string
 	remaining := content
 	for len(remaining) > 0 && len(parts) < 3 {
 		if len(remaining) <= MaxMessageLen {
 			parts = append(parts, remaining)
+			remaining = ""
 			break
 		}
 
-		// Find the last newline within MaxMessageLen
 		chunk := remaining[:MaxMessageLen]
 		idx := strings.LastIndex(chunk, "\n")
 		if idx == -1 {
-			// No newline found; hard-cut at MaxMessageLen
-			parts = append(parts, chunk)
-			remaining = remaining[MaxMessageLen:]
-			continue
+			// No newline found; can't split at newline boundary here.
+			return nil
 		}
 
 		parts = append(parts, remaining[:idx])
-		remaining = remaining[idx+1:] // skip the newline
+		remaining = remaining[idx+1:]
 	}
 
+	if len(remaining) > 0 {
+		// Didn't fit in 3 parts via newline splitting.
+		return nil
+	}
+	return parts
+}
+
+// splitHardCut splits content into up to 3 parts using hard-cuts at MaxMessageLen.
+// The last part may be up to MaxMessageLen chars.
+func splitHardCut(content string) []string {
+	var parts []string
+	for len(content) > 0 {
+		if len(content) <= MaxMessageLen {
+			parts = append(parts, content)
+			break
+		}
+		parts = append(parts, content[:MaxMessageLen])
+		content = content[MaxMessageLen:]
+	}
 	return parts
 }

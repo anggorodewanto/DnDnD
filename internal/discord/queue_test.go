@@ -2,6 +2,7 @@ package discord
 
 import (
 	"errors"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -187,11 +188,102 @@ func TestMessageQueue_Stop_FlushesErrors(t *testing.T) {
 
 	select {
 	case err := <-errCh:
-		// Either the send gets the rate-limit retry loop interrupted, or it gets queue stopped
-		// Both are acceptable since the queue is stopping
-		_ = err
+		assert.ErrorIs(t, err, ErrQueueStopped, "stopped queue should return ErrQueueStopped")
 	case <-time.After(2 * time.Second):
 		t.Fatal("Send did not return after Stop")
+	}
+}
+
+func TestDefaultSend_Detects429_RateLimitError(t *testing.T) {
+	mock := newTestMock()
+	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
+		return nil, &discordgo.RateLimitError{
+			RateLimit: &discordgo.RateLimit{
+				TooManyRequests: &discordgo.TooManyRequests{
+					RetryAfter: 2 * time.Second,
+				},
+				URL: "https://discord.com/api/channels/ch-1/messages",
+			},
+		}
+	}
+
+	q := NewMessageQueue(mock)
+	defer q.Stop()
+
+	retryAfter, err := q.defaultSend("ch-1", "Hello!")
+	assert.NoError(t, err, "429 should not propagate as error; it sets retryAfter")
+	assert.Equal(t, 2*time.Second, retryAfter)
+}
+
+func TestDefaultSend_Detects429_RESTError(t *testing.T) {
+	mock := newTestMock()
+	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
+		return nil, &discordgo.RESTError{
+			Response: &http.Response{
+				StatusCode: 429,
+				Header: http.Header{
+					"Retry-After": []string{"3"},
+				},
+			},
+		}
+	}
+
+	q := NewMessageQueue(mock)
+	defer q.Stop()
+
+	retryAfter, err := q.defaultSend("ch-1", "Hello!")
+	assert.NoError(t, err, "429 should not propagate as error; it sets retryAfter")
+	assert.Equal(t, 3*time.Second, retryAfter)
+}
+
+func TestDefaultSend_NonRateLimitError_ReturnsError(t *testing.T) {
+	mock := newTestMock()
+	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
+		return nil, errors.New("network error")
+	}
+
+	q := NewMessageQueue(mock)
+	defer q.Stop()
+
+	retryAfter, err := q.defaultSend("ch-1", "Hello!")
+	assert.Error(t, err)
+	assert.Equal(t, time.Duration(0), retryAfter)
+}
+
+func TestDefaultSend_RESTError429_NoRetryAfterHeader(t *testing.T) {
+	mock := newTestMock()
+	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
+		return nil, &discordgo.RESTError{
+			Response: &http.Response{
+				StatusCode: 429,
+				Header:     http.Header{},
+			},
+		}
+	}
+
+	q := NewMessageQueue(mock)
+	defer q.Stop()
+
+	retryAfter, err := q.defaultSend("ch-1", "Hello!")
+	assert.NoError(t, err)
+	assert.Equal(t, 1*time.Second, retryAfter, "should default to 1s when no Retry-After header")
+}
+
+func TestParseRetryAfterHeader(t *testing.T) {
+	tests := []struct {
+		name     string
+		val      string
+		expected time.Duration
+	}{
+		{"empty", "", 0},
+		{"integer", "5", 5 * time.Second},
+		{"float", "1.5", 1500 * time.Millisecond},
+		{"invalid", "abc", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, parseRetryAfterHeader(tt.val))
+		})
 	}
 }
 

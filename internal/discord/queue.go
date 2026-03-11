@@ -1,9 +1,13 @@
 package discord
 
 import (
+	"errors"
 	"math/rand/v2"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 // queueItem represents a message waiting to be sent.
@@ -144,7 +148,40 @@ func (mq *MessageQueue) flushErrors(channelID string, err error) {
 
 func (mq *MessageQueue) defaultSend(channelID, content string) (time.Duration, error) {
 	_, err := mq.session.ChannelMessageSend(channelID, content)
+	if err == nil {
+		return 0, nil
+	}
+
+	// Check for discordgo's RateLimitError (returned when ShouldRetryOnRateLimit is false)
+	var rateLimitErr *discordgo.RateLimitError
+	if errors.As(err, &rateLimitErr) {
+		return rateLimitErr.RetryAfter, nil
+	}
+
+	// Check for RESTError with 429 status code
+	var restErr *discordgo.RESTError
+	if errors.As(err, &restErr) && restErr.Response != nil && restErr.Response.StatusCode == 429 {
+		retryAfter := parseRetryAfterHeader(restErr.Response.Header.Get("Retry-After"))
+		if retryAfter > 0 {
+			return retryAfter, nil
+		}
+		// Default fallback if no Retry-After header
+		return 1 * time.Second, nil
+	}
+
 	return 0, err
+}
+
+// parseRetryAfterHeader parses the Retry-After header value as seconds.
+func parseRetryAfterHeader(val string) time.Duration {
+	if val == "" {
+		return 0
+	}
+	secs, err := strconv.ParseFloat(val, 64)
+	if err != nil {
+		return 0
+	}
+	return time.Duration(secs * float64(time.Second))
 }
 
 // ErrQueueStopped is returned when the queue is stopped while messages are pending.
