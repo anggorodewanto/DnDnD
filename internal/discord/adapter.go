@@ -31,6 +31,22 @@ func (d *DiscordgoSession) ApplicationCommandDelete(appID, guildID, cmdID string
 	return d.S.ApplicationCommandDelete(appID, guildID, cmdID)
 }
 
+func (d *DiscordgoSession) GuildChannels(guildID string) ([]*discordgo.Channel, error) {
+	return d.S.GuildChannels(guildID)
+}
+
+func (d *DiscordgoSession) GuildChannelCreateComplex(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
+	return d.S.GuildChannelCreateComplex(guildID, data)
+}
+
+func (d *DiscordgoSession) InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+	return d.S.InteractionRespond(interaction, resp)
+}
+
+func (d *DiscordgoSession) InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error) {
+	return d.S.InteractionResponseEdit(interaction, newresp)
+}
+
 func (d *DiscordgoSession) GetState() *discordgo.State {
 	return d.S.State
 }

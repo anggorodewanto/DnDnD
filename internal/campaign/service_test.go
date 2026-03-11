@@ -630,3 +630,26 @@ func TestSettingsToNullRawMessage(t *testing.T) {
 	assert.Equal(t, "variant", parsed.DiagonalRule)
 	assert.Equal(t, []string{"srd"}, parsed.Open5eSources)
 }
+
+func TestSettings_ChannelIDs_RoundTrip(t *testing.T) {
+	s := &Settings{
+		TurnTimeoutHours: 24,
+		DiagonalRule:     "standard",
+		ChannelIDs: map[string]string{
+			"the-story":   "chan-1",
+			"combat-map":  "chan-2",
+			"in-character": "chan-3",
+		},
+	}
+	msg, err := settingsToNullRawMessage(s)
+	require.NoError(t, err)
+
+	var parsed Settings
+	err = json.Unmarshal(msg.RawMessage, &parsed)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{
+		"the-story":   "chan-1",
+		"combat-map":  "chan-2",
+		"in-character": "chan-3",
+	}, parsed.ChannelIDs)
+}

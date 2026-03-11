@@ -6,6 +6,9 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// setupPermission requires ManageChannels to run /setup.
+var setupPermission int64 = discordgo.PermissionManageChannels
+
 // CommandDefinitions returns the full set of slash commands the bot registers per guild.
 func CommandDefinitions() []*discordgo.ApplicationCommand {
 	return []*discordgo.ApplicationCommand{
@@ -40,6 +43,11 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 		{
 			Name:        "help",
 			Description: "Show a full command list",
+		},
+		{
+			Name:                     "setup",
+			Description:              "Create the full channel structure for this campaign",
+			DefaultMemberPermissions: &setupPermission,
 		},
 	}
 }

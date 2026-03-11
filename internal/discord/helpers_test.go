@@ -15,6 +15,10 @@ type MockSession struct {
 	ApplicationCommandBulkOverwriteFunc func(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error)
 	ApplicationCommandsFunc             func(appID, guildID string) ([]*discordgo.ApplicationCommand, error)
 	ApplicationCommandDeleteFunc        func(appID, guildID, cmdID string) error
+	GuildChannelsFunc                   func(guildID string) ([]*discordgo.Channel, error)
+	GuildChannelCreateComplexFunc       func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error)
+	InteractionRespondFunc              func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error
+	InteractionResponseEditFunc         func(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error)
 	StateValue                          *discordgo.State
 }
 
@@ -43,6 +47,34 @@ func (m *MockSession) ApplicationCommands(appID, guildID string) ([]*discordgo.A
 
 func (m *MockSession) ApplicationCommandDelete(appID, guildID, cmdID string) error {
 	return m.ApplicationCommandDeleteFunc(appID, guildID, cmdID)
+}
+
+func (m *MockSession) GuildChannels(guildID string) ([]*discordgo.Channel, error) {
+	if m.GuildChannelsFunc != nil {
+		return m.GuildChannelsFunc(guildID)
+	}
+	return nil, nil
+}
+
+func (m *MockSession) GuildChannelCreateComplex(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
+	if m.GuildChannelCreateComplexFunc != nil {
+		return m.GuildChannelCreateComplexFunc(guildID, data)
+	}
+	return &discordgo.Channel{ID: "new-" + data.Name, Name: data.Name}, nil
+}
+
+func (m *MockSession) InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+	if m.InteractionRespondFunc != nil {
+		return m.InteractionRespondFunc(interaction, resp)
+	}
+	return nil
+}
+
+func (m *MockSession) InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error) {
+	if m.InteractionResponseEditFunc != nil {
+		return m.InteractionResponseEditFunc(interaction, newresp)
+	}
+	return &discordgo.Message{}, nil
 }
 
 func (m *MockSession) GetState() *discordgo.State {

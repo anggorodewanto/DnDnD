@@ -10,5 +10,9 @@ type Session interface {
 	ApplicationCommandBulkOverwrite(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error)
 	ApplicationCommands(appID, guildID string) ([]*discordgo.ApplicationCommand, error)
 	ApplicationCommandDelete(appID, guildID, cmdID string) error
+	GuildChannels(guildID string) ([]*discordgo.Channel, error)
+	GuildChannelCreateComplex(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error)
+	InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error
+	InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error)
 	GetState() *discordgo.State
 }
