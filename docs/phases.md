@@ -62,7 +62,7 @@
   - Depends on: Phase 2, Phase 9a
   - Done when: Campaign created on `/setup`, all queries properly scoped, pause/resume posts to `#the-story`.
 
-- [ ] **Phase 12: Discord Channel Structure (`/setup`)**
+- [x] **Phase 12: Discord Channel Structure (`/setup`)**
   - Scope: `/setup` slash command that auto-creates the full channel structure (SYSTEM, NARRATION, COMBAT, REFERENCE categories with channels). Permission overrides (e.g., `#the-story` DM-write-only, `#combat-map` bot-write-only). Skip existing channels. Store channel IDs in campaign settings.
   - Depends on: Phase 9a, Phase 11
   - Done when: `/setup` creates all channels with correct permissions, skips duplicates, stores channel references.

@@ -142,18 +142,21 @@ func TestSetupChannels_SkipsExistingChannels(t *testing.T) {
 	assert.Equal(t, "existing-chan", result["initiative-tracker"])
 }
 
-func TestSetupChannels_TheStoryIsDMWriteOnly(t *testing.T) {
+// captureOverwrites runs SetupChannels and returns the permission overwrites
+// applied to the named channel.
+func captureOverwrites(t *testing.T, channelName string) []*discordgo.PermissionOverwrite {
+	t.Helper()
 	mock := newTestMock()
 	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
 		return nil, nil
 	}
 
-	var theStoryOverwrites []*discordgo.PermissionOverwrite
+	var overwrites []*discordgo.PermissionOverwrite
 	channelIDCounter := 0
 	mock.GuildChannelCreateComplexFunc = func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
 		channelIDCounter++
-		if data.Name == "the-story" {
-			theStoryOverwrites = data.PermissionOverwrites
+		if data.Name == channelName {
+			overwrites = data.PermissionOverwrites
 		}
 		return &discordgo.Channel{
 			ID:   fmt.Sprintf("chan-%d", channelIDCounter),
@@ -164,96 +167,43 @@ func TestSetupChannels_TheStoryIsDMWriteOnly(t *testing.T) {
 
 	_, err := SetupChannels(mock, "guild-1", "bot-user-1", "dm-user-1")
 	require.NoError(t, err)
+	return overwrites
+}
 
-	// #the-story: @everyone denied send, DM allowed send
-	require.NotEmpty(t, theStoryOverwrites, "expected permission overwrites on #the-story")
+// assertExclusiveWrite checks that the overwrites deny @everyone SendMessages
+// and allow the specified user SendMessages.
+func assertExclusiveWrite(t *testing.T, overwrites []*discordgo.PermissionOverwrite, allowedUserID, label string) {
+	t.Helper()
+	require.NotEmpty(t, overwrites, "expected permission overwrites on #%s", label)
 
-	var everyoneDeny, dmAllow bool
-	for _, ow := range theStoryOverwrites {
-		if ow.ID == "guild-1" && ow.Type == discordgo.PermissionOverwriteTypeRole {
-			if ow.Deny&discordgo.PermissionSendMessages != 0 {
-				everyoneDeny = true
-			}
+	var everyoneDeny, userAllow bool
+	for _, ow := range overwrites {
+		if ow.ID == "guild-1" && ow.Type == discordgo.PermissionOverwriteTypeRole && ow.Deny&discordgo.PermissionSendMessages != 0 {
+			everyoneDeny = true
 		}
-		if ow.ID == "dm-user-1" && ow.Type == discordgo.PermissionOverwriteTypeMember {
-			if ow.Allow&discordgo.PermissionSendMessages != 0 {
-				dmAllow = true
-			}
+		if ow.ID == allowedUserID && ow.Type == discordgo.PermissionOverwriteTypeMember && ow.Allow&discordgo.PermissionSendMessages != 0 {
+			userAllow = true
 		}
 	}
-	assert.True(t, everyoneDeny, "@everyone should be denied SendMessages in #the-story")
-	assert.True(t, dmAllow, "DM should be allowed SendMessages in #the-story")
+	assert.True(t, everyoneDeny, "@everyone should be denied SendMessages in #%s", label)
+	assert.True(t, userAllow, "%s should be allowed SendMessages in #%s", allowedUserID, label)
+}
+
+func TestSetupChannels_TheStoryIsDMWriteOnly(t *testing.T) {
+	overwrites := captureOverwrites(t, "the-story")
+	assertExclusiveWrite(t, overwrites, "dm-user-1", "the-story")
 }
 
 func TestSetupChannels_CombatMapIsBotWriteOnly(t *testing.T) {
-	mock := newTestMock()
-	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
-		return nil, nil
-	}
-
-	var combatMapOverwrites []*discordgo.PermissionOverwrite
-	channelIDCounter := 0
-	mock.GuildChannelCreateComplexFunc = func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
-		channelIDCounter++
-		if data.Name == "combat-map" {
-			combatMapOverwrites = data.PermissionOverwrites
-		}
-		return &discordgo.Channel{
-			ID:   fmt.Sprintf("chan-%d", channelIDCounter),
-			Name: data.Name,
-			Type: data.Type,
-		}, nil
-	}
-
-	_, err := SetupChannels(mock, "guild-1", "bot-user-1", "dm-user-1")
-	require.NoError(t, err)
-
-	require.NotEmpty(t, combatMapOverwrites)
-
-	var everyoneDeny, botAllow bool
-	for _, ow := range combatMapOverwrites {
-		if ow.ID == "guild-1" && ow.Type == discordgo.PermissionOverwriteTypeRole {
-			if ow.Deny&discordgo.PermissionSendMessages != 0 {
-				everyoneDeny = true
-			}
-		}
-		if ow.ID == "bot-user-1" && ow.Type == discordgo.PermissionOverwriteTypeMember {
-			if ow.Allow&discordgo.PermissionSendMessages != 0 {
-				botAllow = true
-			}
-		}
-	}
-	assert.True(t, everyoneDeny, "@everyone should be denied SendMessages in #combat-map")
-	assert.True(t, botAllow, "bot should be allowed SendMessages in #combat-map")
+	overwrites := captureOverwrites(t, "combat-map")
+	assertExclusiveWrite(t, overwrites, "bot-user-1", "combat-map")
 }
 
 func TestSetupChannels_InCharacterIsPlayerAndDMWritable(t *testing.T) {
-	mock := newTestMock()
-	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
-		return nil, nil
-	}
+	overwrites := captureOverwrites(t, "in-character")
 
-	var icOverwrites []*discordgo.PermissionOverwrite
-	channelIDCounter := 0
-	mock.GuildChannelCreateComplexFunc = func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
-		channelIDCounter++
-		if data.Name == "in-character" {
-			icOverwrites = data.PermissionOverwrites
-		}
-		return &discordgo.Channel{
-			ID:   fmt.Sprintf("chan-%d", channelIDCounter),
-			Name: data.Name,
-			Type: data.Type,
-		}, nil
-	}
-
-	_, err := SetupChannels(mock, "guild-1", "bot-user-1", "dm-user-1")
-	require.NoError(t, err)
-
-	// #in-character should have no @everyone deny (everyone can write)
-	// This means no restrictive overwrites -- it's player-and-DM writable by default
-	// But let's verify it has no deny on SendMessages for @everyone
-	for _, ow := range icOverwrites {
+	// #in-character should have no @everyone deny (everyone can write by default)
+	for _, ow := range overwrites {
 		if ow.ID == "guild-1" && ow.Type == discordgo.PermissionOverwriteTypeRole {
 			assert.Zero(t, ow.Deny&discordgo.PermissionSendMessages,
 				"@everyone should NOT be denied SendMessages in #in-character")
@@ -404,6 +354,22 @@ func TestSetupChannels_ChannelsHaveCorrectParentID(t *testing.T) {
 
 // HandleSetupCommand tests
 
+// setupMockResponder configures a mock to capture the final interaction response edit content.
+// Returns a pointer to the captured content string.
+func setupMockResponder(mock *MockSession) *string {
+	var content string
+	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		return nil
+	}
+	mock.InteractionResponseEditFunc = func(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error) {
+		if newresp.Content != nil {
+			content = *newresp.Content
+		}
+		return &discordgo.Message{}, nil
+	}
+	return &content
+}
+
 type mockCampaignLookup struct {
 	getCampaignFunc    func(guildID string) (SetupCampaignInfo, error)
 	updateSettingsFunc func(guildID string, channelIDs map[string]string) error
@@ -464,11 +430,7 @@ func TestHandleSetupCommand_Success(t *testing.T) {
 
 	bot := NewBot(mock, "app-1", newTestLogger())
 	handler := NewSetupHandler(bot, campaignLookup)
-
-	interaction := &discordgo.Interaction{
-		GuildID: "guild-1",
-	}
-	handler.Handle(interaction)
+	handler.Handle(&discordgo.Interaction{GuildID: "guild-1"})
 
 	assert.True(t, deferredResponse, "should send deferred response")
 	assert.Contains(t, editContent, "created")
@@ -478,17 +440,7 @@ func TestHandleSetupCommand_Success(t *testing.T) {
 
 func TestHandleSetupCommand_NoCampaign(t *testing.T) {
 	mock := newTestMock()
-
-	var editContent string
-	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		return nil
-	}
-	mock.InteractionResponseEditFunc = func(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error) {
-		if newresp.Content != nil {
-			editContent = *newresp.Content
-		}
-		return &discordgo.Message{}, nil
-	}
+	editContent := setupMockResponder(mock)
 
 	campaignLookup := &mockCampaignLookup{
 		getCampaignFunc: func(guildID string) (SetupCampaignInfo, error) {
@@ -500,7 +452,7 @@ func TestHandleSetupCommand_NoCampaign(t *testing.T) {
 	handler := NewSetupHandler(bot, campaignLookup)
 	handler.Handle(&discordgo.Interaction{GuildID: "guild-1"})
 
-	assert.Contains(t, editContent, "no campaign")
+	assert.Contains(t, *editContent, "no campaign")
 }
 
 func TestHandleSetupCommand_SetupError(t *testing.T) {
@@ -508,24 +460,13 @@ func TestHandleSetupCommand_SetupError(t *testing.T) {
 	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
 		return nil, fmt.Errorf("api error")
 	}
+	editContent := setupMockResponder(mock)
 
-	var editContent string
-	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		return nil
-	}
-	mock.InteractionResponseEditFunc = func(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error) {
-		if newresp.Content != nil {
-			editContent = *newresp.Content
-		}
-		return &discordgo.Message{}, nil
-	}
-
-	campaignLookup := &mockCampaignLookup{}
 	bot := NewBot(mock, "app-1", newTestLogger())
-	handler := NewSetupHandler(bot, campaignLookup)
+	handler := NewSetupHandler(bot, &mockCampaignLookup{})
 	handler.Handle(&discordgo.Interaction{GuildID: "guild-1"})
 
-	assert.Contains(t, editContent, "Failed")
+	assert.Contains(t, *editContent, "Failed")
 }
 
 func TestHandleSetupCommand_SaveError(t *testing.T) {
@@ -542,17 +483,7 @@ func TestHandleSetupCommand_SaveError(t *testing.T) {
 			Type: data.Type,
 		}, nil
 	}
-
-	var editContent string
-	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		return nil
-	}
-	mock.InteractionResponseEditFunc = func(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error) {
-		if newresp.Content != nil {
-			editContent = *newresp.Content
-		}
-		return &discordgo.Message{}, nil
-	}
+	editContent := setupMockResponder(mock)
 
 	campaignLookup := &mockCampaignLookup{
 		updateSettingsFunc: func(guildID string, channelIDs map[string]string) error {
@@ -564,7 +495,6 @@ func TestHandleSetupCommand_SaveError(t *testing.T) {
 	handler := NewSetupHandler(bot, campaignLookup)
 	handler.Handle(&discordgo.Interaction{GuildID: "guild-1"})
 
-	// Channels created but save failed - should still report partial success
-	assert.Contains(t, editContent, "created")
-	assert.Contains(t, editContent, "failed to save")
+	assert.Contains(t, *editContent, "created")
+	assert.Contains(t, *editContent, "failed to save")
 }

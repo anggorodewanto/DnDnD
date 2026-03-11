@@ -57,9 +57,9 @@ func ChannelStructure() []CategoryDef {
 	}
 }
 
-// theStoryPerms returns overwrites making #the-story DM-write-only.
-// @everyone is denied SendMessages; the DM is explicitly allowed.
-func theStoryPerms(guildID, _, dmUserID string) []*discordgo.PermissionOverwrite {
+// exclusiveWritePerms returns overwrites that deny @everyone SendMessages
+// and allow only the specified user to send messages.
+func exclusiveWritePerms(guildID, allowedUserID string) []*discordgo.PermissionOverwrite {
 	return []*discordgo.PermissionOverwrite{
 		{
 			ID:   guildID, // @everyone role ID == guild ID
@@ -67,28 +67,21 @@ func theStoryPerms(guildID, _, dmUserID string) []*discordgo.PermissionOverwrite
 			Deny: discordgo.PermissionSendMessages,
 		},
 		{
-			ID:    dmUserID,
+			ID:    allowedUserID,
 			Type:  discordgo.PermissionOverwriteTypeMember,
 			Allow: discordgo.PermissionSendMessages,
 		},
 	}
 }
 
+// theStoryPerms returns overwrites making #the-story DM-write-only.
+func theStoryPerms(guildID, _, dmUserID string) []*discordgo.PermissionOverwrite {
+	return exclusiveWritePerms(guildID, dmUserID)
+}
+
 // combatMapPerms returns overwrites making #combat-map bot-write-only.
-// @everyone is denied SendMessages; the bot is explicitly allowed.
 func combatMapPerms(guildID, botUserID, _ string) []*discordgo.PermissionOverwrite {
-	return []*discordgo.PermissionOverwrite{
-		{
-			ID:   guildID,
-			Type: discordgo.PermissionOverwriteTypeRole,
-			Deny: discordgo.PermissionSendMessages,
-		},
-		{
-			ID:    botUserID,
-			Type:  discordgo.PermissionOverwriteTypeMember,
-			Allow: discordgo.PermissionSendMessages,
-		},
-	}
+	return exclusiveWritePerms(guildID, botUserID)
 }
 
 // SetupChannels creates the full category/channel structure for a guild.
@@ -100,7 +93,6 @@ func SetupChannels(s Session, guildID, botUserID, dmUserID string) (map[string]s
 		return nil, fmt.Errorf("fetching guild channels: %w", err)
 	}
 
-	// Build lookup maps for existing categories and channels.
 	existingCategories := make(map[string]*discordgo.Channel)
 	existingChannels := make(map[string]*discordgo.Channel) // key: "parentID/name"
 	for _, ch := range existing {
@@ -178,43 +170,42 @@ func (h *SetupHandler) Handle(interaction *discordgo.Interaction) {
 	s := h.bot.session
 	guildID := interaction.GuildID
 
-	// Acknowledge with deferred response
 	_ = s.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	})
 
-	// Look up campaign for this guild
 	info, err := h.campaignLookup.GetCampaignForSetup(guildID)
 	if err != nil {
-		msg := fmt.Sprintf("Error: no campaign found for this server. Create a campaign first.")
-		_, _ = s.InteractionResponseEdit(interaction, &discordgo.WebhookEdit{Content: &msg})
+		h.editResponse(interaction, "Error: no campaign found for this server. Create a campaign first.")
 		return
 	}
 
-	// Get bot user ID from state
-	botUserID := ""
-	if state := s.GetState(); state != nil && state.User != nil {
-		botUserID = state.User.ID
-	}
-
-	// Create channels
-	channelIDs, err := SetupChannels(s, guildID, botUserID, info.DMUserID)
+	channelIDs, err := SetupChannels(s, guildID, botUserIDFromState(s), info.DMUserID)
 	if err != nil {
-		msg := fmt.Sprintf("Failed to create channels: %s", err)
-		_, _ = s.InteractionResponseEdit(interaction, &discordgo.WebhookEdit{Content: &msg})
+		h.editResponse(interaction, fmt.Sprintf("Failed to create channels: %s", err))
 		return
 	}
 
-	// Save channel IDs to campaign settings
 	if err := h.campaignLookup.SaveChannelIDs(guildID, channelIDs); err != nil {
 		h.bot.logger.Error("failed to save channel IDs", "guild_id", guildID, "error", err)
-		msg := fmt.Sprintf("Channels created successfully, but failed to save channel references: %s", err)
-		_, _ = s.InteractionResponseEdit(interaction, &discordgo.WebhookEdit{Content: &msg})
+		h.editResponse(interaction, fmt.Sprintf("Channels created successfully, but failed to save channel references: %s", err))
 		return
 	}
 
-	msg := fmt.Sprintf("Channel structure created successfully! %d channels set up.", len(channelIDs))
-	_, _ = s.InteractionResponseEdit(interaction, &discordgo.WebhookEdit{Content: &msg})
+	h.editResponse(interaction, fmt.Sprintf("Channel structure created successfully! %d channels set up.", len(channelIDs)))
+}
+
+// editResponse is a convenience wrapper for editing a deferred interaction response.
+func (h *SetupHandler) editResponse(interaction *discordgo.Interaction, msg string) {
+	_, _ = h.bot.session.InteractionResponseEdit(interaction, &discordgo.WebhookEdit{Content: &msg})
+}
+
+// botUserIDFromState extracts the bot's user ID from the session state, returning "" if unavailable.
+func botUserIDFromState(s Session) string {
+	if state := s.GetState(); state != nil && state.User != nil {
+		return state.User.ID
+	}
+	return ""
 }
 
 // ensureCategory returns the ID of an existing category or creates a new one.
