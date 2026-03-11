@@ -11,6 +11,7 @@ import (
 type MockSession struct {
 	UserChannelCreateFunc               func(recipientID string) (*discordgo.Channel, error)
 	ChannelMessageSendFunc              func(channelID, content string) (*discordgo.Message, error)
+	ChannelMessageSendComplexFunc       func(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error)
 	ApplicationCommandBulkOverwriteFunc func(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error)
 	ApplicationCommandsFunc             func(appID, guildID string) ([]*discordgo.ApplicationCommand, error)
 	ApplicationCommandDeleteFunc        func(appID, guildID, cmdID string) error
@@ -23,6 +24,13 @@ func (m *MockSession) UserChannelCreate(recipientID string) (*discordgo.Channel,
 
 func (m *MockSession) ChannelMessageSend(channelID, content string) (*discordgo.Message, error) {
 	return m.ChannelMessageSendFunc(channelID, content)
+}
+
+func (m *MockSession) ChannelMessageSendComplex(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error) {
+	if m.ChannelMessageSendComplexFunc != nil {
+		return m.ChannelMessageSendComplexFunc(channelID, data)
+	}
+	return &discordgo.Message{}, nil
 }
 
 func (m *MockSession) ApplicationCommandBulkOverwrite(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {

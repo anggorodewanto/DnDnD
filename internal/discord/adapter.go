@@ -15,6 +15,10 @@ func (d *DiscordgoSession) ChannelMessageSend(channelID, content string) (*disco
 	return d.S.ChannelMessageSend(channelID, content)
 }
 
+func (d *DiscordgoSession) ChannelMessageSendComplex(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error) {
+	return d.S.ChannelMessageSendComplex(channelID, data)
+}
+
 func (d *DiscordgoSession) ApplicationCommandBulkOverwrite(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {
 	return d.S.ApplicationCommandBulkOverwrite(appID, guildID, cmds)
 }
