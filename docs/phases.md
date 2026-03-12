@@ -203,7 +203,7 @@
   - Depends on: Phase 34
   - Done when: Unit tests cover all condition-based and context-based adv/disadv sources; cancellation logic; combat log output includes reason.
 
-- [ ] **Phase 36: Extra Attack & Two-Weapon Fighting**
+- [x] **Phase 36: Extra Attack & Two-Weapon Fighting**
   - Scope: Extra Attack: track attacks per action by class/level (Fighter 5=2, 11=3, 20=4). One `/attack` per swing. Report remaining attacks. Unused attacks forfeited on `/done`. Multiclass: use highest `attacks_per_action`. Two-Weapon Fighting: `/bonus offhand` with light weapon validation. Off-hand damage without ability mod (unless fighting style).
   - Depends on: Phase 34
   - Done when: Unit tests verify extra attack counts by class/level, multiclass highest-wins, TWF light weapon validation, off-hand damage modifier rules.

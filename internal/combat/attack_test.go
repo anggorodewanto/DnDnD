@@ -1530,8 +1530,11 @@ func TestServiceOffhandAttack_MainHandNotLight(t *testing.T) {
 		return char, nil
 	}
 	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
-		if id == "longsword" {
+		switch id {
+		case "longsword":
 			return makeLongsword(), nil // longsword is NOT light
+		case "dagger":
+			return makeDagger(), nil
 		}
 		return refdata.Weapon{}, sql.ErrNoRows
 	}

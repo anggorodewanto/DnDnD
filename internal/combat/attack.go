@@ -413,66 +413,14 @@ func FormatAttackLog(result AttackResult) string {
 	return b.String()
 }
 
-// Attack is the service-level method that orchestrates a full attack:
-// weapon resolution, range calculation, auto-crit check, attack resolution,
-// and turn resource tracking.
-func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Roller) (AttackResult, error) {
-	// Validate attack resource
-	if err := ValidateResource(cmd.Turn, ResourceAttack); err != nil {
-		return AttackResult{}, err
-	}
-
-	// Resolve weapon
-	weapon, scores, profBonus, err := s.resolveAttackWeapon(ctx, cmd)
-	if err != nil {
-		return AttackResult{}, fmt.Errorf("resolving weapon: %w", err)
-	}
-
-	// Calculate distance
-	distFt := Distance3D(
-		colToIndex(cmd.Attacker.PositionCol), int(cmd.Attacker.PositionRow)-1, int(cmd.Attacker.AltitudeFt),
-		colToIndex(cmd.Target.PositionCol), int(cmd.Target.PositionRow)-1, int(cmd.Target.AltitudeFt),
-	)
-
-	isMelee := !IsRangedWeapon(weapon)
-
-	// Check auto-crit
-	autoCrit, autoCritReason := CheckAutoCrit(cmd.Target.Conditions, distFt, isMelee)
-
-	// Parse conditions
-	attackerConds, _ := parseConditions(cmd.Attacker.Conditions)
-	targetConds, _ := parseConditions(cmd.Target.Conditions)
-
-	input := AttackInput{
-		AttackerName:        cmd.Attacker.DisplayName,
-		TargetName:          cmd.Target.DisplayName,
-		TargetAC:            int(cmd.Target.Ac),
-		Weapon:              weapon,
-		Scores:              scores,
-		ProfBonus:           profBonus,
-		DistanceFt:          distFt,
-		AutoCrit:            autoCrit,
-		AutoCritReason:      autoCritReason,
-		AttackerConditions:  attackerConds,
-		TargetConditions:    targetConds,
-		HostileNearAttacker: cmd.HostileNearAttacker,
-		AttackerSize:        cmd.AttackerSize,
-		DMAdvantage:         cmd.DMAdvantage,
-		DMDisadvantage:      cmd.DMDisadvantage,
-	}
-
+// resolveAndPersistAttack resolves an attack from the given input, persists the
+// turn resource update, and returns the result with the updated turn attached.
+func (s *Service) resolveAndPersistAttack(ctx context.Context, input AttackInput, updatedTurn refdata.Turn, roller *dice.Roller) (AttackResult, error) {
 	result, err := ResolveAttack(input, roller)
 	if err != nil {
 		return AttackResult{}, err
 	}
 
-	// Deduct attack
-	updatedTurn, err := UseAttack(cmd.Turn)
-	if err != nil {
-		return AttackResult{}, fmt.Errorf("using attack resource: %w", err)
-	}
-
-	// Persist turn resource update
 	_, err = s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn))
 	if err != nil {
 		return AttackResult{}, fmt.Errorf("updating turn actions: %w", err)
@@ -482,16 +430,42 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	return result, nil
 }
 
+// Attack is the service-level method that orchestrates a full attack:
+// weapon resolution, range calculation, auto-crit check, attack resolution,
+// and turn resource tracking.
+func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Roller) (AttackResult, error) {
+	if err := ValidateResource(cmd.Turn, ResourceAttack); err != nil {
+		return AttackResult{}, err
+	}
+
+	weapon, scores, profBonus, err := s.resolveAttackWeapon(ctx, cmd)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("resolving weapon: %w", err)
+	}
+
+	updatedTurn, err := UseAttack(cmd.Turn)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("using attack resource: %w", err)
+	}
+
+	distFt := combatantDistance(cmd.Attacker, cmd.Target)
+	input := buildAttackInput(
+		cmd.Attacker, cmd.Target, weapon, scores, profBonus, distFt,
+		cmd.HostileNearAttacker, cmd.AttackerSize,
+		cmd.DMAdvantage, cmd.DMDisadvantage, nil,
+	)
+
+	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
+}
+
 // OffhandAttack is the service-level method for a two-weapon fighting off-hand attack.
 // It uses the bonus action, validates both weapons are light, and resolves the off-hand attack
 // with 0 damage modifier (unless the character has the Two-Weapon Fighting fighting style).
 func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, roller *dice.Roller) (AttackResult, error) {
-	// Validate bonus action available
 	if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
 		return AttackResult{}, err
 	}
 
-	// Must be a PC with a character
 	if !cmd.Attacker.CharacterID.Valid {
 		return AttackResult{}, fmt.Errorf("off-hand attack requires a character (not NPC)")
 	}
@@ -505,8 +479,6 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	if err != nil {
 		return AttackResult{}, fmt.Errorf("parsing ability scores: %w", err)
 	}
-
-	profBonus := int(char.ProficiencyBonus)
 
 	// Validate main hand weapon exists and is light
 	if !char.EquippedMainHand.Valid || char.EquippedMainHand.String == "" {
@@ -532,66 +504,27 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 		return AttackResult{}, fmt.Errorf("off-hand weapon %q is not light", offWeapon.Name)
 	}
 
-	// Compute damage modifier: 0 unless TWF fighting style
+	// Off-hand attacks use 0 damage modifier unless the character has TWF fighting style
 	dmgMod := 0
 	if HasFightingStyle(char.Features, "two_weapon_fighting") {
 		dmgMod = DamageModifier(scores, offWeapon)
 	}
 
-	// Calculate distance
-	distFt := Distance3D(
-		colToIndex(cmd.Attacker.PositionCol), int(cmd.Attacker.PositionRow)-1, int(cmd.Attacker.AltitudeFt),
-		colToIndex(cmd.Target.PositionCol), int(cmd.Target.PositionRow)-1, int(cmd.Target.AltitudeFt),
-	)
-
-	isMelee := !IsRangedWeapon(offWeapon)
-
-	// Check auto-crit
-	autoCrit, autoCritReason := CheckAutoCrit(cmd.Target.Conditions, distFt, isMelee)
-
-	// Parse conditions
-	attackerConds, _ := parseConditions(cmd.Attacker.Conditions)
-	targetConds, _ := parseConditions(cmd.Target.Conditions)
-
-	input := AttackInput{
-		AttackerName:        cmd.Attacker.DisplayName,
-		TargetName:          cmd.Target.DisplayName,
-		TargetAC:            int(cmd.Target.Ac),
-		Weapon:              offWeapon,
-		Scores:              scores,
-		ProfBonus:           profBonus,
-		DistanceFt:          distFt,
-		AutoCrit:            autoCrit,
-		AutoCritReason:      autoCritReason,
-		AttackerConditions:  attackerConds,
-		TargetConditions:    targetConds,
-		HostileNearAttacker: cmd.HostileNearAttacker,
-		AttackerSize:        cmd.AttackerSize,
-		DMAdvantage:         cmd.DMAdvantage,
-		DMDisadvantage:      cmd.DMDisadvantage,
-		OverrideDmgMod:      &dmgMod,
-	}
-
-	result, err := ResolveAttack(input, roller)
-	if err != nil {
-		return AttackResult{}, err
-	}
-
-	// Use bonus action
 	updatedTurn, err := UseResource(cmd.Turn, ResourceBonusAction)
 	if err != nil {
 		return AttackResult{}, fmt.Errorf("using bonus action: %w", err)
 	}
 
-	// Persist turn update
-	_, err = s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn))
-	if err != nil {
-		return AttackResult{}, fmt.Errorf("updating turn actions: %w", err)
-	}
+	distFt := combatantDistance(cmd.Attacker, cmd.Target)
+	input := buildAttackInput(
+		cmd.Attacker, cmd.Target, offWeapon, scores, int(char.ProficiencyBonus), distFt,
+		cmd.HostileNearAttacker, cmd.AttackerSize,
+		cmd.DMAdvantage, cmd.DMDisadvantage, &dmgMod,
+	)
 
-	result.RemainingTurn = &updatedTurn
-	return result, nil
+	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
 }
+
 
 // resolveAttackWeapon resolves the weapon, ability scores, and proficiency bonus for an attack.
 func (s *Service) resolveAttackWeapon(ctx context.Context, cmd AttackCommand) (refdata.Weapon, AbilityScores, int, error) {
@@ -627,6 +560,51 @@ func (s *Service) resolveAttackWeapon(ctx context.Context, cmd AttackCommand) (r
 	}
 
 	return weapon, scores, profBonus, nil
+}
+
+// combatantDistance returns the 3D distance in feet between two combatants.
+func combatantDistance(a, b refdata.Combatant) int {
+	return Distance3D(
+		colToIndex(a.PositionCol), int(a.PositionRow)-1, int(a.AltitudeFt),
+		colToIndex(b.PositionCol), int(b.PositionRow)-1, int(b.AltitudeFt),
+	)
+}
+
+// buildAttackInput constructs the common AttackInput fields shared by Attack and OffhandAttack.
+func buildAttackInput(
+	attacker, target refdata.Combatant,
+	weapon refdata.Weapon,
+	scores AbilityScores,
+	profBonus int,
+	distFt int,
+	hostileNear bool,
+	attackerSize string,
+	dmAdvantage, dmDisadvantage bool,
+	overrideDmgMod *int,
+) AttackInput {
+	isMelee := !IsRangedWeapon(weapon)
+	autoCrit, autoCritReason := CheckAutoCrit(target.Conditions, distFt, isMelee)
+	attackerConds, _ := parseConditions(attacker.Conditions)
+	targetConds, _ := parseConditions(target.Conditions)
+
+	return AttackInput{
+		AttackerName:        attacker.DisplayName,
+		TargetName:          target.DisplayName,
+		TargetAC:            int(target.Ac),
+		Weapon:              weapon,
+		Scores:              scores,
+		ProfBonus:           profBonus,
+		DistanceFt:          distFt,
+		AutoCrit:            autoCrit,
+		AutoCritReason:      autoCritReason,
+		AttackerConditions:  attackerConds,
+		TargetConditions:    targetConds,
+		HostileNearAttacker: hostileNear,
+		AttackerSize:        attackerSize,
+		DMAdvantage:         dmAdvantage,
+		DMDisadvantage:      dmDisadvantage,
+		OverrideDmgMod:      overrideDmgMod,
+	}
 }
 
 // colToIndex converts a column letter (A-Z) to a 0-based index.
