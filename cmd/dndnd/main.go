@@ -11,6 +11,8 @@ import (
 
 	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/database"
+	"github.com/ab/dndnd/internal/gamemap"
+	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/server"
 )
 
@@ -38,6 +40,8 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 	debug := os.Getenv("DEBUG") == "true"
 	logger := server.NewLogger(logOutput, debug)
 
+	router, _ := server.NewRouter(logger)
+
 	// Optional database connection
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL != "" {
@@ -53,9 +57,13 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			return err
 		}
 		logger.Info("database connected and migrated")
-	}
 
-	router, _ := server.NewRouter(logger)
+		// Wire map API handler
+		queries := refdata.New(db)
+		mapSvc := gamemap.NewService(queries)
+		mapHandler := gamemap.NewHandler(mapSvc)
+		mapHandler.RegisterRoutes(router)
+	}
 
 	srv := &http.Server{
 		Addr:    addr,

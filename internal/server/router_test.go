@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func TestNewRouter_HealthEndpoint(t *testing.T) {
@@ -72,5 +74,29 @@ func TestNewRouter_PanicRecoveryIntegrated(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestNewRouter_ReturnsChiRouter(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	r, _ := NewRouter(logger)
+
+	// Verify the returned router implements chi.Router so callers can
+	// register additional route groups (e.g. map API handler).
+	var _ chi.Router = r
+
+	// Simulate a handler registering routes on the returned router,
+	// just like gamemap.Handler.RegisterRoutes would.
+	r.Get("/api/test-route", func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test-route", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 from registered route, got %d", rec.Code)
 	}
 }

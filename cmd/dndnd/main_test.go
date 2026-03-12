@@ -193,6 +193,46 @@ func TestRun_WithDatabase(t *testing.T) {
 	}
 }
 
+func TestRun_MapAPIRoutesRegistered(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	connStr := testutil.NewTestDBConnString(t)
+	t.Setenv("DATABASE_URL", connStr)
+
+	addr := getFreePort(t)
+	var logBuf bytes.Buffer
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- run(ctx, &logBuf, addr)
+	}()
+
+	waitForServer(t, addr)
+
+	// GET /api/maps without campaign_id should return 400 (Bad Request),
+	// NOT 404 — proving the route is registered.
+	resp, err := http.Get(fmt.Sprintf("http://%s/api/maps", addr))
+	if err != nil {
+		t.Fatalf("failed to reach /api/maps: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		t.Fatal("/api/maps returned 404; map API routes are not wired into the server")
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 from /api/maps without campaign_id, got %d", resp.StatusCode)
+	}
+
+	cancel()
+	<-errCh
+}
+
 func TestRun_DefaultAddr(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 

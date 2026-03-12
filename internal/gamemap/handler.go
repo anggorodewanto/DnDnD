@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -293,22 +294,18 @@ var errNotFound = fmt.Errorf("not found")
 // handleServiceError maps service errors to HTTP status codes.
 func handleServiceError(w http.ResponseWriter, err error) {
 	msg := err.Error()
-	if contains(msg, "must be positive", "exceeds hard limit", "must not be empty") {
+	if containsAny(msg, "must be positive", "exceeds hard limit", "must not be empty") {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
 	http.Error(w, "internal error", http.StatusInternalServerError)
 }
 
-// contains checks if s contains any of the substrings.
-func contains(s string, substrs ...string) bool {
+// containsAny checks if s contains any of the substrings.
+func containsAny(s string, substrs ...string) bool {
 	for _, sub := range substrs {
-		if len(sub) > 0 && len(s) >= len(sub) {
-			for i := 0; i <= len(s)-len(sub); i++ {
-				if s[i:i+len(sub)] == sub {
-					return true
-				}
-			}
+		if strings.Contains(s, sub) {
+			return true
 		}
 	}
 	return false

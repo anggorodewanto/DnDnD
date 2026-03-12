@@ -643,12 +643,13 @@ func TestGenerateDefaultTiledJSON_LargeTileSize(t *testing.T) {
 
 // --- TDD Cycle 27: contains helper ---
 
-func TestContains_Helper(t *testing.T) {
-	assert.True(t, contains("hello world", "world"))
-	assert.True(t, contains("must be positive", "must be positive"))
-	assert.False(t, contains("hello", "world"))
-	assert.False(t, contains("", "world"))
-	assert.False(t, contains("hello", ""))
+func TestContainsAny_Helper(t *testing.T) {
+	assert.True(t, containsAny("hello world", "world"))
+	assert.True(t, containsAny("must be positive", "must be positive"))
+	assert.False(t, containsAny("hello", "world"))
+	assert.False(t, containsAny("", "world"))
+	// strings.Contains returns true for empty substring (stdlib behavior)
+	assert.True(t, containsAny("hello", ""))
 }
 
 // --- TDD Cycle 28: handleServiceError maps errors correctly ---

@@ -12,8 +12,8 @@
     currentView = 'editor';
   }
 
-  function onEditMap(event) {
-    editingMapId = event.detail.id;
+  function onEditMap(id) {
+    editingMapId = id;
     currentView = 'editor';
   }
 

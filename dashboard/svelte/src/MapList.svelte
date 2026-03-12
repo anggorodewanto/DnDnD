@@ -1,14 +1,11 @@
 <script>
   import { listMaps, deleteMap } from './lib/api.js';
-  import { createEventDispatcher } from 'svelte';
 
   let { campaignId, oncreate, onedit } = $props();
 
   let maps = $state([]);
   let loading = $state(true);
   let error = $state(null);
-
-  const dispatch = createEventDispatcher();
 
   async function loadMaps() {
     loading = true;
@@ -57,7 +54,7 @@
           <h3>{map.name}</h3>
           <p>{map.width} x {map.height} squares</p>
           <div class="card-actions">
-            <button onclick={() => onedit && dispatch('edit', { id: map.id })}>Edit</button>
+            <button onclick={() => onedit && onedit(map.id)}>Edit</button>
             <button class="delete-btn" onclick={() => handleDelete(map.id, map.name)}>Delete</button>
           </div>
         </div>

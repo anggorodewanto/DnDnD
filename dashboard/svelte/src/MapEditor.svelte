@@ -30,7 +30,7 @@
   let saving = $state(false);
   let error = $state(null);
   let statusMsg = $state('');
-  let showNewMapForm = $derived(!mapId && !tiledMap);
+  let showNewMapForm = $state(!mapId && !tiledMap);
 
   // Canvas ref
   let canvasEl = $state(null);
