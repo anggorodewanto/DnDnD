@@ -1230,3 +1230,371 @@ func TestShortIDFromName(t *testing.T) {
 	}
 }
 
+// --- TDD Cycle 44: ClearCombatConditions removes combat-only conditions ---
+
+func TestClearCombatConditions_RemovesCombatConditions(t *testing.T) {
+	input := json.RawMessage(`[
+		{"condition":"stunned","duration_rounds":3,"started_round":1},
+		{"condition":"frightened","duration_rounds":2,"started_round":1},
+		{"condition":"exhaustion","duration_rounds":0,"started_round":0}
+	]`)
+	result, err := ClearCombatConditions(input)
+	require.NoError(t, err)
+
+	var conds []CombatCondition
+	require.NoError(t, json.Unmarshal(result, &conds))
+	require.Len(t, conds, 1)
+	assert.Equal(t, "exhaustion", conds[0].Condition)
+}
+
+// --- TDD Cycle 45: ClearCombatConditions handles empty and nil input ---
+
+func TestClearCombatConditions_EmptyInput(t *testing.T) {
+	result, err := ClearCombatConditions(json.RawMessage(`[]`))
+	require.NoError(t, err)
+	assert.Equal(t, "[]", string(result))
+
+	result2, err := ClearCombatConditions(nil)
+	require.NoError(t, err)
+	assert.Equal(t, "[]", string(result2))
+}
+
+// --- TDD Cycle 46: ClearCombatConditions removes all 11 combat conditions ---
+
+func TestClearCombatConditions_AllCombatConditions(t *testing.T) {
+	allCombat := []CombatCondition{
+		{Condition: "stunned"}, {Condition: "frightened"}, {Condition: "charmed"},
+		{Condition: "restrained"}, {Condition: "grappled"}, {Condition: "prone"},
+		{Condition: "incapacitated"}, {Condition: "paralyzed"}, {Condition: "blinded"},
+		{Condition: "deafened"}, {Condition: "surprised"},
+	}
+	input, _ := json.Marshal(allCombat)
+	result, err := ClearCombatConditions(input)
+	require.NoError(t, err)
+
+	var conds []CombatCondition
+	require.NoError(t, json.Unmarshal(result, &conds))
+	assert.Empty(t, conds)
+}
+
+// --- TDD Cycle 47: ClearCombatConditions preserves non-combat conditions ---
+
+func TestClearCombatConditions_PreservesNonCombat(t *testing.T) {
+	input := json.RawMessage(`[
+		{"condition":"stunned","duration_rounds":1,"started_round":1},
+		{"condition":"curse","duration_rounds":0,"started_round":0},
+		{"condition":"disease","duration_rounds":0,"started_round":0},
+		{"condition":"blinded","duration_rounds":2,"started_round":1}
+	]`)
+	result, err := ClearCombatConditions(input)
+	require.NoError(t, err)
+
+	var conds []CombatCondition
+	require.NoError(t, json.Unmarshal(result, &conds))
+	require.Len(t, conds, 2)
+	assert.Equal(t, "curse", conds[0].Condition)
+	assert.Equal(t, "disease", conds[1].Condition)
+}
+
+// --- TDD Cycle 48: AllHostilesDefeated returns true when all NPCs dead ---
+
+func TestAllHostilesDefeated_AllDead(t *testing.T) {
+	encounterID := uuid.New()
+	store := defaultMockStore()
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), IsNpc: true, IsAlive: false, HpCurrent: 0, Conditions: json.RawMessage(`[]`)},
+			{ID: uuid.New(), IsNpc: true, IsAlive: false, HpCurrent: 0, Conditions: json.RawMessage(`[]`)},
+			{ID: uuid.New(), IsNpc: false, IsAlive: true, HpCurrent: 20, Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	svc := NewService(store)
+
+	result, err := svc.AllHostilesDefeated(context.Background(), encounterID)
+	require.NoError(t, err)
+	assert.True(t, result)
+}
+
+// --- TDD Cycle 49: AllHostilesDefeated returns false when some NPCs alive ---
+
+func TestAllHostilesDefeated_SomeAlive(t *testing.T) {
+	store := defaultMockStore()
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), IsNpc: true, IsAlive: false, HpCurrent: 0, Conditions: json.RawMessage(`[]`)},
+			{ID: uuid.New(), IsNpc: true, IsAlive: true, HpCurrent: 5, Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	svc := NewService(store)
+
+	result, err := svc.AllHostilesDefeated(context.Background(), uuid.New())
+	require.NoError(t, err)
+	assert.False(t, result)
+}
+
+// --- TDD Cycle 50: AllHostilesDefeated returns false with no NPCs ---
+
+func TestAllHostilesDefeated_NoNPCs(t *testing.T) {
+	store := defaultMockStore()
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), IsNpc: false, IsAlive: true, HpCurrent: 20, Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	svc := NewService(store)
+
+	result, err := svc.AllHostilesDefeated(context.Background(), uuid.New())
+	require.NoError(t, err)
+	assert.False(t, result)
+}
+
+// --- TDD Cycle 51: AllHostilesDefeated store error ---
+
+func TestAllHostilesDefeated_StoreError(t *testing.T) {
+	store := defaultMockStore()
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return nil, errors.New("db error")
+	}
+	svc := NewService(store)
+
+	_, err := svc.AllHostilesDefeated(context.Background(), uuid.New())
+	assert.Error(t, err)
+}
+
+// --- TDD Cycle 63: EndCombat skips condition update when no combat conditions present ---
+
+func TestEndCombat_SkipsUpdateWhenNoCombatConditions(t *testing.T) {
+	encounterID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 2}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed", RoundNumber: 2}, nil
+	}
+	conditionUpdateCalled := false
+	store.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		conditionUpdateCalled = true
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), IsNpc: false, IsAlive: true, HpCurrent: 20, DisplayName: "Frodo", Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), encounterID)
+	require.NoError(t, err)
+	assert.False(t, conditionUpdateCalled, "should not update conditions when no combat conditions to clear")
+}
+
+// --- TDD Cycle 64: EndCombat completed encounter error ---
+
+func TestEndCombat_CompletedEncounter(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "completed"}, nil
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), uuid.New())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must be active")
+}
+
+// --- TDD Cycle 65: ClearCombatConditions with invalid JSON ---
+
+func TestClearCombatConditions_InvalidJSON(t *testing.T) {
+	_, err := ClearCombatConditions(json.RawMessage(`not json`))
+	assert.Error(t, err)
+}
+
+// --- TDD Cycle 66: EndCombat update status error ---
+
+func TestEndCombat_UpdateStatusError(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{}, errors.New("db error")
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), uuid.New())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "setting status")
+}
+
+// --- TDD Cycle 67: EndCombat complete turn error ---
+
+func TestEndCombat_CompleteTurnError(t *testing.T) {
+	turnID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1, CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true}}, nil
+	}
+	store.completeTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{}, errors.New("turn error")
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), uuid.New())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "completing active turn")
+}
+
+// --- TDD Cycle 68: EndCombat list combatants error ---
+
+func TestEndCombat_ListCombatantsError(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed", RoundNumber: 1}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return nil, errors.New("db error")
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), uuid.New())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "listing combatants")
+}
+
+// --- TDD Cycle 69: EndCombat update conditions error ---
+
+func TestEndCombat_UpdateConditionsError(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed", RoundNumber: 1}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), DisplayName: "Test", Conditions: json.RawMessage(`[{"condition":"stunned","duration_rounds":1,"started_round":1}]`)},
+		}, nil
+	}
+	store.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errors.New("update error")
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), uuid.New())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "updating conditions")
+}
+
+// --- TDD Cycle 52: EndCombat success ---
+
+func TestEndCombat_Success(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatantIDs := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Name:          "Goblin Ambush",
+			DisplayName:   sql.NullString{String: "The Goblin Ambush", Valid: true},
+			Status:        "active",
+			RoundNumber:   3,
+			CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+		}, nil
+	}
+	statusUpdated := false
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		assert.Equal(t, "completed", arg.Status)
+		statusUpdated = true
+		return refdata.Encounter{ID: arg.ID, Status: "completed", RoundNumber: 3, Name: "Goblin Ambush"}, nil
+	}
+	turnCompleted := false
+	store.completeTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		assert.Equal(t, turnID, id)
+		turnCompleted = true
+		return refdata.Turn{ID: id, Status: "completed"}, nil
+	}
+	conditionsCleared := map[uuid.UUID]bool{}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: combatantIDs[0], IsNpc: true, IsAlive: false, HpCurrent: 0, DisplayName: "Goblin 1", Conditions: json.RawMessage(`[{"condition":"stunned","duration_rounds":1,"started_round":2}]`)},
+			{ID: combatantIDs[1], IsNpc: true, IsAlive: false, HpCurrent: 0, DisplayName: "Goblin 2", Conditions: json.RawMessage(`[]`)},
+			{ID: combatantIDs[2], IsNpc: false, IsAlive: true, HpCurrent: 30, DisplayName: "Aragorn", Conditions: json.RawMessage(`[{"condition":"frightened","duration_rounds":2,"started_round":2},{"condition":"exhaustion","duration_rounds":0,"started_round":0}]`)},
+		}, nil
+	}
+	store.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		conditionsCleared[arg.ID] = true
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(store)
+	result, err := svc.EndCombat(context.Background(), encounterID)
+	require.NoError(t, err)
+
+	assert.True(t, statusUpdated, "encounter status should be set to completed")
+	assert.True(t, turnCompleted, "active turn should be completed")
+	assert.Equal(t, int32(3), result.RoundsElapsed)
+	assert.Equal(t, 2, result.Casualties)
+	assert.Contains(t, result.Summary, "3 rounds")
+	assert.Contains(t, result.Summary, "2 casualties")
+	assert.True(t, conditionsCleared[combatantIDs[0]], "goblin 1 conditions should be cleared")
+	assert.True(t, conditionsCleared[combatantIDs[2]], "aragorn conditions should be cleared")
+}
+
+// --- TDD Cycle 53: EndCombat rejects non-active encounter ---
+
+func TestEndCombat_NotActive(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "preparing"}, nil
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), uuid.New())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must be active")
+}
+
+// --- TDD Cycle 54: EndCombat with no active turn ---
+
+func TestEndCombat_NoActiveTurn(t *testing.T) {
+	encounterID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed", RoundNumber: 1}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), IsNpc: false, IsAlive: true, HpCurrent: 20, DisplayName: "Frodo", Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	svc := NewService(store)
+
+	result, err := svc.EndCombat(context.Background(), encounterID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), result.RoundsElapsed)
+	assert.Equal(t, 0, result.Casualties)
+}
+
+// --- TDD Cycle 55: EndCombat encounter not found ---
+
+func TestEndCombat_EncounterNotFound(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{}, sql.ErrNoRows
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), uuid.New())
+	assert.Error(t, err)
+}
+

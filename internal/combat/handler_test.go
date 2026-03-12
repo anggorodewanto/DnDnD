@@ -299,3 +299,145 @@ func TestHandler_ListCharacters_ServiceError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
+
+// --- TDD Cycle 56: POST /api/combat/{encounterID}/end success ---
+
+func TestHandler_EndCombat_Success(t *testing.T) {
+	encounterID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID: id, Name: "Goblin Ambush", Status: "active", RoundNumber: 3,
+			CurrentTurnID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed", RoundNumber: 3, Name: "Goblin Ambush"}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), IsNpc: true, IsAlive: false, HpCurrent: 0, DisplayName: "Goblin", Conditions: json.RawMessage(`[]`)},
+			{ID: uuid.New(), IsNpc: false, IsAlive: true, HpCurrent: 30, DisplayName: "Aragorn", Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/end", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp endCombatResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "completed", resp.Encounter.Status)
+	assert.Equal(t, int32(3), resp.RoundsElapsed)
+	assert.Equal(t, 1, resp.Casualties)
+	assert.Contains(t, resp.Summary, "3 rounds")
+}
+
+// --- TDD Cycle 57: POST /api/combat/{encounterID}/end invalid ID ---
+
+func TestHandler_EndCombat_InvalidID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/not-a-uuid/end", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle 58: POST /api/combat/{encounterID}/end service error ---
+
+func TestHandler_EndCombat_ServiceError(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{}, errors.New("db error")
+	}
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/end", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// --- TDD Cycle 59: GET /api/combat/{encounterID}/hostiles-defeated success (all defeated) ---
+
+func TestHandler_CheckHostilesDefeated_AllDefeated(t *testing.T) {
+	encounterID := uuid.New()
+	store := defaultMockStore()
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), IsNpc: true, IsAlive: false, HpCurrent: 0, Conditions: json.RawMessage(`[]`)},
+			{ID: uuid.New(), IsNpc: false, IsAlive: true, HpCurrent: 20, Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/"+encounterID.String()+"/hostiles-defeated", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp hostilesDefeatedResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.True(t, resp.AllDefeated)
+}
+
+// --- TDD Cycle 60: GET /api/combat/{encounterID}/hostiles-defeated not all defeated ---
+
+func TestHandler_CheckHostilesDefeated_NotAllDefeated(t *testing.T) {
+	store := defaultMockStore()
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), IsNpc: true, IsAlive: true, HpCurrent: 10, Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/"+uuid.New().String()+"/hostiles-defeated", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp hostilesDefeatedResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.False(t, resp.AllDefeated)
+}
+
+// --- TDD Cycle 61: GET /api/combat/{encounterID}/hostiles-defeated invalid ID ---
+
+func TestHandler_CheckHostilesDefeated_InvalidID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/not-uuid/hostiles-defeated", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle 62: GET /api/combat/{encounterID}/hostiles-defeated service error ---
+
+func TestHandler_CheckHostilesDefeated_ServiceError(t *testing.T) {
+	store := defaultMockStore()
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return nil, errors.New("db error")
+	}
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/"+uuid.New().String()+"/hostiles-defeated", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}

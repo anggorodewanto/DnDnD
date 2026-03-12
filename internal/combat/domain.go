@@ -105,6 +105,15 @@ type StartCombatResult struct {
 	FirstTurn          TurnInfo             `json:"first_turn"`
 }
 
+// EndCombatResult holds the result of the EndCombat operation.
+type EndCombatResult struct {
+	Encounter     refdata.Encounter   `json:"encounter"`
+	Combatants    []refdata.Combatant `json:"combatants"`
+	Summary       string              `json:"summary"`
+	Casualties    int                 `json:"casualties"`
+	RoundsElapsed int32               `json:"rounds_elapsed"`
+}
+
 // ParseTemplateCreatures parses the JSONB creatures array from an encounter template.
 func ParseTemplateCreatures(raw json.RawMessage) ([]TemplateCreature, error) {
 	if len(raw) == 0 {

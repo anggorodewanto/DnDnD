@@ -26,6 +26,8 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/combat", func(r chi.Router) {
 		r.Post("/start", h.StartCombat)
 		r.Get("/characters", h.ListCharacters)
+		r.Post("/{encounterID}/end", h.EndCombat)
+		r.Get("/{encounterID}/hostiles-defeated", h.CheckHostilesDefeated)
 	})
 }
 
@@ -85,6 +87,20 @@ type characterListResponse struct {
 	HpMax   int32  `json:"hp_max"`
 	Ac      int32  `json:"ac"`
 	SpeedFt int32  `json:"speed_ft"`
+}
+
+// endCombatResponse is the JSON response for ending combat.
+type endCombatResponse struct {
+	Encounter     encounterResponse   `json:"encounter"`
+	Combatants    []combatantResponse `json:"combatants"`
+	Summary       string              `json:"summary"`
+	Casualties    int                 `json:"casualties"`
+	RoundsElapsed int32               `json:"rounds_elapsed"`
+}
+
+// hostilesDefeatedResponse is the JSON response for the hostiles-defeated check.
+type hostilesDefeatedResponse struct {
+	AllDefeated bool `json:"all_defeated"`
 }
 
 // writeJSON writes a JSON response with the given status code.
@@ -210,4 +226,68 @@ func (h *Handler) ListCharacters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// EndCombat handles POST /api/combat/{encounterID}/end.
+func (h *Handler) EndCombat(w http.ResponseWriter, r *http.Request) {
+	encounterIDStr := chi.URLParam(r, "encounterID")
+	encounterID, err := uuid.Parse(encounterIDStr)
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.svc.EndCombat(r.Context(), encounterID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	combatants := make([]combatantResponse, len(result.Combatants))
+	for i, c := range result.Combatants {
+		combatants[i] = combatantResponse{
+			ID:              c.ID.String(),
+			ShortID:         c.ShortID,
+			DisplayName:     c.DisplayName,
+			InitiativeRoll:  c.InitiativeRoll,
+			InitiativeOrder: c.InitiativeOrder,
+			HpMax:           c.HpMax,
+			HpCurrent:       c.HpCurrent,
+			Ac:              c.Ac,
+			IsNpc:           c.IsNpc,
+			IsAlive:         c.IsAlive,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, endCombatResponse{
+		Encounter: encounterResponse{
+			ID:          result.Encounter.ID.String(),
+			CampaignID:  result.Encounter.CampaignID.String(),
+			Name:        result.Encounter.Name,
+			Status:      result.Encounter.Status,
+			RoundNumber: result.Encounter.RoundNumber,
+		},
+		Combatants:    combatants,
+		Summary:       result.Summary,
+		Casualties:    result.Casualties,
+		RoundsElapsed: result.RoundsElapsed,
+	})
+}
+
+// CheckHostilesDefeated handles GET /api/combat/{encounterID}/hostiles-defeated.
+func (h *Handler) CheckHostilesDefeated(w http.ResponseWriter, r *http.Request) {
+	encounterIDStr := chi.URLParam(r, "encounterID")
+	encounterID, err := uuid.Parse(encounterIDStr)
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	defeated, err := h.svc.AllHostilesDefeated(r.Context(), encounterID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, hostilesDefeatedResponse{AllDefeated: defeated})
 }

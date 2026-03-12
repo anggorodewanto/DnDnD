@@ -397,6 +397,95 @@ func (s *Service) markSurprisedByShortIDs(ctx context.Context, encounterID uuid.
 	return nil
 }
 
+// EndCombat validates the encounter is active, sets status to completed, clears combat-only
+// conditions from all combatants, completes the active turn, and returns a summary.
+func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndCombatResult, error) {
+	enc, err := s.store.GetEncounter(ctx, encounterID)
+	if err != nil {
+		return EndCombatResult{}, fmt.Errorf("getting encounter: %w", err)
+	}
+	if enc.Status != "active" {
+		return EndCombatResult{}, fmt.Errorf("encounter is %q, must be active to end combat", enc.Status)
+	}
+
+	// Complete active turn if any
+	if enc.CurrentTurnID.Valid {
+		if _, err := s.store.CompleteTurn(ctx, enc.CurrentTurnID.UUID); err != nil {
+			return EndCombatResult{}, fmt.Errorf("completing active turn: %w", err)
+		}
+	}
+
+	// Set status to completed
+	enc, err = s.store.UpdateEncounterStatus(ctx, refdata.UpdateEncounterStatusParams{
+		ID:     encounterID,
+		Status: "completed",
+	})
+	if err != nil {
+		return EndCombatResult{}, fmt.Errorf("setting status to completed: %w", err)
+	}
+
+	// List combatants and clear combat conditions
+	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return EndCombatResult{}, fmt.Errorf("listing combatants: %w", err)
+	}
+
+	casualties := 0
+	cleaned := make([]refdata.Combatant, len(combatants))
+	for i, c := range combatants {
+		if !c.IsAlive {
+			casualties++
+		}
+		newConds, err := ClearCombatConditions(c.Conditions)
+		if err != nil {
+			return EndCombatResult{}, fmt.Errorf("clearing conditions for %s: %w", c.DisplayName, err)
+		}
+		if string(newConds) != string(c.Conditions) {
+			updated, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+				ID:              c.ID,
+				Conditions:      newConds,
+				ExhaustionLevel: c.ExhaustionLevel,
+			})
+			if err != nil {
+				return EndCombatResult{}, fmt.Errorf("updating conditions for %s: %w", c.DisplayName, err)
+			}
+			cleaned[i] = updated
+		} else {
+			cleaned[i] = c
+		}
+	}
+
+	roundsElapsed := enc.RoundNumber
+	summary := fmt.Sprintf("%d rounds, %d casualties", roundsElapsed, casualties)
+
+	return EndCombatResult{
+		Encounter:     enc,
+		Combatants:    cleaned,
+		Summary:       summary,
+		Casualties:    casualties,
+		RoundsElapsed: roundsElapsed,
+	}, nil
+}
+
+// AllHostilesDefeated checks if all NPC combatants in the encounter have 0 HP or are not alive.
+func (s *Service) AllHostilesDefeated(ctx context.Context, encounterID uuid.UUID) (bool, error) {
+	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return false, fmt.Errorf("listing combatants: %w", err)
+	}
+	hostileCount := 0
+	for _, c := range combatants {
+		if !c.IsNpc {
+			continue
+		}
+		hostileCount++
+		if c.IsAlive && c.HpCurrent > 0 {
+			return false, nil
+		}
+	}
+	return hostileCount > 0, nil
+}
+
 // ListCharactersByCampaign returns all characters for a campaign.
 func (s *Service) ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error) {
 	return s.store.ListCharactersByCampaign(ctx, campaignID)

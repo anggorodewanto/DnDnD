@@ -106,6 +106,38 @@ func AddSurprisedCondition(conditions json.RawMessage) (json.RawMessage, error) 
 	return json.Marshal(append(conds, SurprisedCondition()))
 }
 
+// combatOnlyConditions is the set of conditions that are cleared when combat ends.
+var combatOnlyConditions = map[string]bool{
+	"stunned":       true,
+	"frightened":    true,
+	"charmed":       true,
+	"restrained":    true,
+	"grappled":      true,
+	"prone":         true,
+	"incapacitated": true,
+	"paralyzed":     true,
+	"blinded":       true,
+	"deafened":      true,
+	"surprised":     true,
+}
+
+// ClearCombatConditions removes combat-only conditions (stunned, frightened, charmed,
+// restrained, grappled, prone, incapacitated, paralyzed, blinded, deafened, surprised)
+// while preserving non-combat conditions like exhaustion, curse, disease.
+func ClearCombatConditions(conditions json.RawMessage) (json.RawMessage, error) {
+	conds, err := parseConditions(conditions)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]CombatCondition, 0, len(conds))
+	for _, c := range conds {
+		if !combatOnlyConditions[c.Condition] {
+			filtered = append(filtered, c)
+		}
+	}
+	return json.Marshal(filtered)
+}
+
 // RemoveSurprisedCondition removes the surprised condition from a conditions JSONB array.
 func RemoveSurprisedCondition(conditions json.RawMessage) (json.RawMessage, error) {
 	conds, err := parseConditions(conditions)
