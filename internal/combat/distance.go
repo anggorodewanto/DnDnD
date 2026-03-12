@@ -2,6 +2,7 @@ package combat
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/ab/dndnd/internal/gamemap/renderer"
@@ -19,7 +20,7 @@ func FormatDistance(distFt int, from, to string) string {
 }
 
 // FormatRangeRejection formats a range rejection message showing actual distance and max range.
-func FormatRangeRejection(distFt, maxRange int, targetName string) string {
+func FormatRangeRejection(distFt, maxRange int) string {
 	return fmt.Sprintf("\u274c Target is out of range \u2014 %dft away (max %dft).", distFt, maxRange)
 }
 
@@ -40,7 +41,7 @@ func ResolveTarget(target string, combatants []refdata.Combatant) (*refdata.Comb
 	if err == nil {
 		for i := range combatants {
 			cCol, cRow, cErr := renderer.ParseCoordinate(
-				combatants[i].PositionCol + fmt.Sprintf("%d", combatants[i].PositionRow),
+				combatants[i].PositionCol + strconv.Itoa(int(combatants[i].PositionRow)),
 			)
 			if cErr != nil {
 				continue

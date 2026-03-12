@@ -23,7 +23,7 @@ func TestFormatDistanceTwoTargets(t *testing.T) {
 }
 
 func TestFormatRangeRejection(t *testing.T) {
-	got := FormatRangeRejection(65, 60, "Goblin #1")
+	got := FormatRangeRejection(65, 60)
 	expected := "\u274c Target is out of range \u2014 65ft away (max 60ft)."
 	if got != expected {
 		t.Errorf("expected %q, got %q", expected, got)

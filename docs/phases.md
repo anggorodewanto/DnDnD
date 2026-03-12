@@ -183,7 +183,7 @@
   - Depends on: Phase 30, Phase 22
   - Done when: Unit tests verify altitude movement cost, 3D distance calculation, fall damage; map shows stacked tokens correctly.
 
-- [ ] **Phase 32: Distance Awareness (`/distance`)**
+- [x] **Phase 32: Distance Awareness (`/distance`)**
   - Scope: `/distance` command (ephemeral): distance from self to target, or between two combatants. 3D Euclidean calculation. Passive distance in action feedback (attack/cast log entries include distance). Range rejection messages include actual distance and allowed range.
   - Depends on: Phase 31
   - Done when: `/distance` returns correct distances; attack/cast feedback includes distance; range rejections show both distances.

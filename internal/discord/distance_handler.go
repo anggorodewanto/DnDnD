@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/bwmarrin/discordgo"
 
@@ -50,7 +51,6 @@ func (h *DistanceHandler) Handle(interaction *discordgo.Interaction) {
 		target2Str = data.Options[1].StringValue()
 	}
 
-	// Get active encounter
 	encounterID, err := h.encounterProvider.GetActiveEncounterID(ctx, interaction.GuildID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "No active encounter in this server.")
@@ -63,7 +63,6 @@ func (h *DistanceHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// List all combatants
 	combatants, err := h.combatService.ListCombatantsByEncounterID(ctx, encounterID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Failed to list combatants.")
@@ -75,7 +74,6 @@ func (h *DistanceHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// Single target: distance from current turn combatant to target
 	if !encounter.CurrentTurnID.Valid {
 		respondEphemeral(h.session, interaction, "No active turn.")
 		return
@@ -100,7 +98,7 @@ func (h *DistanceHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	dist := computeCombatantDistance(selfCombatant, *target)
-	msg := combat.FormatDistance(dist, "You", fmt.Sprintf("%s (%s)", target.DisplayName, target.ShortID))
+	msg := combat.FormatDistance(dist, "You", combatantLabel(*target))
 	respondEphemeral(h.session, interaction, msg)
 }
 
@@ -118,11 +116,13 @@ func (h *DistanceHandler) handleTwoTargets(interaction *discordgo.Interaction, t
 	}
 
 	dist := computeCombatantDistance(*t1, *t2)
-	msg := combat.FormatDistance(dist,
-		fmt.Sprintf("%s (%s)", t1.DisplayName, t1.ShortID),
-		fmt.Sprintf("%s (%s)", t2.DisplayName, t2.ShortID),
-	)
+	msg := combat.FormatDistance(dist, combatantLabel(*t1), combatantLabel(*t2))
 	respondEphemeral(h.session, interaction, msg)
+}
+
+// combatantLabel formats a combatant as "DisplayName (ShortID)".
+func combatantLabel(c refdata.Combatant) string {
+	return fmt.Sprintf("%s (%s)", c.DisplayName, c.ShortID)
 }
 
 // computeCombatantDistance calculates the 3D Euclidean distance between two combatants.
@@ -134,7 +134,7 @@ func computeCombatantDistance(a, b refdata.Combatant) int {
 
 // parseCombatantPos converts a combatant's position to 0-based col/row.
 func parseCombatantPos(c refdata.Combatant) (col, row int) {
-	col, row, err := renderer.ParseCoordinate(c.PositionCol + fmt.Sprintf("%d", c.PositionRow))
+	col, row, err := renderer.ParseCoordinate(c.PositionCol + strconv.Itoa(int(c.PositionRow)))
 	if err != nil {
 		return 0, 0
 	}
