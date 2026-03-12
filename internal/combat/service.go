@@ -51,9 +51,15 @@ type Store interface {
 	ListActionLogByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.ActionLog, error)
 	ListActionLogByTurnID(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error)
 
+	// Initiative
+	UpdateCombatantInitiative(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error)
+	SkipTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	ListTurnsByEncounterAndRound(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error)
+
 	// Reference data lookups
 	GetEncounterTemplate(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error)
 	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
+	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 }
 
 // Service manages combat encounters and their entities.

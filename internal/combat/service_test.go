@@ -37,8 +37,12 @@ type mockStore struct {
 	createActionLogFn             func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error)
 	listActionLogByEncounterIDFn  func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ActionLog, error)
 	listActionLogByTurnIDFn       func(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error)
-	getEncounterTemplateFn        func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error)
-	getCreatureFn                 func(ctx context.Context, id string) (refdata.Creature, error)
+	getEncounterTemplateFn            func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error)
+	getCreatureFn                     func(ctx context.Context, id string) (refdata.Creature, error)
+	updateCombatantInitiativeFn       func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error)
+	skipTurnFn                        func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	listTurnsByEncounterAndRoundFn    func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error)
+	getCharacterFn                    func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -109,6 +113,18 @@ func (m *mockStore) GetEncounterTemplate(ctx context.Context, id uuid.UUID) (ref
 }
 func (m *mockStore) GetCreature(ctx context.Context, id string) (refdata.Creature, error) {
 	return m.getCreatureFn(ctx, id)
+}
+func (m *mockStore) UpdateCombatantInitiative(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+	return m.updateCombatantInitiativeFn(ctx, arg)
+}
+func (m *mockStore) SkipTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	return m.skipTurnFn(ctx, id)
+}
+func (m *mockStore) ListTurnsByEncounterAndRound(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+	return m.listTurnsByEncounterAndRoundFn(ctx, arg)
+}
+func (m *mockStore) GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+	return m.getCharacterFn(ctx, id)
 }
 
 func defaultMockStore() *mockStore {
@@ -195,6 +211,18 @@ func defaultMockStore() *mockStore {
 		},
 		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
 			return refdata.Creature{}, sql.ErrNoRows
+		},
+		updateCombatantInitiativeFn: func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: arg.ID, InitiativeRoll: arg.InitiativeRoll, InitiativeOrder: arg.InitiativeOrder}, nil
+		},
+		skipTurnFn: func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: id, Status: "skipped"}, nil
+		},
+		listTurnsByEncounterAndRoundFn: func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+			return []refdata.Turn{}, nil
+		},
+		getCharacterFn: func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+			return refdata.Character{}, sql.ErrNoRows
 		},
 	}
 }
