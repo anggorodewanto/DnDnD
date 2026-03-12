@@ -190,9 +190,12 @@ func buildResourceList(turn refdata.Turn) []string {
 // ResolveTurnResources determines the starting movement (ft) and attacks remaining
 // for a combatant at the start of their turn. For PCs, it looks up character speed
 // and class attacks_per_action. For NPCs, defaults are 30ft and 1 attack.
+// Condition effects (grappled/restrained → 0 speed) are applied.
 func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Combatant) (speedFt int32, attacksRemaining int32, err error) {
+	conds, _ := parseConditions(combatant.Conditions)
+
 	if combatant.IsNpc || !combatant.CharacterID.Valid {
-		return 30, 1, nil
+		return int32(EffectiveSpeed(30, conds)), 1, nil
 	}
 
 	char, err := s.store.GetCharacter(ctx, combatant.CharacterID.UUID)
@@ -227,7 +230,7 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 		}
 	}
 
-	return speedFt, int32(bestAttacks), nil
+	return int32(EffectiveSpeed(int(speedFt), conds)), int32(bestAttacks), nil
 }
 
 // FormatTurnStartPrompt produces the turn start notification shown in #your-turn.

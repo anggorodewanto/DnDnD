@@ -384,10 +384,18 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 		return TurnInfo{}, errors.New("no alive combatants")
 	}
 
-	// Iterate through candidates, skipping surprised ones in round 1
+	// Iterate through candidates, skipping surprised and incapacitated ones
 	for _, candidate := range candidates {
 		if roundNumber == 1 && IsSurprised(candidate.Conditions) {
 			if err := s.skipSurprisedTurn(ctx, encounterID, roundNumber, candidate); err != nil {
+				return TurnInfo{}, err
+			}
+			continue
+		}
+
+		// Skip incapacitated combatants (stunned, paralyzed, unconscious, petrified, incapacitated)
+		if IsIncapacitatedRaw(candidate.Conditions) {
+			if err := s.skipIncapacitatedTurn(ctx, encounterID, roundNumber, candidate); err != nil {
 				return TurnInfo{}, err
 			}
 			continue
@@ -441,6 +449,23 @@ func (s *Service) skipSurprisedTurn(ctx context.Context, encounterID uuid.UUID, 
 		ExhaustionLevel: combatant.ExhaustionLevel,
 	}); err != nil {
 		return fmt.Errorf("updating conditions after surprise skip: %w", err)
+	}
+	return nil
+}
+
+// skipIncapacitatedTurn creates and immediately skips a turn for an incapacitated combatant.
+func (s *Service) skipIncapacitatedTurn(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant) error {
+	turn, err := s.store.CreateTurn(ctx, refdata.CreateTurnParams{
+		EncounterID: encounterID,
+		CombatantID: combatant.ID,
+		RoundNumber: roundNumber,
+		Status:      "skipped",
+	})
+	if err != nil {
+		return fmt.Errorf("creating skipped turn for incapacitated: %w", err)
+	}
+	if _, err := s.store.SkipTurn(ctx, turn.ID); err != nil {
+		return fmt.Errorf("skipping incapacitated turn: %w", err)
 	}
 	return nil
 }
