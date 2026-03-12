@@ -93,7 +93,6 @@ func (s *Service) CreateEncounter(ctx context.Context, input CreateEncounterInpu
 	if err != nil {
 		return refdata.Encounter{}, fmt.Errorf("creating encounter: %w", err)
 	}
-
 	return enc, nil
 }
 
@@ -135,20 +134,10 @@ func (s *Service) AddCombatant(ctx context.Context, encounterID uuid.UUID, param
 		charID = uuid.NullUUID{UUID: parsed, Valid: true}
 	}
 
-	creatureRef := sql.NullString{}
-	if params.CreatureRefID != "" {
-		creatureRef = sql.NullString{String: params.CreatureRefID, Valid: true}
-	}
-
-	deathSaves := pqtype.NullRawMessage{}
-	if len(params.DeathSaves) > 0 {
-		deathSaves = pqtype.NullRawMessage{RawMessage: params.DeathSaves, Valid: true}
-	}
-
 	c, err := s.store.CreateCombatant(ctx, refdata.CreateCombatantParams{
 		EncounterID:     encounterID,
 		CharacterID:     charID,
-		CreatureRefID:   creatureRef,
+		CreatureRefID:   nullString(params.CreatureRefID),
 		ShortID:         params.ShortID,
 		DisplayName:     params.DisplayName,
 		InitiativeRoll:  0,
@@ -160,7 +149,7 @@ func (s *Service) AddCombatant(ctx context.Context, encounterID uuid.UUID, param
 		TempHp:          params.TempHP,
 		Ac:              params.AC,
 		Conditions:      json.RawMessage(`[]`),
-		DeathSaves:      deathSaves,
+		DeathSaves:      nullRawMessage(params.DeathSaves),
 		IsVisible:       params.IsVisible,
 		IsAlive:         params.IsAlive,
 		IsNpc:           params.IsNPC,
@@ -168,7 +157,6 @@ func (s *Service) AddCombatant(ctx context.Context, encounterID uuid.UUID, param
 	if err != nil {
 		return refdata.Combatant{}, fmt.Errorf("creating combatant: %w", err)
 	}
-
 	return c, nil
 }
 
@@ -287,26 +275,16 @@ func (s *Service) CreateActionLog(ctx context.Context, input CreateActionLogInpu
 		return refdata.ActionLog{}, errors.New("action_type must not be empty")
 	}
 
-	desc := sql.NullString{}
-	if input.Description != "" {
-		desc = sql.NullString{String: input.Description, Valid: true}
-	}
-
-	diceRolls := pqtype.NullRawMessage{}
-	if len(input.DiceRolls) > 0 {
-		diceRolls = pqtype.NullRawMessage{RawMessage: input.DiceRolls, Valid: true}
-	}
-
 	return s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
 		TurnID:      input.TurnID,
 		EncounterID: input.EncounterID,
 		ActionType:  input.ActionType,
 		ActorID:     input.ActorID,
 		TargetID:    input.TargetID,
-		Description: desc,
+		Description: nullString(input.Description),
 		BeforeState: input.BeforeState,
 		AfterState:  input.AfterState,
-		DiceRolls:   diceRolls,
+		DiceRolls:   nullRawMessage(input.DiceRolls),
 	})
 }
 
@@ -323,4 +301,9 @@ func (s *Service) ListActionLogByTurnID(ctx context.Context, turnID uuid.UUID) (
 // nullString converts a string to sql.NullString, treating empty as null.
 func nullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
+}
+
+// nullRawMessage converts a json.RawMessage to pqtype.NullRawMessage, treating empty/nil as null.
+func nullRawMessage(raw json.RawMessage) pqtype.NullRawMessage {
+	return pqtype.NullRawMessage{RawMessage: raw, Valid: len(raw) > 0}
 }

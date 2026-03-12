@@ -138,7 +138,7 @@
   - Depends on: Phase 6, Phase 15, Phase 21a
   - Done when: DM can create encounter templates with creatures placed on maps, edit/duplicate/delete them, see them listed on Campaign Home.
 
-- [ ] **Phase 24: Encounters & Combatants Tables**
+- [x] **Phase 24: Encounters & Combatants Tables**
   - Scope: Migrations for `encounters`, `combatants`, `turns`, `action_log` tables (full schema from spec). Go domain types for all combat entities. sqlc queries for CRUD. Combatant creation from character + creature reference data.
   - Depends on: Phase 7, Phase 6, Phase 19
   - Done when: Encounters can be created from templates, combatants instantiated with correct stats, turns table ready for use.

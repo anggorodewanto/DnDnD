@@ -11,11 +11,6 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-func mustUUID(t *testing.T) uuid.UUID {
-	t.Helper()
-	return uuid.New()
-}
-
 // --- TDD Cycle 1: CombatantFromCreature copies stats correctly ---
 
 func TestCombatantFromCreature(t *testing.T) {
@@ -76,7 +71,7 @@ func TestCombatantFromCreature_InvalidSpeedJSON(t *testing.T) {
 // --- TDD Cycle 4: CombatantFromCharacter copies stats correctly ---
 
 func TestCombatantFromCharacter(t *testing.T) {
-	charID := mustUUID(t)
+	charID := uuid.New()
 	char := refdata.Character{
 		ID:        charID,
 		Name:      "Aragorn",

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -676,5 +675,3 @@ func TestService_CreateActionLog_WithOptionalFields(t *testing.T) {
 	assert.NotEqual(t, uuid.Nil, log.ID)
 }
 
-// Use unused imports to satisfy compiler
-var _ = pqtype.NullRawMessage{}
