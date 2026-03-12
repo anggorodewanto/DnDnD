@@ -222,6 +222,23 @@ func HasFeat(features pqtype.NullRawMessage, featID string) bool {
 	return hasFeatureEffect(features, featID)
 }
 
+// HasBarbarianClass checks whether a character's classes JSON includes a Barbarian entry.
+func HasBarbarianClass(classesJSON json.RawMessage) bool {
+	if len(classesJSON) == 0 {
+		return false
+	}
+	var classes []CharacterClass
+	if err := json.Unmarshal(classesJSON, &classes); err != nil {
+		return false
+	}
+	for _, c := range classes {
+		if strings.EqualFold(c.Class, "Barbarian") {
+			return true
+		}
+	}
+	return false
+}
+
 // VersatileDamageExpression builds the damage expression using versatile_damage if available.
 func VersatileDamageExpression(weapon refdata.Weapon, abilityMod int) string {
 	if weapon.VersatileDamage.Valid && weapon.VersatileDamage.String != "" {
@@ -303,6 +320,9 @@ type AttackInput struct {
 	ImprovisedThrown    bool // Improvised weapon thrown (range 20/60)
 	HasCrossbowExpert   bool // Character has Crossbow Expert feat
 	HasTavernBrawler    bool // Character has Tavern Brawler feat
+	GWM                 bool // Great Weapon Master: -5 hit, +10 damage (heavy melee)
+	Sharpshooter        bool // Sharpshooter: -5 hit, +10 damage (ranged)
+	Reckless            bool // Reckless Attack: advantage on melee STR attacks (Barbarian)
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -328,6 +348,9 @@ type AttackResult struct {
 	RollMode            dice.RollMode
 	AdvantageReasons    []string
 	DisadvantageReasons []string
+	GWM                 bool
+	Sharpshooter        bool
+	Reckless            bool
 }
 
 // OffhandAttackCommand holds the service-level inputs for an off-hand attack (bonus action).
@@ -355,6 +378,9 @@ type AttackCommand struct {
 	IsImprovised        bool // Improvised weapon attack
 	ImprovisedThrown    bool // Improvised weapon thrown
 	Thrown               bool // Throw a melee weapon with "thrown" property
+	GWM                  bool // Great Weapon Master flag
+	Sharpshooter         bool // Sharpshooter flag
+	Reckless             bool // Reckless Attack flag
 }
 
 // ResolveAttack resolves a single attack using pure inputs. Returns an error if the target
@@ -389,10 +415,41 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		profBonus = 0
 	}
 
+	// GWM validation: requires heavy melee weapon
+	if input.GWM {
+		if IsRangedWeapon(input.Weapon) || !HasProperty(input.Weapon, "heavy") {
+			return AttackResult{}, fmt.Errorf("Great Weapon Master requires a heavy melee weapon")
+		}
+	}
+
+	// Sharpshooter validation: requires ranged weapon
+	if input.Sharpshooter {
+		if !IsRangedWeapon(input.Weapon) {
+			return AttackResult{}, fmt.Errorf("Sharpshooter requires a ranged weapon")
+		}
+	}
+
+	// Reckless validation: requires melee STR-based attack
+	if input.Reckless {
+		if IsRangedWeapon(input.Weapon) {
+			return AttackResult{}, fmt.Errorf("Reckless Attack requires a melee weapon")
+		}
+		if HasProperty(input.Weapon, "finesse") && AbilityModifier(input.Scores.Dex) > AbilityModifier(input.Scores.Str) {
+			return AttackResult{}, fmt.Errorf("Reckless Attack requires a STR-based attack (finesse weapon using DEX)")
+		}
+	}
+
 	atkMod := AttackModifier(input.Scores, input.Weapon, profBonus)
 	dmgMod := DamageModifier(input.Scores, input.Weapon)
 	if input.OverrideDmgMod != nil {
 		dmgMod = *input.OverrideDmgMod
+	}
+
+	// GWM / Sharpshooter: -5 to hit, +10 to damage
+	gwmSharpshooterBonus := 0
+	if input.GWM || input.Sharpshooter {
+		atkMod -= 5
+		gwmSharpshooterBonus = 10
 	}
 
 	result := AttackResult{
@@ -405,6 +462,9 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		DamageType:   input.Weapon.DamageType,
 		Cover:        input.Cover,
 		InLongRange:  resolveInLongRange(input),
+		GWM:          input.GWM,
+		Sharpshooter: input.Sharpshooter,
+		Reckless:     input.Reckless,
 	}
 
 	// Detect advantage/disadvantage
@@ -417,6 +477,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		AttackerSize:        input.AttackerSize,
 		DMAdvantage:         input.DMAdvantage,
 		DMDisadvantage:      input.DMDisadvantage,
+		Reckless:            input.Reckless,
 	}
 	rollMode, advReasons, disadvReasons := DetectAdvantage(advInput)
 	// Thrown/improvised-thrown in long range: add disadvantage
@@ -435,7 +496,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		result.AutoCrit = true
 		result.AutoCritReason = input.AutoCritReason
 		dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, true, input.TwoHanded, roller)
-		result.DamageTotal = dmg
+		result.DamageTotal = dmg + gwmSharpshooterBonus
 		result.DamageDice = damageDice
 		result.DamageRoll = dmgRoll
 		return result, nil
@@ -464,7 +525,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 
 	// Roll damage
 	dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, result.CriticalHit, input.TwoHanded, roller)
-	result.DamageTotal = dmg
+	result.DamageTotal = dmg + gwmSharpshooterBonus
 	result.DamageDice = damageDice
 	result.DamageRoll = dmgRoll
 
@@ -566,6 +627,21 @@ func FormatAttackLog(result AttackResult) string {
 		fmt.Fprintf(&b, " (%dft)", result.DistanceFt)
 	}
 
+	// Modifier flags annotation
+	var flags []string
+	if result.GWM {
+		flags = append(flags, "GWM -5/+10")
+	}
+	if result.Sharpshooter {
+		flags = append(flags, "Sharpshooter -5/+10")
+	}
+	if result.Reckless {
+		flags = append(flags, "Reckless Attack")
+	}
+	if len(flags) > 0 {
+		fmt.Fprintf(&b, " [%s]", strings.Join(flags, ", "))
+	}
+
 	// Advantage/disadvantage annotation
 	switch result.RollMode {
 	case dice.Advantage:
@@ -639,6 +715,23 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return AttackResult{}, fmt.Errorf("resolving weapon: %w", err)
 	}
 
+	// Validate modifier flag prerequisites
+	if cmd.GWM {
+		if char == nil || !HasFeat(char.Features, "great-weapon-master") {
+			return AttackResult{}, fmt.Errorf("Great Weapon Master requires the feat")
+		}
+	}
+	if cmd.Sharpshooter {
+		if char == nil || !HasFeat(char.Features, "sharpshooter") {
+			return AttackResult{}, fmt.Errorf("Sharpshooter requires the feat")
+		}
+	}
+	if cmd.Reckless {
+		if char == nil || !HasBarbarianClass(char.Classes) {
+			return AttackResult{}, fmt.Errorf("Reckless Attack requires Barbarian class")
+		}
+	}
+
 	// Loading weapons: limit to 1 attack per action
 	hasCrossbowExpert := false
 	hasTavernBrawler := false
@@ -691,6 +784,9 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	input.Thrown = cmd.Thrown
 	input.HasCrossbowExpert = hasCrossbowExpert
 	input.HasTavernBrawler = hasTavernBrawler
+	input.GWM = cmd.GWM
+	input.Sharpshooter = cmd.Sharpshooter
+	input.Reckless = cmd.Reckless
 
 	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
 }

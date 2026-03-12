@@ -17,6 +17,7 @@ type AdvantageInput struct {
 	AttackerSize       string
 	DMAdvantage        bool
 	DMDisadvantage     bool
+	Reckless           bool
 }
 
 // DetectAdvantage examines attacker/target conditions, weapon properties, and combat
@@ -24,6 +25,11 @@ type AdvantageInput struct {
 func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 	var advReasons []string
 	var disadvReasons []string
+
+	// Reckless Attack
+	if input.Reckless {
+		advReasons = append(advReasons, "Reckless Attack")
+	}
 
 	// DM overrides
 	if input.DMAdvantage {
