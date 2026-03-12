@@ -18,9 +18,10 @@ type CharacterFeature struct {
 	MechanicalEffect string `json:"mechanical_effect"`
 }
 
-// HasFightingStyle checks whether a character's features include a fighting style
-// with the given mechanical effect name (e.g., "two_weapon_fighting").
-func HasFightingStyle(features pqtype.NullRawMessage, styleName string) bool {
+// hasFeatureEffect checks whether a character's features include one with the
+// given mechanical_effect value. This is the shared implementation for
+// HasFightingStyle and HasFeat.
+func hasFeatureEffect(features pqtype.NullRawMessage, effectID string) bool {
 	if !features.Valid || len(features.RawMessage) == 0 {
 		return false
 	}
@@ -29,11 +30,17 @@ func HasFightingStyle(features pqtype.NullRawMessage, styleName string) bool {
 		return false
 	}
 	for _, f := range feats {
-		if strings.EqualFold(f.MechanicalEffect, styleName) {
+		if strings.EqualFold(f.MechanicalEffect, effectID) {
 			return true
 		}
 	}
 	return false
+}
+
+// HasFightingStyle checks whether a character's features include a fighting style
+// with the given mechanical effect name (e.g., "two_weapon_fighting").
+func HasFightingStyle(features pqtype.NullRawMessage, styleName string) bool {
+	return hasFeatureEffect(features, styleName)
 }
 
 // HasProperty checks whether a weapon has the specified property (e.g. "finesse", "light").
@@ -212,19 +219,7 @@ func GetAmmunitionName(weapon refdata.Weapon) string {
 // HasFeat checks whether a character's features include a feat with the given
 // mechanical_effect ID (e.g., "crossbow-expert", "tavern-brawler").
 func HasFeat(features pqtype.NullRawMessage, featID string) bool {
-	if !features.Valid || len(features.RawMessage) == 0 {
-		return false
-	}
-	var feats []CharacterFeature
-	if err := json.Unmarshal(features.RawMessage, &feats); err != nil {
-		return false
-	}
-	for _, f := range feats {
-		if strings.EqualFold(f.MechanicalEffect, featID) {
-			return true
-		}
-	}
-	return false
+	return hasFeatureEffect(features, featID)
 }
 
 // VersatileDamageExpression builds the damage expression using versatile_damage if available.
@@ -499,8 +494,10 @@ func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, twoHa
 		return total, fmt.Sprintf("%d", total), nil
 	}
 
+	useVersatile := twoHanded && weapon.VersatileDamage.Valid && weapon.VersatileDamage.String != ""
+
 	var expr string
-	if twoHanded && weapon.VersatileDamage.Valid && weapon.VersatileDamage.String != "" {
+	if useVersatile {
 		expr = VersatileDamageExpression(weapon, dmgMod)
 	} else {
 		expr = DamageExpression(weapon, dmgMod)
@@ -513,7 +510,7 @@ func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, twoHa
 
 	if critical {
 		critWeapon := weapon
-		if twoHanded && weapon.VersatileDamage.Valid && weapon.VersatileDamage.String != "" {
+		if useVersatile {
 			critWeapon.Damage = weapon.VersatileDamage.String
 		}
 		return rollResult.Total, buildCritDiceDisplay(critWeapon, dmgMod), &rollResult
@@ -681,11 +678,7 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		}
 	}
 
-	// Off-hand occupied check for two-handed
-	offHandOccupied := false
-	if char != nil && char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
-		offHandOccupied = true
-	}
+	offHandOccupied := char != nil && char.EquippedOffHand.Valid && char.EquippedOffHand.String != ""
 
 	distFt := combatantDistance(cmd.Attacker, cmd.Target)
 	input := buildAttackInput(

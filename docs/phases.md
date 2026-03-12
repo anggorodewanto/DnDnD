@@ -208,7 +208,7 @@
   - Depends on: Phase 34
   - Done when: Unit tests verify extra attack counts by class/level, multiclass highest-wins, TWF light weapon validation, off-hand damage modifier rules.
 
-- [ ] **Phase 37: Weapon Properties — Versatile, Reach, Heavy, Loading, Thrown, Ammunition, Improvised**
+- [x] **Phase 37: Weapon Properties — Versatile, Reach, Heavy, Loading, Thrown, Ammunition, Improvised**
   - Scope: `--twohanded` flag for versatile weapons (off-hand must be free). Reach weapons extend melee to 10ft. Heavy weapons: disadvantage for Small/Tiny. Loading: one attack per action with loading weapons (Crossbow Expert override). Thrown weapons: range validation, weapon removed from hand after throw. Ammunition: auto-deduct from inventory, reject when empty, post-combat half recovery. Improvised weapons: 1d4 bludgeoning, no proficiency (Tavern Brawler override), `--thrown` range 20/60.
   - Depends on: Phase 34
   - Done when: Unit tests verify each weapon property mechanic; integration tests cover ammunition tracking and thrown weapon hand management.
