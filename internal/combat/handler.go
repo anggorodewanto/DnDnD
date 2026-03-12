@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/refdata"
 )
 
 // Handler serves combat API endpoints over HTTP.
@@ -112,6 +113,37 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
+// toEncounterResponse converts a refdata.Encounter to its JSON response representation.
+func toEncounterResponse(enc refdata.Encounter) encounterResponse {
+	return encounterResponse{
+		ID:          enc.ID.String(),
+		CampaignID:  enc.CampaignID.String(),
+		Name:        enc.Name,
+		Status:      enc.Status,
+		RoundNumber: enc.RoundNumber,
+	}
+}
+
+// toCombatantResponses converts a slice of refdata.Combatant to their JSON response representations.
+func toCombatantResponses(combatants []refdata.Combatant) []combatantResponse {
+	resp := make([]combatantResponse, len(combatants))
+	for i, c := range combatants {
+		resp[i] = combatantResponse{
+			ID:              c.ID.String(),
+			ShortID:         c.ShortID,
+			DisplayName:     c.DisplayName,
+			InitiativeRoll:  c.InitiativeRoll,
+			InitiativeOrder: c.InitiativeOrder,
+			HpMax:           c.HpMax,
+			HpCurrent:       c.HpCurrent,
+			Ac:              c.Ac,
+			IsNpc:           c.IsNpc,
+			IsAlive:         c.IsAlive,
+		}
+	}
+	return resp
+}
+
 // StartCombat handles POST /api/combat/start.
 func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 	var req startCombatRequest
@@ -159,31 +191,9 @@ func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	combatants := make([]combatantResponse, len(result.Combatants))
-	for i, c := range result.Combatants {
-		combatants[i] = combatantResponse{
-			ID:              c.ID.String(),
-			ShortID:         c.ShortID,
-			DisplayName:     c.DisplayName,
-			InitiativeRoll:  c.InitiativeRoll,
-			InitiativeOrder: c.InitiativeOrder,
-			HpMax:           c.HpMax,
-			HpCurrent:       c.HpCurrent,
-			Ac:              c.Ac,
-			IsNpc:           c.IsNpc,
-			IsAlive:         c.IsAlive,
-		}
-	}
-
 	writeJSON(w, http.StatusOK, startCombatResponse{
-		Encounter: encounterResponse{
-			ID:          result.Encounter.ID.String(),
-			CampaignID:  result.Encounter.CampaignID.String(),
-			Name:        result.Encounter.Name,
-			Status:      result.Encounter.Status,
-			RoundNumber: result.Encounter.RoundNumber,
-		},
-		Combatants:        combatants,
+		Encounter:         toEncounterResponse(result.Encounter),
+		Combatants:        toCombatantResponses(result.Combatants),
 		InitiativeTracker: result.InitiativeTracker,
 		FirstTurn: turnInfoResponse{
 			TurnID:      result.FirstTurn.Turn.ID.String(),
@@ -249,31 +259,9 @@ func (h *Handler) EndCombat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	combatants := make([]combatantResponse, len(result.Combatants))
-	for i, c := range result.Combatants {
-		combatants[i] = combatantResponse{
-			ID:              c.ID.String(),
-			ShortID:         c.ShortID,
-			DisplayName:     c.DisplayName,
-			InitiativeRoll:  c.InitiativeRoll,
-			InitiativeOrder: c.InitiativeOrder,
-			HpMax:           c.HpMax,
-			HpCurrent:       c.HpCurrent,
-			Ac:              c.Ac,
-			IsNpc:           c.IsNpc,
-			IsAlive:         c.IsAlive,
-		}
-	}
-
 	writeJSON(w, http.StatusOK, endCombatResponse{
-		Encounter: encounterResponse{
-			ID:          result.Encounter.ID.String(),
-			CampaignID:  result.Encounter.CampaignID.String(),
-			Name:        result.Encounter.Name,
-			Status:      result.Encounter.Status,
-			RoundNumber: result.Encounter.RoundNumber,
-		},
-		Combatants:        combatants,
+		Encounter:         toEncounterResponse(result.Encounter),
+		Combatants:        toCombatantResponses(result.Combatants),
 		Summary:           result.Summary,
 		Casualties:        result.Casualties,
 		RoundsElapsed:     result.RoundsElapsed,

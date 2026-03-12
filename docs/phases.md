@@ -153,7 +153,7 @@
   - Depends on: Phase 25, Phase 22, Phase 23
   - Done when: Full start-combat flow works: template -> instantiate -> initiative -> Discord messages -> first player pinged.
 
-- [ ] **Phase 26b: Combat Lifecycle — End Combat & Cleanup**
+- [x] **Phase 26b: Combat Lifecycle — End Combat & Cleanup**
   - Scope: Auto-detect all hostiles at 0 HP -> DM prompt to end. Manual end option from dashboard. Cleanup: clear combat conditions, end concentration, freeze initiative tracker, cancel timers, ammunition recovery prompt, loot pool availability, bot announcement in #combat-log. Clear reaction declarations. Encounter status transition: active -> completed.
   - Depends on: Phase 26a
   - Done when: End-combat detection works, cleanup removes all transient state, Discord messages posted, encounter marked completed.

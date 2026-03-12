@@ -166,26 +166,33 @@ func SortByInitiative(entries []InitiativeEntry) {
 	})
 }
 
+// encounterDisplayName returns the display name if set, otherwise the slug name.
+func encounterDisplayName(encounter refdata.Encounter) string {
+	if encounter.DisplayName.Valid && encounter.DisplayName.String != "" {
+		return encounter.DisplayName.String
+	}
+	return encounter.Name
+}
+
+// formatCombatantLine formats a single combatant line: NPCs show name only, PCs show HP.
+func formatCombatantLine(c refdata.Combatant) string {
+	if c.IsNpc {
+		return fmt.Sprintf("  %s", c.DisplayName)
+	}
+	return fmt.Sprintf("  %s (%d/%d HP)", c.DisplayName, c.HpCurrent, c.HpMax)
+}
+
 // FormatInitiativeTracker produces the Discord message for the initiative tracker.
 func FormatInitiativeTracker(encounter refdata.Encounter, combatants []refdata.Combatant, currentTurnCombatantID uuid.UUID) string {
-	name := encounter.Name
-	if encounter.DisplayName.Valid && encounter.DisplayName.String != "" {
-		name = encounter.DisplayName.String
-	}
-
 	var b strings.Builder
-	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", name, encounter.RoundNumber)
+	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", encounterDisplayName(encounter), encounter.RoundNumber)
 
 	for _, c := range combatants {
 		if c.ID == currentTurnCombatantID {
 			fmt.Fprintf(&b, "\U0001f514 @%s \u2014 it's your turn!\n", c.DisplayName)
 			continue
 		}
-		if c.IsNpc {
-			fmt.Fprintf(&b, "  %s\n", c.DisplayName)
-		} else {
-			fmt.Fprintf(&b, "  %s (%d/%d HP)\n", c.DisplayName, c.HpCurrent, c.HpMax)
-		}
+		fmt.Fprintf(&b, "%s\n", formatCombatantLine(c))
 	}
 
 	return strings.TrimRight(b.String(), "\n")
@@ -194,20 +201,11 @@ func FormatInitiativeTracker(encounter refdata.Encounter, combatants []refdata.C
 // FormatCompletedInitiativeTracker produces the initiative tracker for a completed encounter.
 // No active turn indicator is shown and a "--- Combat Complete ---" footer is appended.
 func FormatCompletedInitiativeTracker(encounter refdata.Encounter, combatants []refdata.Combatant) string {
-	name := encounter.Name
-	if encounter.DisplayName.Valid && encounter.DisplayName.String != "" {
-		name = encounter.DisplayName.String
-	}
-
 	var b strings.Builder
-	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", name, encounter.RoundNumber)
+	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", encounterDisplayName(encounter), encounter.RoundNumber)
 
 	for _, c := range combatants {
-		if c.IsNpc {
-			fmt.Fprintf(&b, "  %s\n", c.DisplayName)
-		} else {
-			fmt.Fprintf(&b, "  %s (%d/%d HP)\n", c.DisplayName, c.HpCurrent, c.HpMax)
-		}
+		fmt.Fprintf(&b, "%s\n", formatCombatantLine(c))
 	}
 
 	b.WriteString("--- Combat Complete ---")
