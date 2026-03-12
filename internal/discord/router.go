@@ -31,6 +31,11 @@ func (r *CommandRouter) SetFlyHandler(h *FlyHandler) {
 	r.flyHandler = h
 }
 
+// SetDistanceHandler registers the DistanceHandler for the /distance command.
+func (r *CommandRouter) SetDistanceHandler(h *DistanceHandler) {
+	r.handlers["distance"] = h
+}
+
 // RegistrationDeps holds the optional dependencies for registration command handlers.
 // When nil, the router uses plain stub handlers for registration commands.
 type RegistrationDeps struct {
