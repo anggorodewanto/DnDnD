@@ -1,11 +1,24 @@
 <script>
   import MapEditor from './MapEditor.svelte';
   import MapList from './MapList.svelte';
+  import EncounterBuilder from './EncounterBuilder.svelte';
+  import EncounterList from './EncounterList.svelte';
 
   let currentView = $state('list');
   let editingMapId = $state(null);
+  let editingEncounterId = $state(null);
   // For demo purposes, use a fixed campaign ID. In production this comes from session.
   let campaignId = $state('00000000-0000-0000-0000-000000000001');
+
+  // Determine initial view from URL hash
+  function getInitialView() {
+    const hash = window.location.hash;
+    if (hash === '#encounters') return 'encounter-list';
+    if (hash === '#encounter-new') return 'encounter-editor';
+    return 'list';
+  }
+
+  currentView = getInitialView();
 
   function onCreateNew() {
     editingMapId = null;
@@ -21,20 +34,60 @@
     currentView = 'list';
     editingMapId = null;
   }
+
+  function onCreateEncounter() {
+    editingEncounterId = null;
+    currentView = 'encounter-editor';
+  }
+
+  function onEditEncounter(id) {
+    editingEncounterId = id;
+    currentView = 'encounter-editor';
+  }
+
+  function onBackFromEncounter() {
+    currentView = 'encounter-list';
+    editingEncounterId = null;
+  }
+
+  function onShowEncounters() {
+    currentView = 'encounter-list';
+  }
+
+  function onShowMaps() {
+    currentView = 'list';
+  }
 </script>
 
 <main>
   <header>
-    <h1>Map Editor</h1>
+    {#if currentView === 'list' || currentView === 'editor'}
+      <h1>Map Editor</h1>
+    {:else}
+      <h1>Encounter Builder</h1>
+    {/if}
+
+    <nav class="view-nav">
+      <button class:active={currentView === 'list' || currentView === 'editor'} onclick={onShowMaps}>Maps</button>
+      <button class:active={currentView === 'encounter-list' || currentView === 'encounter-editor'} onclick={onShowEncounters}>Encounters</button>
+    </nav>
+
     {#if currentView === 'editor'}
       <button class="back-btn" onclick={onBack}>Back to Map List</button>
+    {/if}
+    {#if currentView === 'encounter-editor'}
+      <button class="back-btn" onclick={onBackFromEncounter}>Back to Encounter List</button>
     {/if}
   </header>
 
   {#if currentView === 'list'}
     <MapList {campaignId} oncreate={onCreateNew} onedit={onEditMap} />
-  {:else}
+  {:else if currentView === 'editor'}
     <MapEditor {campaignId} mapId={editingMapId} onback={onBack} />
+  {:else if currentView === 'encounter-list'}
+    <EncounterList {campaignId} oncreate={onCreateEncounter} onedit={onEditEncounter} />
+  {:else if currentView === 'encounter-editor'}
+    <EncounterBuilder {campaignId} encounterId={editingEncounterId} onback={onBackFromEncounter} />
   {/if}
 </main>
 
@@ -61,6 +114,30 @@
   header h1 {
     color: #e94560;
     margin: 0;
+  }
+
+  .view-nav {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .view-nav button {
+    padding: 0.5rem 1rem;
+    background: #16213e;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .view-nav button:hover {
+    background: #0f3460;
+  }
+
+  .view-nav button.active {
+    background: #e94560;
+    border-color: #e94560;
+    color: white;
   }
 
   .back-btn {

@@ -1,8 +1,9 @@
 /**
- * API client for map and asset operations.
+ * API client for map, asset, and encounter operations.
  */
 
 const API_BASE = '/api/maps';
+const ENCOUNTERS_BASE = '/api/encounters';
 
 /**
  * Perform a fetch and throw on non-OK responses.
@@ -95,4 +96,87 @@ export async function deleteMap(id) {
   await apiFetch(`${API_BASE}/${id}`, {
     method: 'DELETE',
   });
+}
+
+// --- Encounter API ---
+
+/**
+ * Create a new encounter template.
+ * @param {object} params - { campaign_id, name, display_name?, map_id?, creatures? }
+ * @returns {Promise<object>} The created encounter.
+ */
+export async function createEncounter(params) {
+  const res = await apiFetch(ENCOUNTERS_BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  return res.json();
+}
+
+/**
+ * Get an encounter template by ID.
+ * @param {string} id - Encounter UUID.
+ * @returns {Promise<object>} The encounter.
+ */
+export async function getEncounter(id) {
+  const res = await apiFetch(`${ENCOUNTERS_BASE}/${id}`);
+  return res.json();
+}
+
+/**
+ * List encounter templates for a campaign.
+ * @param {string} campaignId - Campaign UUID.
+ * @returns {Promise<object[]>} Array of encounters.
+ */
+export async function listEncounters(campaignId) {
+  const res = await apiFetch(`${ENCOUNTERS_BASE}?campaign_id=${campaignId}`);
+  return res.json();
+}
+
+/**
+ * Update an encounter template.
+ * @param {string} id - Encounter UUID.
+ * @param {object} params - { name, display_name?, map_id?, creatures? }
+ * @returns {Promise<object>} The updated encounter.
+ */
+export async function updateEncounter(id, params) {
+  const res = await apiFetch(`${ENCOUNTERS_BASE}/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  return res.json();
+}
+
+/**
+ * Delete an encounter template.
+ * @param {string} id - Encounter UUID.
+ * @returns {Promise<void>}
+ */
+export async function deleteEncounter(id) {
+  await apiFetch(`${ENCOUNTERS_BASE}/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Duplicate an encounter template.
+ * @param {string} id - Encounter UUID.
+ * @returns {Promise<object>} The duplicated encounter.
+ */
+export async function duplicateEncounter(id) {
+  const res = await apiFetch(`${ENCOUNTERS_BASE}/${id}/duplicate`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
+/**
+ * List creatures (stat blocks).
+ * @returns {Promise<object[]>} Array of creatures.
+ */
+export async function listCreatures() {
+  const res = await apiFetch('/api/creatures');
+  return res.json();
 }

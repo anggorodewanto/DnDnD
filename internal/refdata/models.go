@@ -145,6 +145,17 @@ type Creature struct {
 	UpdatedAt             time.Time             `json:"updated_at"`
 }
 
+type EncounterTemplate struct {
+	ID          uuid.UUID       `json:"id"`
+	CampaignID  uuid.UUID       `json:"campaign_id"`
+	MapID       uuid.NullUUID   `json:"map_id"`
+	Name        string          `json:"name"`
+	DisplayName sql.NullString  `json:"display_name"`
+	Creatures   json.RawMessage `json:"creatures"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
 type Feat struct {
 	ID               string                `json:"id"`
 	Name             string                `json:"name"`

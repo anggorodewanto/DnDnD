@@ -12,6 +12,7 @@ import (
 	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/asset"
 	"github.com/ab/dndnd/internal/database"
+	"github.com/ab/dndnd/internal/encounter"
 	"github.com/ab/dndnd/internal/gamemap"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/server"
@@ -64,6 +65,11 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		mapSvc := gamemap.NewService(queries)
 		mapHandler := gamemap.NewHandler(mapSvc)
 		mapHandler.RegisterRoutes(router)
+
+		// Wire encounter API handler
+		encounterSvc := encounter.NewService(queries)
+		encounterHandler := encounter.NewHandler(encounterSvc)
+		encounterHandler.RegisterRoutes(router)
 
 		// Wire asset API handler
 		assetDataDir := os.Getenv("ASSET_DATA_DIR")
