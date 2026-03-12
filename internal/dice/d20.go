@@ -65,20 +65,12 @@ func (r *Roller) RollD20(modifier int, mode RollMode) (D20Result, error) {
 		r1 := r.randFn(20)
 		r2 := r.randFn(20)
 		result.Rolls = []int{r1, r2}
-		if r1 >= r2 {
-			result.Chosen = r1
-		} else {
-			result.Chosen = r2
-		}
+		result.Chosen = max(r1, r2)
 	case Disadvantage:
 		r1 := r.randFn(20)
 		r2 := r.randFn(20)
 		result.Rolls = []int{r1, r2}
-		if r1 <= r2 {
-			result.Chosen = r1
-		} else {
-			result.Chosen = r2
-		}
+		result.Chosen = min(r1, r2)
 	}
 
 	result.CriticalHit = result.Chosen == 20

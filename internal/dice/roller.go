@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 )
 
@@ -52,21 +53,11 @@ func cryptoRand(max int) int {
 	return int(n.Int64()) + 1
 }
 
-// Roll parses a dice expression and rolls the dice, returning a full breakdown.
-func (r *Roller) Roll(expression string) (RollResult, error) {
-	expr, err := ParseExpression(expression)
-	if err != nil {
-		return RollResult{}, err
-	}
-
-	result := RollResult{
-		Expression: expression,
-		Modifier:   expr.Modifier,
-		Timestamp:  time.Now(),
-	}
-
+// rollGroups rolls all dice groups and returns the group results and their combined total.
+func (r *Roller) rollGroups(groups []DiceGroup) ([]GroupResult, int) {
+	var results []GroupResult
 	total := 0
-	for _, g := range expr.Groups {
+	for _, g := range groups {
 		gr := GroupResult{
 			Die:   g.Sides,
 			Count: g.Count,
@@ -79,11 +70,26 @@ func (r *Roller) Roll(expression string) (RollResult, error) {
 		}
 		gr.Total = groupTotal
 		total += groupTotal
-		result.Groups = append(result.Groups, gr)
+		results = append(results, gr)
+	}
+	return results, total
+}
+
+// Roll parses a dice expression and rolls the dice, returning a full breakdown.
+func (r *Roller) Roll(expression string) (RollResult, error) {
+	expr, err := ParseExpression(expression)
+	if err != nil {
+		return RollResult{}, err
 	}
 
-	total += expr.Modifier
-	result.Total = total
+	groups, total := r.rollGroups(expr.Groups)
+	result := RollResult{
+		Expression: expression,
+		Groups:     groups,
+		Modifier:   expr.Modifier,
+		Total:      total + expr.Modifier,
+		Timestamp:  time.Now(),
+	}
 	result.Breakdown = formatBreakdown(result)
 
 	return result, nil
@@ -103,49 +109,33 @@ func (r *Roller) RollDamage(expression string, critical bool) (RollResult, error
 		}
 	}
 
+	groups, total := r.rollGroups(expr.Groups)
 	result := RollResult{
 		Expression: expression,
+		Groups:     groups,
 		Modifier:   expr.Modifier,
 		Critical:   critical,
+		Total:      total + expr.Modifier,
 		Timestamp:  time.Now(),
 	}
-
-	total := 0
-	for _, g := range expr.Groups {
-		gr := GroupResult{
-			Die:   g.Sides,
-			Count: g.Count,
-		}
-		groupTotal := 0
-		for i := 0; i < g.Count; i++ {
-			roll := r.randFn(g.Sides)
-			gr.Results = append(gr.Results, roll)
-			groupTotal += roll
-		}
-		gr.Total = groupTotal
-		total += groupTotal
-		result.Groups = append(result.Groups, gr)
-	}
-
-	total += expr.Modifier
-	result.Total = total
 	result.Breakdown = formatBreakdown(result)
 
 	return result, nil
 }
 
 func formatBreakdown(r RollResult) string {
-	parts := ""
+	var b strings.Builder
 	for i, g := range r.Groups {
 		if i > 0 {
-			parts += " + "
+			b.WriteString(" + ")
 		}
-		parts += fmt.Sprintf("%v", g.Results)
+		fmt.Fprintf(&b, "%v", g.Results)
 	}
 	if r.Modifier > 0 {
-		parts += fmt.Sprintf(" + %d", r.Modifier)
+		fmt.Fprintf(&b, " + %d", r.Modifier)
 	} else if r.Modifier < 0 {
-		parts += fmt.Sprintf(" - %d", -r.Modifier)
+		fmt.Fprintf(&b, " - %d", -r.Modifier)
 	}
-	return fmt.Sprintf("%s = %d", parts, r.Total)
+	fmt.Fprintf(&b, " = %d", r.Total)
+	return b.String()
 }

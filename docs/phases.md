@@ -92,7 +92,7 @@
   - Depends on: Phase 7, Phase 12
   - Done when: Character card created on approval, auto-updates on HP/equipment/condition/level changes.
 
-- [ ] **Phase 18: Dice Rolling Engine**
+- [x] **Phase 18: Dice Rolling Engine**
   - Scope: Core dice rolling: parse dice expressions (NdM+K), roll with advantage/disadvantage, critical hit detection (nat 20), critical failure (nat 1). Modifier stacking. Roll logging with full breakdown. All rolls posted to `#roll-history`.
   - Depends on: Phase 1
   - Done when: Unit tests cover all dice expressions, advantage/disadvantage, crits; roll results include full breakdown for combat log.
