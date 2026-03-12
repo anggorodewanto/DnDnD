@@ -178,7 +178,7 @@
   - Depends on: Phase 28, Phase 29
   - Done when: Integration tests verify valid/invalid moves, split movement, confirmation flow, tile occupancy rules.
 
-- [ ] **Phase 31: Altitude & Flying (`/fly`)**
+- [x] **Phase 31: Altitude & Flying (`/fly`)**
   - Scope: `/fly` command: set altitude (costs movement 1:1). Altitude display on tokens (`AR^30`). 3D Euclidean distance for range checks (rounded to nearest 5ft). Flying tokens don't block ground tiles. Fall damage on prone/lose fly speed (1d6 per 10ft). Stacked token rendering offset for same-tile different-altitude.
   - Depends on: Phase 30, Phase 22
   - Done when: Unit tests verify altitude movement cost, 3D distance calculation, fall damage; map shows stacked tokens correctly.

@@ -49,17 +49,14 @@ func ValidateFly(req FlyRequest) *FlyResult {
 		return &FlyResult{Valid: false, Reason: fmt.Sprintf("Already at %dft altitude.", req.CurrentAltitude)}
 	}
 
-	diff := req.TargetAltitude - req.CurrentAltitude
-	if diff < 0 {
-		diff = -diff
-	}
-	cost := int(diff)
-
 	if req.MovementRemainingFt <= 0 {
 		return &FlyResult{Valid: false, Reason: "No movement remaining."}
 	}
 
-	if cost > int(req.MovementRemainingFt) {
+	cost := abs32(req.TargetAltitude - req.CurrentAltitude)
+	remaining := req.MovementRemainingFt - cost
+
+	if remaining < 0 {
 		return &FlyResult{
 			Valid:  false,
 			Reason: fmt.Sprintf("Not enough movement: %dft needed, %dft remaining.", cost, req.MovementRemainingFt),
@@ -68,10 +65,18 @@ func ValidateFly(req FlyRequest) *FlyResult {
 
 	return &FlyResult{
 		Valid:       true,
-		CostFt:      cost,
-		RemainingFt: int(req.MovementRemainingFt) - cost,
+		CostFt:      int(cost),
+		RemainingFt: int(remaining),
 		NewAltitude: req.TargetAltitude,
 	}
+}
+
+// abs32 returns the absolute value of an int32.
+func abs32(x int32) int32 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 // FallDamageResult holds the outcome of fall damage calculation.
