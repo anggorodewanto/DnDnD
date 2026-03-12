@@ -123,46 +123,59 @@ func appendModifier(base string, mod int) string {
 
 // AttackInput holds all inputs for resolving a single attack (pure function).
 type AttackInput struct {
-	AttackerName   string
-	TargetName     string
-	TargetAC       int
-	Weapon         refdata.Weapon
-	Scores         AbilityScores
-	ProfBonus      int
-	DistanceFt     int
-	Cover          CoverLevel
-	AutoCrit       bool
-	AutoCritReason string
+	AttackerName        string
+	TargetName          string
+	TargetAC            int
+	Weapon              refdata.Weapon
+	Scores              AbilityScores
+	ProfBonus           int
+	DistanceFt          int
+	Cover               CoverLevel
+	AutoCrit            bool
+	AutoCritReason      string
+	AttackerConditions  []CombatCondition
+	TargetConditions    []CombatCondition
+	HostileNearAttacker bool
+	AttackerSize        string
+	DMAdvantage         bool
+	DMDisadvantage      bool
 }
 
 // AttackResult holds the full result of an attack resolution.
 type AttackResult struct {
-	AttackerName   string
-	TargetName     string
-	WeaponName     string
-	DistanceFt     int
-	IsMelee        bool
-	Hit            bool
-	CriticalHit    bool
-	AutoCrit       bool
-	AutoCritReason string
-	D20Roll        dice.D20Result
-	EffectiveAC    int
-	DamageTotal    int
-	DamageType     string
-	DamageDice     string
-	DamageRoll     *dice.RollResult
-	InLongRange    bool
-	Cover          CoverLevel
-	RemainingTurn  *refdata.Turn
+	AttackerName        string
+	TargetName          string
+	WeaponName          string
+	DistanceFt          int
+	IsMelee             bool
+	Hit                 bool
+	CriticalHit         bool
+	AutoCrit            bool
+	AutoCritReason      string
+	D20Roll             dice.D20Result
+	EffectiveAC         int
+	DamageTotal         int
+	DamageType          string
+	DamageDice          string
+	DamageRoll          *dice.RollResult
+	InLongRange         bool
+	Cover               CoverLevel
+	RemainingTurn       *refdata.Turn
+	RollMode            dice.RollMode
+	AdvantageReasons    []string
+	DisadvantageReasons []string
 }
 
 // AttackCommand holds the service-level inputs for an attack.
 type AttackCommand struct {
-	Attacker       refdata.Combatant
-	Target         refdata.Combatant
-	Turn           refdata.Turn
-	WeaponOverride string
+	Attacker            refdata.Combatant
+	Target              refdata.Combatant
+	Turn                refdata.Turn
+	WeaponOverride      string
+	HostileNearAttacker bool
+	AttackerSize        string
+	DMAdvantage         bool
+	DMDisadvantage      bool
 }
 
 // ResolveAttack resolves a single attack using pure inputs. Returns an error if the target
@@ -192,6 +205,22 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		InLongRange:  IsInLongRange(input.Weapon, input.DistanceFt),
 	}
 
+	// Detect advantage/disadvantage
+	advInput := AdvantageInput{
+		AttackerConditions:  input.AttackerConditions,
+		TargetConditions:    input.TargetConditions,
+		Weapon:              input.Weapon,
+		DistanceFt:          input.DistanceFt,
+		HostileNearAttacker: input.HostileNearAttacker,
+		AttackerSize:        input.AttackerSize,
+		DMAdvantage:         input.DMAdvantage,
+		DMDisadvantage:      input.DMDisadvantage,
+	}
+	rollMode, advReasons, disadvReasons := DetectAdvantage(advInput)
+	result.RollMode = rollMode
+	result.AdvantageReasons = advReasons
+	result.DisadvantageReasons = disadvReasons
+
 	// Auto-crit: skip attack roll, auto-hit and auto-crit
 	if input.AutoCrit {
 		result.Hit = true
@@ -206,7 +235,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 
 	// Roll attack
-	d20, err := roller.RollD20(atkMod, dice.Normal)
+	d20, err := roller.RollD20(atkMod, rollMode)
 	if err != nil {
 		return AttackResult{}, fmt.Errorf("rolling attack: %w", err)
 	}
@@ -306,6 +335,16 @@ func FormatAttackLog(result AttackResult) string {
 		fmt.Fprintf(&b, " (%dft)", result.DistanceFt)
 	}
 
+	// Advantage/disadvantage annotation
+	switch result.RollMode {
+	case dice.Advantage:
+		fmt.Fprintf(&b, " (advantage \u2014 %s)", strings.Join(result.AdvantageReasons, ", "))
+	case dice.Disadvantage:
+		fmt.Fprintf(&b, " (disadvantage \u2014 %s)", strings.Join(result.DisadvantageReasons, ", "))
+	case dice.AdvantageAndDisadvantage:
+		b.WriteString(" (advantage + disadvantage cancel \u2014 normal roll)")
+	}
+
 	if result.AutoCrit {
 		fmt.Fprintf(&b, " (auto-crit \u2014 %s)", result.AutoCritReason)
 		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (doubled dice: %s)", result.DamageTotal, result.DamageType, result.DamageDice)
@@ -360,16 +399,26 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	// Check auto-crit
 	autoCrit, autoCritReason := CheckAutoCrit(cmd.Target.Conditions, distFt, isMelee)
 
+	// Parse conditions
+	attackerConds, _ := parseConditions(cmd.Attacker.Conditions)
+	targetConds, _ := parseConditions(cmd.Target.Conditions)
+
 	input := AttackInput{
-		AttackerName:   cmd.Attacker.DisplayName,
-		TargetName:     cmd.Target.DisplayName,
-		TargetAC:       int(cmd.Target.Ac),
-		Weapon:         weapon,
-		Scores:         scores,
-		ProfBonus:      profBonus,
-		DistanceFt:     distFt,
-		AutoCrit:       autoCrit,
-		AutoCritReason: autoCritReason,
+		AttackerName:        cmd.Attacker.DisplayName,
+		TargetName:          cmd.Target.DisplayName,
+		TargetAC:            int(cmd.Target.Ac),
+		Weapon:              weapon,
+		Scores:              scores,
+		ProfBonus:           profBonus,
+		DistanceFt:          distFt,
+		AutoCrit:            autoCrit,
+		AutoCritReason:      autoCritReason,
+		AttackerConditions:  attackerConds,
+		TargetConditions:    targetConds,
+		HostileNearAttacker: cmd.HostileNearAttacker,
+		AttackerSize:        cmd.AttackerSize,
+		DMAdvantage:         cmd.DMAdvantage,
+		DMDisadvantage:      cmd.DMDisadvantage,
 	}
 
 	result, err := ResolveAttack(input, roller)
