@@ -15,8 +15,6 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// --- Mock for TurnValidationQuerier ---
-
 type mockQuerier struct {
 	activeTurn    refdata.Turn
 	activeTurnErr error
@@ -48,7 +46,6 @@ func (m *mockQuerier) GetPlayerCharacterByCharacter(_ context.Context, _ refdata
 }
 
 func (m *mockQuerier) WithTx(_ *sql.Tx) *refdata.Queries {
-	// Not used in ValidateTurnOwnership unit tests
 	return nil
 }
 
@@ -81,20 +78,6 @@ func TestIsLockTimeoutError_WrappedPQError(t *testing.T) {
 
 func TestIsLockTimeoutError_NonPQError(t *testing.T) {
 	assert.False(t, isLockTimeoutError(errors.New("some other error")))
-}
-
-// --- Tests for UUIDToInt64 ---
-
-func TestUUIDToInt64_ZeroUUID(t *testing.T) {
-	id := uuid.UUID{}
-	assert.Equal(t, int64(0), UUIDToInt64(id))
-}
-
-func TestUUIDToInt64_KnownValue(t *testing.T) {
-	id := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-	result := UUIDToInt64(id)
-	assert.NotEqual(t, int64(0), result)
-	assert.Equal(t, result, UUIDToInt64(id))
 }
 
 // --- Tests for ErrNotYourTurn ---
@@ -156,7 +139,7 @@ func TestValidateTurnOwnership_GetActiveTurnError(t *testing.T) {
 	m := baseMock()
 	m.activeTurnErr = errors.New("db connection lost")
 
-	_, err := ValidateTurnOwnership(context.Background(), nil, m, uuid.New(), "player-user")
+	_, err := ValidateTurnOwnership(context.Background(), m, uuid.New(), "player-user")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting active turn")
 	assert.Contains(t, err.Error(), "db connection lost")
@@ -166,7 +149,7 @@ func TestValidateTurnOwnership_GetActiveTurnNoRows(t *testing.T) {
 	m := baseMock()
 	m.activeTurnErr = sql.ErrNoRows
 
-	_, err := ValidateTurnOwnership(context.Background(), nil, m, uuid.New(), "player-user")
+	_, err := ValidateTurnOwnership(context.Background(), m, uuid.New(), "player-user")
 	assert.ErrorIs(t, err, ErrNoActiveTurn)
 }
 
@@ -174,7 +157,7 @@ func TestValidateTurnOwnership_GetCombatantError(t *testing.T) {
 	m := baseMock()
 	m.combatantErr = errors.New("combatant query failed")
 
-	_, err := ValidateTurnOwnership(context.Background(), nil, m, uuid.New(), "player-user")
+	_, err := ValidateTurnOwnership(context.Background(), m, uuid.New(), "player-user")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting combatant")
 	assert.Contains(t, err.Error(), "combatant query failed")
@@ -184,7 +167,7 @@ func TestValidateTurnOwnership_GetCampaignByEncounterIDError(t *testing.T) {
 	m := baseMock()
 	m.campaignErr = errors.New("campaign query failed")
 
-	_, err := ValidateTurnOwnership(context.Background(), nil, m, uuid.New(), "player-user")
+	_, err := ValidateTurnOwnership(context.Background(), m, uuid.New(), "player-user")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting campaign")
 	assert.Contains(t, err.Error(), "campaign query failed")
@@ -194,7 +177,7 @@ func TestValidateTurnOwnership_GetPlayerCharacterGeneralError(t *testing.T) {
 	m := baseMock()
 	m.playerCharErr = errors.New("player character db error")
 
-	_, err := ValidateTurnOwnership(context.Background(), nil, m, uuid.New(), "player-user")
+	_, err := ValidateTurnOwnership(context.Background(), m, uuid.New(), "player-user")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting player character")
 	assert.Contains(t, err.Error(), "player character db error")
@@ -204,7 +187,7 @@ func TestValidateTurnOwnership_GetPlayerCharacterNoRows(t *testing.T) {
 	m := baseMock()
 	m.playerCharErr = sql.ErrNoRows
 
-	_, err := ValidateTurnOwnership(context.Background(), nil, m, uuid.New(), "player-user")
+	_, err := ValidateTurnOwnership(context.Background(), m, uuid.New(), "player-user")
 	require.Error(t, err)
 	var notYourTurn *ErrNotYourTurn
 	assert.True(t, errors.As(err, &notYourTurn))
@@ -213,7 +196,7 @@ func TestValidateTurnOwnership_GetPlayerCharacterNoRows(t *testing.T) {
 
 func TestValidateTurnOwnership_DMCanAlwaysAct(t *testing.T) {
 	m := baseMock()
-	info, err := ValidateTurnOwnership(context.Background(), nil, m, uuid.New(), "dm-user")
+	info, err := ValidateTurnOwnership(context.Background(), m, uuid.New(), "dm-user")
 	require.NoError(t, err)
 	assert.Equal(t, m.activeTurn.ID, info.TurnID)
 	assert.Equal(t, "dm-user", info.DMUserID)
@@ -223,7 +206,7 @@ func TestValidateTurnOwnership_NPCTurn_NonDMRejected(t *testing.T) {
 	m := baseMock()
 	m.combatant.IsNpc = true
 
-	_, err := ValidateTurnOwnership(context.Background(), nil, m, uuid.New(), "player-user")
+	_, err := ValidateTurnOwnership(context.Background(), m, uuid.New(), "player-user")
 	require.Error(t, err)
 	var notYourTurn *ErrNotYourTurn
 	assert.True(t, errors.As(err, &notYourTurn))
@@ -233,7 +216,7 @@ func TestValidateTurnOwnership_NoCharacterID_NonDMRejected(t *testing.T) {
 	m := baseMock()
 	m.combatant.CharacterID = uuid.NullUUID{Valid: false}
 
-	_, err := ValidateTurnOwnership(context.Background(), nil, m, uuid.New(), "player-user")
+	_, err := ValidateTurnOwnership(context.Background(), m, uuid.New(), "player-user")
 	require.Error(t, err)
 	var notYourTurn *ErrNotYourTurn
 	assert.True(t, errors.As(err, &notYourTurn))
@@ -241,7 +224,7 @@ func TestValidateTurnOwnership_NoCharacterID_NonDMRejected(t *testing.T) {
 
 func TestValidateTurnOwnership_CorrectPlayer(t *testing.T) {
 	m := baseMock()
-	info, err := ValidateTurnOwnership(context.Background(), nil, m, uuid.New(), "player-user")
+	info, err := ValidateTurnOwnership(context.Background(), m, uuid.New(), "player-user")
 	require.NoError(t, err)
 	assert.Equal(t, "player-user", info.OwnerUserID)
 	assert.Equal(t, m.activeTurn.ID, info.TurnID)
@@ -249,14 +232,12 @@ func TestValidateTurnOwnership_CorrectPlayer(t *testing.T) {
 
 func TestValidateTurnOwnership_WrongPlayer(t *testing.T) {
 	m := baseMock()
-	_, err := ValidateTurnOwnership(context.Background(), nil, m, uuid.New(), "wrong-user")
+	_, err := ValidateTurnOwnership(context.Background(), m, uuid.New(), "wrong-user")
 	require.Error(t, err)
 	var notYourTurn *ErrNotYourTurn
 	assert.True(t, errors.As(err, &notYourTurn))
 	assert.Equal(t, "player-user", notYourTurn.CurrentDiscordUserID)
 }
-
-// --- Mock TxBeginner for AcquireTurnLock tests ---
 
 type mockTxBeginner struct {
 	tx  *sql.Tx
@@ -294,5 +275,3 @@ func TestAcquireTurnLockWithValidation_BeginTxError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "beginning transaction")
 }
-
-

@@ -230,7 +230,7 @@ func TestIntegration_TurnValidation_WrongUser(t *testing.T) {
 	ctx := context.Background()
 
 	wrongUserID := "wrong-user-789"
-	_, err := combat.ValidateTurnOwnership(ctx, td.DB, td.Queries, td.EncounterID, wrongUserID)
+	_, err := combat.ValidateTurnOwnership(ctx, td.Queries, td.EncounterID, wrongUserID)
 	require.Error(t, err)
 
 	var notYourTurn *combat.ErrNotYourTurn
@@ -249,7 +249,7 @@ func TestIntegration_TurnValidation_CorrectUser(t *testing.T) {
 	td := setupTurnLockTest(t)
 	ctx := context.Background()
 
-	info, err := combat.ValidateTurnOwnership(ctx, td.DB, td.Queries, td.EncounterID, td.PlayerUID)
+	info, err := combat.ValidateTurnOwnership(ctx, td.Queries, td.EncounterID, td.PlayerUID)
 	require.NoError(t, err)
 	assert.Equal(t, td.TurnID, info.TurnID)
 	assert.Equal(t, td.CombatantID, info.CombatantID)
@@ -268,7 +268,7 @@ func TestIntegration_TurnValidation_DMBypass(t *testing.T) {
 	td := setupTurnLockTest(t)
 	ctx := context.Background()
 
-	info, err := combat.ValidateTurnOwnership(ctx, td.DB, td.Queries, td.EncounterID, td.DMUserID)
+	info, err := combat.ValidateTurnOwnership(ctx, td.Queries, td.EncounterID, td.DMUserID)
 	require.NoError(t, err)
 	assert.Equal(t, td.TurnID, info.TurnID)
 	assert.Equal(t, td.DMUserID, info.DMUserID)
@@ -329,12 +329,12 @@ func TestIntegration_TurnValidation_NPC_DMOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	// DM should be allowed
-	info, err := combat.ValidateTurnOwnership(ctx, db, queries, enc.ID, dmUserID)
+	info, err := combat.ValidateTurnOwnership(ctx, queries, enc.ID, dmUserID)
 	require.NoError(t, err)
 	assert.True(t, info.IsNPC)
 
 	// Player should be rejected
-	_, err = combat.ValidateTurnOwnership(ctx, db, queries, enc.ID, "some-player")
+	_, err = combat.ValidateTurnOwnership(ctx, queries, enc.ID, "some-player")
 	require.Error(t, err)
 	var notYourTurn *combat.ErrNotYourTurn
 	assert.True(t, errors.As(err, &notYourTurn))
@@ -558,14 +558,13 @@ func TestIntegration_AcquireTurnLockWithValidation_TurnIDMismatch(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	newTurn, err := td.Queries.CreateTurn(ctx, refdata.CreateTurnParams{
+	_, err = td.Queries.CreateTurn(ctx, refdata.CreateTurnParams{
 		EncounterID: td.EncounterID,
 		CombatantID: npc.ID,
 		RoundNumber: 1,
 		Status:      "active",
 	})
 	require.NoError(t, err)
-	_ = newTurn
 
 	// Release the lock so the goroutine proceeds
 	holdTx.Commit()
@@ -724,6 +723,6 @@ func TestIntegration_TurnValidation_NoActiveTurn(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = combat.ValidateTurnOwnership(ctx, db, queries, enc.ID, "any-user")
+	_, err = combat.ValidateTurnOwnership(ctx, queries, enc.ID, "any-user")
 	assert.ErrorIs(t, err, combat.ErrNoActiveTurn)
 }

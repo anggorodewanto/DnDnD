@@ -158,7 +158,7 @@
   - Depends on: Phase 26a
   - Done when: End-combat detection works, cleanup removes all transient state, Discord messages posted, encounter marked completed.
 
-- [ ] **Phase 27: Concurrency — Advisory Locks & Turn Validation**
+- [x] **Phase 27: Concurrency — Advisory Locks & Turn Validation**
   - Scope: Per-turn pessimistic lock using PostgreSQL advisory locks keyed on `turn_id`. Lock timeout (5s). Out-of-turn prevention (validate Discord user ID matches active turn's character owner). DM dashboard mutations through same lock. Exceptions for `/reaction`, `/check`, `/save`, `/rest`.
   - Depends on: Phase 24
   - Done when: Integration tests verify lock serialization, rapid command queueing, lock timeout behavior, out-of-turn rejection, DM concurrent access.
