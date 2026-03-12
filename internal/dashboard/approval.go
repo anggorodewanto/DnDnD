@@ -37,8 +37,15 @@ type ApprovalStore interface {
 	ListPendingApprovals(ctx context.Context, campaignID uuid.UUID) ([]ApprovalEntry, error)
 	GetApprovalDetail(ctx context.Context, id uuid.UUID) (*ApprovalDetail, error)
 	ApproveCharacter(ctx context.Context, id uuid.UUID) error
+	RetireCharacter(ctx context.Context, id uuid.UUID) error
 	RequestChanges(ctx context.Context, id uuid.UUID, feedback string) error
 	RejectCharacter(ctx context.Context, id uuid.UUID, feedback string) error
+}
+
+// CharacterCardPoster posts and updates character cards in the #character-cards channel.
+type CharacterCardPoster interface {
+	PostCharacterCard(ctx context.Context, characterID uuid.UUID, characterName, discordUserID string) error
+	UpdateCardRetired(ctx context.Context, characterID uuid.UUID, characterName, discordUserID string) error
 }
 
 // PlayerNotifier is an interface for sending notifications to players.

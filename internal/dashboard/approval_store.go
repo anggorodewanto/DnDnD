@@ -103,6 +103,11 @@ func (s *DBApprovalStore) RequestChanges(ctx context.Context, id uuid.UUID, feed
 	return s.transitionStatus(ctx, id, "changes_requested", feedback)
 }
 
+// RetireCharacter transitions a player character from pending to retired.
+func (s *DBApprovalStore) RetireCharacter(ctx context.Context, id uuid.UUID) error {
+	return s.transitionStatus(ctx, id, "retired", "")
+}
+
 // RejectCharacter transitions a player character from pending to rejected.
 func (s *DBApprovalStore) RejectCharacter(ctx context.Context, id uuid.UUID, feedback string) error {
 	return s.transitionStatus(ctx, id, "rejected", feedback)

@@ -17,6 +17,7 @@ type ApprovalHandler struct {
 	logger       *slog.Logger
 	store        ApprovalStore
 	notifier     PlayerNotifier
+	cardPoster   CharacterCardPoster
 	hub          *Hub
 	campaignID   uuid.UUID
 	approvalTmpl *template.Template
@@ -144,7 +145,8 @@ type feedbackRequest struct {
 	Feedback string `json:"feedback"`
 }
 
-// Approve approves a pending character.
+// Approve approves a pending character. For retirement submissions (created_via="retire"),
+// it transitions to "retired" status and updates the character card with a retired badge.
 func (ah *ApprovalHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	if _, ok := ah.requireAuth(r); !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -163,21 +165,50 @@ func (ah *ApprovalHandler) Approve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := ah.store.ApproveCharacter(r.Context(), id); err != nil {
-		ah.logger.Error("failed to approve character", "error", err, "id", id)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+	isRetire := detail.CreatedVia == "retire"
+
+	if isRetire {
+		if err := ah.store.RetireCharacter(r.Context(), id); err != nil {
+			ah.logger.Error("failed to retire character", "error", err, "id", id)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := ah.store.ApproveCharacter(r.Context(), id); err != nil {
+			ah.logger.Error("failed to approve character", "error", err, "id", id)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Notify player
 	if ah.notifier != nil {
-		_ = ah.notifier.NotifyApproval(r.Context(), detail.DiscordUserID, detail.CharacterName)
+		if err := ah.notifier.NotifyApproval(r.Context(), detail.DiscordUserID, detail.CharacterName); err != nil {
+			ah.logger.Error("failed to notify player of approval", "error", err, "discord_user_id", detail.DiscordUserID)
+		}
+	}
+
+	// Post/update character card
+	if ah.cardPoster != nil {
+		if isRetire {
+			if err := ah.cardPoster.UpdateCardRetired(r.Context(), detail.CharacterID, detail.CharacterName, detail.DiscordUserID); err != nil {
+				ah.logger.Error("failed to update character card with retired badge", "error", err, "character_id", detail.CharacterID)
+			}
+		} else {
+			if err := ah.cardPoster.PostCharacterCard(r.Context(), detail.CharacterID, detail.CharacterName, detail.DiscordUserID); err != nil {
+				ah.logger.Error("failed to post character card", "error", err, "character_id", detail.CharacterID)
+			}
+		}
 	}
 
 	// Broadcast update via WebSocket
 	ah.broadcastUpdate("approval_updated", id)
 
-	ah.writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
+	status := "approved"
+	if isRetire {
+		status = "retired"
+	}
+	ah.writeJSON(w, http.StatusOK, map[string]string{"status": status})
 }
 
 // RequestChangesHandler requests changes on a pending character.
@@ -218,7 +249,9 @@ func (ah *ApprovalHandler) RequestChangesHandler(w http.ResponseWriter, r *http.
 
 	// Notify player
 	if ah.notifier != nil {
-		_ = ah.notifier.NotifyChangesRequested(r.Context(), detail.DiscordUserID, detail.CharacterName, req.Feedback)
+		if err := ah.notifier.NotifyChangesRequested(r.Context(), detail.DiscordUserID, detail.CharacterName, req.Feedback); err != nil {
+			ah.logger.Error("failed to notify player of changes requested", "error", err, "discord_user_id", detail.DiscordUserID)
+		}
 	}
 
 	// Broadcast update
@@ -265,7 +298,9 @@ func (ah *ApprovalHandler) Reject(w http.ResponseWriter, r *http.Request) {
 
 	// Notify player
 	if ah.notifier != nil {
-		_ = ah.notifier.NotifyRejection(r.Context(), detail.DiscordUserID, detail.CharacterName, req.Feedback)
+		if err := ah.notifier.NotifyRejection(r.Context(), detail.DiscordUserID, detail.CharacterName, req.Feedback); err != nil {
+			ah.logger.Error("failed to notify player of rejection", "error", err, "discord_user_id", detail.DiscordUserID)
+		}
 	}
 
 	// Broadcast update

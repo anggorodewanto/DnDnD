@@ -50,6 +50,10 @@ func (m *mockApprovalStore) RequestChanges(_ context.Context, id uuid.UUID, feed
 	return m.requestErr
 }
 
+func (m *mockApprovalStore) RetireCharacter(_ context.Context, id uuid.UUID) error {
+	return nil
+}
+
 func (m *mockApprovalStore) RejectCharacter(_ context.Context, id uuid.UUID, feedback string) error {
 	m.rejectedID = id
 	m.rejectedFB = feedback
