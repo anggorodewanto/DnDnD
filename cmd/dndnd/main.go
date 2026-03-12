@@ -10,6 +10,7 @@ import (
 	"time"
 
 	dbfs "github.com/ab/dndnd/db"
+	"github.com/ab/dndnd/internal/asset"
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/gamemap"
 	"github.com/ab/dndnd/internal/refdata"
@@ -63,6 +64,16 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		mapSvc := gamemap.NewService(queries)
 		mapHandler := gamemap.NewHandler(mapSvc)
 		mapHandler.RegisterRoutes(router)
+
+		// Wire asset API handler
+		assetDataDir := os.Getenv("ASSET_DATA_DIR")
+		if assetDataDir == "" {
+			assetDataDir = "data/assets"
+		}
+		assetStore := asset.NewLocalStore(assetDataDir)
+		assetSvc := asset.NewService(queries, assetStore)
+		assetHandler := asset.NewHandler(assetSvc)
+		assetHandler.RegisterRoutes(router)
 	}
 
 	srv := &http.Server{

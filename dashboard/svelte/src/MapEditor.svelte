@@ -1,5 +1,5 @@
 <script>
-  import { createMap, getMap, updateMap } from './lib/api.js';
+  import { createMap, getMap, updateMap, uploadAsset } from './lib/api.js';
   import {
     TERRAIN_TYPES,
     terrainByGid,
@@ -21,6 +21,13 @@
   let savedMapId = $state(null);
   let dirty = $state(false);
 
+  // Background image state
+  let backgroundImageId = $state(null);
+  let backgroundImageUrl = $state(null);
+  let backgroundImage = $state(null); // HTMLImageElement
+  let backgroundOpacity = $state(0.5);
+  let uploadingImage = $state(false);
+
   // Tool state
   let activeTool = $state('terrain');
   let selectedTerrain = $state('open_ground');
@@ -34,6 +41,9 @@
 
   // Canvas ref
   let canvasEl = $state(null);
+
+  // File input ref
+  let fileInputEl = $state(null);
 
   // Mouse state for painting
   let isPainting = $state(false);
@@ -63,6 +73,11 @@
       mapHeight = data.height;
       tiledMap = typeof data.tiled_json === 'string' ? JSON.parse(data.tiled_json) : data.tiled_json;
       savedMapId = data.id;
+      if (data.background_image_id) {
+        backgroundImageId = data.background_image_id;
+        backgroundImageUrl = `/api/assets/${data.background_image_id}`;
+        loadBackgroundImage(backgroundImageUrl);
+      }
       showNewMapForm = false;
       dirty = false;
     } catch (e) {
@@ -92,21 +107,29 @@
     statusMsg = '';
     try {
       if (savedMapId) {
-        await updateMap(savedMapId, {
+        const updatePayload = {
           name: mapName,
           width: mapWidth,
           height: mapHeight,
           tiled_json: tiledMap,
-        });
+        };
+        if (backgroundImageId) {
+          updatePayload.background_image_id = backgroundImageId;
+        }
+        await updateMap(savedMapId, updatePayload);
         statusMsg = 'Map saved.';
       } else {
-        const result = await createMap({
+        const createPayload = {
           campaign_id: campaignId,
           name: mapName,
           width: mapWidth,
           height: mapHeight,
           tiled_json: tiledMap,
-        });
+        };
+        if (backgroundImageId) {
+          createPayload.background_image_id = backgroundImageId;
+        }
+        const result = await createMap(createPayload);
         savedMapId = result.id;
         statusMsg = 'Map created.';
       }
@@ -116,6 +139,52 @@
     } finally {
       saving = false;
     }
+  }
+
+  function loadBackgroundImage(url) {
+    const img = new Image();
+    img.onload = () => {
+      backgroundImage = img;
+      drawMap();
+    };
+    img.onerror = () => {
+      error = 'Failed to load background image';
+    };
+    img.src = url;
+  }
+
+  async function handleImageUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      error = 'Please select an image file (PNG or JPG)';
+      return;
+    }
+
+    uploadingImage = true;
+    error = null;
+    try {
+      const result = await uploadAsset({
+        campaignId: campaignId,
+        type: 'map_background',
+        file,
+      });
+      backgroundImageId = result.id;
+      backgroundImageUrl = result.url;
+      loadBackgroundImage(result.url);
+      dirty = true;
+    } catch (e) {
+      error = e.message;
+    } finally {
+      uploadingImage = false;
+    }
+  }
+
+  function handleOpacityChange(e) {
+    backgroundOpacity = parseFloat(e.target.value);
+    drawMap();
   }
 
   function getTileSize() {
@@ -130,9 +199,19 @@
     canvasEl.width = tiledMap.width * tileSize;
     canvasEl.height = tiledMap.height * tileSize;
 
-    // Draw terrain
+    // Draw background image if present
+    if (backgroundImage) {
+      ctx.globalAlpha = backgroundOpacity;
+      ctx.drawImage(backgroundImage, 0, 0, canvasEl.width, canvasEl.height);
+      ctx.globalAlpha = 1.0;
+    }
+
+    // Draw terrain (semi-transparent if background image present)
     const terrainLayer = tiledMap.layers?.find(l => l.name === 'terrain');
     if (terrainLayer?.data) {
+      if (backgroundImage) {
+        ctx.globalAlpha = 0.4;
+      }
       for (let y = 0; y < tiledMap.height; y++) {
         for (let x = 0; x < tiledMap.width; x++) {
           const idx = y * tiledMap.width + x;
@@ -141,8 +220,13 @@
 
           ctx.fillStyle = terrain.color;
           ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+        }
+      }
+      ctx.globalAlpha = 1.0;
 
-          // Grid lines
+      // Grid lines always at full opacity
+      for (let y = 0; y < tiledMap.height; y++) {
+        for (let x = 0; x < tiledMap.width; x++) {
           ctx.strokeStyle = 'rgba(255,255,255,0.15)';
           ctx.lineWidth = 1;
           ctx.strokeRect(x * tileSize, y * tileSize, tileSize, tileSize);
@@ -325,6 +409,35 @@
           {/each}
         </div>
       {/if}
+
+      <div class="toolbar-section">
+        <input
+          type="file"
+          accept="image/png,image/jpeg"
+          style="display:none"
+          bind:this={fileInputEl}
+          onchange={handleImageUpload}
+        />
+        <button
+          class="import-btn"
+          onclick={() => fileInputEl?.click()}
+          disabled={uploadingImage}
+        >{uploadingImage ? 'Uploading...' : 'Import Image'}</button>
+        {#if backgroundImage}
+          <label class="opacity-label">
+            Opacity:
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={backgroundOpacity}
+              oninput={handleOpacityChange}
+            />
+            <span>{Math.round(backgroundOpacity * 100)}%</span>
+          </label>
+        {/if}
+      </div>
 
       <div class="toolbar-section">
         <button class="save-btn" onclick={saveMap} disabled={saving || !dirty}>
@@ -524,5 +637,28 @@
 
   .error {
     color: #ff4444;
+  }
+
+  .import-btn {
+    background: #17a2b8 !important;
+    border-color: #17a2b8 !important;
+    color: white !important;
+  }
+
+  .import-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+  }
+
+  .opacity-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    color: #ccc;
+  }
+
+  .opacity-label input[type="range"] {
+    width: 80px;
   }
 </style>

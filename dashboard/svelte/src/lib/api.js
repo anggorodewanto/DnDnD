@@ -70,6 +70,28 @@ export async function updateMap(id, params) {
 }
 
 /**
+ * Upload an asset file.
+ * @param {object} params - { campaignId, type, file }
+ * @returns {Promise<object>} The uploaded asset { id, url }.
+ */
+export async function uploadAsset({ campaignId, type, file }) {
+  const formData = new FormData();
+  formData.append('campaign_id', campaignId);
+  formData.append('type', type);
+  formData.append('file', file);
+
+  const res = await fetch('/api/assets/upload', {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Failed to upload asset: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
  * Delete a map.
  * @param {string} id - Map UUID.
  * @returns {Promise<void>}

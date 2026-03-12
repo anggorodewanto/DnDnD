@@ -36,17 +36,18 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 
 // mapResponse is the JSON response for a single map.
 type mapResponse struct {
-	ID        string          `json:"id"`
-	Campaign  string          `json:"campaign_id"`
-	Name      string          `json:"name"`
-	Width     int             `json:"width"`
-	Height    int             `json:"height"`
-	TiledJSON json.RawMessage `json:"tiled_json"`
+	ID                string          `json:"id"`
+	Campaign          string          `json:"campaign_id"`
+	Name              string          `json:"name"`
+	Width             int             `json:"width"`
+	Height            int             `json:"height"`
+	TiledJSON         json.RawMessage `json:"tiled_json"`
+	BackgroundImageID *string         `json:"background_image_id"`
 }
 
 // newMapResponse converts a refdata.Map to a mapResponse.
 func newMapResponse(m refdata.Map) mapResponse {
-	return mapResponse{
+	resp := mapResponse{
 		ID:        m.ID.String(),
 		Campaign:  m.CampaignID.String(),
 		Name:      m.Name,
@@ -54,23 +55,30 @@ func newMapResponse(m refdata.Map) mapResponse {
 		Height:    int(m.HeightSquares),
 		TiledJSON: m.TiledJson,
 	}
+	if m.BackgroundImageID.Valid {
+		s := m.BackgroundImageID.UUID.String()
+		resp.BackgroundImageID = &s
+	}
+	return resp
 }
 
 // createMapRequest is the JSON request body for creating a map.
 type createMapRequest struct {
-	CampaignID string          `json:"campaign_id"`
-	Name       string          `json:"name"`
-	Width      int             `json:"width"`
-	Height     int             `json:"height"`
-	TiledJSON  json.RawMessage `json:"tiled_json,omitempty"`
+	CampaignID        string          `json:"campaign_id"`
+	Name              string          `json:"name"`
+	Width             int             `json:"width"`
+	Height            int             `json:"height"`
+	TiledJSON         json.RawMessage `json:"tiled_json,omitempty"`
+	BackgroundImageID *string         `json:"background_image_id,omitempty"`
 }
 
 // updateMapRequest is the JSON request body for updating a map.
 type updateMapRequest struct {
-	Name      string          `json:"name"`
-	Width     int             `json:"width"`
-	Height    int             `json:"height"`
-	TiledJSON json.RawMessage `json:"tiled_json"`
+	Name              string          `json:"name"`
+	Width             int             `json:"width"`
+	Height            int             `json:"height"`
+	TiledJSON         json.RawMessage `json:"tiled_json"`
+	BackgroundImageID *string         `json:"background_image_id,omitempty"`
 }
 
 // generateDefaultTiledJSON creates a default Tiled-compatible JSON for a blank map.
@@ -147,12 +155,23 @@ func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 		tiledJSON = generateDefaultTiledJSON(req.Width, req.Height, tileSize)
 	}
 
+	var bgImageID uuid.NullUUID
+	if req.BackgroundImageID != nil {
+		parsed, err := uuid.Parse(*req.BackgroundImageID)
+		if err != nil {
+			http.Error(w, "invalid background_image_id", http.StatusBadRequest)
+			return
+		}
+		bgImageID = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
+
 	m, _, err := h.svc.CreateMap(r.Context(), CreateMapInput{
-		CampaignID: campaignID,
-		Name:       req.Name,
-		Width:      req.Width,
-		Height:     req.Height,
-		TiledJSON:  tiledJSON,
+		CampaignID:        campaignID,
+		Name:              req.Name,
+		Width:             req.Width,
+		Height:            req.Height,
+		TiledJSON:         tiledJSON,
+		BackgroundImageID: bgImageID,
 	})
 	if err != nil {
 		handleServiceError(w, err)
@@ -231,12 +250,23 @@ func (h *Handler) UpdateMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var bgImageID uuid.NullUUID
+	if req.BackgroundImageID != nil {
+		parsed, parseErr := uuid.Parse(*req.BackgroundImageID)
+		if parseErr != nil {
+			http.Error(w, "invalid background_image_id", http.StatusBadRequest)
+			return
+		}
+		bgImageID = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
+
 	m, _, err := h.svc.UpdateMap(r.Context(), UpdateMapInput{
-		ID:        id,
-		Name:      req.Name,
-		Width:     req.Width,
-		Height:    req.Height,
-		TiledJSON: req.TiledJSON,
+		ID:                id,
+		Name:              req.Name,
+		Width:             req.Width,
+		Height:            req.Height,
+		TiledJSON:         req.TiledJSON,
+		BackgroundImageID: bgImageID,
 	})
 	if err != nil {
 		handleServiceError(w, err)

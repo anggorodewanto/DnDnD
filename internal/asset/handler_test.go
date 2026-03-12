@@ -1,9 +1,13 @@
 package asset
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +23,7 @@ import (
 
 func newTestRouter(h *Handler) *chi.Mux {
 	r := chi.NewRouter()
+	r.Post("/api/assets/upload", h.UploadAsset)
 	r.Get("/api/assets/{id}", h.ServeAsset)
 	return r
 }
@@ -133,4 +138,188 @@ func TestHandler_ServeAsset_ContentLength(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "42", rec.Header().Get("Content-Length"))
+}
+
+// --- TDD Cycle 1: POST /api/assets/upload with multipart form ---
+
+func TestHandler_UploadAsset_Success(t *testing.T) {
+	campaignID := uuid.New()
+	assetID := uuid.New()
+
+	db := &mockDBStore{
+		createAssetFn: func(ctx context.Context, arg refdata.CreateAssetParams) (refdata.Asset, error) {
+			return refdata.Asset{
+				ID:           assetID,
+				CampaignID:   arg.CampaignID,
+				Type:         arg.Type,
+				OriginalName: arg.OriginalName,
+				MimeType:     arg.MimeType,
+				ByteSize:     arg.ByteSize,
+				StoragePath:  arg.StoragePath,
+			}, nil
+		},
+	}
+	fs := &mockFileStore{
+		putFn: func(ctx context.Context, cid uuid.UUID, at AssetType, fn string, r io.Reader) (string, error) {
+			return "camp/maps/abc", nil
+		},
+		urlFn: func(id uuid.UUID) string {
+			return "/api/assets/" + id.String()
+		},
+	}
+	svc := NewService(db, fs)
+	h := NewHandler(svc)
+	router := newTestRouter(h)
+
+	// Build multipart form
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	writer.WriteField("campaign_id", campaignID.String())
+	writer.WriteField("type", "map_background")
+	part, _ := writer.CreateFormFile("file", "map.png")
+	part.Write([]byte("fakepngdata"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/assets/upload", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	var resp map[string]interface{}
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, assetID.String(), resp["id"])
+	assert.Contains(t, resp["url"].(string), assetID.String())
+}
+
+func TestHandler_UploadAsset_MissingCampaignID(t *testing.T) {
+	svc := NewService(&mockDBStore{}, &mockFileStore{})
+	h := NewHandler(svc)
+	router := newTestRouter(h)
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	writer.WriteField("type", "map_background")
+	part, _ := writer.CreateFormFile("file", "map.png")
+	part.Write([]byte("data"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/assets/upload", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_UploadAsset_MissingFile(t *testing.T) {
+	svc := NewService(&mockDBStore{}, &mockFileStore{})
+	h := NewHandler(svc)
+	router := newTestRouter(h)
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	writer.WriteField("campaign_id", uuid.New().String())
+	writer.WriteField("type", "map_background")
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/assets/upload", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_UploadAsset_InvalidType(t *testing.T) {
+	svc := NewService(&mockDBStore{}, &mockFileStore{})
+	h := NewHandler(svc)
+	router := newTestRouter(h)
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	writer.WriteField("campaign_id", uuid.New().String())
+	writer.WriteField("type", "bogus_type")
+	part, _ := writer.CreateFormFile("file", "map.png")
+	part.Write([]byte("data"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/assets/upload", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "invalid asset type")
+}
+
+func TestHandler_UploadAsset_InvalidMultipartForm(t *testing.T) {
+	svc := NewService(&mockDBStore{}, &mockFileStore{})
+	h := NewHandler(svc)
+	router := newTestRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/assets/upload", strings.NewReader("not multipart"))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=invalid")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_UploadAsset_ServiceError(t *testing.T) {
+	db := &mockDBStore{
+		createAssetFn: func(ctx context.Context, arg refdata.CreateAssetParams) (refdata.Asset, error) {
+			return refdata.Asset{}, errors.New("db error")
+		},
+	}
+	fs := &mockFileStore{
+		putFn: func(ctx context.Context, cid uuid.UUID, at AssetType, fn string, r io.Reader) (string, error) {
+			return "path", nil
+		},
+	}
+	svc := NewService(db, fs)
+	h := NewHandler(svc)
+	router := newTestRouter(h)
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	writer.WriteField("campaign_id", uuid.New().String())
+	writer.WriteField("type", "map_background")
+	part, _ := writer.CreateFormFile("file", "map.png")
+	part.Write([]byte("data"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/assets/upload", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_RegisterRoutes(t *testing.T) {
+	svc := NewService(&mockDBStore{}, &mockFileStore{})
+	h := NewHandler(svc)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	// Test that upload route is registered
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	writer.WriteField("campaign_id", uuid.New().String())
+	writer.WriteField("type", "map_background")
+	part, _ := writer.CreateFormFile("file", "test.png")
+	part.Write([]byte("data"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/assets/upload", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	// Should get 201 (upload works) or 400 (validation) but NOT 404/405
+	assert.NotEqual(t, http.StatusNotFound, rec.Code)
+	assert.NotEqual(t, http.StatusMethodNotAllowed, rec.Code)
 }

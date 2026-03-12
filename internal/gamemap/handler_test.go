@@ -736,3 +736,188 @@ func TestNewHandler_ReturnsHandler(t *testing.T) {
 	assert.NotNil(t, h)
 	assert.Equal(t, svc, h.svc)
 }
+
+// --- TDD Cycle 31: mapResponse includes background_image_id ---
+
+func TestHandler_GetMap_IncludesBackgroundImageID(t *testing.T) {
+	mapID := uuid.New()
+	bgID := uuid.New()
+	store := &mockStore{
+		getMapByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+			return refdata.Map{
+				ID:                mapID,
+				Name:              "BG Map",
+				WidthSquares:      10,
+				HeightSquares:     10,
+				TiledJson:         minimalTiledJSON(),
+				BackgroundImageID: uuid.NullUUID{UUID: bgID, Valid: true},
+			}, nil
+		},
+	}
+	_, r := newTestRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+mapID.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]interface{}
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, bgID.String(), resp["background_image_id"])
+}
+
+func TestHandler_GetMap_NullBackgroundImageID(t *testing.T) {
+	mapID := uuid.New()
+	store := &mockStore{
+		getMapByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+			return refdata.Map{
+				ID:            mapID,
+				Name:          "No BG",
+				WidthSquares:  10,
+				HeightSquares: 10,
+				TiledJson:     minimalTiledJSON(),
+			}, nil
+		},
+	}
+	_, r := newTestRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+mapID.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]interface{}
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	// Null should be omitted or null
+	bgVal, exists := resp["background_image_id"]
+	if exists {
+		assert.Nil(t, bgVal)
+	}
+}
+
+// --- TDD Cycle 32: CreateMap passes background_image_id ---
+
+func TestHandler_CreateMap_WithBackgroundImageID(t *testing.T) {
+	campaignID := uuid.New()
+	bgID := uuid.New()
+	var capturedBgID uuid.NullUUID
+	store := &mockStore{
+		createMapFn: func(ctx context.Context, arg refdata.CreateMapParams) (refdata.Map, error) {
+			capturedBgID = arg.BackgroundImageID
+			return refdata.Map{
+				ID:                uuid.New(),
+				CampaignID:        arg.CampaignID,
+				Name:              arg.Name,
+				WidthSquares:      arg.WidthSquares,
+				HeightSquares:     arg.HeightSquares,
+				TiledJson:         arg.TiledJson,
+				BackgroundImageID: arg.BackgroundImageID,
+			}, nil
+		},
+	}
+	_, r := newTestRouter(store)
+
+	body := map[string]interface{}{
+		"campaign_id":         campaignID.String(),
+		"name":                "BG Map",
+		"width":               10,
+		"height":              10,
+		"background_image_id": bgID.String(),
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/maps", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	assert.True(t, capturedBgID.Valid)
+	assert.Equal(t, bgID, capturedBgID.UUID)
+}
+
+func TestHandler_CreateMap_InvalidBackgroundImageID(t *testing.T) {
+	campaignID := uuid.New()
+	_, r := newTestRouter(successStore(campaignID))
+
+	body := map[string]interface{}{
+		"campaign_id":         campaignID.String(),
+		"name":                "Bad BG",
+		"width":               10,
+		"height":              10,
+		"background_image_id": "not-a-uuid",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/maps", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "invalid background_image_id")
+}
+
+// --- TDD Cycle 33: UpdateMap passes background_image_id ---
+
+func TestHandler_UpdateMap_WithBackgroundImageID(t *testing.T) {
+	mapID := uuid.New()
+	bgID := uuid.New()
+	campaignID := uuid.New()
+	var capturedBgID uuid.NullUUID
+	store := &mockStore{
+		updateMapFn: func(ctx context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
+			capturedBgID = arg.BackgroundImageID
+			return refdata.Map{
+				ID:                arg.ID,
+				CampaignID:        campaignID,
+				Name:              arg.Name,
+				WidthSquares:      arg.WidthSquares,
+				HeightSquares:     arg.HeightSquares,
+				TiledJson:         arg.TiledJson,
+				BackgroundImageID: arg.BackgroundImageID,
+			}, nil
+		},
+	}
+	_, r := newTestRouter(store)
+
+	body := map[string]interface{}{
+		"name":                "Updated BG",
+		"width":               10,
+		"height":              10,
+		"tiled_json":          minimalTiledJSON(),
+		"background_image_id": bgID.String(),
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String(), bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.True(t, capturedBgID.Valid)
+	assert.Equal(t, bgID, capturedBgID.UUID)
+}
+
+func TestHandler_UpdateMap_InvalidBackgroundImageID(t *testing.T) {
+	_, r := newTestRouter(successStore(uuid.New()))
+	mapID := uuid.New()
+
+	body := map[string]interface{}{
+		"name":                "Bad BG Update",
+		"width":               10,
+		"height":              10,
+		"tiled_json":          minimalTiledJSON(),
+		"background_image_id": "not-a-uuid",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String(), bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "invalid background_image_id")
+}
