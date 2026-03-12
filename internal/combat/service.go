@@ -341,23 +341,8 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 	}
 
 	// Step 3: Resolve surprised short IDs to combatant UUIDs and mark surprised
-	if len(input.SurprisedShortIDs) > 0 {
-		allCombatants, err := s.store.ListCombatantsByEncounterID(ctx, enc.ID)
-		if err != nil {
-			return StartCombatResult{}, fmt.Errorf("listing combatants for surprise: %w", err)
-		}
-		shortIDSet := make(map[string]bool, len(input.SurprisedShortIDs))
-		for _, sid := range input.SurprisedShortIDs {
-			shortIDSet[sid] = true
-		}
-		for _, c := range allCombatants {
-			if !shortIDSet[c.ShortID] {
-				continue
-			}
-			if err := s.MarkSurprised(ctx, c.ID); err != nil {
-				return StartCombatResult{}, fmt.Errorf("marking combatant %s surprised: %w", c.ShortID, err)
-			}
-		}
+	if err := s.markSurprisedByShortIDs(ctx, enc.ID, input.SurprisedShortIDs); err != nil {
+		return StartCombatResult{}, err
 	}
 
 	// Step 4: Roll initiative
@@ -378,15 +363,38 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 		return StartCombatResult{}, fmt.Errorf("re-fetching encounter: %w", err)
 	}
 
-	// Step 6: Format initiative tracker
-	tracker := FormatInitiativeTracker(enc, sortedCombatants, turnInfo.CombatantID)
-
 	return StartCombatResult{
 		Encounter:         enc,
 		Combatants:        sortedCombatants,
-		InitiativeTracker: tracker,
+		InitiativeTracker: FormatInitiativeTracker(enc, sortedCombatants, turnInfo.CombatantID),
 		FirstTurn:         turnInfo,
 	}, nil
+}
+
+func (s *Service) markSurprisedByShortIDs(ctx context.Context, encounterID uuid.UUID, shortIDs []string) error {
+	if len(shortIDs) == 0 {
+		return nil
+	}
+
+	allCombatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return fmt.Errorf("listing combatants for surprise: %w", err)
+	}
+
+	shortIDSet := make(map[string]bool, len(shortIDs))
+	for _, sid := range shortIDs {
+		shortIDSet[sid] = true
+	}
+
+	for _, c := range allCombatants {
+		if !shortIDSet[c.ShortID] {
+			continue
+		}
+		if err := s.MarkSurprised(ctx, c.ID); err != nil {
+			return fmt.Errorf("marking combatant %s surprised: %w", c.ShortID, err)
+		}
+	}
+	return nil
 }
 
 // ListCharactersByCampaign returns all characters for a campaign.

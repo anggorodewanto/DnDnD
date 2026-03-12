@@ -141,23 +141,6 @@ func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := startCombatResponse{
-		Encounter: encounterResponse{
-			ID:          result.Encounter.ID.String(),
-			CampaignID:  result.Encounter.CampaignID.String(),
-			Name:        result.Encounter.Name,
-			Status:      result.Encounter.Status,
-			RoundNumber: result.Encounter.RoundNumber,
-		},
-		InitiativeTracker: result.InitiativeTracker,
-		FirstTurn: turnInfoResponse{
-			TurnID:      result.FirstTurn.Turn.ID.String(),
-			CombatantID: result.FirstTurn.CombatantID.String(),
-			RoundNumber: result.FirstTurn.RoundNumber,
-			Skipped:     result.FirstTurn.Skipped,
-		},
-	}
-
 	combatants := make([]combatantResponse, len(result.Combatants))
 	for i, c := range result.Combatants {
 		combatants[i] = combatantResponse{
@@ -173,9 +156,24 @@ func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 			IsAlive:         c.IsAlive,
 		}
 	}
-	resp.Combatants = combatants
 
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, startCombatResponse{
+		Encounter: encounterResponse{
+			ID:          result.Encounter.ID.String(),
+			CampaignID:  result.Encounter.CampaignID.String(),
+			Name:        result.Encounter.Name,
+			Status:      result.Encounter.Status,
+			RoundNumber: result.Encounter.RoundNumber,
+		},
+		Combatants:        combatants,
+		InitiativeTracker: result.InitiativeTracker,
+		FirstTurn: turnInfoResponse{
+			TurnID:      result.FirstTurn.Turn.ID.String(),
+			CombatantID: result.FirstTurn.CombatantID.String(),
+			RoundNumber: result.FirstTurn.RoundNumber,
+			Skipped:     result.FirstTurn.Skipped,
+		},
+	})
 }
 
 // ListCharacters handles GET /api/combat/characters?campaign_id=X.
