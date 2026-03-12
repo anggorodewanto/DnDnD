@@ -17,3 +17,9 @@ primary_region = "ord"
     method = "GET"
     timeout = "5s"
     path = "/health"
+
+# Persistent volume for asset storage (maps, tokens, tilesets, narration).
+# Create with: fly volumes create dndnd_data --region ord --size 1
+[mounts]
+  source = "dndnd_data"
+  destination = "/data"

@@ -27,6 +27,18 @@ type Armor struct {
 	UpdatedAt     time.Time       `json:"updated_at"`
 }
 
+type Asset struct {
+	ID           uuid.UUID `json:"id"`
+	CampaignID   uuid.UUID `json:"campaign_id"`
+	Type         string    `json:"type"`
+	OriginalName string    `json:"original_name"`
+	MimeType     string    `json:"mime_type"`
+	ByteSize     int64     `json:"byte_size"`
+	StoragePath  string    `json:"storage_path"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 type Campaign struct {
 	ID        uuid.UUID             `json:"id"`
 	GuildID   string                `json:"guild_id"`

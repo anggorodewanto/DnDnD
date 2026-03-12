@@ -12,5 +12,8 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /dndnd /dndnd
 
+# Create the asset storage directory (mounted as a Fly Volume in production)
+RUN mkdir -p /data/assets
+
 EXPOSE 8080
 CMD ["/dndnd"]
