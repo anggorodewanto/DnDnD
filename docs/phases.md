@@ -123,7 +123,7 @@
   - Depends on: Phase 21a
   - Done when: DM can paint lighting zones, set tile elevations, mark spawn zones; all data persists in map JSON.
 
-- [ ] **Phase 21d: Map Editor — Undo/Redo, Region Select, Copy/Paste, Duplicate (Dashboard)**
+- [x] **Phase 21d: Map Editor — Undo/Redo, Region Select, Copy/Paste, Duplicate (Dashboard)**
   - Scope: Undo/redo stack for all editor operations. Rectangular region select tool. Copy/paste selected region. Duplicate entire map.
   - Depends on: Phase 21a
   - Done when: Undo/redo works for all tools, region select+copy+paste works, duplicate map creates independent copy.

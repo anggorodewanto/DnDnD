@@ -540,15 +540,11 @@
       paintTile(px, py);
     } else if (activeTool === 'spawn' && spawnDragStart) {
       const { tx, ty } = tileFromPixel(px, py);
-      const cx = Math.max(0, Math.min(tiledMap.width - 1, tx));
-      const cy = Math.max(0, Math.min(tiledMap.height - 1, ty));
-      spawnDragEnd = { tx: cx, ty: cy };
+      spawnDragEnd = clampTile(tx, ty);
       drawMap();
     } else if (activeTool === 'select' && selectDragStart) {
       const { tx, ty } = tileFromPixel(px, py);
-      const cx = Math.max(0, Math.min(tiledMap.width - 1, tx));
-      const cy = Math.max(0, Math.min(tiledMap.height - 1, ty));
-      selectDragEnd = { tx: cx, ty: cy };
+      selectDragEnd = clampTile(tx, ty);
       drawMap();
     } else if (activeTool === 'paste' && clipboard) {
       const { tx, ty } = tileFromPixel(px, py);
@@ -560,21 +556,14 @@
   function handleCanvasMouseUp() {
     if (activeTool === 'spawn' && spawnDragStart && spawnDragEnd) {
       pushUndo();
-      const sx = Math.min(spawnDragStart.tx, spawnDragEnd.tx);
-      const sy = Math.min(spawnDragStart.ty, spawnDragEnd.ty);
-      const sw = Math.abs(spawnDragEnd.tx - spawnDragStart.tx) + 1;
-      const sh = Math.abs(spawnDragEnd.ty - spawnDragStart.ty) + 1;
-      tiledMap = addSpawnZone(tiledMap, sx, sy, sw, sh, selectedSpawnType);
+      const { x, y, width, height } = rectFromDrag(spawnDragStart, spawnDragEnd);
+      tiledMap = addSpawnZone(tiledMap, x, y, width, height, selectedSpawnType);
       dirty = true;
       spawnDragStart = null;
       spawnDragEnd = null;
       drawMap();
     } else if (activeTool === 'select' && selectDragStart && selectDragEnd) {
-      const sx = Math.min(selectDragStart.tx, selectDragEnd.tx);
-      const sy = Math.min(selectDragStart.ty, selectDragEnd.ty);
-      const sw = Math.abs(selectDragEnd.tx - selectDragStart.tx) + 1;
-      const sh = Math.abs(selectDragEnd.ty - selectDragStart.ty) + 1;
-      selectionRect = { x: sx, y: sy, width: sw, height: sh };
+      selectionRect = rectFromDrag(selectDragStart, selectDragEnd);
       selectDragStart = null;
       selectDragEnd = null;
       drawMap();
@@ -584,6 +573,21 @@
 
   function tileInBounds(tx, ty) {
     return tx >= 0 && tx < tiledMap.width && ty >= 0 && ty < tiledMap.height;
+  }
+
+  function clampTile(tx, ty) {
+    return {
+      tx: Math.max(0, Math.min(tiledMap.width - 1, tx)),
+      ty: Math.max(0, Math.min(tiledMap.height - 1, ty)),
+    };
+  }
+
+  function rectFromDrag(start, end) {
+    const x = Math.min(start.tx, end.tx);
+    const y = Math.min(start.ty, end.ty);
+    const width = Math.abs(end.tx - start.tx) + 1;
+    const height = Math.abs(end.ty - start.ty) + 1;
+    return { x, y, width, height };
   }
 
   function paintTile(px, py) {

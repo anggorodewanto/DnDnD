@@ -187,6 +187,37 @@ function getObjectGroupObjects(tiledMap, layerName) {
 }
 
 /**
+ * Filter objects fully contained within a pixel-space bounding box
+ * and convert their coordinates to region-relative positions.
+ */
+function extractObjectsInBounds(objects, originX, originY, boundsW, boundsH) {
+  return objects
+    .filter(obj =>
+      obj.x >= originX && obj.y >= originY &&
+      obj.x + (obj.width || 0) <= originX + boundsW &&
+      obj.y + (obj.height || 0) <= originY + boundsH
+    )
+    .map(obj => ({ ...obj, x: obj.x - originX, y: obj.y - originY }));
+}
+
+/**
+ * Paste an array of region-relative objects into a named object group layer
+ * with the given pixel offset.
+ */
+function pasteObjects(map, layerName, objects, offsetX, offsetY) {
+  const layer = findLayer(map, layerName, 'objectgroup');
+  if (!layer || !objects) return;
+  for (const obj of objects) {
+    layer.objects.push({
+      ...obj,
+      id: layer.objects.length + 1,
+      x: obj.x + offsetX,
+      y: obj.y + offsetY,
+    });
+  }
+}
+
+/**
  * Set terrain at a specific tile position.
  * @param {object} tiledMap - The Tiled-compatible map object.
  * @param {number} x - Tile x coordinate.
@@ -393,22 +424,24 @@ export function extractRegion(map, x, y, width, height) {
     return { width: 0, height: 0, terrain: [], lighting: [], elevation: [], walls: [], spawn_zones: [] };
   }
 
-  const terrainData = getTerrainData(map);
-  const lightingData = getLightingData(map);
-  const elevationData = getElevationData(map);
+  const layerSources = {
+    terrain: getTerrainData(map),
+    lighting: getLightingData(map),
+    elevation: getElevationData(map),
+  };
 
-  const terrain = [];
-  const lighting = [];
-  const elevation = [];
+  const extracted = { terrain: [], lighting: [], elevation: [] };
 
   for (let ry = 0; ry < clippedH; ry++) {
     for (let rx = 0; rx < clippedW; rx++) {
       const idx = (clippedY + ry) * map.width + (clippedX + rx);
-      terrain.push(terrainData[idx] || 0);
-      lighting.push(lightingData[idx] || 0);
-      elevation.push(elevationData[idx] || 0);
+      for (const key of Object.keys(layerSources)) {
+        extracted[key].push(layerSources[key][idx] || 0);
+      }
     }
   }
+
+  const { terrain, lighting, elevation } = extracted;
 
   // Extract walls within bounds (convert to relative pixel coords)
   const tileSize = map.tilewidth;
@@ -417,26 +450,8 @@ export function extractRegion(map, x, y, width, height) {
   const regionPxW = clippedW * tileSize;
   const regionPxH = clippedH * tileSize;
 
-  const allWalls = getWalls(map);
-  const walls = allWalls
-    .filter(w => {
-      const wx = w.x;
-      const wy = w.y;
-      const wRight = wx + (w.width || 0);
-      const wBottom = wy + (w.height || 0);
-      return wx >= regionPxX && wy >= regionPxY && wRight <= regionPxX + regionPxW && wBottom <= regionPxY + regionPxH;
-    })
-    .map(w => ({ ...w, x: w.x - regionPxX, y: w.y - regionPxY }));
-
-  // Extract spawn zones within bounds (convert to relative pixel coords)
-  const allZones = getSpawnZones(map);
-  const spawn_zones = allZones
-    .filter(z => {
-      return z.x >= regionPxX && z.y >= regionPxY &&
-        z.x + z.width <= regionPxX + regionPxW &&
-        z.y + z.height <= regionPxY + regionPxH;
-    })
-    .map(z => ({ ...z, x: z.x - regionPxX, y: z.y - regionPxY }));
+  const walls = extractObjectsInBounds(getWalls(map), regionPxX, regionPxY, regionPxW, regionPxH);
+  const spawn_zones = extractObjectsInBounds(getSpawnZones(map), regionPxX, regionPxY, regionPxW, regionPxH);
 
   return { width: clippedW, height: clippedH, terrain, lighting, elevation, walls, spawn_zones };
 }
@@ -476,32 +491,11 @@ export function pasteRegion(map, region, destX, destY) {
     }
   }
 
-  // Paste walls with offset
   const tileSize = map.tilewidth;
-  const wallLayer = findLayer(map, 'walls', 'objectgroup');
-  if (wallLayer && region.walls) {
-    for (const w of region.walls) {
-      wallLayer.objects.push({
-        ...w,
-        id: wallLayer.objects.length + 1,
-        x: w.x + destX * tileSize,
-        y: w.y + destY * tileSize,
-      });
-    }
-  }
-
-  // Paste spawn zones with offset
-  const spawnLayer = findLayer(map, 'spawn_zones', 'objectgroup');
-  if (spawnLayer && region.spawn_zones) {
-    for (const z of region.spawn_zones) {
-      spawnLayer.objects.push({
-        ...z,
-        id: spawnLayer.objects.length + 1,
-        x: z.x + destX * tileSize,
-        y: z.y + destY * tileSize,
-      });
-    }
-  }
+  const offsetX = destX * tileSize;
+  const offsetY = destY * tileSize;
+  pasteObjects(map, 'walls', region.walls, offsetX, offsetY);
+  pasteObjects(map, 'spawn_zones', region.spawn_zones, offsetX, offsetY);
 
   return map;
 }
