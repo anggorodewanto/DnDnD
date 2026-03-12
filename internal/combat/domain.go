@@ -91,10 +91,10 @@ type Position struct {
 
 // StartCombatInput holds parameters for the StartCombat flow.
 type StartCombatInput struct {
-	TemplateID             uuid.UUID                `json:"template_id"`
-	CharacterIDs           []uuid.UUID              `json:"character_ids"`
-	CharacterPositions     map[uuid.UUID]Position   `json:"character_positions"`
-	SurprisedCombatantIDs  []uuid.UUID              `json:"surprised_combatant_ids,omitempty"`
+	TemplateID           uuid.UUID              `json:"template_id"`
+	CharacterIDs         []uuid.UUID            `json:"character_ids"`
+	CharacterPositions   map[uuid.UUID]Position `json:"character_positions"`
+	SurprisedShortIDs    []string               `json:"surprised_short_ids,omitempty"`
 }
 
 // StartCombatResult holds the result of the StartCombat flow.

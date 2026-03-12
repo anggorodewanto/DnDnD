@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -224,4 +225,77 @@ func startCombatMockStore(templateID, encounterID, charID uuid.UUID) *mockStore 
 	}
 
 	return store
+}
+
+// --- TDD Cycle 40: GET /api/combat/characters success ---
+
+func TestHandler_ListCharacters_Success(t *testing.T) {
+	charID := uuid.New()
+	campaignID := uuid.New()
+	store := defaultMockStore()
+	store.listCharactersByCampaignFn = func(ctx context.Context, cID uuid.UUID) ([]refdata.Character, error) {
+		assert.Equal(t, campaignID, cID)
+		return []refdata.Character{
+			{ID: charID, Name: "Aragorn", Race: "Human", Level: 5, HpMax: 45, Ac: 18, SpeedFt: 30},
+		}, nil
+	}
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/characters?campaign_id="+campaignID.String(), nil)
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp []characterListResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	require.Len(t, resp, 1)
+	assert.Equal(t, charID.String(), resp[0].ID)
+	assert.Equal(t, "Aragorn", resp[0].Name)
+	assert.Equal(t, int32(5), resp[0].Level)
+}
+
+// --- TDD Cycle 41: GET /api/combat/characters missing campaign_id ---
+
+func TestHandler_ListCharacters_MissingCampaignID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/characters", nil)
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle 42: GET /api/combat/characters invalid campaign_id ---
+
+func TestHandler_ListCharacters_InvalidCampaignID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/characters?campaign_id=not-uuid", nil)
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle 43: GET /api/combat/characters service error ---
+
+func TestHandler_ListCharacters_ServiceError(t *testing.T) {
+	store := defaultMockStore()
+	store.listCharactersByCampaignFn = func(ctx context.Context, cID uuid.UUID) ([]refdata.Character, error) {
+		return nil, errors.New("db error")
+	}
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/characters?campaign_id="+uuid.New().String(), nil)
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }

@@ -44,6 +44,7 @@ type mockStore struct {
 	skipTurnFn                        func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
 	listTurnsByEncounterAndRoundFn    func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error)
 	getCharacterFn                    func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	listCharactersByCampaignFn        func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -126,6 +127,9 @@ func (m *mockStore) ListTurnsByEncounterAndRound(ctx context.Context, arg refdat
 }
 func (m *mockStore) GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
 	return m.getCharacterFn(ctx, id)
+}
+func (m *mockStore) ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error) {
+	return m.listCharactersByCampaignFn(ctx, campaignID)
 }
 
 func defaultMockStore() *mockStore {
@@ -224,6 +228,9 @@ func defaultMockStore() *mockStore {
 		},
 		getCharacterFn: func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
 			return refdata.Character{}, sql.ErrNoRows
+		},
+		listCharactersByCampaignFn: func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error) {
+			return []refdata.Character{}, nil
 		},
 	}
 }
@@ -942,8 +949,8 @@ func TestService_StartCombat_WithSurprisedCombatants(t *testing.T) {
 			return []refdata.Combatant{}, nil
 		}
 		return []refdata.Combatant{
-			{ID: createdCombatantIDs[0], EncounterID: encounterID, DisplayName: "Goblin", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[{"condition":"surprised","duration_rounds":1,"started_round":0}]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
-			{ID: createdCombatantIDs[1], EncounterID: encounterID, DisplayName: "Aragorn", IsAlive: true, IsNpc: false, HpMax: 45, HpCurrent: 45, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+			{ID: createdCombatantIDs[0], EncounterID: encounterID, ShortID: "G1", DisplayName: "Goblin", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[{"condition":"surprised","duration_rounds":1,"started_round":0}]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
+			{ID: createdCombatantIDs[1], EncounterID: encounterID, ShortID: "AR", DisplayName: "Aragorn", IsAlive: true, IsNpc: false, HpMax: 45, HpCurrent: 45, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
 		}, nil
 	}
 	store.updateCombatantInitiativeFn = func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
@@ -959,14 +966,11 @@ func TestService_StartCombat_WithSurprisedCombatants(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 15 })
 	svc := NewService(store)
 
-	// The goblin combatant ID will be createdCombatantIDs[0] after template processing
-	// But we need to pass it in input — we use a placeholder and check the MarkSurprised was called
-	surpriseTarget := uuid.New()
 	result, err := svc.StartCombat(context.Background(), StartCombatInput{
-		TemplateID:            templateID,
-		CharacterIDs:          []uuid.UUID{charID},
-		CharacterPositions:    map[uuid.UUID]Position{charID: {Col: "D", Row: 5}},
-		SurprisedCombatantIDs: []uuid.UUID{surpriseTarget},
+		TemplateID:         templateID,
+		CharacterIDs:       []uuid.UUID{charID},
+		CharacterPositions: map[uuid.UUID]Position{charID: {Col: "D", Row: 5}},
+		SurprisedShortIDs:  []string{"G1"},
 	}, roller)
 
 	require.NoError(t, err)
@@ -1010,12 +1014,22 @@ func TestService_StartCombat_AddCombatantError(t *testing.T) {
 
 func TestService_StartCombat_MarkSurprisedError(t *testing.T) {
 	templateID := uuid.New()
+	encounterID := uuid.New()
+	cID := uuid.New()
 
 	store := defaultMockStore()
 	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
 		return refdata.EncounterTemplate{
 			ID: templateID, CampaignID: uuid.New(), Name: "Test",
 			Creatures: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.createEncounterFn = func(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: encounterID, Name: arg.Name, Status: arg.Status}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: cID, ShortID: "G1", DisplayName: "Goblin", IsAlive: true, Conditions: json.RawMessage(`[]`)},
 		}, nil
 	}
 	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
@@ -1025,11 +1039,57 @@ func TestService_StartCombat_MarkSurprisedError(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 10 })
 	svc := NewService(store)
 	_, err := svc.StartCombat(context.Background(), StartCombatInput{
-		TemplateID:            templateID,
-		SurprisedCombatantIDs: []uuid.UUID{uuid.New()},
+		TemplateID:        templateID,
+		SurprisedShortIDs: []string{"G1"},
 	}, roller)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "marking combatant")
+}
+
+// --- TDD Cycle 33b2: StartCombat listing combatants for surprise error ---
+
+func TestService_StartCombat_ListCombatantsForSurpriseError(t *testing.T) {
+	templateID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID: templateID, CampaignID: uuid.New(), Name: "Test",
+			Creatures: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.createEncounterFn = func(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: encounterID, Name: arg.Name, Status: arg.Status}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return nil, errors.New("db error")
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	svc := NewService(store)
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID:        templateID,
+		SurprisedShortIDs: []string{"G1"},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing combatants for surprise")
+}
+
+// --- TDD Cycle 33b3: StartCombat ListCharactersByCampaign ---
+
+func TestService_ListCharactersByCampaign(t *testing.T) {
+	charID := uuid.New()
+	campaignID := uuid.New()
+	store := defaultMockStore()
+	store.listCharactersByCampaignFn = func(ctx context.Context, cID uuid.UUID) ([]refdata.Character, error) {
+		return []refdata.Character{{ID: charID, CampaignID: campaignID, Name: "Aragorn"}}, nil
+	}
+	svc := NewService(store)
+	chars, err := svc.ListCharactersByCampaign(context.Background(), campaignID)
+	require.NoError(t, err)
+	require.Len(t, chars, 1)
+	assert.Equal(t, "Aragorn", chars[0].Name)
 }
 
 // --- TDD Cycle 33c: StartCombat roll initiative error ---

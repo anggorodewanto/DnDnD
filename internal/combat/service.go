@@ -62,6 +62,7 @@ type Store interface {
 	GetEncounterTemplate(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error)
 	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
 }
 
 // Service manages combat encounters and their entities.
@@ -339,10 +340,23 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 		}
 	}
 
-	// Step 3: Mark surprised combatants
-	for _, cID := range input.SurprisedCombatantIDs {
-		if err := s.MarkSurprised(ctx, cID); err != nil {
-			return StartCombatResult{}, fmt.Errorf("marking combatant %s surprised: %w", cID, err)
+	// Step 3: Resolve surprised short IDs to combatant UUIDs and mark surprised
+	if len(input.SurprisedShortIDs) > 0 {
+		allCombatants, err := s.store.ListCombatantsByEncounterID(ctx, enc.ID)
+		if err != nil {
+			return StartCombatResult{}, fmt.Errorf("listing combatants for surprise: %w", err)
+		}
+		shortIDSet := make(map[string]bool, len(input.SurprisedShortIDs))
+		for _, sid := range input.SurprisedShortIDs {
+			shortIDSet[sid] = true
+		}
+		for _, c := range allCombatants {
+			if !shortIDSet[c.ShortID] {
+				continue
+			}
+			if err := s.MarkSurprised(ctx, c.ID); err != nil {
+				return StartCombatResult{}, fmt.Errorf("marking combatant %s surprised: %w", c.ShortID, err)
+			}
 		}
 	}
 
@@ -373,6 +387,11 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 		InitiativeTracker: tracker,
 		FirstTurn:         turnInfo,
 	}, nil
+}
+
+// ListCharactersByCampaign returns all characters for a campaign.
+func (s *Service) ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error) {
+	return s.store.ListCharactersByCampaign(ctx, campaignID)
 }
 
 // nullString converts a string to sql.NullString, treating empty as null.

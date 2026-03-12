@@ -25,23 +25,24 @@ func NewHandler(svc *Service, roller *dice.Roller) *Handler {
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/combat", func(r chi.Router) {
 		r.Post("/start", h.StartCombat)
+		r.Get("/characters", h.ListCharacters)
 	})
 }
 
 // startCombatRequest is the JSON request body for starting combat.
 type startCombatRequest struct {
-	TemplateID                string                       `json:"template_id"`
-	CharacterIDs              []string                     `json:"character_ids"`
-	CharacterPositions        map[string]Position          `json:"character_positions"`
-	SurprisedCombatantShortIDs []string                    `json:"surprised_combatant_short_ids,omitempty"`
+	TemplateID                 string              `json:"template_id"`
+	CharacterIDs               []string            `json:"character_ids"`
+	CharacterPositions         map[string]Position `json:"character_positions"`
+	SurprisedCombatantShortIDs []string            `json:"surprised_combatant_short_ids,omitempty"`
 }
 
 // startCombatResponse is the JSON response for the start combat flow.
 type startCombatResponse struct {
-	Encounter         encounterResponse    `json:"encounter"`
-	Combatants        []combatantResponse  `json:"combatants"`
-	InitiativeTracker string               `json:"initiative_tracker"`
-	FirstTurn         turnInfoResponse     `json:"first_turn"`
+	Encounter         encounterResponse   `json:"encounter"`
+	Combatants        []combatantResponse `json:"combatants"`
+	InitiativeTracker string              `json:"initiative_tracker"`
+	FirstTurn         turnInfoResponse    `json:"first_turn"`
 }
 
 // encounterResponse is the JSON representation of an encounter.
@@ -73,6 +74,17 @@ type turnInfoResponse struct {
 	CombatantID string `json:"combatant_id"`
 	RoundNumber int32  `json:"round_number"`
 	Skipped     bool   `json:"skipped"`
+}
+
+// characterListResponse is the JSON representation of a character for combat selection.
+type characterListResponse struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Race    string `json:"race"`
+	Level   int32  `json:"level"`
+	HpMax   int32  `json:"hp_max"`
+	Ac      int32  `json:"ac"`
+	SpeedFt int32  `json:"speed_ft"`
 }
 
 // writeJSON writes a JSON response with the given status code.
@@ -116,14 +128,11 @@ func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 		positions[id] = v
 	}
 
-	// Parse surprised combatant short IDs — these need to be resolved to UUIDs
-	// by the caller or left empty. For now we pass them through as empty UUIDs
-	// since the spec says these are short IDs, not UUIDs. We'll need the combatants
-	// list from the template creation to resolve them.
 	input := StartCombatInput{
 		TemplateID:         templateID,
 		CharacterIDs:       charIDs,
 		CharacterPositions: positions,
+		SurprisedShortIDs:  req.SurprisedCombatantShortIDs,
 	}
 
 	result, err := h.svc.StartCombat(r.Context(), input, h.roller)
@@ -165,6 +174,42 @@ func (h *Handler) StartCombat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	resp.Combatants = combatants
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ListCharacters handles GET /api/combat/characters?campaign_id=X.
+func (h *Handler) ListCharacters(w http.ResponseWriter, r *http.Request) {
+	campaignIDStr := r.URL.Query().Get("campaign_id")
+	if campaignIDStr == "" {
+		http.Error(w, "campaign_id query parameter required", http.StatusBadRequest)
+		return
+	}
+
+	campaignID, err := uuid.Parse(campaignIDStr)
+	if err != nil {
+		http.Error(w, "invalid campaign_id", http.StatusBadRequest)
+		return
+	}
+
+	chars, err := h.svc.ListCharactersByCampaign(r.Context(), campaignID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	resp := make([]characterListResponse, len(chars))
+	for i, c := range chars {
+		resp[i] = characterListResponse{
+			ID:      c.ID.String(),
+			Name:    c.Name,
+			Race:    c.Race,
+			Level:   c.Level,
+			HpMax:   c.HpMax,
+			Ac:      c.Ac,
+			SpeedFt: c.SpeedFt,
+		}
+	}
 
 	writeJSON(w, http.StatusOK, resp)
 }
