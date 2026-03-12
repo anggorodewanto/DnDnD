@@ -1053,11 +1053,30 @@ func TestMaxRange_RangedNoRanges(t *testing.T) {
 	assert.Equal(t, 5, MaxRange(weapon))
 }
 
-func TestResolveAttack_RollD20Error(t *testing.T) {
-	// This tests that an error from RollD20 is propagated. In practice
-	// this is unusual since RollD20 returns nil errors normally, but
-	// we cover the branch.
-	// We can't easily force RollD20 to error, so we'll skip this.
+func TestResolveAttack_NatOneAlwaysMisses(t *testing.T) {
+	// Nat 1 always misses even with huge modifier vs low AC
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 1
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName: "Aria",
+		TargetName:   "Goblin #1",
+		TargetAC:     5, // very low AC
+		Weapon:       makeLongsword(),
+		Scores:       AbilityScores{Str: 20, Dex: 14}, // +5 STR mod
+		ProfBonus:    6,                                 // high prof
+		DistanceFt:   5,
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.False(t, result.Hit, "nat 1 should always miss")
+	assert.True(t, result.D20Roll.CriticalFail)
+	assert.Equal(t, 0, result.DamageTotal)
 }
 
 func TestCheckAutoCrit_BadJSON(t *testing.T) {

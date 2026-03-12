@@ -209,10 +209,12 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 	result.D20Roll = d20
 
-	// Nat 20 always hits and crits
+	// Nat 20 always hits and crits; nat 1 always misses
 	if d20.CriticalHit {
 		result.Hit = true
 		result.CriticalHit = true
+	} else if d20.CriticalFail {
+		result.Hit = false
 	} else {
 		result.Hit = d20.Total >= effectiveAC
 	}
