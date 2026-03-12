@@ -14,26 +14,21 @@ func ShortID(name string, existing []string) string {
 	}
 
 	words := strings.Fields(name)
-	var base strings.Builder
-	for _, w := range words {
-		if len(w) > 0 {
-			base.WriteByte(w[0])
-		}
-	}
 
-	// Single-character name: just use that letter
-	if base.Len() == 0 {
-		return "X"
-	}
-
-	// For single-word names with 2+ chars, use first two letters
+	// For single-word names with 2+ chars, use first two letters;
+	// otherwise use the first letter of each word.
+	var base string
 	if len(words) == 1 && len(words[0]) >= 2 {
-		base.Reset()
-		base.WriteByte(words[0][0])
-		base.WriteByte(words[0][1])
+		base = words[0][:2]
+	} else {
+		var b strings.Builder
+		for _, w := range words {
+			b.WriteByte(w[0])
+		}
+		base = b.String()
 	}
 
-	candidate := strings.ToUpper(base.String())
+	candidate := strings.ToUpper(base)
 
 	existSet := make(map[string]bool, len(existing))
 	for _, e := range existing {

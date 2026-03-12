@@ -56,12 +56,12 @@ func FormatCard(d CardData) string {
 	if d.TempHP > 0 {
 		hpStr += fmt.Sprintf(" (+%d temp)", d.TempHP)
 	}
-	b.WriteString(fmt.Sprintf("%s | AC: %d | Speed: %dft\n", hpStr, d.AC, d.SpeedFt))
+	fmt.Fprintf(&b, "%s | AC: %d | Speed: %dft\n", hpStr, d.AC, d.SpeedFt)
 
 	// Ability scores
-	b.WriteString(fmt.Sprintf("STR %d | DEX %d | CON %d | WIS %d | INT %d | CHA %d\n",
+	fmt.Fprintf(&b, "STR %d | DEX %d | CON %d | WIS %d | INT %d | CHA %d\n",
 		d.AbilityScores.STR, d.AbilityScores.DEX, d.AbilityScores.CON,
-		d.AbilityScores.WIS, d.AbilityScores.INT, d.AbilityScores.CHA))
+		d.AbilityScores.WIS, d.AbilityScores.INT, d.AbilityScores.CHA)
 
 	// Equipped
 	b.WriteString("Equipped: ")
@@ -87,14 +87,11 @@ func FormatCard(d CardData) string {
 	}
 	b.WriteByte('\n')
 
-	// Temp HP line (only if present, already shown in HP line above)
-	// Exhaustion (only if > 0)
 	if d.Exhaustion > 0 {
-		b.WriteString(fmt.Sprintf("Exhaustion: %d\n", d.Exhaustion))
+		fmt.Fprintf(&b, "Exhaustion: %d\n", d.Exhaustion)
 	}
 
-	// Gold
-	b.WriteString(fmt.Sprintf("Gold: %dgp\n", d.Gold))
+	fmt.Fprintf(&b, "Gold: %dgp\n", d.Gold)
 
 	// Languages
 	b.WriteString("Languages: ")

@@ -78,37 +78,16 @@ func (s *Service) PostCharacterCard(ctx context.Context, characterID uuid.UUID, 
 
 // UpdateCardRetired edits the existing card message to add a RETIRED badge.
 func (s *Service) UpdateCardRetired(ctx context.Context, characterID uuid.UUID, characterName, discordUserID string) error {
-	char, channelID, err := s.fetchCharacterAndChannel(ctx, characterID)
-	if err != nil {
-		return err
-	}
-
-	msgID, err := s.store.GetCharacterCardMessageID(ctx, characterID)
-	if err != nil {
-		return fmt.Errorf("fetching card message ID: %w", err)
-	}
-	if !msgID.Valid || msgID.String == "" {
-		return fmt.Errorf("no existing card message for character %s", characterID)
-	}
-
-	shortID, err := s.generateShortID(ctx, char)
-	if err != nil {
-		return err
-	}
-
-	data := buildCardData(char, shortID, true)
-	content := FormatCard(data)
-
-	_, err = s.discord.ChannelMessageEdit(channelID, msgID.String, content)
-	if err != nil {
-		return fmt.Errorf("editing character card: %w", err)
-	}
-
-	return nil
+	return s.editCard(ctx, characterID, true)
 }
 
 // UpdateCard re-fetches character data and edits the existing Discord message.
 func (s *Service) UpdateCard(ctx context.Context, characterID uuid.UUID) error {
+	return s.editCard(ctx, characterID, false)
+}
+
+// editCard fetches the character, resolves its short ID, and edits the existing card message.
+func (s *Service) editCard(ctx context.Context, characterID uuid.UUID, retired bool) error {
 	char, channelID, err := s.fetchCharacterAndChannel(ctx, characterID)
 	if err != nil {
 		return err
@@ -127,7 +106,7 @@ func (s *Service) UpdateCard(ctx context.Context, characterID uuid.UUID) error {
 		return err
 	}
 
-	data := buildCardData(char, shortID, false)
+	data := buildCardData(char, shortID, retired)
 	content := FormatCard(data)
 
 	_, err = s.discord.ChannelMessageEdit(channelID, msgID.String, content)
@@ -233,15 +212,6 @@ func buildCardData(char refdata.Character, shortID string, retired bool) CardDat
 		_ = json.Unmarshal(char.SpellSlots.RawMessage, &spellSlots)
 	}
 
-	mainHand := ""
-	if char.EquippedMainHand.Valid {
-		mainHand = char.EquippedMainHand.String
-	}
-	offHand := ""
-	if char.EquippedOffHand.Valid {
-		offHand = char.EquippedOffHand.String
-	}
-
 	return CardData{
 		Name:             char.Name,
 		ShortID:          shortID,
@@ -254,8 +224,8 @@ func buildCardData(char refdata.Character, shortID string, retired bool) CardDat
 		AC:               int(char.Ac),
 		SpeedFt:          int(char.SpeedFt),
 		AbilityScores:    abilities,
-		EquippedMainHand: mainHand,
-		EquippedOffHand:  offHand,
+		EquippedMainHand: char.EquippedMainHand.String,
+		EquippedOffHand:  char.EquippedOffHand.String,
 		SpellSlots:       spellSlots,
 		Gold:             int(char.Gold),
 		Languages:        char.Languages,

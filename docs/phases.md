@@ -87,7 +87,7 @@
   - Depends on: Phase 14, Phase 15
   - Done when: Full approval workflow works end-to-end: submission -> DM review -> approve/reject -> player notification -> character card posted.
 
-- [ ] **Phase 17: Character Cards (`#character-cards`)**
+- [x] **Phase 17: Character Cards (`#character-cards`)**
   - Scope: Bot maintains one auto-updated message per character in `#character-cards`. Format per spec (name, short ID, level, race, class/subclass, HP, AC, speed, ability scores, equipped weapons, spell slots, conditions, concentration, gold, languages). Auto-edits on state change.
   - Depends on: Phase 7, Phase 12
   - Done when: Character card created on approval, auto-updates on HP/equipment/condition/level changes.

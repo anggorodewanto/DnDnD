@@ -1,6 +1,7 @@
 package charactercard
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
@@ -240,9 +241,9 @@ func TestFormatCard_SpellSlotOrdering(t *testing.T) {
 
 	result := FormatCard(data)
 	// Slots should be in order: 1st, 2nd, 3rd
-	idx1 := indexOf(result, "1st:")
-	idx2 := indexOf(result, "2nd:")
-	idx3 := indexOf(result, "3rd:")
+	idx1 := strings.Index(result, "1st:")
+	idx2 := strings.Index(result, "2nd:")
+	idx3 := strings.Index(result, "3rd:")
 	assert.Greater(t, idx2, idx1, "2nd should come after 1st")
 	assert.Greater(t, idx3, idx2, "3rd should come after 2nd")
 }
@@ -322,11 +323,3 @@ func TestFormatCard_OnlyOffHand(t *testing.T) {
 	assert.NotContains(t, result, "(main)")
 }
 
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}
