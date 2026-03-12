@@ -44,10 +44,7 @@ func abilityModForWeapon(scores AbilityScores, weapon refdata.Weapon) int {
 	dexMod := AbilityModifier(scores.Dex)
 
 	if HasProperty(weapon, "finesse") {
-		if dexMod > strMod {
-			return dexMod
-		}
-		return strMod
+		return max(strMod, dexMod)
 	}
 	if IsRangedWeapon(weapon) {
 		return dexMod
@@ -109,13 +106,19 @@ func DamageExpression(weapon refdata.Weapon, abilityMod int) string {
 	if weapon.ID == "unarmed-strike" {
 		return ""
 	}
-	if abilityMod == 0 {
-		return weapon.Damage
+	return appendModifier(weapon.Damage, abilityMod)
+}
+
+// appendModifier appends a signed modifier to a dice expression string.
+// Zero modifiers are omitted; negative modifiers include their own minus sign.
+func appendModifier(base string, mod int) string {
+	if mod == 0 {
+		return base
 	}
-	if abilityMod > 0 {
-		return weapon.Damage + "+" + fmt.Sprintf("%d", abilityMod)
+	if mod > 0 {
+		return fmt.Sprintf("%s+%d", base, mod)
 	}
-	return weapon.Damage + fmt.Sprintf("%d", abilityMod) // negative already has minus sign
+	return fmt.Sprintf("%s%d", base, mod)
 }
 
 // AttackInput holds all inputs for resolving a single attack (pure function).
@@ -239,10 +242,7 @@ func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, rolle
 		if critical {
 			base = 2
 		}
-		total := base + dmgMod
-		if total < 0 {
-			total = 0
-		}
+		total := max(base+dmgMod, 0)
 		return total, fmt.Sprintf("%d", total), nil
 	}
 
@@ -252,19 +252,15 @@ func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, rolle
 		return 0, expr, nil
 	}
 
-	damageDice := expr
 	if critical {
-		// Build the doubled expression for display
-		damageDice = buildCritDiceDisplay(weapon, dmgMod)
+		return rollResult.Total, buildCritDiceDisplay(weapon, dmgMod), &rollResult
 	}
-
-	return rollResult.Total, damageDice, &rollResult
+	return rollResult.Total, expr, &rollResult
 }
 
 // buildCritDiceDisplay builds the display string for critical hit damage dice.
+// Doubles the dice count but not the modifier.
 func buildCritDiceDisplay(weapon refdata.Weapon, dmgMod int) string {
-	// For crits, double the dice but not the modifier
-	// Parse the base damage to get the doubled form
 	expr, err := dice.ParseExpression(weapon.Damage)
 	if err != nil {
 		return weapon.Damage
@@ -274,13 +270,7 @@ func buildCritDiceDisplay(weapon refdata.Weapon, dmgMod int) string {
 	for _, g := range expr.Groups {
 		parts = append(parts, fmt.Sprintf("%dd%d", g.Count*2, g.Sides))
 	}
-	result := strings.Join(parts, "+")
-	if dmgMod > 0 {
-		result += fmt.Sprintf("+%d", dmgMod)
-	} else if dmgMod < 0 {
-		result += fmt.Sprintf("%d", dmgMod)
-	}
-	return result
+	return appendModifier(strings.Join(parts, "+"), dmgMod)
 }
 
 // CheckAutoCrit checks if an attack should auto-crit based on target conditions and distance.
@@ -311,36 +301,34 @@ func FormatAttackLog(result AttackResult) string {
 	var b strings.Builder
 
 	// Header line
-	header := fmt.Sprintf("\u2694\ufe0f  %s attacks %s with %s", result.AttackerName, result.TargetName, result.WeaponName)
+	fmt.Fprintf(&b, "\u2694\ufe0f  %s attacks %s with %s", result.AttackerName, result.TargetName, result.WeaponName)
 	if !result.IsMelee || result.DistanceFt > 5 {
-		header += fmt.Sprintf(" (%dft)", result.DistanceFt)
+		fmt.Fprintf(&b, " (%dft)", result.DistanceFt)
 	}
-	b.WriteString(header)
 
 	if result.AutoCrit {
-		// Auto-crit line
-		b.WriteString(fmt.Sprintf(" (auto-crit \u2014 %s)", result.AutoCritReason))
-		b.WriteString(fmt.Sprintf("\n    \u2192 Damage: %d %s (doubled dice: %s)", result.DamageTotal, result.DamageType, result.DamageDice))
+		fmt.Fprintf(&b, " (auto-crit \u2014 %s)", result.AutoCritReason)
+		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (doubled dice: %s)", result.DamageTotal, result.DamageType, result.DamageDice)
 		return b.String()
 	}
 
 	// Attack roll line
 	rollStr := fmt.Sprintf("%d (%d + %d)", result.D20Roll.Total, result.D20Roll.Chosen, result.D20Roll.Modifier)
 	if result.CriticalHit {
-		b.WriteString(fmt.Sprintf("\n    \u2192 Roll to hit: \U0001f3af NAT 20 \u2014 CRITICAL HIT!"))
+		b.WriteString("\n    \u2192 Roll to hit: \U0001f3af NAT 20 \u2014 CRITICAL HIT!")
 	} else if result.Hit {
-		b.WriteString(fmt.Sprintf("\n    \u2192 Roll to hit: %s \u2014 HIT", rollStr))
+		fmt.Fprintf(&b, "\n    \u2192 Roll to hit: %s \u2014 HIT", rollStr)
 	} else {
-		b.WriteString(fmt.Sprintf("\n    \u2192 Roll to hit: %s \u2014 MISS", rollStr))
+		fmt.Fprintf(&b, "\n    \u2192 Roll to hit: %s \u2014 MISS", rollStr)
 	}
 
 	// Damage line (only on hit)
 	if result.Hit {
+		diceLabel := result.DamageDice
 		if result.CriticalHit {
-			b.WriteString(fmt.Sprintf("\n    \u2192 Damage: %d %s (doubled dice: %s)", result.DamageTotal, result.DamageType, result.DamageDice))
-		} else {
-			b.WriteString(fmt.Sprintf("\n    \u2192 Damage: %d %s (%s)", result.DamageTotal, result.DamageType, result.DamageDice))
+			diceLabel = "doubled dice: " + result.DamageDice
 		}
+		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (%s)", result.DamageTotal, result.DamageType, diceLabel)
 	}
 
 	return b.String()
@@ -424,14 +412,11 @@ func (s *Service) resolveAttackWeapon(ctx context.Context, cmd AttackCommand) (r
 
 	profBonus := int(char.ProficiencyBonus)
 
-	// Determine weapon ID
-	weaponID := ""
-	if cmd.WeaponOverride != "" {
-		weaponID = cmd.WeaponOverride
-	} else if char.EquippedMainHand.Valid {
+	// Determine weapon ID: override > equipped main hand > unarmed
+	weaponID := cmd.WeaponOverride
+	if weaponID == "" && char.EquippedMainHand.Valid {
 		weaponID = char.EquippedMainHand.String
 	}
-
 	if weaponID == "" {
 		return UnarmedStrike(), scores, profBonus, nil
 	}

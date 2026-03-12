@@ -193,7 +193,7 @@
   - Depends on: Phase 19, Phase 29
   - Done when: Unit tests verify cover from walls, obstacles, creatures; half/three-quarters/full correctly determined; integration with AC and saves.
 
-- [ ] **Phase 34: Basic Attack Resolution (`/attack`)**
+- [x] **Phase 34: Basic Attack Resolution (`/attack`)**
   - Scope: `/attack` command: weapon selection (equipped or specified), attack roll (d20 + modifiers), AC comparison, hit/miss determination, damage roll. Critical hits (nat 20, double dice). Auto-crit (paralyzed/unconscious within 5ft). Finesse auto-select (higher of STR/DEX). Range validation (melee reach, ranged normal/long). Cover AC bonus integration. Distance in combat log. Attacks remaining tracking.
   - Depends on: Phase 28, Phase 18, Phase 33
   - Done when: Integration tests verify attack flow: weapon selection, to-hit calculation, damage on hit, crits, range validation, cover, finesse auto-select.
