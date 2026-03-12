@@ -10,6 +10,11 @@ import (
 // RenderMap generates a PNG image from the given map data.
 // Returns the PNG bytes or an error.
 func RenderMap(md *MapData) ([]byte, error) {
+	// Auto-reduce tile size for large maps (>100 in either dimension)
+	if md.Width > 100 || md.Height > 100 {
+		md.TileSize = 32
+	}
+
 	margin := gridLabelMargin
 	mapW := md.Width * md.TileSize
 	mapH := md.Height * md.TileSize

@@ -92,11 +92,11 @@ func TestRenderMap_NoLegend(t *testing.T) {
 }
 
 func TestRenderMap_LargeMapTileSize(t *testing.T) {
-	// 101x101 should use 32px tiles
+	// 101x101 with TileSize 48 should be auto-reduced to 32px tiles
 	md := &MapData{
 		Width:    101,
 		Height:   101,
-		TileSize: 32,
+		TileSize: 48,
 		TerrainGrid: func() []TerrainType {
 			g := make([]TerrainType, 101*101)
 			for i := range g {
@@ -116,14 +116,51 @@ func TestRenderMap_LargeMapTileSize(t *testing.T) {
 		t.Fatalf("not valid PNG: %v", err)
 	}
 
+	// Should have been auto-reduced to 32px tiles
 	bounds := img.Bounds()
 	expectedW := 101*32 + gridLabelMargin
 	expectedH := 101*32 + gridLabelMargin
 	if bounds.Dx() != expectedW {
-		t.Errorf("width = %d, want %d", bounds.Dx(), expectedW)
+		t.Errorf("width = %d, want %d (tile size should be auto-reduced to 32)", bounds.Dx(), expectedW)
 	}
 	if bounds.Dy() != expectedH {
-		t.Errorf("height = %d, want %d", bounds.Dy(), expectedH)
+		t.Errorf("height = %d, want %d (tile size should be auto-reduced to 32)", bounds.Dy(), expectedH)
+	}
+}
+
+func TestRenderMap_SmallMapKeepsTileSize(t *testing.T) {
+	// 100x100 should NOT auto-reduce (boundary check)
+	md := &MapData{
+		Width:    100,
+		Height:   100,
+		TileSize: 48,
+		TerrainGrid: func() []TerrainType {
+			g := make([]TerrainType, 100*100)
+			for i := range g {
+				g[i] = TerrainOpenGround
+			}
+			return g
+		}(),
+	}
+
+	data, err := RenderMap(md)
+	if err != nil {
+		t.Fatalf("RenderMap error: %v", err)
+	}
+
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("not valid PNG: %v", err)
+	}
+
+	bounds := img.Bounds()
+	expectedW := 100*48 + gridLabelMargin
+	expectedH := 100*48 + gridLabelMargin
+	if bounds.Dx() != expectedW {
+		t.Errorf("width = %d, want %d (100x100 should keep 48px tiles)", bounds.Dx(), expectedW)
+	}
+	if bounds.Dy() != expectedH {
+		t.Errorf("height = %d, want %d (100x100 should keep 48px tiles)", bounds.Dy(), expectedH)
 	}
 }
 

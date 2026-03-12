@@ -1,7 +1,6 @@
 package renderer
 
 import (
-	"image"
 	"image/color"
 	"testing"
 
@@ -119,22 +118,4 @@ func TestCollectNonStandardTerrain_AllOpenGround(t *testing.T) {
 	if len(result) != 0 {
 		t.Errorf("expected 0 terrain types for all open ground, got %d", len(result))
 	}
-}
-
-// helper to check if a point has a specific color within tolerance
-func colorMatch(img image.Image, x, y int, want color.RGBA, tolerance uint8) bool {
-	got := img.At(x, y)
-	r1, g1, b1, _ := got.RGBA()
-	r2, g2, b2, _ := want.RGBA()
-	dr := absDiff(uint8(r1>>8), uint8(r2>>8))
-	dg := absDiff(uint8(g1>>8), uint8(g2>>8))
-	db := absDiff(uint8(b1>>8), uint8(b2>>8))
-	return dr <= tolerance && dg <= tolerance && db <= tolerance
-}
-
-func absDiff(a, b uint8) uint8 {
-	if a > b {
-		return a - b
-	}
-	return b - a
 }
