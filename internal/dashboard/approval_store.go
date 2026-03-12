@@ -18,7 +18,7 @@ type ApprovalQueries interface {
 	UpdatePlayerCharacterStatus(ctx context.Context, arg refdata.UpdatePlayerCharacterStatusParams) (refdata.PlayerCharacter, error)
 }
 
-// validTransitions defines which status transitions are allowed from "pending".
+// validApprovalTransitions defines which status transitions are allowed per current status.
 var validApprovalTransitions = map[string]map[string]bool{
 	"pending": {
 		"approved":          true,
@@ -124,15 +124,10 @@ func (s *DBApprovalStore) transitionStatus(ctx context.Context, id uuid.UUID, ne
 		return fmt.Errorf("invalid status transition: %s -> %s", current.Status, newStatus)
 	}
 
-	feedbackNull := sql.NullString{}
-	if feedback != "" {
-		feedbackNull = sql.NullString{String: feedback, Valid: true}
-	}
-
 	_, err = s.queries.UpdatePlayerCharacterStatus(ctx, refdata.UpdatePlayerCharacterStatusParams{
 		ID:         id,
 		Status:     newStatus,
-		DmFeedback: feedbackNull,
+		DmFeedback: sql.NullString{String: feedback, Valid: feedback != ""},
 	})
 	if err != nil {
 		return fmt.Errorf("updating status: %w", err)

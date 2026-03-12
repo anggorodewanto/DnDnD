@@ -74,8 +74,7 @@ func setupApprovalTestWithCardPoster(store ApprovalStore, notifier PlayerNotifie
 	hub := NewHub()
 	go hub.Run()
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(nil, store, notifier, hub, campaignID)
-	ah.cardPoster = cardPoster
+	ah := NewApprovalHandler(nil, store, notifier, hub, campaignID, cardPoster)
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -264,7 +263,7 @@ func TestServeApprovalPage_TemplateError(t *testing.T) {
 	defer hub.Stop()
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
-	ah := NewApprovalHandler(nil, &mockApprovalStore{}, &mockNotifier{}, hub, campaignID)
+	ah := NewApprovalHandler(nil, &mockApprovalStore{}, &mockNotifier{}, hub, campaignID, nil)
 	// Inject a broken template that will always fail
 	ah.approvalTmpl = template.Must(template.New("broken").Parse("{{ .NonExistent.Method }}"))
 
@@ -307,8 +306,7 @@ func TestApprove_NotificationError_IsLogged(t *testing.T) {
 	go hub.Run()
 	defer hub.Stop()
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(logger, store, notifier, hub, campaignID)
-	ah.cardPoster = &mockCardPoster{}
+	ah := NewApprovalHandler(logger, store, notifier, hub, campaignID, &mockCardPoster{})
 
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
@@ -347,7 +345,7 @@ func TestRequestChanges_NotificationError_IsLogged(t *testing.T) {
 	go hub.Run()
 	defer hub.Stop()
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(logger, store, notifier, hub, campaignID)
+	ah := NewApprovalHandler(logger, store, notifier, hub, campaignID, nil)
 
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
@@ -388,7 +386,7 @@ func TestReject_NotificationError_IsLogged(t *testing.T) {
 	go hub.Run()
 	defer hub.Stop()
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(logger, store, notifier, hub, campaignID)
+	ah := NewApprovalHandler(logger, store, notifier, hub, campaignID, nil)
 
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {

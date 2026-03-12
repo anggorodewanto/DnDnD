@@ -97,7 +97,7 @@ func setupApprovalTest(store ApprovalStore, notifier PlayerNotifier) (*ApprovalH
 	hub := NewHub()
 	go hub.Run()
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(nil, store, notifier, hub, campaignID)
+	ah := NewApprovalHandler(nil, store, notifier, hub, campaignID, nil)
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -356,7 +356,7 @@ func TestApprovalEndpoints_RequireAuth(t *testing.T) {
 	go hub.Run()
 	defer hub.Stop()
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, campaignID)
+	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, campaignID, nil)
 
 	// Router WITHOUT auth middleware
 	r := chi.NewRouter()

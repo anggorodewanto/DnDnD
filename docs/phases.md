@@ -82,7 +82,7 @@
   - Depends on: Phase 10, Phase 11
   - Done when: Dashboard loads with sidebar, Campaign Home shows placeholder data, WebSocket connects and reconnects.
 
-- [ ] **Phase 16: Character Approval Queue (Dashboard)**
+- [x] **Phase 16: Character Approval Queue (Dashboard)**
   - Scope: Dashboard panel showing pending characters from `/import`, `/create-character`, `/register`, and `/retire`. DM can review full sheet, approve, request changes (with message), or reject. On approve: character linked, `#character-cards` entry created, player pinged via Discord DM. On retire: character unlinked, card updated with "Retired" badge.
   - Depends on: Phase 14, Phase 15
   - Done when: Full approval workflow works end-to-end: submission -> DM review -> approve/reject -> player notification -> character card posted.

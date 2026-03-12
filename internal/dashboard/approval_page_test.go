@@ -17,7 +17,7 @@ func TestServeApprovalPage_ReturnsHTML(t *testing.T) {
 	go hub.Run()
 	defer hub.Stop()
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, campaignID)
+	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, campaignID, nil)
 
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
@@ -47,7 +47,7 @@ func TestServeApprovalPage_RequiresAuth(t *testing.T) {
 	go hub.Run()
 	defer hub.Stop()
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, campaignID)
+	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, campaignID, nil)
 
 	r := chi.NewRouter()
 	// No auth middleware
@@ -66,7 +66,7 @@ func TestServeApprovalPage_ContainsSidebarNav(t *testing.T) {
 	go hub.Run()
 	defer hub.Stop()
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, campaignID)
+	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, campaignID, nil)
 
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {

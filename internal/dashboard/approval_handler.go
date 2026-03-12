@@ -24,7 +24,7 @@ type ApprovalHandler struct {
 }
 
 // NewApprovalHandler creates a new ApprovalHandler.
-func NewApprovalHandler(logger *slog.Logger, store ApprovalStore, notifier PlayerNotifier, hub *Hub, campaignID uuid.UUID) *ApprovalHandler {
+func NewApprovalHandler(logger *slog.Logger, store ApprovalStore, notifier PlayerNotifier, hub *Hub, campaignID uuid.UUID, cardPoster CharacterCardPoster) *ApprovalHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -33,6 +33,7 @@ func NewApprovalHandler(logger *slog.Logger, store ApprovalStore, notifier Playe
 		logger:       logger,
 		store:        store,
 		notifier:     notifier,
+		cardPoster:   cardPoster,
 		hub:          hub,
 		campaignID:   campaignID,
 		approvalTmpl: tmpl,
@@ -96,10 +97,44 @@ func (ah *ApprovalHandler) parseID(w http.ResponseWriter, r *http.Request) (uuid
 	return id, true
 }
 
-func (ah *ApprovalHandler) writeJSON(w http.ResponseWriter, status int, v interface{}) {
+func (ah *ApprovalHandler) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
+}
+
+// parseFeedbackRequest validates auth, parses the ID and feedback body.
+// Returns the parsed ID, detail, and feedback string. On failure it writes the
+// HTTP error response and returns ok=false.
+func (ah *ApprovalHandler) parseFeedbackRequest(w http.ResponseWriter, r *http.Request) (detail *ApprovalDetail, feedback string, ok bool) {
+	if _, authOK := ah.requireAuth(r); !authOK {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return nil, "", false
+	}
+
+	id, idOK := ah.parseID(w, r)
+	if !idOK {
+		return nil, "", false
+	}
+
+	var req feedbackRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return nil, "", false
+	}
+
+	if req.Feedback == "" {
+		http.Error(w, "feedback is required", http.StatusBadRequest)
+		return nil, "", false
+	}
+
+	d, err := ah.store.GetApprovalDetail(r.Context(), id)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return nil, "", false
+	}
+
+	return d, req.Feedback, true
 }
 
 // ListApprovals returns all pending approvals as JSON.
@@ -213,99 +248,47 @@ func (ah *ApprovalHandler) Approve(w http.ResponseWriter, r *http.Request) {
 
 // RequestChangesHandler requests changes on a pending character.
 func (ah *ApprovalHandler) RequestChangesHandler(w http.ResponseWriter, r *http.Request) {
-	if _, ok := ah.requireAuth(r); !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	id, ok := ah.parseID(w, r)
+	detail, feedback, ok := ah.parseFeedbackRequest(w, r)
 	if !ok {
 		return
 	}
 
-	var req feedbackRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if req.Feedback == "" {
-		http.Error(w, "feedback is required", http.StatusBadRequest)
-		return
-	}
-
-	// Get detail for notification
-	detail, err := ah.store.GetApprovalDetail(r.Context(), id)
-	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-
-	if err := ah.store.RequestChanges(r.Context(), id, req.Feedback); err != nil {
-		ah.logger.Error("failed to request changes", "error", err, "id", id)
+	if err := ah.store.RequestChanges(r.Context(), detail.ID, feedback); err != nil {
+		ah.logger.Error("failed to request changes", "error", err, "id", detail.ID)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Notify player
 	if ah.notifier != nil {
-		if err := ah.notifier.NotifyChangesRequested(r.Context(), detail.DiscordUserID, detail.CharacterName, req.Feedback); err != nil {
+		if err := ah.notifier.NotifyChangesRequested(r.Context(), detail.DiscordUserID, detail.CharacterName, feedback); err != nil {
 			ah.logger.Error("failed to notify player of changes requested", "error", err, "discord_user_id", detail.DiscordUserID)
 		}
 	}
 
-	// Broadcast update
-	ah.broadcastUpdate("approval_updated", id)
-
+	ah.broadcastUpdate("approval_updated", detail.ID)
 	ah.writeJSON(w, http.StatusOK, map[string]string{"status": "changes_requested"})
 }
 
 // Reject rejects a pending character.
 func (ah *ApprovalHandler) Reject(w http.ResponseWriter, r *http.Request) {
-	if _, ok := ah.requireAuth(r); !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	id, ok := ah.parseID(w, r)
+	detail, feedback, ok := ah.parseFeedbackRequest(w, r)
 	if !ok {
 		return
 	}
 
-	var req feedbackRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if req.Feedback == "" {
-		http.Error(w, "feedback is required", http.StatusBadRequest)
-		return
-	}
-
-	// Get detail for notification
-	detail, err := ah.store.GetApprovalDetail(r.Context(), id)
-	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-
-	if err := ah.store.RejectCharacter(r.Context(), id, req.Feedback); err != nil {
-		ah.logger.Error("failed to reject character", "error", err, "id", id)
+	if err := ah.store.RejectCharacter(r.Context(), detail.ID, feedback); err != nil {
+		ah.logger.Error("failed to reject character", "error", err, "id", detail.ID)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Notify player
 	if ah.notifier != nil {
-		if err := ah.notifier.NotifyRejection(r.Context(), detail.DiscordUserID, detail.CharacterName, req.Feedback); err != nil {
+		if err := ah.notifier.NotifyRejection(r.Context(), detail.DiscordUserID, detail.CharacterName, feedback); err != nil {
 			ah.logger.Error("failed to notify player of rejection", "error", err, "discord_user_id", detail.DiscordUserID)
 		}
 	}
 
-	// Broadcast update
-	ah.broadcastUpdate("approval_updated", id)
-
+	ah.broadcastUpdate("approval_updated", detail.ID)
 	ah.writeJSON(w, http.StatusOK, map[string]string{"status": "rejected"})
 }
 

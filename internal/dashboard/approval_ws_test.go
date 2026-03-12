@@ -21,7 +21,7 @@ func setupApprovalWSTest(t *testing.T, store *mockApprovalStore) (chi.Router, *H
 	t.Cleanup(hub.Stop)
 
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, campaignID)
+	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, campaignID, nil)
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +146,7 @@ func TestRequestChanges_BroadcastsWebSocketMessage(t *testing.T) {
 
 func TestBroadcastUpdate_NilHub_NoPanic(t *testing.T) {
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(nil, &mockApprovalStore{}, &mockNotifier{}, nil, campaignID)
+	ah := NewApprovalHandler(nil, &mockApprovalStore{}, &mockNotifier{}, nil, campaignID, nil)
 	assert.NotPanics(t, func() {
 		ah.broadcastUpdate("test", uuid.New())
 	})

@@ -171,7 +171,7 @@ func TestApproveCharacter_NilNotifier(t *testing.T) {
 	go hub.Run()
 	defer hub.Stop()
 	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	ah := NewApprovalHandler(nil, store, nil, hub, campaignID)
+	ah := NewApprovalHandler(nil, store, nil, hub, campaignID, nil)
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
