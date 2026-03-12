@@ -2,6 +2,7 @@ package discord
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -14,8 +15,14 @@ type CommandHandler interface {
 
 // CommandRouter dispatches slash command interactions to the appropriate handler.
 type CommandRouter struct {
-	bot      *Bot
-	handlers map[string]CommandHandler
+	bot         *Bot
+	handlers    map[string]CommandHandler
+	moveHandler *MoveHandler
+}
+
+// SetMoveHandler registers the MoveHandler for button callback routing.
+func (r *CommandRouter) SetMoveHandler(h *MoveHandler) {
+	r.moveHandler = h
 }
 
 // RegistrationDeps holds the optional dependencies for registration command handlers.
@@ -89,6 +96,11 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 
 // Handle dispatches an interaction to the correct command handler.
 func (r *CommandRouter) Handle(interaction *discordgo.Interaction) {
+	if interaction.Type == discordgo.InteractionMessageComponent {
+		r.handleComponent(interaction)
+		return
+	}
+
 	if interaction.Type != discordgo.InteractionApplicationCommand {
 		return
 	}
@@ -101,6 +113,31 @@ func (r *CommandRouter) Handle(interaction *discordgo.Interaction) {
 	}
 
 	handler.Handle(interaction)
+}
+
+// handleComponent routes message component interactions (button clicks) to the appropriate handler.
+func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
+	data := interaction.Data.(discordgo.MessageComponentInteractionData)
+	customID := data.CustomID
+
+	if r.moveHandler == nil {
+		return
+	}
+
+	if strings.HasPrefix(customID, "move_confirm:") {
+		turnID, combatantID, destCol, destRow, costFt, err := ParseMoveConfirmData(customID)
+		if err != nil {
+			respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Invalid move data: %v", err))
+			return
+		}
+		r.moveHandler.HandleMoveConfirm(interaction, turnID, combatantID, destCol, destRow, costFt)
+		return
+	}
+
+	if strings.HasPrefix(customID, "move_cancel:") {
+		r.moveHandler.HandleMoveCancel(interaction)
+		return
+	}
 }
 
 // respondEphemeral sends an ephemeral message as an interaction response.

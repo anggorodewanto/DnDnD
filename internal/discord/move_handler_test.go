@@ -380,6 +380,31 @@ func TestParseMoveConfirmData_Invalid(t *testing.T) {
 	}
 }
 
+func TestParseMoveConfirmData_MalformedTurnUUID(t *testing.T) {
+	// Valid format (passes Sscanf %36s) but not a valid UUID
+	customID := "move_confirm:zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz:00000000-0000-0000-0000-000000000001:3:0:15"
+	_, _, _, _, _, err := ParseMoveConfirmData(customID)
+	if err == nil {
+		t.Fatal("expected error for malformed turn UUID")
+	}
+	if !strings.Contains(err.Error(), "invalid turn ID") {
+		t.Errorf("expected 'invalid turn ID' error, got: %v", err)
+	}
+}
+
+func TestParseMoveConfirmData_MalformedCombatantUUID(t *testing.T) {
+	turnID := uuid.New()
+	// Valid format (passes Sscanf %36s) but not a valid UUID
+	customID := "move_confirm:" + turnID.String() + ":zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz:3:0:15"
+	_, _, _, _, _, err := ParseMoveConfirmData(customID)
+	if err == nil {
+		t.Fatal("expected error for malformed combatant UUID")
+	}
+	if !strings.Contains(err.Error(), "invalid combatant ID") {
+		t.Errorf("expected 'invalid combatant ID' error, got: %v", err)
+	}
+}
+
 func TestMoveHandler_NoMap(t *testing.T) {
 	sess := &mockMoveSession{}
 	handler, encounterID, _, _ := setupMoveHandler(sess)
@@ -749,6 +774,107 @@ func TestMoveHandler_BadMapJSON(t *testing.T) {
 	content := sess.lastResponse.Data.Content
 	if !strings.Contains(content, "Failed to parse map") {
 		t.Errorf("expected parse error message, got: %s", content)
+	}
+}
+
+func TestMoveHandler_SplitMovement(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupMoveHandler(sess)
+
+	// Track position and movement updates
+	currentCol := "A"
+	var currentRow int32 = 1
+	movementRemaining := int32(30)
+
+	handler.combatService = &mockMoveService{
+		getEncounter: handler.combatService.(*mockMoveService).getEncounter,
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:          combatantID,
+				PositionCol: currentCol,
+				PositionRow: currentRow,
+				IsAlive:     true,
+				IsNpc:       false,
+			}, nil
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: combatantID, PositionCol: currentCol, PositionRow: currentRow, IsAlive: true, IsNpc: false},
+			}, nil
+		},
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, col string, row, _ int32) (refdata.Combatant, error) {
+			currentCol = col
+			currentRow = row
+			return refdata.Combatant{}, nil
+		},
+	}
+
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: movementRemaining,
+			}, nil
+		},
+		updateTurnActions: func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			movementRemaining = arg.MovementRemainingFt
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: movementRemaining,
+			}, nil
+		},
+	}
+
+	// First move: A1 -> C1 (2 tiles = 10ft), should show 20ft remaining
+	interaction1 := makeMoveInteraction("C1")
+	handler.Handle(interaction1)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected confirmation response for first move")
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "10ft") {
+		t.Errorf("expected 10ft cost for first move, got: %s", sess.lastResponse.Data.Content)
+	}
+
+	// Simulate confirming the first move
+	confirmInteraction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirm(confirmInteraction, turnID, combatantID, 2, 0, 10)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response after first move confirm")
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Moved to C1") {
+		t.Errorf("expected moved to C1, got: %s", sess.lastResponse.Data.Content)
+	}
+
+	// Verify movement was deducted: should be 20ft remaining
+	if movementRemaining != 20 {
+		t.Fatalf("expected 20ft remaining after first move, got %d", movementRemaining)
+	}
+
+	// Second move: C1 -> E1 (2 tiles = 10ft), should use updated remaining (20ft)
+	interaction2 := makeMoveInteraction("E1")
+	handler.Handle(interaction2)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected confirmation response for second move")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "10ft remaining") {
+		t.Errorf("expected 10ft remaining after second move confirmation, got: %s", content)
+	}
+
+	// Confirm the second move
+	handler.HandleMoveConfirm(confirmInteraction, turnID, combatantID, 4, 0, 10)
+
+	if movementRemaining != 10 {
+		t.Errorf("expected 10ft remaining after second move, got %d", movementRemaining)
 	}
 }
 
