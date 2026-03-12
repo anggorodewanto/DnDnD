@@ -103,7 +103,7 @@
   - Done when: Maps can be created/read/updated, size validation enforced, Tiled JSON stored and retrieved.
 
 - [ ] **Phase 20: Assets Table & AssetStore Interface**
-  - Scope: Migration for `assets` table. `AssetStore` Go interface (`Put`, `Get`, `Delete`, `URL`). `LocalAssetStore` implementation (local filesystem at `data/assets/{campaign_id}/{type}/`). UUID filenames. `/api/assets/{id}` endpoint for serving files to dashboard. Fly Volume mount configuration.
+  - Scope: Migration for `assets` table. Add FK constraint from `maps.background_image_id` to `assets.id`. `AssetStore` Go interface (`Put`, `Get`, `Delete`, `URL`). `LocalAssetStore` implementation (local filesystem at `data/assets/{campaign_id}/{type}/`). UUID filenames. `/api/assets/{id}` endpoint for serving files to dashboard. Fly Volume mount configuration.
   - Depends on: Phase 2
   - Done when: Files can be uploaded, stored, retrieved, and deleted through the interface; assets served via API endpoint.
 
