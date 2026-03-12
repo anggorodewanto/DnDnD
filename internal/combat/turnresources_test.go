@@ -439,6 +439,49 @@ func TestResolveTurnResources_NoCombatantCharacterID(t *testing.T) {
 	assert.Equal(t, int32(1), attacks)
 }
 
+func TestResolveTurnResources_MulticlassHighestWins(t *testing.T) {
+	charID := uuid.New()
+	combatant := refdata.Combatant{
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsNpc:       false,
+	}
+	character := refdata.Character{
+		ID:      charID,
+		SpeedFt: 30,
+		Level:   8,
+		Classes: json.RawMessage(`[{"class":"fighter","level":5},{"class":"wizard","level":3}]`),
+	}
+
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, id uuid.UUID) (refdata.Character, error) {
+		assert.Equal(t, charID, id)
+		return character, nil
+	}
+	store.getClassFn = func(_ context.Context, id string) (refdata.Class, error) {
+		switch id {
+		case "fighter":
+			return refdata.Class{
+				ID:               "fighter",
+				AttacksPerAction: json.RawMessage(`{"1":1,"5":2,"11":3,"20":4}`),
+			}, nil
+		case "wizard":
+			return refdata.Class{
+				ID:               "wizard",
+				AttacksPerAction: json.RawMessage(`{"1":1}`),
+			}, nil
+		default:
+			t.Fatalf("unexpected class lookup: %s", id)
+			return refdata.Class{}, nil
+		}
+	}
+
+	svc := NewService(store)
+	speed, attacks, err := svc.ResolveTurnResources(context.Background(), combatant)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(30), speed)
+	assert.Equal(t, int32(2), attacks) // Fighter 5 gives 2 attacks, Wizard 3 gives 1
+}
+
 func TestResolveTurnResources_InvalidAttacksPerActionJSON(t *testing.T) {
 	charID := uuid.New()
 	combatant := refdata.Combatant{
