@@ -180,11 +180,11 @@ func TestCheckExpiredConditions_ExpiresAtStartOfTurn(t *testing.T) {
 	conds := json.RawMessage(`[{"condition":"frightened","duration_rounds":2,"started_round":1,"source_combatant_id":"source-uuid","expires_on":"start_of_turn"}]`)
 
 	// Round 3: 1 + 2 = 3, currentRound >= 3, should expire
-	updated, msgs, err := CheckExpiredConditions(conds, 3, sourceID, "start_of_turn")
+	updated, expired, err := CheckExpiredConditions(conds, 3, sourceID, "start_of_turn")
 	require.NoError(t, err)
-	assert.Len(t, msgs, 1)
-	assert.Contains(t, msgs[0], "frightened")
-	assert.Contains(t, msgs[0], "expired")
+	require.Len(t, expired, 1)
+	assert.Contains(t, expired[0].Message, "frightened")
+	assert.Contains(t, expired[0].Message, "expired")
 
 	var remaining []CombatCondition
 	require.NoError(t, json.Unmarshal(updated, &remaining))
@@ -196,9 +196,9 @@ func TestCheckExpiredConditions_NotYetExpired(t *testing.T) {
 	conds := json.RawMessage(`[{"condition":"frightened","duration_rounds":2,"started_round":1,"source_combatant_id":"source-uuid","expires_on":"start_of_turn"}]`)
 
 	// Round 2: 1 + 2 = 3, currentRound 2 < 3, should NOT expire
-	updated, msgs, err := CheckExpiredConditions(conds, 2, sourceID, "start_of_turn")
+	updated, expired, err := CheckExpiredConditions(conds, 2, sourceID, "start_of_turn")
 	require.NoError(t, err)
-	assert.Len(t, msgs, 0)
+	assert.Len(t, expired, 0)
 
 	var remaining []CombatCondition
 	require.NoError(t, json.Unmarshal(updated, &remaining))
@@ -209,9 +209,9 @@ func TestCheckExpiredConditions_WrongSource(t *testing.T) {
 	conds := json.RawMessage(`[{"condition":"frightened","duration_rounds":2,"started_round":1,"source_combatant_id":"source-uuid","expires_on":"start_of_turn"}]`)
 
 	// Different source combatant — should NOT expire even though round matches
-	updated, msgs, err := CheckExpiredConditions(conds, 3, "other-uuid", "start_of_turn")
+	updated, expired, err := CheckExpiredConditions(conds, 3, "other-uuid", "start_of_turn")
 	require.NoError(t, err)
-	assert.Len(t, msgs, 0)
+	assert.Len(t, expired, 0)
 
 	var remaining []CombatCondition
 	require.NoError(t, json.Unmarshal(updated, &remaining))
@@ -222,9 +222,9 @@ func TestCheckExpiredConditions_WrongTiming(t *testing.T) {
 	conds := json.RawMessage(`[{"condition":"frightened","duration_rounds":2,"started_round":1,"source_combatant_id":"source-uuid","expires_on":"start_of_turn"}]`)
 
 	// Correct source, correct round, but wrong timing (end_of_turn instead of start_of_turn)
-	updated, msgs, err := CheckExpiredConditions(conds, 3, "source-uuid", "end_of_turn")
+	updated, expired, err := CheckExpiredConditions(conds, 3, "source-uuid", "end_of_turn")
 	require.NoError(t, err)
-	assert.Len(t, msgs, 0)
+	assert.Len(t, expired, 0)
 
 	var remaining []CombatCondition
 	require.NoError(t, json.Unmarshal(updated, &remaining))
@@ -235,9 +235,9 @@ func TestCheckExpiredConditions_IndefiniteNotExpired(t *testing.T) {
 	// duration_rounds = 0 means indefinite — should never auto-expire
 	conds := json.RawMessage(`[{"condition":"grappled","duration_rounds":0,"started_round":1,"source_combatant_id":"source-uuid","expires_on":"start_of_turn"}]`)
 
-	updated, msgs, err := CheckExpiredConditions(conds, 100, "source-uuid", "start_of_turn")
+	updated, expired, err := CheckExpiredConditions(conds, 100, "source-uuid", "start_of_turn")
 	require.NoError(t, err)
-	assert.Len(t, msgs, 0)
+	assert.Len(t, expired, 0)
 
 	var remaining []CombatCondition
 	require.NoError(t, json.Unmarshal(updated, &remaining))
@@ -249,9 +249,9 @@ func TestCheckExpiredConditions_EndOfTurnTiming(t *testing.T) {
 	conds := json.RawMessage(`[{"condition":"hold_person","duration_rounds":3,"started_round":2,"source_combatant_id":"source-uuid","expires_on":"end_of_turn"}]`)
 
 	// Round 5: 2 + 3 = 5, expires at end of turn
-	updated, msgs, err := CheckExpiredConditions(conds, 5, sourceID, "end_of_turn")
+	updated, expired, err := CheckExpiredConditions(conds, 5, sourceID, "end_of_turn")
 	require.NoError(t, err)
-	assert.Len(t, msgs, 1)
+	assert.Len(t, expired, 1)
 
 	var remaining []CombatCondition
 	require.NoError(t, json.Unmarshal(updated, &remaining))
@@ -267,9 +267,9 @@ func TestCheckExpiredConditions_MixedConditions(t *testing.T) {
 		{"condition":"charmed","duration_rounds":3,"started_round":1,"source_combatant_id":"other-uuid","expires_on":"start_of_turn"}
 	]`)
 
-	updated, msgs, err := CheckExpiredConditions(conds, 3, sourceID, "start_of_turn")
+	updated, expired, err := CheckExpiredConditions(conds, 3, sourceID, "start_of_turn")
 	require.NoError(t, err)
-	assert.Len(t, msgs, 1) // only frightened expires
+	assert.Len(t, expired, 1) // only frightened expires
 
 	var remaining []CombatCondition
 	require.NoError(t, json.Unmarshal(updated, &remaining))
@@ -281,9 +281,9 @@ func TestCheckExpiredConditions_DefaultTimingStartOfTurn(t *testing.T) {
 	// No expires_on field — should default to "start_of_turn"
 	conds := json.RawMessage(`[{"condition":"blinded","duration_rounds":1,"started_round":1,"source_combatant_id":"source-uuid"}]`)
 
-	updated, msgs, err := CheckExpiredConditions(conds, 2, sourceID, "start_of_turn")
+	updated, expired, err := CheckExpiredConditions(conds, 2, sourceID, "start_of_turn")
 	require.NoError(t, err)
-	assert.Len(t, msgs, 1)
+	assert.Len(t, expired, 1)
 
 	var remaining []CombatCondition
 	require.NoError(t, json.Unmarshal(updated, &remaining))
@@ -665,6 +665,218 @@ func TestAdvanceTurn_ProcessesTurnStartExpiration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, combatantID, info.CombatantID)
 	assert.True(t, conditionsUpdated, "conditions should have been updated via ProcessTurnStart")
+}
+
+// --- TDD Cycle 13: CheckExpiredConditions returns source_combatant_id ---
+
+func TestCheckExpiredConditions_ReturnsSourceCombatantID(t *testing.T) {
+	sourceID := "source-uuid"
+	conds := json.RawMessage(`[{"condition":"frightened","duration_rounds":2,"started_round":1,"source_combatant_id":"source-uuid","expires_on":"start_of_turn"}]`)
+
+	updated, expired, err := CheckExpiredConditions(conds, 3, sourceID, "start_of_turn")
+	require.NoError(t, err)
+	require.Len(t, expired, 1)
+	assert.Equal(t, "frightened", expired[0].Condition)
+	assert.Equal(t, "source-uuid", expired[0].SourceCombatantID)
+	assert.Contains(t, expired[0].Message, "frightened")
+	assert.Contains(t, expired[0].Message, "expired")
+
+	var remaining []CombatCondition
+	require.NoError(t, json.Unmarshal(updated, &remaining))
+	assert.Len(t, remaining, 0)
+}
+
+// --- TDD Cycle 14: processExpiredConditions includes source name in message ---
+
+func TestProcessTurnStart_ExpirationMessageIncludesSourceName(t *testing.T) {
+	sourceID := uuid.New()
+	targetID := uuid.New()
+
+	target := refdata.Combatant{
+		ID:          targetID,
+		DisplayName: "Goblin",
+		Conditions: json.RawMessage(fmt.Sprintf(
+			`[{"condition":"frightened","duration_rounds":2,"started_round":1,"source_combatant_id":"%s","expires_on":"start_of_turn"}]`,
+			sourceID.String(),
+		)),
+	}
+	source := refdata.Combatant{
+		ID:          sourceID,
+		DisplayName: "Fighter",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{source, target}, nil
+	}
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		c := target
+		c.Conditions = arg.Conditions
+		return c, nil
+	}
+
+	svc := NewService(ms)
+	encounterID := uuid.New()
+
+	msgs, err := svc.ProcessTurnStart(context.Background(), encounterID, source, 3)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "⏱️ frightened on Goblin has expired (placed by Fighter).", msgs[0])
+}
+
+// --- TDD Cycle 15: processExpiredConditions persists to action_log ---
+
+func TestProcessTurnStart_PersistsToActionLog(t *testing.T) {
+	sourceID := uuid.New()
+	targetID := uuid.New()
+	encounterID := uuid.New()
+	turnID := uuid.New()
+
+	target := refdata.Combatant{
+		ID:          targetID,
+		DisplayName: "Goblin",
+		Conditions: json.RawMessage(fmt.Sprintf(
+			`[{"condition":"frightened","duration_rounds":2,"started_round":1,"source_combatant_id":"%s","expires_on":"start_of_turn"}]`,
+			sourceID.String(),
+		)),
+	}
+	source := refdata.Combatant{
+		ID:          sourceID,
+		DisplayName: "Fighter",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{source, target}, nil
+	}
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		c := target
+		c.Conditions = arg.Conditions
+		return c, nil
+	}
+	var loggedEntries []refdata.CreateActionLogParams
+	ms.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		loggedEntries = append(loggedEntries, arg)
+		return refdata.ActionLog{ID: uuid.New()}, nil
+	}
+
+	svc := NewService(ms)
+
+	msgs, err := svc.ProcessTurnStartWithLog(context.Background(), encounterID, source, 3, turnID)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Len(t, loggedEntries, 1)
+	assert.Equal(t, encounterID, loggedEntries[0].EncounterID)
+	assert.Equal(t, turnID, loggedEntries[0].TurnID)
+	assert.Equal(t, "condition_expired", loggedEntries[0].ActionType)
+	assert.Contains(t, loggedEntries[0].Description.String, "frightened")
+}
+
+func TestProcessTurnEndWithLog_PersistsToActionLog(t *testing.T) {
+	sourceID := uuid.New()
+	targetID := uuid.New()
+	encounterID := uuid.New()
+	turnID := uuid.New()
+
+	target := refdata.Combatant{
+		ID:          targetID,
+		DisplayName: "Goblin",
+		Conditions: json.RawMessage(fmt.Sprintf(
+			`[{"condition":"hold_person","duration_rounds":3,"started_round":2,"source_combatant_id":"%s","expires_on":"end_of_turn"}]`,
+			sourceID.String(),
+		)),
+	}
+	source := refdata.Combatant{
+		ID:          sourceID,
+		DisplayName: "Wizard",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{source, target}, nil
+	}
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		c := target
+		c.Conditions = arg.Conditions
+		return c, nil
+	}
+	var loggedEntries []refdata.CreateActionLogParams
+	ms.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		loggedEntries = append(loggedEntries, arg)
+		return refdata.ActionLog{ID: uuid.New()}, nil
+	}
+
+	svc := NewService(ms)
+
+	msgs, err := svc.ProcessTurnEndWithLog(context.Background(), encounterID, sourceID, 5, turnID)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Len(t, loggedEntries, 1)
+	assert.Equal(t, "condition_expired", loggedEntries[0].ActionType)
+}
+
+// --- TDD Cycle 16: ApplyCondition persists to action_log when encounterID/turnID provided ---
+
+func TestApplyConditionWithLog_PersistsToActionLog(t *testing.T) {
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		DisplayName: "Goblin",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := conditionMockStore(combatant)
+	var loggedEntries []refdata.CreateActionLogParams
+	ms.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		loggedEntries = append(loggedEntries, arg)
+		return refdata.ActionLog{ID: uuid.New()}, nil
+	}
+	svc := NewService(ms)
+
+	cond := CombatCondition{
+		Condition:      "prone",
+		DurationRounds: 0,
+	}
+
+	_, msgs, err := svc.ApplyConditionWithLog(context.Background(), combatantID, cond, encounterID, turnID)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Len(t, loggedEntries, 1)
+	assert.Equal(t, "condition_applied", loggedEntries[0].ActionType)
+	assert.Equal(t, encounterID, loggedEntries[0].EncounterID)
+	assert.Equal(t, turnID, loggedEntries[0].TurnID)
+}
+
+// --- TDD Cycle 17: RemoveConditionFromCombatant persists to action_log ---
+
+func TestRemoveConditionWithLog_PersistsToActionLog(t *testing.T) {
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		DisplayName: "Fighter",
+		Conditions:  json.RawMessage(`[{"condition":"prone"}]`),
+	}
+
+	ms := conditionMockStore(combatant)
+	var loggedEntries []refdata.CreateActionLogParams
+	ms.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		loggedEntries = append(loggedEntries, arg)
+		return refdata.ActionLog{ID: uuid.New()}, nil
+	}
+	svc := NewService(ms)
+
+	_, msgs, err := svc.RemoveConditionWithLog(context.Background(), combatantID, "prone", encounterID, turnID)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Len(t, loggedEntries, 1)
+	assert.Equal(t, "condition_removed", loggedEntries[0].ActionType)
 }
 
 // --- Backward compatibility: SurprisedCondition with new fields ---

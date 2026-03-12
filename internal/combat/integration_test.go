@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	dbfs "github.com/ab/dndnd/db"
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/testutil"
 	"github.com/google/uuid"
@@ -681,4 +682,132 @@ func TestIntegration_UpdateTurnActions(t *testing.T) {
 	assert.Equal(t, int32(15), updated.MovementRemainingFt)
 	assert.True(t, updated.ActionUsed)
 	assert.Equal(t, int32(1), updated.AttacksRemaining)
+}
+
+// --- Integration TDD Cycle 12: Condition auto-expiration round-trip ---
+
+// testStoreAdapter wraps refdata.Queries to satisfy the combat.Store interface.
+type testStoreAdapter struct {
+	*refdata.Queries
+}
+
+func (a *testStoreAdapter) UpdateCharacterInventory(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error {
+	return nil // stub for tests
+}
+
+func TestIntegration_ConditionAutoExpiration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db, queries := setupTestDB(t)
+	ctx := context.Background()
+	campaignID := createTestCampaign(t, db)
+	charID := createTestCharacter(t, db, campaignID)
+	createTestCreature(t, db)
+
+	svc := combat.NewService(&testStoreAdapter{queries})
+
+	// Create encounter
+	enc, err := svc.CreateEncounter(ctx, combat.CreateEncounterInput{
+		CampaignID: campaignID,
+		Name:       "Condition Expiration Test",
+	})
+	require.NoError(t, err)
+
+	// Add a PC combatant (the source of the condition)
+	source, err := svc.AddCombatant(ctx, enc.ID, combat.CombatantParams{
+		CharacterID: charID.String(),
+		ShortID:     "AR",
+		DisplayName: "Aragorn",
+		HPMax:       45,
+		HPCurrent:   45,
+		AC:          18,
+		PositionCol: "A",
+		PositionRow: 1,
+		IsVisible:   true,
+		IsAlive:     true,
+		IsNPC:       false,
+	})
+	require.NoError(t, err)
+
+	// Add an NPC combatant (the target of the condition)
+	target, err := svc.AddCombatant(ctx, enc.ID, combat.CombatantParams{
+		CreatureRefID: "goblin",
+		ShortID:       "G1",
+		DisplayName:   "Goblin",
+		HPMax:         7,
+		HPCurrent:     7,
+		AC:            15,
+		PositionCol:   "C",
+		PositionRow:   3,
+		IsVisible:     true,
+		IsAlive:       true,
+		IsNPC:         true,
+	})
+	require.NoError(t, err)
+
+	// Apply a condition with duration 2 rounds, started at round 1, expires at start of source's turn
+	cond := combat.CombatCondition{
+		Condition:         "frightened",
+		DurationRounds:    2,
+		StartedRound:      1,
+		SourceCombatantID: source.ID.String(),
+		ExpiresOn:         "start_of_turn",
+	}
+	updatedTarget, msgs, err := svc.ApplyCondition(ctx, target.ID, cond)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	assert.True(t, combat.HasCondition(updatedTarget.Conditions, "frightened"))
+
+	// Verify condition persisted in DB
+	fetched, err := queries.GetCombatant(ctx, target.ID)
+	require.NoError(t, err)
+	assert.True(t, combat.HasCondition(fetched.Conditions, "frightened"))
+
+	// Set up encounter as active at round 3 (condition should expire: started_round 1 + duration 2 = round 3)
+	_, err = queries.UpdateEncounterStatus(ctx, refdata.UpdateEncounterStatusParams{
+		ID:     enc.ID,
+		Status: "active",
+	})
+	require.NoError(t, err)
+	_, err = queries.UpdateEncounterRound(ctx, refdata.UpdateEncounterRoundParams{
+		ID:          enc.ID,
+		RoundNumber: 3,
+	})
+	require.NoError(t, err)
+
+	// Create a turn for the source combatant
+	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
+		EncounterID:         enc.ID,
+		CombatantID:         source.ID,
+		RoundNumber:         3,
+		Status:              "active",
+		MovementRemainingFt: 30,
+		AttacksRemaining:    1,
+	})
+	require.NoError(t, err)
+
+	// Process turn start with logging — should expire the condition
+	expMsgs, err := svc.ProcessTurnStartWithLog(ctx, enc.ID, source, 3, turn.ID)
+	require.NoError(t, err)
+	require.Len(t, expMsgs, 1)
+	assert.Contains(t, expMsgs[0], "frightened")
+	assert.Contains(t, expMsgs[0], "Goblin")
+	assert.Contains(t, expMsgs[0], "Aragorn")
+	assert.Contains(t, expMsgs[0], "placed by")
+
+	// Verify condition was removed from DB
+	fetched, err = queries.GetCombatant(ctx, target.ID)
+	require.NoError(t, err)
+	assert.False(t, combat.HasCondition(fetched.Conditions, "frightened"))
+
+	// Verify action_log was persisted
+	logs, err := queries.ListActionLogByTurnID(ctx, turn.ID)
+	require.NoError(t, err)
+	require.Len(t, logs, 1)
+	assert.Equal(t, "condition_expired", logs[0].ActionType)
+	assert.Contains(t, logs[0].Description.String, "frightened")
+	assert.Contains(t, logs[0].Description.String, "Goblin")
+	assert.Contains(t, logs[0].Description.String, "Aragorn")
 }

@@ -90,20 +90,31 @@ func isExpired(c CombatCondition, currentRound int, triggerCombatantID string, t
 	return currentRound >= c.StartedRound+c.DurationRounds
 }
 
+// ExpiredConditionInfo holds information about an expired condition.
+type ExpiredConditionInfo struct {
+	Condition         string
+	SourceCombatantID string
+	Message           string
+}
+
 // CheckExpiredConditions checks all conditions for expiration and returns
-// updated conditions JSONB and log messages for expired conditions.
-func CheckExpiredConditions(conditions json.RawMessage, currentRound int, triggerCombatantID string, timing string) (json.RawMessage, []string, error) {
+// updated conditions JSONB and info about expired conditions.
+func CheckExpiredConditions(conditions json.RawMessage, currentRound int, triggerCombatantID string, timing string) (json.RawMessage, []ExpiredConditionInfo, error) {
 	conds, err := parseConditions(conditions)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	var remaining []CombatCondition
-	var msgs []string
+	var expired []ExpiredConditionInfo
 
 	for _, c := range conds {
 		if isExpired(c, currentRound, triggerCombatantID, timing) {
-			msgs = append(msgs, fmt.Sprintf("⏱️ %s has expired", c.Condition))
+			expired = append(expired, ExpiredConditionInfo{
+				Condition:         c.Condition,
+				SourceCombatantID: c.SourceCombatantID,
+				Message:           fmt.Sprintf("⏱️ %s has expired", c.Condition),
+			})
 			continue
 		}
 		remaining = append(remaining, c)
@@ -116,7 +127,7 @@ func CheckExpiredConditions(conditions json.RawMessage, currentRound int, trigge
 	if err != nil {
 		return nil, nil, err
 	}
-	return updated, msgs, nil
+	return updated, expired, nil
 }
 
 // ApplyCondition applies a condition to a combatant and returns the updated
@@ -165,6 +176,28 @@ func (s *Service) ApplyCondition(ctx context.Context, combatantID uuid.UUID, con
 	return updated, []string{msg}, nil
 }
 
+// ApplyConditionWithLog applies a condition and persists the log message to action_log.
+func (s *Service) ApplyConditionWithLog(ctx context.Context, combatantID uuid.UUID, condition CombatCondition, encounterID uuid.UUID, turnID uuid.UUID) (refdata.Combatant, []string, error) {
+	updated, msgs, err := s.ApplyCondition(ctx, combatantID, condition)
+	if err != nil {
+		return updated, msgs, err
+	}
+	for _, msg := range msgs {
+		if _, err := s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
+			TurnID:      turnID,
+			EncounterID: encounterID,
+			ActionType:  "condition_applied",
+			ActorID:     combatantID,
+			Description: nullString(msg),
+			BeforeState: json.RawMessage(`{}`),
+			AfterState:  json.RawMessage(`{}`),
+		}); err != nil {
+			return updated, msgs, fmt.Errorf("logging condition application: %w", err)
+		}
+	}
+	return updated, msgs, nil
+}
+
 // RemoveConditionFromCombatant removes a condition from a combatant and returns
 // the updated combatant and combat log messages.
 func (s *Service) RemoveConditionFromCombatant(ctx context.Context, combatantID uuid.UUID, conditionName string) (refdata.Combatant, []string, error) {
@@ -191,43 +224,102 @@ func (s *Service) RemoveConditionFromCombatant(ctx context.Context, combatantID 
 	return updated, []string{msg}, nil
 }
 
+// RemoveConditionWithLog removes a condition and persists the log message to action_log.
+func (s *Service) RemoveConditionWithLog(ctx context.Context, combatantID uuid.UUID, conditionName string, encounterID uuid.UUID, turnID uuid.UUID) (refdata.Combatant, []string, error) {
+	updated, msgs, err := s.RemoveConditionFromCombatant(ctx, combatantID, conditionName)
+	if err != nil {
+		return updated, msgs, err
+	}
+	for _, msg := range msgs {
+		if _, err := s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
+			TurnID:      turnID,
+			EncounterID: encounterID,
+			ActionType:  "condition_removed",
+			ActorID:     combatantID,
+			Description: nullString(msg),
+			BeforeState: json.RawMessage(`{}`),
+			AfterState:  json.RawMessage(`{}`),
+		}); err != nil {
+			return updated, msgs, fmt.Errorf("logging condition removal: %w", err)
+		}
+	}
+	return updated, msgs, nil
+}
+
 // ProcessTurnStart checks ALL combatants in the encounter for conditions that
 // expire at the start of the given combatant's turn (where source_combatant_id
 // matches the current combatant), auto-removes expired conditions, and returns
 // log messages.
 func (s *Service) ProcessTurnStart(ctx context.Context, encounterID uuid.UUID, combatant refdata.Combatant, currentRound int32) ([]string, error) {
-	return s.processExpiredConditions(ctx, encounterID, combatant.ID, int(currentRound), "start_of_turn")
+	return s.processExpiredConditions(ctx, encounterID, combatant.ID, int(currentRound), "start_of_turn", nil)
+}
+
+// ProcessTurnStartWithLog is like ProcessTurnStart but also persists messages to the action_log.
+func (s *Service) ProcessTurnStartWithLog(ctx context.Context, encounterID uuid.UUID, combatant refdata.Combatant, currentRound int32, turnID uuid.UUID) ([]string, error) {
+	return s.processExpiredConditions(ctx, encounterID, combatant.ID, int(currentRound), "start_of_turn", &turnID)
 }
 
 // ProcessTurnEnd checks ALL combatants in the encounter for conditions that
 // expire at the end of the given combatant's turn, auto-removes expired
 // conditions, and returns log messages.
 func (s *Service) ProcessTurnEnd(ctx context.Context, encounterID uuid.UUID, combatantID uuid.UUID, currentRound int32) ([]string, error) {
-	return s.processExpiredConditions(ctx, encounterID, combatantID, int(currentRound), "end_of_turn")
+	return s.processExpiredConditions(ctx, encounterID, combatantID, int(currentRound), "end_of_turn", nil)
+}
+
+// ProcessTurnEndWithLog is like ProcessTurnEnd but also persists messages to the action_log.
+func (s *Service) ProcessTurnEndWithLog(ctx context.Context, encounterID uuid.UUID, combatantID uuid.UUID, currentRound int32, turnID uuid.UUID) ([]string, error) {
+	return s.processExpiredConditions(ctx, encounterID, combatantID, int(currentRound), "end_of_turn", &turnID)
 }
 
 // processExpiredConditions is the shared implementation for ProcessTurnStart and ProcessTurnEnd.
-func (s *Service) processExpiredConditions(ctx context.Context, encounterID uuid.UUID, triggerCombatantID uuid.UUID, currentRound int, timing string) ([]string, error) {
+func (s *Service) processExpiredConditions(ctx context.Context, encounterID uuid.UUID, triggerCombatantID uuid.UUID, currentRound int, timing string, turnID *uuid.UUID) ([]string, error) {
 	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
 	if err != nil {
 		return nil, fmt.Errorf("listing combatants: %w", err)
+	}
+
+	// Build a map of combatant IDs to display names for source lookup
+	nameByID := make(map[string]string, len(combatants))
+	for _, c := range combatants {
+		nameByID[c.ID.String()] = c.DisplayName
 	}
 
 	var allMsgs []string
 	triggerID := triggerCombatantID.String()
 
 	for _, c := range combatants {
-		updated, msgs, err := CheckExpiredConditions(c.Conditions, currentRound, triggerID, timing)
+		updated, expired, err := CheckExpiredConditions(c.Conditions, currentRound, triggerID, timing)
 		if err != nil {
 			return nil, fmt.Errorf("checking expired conditions for %s: %w", c.DisplayName, err)
 		}
-		if len(msgs) == 0 {
+		if len(expired) == 0 {
 			continue
 		}
 
-		// Enrich messages with target name
-		for i, msg := range msgs {
-			msgs[i] = fmt.Sprintf("%s on %s", msg, c.DisplayName)
+		// Build enriched messages with target name and source name
+		var msgs []string
+		for _, info := range expired {
+			sourceName := nameByID[info.SourceCombatantID]
+			if sourceName == "" {
+				sourceName = "unknown"
+			}
+			msg := fmt.Sprintf("⏱️ %s on %s has expired (placed by %s).", info.Condition, c.DisplayName, sourceName)
+			msgs = append(msgs, msg)
+
+			// Persist to action_log if turnID is available
+			if turnID != nil {
+				if _, err := s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
+					TurnID:      *turnID,
+					EncounterID: encounterID,
+					ActionType:  "condition_expired",
+					ActorID:     c.ID,
+					Description: nullString(msg),
+					BeforeState: json.RawMessage(`{}`),
+					AfterState:  json.RawMessage(`{}`),
+				}); err != nil {
+					return nil, fmt.Errorf("logging condition expiration for %s: %w", c.DisplayName, err)
+				}
+			}
 		}
 
 		if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
