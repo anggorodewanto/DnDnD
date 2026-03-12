@@ -1,0 +1,227 @@
+package combat
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/refdata"
+)
+
+func newTestCombatRouter(store Store) (*Handler, chi.Router) {
+	svc := NewService(store)
+	roller := dice.NewRoller(func(max int) int { return 15 })
+	h := NewHandler(svc, roller)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+	return h, r
+}
+
+// --- TDD Cycle 34: POST /api/combat/start success ---
+
+func TestHandler_StartCombat_Success(t *testing.T) {
+	templateID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	store := startCombatMockStore(templateID, encounterID, charID)
+	_, r := newTestCombatRouter(store)
+
+	body := map[string]interface{}{
+		"template_id":    templateID.String(),
+		"character_ids":  []string{charID.String()},
+		"character_positions": map[string]interface{}{
+			charID.String(): map[string]interface{}{"col": "D", "row": 5},
+		},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp startCombatResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, encounterID.String(), resp.Encounter.ID)
+	assert.NotEmpty(t, resp.InitiativeTracker)
+	assert.NotEmpty(t, resp.Combatants)
+	assert.NotEmpty(t, resp.FirstTurn.TurnID)
+}
+
+// --- TDD Cycle 35: POST /api/combat/start invalid JSON ---
+
+func TestHandler_StartCombat_InvalidJSON(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start", bytes.NewReader([]byte("not json")))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle 36: POST /api/combat/start invalid template_id ---
+
+func TestHandler_StartCombat_InvalidTemplateID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	body := map[string]interface{}{
+		"template_id": "not-a-uuid",
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle 37: POST /api/combat/start invalid character_id ---
+
+func TestHandler_StartCombat_InvalidCharacterID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	body := map[string]interface{}{
+		"template_id":   uuid.New().String(),
+		"character_ids": []string{"not-uuid"},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle 38: POST /api/combat/start invalid position key ---
+
+func TestHandler_StartCombat_InvalidPositionKey(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	body := map[string]interface{}{
+		"template_id":   uuid.New().String(),
+		"character_ids": []string{},
+		"character_positions": map[string]interface{}{
+			"not-uuid": map[string]interface{}{"col": "A", "row": 1},
+		},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle 39: POST /api/combat/start service error ---
+
+func TestHandler_StartCombat_ServiceError(t *testing.T) {
+	store := defaultMockStore()
+	// Template not found will cause service error
+	_, r := newTestCombatRouter(store)
+
+	body := map[string]interface{}{
+		"template_id":   uuid.New().String(),
+		"character_ids": []string{},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/start", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// startCombatMockStore builds a fully-wired mock store for the start combat flow.
+func startCombatMockStore(templateID, encounterID, charID uuid.UUID) *mockStore {
+	store := defaultMockStore()
+
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID:         templateID,
+			CampaignID: uuid.New(),
+			Name:       "Goblin Ambush",
+			Creatures: json.RawMessage(`[
+				{"creature_ref_id":"goblin","short_id":"G1","display_name":"Goblin","position_col":"A","position_row":1,"quantity":1}
+			]`),
+		}, nil
+	}
+	store.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID: "goblin", Name: "Goblin", Ac: 15, HpAverage: 7,
+			Speed:         json.RawMessage(`{"walk":30}`),
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`),
+		}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID: charID, Name: "Aragorn", HpMax: 45, HpCurrent: 45, Ac: 18, SpeedFt: 30,
+			AbilityScores: json.RawMessage(`{"str":16,"dex":14,"con":14,"int":10,"wis":12,"cha":14}`),
+		}, nil
+	}
+
+	createdCombatantIDs := []uuid.UUID{}
+	store.createEncounterFn = func(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: encounterID, CampaignID: arg.CampaignID, Name: arg.Name, Status: arg.Status}, nil
+	}
+	store.createCombatantFn = func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		cID := uuid.New()
+		createdCombatantIDs = append(createdCombatantIDs, cID)
+		return refdata.Combatant{
+			ID: cID, EncounterID: arg.EncounterID, ShortID: arg.ShortID, DisplayName: arg.DisplayName,
+			HpMax: arg.HpMax, HpCurrent: arg.HpCurrent, Ac: arg.Ac, IsAlive: true, IsNpc: arg.IsNpc,
+			IsVisible: true, Conditions: json.RawMessage(`[]`),
+			CharacterID: arg.CharacterID, PositionCol: arg.PositionCol, PositionRow: arg.PositionRow,
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		if len(createdCombatantIDs) < 2 {
+			return []refdata.Combatant{}, nil
+		}
+		return []refdata.Combatant{
+			{ID: createdCombatantIDs[0], EncounterID: encounterID, DisplayName: "Goblin", ShortID: "G1", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
+			{ID: createdCombatantIDs[1], EncounterID: encounterID, DisplayName: "Aragorn", ShortID: "AR", IsAlive: true, IsNpc: false, HpMax: 45, HpCurrent: 45, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+		}, nil
+	}
+	store.updateCombatantInitiativeFn = func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, InitiativeRoll: arg.InitiativeRoll, InitiativeOrder: arg.InitiativeOrder, IsAlive: true, Conditions: json.RawMessage(`[]`), DisplayName: "Test"}, nil
+	}
+	store.updateEncounterRoundFn = func(ctx context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber, Name: "Goblin Ambush", Status: "active"}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: arg.Status, Name: "Goblin Ambush", RoundNumber: 1}, nil
+	}
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Name: "Goblin Ambush", Status: "active", RoundNumber: 1}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+	store.updateEncounterCurrentTurnFn = func(ctx context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, CurrentTurnID: arg.CurrentTurnID, RoundNumber: 1, Name: "Goblin Ambush"}, nil
+	}
+
+	return store
+}

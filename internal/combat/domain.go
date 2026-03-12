@@ -3,6 +3,8 @@ package combat
 import (
 	"encoding/json"
 
+	"github.com/google/uuid"
+
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -79,6 +81,28 @@ func CombatantFromCharacter(char refdata.Character, shortID, posCol string, posR
 		IsVisible:   true,
 		DeathSaves:  ds,
 	}
+}
+
+// Position represents a map grid position.
+type Position struct {
+	Col string `json:"col"`
+	Row int32  `json:"row"`
+}
+
+// StartCombatInput holds parameters for the StartCombat flow.
+type StartCombatInput struct {
+	TemplateID             uuid.UUID                `json:"template_id"`
+	CharacterIDs           []uuid.UUID              `json:"character_ids"`
+	CharacterPositions     map[uuid.UUID]Position   `json:"character_positions"`
+	SurprisedCombatantIDs  []uuid.UUID              `json:"surprised_combatant_ids,omitempty"`
+}
+
+// StartCombatResult holds the result of the StartCombat flow.
+type StartCombatResult struct {
+	Encounter          refdata.Encounter    `json:"encounter"`
+	Combatants         []refdata.Combatant  `json:"combatants"`
+	InitiativeTracker  string               `json:"initiative_tracker"`
+	FirstTurn          TurnInfo             `json:"first_turn"`
 }
 
 // ParseTemplateCreatures parses the JSONB creatures array from an encounter template.

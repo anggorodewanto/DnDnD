@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -302,6 +304,75 @@ func (s *Service) ListActionLogByEncounterID(ctx context.Context, encounterID uu
 // ListActionLogByTurnID lists all action log entries for a turn.
 func (s *Service) ListActionLogByTurnID(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error) {
 	return s.store.ListActionLogByTurnID(ctx, turnID)
+}
+
+// ShortIDFromName generates a short ID from a character name (first 2 letters uppercase).
+func ShortIDFromName(name string) string {
+	if len(name) < 2 {
+		return strings.ToUpper(name)
+	}
+	return strings.ToUpper(name[:2])
+}
+
+// StartCombat orchestrates the full start-combat flow:
+// create encounter from template, add PCs, mark surprised, roll initiative, advance to first turn.
+func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, roller *dice.Roller) (StartCombatResult, error) {
+	// Step 1: Create encounter + creature combatants from template
+	enc, _, err := s.CreateEncounterFromTemplate(ctx, input.TemplateID)
+	if err != nil {
+		return StartCombatResult{}, fmt.Errorf("creating encounter from template: %w", err)
+	}
+
+	// Step 2: Add PC combatants
+	for _, charID := range input.CharacterIDs {
+		char, err := s.store.GetCharacter(ctx, charID)
+		if err != nil {
+			return StartCombatResult{}, fmt.Errorf("getting character %s: %w", charID, err)
+		}
+
+		pos := input.CharacterPositions[charID]
+		shortID := ShortIDFromName(char.Name)
+		params := CombatantFromCharacter(char, shortID, pos.Col, pos.Row)
+
+		if _, err := s.AddCombatant(ctx, enc.ID, params); err != nil {
+			return StartCombatResult{}, fmt.Errorf("adding character combatant %s: %w", char.Name, err)
+		}
+	}
+
+	// Step 3: Mark surprised combatants
+	for _, cID := range input.SurprisedCombatantIDs {
+		if err := s.MarkSurprised(ctx, cID); err != nil {
+			return StartCombatResult{}, fmt.Errorf("marking combatant %s surprised: %w", cID, err)
+		}
+	}
+
+	// Step 4: Roll initiative
+	sortedCombatants, err := s.RollInitiative(ctx, enc.ID, roller)
+	if err != nil {
+		return StartCombatResult{}, fmt.Errorf("rolling initiative: %w", err)
+	}
+
+	// Step 5: Advance to first turn
+	turnInfo, err := s.AdvanceTurn(ctx, enc.ID)
+	if err != nil {
+		return StartCombatResult{}, fmt.Errorf("advancing to first turn: %w", err)
+	}
+
+	// Re-fetch encounter to get updated state (round, status, current_turn)
+	enc, err = s.store.GetEncounter(ctx, enc.ID)
+	if err != nil {
+		return StartCombatResult{}, fmt.Errorf("re-fetching encounter: %w", err)
+	}
+
+	// Step 6: Format initiative tracker
+	tracker := FormatInitiativeTracker(enc, sortedCombatants, turnInfo.CombatantID)
+
+	return StartCombatResult{
+		Encounter:         enc,
+		Combatants:        sortedCombatants,
+		InitiativeTracker: tracker,
+		FirstTurn:         turnInfo,
+	}, nil
 }
 
 // nullString converts a string to sql.NullString, treating empty as null.

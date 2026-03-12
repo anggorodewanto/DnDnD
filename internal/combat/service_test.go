@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -701,5 +702,471 @@ func TestService_CreateActionLog_WithOptionalFields(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.Nil, log.ID)
+}
+
+// --- TDD Cycle 29: StartCombat happy path ---
+
+func TestService_StartCombat_Success(t *testing.T) {
+	templateID := uuid.New()
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	store := defaultMockStore()
+
+	// Template lookup
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID:         templateID,
+			CampaignID: campaignID,
+			MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
+			Name:       "Goblin Ambush",
+			Creatures: json.RawMessage(`[
+				{"creature_ref_id":"goblin","short_id":"G1","display_name":"Goblin","position_col":"A","position_row":1,"quantity":1}
+			]`),
+		}, nil
+	}
+
+	// Creature lookup
+	store.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "goblin",
+			Name:          "Goblin",
+			Ac:            15,
+			HpAverage:     7,
+			Speed:         json.RawMessage(`{"walk":30}`),
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`),
+		}, nil
+	}
+
+	// Character lookup
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID:            charID,
+			Name:          "Aragorn",
+			HpMax:         45,
+			HpCurrent:     45,
+			Ac:            18,
+			SpeedFt:       30,
+			AbilityScores: json.RawMessage(`{"str":16,"dex":14,"con":14,"int":10,"wis":12,"cha":14}`),
+		}, nil
+	}
+
+	// Track created combatants
+	createdCombatantIDs := []uuid.UUID{}
+	combatantCounter := 0
+	store.createEncounterFn = func(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:          encounterID,
+			CampaignID:  campaignID,
+			MapID:       uuid.NullUUID{UUID: mapID, Valid: true},
+			Name:        arg.Name,
+			Status:      arg.Status,
+			RoundNumber: arg.RoundNumber,
+		}, nil
+	}
+	store.createCombatantFn = func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		cID := uuid.New()
+		createdCombatantIDs = append(createdCombatantIDs, cID)
+		combatantCounter++
+		return refdata.Combatant{
+			ID:          cID,
+			EncounterID: arg.EncounterID,
+			CharacterID: arg.CharacterID,
+			ShortID:     arg.ShortID,
+			DisplayName: arg.DisplayName,
+			HpMax:       arg.HpMax,
+			HpCurrent:   arg.HpCurrent,
+			Ac:          arg.Ac,
+			IsAlive:     true,
+			IsNpc:       arg.IsNpc,
+			IsVisible:   true,
+			PositionCol: arg.PositionCol,
+			PositionRow: arg.PositionRow,
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+
+	// Initiative updates: return combatants sorted
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		// Return the 2 combatants (goblin + aragorn) after creation
+		return []refdata.Combatant{
+			{ID: createdCombatantIDs[0], EncounterID: encounterID, DisplayName: "Goblin", ShortID: "G1", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
+			{ID: createdCombatantIDs[1], EncounterID: encounterID, DisplayName: "Aragorn", ShortID: "AR", IsAlive: true, IsNpc: false, HpMax: 45, HpCurrent: 45, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+		}, nil
+	}
+
+	store.updateCombatantInitiativeFn = func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:              arg.ID,
+			EncounterID:     encounterID,
+			InitiativeRoll:  arg.InitiativeRoll,
+			InitiativeOrder: arg.InitiativeOrder,
+			IsAlive:         true,
+			Conditions:      json.RawMessage(`[]`),
+		}, nil
+	}
+
+	store.updateEncounterRoundFn = func(ctx context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber, Name: "Goblin Ambush", Status: "active"}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: arg.Status, Name: "Goblin Ambush", RoundNumber: 1}, nil
+	}
+
+	// AdvanceTurn needs encounter + turns
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Name: "Goblin Ambush", Status: "active", RoundNumber: 1}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+
+	turnID := uuid.New()
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+	store.updateEncounterCurrentTurnFn = func(ctx context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, CurrentTurnID: arg.CurrentTurnID, RoundNumber: 1, Name: "Goblin Ambush"}, nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 15 })
+	svc := NewService(store)
+
+	result, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID:   templateID,
+		CharacterIDs: []uuid.UUID{charID},
+		CharacterPositions: map[uuid.UUID]Position{
+			charID: {Col: "D", Row: 5},
+		},
+	}, roller)
+
+	require.NoError(t, err)
+	assert.Equal(t, encounterID, result.Encounter.ID)
+	assert.NotEmpty(t, result.Combatants)
+	assert.NotEmpty(t, result.InitiativeTracker)
+	assert.NotEqual(t, uuid.Nil, result.FirstTurn.Turn.ID)
+}
+
+// --- TDD Cycle 30: StartCombat template error ---
+
+func TestService_StartCombat_TemplateError(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{}, errors.New("not found")
+	}
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	svc := NewService(store)
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID: uuid.New(),
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "creating encounter from template")
+}
+
+// --- TDD Cycle 31: StartCombat character not found ---
+
+func TestService_StartCombat_CharacterNotFound(t *testing.T) {
+	templateID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID:         templateID,
+			CampaignID: uuid.New(),
+			Name:       "Test",
+			Creatures:  json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, errors.New("not found")
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	svc := NewService(store)
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID:   templateID,
+		CharacterIDs: []uuid.UUID{uuid.New()},
+		CharacterPositions: map[uuid.UUID]Position{},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
+}
+
+// --- TDD Cycle 32: StartCombat with surprised combatants ---
+
+func TestService_StartCombat_WithSurprisedCombatants(t *testing.T) {
+	templateID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID:         templateID,
+			CampaignID: uuid.New(),
+			Name:       "Surprise Attack",
+			Creatures:  json.RawMessage(`[{"creature_ref_id":"goblin","short_id":"G1","display_name":"Goblin","position_col":"A","position_row":1,"quantity":1}]`),
+		}, nil
+	}
+	store.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "goblin", Ac: 15, HpAverage: 7, Speed: json.RawMessage(`{"walk":30}`), AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`)}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: charID, Name: "Aragorn", HpMax: 45, HpCurrent: 45, Ac: 18, SpeedFt: 30, AbilityScores: json.RawMessage(`{"str":16,"dex":14,"con":14,"int":10,"wis":12,"cha":14}`)}, nil
+	}
+
+	createdCombatantIDs := []uuid.UUID{}
+	store.createEncounterFn = func(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: encounterID, Name: arg.Name, Status: arg.Status}, nil
+	}
+	store.createCombatantFn = func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		cID := uuid.New()
+		createdCombatantIDs = append(createdCombatantIDs, cID)
+		return refdata.Combatant{ID: cID, EncounterID: arg.EncounterID, ShortID: arg.ShortID, DisplayName: arg.DisplayName, HpMax: arg.HpMax, HpCurrent: arg.HpCurrent, Ac: arg.Ac, IsAlive: true, IsNpc: arg.IsNpc, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	// Track MarkSurprised calls — getCombatant is called by MarkSurprised and skipSurprisedTurn
+	markSurprisedCalled := false
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		markSurprisedCalled = true
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	// Initiative + turn support
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		if len(createdCombatantIDs) < 2 {
+			return []refdata.Combatant{}, nil
+		}
+		return []refdata.Combatant{
+			{ID: createdCombatantIDs[0], EncounterID: encounterID, DisplayName: "Goblin", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[{"condition":"surprised","duration_rounds":1,"started_round":0}]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
+			{ID: createdCombatantIDs[1], EncounterID: encounterID, DisplayName: "Aragorn", IsAlive: true, IsNpc: false, HpMax: 45, HpCurrent: 45, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+		}, nil
+	}
+	store.updateCombatantInitiativeFn = func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, InitiativeRoll: arg.InitiativeRoll, InitiativeOrder: arg.InitiativeOrder, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Name: "Surprise Attack", Status: "active", RoundNumber: 1}, nil
+	}
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 15 })
+	svc := NewService(store)
+
+	// The goblin combatant ID will be createdCombatantIDs[0] after template processing
+	// But we need to pass it in input — we use a placeholder and check the MarkSurprised was called
+	surpriseTarget := uuid.New()
+	result, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID:            templateID,
+		CharacterIDs:          []uuid.UUID{charID},
+		CharacterPositions:    map[uuid.UUID]Position{charID: {Col: "D", Row: 5}},
+		SurprisedCombatantIDs: []uuid.UUID{surpriseTarget},
+	}, roller)
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, result.Combatants)
+	// Verify MarkSurprised was called
+	assert.True(t, markSurprisedCalled, "MarkSurprised should have been called")
+}
+
+// --- TDD Cycle 33a: StartCombat add combatant error ---
+
+func TestService_StartCombat_AddCombatantError(t *testing.T) {
+	templateID := uuid.New()
+	charID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID: templateID, CampaignID: uuid.New(), Name: "Test",
+			Creatures: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: charID, Name: "Aragorn", HpMax: 45, HpCurrent: 45, Ac: 18, SpeedFt: 30}, nil
+	}
+	store.createCombatantFn = func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errors.New("db error")
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	svc := NewService(store)
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID:         templateID,
+		CharacterIDs:       []uuid.UUID{charID},
+		CharacterPositions: map[uuid.UUID]Position{charID: {Col: "A", Row: 1}},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "adding character combatant")
+}
+
+// --- TDD Cycle 33b: StartCombat mark surprised error ---
+
+func TestService_StartCombat_MarkSurprisedError(t *testing.T) {
+	templateID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID: templateID, CampaignID: uuid.New(), Name: "Test",
+			Creatures: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errors.New("not found")
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	svc := NewService(store)
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID:            templateID,
+		SurprisedCombatantIDs: []uuid.UUID{uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "marking combatant")
+}
+
+// --- TDD Cycle 33c: StartCombat roll initiative error ---
+
+func TestService_StartCombat_RollInitiativeError(t *testing.T) {
+	templateID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID: templateID, CampaignID: uuid.New(), Name: "Test",
+			Creatures: json.RawMessage(`[]`),
+		}, nil
+	}
+	// ListCombatantsByEncounterID returns empty -> RollInitiative fails
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{}, nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	svc := NewService(store)
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID: templateID,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rolling initiative")
+}
+
+// --- TDD Cycle 33d: StartCombat advance turn error ---
+
+func TestService_StartCombat_AdvanceTurnError(t *testing.T) {
+	templateID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID: templateID, CampaignID: uuid.New(), Name: "Test",
+			Creatures: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.createEncounterFn = func(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: encounterID, Name: arg.Name, Status: arg.Status}, nil
+	}
+	cID := uuid.New()
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: cID, EncounterID: encounterID, DisplayName: "Goblin", IsAlive: true, Conditions: json.RawMessage(`[]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
+		}, nil
+	}
+	store.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "goblin", AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`)}, nil
+	}
+	store.updateCombatantInitiativeFn = func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, InitiativeRoll: arg.InitiativeRoll, InitiativeOrder: arg.InitiativeOrder, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	// GetEncounter fails for AdvanceTurn
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{}, errors.New("db error")
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	svc := NewService(store)
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID: templateID,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "advancing to first turn")
+}
+
+// --- TDD Cycle 33e: StartCombat re-fetch encounter error ---
+
+func TestService_StartCombat_RefetchEncounterError(t *testing.T) {
+	templateID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID: templateID, CampaignID: uuid.New(), Name: "Test",
+			Creatures: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.createEncounterFn = func(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: encounterID, Name: arg.Name, Status: arg.Status}, nil
+	}
+	cID := uuid.New()
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: cID, EncounterID: encounterID, DisplayName: "Goblin", IsAlive: true, Conditions: json.RawMessage(`[]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
+		}, nil
+	}
+	store.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "goblin", AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`)}, nil
+	}
+	store.updateCombatantInitiativeFn = func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, InitiativeRoll: arg.InitiativeRoll, InitiativeOrder: arg.InitiativeOrder, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+
+	getEncounterCalls := 0
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		getEncounterCalls++
+		// First call (from AdvanceTurn) succeeds, second call (re-fetch) fails
+		if getEncounterCalls == 1 {
+			return refdata.Encounter{ID: id, Name: "Test", Status: "active", RoundNumber: 1}, nil
+		}
+		return refdata.Encounter{}, errors.New("db error")
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	svc := NewService(store)
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID: templateID,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "re-fetching encounter")
+}
+
+// --- TDD Cycle 33: ShortIDFromName ---
+
+func TestShortIDFromName(t *testing.T) {
+	tests := []struct {
+		name     string
+		expected string
+	}{
+		{"Aragorn", "AR"},
+		{"Bo", "BO"},
+		{"X", "X"},
+		{"legolas", "LE"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, ShortIDFromName(tt.name))
+		})
+	}
 }
 
