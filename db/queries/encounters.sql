@@ -20,3 +20,8 @@ UPDATE encounters SET round_number = $2, updated_at = now() WHERE id = $1 RETURN
 
 -- name: DeleteEncounter :exec
 DELETE FROM encounters WHERE id = $1;
+
+-- name: GetCampaignByEncounterID :one
+SELECT c.* FROM campaigns c
+JOIN encounters e ON e.campaign_id = c.id
+WHERE e.id = $1;

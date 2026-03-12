@@ -64,6 +64,28 @@ func (q *Queries) DeleteEncounter(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const getCampaignByEncounterID = `-- name: GetCampaignByEncounterID :one
+SELECT c.id, c.guild_id, c.dm_user_id, c.name, c.settings, c.status, c.created_at, c.updated_at FROM campaigns c
+JOIN encounters e ON e.campaign_id = c.id
+WHERE e.id = $1
+`
+
+func (q *Queries) GetCampaignByEncounterID(ctx context.Context, id uuid.UUID) (Campaign, error) {
+	row := q.db.QueryRowContext(ctx, getCampaignByEncounterID, id)
+	var i Campaign
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.DmUserID,
+		&i.Name,
+		&i.Settings,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getEncounter = `-- name: GetEncounter :one
 SELECT id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at FROM encounters WHERE id = $1
 `
