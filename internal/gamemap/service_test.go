@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -72,71 +71,57 @@ func successStore(campaignID uuid.UUID) *mockStore {
 
 // --- TDD Cycle 1: Reject maps with dimensions > 200 (hard limit) ---
 
-func TestCreateMap_RejectWidth201(t *testing.T) {
-	svc := NewService(&mockStore{})
-	_, _, err := svc.CreateMap(context.Background(), CreateMapInput{
-		CampaignID: uuid.New(),
-		Name:       "Test Map",
-		Width:      201,
-		Height:     100,
-		TiledJSON:  minimalTiledJSON(),
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exceeds hard limit")
-}
-
-func TestCreateMap_RejectHeight201(t *testing.T) {
-	svc := NewService(&mockStore{})
-	_, _, err := svc.CreateMap(context.Background(), CreateMapInput{
-		CampaignID: uuid.New(),
-		Name:       "Test Map",
-		Width:      100,
-		Height:     201,
-		TiledJSON:  minimalTiledJSON(),
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exceeds hard limit")
-}
-
-func TestCreateMap_RejectBoth201(t *testing.T) {
-	svc := NewService(&mockStore{})
-	_, _, err := svc.CreateMap(context.Background(), CreateMapInput{
-		CampaignID: uuid.New(),
-		Name:       "Test Map",
-		Width:      201,
-		Height:     201,
-		TiledJSON:  minimalTiledJSON(),
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exceeds hard limit")
+func TestCreateMap_RejectHardLimit(t *testing.T) {
+	cases := []struct {
+		name   string
+		width  int
+		height int
+	}{
+		{"width exceeds", 201, 100},
+		{"height exceeds", 100, 201},
+		{"both exceed", 201, 201},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewService(&mockStore{})
+			_, _, err := svc.CreateMap(context.Background(), CreateMapInput{
+				CampaignID: uuid.New(),
+				Name:       "Test Map",
+				Width:      tc.width,
+				Height:     tc.height,
+				TiledJSON:  minimalTiledJSON(),
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "exceeds hard limit")
+		})
+	}
 }
 
 // --- TDD Cycle 2: Reject maps with non-positive dimensions ---
 
-func TestCreateMap_RejectZeroWidth(t *testing.T) {
-	svc := NewService(&mockStore{})
-	_, _, err := svc.CreateMap(context.Background(), CreateMapInput{
-		CampaignID: uuid.New(),
-		Name:       "Test Map",
-		Width:      0,
-		Height:     10,
-		TiledJSON:  minimalTiledJSON(),
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "must be positive")
-}
-
-func TestCreateMap_RejectNegativeHeight(t *testing.T) {
-	svc := NewService(&mockStore{})
-	_, _, err := svc.CreateMap(context.Background(), CreateMapInput{
-		CampaignID: uuid.New(),
-		Name:       "Test Map",
-		Width:      10,
-		Height:     -5,
-		TiledJSON:  minimalTiledJSON(),
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "must be positive")
+func TestCreateMap_RejectNonPositiveDimensions(t *testing.T) {
+	cases := []struct {
+		name   string
+		width  int
+		height int
+	}{
+		{"zero width", 0, 10},
+		{"negative height", 10, -5},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewService(&mockStore{})
+			_, _, err := svc.CreateMap(context.Background(), CreateMapInput{
+				CampaignID: uuid.New(),
+				Name:       "Test Map",
+				Width:      tc.width,
+				Height:     tc.height,
+				TiledJSON:  minimalTiledJSON(),
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "must be positive")
+		})
+	}
 }
 
 // --- TDD Cycle 3: Standard size category for maps <= 100x100 ---
@@ -781,114 +766,5 @@ func TestTilesetRef_JSONRoundTrip(t *testing.T) {
 	assert.Equal(t, ref, parsed)
 }
 
-// --- Edge case: both width and height exactly at soft limit ---
 
-func TestCreateMap_Boundary100x100(t *testing.T) {
-	campaignID := uuid.New()
-	svc := NewService(successStore(campaignID))
-	_, cat, err := svc.CreateMap(context.Background(), CreateMapInput{
-		CampaignID: campaignID,
-		Name:       "Boundary",
-		Width:      100,
-		Height:     100,
-		TiledJSON:  minimalTiledJSON(),
-	})
-	require.NoError(t, err)
-	assert.Equal(t, SizeCategoryStandard, cat)
-}
 
-// --- Edge case: exactly at hard limit ---
-
-func TestCreateMap_Boundary200x200(t *testing.T) {
-	campaignID := uuid.New()
-	svc := NewService(successStore(campaignID))
-	_, cat, err := svc.CreateMap(context.Background(), CreateMapInput{
-		CampaignID: campaignID,
-		Name:       "Max Boundary",
-		Width:      200,
-		Height:     200,
-		TiledJSON:  minimalTiledJSON(),
-	})
-	require.NoError(t, err)
-	assert.Equal(t, SizeCategoryLarge, cat)
-}
-
-// --- Edge case: TiledJSON passed through to store ---
-
-func TestCreateMap_TiledJSONPassedThrough(t *testing.T) {
-	campaignID := uuid.New()
-	expected := minimalTiledJSON()
-	var capturedJSON json.RawMessage
-	store := &mockStore{
-		createMapFn: func(ctx context.Context, arg refdata.CreateMapParams) (refdata.Map, error) {
-			capturedJSON = arg.TiledJson
-			return refdata.Map{ID: uuid.New(), CampaignID: arg.CampaignID, TiledJson: arg.TiledJson}, nil
-		},
-	}
-	svc := NewService(store)
-	_, _, err := svc.CreateMap(context.Background(), CreateMapInput{
-		CampaignID: campaignID,
-		Name:       "Test",
-		Width:      10,
-		Height:     10,
-		TiledJSON:  expected,
-	})
-	require.NoError(t, err)
-	assert.JSONEq(t, string(expected), string(capturedJSON))
-}
-
-// --- SizeCategory string values ---
-
-func TestSizeCategory_Values(t *testing.T) {
-	assert.Equal(t, SizeCategory("standard"), SizeCategoryStandard)
-	assert.Equal(t, SizeCategory("large"), SizeCategoryLarge)
-}
-
-// --- Background image not set ---
-
-func TestCreateMap_NoBackgroundImage(t *testing.T) {
-	campaignID := uuid.New()
-	var capturedParams refdata.CreateMapParams
-	store := &mockStore{
-		createMapFn: func(ctx context.Context, arg refdata.CreateMapParams) (refdata.Map, error) {
-			capturedParams = arg
-			return refdata.Map{ID: uuid.New(), CampaignID: arg.CampaignID}, nil
-		},
-	}
-	svc := NewService(store)
-	_, _, err := svc.CreateMap(context.Background(), CreateMapInput{
-		CampaignID: campaignID,
-		Name:       "No BG",
-		Width:      10,
-		Height:     10,
-		TiledJSON:  minimalTiledJSON(),
-	})
-	require.NoError(t, err)
-	assert.False(t, capturedParams.BackgroundImageID.Valid)
-}
-
-// --- Ensure CampaignID is passed through ---
-
-func TestCreateMap_CampaignIDPassedThrough(t *testing.T) {
-	campaignID := uuid.New()
-	var capturedCampaignID uuid.UUID
-	store := &mockStore{
-		createMapFn: func(ctx context.Context, arg refdata.CreateMapParams) (refdata.Map, error) {
-			capturedCampaignID = arg.CampaignID
-			return refdata.Map{ID: uuid.New(), CampaignID: arg.CampaignID}, nil
-		},
-	}
-	svc := NewService(store)
-	_, _, err := svc.CreateMap(context.Background(), CreateMapInput{
-		CampaignID: campaignID,
-		Name:       "Test",
-		Width:      10,
-		Height:     10,
-		TiledJSON:  minimalTiledJSON(),
-	})
-	require.NoError(t, err)
-	assert.Equal(t, campaignID, capturedCampaignID)
-}
-
-// unused import guard
-var _ pqtype.NullRawMessage

@@ -97,7 +97,7 @@
   - Depends on: Phase 1
   - Done when: Unit tests cover all dice expressions, advantage/disadvantage, crits; roll results include full breakdown for combat log.
 
-- [ ] **Phase 19: Maps Table & Map Storage**
+- [x] **Phase 19: Maps Table & Map Storage**
   - Scope: Migration for `maps` table (id, campaign_id, name, width/height_squares, tiled_json, background_image_id, tileset_refs). Map size validation (soft limit 100x100, hard limit 200x200). Tiled-compatible JSON storage format. Go structs and sqlc queries.
   - Depends on: Phase 2
   - Done when: Maps can be created/read/updated, size validation enforced, Tiled JSON stored and retrieved.

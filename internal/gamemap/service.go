@@ -3,6 +3,7 @@ package gamemap
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -70,16 +71,8 @@ func NewService(store Store) *Service {
 // CreateMap validates input and creates a new map.
 // Returns the created map, the size category, and any error.
 func (s *Service) CreateMap(ctx context.Context, input CreateMapInput) (refdata.Map, SizeCategory, error) {
-	if err := validateDimensions(input.Width, input.Height); err != nil {
+	if err := validateMapFields(input.Name, input.Width, input.Height, input.TiledJSON); err != nil {
 		return refdata.Map{}, "", err
-	}
-
-	if input.Name == "" {
-		return refdata.Map{}, "", fmt.Errorf("name must not be empty")
-	}
-
-	if input.TiledJSON == nil || len(input.TiledJSON) == 0 {
-		return refdata.Map{}, "", fmt.Errorf("tiled_json must not be empty")
 	}
 
 	category := classifySize(input.Width, input.Height)
@@ -128,16 +121,8 @@ type UpdateMapInput struct {
 
 // UpdateMap validates input and updates an existing map.
 func (s *Service) UpdateMap(ctx context.Context, input UpdateMapInput) (refdata.Map, SizeCategory, error) {
-	if err := validateDimensions(input.Width, input.Height); err != nil {
+	if err := validateMapFields(input.Name, input.Width, input.Height, input.TiledJSON); err != nil {
 		return refdata.Map{}, "", err
-	}
-
-	if input.Name == "" {
-		return refdata.Map{}, "", fmt.Errorf("name must not be empty")
-	}
-
-	if input.TiledJSON == nil || len(input.TiledJSON) == 0 {
-		return refdata.Map{}, "", fmt.Errorf("tiled_json must not be empty")
 	}
 
 	category := classifySize(input.Width, input.Height)
@@ -174,6 +159,20 @@ func TileSizeForCategory(cat SizeCategory) int {
 		return LargeTileSize
 	}
 	return StandardTileSize
+}
+
+// validateMapFields checks name, dimensions, and tiled JSON.
+func validateMapFields(name string, width, height int, tiledJSON json.RawMessage) error {
+	if err := validateDimensions(width, height); err != nil {
+		return err
+	}
+	if name == "" {
+		return errors.New("name must not be empty")
+	}
+	if len(tiledJSON) == 0 {
+		return errors.New("tiled_json must not be empty")
+	}
+	return nil
 }
 
 // validateDimensions checks that dimensions are within bounds.
