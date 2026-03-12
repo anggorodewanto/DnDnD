@@ -81,8 +81,10 @@ func abilityLabel(ability string) string {
 }
 
 // CheckAbilityCheckEffects checks conditions for effects on ability checks.
+// The fearSourceVisible parameter controls whether frightened applies disadvantage
+// (per 5e rules, only when the source of fear is within line of sight).
 // Returns autoFail, rollMode, and reasons.
-func CheckAbilityCheckEffects(conditions []CombatCondition, requiresSight bool, requiresHearing bool) (bool, dice.RollMode, []string) {
+func CheckAbilityCheckEffects(conditions []CombatCondition, requiresSight bool, requiresHearing bool, fearSourceVisible bool) (bool, dice.RollMode, []string) {
 	var reasons []string
 	var hasDisadv bool
 
@@ -99,8 +101,10 @@ func CheckAbilityCheckEffects(conditions []CombatCondition, requiresSight bool, 
 				return true, dice.Normal, reasons
 			}
 		case "frightened":
-			hasDisadv = true
-			reasons = append(reasons, "frightened: disadvantage on ability checks")
+			if fearSourceVisible {
+				hasDisadv = true
+				reasons = append(reasons, "frightened: disadvantage on ability checks (fear source visible)")
+			}
 		case "poisoned":
 			hasDisadv = true
 			reasons = append(reasons, "poisoned: disadvantage on ability checks")
@@ -210,6 +214,12 @@ func IsIncapacitatedRaw(conditions json.RawMessage) bool {
 		return false
 	}
 	return IsIncapacitated(conds)
+}
+
+// StandFromProneCost returns the movement cost to stand from prone,
+// which is half the creature's maximum speed (rounded down).
+func StandFromProneCost(maxSpeed int) int {
+	return maxSpeed / 2
 }
 
 // CanActRaw checks conditions from raw JSON.
