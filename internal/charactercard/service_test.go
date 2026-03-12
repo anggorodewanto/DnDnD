@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -330,7 +331,9 @@ func TestService_UpdateCardRetired_EditError(t *testing.T) {
 }
 
 func TestService_ShortID_WithExistingNames(t *testing.T) {
+	// Aria has a lower ID than Arthur, so Aria gets "AR" and Arthur gets "AR2"
 	char := newTestCharacter()
+	char.ID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	char.Name = "Aria"
 
 	otherChar := newTestCharacter()
@@ -347,8 +350,68 @@ func TestService_ShortID_WithExistingNames(t *testing.T) {
 
 	err := svc.PostCharacterCard(context.Background(), char.ID, "Aria", "player1")
 	require.NoError(t, err)
-	// Arthur takes "AR", so Aria should get "AR2"
-	assert.Contains(t, session.sentContent, "AR2")
+	// Aria (lower ID) gets the base "AR"
+	assert.Contains(t, session.sentContent, "Aria (AR)")
+}
+
+func TestService_ShortID_SymmetricCollision(t *testing.T) {
+	// When two characters have the same base initials (e.g., "Aria" and "Arthur" both produce "AR"),
+	// they should get different stable short IDs regardless of which one we query.
+	// The first by character ID should get "AR", the second should get "AR2".
+	ariaID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	arthurID := uuid.MustParse("00000000-0000-0000-0000-000000000099")
+
+	ariaChar := newTestCharacter()
+	ariaChar.ID = ariaID
+	ariaChar.Name = "Aria"
+
+	arthurChar := newTestCharacter()
+	arthurChar.ID = arthurID
+	arthurChar.Name = "Arthur"
+
+	allChars := []refdata.Character{ariaChar, arthurChar}
+
+	// Post Aria's card
+	ariaStore := &mockStore{
+		character:  ariaChar,
+		campaign:   newTestCampaign(),
+		characters: allChars,
+	}
+	ariaSession := &mockDiscordSession{}
+	ariaSvc := NewService(ariaSession, ariaStore, nil)
+	err := ariaSvc.PostCharacterCard(context.Background(), ariaID, "Aria", "player1")
+	require.NoError(t, err)
+
+	// Post Arthur's card
+	arthurStore := &mockStore{
+		character:  arthurChar,
+		campaign:   newTestCampaign(),
+		characters: allChars,
+	}
+	arthurSession := &mockDiscordSession{}
+	arthurSvc := NewService(arthurSession, arthurStore, nil)
+	err = arthurSvc.PostCharacterCard(context.Background(), arthurID, "Arthur", "player2")
+	require.NoError(t, err)
+
+	// They must get different short IDs
+	ariaShort := extractShortID(ariaSession.sentContent)
+	arthurShort := extractShortID(arthurSession.sentContent)
+	assert.NotEqual(t, ariaShort, arthurShort, "Aria and Arthur must get different short IDs")
+
+	// Aria (lower ID) should get "AR", Arthur should get "AR2"
+	assert.Equal(t, "AR", ariaShort, "Aria (lower ID) should get the base short ID")
+	assert.Equal(t, "AR2", arthurShort, "Arthur (higher ID) should get the suffixed short ID")
+}
+
+// extractShortID pulls the short ID from a formatted card content string.
+// The format is "⚔️ Name (SHORTID) — ..."
+func extractShortID(content string) string {
+	start := strings.Index(content, "(")
+	end := strings.Index(content, ")")
+	if start == -1 || end == -1 || end <= start {
+		return ""
+	}
+	return content[start+1 : end]
 }
 
 func TestService_UpdateCard_GetCardMsgIDError(t *testing.T) {
@@ -467,6 +530,73 @@ func TestService_UpdateCard_GenerateShortIDError(t *testing.T) {
 	err := svc.UpdateCard(context.Background(), uuid.New())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "listing characters")
+}
+
+func TestService_OnCharacterUpdated_CallsUpdateCard(t *testing.T) {
+	char := newTestCharacter()
+	store := &mockStore{
+		character: char,
+		campaign:  newTestCampaign(),
+		cardMsgID: sql.NullString{String: "msg-existing", Valid: true},
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.OnCharacterUpdated(context.Background(), char.ID)
+	require.NoError(t, err)
+
+	// Should have edited the existing message
+	assert.Equal(t, "channel-123", session.editedChannel)
+	assert.Equal(t, "msg-existing", session.editedMsgID)
+	assert.Contains(t, session.editedContent, "Aria (AR)")
+}
+
+func TestService_OnCharacterUpdated_NoCardMessage_NoError(t *testing.T) {
+	// If no card message exists yet (character not yet approved), OnCharacterUpdated should be a no-op
+	char := newTestCharacter()
+	store := &mockStore{
+		character: char,
+		campaign:  newTestCampaign(),
+		cardMsgID: sql.NullString{Valid: false},
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.OnCharacterUpdated(context.Background(), char.ID)
+	require.NoError(t, err)
+
+	// Should NOT have tried to edit anything
+	assert.Empty(t, session.editedChannel)
+}
+
+func TestService_OnCharacterUpdated_GetCardMsgIDError_SilentNoOp(t *testing.T) {
+	// When GetCharacterCardMessageID fails, OnCharacterUpdated should log and return nil (no-op)
+	store := &mockStore{
+		character:    newTestCharacter(),
+		campaign:     newTestCampaign(),
+		cardMsgIDErr: errors.New("db error"),
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.OnCharacterUpdated(context.Background(), uuid.New())
+	require.NoError(t, err)
+	assert.Empty(t, session.editedChannel)
+}
+
+func TestService_OnCharacterUpdated_UpdateCardError(t *testing.T) {
+	// When UpdateCard itself fails, the error should propagate
+	store := &mockStore{
+		character: newTestCharacter(),
+		campaign:  newTestCampaign(),
+		cardMsgID: sql.NullString{String: "msg-existing", Valid: true},
+	}
+	session := &mockDiscordSession{editErr: errors.New("discord down")}
+	svc := NewService(session, store, nil)
+
+	err := svc.OnCharacterUpdated(context.Background(), uuid.New())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "editing character card")
 }
 
 func TestService_SetCardMsgID_Error(t *testing.T) {

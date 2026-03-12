@@ -49,6 +49,10 @@ func (m *mockCardPoster) UpdateCardRetired(_ context.Context, characterID uuid.U
 	return m.retireErr
 }
 
+func (m *mockCardPoster) OnCharacterUpdated(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+
 // --- Mock notifier that returns errors ---
 
 type errorNotifier struct {

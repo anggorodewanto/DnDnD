@@ -46,6 +46,7 @@ type ApprovalStore interface {
 type CharacterCardPoster interface {
 	PostCharacterCard(ctx context.Context, characterID uuid.UUID, characterName, discordUserID string) error
 	UpdateCardRetired(ctx context.Context, characterID uuid.UUID, characterName, discordUserID string) error
+	OnCharacterUpdated(ctx context.Context, characterID uuid.UUID) error
 }
 
 // PlayerNotifier is an interface for sending notifications to players.

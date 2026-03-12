@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -137,6 +138,23 @@ func (s *Service) UpdateCard(ctx context.Context, characterID uuid.UUID) error {
 	return nil
 }
 
+// OnCharacterUpdated is a hook that should be called when character state changes
+// (HP, equipment, conditions, level, etc.). It updates the character's card if one exists.
+// If no card message exists yet (character not approved), this is a silent no-op.
+func (s *Service) OnCharacterUpdated(ctx context.Context, characterID uuid.UUID) error {
+	// Check if a card message exists; if not, silently return
+	msgID, err := s.store.GetCharacterCardMessageID(ctx, characterID)
+	if err != nil {
+		s.logger.Warn("checking card message ID for auto-update", "character_id", characterID, "error", err)
+		return nil
+	}
+	if !msgID.Valid || msgID.String == "" {
+		return nil
+	}
+
+	return s.UpdateCard(ctx, characterID)
+}
+
 func (s *Service) fetchCharacterAndChannel(ctx context.Context, characterID uuid.UUID) (refdata.Character, string, error) {
 	char, err := s.store.GetCharacter(ctx, characterID)
 	if err != nil {
@@ -162,16 +180,23 @@ func (s *Service) generateShortID(ctx context.Context, char refdata.Character) (
 		return "", fmt.Errorf("listing characters for short ID: %w", err)
 	}
 
-	// Build existing short IDs from other characters
-	var existing []string
+	// Sort all characters by ID for stable, deterministic assignment
+	sort.Slice(chars, func(i, j int) bool {
+		return chars[i].ID.String() < chars[j].ID.String()
+	})
+
+	// Assign short IDs in order; earlier characters claim the base ID first
+	var assigned []string
 	for _, c := range chars {
+		id := ShortID(c.Name, assigned)
 		if c.ID == char.ID {
-			continue
+			return id, nil
 		}
-		existing = append(existing, ShortID(c.Name, nil))
+		assigned = append(assigned, id)
 	}
 
-	return ShortID(char.Name, existing), nil
+	// Character not in the list (shouldn't happen), fall back
+	return ShortID(char.Name, assigned), nil
 }
 
 type campaignSettings struct {
