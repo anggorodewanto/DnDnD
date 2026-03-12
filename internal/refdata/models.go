@@ -13,6 +13,20 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+type ActionLog struct {
+	ID          uuid.UUID             `json:"id"`
+	TurnID      uuid.UUID             `json:"turn_id"`
+	EncounterID uuid.UUID             `json:"encounter_id"`
+	ActionType  string                `json:"action_type"`
+	ActorID     uuid.UUID             `json:"actor_id"`
+	TargetID    uuid.NullUUID         `json:"target_id"`
+	Description sql.NullString        `json:"description"`
+	BeforeState json.RawMessage       `json:"before_state"`
+	AfterState  json.RawMessage       `json:"after_state"`
+	DiceRolls   pqtype.NullRawMessage `json:"dice_rolls"`
+	CreatedAt   time.Time             `json:"created_at"`
+}
+
 type Armor struct {
 	ID            string          `json:"id"`
 	Name          string          `json:"name"`
@@ -106,6 +120,40 @@ type Class struct {
 	UpdatedAt               time.Time             `json:"updated_at"`
 }
 
+type Combatant struct {
+	ID                      uuid.UUID             `json:"id"`
+	EncounterID             uuid.UUID             `json:"encounter_id"`
+	CharacterID             uuid.NullUUID         `json:"character_id"`
+	CreatureRefID           sql.NullString        `json:"creature_ref_id"`
+	ShortID                 string                `json:"short_id"`
+	DisplayName             string                `json:"display_name"`
+	InitiativeRoll          int32                 `json:"initiative_roll"`
+	InitiativeOrder         int32                 `json:"initiative_order"`
+	PositionCol             string                `json:"position_col"`
+	PositionRow             int32                 `json:"position_row"`
+	AltitudeFt              int32                 `json:"altitude_ft"`
+	HpMax                   int32                 `json:"hp_max"`
+	HpCurrent               int32                 `json:"hp_current"`
+	TempHp                  int32                 `json:"temp_hp"`
+	Ac                      int32                 `json:"ac"`
+	Conditions              json.RawMessage       `json:"conditions"`
+	ExhaustionLevel         int32                 `json:"exhaustion_level"`
+	DeathSaves              pqtype.NullRawMessage `json:"death_saves"`
+	IsVisible               bool                  `json:"is_visible"`
+	IsAlive                 bool                  `json:"is_alive"`
+	IsNpc                   bool                  `json:"is_npc"`
+	IsRaging                bool                  `json:"is_raging"`
+	RageRoundsRemaining     sql.NullInt32         `json:"rage_rounds_remaining"`
+	RageAttackedThisRound   bool                  `json:"rage_attacked_this_round"`
+	RageTookDamageThisRound bool                  `json:"rage_took_damage_this_round"`
+	IsWildShaped            bool                  `json:"is_wild_shaped"`
+	WildShapeCreatureRef    sql.NullString        `json:"wild_shape_creature_ref"`
+	WildShapeOriginal       pqtype.NullRawMessage `json:"wild_shape_original"`
+	SummonerID              uuid.NullUUID         `json:"summoner_id"`
+	CreatedAt               time.Time             `json:"created_at"`
+	UpdatedAt               time.Time             `json:"updated_at"`
+}
+
 type ConditionsRef struct {
 	ID                string          `json:"id"`
 	Name              string          `json:"name"`
@@ -143,6 +191,20 @@ type Creature struct {
 	Source                sql.NullString        `json:"source"`
 	CreatedAt             time.Time             `json:"created_at"`
 	UpdatedAt             time.Time             `json:"updated_at"`
+}
+
+type Encounter struct {
+	ID            uuid.UUID      `json:"id"`
+	CampaignID    uuid.UUID      `json:"campaign_id"`
+	MapID         uuid.NullUUID  `json:"map_id"`
+	Name          string         `json:"name"`
+	DisplayName   sql.NullString `json:"display_name"`
+	TemplateID    uuid.NullUUID  `json:"template_id"`
+	Status        string         `json:"status"`
+	RoundNumber   int32          `json:"round_number"`
+	CurrentTurnID uuid.NullUUID  `json:"current_turn_id"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
 type EncounterTemplate struct {
@@ -266,6 +328,28 @@ type Spell struct {
 	Classes             []string              `json:"classes"`
 	CreatedAt           time.Time             `json:"created_at"`
 	UpdatedAt           time.Time             `json:"updated_at"`
+}
+
+type Turn struct {
+	ID                   uuid.UUID    `json:"id"`
+	EncounterID          uuid.UUID    `json:"encounter_id"`
+	CombatantID          uuid.UUID    `json:"combatant_id"`
+	RoundNumber          int32        `json:"round_number"`
+	Status               string       `json:"status"`
+	MovementRemainingFt  int32        `json:"movement_remaining_ft"`
+	ActionUsed           bool         `json:"action_used"`
+	BonusActionUsed      bool         `json:"bonus_action_used"`
+	BonusActionSpellCast bool         `json:"bonus_action_spell_cast"`
+	ActionSpellCast      bool         `json:"action_spell_cast"`
+	ReactionUsed         bool         `json:"reaction_used"`
+	FreeInteractUsed     bool         `json:"free_interact_used"`
+	AttacksRemaining     int32        `json:"attacks_remaining"`
+	HasDisengaged        bool         `json:"has_disengaged"`
+	ActionSurged         bool         `json:"action_surged"`
+	StartedAt            sql.NullTime `json:"started_at"`
+	TimeoutAt            sql.NullTime `json:"timeout_at"`
+	CompletedAt          sql.NullTime `json:"completed_at"`
+	CreatedAt            time.Time    `json:"created_at"`
 }
 
 type Weapon struct {
