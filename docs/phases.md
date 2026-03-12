@@ -118,7 +118,7 @@
   - Depends on: Phase 21a, Phase 20
   - Done when: DM can import a background image, adjust opacity, and see it beneath the grid.
 
-- [ ] **Phase 21c: Map Editor — Lighting, Elevation, Spawn Zones (Dashboard)**
+- [x] **Phase 21c: Map Editor — Lighting, Elevation, Spawn Zones (Dashboard)**
   - Scope: Lighting brush (dim, darkness, magical darkness, fog/obscurement). Elevation painting per tile. Spawn zone marking (player/enemy regions).
   - Depends on: Phase 21a
   - Done when: DM can paint lighting zones, set tile elevations, mark spawn zones; all data persists in map JSON.

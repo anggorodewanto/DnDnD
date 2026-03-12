@@ -361,22 +361,16 @@
 
     const { px, py } = canvasPixel(e);
 
-    if (activeTool === 'terrain') {
+    if (activeTool === 'terrain' || activeTool === 'lighting' || activeTool === 'elevation') {
       isPainting = true;
-      paintTerrain(px, py);
-    } else if (activeTool === 'lighting') {
-      isPainting = true;
-      paintLighting(px, py);
-    } else if (activeTool === 'elevation') {
-      isPainting = true;
-      paintElevation(px, py);
+      paintTile(px, py);
     } else if (activeTool === 'wall') {
       placeWall(px, py);
     } else if (activeTool === 'eraseWall') {
       eraseWall(px, py);
     } else if (activeTool === 'spawn') {
       const { tx, ty } = tileFromPixel(px, py);
-      if (tx >= 0 && tx < tiledMap.width && ty >= 0 && ty < tiledMap.height) {
+      if (tileInBounds(tx, ty)) {
         spawnDragStart = { tx, ty };
         spawnDragEnd = { tx, ty };
       }
@@ -390,12 +384,8 @@
 
     const { px, py } = canvasPixel(e);
 
-    if (isPainting && activeTool === 'terrain') {
-      paintTerrain(px, py);
-    } else if (isPainting && activeTool === 'lighting') {
-      paintLighting(px, py);
-    } else if (isPainting && activeTool === 'elevation') {
-      paintElevation(px, py);
+    if (isPainting && (activeTool === 'terrain' || activeTool === 'lighting' || activeTool === 'elevation')) {
+      paintTile(px, py);
     } else if (activeTool === 'spawn' && spawnDragStart) {
       const { tx, ty } = tileFromPixel(px, py);
       const cx = Math.max(0, Math.min(tiledMap.width - 1, tx));
@@ -420,40 +410,23 @@
     isPainting = false;
   }
 
-  function paintTerrain(px, py) {
-    const tileSize = getTileSize();
-    const tx = Math.floor(px / tileSize);
-    const ty = Math.floor(py / tileSize);
-
-    if (tx < 0 || tx >= tiledMap.width || ty < 0 || ty >= tiledMap.height) return;
-
-    const gid = TERRAIN_TYPES[selectedTerrain]?.gid || 1;
-    tiledMap = setTerrain(tiledMap, tx, ty, gid);
-    dirty = true;
-    drawMap();
+  function tileInBounds(tx, ty) {
+    return tx >= 0 && tx < tiledMap.width && ty >= 0 && ty < tiledMap.height;
   }
 
-  function paintLighting(px, py) {
-    const tileSize = getTileSize();
-    const tx = Math.floor(px / tileSize);
-    const ty = Math.floor(py / tileSize);
+  function paintTile(px, py) {
+    const { tx, ty } = tileFromPixel(px, py);
+    if (!tileInBounds(tx, ty)) return;
 
-    if (tx < 0 || tx >= tiledMap.width || ty < 0 || ty >= tiledMap.height) return;
-
-    const gid = LIGHTING_TYPES[selectedLighting]?.gid ?? 0;
-    tiledMap = setLighting(tiledMap, tx, ty, gid);
-    dirty = true;
-    drawMap();
-  }
-
-  function paintElevation(px, py) {
-    const tileSize = getTileSize();
-    const tx = Math.floor(px / tileSize);
-    const ty = Math.floor(py / tileSize);
-
-    if (tx < 0 || tx >= tiledMap.width || ty < 0 || ty >= tiledMap.height) return;
-
-    tiledMap = setElevation(tiledMap, tx, ty, selectedElevation);
+    if (activeTool === 'terrain') {
+      const gid = TERRAIN_TYPES[selectedTerrain]?.gid || 1;
+      tiledMap = setTerrain(tiledMap, tx, ty, gid);
+    } else if (activeTool === 'lighting') {
+      const gid = LIGHTING_TYPES[selectedLighting]?.gid ?? 0;
+      tiledMap = setLighting(tiledMap, tx, ty, gid);
+    } else if (activeTool === 'elevation') {
+      tiledMap = setElevation(tiledMap, tx, ty, selectedElevation);
+    }
     dirty = true;
     drawMap();
   }

@@ -23,24 +23,32 @@ export const LIGHTING_TYPES = {
   light_obscurement:  { gid: 5, label: 'Light Obscurement',  color: '#ccddaa' },
 };
 
-/** Get lighting info by GID. */
-export function lightingByGid(gid) {
-  for (const [key, val] of Object.entries(LIGHTING_TYPES)) {
+/**
+ * Look up an entry by GID in a type map, returning the matching key and value.
+ * Falls back to the given default key if no match is found.
+ */
+function lookupByGid(typeMap, gid, defaultKey) {
+  for (const [key, val] of Object.entries(typeMap)) {
     if (val.gid === gid) {
       return { key, ...val };
     }
   }
-  return { key: 'normal', ...LIGHTING_TYPES.normal };
+  return { key: defaultKey, ...typeMap[defaultKey] };
+}
+
+/** Get lighting info by GID. */
+export function lightingByGid(gid) {
+  return lookupByGid(LIGHTING_TYPES, gid, 'normal');
 }
 
 /** Get terrain info by GID. */
 export function terrainByGid(gid) {
-  for (const [key, val] of Object.entries(TERRAIN_TYPES)) {
-    if (val.gid === gid) {
-      return { key, ...val };
-    }
-  }
-  return { key: 'open_ground', ...TERRAIN_TYPES.open_ground };
+  return lookupByGid(TERRAIN_TYPES, gid, 'open_ground');
+}
+
+/** Find a layer by name and type in a Tiled map. */
+function findLayer(tiledMap, name, type) {
+  return tiledMap.layers?.find(l => l.name === name && l.type === type);
 }
 
 /** Maximum elevation level. */
@@ -153,8 +161,29 @@ export function generateBlankMap(width, height) {
  * @returns {number[]} The terrain data array (GIDs).
  */
 export function getTerrainData(tiledMap) {
-  const layer = tiledMap.layers?.find(l => l.name === 'terrain' && l.type === 'tilelayer');
-  return layer?.data || [];
+  return findLayer(tiledMap, 'terrain', 'tilelayer')?.data || [];
+}
+
+/**
+ * Set a value in a tile layer at a specific position.
+ * Shared implementation for terrain, lighting, and elevation setters.
+ */
+function setTileValue(tiledMap, layerName, x, y, value) {
+  const layer = findLayer(tiledMap, layerName, 'tilelayer');
+  if (!layer) return tiledMap;
+
+  const idx = y * tiledMap.width + x;
+  if (idx >= 0 && idx < layer.data.length) {
+    layer.data[idx] = value;
+  }
+  return tiledMap;
+}
+
+/**
+ * Get the objects array from a named object group layer.
+ */
+function getObjectGroupObjects(tiledMap, layerName) {
+  return findLayer(tiledMap, layerName, 'objectgroup')?.objects || [];
 }
 
 /**
@@ -166,14 +195,7 @@ export function getTerrainData(tiledMap) {
  * @returns {object} Updated map (mutates in place for performance).
  */
 export function setTerrain(tiledMap, x, y, gid) {
-  const layer = tiledMap.layers?.find(l => l.name === 'terrain' && l.type === 'tilelayer');
-  if (!layer) return tiledMap;
-
-  const idx = y * tiledMap.width + x;
-  if (idx >= 0 && idx < layer.data.length) {
-    layer.data[idx] = gid;
-  }
-  return tiledMap;
+  return setTileValue(tiledMap, 'terrain', x, y, gid);
 }
 
 /**
@@ -182,8 +204,7 @@ export function setTerrain(tiledMap, x, y, gid) {
  * @returns {object[]} The wall objects array.
  */
 export function getWalls(tiledMap) {
-  const layer = tiledMap.layers?.find(l => l.name === 'walls' && l.type === 'objectgroup');
-  return layer?.objects || [];
+  return getObjectGroupObjects(tiledMap, 'walls');
 }
 
 /**
@@ -196,19 +217,20 @@ export function getWalls(tiledMap) {
  * @returns {object} Updated map.
  */
 export function addWall(tiledMap, x, y, orientation) {
-  const layer = tiledMap.layers?.find(l => l.name === 'walls' && l.type === 'objectgroup');
+  const layer = findLayer(tiledMap, 'walls', 'objectgroup');
   if (!layer) return tiledMap;
 
   const tileSize = tiledMap.tilewidth;
+  const isHorizontal = orientation === 'horizontal';
   const wall = {
     id: layer.objects.length + 1,
     type: 'wall',
     x,
     y,
-    width: orientation === 'horizontal' ? tileSize : 0,
-    height: orientation === 'vertical' ? tileSize : 0,
+    width: isHorizontal ? tileSize : 0,
+    height: isHorizontal ? 0 : tileSize,
     properties: {
-      edge: orientation === 'horizontal' ? 'top' : 'left',
+      edge: isHorizontal ? 'top' : 'left',
     },
   };
 
@@ -225,7 +247,7 @@ export function addWall(tiledMap, x, y, orientation) {
  * @returns {object} Updated map.
  */
 export function removeWall(tiledMap, px, py, threshold) {
-  const layer = tiledMap.layers?.find(l => l.name === 'walls' && l.type === 'objectgroup');
+  const layer = findLayer(tiledMap, 'walls', 'objectgroup');
   if (!layer) return tiledMap;
 
   layer.objects = layer.objects.filter(wall => {
@@ -233,12 +255,10 @@ export function removeWall(tiledMap, px, py, threshold) {
     const wh = wall.height || 0;
 
     if (ww > 0) {
-      // Horizontal wall: check if point is within segment x-range and close to y
       if (px >= wall.x && px <= wall.x + ww && Math.abs(py - wall.y) <= threshold) {
         return false;
       }
     } else if (wh > 0) {
-      // Vertical wall: check if point is within segment y-range and close to x
       if (py >= wall.y && py <= wall.y + wh && Math.abs(px - wall.x) <= threshold) {
         return false;
       }
@@ -255,8 +275,7 @@ export function removeWall(tiledMap, px, py, threshold) {
  * @returns {number[]} The lighting data array (GIDs).
  */
 export function getLightingData(tiledMap) {
-  const layer = tiledMap.layers?.find(l => l.name === 'lighting' && l.type === 'tilelayer');
-  return layer?.data || [];
+  return findLayer(tiledMap, 'lighting', 'tilelayer')?.data || [];
 }
 
 /**
@@ -268,14 +287,7 @@ export function getLightingData(tiledMap) {
  * @returns {object} Updated map (mutates in place).
  */
 export function setLighting(tiledMap, x, y, gid) {
-  const layer = tiledMap.layers?.find(l => l.name === 'lighting' && l.type === 'tilelayer');
-  if (!layer) return tiledMap;
-
-  const idx = y * tiledMap.width + x;
-  if (idx >= 0 && idx < layer.data.length) {
-    layer.data[idx] = gid;
-  }
-  return tiledMap;
+  return setTileValue(tiledMap, 'lighting', x, y, gid);
 }
 
 /**
@@ -284,8 +296,7 @@ export function setLighting(tiledMap, x, y, gid) {
  * @returns {number[]} The elevation data array.
  */
 export function getElevationData(tiledMap) {
-  const layer = tiledMap.layers?.find(l => l.name === 'elevation' && l.type === 'tilelayer');
-  return layer?.data || [];
+  return findLayer(tiledMap, 'elevation', 'tilelayer')?.data || [];
 }
 
 /**
@@ -297,15 +308,8 @@ export function getElevationData(tiledMap) {
  * @returns {object} Updated map (mutates in place).
  */
 export function setElevation(tiledMap, x, y, level) {
-  const layer = tiledMap.layers?.find(l => l.name === 'elevation' && l.type === 'tilelayer');
-  if (!layer) return tiledMap;
-
   const clamped = Math.max(0, Math.min(ELEVATION_MAX, level));
-  const idx = y * tiledMap.width + x;
-  if (idx >= 0 && idx < layer.data.length) {
-    layer.data[idx] = clamped;
-  }
-  return tiledMap;
+  return setTileValue(tiledMap, 'elevation', x, y, clamped);
 }
 
 /**
@@ -314,8 +318,7 @@ export function setElevation(tiledMap, x, y, level) {
  * @returns {object[]} The spawn zone objects array.
  */
 export function getSpawnZones(tiledMap) {
-  const layer = tiledMap.layers?.find(l => l.name === 'spawn_zones' && l.type === 'objectgroup');
-  return layer?.objects || [];
+  return getObjectGroupObjects(tiledMap, 'spawn_zones');
 }
 
 /**
@@ -329,7 +332,7 @@ export function getSpawnZones(tiledMap) {
  * @returns {object} Updated map.
  */
 export function addSpawnZone(tiledMap, x, y, width, height, zoneType) {
-  const layer = tiledMap.layers?.find(l => l.name === 'spawn_zones' && l.type === 'objectgroup');
+  const layer = findLayer(tiledMap, 'spawn_zones', 'objectgroup');
   if (!layer) return tiledMap;
   if (zoneType !== 'player' && zoneType !== 'enemy') return tiledMap;
 
@@ -354,7 +357,7 @@ export function addSpawnZone(tiledMap, x, y, width, height, zoneType) {
  * @returns {object} Updated map.
  */
 export function removeSpawnZone(tiledMap, zoneId) {
-  const layer = tiledMap.layers?.find(l => l.name === 'spawn_zones' && l.type === 'objectgroup');
+  const layer = findLayer(tiledMap, 'spawn_zones', 'objectgroup');
   if (!layer) return tiledMap;
 
   layer.objects = layer.objects.filter(z => z.id !== zoneId);
