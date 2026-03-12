@@ -3,11 +3,62 @@ package renderer
 import (
 	"fmt"
 	"image/color"
+	"strings"
+	"unicode"
 
 	"github.com/fogleman/gg"
 )
 
 const gridLabelMargin = 28
+
+// ParseCoordinate parses a grid coordinate string like "D4" or "AA12" into
+// a 0-based column and 0-based row. Column letters are case-insensitive.
+// Row numbers are 1-based in the input (D4 = col 3, row 3 in 0-based).
+func ParseCoordinate(s string) (col, row int, err error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, 0, fmt.Errorf("empty coordinate")
+	}
+
+	// Find boundary between letters and digits
+	i := 0
+	for i < len(s) && unicode.IsLetter(rune(s[i])) {
+		i++
+	}
+	if i == 0 {
+		return 0, 0, fmt.Errorf("coordinate must start with column letters: %q", s)
+	}
+	if i == len(s) {
+		return 0, 0, fmt.Errorf("coordinate must end with row number: %q", s)
+	}
+
+	colPart := strings.ToUpper(s[:i])
+	rowPart := s[i:]
+
+	// Parse column: A=0, Z=25, AA=26, AB=27, etc.
+	col = 0
+	for _, ch := range colPart {
+		if ch < 'A' || ch > 'Z' {
+			return 0, 0, fmt.Errorf("invalid column letter in %q", s)
+		}
+		col = col*26 + int(ch-'A') + 1
+	}
+	col-- // convert from 1-based to 0-based
+
+	// Parse row: must be positive integer
+	rowNum := 0
+	for _, ch := range rowPart {
+		if ch < '0' || ch > '9' {
+			return 0, 0, fmt.Errorf("invalid row number in %q", s)
+		}
+		rowNum = rowNum*10 + int(ch-'0')
+	}
+	if rowNum <= 0 {
+		return 0, 0, fmt.Errorf("row must be >= 1, got %d in %q", rowNum, s)
+	}
+
+	return col, rowNum - 1, nil
+}
 
 // ColumnLabel converts a zero-based column index to a spreadsheet-style label.
 // 0 -> "A", 25 -> "Z", 26 -> "AA", 27 -> "AB", etc.

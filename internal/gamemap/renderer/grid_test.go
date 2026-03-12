@@ -87,3 +87,64 @@ func TestGridLabelMarginConstant(t *testing.T) {
 		t.Errorf("gridLabelMargin should be >= 20, got %d", gridLabelMargin)
 	}
 }
+
+func TestParseCoordinate(t *testing.T) {
+	tests := []struct {
+		input   string
+		wantCol int
+		wantRow int
+		wantErr bool
+	}{
+		{"A1", 0, 0, false},
+		{"D4", 3, 3, false},
+		{"Z1", 25, 0, false},
+		{"AA1", 26, 0, false},
+		{"AB12", 27, 11, false},
+		{"AZ1", 51, 0, false},
+		{"BA1", 52, 0, false},
+		{"a1", 0, 0, false},    // case insensitive
+		{"d4", 3, 3, false},    // case insensitive
+		{"aa12", 26, 11, false}, // case insensitive
+		{"", 0, 0, true},       // empty
+		{"1", 0, 0, true},      // no column
+		{"A", 0, 0, true},      // no row
+		{"A0", 0, 0, true},     // row 0 invalid (1-based)
+		{"1A", 0, 0, true},     // wrong order
+		{"A-1", 0, 0, true},    // negative row
+		{"A1B", 0, 0, true},    // trailing letters
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			col, row, err := ParseCoordinate(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ParseCoordinate(%q) expected error, got col=%d, row=%d", tt.input, col, row)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("ParseCoordinate(%q) unexpected error: %v", tt.input, err)
+				return
+			}
+			if col != tt.wantCol || row != tt.wantRow {
+				t.Errorf("ParseCoordinate(%q) = (%d, %d), want (%d, %d)", tt.input, col, row, tt.wantCol, tt.wantRow)
+			}
+		})
+	}
+}
+
+func TestParseCoordinate_RoundTrip(t *testing.T) {
+	// Verify ParseCoordinate is the inverse of ColumnLabel
+	for col := 0; col <= 77; col++ {
+		label := ColumnLabel(col)
+		coord := label + "1"
+		gotCol, gotRow, err := ParseCoordinate(coord)
+		if err != nil {
+			t.Errorf("round-trip failed for col %d (label %q): %v", col, label, err)
+			continue
+		}
+		if gotCol != col || gotRow != 0 {
+			t.Errorf("round-trip col %d: ParseCoordinate(%q) = (%d, %d), want (%d, 0)", col, coord, gotCol, gotRow, col)
+		}
+	}
+}
