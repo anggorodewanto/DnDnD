@@ -73,45 +73,39 @@ func TestEffectiveAC(t *testing.T) {
 	}
 }
 
-func TestLineIntersectsWall(t *testing.T) {
+func TestSegmentsIntersect_Wall(t *testing.T) {
 	// Vertical wall from (2,0) to (2,3) — blocks lines crossing x=2
-	wall := renderer.WallSegment{X1: 2, Y1: 0, X2: 2, Y2: 3}
-
 	// Line from (1,1) to (3,1) should cross the wall
-	if !lineIntersectsSegment(1, 1, 3, 1, wall) {
+	if !segmentsIntersect(1, 1, 3, 1, 2, 0, 2, 3) {
 		t.Error("expected line (1,1)-(3,1) to intersect vertical wall at x=2")
 	}
 
 	// Line from (0,0) to (1,1) should NOT cross the wall
-	if lineIntersectsSegment(0, 0, 1, 1, wall) {
+	if segmentsIntersect(0, 0, 1, 1, 2, 0, 2, 3) {
 		t.Error("expected line (0,0)-(1,1) to NOT intersect vertical wall at x=2")
 	}
 
 	// Horizontal wall from (0,2) to (3,2)
-	hwall := renderer.WallSegment{X1: 0, Y1: 2, X2: 3, Y2: 2}
-
 	// Line from (1,1) to (1,3) should cross horizontal wall at y=2
-	if !lineIntersectsSegment(1, 1, 1, 3, hwall) {
+	if !segmentsIntersect(1, 1, 1, 3, 0, 2, 3, 2) {
 		t.Error("expected line (1,1)-(1,3) to intersect horizontal wall at y=2")
 	}
 
 	// Line from (1,0) to (1,1) should NOT cross horizontal wall at y=2
-	if lineIntersectsSegment(1, 0, 1, 1, hwall) {
+	if segmentsIntersect(1, 0, 1, 1, 0, 2, 3, 2) {
 		t.Error("expected line (1,0)-(1,1) to NOT intersect horizontal wall at y=2")
 	}
 }
 
-func TestLineIntersectsWall_Diagonal(t *testing.T) {
+func TestSegmentsIntersect_Diagonal(t *testing.T) {
 	// Vertical wall at x=2 from y=0 to y=4
-	wall := renderer.WallSegment{X1: 2, Y1: 0, X2: 2, Y2: 4}
-
 	// Diagonal line from (0,0) to (4,4) should cross x=2
-	if !lineIntersectsSegment(0, 0, 4, 4, wall) {
+	if !segmentsIntersect(0, 0, 4, 4, 2, 0, 2, 4) {
 		t.Error("expected diagonal line (0,0)-(4,4) to intersect vertical wall at x=2")
 	}
 
 	// Diagonal line from (0,0) to (1,4) should NOT cross x=2
-	if lineIntersectsSegment(0, 0, 1, 4, wall) {
+	if segmentsIntersect(0, 0, 1, 4, 2, 0, 2, 4) {
 		t.Error("expected diagonal line (0,0)-(1,4) to NOT intersect vertical wall at x=2")
 	}
 }
@@ -377,14 +371,9 @@ func TestDistSq(t *testing.T) {
 	}
 }
 
-func TestLineIntersectsWall_EndpointOnWall(t *testing.T) {
-	// Wall at x=2 from y=0 to y=2
-	wall := renderer.WallSegment{X1: 2, Y1: 0, X2: 2, Y2: 2}
-
-	// Line that starts exactly on the wall endpoint — should NOT count as blocked
-	// A corner-to-corner line touching a wall endpoint is not considered blocked
-	// (the line shares a point but doesn't cross the wall)
-	if lineIntersectsSegment(2, 0, 3, 1, wall) {
+func TestSegmentsIntersect_EndpointOnWall(t *testing.T) {
+	// Line that starts exactly on the wall endpoint should NOT count as blocked
+	if segmentsIntersect(2, 0, 3, 1, 2, 0, 2, 2) {
 		t.Error("line starting at wall endpoint should not count as intersection")
 	}
 }

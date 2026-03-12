@@ -188,7 +188,7 @@
   - Depends on: Phase 31
   - Done when: `/distance` returns correct distances; attack/cast feedback includes distance; range rejections show both distances.
 
-- [ ] **Phase 33: Cover Calculation**
+- [x] **Phase 33: Cover Calculation**
   - Scope: Dynamic cover computation from map geometry (walls, obstacles, creatures). DMG grid variant: corner-of-attacker to corners-of-target line tracing. Half (+2 AC, +2 DEX save), three-quarters (+5, +5), full cover (block targeting). Creature-granted half cover. Integration with attacks (AC bonus) and saves (DEX save bonus for AoE).
   - Depends on: Phase 19, Phase 29
   - Done when: Unit tests verify cover from walls, obstacles, creatures; half/three-quarters/full correctly determined; integration with AC and saves.
