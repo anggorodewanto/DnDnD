@@ -163,20 +163,17 @@ export function removeWall(tiledMap, px, py, threshold) {
   if (!layer) return tiledMap;
 
   layer.objects = layer.objects.filter(wall => {
-    const wx = wall.x;
-    const wy = wall.y;
     const ww = wall.width || 0;
     const wh = wall.height || 0;
 
-    // Distance from point to line segment
     if (ww > 0) {
-      // Horizontal wall
-      if (px >= wx && px <= wx + ww && Math.abs(py - wy) <= threshold) {
+      // Horizontal wall: check if point is within segment x-range and close to y
+      if (px >= wall.x && px <= wall.x + ww && Math.abs(py - wall.y) <= threshold) {
         return false;
       }
     } else if (wh > 0) {
-      // Vertical wall
-      if (py >= wy && py <= wy + wh && Math.abs(px - wx) <= threshold) {
+      // Vertical wall: check if point is within segment y-range and close to x
+      if (py >= wall.y && py <= wall.y + wh && Math.abs(px - wall.x) <= threshold) {
         return false;
       }
     }

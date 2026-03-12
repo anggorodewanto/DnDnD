@@ -107,7 +107,7 @@
   - Depends on: Phase 2
   - Done when: Files can be uploaded, stored, retrieved, and deleted through the interface; assets served via API endpoint.
 
-- [ ] **Phase 21a: Map Editor — Grid, Terrain, Walls, Save/Load (Dashboard)**
+- [x] **Phase 21a: Map Editor — Grid, Terrain, Walls, Save/Load (Dashboard)**
   - Scope: Svelte map editor: specify grid dimensions, blank grid with default terrain, terrain brush (open ground, difficult terrain, water, lava, pit), wall tool (draw along tile edges). Map save/load via API.
   - Depends on: Phase 15, Phase 19
   - Done when: DM can create maps with terrain and walls, save and reload them.

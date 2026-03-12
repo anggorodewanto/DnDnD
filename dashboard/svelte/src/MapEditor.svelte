@@ -169,14 +169,20 @@
     }
   }
 
-  function handleCanvasMouseDown(e) {
-    if (!tiledMap) return;
-
+  function canvasPixel(e) {
     const rect = canvasEl.getBoundingClientRect();
     const scaleX = canvasEl.width / rect.width;
     const scaleY = canvasEl.height / rect.height;
-    const px = (e.clientX - rect.left) * scaleX;
-    const py = (e.clientY - rect.top) * scaleY;
+    return {
+      px: (e.clientX - rect.left) * scaleX,
+      py: (e.clientY - rect.top) * scaleY,
+    };
+  }
+
+  function handleCanvasMouseDown(e) {
+    if (!tiledMap) return;
+
+    const { px, py } = canvasPixel(e);
 
     if (activeTool === 'terrain') {
       isPainting = true;
@@ -191,12 +197,7 @@
   function handleCanvasMouseMove(e) {
     if (!isPainting || activeTool !== 'terrain') return;
 
-    const rect = canvasEl.getBoundingClientRect();
-    const scaleX = canvasEl.width / rect.width;
-    const scaleY = canvasEl.height / rect.height;
-    const px = (e.clientX - rect.left) * scaleX;
-    const py = (e.clientY - rect.top) * scaleY;
-
+    const { px, py } = canvasPixel(e);
     paintTerrain(px, py);
   }
 

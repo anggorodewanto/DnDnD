@@ -9,6 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/ab/dndnd/internal/refdata"
 )
 
 // Handler serves map CRUD endpoints over HTTP.
@@ -40,6 +42,18 @@ type mapResponse struct {
 	Width     int             `json:"width"`
 	Height    int             `json:"height"`
 	TiledJSON json.RawMessage `json:"tiled_json"`
+}
+
+// newMapResponse converts a refdata.Map to a mapResponse.
+func newMapResponse(m refdata.Map) mapResponse {
+	return mapResponse{
+		ID:        m.ID.String(),
+		Campaign:  m.CampaignID.String(),
+		Name:      m.Name,
+		Width:     int(m.WidthSquares),
+		Height:    int(m.HeightSquares),
+		TiledJSON: m.TiledJson,
+	}
 }
 
 // createMapRequest is the JSON request body for creating a map.
@@ -145,18 +159,9 @@ func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := mapResponse{
-		ID:        m.ID.String(),
-		Campaign:  m.CampaignID.String(),
-		Name:      m.Name,
-		Width:     int(m.WidthSquares),
-		Height:    int(m.HeightSquares),
-		TiledJSON: m.TiledJson,
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(newMapResponse(m))
 }
 
 // GetMap handles GET /api/maps/{id}.
@@ -178,17 +183,8 @@ func (h *Handler) GetMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := mapResponse{
-		ID:        m.ID.String(),
-		Campaign:  m.CampaignID.String(),
-		Name:      m.Name,
-		Width:     int(m.WidthSquares),
-		Height:    int(m.HeightSquares),
-		TiledJSON: m.TiledJson,
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(newMapResponse(m))
 }
 
 // ListMaps handles GET /api/maps?campaign_id=X.
@@ -211,20 +207,9 @@ func (h *Handler) ListMaps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var resp []mapResponse
-	for _, m := range maps {
-		resp = append(resp, mapResponse{
-			ID:        m.ID.String(),
-			Campaign:  m.CampaignID.String(),
-			Name:      m.Name,
-			Width:     int(m.WidthSquares),
-			Height:    int(m.HeightSquares),
-			TiledJSON: m.TiledJson,
-		})
-	}
-
-	if resp == nil {
-		resp = []mapResponse{}
+	resp := make([]mapResponse, len(maps))
+	for i, m := range maps {
+		resp[i] = newMapResponse(m)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -258,17 +243,8 @@ func (h *Handler) UpdateMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := mapResponse{
-		ID:        m.ID.String(),
-		Campaign:  m.CampaignID.String(),
-		Name:      m.Name,
-		Width:     int(m.WidthSquares),
-		Height:    int(m.HeightSquares),
-		TiledJSON: m.TiledJson,
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(newMapResponse(m))
 }
 
 // DeleteMap handles DELETE /api/maps/{id}.
