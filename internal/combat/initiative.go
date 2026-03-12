@@ -54,9 +54,11 @@ type InitiativeEntry struct {
 
 // CombatCondition represents a condition applied to a combatant.
 type CombatCondition struct {
-	Condition      string `json:"condition"`
-	DurationRounds int    `json:"duration_rounds"`
-	StartedRound   int    `json:"started_round"`
+	Condition         string `json:"condition"`
+	DurationRounds    int    `json:"duration_rounds"`
+	StartedRound      int    `json:"started_round"`
+	SourceCombatantID string `json:"source_combatant_id,omitempty"`
+	ExpiresOn         string `json:"expires_on,omitempty"`
 }
 
 // SurprisedCondition returns the standard surprised condition struct.
@@ -340,6 +342,14 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 
 	// Complete current turn if there is one
 	if enc.CurrentTurnID.Valid {
+		// Process end-of-turn condition expiration for the current combatant
+		currentTurn, err := s.store.GetTurn(ctx, enc.CurrentTurnID.UUID)
+		if err == nil {
+			if _, err := s.ProcessTurnEnd(ctx, encounterID, currentTurn.CombatantID, enc.RoundNumber); err != nil {
+				return TurnInfo{}, fmt.Errorf("processing turn end conditions: %w", err)
+			}
+		}
+
 		if _, err := s.store.CompleteTurn(ctx, enc.CurrentTurnID.UUID); err != nil {
 			return TurnInfo{}, fmt.Errorf("completing current turn: %w", err)
 		}
@@ -461,7 +471,13 @@ func (s *Service) skipSurprisedTurn(ctx context.Context, encounterID uuid.UUID, 
 }
 
 // createActiveTurn creates an active turn and updates the encounter's current turn.
+// It processes turn-start condition expiration before creating the turn.
 func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant) (TurnInfo, error) {
+	// Process turn-start condition expiration
+	if _, err := s.ProcessTurnStart(ctx, encounterID, combatant, roundNumber); err != nil {
+		return TurnInfo{}, fmt.Errorf("processing turn start conditions: %w", err)
+	}
+
 	speedFt, attacksRemaining, err := s.ResolveTurnResources(ctx, combatant)
 	if err != nil {
 		return TurnInfo{}, fmt.Errorf("resolving turn resources: %w", err)

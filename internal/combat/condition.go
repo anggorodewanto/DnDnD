@@ -1,0 +1,245 @@
+package combat
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/google/uuid"
+
+	"github.com/ab/dndnd/internal/refdata"
+)
+
+// AddCondition adds a condition to the JSONB array.
+func AddCondition(conditions json.RawMessage, condition CombatCondition) (json.RawMessage, error) {
+	conds, err := parseConditions(conditions)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(append(conds, condition))
+}
+
+// HasCondition checks if a condition is present in the JSONB array.
+func HasCondition(conditions json.RawMessage, conditionName string) bool {
+	conds, err := parseConditions(conditions)
+	if err != nil {
+		return false
+	}
+	for _, c := range conds {
+		if c.Condition == conditionName {
+			return true
+		}
+	}
+	return false
+}
+
+// GetCondition retrieves a specific condition by name from the JSONB array.
+func GetCondition(conditions json.RawMessage, conditionName string) (CombatCondition, bool) {
+	conds, err := parseConditions(conditions)
+	if err != nil {
+		return CombatCondition{}, false
+	}
+	for _, c := range conds {
+		if c.Condition == conditionName {
+			return c, true
+		}
+	}
+	return CombatCondition{}, false
+}
+
+// ListConditions lists all conditions from the JSONB array.
+func ListConditions(conditions json.RawMessage) ([]CombatCondition, error) {
+	return parseConditions(conditions)
+}
+
+// RemoveCondition removes a condition by name from the JSONB array.
+func RemoveCondition(conditions json.RawMessage, conditionName string) (json.RawMessage, error) {
+	conds, err := parseConditions(conditions)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]CombatCondition, 0, len(conds))
+	for _, c := range conds {
+		if c.Condition != conditionName {
+			filtered = append(filtered, c)
+		}
+	}
+	return json.Marshal(filtered)
+}
+
+// isExpired checks whether a condition has expired based on the current round,
+// the triggering combatant, and the timing phase.
+func isExpired(c CombatCondition, currentRound int, triggerCombatantID string, timing string) bool {
+	// Indefinite conditions never auto-expire
+	if c.DurationRounds <= 0 {
+		return false
+	}
+	// Only expire conditions placed by the trigger combatant
+	if c.SourceCombatantID != triggerCombatantID {
+		return false
+	}
+	// Check timing — default to "start_of_turn" if empty
+	expiresOn := c.ExpiresOn
+	if expiresOn == "" {
+		expiresOn = "start_of_turn"
+	}
+	if expiresOn != timing {
+		return false
+	}
+	// Check if enough rounds have passed
+	return currentRound >= c.StartedRound+c.DurationRounds
+}
+
+// CheckExpiredConditions checks all conditions for expiration and returns
+// updated conditions JSONB and log messages for expired conditions.
+func CheckExpiredConditions(conditions json.RawMessage, currentRound int, triggerCombatantID string, timing string) (json.RawMessage, []string, error) {
+	conds, err := parseConditions(conditions)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var remaining []CombatCondition
+	var msgs []string
+
+	for _, c := range conds {
+		if isExpired(c, currentRound, triggerCombatantID, timing) {
+			msgs = append(msgs, fmt.Sprintf("⏱️ %s has expired", c.Condition))
+			continue
+		}
+		remaining = append(remaining, c)
+	}
+
+	if remaining == nil {
+		remaining = []CombatCondition{}
+	}
+	updated, err := json.Marshal(remaining)
+	if err != nil {
+		return nil, nil, err
+	}
+	return updated, msgs, nil
+}
+
+// ApplyCondition applies a condition to a combatant and returns the updated
+// combatant and combat log messages.
+func (s *Service) ApplyCondition(ctx context.Context, combatantID uuid.UUID, condition CombatCondition) (refdata.Combatant, []string, error) {
+	c, err := s.store.GetCombatant(ctx, combatantID)
+	if err != nil {
+		return refdata.Combatant{}, nil, fmt.Errorf("getting combatant: %w", err)
+	}
+
+	newConds, err := AddCondition(c.Conditions, condition)
+	if err != nil {
+		return refdata.Combatant{}, nil, fmt.Errorf("adding condition: %w", err)
+	}
+
+	updated, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+		ID:              combatantID,
+		Conditions:      newConds,
+		ExhaustionLevel: c.ExhaustionLevel,
+	})
+	if err != nil {
+		return refdata.Combatant{}, nil, fmt.Errorf("updating conditions: %w", err)
+	}
+
+	var msg string
+	if condition.DurationRounds <= 0 {
+		msg = fmt.Sprintf("🔴 %s applied to %s (indefinite)", condition.Condition, c.DisplayName)
+	} else {
+		timing := condition.ExpiresOn
+		if timing == "" {
+			timing = "start_of_turn"
+		}
+		timingLabel := "start"
+		if timing == "end_of_turn" {
+			timingLabel = "end"
+		}
+		if condition.SourceCombatantID != "" {
+			msg = fmt.Sprintf("🔴 %s applied to %s by source (%d rounds, expires at %s of source's turn)",
+				condition.Condition, c.DisplayName, condition.DurationRounds, timingLabel)
+		} else {
+			msg = fmt.Sprintf("🔴 %s applied to %s (%d rounds, expires at %s of turn)",
+				condition.Condition, c.DisplayName, condition.DurationRounds, timingLabel)
+		}
+	}
+
+	return updated, []string{msg}, nil
+}
+
+// RemoveConditionFromCombatant removes a condition from a combatant and returns
+// the updated combatant and combat log messages.
+func (s *Service) RemoveConditionFromCombatant(ctx context.Context, combatantID uuid.UUID, conditionName string) (refdata.Combatant, []string, error) {
+	c, err := s.store.GetCombatant(ctx, combatantID)
+	if err != nil {
+		return refdata.Combatant{}, nil, fmt.Errorf("getting combatant: %w", err)
+	}
+
+	newConds, err := RemoveCondition(c.Conditions, conditionName)
+	if err != nil {
+		return refdata.Combatant{}, nil, fmt.Errorf("removing condition: %w", err)
+	}
+
+	updated, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+		ID:              combatantID,
+		Conditions:      newConds,
+		ExhaustionLevel: c.ExhaustionLevel,
+	})
+	if err != nil {
+		return refdata.Combatant{}, nil, fmt.Errorf("updating conditions: %w", err)
+	}
+
+	msg := fmt.Sprintf("🟢 %s removed from %s", conditionName, c.DisplayName)
+	return updated, []string{msg}, nil
+}
+
+// ProcessTurnStart checks ALL combatants in the encounter for conditions that
+// expire at the start of the given combatant's turn (where source_combatant_id
+// matches the current combatant), auto-removes expired conditions, and returns
+// log messages.
+func (s *Service) ProcessTurnStart(ctx context.Context, encounterID uuid.UUID, combatant refdata.Combatant, currentRound int32) ([]string, error) {
+	return s.processExpiredConditions(ctx, encounterID, combatant.ID, int(currentRound), "start_of_turn")
+}
+
+// ProcessTurnEnd checks ALL combatants in the encounter for conditions that
+// expire at the end of the given combatant's turn, auto-removes expired
+// conditions, and returns log messages.
+func (s *Service) ProcessTurnEnd(ctx context.Context, encounterID uuid.UUID, combatantID uuid.UUID, currentRound int32) ([]string, error) {
+	return s.processExpiredConditions(ctx, encounterID, combatantID, int(currentRound), "end_of_turn")
+}
+
+// processExpiredConditions is the shared implementation for ProcessTurnStart and ProcessTurnEnd.
+func (s *Service) processExpiredConditions(ctx context.Context, encounterID uuid.UUID, triggerCombatantID uuid.UUID, currentRound int, timing string) ([]string, error) {
+	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing combatants: %w", err)
+	}
+
+	var allMsgs []string
+	triggerID := triggerCombatantID.String()
+
+	for _, c := range combatants {
+		updated, msgs, err := CheckExpiredConditions(c.Conditions, currentRound, triggerID, timing)
+		if err != nil {
+			return nil, fmt.Errorf("checking expired conditions for %s: %w", c.DisplayName, err)
+		}
+		if len(msgs) == 0 {
+			continue
+		}
+
+		// Enrich messages with target name
+		for i, msg := range msgs {
+			msgs[i] = fmt.Sprintf("%s on %s", msg, c.DisplayName)
+		}
+
+		if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+			ID:              c.ID,
+			Conditions:      updated,
+			ExhaustionLevel: c.ExhaustionLevel,
+		}); err != nil {
+			return nil, fmt.Errorf("updating conditions for %s: %w", c.DisplayName, err)
+		}
+
+		allMsgs = append(allMsgs, msgs...)
+	}
+
+	return allMsgs, nil
+}
