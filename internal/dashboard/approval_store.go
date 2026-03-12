@@ -55,7 +55,7 @@ func (s *DBApprovalStore) ListPendingApprovals(ctx context.Context, campaignID u
 			CharacterID:   row.CharacterID,
 			CharacterName: row.CharacterName,
 			DiscordUserID: row.DiscordUserID,
-			Status:        row.PlayerCharacter.Status,
+			Status:        row.Status,
 			CreatedVia:    row.CreatedVia,
 			DmFeedback:    row.DmFeedback.String,
 		}
@@ -76,7 +76,7 @@ func (s *DBApprovalStore) GetApprovalDetail(ctx context.Context, id uuid.UUID) (
 			CharacterID:   row.CharacterID,
 			CharacterName: row.CharacterName,
 			DiscordUserID: row.DiscordUserID,
-			Status:        row.PlayerCharacter.Status,
+			Status:        row.Status,
 			CreatedVia:    row.CreatedVia,
 			DmFeedback:    row.DmFeedback.String,
 		},

@@ -71,6 +71,7 @@ type Character struct {
 	Homebrew         sql.NullBool          `json:"homebrew"`
 	CreatedAt        time.Time             `json:"created_at"`
 	UpdatedAt        time.Time             `json:"updated_at"`
+	CardMessageID    sql.NullString        `json:"card_message_id"`
 }
 
 type Class struct {

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -17,15 +16,15 @@ import (
 
 // fakeQueries is a test double that implements the methods DBApprovalStore needs.
 type fakeQueries struct {
-	pendingRows   []refdata.ListPlayerCharactersByStatusRow
-	pendingErr    error
-	detailRow     refdata.GetPlayerCharacterWithCharacterRow
-	detailErr     error
-	getPC         refdata.PlayerCharacter
-	getPCErr      error
-	updatePC      refdata.PlayerCharacter
-	updateErr     error
-	updateParams  refdata.UpdatePlayerCharacterStatusParams
+	pendingRows  []refdata.ListPlayerCharactersByStatusRow
+	pendingErr   error
+	detailRow    refdata.GetPlayerCharacterWithCharacterRow
+	detailErr    error
+	getPC        refdata.PlayerCharacter
+	getPCErr     error
+	updatePC     refdata.PlayerCharacter
+	updateErr    error
+	updateParams refdata.UpdatePlayerCharacterStatusParams
 }
 
 func (f *fakeQueries) ListPlayerCharactersByStatus(_ context.Context, _ refdata.ListPlayerCharactersByStatusParams) ([]refdata.ListPlayerCharactersByStatusRow, error) {
@@ -53,15 +52,12 @@ func TestDBApprovalStore_ListPendingApprovals(t *testing.T) {
 	fq := &fakeQueries{
 		pendingRows: []refdata.ListPlayerCharactersByStatusRow{
 			{
-				PlayerCharacter: refdata.PlayerCharacter{
-					ID:            id,
-					CampaignID:    campaignID,
-					CharacterID:   charID,
-					DiscordUserID: "player1",
-					Status:        "pending",
-					CreatedVia:    "import",
-					CreatedAt:     time.Now(),
-				},
+				ID:            id,
+				CampaignID:    campaignID,
+				CharacterID:   charID,
+				DiscordUserID: "player1",
+				Status:        "pending",
+				CreatedVia:    "import",
 				CharacterName: "Gandalf",
 				Race:          "Human",
 				Level:         5,
@@ -91,13 +87,11 @@ func TestDBApprovalStore_GetApprovalDetail(t *testing.T) {
 
 	fq := &fakeQueries{
 		detailRow: refdata.GetPlayerCharacterWithCharacterRow{
-			PlayerCharacter: refdata.PlayerCharacter{
-				ID:            id,
-				CharacterID:   charID,
-				DiscordUserID: "player1",
-				Status:        "pending",
-				CreatedVia:    "import",
-			},
+			ID:            id,
+			CharacterID:   charID,
+			DiscordUserID: "player1",
+			Status:        "pending",
+			CreatedVia:    "import",
 			CharacterName: "Gandalf",
 			Race:          "Human",
 			Level:         5,

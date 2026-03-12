@@ -60,3 +60,9 @@ DELETE FROM characters WHERE id = $1;
 
 -- name: CountCharactersByCampaign :one
 SELECT count(*) FROM characters WHERE campaign_id = $1;
+
+-- name: GetCharacterCardMessageID :one
+SELECT card_message_id FROM characters WHERE id = $1;
+
+-- name: SetCharacterCardMessageID :exec
+UPDATE characters SET card_message_id = $2, updated_at = now() WHERE id = $1;
