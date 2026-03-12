@@ -525,7 +525,6 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
 }
 
-
 // resolveAttackWeapon resolves the weapon, ability scores, and proficiency bonus for an attack.
 func (s *Service) resolveAttackWeapon(ctx context.Context, cmd AttackCommand) (refdata.Weapon, AbilityScores, int, error) {
 	if !cmd.Attacker.CharacterID.Valid {
