@@ -201,12 +201,6 @@ func FindPath(req PathRequest) (*PathResult, error) {
 	occupantMap := buildOccupantMap(g.Occupants)
 
 	// A* with priority queue
-	type node struct {
-		point Point
-		gCost int // cost from start
-		fCost int // gCost + heuristic
-	}
-
 	gCosts := make(map[Point]int)
 	cameFrom := make(map[Point]Point)
 	gCosts[req.Start] = 0
@@ -228,7 +222,7 @@ func FindPath(req PathRequest) (*PathResult, error) {
 
 		curG := gCosts[cur]
 		if curG > current.gCost {
-			continue // stale entry
+			continue
 		}
 
 		for _, dir := range directions {
@@ -239,18 +233,14 @@ func FindPath(req PathRequest) (*PathResult, error) {
 				continue
 			}
 
-			// Check wall blocking for cardinal moves only (diagonal corner-cutting allowed)
-			if !isDiagonal(dr, dc) {
-				if blockedEdges[makeEdge(cur.Row, cur.Col, next.Row, next.Col)] {
-					continue
-				}
+			// Walls block cardinal moves only (diagonal corner-cutting allowed)
+			if !isDiagonal(dr, dc) && blockedEdges[makeEdge(cur.Row, cur.Col, next.Row, next.Col)] {
+				continue
 			}
 
-			// Check occupant blocking
-			if occ, ok := occupantMap[next]; ok {
-				if !canPassThrough(occ, req.SizeCategory) {
-					continue
-				}
+			// Enemies block unless size difference >= 2
+			if occ, ok := occupantMap[next]; ok && !canPassThrough(occ, req.SizeCategory) {
+				continue
 			}
 
 			// Calculate move cost
@@ -282,21 +272,17 @@ func canPassThrough(occ Occupant, moverSize int) bool {
 	if occ.IsAlly {
 		return true
 	}
-	diff := moverSize - occ.SizeCategory
-	if diff < 0 {
-		diff = -diff
-	}
-	return diff >= 2
+	return abs(moverSize-occ.SizeCategory) >= 2
 }
 
 func tileCost(p Point, g *Grid, isProne bool) int {
 	terrain := g.Terrain[p.Row*g.Width+p.Col]
 	cost := 5
 	if terrain == renderer.TerrainDifficultTerrain {
-		cost = 10 // ×2
+		cost = 10
 	}
 	if isProne {
-		cost += 5 // prone adds +5 (so open=10, difficult=15)
+		cost += 5
 	}
 	return cost
 }
@@ -308,7 +294,6 @@ func buildResult(cameFrom map[Point]Point, start, end Point, totalCost int) *Pat
 		cur = cameFrom[cur]
 		path = append(path, cur)
 	}
-	// Reverse
 	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
 		path[i], path[j] = path[j], path[i]
 	}

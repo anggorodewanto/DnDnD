@@ -192,8 +192,6 @@ func TestFindPath_EnemySizeDiff2PassThrough(t *testing.T) {
 
 func TestFindPath_EnemySizeDiff1Blocked(t *testing.T) {
 	g := openGrid(3, 1)
-	// Small enemy, Large mover: diff = 2, can pass through (>= 2)
-	// Actually diff = 2 means CAN pass. Let's use diff=1:
 	// Medium enemy, Large mover: diff = 1 < 2, blocked
 	g.Occupants = []Occupant{{Col: 1, Row: 0, IsAlly: false, SizeCategory: SizeMedium}}
 	req := PathRequest{

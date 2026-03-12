@@ -168,7 +168,7 @@
   - Depends on: Phase 24, Phase 27
   - Done when: Unit tests verify resource tracking, deduction, and display; commands rejected when resources spent.
 
-- [ ] **Phase 29: Pathfinding (A*)**
+- [x] **Phase 29: Pathfinding (A*)**
   - Scope: A* pathfinding on tile grid. Edge weights for difficult terrain (x2), prone crawling (x2, stacks to x3 with difficult terrain). Tile occupancy rules (move through allies, not enemies unless size diff >= 2). Wall edge blocking. Diagonal movement at 5ft (no alternating). Diagonal corner-cutting allowed. Path cost calculation.
   - Depends on: Phase 19
   - Done when: Unit tests cover normal paths, difficult terrain, wall blocking, occupancy rules, diagonals, corner-cutting, prone crawling costs.
