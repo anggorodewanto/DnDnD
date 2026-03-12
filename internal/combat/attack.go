@@ -89,9 +89,13 @@ func DamageModifier(scores AbilityScores, weapon refdata.Weapon) int {
 }
 
 // MaxRange returns the maximum range of a weapon in feet.
-// Melee weapons default to 5ft reach. Ranged weapons use long range if available, else normal range.
+// Melee weapons default to 5ft reach (10ft with reach property).
+// Ranged weapons use long range if available, else normal range.
 func MaxRange(weapon refdata.Weapon) int {
 	if !IsRangedWeapon(weapon) {
+		if HasProperty(weapon, "reach") {
+			return 10
+		}
 		return 5
 	}
 	if weapon.RangeLongFt.Valid {
@@ -103,10 +107,13 @@ func MaxRange(weapon refdata.Weapon) int {
 	return 5
 }
 
-// NormalRange returns the normal range of a weapon. For melee, it's the reach (5ft).
+// NormalRange returns the normal range of a weapon. For melee, it's the reach (5ft, or 10ft with reach).
 // For ranged, it's the normal range value.
 func NormalRange(weapon refdata.Weapon) int {
 	if !IsRangedWeapon(weapon) {
+		if HasProperty(weapon, "reach") {
+			return 10
+		}
 		return 5
 	}
 	if weapon.RangeNormalFt.Valid {
@@ -147,6 +154,134 @@ func appendModifier(base string, mod int) string {
 	return fmt.Sprintf("%s%d", base, mod)
 }
 
+// InventoryItem represents a single item in a character's inventory JSON array.
+type InventoryItem struct {
+	Name     string `json:"name"`
+	Quantity int    `json:"quantity"`
+	Type     string `json:"type"`
+}
+
+// ParseInventory parses the inventory JSON array into InventoryItem slice.
+func ParseInventory(raw json.RawMessage) ([]InventoryItem, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var items []InventoryItem
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, fmt.Errorf("parsing inventory: %w", err)
+	}
+	return items, nil
+}
+
+// DeductAmmunition decrements the quantity of the named ammo by 1.
+// Returns an error if the ammo is not found or has 0 quantity.
+func DeductAmmunition(items []InventoryItem, ammoName string) ([]InventoryItem, error) {
+	for i := range items {
+		if strings.EqualFold(items[i].Name, ammoName) && items[i].Type == "ammunition" {
+			if items[i].Quantity <= 0 {
+				return items, fmt.Errorf("No %s remaining.", strings.ToLower(ammoName))
+			}
+			items[i].Quantity--
+			return items, nil
+		}
+	}
+	return items, fmt.Errorf("No %s remaining.", strings.ToLower(ammoName))
+}
+
+// RecoverAmmunition adds back half (rounded down) of spent ammunition after combat.
+func RecoverAmmunition(items []InventoryItem, ammoName string, spent int) []InventoryItem {
+	recovered := spent / 2
+	for i := range items {
+		if strings.EqualFold(items[i].Name, ammoName) && items[i].Type == "ammunition" {
+			items[i].Quantity += recovered
+			return items
+		}
+	}
+	return items
+}
+
+// GetAmmunitionName returns the conventional ammunition name for a weapon.
+// Crossbows use "Bolts", other ammunition weapons use "Arrows".
+func GetAmmunitionName(weapon refdata.Weapon) string {
+	if strings.Contains(strings.ToLower(weapon.Name), "crossbow") {
+		return "Bolts"
+	}
+	return "Arrows"
+}
+
+// HasFeat checks whether a character's features include a feat with the given
+// mechanical_effect ID (e.g., "crossbow-expert", "tavern-brawler").
+func HasFeat(features pqtype.NullRawMessage, featID string) bool {
+	if !features.Valid || len(features.RawMessage) == 0 {
+		return false
+	}
+	var feats []CharacterFeature
+	if err := json.Unmarshal(features.RawMessage, &feats); err != nil {
+		return false
+	}
+	for _, f := range feats {
+		if strings.EqualFold(f.MechanicalEffect, featID) {
+			return true
+		}
+	}
+	return false
+}
+
+// VersatileDamageExpression builds the damage expression using versatile_damage if available.
+func VersatileDamageExpression(weapon refdata.Weapon, abilityMod int) string {
+	if weapon.VersatileDamage.Valid && weapon.VersatileDamage.String != "" {
+		return appendModifier(weapon.VersatileDamage.String, abilityMod)
+	}
+	return appendModifier(weapon.Damage, abilityMod)
+}
+
+// ImprovisedWeapon returns the pseudo-weapon for improvised weapon attacks.
+func ImprovisedWeapon() refdata.Weapon {
+	return refdata.Weapon{
+		ID:         "improvised-weapon",
+		Name:       "Improvised Weapon",
+		Damage:     "1d4",
+		DamageType: "bludgeoning",
+		WeaponType: "simple_melee",
+	}
+}
+
+// ApplyLoadingLimit caps attacks remaining to 1 for loading weapons,
+// unless the character has the Crossbow Expert feat.
+func ApplyLoadingLimit(attacks int32, isLoading, hasCrossbowExpert bool) int32 {
+	if isLoading && !hasCrossbowExpert {
+		return 1
+	}
+	return attacks
+}
+
+// ThrownMaxRange returns the max range for a thrown melee weapon.
+func ThrownMaxRange(weapon refdata.Weapon) int {
+	if weapon.RangeLongFt.Valid {
+		return int(weapon.RangeLongFt.Int32)
+	}
+	if weapon.RangeNormalFt.Valid {
+		return int(weapon.RangeNormalFt.Int32)
+	}
+	return 5
+}
+
+// ThrownNormalRange returns the normal range for a thrown melee weapon.
+func ThrownNormalRange(weapon refdata.Weapon) int {
+	if weapon.RangeNormalFt.Valid {
+		return int(weapon.RangeNormalFt.Int32)
+	}
+	return 5
+}
+
+// IsThrownInLongRange returns true if the distance is beyond normal range but within long range
+// for a thrown weapon.
+func IsThrownInLongRange(weapon refdata.Weapon, distFt int) bool {
+	normal := ThrownNormalRange(weapon)
+	maxR := ThrownMaxRange(weapon)
+	return distFt > normal && distFt <= maxR
+}
+
 // AttackInput holds all inputs for resolving a single attack (pure function).
 type AttackInput struct {
 	AttackerName        string
@@ -166,6 +301,13 @@ type AttackInput struct {
 	DMAdvantage         bool
 	DMDisadvantage      bool
 	OverrideDmgMod      *int // If set, overrides the normal ability modifier for damage
+	TwoHanded           bool // Use versatile damage die (requires free off-hand)
+	OffHandOccupied     bool // True if off-hand is occupied (blocks two-handed)
+	Thrown               bool // Melee weapon thrown at range
+	IsImprovised        bool // Improvised weapon (no proficiency unless Tavern Brawler)
+	ImprovisedThrown    bool // Improvised weapon thrown (range 20/60)
+	HasCrossbowExpert   bool // Character has Crossbow Expert feat
+	HasTavernBrawler    bool // Character has Tavern Brawler feat
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -214,13 +356,30 @@ type AttackCommand struct {
 	AttackerSize        string
 	DMAdvantage         bool
 	DMDisadvantage      bool
+	TwoHanded           bool // Use versatile two-handed grip
+	IsImprovised        bool // Improvised weapon attack
+	ImprovisedThrown    bool // Improvised weapon thrown
+	Thrown               bool // Throw a melee weapon with "thrown" property
 }
 
 // ResolveAttack resolves a single attack using pure inputs. Returns an error if the target
 // is out of range.
 func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error) {
 	isMelee := !IsRangedWeapon(input.Weapon)
+
+	// Versatile two-handed: reject if off-hand is occupied
+	if input.TwoHanded && input.OffHandOccupied {
+		return AttackResult{}, fmt.Errorf("cannot use two-handed grip: off-hand is occupied")
+	}
+
+	// Determine effective range based on thrown / improvised thrown
 	maxR := MaxRange(input.Weapon)
+	if input.Thrown && isMelee && HasProperty(input.Weapon, "thrown") {
+		maxR = ThrownMaxRange(input.Weapon)
+	}
+	if input.ImprovisedThrown {
+		maxR = 60 // improvised thrown: 20/60
+	}
 
 	// Range validation
 	if input.DistanceFt > maxR {
@@ -228,7 +387,14 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 
 	effectiveAC := EffectiveAC(input.TargetAC, input.Cover)
-	atkMod := AttackModifier(input.Scores, input.Weapon, input.ProfBonus)
+
+	// Improvised weapons: no proficiency bonus (unless Tavern Brawler)
+	profBonus := input.ProfBonus
+	if input.IsImprovised && !input.HasTavernBrawler {
+		profBonus = 0
+	}
+
+	atkMod := AttackModifier(input.Scores, input.Weapon, profBonus)
 	dmgMod := DamageModifier(input.Scores, input.Weapon)
 	if input.OverrideDmgMod != nil {
 		dmgMod = *input.OverrideDmgMod
@@ -243,11 +409,11 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		EffectiveAC:  effectiveAC,
 		DamageType:   input.Weapon.DamageType,
 		Cover:        input.Cover,
-		InLongRange:  IsInLongRange(input.Weapon, input.DistanceFt),
+		InLongRange:  resolveInLongRange(input),
 	}
 
 	// Detect advantage/disadvantage
-	rollMode, advReasons, disadvReasons := DetectAdvantage(AdvantageInput{
+	advInput := AdvantageInput{
 		AttackerConditions:  input.AttackerConditions,
 		TargetConditions:    input.TargetConditions,
 		Weapon:              input.Weapon,
@@ -256,7 +422,13 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		AttackerSize:        input.AttackerSize,
 		DMAdvantage:         input.DMAdvantage,
 		DMDisadvantage:      input.DMDisadvantage,
-	})
+	}
+	rollMode, advReasons, disadvReasons := DetectAdvantage(advInput)
+	// Thrown/improvised-thrown in long range: add disadvantage
+	if result.InLongRange && !IsRangedWeapon(input.Weapon) {
+		disadvReasons = append(disadvReasons, "long range")
+		rollMode = resolveMode(advReasons, disadvReasons)
+	}
 	result.RollMode = rollMode
 	result.AdvantageReasons = advReasons
 	result.DisadvantageReasons = disadvReasons
@@ -267,7 +439,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		result.CriticalHit = true
 		result.AutoCrit = true
 		result.AutoCritReason = input.AutoCritReason
-		dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, true, roller)
+		dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, true, input.TwoHanded, roller)
 		result.DamageTotal = dmg
 		result.DamageDice = damageDice
 		result.DamageRoll = dmgRoll
@@ -296,7 +468,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 
 	// Roll damage
-	dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, result.CriticalHit, roller)
+	dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, result.CriticalHit, input.TwoHanded, roller)
 	result.DamageTotal = dmg
 	result.DamageDice = damageDice
 	result.DamageRoll = dmgRoll
@@ -304,8 +476,20 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	return result, nil
 }
 
+// resolveInLongRange determines if the attack is in long range, handling
+// thrown and improvised thrown weapons in addition to ranged weapons.
+func resolveInLongRange(input AttackInput) bool {
+	if input.Thrown && !IsRangedWeapon(input.Weapon) {
+		return IsThrownInLongRange(input.Weapon, input.DistanceFt)
+	}
+	if input.ImprovisedThrown {
+		return input.DistanceFt > 20 && input.DistanceFt <= 60
+	}
+	return IsInLongRange(input.Weapon, input.DistanceFt)
+}
+
 // resolveWeaponDamage handles damage calculation for both normal weapons and unarmed strikes.
-func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, roller *dice.Roller) (int, string, *dice.RollResult) {
+func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, twoHanded bool, roller *dice.Roller) (int, string, *dice.RollResult) {
 	if weapon.ID == "unarmed-strike" {
 		base := 1
 		if critical {
@@ -315,14 +499,24 @@ func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, rolle
 		return total, fmt.Sprintf("%d", total), nil
 	}
 
-	expr := DamageExpression(weapon, dmgMod)
+	var expr string
+	if twoHanded && weapon.VersatileDamage.Valid && weapon.VersatileDamage.String != "" {
+		expr = VersatileDamageExpression(weapon, dmgMod)
+	} else {
+		expr = DamageExpression(weapon, dmgMod)
+	}
+
 	rollResult, err := roller.RollDamage(expr, critical)
 	if err != nil {
 		return 0, expr, nil
 	}
 
 	if critical {
-		return rollResult.Total, buildCritDiceDisplay(weapon, dmgMod), &rollResult
+		critWeapon := weapon
+		if twoHanded && weapon.VersatileDamage.Valid && weapon.VersatileDamage.String != "" {
+			critWeapon.Damage = weapon.VersatileDamage.String
+		}
+		return rollResult.Total, buildCritDiceDisplay(critWeapon, dmgMod), &rollResult
 	}
 	return rollResult.Total, expr, &rollResult
 }
@@ -438,9 +632,95 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return AttackResult{}, err
 	}
 
-	weapon, scores, profBonus, err := s.resolveAttackWeapon(ctx, cmd)
+	// Improvised weapon: use improvised pseudo-weapon
+	if cmd.IsImprovised {
+		return s.attackImprovised(ctx, cmd, roller)
+	}
+
+	weapon, scores, profBonus, char, err := s.resolveAttackWeaponFull(ctx, cmd)
 	if err != nil {
 		return AttackResult{}, fmt.Errorf("resolving weapon: %w", err)
+	}
+
+	// Loading weapons: limit to 1 attack per action
+	hasCrossbowExpert := false
+	hasTavernBrawler := false
+	if char != nil {
+		hasCrossbowExpert = HasFeat(char.Features, "crossbow-expert")
+		hasTavernBrawler = HasFeat(char.Features, "tavern-brawler")
+	}
+
+	// Apply loading limit
+	turn := cmd.Turn
+	if HasProperty(weapon, "loading") {
+		turn.AttacksRemaining = ApplyLoadingLimit(turn.AttacksRemaining, true, hasCrossbowExpert)
+	}
+
+	updatedTurn, err := UseAttack(turn)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("using attack resource: %w", err)
+	}
+
+	// Ammunition: deduct from inventory
+	if HasProperty(weapon, "ammunition") && char != nil {
+		ammoName := GetAmmunitionName(weapon)
+		items, err := ParseInventory(char.Inventory.RawMessage)
+		if err != nil {
+			return AttackResult{}, fmt.Errorf("parsing inventory: %w", err)
+		}
+		items, err = DeductAmmunition(items, ammoName)
+		if err != nil {
+			return AttackResult{}, err
+		}
+		invJSON, err := json.Marshal(items)
+		if err != nil {
+			return AttackResult{}, fmt.Errorf("marshaling inventory: %w", err)
+		}
+		if err := s.store.UpdateCharacterInventory(ctx, char.ID, pqtype.NullRawMessage{RawMessage: invJSON, Valid: true}); err != nil {
+			return AttackResult{}, fmt.Errorf("updating inventory: %w", err)
+		}
+	}
+
+	// Off-hand occupied check for two-handed
+	offHandOccupied := false
+	if char != nil && char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
+		offHandOccupied = true
+	}
+
+	distFt := combatantDistance(cmd.Attacker, cmd.Target)
+	input := buildAttackInput(
+		cmd.Attacker, cmd.Target, weapon, scores, profBonus, distFt,
+		cmd.HostileNearAttacker, cmd.AttackerSize,
+		cmd.DMAdvantage, cmd.DMDisadvantage, nil,
+	)
+	input.TwoHanded = cmd.TwoHanded
+	input.OffHandOccupied = offHandOccupied
+	input.Thrown = cmd.Thrown
+	input.HasCrossbowExpert = hasCrossbowExpert
+	input.HasTavernBrawler = hasTavernBrawler
+
+	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
+}
+
+// attackImprovised handles improvised weapon attacks at the service level.
+func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, roller *dice.Roller) (AttackResult, error) {
+	weapon := ImprovisedWeapon()
+	scores := AbilityScores{Str: 10, Dex: 10}
+	profBonus := 2
+	hasTavernBrawler := false
+
+	if cmd.Attacker.CharacterID.Valid {
+		char, err := s.store.GetCharacter(ctx, cmd.Attacker.CharacterID.UUID)
+		if err != nil {
+			return AttackResult{}, fmt.Errorf("getting character: %w", err)
+		}
+		s, err := ParseAbilityScores(char.AbilityScores)
+		if err != nil {
+			return AttackResult{}, fmt.Errorf("parsing ability scores: %w", err)
+		}
+		scores = s
+		profBonus = int(char.ProficiencyBonus)
+		hasTavernBrawler = HasFeat(char.Features, "tavern-brawler")
 	}
 
 	updatedTurn, err := UseAttack(cmd.Turn)
@@ -454,6 +734,9 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		cmd.HostileNearAttacker, cmd.AttackerSize,
 		cmd.DMAdvantage, cmd.DMDisadvantage, nil,
 	)
+	input.IsImprovised = true
+	input.ImprovisedThrown = cmd.ImprovisedThrown
+	input.HasTavernBrawler = hasTavernBrawler
 
 	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
 }
@@ -525,21 +808,21 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
 }
 
-// resolveAttackWeapon resolves the weapon, ability scores, and proficiency bonus for an attack.
-func (s *Service) resolveAttackWeapon(ctx context.Context, cmd AttackCommand) (refdata.Weapon, AbilityScores, int, error) {
+// resolveAttackWeaponFull resolves weapon, scores, proficiency, and optionally the character.
+func (s *Service) resolveAttackWeaponFull(ctx context.Context, cmd AttackCommand) (refdata.Weapon, AbilityScores, int, *refdata.Character, error) {
 	if !cmd.Attacker.CharacterID.Valid {
 		// NPC combatant — for now, use unarmed strike as fallback
-		return UnarmedStrike(), AbilityScores{Str: 10, Dex: 10}, 2, nil
+		return UnarmedStrike(), AbilityScores{Str: 10, Dex: 10}, 2, nil, nil
 	}
 
 	char, err := s.store.GetCharacter(ctx, cmd.Attacker.CharacterID.UUID)
 	if err != nil {
-		return refdata.Weapon{}, AbilityScores{}, 0, fmt.Errorf("getting character: %w", err)
+		return refdata.Weapon{}, AbilityScores{}, 0, nil, fmt.Errorf("getting character: %w", err)
 	}
 
 	scores, err := ParseAbilityScores(char.AbilityScores)
 	if err != nil {
-		return refdata.Weapon{}, AbilityScores{}, 0, fmt.Errorf("parsing ability scores: %w", err)
+		return refdata.Weapon{}, AbilityScores{}, 0, nil, fmt.Errorf("parsing ability scores: %w", err)
 	}
 
 	profBonus := int(char.ProficiencyBonus)
@@ -550,15 +833,15 @@ func (s *Service) resolveAttackWeapon(ctx context.Context, cmd AttackCommand) (r
 		weaponID = char.EquippedMainHand.String
 	}
 	if weaponID == "" {
-		return UnarmedStrike(), scores, profBonus, nil
+		return UnarmedStrike(), scores, profBonus, &char, nil
 	}
 
 	weapon, err := s.store.GetWeapon(ctx, weaponID)
 	if err != nil {
-		return refdata.Weapon{}, AbilityScores{}, 0, fmt.Errorf("getting weapon %q: %w", weaponID, err)
+		return refdata.Weapon{}, AbilityScores{}, 0, nil, fmt.Errorf("getting weapon %q: %w", weaponID, err)
 	}
 
-	return weapon, scores, profBonus, nil
+	return weapon, scores, profBonus, &char, nil
 }
 
 // combatantDistance returns the 3D distance in feet between two combatants.

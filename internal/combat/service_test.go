@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -48,6 +49,7 @@ type mockStore struct {
 	listCharactersByCampaignFn        func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
 	updateTurnActionsFn               func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
 	getWeaponFn                       func(ctx context.Context, id string) (refdata.Weapon, error)
+	updateCharacterInventoryFn        func(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -142,6 +144,9 @@ func (m *mockStore) UpdateTurnActions(ctx context.Context, arg refdata.UpdateTur
 }
 func (m *mockStore) GetWeapon(ctx context.Context, id string) (refdata.Weapon, error) {
 	return m.getWeaponFn(ctx, id)
+}
+func (m *mockStore) UpdateCharacterInventory(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error {
+	return m.updateCharacterInventoryFn(ctx, id, inventory)
 }
 
 func defaultMockStore() *mockStore {
@@ -252,6 +257,9 @@ func defaultMockStore() *mockStore {
 		},
 		getWeaponFn: func(ctx context.Context, id string) (refdata.Weapon, error) {
 			return refdata.Weapon{}, sql.ErrNoRows
+		},
+		updateCharacterInventoryFn: func(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error {
+			return nil
 		},
 	}
 }

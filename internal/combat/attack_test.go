@@ -1182,7 +1182,7 @@ func TestServiceAttack_RangeRejectedFlow(t *testing.T) {
 func TestResolveWeaponDamage_CritWithWeapon(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 4 })
 	weapon := makeLongsword()
-	dmg, damageDice, rollResult := resolveWeaponDamage(weapon, 3, true, roller)
+	dmg, damageDice, rollResult := resolveWeaponDamage(weapon, 3, true, false, roller)
 	assert.Greater(t, dmg, 0)
 	assert.Equal(t, "2d8+3", damageDice) // doubled dice
 	assert.NotNil(t, rollResult)
@@ -1191,7 +1191,7 @@ func TestResolveWeaponDamage_CritWithWeapon(t *testing.T) {
 func TestResolveWeaponDamage_NormalWithWeapon(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 5 })
 	weapon := makeLongsword()
-	dmg, damageDice, rollResult := resolveWeaponDamage(weapon, 3, false, roller)
+	dmg, damageDice, rollResult := resolveWeaponDamage(weapon, 3, false, false, roller)
 	assert.Equal(t, 8, dmg) // 5 + 3
 	assert.Equal(t, "1d8+3", damageDice)
 	assert.NotNil(t, rollResult)
@@ -1200,21 +1200,21 @@ func TestResolveWeaponDamage_NormalWithWeapon(t *testing.T) {
 func TestResolveWeaponDamage_UnarmedNormal(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 1 })
 	weapon := UnarmedStrike()
-	dmg, _, _ := resolveWeaponDamage(weapon, 3, false, roller)
+	dmg, _, _ := resolveWeaponDamage(weapon, 3, false, false, roller)
 	assert.Equal(t, 4, dmg) // 1 + 3
 }
 
 func TestResolveWeaponDamage_UnarmedCrit(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 1 })
 	weapon := UnarmedStrike()
-	dmg, _, _ := resolveWeaponDamage(weapon, 3, true, roller)
+	dmg, _, _ := resolveWeaponDamage(weapon, 3, true, false, roller)
 	assert.Equal(t, 5, dmg) // 2 + 3
 }
 
 func TestResolveWeaponDamage_UnarmedNegativeMod(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 1 })
 	weapon := UnarmedStrike()
-	dmg, _, _ := resolveWeaponDamage(weapon, -5, false, roller)
+	dmg, _, _ := resolveWeaponDamage(weapon, -5, false, false, roller)
 	assert.Equal(t, 0, dmg) // 1 + (-5) = -4, clamped to 0
 }
 
@@ -1759,6 +1759,1114 @@ func TestServiceOffhandAttack_BadAbilityScores(t *testing.T) {
 		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`)},
 		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
 		Turn:     refdata.Turn{ID: uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing ability scores")
+}
+
+// --- Phase 37: Weapon Properties Tests ---
+
+func makeVersatileLongsword() refdata.Weapon {
+	return refdata.Weapon{
+		ID:              "longsword",
+		Name:            "Longsword",
+		Damage:          "1d8",
+		DamageType:      "slashing",
+		WeaponType:      "martial_melee",
+		Properties:      []string{"versatile"},
+		VersatileDamage: sql.NullString{String: "1d10", Valid: true},
+	}
+}
+
+func makeJavelin() refdata.Weapon {
+	return refdata.Weapon{
+		ID:            "javelin",
+		Name:          "Javelin",
+		Damage:        "1d6",
+		DamageType:    "piercing",
+		WeaponType:    "simple_melee",
+		Properties:    []string{"thrown"},
+		RangeNormalFt: sql.NullInt32{Int32: 30, Valid: true},
+		RangeLongFt:   sql.NullInt32{Int32: 120, Valid: true},
+	}
+}
+
+func makeHeavyCrossbowFull() refdata.Weapon {
+	return refdata.Weapon{
+		ID:            "heavy-crossbow",
+		Name:          "Heavy Crossbow",
+		Damage:        "1d10",
+		DamageType:    "piercing",
+		WeaponType:    "martial_ranged",
+		Properties:    []string{"heavy", "loading", "ammunition"},
+		RangeNormalFt: sql.NullInt32{Int32: 100, Valid: true},
+		RangeLongFt:   sql.NullInt32{Int32: 400, Valid: true},
+	}
+}
+
+func makeGlaive() refdata.Weapon {
+	return refdata.Weapon{
+		ID:         "glaive",
+		Name:       "Glaive",
+		Damage:     "1d10",
+		DamageType: "slashing",
+		WeaponType: "martial_melee",
+		Properties: []string{"heavy", "reach", "two-handed"},
+	}
+}
+
+func TestVersatileDamageExpression(t *testing.T) {
+	weapon := makeVersatileLongsword()
+	// Two-handed: should use versatile_damage (1d10)
+	got := VersatileDamageExpression(weapon, 3)
+	assert.Equal(t, "1d10+3", got)
+
+	// Weapon without versatile_damage: fall back to base damage
+	weapon2 := makeLongsword()
+	got2 := VersatileDamageExpression(weapon2, 3)
+	assert.Equal(t, "1d8+3", got2)
+}
+
+func TestResolveAttack_VersatileTwoHanded(t *testing.T) {
+	weapon := makeVersatileLongsword()
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 8 // max on d10
+	})
+
+	result, err := ResolveAttack(AttackInput{
+		AttackerName: "Aria",
+		TargetName:   "Goblin",
+		TargetAC:     12,
+		Weapon:       weapon,
+		Scores:       AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:    2,
+		DistanceFt:   5,
+		TwoHanded:    true,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	// Versatile 1d10+3 with roll of 8 = 11
+	assert.Equal(t, 11, result.DamageTotal)
+}
+
+func TestResolveAttack_VersatileOneHanded(t *testing.T) {
+	weapon := makeVersatileLongsword()
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 6
+	})
+
+	result, err := ResolveAttack(AttackInput{
+		AttackerName: "Aria",
+		TargetName:   "Goblin",
+		TargetAC:     12,
+		Weapon:       weapon,
+		Scores:       AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:    2,
+		DistanceFt:   5,
+		TwoHanded:    false,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	// Base 1d8+3 with roll of 6 = 9
+	assert.Equal(t, 9, result.DamageTotal)
+}
+
+func TestResolveAttack_VersatileTwoHandedRejectedWhenOffHandOccupied(t *testing.T) {
+	weapon := makeVersatileLongsword()
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := ResolveAttack(AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin",
+		TargetAC:        12,
+		Weapon:          weapon,
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		TwoHanded:       true,
+		OffHandOccupied: true,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "off-hand")
+}
+
+// --- Reach Tests ---
+
+func TestMaxRange_ReachWeapon(t *testing.T) {
+	weapon := makeGlaive()
+	assert.Equal(t, 10, MaxRange(weapon))
+}
+
+func TestNormalRange_ReachWeapon(t *testing.T) {
+	weapon := makeGlaive()
+	assert.Equal(t, 10, NormalRange(weapon))
+}
+
+func TestResolveAttack_ReachWeaponAt10ft(t *testing.T) {
+	weapon := makeGlaive()
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 6
+	})
+
+	result, err := ResolveAttack(AttackInput{
+		AttackerName: "Aria",
+		TargetName:   "Goblin",
+		TargetAC:     12,
+		Weapon:       weapon,
+		Scores:       AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:    2,
+		DistanceFt:   10,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+}
+
+func TestResolveAttack_ReachWeaponOutOfRange(t *testing.T) {
+	weapon := makeGlaive()
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := ResolveAttack(AttackInput{
+		AttackerName: "Aria",
+		TargetName:   "Goblin",
+		TargetAC:     12,
+		Weapon:       weapon,
+		Scores:       AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:    2,
+		DistanceFt:   15,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "out of range")
+}
+
+// --- Loading Tests ---
+
+func TestResolveAttack_LoadingWeaponLimitsToOneAttack(t *testing.T) {
+	weapon := makeHeavyCrossbowFull()
+	// Loading flag should be set in AttackInput
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 6
+	})
+
+	result, err := ResolveAttack(AttackInput{
+		AttackerName: "Aria",
+		TargetName:   "Goblin",
+		TargetAC:     12,
+		Weapon:       weapon,
+		Scores:       AbilityScores{Str: 10, Dex: 16},
+		ProfBonus:    2,
+		DistanceFt:   30,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	// Loading limit is enforced at the service level, not in ResolveAttack
+}
+
+func TestLoadingWeaponLimitsAttacks(t *testing.T) {
+	// Loading weapons should cap attacks remaining to 1
+	assert.Equal(t, int32(1), ApplyLoadingLimit(3, true, false))
+}
+
+func TestLoadingWeaponCrossbowExpertOverride(t *testing.T) {
+	// Crossbow Expert ignores loading limit
+	assert.Equal(t, int32(3), ApplyLoadingLimit(3, true, true))
+}
+
+func TestLoadingWeaponNotLoading(t *testing.T) {
+	// Non-loading weapon: no limit
+	assert.Equal(t, int32(3), ApplyLoadingLimit(3, false, false))
+}
+
+// --- Thrown Weapon Tests ---
+
+func TestMaxRange_ThrownMeleeWeapon(t *testing.T) {
+	weapon := makeJavelin()
+	// Thrown melee weapon should use its range values when thrown
+	assert.Equal(t, 120, ThrownMaxRange(weapon))
+}
+
+func TestNormalRange_ThrownMeleeWeapon(t *testing.T) {
+	weapon := makeJavelin()
+	assert.Equal(t, 30, ThrownNormalRange(weapon))
+}
+
+func TestIsInLongRange_ThrownWeapon(t *testing.T) {
+	weapon := makeJavelin()
+	// 50ft is beyond normal 30ft but within long 120ft
+	assert.True(t, IsThrownInLongRange(weapon, 50))
+	// 20ft is within normal range
+	assert.False(t, IsThrownInLongRange(weapon, 20))
+	// 130ft is beyond long range
+	assert.False(t, IsThrownInLongRange(weapon, 130))
+}
+
+func TestResolveAttack_ThrownWeaponAtRange(t *testing.T) {
+	weapon := makeJavelin()
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 4
+	})
+
+	result, err := ResolveAttack(AttackInput{
+		AttackerName: "Aria",
+		TargetName:   "Goblin",
+		TargetAC:     12,
+		Weapon:       weapon,
+		Scores:       AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:    2,
+		DistanceFt:   20,
+		Thrown:        true,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+}
+
+func TestResolveAttack_ThrownWeaponBeyondLongRange(t *testing.T) {
+	weapon := makeJavelin()
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := ResolveAttack(AttackInput{
+		AttackerName: "Aria",
+		TargetName:   "Goblin",
+		TargetAC:     12,
+		Weapon:       weapon,
+		Scores:       AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:    2,
+		DistanceFt:   130,
+		Thrown:        true,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "out of range")
+}
+
+func TestResolveAttack_ThrownWeaponInLongRangeDisadvantage(t *testing.T) {
+	weapon := makeJavelin()
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 4
+	})
+
+	result, err := ResolveAttack(AttackInput{
+		AttackerName: "Aria",
+		TargetName:   "Goblin",
+		TargetAC:     12,
+		Weapon:       weapon,
+		Scores:       AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:    2,
+		DistanceFt:   50, // beyond normal 30, within long 120
+		Thrown:        true,
+	}, roller)
+	require.NoError(t, err)
+	// Should have disadvantage from long range
+	assert.Equal(t, dice.Disadvantage, result.RollMode)
+}
+
+// --- Improvised Weapon Tests ---
+
+func TestImprovised_DamageAndType(t *testing.T) {
+	w := ImprovisedWeapon()
+	assert.Equal(t, "1d4", w.Damage)
+	assert.Equal(t, "bludgeoning", w.DamageType)
+	assert.Equal(t, "Improvised Weapon", w.Name)
+}
+
+func TestResolveAttack_ImprovisedNoProficiency(t *testing.T) {
+	weapon := ImprovisedWeapon()
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 10
+		}
+		return 3
+	})
+
+	result, err := ResolveAttack(AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin",
+		TargetAC:        12,
+		Weapon:          weapon,
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		IsImprovised:    true,
+		HasTavernBrawler: false,
+	}, roller)
+	require.NoError(t, err)
+	// Attack mod: STR mod (3) only, no prof bonus
+	// d20 roll: 10 + 3 = 13 >= 12, hit
+	assert.True(t, result.Hit)
+}
+
+func TestResolveAttack_ImprovisedWithTavernBrawlerGetsProficiency(t *testing.T) {
+	weapon := ImprovisedWeapon()
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 8 // 8 + 3 = 11 miss without prof, 8 + 3 + 2 = 13 hit with prof
+		}
+		return 3
+	})
+
+	result, err := ResolveAttack(AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin",
+		TargetAC:        12,
+		Weapon:          weapon,
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		IsImprovised:    true,
+		HasTavernBrawler: true,
+	}, roller)
+	require.NoError(t, err)
+	// With Tavern Brawler: 8 + 3 + 2 = 13 >= 12, hit
+	assert.True(t, result.Hit)
+}
+
+func TestResolveAttack_ImprovisedThrown(t *testing.T) {
+	weapon := ImprovisedWeapon()
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3
+	})
+
+	result, err := ResolveAttack(AttackInput{
+		AttackerName:     "Aria",
+		TargetName:       "Goblin",
+		TargetAC:         12,
+		Weapon:           weapon,
+		Scores:           AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:        2,
+		DistanceFt:       15,
+		IsImprovised:     true,
+		ImprovisedThrown: true,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+}
+
+func TestResolveAttack_ImprovisedThrownBeyondLongRange(t *testing.T) {
+	weapon := ImprovisedWeapon()
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := ResolveAttack(AttackInput{
+		AttackerName:     "Aria",
+		TargetName:       "Goblin",
+		TargetAC:         12,
+		Weapon:           weapon,
+		Scores:           AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:        2,
+		DistanceFt:       65,
+		IsImprovised:     true,
+		ImprovisedThrown: true,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "out of range")
+}
+
+// --- HasFeat Tests ---
+
+func TestHasFeat(t *testing.T) {
+	features := pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"Crossbow Expert","mechanical_effect":"crossbow-expert"},{"name":"Tavern Brawler","mechanical_effect":"tavern-brawler"}]`),
+		Valid:      true,
+	}
+	assert.True(t, HasFeat(features, "crossbow-expert"))
+	assert.True(t, HasFeat(features, "tavern-brawler"))
+	assert.False(t, HasFeat(features, "sharpshooter"))
+}
+
+func TestHasFeat_NullFeatures(t *testing.T) {
+	features := pqtype.NullRawMessage{Valid: false}
+	assert.False(t, HasFeat(features, "crossbow-expert"))
+}
+
+func TestHasFeat_InvalidJSON(t *testing.T) {
+	features := pqtype.NullRawMessage{RawMessage: json.RawMessage(`invalid`), Valid: true}
+	assert.False(t, HasFeat(features, "crossbow-expert"))
+}
+
+// --- Ammunition Tests ---
+
+func TestInventoryItem_ParseAndDeduct(t *testing.T) {
+	inv := json.RawMessage(`[{"name":"Arrows","quantity":18,"type":"ammunition"}]`)
+	items, err := ParseInventory(inv)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, "Arrows", items[0].Name)
+	assert.Equal(t, 18, items[0].Quantity)
+
+	items, err = DeductAmmunition(items, "Arrows")
+	require.NoError(t, err)
+	assert.Equal(t, 17, items[0].Quantity)
+}
+
+func TestDeductAmmunition_Empty(t *testing.T) {
+	items := []InventoryItem{{Name: "Arrows", Quantity: 0, Type: "ammunition"}}
+	_, err := DeductAmmunition(items, "Arrows")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "No arrows remaining")
+}
+
+func TestDeductAmmunition_NotFound(t *testing.T) {
+	items := []InventoryItem{{Name: "Bolts", Quantity: 10, Type: "ammunition"}}
+	_, err := DeductAmmunition(items, "Arrows")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "No arrows remaining")
+}
+
+func TestRecoverAmmunition(t *testing.T) {
+	items := []InventoryItem{{Name: "Arrows", Quantity: 10, Type: "ammunition"}}
+	// Used 8 arrows (had 18, now 10): recover half of 8 = 4
+	items = RecoverAmmunition(items, "Arrows", 8)
+	assert.Equal(t, 14, items[0].Quantity)
+}
+
+func TestRecoverAmmunition_RoundsDown(t *testing.T) {
+	items := []InventoryItem{{Name: "Arrows", Quantity: 10, Type: "ammunition"}}
+	// Used 7 arrows: recover half of 7 = 3 (rounded down)
+	items = RecoverAmmunition(items, "Arrows", 7)
+	assert.Equal(t, 13, items[0].Quantity)
+}
+
+func TestParseInventory_Empty(t *testing.T) {
+	items, err := ParseInventory(nil)
+	require.NoError(t, err)
+	assert.Nil(t, items)
+}
+
+func TestParseInventory_InvalidJSON(t *testing.T) {
+	_, err := ParseInventory(json.RawMessage(`invalid`))
+	require.Error(t, err)
+}
+
+func TestRecoverAmmunition_NotFound(t *testing.T) {
+	items := []InventoryItem{{Name: "Bolts", Quantity: 10, Type: "ammunition"}}
+	items = RecoverAmmunition(items, "Arrows", 5)
+	// No change since "Arrows" not found
+	assert.Equal(t, 10, items[0].Quantity)
+}
+
+func TestThrownMaxRange_NoRangeValues(t *testing.T) {
+	weapon := refdata.Weapon{WeaponType: "simple_melee", Properties: []string{"thrown"}}
+	assert.Equal(t, 5, ThrownMaxRange(weapon))
+}
+
+func TestThrownMaxRange_OnlyNormalRange(t *testing.T) {
+	weapon := refdata.Weapon{
+		WeaponType:    "simple_melee",
+		Properties:    []string{"thrown"},
+		RangeNormalFt: sql.NullInt32{Int32: 20, Valid: true},
+	}
+	assert.Equal(t, 20, ThrownMaxRange(weapon))
+}
+
+func TestThrownNormalRange_NoRangeValues(t *testing.T) {
+	weapon := refdata.Weapon{WeaponType: "simple_melee", Properties: []string{"thrown"}}
+	assert.Equal(t, 5, ThrownNormalRange(weapon))
+}
+
+func TestResolveWeaponDamage_VersatileTwoHanded(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int { return 8 })
+	weapon := makeVersatileLongsword()
+	dmg, damageDice, rollResult := resolveWeaponDamage(weapon, 3, false, true, roller)
+	assert.Equal(t, 11, dmg)         // 8 + 3
+	assert.Equal(t, "1d10+3", damageDice)
+	assert.NotNil(t, rollResult)
+}
+
+func TestResolveWeaponDamage_VersatileTwoHandedCrit(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int { return 8 })
+	weapon := makeVersatileLongsword()
+	dmg, damageDice, rollResult := resolveWeaponDamage(weapon, 3, true, true, roller)
+	assert.Greater(t, dmg, 0)
+	assert.Equal(t, "2d10+3", damageDice) // doubled versitle dice
+	assert.NotNil(t, rollResult)
+}
+
+func TestResolveAttack_ImprovisedThrownLongRange(t *testing.T) {
+	weapon := ImprovisedWeapon()
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3
+	})
+
+	result, err := ResolveAttack(AttackInput{
+		AttackerName:     "Aria",
+		TargetName:       "Goblin",
+		TargetAC:         12,
+		Weapon:           weapon,
+		Scores:           AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:        2,
+		DistanceFt:       30, // beyond normal 20, within long 60
+		IsImprovised:     true,
+		ImprovisedThrown: true,
+	}, roller)
+	require.NoError(t, err)
+	// Should have disadvantage from long range
+	assert.Equal(t, dice.Disadvantage, result.RollMode)
+}
+
+func TestServiceAttack_ImprovisedNPC(t *testing.T) {
+	ctx := context.Background()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	ms := defaultMockStore()
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3
+	})
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker:     refdata.Combatant{ID: attackerID, DisplayName: "NPC", PositionCol: "A", PositionRow: 1, IsNpc: true, Conditions: json.RawMessage(`[]`)},
+		Target:       refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "B", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:         refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
+		IsImprovised: true,
+	}, roller)
+	require.NoError(t, err)
+	assert.Equal(t, "Improvised Weapon", result.WeaponName)
+}
+
+func TestGetAmmunitionForWeapon(t *testing.T) {
+	longbow := makeLongbow()
+	longbow.Properties = []string{"ammunition"}
+	// Longbow uses Arrows
+	assert.Equal(t, "Arrows", GetAmmunitionName(longbow))
+
+	crossbow := makeHeavyCrossbowFull()
+	assert.Equal(t, "Bolts", GetAmmunitionName(crossbow))
+}
+
+// --- Service-Level Phase 37 Tests ---
+
+func TestServiceAttack_VersatileTwoHanded(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(16, 10, 2, "longsword")
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		if id == "longsword" {
+			return makeVersatileLongsword(), nil
+		}
+		return refdata.Weapon{}, fmt.Errorf("not found")
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 8
+	})
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker:  refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:    refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "B", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:      refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
+		TwoHanded: true,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	// Versatile 1d10+3, roll of 8 = 11
+	assert.Equal(t, 11, result.DamageTotal)
+}
+
+func TestServiceAttack_VersatileTwoHanded_OffHandOccupied(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(16, 10, 2, "longsword")
+	char.ID = charID
+	char.EquippedOffHand = sql.NullString{String: "shield", Valid: true}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeVersatileLongsword(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.Attack(ctx, AttackCommand{
+		Attacker:  refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:    refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "B", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:      refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
+		TwoHanded: true,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "off-hand")
+}
+
+func TestServiceAttack_LoadingWeaponLimitsAttacks(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(10, 16, 2, "heavy-crossbow")
+	char.ID = charID
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"Bolts","quantity":20,"type":"ammunition"}]`),
+		Valid:      true,
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeHeavyCrossbowFull(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 6
+	})
+
+	// Fighter with 2 attacks, but loading weapon should cap to 1
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 2}
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "B", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	// After loading limit (capped to 1) and using 1, should have 0 remaining
+	assert.Equal(t, int32(0), result.RemainingTurn.AttacksRemaining)
+}
+
+func TestServiceAttack_LoadingWeaponCrossbowExpertOverride(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(10, 16, 2, "heavy-crossbow")
+	char.ID = charID
+	char.Features = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"Crossbow Expert","mechanical_effect":"crossbow-expert"}]`),
+		Valid:      true,
+	}
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"Bolts","quantity":20,"type":"ammunition"}]`),
+		Valid:      true,
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeHeavyCrossbowFull(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 6
+	})
+
+	// Fighter with 2 attacks, Crossbow Expert: loading limit should NOT apply
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 2}
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "B", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	// Crossbow Expert means no loading limit: 2 - 1 = 1 remaining
+	assert.Equal(t, int32(1), result.RemainingTurn.AttacksRemaining)
+}
+
+func TestServiceAttack_AmmunitionDeduction(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(10, 16, 2, "longbow")
+	char.ID = charID
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"Arrows","quantity":18,"type":"ammunition"}]`),
+		Valid:      true,
+	}
+
+	var savedInventory pqtype.NullRawMessage
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		bow := makeLongbow()
+		bow.Properties = []string{"ammunition"}
+		return bow, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+	ms.updateCharacterInventoryFn = func(ctx context.Context, id uuid.UUID, inv pqtype.NullRawMessage) error {
+		savedInventory = inv
+		return nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 6
+	})
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "C", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+
+	// Verify inventory was updated
+	require.True(t, savedInventory.Valid)
+	var items []InventoryItem
+	err = json.Unmarshal(savedInventory.RawMessage, &items)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, 17, items[0].Quantity) // 18 - 1 = 17
+}
+
+func TestServiceAttack_AmmunitionEmpty(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(10, 16, 2, "longbow")
+	char.ID = charID
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"Arrows","quantity":0,"type":"ammunition"}]`),
+		Valid:      true,
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		bow := makeLongbow()
+		bow.Properties = []string{"ammunition"}
+		return bow, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.Attack(ctx, AttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "C", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "No arrows remaining")
+}
+
+func TestServiceAttack_ImprovisedService(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(16, 10, 2)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3
+	})
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker:     refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:       refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "B", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:         refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
+		IsImprovised: true,
+	}, roller)
+	require.NoError(t, err)
+	assert.Equal(t, "Improvised Weapon", result.WeaponName)
+	assert.Equal(t, "bludgeoning", result.DamageType)
+}
+
+func TestServiceAttack_ThrownWeapon(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(16, 10, 2, "javelin")
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeJavelin(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 4
+	})
+
+	// Throw javelin at 20ft (within normal range 30ft)
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "E", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
+		Thrown:    true,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "Javelin", result.WeaponName)
+}
+
+func TestServiceAttack_AmmunitionUpdateInventoryError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(10, 16, 2, "longbow")
+	char.ID = charID
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"Arrows","quantity":18,"type":"ammunition"}]`),
+		Valid:      true,
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		bow := makeLongbow()
+		bow.Properties = []string{"ammunition"}
+		return bow, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+	ms.updateCharacterInventoryFn = func(ctx context.Context, id uuid.UUID, inv pqtype.NullRawMessage) error {
+		return fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.Attack(ctx, AttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "C", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating inventory")
+}
+
+func TestServiceAttack_AmmunitionInvalidInventoryJSON(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(10, 16, 2, "longbow")
+	char.ID = charID
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`invalid`),
+		Valid:      true,
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		bow := makeLongbow()
+		bow.Properties = []string{"ammunition"}
+		return bow, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.Attack(ctx, AttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "C", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing inventory")
+}
+
+func TestServiceAttack_ImprovisedGetCharacterError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("char not found")
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.Attack(ctx, AttackCommand{
+		Attacker:     refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:       refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "B", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:         refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
+		IsImprovised: true,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
+}
+
+func TestServiceAttack_ImprovisedBadAbilityScores(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := refdata.Character{
+		ID:               charID,
+		AbilityScores:    json.RawMessage(`invalid`),
+		ProficiencyBonus: 2,
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.Attack(ctx, AttackCommand{
+		Attacker:     refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:       refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "B", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
+		Turn:         refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
+		IsImprovised: true,
 	}, roller)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing ability scores")

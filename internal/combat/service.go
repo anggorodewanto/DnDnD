@@ -71,6 +71,9 @@ type Store interface {
 	GetClass(ctx context.Context, id string) (refdata.Class, error)
 	GetWeapon(ctx context.Context, id string) (refdata.Weapon, error)
 	ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
+
+	// Character inventory
+	UpdateCharacterInventory(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error
 }
 
 // Service manages combat encounters and their entities.
