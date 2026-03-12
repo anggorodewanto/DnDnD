@@ -1598,3 +1598,51 @@ func TestEndCombat_EncounterNotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// --- TDD Cycle 71: EndCombat includes frozen initiative tracker ---
+
+func TestEndCombat_IncludesInitiativeTracker(t *testing.T) {
+	encounterID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID: id, Name: "Goblin Ambush", Status: "active", RoundNumber: 3,
+			DisplayName: sql.NullString{String: "The Goblin Ambush", Valid: true},
+		}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID: arg.ID, Status: "completed", RoundNumber: 3, Name: "Goblin Ambush",
+			DisplayName: sql.NullString{String: "The Goblin Ambush", Valid: true},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), IsNpc: true, IsAlive: false, HpCurrent: 0, DisplayName: "Goblin", Conditions: json.RawMessage(`[]`)},
+			{ID: uuid.New(), IsNpc: false, IsAlive: true, HpCurrent: 30, HpMax: 45, DisplayName: "Aragorn", Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+
+	svc := NewService(store)
+	result, err := svc.EndCombat(context.Background(), encounterID)
+	require.NoError(t, err)
+
+	assert.Contains(t, result.InitiativeTracker, "The Goblin Ambush")
+	assert.Contains(t, result.InitiativeTracker, "Round 3")
+	assert.Contains(t, result.InitiativeTracker, "--- Combat Complete ---")
+	assert.NotContains(t, result.InitiativeTracker, "\U0001f514")
+}
+
+// --- TDD Cycle 72: EndCombat returns ErrEncounterNotActive for non-active encounter ---
+
+func TestEndCombat_ReturnsErrEncounterNotActive(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "preparing"}, nil
+	}
+	svc := NewService(store)
+
+	_, err := svc.EndCombat(context.Background(), uuid.New())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrEncounterNotActive)
+}
+

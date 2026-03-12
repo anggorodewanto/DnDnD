@@ -350,6 +350,60 @@ func TestHandler_EndCombat_InvalidID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// --- TDD Cycle 73: POST /api/combat/{encounterID}/end non-active returns 409 ---
+
+func TestHandler_EndCombat_NotActive_Returns409(t *testing.T) {
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "preparing"}, nil
+	}
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/end", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusConflict, rec.Code)
+}
+
+// --- TDD Cycle 74: POST /api/combat/{encounterID}/end success includes initiative_tracker ---
+
+func TestHandler_EndCombat_IncludesInitiativeTracker(t *testing.T) {
+	encounterID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID: id, Name: "Goblin Ambush", Status: "active", RoundNumber: 3,
+			DisplayName: sql.NullString{String: "The Goblin Ambush", Valid: true},
+		}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID: arg.ID, Status: "completed", RoundNumber: 3, Name: "Goblin Ambush",
+			DisplayName: sql.NullString{String: "The Goblin Ambush", Valid: true},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), IsNpc: true, IsAlive: false, HpCurrent: 0, DisplayName: "Goblin", Conditions: json.RawMessage(`[]`)},
+			{ID: uuid.New(), IsNpc: false, IsAlive: true, HpCurrent: 30, HpMax: 45, DisplayName: "Aragorn", Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/end", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp endCombatResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Contains(t, resp.InitiativeTracker, "--- Combat Complete ---")
+	assert.Contains(t, resp.InitiativeTracker, "The Goblin Ambush")
+}
+
 // --- TDD Cycle 58: POST /api/combat/{encounterID}/end service error ---
 
 func TestHandler_EndCombat_ServiceError(t *testing.T) {

@@ -2,6 +2,7 @@ package combat
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -91,11 +92,12 @@ type characterListResponse struct {
 
 // endCombatResponse is the JSON response for ending combat.
 type endCombatResponse struct {
-	Encounter     encounterResponse   `json:"encounter"`
-	Combatants    []combatantResponse `json:"combatants"`
-	Summary       string              `json:"summary"`
-	Casualties    int                 `json:"casualties"`
-	RoundsElapsed int32               `json:"rounds_elapsed"`
+	Encounter         encounterResponse   `json:"encounter"`
+	Combatants        []combatantResponse `json:"combatants"`
+	Summary           string              `json:"summary"`
+	Casualties        int                 `json:"casualties"`
+	RoundsElapsed     int32               `json:"rounds_elapsed"`
+	InitiativeTracker string              `json:"initiative_tracker"`
 }
 
 // hostilesDefeatedResponse is the JSON response for the hostiles-defeated check.
@@ -239,6 +241,10 @@ func (h *Handler) EndCombat(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.svc.EndCombat(r.Context(), encounterID)
 	if err != nil {
+		if errors.Is(err, ErrEncounterNotActive) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -267,10 +273,11 @@ func (h *Handler) EndCombat(w http.ResponseWriter, r *http.Request) {
 			Status:      result.Encounter.Status,
 			RoundNumber: result.Encounter.RoundNumber,
 		},
-		Combatants:    combatants,
-		Summary:       result.Summary,
-		Casualties:    result.Casualties,
-		RoundsElapsed: result.RoundsElapsed,
+		Combatants:        combatants,
+		Summary:           result.Summary,
+		Casualties:        result.Casualties,
+		RoundsElapsed:     result.RoundsElapsed,
+		InitiativeTracker: result.InitiativeTracker,
 	})
 }
 

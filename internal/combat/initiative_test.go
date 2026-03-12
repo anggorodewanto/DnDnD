@@ -1046,3 +1046,70 @@ func TestService_AdvanceTurn_RoundAdvancement(t *testing.T) {
 	assert.Equal(t, int32(2), newRound)
 	assert.Equal(t, combatant1ID, turnInfo.CombatantID)
 }
+
+// --- TDD Cycle 70: FormatCompletedInitiativeTracker ---
+
+func TestFormatCompletedInitiativeTracker_Basic(t *testing.T) {
+	enc := refdata.Encounter{
+		DisplayName: sql.NullString{String: "Rooftop Ambush", Valid: true},
+		RoundNumber: 5,
+	}
+	combatants := []refdata.Combatant{
+		{ID: uuid.New(), DisplayName: "Aria", InitiativeOrder: 1, IsNpc: false, HpCurrent: 30, HpMax: 45},
+		{ID: uuid.New(), DisplayName: "Goblin 1", InitiativeOrder: 2, IsNpc: true, HpCurrent: 0, HpMax: 7},
+	}
+
+	result := FormatCompletedInitiativeTracker(enc, combatants)
+
+	assert.Contains(t, result, "Rooftop Ambush")
+	assert.Contains(t, result, "Round 5")
+	assert.Contains(t, result, "Aria")
+	assert.Contains(t, result, "Goblin 1")
+	assert.Contains(t, result, "--- Combat Complete ---")
+	// Should NOT contain the bell indicator (no active turn)
+	assert.NotContains(t, result, "\U0001f514")
+}
+
+func TestFormatCompletedInitiativeTracker_NameFallback(t *testing.T) {
+	enc := refdata.Encounter{
+		Name:        "goblin-ambush",
+		DisplayName: sql.NullString{Valid: false},
+		RoundNumber: 2,
+	}
+	combatants := []refdata.Combatant{
+		{ID: uuid.New(), DisplayName: "Aria", InitiativeOrder: 1, IsNpc: false, HpCurrent: 30, HpMax: 45},
+	}
+
+	result := FormatCompletedInitiativeTracker(enc, combatants)
+
+	assert.Contains(t, result, "goblin-ambush")
+	assert.Contains(t, result, "--- Combat Complete ---")
+}
+
+func TestFormatCompletedInitiativeTracker_PCShowsHP(t *testing.T) {
+	enc := refdata.Encounter{
+		DisplayName: sql.NullString{String: "Test", Valid: true},
+		RoundNumber: 1,
+	}
+	combatants := []refdata.Combatant{
+		{ID: uuid.New(), DisplayName: "Aria", InitiativeOrder: 1, IsNpc: false, HpCurrent: 30, HpMax: 45},
+	}
+
+	result := FormatCompletedInitiativeTracker(enc, combatants)
+
+	assert.Contains(t, result, "30/45 HP")
+}
+
+func TestFormatCompletedInitiativeTracker_NPCNoHP(t *testing.T) {
+	enc := refdata.Encounter{
+		DisplayName: sql.NullString{String: "Test", Valid: true},
+		RoundNumber: 1,
+	}
+	combatants := []refdata.Combatant{
+		{ID: uuid.New(), DisplayName: "Goblin", InitiativeOrder: 1, IsNpc: true, HpCurrent: 7, HpMax: 7},
+	}
+
+	result := FormatCompletedInitiativeTracker(enc, combatants)
+
+	assert.NotContains(t, result, "HP")
+}

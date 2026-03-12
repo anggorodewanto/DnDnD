@@ -15,6 +15,9 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
+// ErrEncounterNotActive is returned when EndCombat is called on a non-active encounter.
+var ErrEncounterNotActive = errors.New("encounter must be active to end combat")
+
 // Valid encounter statuses.
 var validStatuses = map[string]bool{
 	"preparing": true,
@@ -405,7 +408,7 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 		return EndCombatResult{}, fmt.Errorf("getting encounter: %w", err)
 	}
 	if enc.Status != "active" {
-		return EndCombatResult{}, fmt.Errorf("encounter is %q, must be active to end combat", enc.Status)
+		return EndCombatResult{}, fmt.Errorf("encounter is %q: %w", enc.Status, ErrEncounterNotActive)
 	}
 
 	// Complete active turn if any
@@ -459,11 +462,12 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 	summary := fmt.Sprintf("%d rounds, %d casualties", roundsElapsed, casualties)
 
 	return EndCombatResult{
-		Encounter:     enc,
-		Combatants:    cleaned,
-		Summary:       summary,
-		Casualties:    casualties,
-		RoundsElapsed: roundsElapsed,
+		Encounter:         enc,
+		Combatants:        cleaned,
+		Summary:           summary,
+		Casualties:        casualties,
+		RoundsElapsed:     roundsElapsed,
+		InitiativeTracker: FormatCompletedInitiativeTracker(enc, cleaned),
 	}, nil
 }
 

@@ -191,6 +191,29 @@ func FormatInitiativeTracker(encounter refdata.Encounter, combatants []refdata.C
 	return strings.TrimRight(b.String(), "\n")
 }
 
+// FormatCompletedInitiativeTracker produces the initiative tracker for a completed encounter.
+// No active turn indicator is shown and a "--- Combat Complete ---" footer is appended.
+func FormatCompletedInitiativeTracker(encounter refdata.Encounter, combatants []refdata.Combatant) string {
+	name := encounter.Name
+	if encounter.DisplayName.Valid && encounter.DisplayName.String != "" {
+		name = encounter.DisplayName.String
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", name, encounter.RoundNumber)
+
+	for _, c := range combatants {
+		if c.IsNpc {
+			fmt.Fprintf(&b, "  %s\n", c.DisplayName)
+		} else {
+			fmt.Fprintf(&b, "  %s (%d/%d HP)\n", c.DisplayName, c.HpCurrent, c.HpMax)
+		}
+	}
+
+	b.WriteString("--- Combat Complete ---")
+	return b.String()
+}
+
 // dexModFromScores parses ability scores JSON and returns the DEX modifier.
 func dexModFromScores(raw json.RawMessage, label string) (int, error) {
 	scores, err := ParseAbilityScores(raw)

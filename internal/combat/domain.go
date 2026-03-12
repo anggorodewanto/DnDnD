@@ -107,11 +107,12 @@ type StartCombatResult struct {
 
 // EndCombatResult holds the result of the EndCombat operation.
 type EndCombatResult struct {
-	Encounter     refdata.Encounter   `json:"encounter"`
-	Combatants    []refdata.Combatant `json:"combatants"`
-	Summary       string              `json:"summary"`
-	Casualties    int                 `json:"casualties"`
-	RoundsElapsed int32               `json:"rounds_elapsed"`
+	Encounter          refdata.Encounter   `json:"encounter"`
+	Combatants         []refdata.Combatant `json:"combatants"`
+	Summary            string              `json:"summary"`
+	Casualties         int                 `json:"casualties"`
+	RoundsElapsed      int32               `json:"rounds_elapsed"`
+	InitiativeTracker  string              `json:"initiative_tracker"`
 }
 
 // ParseTemplateCreatures parses the JSONB creatures array from an encounter template.
