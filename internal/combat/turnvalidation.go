@@ -24,6 +24,16 @@ func (e *ErrNotYourTurn) Error() string {
 // ErrNoActiveTurn is returned when there is no active turn for the encounter.
 var ErrNoActiveTurn = errors.New("no active turn for this encounter")
 
+// TurnValidationQuerier abstracts the query methods needed for turn validation,
+// allowing mock implementations for testing.
+type TurnValidationQuerier interface {
+	GetActiveTurnByEncounterID(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
+	GetCombatant(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
+	GetCampaignByEncounterID(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
+	GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
+	WithTx(tx *sql.Tx) *refdata.Queries
+}
+
 // TurnOwnerInfo holds information about the current turn owner for validation.
 type TurnOwnerInfo struct {
 	TurnID       uuid.UUID
@@ -38,7 +48,7 @@ type TurnOwnerInfo struct {
 // ValidateTurnOwnership checks if the given discord user is allowed to act on the current turn.
 // Returns TurnOwnerInfo on success. Returns ErrNotYourTurn if the user doesn't own this turn.
 // The DM (campaign.dm_user_id) can always act. NPCs can only be controlled by the DM.
-func ValidateTurnOwnership(ctx context.Context, db *sql.DB, queries *refdata.Queries, encounterID uuid.UUID, discordUserID string) (TurnOwnerInfo, error) {
+func ValidateTurnOwnership(ctx context.Context, db TxBeginner, queries TurnValidationQuerier, encounterID uuid.UUID, discordUserID string) (TurnOwnerInfo, error) {
 	// Get the active turn
 	turn, err := queries.GetActiveTurnByEncounterID(ctx, encounterID)
 	if err != nil {
@@ -110,11 +120,16 @@ func ValidateTurnOwnership(ctx context.Context, db *sql.DB, queries *refdata.Que
 	return info, nil
 }
 
+// ErrTurnChanged is returned when the active turn changed between validation and lock acquisition.
+var ErrTurnChanged = errors.New("it's no longer your turn")
+
 // AcquireTurnLockWithValidation validates turn ownership and acquires the advisory lock.
+// After acquiring the lock, it re-validates that the turn hasn't changed (TOCTOU protection).
 // Returns the transaction for the caller to use (commit/rollback).
 // Returns ErrNotYourTurn if the user doesn't own the turn.
+// Returns ErrTurnChanged if the turn changed after validation (e.g., DM ended the turn).
 // Returns ErrLockTimeout if the lock can't be acquired within 5 seconds.
-func AcquireTurnLockWithValidation(ctx context.Context, db *sql.DB, queries *refdata.Queries, encounterID uuid.UUID, discordUserID string) (*sql.Tx, TurnOwnerInfo, error) {
+func AcquireTurnLockWithValidation(ctx context.Context, db TxBeginner, queries TurnValidationQuerier, encounterID uuid.UUID, discordUserID string) (*sql.Tx, TurnOwnerInfo, error) {
 	info, err := ValidateTurnOwnership(ctx, db, queries, encounterID, discordUserID)
 	if err != nil {
 		return nil, TurnOwnerInfo{}, err
@@ -123,6 +138,23 @@ func AcquireTurnLockWithValidation(ctx context.Context, db *sql.DB, queries *ref
 	tx, err := AcquireTurnLock(ctx, db, info.TurnID)
 	if err != nil {
 		return nil, TurnOwnerInfo{}, err
+	}
+
+	// Re-validate within the transaction to prevent TOCTOU race.
+	// The DM could have ended this turn between our initial validation and lock acquisition.
+	txQueries := queries.WithTx(tx)
+	currentTurn, err := txQueries.GetActiveTurnByEncounterID(ctx, encounterID)
+	if err != nil {
+		tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, TurnOwnerInfo{}, ErrTurnChanged
+		}
+		return nil, TurnOwnerInfo{}, fmt.Errorf("re-validating active turn: %w", err)
+	}
+
+	if currentTurn.ID != info.TurnID {
+		tx.Rollback()
+		return nil, TurnOwnerInfo{}, ErrTurnChanged
 	}
 
 	return tx, info, nil

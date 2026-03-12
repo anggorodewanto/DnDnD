@@ -205,12 +205,7 @@ func TestIntegration_TurnLock_Timeout(t *testing.T) {
 	require.NoError(t, err)
 	defer holdTx.Rollback()
 
-	lockKey := int64(0)
-	// Compute same key as AcquireTurnLock would
-	idBytes := td.TurnID[:]
-	lockKey = int64(uint64(idBytes[0])<<56 | uint64(idBytes[1])<<48 | uint64(idBytes[2])<<40 |
-		uint64(idBytes[3])<<32 | uint64(idBytes[4])<<24 | uint64(idBytes[5])<<16 |
-		uint64(idBytes[6])<<8 | uint64(idBytes[7]))
+	lockKey := combat.UUIDToInt64(td.TurnID)
 	_, err = holdTx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", lockKey)
 	require.NoError(t, err)
 
@@ -462,6 +457,210 @@ func TestIntegration_AcquireTurnLockWithValidation_WrongUser(t *testing.T) {
 
 	var notYourTurn *combat.ErrNotYourTurn
 	assert.True(t, errors.As(err, &notYourTurn))
+}
+
+// --- TDD Cycle 14: TOCTOU race — turn changed between validation and lock ---
+
+func TestIntegration_AcquireTurnLockWithValidation_TurnChangedAfterValidation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	td := setupTurnLockTest(t)
+	ctx := context.Background()
+
+	// Hold the lock so the player's AcquireTurnLockWithValidation blocks after validation
+	lockKey := combat.UUIDToInt64(td.TurnID)
+	holdTx, err := td.DB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer holdTx.Rollback()
+
+	_, err = holdTx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", lockKey)
+	require.NoError(t, err)
+
+	// In a goroutine, attempt the combined validate+lock. It will validate OK,
+	// then block on the lock. Meanwhile we'll end the turn.
+	type result struct {
+		err error
+	}
+	ch := make(chan result, 1)
+
+	go func() {
+		_, _, err := combat.AcquireTurnLockWithValidation(ctx, td.DB, td.Queries, td.EncounterID, td.PlayerUID)
+		ch <- result{err: err}
+	}()
+
+	// Give the goroutine time to pass validation and start blocking on lock
+	time.Sleep(200 * time.Millisecond)
+
+	// End the current turn (simulate DM ending the turn)
+	_, err = td.Queries.CompleteTurn(ctx, td.TurnID)
+	require.NoError(t, err)
+
+	// Release the lock so the goroutine proceeds
+	holdTx.Commit()
+
+	// The goroutine should detect the turn changed during re-validation
+	res := <-ch
+	require.Error(t, res.err)
+	assert.ErrorIs(t, res.err, combat.ErrTurnChanged)
+}
+
+// --- TDD Cycle 15: TOCTOU race — turn changed to a different turn (ID mismatch) ---
+
+func TestIntegration_AcquireTurnLockWithValidation_TurnIDMismatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	td := setupTurnLockTest(t)
+	ctx := context.Background()
+
+	// Hold the lock so the player's AcquireTurnLockWithValidation blocks after validation
+	lockKey := combat.UUIDToInt64(td.TurnID)
+	holdTx, err := td.DB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer holdTx.Rollback()
+
+	_, err = holdTx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", lockKey)
+	require.NoError(t, err)
+
+	type result struct {
+		err error
+	}
+	ch := make(chan result, 1)
+
+	go func() {
+		_, _, err := combat.AcquireTurnLockWithValidation(ctx, td.DB, td.Queries, td.EncounterID, td.PlayerUID)
+		ch <- result{err: err}
+	}()
+
+	// Give the goroutine time to pass validation and start blocking on lock
+	time.Sleep(200 * time.Millisecond)
+
+	// Complete the old turn and create a NEW active turn for a different combatant
+	_, err = td.Queries.CompleteTurn(ctx, td.TurnID)
+	require.NoError(t, err)
+
+	// Create a new NPC combatant and give it the active turn
+	npc, err := td.Queries.CreateCombatant(ctx, refdata.CreateCombatantParams{
+		EncounterID: td.EncounterID,
+		ShortID:     "G1",
+		DisplayName: "Goblin",
+		HpMax:       7,
+		HpCurrent:   7,
+		Ac:          15,
+		Conditions:  json.RawMessage(`[]`),
+		PositionCol: "B",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsNpc:       true,
+	})
+	require.NoError(t, err)
+
+	newTurn, err := td.Queries.CreateTurn(ctx, refdata.CreateTurnParams{
+		EncounterID: td.EncounterID,
+		CombatantID: npc.ID,
+		RoundNumber: 1,
+		Status:      "active",
+	})
+	require.NoError(t, err)
+	_ = newTurn
+
+	// Release the lock so the goroutine proceeds
+	holdTx.Commit()
+
+	// The goroutine should detect the turn ID changed
+	res := <-ch
+	require.Error(t, res.err)
+	assert.ErrorIs(t, res.err, combat.ErrTurnChanged)
+}
+
+// --- TDD Cycle 16: AcquireTurnLock with context cancelled after BeginTx (SET LOCAL error) ---
+
+// cancellingTxBeginner cancels context after BeginTx succeeds, causing SET LOCAL to fail.
+type cancellingTxBeginner struct {
+	realDB combat.TxBeginner
+	cancel context.CancelFunc
+}
+
+func (c *cancellingTxBeginner) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
+	tx, err := c.realDB.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	c.cancel()
+	return tx, nil
+}
+
+func TestIntegration_AcquireTurnLock_SetLocalError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	td := setupTurnLockTest(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wrapper := &cancellingTxBeginner{realDB: td.DB, cancel: cancel}
+
+	_, err := combat.AcquireTurnLock(ctx, wrapper, uuid.New())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "setting lock timeout")
+}
+
+// --- TDD Cycle 17: AcquireTurnLock with context cancelled during lock wait ---
+
+func TestIntegration_AcquireTurnLock_ContextCancelledDuringLockWait(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	td := setupTurnLockTest(t)
+	ctx := context.Background()
+
+	// Hold the advisory lock so the second attempt blocks
+	lockKey := combat.UUIDToInt64(td.TurnID)
+	holdTx, err := td.DB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer holdTx.Rollback()
+
+	_, err = holdTx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", lockKey)
+	require.NoError(t, err)
+
+	// Use a short-lived context that will be cancelled while waiting for the lock.
+	// This triggers the non-timeout advisory lock error path (context.Canceled != lock_timeout).
+	cancelCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+
+	_, err = combat.AcquireTurnLock(cancelCtx, td.DB, td.TurnID)
+	require.Error(t, err)
+	// Should NOT be ErrLockTimeout since it was a context cancellation, not a PG lock timeout
+	assert.NotErrorIs(t, err, combat.ErrLockTimeout)
+	assert.Contains(t, err.Error(), "acquiring advisory lock")
+}
+
+// --- TDD Cycle 17: AcquireTurnLockWithValidation propagates lock errors ---
+
+func TestIntegration_AcquireTurnLockWithValidation_LockTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	td := setupTurnLockTest(t)
+	ctx := context.Background()
+
+	// Hold a lock so the combined function times out
+	lockKey := combat.UUIDToInt64(td.TurnID)
+	holdTx, err := td.DB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer holdTx.Rollback()
+
+	_, err = holdTx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", lockKey)
+	require.NoError(t, err)
+
+	// The combined function should timeout waiting for the lock
+	_, _, err = combat.AcquireTurnLockWithValidation(ctx, td.DB, td.Queries, td.EncounterID, td.PlayerUID)
+	assert.ErrorIs(t, err, combat.ErrLockTimeout)
 }
 
 // --- TDD Cycle 12: DM concurrent access with lock ---
