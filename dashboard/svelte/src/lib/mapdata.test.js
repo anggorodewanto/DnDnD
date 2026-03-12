@@ -13,6 +13,16 @@ import {
   LARGE_TILE_SIZE,
   SOFT_LIMIT,
   HARD_LIMIT,
+  LIGHTING_TYPES,
+  lightingByGid,
+  ELEVATION_MAX,
+  setLighting,
+  getLightingData,
+  setElevation,
+  getElevationData,
+  addSpawnZone,
+  getSpawnZones,
+  removeSpawnZone,
 } from './mapdata.js';
 
 describe('TERRAIN_TYPES', () => {
@@ -74,13 +84,45 @@ describe('generateBlankMap', () => {
     expect(data.every(v => v === 1)).toBe(true);
   });
 
-  it('has two layers: terrain and walls', () => {
+  it('has five layers: terrain, walls, lighting, elevation, spawn_zones', () => {
     const map = generateBlankMap(5, 5);
-    expect(map.layers).toHaveLength(2);
+    expect(map.layers).toHaveLength(5);
     expect(map.layers[0].name).toBe('terrain');
     expect(map.layers[0].type).toBe('tilelayer');
     expect(map.layers[1].name).toBe('walls');
     expect(map.layers[1].type).toBe('objectgroup');
+    expect(map.layers[2].name).toBe('lighting');
+    expect(map.layers[2].type).toBe('tilelayer');
+    expect(map.layers[3].name).toBe('elevation');
+    expect(map.layers[3].type).toBe('tilelayer');
+    expect(map.layers[4].name).toBe('spawn_zones');
+    expect(map.layers[4].type).toBe('objectgroup');
+  });
+
+  it('has lighting layer filled with 0 (normal)', () => {
+    const map = generateBlankMap(3, 2);
+    const data = getLightingData(map);
+    expect(data).toHaveLength(6);
+    expect(data.every(v => v === 0)).toBe(true);
+  });
+
+  it('has elevation layer filled with 0 (ground level)', () => {
+    const map = generateBlankMap(3, 2);
+    const data = getElevationData(map);
+    expect(data).toHaveLength(6);
+    expect(data.every(v => v === 0)).toBe(true);
+  });
+
+  it('has empty spawn_zones layer', () => {
+    const map = generateBlankMap(5, 5);
+    expect(getSpawnZones(map)).toHaveLength(0);
+  });
+
+  it('has a lighting tileset', () => {
+    const map = generateBlankMap(5, 5);
+    const lightingTileset = map.tilesets.find(ts => ts.name === 'lighting');
+    expect(lightingTileset).toBeTruthy();
+    expect(lightingTileset.tiles).toHaveLength(5);
   });
 
   it('has empty walls layer', () => {
@@ -88,11 +130,14 @@ describe('generateBlankMap', () => {
     expect(getWalls(map)).toHaveLength(0);
   });
 
-  it('has a tileset with 5 terrain tiles', () => {
+  it('has tilesets for terrain and lighting', () => {
     const map = generateBlankMap(5, 5);
-    expect(map.tilesets).toHaveLength(1);
+    expect(map.tilesets).toHaveLength(2);
     expect(map.tilesets[0].firstgid).toBe(1);
+    expect(map.tilesets[0].name).toBe('terrain');
     expect(map.tilesets[0].tiles).toHaveLength(5);
+    expect(map.tilesets[1].name).toBe('lighting');
+    expect(map.tilesets[1].tiles).toHaveLength(5);
   });
 
   it('uses orthogonal orientation', () => {
@@ -217,5 +262,198 @@ describe('constants', () => {
     expect(LARGE_TILE_SIZE).toBe(32);
     expect(SOFT_LIMIT).toBe(100);
     expect(HARD_LIMIT).toBe(200);
+  });
+});
+
+describe('LIGHTING_TYPES', () => {
+  it('has 6 lighting types including normal', () => {
+    expect(Object.keys(LIGHTING_TYPES)).toHaveLength(6);
+  });
+
+  it('has normal type with gid 0', () => {
+    expect(LIGHTING_TYPES.normal.gid).toBe(0);
+  });
+
+  it('maps GIDs 0-5 for all types', () => {
+    const gids = Object.values(LIGHTING_TYPES).map(t => t.gid).sort((a, b) => a - b);
+    expect(gids).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it('each has a label and color', () => {
+    for (const [key, val] of Object.entries(LIGHTING_TYPES)) {
+      expect(val.label).toBeTruthy();
+      expect(val.color).toMatch(/^#[0-9a-f]{6}$/i);
+    }
+  });
+});
+
+describe('lightingByGid', () => {
+  it('returns lighting info for valid GIDs', () => {
+    expect(lightingByGid(0).key).toBe('normal');
+    expect(lightingByGid(1).key).toBe('dim_light');
+    expect(lightingByGid(3).key).toBe('magical_darkness');
+    expect(lightingByGid(5).key).toBe('light_obscurement');
+  });
+
+  it('returns normal for unknown GIDs', () => {
+    expect(lightingByGid(99).key).toBe('normal');
+    expect(lightingByGid(-1).key).toBe('normal');
+  });
+});
+
+describe('ELEVATION_MAX', () => {
+  it('is 10', () => {
+    expect(ELEVATION_MAX).toBe(10);
+  });
+});
+
+describe('setLighting / getLightingData', () => {
+  it('sets lighting at specified position', () => {
+    const map = generateBlankMap(5, 5);
+    setLighting(map, 2, 3, 1); // dim light at (2,3)
+    const data = getLightingData(map);
+    expect(data[3 * 5 + 2]).toBe(1);
+  });
+
+  it('does not affect other tiles', () => {
+    const map = generateBlankMap(3, 3);
+    setLighting(map, 1, 1, 3); // magical darkness at center
+    const data = getLightingData(map);
+    expect(data[0]).toBe(0); // top-left still normal
+    expect(data[4]).toBe(3); // center is magical darkness
+    expect(data[8]).toBe(0); // bottom-right still normal
+  });
+
+  it('handles out-of-bounds gracefully', () => {
+    const map = generateBlankMap(3, 3);
+    setLighting(map, -1, 0, 2);
+    setLighting(map, 0, 99, 2);
+    expect(getLightingData(map).every(v => v === 0)).toBe(true);
+  });
+
+  it('handles missing lighting layer', () => {
+    const map = { width: 3, height: 3, layers: [] };
+    const result = setLighting(map, 1, 1, 2);
+    expect(result).toBe(map);
+  });
+
+  it('returns empty array for missing layer', () => {
+    const map = { layers: [] };
+    expect(getLightingData(map)).toEqual([]);
+  });
+});
+
+describe('setElevation / getElevationData', () => {
+  it('sets elevation at specified position', () => {
+    const map = generateBlankMap(5, 5);
+    setElevation(map, 2, 3, 5);
+    const data = getElevationData(map);
+    expect(data[3 * 5 + 2]).toBe(5);
+  });
+
+  it('clamps elevation to 0-ELEVATION_MAX', () => {
+    const map = generateBlankMap(3, 3);
+    setElevation(map, 0, 0, -5);
+    setElevation(map, 1, 0, 15);
+    const data = getElevationData(map);
+    expect(data[0]).toBe(0);
+    expect(data[1]).toBe(10);
+  });
+
+  it('does not affect other tiles', () => {
+    const map = generateBlankMap(3, 3);
+    setElevation(map, 1, 1, 7);
+    const data = getElevationData(map);
+    expect(data[0]).toBe(0);
+    expect(data[4]).toBe(7);
+    expect(data[8]).toBe(0);
+  });
+
+  it('handles out-of-bounds gracefully', () => {
+    const map = generateBlankMap(3, 3);
+    setElevation(map, -1, 0, 5);
+    setElevation(map, 0, 99, 5);
+    expect(getElevationData(map).every(v => v === 0)).toBe(true);
+  });
+
+  it('handles missing elevation layer', () => {
+    const map = { width: 3, height: 3, layers: [] };
+    const result = setElevation(map, 1, 1, 5);
+    expect(result).toBe(map);
+  });
+
+  it('returns empty array for missing layer', () => {
+    const map = { layers: [] };
+    expect(getElevationData(map)).toEqual([]);
+  });
+});
+
+describe('addSpawnZone / getSpawnZones / removeSpawnZone', () => {
+  it('adds a player spawn zone', () => {
+    const map = generateBlankMap(10, 10);
+    addSpawnZone(map, 1, 2, 3, 4, 'player');
+    const zones = getSpawnZones(map);
+    expect(zones).toHaveLength(1);
+    expect(zones[0].type).toBe('player');
+    expect(zones[0].x).toBe(1 * 48);
+    expect(zones[0].y).toBe(2 * 48);
+    expect(zones[0].width).toBe(3 * 48);
+    expect(zones[0].height).toBe(4 * 48);
+  });
+
+  it('adds an enemy spawn zone', () => {
+    const map = generateBlankMap(10, 10);
+    addSpawnZone(map, 5, 5, 2, 2, 'enemy');
+    const zones = getSpawnZones(map);
+    expect(zones).toHaveLength(1);
+    expect(zones[0].type).toBe('enemy');
+  });
+
+  it('rejects invalid zone types', () => {
+    const map = generateBlankMap(10, 10);
+    addSpawnZone(map, 0, 0, 1, 1, 'invalid');
+    expect(getSpawnZones(map)).toHaveLength(0);
+  });
+
+  it('can add multiple spawn zones', () => {
+    const map = generateBlankMap(10, 10);
+    addSpawnZone(map, 0, 0, 2, 2, 'player');
+    addSpawnZone(map, 5, 5, 3, 3, 'enemy');
+    expect(getSpawnZones(map)).toHaveLength(2);
+  });
+
+  it('removes a spawn zone by ID', () => {
+    const map = generateBlankMap(10, 10);
+    addSpawnZone(map, 0, 0, 2, 2, 'player');
+    addSpawnZone(map, 5, 5, 3, 3, 'enemy');
+    const zones = getSpawnZones(map);
+    const idToRemove = zones[0].id;
+    removeSpawnZone(map, idToRemove);
+    expect(getSpawnZones(map)).toHaveLength(1);
+    expect(getSpawnZones(map)[0].type).toBe('enemy');
+  });
+
+  it('does nothing when removing non-existent zone', () => {
+    const map = generateBlankMap(10, 10);
+    addSpawnZone(map, 0, 0, 2, 2, 'player');
+    removeSpawnZone(map, 999);
+    expect(getSpawnZones(map)).toHaveLength(1);
+  });
+
+  it('handles missing spawn_zones layer', () => {
+    const map = { width: 5, height: 5, layers: [], tilewidth: 48 };
+    const result = addSpawnZone(map, 0, 0, 1, 1, 'player');
+    expect(result).toBe(map);
+  });
+
+  it('returns empty array for missing layer', () => {
+    const map = { layers: [] };
+    expect(getSpawnZones(map)).toEqual([]);
+  });
+
+  it('handles removeSpawnZone with missing layer', () => {
+    const map = { layers: [] };
+    const result = removeSpawnZone(map, 1);
+    expect(result).toBe(map);
   });
 });

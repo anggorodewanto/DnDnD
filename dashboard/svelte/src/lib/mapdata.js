@@ -10,6 +10,29 @@ export const TERRAIN_TYPES = {
   pit: { gid: 5, label: 'Pit', color: '#2d2d2d' },
 };
 
+/**
+ * Lighting type GID mapping.
+ * GID 0 means "normal" (no lighting override).
+ */
+export const LIGHTING_TYPES = {
+  normal:             { gid: 0, label: 'Normal',             color: '#000000' },
+  dim_light:          { gid: 1, label: 'Dim Light',          color: '#ffdd57' },
+  darkness:           { gid: 2, label: 'Darkness',           color: '#333333' },
+  magical_darkness:   { gid: 3, label: 'Magical Darkness',   color: '#1a0033' },
+  fog:                { gid: 4, label: 'Fog / Obscurement',  color: '#aabbcc' },
+  light_obscurement:  { gid: 5, label: 'Light Obscurement',  color: '#ccddaa' },
+};
+
+/** Get lighting info by GID. */
+export function lightingByGid(gid) {
+  for (const [key, val] of Object.entries(LIGHTING_TYPES)) {
+    if (val.gid === gid) {
+      return { key, ...val };
+    }
+  }
+  return { key: 'normal', ...LIGHTING_TYPES.normal };
+}
+
 /** Get terrain info by GID. */
 export function terrainByGid(gid) {
   for (const [key, val] of Object.entries(TERRAIN_TYPES)) {
@@ -19,6 +42,9 @@ export function terrainByGid(gid) {
   }
   return { key: 'open_ground', ...TERRAIN_TYPES.open_ground };
 }
+
+/** Maximum elevation level. */
+export const ELEVATION_MAX = 10;
 
 /** Standard tile size in pixels. */
 export const STANDARD_TILE_SIZE = 48;
@@ -37,7 +63,10 @@ export const HARD_LIMIT = 200;
  */
 export function generateBlankMap(width, height) {
   const tileSize = (width > SOFT_LIMIT || height > SOFT_LIMIT) ? LARGE_TILE_SIZE : STANDARD_TILE_SIZE;
-  const data = new Array(width * height).fill(1); // All open ground
+  const tileCount = width * height;
+  const data = new Array(tileCount).fill(1); // All open ground
+  const lightingData = new Array(tileCount).fill(0); // No lighting override
+  const elevationData = new Array(tileCount).fill(0); // Ground level
 
   return {
     width,
@@ -63,6 +92,31 @@ export function generateBlankMap(width, height) {
         visible: true,
         opacity: 1,
       },
+      {
+        name: 'lighting',
+        type: 'tilelayer',
+        width,
+        height,
+        data: lightingData,
+        visible: true,
+        opacity: 1,
+      },
+      {
+        name: 'elevation',
+        type: 'tilelayer',
+        width,
+        height,
+        data: elevationData,
+        visible: true,
+        opacity: 1,
+      },
+      {
+        name: 'spawn_zones',
+        type: 'objectgroup',
+        objects: [],
+        visible: true,
+        opacity: 1,
+      },
     ],
     tilesets: [
       {
@@ -75,6 +129,18 @@ export function generateBlankMap(width, height) {
           { id: 2, type: 'water' },
           { id: 3, type: 'lava' },
           { id: 4, type: 'pit' },
+        ],
+      },
+      {
+        firstgid: 7,
+        name: 'lighting',
+        tilecount: 6,
+        tiles: [
+          { id: 0, type: 'dim_light' },
+          { id: 1, type: 'darkness' },
+          { id: 2, type: 'magical_darkness' },
+          { id: 3, type: 'fog' },
+          { id: 4, type: 'light_obscurement' },
         ],
       },
     ],
@@ -180,6 +246,118 @@ export function removeWall(tiledMap, px, py, threshold) {
     return true;
   });
 
+  return tiledMap;
+}
+
+/**
+ * Get the lighting layer data array from a Tiled map.
+ * @param {object} tiledMap - The Tiled-compatible map object.
+ * @returns {number[]} The lighting data array (GIDs).
+ */
+export function getLightingData(tiledMap) {
+  const layer = tiledMap.layers?.find(l => l.name === 'lighting' && l.type === 'tilelayer');
+  return layer?.data || [];
+}
+
+/**
+ * Set lighting at a specific tile position.
+ * @param {object} tiledMap - The Tiled-compatible map object.
+ * @param {number} x - Tile x coordinate.
+ * @param {number} y - Tile y coordinate.
+ * @param {number} gid - Lighting GID to set (0 = normal).
+ * @returns {object} Updated map (mutates in place).
+ */
+export function setLighting(tiledMap, x, y, gid) {
+  const layer = tiledMap.layers?.find(l => l.name === 'lighting' && l.type === 'tilelayer');
+  if (!layer) return tiledMap;
+
+  const idx = y * tiledMap.width + x;
+  if (idx >= 0 && idx < layer.data.length) {
+    layer.data[idx] = gid;
+  }
+  return tiledMap;
+}
+
+/**
+ * Get the elevation layer data array from a Tiled map.
+ * @param {object} tiledMap - The Tiled-compatible map object.
+ * @returns {number[]} The elevation data array.
+ */
+export function getElevationData(tiledMap) {
+  const layer = tiledMap.layers?.find(l => l.name === 'elevation' && l.type === 'tilelayer');
+  return layer?.data || [];
+}
+
+/**
+ * Set elevation at a specific tile position.
+ * @param {object} tiledMap - The Tiled-compatible map object.
+ * @param {number} x - Tile x coordinate.
+ * @param {number} y - Tile y coordinate.
+ * @param {number} level - Elevation level (0-ELEVATION_MAX).
+ * @returns {object} Updated map (mutates in place).
+ */
+export function setElevation(tiledMap, x, y, level) {
+  const layer = tiledMap.layers?.find(l => l.name === 'elevation' && l.type === 'tilelayer');
+  if (!layer) return tiledMap;
+
+  const clamped = Math.max(0, Math.min(ELEVATION_MAX, level));
+  const idx = y * tiledMap.width + x;
+  if (idx >= 0 && idx < layer.data.length) {
+    layer.data[idx] = clamped;
+  }
+  return tiledMap;
+}
+
+/**
+ * Get spawn zone objects from the map.
+ * @param {object} tiledMap - The Tiled-compatible map object.
+ * @returns {object[]} The spawn zone objects array.
+ */
+export function getSpawnZones(tiledMap) {
+  const layer = tiledMap.layers?.find(l => l.name === 'spawn_zones' && l.type === 'objectgroup');
+  return layer?.objects || [];
+}
+
+/**
+ * Add a spawn zone rectangle to the map.
+ * @param {object} tiledMap - The Tiled-compatible map object.
+ * @param {number} x - Tile x coordinate.
+ * @param {number} y - Tile y coordinate.
+ * @param {number} width - Width in tiles.
+ * @param {number} height - Height in tiles.
+ * @param {'player'|'enemy'} zoneType - Spawn zone type.
+ * @returns {object} Updated map.
+ */
+export function addSpawnZone(tiledMap, x, y, width, height, zoneType) {
+  const layer = tiledMap.layers?.find(l => l.name === 'spawn_zones' && l.type === 'objectgroup');
+  if (!layer) return tiledMap;
+  if (zoneType !== 'player' && zoneType !== 'enemy') return tiledMap;
+
+  const tileSize = tiledMap.tilewidth;
+  const zone = {
+    id: layer.objects.length + 1,
+    type: zoneType,
+    x: x * tileSize,
+    y: y * tileSize,
+    width: width * tileSize,
+    height: height * tileSize,
+  };
+
+  layer.objects.push(zone);
+  return tiledMap;
+}
+
+/**
+ * Remove a spawn zone by ID.
+ * @param {object} tiledMap - The Tiled-compatible map object.
+ * @param {number} zoneId - The zone ID to remove.
+ * @returns {object} Updated map.
+ */
+export function removeSpawnZone(tiledMap, zoneId) {
+  const layer = tiledMap.layers?.find(l => l.name === 'spawn_zones' && l.type === 'objectgroup');
+  if (!layer) return tiledMap;
+
+  layer.objects = layer.objects.filter(z => z.id !== zoneId);
   return tiledMap;
 }
 

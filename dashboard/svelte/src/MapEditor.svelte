@@ -3,11 +3,21 @@
   import {
     TERRAIN_TYPES,
     terrainByGid,
+    LIGHTING_TYPES,
+    lightingByGid,
+    ELEVATION_MAX,
     generateBlankMap,
     setTerrain,
+    setLighting,
+    getLightingData,
+    setElevation,
+    getElevationData,
     addWall,
     removeWall,
     getWalls,
+    addSpawnZone,
+    getSpawnZones,
+    removeSpawnZone,
     validateDimensions,
   } from './lib/mapdata.js';
 
@@ -31,6 +41,9 @@
   // Tool state
   let activeTool = $state('terrain');
   let selectedTerrain = $state('open_ground');
+  let selectedLighting = $state('dim_light');
+  let selectedElevation = $state(1);
+  let selectedSpawnType = $state('player');
 
   // UI state
   let loading = $state(false);
@@ -47,6 +60,10 @@
 
   // Mouse state for painting
   let isPainting = $state(false);
+
+  // Spawn zone drag state
+  let spawnDragStart = $state(null);
+  let spawnDragEnd = $state(null);
 
   // Sync savedMapId from prop and load existing map
   $effect(() => {
@@ -226,6 +243,82 @@
       }
     }
 
+    // Draw lighting overlay
+    const lightingData = getLightingData(tiledMap);
+    if (lightingData.length > 0) {
+      for (let y = 0; y < tiledMap.height; y++) {
+        for (let x = 0; x < tiledMap.width; x++) {
+          const idx = y * tiledMap.width + x;
+          const gid = lightingData[idx];
+          if (gid === 0) continue; // normal — no overlay
+          const lighting = lightingByGid(gid);
+          ctx.fillStyle = lighting.color;
+          ctx.globalAlpha = 0.4;
+          ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+          ctx.globalAlpha = 1.0;
+        }
+      }
+    }
+
+    // Draw elevation labels
+    const elevationData = getElevationData(tiledMap);
+    if (elevationData.length > 0) {
+      ctx.font = `${Math.max(10, tileSize * 0.3)}px sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      for (let y = 0; y < tiledMap.height; y++) {
+        for (let x = 0; x < tiledMap.width; x++) {
+          const idx = y * tiledMap.width + x;
+          const elev = elevationData[idx];
+          if (elev === 0) continue; // ground level — no label
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+          ctx.lineWidth = 2;
+          const text = `E${elev}`;
+          const tx = (x + 1) * tileSize - 2;
+          const ty = (y + 1) * tileSize - 2;
+          ctx.strokeText(text, tx, ty);
+          ctx.fillText(text, tx, ty);
+        }
+      }
+    }
+
+    // Draw spawn zones
+    const spawnZones = getSpawnZones(tiledMap);
+    for (const zone of spawnZones) {
+      const isPlayer = zone.type === 'player';
+      ctx.fillStyle = isPlayer ? 'rgba(0, 128, 255, 0.25)' : 'rgba(255, 64, 64, 0.25)';
+      ctx.fillRect(zone.x, zone.y, zone.width, zone.height);
+      ctx.strokeStyle = isPlayer ? '#0080ff' : '#ff4040';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 3]);
+      ctx.strokeRect(zone.x, zone.y, zone.width, zone.height);
+      ctx.setLineDash([]);
+
+      // Label
+      ctx.font = `${Math.max(10, tileSize * 0.28)}px sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = isPlayer ? '#0080ff' : '#ff4040';
+      ctx.fillText(isPlayer ? 'Player' : 'Enemy', zone.x + 3, zone.y + 3);
+    }
+
+    // Draw spawn zone drag preview
+    if (spawnDragStart && spawnDragEnd) {
+      const sx = Math.min(spawnDragStart.tx, spawnDragEnd.tx);
+      const sy = Math.min(spawnDragStart.ty, spawnDragEnd.ty);
+      const sw = Math.abs(spawnDragEnd.tx - spawnDragStart.tx) + 1;
+      const sh = Math.abs(spawnDragEnd.ty - spawnDragStart.ty) + 1;
+      const isPlayer = selectedSpawnType === 'player';
+      ctx.fillStyle = isPlayer ? 'rgba(0, 128, 255, 0.3)' : 'rgba(255, 64, 64, 0.3)';
+      ctx.fillRect(sx * tileSize, sy * tileSize, sw * tileSize, sh * tileSize);
+      ctx.strokeStyle = isPlayer ? '#0080ff' : '#ff4040';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 2]);
+      ctx.strokeRect(sx * tileSize, sy * tileSize, sw * tileSize, sh * tileSize);
+      ctx.setLineDash([]);
+    }
+
     // Draw walls
     const walls = getWalls(tiledMap);
     ctx.strokeStyle = '#ff0000';
@@ -255,6 +348,14 @@
     };
   }
 
+  function tileFromPixel(px, py) {
+    const tileSize = getTileSize();
+    return {
+      tx: Math.floor(px / tileSize),
+      ty: Math.floor(py / tileSize),
+    };
+  }
+
   function handleCanvasMouseDown(e) {
     if (!tiledMap) return;
 
@@ -263,21 +364,59 @@
     if (activeTool === 'terrain') {
       isPainting = true;
       paintTerrain(px, py);
+    } else if (activeTool === 'lighting') {
+      isPainting = true;
+      paintLighting(px, py);
+    } else if (activeTool === 'elevation') {
+      isPainting = true;
+      paintElevation(px, py);
     } else if (activeTool === 'wall') {
       placeWall(px, py);
     } else if (activeTool === 'eraseWall') {
       eraseWall(px, py);
+    } else if (activeTool === 'spawn') {
+      const { tx, ty } = tileFromPixel(px, py);
+      if (tx >= 0 && tx < tiledMap.width && ty >= 0 && ty < tiledMap.height) {
+        spawnDragStart = { tx, ty };
+        spawnDragEnd = { tx, ty };
+      }
+    } else if (activeTool === 'eraseSpawn') {
+      eraseSpawnZone(px, py);
     }
   }
 
   function handleCanvasMouseMove(e) {
-    if (!isPainting || activeTool !== 'terrain') return;
+    if (!tiledMap) return;
 
     const { px, py } = canvasPixel(e);
-    paintTerrain(px, py);
+
+    if (isPainting && activeTool === 'terrain') {
+      paintTerrain(px, py);
+    } else if (isPainting && activeTool === 'lighting') {
+      paintLighting(px, py);
+    } else if (isPainting && activeTool === 'elevation') {
+      paintElevation(px, py);
+    } else if (activeTool === 'spawn' && spawnDragStart) {
+      const { tx, ty } = tileFromPixel(px, py);
+      const cx = Math.max(0, Math.min(tiledMap.width - 1, tx));
+      const cy = Math.max(0, Math.min(tiledMap.height - 1, ty));
+      spawnDragEnd = { tx: cx, ty: cy };
+      drawMap();
+    }
   }
 
   function handleCanvasMouseUp() {
+    if (activeTool === 'spawn' && spawnDragStart && spawnDragEnd) {
+      const sx = Math.min(spawnDragStart.tx, spawnDragEnd.tx);
+      const sy = Math.min(spawnDragStart.ty, spawnDragEnd.ty);
+      const sw = Math.abs(spawnDragEnd.tx - spawnDragStart.tx) + 1;
+      const sh = Math.abs(spawnDragEnd.ty - spawnDragStart.ty) + 1;
+      tiledMap = addSpawnZone(tiledMap, sx, sy, sw, sh, selectedSpawnType);
+      dirty = true;
+      spawnDragStart = null;
+      spawnDragEnd = null;
+      drawMap();
+    }
     isPainting = false;
   }
 
@@ -290,6 +429,31 @@
 
     const gid = TERRAIN_TYPES[selectedTerrain]?.gid || 1;
     tiledMap = setTerrain(tiledMap, tx, ty, gid);
+    dirty = true;
+    drawMap();
+  }
+
+  function paintLighting(px, py) {
+    const tileSize = getTileSize();
+    const tx = Math.floor(px / tileSize);
+    const ty = Math.floor(py / tileSize);
+
+    if (tx < 0 || tx >= tiledMap.width || ty < 0 || ty >= tiledMap.height) return;
+
+    const gid = LIGHTING_TYPES[selectedLighting]?.gid ?? 0;
+    tiledMap = setLighting(tiledMap, tx, ty, gid);
+    dirty = true;
+    drawMap();
+  }
+
+  function paintElevation(px, py) {
+    const tileSize = getTileSize();
+    const tx = Math.floor(px / tileSize);
+    const ty = Math.floor(py / tileSize);
+
+    if (tx < 0 || tx >= tiledMap.width || ty < 0 || ty >= tiledMap.height) return;
+
+    tiledMap = setElevation(tiledMap, tx, ty, selectedElevation);
     dirty = true;
     drawMap();
   }
@@ -328,6 +492,18 @@
     tiledMap = removeWall(tiledMap, px, py, tileSize / 4);
     dirty = true;
     drawMap();
+  }
+
+  function eraseSpawnZone(px, py) {
+    const zones = getSpawnZones(tiledMap);
+    for (const zone of zones) {
+      if (px >= zone.x && px <= zone.x + zone.width && py >= zone.y && py <= zone.y + zone.height) {
+        tiledMap = removeSpawnZone(tiledMap, zone.id);
+        dirty = true;
+        drawMap();
+        return;
+      }
+    }
   }
 </script>
 
@@ -378,6 +554,14 @@
           onclick={() => activeTool = 'terrain'}
         >Terrain</button>
         <button
+          class:active={activeTool === 'lighting'}
+          onclick={() => activeTool = 'lighting'}
+        >Lighting</button>
+        <button
+          class:active={activeTool === 'elevation'}
+          onclick={() => activeTool = 'elevation'}
+        >Elevation</button>
+        <button
           class:active={activeTool === 'wall'}
           onclick={() => activeTool = 'wall'}
         >Wall</button>
@@ -385,6 +569,14 @@
           class:active={activeTool === 'eraseWall'}
           onclick={() => activeTool = 'eraseWall'}
         >Erase Wall</button>
+        <button
+          class:active={activeTool === 'spawn'}
+          onclick={() => activeTool = 'spawn'}
+        >Spawn Zone</button>
+        <button
+          class:active={activeTool === 'eraseSpawn'}
+          onclick={() => activeTool = 'eraseSpawn'}
+        >Erase Spawn</button>
       </div>
 
       {#if activeTool === 'terrain'}
@@ -399,6 +591,65 @@
               title={terrain.label}
             >{terrain.label}</button>
           {/each}
+        </div>
+      {/if}
+
+      {#if activeTool === 'lighting'}
+        <div class="toolbar-section lighting-palette">
+          <span class="section-label">Lighting:</span>
+          {#each Object.entries(LIGHTING_TYPES).filter(([k]) => k !== 'normal') as [key, lt]}
+            <button
+              class="lighting-btn"
+              class:active={selectedLighting === key}
+              onclick={() => selectedLighting = key}
+              style="background: {lt.color}"
+              title={lt.label}
+            >{lt.label}</button>
+          {/each}
+          <button
+            class="lighting-btn"
+            class:active={selectedLighting === 'normal'}
+            onclick={() => selectedLighting = 'normal'}
+            title="Erase lighting"
+          >Clear</button>
+        </div>
+      {/if}
+
+      {#if activeTool === 'elevation'}
+        <div class="toolbar-section">
+          <span class="section-label">Level:</span>
+          <input
+            type="number"
+            class="elevation-input"
+            min="0"
+            max={ELEVATION_MAX}
+            bind:value={selectedElevation}
+          />
+          <input
+            type="range"
+            min="0"
+            max={ELEVATION_MAX}
+            bind:value={selectedElevation}
+            class="elevation-slider"
+          />
+          <span class="elevation-label">{selectedElevation}</span>
+        </div>
+      {/if}
+
+      {#if activeTool === 'spawn'}
+        <div class="toolbar-section">
+          <span class="section-label">Type:</span>
+          <button
+            class="spawn-btn player"
+            class:active={selectedSpawnType === 'player'}
+            onclick={() => selectedSpawnType = 'player'}
+          >Player</button>
+          <button
+            class="spawn-btn enemy"
+            class:active={selectedSpawnType === 'enemy'}
+            onclick={() => selectedSpawnType = 'enemy'}
+          >Enemy</button>
+          <span class="section-label hint">Click & drag to draw zone</span>
         </div>
       {/if}
 
@@ -530,6 +781,11 @@
     color: #888;
   }
 
+  .hint {
+    font-style: italic;
+    font-size: 0.75rem;
+  }
+
   .toolbar button {
     padding: 0.4rem 0.8rem;
     background: #1a1a2e;
@@ -549,12 +805,44 @@
     color: white;
   }
 
-  .terrain-btn {
+  .terrain-btn, .lighting-btn {
     font-size: 0.8rem;
     min-width: 80px;
     text-align: center;
     color: white !important;
     text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  }
+
+  .spawn-btn.player {
+    border-color: #0080ff !important;
+  }
+
+  .spawn-btn.player.active {
+    background: #0080ff !important;
+    border-color: #0080ff !important;
+  }
+
+  .spawn-btn.enemy {
+    border-color: #ff4040 !important;
+  }
+
+  .spawn-btn.enemy.active {
+    background: #ff4040 !important;
+    border-color: #ff4040 !important;
+  }
+
+  .elevation-input {
+    width: 50px !important;
+  }
+
+  .elevation-slider {
+    width: 80px !important;
+  }
+
+  .elevation-label {
+    font-size: 0.85rem;
+    color: #ccc;
+    min-width: 1.5em;
   }
 
   .toolbar input {
