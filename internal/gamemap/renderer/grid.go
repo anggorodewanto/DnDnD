@@ -50,19 +50,10 @@ func DrawGrid(dc *gg.Context, md *MapData) {
 // in the margin area. The drawing context should be sized to include the margin.
 func DrawCoordinateLabels(dc *gg.Context, md *MapData) {
 	ts := float64(md.TileSize)
-	fontSize := float64(md.TileSize) * 0.25
-	if fontSize < 8 {
-		fontSize = 8
-	}
-	if fontSize > 14 {
-		fontSize = 14
-	}
+	fontSize := max(8, min(14, float64(md.TileSize)*0.25))
 	dc.SetColor(color.RGBA{R: 0x33, G: 0x33, B: 0x33, A: 0xFF})
 
-	// Load default font - gg uses Go's basic font if none loaded
-	if err := dc.LoadFontFace("", fontSize); err != nil {
-		// fallback: use whatever font is available
-	}
+	_ = dc.LoadFontFace("", fontSize)
 
 	margin := float64(gridLabelMargin)
 

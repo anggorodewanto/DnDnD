@@ -43,7 +43,6 @@ func drawHatching(dc *gg.Context, x, y, size float64) {
 	dc.SetLineWidth(1)
 	step := 8.0
 	for offset := step; offset < size*2; offset += step {
-		// diagonal lines from top-left to bottom-right direction
 		dc.DrawLine(x+offset, y, x, y+offset)
 		dc.Stroke()
 	}

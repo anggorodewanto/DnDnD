@@ -16,11 +16,7 @@ const (
 
 // NeedsLegend returns true if the map requires a legend panel.
 func NeedsLegend(md *MapData) bool {
-	if len(md.ActiveEffects) > 0 {
-		return true
-	}
-	nonStandard := CollectNonStandardTerrain(md.TerrainGrid)
-	return len(nonStandard) > 0
+	return len(md.ActiveEffects) > 0 || len(CollectNonStandardTerrain(md.TerrainGrid)) > 0
 }
 
 // LegendHeight returns the height in pixels needed for the legend panel.
@@ -55,9 +51,7 @@ func DrawLegend(dc *gg.Context, md *MapData, yOffset int) {
 	x := float64(legendPadding)
 	fontSize := 11.0
 
-	if err := dc.LoadFontFace("", fontSize); err != nil {
-		// fallback
-	}
+	_ = dc.LoadFontFace("", fontSize)
 
 	// Terrain key section
 	if len(nonStandard) > 0 {

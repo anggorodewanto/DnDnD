@@ -128,7 +128,7 @@
   - Depends on: Phase 21a
   - Done when: Undo/redo works for all tools, region select+copy+paste works, duplicate map creates independent copy.
 
-- [ ] **Phase 22: Map Rendering Engine (Server-Side PNG)**
+- [x] **Phase 22: Map Rendering Engine (Server-Side PNG)**
   - Scope: Go `image/draw` + `gg` map renderer. Tile rendering at 48px (32px for >100x100). Terrain types with colors/patterns. Wall rendering. Grid lines and coordinate labels (A-Z, AA-AZ, etc.). Token rendering with short ID labels. Token health tier indicators (dual-channel: color + icon, colorblind-accessible). Stacked token rendering for altitude. Unified map legend (terrain key + active effects). Per-encounter render queue with debouncing.
   - Depends on: Phase 19
   - Done when: PNG generated from map JSON + combatant positions; tokens show health tiers with accessible indicators; legend renders when needed; render queue debounces rapid updates.

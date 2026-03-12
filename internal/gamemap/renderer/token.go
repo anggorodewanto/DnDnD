@@ -56,15 +56,11 @@ func DrawTokens(dc *gg.Context, md *MapData) {
 
 // drawTokenCircle draws the circular token with health-tier-specific styling.
 func drawTokenCircle(dc *gg.Context, cx, cy, radius float64, tier HealthTier) {
-	// Fill
-	tc := tier.TierColor()
-	dc.SetColor(tc)
+	dc.SetColor(tier.TierColor())
 	dc.DrawCircle(cx, cy, radius)
 	dc.Fill()
 
-	// Border based on tier
-	borderColor := color.RGBA{R: 0x22, G: 0x22, B: 0x22, A: 0xFF}
-	dc.SetColor(borderColor)
+	dc.SetColor(color.RGBA{R: 0x22, G: 0x22, B: 0x22, A: 0xFF})
 
 	switch tier {
 	case TierUninjured:
@@ -94,19 +90,13 @@ func drawTokenCircle(dc *gg.Context, cx, cy, radius float64, tier HealthTier) {
 
 // drawTokenLabel renders the short ID text in the center of the token.
 func drawTokenLabel(dc *gg.Context, cx, cy float64, label string, tier HealthTier, tileSize float64) {
-	fontSize := tileSize * 0.22
-	if fontSize < 8 {
-		fontSize = 8
-	}
-	if err := dc.LoadFontFace("", fontSize); err != nil {
-		// fallback
-	}
+	fontSize := max(8, tileSize*0.22)
+	_ = dc.LoadFontFace("", fontSize)
 
-	// Text color: white for most, black for yellow/light backgrounds
-	switch tier {
-	case TierScratched:
+	// Text color: black for yellow/light backgrounds, white for the rest
+	if tier == TierScratched {
 		dc.SetColor(color.RGBA{R: 0x22, G: 0x22, B: 0x22, A: 0xFF})
-	default:
+	} else {
 		dc.SetColor(color.White)
 	}
 	dc.DrawStringAnchored(label, cx, cy, 0.5, 0.5)
@@ -115,13 +105,8 @@ func drawTokenLabel(dc *gg.Context, cx, cy float64, label string, tier HealthTie
 // drawAltitudeBadge draws an altitude indicator badge near the token.
 func drawAltitudeBadge(dc *gg.Context, cx, cy, radius float64, altFt int, tileSize float64) {
 	badgeText := fmt.Sprintf("\u2191%d", altFt)
-	fontSize := tileSize * 0.18
-	if fontSize < 7 {
-		fontSize = 7
-	}
-	if err := dc.LoadFontFace("", fontSize); err != nil {
-		// fallback
-	}
+	fontSize := max(7, tileSize*0.18)
+	_ = dc.LoadFontFace("", fontSize)
 
 	bx := cx + radius*0.7
 	by := cy - radius*0.7

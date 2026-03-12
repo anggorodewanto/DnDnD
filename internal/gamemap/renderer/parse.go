@@ -100,21 +100,16 @@ func parseTerrainLayer(tm tiledMap, gidMap map[int]TerrainType) []TerrainType {
 		}
 		grid := make([]TerrainType, len(layer.Data))
 		for i, gid := range layer.Data {
+			// Zero value (TerrainOpenGround) is already set by make
 			if t, ok := gidMap[gid]; ok {
 				grid[i] = t
-			} else {
-				grid[i] = TerrainOpenGround
 			}
 		}
 		return grid
 	}
 
-	// No terrain layer found: default to open ground
-	grid := make([]TerrainType, tm.Width*tm.Height)
-	for i := range grid {
-		grid[i] = TerrainOpenGround
-	}
-	return grid
+	// No terrain layer found: default to open ground (zero value is TerrainOpenGround)
+	return make([]TerrainType, tm.Width*tm.Height)
 }
 
 // parseWallsLayer extracts wall segments from the tiled map object layer.
