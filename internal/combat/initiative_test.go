@@ -1113,3 +1113,163 @@ func TestFormatCompletedInitiativeTracker_NPCNoHP(t *testing.T) {
 
 	assert.NotContains(t, result, "HP")
 }
+
+// --- TDD Cycle: createActiveTurn resolves turn resources ---
+
+func TestService_AdvanceTurn_SetsResourcesForPC(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	charID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
+			CurrentTurnID: uuid.NullUUID{},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{
+				ID:              combatantID,
+				InitiativeOrder: 1,
+				DisplayName:     "Aria",
+				Conditions:      json.RawMessage(`[]`),
+				IsAlive:         true,
+				IsNpc:           false,
+				CharacterID:     uuid.NullUUID{UUID: charID, Valid: true},
+			},
+		}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID:      charID,
+			SpeedFt: 35,
+			Classes: json.RawMessage(`[{"class":"fighter","level":5}]`),
+		}, nil
+	}
+	store.getClassFn = func(ctx context.Context, id string) (refdata.Class, error) {
+		return refdata.Class{
+			ID:               "fighter",
+			AttacksPerAction: json.RawMessage(`{"1":1,"5":2}`),
+		}, nil
+	}
+
+	var createdParams refdata.CreateTurnParams
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		createdParams = arg
+		return refdata.Turn{
+			ID:                  uuid.New(),
+			CombatantID:         arg.CombatantID,
+			RoundNumber:         arg.RoundNumber,
+			Status:              arg.Status,
+			MovementRemainingFt: arg.MovementRemainingFt,
+			AttacksRemaining:    arg.AttacksRemaining,
+		}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.AdvanceTurn(ctx, encounterID)
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(35), createdParams.MovementRemainingFt, "movement should be character speed")
+	assert.Equal(t, int32(2), createdParams.AttacksRemaining, "fighter level 5 gets 2 attacks")
+}
+
+func TestService_AdvanceTurn_SetsResourcesForNPC(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
+			CurrentTurnID: uuid.NullUUID{},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{
+				ID:              combatantID,
+				InitiativeOrder: 1,
+				DisplayName:     "Goblin",
+				Conditions:      json.RawMessage(`[]`),
+				IsAlive:         true,
+				IsNpc:           true,
+			},
+		}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+
+	var createdParams refdata.CreateTurnParams
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		createdParams = arg
+		return refdata.Turn{
+			ID:                  uuid.New(),
+			CombatantID:         arg.CombatantID,
+			RoundNumber:         arg.RoundNumber,
+			Status:              arg.Status,
+			MovementRemainingFt: arg.MovementRemainingFt,
+			AttacksRemaining:    arg.AttacksRemaining,
+		}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.AdvanceTurn(ctx, encounterID)
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(30), createdParams.MovementRemainingFt, "NPC defaults to 30ft")
+	assert.Equal(t, int32(1), createdParams.AttacksRemaining, "NPC defaults to 1 attack")
+}
+
+func TestService_AdvanceTurn_ResolveTurnResourcesError(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	charID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
+			CurrentTurnID: uuid.NullUUID{},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{
+				ID:              combatantID,
+				InitiativeOrder: 1,
+				DisplayName:     "Aria",
+				Conditions:      json.RawMessage(`[]`),
+				IsAlive:         true,
+				IsNpc:           false,
+				CharacterID:     uuid.NullUUID{UUID: charID, Valid: true},
+			},
+		}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, errors.New("db connection error")
+	}
+
+	svc := NewService(store)
+	_, err := svc.AdvanceTurn(ctx, encounterID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resolving turn resources")
+}

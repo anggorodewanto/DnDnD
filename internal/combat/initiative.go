@@ -462,11 +462,18 @@ func (s *Service) skipSurprisedTurn(ctx context.Context, encounterID uuid.UUID, 
 
 // createActiveTurn creates an active turn and updates the encounter's current turn.
 func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant) (TurnInfo, error) {
+	speedFt, attacksRemaining, err := s.ResolveTurnResources(ctx, combatant)
+	if err != nil {
+		return TurnInfo{}, fmt.Errorf("resolving turn resources: %w", err)
+	}
+
 	turn, err := s.store.CreateTurn(ctx, refdata.CreateTurnParams{
-		EncounterID: encounterID,
-		CombatantID: combatant.ID,
-		RoundNumber: roundNumber,
-		Status:      "active",
+		EncounterID:         encounterID,
+		CombatantID:         combatant.ID,
+		RoundNumber:         roundNumber,
+		Status:              "active",
+		MovementRemainingFt: speedFt,
+		AttacksRemaining:    attacksRemaining,
 	})
 	if err != nil {
 		return TurnInfo{}, fmt.Errorf("creating turn: %w", err)
