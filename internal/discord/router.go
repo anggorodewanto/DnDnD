@@ -18,11 +18,17 @@ type CommandRouter struct {
 	bot         *Bot
 	handlers    map[string]CommandHandler
 	moveHandler *MoveHandler
+	flyHandler  *FlyHandler
 }
 
 // SetMoveHandler registers the MoveHandler for button callback routing.
 func (r *CommandRouter) SetMoveHandler(h *MoveHandler) {
 	r.moveHandler = h
+}
+
+// SetFlyHandler registers the FlyHandler for button callback routing.
+func (r *CommandRouter) SetFlyHandler(h *FlyHandler) {
+	r.flyHandler = h
 }
 
 // RegistrationDeps holds the optional dependencies for registration command handlers.
@@ -120,23 +126,40 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 	data := interaction.Data.(discordgo.MessageComponentInteractionData)
 	customID := data.CustomID
 
-	if r.moveHandler == nil {
-		return
-	}
-
-	if strings.HasPrefix(customID, "move_confirm:") {
-		turnID, combatantID, destCol, destRow, costFt, err := ParseMoveConfirmData(customID)
-		if err != nil {
-			respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Invalid move data: %v", err))
+	// Move button callbacks
+	if r.moveHandler != nil {
+		if strings.HasPrefix(customID, "move_confirm:") {
+			turnID, combatantID, destCol, destRow, costFt, err := ParseMoveConfirmData(customID)
+			if err != nil {
+				respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Invalid move data: %v", err))
+				return
+			}
+			r.moveHandler.HandleMoveConfirm(interaction, turnID, combatantID, destCol, destRow, costFt)
 			return
 		}
-		r.moveHandler.HandleMoveConfirm(interaction, turnID, combatantID, destCol, destRow, costFt)
-		return
+
+		if strings.HasPrefix(customID, "move_cancel:") {
+			r.moveHandler.HandleMoveCancel(interaction)
+			return
+		}
 	}
 
-	if strings.HasPrefix(customID, "move_cancel:") {
-		r.moveHandler.HandleMoveCancel(interaction)
-		return
+	// Fly button callbacks
+	if r.flyHandler != nil {
+		if strings.HasPrefix(customID, "fly_confirm:") {
+			turnID, combatantID, newAlt, costFt, err := ParseFlyConfirmData(customID)
+			if err != nil {
+				respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Invalid fly data: %v", err))
+				return
+			}
+			r.flyHandler.HandleFlyConfirm(interaction, turnID, combatantID, newAlt, costFt)
+			return
+		}
+
+		if strings.HasPrefix(customID, "fly_cancel:") {
+			r.flyHandler.HandleFlyCancel(interaction)
+			return
+		}
 	}
 }
 

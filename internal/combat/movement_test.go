@@ -462,6 +462,56 @@ func TestValidateEndTurnPosition_DeadCreatureOK(t *testing.T) {
 	}
 }
 
+func TestValidateMove_FlyingOccupantDoesNotBlock(t *testing.T) {
+	// An enemy at altitude 30ft should not block destination at ground level
+	terrain := make([]renderer.TerrainType, 4)
+	grid := &pathfinding.Grid{
+		Width:   2,
+		Height:  2,
+		Terrain: terrain,
+		Occupants: []pathfinding.Occupant{
+			{Col: 1, Row: 0, IsAlly: false, SizeCategory: pathfinding.SizeMedium, AltitudeFt: 30},
+		},
+	}
+
+	turn := refdata.Turn{MovementRemainingFt: 30}
+	combatant := refdata.Combatant{PositionCol: "A", PositionRow: 1}
+
+	req := MoveRequest{
+		DestCol:      1,
+		DestRow:      0,
+		Turn:         turn,
+		Combatant:    combatant,
+		Grid:         grid,
+		SizeCategory: pathfinding.SizeMedium,
+	}
+
+	result, err := ValidateMove(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Valid {
+		t.Fatalf("expected valid move - flying occupant should not block ground, got: %s", result.Reason)
+	}
+}
+
+func TestValidateEndTurnPosition_DifferentAltitudeOK(t *testing.T) {
+	combatant := refdata.Combatant{
+		ID:          uuid.New(),
+		PositionCol: "A",
+		PositionRow: 1,
+		AltitudeFt:  30,
+		IsAlive:     true,
+	}
+	others := []refdata.Combatant{
+		{ID: uuid.New(), PositionCol: "A", PositionRow: 1, AltitudeFt: 0, IsAlive: true, DisplayName: "Goblin"},
+	}
+	msg := ValidateEndTurnPosition(combatant, others)
+	if msg != "" {
+		t.Errorf("expected empty message for different altitude, got: %s", msg)
+	}
+}
+
 func TestValidateEndTurnPosition_SelfIgnored(t *testing.T) {
 	id := uuid.New()
 	combatant := refdata.Combatant{

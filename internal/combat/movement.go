@@ -67,9 +67,9 @@ func ValidateMove(req MoveRequest) (*MoveResult, error) {
 		}, nil
 	}
 
-	// Check occupancy at destination - cannot end on any occupied tile
+	// Check occupancy at destination - cannot end on any occupied tile at the same altitude
 	for _, occ := range req.Grid.Occupants {
-		if occ.Col == req.DestCol && occ.Row == req.DestRow {
+		if occ.Col == req.DestCol && occ.Row == req.DestRow && occ.AltitudeFt == 0 {
 			return &MoveResult{
 				Valid:     false,
 				Reason:    fmt.Sprintf("Cannot end movement in an occupied tile (%s)", destLabel),
@@ -146,7 +146,7 @@ func ValidateEndTurnPosition(combatant refdata.Combatant, allCombatants []refdat
 		if other.ID == combatant.ID || !other.IsAlive {
 			continue
 		}
-		if other.PositionCol == combatant.PositionCol && other.PositionRow == combatant.PositionRow {
+		if other.PositionCol == combatant.PositionCol && other.PositionRow == combatant.PositionRow && other.AltitudeFt == combatant.AltitudeFt {
 			return fmt.Sprintf("You can't end your turn in another creature's space — use `/move` to leave %s's tile", other.DisplayName)
 		}
 	}

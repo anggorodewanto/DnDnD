@@ -240,9 +240,16 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 		return
 	}
 
-	// Update combatant position
+	// Get combatant to preserve altitude during horizontal movement
+	combatant, getErr := h.combatService.GetCombatant(ctx, combatantID)
+	currentAltitude := int32(0)
+	if getErr == nil {
+		currentAltitude = combatant.AltitudeFt
+	}
+
+	// Update combatant position (preserving current altitude)
 	destLabel := renderer.ColumnLabel(destCol)
-	_, err = h.combatService.UpdateCombatantPosition(ctx, combatantID, destLabel, int32(destRow+1), 0)
+	_, err = h.combatService.UpdateCombatantPosition(ctx, combatantID, destLabel, int32(destRow+1), currentAltitude)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Failed to update position.")
 		return
@@ -286,7 +293,8 @@ func buildOccupants(all []refdata.Combatant, mover refdata.Combatant) []pathfind
 			Col:          col,
 			Row:          row,
 			IsAlly:       c.IsNpc == mover.IsNpc, // ally if same faction
-			SizeCategory: pathfinding.SizeMedium,    // default; would look up creature size
+			SizeCategory: pathfinding.SizeMedium,  // default; would look up creature size
+			AltitudeFt:   int(c.AltitudeFt),
 		})
 	}
 	return occupants

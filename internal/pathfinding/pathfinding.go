@@ -50,6 +50,7 @@ type Occupant struct {
 	Row          int
 	IsAlly       bool
 	SizeCategory int
+	AltitudeFt   int // altitude in feet; 0 = ground level
 }
 
 // Grid holds the pathfinding map data.
@@ -134,9 +135,13 @@ func addWallEdges(blocked map[edge]bool, w renderer.WallSegment, width, height i
 }
 
 // buildOccupantMap creates a lookup from (row, col) -> occupant for O(1) checks.
+// Flying occupants (AltitudeFt > 0) are excluded because they don't block ground tiles.
 func buildOccupantMap(occupants []Occupant) map[Point]Occupant {
 	m := make(map[Point]Occupant, len(occupants))
 	for _, o := range occupants {
+		if o.AltitudeFt > 0 {
+			continue
+		}
 		m[Point{o.Col, o.Row}] = o
 	}
 	return m

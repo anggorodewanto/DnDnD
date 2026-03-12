@@ -260,6 +260,107 @@ func TestCommandRouter_UnknownCommandRespondsWithError(t *testing.T) {
 	}
 }
 
+func TestCommandRouter_FlyConfirmButtonRoutes(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupFlyHandler(sess)
+
+	mock := newTestMock()
+	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		sess.InteractionRespond(interaction, resp)
+		return nil
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	router := NewCommandRouter(bot, nil)
+	router.SetFlyHandler(handler)
+
+	confirmID := "fly_confirm:" + turnID.String() + ":" + combatantID.String() + ":30:30"
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: confirmID,
+		},
+	}
+
+	router.Handle(interaction)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response from fly confirm handler")
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "30ft") {
+		t.Errorf("expected altitude in confirmation, got: %s", sess.lastResponse.Data.Content)
+	}
+}
+
+func TestCommandRouter_FlyCancelButtonRoutes(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, _ := setupFlyHandler(sess)
+
+	mock := newTestMock()
+	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		sess.InteractionRespond(interaction, resp)
+		return nil
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	router := NewCommandRouter(bot, nil)
+	router.SetFlyHandler(handler)
+
+	cancelID := "fly_cancel:" + turnID.String()
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: cancelID,
+		},
+	}
+
+	router.Handle(interaction)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response from fly cancel handler")
+	}
+	if sess.lastResponse.Data.Content != "Fly cancelled." {
+		t.Errorf("expected cancel message, got: %s", sess.lastResponse.Data.Content)
+	}
+}
+
+func TestCommandRouter_FlyConfirmInvalidData(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _ := setupFlyHandler(sess)
+
+	mock := newTestMock()
+	var respondedContent string
+	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		if resp.Data != nil {
+			respondedContent = resp.Data.Content
+		}
+		return nil
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	router := NewCommandRouter(bot, nil)
+	router.SetFlyHandler(handler)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "fly_confirm:bad-data",
+		},
+	}
+
+	router.Handle(interaction)
+
+	if !strings.Contains(respondedContent, "Invalid fly data") {
+		t.Errorf("expected invalid fly data message, got: %s", respondedContent)
+	}
+}
+
 func TestCommandRouter_StubResponseIncludesCommandName(t *testing.T) {
 	mock := newTestMock()
 	var respondedContent string

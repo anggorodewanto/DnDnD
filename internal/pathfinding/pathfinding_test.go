@@ -502,3 +502,34 @@ func TestFindPath_LargerGrid(t *testing.T) {
 	assert.True(t, res.Found)
 	assert.Equal(t, 45, res.TotalCostFt) // 9 diagonal * 5ft
 }
+
+func TestFindPath_FlyingOccupantDoesNotBlockGround(t *testing.T) {
+	// 3×1 grid, enemy flying at altitude 30ft at col 1 - should not block ground path
+	g := openGrid(3, 1)
+	g.Occupants = []Occupant{{Col: 1, Row: 0, IsAlly: false, SizeCategory: SizeMedium, AltitudeFt: 30}}
+	req := PathRequest{
+		Start:        Point{0, 0},
+		End:          Point{2, 0},
+		SizeCategory: SizeMedium,
+		Grid:         g,
+	}
+	res, err := FindPath(req)
+	require.NoError(t, err)
+	assert.True(t, res.Found, "flying occupant should not block ground path")
+	assert.Equal(t, 10, res.TotalCostFt)
+}
+
+func TestFindPath_GroundOccupantStillBlocks(t *testing.T) {
+	// 3×1 grid, enemy at ground level at col 1 - should block
+	g := openGrid(3, 1)
+	g.Occupants = []Occupant{{Col: 1, Row: 0, IsAlly: false, SizeCategory: SizeMedium, AltitudeFt: 0}}
+	req := PathRequest{
+		Start:        Point{0, 0},
+		End:          Point{2, 0},
+		SizeCategory: SizeMedium,
+		Grid:         g,
+	}
+	res, err := FindPath(req)
+	require.NoError(t, err)
+	assert.False(t, res.Found, "ground occupant should still block")
+}
