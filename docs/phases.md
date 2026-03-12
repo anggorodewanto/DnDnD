@@ -173,7 +173,7 @@
   - Depends on: Phase 19
   - Done when: Unit tests cover normal paths, difficult terrain, wall blocking, occupancy rules, diagonals, corner-cutting, prone crawling costs.
 
-- [ ] **Phase 30: Movement (`/move`)**
+- [x] **Phase 30: Movement (`/move`)**
   - Scope: `/move` command: destination coordinate parsing (A1 through AA99+), path validation via A*, movement cost deduction, split movement support, ephemeral confirmation prompt with path cost and remaining movement. Moving through occupied tiles (ally pass-through, enemy blocking, size exception). Cannot end turn in another creature's space (block `/done`).
   - Depends on: Phase 28, Phase 29
   - Done when: Integration tests verify valid/invalid moves, split movement, confirmation flow, tile occupancy rules.

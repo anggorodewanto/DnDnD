@@ -70,14 +70,6 @@ func ValidateMove(req MoveRequest) (*MoveResult, error) {
 	// Check occupancy at destination - cannot end on any occupied tile
 	for _, occ := range req.Grid.Occupants {
 		if occ.Col == req.DestCol && occ.Row == req.DestRow {
-			if occ.IsAlly {
-				return &MoveResult{
-					Valid:     false,
-					Reason:    fmt.Sprintf("Cannot end movement in an occupied tile (%s)", destLabel),
-					DestLabel: destLabel,
-				}, nil
-			}
-			// Enemy: cannot end on enemy tile either
 			return &MoveResult{
 				Valid:     false,
 				Reason:    fmt.Sprintf("Cannot end movement in an occupied tile (%s)", destLabel),
@@ -151,10 +143,7 @@ func FormatMoveConfirmation(result *MoveResult) string {
 // Returns an error message if they cannot end their turn there, empty string if OK.
 func ValidateEndTurnPosition(combatant refdata.Combatant, allCombatants []refdata.Combatant) string {
 	for _, other := range allCombatants {
-		if other.ID == combatant.ID {
-			continue
-		}
-		if !other.IsAlive {
+		if other.ID == combatant.ID || !other.IsAlive {
 			continue
 		}
 		if other.PositionCol == combatant.PositionCol && other.PositionRow == combatant.PositionRow {

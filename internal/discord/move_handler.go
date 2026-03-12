@@ -83,7 +83,6 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	userID := interactionUserID(interaction)
 	guildID := interaction.GuildID
 
 	// Get active encounter
@@ -117,7 +116,7 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	_ = userID // TODO: turn ownership validation will be wired when full turn lock is available
+	// TODO: turn ownership validation will be wired when full turn lock is available
 
 	// Get map data
 	if !encounter.MapID.Valid {
@@ -155,12 +154,8 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 		Occupants: occupants,
 	}
 
-	// Determine mover size category
+	// TODO: look up creature size from CreatureRefID when available
 	sizeCategory := pathfinding.SizeMedium
-	if combatant.CreatureRefID.Valid {
-		// For creatures we'd look up size; default to Medium for now
-		sizeCategory = pathfinding.SizeMedium
-	}
 
 	moveReq := combat.MoveRequest{
 		DestCol:      destCol,
@@ -280,10 +275,7 @@ func (h *MoveHandler) HandleMoveCancel(interaction *discordgo.Interaction) {
 func buildOccupants(all []refdata.Combatant, mover refdata.Combatant) []pathfinding.Occupant {
 	var occupants []pathfinding.Occupant
 	for _, c := range all {
-		if c.ID == mover.ID {
-			continue
-		}
-		if !c.IsAlive {
+		if c.ID == mover.ID || !c.IsAlive {
 			continue
 		}
 		col, row, err := renderer.ParseCoordinate(c.PositionCol + fmt.Sprintf("%d", c.PositionRow))
@@ -293,7 +285,7 @@ func buildOccupants(all []refdata.Combatant, mover refdata.Combatant) []pathfind
 		occupants = append(occupants, pathfinding.Occupant{
 			Col:          col,
 			Row:          row,
-			IsAlly:       !c.IsNpc == !mover.IsNpc, // ally if same faction
+			IsAlly:       c.IsNpc == mover.IsNpc, // ally if same faction
 			SizeCategory: pathfinding.SizeMedium,    // default; would look up creature size
 		})
 	}
