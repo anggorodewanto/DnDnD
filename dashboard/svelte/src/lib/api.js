@@ -1,8 +1,23 @@
 /**
- * API client for map CRUD operations.
+ * API client for map and asset operations.
  */
 
 const API_BASE = '/api/maps';
+
+/**
+ * Perform a fetch and throw on non-OK responses.
+ * @param {string} url
+ * @param {RequestInit} [options]
+ * @returns {Promise<Response>}
+ */
+async function apiFetch(url, options) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res;
+}
 
 /**
  * Create a new map.
@@ -10,15 +25,11 @@ const API_BASE = '/api/maps';
  * @returns {Promise<object>} The created map.
  */
 export async function createMap(params) {
-  const res = await fetch(API_BASE, {
+  const res = await apiFetch(API_BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Failed to create map: ${res.status}`);
-  }
   return res.json();
 }
 
@@ -28,11 +39,7 @@ export async function createMap(params) {
  * @returns {Promise<object>} The map.
  */
 export async function getMap(id) {
-  const res = await fetch(`${API_BASE}/${id}`);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Failed to get map: ${res.status}`);
-  }
+  const res = await apiFetch(`${API_BASE}/${id}`);
   return res.json();
 }
 
@@ -42,11 +49,7 @@ export async function getMap(id) {
  * @returns {Promise<object[]>} Array of maps.
  */
 export async function listMaps(campaignId) {
-  const res = await fetch(`${API_BASE}?campaign_id=${campaignId}`);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Failed to list maps: ${res.status}`);
-  }
+  const res = await apiFetch(`${API_BASE}?campaign_id=${campaignId}`);
   return res.json();
 }
 
@@ -57,15 +60,11 @@ export async function listMaps(campaignId) {
  * @returns {Promise<object>} The updated map.
  */
 export async function updateMap(id, params) {
-  const res = await fetch(`${API_BASE}/${id}`, {
+  const res = await apiFetch(`${API_BASE}/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Failed to update map: ${res.status}`);
-  }
   return res.json();
 }
 
@@ -80,14 +79,10 @@ export async function uploadAsset({ campaignId, type, file }) {
   formData.append('type', type);
   formData.append('file', file);
 
-  const res = await fetch('/api/assets/upload', {
+  const res = await apiFetch('/api/assets/upload', {
     method: 'POST',
     body: formData,
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Failed to upload asset: ${res.status}`);
-  }
   return res.json();
 }
 
@@ -97,11 +92,7 @@ export async function uploadAsset({ campaignId, type, file }) {
  * @returns {Promise<void>}
  */
 export async function deleteMap(id) {
-  const res = await fetch(`${API_BASE}/${id}`, {
+  await apiFetch(`${API_BASE}/${id}`, {
     method: 'DELETE',
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Failed to delete map: ${res.status}`);
-  }
 }

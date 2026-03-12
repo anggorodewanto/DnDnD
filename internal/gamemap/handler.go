@@ -3,7 +3,6 @@ package gamemap
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -155,14 +154,10 @@ func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 		tiledJSON = generateDefaultTiledJSON(req.Width, req.Height, tileSize)
 	}
 
-	var bgImageID uuid.NullUUID
-	if req.BackgroundImageID != nil {
-		parsed, err := uuid.Parse(*req.BackgroundImageID)
-		if err != nil {
-			http.Error(w, "invalid background_image_id", http.StatusBadRequest)
-			return
-		}
-		bgImageID = uuid.NullUUID{UUID: parsed, Valid: true}
+	bgImageID, err := parseOptionalUUID(req.BackgroundImageID)
+	if err != nil {
+		http.Error(w, "invalid background_image_id", http.StatusBadRequest)
+		return
 	}
 
 	m, _, err := h.svc.CreateMap(r.Context(), CreateMapInput{
@@ -194,7 +189,7 @@ func (h *Handler) GetMap(w http.ResponseWriter, r *http.Request) {
 
 	m, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
-		if err.Error() == "not found" || errors.Is(err, errNotFound) {
+		if err.Error() == errNotFound.Error() {
 			http.Error(w, "map not found", http.StatusNotFound)
 			return
 		}
@@ -250,14 +245,10 @@ func (h *Handler) UpdateMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var bgImageID uuid.NullUUID
-	if req.BackgroundImageID != nil {
-		parsed, parseErr := uuid.Parse(*req.BackgroundImageID)
-		if parseErr != nil {
-			http.Error(w, "invalid background_image_id", http.StatusBadRequest)
-			return
-		}
-		bgImageID = uuid.NullUUID{UUID: parsed, Valid: true}
+	bgImageID, err := parseOptionalUUID(req.BackgroundImageID)
+	if err != nil {
+		http.Error(w, "invalid background_image_id", http.StatusBadRequest)
+		return
 	}
 
 	m, _, err := h.svc.UpdateMap(r.Context(), UpdateMapInput{
@@ -295,7 +286,20 @@ func (h *Handler) DeleteMap(w http.ResponseWriter, r *http.Request) {
 }
 
 // errNotFound is a sentinel error for not found.
-var errNotFound = fmt.Errorf("not found")
+var errNotFound = errors.New("not found")
+
+// parseOptionalUUID parses an optional UUID string pointer into a uuid.NullUUID.
+// Returns an error if the string is present but not a valid UUID.
+func parseOptionalUUID(s *string) (uuid.NullUUID, error) {
+	if s == nil {
+		return uuid.NullUUID{}, nil
+	}
+	parsed, err := uuid.Parse(*s)
+	if err != nil {
+		return uuid.NullUUID{}, err
+	}
+	return uuid.NullUUID{UUID: parsed, Valid: true}, nil
+}
 
 // handleServiceError maps service errors to HTTP status codes.
 func handleServiceError(w http.ResponseWriter, err error) {

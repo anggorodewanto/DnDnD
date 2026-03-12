@@ -106,30 +106,22 @@
     error = null;
     statusMsg = '';
     try {
+      const payload = {
+        name: mapName,
+        width: mapWidth,
+        height: mapHeight,
+        tiled_json: tiledMap,
+      };
+      if (backgroundImageId) {
+        payload.background_image_id = backgroundImageId;
+      }
+
       if (savedMapId) {
-        const updatePayload = {
-          name: mapName,
-          width: mapWidth,
-          height: mapHeight,
-          tiled_json: tiledMap,
-        };
-        if (backgroundImageId) {
-          updatePayload.background_image_id = backgroundImageId;
-        }
-        await updateMap(savedMapId, updatePayload);
+        await updateMap(savedMapId, payload);
         statusMsg = 'Map saved.';
       } else {
-        const createPayload = {
-          campaign_id: campaignId,
-          name: mapName,
-          width: mapWidth,
-          height: mapHeight,
-          tiled_json: tiledMap,
-        };
-        if (backgroundImageId) {
-          createPayload.background_image_id = backgroundImageId;
-        }
-        const result = await createMap(createPayload);
+        payload.campaign_id = campaignId;
+        const result = await createMap(payload);
         savedMapId = result.id;
         statusMsg = 'Map created.';
       }
