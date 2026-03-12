@@ -198,7 +198,7 @@
   - Depends on: Phase 28, Phase 18, Phase 33
   - Done when: Integration tests verify attack flow: weapon selection, to-hit calculation, damage on hit, crits, range validation, cover, finesse auto-select.
 
-- [ ] **Phase 35: Advantage/Disadvantage Auto-Detection**
+- [x] **Phase 35: Advantage/Disadvantage Auto-Detection**
   - Scope: Auto-detect advantage/disadvantage from: conditions (blinded, invisible, poisoned, prone, restrained, stunned, paralyzed, unconscious, petrified per tables in spec), combat context (reckless attack, ranged with hostile within 5ft, beyond normal range, heavy weapon + small creature). Multiple sources cancel per 5e. Combat log shows reason. DM override from dashboard.
   - Depends on: Phase 34
   - Done when: Unit tests cover all condition-based and context-based adv/disadv sources; cancellation logic; combat log output includes reason.

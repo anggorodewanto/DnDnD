@@ -206,7 +206,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 
 	// Detect advantage/disadvantage
-	advInput := AdvantageInput{
+	rollMode, advReasons, disadvReasons := DetectAdvantage(AdvantageInput{
 		AttackerConditions:  input.AttackerConditions,
 		TargetConditions:    input.TargetConditions,
 		Weapon:              input.Weapon,
@@ -215,8 +215,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		AttackerSize:        input.AttackerSize,
 		DMAdvantage:         input.DMAdvantage,
 		DMDisadvantage:      input.DMDisadvantage,
-	}
-	rollMode, advReasons, disadvReasons := DetectAdvantage(advInput)
+	})
 	result.RollMode = rollMode
 	result.AdvantageReasons = advReasons
 	result.DisadvantageReasons = disadvReasons
