@@ -47,6 +47,7 @@ type mockStore struct {
 	getClassFn                        func(ctx context.Context, id string) (refdata.Class, error)
 	listCharactersByCampaignFn        func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
 	updateTurnActionsFn               func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
+	getWeaponFn                       func(ctx context.Context, id string) (refdata.Weapon, error)
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -138,6 +139,9 @@ func (m *mockStore) GetClass(ctx context.Context, id string) (refdata.Class, err
 }
 func (m *mockStore) UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
 	return m.updateTurnActionsFn(ctx, arg)
+}
+func (m *mockStore) GetWeapon(ctx context.Context, id string) (refdata.Weapon, error) {
+	return m.getWeaponFn(ctx, id)
 }
 
 func defaultMockStore() *mockStore {
@@ -245,6 +249,9 @@ func defaultMockStore() *mockStore {
 		},
 		updateTurnActionsFn: func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
 			return refdata.Turn{ID: arg.ID}, nil
+		},
+		getWeaponFn: func(ctx context.Context, id string) (refdata.Weapon, error) {
+			return refdata.Weapon{}, sql.ErrNoRows
 		},
 	}
 }

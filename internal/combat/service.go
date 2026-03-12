@@ -69,6 +69,7 @@ type Store interface {
 	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	GetClass(ctx context.Context, id string) (refdata.Class, error)
+	GetWeapon(ctx context.Context, id string) (refdata.Weapon, error)
 	ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
 }
 
