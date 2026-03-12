@@ -365,6 +365,204 @@ export function removeSpawnZone(tiledMap, zoneId) {
 }
 
 /**
+ * Create a deep copy of a Tiled-compatible map.
+ * @param {object} map - The map to clone.
+ * @returns {object} A deep copy of the map.
+ */
+export function cloneMap(map) {
+  return JSON.parse(JSON.stringify(map));
+}
+
+/**
+ * Extract all layer data for a rectangular region of the map.
+ * @param {object} map - The Tiled-compatible map object.
+ * @param {number} x - Region start tile x.
+ * @param {number} y - Region start tile y.
+ * @param {number} width - Region width in tiles.
+ * @param {number} height - Region height in tiles.
+ * @returns {object} Region data with terrain, lighting, elevation, walls, spawn_zones.
+ */
+export function extractRegion(map, x, y, width, height) {
+  // Clip to map bounds
+  const clippedX = Math.max(0, Math.min(x, map.width));
+  const clippedY = Math.max(0, Math.min(y, map.height));
+  const clippedW = Math.max(0, Math.min(width, map.width - clippedX));
+  const clippedH = Math.max(0, Math.min(height, map.height - clippedY));
+
+  if (clippedW === 0 || clippedH === 0) {
+    return { width: 0, height: 0, terrain: [], lighting: [], elevation: [], walls: [], spawn_zones: [] };
+  }
+
+  const terrainData = getTerrainData(map);
+  const lightingData = getLightingData(map);
+  const elevationData = getElevationData(map);
+
+  const terrain = [];
+  const lighting = [];
+  const elevation = [];
+
+  for (let ry = 0; ry < clippedH; ry++) {
+    for (let rx = 0; rx < clippedW; rx++) {
+      const idx = (clippedY + ry) * map.width + (clippedX + rx);
+      terrain.push(terrainData[idx] || 0);
+      lighting.push(lightingData[idx] || 0);
+      elevation.push(elevationData[idx] || 0);
+    }
+  }
+
+  // Extract walls within bounds (convert to relative pixel coords)
+  const tileSize = map.tilewidth;
+  const regionPxX = clippedX * tileSize;
+  const regionPxY = clippedY * tileSize;
+  const regionPxW = clippedW * tileSize;
+  const regionPxH = clippedH * tileSize;
+
+  const allWalls = getWalls(map);
+  const walls = allWalls
+    .filter(w => {
+      const wx = w.x;
+      const wy = w.y;
+      const wRight = wx + (w.width || 0);
+      const wBottom = wy + (w.height || 0);
+      return wx >= regionPxX && wy >= regionPxY && wRight <= regionPxX + regionPxW && wBottom <= regionPxY + regionPxH;
+    })
+    .map(w => ({ ...w, x: w.x - regionPxX, y: w.y - regionPxY }));
+
+  // Extract spawn zones within bounds (convert to relative pixel coords)
+  const allZones = getSpawnZones(map);
+  const spawn_zones = allZones
+    .filter(z => {
+      return z.x >= regionPxX && z.y >= regionPxY &&
+        z.x + z.width <= regionPxX + regionPxW &&
+        z.y + z.height <= regionPxY + regionPxH;
+    })
+    .map(z => ({ ...z, x: z.x - regionPxX, y: z.y - regionPxY }));
+
+  return { width: clippedW, height: clippedH, terrain, lighting, elevation, walls, spawn_zones };
+}
+
+/**
+ * Paste a region's data onto the map at the destination position, clipping to map bounds.
+ * @param {object} map - The Tiled-compatible map object.
+ * @param {object} region - Region data from extractRegion.
+ * @param {number} destX - Destination tile x.
+ * @param {number} destY - Destination tile y.
+ * @returns {object} Updated map (mutates in place).
+ */
+export function pasteRegion(map, region, destX, destY) {
+  if (region.width === 0 || region.height === 0) return map;
+
+  const terrainLayer = findLayer(map, 'terrain', 'tilelayer');
+  const lightingLayer = findLayer(map, 'lighting', 'tilelayer');
+  const elevationLayer = findLayer(map, 'elevation', 'tilelayer');
+
+  // Paste tile data, clipping to map bounds
+  const pasteW = Math.min(region.width, map.width - destX);
+  const pasteH = Math.min(region.height, map.height - destY);
+
+  for (let ry = 0; ry < pasteH; ry++) {
+    for (let rx = 0; rx < pasteW; rx++) {
+      const srcIdx = ry * region.width + rx;
+      const dstIdx = (destY + ry) * map.width + (destX + rx);
+      if (terrainLayer && region.terrain[srcIdx] !== undefined) {
+        terrainLayer.data[dstIdx] = region.terrain[srcIdx];
+      }
+      if (lightingLayer && region.lighting[srcIdx] !== undefined) {
+        lightingLayer.data[dstIdx] = region.lighting[srcIdx];
+      }
+      if (elevationLayer && region.elevation[srcIdx] !== undefined) {
+        elevationLayer.data[dstIdx] = region.elevation[srcIdx];
+      }
+    }
+  }
+
+  // Paste walls with offset
+  const tileSize = map.tilewidth;
+  const wallLayer = findLayer(map, 'walls', 'objectgroup');
+  if (wallLayer && region.walls) {
+    for (const w of region.walls) {
+      wallLayer.objects.push({
+        ...w,
+        id: wallLayer.objects.length + 1,
+        x: w.x + destX * tileSize,
+        y: w.y + destY * tileSize,
+      });
+    }
+  }
+
+  // Paste spawn zones with offset
+  const spawnLayer = findLayer(map, 'spawn_zones', 'objectgroup');
+  if (spawnLayer && region.spawn_zones) {
+    for (const z of region.spawn_zones) {
+      spawnLayer.objects.push({
+        ...z,
+        id: spawnLayer.objects.length + 1,
+        x: z.x + destX * tileSize,
+        y: z.y + destY * tileSize,
+      });
+    }
+  }
+
+  return map;
+}
+
+/**
+ * Create an independent deep copy of a map (alias for cloneMap).
+ * @param {object} map - The map to duplicate.
+ * @returns {object} A deep copy of the map.
+ */
+export function duplicateMap(map) {
+  return cloneMap(map);
+}
+
+/**
+ * Undo/redo stack for map editor operations.
+ * Stores full map snapshots for simplicity and reliability.
+ */
+export class UndoStack {
+  constructor(maxSize = 50) {
+    this._undoStack = [];
+    this._redoStack = [];
+    this._maxSize = maxSize;
+  }
+
+  push(snapshot) {
+    this._undoStack.push(snapshot);
+    if (this._undoStack.length > this._maxSize) {
+      this._undoStack.shift();
+    }
+    this._redoStack = [];
+  }
+
+  canUndo() {
+    return this._undoStack.length > 0;
+  }
+
+  canRedo() {
+    return this._redoStack.length > 0;
+  }
+
+  undo(currentMap) {
+    if (!this.canUndo()) return null;
+    const snapshot = this._undoStack.pop();
+    this._redoStack.push(currentMap);
+    return snapshot;
+  }
+
+  redo(currentMap) {
+    if (!this.canRedo()) return null;
+    const snapshot = this._redoStack.pop();
+    this._undoStack.push(currentMap);
+    return snapshot;
+  }
+
+  clear() {
+    this._undoStack = [];
+    this._redoStack = [];
+  }
+}
+
+/**
  * Validate map dimensions.
  * @param {number} width
  * @param {number} height

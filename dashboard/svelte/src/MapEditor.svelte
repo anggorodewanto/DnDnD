@@ -19,6 +19,11 @@
     getSpawnZones,
     removeSpawnZone,
     validateDimensions,
+    cloneMap,
+    extractRegion,
+    pasteRegion,
+    duplicateMap,
+    UndoStack,
   } from './lib/mapdata.js';
 
   let { campaignId, mapId = null, onback } = $props();
@@ -64,6 +69,18 @@
   // Spawn zone drag state
   let spawnDragStart = $state(null);
   let spawnDragEnd = $state(null);
+
+  // Undo/redo
+  let undoStack = new UndoStack();
+
+  // Selection state
+  let selectDragStart = $state(null);
+  let selectDragEnd = $state(null);
+  let selectionRect = $state(null); // { x, y, width, height } in tiles
+
+  // Copy/paste state
+  let clipboard = $state(null); // region data
+  let pastePreview = $state(null); // { tx, ty } tile position for paste preview
 
   // Sync savedMapId from prop and load existing map
   $effect(() => {
@@ -194,6 +211,88 @@
   function handleOpacityChange(e) {
     backgroundOpacity = parseFloat(e.target.value);
     drawMap();
+  }
+
+  function pushUndo() {
+    if (!tiledMap) return;
+    undoStack.push(cloneMap(tiledMap));
+  }
+
+  function performUndo() {
+    if (!tiledMap) return;
+    const prev = undoStack.undo(cloneMap(tiledMap));
+    if (!prev) return;
+    tiledMap = prev;
+    dirty = true;
+    drawMap();
+  }
+
+  function performRedo() {
+    if (!tiledMap) return;
+    const next = undoStack.redo(cloneMap(tiledMap));
+    if (!next) return;
+    tiledMap = next;
+    dirty = true;
+    drawMap();
+  }
+
+  function copySelection() {
+    if (!tiledMap || !selectionRect) return;
+    clipboard = extractRegion(tiledMap, selectionRect.x, selectionRect.y, selectionRect.width, selectionRect.height);
+  }
+
+  function startPaste() {
+    if (!clipboard) return;
+    activeTool = 'paste';
+    pastePreview = null;
+  }
+
+  function performPaste(tx, ty) {
+    if (!tiledMap || !clipboard) return;
+    pushUndo();
+    tiledMap = pasteRegion(tiledMap, clipboard, tx, ty);
+    dirty = true;
+    pastePreview = null;
+    activeTool = 'select';
+    drawMap();
+  }
+
+  function performDuplicate() {
+    if (!tiledMap) return;
+    tiledMap = duplicateMap(tiledMap);
+    mapName = mapName + ' (copy)';
+    savedMapId = null;
+    dirty = true;
+    undoStack.clear();
+    drawMap();
+  }
+
+  function handleKeydown(e) {
+    if (!tiledMap) return;
+
+    // Ctrl+Z = undo, Ctrl+Shift+Z = redo
+    if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      performUndo();
+      return;
+    }
+    if (e.ctrlKey && e.key === 'Z' && e.shiftKey) {
+      e.preventDefault();
+      performRedo();
+      return;
+    }
+    // Ctrl+C = copy
+    if (e.ctrlKey && e.key === 'c') {
+      e.preventDefault();
+      copySelection();
+      return;
+    }
+    // Ctrl+V = paste
+    if (e.ctrlKey && e.key === 'v') {
+      e.preventDefault();
+      startPaste();
+      return;
+    }
   }
 
   function getTileSize() {
@@ -336,6 +435,45 @@
       }
       ctx.stroke();
     }
+
+    // Draw selection rectangle
+    if (selectionRect) {
+      ctx.strokeStyle = '#00ffff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 3]);
+      ctx.strokeRect(selectionRect.x * tileSize, selectionRect.y * tileSize, selectionRect.width * tileSize, selectionRect.height * tileSize);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
+      ctx.fillRect(selectionRect.x * tileSize, selectionRect.y * tileSize, selectionRect.width * tileSize, selectionRect.height * tileSize);
+    }
+
+    // Draw select drag preview
+    if (selectDragStart && selectDragEnd) {
+      const sx = Math.min(selectDragStart.tx, selectDragEnd.tx);
+      const sy = Math.min(selectDragStart.ty, selectDragEnd.ty);
+      const sw = Math.abs(selectDragEnd.tx - selectDragStart.tx) + 1;
+      const sh = Math.abs(selectDragEnd.ty - selectDragStart.ty) + 1;
+      ctx.strokeStyle = '#00ffff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 2]);
+      ctx.strokeRect(sx * tileSize, sy * tileSize, sw * tileSize, sh * tileSize);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(0, 255, 255, 0.15)';
+      ctx.fillRect(sx * tileSize, sy * tileSize, sw * tileSize, sh * tileSize);
+    }
+
+    // Draw paste preview
+    if (activeTool === 'paste' && clipboard && pastePreview) {
+      ctx.fillStyle = 'rgba(0, 255, 128, 0.2)';
+      ctx.strokeStyle = '#00ff80';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 2]);
+      const pw = Math.min(clipboard.width, tiledMap.width - pastePreview.tx);
+      const ph = Math.min(clipboard.height, tiledMap.height - pastePreview.ty);
+      ctx.fillRect(pastePreview.tx * tileSize, pastePreview.ty * tileSize, pw * tileSize, ph * tileSize);
+      ctx.strokeRect(pastePreview.tx * tileSize, pastePreview.ty * tileSize, pw * tileSize, ph * tileSize);
+      ctx.setLineDash([]);
+    }
   }
 
   function canvasPixel(e) {
@@ -362,11 +500,14 @@
     const { px, py } = canvasPixel(e);
 
     if (activeTool === 'terrain' || activeTool === 'lighting' || activeTool === 'elevation') {
+      pushUndo();
       isPainting = true;
       paintTile(px, py);
     } else if (activeTool === 'wall') {
+      pushUndo();
       placeWall(px, py);
     } else if (activeTool === 'eraseWall') {
+      pushUndo();
       eraseWall(px, py);
     } else if (activeTool === 'spawn') {
       const { tx, ty } = tileFromPixel(px, py);
@@ -375,7 +516,18 @@
         spawnDragEnd = { tx, ty };
       }
     } else if (activeTool === 'eraseSpawn') {
+      pushUndo();
       eraseSpawnZone(px, py);
+    } else if (activeTool === 'select') {
+      const { tx, ty } = tileFromPixel(px, py);
+      if (tileInBounds(tx, ty)) {
+        selectDragStart = { tx, ty };
+        selectDragEnd = { tx, ty };
+        selectionRect = null;
+      }
+    } else if (activeTool === 'paste') {
+      const { tx, ty } = tileFromPixel(px, py);
+      performPaste(tx, ty);
     }
   }
 
@@ -392,11 +544,22 @@
       const cy = Math.max(0, Math.min(tiledMap.height - 1, ty));
       spawnDragEnd = { tx: cx, ty: cy };
       drawMap();
+    } else if (activeTool === 'select' && selectDragStart) {
+      const { tx, ty } = tileFromPixel(px, py);
+      const cx = Math.max(0, Math.min(tiledMap.width - 1, tx));
+      const cy = Math.max(0, Math.min(tiledMap.height - 1, ty));
+      selectDragEnd = { tx: cx, ty: cy };
+      drawMap();
+    } else if (activeTool === 'paste' && clipboard) {
+      const { tx, ty } = tileFromPixel(px, py);
+      pastePreview = { tx, ty };
+      drawMap();
     }
   }
 
   function handleCanvasMouseUp() {
     if (activeTool === 'spawn' && spawnDragStart && spawnDragEnd) {
+      pushUndo();
       const sx = Math.min(spawnDragStart.tx, spawnDragEnd.tx);
       const sy = Math.min(spawnDragStart.ty, spawnDragEnd.ty);
       const sw = Math.abs(spawnDragEnd.tx - spawnDragStart.tx) + 1;
@@ -405,6 +568,15 @@
       dirty = true;
       spawnDragStart = null;
       spawnDragEnd = null;
+      drawMap();
+    } else if (activeTool === 'select' && selectDragStart && selectDragEnd) {
+      const sx = Math.min(selectDragStart.tx, selectDragEnd.tx);
+      const sy = Math.min(selectDragStart.ty, selectDragEnd.ty);
+      const sw = Math.abs(selectDragEnd.tx - selectDragStart.tx) + 1;
+      const sh = Math.abs(selectDragEnd.ty - selectDragStart.ty) + 1;
+      selectionRect = { x: sx, y: sy, width: sw, height: sh };
+      selectDragStart = null;
+      selectDragEnd = null;
       drawMap();
     }
     isPainting = false;
@@ -480,6 +652,8 @@
   }
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div class="editor">
   {#if loading}
     <p>Loading map...</p>
@@ -550,6 +724,10 @@
           class:active={activeTool === 'eraseSpawn'}
           onclick={() => activeTool = 'eraseSpawn'}
         >Erase Spawn</button>
+        <button
+          class:active={activeTool === 'select'}
+          onclick={() => activeTool = 'select'}
+        >Select</button>
       </div>
 
       {#if activeTool === 'terrain'}
@@ -653,6 +831,28 @@
             <span>{Math.round(backgroundOpacity * 100)}%</span>
           </label>
         {/if}
+      </div>
+
+      {#if activeTool === 'select' && selectionRect}
+        <div class="toolbar-section">
+          <span class="section-label">Selection:</span>
+          <button onclick={copySelection}>Copy (Ctrl+C)</button>
+        </div>
+      {/if}
+
+      {#if activeTool === 'paste'}
+        <div class="toolbar-section">
+          <span class="section-label hint">Click to place pasted region</span>
+        </div>
+      {/if}
+
+      <div class="toolbar-section">
+        <button class="undo-btn" onclick={performUndo} disabled={!undoStack.canUndo()} title="Undo (Ctrl+Z)">Undo</button>
+        <button class="redo-btn" onclick={performRedo} disabled={!undoStack.canRedo()} title="Redo (Ctrl+Shift+Z)">Redo</button>
+        {#if clipboard}
+          <button onclick={startPaste} title="Paste (Ctrl+V)">Paste</button>
+        {/if}
+        <button class="duplicate-btn" onclick={performDuplicate} title="Duplicate Map">Duplicate Map</button>
       </div>
 
       <div class="toolbar-section">
@@ -890,6 +1090,22 @@
 
   .error {
     color: #ff4444;
+  }
+
+  .undo-btn, .redo-btn {
+    background: #6c757d !important;
+    border-color: #6c757d !important;
+  }
+
+  .undo-btn:disabled, .redo-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed !important;
+  }
+
+  .duplicate-btn {
+    background: #6f42c1 !important;
+    border-color: #6f42c1 !important;
+    color: white !important;
   }
 
   .import-btn {

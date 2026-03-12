@@ -23,6 +23,11 @@ import {
   addSpawnZone,
   getSpawnZones,
   removeSpawnZone,
+  cloneMap,
+  extractRegion,
+  pasteRegion,
+  duplicateMap,
+  UndoStack,
 } from './mapdata.js';
 
 describe('TERRAIN_TYPES', () => {
@@ -454,6 +459,350 @@ describe('addSpawnZone / getSpawnZones / removeSpawnZone', () => {
   it('handles removeSpawnZone with missing layer', () => {
     const map = { layers: [] };
     const result = removeSpawnZone(map, 1);
+    expect(result).toBe(map);
+  });
+});
+
+describe('cloneMap', () => {
+  it('creates a deep copy of a map', () => {
+    const map = generateBlankMap(3, 3);
+    setTerrain(map, 1, 1, 3);
+    addWall(map, 48, 0, 'horizontal');
+    const clone = cloneMap(map);
+    expect(clone).toEqual(map);
+    expect(clone).not.toBe(map);
+  });
+
+  it('deep copies terrain data independently', () => {
+    const map = generateBlankMap(3, 3);
+    const clone = cloneMap(map);
+    setTerrain(clone, 0, 0, 5);
+    expect(getTerrainData(map)[0]).toBe(1);
+    expect(getTerrainData(clone)[0]).toBe(5);
+  });
+
+  it('deep copies walls independently', () => {
+    const map = generateBlankMap(3, 3);
+    addWall(map, 0, 0, 'horizontal');
+    const clone = cloneMap(map);
+    addWall(clone, 48, 0, 'vertical');
+    expect(getWalls(map)).toHaveLength(1);
+    expect(getWalls(clone)).toHaveLength(2);
+  });
+
+  it('deep copies lighting data independently', () => {
+    const map = generateBlankMap(3, 3);
+    setLighting(map, 0, 0, 2);
+    const clone = cloneMap(map);
+    setLighting(clone, 0, 0, 0);
+    expect(getLightingData(map)[0]).toBe(2);
+    expect(getLightingData(clone)[0]).toBe(0);
+  });
+
+  it('deep copies elevation data independently', () => {
+    const map = generateBlankMap(3, 3);
+    setElevation(map, 0, 0, 5);
+    const clone = cloneMap(map);
+    setElevation(clone, 0, 0, 0);
+    expect(getElevationData(map)[0]).toBe(5);
+    expect(getElevationData(clone)[0]).toBe(0);
+  });
+
+  it('deep copies spawn zones independently', () => {
+    const map = generateBlankMap(5, 5);
+    addSpawnZone(map, 0, 0, 2, 2, 'player');
+    const clone = cloneMap(map);
+    addSpawnZone(clone, 3, 3, 1, 1, 'enemy');
+    expect(getSpawnZones(map)).toHaveLength(1);
+    expect(getSpawnZones(clone)).toHaveLength(2);
+  });
+});
+
+describe('extractRegion', () => {
+  it('extracts terrain data for a rectangular region', () => {
+    const map = generateBlankMap(5, 5);
+    setTerrain(map, 1, 1, 3);
+    setTerrain(map, 2, 2, 4);
+    const region = extractRegion(map, 1, 1, 2, 2);
+    expect(region.width).toBe(2);
+    expect(region.height).toBe(2);
+    expect(region.terrain).toEqual([3, 1, 1, 4]);
+  });
+
+  it('extracts lighting data for a region', () => {
+    const map = generateBlankMap(5, 5);
+    setLighting(map, 1, 1, 2);
+    const region = extractRegion(map, 1, 1, 2, 2);
+    expect(region.lighting).toEqual([2, 0, 0, 0]);
+  });
+
+  it('extracts elevation data for a region', () => {
+    const map = generateBlankMap(5, 5);
+    setElevation(map, 2, 2, 7);
+    const region = extractRegion(map, 1, 1, 3, 3);
+    expect(region.elevation[4]).toBe(7);
+  });
+
+  it('extracts walls within the region bounds', () => {
+    const map = generateBlankMap(5, 5);
+    const ts = map.tilewidth;
+    addWall(map, ts, ts, 'horizontal');
+    addWall(map, 0, 0, 'horizontal');
+    const region = extractRegion(map, 1, 1, 3, 3);
+    expect(region.walls).toHaveLength(1);
+    expect(region.walls[0].x).toBe(0);
+    expect(region.walls[0].y).toBe(0);
+  });
+
+  it('extracts spawn zones within the region bounds', () => {
+    const map = generateBlankMap(10, 10);
+    addSpawnZone(map, 2, 2, 2, 2, 'player');
+    addSpawnZone(map, 8, 8, 1, 1, 'enemy');
+    const region = extractRegion(map, 1, 1, 5, 5);
+    expect(region.spawn_zones).toHaveLength(1);
+    expect(region.spawn_zones[0].type).toBe('player');
+  });
+
+  it('clips to map bounds when region extends beyond', () => {
+    const map = generateBlankMap(3, 3);
+    const region = extractRegion(map, 2, 2, 5, 5);
+    expect(region.width).toBe(1);
+    expect(region.height).toBe(1);
+    expect(region.terrain).toHaveLength(1);
+  });
+
+  it('returns empty region for out-of-bounds coordinates', () => {
+    const map = generateBlankMap(3, 3);
+    const region = extractRegion(map, 10, 10, 2, 2);
+    expect(region.width).toBe(0);
+    expect(region.height).toBe(0);
+    expect(region.terrain).toEqual([]);
+  });
+});
+
+describe('pasteRegion', () => {
+  it('pastes terrain data at destination', () => {
+    const map = generateBlankMap(5, 5);
+    const region = { width: 2, height: 2, terrain: [3, 4, 5, 2], lighting: [0, 0, 0, 0], elevation: [0, 0, 0, 0], walls: [], spawn_zones: [] };
+    pasteRegion(map, region, 1, 1);
+    const data = getTerrainData(map);
+    expect(data[1 * 5 + 1]).toBe(3);
+    expect(data[1 * 5 + 2]).toBe(4);
+    expect(data[2 * 5 + 1]).toBe(5);
+    expect(data[2 * 5 + 2]).toBe(2);
+  });
+
+  it('pastes lighting data at destination', () => {
+    const map = generateBlankMap(5, 5);
+    const region = { width: 2, height: 1, terrain: [1, 1], lighting: [2, 3], elevation: [0, 0], walls: [], spawn_zones: [] };
+    pasteRegion(map, region, 0, 0);
+    const data = getLightingData(map);
+    expect(data[0]).toBe(2);
+    expect(data[1]).toBe(3);
+  });
+
+  it('pastes elevation data at destination', () => {
+    const map = generateBlankMap(5, 5);
+    const region = { width: 1, height: 1, terrain: [1], lighting: [0], elevation: [7], walls: [], spawn_zones: [] };
+    pasteRegion(map, region, 3, 3);
+    expect(getElevationData(map)[3 * 5 + 3]).toBe(7);
+  });
+
+  it('clips paste to map bounds', () => {
+    const map = generateBlankMap(3, 3);
+    const region = { width: 2, height: 2, terrain: [3, 4, 5, 2], lighting: [0, 0, 0, 0], elevation: [0, 0, 0, 0], walls: [], spawn_zones: [] };
+    pasteRegion(map, region, 2, 2);
+    const data = getTerrainData(map);
+    expect(data[2 * 3 + 2]).toBe(3); // only top-left of region fits
+    expect(data[0]).toBe(1); // untouched
+  });
+
+  it('pastes walls with offset', () => {
+    const map = generateBlankMap(5, 5);
+    const ts = map.tilewidth;
+    const region = { width: 2, height: 2, terrain: [1, 1, 1, 1], lighting: [0, 0, 0, 0], elevation: [0, 0, 0, 0], walls: [{ id: 1, type: 'wall', x: 0, y: 0, width: ts, height: 0, properties: { edge: 'top' } }], spawn_zones: [] };
+    pasteRegion(map, region, 2, 3);
+    const walls = getWalls(map);
+    expect(walls).toHaveLength(1);
+    expect(walls[0].x).toBe(2 * ts);
+    expect(walls[0].y).toBe(3 * ts);
+  });
+
+  it('pastes spawn zones with offset', () => {
+    const map = generateBlankMap(10, 10);
+    const ts = map.tilewidth;
+    const region = { width: 3, height: 3, terrain: new Array(9).fill(1), lighting: new Array(9).fill(0), elevation: new Array(9).fill(0), walls: [], spawn_zones: [{ id: 1, type: 'player', x: 0, y: 0, width: ts * 2, height: ts * 2 }] };
+    pasteRegion(map, region, 4, 4);
+    const zones = getSpawnZones(map);
+    expect(zones).toHaveLength(1);
+    expect(zones[0].x).toBe(4 * ts);
+    expect(zones[0].y).toBe(4 * ts);
+  });
+
+  it('handles empty region gracefully', () => {
+    const map = generateBlankMap(3, 3);
+    const region = { width: 0, height: 0, terrain: [], lighting: [], elevation: [], walls: [], spawn_zones: [] };
+    const result = pasteRegion(map, region, 0, 0);
+    expect(result).toBe(map);
+  });
+});
+
+describe('duplicateMap', () => {
+  it('creates an independent deep copy', () => {
+    const map = generateBlankMap(3, 3);
+    setTerrain(map, 0, 0, 5);
+    const dup = duplicateMap(map);
+    expect(dup).toEqual(map);
+    expect(dup).not.toBe(map);
+    setTerrain(dup, 0, 0, 1);
+    expect(getTerrainData(map)[0]).toBe(5);
+  });
+});
+
+describe('UndoStack', () => {
+  it('starts empty with no undo/redo', () => {
+    const stack = new UndoStack();
+    expect(stack.canUndo()).toBe(false);
+    expect(stack.canRedo()).toBe(false);
+  });
+
+  it('push adds a snapshot that can be undone', () => {
+    const stack = new UndoStack();
+    stack.push({ state: 1 });
+    expect(stack.canUndo()).toBe(true);
+    expect(stack.canRedo()).toBe(false);
+  });
+
+  it('undo returns previous state and enables redo', () => {
+    const stack = new UndoStack();
+    const snap1 = { state: 1 };
+    stack.push(snap1);
+    const current = { state: 2 };
+    const result = stack.undo(current);
+    expect(result).toEqual(snap1);
+    expect(stack.canUndo()).toBe(false);
+    expect(stack.canRedo()).toBe(true);
+  });
+
+  it('redo returns the next state', () => {
+    const stack = new UndoStack();
+    stack.push({ state: 1 });
+    const current = { state: 2 };
+    stack.undo(current);
+    const result = stack.redo({ state: 1 });
+    expect(result).toEqual(current);
+    expect(stack.canUndo()).toBe(true);
+    expect(stack.canRedo()).toBe(false);
+  });
+
+  it('undo returns null when nothing to undo', () => {
+    const stack = new UndoStack();
+    expect(stack.undo({ state: 1 })).toBeNull();
+  });
+
+  it('redo returns null when nothing to redo', () => {
+    const stack = new UndoStack();
+    expect(stack.redo({ state: 1 })).toBeNull();
+  });
+
+  it('push clears the redo stack', () => {
+    const stack = new UndoStack();
+    stack.push({ state: 1 });
+    stack.undo({ state: 2 });
+    expect(stack.canRedo()).toBe(true);
+    stack.push({ state: 3 });
+    expect(stack.canRedo()).toBe(false);
+  });
+
+  it('respects max stack size and drops oldest', () => {
+    const stack = new UndoStack(3);
+    stack.push({ s: 1 });
+    stack.push({ s: 2 });
+    stack.push({ s: 3 });
+    stack.push({ s: 4 }); // should drop { s: 1 }
+    expect(stack.canUndo()).toBe(true);
+    // Can undo 3 times, not 4
+    stack.undo({ s: 5 }); // returns { s: 4 }
+    stack.undo({ s: 4 }); // returns { s: 3 }
+    stack.undo({ s: 3 }); // returns { s: 2 }
+    expect(stack.canUndo()).toBe(false);
+  });
+
+  it('clear empties both stacks', () => {
+    const stack = new UndoStack();
+    stack.push({ s: 1 });
+    stack.push({ s: 2 });
+    stack.undo({ s: 3 });
+    stack.clear();
+    expect(stack.canUndo()).toBe(false);
+    expect(stack.canRedo()).toBe(false);
+  });
+
+  it('multiple undo/redo cycles work correctly', () => {
+    const stack = new UndoStack();
+    stack.push({ s: 'a' });
+    stack.push({ s: 'b' });
+    stack.push({ s: 'c' });
+
+    const r1 = stack.undo({ s: 'd' }); // back to c
+    expect(r1).toEqual({ s: 'c' });
+
+    const r2 = stack.undo({ s: 'c' }); // back to b
+    expect(r2).toEqual({ s: 'b' });
+
+    const r3 = stack.redo({ s: 'b' }); // forward to c
+    expect(r3).toEqual({ s: 'c' });
+
+    const r4 = stack.redo({ s: 'c' }); // forward to d
+    expect(r4).toEqual({ s: 'd' });
+
+    expect(stack.canRedo()).toBe(false);
+  });
+
+  it('default max size is 50', () => {
+    const stack = new UndoStack();
+    for (let i = 0; i < 60; i++) {
+      stack.push({ i });
+    }
+    // Should only be able to undo 50 times
+    let count = 0;
+    while (stack.canUndo()) {
+      stack.undo({ current: true });
+      count++;
+    }
+    expect(count).toBe(50);
+  });
+});
+
+describe('extractRegion + pasteRegion roundtrip', () => {
+  it('extract then paste preserves data', () => {
+    const map = generateBlankMap(5, 5);
+    setTerrain(map, 1, 1, 3);
+    setTerrain(map, 2, 1, 4);
+    setLighting(map, 1, 1, 2);
+    setElevation(map, 2, 2, 5);
+    const region = extractRegion(map, 1, 1, 2, 2);
+
+    const target = generateBlankMap(5, 5);
+    pasteRegion(target, region, 3, 3);
+    expect(getTerrainData(target)[3 * 5 + 3]).toBe(3);
+    expect(getTerrainData(target)[3 * 5 + 4]).toBe(4);
+    expect(getLightingData(target)[3 * 5 + 3]).toBe(2);
+    expect(getElevationData(target)[4 * 5 + 4]).toBe(5);
+  });
+
+  it('extractRegion with negative start gets clipped to 0', () => {
+    const map = generateBlankMap(3, 3);
+    const region = extractRegion(map, -1, -1, 2, 2);
+    // clippedX=0, clippedY=0, width stays 2, height stays 2
+    expect(region.width).toBe(2);
+    expect(region.height).toBe(2);
+  });
+
+  it('pasteRegion with missing layers does not crash', () => {
+    const map = { width: 3, height: 3, layers: [], tilewidth: 48 };
+    const region = { width: 1, height: 1, terrain: [3], lighting: [0], elevation: [0], walls: [], spawn_zones: [] };
+    const result = pasteRegion(map, region, 0, 0);
     expect(result).toBe(map);
   });
 });
