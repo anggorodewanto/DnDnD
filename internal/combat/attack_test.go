@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -249,6 +250,33 @@ func makeRapier() refdata.Weapon {
 		WeaponType: "martial_melee",
 		Properties: []string{"finesse"},
 	}
+}
+
+func TestResolveAttack_OverrideDmgMod(t *testing.T) {
+	// With OverrideDmgMod=0, damage should not include ability modifier
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 5 // d6 rolls 5
+	})
+
+	zeroDmg := 0
+	input := AttackInput{
+		AttackerName:   "Aria",
+		TargetName:     "Goblin #1",
+		TargetAC:       10,
+		Weapon:         refdata.Weapon{ID: "shortsword", Name: "Shortsword", Damage: "1d6", DamageType: "piercing", WeaponType: "martial_melee", Properties: []string{"finesse", "light"}},
+		Scores:         AbilityScores{Str: 16, Dex: 14},
+		ProfBonus:      2,
+		DistanceFt:     5,
+		OverrideDmgMod: &zeroDmg,
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, 5, result.DamageTotal) // 5 (d6) + 0 (overridden), not +3 STR
 }
 
 func TestResolveAttack_BasicHit(t *testing.T) {
@@ -1309,4 +1337,487 @@ func TestServiceAttack_BadAbilityScoresJSON(t *testing.T) {
 	}, roller)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing ability scores")
+}
+
+// --- OffhandAttack Tests ---
+
+func makeShortsword() refdata.Weapon {
+	return refdata.Weapon{
+		ID:         "shortsword",
+		Name:       "Shortsword",
+		Damage:     "1d6",
+		DamageType: "piercing",
+		WeaponType: "martial_melee",
+		Properties: []string{"finesse", "light"},
+	}
+}
+
+func makeDagger() refdata.Weapon {
+	return refdata.Weapon{
+		ID:         "dagger",
+		Name:       "Dagger",
+		Damage:     "1d4",
+		DamageType: "piercing",
+		WeaponType: "simple_melee",
+		Properties: []string{"finesse", "light", "thrown"},
+	}
+}
+
+func TestServiceOffhandAttack_HappyPath_NoTWFStyle(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "shortsword")
+	char.ID = charID
+	char.EquippedOffHand = sql.NullString{String: "dagger", Valid: true}
+	// No TWF fighting style
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		switch id {
+		case "shortsword":
+			return makeShortsword(), nil
+		case "dagger":
+			return makeDagger(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3 // d4 rolls 3
+	})
+
+	result, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin #1", PositionCol: "B", PositionRow: 1, Ac: 13, IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: turnID, CombatantID: attackerID, AttacksRemaining: 1},
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "Dagger", result.WeaponName)
+	// Damage = d4(3) + 0 (no TWF style, no ability mod) = 3
+	assert.Equal(t, 3, result.DamageTotal)
+}
+
+func TestServiceOffhandAttack_HappyPath_WithTWFStyle(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "shortsword")
+	char.ID = charID
+	char.EquippedOffHand = sql.NullString{String: "dagger", Valid: true}
+	char.Features = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"Two-Weapon Fighting","mechanical_effect":"two_weapon_fighting"}]`),
+		Valid:      true,
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		switch id {
+		case "shortsword":
+			return makeShortsword(), nil
+		case "dagger":
+			return makeDagger(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3 // d4 rolls 3
+	})
+
+	result, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin #1", PositionCol: "B", PositionRow: 1, Ac: 13, IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: turnID, CombatantID: attackerID, AttacksRemaining: 1},
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "Dagger", result.WeaponName)
+	// Dagger is finesse: uses higher of STR(3)/DEX(2) = STR mod 3
+	// Damage = d4(3) + 3 (TWF style adds ability mod) = 6
+	assert.Equal(t, 6, result.DamageTotal)
+}
+
+func TestServiceOffhandAttack_BonusActionAlreadyUsed(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New(), BonusActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bonus action")
+}
+
+func TestServiceOffhandAttack_NPCAttacker(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), IsNpc: true, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires a character")
+}
+
+func TestServiceOffhandAttack_NoMainHandWeapon(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "") // no main hand weapon
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no main hand weapon")
+}
+
+func TestServiceOffhandAttack_MainHandNotLight(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "longsword")
+	char.ID = charID
+	char.EquippedOffHand = sql.NullString{String: "dagger", Valid: true}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		if id == "longsword" {
+			return makeLongsword(), nil // longsword is NOT light
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not light")
+}
+
+func TestServiceOffhandAttack_NoOffHandWeapon(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "shortsword")
+	char.ID = charID
+	// No off-hand weapon
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		if id == "shortsword" {
+			return makeShortsword(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no off-hand weapon")
+}
+
+func TestServiceOffhandAttack_OffHandNotLight(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "shortsword")
+	char.ID = charID
+	char.EquippedOffHand = sql.NullString{String: "longsword", Valid: true}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		switch id {
+		case "shortsword":
+			return makeShortsword(), nil
+		case "longsword":
+			return makeLongsword(), nil // NOT light
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not light")
+}
+
+func TestServiceOffhandAttack_GetCharacterError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
+}
+
+func TestServiceOffhandAttack_UpdateTurnActionsError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "shortsword")
+	char.ID = charID
+	char.EquippedOffHand = sql.NullString{String: "dagger", Valid: true}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		switch id {
+		case "shortsword":
+			return makeShortsword(), nil
+		case "dagger":
+			return makeDagger(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3
+	})
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), DisplayName: "Goblin", PositionCol: "B", PositionRow: 1, Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating turn actions")
+}
+
+func TestServiceOffhandAttack_GetOffHandWeaponError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "shortsword")
+	char.ID = charID
+	char.EquippedOffHand = sql.NullString{String: "nonexistent", Valid: true}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		if id == "shortsword" {
+			return makeShortsword(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting off-hand weapon")
+}
+
+func TestServiceOffhandAttack_GetMainHandWeaponError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "nonexistent")
+	char.ID = charID
+	char.EquippedOffHand = sql.NullString{String: "dagger", Valid: true}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	// Default getWeaponFn returns sql.ErrNoRows
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting main hand weapon")
+}
+
+func TestServiceOffhandAttack_BadAbilityScores(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	char := refdata.Character{
+		ID:               charID,
+		AbilityScores:    json.RawMessage(`invalid`),
+		ProficiencyBonus: 2,
+		EquippedMainHand: sql.NullString{String: "shortsword", Valid: true},
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.OffhandAttack(ctx, OffhandAttackCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New()},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing ability scores")
+}
+
+// --- HasFightingStyle Tests ---
+
+func TestHasFightingStyle(t *testing.T) {
+	tests := []struct {
+		name     string
+		features pqtype.NullRawMessage
+		style    string
+		expected bool
+	}{
+		{
+			name: "TWF style present",
+			features: pqtype.NullRawMessage{
+				RawMessage: json.RawMessage(`[{"name":"Two-Weapon Fighting","mechanical_effect":"two_weapon_fighting"}]`),
+				Valid:      true,
+			},
+			style:    "two_weapon_fighting",
+			expected: true,
+		},
+		{
+			name:     "no features (null)",
+			features: pqtype.NullRawMessage{Valid: false},
+			style:    "two_weapon_fighting",
+			expected: false,
+		},
+		{
+			name: "other features but not TWF",
+			features: pqtype.NullRawMessage{
+				RawMessage: json.RawMessage(`[{"name":"Defense","mechanical_effect":"defense"}]`),
+				Valid:      true,
+			},
+			style:    "two_weapon_fighting",
+			expected: false,
+		},
+		{
+			name: "invalid JSON",
+			features: pqtype.NullRawMessage{
+				RawMessage: json.RawMessage(`invalid`),
+				Valid:      true,
+			},
+			style:    "two_weapon_fighting",
+			expected: false,
+		},
+		{
+			name: "empty array",
+			features: pqtype.NullRawMessage{
+				RawMessage: json.RawMessage(`[]`),
+				Valid:      true,
+			},
+			style:    "two_weapon_fighting",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HasFightingStyle(tt.features, tt.style)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
 }

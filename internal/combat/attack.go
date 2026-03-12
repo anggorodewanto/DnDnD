@@ -6,9 +6,35 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/sqlc-dev/pqtype"
+
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+// CharacterFeature represents a single feature entry in a character's Features JSON array.
+type CharacterFeature struct {
+	Name             string `json:"name"`
+	MechanicalEffect string `json:"mechanical_effect"`
+}
+
+// HasFightingStyle checks whether a character's features include a fighting style
+// with the given mechanical effect name (e.g., "two_weapon_fighting").
+func HasFightingStyle(features pqtype.NullRawMessage, styleName string) bool {
+	if !features.Valid || len(features.RawMessage) == 0 {
+		return false
+	}
+	var feats []CharacterFeature
+	if err := json.Unmarshal(features.RawMessage, &feats); err != nil {
+		return false
+	}
+	for _, f := range feats {
+		if strings.EqualFold(f.MechanicalEffect, styleName) {
+			return true
+		}
+	}
+	return false
+}
 
 // HasProperty checks whether a weapon has the specified property (e.g. "finesse", "light").
 func HasProperty(weapon refdata.Weapon, prop string) bool {
@@ -139,6 +165,7 @@ type AttackInput struct {
 	AttackerSize        string
 	DMAdvantage         bool
 	DMDisadvantage      bool
+	OverrideDmgMod      *int // If set, overrides the normal ability modifier for damage
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -164,6 +191,17 @@ type AttackResult struct {
 	RollMode            dice.RollMode
 	AdvantageReasons    []string
 	DisadvantageReasons []string
+}
+
+// OffhandAttackCommand holds the service-level inputs for an off-hand attack (bonus action).
+type OffhandAttackCommand struct {
+	Attacker            refdata.Combatant
+	Target              refdata.Combatant
+	Turn                refdata.Turn
+	HostileNearAttacker bool
+	AttackerSize        string
+	DMAdvantage         bool
+	DMDisadvantage      bool
 }
 
 // AttackCommand holds the service-level inputs for an attack.
@@ -192,6 +230,9 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	effectiveAC := EffectiveAC(input.TargetAC, input.Cover)
 	atkMod := AttackModifier(input.Scores, input.Weapon, input.ProfBonus)
 	dmgMod := DamageModifier(input.Scores, input.Weapon)
+	if input.OverrideDmgMod != nil {
+		dmgMod = *input.OverrideDmgMod
+	}
 
 	result := AttackResult{
 		AttackerName: input.AttackerName,
@@ -432,6 +473,117 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	}
 
 	// Persist turn resource update
+	_, err = s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn))
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("updating turn actions: %w", err)
+	}
+
+	result.RemainingTurn = &updatedTurn
+	return result, nil
+}
+
+// OffhandAttack is the service-level method for a two-weapon fighting off-hand attack.
+// It uses the bonus action, validates both weapons are light, and resolves the off-hand attack
+// with 0 damage modifier (unless the character has the Two-Weapon Fighting fighting style).
+func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, roller *dice.Roller) (AttackResult, error) {
+	// Validate bonus action available
+	if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
+		return AttackResult{}, err
+	}
+
+	// Must be a PC with a character
+	if !cmd.Attacker.CharacterID.Valid {
+		return AttackResult{}, fmt.Errorf("off-hand attack requires a character (not NPC)")
+	}
+
+	char, err := s.store.GetCharacter(ctx, cmd.Attacker.CharacterID.UUID)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("getting character: %w", err)
+	}
+
+	scores, err := ParseAbilityScores(char.AbilityScores)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("parsing ability scores: %w", err)
+	}
+
+	profBonus := int(char.ProficiencyBonus)
+
+	// Validate main hand weapon exists and is light
+	if !char.EquippedMainHand.Valid || char.EquippedMainHand.String == "" {
+		return AttackResult{}, fmt.Errorf("no main hand weapon equipped")
+	}
+	mainWeapon, err := s.store.GetWeapon(ctx, char.EquippedMainHand.String)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("getting main hand weapon: %w", err)
+	}
+	if !HasProperty(mainWeapon, "light") {
+		return AttackResult{}, fmt.Errorf("main hand weapon %q is not light", mainWeapon.Name)
+	}
+
+	// Validate off-hand weapon exists and is light
+	if !char.EquippedOffHand.Valid || char.EquippedOffHand.String == "" {
+		return AttackResult{}, fmt.Errorf("no off-hand weapon equipped")
+	}
+	offWeapon, err := s.store.GetWeapon(ctx, char.EquippedOffHand.String)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("getting off-hand weapon: %w", err)
+	}
+	if !HasProperty(offWeapon, "light") {
+		return AttackResult{}, fmt.Errorf("off-hand weapon %q is not light", offWeapon.Name)
+	}
+
+	// Compute damage modifier: 0 unless TWF fighting style
+	dmgMod := 0
+	if HasFightingStyle(char.Features, "two_weapon_fighting") {
+		dmgMod = DamageModifier(scores, offWeapon)
+	}
+
+	// Calculate distance
+	distFt := Distance3D(
+		colToIndex(cmd.Attacker.PositionCol), int(cmd.Attacker.PositionRow)-1, int(cmd.Attacker.AltitudeFt),
+		colToIndex(cmd.Target.PositionCol), int(cmd.Target.PositionRow)-1, int(cmd.Target.AltitudeFt),
+	)
+
+	isMelee := !IsRangedWeapon(offWeapon)
+
+	// Check auto-crit
+	autoCrit, autoCritReason := CheckAutoCrit(cmd.Target.Conditions, distFt, isMelee)
+
+	// Parse conditions
+	attackerConds, _ := parseConditions(cmd.Attacker.Conditions)
+	targetConds, _ := parseConditions(cmd.Target.Conditions)
+
+	input := AttackInput{
+		AttackerName:        cmd.Attacker.DisplayName,
+		TargetName:          cmd.Target.DisplayName,
+		TargetAC:            int(cmd.Target.Ac),
+		Weapon:              offWeapon,
+		Scores:              scores,
+		ProfBonus:           profBonus,
+		DistanceFt:          distFt,
+		AutoCrit:            autoCrit,
+		AutoCritReason:      autoCritReason,
+		AttackerConditions:  attackerConds,
+		TargetConditions:    targetConds,
+		HostileNearAttacker: cmd.HostileNearAttacker,
+		AttackerSize:        cmd.AttackerSize,
+		DMAdvantage:         cmd.DMAdvantage,
+		DMDisadvantage:      cmd.DMDisadvantage,
+		OverrideDmgMod:      &dmgMod,
+	}
+
+	result, err := ResolveAttack(input, roller)
+	if err != nil {
+		return AttackResult{}, err
+	}
+
+	// Use bonus action
+	updatedTurn, err := UseResource(cmd.Turn, ResourceBonusAction)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("using bonus action: %w", err)
+	}
+
+	// Persist turn update
 	_, err = s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn))
 	if err != nil {
 		return AttackResult{}, fmt.Errorf("updating turn actions: %w", err)
