@@ -213,7 +213,7 @@
   - Depends on: Phase 34
   - Done when: Unit tests verify each weapon property mechanic; integration tests cover ammunition tracking and thrown weapon hand management.
 
-- [ ] **Phase 38: Attack Modifier Flags (GWM, Sharpshooter, Reckless)**
+- [x] **Phase 38: Attack Modifier Flags (GWM, Sharpshooter, Reckless)**
   - Scope: `--gwm` (-5 hit, +10 damage, requires heavy melee). `--sharpshooter` (-5 hit, +10 damage, requires ranged). `--reckless` (advantage on melee STR attacks, enemies get advantage, Barbarian only, first attack). Invalid flag errors with explanation.
   - Depends on: Phase 34, Phase 35
   - Done when: Unit tests verify each flag's modifiers, validation (correct weapon type, correct class), and interaction with advantage system.

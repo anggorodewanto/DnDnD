@@ -416,27 +416,22 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 
 	// GWM validation: requires heavy melee weapon
-	if input.GWM {
-		if IsRangedWeapon(input.Weapon) || !HasProperty(input.Weapon, "heavy") {
-			return AttackResult{}, fmt.Errorf("Great Weapon Master requires a heavy melee weapon")
-		}
+	if input.GWM && (IsRangedWeapon(input.Weapon) || !HasProperty(input.Weapon, "heavy")) {
+		return AttackResult{}, fmt.Errorf("Great Weapon Master requires a heavy melee weapon")
 	}
 
 	// Sharpshooter validation: requires ranged weapon
-	if input.Sharpshooter {
-		if !IsRangedWeapon(input.Weapon) {
-			return AttackResult{}, fmt.Errorf("Sharpshooter requires a ranged weapon")
-		}
+	if input.Sharpshooter && !IsRangedWeapon(input.Weapon) {
+		return AttackResult{}, fmt.Errorf("Sharpshooter requires a ranged weapon")
 	}
 
 	// Reckless validation: requires melee STR-based attack
-	if input.Reckless {
-		if IsRangedWeapon(input.Weapon) {
-			return AttackResult{}, fmt.Errorf("Reckless Attack requires a melee weapon")
-		}
-		if HasProperty(input.Weapon, "finesse") && AbilityModifier(input.Scores.Dex) > AbilityModifier(input.Scores.Str) {
-			return AttackResult{}, fmt.Errorf("Reckless Attack requires a STR-based attack (finesse weapon using DEX)")
-		}
+	if input.Reckless && IsRangedWeapon(input.Weapon) {
+		return AttackResult{}, fmt.Errorf("Reckless Attack requires a melee weapon")
+	}
+	usesDEX := HasProperty(input.Weapon, "finesse") && AbilityModifier(input.Scores.Dex) > AbilityModifier(input.Scores.Str)
+	if input.Reckless && usesDEX {
+		return AttackResult{}, fmt.Errorf("Reckless Attack requires a STR-based attack (finesse weapon using DEX)")
 	}
 
 	atkMod := AttackModifier(input.Scores, input.Weapon, profBonus)
@@ -716,20 +711,14 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	}
 
 	// Validate modifier flag prerequisites
-	if cmd.GWM {
-		if char == nil || !HasFeat(char.Features, "great-weapon-master") {
-			return AttackResult{}, fmt.Errorf("Great Weapon Master requires the feat")
-		}
+	if cmd.GWM && (char == nil || !HasFeat(char.Features, "great-weapon-master")) {
+		return AttackResult{}, fmt.Errorf("Great Weapon Master requires the feat")
 	}
-	if cmd.Sharpshooter {
-		if char == nil || !HasFeat(char.Features, "sharpshooter") {
-			return AttackResult{}, fmt.Errorf("Sharpshooter requires the feat")
-		}
+	if cmd.Sharpshooter && (char == nil || !HasFeat(char.Features, "sharpshooter")) {
+		return AttackResult{}, fmt.Errorf("Sharpshooter requires the feat")
 	}
-	if cmd.Reckless {
-		if char == nil || !HasBarbarianClass(char.Classes) {
-			return AttackResult{}, fmt.Errorf("Reckless Attack requires Barbarian class")
-		}
+	if cmd.Reckless && (char == nil || !HasBarbarianClass(char.Classes)) {
+		return AttackResult{}, fmt.Errorf("Reckless Attack requires Barbarian class")
 	}
 
 	// Loading weapons: limit to 1 attack per action

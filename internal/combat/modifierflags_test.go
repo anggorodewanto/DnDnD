@@ -27,9 +27,7 @@ func makeGreataxe() refdata.Weapon {
 	}
 }
 
-// --- TDD Cycle 1: GWM applies -5 hit, +10 damage on heavy melee ---
-
-// --- TDD Cycle 2: GWM rejects non-heavy weapon ---
+// --- GWM rejects non-heavy weapon ---
 
 func TestResolveAttack_GWM_NonHeavyMelee_Error(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 10 })
@@ -69,7 +67,7 @@ func TestResolveAttack_GWM_RangedWeapon_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "heavy melee weapon")
 }
 
-// --- TDD Cycle 3: Sharpshooter applies -5 hit, +10 damage on ranged ---
+// --- Sharpshooter applies -5 hit, +10 damage on ranged ---
 
 func TestResolveAttack_Sharpshooter_Ranged_AppliesModifiers(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int {
@@ -119,7 +117,7 @@ func TestResolveAttack_Sharpshooter_MeleeWeapon_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "ranged weapon")
 }
 
-// --- TDD Cycle 4: Reckless Attack grants advantage on melee STR attack ---
+// --- Reckless Attack grants advantage on melee STR attack ---
 
 func TestResolveAttack_Reckless_MeleeSTR_Advantage(t *testing.T) {
 	callIdx := 0
@@ -215,7 +213,7 @@ func TestResolveAttack_Reckless_FinesseUsingSTR_OK(t *testing.T) {
 	assert.Contains(t, result.AdvantageReasons, "Reckless Attack")
 }
 
-// --- TDD Cycle 1: GWM applies -5 hit, +10 damage on heavy melee ---
+// --- GWM applies -5 hit, +10 damage on heavy melee ---
 
 func TestResolveAttack_GWM_HeavyMelee_AppliesModifiers(t *testing.T) {
 	// d20 rolls 18, damage rolls 8
@@ -341,7 +339,7 @@ func TestHasBarbarianClass(t *testing.T) {
 	}
 }
 
-// --- TDD Cycle 5: Service.Attack validates feat/class prerequisites ---
+// --- Service.Attack validates feat/class prerequisites ---
 
 func makeCharacterWithFeats(str, dex int, profBonus int32, equippedWeapon string, feats []CharacterFeature, classes []CharacterClass) refdata.Character {
 	char := makeCharacter(str, dex, profBonus, equippedWeapon)
@@ -498,7 +496,7 @@ func TestServiceAttack_Reckless_RequiresBarbarian(t *testing.T) {
 	assert.Contains(t, err.Error(), "Barbarian")
 }
 
-// --- TDD Cycle 6: FormatAttackLog notes active modifier flags ---
+// --- FormatAttackLog notes active modifier flags ---
 
 func TestFormatAttackLog_GWM(t *testing.T) {
 	result := AttackResult{
