@@ -148,7 +148,7 @@
   - Depends on: Phase 24, Phase 18
   - Done when: Unit tests verify tiebreaking, surprise skipping, round advancement; initiative tracker message posted and updated in Discord.
 
-- [ ] **Phase 26a: Combat Lifecycle — Start Combat**
+- [x] **Phase 26a: Combat Lifecycle — Start Combat**
   - Scope: "Start Combat" flow: create encounter instance from template, assign PCs (via DM selection or spawn zones), place PC tokens on map, roll initiative, post initiative tracker + map image to Discord, ping first combatant. Encounter status transition: preparing -> active.
   - Depends on: Phase 25, Phase 22, Phase 23
   - Done when: Full start-combat flow works: template -> instantiate -> initiative -> Discord messages -> first player pinged.
