@@ -163,7 +163,7 @@
   - Depends on: Phase 24
   - Done when: Integration tests verify lock serialization, rapid command queueing, lock timeout behavior, out-of-turn rejection, DM concurrent access.
 
-- [ ] **Phase 28: Turn Resource Tracking**
+- [x] **Phase 28: Turn Resource Tracking**
   - Scope: Turn resource management: movement remaining, action used, bonus action used, free object interaction used, attacks remaining (by class/level), reaction used (per round, resets at creature's turn start). Resource validation on every command. Turn status prompt (at turn start + after every command) showing remaining resources. Spent resources omitted from display.
   - Depends on: Phase 24, Phase 27
   - Done when: Unit tests verify resource tracking, deduction, and display; commands rejected when resources spent.

@@ -70,6 +70,14 @@ func ValidateResource(turn refdata.Turn, resource ResourceType) error {
 // For movement and attacks, use UseMovement and UseAttack instead.
 // Returns a copy of the turn with the resource marked as used.
 func UseResource(turn refdata.Turn, resource ResourceType) (refdata.Turn, error) {
+	switch resource {
+	case ResourceMovement:
+		return turn, fmt.Errorf("use UseMovement for movement resources")
+	case ResourceAttack:
+		return turn, fmt.Errorf("use UseAttack for attack resources")
+	default:
+		// handled below
+	}
 	if err := ValidateResource(turn, resource); err != nil {
 		return turn, err
 	}
@@ -82,26 +90,22 @@ func UseResource(turn refdata.Turn, resource ResourceType) (refdata.Turn, error)
 		turn.ReactionUsed = true
 	case ResourceFreeInteract:
 		turn.FreeInteractUsed = true
-	case ResourceMovement:
-		return turn, fmt.Errorf("use UseMovement for movement resources")
-	case ResourceAttack:
-		return turn, fmt.Errorf("use UseAttack for attack resources")
 	}
 	return turn, nil
 }
 
 // UseMovement deducts the given feet from movement remaining.
-// Returns ErrResourceSpent if no movement remains.
-// Returns an error if requesting more movement than available.
+// Returns an error if feet is not positive, ErrResourceSpent if no movement remains,
+// or an error if requesting more movement than available.
 func UseMovement(turn refdata.Turn, feet int32) (refdata.Turn, error) {
+	if feet <= 0 {
+		return turn, fmt.Errorf("movement must be positive, got %d", feet)
+	}
 	if turn.MovementRemainingFt <= 0 {
 		return turn, fmt.Errorf("%s: %w", ResourceMovement, ErrResourceSpent)
 	}
 	if feet > turn.MovementRemainingFt {
 		return turn, fmt.Errorf("not enough movement: %dft requested, %dft remaining", feet, turn.MovementRemainingFt)
-	}
-	if feet <= 0 {
-		return turn, fmt.Errorf("movement must be positive, got %d", feet)
 	}
 	turn.MovementRemainingFt -= feet
 	return turn, nil
@@ -125,29 +129,6 @@ func AttacksPerActionForLevel(attacks map[string]int, level int) int {
 		if threshold <= level && threshold > bestThreshold {
 			bestThreshold = threshold
 			best = v
-		}
-	}
-	return best
-}
-
-// ResolveAttacksForCharacter determines the best (highest) number of attacks per action
-// by checking each class the character has against the class data's attacks_per_action.
-// classData maps class_id -> attacks_per_action (e.g., {"1": 1, "5": 2}).
-// Returns 1 as a default minimum.
-func ResolveAttacksForCharacter(classesJSON json.RawMessage, classData map[string]map[string]int) int {
-	var classes []CharacterClass
-	if err := json.Unmarshal(classesJSON, &classes); err != nil {
-		return 1
-	}
-	best := 1
-	for _, c := range classes {
-		attacksMap, ok := classData[c.Class]
-		if !ok {
-			continue
-		}
-		attacks := AttacksPerActionForLevel(attacksMap, c.Level)
-		if attacks > best {
-			best = attacks
 		}
 	}
 	return best

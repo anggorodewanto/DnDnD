@@ -193,49 +193,6 @@ func TestAttacksPerActionForLevel(t *testing.T) {
 	}
 }
 
-func TestResolveAttacksForCharacter(t *testing.T) {
-	tests := []struct {
-		name       string
-		classesJSON string
-		classData  map[string]map[string]int // class_id -> attacks_per_action
-		expected   int
-	}{
-		{
-			"fighter_level_5",
-			`[{"class":"fighter","level":5}]`,
-			map[string]map[string]int{"fighter": {"1": 1, "5": 2, "11": 3, "20": 4}},
-			2,
-		},
-		{
-			"multiclass_fighter5_wizard3_uses_best",
-			`[{"class":"fighter","level":5},{"class":"wizard","level":3}]`,
-			map[string]map[string]int{
-				"fighter": {"1": 1, "5": 2},
-				"wizard":  {"1": 1},
-			},
-			2,
-		},
-		{
-			"wizard_level_10",
-			`[{"class":"wizard","level":10}]`,
-			map[string]map[string]int{"wizard": {"1": 1}},
-			1,
-		},
-		{
-			"empty_classes",
-			`[]`,
-			map[string]map[string]int{},
-			1,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result := ResolveAttacksForCharacter([]byte(tc.classesJSON), tc.classData)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
 func TestFormatTurnStartPrompt_FullResources(t *testing.T) {
 	turn := refdata.Turn{
 		MovementRemainingFt: 30,
@@ -395,20 +352,6 @@ func TestInitializeTurnResources_PCNoClasses(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int32(25), speed)
 	assert.Equal(t, int32(1), attacks)
-}
-
-func TestResolveAttacksForCharacter_ClassNotInData(t *testing.T) {
-	// Character has a class not in classData
-	result := ResolveAttacksForCharacter(
-		[]byte(`[{"class":"unknown","level":5}]`),
-		map[string]map[string]int{"fighter": {"1": 1, "5": 2}},
-	)
-	assert.Equal(t, 1, result)
-}
-
-func TestResolveAttacksForCharacter_InvalidJSON(t *testing.T) {
-	result := ResolveAttacksForCharacter([]byte(`invalid`), map[string]map[string]int{})
-	assert.Equal(t, 1, result)
 }
 
 func TestAttacksPerActionForLevel_InvalidKey(t *testing.T) {
