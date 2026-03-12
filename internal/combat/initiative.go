@@ -85,34 +85,38 @@ func IsSurprised(conditions json.RawMessage) bool {
 	return false
 }
 
+// parseConditions unmarshals a conditions JSONB array, treating empty/nil as an empty slice.
+func parseConditions(raw json.RawMessage) ([]CombatCondition, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var conds []CombatCondition
+	if err := json.Unmarshal(raw, &conds); err != nil {
+		return nil, err
+	}
+	return conds, nil
+}
+
 // AddSurprisedCondition adds the surprised condition to an existing conditions JSONB array.
 func AddSurprisedCondition(conditions json.RawMessage) (json.RawMessage, error) {
-	var conds []CombatCondition
-	if len(conditions) > 0 {
-		if err := json.Unmarshal(conditions, &conds); err != nil {
-			return nil, err
-		}
+	conds, err := parseConditions(conditions)
+	if err != nil {
+		return nil, err
 	}
-	conds = append(conds, SurprisedCondition())
-	return json.Marshal(conds)
+	return json.Marshal(append(conds, SurprisedCondition()))
 }
 
 // RemoveSurprisedCondition removes the surprised condition from a conditions JSONB array.
 func RemoveSurprisedCondition(conditions json.RawMessage) (json.RawMessage, error) {
-	var conds []CombatCondition
-	if len(conditions) > 0 {
-		if err := json.Unmarshal(conditions, &conds); err != nil {
-			return nil, err
-		}
+	conds, err := parseConditions(conditions)
+	if err != nil {
+		return nil, err
 	}
-	var filtered []CombatCondition
+	filtered := make([]CombatCondition, 0, len(conds))
 	for _, c := range conds {
 		if c.Condition != "surprised" {
 			filtered = append(filtered, c)
 		}
-	}
-	if filtered == nil {
-		filtered = []CombatCondition{}
 	}
 	return json.Marshal(filtered)
 }
@@ -143,16 +147,25 @@ func FormatInitiativeTracker(encounter refdata.Encounter, combatants []refdata.C
 	for _, c := range combatants {
 		if c.ID == currentTurnCombatantID {
 			fmt.Fprintf(&b, "\U0001f514 @%s \u2014 it's your turn!\n", c.DisplayName)
+			continue
+		}
+		if c.IsNpc {
+			fmt.Fprintf(&b, "  %s\n", c.DisplayName)
 		} else {
-			fmt.Fprintf(&b, "  %s", c.DisplayName)
-			if !c.IsNpc {
-				fmt.Fprintf(&b, " (%d/%d HP)", c.HpCurrent, c.HpMax)
-			}
-			b.WriteString("\n")
+			fmt.Fprintf(&b, "  %s (%d/%d HP)\n", c.DisplayName, c.HpCurrent, c.HpMax)
 		}
 	}
 
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// dexModFromScores parses ability scores JSON and returns the DEX modifier.
+func dexModFromScores(raw json.RawMessage, label string) (int, error) {
+	scores, err := ParseAbilityScores(raw)
+	if err != nil {
+		return 0, fmt.Errorf("parsing %s ability scores: %w", label, err)
+	}
+	return AbilityModifier(scores.Dex), nil
 }
 
 // getDexModifier returns the DEX modifier for a combatant by looking up
@@ -163,22 +176,14 @@ func (s *Service) getDexModifier(ctx context.Context, c refdata.Combatant) (int,
 		if err != nil {
 			return 0, fmt.Errorf("getting character %s: %w", c.CharacterID.UUID, err)
 		}
-		scores, err := ParseAbilityScores(char.AbilityScores)
-		if err != nil {
-			return 0, fmt.Errorf("parsing character ability scores: %w", err)
-		}
-		return AbilityModifier(scores.Dex), nil
+		return dexModFromScores(char.AbilityScores, "character")
 	}
 	if c.CreatureRefID.Valid {
 		creature, err := s.store.GetCreature(ctx, c.CreatureRefID.String)
 		if err != nil {
 			return 0, fmt.Errorf("getting creature %s: %w", c.CreatureRefID.String, err)
 		}
-		scores, err := ParseAbilityScores(creature.AbilityScores)
-		if err != nil {
-			return 0, fmt.Errorf("parsing creature ability scores: %w", err)
-		}
-		return AbilityModifier(scores.Dex), nil
+		return dexModFromScores(creature.AbilityScores, "creature")
 	}
 	return 0, nil
 }
@@ -261,12 +266,11 @@ func (s *Service) MarkSurprised(ctx context.Context, combatantID uuid.UUID) erro
 	if err != nil {
 		return fmt.Errorf("adding surprised condition: %w", err)
 	}
-	_, err = s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+	if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
 		ID:              combatantID,
 		Conditions:      newConds,
 		ExhaustionLevel: c.ExhaustionLevel,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("updating conditions: %w", err)
 	}
 	return nil

@@ -143,7 +143,7 @@
   - Depends on: Phase 7, Phase 6, Phase 19
   - Done when: Encounters can be created from templates, combatants instantiated with correct stats, turns table ready for use.
 
-- [ ] **Phase 25: Initiative System**
+- [x] **Phase 25: Initiative System**
   - Scope: Initiative rolling for all combatants. Tiebreaking (higher DEX, then alphabetical). Initiative order assignment. Initiative tracker message in `#initiative-tracker` (auto-updated). Surprise marking (condition-based, auto-skip in round 1). Round counter advancement.
   - Depends on: Phase 24, Phase 18
   - Done when: Unit tests verify tiebreaking, surprise skipping, round advancement; initiative tracker message posted and updated in Discord.
