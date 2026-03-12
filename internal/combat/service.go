@@ -61,10 +61,14 @@ type Store interface {
 	SkipTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
 	ListTurnsByEncounterAndRound(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error)
 
+	// Turn Resources
+	UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
+
 	// Reference data lookups
 	GetEncounterTemplate(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error)
 	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	GetClass(ctx context.Context, id string) (refdata.Class, error)
 	ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
 }
 
