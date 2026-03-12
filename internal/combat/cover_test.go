@@ -132,16 +132,15 @@ func TestCalculateCover_SameSquare(t *testing.T) {
 }
 
 func TestCalculateCover_HalfCover_Wall(t *testing.T) {
-	// Attacker at (0,0), target at (3,2).
-	// Wall at x=2 from y=0 to y=0.3 — only blocks a couple of lines from some corners.
+	// Attacker at (0,0), target at (3,0).
+	// Wall at x=2 from y=0.5 to y=1.5 — blocks lines heading to the lower-right target corners.
 	// Attacker corners: (0,0),(1,0),(0,1),(1,1)
-	// Target corners: (3,2),(4,2),(3,3),(4,3)
-	// From bottom attacker corners, lines go steeply downward and miss the short wall at y<0.3.
-	walls := []renderer.WallSegment{{X1: 2, Y1: 0, X2: 2, Y2: 0.3}}
-	cover := CalculateCover(0, 0, 3, 2, walls, nil)
-	// Best corner should be one that avoids the short wall — likely CoverNone
-	if cover == CoverFull {
-		t.Errorf("expected less than full cover from short wall, got %v", cover)
+	// Target corners: (3,0),(4,0),(3,1),(4,1)
+	// Best corners are (0,0) and (1,0) with 2 and 1 blocked lines respectively → Half cover.
+	walls := []renderer.WallSegment{{X1: 2, Y1: 0.5, X2: 2, Y2: 1.5}}
+	cover := CalculateCover(0, 0, 3, 0, walls, nil)
+	if cover != CoverHalf {
+		t.Errorf("expected CoverHalf, got %v", cover)
 	}
 }
 
@@ -156,19 +155,20 @@ func TestCalculateCover_FullCover_Wall(t *testing.T) {
 }
 
 func TestCalculateCover_ThreeQuartersCover(t *testing.T) {
-	// Attacker at (0,0), target at (2,0)
-	// Wall at x=1 from y=0 to y=0.8 — blocks 3 of 4 lines from each corner
-	// Actually let's use a more predictable setup.
-	// Attacker (0,0), target (2,0)
-	// Attacker corners: (0,0),(1,0),(0,1),(1,1)
-	// Target corners: (2,0),(3,0),(2,1),(3,1)
-	// Wall at x=1.5, y=0 to y=0.9 — blocks lines at low y but not high y
-	walls := []renderer.WallSegment{{X1: 1.5, Y1: 0, X2: 1.5, Y2: 0.9}}
-	cover := CalculateCover(0, 0, 2, 0, walls, nil)
-	// This should block some but not all lines — let's just verify it's computed
-	t.Logf("Cover with partial wall: %v", cover)
-	if cover == CoverFull {
-		t.Error("should not be full cover with short wall")
+	// Attacker at (0,0), target at (3,3).
+	// Two walls forming an L along the left and top edges of the target square:
+	//   Wall 1: x=3 from y=0 to y=4 (vertical, left side of target)
+	//   Wall 2: y=3 from x=0 to x=4 (horizontal, top side of target)
+	// From every attacker corner, the line to target corner (3,3) reaches it at t=1
+	// (an endpoint), so it is NOT blocked. The other 3 target corners are all blocked.
+	// Every attacker corner sees exactly 3 of 4 lines blocked → ThreeQuarters.
+	walls := []renderer.WallSegment{
+		{X1: 3, Y1: 0, X2: 3, Y2: 4},
+		{X1: 0, Y1: 3, X2: 4, Y2: 3},
+	}
+	cover := CalculateCover(0, 0, 3, 3, walls, nil)
+	if cover != CoverThreeQuarters {
+		t.Errorf("expected CoverThreeQuarters, got %v", cover)
 	}
 }
 
