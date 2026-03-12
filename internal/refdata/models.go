@@ -164,6 +164,19 @@ type MagicItem struct {
 	UpdatedAt             time.Time             `json:"updated_at"`
 }
 
+type Map struct {
+	ID                uuid.UUID             `json:"id"`
+	CampaignID        uuid.UUID             `json:"campaign_id"`
+	Name              string                `json:"name"`
+	WidthSquares      int32                 `json:"width_squares"`
+	HeightSquares     int32                 `json:"height_squares"`
+	TiledJson         json.RawMessage       `json:"tiled_json"`
+	BackgroundImageID uuid.NullUUID         `json:"background_image_id"`
+	TilesetRefs       pqtype.NullRawMessage `json:"tileset_refs"`
+	CreatedAt         time.Time             `json:"created_at"`
+	UpdatedAt         time.Time             `json:"updated_at"`
+}
+
 type PlayerCharacter struct {
 	ID            uuid.UUID      `json:"id"`
 	CampaignID    uuid.UUID      `json:"campaign_id"`
