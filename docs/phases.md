@@ -218,7 +218,7 @@
   - Depends on: Phase 34, Phase 35
   - Done when: Unit tests verify each flag's modifiers, validation (correct weapon type, correct class), and interaction with advantage system.
 
-- [ ] **Phase 39: Condition System — Application, Tracking, Auto-Expiration**
+- [x] **Phase 39: Condition System — Application, Tracking, Auto-Expiration**
   - Scope: Condition CRUD on combatants (JSONB array). Duration tracking (duration_rounds, started_round, source_combatant_id, expires_on). Auto-expiration at start/end of source creature's turn. Indefinite conditions (grappled, prone) removed by specific actions only. Turn-start sequence: check expired -> apply start-of-turn effects -> ping player. Combat log messages for application/removal/expiration.
   - Depends on: Phase 24, Phase 3
   - Done when: Integration tests verify condition application, duration countdown, auto-expiration timing (start vs end of turn), indefinite condition persistence, combat log output.

@@ -152,27 +152,7 @@ func (s *Service) ApplyCondition(ctx context.Context, combatantID uuid.UUID, con
 		return refdata.Combatant{}, nil, fmt.Errorf("updating conditions: %w", err)
 	}
 
-	var msg string
-	if condition.DurationRounds <= 0 {
-		msg = fmt.Sprintf("🔴 %s applied to %s (indefinite)", condition.Condition, c.DisplayName)
-	} else {
-		timing := condition.ExpiresOn
-		if timing == "" {
-			timing = "start_of_turn"
-		}
-		timingLabel := "start"
-		if timing == "end_of_turn" {
-			timingLabel = "end"
-		}
-		if condition.SourceCombatantID != "" {
-			msg = fmt.Sprintf("🔴 %s applied to %s by source (%d rounds, expires at %s of source's turn)",
-				condition.Condition, c.DisplayName, condition.DurationRounds, timingLabel)
-		} else {
-			msg = fmt.Sprintf("🔴 %s applied to %s (%d rounds, expires at %s of turn)",
-				condition.Condition, c.DisplayName, condition.DurationRounds, timingLabel)
-		}
-	}
-
+	msg := formatConditionApplied(condition, c.DisplayName)
 	return updated, []string{msg}, nil
 }
 
@@ -182,18 +162,8 @@ func (s *Service) ApplyConditionWithLog(ctx context.Context, combatantID uuid.UU
 	if err != nil {
 		return updated, msgs, err
 	}
-	for _, msg := range msgs {
-		if _, err := s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
-			TurnID:      turnID,
-			EncounterID: encounterID,
-			ActionType:  "condition_applied",
-			ActorID:     combatantID,
-			Description: nullString(msg),
-			BeforeState: json.RawMessage(`{}`),
-			AfterState:  json.RawMessage(`{}`),
-		}); err != nil {
-			return updated, msgs, fmt.Errorf("logging condition application: %w", err)
-		}
+	if err := s.logConditionMessages(ctx, msgs, "condition_applied", combatantID, encounterID, turnID); err != nil {
+		return updated, msgs, err
 	}
 	return updated, msgs, nil
 }
@@ -230,18 +200,8 @@ func (s *Service) RemoveConditionWithLog(ctx context.Context, combatantID uuid.U
 	if err != nil {
 		return updated, msgs, err
 	}
-	for _, msg := range msgs {
-		if _, err := s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
-			TurnID:      turnID,
-			EncounterID: encounterID,
-			ActionType:  "condition_removed",
-			ActorID:     combatantID,
-			Description: nullString(msg),
-			BeforeState: json.RawMessage(`{}`),
-			AfterState:  json.RawMessage(`{}`),
-		}); err != nil {
-			return updated, msgs, fmt.Errorf("logging condition removal: %w", err)
-		}
+	if err := s.logConditionMessages(ctx, msgs, "condition_removed", combatantID, encounterID, turnID); err != nil {
+		return updated, msgs, err
 	}
 	return updated, msgs, nil
 }
@@ -269,6 +229,47 @@ func (s *Service) ProcessTurnEnd(ctx context.Context, encounterID uuid.UUID, com
 // ProcessTurnEndWithLog is like ProcessTurnEnd but also persists messages to the action_log.
 func (s *Service) ProcessTurnEndWithLog(ctx context.Context, encounterID uuid.UUID, combatantID uuid.UUID, currentRound int32, turnID uuid.UUID) ([]string, error) {
 	return s.processExpiredConditions(ctx, encounterID, combatantID, int(currentRound), "end_of_turn", &turnID)
+}
+
+// logConditionMessages persists a slice of messages to the action_log.
+func (s *Service) logConditionMessages(ctx context.Context, msgs []string, actionType string, actorID uuid.UUID, encounterID uuid.UUID, turnID uuid.UUID) error {
+	for _, msg := range msgs {
+		if _, err := s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
+			TurnID:      turnID,
+			EncounterID: encounterID,
+			ActionType:  actionType,
+			ActorID:     actorID,
+			Description: nullString(msg),
+			BeforeState: json.RawMessage(`{}`),
+			AfterState:  json.RawMessage(`{}`),
+		}); err != nil {
+			return fmt.Errorf("logging %s: %w", actionType, err)
+		}
+	}
+	return nil
+}
+
+// formatConditionApplied builds the log message for a newly applied condition.
+func formatConditionApplied(condition CombatCondition, displayName string) string {
+	if condition.DurationRounds <= 0 {
+		return fmt.Sprintf("🔴 %s applied to %s (indefinite)", condition.Condition, displayName)
+	}
+
+	timing := condition.ExpiresOn
+	if timing == "" {
+		timing = "start_of_turn"
+	}
+	timingLabel := "start"
+	if timing == "end_of_turn" {
+		timingLabel = "end"
+	}
+
+	if condition.SourceCombatantID != "" {
+		return fmt.Sprintf("🔴 %s applied to %s by source (%d rounds, expires at %s of source's turn)",
+			condition.Condition, displayName, condition.DurationRounds, timingLabel)
+	}
+	return fmt.Sprintf("🔴 %s applied to %s (%d rounds, expires at %s of turn)",
+		condition.Condition, displayName, condition.DurationRounds, timingLabel)
 }
 
 // processExpiredConditions is the shared implementation for ProcessTurnStart and ProcessTurnEnd.

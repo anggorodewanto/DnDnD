@@ -72,19 +72,7 @@ func SurprisedCondition() CombatCondition {
 
 // IsSurprised checks whether a combatant's conditions JSONB contains the "surprised" condition.
 func IsSurprised(conditions json.RawMessage) bool {
-	if len(conditions) == 0 {
-		return false
-	}
-	var conds []CombatCondition
-	if err := json.Unmarshal(conditions, &conds); err != nil {
-		return false
-	}
-	for _, c := range conds {
-		if c.Condition == "surprised" {
-			return true
-		}
-	}
-	return false
+	return HasCondition(conditions, "surprised")
 }
 
 // parseConditions unmarshals a conditions JSONB array, treating empty/nil as an empty slice.
@@ -101,11 +89,7 @@ func parseConditions(raw json.RawMessage) ([]CombatCondition, error) {
 
 // AddSurprisedCondition adds the surprised condition to an existing conditions JSONB array.
 func AddSurprisedCondition(conditions json.RawMessage) (json.RawMessage, error) {
-	conds, err := parseConditions(conditions)
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(append(conds, SurprisedCondition()))
+	return AddCondition(conditions, SurprisedCondition())
 }
 
 // combatOnlyConditions is the set of conditions that are cleared when combat ends.
@@ -142,17 +126,7 @@ func ClearCombatConditions(conditions json.RawMessage) (json.RawMessage, error) 
 
 // RemoveSurprisedCondition removes the surprised condition from a conditions JSONB array.
 func RemoveSurprisedCondition(conditions json.RawMessage) (json.RawMessage, error) {
-	conds, err := parseConditions(conditions)
-	if err != nil {
-		return nil, err
-	}
-	filtered := make([]CombatCondition, 0, len(conds))
-	for _, c := range conds {
-		if c.Condition != "surprised" {
-			filtered = append(filtered, c)
-		}
-	}
-	return json.Marshal(filtered)
+	return RemoveCondition(conditions, "surprised")
 }
 
 // SortByInitiative sorts entries by: roll DESC, DEX modifier DESC, display name ASC.
