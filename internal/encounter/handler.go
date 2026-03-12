@@ -3,6 +3,7 @@ package encounter
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -97,6 +98,11 @@ type updateEncounterRequest struct {
 	Creatures   json.RawMessage `json:"creatures,omitempty"`
 }
 
+// parseIDParam extracts and parses a UUID path parameter from the request.
+func parseIDParam(r *http.Request, param string) (uuid.UUID, error) {
+	return uuid.Parse(chi.URLParam(r, param))
+}
+
 // parseOptionalUUID parses an optional UUID string pointer into a uuid.NullUUID.
 func parseOptionalUUID(s *string) (uuid.NullUUID, error) {
 	if s == nil || *s == "" {
@@ -107,6 +113,13 @@ func parseOptionalUUID(s *string) (uuid.NullUUID, error) {
 		return uuid.NullUUID{}, err
 	}
 	return uuid.NullUUID{UUID: parsed, Valid: true}, nil
+}
+
+// writeJSON writes a JSON response with the given status code.
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
 }
 
 // CreateEncounter handles POST /api/encounters.
@@ -141,15 +154,12 @@ func (h *Handler) CreateEncounter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(newEncounterResponse(et))
+	writeJSON(w, http.StatusCreated, newEncounterResponse(et))
 }
 
 // GetEncounter handles GET /api/encounters/{id}.
 func (h *Handler) GetEncounter(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
+	id, err := parseIDParam(r, "id")
 	if err != nil {
 		http.Error(w, "invalid encounter id", http.StatusBadRequest)
 		return
@@ -157,7 +167,7 @@ func (h *Handler) GetEncounter(w http.ResponseWriter, r *http.Request) {
 
 	et, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "encounter not found", http.StatusNotFound)
 			return
 		}
@@ -165,8 +175,7 @@ func (h *Handler) GetEncounter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(newEncounterResponse(et))
+	writeJSON(w, http.StatusOK, newEncounterResponse(et))
 }
 
 // ListEncounters handles GET /api/encounters?campaign_id=X.
@@ -194,14 +203,12 @@ func (h *Handler) ListEncounters(w http.ResponseWriter, r *http.Request) {
 		resp[i] = newEncounterResponse(et)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // UpdateEncounter handles PUT /api/encounters/{id}.
 func (h *Handler) UpdateEncounter(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
+	id, err := parseIDParam(r, "id")
 	if err != nil {
 		http.Error(w, "invalid encounter id", http.StatusBadRequest)
 		return
@@ -231,14 +238,12 @@ func (h *Handler) UpdateEncounter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(newEncounterResponse(et))
+	writeJSON(w, http.StatusOK, newEncounterResponse(et))
 }
 
 // DeleteEncounter handles DELETE /api/encounters/{id}.
 func (h *Handler) DeleteEncounter(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
+	id, err := parseIDParam(r, "id")
 	if err != nil {
 		http.Error(w, "invalid encounter id", http.StatusBadRequest)
 		return
@@ -254,8 +259,7 @@ func (h *Handler) DeleteEncounter(w http.ResponseWriter, r *http.Request) {
 
 // DuplicateEncounter handles POST /api/encounters/{id}/duplicate.
 func (h *Handler) DuplicateEncounter(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
+	id, err := parseIDParam(r, "id")
 	if err != nil {
 		http.Error(w, "invalid encounter id", http.StatusBadRequest)
 		return
@@ -267,9 +271,7 @@ func (h *Handler) DuplicateEncounter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(newEncounterResponse(et))
+	writeJSON(w, http.StatusCreated, newEncounterResponse(et))
 }
 
 // creatureListItem is a simplified creature response for the encounter builder.
@@ -304,8 +306,7 @@ func (h *Handler) ListCreatures(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleServiceError maps service errors to HTTP status codes.

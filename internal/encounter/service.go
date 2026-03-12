@@ -47,22 +47,12 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (refdata.Encoun
 		return refdata.EncounterTemplate{}, errors.New("name must not be empty")
 	}
 
-	creatures := input.Creatures
-	if len(creatures) == 0 {
-		creatures = json.RawMessage(`[]`)
-	}
-
-	displayName := sql.NullString{}
-	if input.DisplayName != "" {
-		displayName = sql.NullString{String: input.DisplayName, Valid: true}
-	}
-
 	et, err := s.store.CreateEncounterTemplate(ctx, refdata.CreateEncounterTemplateParams{
 		CampaignID:  input.CampaignID,
 		MapID:       input.MapID,
 		Name:        input.Name,
-		DisplayName: displayName,
-		Creatures:   creatures,
+		DisplayName: nullString(input.DisplayName),
+		Creatures:   defaultCreatures(input.Creatures),
 	})
 	if err != nil {
 		return refdata.EncounterTemplate{}, fmt.Errorf("creating encounter template: %w", err)
@@ -96,22 +86,12 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (refdata.Encoun
 		return refdata.EncounterTemplate{}, errors.New("name must not be empty")
 	}
 
-	creatures := input.Creatures
-	if len(creatures) == 0 {
-		creatures = json.RawMessage(`[]`)
-	}
-
-	displayName := sql.NullString{}
-	if input.DisplayName != "" {
-		displayName = sql.NullString{String: input.DisplayName, Valid: true}
-	}
-
 	et, err := s.store.UpdateEncounterTemplate(ctx, refdata.UpdateEncounterTemplateParams{
 		ID:          input.ID,
 		MapID:       input.MapID,
 		Name:        input.Name,
-		DisplayName: displayName,
-		Creatures:   creatures,
+		DisplayName: nullString(input.DisplayName),
+		Creatures:   defaultCreatures(input.Creatures),
 	})
 	if err != nil {
 		return refdata.EncounterTemplate{}, fmt.Errorf("updating encounter template: %w", err)
@@ -137,16 +117,16 @@ func (s *Service) Duplicate(ctx context.Context, id uuid.UUID) (refdata.Encounte
 		return refdata.EncounterTemplate{}, fmt.Errorf("getting encounter template to duplicate: %w", err)
 	}
 
-	displayName := sql.NullString{}
+	copiedDisplayName := sql.NullString{}
 	if original.DisplayName.Valid {
-		displayName = sql.NullString{String: original.DisplayName.String + " (copy)", Valid: true}
+		copiedDisplayName = sql.NullString{String: original.DisplayName.String + " (copy)", Valid: true}
 	}
 
 	et, err := s.store.CreateEncounterTemplate(ctx, refdata.CreateEncounterTemplateParams{
 		CampaignID:  original.CampaignID,
 		MapID:       original.MapID,
 		Name:        original.Name + " (copy)",
-		DisplayName: displayName,
+		DisplayName: copiedDisplayName,
 		Creatures:   original.Creatures,
 	})
 	if err != nil {
@@ -154,4 +134,17 @@ func (s *Service) Duplicate(ctx context.Context, id uuid.UUID) (refdata.Encounte
 	}
 
 	return et, nil
+}
+
+// nullString converts a string to sql.NullString, treating empty as null.
+func nullString(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: s != ""}
+}
+
+// defaultCreatures returns the given JSON or an empty array if nil/empty.
+func defaultCreatures(c json.RawMessage) json.RawMessage {
+	if len(c) == 0 {
+		return json.RawMessage(`[]`)
+	}
+	return c
 }

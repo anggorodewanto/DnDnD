@@ -133,7 +133,7 @@
   - Depends on: Phase 19
   - Done when: PNG generated from map JSON + combatant positions; tokens show health tiers with accessible indicators; legend renders when needed; render queue debounces rapid updates.
 
-- [ ] **Phase 23: Encounter Templates & Encounter Builder (Dashboard)**
+- [x] **Phase 23: Encounter Templates & Encounter Builder (Dashboard)**
   - Scope: Migration for `encounter_templates` table. Dashboard Encounter Builder: name (internal + display), map selection, add creatures from Stat Block Library, set quantities, auto-generate short IDs, drag-drop creature token placement on map. Save/edit/duplicate/delete templates. Saved Encounters list on Campaign Home.
   - Depends on: Phase 6, Phase 15, Phase 21a
   - Done when: DM can create encounter templates with creatures placed on maps, edit/duplicate/delete them, see them listed on Campaign Home.

@@ -9,10 +9,6 @@
   } from './lib/api.js';
   import {
     terrainByGid,
-    lightingByGid,
-    getLightingData,
-    getElevationData,
-    getSpawnZones,
     getWalls,
   } from './lib/mapdata.js';
 
@@ -279,26 +275,26 @@
     ctx.fillText(label, x + tileSize / 2, y + tileSize / 2);
   }
 
-  function canvasPixel(e) {
+  function canvasTileCoords(e) {
     const rect = canvasEl.getBoundingClientRect();
     const scaleX = canvasEl.width / rect.width;
     const scaleY = canvasEl.height / rect.height;
-    return {
-      px: (e.clientX - rect.left) * scaleX,
-      py: (e.clientY - rect.top) * scaleY,
-    };
+    const tileSize = getTileSize();
+    const col = Math.floor((e.clientX - rect.left) * scaleX / tileSize);
+    const row = Math.floor((e.clientY - rect.top) * scaleY / tileSize);
+    return { col, row };
+  }
+
+  function isTileInBounds(col, row) {
+    return col >= 0 && col < loadedMap.width && row >= 0 && row < loadedMap.height;
   }
 
   function handleCanvasDrop(e) {
     e.preventDefault();
     if (!draggingCreature || !loadedMap) return;
 
-    const { px, py } = canvasPixel(e);
-    const tileSize = getTileSize();
-    const col = Math.floor(px / tileSize);
-    const row = Math.floor(py / tileSize);
-
-    if (col < 0 || col >= loadedMap.width || row < 0 || row >= loadedMap.height) return;
+    const { col, row } = canvasTileCoords(e);
+    if (!isTileInBounds(col, row)) return;
 
     const idx = creatures.indexOf(draggingCreature);
     if (idx === -1) return;
@@ -316,12 +312,8 @@
     e.preventDefault();
     if (!draggingCreature || !loadedMap) return;
 
-    const { px, py } = canvasPixel(e);
-    const tileSize = getTileSize();
-    const col = Math.floor(px / tileSize);
-    const row = Math.floor(py / tileSize);
-
-    if (col >= 0 && col < loadedMap.width && row >= 0 && row < loadedMap.height) {
+    const { col, row } = canvasTileCoords(e);
+    if (isTileInBounds(col, row)) {
       dragPreviewPos = { col, row };
       drawMap();
     }
