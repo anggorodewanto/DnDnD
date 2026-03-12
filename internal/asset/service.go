@@ -12,14 +12,6 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// validTypes is the set of allowed asset types.
-var validTypes = map[AssetType]bool{
-	TypeMapBackground: true,
-	TypeToken:         true,
-	TypeTileset:       true,
-	TypeNarration:     true,
-}
-
 // DBStore defines the database operations needed by the asset service.
 type DBStore interface {
 	CreateAsset(ctx context.Context, arg refdata.CreateAssetParams) (refdata.Asset, error)
@@ -128,7 +120,7 @@ func (s *Service) URL(assetID uuid.UUID) string {
 
 // validateUpload checks upload input for validity.
 func validateUpload(input UploadInput) error {
-	if !validTypes[input.Type] {
+	if !input.Type.Valid() {
 		return errors.New("invalid asset type: " + string(input.Type))
 	}
 	if input.OriginalName == "" {

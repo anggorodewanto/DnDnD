@@ -80,5 +80,5 @@ func (s *LocalStore) Delete(ctx context.Context, storagePath string) error {
 
 // URL returns the API path for accessing the asset.
 func (s *LocalStore) URL(assetID uuid.UUID) string {
-	return fmt.Sprintf("/api/assets/%s", assetID.String())
+	return "/api/assets/" + assetID.String()
 }

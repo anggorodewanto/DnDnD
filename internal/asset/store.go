@@ -17,6 +17,16 @@ const (
 	TypeNarration     AssetType = "narration"
 )
 
+// Valid reports whether t is a recognized asset type.
+func (t AssetType) Valid() bool {
+	switch t {
+	case TypeMapBackground, TypeToken, TypeTileset, TypeNarration:
+		return true
+	default:
+		return false
+	}
+}
+
 // Store defines the interface for asset storage backends.
 // Implementations can target local filesystem, S3, etc.
 type Store interface {

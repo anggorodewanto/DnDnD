@@ -3,7 +3,6 @@ package asset
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -47,9 +46,6 @@ func (h *Handler) ServeAsset(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", strconv.FormatInt(asset.ByteSize, 10))
 	}
 
-	if _, err := io.Copy(w, rc); err != nil {
-		// Response already started, can't change status code.
-		// Just log if we had a logger. For now, best-effort.
-		_ = fmt.Errorf("streaming asset %s: %w", id, err)
-	}
+	// Response already started; best-effort copy.
+	_, _ = io.Copy(w, rc)
 }
