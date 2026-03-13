@@ -278,7 +278,7 @@
   - Depends on: Phase 44, Phase 28
   - Done when: Integration tests verify granting, die scaling, usage prompt flow, expiration, turn status display.
 
-- [ ] **Phase 50: Channel Divinity (Cleric/Paladin)**
+- [x] **Phase 50: Channel Divinity (Cleric/Paladin)**
   - Scope: `/action channel-divinity [option]`: costs action, tracked in feature_uses (recharge short). Turn Undead: WIS save for undead within 30ft, Turned condition. Destroy Undead (Cleric 5+): instant destroy below CR threshold. Subclass options: auto-resolved (Preserve Life, Sacred Weapon, Vow of Enmity) or DM-resolved (route to #dm-queue). Usage tracking and validation.
   - Depends on: Phase 44, Phase 28
   - Done when: Integration tests verify Turn Undead saves, Destroy Undead CR threshold, Preserve Life HP distribution, DM-queue routing for narrative options.

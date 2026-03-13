@@ -41,7 +41,7 @@ func setupChannelDivinityFixture(t *testing.T, clericLevel int, featureUses int)
 
 	// Create cleric character
 	charID := uuid.New()
-	classesJSON, _ := json.Marshal([]map[string]interface{}{{"class": "Cleric", "level": clericLevel}})
+	classesJSON, _ := json.Marshal([]map[string]any{{"class": "Cleric", "level": clericLevel}})
 	featureUsesJSON, _ := json.Marshal(map[string]int{"channel-divinity": featureUses})
 	_, err := db.Exec(`INSERT INTO characters (id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, ac, speed_ft, proficiency_bonus, hit_dice_remaining, languages, feature_uses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 		charID, campaignID, "Thorn", "human", classesJSON, clericLevel,
@@ -376,7 +376,7 @@ func TestIntegration_SacredWeapon(t *testing.T) {
 
 	// Create paladin character
 	charID := uuid.New()
-	classesJSON, _ := json.Marshal([]map[string]interface{}{{"class": "Paladin", "level": 3}})
+	classesJSON, _ := json.Marshal([]map[string]any{{"class": "Paladin", "level": 3}})
 	featureUsesJSON, _ := json.Marshal(map[string]int{"channel-divinity": 1})
 	_, err := db.Exec(`INSERT INTO characters (id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, ac, speed_ft, proficiency_bonus, hit_dice_remaining, languages, feature_uses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 		charID, campaignID, "Oath", "human", classesJSON, 3,
@@ -476,7 +476,7 @@ func TestIntegration_VowOfEnmity(t *testing.T) {
 
 	// Create paladin character
 	charID := uuid.New()
-	classesJSON, _ := json.Marshal([]map[string]interface{}{{"class": "Paladin", "level": 3}})
+	classesJSON, _ := json.Marshal([]map[string]any{{"class": "Paladin", "level": 3}})
 	featureUsesJSON, _ := json.Marshal(map[string]int{"channel-divinity": 1})
 	_, err := db.Exec(`INSERT INTO characters (id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, ac, speed_ft, proficiency_bonus, hit_dice_remaining, languages, feature_uses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 		charID, campaignID, "Oath", "human", classesJSON, 3,

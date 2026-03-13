@@ -382,10 +382,7 @@ func (s *Service) SacredWeapon(ctx context.Context, cmd SacredWeaponCommand) (Sa
 	if err != nil {
 		return SacredWeaponResult{}, fmt.Errorf("parsing ability scores: %w", err)
 	}
-	chaMod := AbilityModifier(scores.Cha)
-	if chaMod < 1 {
-		chaMod = 1
-	}
+	chaMod := max(AbilityModifier(scores.Cha), 1)
 
 	newUsesRemaining, err := s.DeductFeatureUse(ctx, char, FeatureKeyChannelDivinity, featureUses, usesRemaining)
 	if err != nil {
