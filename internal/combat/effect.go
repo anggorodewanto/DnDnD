@@ -1,6 +1,10 @@
 package combat
 
-import "github.com/ab/dndnd/internal/dice"
+import (
+	"sort"
+
+	"github.com/ab/dndnd/internal/dice"
+)
 
 // EffectType represents the kind of mechanical effect a feature provides.
 type EffectType string
@@ -27,32 +31,19 @@ const (
 	EffectDMResolution        EffectType = "dm_resolution"
 )
 
-// validEffectTypes is the set of all recognized effect types.
-var validEffectTypes = map[EffectType]bool{
-	EffectModifyAttackRoll:     true,
-	EffectModifyDamageRoll:     true,
-	EffectExtraDamageDice:      true,
-	EffectModifyAC:             true,
-	EffectModifySave:           true,
-	EffectModifyCheck:          true,
-	EffectModifySpeed:          true,
-	EffectGrantResistance:      true,
-	EffectGrantImmunity:        true,
-	EffectExtraAttack:          true,
-	EffectModifyHP:             true,
-	EffectConditionalAdvantage: true,
-	EffectResourceOnHit:        true,
-	EffectReactionTrigger:      true,
-	EffectAura:                 true,
-	EffectReplaceRoll:          true,
-	EffectGrantProficiency:     true,
-	EffectModifyRange:          true,
-	EffectDMResolution:         true,
-}
-
 // IsValid returns true if the effect type is a recognized value.
 func (et EffectType) IsValid() bool {
-	return validEffectTypes[et]
+	switch et {
+	case EffectModifyAttackRoll, EffectModifyDamageRoll, EffectExtraDamageDice,
+		EffectModifyAC, EffectModifySave, EffectModifyCheck, EffectModifySpeed,
+		EffectGrantResistance, EffectGrantImmunity, EffectExtraAttack,
+		EffectModifyHP, EffectConditionalAdvantage, EffectResourceOnHit,
+		EffectReactionTrigger, EffectAura, EffectReplaceRoll,
+		EffectGrantProficiency, EffectModifyRange, EffectDMResolution:
+		return true
+	default:
+		return false
+	}
 }
 
 // TriggerPoint represents when an effect is evaluated during gameplay.
@@ -69,21 +60,16 @@ const (
 	TriggerOnRest       TriggerPoint = "on_rest"
 )
 
-// validTriggerPoints is the set of all recognized trigger points.
-var validTriggerPoints = map[TriggerPoint]bool{
-	TriggerOnAttackRoll: true,
-	TriggerOnDamageRoll: true,
-	TriggerOnTakeDamage: true,
-	TriggerOnSave:       true,
-	TriggerOnCheck:      true,
-	TriggerOnTurnStart:  true,
-	TriggerOnTurnEnd:    true,
-	TriggerOnRest:       true,
-}
-
 // IsValid returns true if the trigger point is a recognized value.
 func (tp TriggerPoint) IsValid() bool {
-	return validTriggerPoints[tp]
+	switch tp {
+	case TriggerOnAttackRoll, TriggerOnDamageRoll, TriggerOnTakeDamage,
+		TriggerOnSave, TriggerOnCheck, TriggerOnTurnStart,
+		TriggerOnTurnEnd, TriggerOnRest:
+		return true
+	default:
+		return false
+	}
 }
 
 // EffectConditions holds the filters that must be true for an effect to apply.
@@ -112,7 +98,7 @@ type Effect struct {
 	On           string           `json:"on,omitempty"`
 	Description  string           `json:"description,omitempty"`
 	ReplaceValue int              `json:"replace_value,omitempty"`
-	Conditions   EffectConditions `json:"conditions,omitempty"`
+	Conditions   EffectConditions `json:"conditions,omitzero"`
 }
 
 // MatchesTrigger returns true if this effect's trigger matches the given trigger point.
@@ -207,13 +193,8 @@ func EvaluateConditions(e Effect, ctx EffectContext) bool {
 	if c.OncePerTurn && ctx.UsedThisTurn != nil && ctx.UsedThisTurn[string(e.Type)] {
 		return false
 	}
-	if c.UsesRemaining {
-		if ctx.UsesRemaining == nil {
-			return false
-		}
-		if ctx.UsesRemaining[string(e.Type)] <= 0 {
-			return false
-		}
+	if c.UsesRemaining && (ctx.UsesRemaining == nil || ctx.UsesRemaining[string(e.Type)] <= 0) {
+		return false
 	}
 
 	return true
@@ -273,16 +254,9 @@ func CollectEffects(features []FeatureDefinition, trigger TriggerPoint, ctx Effe
 // SortByPriority sorts resolved effects by their resolution priority
 // (immunities first, then R/V, flat mods, dice mods, adv/disadv).
 func SortByPriority(effects []ResolvedEffect) {
-	// Simple insertion sort — effect lists are small.
-	for i := 1; i < len(effects); i++ {
-		key := effects[i]
-		j := i - 1
-		for j >= 0 && effects[j].Priority > key.Priority {
-			effects[j+1] = effects[j]
-			j--
-		}
-		effects[j+1] = key
-	}
+	sort.SliceStable(effects, func(i, j int) bool {
+		return effects[i].Priority < effects[j].Priority
+	})
 }
 
 // ProcessEffects is the single-pass processor: collect active effects,
@@ -311,20 +285,11 @@ func ProcessEffects(features []FeatureDefinition, trigger TriggerPoint, ctx Effe
 		case EffectGrantResistance:
 			result.Resistances = append(result.Resistances, e.DamageTypes...)
 
-		case EffectModifyAttackRoll:
-			result.FlatModifier += e.Modifier
-
-		case EffectModifyDamageRoll:
+		case EffectModifyAttackRoll, EffectModifyDamageRoll, EffectModifySave, EffectModifyCheck:
 			result.FlatModifier += e.Modifier
 
 		case EffectModifyAC:
 			result.ACModifier += e.Modifier
-
-		case EffectModifySave:
-			result.FlatModifier += e.Modifier
-
-		case EffectModifyCheck:
-			result.FlatModifier += e.Modifier
 
 		case EffectModifySpeed:
 			result.SpeedModifier += e.Modifier

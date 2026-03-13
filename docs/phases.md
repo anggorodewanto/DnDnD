@@ -243,7 +243,7 @@
   - Depends on: Phase 42, Phase 18
   - Done when: Unit tests cover full death save state machine, instant death, damage at 0 HP, stabilization paths, healing from 0, nat 1/nat 20 edge cases.
 
-- [ ] **Phase 44: Feature Effect System — Core Engine**
+- [x] **Phase 44: Feature Effect System — Core Engine**
   - Scope: Data-driven effect processor. Effect types: modify_attack_roll, modify_damage_roll, extra_damage_dice, modify_ac, modify_save, modify_check, modify_speed, grant_resistance, grant_immunity, extra_attack, modify_hp, conditional_advantage, resource_on_hit, reaction_trigger, aura, replace_roll, grant_proficiency, modify_range, dm_resolution. Trigger points: on_attack_roll, on_damage_roll, on_take_damage, on_save, on_check, on_turn_start, on_turn_end, on_rest. Condition filters. Resolution priority (immunities -> R/V -> flat mods -> dice mods -> adv/disadv). Single-pass processor: collect active effects -> filter by conditions -> apply in priority order.
   - Depends on: Phase 7, Phase 39
   - Done when: Unit tests verify each effect type, trigger point matching, condition filtering, priority ordering, single-pass processing with multiple simultaneous effects.
