@@ -110,7 +110,10 @@ func UnarmoredMovementBonus(monkLevel int) int {
 	if monkLevel >= 6 {
 		return 15
 	}
-	return 10
+	if monkLevel >= 2 {
+		return 10
+	}
+	return 0
 }
 
 // UnarmoredMovementFeature returns the FeatureDefinition for Unarmored Movement

@@ -204,38 +204,38 @@ func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeatu
 	for _, f := range features {
 		// Handle comma-separated mechanical effects (e.g., "martial_arts_d4,bonus_action_unarmed_strike")
 		for _, effect := range splitMechanicalEffects(f.MechanicalEffect) {
-		switch effect {
-		case "rage":
-			defs = append(defs, RageFeature(max(barbarianLevel, 1)))
-		case "sneak_attack":
-			defs = append(defs, SneakAttackFeature(max(rogueLevel, 1)))
-		case "evasion":
-			defs = append(defs, EvasionFeature())
-		case "uncanny_dodge":
-			defs = append(defs, UncannyDodgeFeature())
-		case "archery":
-			defs = append(defs, ArcheryFeature())
-		case "defense":
-			defs = append(defs, DefenseFeature())
-		case "dueling":
-			defs = append(defs, DuelingFeature())
-		case "great_weapon_fighting":
-			defs = append(defs, GreatWeaponFightingFeature())
-		case "pack_tactics":
-			defs = append(defs, PackTacticsFeature())
-		case "wild_shape":
-			// Wild Shape is an activation command, not a passive combat effect.
-			// No FeatureDefinition needed here; handled by ActivateWildShape service method.
+			switch effect {
+			case "rage":
+				defs = append(defs, RageFeature(max(barbarianLevel, 1)))
+			case "sneak_attack":
+				defs = append(defs, SneakAttackFeature(max(rogueLevel, 1)))
+			case "evasion":
+				defs = append(defs, EvasionFeature())
+			case "uncanny_dodge":
+				defs = append(defs, UncannyDodgeFeature())
+			case "archery":
+				defs = append(defs, ArcheryFeature())
+			case "defense":
+				defs = append(defs, DefenseFeature())
+			case "dueling":
+				defs = append(defs, DuelingFeature())
+			case "great_weapon_fighting":
+				defs = append(defs, GreatWeaponFightingFeature())
+			case "pack_tactics":
+				defs = append(defs, PackTacticsFeature())
+			case "wild_shape":
+				// Wild Shape is an activation command, not a passive combat effect.
+				// No FeatureDefinition needed here; handled by ActivateWildShape service method.
 
-		// Monk features
-		case "martial_arts_d4":
-			// Martial arts is a passive feature handled at attack resolution time.
-			// No FeatureDefinition needed — the monk level is checked in ResolveAttack.
-		case "bonus_action_unarmed_strike":
-			// Handled by MartialArtsBonusAttack service method, not a passive feature.
-		case "speed_plus_10":
-			defs = append(defs, UnarmoredMovementFeature(max(monkLevel, 2)))
-		}
+			// Monk features
+			case "martial_arts_d4":
+				// Martial arts is a passive feature handled at attack resolution time.
+				// No FeatureDefinition needed — the monk level is checked in ResolveAttack.
+			case "bonus_action_unarmed_strike":
+				// Handled by MartialArtsBonusAttack service method, not a passive feature.
+			case "speed_plus_10":
+				defs = append(defs, UnarmoredMovementFeature(max(monkLevel, 2)))
+			}
 		}
 	}
 

@@ -1,10 +1,17 @@
 package combat
 
 import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TDD Cycle 1: IsMonkWeapon
@@ -681,3 +688,344 @@ func TestMartialArtsDie(t *testing.T) {
 		}
 	}
 }
+
+// TDD Cycle 13: UnarmoredMovementBonus returns 0 for levels below 2
+
+func TestUnarmoredMovementBonus_Level1_ReturnsZero(t *testing.T) {
+	got := UnarmoredMovementBonus(1)
+	if got != 0 {
+		t.Errorf("UnarmoredMovementBonus(1) = %d, want 0 (starts at level 2)", got)
+	}
+}
+
+func TestUnarmoredMovementBonus_Level0_ReturnsZero(t *testing.T) {
+	got := UnarmoredMovementBonus(0)
+	if got != 0 {
+		t.Errorf("UnarmoredMovementBonus(0) = %d, want 0", got)
+	}
+}
+
+// TDD Cycle 14: MartialArtsBonusAttack service method integration tests
+
+func makeMonkCharacter(str, dex int, monkLevel int) refdata.Character {
+	scores := AbilityScores{Str: str, Dex: dex, Con: 10, Int: 10, Wis: 16, Cha: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []CharacterClass{{Class: "Monk", Level: monkLevel}}
+	classesJSON, _ := json.Marshal(classes)
+	return refdata.Character{
+		ID:               uuid.New(),
+		AbilityScores:    scoresJSON,
+		ProficiencyBonus: 2,
+		Classes:          classesJSON,
+	}
+}
+
+func TestServiceMartialArtsBonusAttack_HappyPath(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	char := makeMonkCharacter(10, 16, 5) // DEX +3, Monk 5
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15 // attack roll
+		}
+		return 4 // damage die
+	})
+
+	result, err := svc.MartialArtsBonusAttack(ctx, MartialArtsBonusAttackCommand{
+		Attacker: refdata.Combatant{
+			ID:          attackerID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			PositionCol: "A", PositionRow: 1,
+			IsAlive: true, Conditions: json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:          targetID,
+			DisplayName: "Goblin #1",
+			PositionCol: "B", PositionRow: 1,
+			Ac: 13, IsAlive: true, IsNpc: true,
+			Conditions: json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{
+			ID:               turnID,
+			CombatantID:      attackerID,
+			AttacksRemaining: 1,
+			ActionUsed:       true, // Attack action was used
+		},
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	// Monk level 5: martial arts die 1d6, DEX +3
+	// Damage = d6(4) + 3 = 7
+	assert.Equal(t, 7, result.DamageTotal)
+	assert.Equal(t, "bludgeoning", result.DamageType)
+}
+
+func TestServiceMartialArtsBonusAttack_NotACharacter(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.MartialArtsBonusAttack(ctx, MartialArtsBonusAttackCommand{
+		Attacker: refdata.Combatant{
+			ID:    uuid.New(),
+			IsNpc: true,
+			// No CharacterID — NPC
+			Conditions: json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires a character")
+}
+
+func TestServiceMartialArtsBonusAttack_NotAMonk(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	// Fighter, not a monk
+	scores := AbilityScores{Str: 16, Dex: 10, Con: 10, Int: 10, Wis: 10, Cha: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Fighter", Level: 5}})
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID:               charID,
+			AbilityScores:    scoresJSON,
+			ProficiencyBonus: 2,
+			Classes:          classesJSON,
+		}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.MartialArtsBonusAttack(ctx, MartialArtsBonusAttackCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires Monk class")
+}
+
+func TestServiceMartialArtsBonusAttack_NoAttackAction(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacter(10, 16, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.MartialArtsBonusAttack(ctx, MartialArtsBonusAttackCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn: refdata.Turn{
+			ID:         uuid.New(),
+			ActionUsed: false, // No attack action used
+		},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires the Attack action")
+}
+
+func TestServiceMartialArtsBonusAttack_BonusActionAlreadyUsed(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.MartialArtsBonusAttack(ctx, MartialArtsBonusAttackCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), BonusActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bonus action")
+}
+
+func TestServiceMartialArtsBonusAttack_Miss(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacter(10, 16, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 1 // nat 1 miss
+		}
+		return 3
+	})
+
+	result, err := svc.MartialArtsBonusAttack(ctx, MartialArtsBonusAttackCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			PositionCol: "A", PositionRow: 1,
+			IsAlive: true, Conditions: json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID: uuid.New(), DisplayName: "Goblin",
+			PositionCol: "B", PositionRow: 1,
+			Ac: 20, IsAlive: true, IsNpc: true,
+			Conditions: json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{
+			ID:               uuid.New(),
+			AttacksRemaining: 1,
+			ActionUsed:       true,
+		},
+	}, roller)
+	require.NoError(t, err)
+	assert.False(t, result.Hit)
+	assert.Equal(t, 0, result.DamageTotal)
+}
+
+func TestServiceMartialArtsBonusAttack_GetCharacterError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.MartialArtsBonusAttack(ctx, MartialArtsBonusAttackCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
+}
+
+func TestServiceMartialArtsBonusAttack_BadAbilityScores(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Monk", Level: 5}})
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID:               charID,
+			AbilityScores:    []byte(`bad-json`),
+			ProficiencyBonus: 2,
+			Classes:          classesJSON,
+		}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.MartialArtsBonusAttack(ctx, MartialArtsBonusAttackCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing ability scores")
+}
+
+func TestServiceMartialArtsBonusAttack_UpdateTurnError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacter(10, 16, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3
+	})
+
+	_, err := svc.MartialArtsBonusAttack(ctx, MartialArtsBonusAttackCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			PositionCol: "A", PositionRow: 1,
+			IsAlive: true, Conditions: json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID: uuid.New(), DisplayName: "Goblin",
+			PositionCol: "B", PositionRow: 1,
+			Ac: 13, IsAlive: true, IsNpc: true,
+			Conditions: json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{
+			ID:               uuid.New(),
+			AttacksRemaining: 1,
+			ActionUsed:       true,
+		},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating turn actions")
+}
+
+// Suppress unused imports
+var _ = sql.ErrNoRows
