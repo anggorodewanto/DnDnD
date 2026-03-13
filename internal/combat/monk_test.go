@@ -10,6 +10,7 @@ import (
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1023,6 +1024,1391 @@ func TestServiceMartialArtsBonusAttack_UpdateTurnError(t *testing.T) {
 			ActionUsed:       true,
 		},
 	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating turn actions")
+}
+
+// --- Phase 48b: Ki Abilities ---
+
+// TDD Cycle 1: parseKiUses extracts ki points from feature_uses
+
+func TestParseKiUses_WithKiPoints(t *testing.T) {
+	featureUsesJSON := json.RawMessage(`{"ki":3}`)
+	char := refdata.Character{
+		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
+	}
+	uses, remaining, err := parseKiUses(char)
+	require.NoError(t, err)
+	assert.Equal(t, 3, remaining)
+	assert.Equal(t, 3, uses["ki"])
+}
+
+func TestParseKiUses_Empty(t *testing.T) {
+	char := refdata.Character{}
+	uses, remaining, err := parseKiUses(char)
+	require.NoError(t, err)
+	assert.Equal(t, 0, remaining)
+	assert.NotNil(t, uses)
+}
+
+func TestParseKiUses_BadJSON(t *testing.T) {
+	char := refdata.Character{
+		FeatureUses: pqtype.NullRawMessage{RawMessage: json.RawMessage(`bad`), Valid: true},
+	}
+	_, _, err := parseKiUses(char)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing feature_uses")
+}
+
+// TDD Cycle 2: ValidateKiAbility
+
+func TestValidateKiAbility_Valid(t *testing.T) {
+	err := ValidateKiAbility(5, 3, "flurry-of-blows")
+	assert.NoError(t, err)
+}
+
+func TestValidateKiAbility_NotMonk(t *testing.T) {
+	err := ValidateKiAbility(0, 3, "flurry-of-blows")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires Monk class")
+}
+
+func TestValidateKiAbility_NoKiPoints(t *testing.T) {
+	err := ValidateKiAbility(5, 0, "flurry-of-blows")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no ki points remaining")
+}
+
+// TDD Cycle 3: FlurryOfBlows service method
+
+func makeMonkCharacterWithKi(str, dex, wis int, monkLevel int, kiPoints int) refdata.Character {
+	scores := AbilityScores{Str: str, Dex: dex, Con: 10, Int: 10, Wis: wis, Cha: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []CharacterClass{{Class: "Monk", Level: monkLevel}}
+	classesJSON, _ := json.Marshal(classes)
+	featureUses := map[string]int{"ki": kiPoints}
+	featureUsesJSON, _ := json.Marshal(featureUses)
+	return refdata.Character{
+		ID:               uuid.New(),
+		AbilityScores:    scoresJSON,
+		ProficiencyBonus: 2,
+		Classes:          classesJSON,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
+	}
+}
+
+func TestServiceFlurryOfBlows_HappyPath(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+	var updatedFeatureUses pqtype.NullRawMessage
+	ms.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		updatedFeatureUses = arg.FeatureUses
+		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3
+	})
+
+	result, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          attackerID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			PositionCol: "A", PositionRow: 1,
+			IsAlive: true, Conditions: json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:          targetID,
+			DisplayName: "Goblin #1",
+			PositionCol: "B", PositionRow: 1,
+			Ac: 13, IsAlive: true, IsNpc: true,
+			Conditions: json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{
+			ID:               turnID,
+			CombatantID:      attackerID,
+			AttacksRemaining: 1,
+			ActionUsed:       true,
+		},
+	}, roller)
+	require.NoError(t, err)
+	assert.Len(t, result.Attacks, 2, "flurry of blows should make 2 attacks")
+	assert.Equal(t, 4, result.KiRemaining, "should deduct 1 ki point")
+	// Verify ki was persisted
+	var uses map[string]int
+	require.NoError(t, json.Unmarshal(updatedFeatureUses.RawMessage, &uses))
+	assert.Equal(t, 4, uses["ki"])
+}
+
+func TestServiceFlurryOfBlows_BonusActionSpent(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), BonusActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bonus action")
+}
+
+func TestServiceFlurryOfBlows_NotACharacter(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{ID: uuid.New(), IsNpc: true, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires a character")
+}
+
+func TestServiceFlurryOfBlows_NoKiRemaining(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 0) // 0 ki
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no ki points remaining")
+}
+
+func TestServiceFlurryOfBlows_NoAttackAction(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), ActionUsed: false}, // no attack action
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires the Attack action")
+}
+
+// TDD Cycle 4: PatientDefense
+
+func TestServicePatientDefense_HappyPath(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+	var appliedConditions json.RawMessage
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "Kira", Conditions: json.RawMessage(`[]`)}, nil
+	}
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		appliedConditions = arg.Conditions
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(ms)
+
+	result, err := svc.PatientDefense(ctx, KiAbilityCommand{
+		Combatant: refdata.Combatant{
+			ID:          attackerID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{ID: uuid.New(), CombatantID: attackerID},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 4, result.KiRemaining)
+	assert.Contains(t, result.CombatLog, "Patient Defense")
+
+	// Verify dodge condition was applied
+	assert.True(t, HasCondition(appliedConditions, "dodge"))
+}
+
+func TestServicePatientDefense_NoKi(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 0)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	svc := NewService(ms)
+	_, err := svc.PatientDefense(ctx, KiAbilityCommand{
+		Combatant: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{ID: uuid.New()},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no ki points remaining")
+}
+
+// TDD Cycle 5: StepOfTheWind
+
+func TestServiceStepOfTheWind_Dash(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID:                  arg.ID,
+			BonusActionUsed:     arg.BonusActionUsed,
+			MovementRemainingFt: arg.MovementRemainingFt,
+		}, nil
+	}
+
+	svc := NewService(ms)
+
+	result, err := svc.StepOfTheWind(ctx, StepOfTheWindCommand{
+		KiAbilityCommand: KiAbilityCommand{
+			Combatant: refdata.Combatant{
+				ID:          attackerID,
+				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+				DisplayName: "Kira",
+				Conditions:  json.RawMessage(`[]`),
+			},
+			Turn: refdata.Turn{ID: uuid.New(), CombatantID: attackerID, MovementRemainingFt: 30},
+		},
+		Mode: "dash",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 4, result.KiRemaining)
+	assert.Contains(t, result.CombatLog, "Step of the Wind")
+	assert.Contains(t, result.CombatLog, "dash")
+	// Dash doubles remaining movement
+	assert.Equal(t, int32(60), result.Turn.MovementRemainingFt)
+}
+
+func TestServiceStepOfTheWind_Disengage(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 3)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID:              arg.ID,
+			BonusActionUsed: arg.BonusActionUsed,
+			HasDisengaged:   arg.HasDisengaged,
+		}, nil
+	}
+
+	svc := NewService(ms)
+
+	result, err := svc.StepOfTheWind(ctx, StepOfTheWindCommand{
+		KiAbilityCommand: KiAbilityCommand{
+			Combatant: refdata.Combatant{
+				ID:          attackerID,
+				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+				DisplayName: "Kira",
+				Conditions:  json.RawMessage(`[]`),
+			},
+			Turn: refdata.Turn{ID: uuid.New(), CombatantID: attackerID, MovementRemainingFt: 30},
+		},
+		Mode: "disengage",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.KiRemaining)
+	assert.Contains(t, result.CombatLog, "disengage")
+	assert.True(t, result.Turn.HasDisengaged)
+}
+
+func TestServiceStepOfTheWind_InvalidMode(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 3)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+
+	svc := NewService(ms)
+
+	_, err := svc.StepOfTheWind(ctx, StepOfTheWindCommand{
+		KiAbilityCommand: KiAbilityCommand{
+			Combatant: refdata.Combatant{
+				ID:          uuid.New(),
+				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+				DisplayName: "Kira",
+				Conditions:  json.RawMessage(`[]`),
+			},
+			Turn: refdata.Turn{ID: uuid.New(), MovementRemainingFt: 30},
+		},
+		Mode: "attack",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid mode")
+}
+
+// TDD Cycle 6: StunningStrike
+
+func TestStunningStrikeDC(t *testing.T) {
+	// DC = 8 + proficiency + WIS mod
+	// WIS 16 = +3, prof 2 -> DC = 13
+	dc := StunningStrikeDC(2, 16)
+	assert.Equal(t, 13, dc)
+}
+
+func TestStunningStrikeDC_HighLevel(t *testing.T) {
+	// WIS 20 = +5, prof 6 -> DC = 19
+	dc := StunningStrikeDC(6, 20)
+	assert.Equal(t, 19, dc)
+}
+
+func TestServiceStunningStrike_TargetFailsSave(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5) // WIS 16 (+3), prof 2 -> DC 13
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == targetID {
+			return refdata.Combatant{
+				ID:          targetID,
+				DisplayName: "Goblin",
+				Conditions:  json.RawMessage(`[]`),
+			}, nil
+		}
+		return refdata.Combatant{ID: id, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	var appliedConditions json.RawMessage
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		appliedConditions = arg.Conditions
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(ms)
+	// Roller returns 5 on d20 -> save = 5 + 0 (CON 10) = 5, fails DC 13
+	roller := dice.NewRoller(func(max int) int { return 5 })
+
+	result, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          attackerID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:          targetID,
+			DisplayName: "Goblin",
+			Conditions:  json.RawMessage(`[]`),
+		},
+		CurrentRound: 3,
+	}, roller)
+	require.NoError(t, err)
+	assert.False(t, result.SaveSucceeded)
+	assert.True(t, result.Stunned)
+	assert.Equal(t, 4, result.KiRemaining)
+	assert.Contains(t, result.CombatLog, "stunned")
+
+	// Verify stunned was applied
+	assert.True(t, HasCondition(appliedConditions, "stunned"))
+}
+
+func TestServiceStunningStrike_TargetPassesSave(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5) // DC 13
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "Goblin", Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(ms)
+	// Roller returns 18 on d20 -> save = 18 + 0 = 18, passes DC 13
+	roller := dice.NewRoller(func(max int) int { return 18 })
+
+	result, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          attackerID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:          targetID,
+			DisplayName: "Goblin",
+			Conditions:  json.RawMessage(`[]`),
+		},
+		CurrentRound: 3,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.SaveSucceeded)
+	assert.False(t, result.Stunned)
+	assert.Equal(t, 4, result.KiRemaining)
+	assert.Contains(t, result.CombatLog, "resists")
+}
+
+func TestServiceStunningStrike_NoKi(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 0)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:         uuid.New(),
+			Conditions: json.RawMessage(`[]`),
+		},
+		CurrentRound: 1,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no ki points remaining")
+}
+
+func TestServiceStunningStrike_NotMonk(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	// Fighter, not monk
+	scores := AbilityScores{Str: 16, Dex: 10, Con: 10, Int: 10, Wis: 10, Cha: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Fighter", Level: 5}})
+	featureUsesJSON, _ := json.Marshal(map[string]int{"ki": 5})
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID:               charID,
+			AbilityScores:    scoresJSON,
+			ProficiencyBonus: 2,
+			Classes:          classesJSON,
+			FeatureUses:      pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
+		}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:         uuid.New(),
+			Conditions: json.RawMessage(`[]`),
+		},
+		CurrentRound: 1,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires Monk class")
+}
+
+// TDD Cycle 7: StunningStrike with creature save bonus
+
+func TestServiceStunningStrike_CreatureWithConSaveBonus(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5) // DC 13
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:            targetID,
+			DisplayName:   "Ogre",
+			CreatureRefID: sql.NullString{String: "ogre", Valid: true},
+			Conditions:    json.RawMessage(`[]`),
+		}, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		savesJSON, _ := json.Marshal(map[string]int{"con": 5})
+		return refdata.Creature{
+			ID:             "ogre",
+			AbilityScores:  json.RawMessage(`{"str":19,"dex":8,"con":16,"int":5,"wis":7,"cha":7}`),
+			SavingThrows:   pqtype.NullRawMessage{RawMessage: savesJSON, Valid: true},
+		}, nil
+	}
+
+	svc := NewService(ms)
+	// Roller returns 7 -> save = 7 + 5 (con save bonus) = 12, fails DC 13
+	roller := dice.NewRoller(func(max int) int { return 7 })
+
+	result, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          attackerID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:            targetID,
+			DisplayName:   "Ogre",
+			CreatureRefID: sql.NullString{String: "ogre", Valid: true},
+			Conditions:    json.RawMessage(`[]`),
+		},
+		CurrentRound: 3,
+	}, roller)
+	require.NoError(t, err)
+	assert.False(t, result.SaveSucceeded)
+	assert.True(t, result.Stunned)
+}
+
+// TDD Cycle 8: Edge cases
+
+func TestServiceFlurryOfBlows_GetCharacterError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
+}
+
+func TestServiceFlurryOfBlows_BadAbilityScores(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Monk", Level: 5}})
+	featureUsesJSON, _ := json.Marshal(map[string]int{"ki": 5})
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID:               charID,
+			AbilityScores:    []byte(`bad-json`),
+			ProficiencyBonus: 2,
+			Classes:          classesJSON,
+			FeatureUses:      pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
+		}, nil
+	}
+	ms.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing ability scores")
+}
+
+func TestServiceFlurryOfBlows_UpdateFeatureUsesError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating feature_uses")
+}
+
+func TestServicePatientDefense_BonusActionSpent(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+
+	_, err := svc.PatientDefense(ctx, KiAbilityCommand{
+		Combatant: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{ID: uuid.New(), BonusActionUsed: true},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bonus action")
+}
+
+func TestServicePatientDefense_NotACharacter(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+
+	_, err := svc.PatientDefense(ctx, KiAbilityCommand{
+		Combatant: refdata.Combatant{
+			ID:         uuid.New(),
+			IsNpc:      true,
+			Conditions: json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{ID: uuid.New()},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires a character")
+}
+
+func TestServiceStepOfTheWind_BonusActionSpent(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+
+	_, err := svc.StepOfTheWind(ctx, StepOfTheWindCommand{
+		KiAbilityCommand: KiAbilityCommand{
+			Combatant: refdata.Combatant{
+				ID:          uuid.New(),
+				CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+				Conditions:  json.RawMessage(`[]`),
+			},
+			Turn: refdata.Turn{ID: uuid.New(), BonusActionUsed: true},
+		},
+		Mode: "dash",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bonus action")
+}
+
+func TestServiceStepOfTheWind_NotACharacter(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+
+	_, err := svc.StepOfTheWind(ctx, StepOfTheWindCommand{
+		KiAbilityCommand: KiAbilityCommand{
+			Combatant: refdata.Combatant{
+				ID:         uuid.New(),
+				IsNpc:      true,
+				Conditions: json.RawMessage(`[]`),
+			},
+			Turn: refdata.Turn{ID: uuid.New()},
+		},
+		Mode: "dash",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires a character")
+}
+
+func TestServiceStepOfTheWind_NoKi(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 0)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	svc := NewService(ms)
+
+	_, err := svc.StepOfTheWind(ctx, StepOfTheWindCommand{
+		KiAbilityCommand: KiAbilityCommand{
+			Combatant: refdata.Combatant{
+				ID:          uuid.New(),
+				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+				Conditions:  json.RawMessage(`[]`),
+			},
+			Turn: refdata.Turn{ID: uuid.New()},
+		},
+		Mode: "dash",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no ki points remaining")
+}
+
+func TestServiceStunningStrike_NotACharacter(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:         uuid.New(),
+			IsNpc:      true,
+			Conditions: json.RawMessage(`[]`),
+		},
+		Target:       refdata.Combatant{ID: uuid.New(), Conditions: json.RawMessage(`[]`)},
+		CurrentRound: 1,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires a character")
+}
+
+func TestServiceStunningStrike_GetCharacterError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target:       refdata.Combatant{ID: uuid.New(), Conditions: json.RawMessage(`[]`)},
+		CurrentRound: 1,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
+}
+
+func TestServiceStunningStrike_BadAbilityScores(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Monk", Level: 5}})
+	featureUsesJSON, _ := json.Marshal(map[string]int{"ki": 5})
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID:               charID,
+			AbilityScores:    []byte(`bad-json`),
+			ProficiencyBonus: 2,
+			Classes:          classesJSON,
+			FeatureUses:      pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
+		}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target:       refdata.Combatant{ID: uuid.New(), Conditions: json.RawMessage(`[]`)},
+		CurrentRound: 1,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing ability scores")
+}
+
+func TestServiceStunningStrike_UpdateFeatureUsesError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target:       refdata.Combatant{ID: uuid.New(), Conditions: json.RawMessage(`[]`)},
+		CurrentRound: 1,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating feature_uses")
+}
+
+// Test resolveTargetConSave with PC target
+func TestServiceStunningStrike_PCTarget(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetCharID := uuid.New()
+	targetID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5) // DC 13
+	char.ID = charID
+
+	// Target PC with CON 14 (+2)
+	targetScores := AbilityScores{Str: 10, Dex: 10, Con: 14, Int: 10, Wis: 10, Cha: 10}
+	targetScoresJSON, _ := json.Marshal(targetScores)
+
+	ms := defaultMockStore()
+	callNum := 0
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		callNum++
+		if id == charID {
+			return char, nil
+		}
+		return refdata.Character{
+			ID:            targetCharID,
+			AbilityScores: targetScoresJSON,
+		}, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:          targetID,
+			CharacterID: uuid.NullUUID{UUID: targetCharID, Valid: true},
+			DisplayName: "Ally",
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+
+	svc := NewService(ms)
+	// Roll 10 -> save = 10 + 2 = 12, fails DC 13
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	result, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          attackerID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:          targetID,
+			CharacterID: uuid.NullUUID{UUID: targetCharID, Valid: true},
+			DisplayName: "Ally",
+			Conditions:  json.RawMessage(`[]`),
+		},
+		CurrentRound: 3,
+	}, roller)
+	require.NoError(t, err)
+	assert.False(t, result.SaveSucceeded)
+	assert.True(t, result.Stunned)
+}
+
+// Test resolveTargetConSave with NPC target (no creature ref)
+func TestServiceStunningStrike_NPCNoCreatureRef(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5) // DC 13
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:          targetID,
+			DisplayName: "Bandit",
+			IsNpc:       true,
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+
+	svc := NewService(ms)
+	// Roll 12 -> save = 12 + 0 = 12, fails DC 13
+	roller := dice.NewRoller(func(max int) int { return 12 })
+
+	result, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          attackerID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:          targetID,
+			DisplayName: "Bandit",
+			IsNpc:       true,
+			Conditions:  json.RawMessage(`[]`),
+		},
+		CurrentRound: 2,
+	}, roller)
+	require.NoError(t, err)
+	assert.False(t, result.SaveSucceeded)
+	assert.True(t, result.Stunned)
+}
+
+// Test FlurryOfBlows update turn error
+func TestServiceFlurryOfBlows_UpdateTurnError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			PositionCol: "A", PositionRow: 1,
+			Conditions: json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID: uuid.New(), DisplayName: "Goblin",
+			PositionCol: "B", PositionRow: 1,
+			Ac: 13, Conditions: json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating turn actions")
+}
+
+// Test that FlurryOfBlows replaces martial arts bonus (uses bonus action)
+func TestServiceFlurryOfBlows_ReplacesMaritalArtBonus(t *testing.T) {
+	// FlurryOfBlows and MartialArtsBonusAttack both use bonus action.
+	// If bonus action already used, FlurryOfBlows should fail.
+	ctx := context.Background()
+	svc := NewService(defaultMockStore())
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), BonusActionUsed: true, ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bonus action")
+}
+
+// Test FlurryOfBlows with not a monk
+func TestServiceFlurryOfBlows_NotAMonk(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	scores := AbilityScores{Str: 16, Dex: 10, Con: 10, Int: 10, Wis: 10, Cha: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Fighter", Level: 5}})
+	featureUsesJSON, _ := json.Marshal(map[string]int{"ki": 5})
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID:               charID,
+			AbilityScores:    scoresJSON,
+			ProficiencyBonus: 2,
+			Classes:          classesJSON,
+			FeatureUses:      pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
+		}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires Monk class")
+}
+
+// TDD Cycle 9: Coverage gaps for spendKi and resolveTargetConSave
+
+func TestServicePatientDefense_GetCharacterError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+
+	_, err := svc.PatientDefense(ctx, KiAbilityCommand{
+		Combatant: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{ID: uuid.New()},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
+}
+
+func TestServicePatientDefense_UpdateFeatureUsesError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+
+	_, err := svc.PatientDefense(ctx, KiAbilityCommand{
+		Combatant: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{ID: uuid.New()},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating feature_uses")
+}
+
+func TestServicePatientDefense_UpdateTurnError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+
+	_, err := svc.PatientDefense(ctx, KiAbilityCommand{
+		Combatant: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Turn: refdata.Turn{ID: uuid.New()},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating turn actions")
+}
+
+// Test resolveTargetConSave with creature that has no saving_throws field (uses ability score)
+func TestServiceStunningStrike_CreatureNoSaveBonus(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5) // DC 13
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:            targetID,
+			DisplayName:   "Wolf",
+			CreatureRefID: sql.NullString{String: "wolf", Valid: true},
+			Conditions:    json.RawMessage(`[]`),
+		}, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "wolf",
+			AbilityScores: json.RawMessage(`{"str":12,"dex":15,"con":12,"int":3,"wis":12,"cha":6}`),
+			// No SavingThrows set -> uses CON mod (+1)
+		}, nil
+	}
+
+	svc := NewService(ms)
+	// Roll 11 -> save = 11 + 1 (CON 12 mod) = 12, fails DC 13
+	roller := dice.NewRoller(func(max int) int { return 11 })
+
+	result, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          attackerID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:            targetID,
+			DisplayName:   "Wolf",
+			CreatureRefID: sql.NullString{String: "wolf", Valid: true},
+			Conditions:    json.RawMessage(`[]`),
+		},
+		CurrentRound: 2,
+	}, roller)
+	require.NoError(t, err)
+	assert.False(t, result.SaveSucceeded)
+	assert.Equal(t, 12, result.SaveTotal) // 11 + 1
+}
+
+// Test resolveTargetConSave error cases
+func TestServiceStunningStrike_GetCreatureError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{}, fmt.Errorf("not found")
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.StunningStrike(ctx, StunningStrikeCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Kira",
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{
+			ID:            uuid.New(),
+			DisplayName:   "Unknown",
+			CreatureRefID: sql.NullString{String: "unknown", Valid: true},
+			Conditions:    json.RawMessage(`[]`),
+		},
+		CurrentRound: 1,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting creature for save")
+}
+
+// Test FlurryOfBlows bad feature_uses JSON
+func TestServiceFlurryOfBlows_BadFeatureUses(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Monk", Level: 5}})
+	scoresJSON, _ := json.Marshal(AbilityScores{Str: 10, Dex: 16, Con: 10, Int: 10, Wis: 16, Cha: 10})
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID:               charID,
+			AbilityScores:    scoresJSON,
+			ProficiencyBonus: 2,
+			Classes:          classesJSON,
+			FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`bad`), Valid: true},
+		}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := svc.FlurryOfBlows(ctx, FlurryOfBlowsCommand{
+		Attacker: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		},
+		Target: refdata.Combatant{ID: uuid.New(), Ac: 13, Conditions: json.RawMessage(`[]`)},
+		Turn:   refdata.Turn{ID: uuid.New(), ActionUsed: true},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing feature_uses")
+}
+
+// Test StepOfTheWind with update turn error
+func TestServiceStepOfTheWind_UpdateTurnError(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+
+	callCount := 0
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		callCount++
+		if callCount == 1 {
+			// First call in spendKi succeeds
+			return refdata.Turn{ID: arg.ID, BonusActionUsed: true, MovementRemainingFt: 30}, nil
+		}
+		// Second call for dash/disengage update fails
+		return refdata.Turn{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+
+	_, err := svc.StepOfTheWind(ctx, StepOfTheWindCommand{
+		KiAbilityCommand: KiAbilityCommand{
+			Combatant: refdata.Combatant{
+				ID:          uuid.New(),
+				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+				DisplayName: "Kira",
+				Conditions:  json.RawMessage(`[]`),
+			},
+			Turn: refdata.Turn{ID: uuid.New(), MovementRemainingFt: 30},
+		},
+		Mode: "dash",
+	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "updating turn actions")
 }
