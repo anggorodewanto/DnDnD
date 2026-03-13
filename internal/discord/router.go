@@ -133,13 +133,43 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 
 	// Move button callbacks
 	if r.moveHandler != nil {
-		if strings.HasPrefix(customID, "move_confirm:") {
-			turnID, combatantID, destCol, destRow, costFt, err := ParseMoveConfirmData(customID)
+		if strings.HasPrefix(customID, "prone_stand:") {
+			turnID, combatantID, destCol, destRow, maxSpeed, err := ParseProneMoveData(customID, "prone_stand")
 			if err != nil {
-				respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Invalid move data: %v", err))
+				respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Invalid prone move data: %v", err))
 				return
 			}
-			r.moveHandler.HandleMoveConfirm(interaction, turnID, combatantID, destCol, destRow, costFt)
+			r.moveHandler.HandleProneStandAndMove(interaction, turnID, combatantID, destCol, destRow, maxSpeed)
+			return
+		}
+
+		if strings.HasPrefix(customID, "prone_crawl:") {
+			turnID, combatantID, destCol, destRow, _, err := ParseProneMoveData(customID, "prone_crawl")
+			if err != nil {
+				respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Invalid prone move data: %v", err))
+				return
+			}
+			r.moveHandler.HandleProneCrawl(interaction, turnID, combatantID, destCol, destRow)
+			return
+		}
+
+		if strings.HasPrefix(customID, "move_confirm:") {
+			// Differentiate basic (6 colon-separated fields) vs extended (8 fields with mode)
+			if isMoveConfirmWithMode(customID) {
+				turnID, combatantID, destCol, destRow, costFt, mode, standCostFt, err := ParseMoveConfirmWithModeData(customID)
+				if err != nil {
+					respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Invalid move data: %v", err))
+					return
+				}
+				r.moveHandler.HandleMoveConfirmWithMode(interaction, turnID, combatantID, destCol, destRow, costFt, mode, standCostFt)
+			} else {
+				turnID, combatantID, destCol, destRow, costFt, err := ParseMoveConfirmData(customID)
+				if err != nil {
+					respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Invalid move data: %v", err))
+					return
+				}
+				r.moveHandler.HandleMoveConfirm(interaction, turnID, combatantID, destCol, destRow, costFt)
+			}
 			return
 		}
 
@@ -166,6 +196,12 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 			return
 		}
 	}
+}
+
+// isMoveConfirmWithMode checks if a move_confirm custom ID includes a mode suffix.
+// Basic format has 6 colon-separated parts, extended has 8.
+func isMoveConfirmWithMode(customID string) bool {
+	return strings.Count(customID, ":") >= 7
 }
 
 // respondEphemeral sends an ephemeral message as an interaction response.

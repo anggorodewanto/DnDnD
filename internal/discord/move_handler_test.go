@@ -16,10 +16,11 @@ import (
 // --- Mocks ---
 
 type mockMoveService struct {
-	getEncounter           func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
-	getCombatant           func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
-	listCombatants         func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
-	updateCombatantPos     func(ctx context.Context, id uuid.UUID, col string, row, alt int32) (refdata.Combatant, error)
+	getEncounter              func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
+	getCombatant              func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
+	listCombatants            func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
+	updateCombatantPos        func(ctx context.Context, id uuid.UUID, col string, row, alt int32) (refdata.Combatant, error)
+	updateConditions func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
 }
 
 func (m *mockMoveService) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
@@ -33,6 +34,12 @@ func (m *mockMoveService) ListCombatantsByEncounterID(ctx context.Context, encou
 }
 func (m *mockMoveService) UpdateCombatantPosition(ctx context.Context, id uuid.UUID, col string, row, alt int32) (refdata.Combatant, error) {
 	return m.updateCombatantPos(ctx, id, col, row, alt)
+}
+func (m *mockMoveService) UpdateCombatantConditions(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+	if m.updateConditions != nil {
+		return m.updateConditions(ctx, arg)
+	}
+	return refdata.Combatant{}, nil
 }
 
 type mockMoveMapProvider struct {
@@ -1216,6 +1223,111 @@ func TestMoveHandler_HandleMoveConfirmWithMode_TurnError(t *testing.T) {
 	content := sess.lastResponse.Data.Content
 	if !strings.Contains(content, "Turn no longer active") {
 		t.Errorf("expected turn error, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirmWithMode_StandAndMove_RemovesProneCondition(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	var conditionsUpdated bool
+	var updatedConditions json.RawMessage
+	handler.combatService = &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{}, nil
+		},
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+			proneConditions, _ := json.Marshal([]map[string]interface{}{
+				{"condition": "prone"},
+			})
+			return refdata.Combatant{
+				ID:          combatantID,
+				Conditions:  proneConditions,
+				DisplayName: "TestChar",
+			}, nil
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, nil
+		},
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
+		updateConditions: func(_ context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+			conditionsUpdated = true
+			updatedConditions = arg.Conditions
+			return refdata.Combatant{}, nil
+		},
+	}
+
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: 30,
+			}, nil
+		},
+		updateTurnActions: func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: arg.MovementRemainingFt,
+				HasStoodThisTurn:    arg.HasStoodThisTurn,
+			}, nil
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+
+	handler.HandleMoveConfirmWithMode(interaction, turnID, combatantID, 3, 0, 10, "stand_and_move", 15)
+
+	if !conditionsUpdated {
+		t.Fatal("expected conditions to be updated (prone removed)")
+	}
+	// Verify prone was removed from conditions
+	if strings.Contains(string(updatedConditions), "prone") {
+		t.Errorf("expected prone condition to be removed, but conditions still contain prone: %s", string(updatedConditions))
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirmWithMode_CrawlEmoji(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: 30,
+			}, nil
+		},
+		updateTurnActions: func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: arg.MovementRemainingFt,
+			}, nil
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirmWithMode(interaction, turnID, combatantID, 3, 0, 20, "crawl", 0)
+	content := sess.lastResponse.Data.Content
+	// Should use bug emoji \U0001f41b, not whale \U0001f40b
+	if strings.Contains(content, "\U0001f40b") {
+		t.Errorf("crawl message uses whale emoji instead of bug emoji: %s", content)
+	}
+	if !strings.Contains(content, "\U0001f41b") {
+		t.Errorf("expected bug emoji in crawl message, got: %s", content)
 	}
 }
 

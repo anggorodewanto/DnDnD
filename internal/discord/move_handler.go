@@ -19,6 +19,7 @@ type MoveService interface {
 	GetCombatant(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 	ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
 	UpdateCombatantPosition(ctx context.Context, id uuid.UUID, col string, row, altitude int32) (refdata.Combatant, error)
+	UpdateCombatantConditions(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
 }
 
 // MoveMapProvider retrieves map data for pathfinding.
@@ -578,6 +579,19 @@ func (h *MoveHandler) HandleMoveConfirmWithMode(interaction *discordgo.Interacti
 
 	if mode == "stand_and_move" {
 		updatedTurn.HasStoodThisTurn = true
+
+		// Remove prone condition from combatant
+		combatant, getErr := h.combatService.GetCombatant(ctx, combatantID)
+		if getErr == nil {
+			newConds, removeErr := combat.RemoveCondition(combatant.Conditions, "prone")
+			if removeErr == nil {
+				_, _ = h.combatService.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+					ID:              combatantID,
+					Conditions:      newConds,
+					ExhaustionLevel: combatant.ExhaustionLevel,
+				})
+			}
+		}
 	}
 
 	_, err = h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updatedTurn))
@@ -604,7 +618,7 @@ func (h *MoveHandler) HandleMoveConfirmWithMode(interaction *discordgo.Interacti
 	if mode == "stand_and_move" {
 		msg = fmt.Sprintf("\U0001f3c3 Stood up and moved to %s%d. %s", destLabel, destRow+1, remaining)
 	} else {
-		msg = fmt.Sprintf("\U0001f40b Crawled to %s%d. %s", destLabel, destRow+1, remaining)
+		msg = fmt.Sprintf("\U0001f41b Crawled to %s%d. %s", destLabel, destRow+1, remaining)
 	}
 
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{

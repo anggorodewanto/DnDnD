@@ -361,6 +361,113 @@ func TestCommandRouter_FlyConfirmInvalidData(t *testing.T) {
 	}
 }
 
+func TestCommandRouter_ProneStandButtonRoutes(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	mock := newTestMock()
+	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		sess.InteractionRespond(interaction, resp)
+		return nil
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	router := NewCommandRouter(bot, nil)
+	router.SetMoveHandler(handler)
+
+	customID := "prone_stand:" + turnID.String() + ":" + combatantID.String() + ":3:0:30"
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: customID,
+		},
+	}
+
+	router.Handle(interaction)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response from prone_stand handler")
+	}
+	// Should get a move confirmation (Stand & move) or an error — not silence
+	content := sess.lastResponse.Data.Content
+	if content == "" {
+		t.Fatal("expected non-empty response content")
+	}
+}
+
+func TestCommandRouter_ProneCrawlButtonRoutes(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	mock := newTestMock()
+	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		sess.InteractionRespond(interaction, resp)
+		return nil
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	router := NewCommandRouter(bot, nil)
+	router.SetMoveHandler(handler)
+
+	customID := "prone_crawl:" + turnID.String() + ":" + combatantID.String() + ":3:0:30"
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: customID,
+		},
+	}
+
+	router.Handle(interaction)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response from prone_crawl handler")
+	}
+	content := sess.lastResponse.Data.Content
+	if content == "" {
+		t.Fatal("expected non-empty response content")
+	}
+}
+
+func TestCommandRouter_MoveConfirmWithModeRoutes(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	mock := newTestMock()
+	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		sess.InteractionRespond(interaction, resp)
+		return nil
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	router := NewCommandRouter(bot, nil)
+	router.SetMoveHandler(handler)
+
+	// Extended format: move_confirm:<turnID>:<combatantID>:<col>:<row>:<cost>:<mode>:<standCost>
+	confirmID := "move_confirm:" + turnID.String() + ":" + combatantID.String() + ":3:0:10:stand_and_move:15"
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: confirmID,
+		},
+	}
+
+	router.Handle(interaction)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response from move confirm with mode handler")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Stood up") {
+		t.Errorf("expected stand and move confirmation, got: %s", content)
+	}
+}
+
 func TestCommandRouter_StubResponseIncludesCommandName(t *testing.T) {
 	mock := newTestMock()
 	var respondedContent string
