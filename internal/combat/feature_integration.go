@@ -201,11 +201,7 @@ func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeatu
 	for _, f := range features {
 		switch f.MechanicalEffect {
 		case "sneak_attack":
-			level := rogueLevel
-			if level < 1 {
-				level = 1
-			}
-			defs = append(defs, SneakAttackFeature(level))
+			defs = append(defs, SneakAttackFeature(max(rogueLevel, 1)))
 		case "evasion":
 			defs = append(defs, EvasionFeature())
 		case "uncanny_dodge":
@@ -249,16 +245,17 @@ type AttackEffectInput struct {
 
 // BuildAttackEffectContext builds an EffectContext from attack parameters.
 func BuildAttackEffectContext(input AttackEffectInput) EffectContext {
+	isRanged := IsRangedWeapon(input.Weapon)
+
 	attackType := "melee"
-	if IsRangedWeapon(input.Weapon) {
+	if isRanged {
 		attackType = "ranged"
 	}
 
-	// Determine the primary weapon property for simple condition matching
 	weaponProperty := ""
 	if HasProperty(input.Weapon, "finesse") {
 		weaponProperty = "finesse"
-	} else if IsRangedWeapon(input.Weapon) {
+	} else if isRanged {
 		weaponProperty = "ranged"
 	}
 

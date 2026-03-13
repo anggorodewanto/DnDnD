@@ -168,6 +168,22 @@ type EffectContext struct {
 	UsesRemaining      map[string]int
 }
 
+// matchesAnyProperty returns true if any required property matches the context's
+// WeaponProperty or is found in the context's WeaponProperties list.
+func matchesAnyProperty(required []string, ctx EffectContext) bool {
+	for _, p := range required {
+		if p == ctx.WeaponProperty {
+			return true
+		}
+		for _, wp := range ctx.WeaponProperties {
+			if p == wp {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // EvaluateConditions checks whether an effect's conditions are satisfied
 // by the current context. Returns true if all conditions pass.
 func EvaluateConditions(e Effect, ctx EffectContext) bool {
@@ -189,26 +205,8 @@ func EvaluateConditions(e Effect, ctx EffectContext) bool {
 		return false
 	}
 	// WeaponProperties: OR match — weapon must have at least one of the listed properties
-	if len(c.WeaponProperties) > 0 {
-		matched := false
-		for _, p := range c.WeaponProperties {
-			if p == ctx.WeaponProperty {
-				matched = true
-				break
-			}
-			for _, wp := range ctx.WeaponProperties {
-				if p == wp {
-					matched = true
-					break
-				}
-			}
-			if matched {
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
+	if len(c.WeaponProperties) > 0 && !matchesAnyProperty(c.WeaponProperties, ctx) {
+		return false
 	}
 	if c.TargetCondition != "" && c.TargetCondition != ctx.TargetCondition {
 		return false

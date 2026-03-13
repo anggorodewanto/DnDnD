@@ -248,7 +248,7 @@
   - Depends on: Phase 7, Phase 39
   - Done when: Unit tests verify each effect type, trigger point matching, condition filtering, priority ordering, single-pass processing with multiple simultaneous effects.
 
-- [ ] **Phase 45: Feature Effect System — Class Feature Integration**
+- [x] **Phase 45: Feature Effect System — Class Feature Integration**
   - Scope: Wire Feature Effect System declarations from `classes.features_by_level` and `characters.features` into the combat engine. Sneak Attack (auto-detect finesse/ranged + advantage or ally within 5ft, once per turn, level-scaled dice). Evasion (Rogue 7+: DEX save success = no damage, fail = half). Uncanny Dodge (reaction: halve damage from visible attack). Archery fighting style (+2 ranged). Defense fighting style (+1 AC in armor). Dueling (+2 damage one-handed). Great Weapon Fighting (reroll 1s and 2s on damage). Pack Tactics (creature feature, advantage when ally within 5ft).
   - Depends on: Phase 44, Phase 34
   - Done when: Integration tests verify Sneak Attack auto-detection and damage, Evasion half/zero damage, Uncanny Dodge halving, all fighting styles, Pack Tactics.
