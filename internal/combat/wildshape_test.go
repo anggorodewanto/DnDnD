@@ -149,6 +149,13 @@ func TestFormatWildShapeActivation(t *testing.T) {
 	assert.Contains(t, got, "HP: 11")
 	assert.Contains(t, got, "AC: 13")
 	assert.Contains(t, got, "40ft")
+	assert.Contains(t, got, "Attacks: Bite")
+}
+
+func TestFormatWildShapeActivation_NoAttacks(t *testing.T) {
+	got := FormatWildShapeActivation("Elara", "Wolf", 1, 11, 13, 40, "")
+	assert.Contains(t, got, "Wild Shapes into a Wolf")
+	assert.NotContains(t, got, "Attacks:")
 }
 
 func TestFormatWildShapeRevert(t *testing.T) {
@@ -157,10 +164,14 @@ func TestFormatWildShapeRevert(t *testing.T) {
 }
 
 func TestFormatWildShapeAutoRevert(t *testing.T) {
-	got := FormatWildShapeAutoRevert("Elara", 5, 23, 28)
+	got := FormatWildShapeAutoRevert("Elara", "wolf", 5, 23, 28)
 	assert.Contains(t, got, "wolf form drops to 0 HP")
 	assert.Contains(t, got, "5 overflow damage")
 	assert.Contains(t, got, "23/28 HP")
+
+	// Different beast name
+	got = FormatWildShapeAutoRevert("Elara", "brown bear", 3, 20, 28)
+	assert.Contains(t, got, "brown bear form drops to 0 HP")
 }
 
 func TestRevertWildShape_NotWildShaped(t *testing.T) {
@@ -216,6 +227,11 @@ func TestCreatureHasFlySpeed(t *testing.T) {
 	assert.False(t, CreatureHasFlySpeed(nil))
 }
 
+func TestCreatureHasSpeed_InvalidJSON(t *testing.T) {
+	assert.False(t, CreatureHasSwimSpeed([]byte(`invalid`)))
+	assert.False(t, CreatureHasFlySpeed([]byte(`invalid`)))
+}
+
 func TestCanWildShapeSpellcast(t *testing.T) {
 	assert.False(t, CanWildShapeSpellcast(17))
 	assert.True(t, CanWildShapeSpellcast(18))
@@ -235,6 +251,8 @@ func TestParseCR(t *testing.T) {
 		{"2", 2},
 		{"3", 3},
 		{"10", 10},
+		{"1/0", 0},  // zero denominator edge case
+		{"abc", 0},  // non-numeric string
 	}
 	for _, tt := range tests {
 		t.Run(tt.cr, func(t *testing.T) {
@@ -543,6 +561,7 @@ func TestDruidLevel(t *testing.T) {
 		{"multiclass", json.RawMessage(`[{"class":"Druid","level":3},{"class":"Cleric","level":2}]`), 3},
 		{"empty", json.RawMessage(`[]`), 0},
 		{"nil", nil, 0},
+		{"invalid json", json.RawMessage(`invalid`), 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -774,6 +793,36 @@ func TestService_ActivateWildShape_UpdateTurnError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestService_ActivateWildShape_InvalidAbilityScores(t *testing.T) {
+	charID := uuid.New()
+	store := defaultMockStore()
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		char := makeDruidCharacter(charID, 4, 2)
+		char.AbilityScores = json.RawMessage(`invalid`) // will fail snapshot
+		return char, nil
+	}
+	store.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return makeWolfBeast(), nil
+	}
+	store.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID}, nil
+	}
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: true}, nil
+	}
+	svc := NewService(store)
+	_, err := svc.ActivateWildShape(context.Background(), WildShapeCommand{
+		Combatant: refdata.Combatant{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			HpMax:       28, HpCurrent: 28, Ac: 16,
+		},
+		Turn:      refdata.Turn{ID: uuid.New()},
+		BeastName: "wolf",
+	})
+	assert.ErrorContains(t, err, "creating snapshot")
+}
+
 func TestService_ActivateWildShape_GetCharacterError(t *testing.T) {
 	store := defaultMockStore()
 	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -786,6 +835,26 @@ func TestService_ActivateWildShape_GetCharacterError(t *testing.T) {
 		BeastName: "wolf",
 	})
 	assert.Error(t, err)
+}
+
+func TestService_RevertWildShape_InvalidSnapshot(t *testing.T) {
+	store := defaultMockStore()
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: true}, nil
+	}
+	svc := NewService(store)
+	_, err := svc.RevertWildShapeService(context.Background(), RevertWildShapeCommand{
+		Combatant: refdata.Combatant{
+			ID:           uuid.New(),
+			IsWildShaped: true,
+			WildShapeOriginal: pqtype.NullRawMessage{
+				RawMessage: json.RawMessage(`invalid`),
+				Valid:      true,
+			},
+		},
+		Turn: refdata.Turn{ID: uuid.New()},
+	})
+	assert.ErrorContains(t, err, "parsing wild shape snapshot")
 }
 
 func TestService_RevertWildShape_BonusActionSpent(t *testing.T) {

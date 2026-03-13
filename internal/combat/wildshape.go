@@ -163,9 +163,9 @@ func FormatWildShapeRevert(name string) string {
 }
 
 // FormatWildShapeAutoRevert returns the combat log for auto-revert when beast HP reaches 0.
-func FormatWildShapeAutoRevert(name string, overflowDmg, hpCurrent, hpMax int32) string {
-	return fmt.Sprintf("\U0001f43a  %s's wolf form drops to 0 HP! Reverts to Druid form (%d overflow damage \u2192 %d/%d HP)",
-		name, overflowDmg, hpCurrent, hpMax)
+func FormatWildShapeAutoRevert(name, beastName string, overflowDmg, hpCurrent, hpMax int32) string {
+	return fmt.Sprintf("\U0001f43a  %s's %s form drops to 0 HP! Reverts to Druid form (%d overflow damage \u2192 %d/%d HP)",
+		name, beastName, overflowDmg, hpCurrent, hpMax)
 }
 
 // AutoRevertWildShape handles auto-revert when beast form HP reaches 0.
