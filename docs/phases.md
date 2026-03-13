@@ -258,7 +258,7 @@
   - Depends on: Phase 44, Phase 28
   - Done when: Integration tests verify rage activation, damage bonus, resistance, duration tracking, auto-end conditions, spellcasting block, armor restriction.
 
-- [ ] **Phase 47: Wild Shape (Druid)**
+- [x] **Phase 47: Wild Shape (Druid)**
   - Scope: `/bonus wild-shape [beast]`: validate beast exists in `creatures` table with `type='beast'`, CR limit by Druid level (base and Moon), swim/fly speed level restrictions. Stat swap: snapshot original, overwrite HP/AC/STR/DEX/CON/speed/attacks from beast. Retained: INT/WIS/CHA, proficiencies, features. Spellcasting blocked (except Beast Spells 18+). Concentration maintained. HP in beast form, overflow damage on revert. `/bonus revert`: voluntary revert. Auto-revert at 0 HP. Token change. Combat log output.
   - Depends on: Phase 6, Phase 44, Phase 28
   - Done when: Integration tests verify transformation, stat swap, CR validation, HP overflow, auto-revert, spellcasting block, concentration maintenance.

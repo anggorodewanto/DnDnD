@@ -60,13 +60,13 @@ func SnapshotCombatantState(c refdata.Combatant, speedFt int32, abilityScores js
 
 // ApplyBeastFormToCombatant overwrites the combatant's stats with the beast's stats.
 // Sets IsWildShaped to true and records the beast reference.
-func ApplyBeastFormToCombatant(c refdata.Combatant, beast refdata.Creature) (refdata.Combatant, error) {
+func ApplyBeastFormToCombatant(c refdata.Combatant, beast refdata.Creature) refdata.Combatant {
 	c.HpMax = beast.HpAverage
 	c.HpCurrent = beast.HpAverage
 	c.Ac = beast.Ac
 	c.IsWildShaped = true
 	c.WildShapeCreatureRef = sql.NullString{String: beast.ID, Valid: true}
-	return c, nil
+	return c
 }
 
 // RevertWildShape restores the combatant from the wild shape snapshot.
@@ -207,21 +207,8 @@ func HasDruidClass(classesJSON json.RawMessage) bool {
 }
 
 // isCircleOfMoon checks if the character has the Circle of the Moon subclass.
-// For now, this checks the character's features for a "circle_of_the_moon" mechanical_effect.
 func isCircleOfMoon(features pqtype.NullRawMessage) bool {
-	if !features.Valid || len(features.RawMessage) == 0 {
-		return false
-	}
-	var feats []CharacterFeature
-	if err := json.Unmarshal(features.RawMessage, &feats); err != nil {
-		return false
-	}
-	for _, f := range feats {
-		if f.MechanicalEffect == "circle_of_the_moon" {
-			return true
-		}
-	}
-	return false
+	return hasFeatureEffect(features, "circle_of_the_moon")
 }
 
 // parseWildShapeUses extracts wild shape uses from character feature_uses JSON.
@@ -336,10 +323,7 @@ func (s *Service) ActivateWildShape(ctx context.Context, cmd WildShapeCommand) (
 	}
 
 	// Apply beast form to combatant
-	transformed, err := ApplyBeastFormToCombatant(cmd.Combatant, beast)
-	if err != nil {
-		return WildShapeResult{}, fmt.Errorf("applying beast form: %w", err)
-	}
+	transformed := ApplyBeastFormToCombatant(cmd.Combatant, beast)
 	transformed.WildShapeOriginal = pqtype.NullRawMessage{RawMessage: snapshot, Valid: true}
 
 	// Persist wild shape state

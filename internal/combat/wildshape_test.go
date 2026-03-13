@@ -79,8 +79,7 @@ func TestApplyBeastFormToCombatant(t *testing.T) {
 		AbilityScores: json.RawMessage(`{"str":12,"dex":15,"con":12,"int":3,"wis":12,"cha":6}`),
 	}
 
-	result, err := ApplyBeastFormToCombatant(c, beast)
-	require.NoError(t, err)
+	result := ApplyBeastFormToCombatant(c, beast)
 	assert.Equal(t, int32(11), result.HpMax)
 	assert.Equal(t, int32(11), result.HpCurrent)
 	assert.Equal(t, int32(13), result.Ac)
