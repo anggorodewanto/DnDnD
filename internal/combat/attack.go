@@ -72,13 +72,24 @@ func UnarmedStrike() refdata.Weapon {
 
 // abilityModForWeapon returns the appropriate ability modifier for a weapon.
 // Finesse weapons use the higher of STR/DEX; ranged weapons use DEX; melee uses STR.
-func abilityModForWeapon(scores AbilityScores, weapon refdata.Weapon) int {
+// Monk weapons (when monkLevel > 0) use the higher of STR/DEX like finesse.
+func abilityModForWeapon(scores AbilityScores, weapon refdata.Weapon, monkLevel ...int) int {
 	strMod := AbilityModifier(scores.Str)
 	dexMod := AbilityModifier(scores.Dex)
 
 	if HasProperty(weapon, "finesse") {
 		return max(strMod, dexMod)
 	}
+
+	// Monk martial arts: use higher of STR/DEX for monk weapons
+	ml := 0
+	if len(monkLevel) > 0 {
+		ml = monkLevel[0]
+	}
+	if ml > 0 && IsMonkWeapon(weapon) {
+		return max(strMod, dexMod)
+	}
+
 	if IsRangedWeapon(weapon) {
 		return dexMod
 	}
@@ -86,13 +97,13 @@ func abilityModForWeapon(scores AbilityScores, weapon refdata.Weapon) int {
 }
 
 // AttackModifier returns the total attack modifier: ability mod + proficiency bonus.
-func AttackModifier(scores AbilityScores, weapon refdata.Weapon, profBonus int) int {
-	return abilityModForWeapon(scores, weapon) + profBonus
+func AttackModifier(scores AbilityScores, weapon refdata.Weapon, profBonus int, monkLevel ...int) int {
+	return abilityModForWeapon(scores, weapon, monkLevel...) + profBonus
 }
 
 // DamageModifier returns the ability modifier added to damage rolls.
-func DamageModifier(scores AbilityScores, weapon refdata.Weapon) int {
-	return abilityModForWeapon(scores, weapon)
+func DamageModifier(scores AbilityScores, weapon refdata.Weapon, monkLevel ...int) int {
+	return abilityModForWeapon(scores, weapon, monkLevel...)
 }
 
 // MaxRange returns the maximum range of a weapon in feet.
@@ -311,6 +322,7 @@ type AttackInput struct {
 	GWM                 bool // Great Weapon Master: -5 hit, +10 damage (heavy melee)
 	Sharpshooter        bool // Sharpshooter: -5 hit, +10 damage (ranged)
 	Reckless            bool // Reckless Attack: advantage on melee STR attacks (Barbarian)
+	MonkLevel           int  // Monk level (0 = not a monk)
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -422,8 +434,8 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		return AttackResult{}, fmt.Errorf("Reckless Attack requires a STR-based attack (finesse weapon using DEX)")
 	}
 
-	atkMod := AttackModifier(input.Scores, input.Weapon, profBonus)
-	dmgMod := DamageModifier(input.Scores, input.Weapon)
+	atkMod := AttackModifier(input.Scores, input.Weapon, profBonus, input.MonkLevel)
+	dmgMod := DamageModifier(input.Scores, input.Weapon, input.MonkLevel)
 	if input.OverrideDmgMod != nil {
 		dmgMod = *input.OverrideDmgMod
 	}
@@ -478,7 +490,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		result.CriticalHit = true
 		result.AutoCrit = true
 		result.AutoCritReason = input.AutoCritReason
-		dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, true, input.TwoHanded, roller)
+		dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, true, input.TwoHanded, roller, input.MonkLevel)
 		result.DamageTotal = dmg + gwmSharpshooterBonus
 		result.DamageDice = damageDice
 		result.DamageRoll = dmgRoll
@@ -507,7 +519,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 
 	// Roll damage
-	dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, result.CriticalHit, input.TwoHanded, roller)
+	dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, result.CriticalHit, input.TwoHanded, roller, input.MonkLevel)
 	result.DamageTotal = dmg + gwmSharpshooterBonus
 	result.DamageDice = damageDice
 	result.DamageRoll = dmgRoll
@@ -528,7 +540,27 @@ func resolveInLongRange(input AttackInput) bool {
 }
 
 // resolveWeaponDamage handles damage calculation for both normal weapons and unarmed strikes.
-func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, twoHanded bool, roller *dice.Roller) (int, string, *dice.RollResult) {
+// monkLevel is optional: if > 0, monk martial arts die is used for monk weapons/unarmed strikes.
+func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, twoHanded bool, roller *dice.Roller, monkLevel ...int) (int, string, *dice.RollResult) {
+	ml := 0
+	if len(monkLevel) > 0 {
+		ml = monkLevel[0]
+	}
+
+	// Monk unarmed strike: use martial arts die instead of flat damage
+	if weapon.ID == "unarmed-strike" && ml > 0 {
+		maDie := MartialArtsDie(ml)
+		expr := appendModifier(maDie, dmgMod)
+		rollResult, err := roller.RollDamage(expr, critical)
+		if err != nil {
+			return 0, expr, nil
+		}
+		if critical {
+			return rollResult.Total, appendModifier(fmt.Sprintf("2d%d", MartialArtsDieSides(ml)), dmgMod), &rollResult
+		}
+		return rollResult.Total, expr, &rollResult
+	}
+
 	if weapon.ID == "unarmed-strike" {
 		base := 1
 		if critical {
@@ -536,6 +568,14 @@ func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, twoHa
 		}
 		total := max(base+dmgMod, 0)
 		return total, fmt.Sprintf("%d", total), nil
+	}
+
+	// Monk weapon: upgrade damage die if martial arts die is higher
+	if ml > 0 && IsMonkWeapon(weapon) {
+		upgraded := MonkDamageExpression(weapon, ml)
+		if upgraded != weapon.Damage {
+			weapon.Damage = upgraded
+		}
 	}
 
 	useVersatile := twoHanded && weapon.VersatileDamage.Valid && weapon.VersatileDamage.String != ""
@@ -764,6 +804,11 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	input.GWM = cmd.GWM
 	input.Sharpshooter = cmd.Sharpshooter
 	input.Reckless = cmd.Reckless
+
+	// Monk martial arts: set monk level for DEX/STR auto-select and die upgrade
+	if char != nil {
+		input.MonkLevel = monkLevelFromJSON(char.Classes)
+	}
 
 	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
 }

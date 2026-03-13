@@ -198,10 +198,13 @@ func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeatu
 
 	rogueLevel := classLevel(classes, "Rogue")
 	barbarianLevel := classLevel(classes, "Barbarian")
+	monkLevel := classLevel(classes, "Monk")
 	// Druid level is checked in the service method for Wild Shape, not here.
 
 	for _, f := range features {
-		switch f.MechanicalEffect {
+		// Handle comma-separated mechanical effects (e.g., "martial_arts_d4,bonus_action_unarmed_strike")
+		for _, effect := range splitMechanicalEffects(f.MechanicalEffect) {
+		switch effect {
 		case "rage":
 			defs = append(defs, RageFeature(max(barbarianLevel, 1)))
 		case "sneak_attack":
@@ -223,10 +226,34 @@ func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeatu
 		case "wild_shape":
 			// Wild Shape is an activation command, not a passive combat effect.
 			// No FeatureDefinition needed here; handled by ActivateWildShape service method.
+
+		// Monk features
+		case "martial_arts_d4":
+			// Martial arts is a passive feature handled at attack resolution time.
+			// No FeatureDefinition needed — the monk level is checked in ResolveAttack.
+		case "bonus_action_unarmed_strike":
+			// Handled by MartialArtsBonusAttack service method, not a passive feature.
+		case "speed_plus_10":
+			defs = append(defs, UnarmoredMovementFeature(max(monkLevel, 2)))
+		}
 		}
 	}
 
 	return defs
+}
+
+// splitMechanicalEffects splits a comma-separated mechanical_effect string into
+// individual effect IDs. Single effects are returned as-is.
+func splitMechanicalEffects(effect string) []string {
+	parts := strings.Split(effect, ",")
+	var result []string
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 // classLevel returns the level for the given class name, or 0 if not found.
