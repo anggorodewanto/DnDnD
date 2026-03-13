@@ -298,7 +298,7 @@
   - Depends on: Phase 44, Phase 28
   - Done when: Integration tests verify surge grants action, extra attack sequence, double-surge prevention, recharge on short rest.
 
-- [ ] **Phase 54: Standard Actions — Dash, Disengage, Dodge, Help, Hide, Stand, Drop Prone, Escape**
+- [x] **Phase 54: Standard Actions — Dash, Disengage, Dodge, Help, Hide, Stand, Drop Prone, Escape**
   - Scope: `/action dash` (add speed to remaining movement). `/action disengage` (suppress OA). `/action dodge` (disadv on attacks against, adv on DEX saves, 1-round condition). `/action help [ally] [target]` (grant advantage, adjacency check). `/action hide` (Stealth vs passive Perception, set is_visible). `/action stand` (half movement cost, remove prone). `/action drop-prone` (no cost, apply prone). `/action escape` (contested check vs grappler, remove grappled). Rogue Cunning Action: `/bonus cunning-action dash` and `/bonus cunning-action disengage` (costs bonus action instead of action, Rogue class validation). All standard actions cost action except stand/drop-prone.
   - Depends on: Phase 28, Phase 40, Phase 18
   - Done when: Integration tests verify each standard action's resource cost, mechanical effect, and combat log output. Rogue cunning-action dash and disengage verified as bonus actions with class check.
