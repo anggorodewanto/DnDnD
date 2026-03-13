@@ -31,6 +31,7 @@ type mockStore struct {
 	updateCombatantHPFn           func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error)
 	updateCombatantConditionsFn   func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
 	updateCombatantPositionFn     func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error)
+	updateCombatantDeathSavesFn   func(ctx context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error)
 	deleteCombatantFn             func(ctx context.Context, id uuid.UUID) error
 	createTurnFn                  func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error)
 	getTurnFn                     func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
@@ -90,6 +91,9 @@ func (m *mockStore) UpdateCombatantConditions(ctx context.Context, arg refdata.U
 }
 func (m *mockStore) UpdateCombatantPosition(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
 	return m.updateCombatantPositionFn(ctx, arg)
+}
+func (m *mockStore) UpdateCombatantDeathSaves(ctx context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error) {
+	return m.updateCombatantDeathSavesFn(ctx, arg)
 }
 func (m *mockStore) DeleteCombatant(ctx context.Context, id uuid.UUID) error {
 	return m.deleteCombatantFn(ctx, id)
@@ -205,6 +209,9 @@ func defaultMockStore() *mockStore {
 		},
 		updateCombatantPositionFn: func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
 			return refdata.Combatant{ID: arg.ID, PositionCol: arg.PositionCol, PositionRow: arg.PositionRow, Conditions: json.RawMessage(`[]`)}, nil
+		},
+		updateCombatantDeathSavesFn: func(ctx context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: arg.ID, DeathSaves: arg.DeathSaves, Conditions: json.RawMessage(`[]`)}, nil
 		},
 		deleteCombatantFn: func(ctx context.Context, id uuid.UUID) error { return nil },
 		createTurnFn: func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
