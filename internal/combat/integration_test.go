@@ -695,6 +695,18 @@ func (a *testStoreAdapter) UpdateCharacterInventory(ctx context.Context, id uuid
 	return nil // stub for tests
 }
 
+func (a *testStoreAdapter) UpdateCombatantRage(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error) {
+	return a.Queries.UpdateCombatantRage(ctx, arg)
+}
+
+func (a *testStoreAdapter) GetArmor(ctx context.Context, id string) (refdata.Armor, error) {
+	return a.Queries.GetArmor(ctx, id)
+}
+
+func (a *testStoreAdapter) UpdateCharacterFeatureUses(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+	return a.Queries.UpdateCharacterFeatureUses(ctx, arg)
+}
+
 func TestIntegration_ConditionAutoExpiration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

@@ -51,6 +51,9 @@ type mockStore struct {
 	updateTurnActionsFn               func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
 	getWeaponFn                       func(ctx context.Context, id string) (refdata.Weapon, error)
 	updateCharacterInventoryFn        func(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error
+	updateCombatantRageFn             func(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error)
+	getArmorFn                        func(ctx context.Context, id string) (refdata.Armor, error)
+	updateCharacterFeatureUsesFn      func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -151,6 +154,15 @@ func (m *mockStore) GetWeapon(ctx context.Context, id string) (refdata.Weapon, e
 }
 func (m *mockStore) UpdateCharacterInventory(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error {
 	return m.updateCharacterInventoryFn(ctx, id, inventory)
+}
+func (m *mockStore) UpdateCombatantRage(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error) {
+	return m.updateCombatantRageFn(ctx, arg)
+}
+func (m *mockStore) GetArmor(ctx context.Context, id string) (refdata.Armor, error) {
+	return m.getArmorFn(ctx, id)
+}
+func (m *mockStore) UpdateCharacterFeatureUses(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+	return m.updateCharacterFeatureUsesFn(ctx, arg)
 }
 
 func defaultMockStore() *mockStore {
@@ -267,6 +279,22 @@ func defaultMockStore() *mockStore {
 		},
 		updateCharacterInventoryFn: func(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error {
 			return nil
+		},
+		updateCombatantRageFn: func(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:                      arg.ID,
+				IsRaging:                arg.IsRaging,
+				RageRoundsRemaining:     arg.RageRoundsRemaining,
+				RageAttackedThisRound:   arg.RageAttackedThisRound,
+				RageTookDamageThisRound: arg.RageTookDamageThisRound,
+				Conditions:              json.RawMessage(`[]`),
+			}, nil
+		},
+		getArmorFn: func(ctx context.Context, id string) (refdata.Armor, error) {
+			return refdata.Armor{}, sql.ErrNoRows
+		},
+		updateCharacterFeatureUsesFn: func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+			return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
 		},
 	}
 }

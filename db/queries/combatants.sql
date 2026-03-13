@@ -43,5 +43,14 @@ WHERE id = $1 RETURNING *;
 UPDATE combatants SET death_saves = $2, updated_at = now()
 WHERE id = $1 RETURNING *;
 
+-- name: UpdateCombatantRage :one
+UPDATE combatants SET
+    is_raging = $2,
+    rage_rounds_remaining = $3,
+    rage_attacked_this_round = $4,
+    rage_took_damage_this_round = $5,
+    updated_at = now()
+WHERE id = $1 RETURNING *;
+
 -- name: DeleteCombatant :exec
 DELETE FROM combatants WHERE id = $1;

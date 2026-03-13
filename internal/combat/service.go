@@ -44,6 +44,7 @@ type Store interface {
 	UpdateCombatantConditions(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
 	UpdateCombatantPosition(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error)
 	UpdateCombatantDeathSaves(ctx context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error)
+	UpdateCombatantRage(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error)
 	DeleteCombatant(ctx context.Context, id uuid.UUID) error
 
 	// Turns
@@ -71,10 +72,14 @@ type Store interface {
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	GetClass(ctx context.Context, id string) (refdata.Class, error)
 	GetWeapon(ctx context.Context, id string) (refdata.Weapon, error)
+	GetArmor(ctx context.Context, id string) (refdata.Armor, error)
 	ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
 
 	// Character inventory
 	UpdateCharacterInventory(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error
+
+	// Character feature uses
+	UpdateCharacterFeatureUses(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
 }
 
 // Service manages combat encounters and their entities.

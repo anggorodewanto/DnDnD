@@ -197,9 +197,12 @@ func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeatu
 	var defs []FeatureDefinition
 
 	rogueLevel := classLevel(classes, "Rogue")
+	barbarianLevel := classLevel(classes, "Barbarian")
 
 	for _, f := range features {
 		switch f.MechanicalEffect {
+		case "rage":
+			defs = append(defs, RageFeature(max(barbarianLevel, 1)))
 		case "sneak_attack":
 			defs = append(defs, SneakAttackFeature(max(rogueLevel, 1)))
 		case "evasion":
@@ -240,6 +243,7 @@ type AttackEffectInput struct {
 	WearingArmor       bool
 	OneHandedMeleeOnly bool
 	IsRaging           bool
+	AbilityUsed        string
 	UsedThisTurn       map[string]bool
 }
 
@@ -268,6 +272,7 @@ func BuildAttackEffectContext(input AttackEffectInput) EffectContext {
 		WearingArmor:       input.WearingArmor,
 		OneHandedMeleeOnly: input.OneHandedMeleeOnly,
 		IsRaging:           input.IsRaging,
+		AbilityUsed:        input.AbilityUsed,
 		UsedThisTurn:       input.UsedThisTurn,
 	}
 }

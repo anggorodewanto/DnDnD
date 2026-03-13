@@ -55,6 +55,11 @@ UPDATE characters SET
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateCharacterFeatureUses :one
+UPDATE characters SET feature_uses = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteCharacter :exec
 DELETE FROM characters WHERE id = $1;
 

@@ -504,3 +504,66 @@ func (q *Queries) UpdateCombatantPosition(ctx context.Context, arg UpdateCombata
 	)
 	return i, err
 }
+
+const updateCombatantRage = `-- name: UpdateCombatantRage :one
+UPDATE combatants SET
+    is_raging = $2,
+    rage_rounds_remaining = $3,
+    rage_attacked_this_round = $4,
+    rage_took_damage_this_round = $5,
+    updated_at = now()
+WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at
+`
+
+type UpdateCombatantRageParams struct {
+	ID                      uuid.UUID     `json:"id"`
+	IsRaging                bool          `json:"is_raging"`
+	RageRoundsRemaining     sql.NullInt32 `json:"rage_rounds_remaining"`
+	RageAttackedThisRound   bool          `json:"rage_attacked_this_round"`
+	RageTookDamageThisRound bool          `json:"rage_took_damage_this_round"`
+}
+
+func (q *Queries) UpdateCombatantRage(ctx context.Context, arg UpdateCombatantRageParams) (Combatant, error) {
+	row := q.db.QueryRowContext(ctx, updateCombatantRage,
+		arg.ID,
+		arg.IsRaging,
+		arg.RageRoundsRemaining,
+		arg.RageAttackedThisRound,
+		arg.RageTookDamageThisRound,
+	)
+	var i Combatant
+	err := row.Scan(
+		&i.ID,
+		&i.EncounterID,
+		&i.CharacterID,
+		&i.CreatureRefID,
+		&i.ShortID,
+		&i.DisplayName,
+		&i.InitiativeRoll,
+		&i.InitiativeOrder,
+		&i.PositionCol,
+		&i.PositionRow,
+		&i.AltitudeFt,
+		&i.HpMax,
+		&i.HpCurrent,
+		&i.TempHp,
+		&i.Ac,
+		&i.Conditions,
+		&i.ExhaustionLevel,
+		&i.DeathSaves,
+		&i.IsVisible,
+		&i.IsAlive,
+		&i.IsNpc,
+		&i.IsRaging,
+		&i.RageRoundsRemaining,
+		&i.RageAttackedThisRound,
+		&i.RageTookDamageThisRound,
+		&i.IsWildShaped,
+		&i.WildShapeCreatureRef,
+		&i.WildShapeOriginal,
+		&i.SummonerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
