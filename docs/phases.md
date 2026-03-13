@@ -308,7 +308,7 @@
   - Depends on: Phase 30, Phase 34, Phase 54
   - Done when: Integration tests verify OA trigger detection, disengage suppression, prompt delivery, reaction consumption, reach weapon interaction, forfeiture.
 
-- [ ] **Phase 56: Grapple, Shove & Dragging**
+- [x] **Phase 56: Grapple, Shove & Dragging**
   - Scope: `/action grapple [target]`: requires free hand, target no more than 1 size larger. Contested Athletics vs Athletics/Acrobatics. On success: grappled condition, speed 0. `/shove [target] --prone/--push`: contested check, knock prone or push 5ft. Push destination validation (unoccupied tile). Size restriction. Dragging: when grappler uses `/move`, detect grappled targets, prompt "Drag" vs "Release & Move". Drag: movement costs double (half speed), all grappled creatures move to grappler's destination. Release: remove grapple condition, move at normal speed. Multiple grappled creatures do not further multiply cost (always x2). Combat log output.
   - Depends on: Phase 54, Phase 40
   - Done when: Integration tests verify grapple (free hand, size, contested check, condition), shove (prone/push, destination check), dragging (prompt, x2 cost, release option, multiple targets), combat log.

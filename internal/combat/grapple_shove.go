@@ -84,12 +84,7 @@ func (s *Service) Grapple(ctx context.Context, cmd GrappleCommand, roller *dice.
 	if err != nil {
 		return GrappleResult{}, err
 	}
-	// Target uses higher of STR or DEX
-	targetStrMod, err := s.getAbilityMod(ctx, cmd.Target, "str")
-	if err != nil {
-		return GrappleResult{}, err
-	}
-	targetDexMod, err := s.getAbilityMod(ctx, cmd.Target, "dex")
+	targetDef, err := s.resolveTargetDefense(ctx, cmd.Target)
 	if err != nil {
 		return GrappleResult{}, err
 	}
@@ -105,14 +100,7 @@ func (s *Service) Grapple(ctx context.Context, cmd GrappleCommand, roller *dice.
 	if err != nil {
 		return GrappleResult{}, fmt.Errorf("rolling grapple check: %w", err)
 	}
-	// Target picks higher: Athletics (STR) or Acrobatics (DEX)
-	targetMod := targetStrMod
-	targetSkill := "Athletics"
-	if targetDexMod > targetStrMod {
-		targetMod = targetDexMod
-		targetSkill = "Acrobatics"
-	}
-	targetRoll, err := roller.RollD20(targetMod, dice.Normal)
+	targetRoll, err := roller.RollD20(targetDef.Mod, dice.Normal)
 	if err != nil {
 		return GrappleResult{}, fmt.Errorf("rolling target check: %w", err)
 	}
@@ -147,10 +135,10 @@ func (s *Service) Grapple(ctx context.Context, cmd GrappleCommand, roller *dice.
 	var log string
 	if success {
 		log = fmt.Sprintf("\U0001f93c  %s grapples %s — \U0001f3b2 Athletics: %d vs %s: %d — Grappled!",
-			cmd.Grappler.DisplayName, cmd.Target.DisplayName, grapplerRoll.Total, targetSkill, targetRoll.Total)
+			cmd.Grappler.DisplayName, cmd.Target.DisplayName, grapplerRoll.Total, targetDef.Skill, targetRoll.Total)
 	} else {
 		log = fmt.Sprintf("\U0001f93c  %s attempts to grapple %s — \U0001f3b2 Athletics: %d vs %s: %d — Failed",
-			cmd.Grappler.DisplayName, cmd.Target.DisplayName, grapplerRoll.Total, targetSkill, targetRoll.Total)
+			cmd.Grappler.DisplayName, cmd.Target.DisplayName, grapplerRoll.Total, targetDef.Skill, targetRoll.Total)
 	}
 
 	return GrappleResult{
@@ -227,19 +215,19 @@ func (s *Service) Shove(ctx context.Context, cmd ShoveCommand, roller *dice.Roll
 			cmd.Shover.PositionCol, int(cmd.Shover.PositionRow),
 			cmd.Target.PositionCol, int(cmd.Target.PositionRow),
 		)
-		pushLabel = colIntToLabel(pushCol) + fmt.Sprintf("%d", pushRow)
+		pushColLabel := colIntToLabel(pushCol)
+		pushLabel = fmt.Sprintf("%s%d", pushColLabel, pushRow)
 
 		// Check occupancy
 		combatants, err := s.store.ListCombatantsByEncounterID(ctx, cmd.Encounter.ID)
 		if err != nil {
 			return ShoveResult{}, fmt.Errorf("listing combatants: %w", err)
 		}
-		pushLabelCol := colIntToLabel(pushCol)
 		for _, c := range combatants {
 			if c.ID == cmd.Target.ID || !c.IsAlive {
 				continue
 			}
-			if c.PositionCol == pushLabelCol && int(c.PositionRow) == pushRow {
+			if c.PositionCol == pushColLabel && int(c.PositionRow) == pushRow {
 				return ShoveResult{}, fmt.Errorf("push destination %s is occupied by %s", pushLabel, c.DisplayName)
 			}
 		}
@@ -250,11 +238,7 @@ func (s *Service) Shove(ctx context.Context, cmd ShoveCommand, roller *dice.Roll
 	if err != nil {
 		return ShoveResult{}, err
 	}
-	targetStrMod, err := s.getAbilityMod(ctx, cmd.Target, "str")
-	if err != nil {
-		return ShoveResult{}, err
-	}
-	targetDexMod, err := s.getAbilityMod(ctx, cmd.Target, "dex")
+	targetDef, err := s.resolveTargetDefense(ctx, cmd.Target)
 	if err != nil {
 		return ShoveResult{}, err
 	}
@@ -270,13 +254,7 @@ func (s *Service) Shove(ctx context.Context, cmd ShoveCommand, roller *dice.Roll
 	if err != nil {
 		return ShoveResult{}, fmt.Errorf("rolling shove check: %w", err)
 	}
-	targetMod := targetStrMod
-	targetSkill := "Athletics"
-	if targetDexMod > targetStrMod {
-		targetMod = targetDexMod
-		targetSkill = "Acrobatics"
-	}
-	targetRoll, err := roller.RollD20(targetMod, dice.Normal)
+	targetRoll, err := roller.RollD20(targetDef.Mod, dice.Normal)
 	if err != nil {
 		return ShoveResult{}, fmt.Errorf("rolling target check: %w", err)
 	}
@@ -327,14 +305,14 @@ func (s *Service) Shove(ctx context.Context, cmd ShoveCommand, roller *dice.Roll
 		switch cmd.Mode {
 		case ShoveProne:
 			log = fmt.Sprintf("\U0001f4cc  %s shoves %s (%s) — \U0001f3b2 Athletics: %d vs %s: %d — Knocked prone!",
-				cmd.Shover.DisplayName, cmd.Target.DisplayName, modeStr, shoverRoll.Total, targetSkill, targetRoll.Total)
+				cmd.Shover.DisplayName, cmd.Target.DisplayName, modeStr, shoverRoll.Total, targetDef.Skill, targetRoll.Total)
 		case ShovePush:
 			log = fmt.Sprintf("\U0001f4cc  %s shoves %s (%s) — \U0001f3b2 Athletics: %d vs %s: %d — Pushed to %s",
-				cmd.Shover.DisplayName, cmd.Target.DisplayName, modeStr, shoverRoll.Total, targetSkill, targetRoll.Total, pushLabel)
+				cmd.Shover.DisplayName, cmd.Target.DisplayName, modeStr, shoverRoll.Total, targetDef.Skill, targetRoll.Total, pushLabel)
 		}
 	} else {
 		log = fmt.Sprintf("\U0001f4cc  %s attempts to shove %s (%s) — \U0001f3b2 Athletics: %d vs %s: %d — Failed",
-			cmd.Shover.DisplayName, cmd.Target.DisplayName, modeStr, shoverRoll.Total, targetSkill, targetRoll.Total)
+			cmd.Shover.DisplayName, cmd.Target.DisplayName, modeStr, shoverRoll.Total, targetDef.Skill, targetRoll.Total)
 	}
 
 	return ShoveResult{
@@ -432,6 +410,28 @@ func (s *Service) ReleaseDrag(ctx context.Context, mover refdata.Combatant, targ
 }
 
 // --- Helpers ---
+
+// targetDefenseResult holds the best defensive skill for a contested check target.
+type targetDefenseResult struct {
+	Mod   int
+	Skill string // "Athletics" or "Acrobatics"
+}
+
+// resolveTargetDefense returns the higher of the target's Athletics (STR) or Acrobatics (DEX).
+func (s *Service) resolveTargetDefense(ctx context.Context, target refdata.Combatant) (targetDefenseResult, error) {
+	strMod, err := s.getAbilityMod(ctx, target, "str")
+	if err != nil {
+		return targetDefenseResult{}, err
+	}
+	dexMod, err := s.getAbilityMod(ctx, target, "dex")
+	if err != nil {
+		return targetDefenseResult{}, err
+	}
+	if dexMod > strMod {
+		return targetDefenseResult{Mod: dexMod, Skill: "Acrobatics"}, nil
+	}
+	return targetDefenseResult{Mod: strMod, Skill: "Athletics"}, nil
+}
 
 // checkFreeHand validates that a combatant has a free hand for grappling.
 // NPCs are assumed to have a free hand.
