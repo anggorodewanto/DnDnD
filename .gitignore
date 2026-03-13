@@ -1,4 +1,7 @@
 bin/
-coverage.out
+*.out
 *.exe
 node_modules/
+dndnd
+code-review-*.md
+dashboard/svelte/coverage/

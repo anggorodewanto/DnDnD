@@ -223,18 +223,35 @@ VERDICT: ISSUES
 
 Record the reviewer's output as **REVIEW_RESULT**.
 
-## 1c. Collect Questions and Ask User
+## 1c. Collect Questions and Signal User Input Needed
 
 After each agent returns, check for a "Questions for User" section in
 IMPL_RESULT and REVIEW_RESULT. Collect all questions from both.
 
 If there are any questions:
 
-1. **Pause the loop.** Do NOT proceed to the next iteration.
-2. Present the questions to the user using `AskUserQuestion`. Group
-   related questions together. Provide context about which spec section
-   triggered the question.
-3. Wait for user answers.
+1. **Stop the loop immediately.** Do NOT proceed to the next iteration.
+2. Output the questions using this **exact format** (the header is required
+   for automation tooling to detect that user input is needed):
+
+   ```
+   ## USER_INPUT_REQUIRED
+
+   **Phase {PHASE_NUMBER} — Questions before continuing:**
+
+   ### From Implementer
+   - (questions from IMPL_RESULT, if any)
+
+   ### From Reviewer
+   - (questions from REVIEW_RESULT, if any)
+
+   (cite the relevant spec section for each question)
+   ```
+
+3. After outputting the marker, use `AskUserQuestion` to present the
+   questions and wait for user answers. If `AskUserQuestion` is not
+   available (e.g., non-interactive mode), simply stop — the automation
+   script will resume the session interactively.
 4. Add the user's answers to **PHASE_CONTEXT** as a new section called
    "User Clarifications" so both agents see them in all future iterations.
 5. Then proceed to the decision below.
