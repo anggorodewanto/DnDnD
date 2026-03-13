@@ -52,6 +52,7 @@ type mockStore struct {
 	getWeaponFn                       func(ctx context.Context, id string) (refdata.Weapon, error)
 	updateCharacterInventoryFn        func(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error
 	updateCombatantRageFn             func(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error)
+	updateCombatantWildShapeFn        func(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error)
 	getArmorFn                        func(ctx context.Context, id string) (refdata.Armor, error)
 	updateCharacterFeatureUsesFn      func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
 }
@@ -157,6 +158,9 @@ func (m *mockStore) UpdateCharacterInventory(ctx context.Context, id uuid.UUID, 
 }
 func (m *mockStore) UpdateCombatantRage(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error) {
 	return m.updateCombatantRageFn(ctx, arg)
+}
+func (m *mockStore) UpdateCombatantWildShape(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error) {
+	return m.updateCombatantWildShapeFn(ctx, arg)
 }
 func (m *mockStore) GetArmor(ctx context.Context, id string) (refdata.Armor, error) {
 	return m.getArmorFn(ctx, id)
@@ -288,6 +292,18 @@ func defaultMockStore() *mockStore {
 				RageAttackedThisRound:   arg.RageAttackedThisRound,
 				RageTookDamageThisRound: arg.RageTookDamageThisRound,
 				Conditions:              json.RawMessage(`[]`),
+			}, nil
+		},
+		updateCombatantWildShapeFn: func(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:                   arg.ID,
+				IsWildShaped:         arg.IsWildShaped,
+				WildShapeCreatureRef: arg.WildShapeCreatureRef,
+				WildShapeOriginal:    arg.WildShapeOriginal,
+				HpMax:                arg.HpMax,
+				HpCurrent:            arg.HpCurrent,
+				Ac:                   arg.Ac,
+				Conditions:           json.RawMessage(`[]`),
 			}, nil
 		},
 		getArmorFn: func(ctx context.Context, id string) (refdata.Armor, error) {

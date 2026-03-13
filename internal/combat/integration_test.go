@@ -699,6 +699,10 @@ func (a *testStoreAdapter) UpdateCombatantRage(ctx context.Context, arg refdata.
 	return a.Queries.UpdateCombatantRage(ctx, arg)
 }
 
+func (a *testStoreAdapter) UpdateCombatantWildShape(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error) {
+	return a.Queries.UpdateCombatantWildShape(ctx, arg)
+}
+
 func (a *testStoreAdapter) GetArmor(ctx context.Context, id string) (refdata.Armor, error) {
 	return a.Queries.GetArmor(ctx, id)
 }

@@ -198,6 +198,7 @@ func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeatu
 
 	rogueLevel := classLevel(classes, "Rogue")
 	barbarianLevel := classLevel(classes, "Barbarian")
+	// Druid level is checked in the service method for Wild Shape, not here.
 
 	for _, f := range features {
 		switch f.MechanicalEffect {
@@ -219,6 +220,9 @@ func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeatu
 			defs = append(defs, GreatWeaponFightingFeature())
 		case "pack_tactics":
 			defs = append(defs, PackTacticsFeature())
+		case "wild_shape":
+			// Wild Shape is an activation command, not a passive combat effect.
+			// No FeatureDefinition needed here; handled by ActivateWildShape service method.
 		}
 	}
 

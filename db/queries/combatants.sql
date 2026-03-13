@@ -52,5 +52,16 @@ UPDATE combatants SET
     updated_at = now()
 WHERE id = $1 RETURNING *;
 
+-- name: UpdateCombatantWildShape :one
+UPDATE combatants SET
+    is_wild_shaped = $2,
+    wild_shape_creature_ref = $3,
+    wild_shape_original = $4,
+    hp_max = $5,
+    hp_current = $6,
+    ac = $7,
+    updated_at = now()
+WHERE id = $1 RETURNING *;
+
 -- name: DeleteCombatant :exec
 DELETE FROM combatants WHERE id = $1;
