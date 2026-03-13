@@ -74,18 +74,22 @@ func (tp TriggerPoint) IsValid() bool {
 
 // EffectConditions holds the filters that must be true for an effect to apply.
 type EffectConditions struct {
-	WhenRaging        bool   `json:"when_raging,omitempty"`
-	WhenConcentrating bool   `json:"when_concentrating,omitempty"`
-	WeaponProperty    string `json:"weapon_property,omitempty"`
-	AttackType        string `json:"attack_type,omitempty"`
-	AbilityUsed       string `json:"ability_used,omitempty"`
-	TargetCondition   string `json:"target_condition,omitempty"`
-	AllyWithin        int    `json:"ally_within,omitempty"`
-	UsesRemaining     bool   `json:"uses_remaining,omitempty"`
-	OncePerTurn       bool   `json:"once_per_turn,omitempty"`
-	HasAdvantage      bool   `json:"has_advantage,omitempty"`
-	AuraRadius        int    `json:"aura_radius,omitempty"`
-	Target            string `json:"target,omitempty"`
+	WhenRaging             bool     `json:"when_raging,omitempty"`
+	WhenConcentrating      bool     `json:"when_concentrating,omitempty"`
+	WeaponProperty         string   `json:"weapon_property,omitempty"`
+	WeaponProperties       []string `json:"weapon_properties,omitempty"`
+	AttackType             string   `json:"attack_type,omitempty"`
+	AbilityUsed            string   `json:"ability_used,omitempty"`
+	TargetCondition        string   `json:"target_condition,omitempty"`
+	AllyWithin             int      `json:"ally_within,omitempty"`
+	UsesRemaining          bool     `json:"uses_remaining,omitempty"`
+	OncePerTurn            bool     `json:"once_per_turn,omitempty"`
+	HasAdvantage           bool     `json:"has_advantage,omitempty"`
+	AdvantageOrAllyWithin  int      `json:"advantage_or_ally_within,omitempty"`
+	WearingArmor           bool     `json:"wearing_armor,omitempty"`
+	OneHandedMeleeOnly     bool     `json:"one_handed_melee_only,omitempty"`
+	AuraRadius             int      `json:"aura_radius,omitempty"`
+	Target                 string   `json:"target,omitempty"`
 }
 
 // Effect represents a single mechanical effect declared by a feature.
@@ -149,16 +153,19 @@ func EffectPriority(et EffectType) ResolutionPriority {
 
 // EffectContext provides the current combat state for condition filtering.
 type EffectContext struct {
-	IsRaging        bool
-	IsConcentrating bool
-	WeaponProperty  string
-	AttackType      string
-	AbilityUsed     string
-	TargetCondition string
-	AllyWithinFt    int
-	HasAdvantage    bool
-	UsedThisTurn    map[string]bool
-	UsesRemaining   map[string]int
+	IsRaging           bool
+	IsConcentrating    bool
+	WeaponProperty     string
+	WeaponProperties   []string
+	AttackType         string
+	AbilityUsed        string
+	TargetCondition    string
+	AllyWithinFt       int
+	HasAdvantage       bool
+	WearingArmor       bool
+	OneHandedMeleeOnly bool
+	UsedThisTurn       map[string]bool
+	UsesRemaining      map[string]int
 }
 
 // EvaluateConditions checks whether an effect's conditions are satisfied
@@ -181,6 +188,28 @@ func EvaluateConditions(e Effect, ctx EffectContext) bool {
 	if c.WeaponProperty != "" && c.WeaponProperty != ctx.WeaponProperty {
 		return false
 	}
+	// WeaponProperties: OR match — weapon must have at least one of the listed properties
+	if len(c.WeaponProperties) > 0 {
+		matched := false
+		for _, p := range c.WeaponProperties {
+			if p == ctx.WeaponProperty {
+				matched = true
+				break
+			}
+			for _, wp := range ctx.WeaponProperties {
+				if p == wp {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
 	if c.TargetCondition != "" && c.TargetCondition != ctx.TargetCondition {
 		return false
 	}
@@ -188,6 +217,18 @@ func EvaluateConditions(e Effect, ctx EffectContext) bool {
 		return false
 	}
 	if c.HasAdvantage && !ctx.HasAdvantage {
+		return false
+	}
+	// AdvantageOrAllyWithin: OR condition — advantage or ally within N ft
+	if c.AdvantageOrAllyWithin > 0 {
+		if !ctx.HasAdvantage && ctx.AllyWithinFt > c.AdvantageOrAllyWithin {
+			return false
+		}
+	}
+	if c.WearingArmor && !ctx.WearingArmor {
+		return false
+	}
+	if c.OneHandedMeleeOnly && !ctx.OneHandedMeleeOnly {
 		return false
 	}
 	if c.OncePerTurn && ctx.UsedThisTurn != nil && ctx.UsedThisTurn[string(e.Type)] {
