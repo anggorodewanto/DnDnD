@@ -2,8 +2,10 @@ package combat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -315,8 +317,14 @@ func (s *Service) Hide(ctx context.Context, cmd HideCommand, roller *dice.Roller
 		return HideResult{}, err
 	}
 
-	// Get DEX modifier for stealth
-	dexMod, err := s.getAbilityMod(ctx, cmd.Combatant, "dex")
+	return s.resolveHide(ctx, cmd, roller)
+}
+
+// resolveHide performs the core hide logic (stealth check vs passive perception).
+// Extracted so it can be reused by both Hide (action) and CunningAction hide (bonus action).
+func (s *Service) resolveHide(ctx context.Context, cmd HideCommand, roller *dice.Roller) (HideResult, error) {
+	// Determine stealth modifier and roll mode
+	stealthMod, rollMode, err := s.stealthModAndMode(ctx, cmd.Combatant)
 	if err != nil {
 		return HideResult{}, err
 	}
@@ -327,14 +335,15 @@ func (s *Service) Hide(ctx context.Context, cmd HideCommand, roller *dice.Roller
 	}
 
 	// Roll stealth
-	stealthResult, err := roller.RollD20(dexMod, dice.Normal)
+	stealthResult, err := roller.RollD20(stealthMod, rollMode)
 	if err != nil {
 		return HideResult{}, fmt.Errorf("rolling stealth: %w", err)
 	}
 	stealthTotal := stealthResult.Total
 
-	// Calculate highest passive Perception among hostiles
+	// Calculate highest passive Perception among hostiles, track who spotted
 	highestPP := 0
+	var spottedBy string
 	for _, h := range cmd.Hostiles {
 		pp, err := s.passivePerception(ctx, h)
 		if err != nil {
@@ -342,6 +351,7 @@ func (s *Service) Hide(ctx context.Context, cmd HideCommand, roller *dice.Roller
 		}
 		if pp > highestPP {
 			highestPP = pp
+			spottedBy = h.DisplayName
 		}
 	}
 
@@ -357,11 +367,11 @@ func (s *Service) Hide(ctx context.Context, cmd HideCommand, roller *dice.Roller
 
 	var log string
 	if success {
-		log = fmt.Sprintf("\U0001f575\ufe0f %s hides successfully! (Stealth %d vs Perception %d)",
-			cmd.Combatant.DisplayName, stealthTotal, highestPP)
+		log = fmt.Sprintf("\U0001f648 %s attempts to Hide — \U0001f3b2 Stealth: %d — Hidden from all hostiles",
+			cmd.Combatant.DisplayName, stealthTotal)
 	} else {
-		log = fmt.Sprintf("\U0001f575\ufe0f %s fails to hide (Stealth %d vs Perception %d)",
-			cmd.Combatant.DisplayName, stealthTotal, highestPP)
+		log = fmt.Sprintf("\U0001f648 %s attempts to Hide — \U0001f3b2 Stealth: %d — Failed (spotted by %s)",
+			cmd.Combatant.DisplayName, stealthTotal, spottedBy)
 	}
 
 	return HideResult{
@@ -372,6 +382,58 @@ func (s *Service) Hide(ctx context.Context, cmd HideCommand, roller *dice.Roller
 		StealthRoll:       stealthTotal,
 		HighestPerception: highestPP,
 	}, nil
+}
+
+// stealthModAndMode calculates the stealth modifier and roll mode for a combatant.
+// For characters: uses full skill modifier and checks for armor stealth disadvantage.
+// For creatures: uses pre-calculated stealth skill if available, else DEX mod.
+func (s *Service) stealthModAndMode(ctx context.Context, combatant refdata.Combatant) (int, dice.RollMode, error) {
+	if combatant.CharacterID.Valid {
+		char, err := s.store.GetCharacter(ctx, combatant.CharacterID.UUID)
+		if err != nil {
+			return 0, dice.Normal, fmt.Errorf("getting character for ability: %w", err)
+		}
+		scores, err := ParseAbilityScores(char.AbilityScores)
+		if err != nil {
+			return 0, dice.Normal, fmt.Errorf("parsing ability scores: %w", err)
+		}
+		profSkills, expertiseSkills, jackOfAllTrades := parseProficiencies(char.Proficiencies.RawMessage)
+		charScores := character.AbilityScores{
+			STR: scores.Str, DEX: scores.Dex, CON: scores.Con,
+			INT: scores.Int, WIS: scores.Wis, CHA: scores.Cha,
+		}
+		mod := character.SkillModifier(charScores, "stealth", profSkills, expertiseSkills, jackOfAllTrades, int(char.ProficiencyBonus))
+
+		// Check armor stealth disadvantage
+		rollMode := dice.Normal
+		if char.EquippedArmor.Valid && char.EquippedArmor.String != "" {
+			armor, err := s.store.GetArmor(ctx, char.EquippedArmor.String)
+			if err == nil && armor.StealthDisadv.Valid && armor.StealthDisadv.Bool {
+				// Check for Medium Armor Master feat negating stealth disadvantage
+				if !hasFeatureEffect(char.Features, "no_stealth_disadvantage_medium_armor") || armor.ArmorType != "medium" {
+					rollMode = dice.Disadvantage
+				}
+			}
+		}
+		return mod, rollMode, nil
+	}
+
+	if combatant.CreatureRefID.Valid && combatant.CreatureRefID.String != "" {
+		creature, err := s.store.GetCreature(ctx, combatant.CreatureRefID.String)
+		if err != nil {
+			return 0, dice.Normal, fmt.Errorf("getting creature for ability: %w", err)
+		}
+		if mod, ok := creatureSkillMod(creature.Skills.RawMessage, "stealth"); ok {
+			return mod, dice.Normal, nil
+		}
+		scores, err := ParseAbilityScores(creature.AbilityScores)
+		if err != nil {
+			return 0, dice.Normal, fmt.Errorf("parsing creature ability scores: %w", err)
+		}
+		return AbilityModifier(scores.Dex), dice.Normal, nil
+	}
+
+	return 0, dice.Normal, nil
 }
 
 // getAbilityMod returns an ability modifier for a combatant.
@@ -421,13 +483,75 @@ func abilityModFromScores(scores AbilityScores, ability string) int {
 	}
 }
 
-// passivePerception returns 10 + WIS modifier for a combatant.
+// passivePerception returns 10 + Perception modifier (including proficiency) for a combatant.
 func (s *Service) passivePerception(ctx context.Context, combatant refdata.Combatant) (int, error) {
-	wisMod, err := s.getAbilityMod(ctx, combatant, "wis")
-	if err != nil {
-		return 0, err
+	// Character: use full skill modifier (proficiency, expertise, jack of all trades)
+	if combatant.CharacterID.Valid {
+		char, err := s.store.GetCharacter(ctx, combatant.CharacterID.UUID)
+		if err != nil {
+			return 0, fmt.Errorf("getting character for perception: %w", err)
+		}
+		scores, err := ParseAbilityScores(char.AbilityScores)
+		if err != nil {
+			return 0, fmt.Errorf("parsing ability scores: %w", err)
+		}
+		profSkills, expertiseSkills, jackOfAllTrades := parseProficiencies(char.Proficiencies.RawMessage)
+		charScores := character.AbilityScores{
+			STR: scores.Str, DEX: scores.Dex, CON: scores.Con,
+			INT: scores.Int, WIS: scores.Wis, CHA: scores.Cha,
+		}
+		mod := character.SkillModifier(charScores, "perception", profSkills, expertiseSkills, jackOfAllTrades, int(char.ProficiencyBonus))
+		return 10 + mod, nil
 	}
-	return 10 + wisMod, nil
+
+	// Creature: use pre-calculated skill value if available, else fallback to WIS mod
+	if combatant.CreatureRefID.Valid && combatant.CreatureRefID.String != "" {
+		creature, err := s.store.GetCreature(ctx, combatant.CreatureRefID.String)
+		if err != nil {
+			return 0, fmt.Errorf("getting creature for ability: %w", err)
+		}
+		if mod, ok := creatureSkillMod(creature.Skills.RawMessage, "perception"); ok {
+			return 10 + mod, nil
+		}
+		scores, err := ParseAbilityScores(creature.AbilityScores)
+		if err != nil {
+			return 0, fmt.Errorf("parsing creature ability scores: %w", err)
+		}
+		return 10 + AbilityModifier(scores.Wis), nil
+	}
+
+	// Fallback: no character or creature data
+	return 10, nil
+}
+
+// parseProficiencies extracts skill proficiency data from the proficiencies JSON column.
+func parseProficiencies(raw json.RawMessage) (skills []string, expertise []string, jackOfAllTrades bool) {
+	if len(raw) == 0 {
+		return nil, nil, false
+	}
+	var data struct {
+		Skills          []string `json:"skills"`
+		Expertise       []string `json:"expertise"`
+		JackOfAllTrades bool     `json:"jack_of_all_trades"`
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, nil, false
+	}
+	return data.Skills, data.Expertise, data.JackOfAllTrades
+}
+
+// creatureSkillMod reads a pre-calculated skill modifier from a creature's Skills JSON.
+// Returns the modifier and true if found, or 0 and false if not present.
+func creatureSkillMod(skills []byte, skill string) (int, bool) {
+	if len(skills) == 0 {
+		return 0, false
+	}
+	var m map[string]int
+	if err := json.Unmarshal(skills, &m); err != nil {
+		return 0, false
+	}
+	v, ok := m[skill]
+	return v, ok
 }
 
 // =====================
@@ -670,24 +794,26 @@ type CunningActionCommand struct {
 	Combatant refdata.Combatant
 	Turn      refdata.Turn
 	Encounter refdata.Encounter
-	Action    string // "dash" or "disengage"
+	Action    string // "dash", "disengage", or "hide"
+	Hostiles  []refdata.Combatant // only for hide
 }
 
 // CunningActionResult holds the outputs of a Cunning Action.
 type CunningActionResult struct {
 	Turn          refdata.Turn
 	CombatLog     string
-	AddedMovement int32 // only for dash
+	AddedMovement int32       // only for dash
+	HideResult    *HideResult // only for hide
 }
 
-// CunningAction handles /bonus cunning-action dash|disengage.
+// CunningAction handles /bonus cunning-action dash|disengage|hide.
 // Costs a bonus action instead of an action. Requires Rogue level 2+.
-func (s *Service) CunningAction(ctx context.Context, cmd CunningActionCommand) (CunningActionResult, error) {
+func (s *Service) CunningAction(ctx context.Context, cmd CunningActionCommand, roller ...*dice.Roller) (CunningActionResult, error) {
 	if ok, reason := CanActRaw(cmd.Combatant.Conditions); !ok {
 		return CunningActionResult{}, fmt.Errorf("%s", reason)
 	}
-	if cmd.Action != "dash" && cmd.Action != "disengage" {
-		return CunningActionResult{}, fmt.Errorf("cunning action must be 'dash' or 'disengage', got %q", cmd.Action)
+	if cmd.Action != "dash" && cmd.Action != "disengage" && cmd.Action != "hide" {
+		return CunningActionResult{}, fmt.Errorf("cunning action must be 'dash', 'disengage', or 'hide', got %q", cmd.Action)
 	}
 	if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
 		return CunningActionResult{}, err
@@ -705,6 +831,87 @@ func (s *Service) CunningAction(ctx context.Context, cmd CunningActionCommand) (
 	rogueLevel := ClassLevelFromJSON(char.Classes, "Rogue")
 	if rogueLevel < 2 {
 		return CunningActionResult{}, fmt.Errorf("Cunning Action requires Rogue level 2+")
+	}
+
+	// For hide, delegate to resolveHide using the bonus action resource
+	if cmd.Action == "hide" {
+		if len(roller) == 0 {
+			return CunningActionResult{}, fmt.Errorf("roller required for hide")
+		}
+		// Build a HideCommand that uses the bonus action
+		hideCmd := HideCommand{
+			Combatant: cmd.Combatant,
+			Turn:      cmd.Turn,
+			Encounter: cmd.Encounter,
+			Hostiles:  cmd.Hostiles,
+		}
+		// Override: use bonus action instead of action
+		hideCmd.Turn.ActionUsed = true // pretend action is used so resolveHide uses the provided turn
+		// Actually, resolveHide calls UseResource(ResourceAction), so we need to handle this differently.
+		// We'll use bonus action directly and call resolveHide's core logic.
+		updatedTurn, err := UseResource(cmd.Turn, ResourceBonusAction)
+		if err != nil {
+			return CunningActionResult{}, err
+		}
+
+		// Stealth mod and mode
+		stealthMod, rollMode, err := s.stealthModAndMode(ctx, cmd.Combatant)
+		if err != nil {
+			return CunningActionResult{}, err
+		}
+
+		stealthResult, err := roller[0].RollD20(stealthMod, rollMode)
+		if err != nil {
+			return CunningActionResult{}, fmt.Errorf("rolling stealth: %w", err)
+		}
+		stealthTotal := stealthResult.Total
+
+		highestPP := 0
+		var spottedBy string
+		for _, h := range cmd.Hostiles {
+			pp, err := s.passivePerception(ctx, h)
+			if err != nil {
+				return CunningActionResult{}, err
+			}
+			if pp > highestPP {
+				highestPP = pp
+				spottedBy = h.DisplayName
+			}
+		}
+
+		success := stealthTotal >= highestPP
+		updatedCombatant := cmd.Combatant
+		if success {
+			updatedCombatant.IsVisible = false
+		}
+
+		if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
+			return CunningActionResult{}, fmt.Errorf("updating turn actions: %w", err)
+		}
+
+		var log string
+		if success {
+			log = fmt.Sprintf("\u26a1 %s uses Cunning Action: Hide — \U0001f3b2 Stealth: %d — Hidden from all hostiles",
+				cmd.Combatant.DisplayName, stealthTotal)
+		} else {
+			log = fmt.Sprintf("\u26a1 %s uses Cunning Action: Hide — \U0001f3b2 Stealth: %d — Failed (spotted by %s)",
+				cmd.Combatant.DisplayName, stealthTotal, spottedBy)
+		}
+
+		hr := HideResult{
+			Turn:              updatedTurn,
+			Combatant:         updatedCombatant,
+			CombatLog:         log,
+			Success:           success,
+			StealthRoll:       stealthTotal,
+			HighestPerception: highestPP,
+		}
+
+		return CunningActionResult{
+			Turn:       updatedTurn,
+			CombatLog:  log,
+			HideResult: &hr,
+		}, nil
 	}
 
 	updatedTurn, err := UseResource(cmd.Turn, ResourceBonusAction)

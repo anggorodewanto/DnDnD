@@ -591,8 +591,8 @@ func TestServiceAttack_Reckless_BarbarianClass_OK(t *testing.T) {
 	})
 
 	result, err := svc.Attack(ctx, AttackCommand{
-		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Grog", PositionCol: "A", PositionRow: 1, IsAlive: true, Conditions: json.RawMessage(`[]`)},
-		Target:   refdata.Combatant{ID: targetID, DisplayName: "Ogre", PositionCol: "B", PositionRow: 1, Ac: 15, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Grog", PositionCol: "A", PositionRow: 1, IsAlive: true, IsVisible: true, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Ogre", PositionCol: "B", PositionRow: 1, Ac: 15, IsAlive: true, IsVisible: true, Conditions: json.RawMessage(`[]`)},
 		Turn:     refdata.Turn{ID: turnID, CombatantID: attackerID, AttacksRemaining: 2},
 		Reckless: true,
 	}, roller)

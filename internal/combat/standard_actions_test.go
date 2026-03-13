@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -131,6 +132,18 @@ func setupUpdateTurnActions(ms *mockStore) {
 }
 
 func deterministic(n int) int { return n - 1 } // always returns max on 1-indexed die
+
+// profJSON builds a proficiencies JSON for testing.
+func profJSON(skills []string, expertise []string, jackOfAllTrades bool) pqtype.NullRawMessage {
+	type profData struct {
+		Skills          []string `json:"skills"`
+		Expertise       []string `json:"expertise"`
+		JackOfAllTrades bool     `json:"jack_of_all_trades"`
+	}
+	data := profData{Skills: skills, Expertise: expertise, JackOfAllTrades: jackOfAllTrades}
+	raw, _ := json.Marshal(data)
+	return pqtype.NullRawMessage{RawMessage: raw, Valid: true}
+}
 
 // =====================
 // 1. DASH
@@ -517,7 +530,7 @@ func TestHide_Success(t *testing.T) {
 	assert.True(t, result.Success)
 	assert.False(t, result.Combatant.IsVisible)
 	assert.True(t, result.Turn.ActionUsed)
-	assert.Contains(t, result.CombatLog, "hides successfully")
+	assert.Contains(t, result.CombatLog, "Hidden from all hostiles")
 }
 
 // TDD Cycle 18: Hide failure
@@ -552,7 +565,7 @@ func TestHide_Failure(t *testing.T) {
 
 	assert.False(t, result.Success)
 	assert.True(t, result.Combatant.IsVisible, "should stay visible on failure")
-	assert.Contains(t, result.CombatLog, "fails to hide")
+	assert.Contains(t, result.CombatLog, "Failed (spotted by")
 }
 
 // TDD Cycle 19: Hide action already used
@@ -1019,11 +1032,11 @@ func TestCunningAction_InvalidAction(t *testing.T) {
 	turn := makeBasicTurn()
 
 	cmd := CunningActionCommand{
-		Combatant: combatant, Turn: turn, Encounter: encounter, Action: "hide",
+		Combatant: combatant, Turn: turn, Encounter: encounter, Action: "attack",
 	}
 	_, err := svc.CunningAction(context.Background(), cmd)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must be 'dash' or 'disengage'")
+	assert.Contains(t, err.Error(), "must be 'dash', 'disengage', or 'hide'")
 }
 
 // TDD Cycle 39: Cunning Action fails for NPC
@@ -1594,4 +1607,518 @@ func TestHelp_UpdateTurnActionsError(t *testing.T) {
 	_, err := svc.Help(context.Background(), cmd)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "updating turn actions")
+}
+
+// =====================
+// Phase 57: Stealth & Hiding
+// =====================
+
+// TDD Cycle P57-1: passivePerception includes Perception proficiency bonus for characters
+func TestPassivePerception_CharacterWithPerceptionProficiency(t *testing.T) {
+	_, _, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(uuid.New(), uuid.New(), charID, "Aria")
+
+	// WIS 16 => +3, proficiency bonus 3, proficient in perception => PP = 10 + 3 + 3 = 16
+	char := makeBasicChar(charID, 30)
+	char.AbilityScores = json.RawMessage(`{"str":10,"dex":14,"con":12,"int":10,"wis":16,"cha":8}`)
+	char.ProficiencyBonus = 3
+	char.Proficiencies = profJSON([]string{"perception", "stealth"}, nil, false)
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	svc := NewService(ms)
+	pp, err := svc.passivePerception(context.Background(), combatant)
+	require.NoError(t, err)
+	assert.Equal(t, 16, pp) // 10 + WIS mod(3) + prof(3)
+}
+
+// TDD Cycle P57-2: Hide uses full Stealth skill modifier (proficiency + expertise)
+func TestHide_UsesStealthProficiency(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(combatantID, encounterID, charID, "Shadow")
+
+	// DEX 14 => +2, proficiency 3, expertise in stealth => +2 + 3*2 = +8
+	char := makeBasicChar(charID, 30)
+	char.AbilityScores = json.RawMessage(`{"str":10,"dex":14,"con":12,"int":10,"wis":10,"cha":8}`)
+	char.ProficiencyBonus = 3
+	char.Proficiencies = profJSON([]string{"stealth"}, []string{"stealth"}, false)
+
+	hostile := makeNPCCombatantWithCreature(uuid.New(), encounterID, "Goblin", "goblin")
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "goblin",
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":10,"cha":8}`), // WIS 10 => PP=10
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	encounter := makeBasicEncounter(encounterID, 1)
+	// deterministic rolls 20 => total = 20 + 8 = 28
+	roller := dice.NewRoller(deterministic)
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	cmd := HideCommand{Combatant: combatant, Turn: turn, Encounter: encounter, Hostiles: []refdata.Combatant{hostile}}
+	result, err := svc.Hide(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	assert.True(t, result.Success)
+	assert.Equal(t, 27, result.StealthRoll) // deterministic rolls 19 on d20 + 8 (DEX 2 + expertise 6)
+}
+
+// TDD Cycle P57-4: Armor with stealth_disadv causes disadvantage on stealth
+func TestHide_ArmorStealthDisadvantage(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(combatantID, encounterID, charID, "Knight")
+
+	char := makeBasicChar(charID, 30)
+	char.AbilityScores = json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":10,"cha":10}`)
+	char.ProficiencyBonus = 3
+	char.EquippedArmor = sql.NullString{String: "chain-mail", Valid: true}
+
+	hostile := makeNPCCombatant(uuid.New(), encounterID, "Guard")
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getArmorFn = func(ctx context.Context, id string) (refdata.Armor, error) {
+		return refdata.Armor{
+			ID:            "chain-mail",
+			StealthDisadv: sql.NullBool{Bool: true, Valid: true},
+			ArmorType:     "heavy",
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	encounter := makeBasicEncounter(encounterID, 1)
+	// With disadvantage: roller is called twice, picks lower
+	rollCall := 0
+	roller := dice.NewRoller(func(n int) int {
+		rollCall++
+		if rollCall == 1 {
+			return 15
+		}
+		return 5
+	})
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	cmd := HideCommand{Combatant: combatant, Turn: turn, Encounter: encounter, Hostiles: []refdata.Combatant{hostile}}
+	result, err := svc.Hide(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	// Disadvantage: takes lower roll (5), plus DEX mod 0 = 5
+	assert.Equal(t, 5, result.StealthRoll)
+}
+
+// TDD Cycle P57-5: Medium Armor Master negates stealth disadvantage for medium armor
+func TestHide_MediumArmorMaster_NegatesDisadvantage(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(combatantID, encounterID, charID, "Ranger")
+
+	char := makeBasicChar(charID, 30)
+	char.AbilityScores = json.RawMessage(`{"str":14,"dex":16,"con":12,"int":10,"wis":14,"cha":8}`)
+	char.ProficiencyBonus = 3
+	char.EquippedArmor = sql.NullString{String: "breastplate", Valid: true}
+	featJSON, _ := json.Marshal([]struct {
+		Name             string `json:"name"`
+		MechanicalEffect string `json:"mechanical_effect"`
+	}{
+		{Name: "Medium Armor Master", MechanicalEffect: "no_stealth_disadvantage_medium_armor"},
+	})
+	char.Features = pqtype.NullRawMessage{RawMessage: featJSON, Valid: true}
+
+	hostile := makeNPCCombatant(uuid.New(), encounterID, "Guard")
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getArmorFn = func(ctx context.Context, id string) (refdata.Armor, error) {
+		return refdata.Armor{
+			ID:            "breastplate",
+			StealthDisadv: sql.NullBool{Bool: true, Valid: true},
+			ArmorType:     "medium",
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	encounter := makeBasicEncounter(encounterID, 1)
+	// Normal roll (no disadvantage due to feat): rolls once, returns 15
+	roller := dice.NewRoller(func(n int) int { return 15 })
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	cmd := HideCommand{Combatant: combatant, Turn: turn, Encounter: encounter, Hostiles: []refdata.Combatant{hostile}}
+	result, err := svc.Hide(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	// Normal roll: 15 + DEX mod(3) = 18 (no disadvantage applied)
+	assert.Equal(t, 18, result.StealthRoll)
+}
+
+// TDD Cycle P57-7: CunningAction accepts "hide" for Rogue
+func TestCunningAction_Hide(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(combatantID, encounterID, charID, "Shadow")
+	char := makeRogueChar(charID, 5)
+	char.AbilityScores = json.RawMessage(`{"str":10,"dex":18,"con":12,"int":14,"wis":13,"cha":8}`) // DEX +4
+	char.Proficiencies = profJSON([]string{"stealth"}, nil, false)
+	encounter := makeBasicEncounter(encounterID, 1)
+
+	hostile := makeNPCCombatantWithCreature(uuid.New(), encounterID, "Goblin", "goblin")
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "goblin",
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`), // PP=9
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	roller := dice.NewRoller(deterministic) // rolls 19
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	cmd := CunningActionCommand{
+		Combatant: combatant,
+		Turn:      turn,
+		Encounter: encounter,
+		Action:    "hide",
+		Hostiles:  []refdata.Combatant{hostile},
+	}
+	result, err := svc.CunningAction(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	assert.True(t, result.Turn.BonusActionUsed, "should use bonus action")
+	assert.False(t, result.Turn.ActionUsed, "should NOT use action")
+	assert.NotNil(t, result.HideResult)
+	assert.True(t, result.HideResult.Success)
+	assert.False(t, result.HideResult.Combatant.IsVisible)
+	assert.Contains(t, result.CombatLog, "Cunning Action")
+	assert.Contains(t, result.CombatLog, "Hide")
+}
+
+// TDD Cycle P57-8: CunningAction hide failure (spotted)
+func TestCunningAction_Hide_Failure(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(combatantID, encounterID, charID, "Shadow")
+	char := makeRogueChar(charID, 5)
+	char.AbilityScores = json.RawMessage(`{"str":10,"dex":8,"con":12,"int":14,"wis":13,"cha":8}`) // DEX -1
+	encounter := makeBasicEncounter(encounterID, 1)
+
+	hostile := makeNPCCombatantWithCreature(uuid.New(), encounterID, "Guard", "guard")
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "guard",
+			AbilityScores: json.RawMessage(`{"str":14,"dex":12,"con":12,"int":10,"wis":16,"cha":10}`), // PP=13
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	roller := dice.NewRoller(func(n int) int { return 0 }) // rolls 0
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	cmd := CunningActionCommand{
+		Combatant: combatant, Turn: turn, Encounter: encounter, Action: "hide",
+		Hostiles: []refdata.Combatant{hostile},
+	}
+	result, err := svc.CunningAction(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	assert.NotNil(t, result.HideResult)
+	assert.False(t, result.HideResult.Success)
+	assert.Contains(t, result.CombatLog, "Failed (spotted by")
+}
+
+// TDD Cycle P57-9: Creature NPC uses pre-calculated stealth skill for hide
+func TestHide_CreatureUsesStealthSkill(t *testing.T) {
+	encounterID, _, _, ms := makeStdTestSetup()
+	npcID := uuid.New()
+	npc := makeNPCCombatantWithCreature(npcID, encounterID, "Shadow Assassin", "shadow-assassin")
+
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		if id == "shadow-assassin" {
+			return refdata.Creature{
+				ID:            "shadow-assassin",
+				AbilityScores: json.RawMessage(`{"str":10,"dex":16,"con":12,"int":10,"wis":10,"cha":8}`),
+				Skills:        pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"stealth":9}`), Valid: true},
+			}, nil
+		}
+		return refdata.Creature{
+			ID:            "guard",
+			AbilityScores: json.RawMessage(`{"str":14,"dex":12,"con":12,"int":10,"wis":10,"cha":10}`),
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	hostile := makeNPCCombatantWithCreature(uuid.New(), encounterID, "Guard", "guard")
+	encounter := makeBasicEncounter(encounterID, 1)
+	// deterministic: rolls 19. stealth mod = 9, total = 19+9=28. PP of guard = 10+0 = 10. Success.
+	roller := dice.NewRoller(deterministic)
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	cmd := HideCommand{Combatant: npc, Turn: turn, Encounter: encounter, Hostiles: []refdata.Combatant{hostile}}
+	result, err := svc.Hide(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	assert.True(t, result.Success)
+	assert.Equal(t, 28, result.StealthRoll) // 19 + stealth skill 9
+}
+
+// TDD Cycle P57-10: Visible attacker is NOT revealed (no DB call)
+func TestServiceAttack_VisibleAttackerNotRevealed(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "longsword")
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeLongsword(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	visibilityCalled := false
+	ms.updateCombatantVisibilityFn = func(ctx context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error) {
+		visibilityCalled = true
+		return refdata.Combatant{}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 6
+	})
+
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria",
+		PositionCol: "A", PositionRow: 1,
+		IsAlive: true, IsVisible: true, // visible
+		Conditions: json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin", PositionCol: "B", PositionRow: 1,
+		Ac: 13, IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{
+		ID: uuid.New(), EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1,
+	}
+
+	result, err := svc.Attack(ctx, AttackCommand{Attacker: attacker, Target: target, Turn: turn}, roller)
+	require.NoError(t, err)
+	assert.False(t, result.AttackerRevealed)
+	assert.False(t, visibilityCalled)
+}
+
+// TDD Cycle P57-11: parseProficiencies with invalid JSON returns empty
+func TestParseProficiencies_InvalidJSON(t *testing.T) {
+	skills, expertise, jat := parseProficiencies(json.RawMessage(`invalid`))
+	assert.Nil(t, skills)
+	assert.Nil(t, expertise)
+	assert.False(t, jat)
+}
+
+// TDD Cycle P57-12: parseProficiencies with nil returns empty
+func TestParseProficiencies_Nil(t *testing.T) {
+	skills, expertise, jat := parseProficiencies(nil)
+	assert.Nil(t, skills)
+	assert.Nil(t, expertise)
+	assert.False(t, jat)
+}
+
+// TDD Cycle P57-13: creatureSkillMod returns false for missing skill
+func TestCreatureSkillMod_MissingSkill(t *testing.T) {
+	data := json.RawMessage(`{"perception":5}`)
+	_, ok := creatureSkillMod(data, "stealth")
+	assert.False(t, ok)
+}
+
+// TDD Cycle P57-14: creatureSkillMod with invalid JSON returns false
+func TestCreatureSkillMod_InvalidJSON(t *testing.T) {
+	_, ok := creatureSkillMod(json.RawMessage(`invalid`), "perception")
+	assert.False(t, ok)
+}
+
+// TDD Cycle P57-15: creatureSkillMod with nil returns false
+func TestCreatureSkillMod_Nil(t *testing.T) {
+	_, ok := creatureSkillMod(nil, "perception")
+	assert.False(t, ok)
+}
+
+// TDD Cycle P57-16: stealthModAndMode error - GetCharacter fails
+func TestStealthModAndMode_GetCharacterError(t *testing.T) {
+	_, _, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(uuid.New(), uuid.New(), charID, "Test")
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	_, _, err := svc.stealthModAndMode(context.Background(), combatant)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character for ability")
+}
+
+// TDD Cycle P57-17: stealthModAndMode error - bad ability scores
+func TestStealthModAndMode_BadAbilityScores(t *testing.T) {
+	_, _, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(uuid.New(), uuid.New(), charID, "Test")
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: charID, AbilityScores: json.RawMessage(`invalid`)}, nil
+	}
+
+	svc := NewService(ms)
+	_, _, err := svc.stealthModAndMode(context.Background(), combatant)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing ability scores")
+}
+
+// TDD Cycle P57-18: stealthModAndMode creature GetCreature error
+func TestStealthModAndMode_CreatureError(t *testing.T) {
+	_, _, _, ms := makeStdTestSetup()
+	combatant := makeNPCCombatantWithCreature(uuid.New(), uuid.New(), "Test", "test-creature")
+
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{}, fmt.Errorf("creature not found")
+	}
+
+	svc := NewService(ms)
+	_, _, err := svc.stealthModAndMode(context.Background(), combatant)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "getting creature for ability")
+}
+
+// TDD Cycle P57-19: stealthModAndMode creature bad ability scores
+func TestStealthModAndMode_CreatureBadScores(t *testing.T) {
+	_, _, _, ms := makeStdTestSetup()
+	combatant := makeNPCCombatantWithCreature(uuid.New(), uuid.New(), "Test", "test-creature")
+
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "test-creature", AbilityScores: json.RawMessage(`invalid`)}, nil
+	}
+
+	svc := NewService(ms)
+	_, _, err := svc.stealthModAndMode(context.Background(), combatant)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing creature ability scores")
+}
+
+// TDD Cycle P57-20: stealthModAndMode creature without stealth skill uses DEX
+func TestStealthModAndMode_CreatureFallbackToDex(t *testing.T) {
+	_, _, _, ms := makeStdTestSetup()
+	combatant := makeNPCCombatantWithCreature(uuid.New(), uuid.New(), "Goblin", "goblin")
+
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "goblin",
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`), // DEX +2
+		}, nil
+	}
+
+	svc := NewService(ms)
+	mod, rollMode, err := svc.stealthModAndMode(context.Background(), combatant)
+	require.NoError(t, err)
+	assert.Equal(t, 2, mod) // DEX +2
+	assert.Equal(t, dice.Normal, rollMode)
+}
+
+// TDD Cycle P57-21: stealthModAndMode NPC without creature ref
+func TestStealthModAndMode_NoPCNoCreature(t *testing.T) {
+	_, _, _, ms := makeStdTestSetup()
+	combatant := makeNPCCombatant(uuid.New(), uuid.New(), "Guard") // no creature ref
+
+	svc := NewService(ms)
+	mod, rollMode, err := svc.stealthModAndMode(context.Background(), combatant)
+	require.NoError(t, err)
+	assert.Equal(t, 0, mod)
+	assert.Equal(t, dice.Normal, rollMode)
+}
+
+// TDD Cycle P57-22: passivePerception character GetCharacter error
+func TestPassivePerception_CharacterGetError(t *testing.T) {
+	_, _, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(uuid.New(), uuid.New(), charID, "Test")
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	_, err := svc.passivePerception(context.Background(), combatant)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character for perception")
+}
+
+// TDD Cycle P57-23: passivePerception character bad ability scores
+func TestPassivePerception_CharacterBadScores(t *testing.T) {
+	_, _, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(uuid.New(), uuid.New(), charID, "Test")
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: charID, AbilityScores: json.RawMessage(`invalid`)}, nil
+	}
+
+	svc := NewService(ms)
+	_, err := svc.passivePerception(context.Background(), combatant)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing ability scores")
+}
+
+// TDD Cycle P57-24: passivePerception creature bad ability scores
+func TestPassivePerception_CreatureBadScores(t *testing.T) {
+	_, _, _, ms := makeStdTestSetup()
+	combatant := makeNPCCombatantWithCreature(uuid.New(), uuid.New(), "Test", "bad")
+
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "bad", AbilityScores: json.RawMessage(`invalid`)}, nil
+	}
+
+	svc := NewService(ms)
+	_, err := svc.passivePerception(context.Background(), combatant)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing creature ability scores")
+}
+
+// TDD Cycle P57-25: passivePerception uses creature's pre-calculated perception skill
+func TestPassivePerception_CreatureWithSkills(t *testing.T) {
+	_, _, _, ms := makeStdTestSetup()
+	combatant := makeNPCCombatantWithCreature(uuid.New(), uuid.New(), "Guard", "guard")
+
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "guard",
+			AbilityScores: json.RawMessage(`{"str":14,"dex":12,"con":12,"int":10,"wis":14,"cha":10}`),
+			Skills:        pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"perception":5}`), Valid: true},
+		}, nil
+	}
+
+	svc := NewService(ms)
+	pp, err := svc.passivePerception(context.Background(), combatant)
+	require.NoError(t, err)
+	assert.Equal(t, 15, pp) // 10 + pre-calculated perception skill (5)
 }

@@ -9,15 +9,17 @@ import (
 
 // AdvantageInput holds all context needed to detect advantage/disadvantage sources.
 type AdvantageInput struct {
-	AttackerConditions []CombatCondition
-	TargetConditions   []CombatCondition
-	Weapon             refdata.Weapon
-	DistanceFt         int
+	AttackerConditions  []CombatCondition
+	TargetConditions    []CombatCondition
+	Weapon              refdata.Weapon
+	DistanceFt          int
 	HostileNearAttacker bool
-	AttackerSize       string
-	DMAdvantage        bool
-	DMDisadvantage     bool
-	Reckless           bool
+	AttackerSize        string
+	DMAdvantage         bool
+	DMDisadvantage      bool
+	Reckless            bool
+	AttackerHidden      bool
+	TargetHidden        bool
 }
 
 // DetectAdvantage examines attacker/target conditions, weapon properties, and combat
@@ -29,6 +31,14 @@ func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 	// Reckless Attack
 	if input.Reckless {
 		advReasons = append(advReasons, "Reckless Attack")
+	}
+
+	// Hidden combatants
+	if input.AttackerHidden {
+		advReasons = append(advReasons, "attacker hidden")
+	}
+	if input.TargetHidden {
+		disadvReasons = append(disadvReasons, "target hidden")
 	}
 
 	// DM overrides

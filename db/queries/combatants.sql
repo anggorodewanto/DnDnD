@@ -71,5 +71,9 @@ UPDATE combatants SET
     updated_at = now()
 WHERE id = $1 RETURNING *;
 
+-- name: UpdateCombatantVisibility :one
+UPDATE combatants SET is_visible = $2, updated_at = now()
+WHERE id = $1 RETURNING *;
+
 -- name: DeleteCombatant :exec
 DELETE FROM combatants WHERE id = $1;

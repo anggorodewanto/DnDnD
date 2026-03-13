@@ -2938,3 +2938,173 @@ func TestHasFightingStyle(t *testing.T) {
 		})
 	}
 }
+
+// Phase 57: Hidden attacker gets advantage
+func TestServiceAttack_HiddenAttackerAdvantage(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "longsword")
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeLongsword(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 6
+	})
+
+	attacker := refdata.Combatant{
+		ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria", PositionCol: "A", PositionRow: 1,
+		IsAlive: true, IsVisible: false, // hidden
+		Conditions: json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin", PositionCol: "B", PositionRow: 1,
+		Ac: 13, IsAlive: true, IsNpc: true, IsVisible: true,
+		Conditions: json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{
+		ID: uuid.New(), CombatantID: attackerID, AttacksRemaining: 1,
+	}
+
+	result, err := svc.Attack(ctx, AttackCommand{Attacker: attacker, Target: target, Turn: turn}, roller)
+	require.NoError(t, err)
+	assert.Contains(t, result.AdvantageReasons, "attacker hidden")
+}
+
+// Phase 57: Hidden target gives attacker disadvantage
+func TestServiceAttack_HiddenTargetDisadvantage(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "longsword")
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeLongsword(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 6
+	})
+
+	attacker := refdata.Combatant{
+		ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria", PositionCol: "A", PositionRow: 1,
+		IsAlive: true, IsVisible: true,
+		Conditions: json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Rogue", PositionCol: "B", PositionRow: 1,
+		Ac: 15, IsAlive: true, IsNpc: false, IsVisible: false, // hidden target
+		Conditions: json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{
+		ID: uuid.New(), CombatantID: attackerID, AttacksRemaining: 1,
+	}
+
+	result, err := svc.Attack(ctx, AttackCommand{Attacker: attacker, Target: target, Turn: turn}, roller)
+	require.NoError(t, err)
+	assert.Contains(t, result.DisadvantageReasons, "target hidden")
+}
+
+// Phase 57: Auto-reveal on attack
+func TestServiceAttack_HiddenAttackerRevealed(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(16, 14, 2, "longsword")
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeLongsword(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	var revealedID uuid.UUID
+	ms.updateCombatantVisibilityFn = func(ctx context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error) {
+		revealedID = arg.ID
+		return refdata.Combatant{ID: arg.ID, IsVisible: arg.IsVisible, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 6
+	})
+
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   false, // hidden
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		DisplayName: "Goblin #1",
+		PositionCol: "B",
+		PositionRow: 1,
+		Ac:          13,
+		IsAlive:     true,
+		IsNpc:       true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{
+		ID:               turnID,
+		EncounterID:      encounterID,
+		CombatantID:      attackerID,
+		AttacksRemaining: 1,
+	}
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.AttackerRevealed, "hidden attacker should be revealed after attacking")
+	assert.Equal(t, attackerID, revealedID, "UpdateCombatantVisibility should be called with attacker ID")
+}

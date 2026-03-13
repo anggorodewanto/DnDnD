@@ -398,8 +398,8 @@ func TestServiceAttack_AdvantageFromTargetCondition(t *testing.T) {
 	})
 
 	result, err := svc.Attack(ctx, AttackCommand{
-		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, IsAlive: true, Conditions: json.RawMessage(`[]`)},
-		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin #1", PositionCol: "B", PositionRow: 1, Ac: 13, IsAlive: true, Conditions: json.RawMessage(`[{"condition":"stunned"}]`)},
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, IsAlive: true, IsVisible: true, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin #1", PositionCol: "B", PositionRow: 1, Ac: 13, IsAlive: true, IsVisible: true, Conditions: json.RawMessage(`[{"condition":"stunned"}]`)},
 		Turn:     refdata.Turn{ID: turnID, CombatantID: attackerID, AttacksRemaining: 1},
 	}, roller)
 	require.NoError(t, err)
@@ -444,8 +444,8 @@ func TestServiceAttack_DisadvantageFromAttackerCondition(t *testing.T) {
 	})
 
 	result, err := svc.Attack(ctx, AttackCommand{
-		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, IsAlive: true, Conditions: json.RawMessage(`[{"condition":"poisoned"}]`)},
-		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin #1", PositionCol: "B", PositionRow: 1, Ac: 13, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, IsAlive: true, IsVisible: true, Conditions: json.RawMessage(`[{"condition":"poisoned"}]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin #1", PositionCol: "B", PositionRow: 1, Ac: 13, IsAlive: true, IsVisible: true, Conditions: json.RawMessage(`[]`)},
 		Turn:     refdata.Turn{ID: turnID, CombatantID: attackerID, AttacksRemaining: 1},
 	}, roller)
 	require.NoError(t, err)
@@ -462,4 +462,35 @@ func makeHeavyCrossbow() refdata.Weapon {
 		WeaponType: "martial_ranged",
 		Properties: []string{"heavy", "loading", "two-handed"},
 	}
+}
+
+// Phase 57: Hidden attacker/target advantage/disadvantage
+
+func TestDetectAdvantage_AttackerHidden(t *testing.T) {
+	input := AdvantageInput{
+		AttackerHidden: true,
+	}
+	mode, advReasons, _ := DetectAdvantage(input)
+	assert.Equal(t, dice.Advantage, mode)
+	assert.Contains(t, advReasons, "attacker hidden")
+}
+
+func TestDetectAdvantage_TargetHidden(t *testing.T) {
+	input := AdvantageInput{
+		TargetHidden: true,
+	}
+	mode, _, disadvReasons := DetectAdvantage(input)
+	assert.Equal(t, dice.Disadvantage, mode)
+	assert.Contains(t, disadvReasons, "target hidden")
+}
+
+func TestDetectAdvantage_AttackerHidden_CancelsWithDisadvantage(t *testing.T) {
+	input := AdvantageInput{
+		AttackerHidden: true,
+		AttackerConditions: []CombatCondition{{Condition: "poisoned"}},
+	}
+	mode, advReasons, disadvReasons := DetectAdvantage(input)
+	assert.Equal(t, dice.AdvantageAndDisadvantage, mode)
+	assert.Contains(t, advReasons, "attacker hidden")
+	assert.Contains(t, disadvReasons, "attacker poisoned")
 }

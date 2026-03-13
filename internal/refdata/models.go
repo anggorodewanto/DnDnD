@@ -121,40 +121,40 @@ type Class struct {
 }
 
 type Combatant struct {
-	ID                      uuid.UUID             `json:"id"`
-	EncounterID             uuid.UUID             `json:"encounter_id"`
-	CharacterID             uuid.NullUUID         `json:"character_id"`
-	CreatureRefID           sql.NullString        `json:"creature_ref_id"`
-	ShortID                 string                `json:"short_id"`
-	DisplayName             string                `json:"display_name"`
-	InitiativeRoll          int32                 `json:"initiative_roll"`
-	InitiativeOrder         int32                 `json:"initiative_order"`
-	PositionCol             string                `json:"position_col"`
-	PositionRow             int32                 `json:"position_row"`
-	AltitudeFt              int32                 `json:"altitude_ft"`
-	HpMax                   int32                 `json:"hp_max"`
-	HpCurrent               int32                 `json:"hp_current"`
-	TempHp                  int32                 `json:"temp_hp"`
-	Ac                      int32                 `json:"ac"`
-	Conditions              json.RawMessage       `json:"conditions"`
-	ExhaustionLevel         int32                 `json:"exhaustion_level"`
-	DeathSaves              pqtype.NullRawMessage `json:"death_saves"`
-	IsVisible               bool                  `json:"is_visible"`
-	IsAlive                 bool                  `json:"is_alive"`
-	IsNpc                   bool                  `json:"is_npc"`
-	IsRaging                bool                  `json:"is_raging"`
-	RageRoundsRemaining     sql.NullInt32         `json:"rage_rounds_remaining"`
-	RageAttackedThisRound   bool                  `json:"rage_attacked_this_round"`
-	RageTookDamageThisRound bool                  `json:"rage_took_damage_this_round"`
-	IsWildShaped            bool                  `json:"is_wild_shaped"`
-	WildShapeCreatureRef    sql.NullString        `json:"wild_shape_creature_ref"`
-	WildShapeOriginal       pqtype.NullRawMessage `json:"wild_shape_original"`
+	ID                         uuid.UUID             `json:"id"`
+	EncounterID                uuid.UUID             `json:"encounter_id"`
+	CharacterID                uuid.NullUUID         `json:"character_id"`
+	CreatureRefID              sql.NullString        `json:"creature_ref_id"`
+	ShortID                    string                `json:"short_id"`
+	DisplayName                string                `json:"display_name"`
+	InitiativeRoll             int32                 `json:"initiative_roll"`
+	InitiativeOrder            int32                 `json:"initiative_order"`
+	PositionCol                string                `json:"position_col"`
+	PositionRow                int32                 `json:"position_row"`
+	AltitudeFt                 int32                 `json:"altitude_ft"`
+	HpMax                      int32                 `json:"hp_max"`
+	HpCurrent                  int32                 `json:"hp_current"`
+	TempHp                     int32                 `json:"temp_hp"`
+	Ac                         int32                 `json:"ac"`
+	Conditions                 json.RawMessage       `json:"conditions"`
+	ExhaustionLevel            int32                 `json:"exhaustion_level"`
+	DeathSaves                 pqtype.NullRawMessage `json:"death_saves"`
+	IsVisible                  bool                  `json:"is_visible"`
+	IsAlive                    bool                  `json:"is_alive"`
+	IsNpc                      bool                  `json:"is_npc"`
+	IsRaging                   bool                  `json:"is_raging"`
+	RageRoundsRemaining        sql.NullInt32         `json:"rage_rounds_remaining"`
+	RageAttackedThisRound      bool                  `json:"rage_attacked_this_round"`
+	RageTookDamageThisRound    bool                  `json:"rage_took_damage_this_round"`
+	IsWildShaped               bool                  `json:"is_wild_shaped"`
+	WildShapeCreatureRef       sql.NullString        `json:"wild_shape_creature_ref"`
+	WildShapeOriginal          pqtype.NullRawMessage `json:"wild_shape_original"`
 	SummonerID                 uuid.NullUUID         `json:"summoner_id"`
+	CreatedAt                  time.Time             `json:"created_at"`
+	UpdatedAt                  time.Time             `json:"updated_at"`
 	BardicInspirationDie       sql.NullString        `json:"bardic_inspiration_die"`
 	BardicInspirationSource    sql.NullString        `json:"bardic_inspiration_source"`
 	BardicInspirationGrantedAt sql.NullTime          `json:"bardic_inspiration_granted_at"`
-	CreatedAt                  time.Time             `json:"created_at"`
-	UpdatedAt                  time.Time             `json:"updated_at"`
 }
 
 type ConditionsRef struct {

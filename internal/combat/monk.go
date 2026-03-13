@@ -83,7 +83,7 @@ func (s *Service) MartialArtsBonusAttack(ctx context.Context, cmd MartialArtsBon
 	)
 	input.MonkLevel = ml
 
-	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
+	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 }
 
 // FlurryOfBlowsCommand holds the inputs for Flurry of Blows.

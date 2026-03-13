@@ -425,19 +425,19 @@ func (q *Queries) UpdateCharacter(ctx context.Context, arg UpdateCharacterParams
 	return i, err
 }
 
-const updateCharacterSpellSlots = `-- name: UpdateCharacterSpellSlots :one
-UPDATE characters SET spell_slots = $2, updated_at = now()
+const updateCharacterFeatureUses = `-- name: UpdateCharacterFeatureUses :one
+UPDATE characters SET feature_uses = $2, updated_at = now()
 WHERE id = $1
 RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
 `
 
-type UpdateCharacterSpellSlotsParams struct {
-	ID         uuid.UUID             `json:"id"`
-	SpellSlots pqtype.NullRawMessage `json:"spell_slots"`
+type UpdateCharacterFeatureUsesParams struct {
+	ID          uuid.UUID             `json:"id"`
+	FeatureUses pqtype.NullRawMessage `json:"feature_uses"`
 }
 
-func (q *Queries) UpdateCharacterSpellSlots(ctx context.Context, arg UpdateCharacterSpellSlotsParams) (Character, error) {
-	row := q.db.QueryRowContext(ctx, updateCharacterSpellSlots, arg.ID, arg.SpellSlots)
+func (q *Queries) UpdateCharacterFeatureUses(ctx context.Context, arg UpdateCharacterFeatureUsesParams) (Character, error) {
+	row := q.db.QueryRowContext(ctx, updateCharacterFeatureUses, arg.ID, arg.FeatureUses)
 	var i Character
 	err := row.Scan(
 		&i.ID,
@@ -477,19 +477,19 @@ func (q *Queries) UpdateCharacterSpellSlots(ctx context.Context, arg UpdateChara
 	return i, err
 }
 
-const updateCharacterFeatureUses = `-- name: UpdateCharacterFeatureUses :one
-UPDATE characters SET feature_uses = $2, updated_at = now()
+const updateCharacterSpellSlots = `-- name: UpdateCharacterSpellSlots :one
+UPDATE characters SET spell_slots = $2, updated_at = now()
 WHERE id = $1
 RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
 `
 
-type UpdateCharacterFeatureUsesParams struct {
-	ID          uuid.UUID             `json:"id"`
-	FeatureUses pqtype.NullRawMessage `json:"feature_uses"`
+type UpdateCharacterSpellSlotsParams struct {
+	ID         uuid.UUID             `json:"id"`
+	SpellSlots pqtype.NullRawMessage `json:"spell_slots"`
 }
 
-func (q *Queries) UpdateCharacterFeatureUses(ctx context.Context, arg UpdateCharacterFeatureUsesParams) (Character, error) {
-	row := q.db.QueryRowContext(ctx, updateCharacterFeatureUses, arg.ID, arg.FeatureUses)
+func (q *Queries) UpdateCharacterSpellSlots(ctx context.Context, arg UpdateCharacterSpellSlotsParams) (Character, error) {
+	row := q.db.QueryRowContext(ctx, updateCharacterSpellSlots, arg.ID, arg.SpellSlots)
 	var i Character
 	err := row.Scan(
 		&i.ID,

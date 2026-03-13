@@ -47,6 +47,7 @@ type Store interface {
 	UpdateCombatantRage(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error)
 	UpdateCombatantWildShape(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error)
 	UpdateCombatantBardicInspiration(ctx context.Context, arg refdata.UpdateCombatantBardicInspirationParams) (refdata.Combatant, error)
+	UpdateCombatantVisibility(ctx context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error)
 	DeleteCombatant(ctx context.Context, id uuid.UUID) error
 
 	// Turns

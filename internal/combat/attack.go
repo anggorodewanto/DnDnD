@@ -323,6 +323,8 @@ type AttackInput struct {
 	Sharpshooter        bool // Sharpshooter: -5 hit, +10 damage (ranged)
 	Reckless            bool // Reckless Attack: advantage on melee STR attacks (Barbarian)
 	MonkLevel           int  // Monk level (0 = not a monk)
+	AttackerHidden      bool // Attacker is hidden (not visible)
+	TargetHidden        bool // Target is hidden (not visible)
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -351,6 +353,7 @@ type AttackResult struct {
 	GWM                 bool
 	Sharpshooter        bool
 	Reckless            bool
+	AttackerRevealed    bool // True if a hidden attacker was revealed by this attack
 }
 
 // OffhandAttackCommand holds the service-level inputs for an off-hand attack (bonus action).
@@ -473,6 +476,8 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		DMAdvantage:         input.DMAdvantage,
 		DMDisadvantage:      input.DMDisadvantage,
 		Reckless:            input.Reckless,
+		AttackerHidden:      input.AttackerHidden,
+		TargetHidden:        input.TargetHidden,
 	}
 	rollMode, advReasons, disadvReasons := DetectAdvantage(advInput)
 	// Thrown/improvised-thrown in long range: add disadvantage
@@ -702,7 +707,7 @@ func FormatAttackLog(result AttackResult) string {
 
 // resolveAndPersistAttack resolves an attack from the given input, persists the
 // turn resource update, and returns the result with the updated turn attached.
-func (s *Service) resolveAndPersistAttack(ctx context.Context, input AttackInput, updatedTurn refdata.Turn, roller *dice.Roller) (AttackResult, error) {
+func (s *Service) resolveAndPersistAttack(ctx context.Context, input AttackInput, updatedTurn refdata.Turn, attacker refdata.Combatant, roller *dice.Roller) (AttackResult, error) {
 	result, err := ResolveAttack(input, roller)
 	if err != nil {
 		return AttackResult{}, err
@@ -711,6 +716,17 @@ func (s *Service) resolveAndPersistAttack(ctx context.Context, input AttackInput
 	_, err = s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn))
 	if err != nil {
 		return AttackResult{}, fmt.Errorf("updating turn actions: %w", err)
+	}
+
+	// Auto-reveal: hidden attacker is revealed after attacking (hit or miss)
+	if !attacker.IsVisible {
+		if _, err := s.store.UpdateCombatantVisibility(ctx, refdata.UpdateCombatantVisibilityParams{
+			ID:        attacker.ID,
+			IsVisible: true,
+		}); err != nil {
+			return AttackResult{}, fmt.Errorf("revealing attacker: %w", err)
+		}
+		result.AttackerRevealed = true
 	}
 
 	result.RemainingTurn = &updatedTurn
@@ -807,7 +823,7 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		input.MonkLevel = ClassLevelFromJSON(char.Classes, "Monk")
 	}
 
-	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
+	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 }
 
 // attackImprovised handles improvised weapon attacks at the service level.
@@ -846,7 +862,7 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	input.ImprovisedThrown = cmd.ImprovisedThrown
 	input.HasTavernBrawler = hasTavernBrawler
 
-	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
+	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 }
 
 // OffhandAttack is the service-level method for a two-weapon fighting off-hand attack.
@@ -913,7 +929,7 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 		cmd.DMAdvantage, cmd.DMDisadvantage, &dmgMod,
 	)
 
-	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)
+	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 }
 
 // resolveAttackWeaponFull resolves weapon, scores, proficiency, and optionally the character.
@@ -993,6 +1009,8 @@ func buildAttackInput(
 		DMAdvantage:         dmAdvantage,
 		DMDisadvantage:      dmDisadvantage,
 		OverrideDmgMod:      overrideDmgMod,
+		AttackerHidden:      !attacker.IsVisible,
+		TargetHidden:        !target.IsVisible,
 	}
 }
 
