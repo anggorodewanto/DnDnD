@@ -190,25 +190,18 @@ func TestDecrementRageRound(t *testing.T) {
 }
 
 func TestValidateRageActivation(t *testing.T) {
-	baseInput := RageActivateInput{
-		Combatant: refdata.Combatant{IsRaging: false},
-		Character: refdata.Character{},
-	}
-
 	// Normal: no error
-	if err := ValidateRageActivation(baseInput, "medium"); err != nil {
+	if err := ValidateRageActivation(false, "medium"); err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
 
 	// Already raging
-	ragingInput := baseInput
-	ragingInput.Combatant.IsRaging = true
-	if err := ValidateRageActivation(ragingInput, ""); err == nil {
+	if err := ValidateRageActivation(true, ""); err == nil {
 		t.Error("expected error for already raging")
 	}
 
 	// Heavy armor
-	if err := ValidateRageActivation(baseInput, "heavy"); err == nil {
+	if err := ValidateRageActivation(false, "heavy"); err == nil {
 		t.Error("expected error for heavy armor")
 	}
 }

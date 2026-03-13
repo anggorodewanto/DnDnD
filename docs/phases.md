@@ -253,7 +253,7 @@
   - Depends on: Phase 44, Phase 34
   - Done when: Integration tests verify Sneak Attack auto-detection and damage, Evasion half/zero damage, Uncanny Dodge halving, all fighting styles, Pack Tactics.
 
-- [ ] **Phase 46: Rage (Barbarian)**
+- [x] **Phase 46: Rage (Barbarian)**
   - Scope: `/bonus rage`: activate rage, costs bonus action, deduct from feature_uses. Rage effects via Feature Effect System: +2/+3/+4 damage on melee STR attacks, resistance to B/P/S, advantage on STR checks/saves. Duration: 10 rounds, auto-end if no attack and no damage taken (track per-round). End on unconscious, voluntary `/bonus end-rage`. Block `/cast` and drop concentration while raging. Heavy armor restriction. Combat log output.
   - Depends on: Phase 44, Phase 28
   - Done when: Integration tests verify rage activation, damage bonus, resistance, duration tracking, auto-end conditions, spellcasting block, armor restriction.

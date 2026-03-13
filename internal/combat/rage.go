@@ -94,26 +94,10 @@ func RageFeature(barbarianLevel int) FeatureDefinition {
 // RageRounds is the number of rounds rage lasts (1 minute = 10 rounds).
 const RageRounds = 10
 
-// RageActivateInput holds the inputs for activating rage.
-type RageActivateInput struct {
-	Combatant refdata.Combatant
-	Turn      refdata.Turn
-	Character refdata.Character
-}
-
-// RageActivateResult holds the result of activating rage.
-type RageActivateResult struct {
-	CombatLog  string
-	Remaining  string
-	RagesLeft  int
-	Combatant  refdata.Combatant
-	Turn       refdata.Turn
-}
-
 // ValidateRageActivation checks all preconditions for rage activation.
 // Returns an error if any precondition fails.
-func ValidateRageActivation(input RageActivateInput, armorType string) error {
-	if input.Combatant.IsRaging {
+func ValidateRageActivation(isRaging bool, armorType string) error {
+	if isRaging {
 		return fmt.Errorf("already raging")
 	}
 	if armorType == "heavy" {
@@ -244,10 +228,7 @@ func (s *Service) ActivateRage(ctx context.Context, cmd RageCommand) (RageResult
 	}
 
 	// Validate rage preconditions
-	if err := ValidateRageActivation(RageActivateInput{
-		Combatant: cmd.Combatant,
-		Character: char,
-	}, armorType); err != nil {
+	if err := ValidateRageActivation(cmd.Combatant.IsRaging, armorType); err != nil {
 		return RageResult{}, err
 	}
 
@@ -293,17 +274,9 @@ func (s *Service) ActivateRage(ctx context.Context, cmd RageCommand) (RageResult
 		return RageResult{}, fmt.Errorf("updating turn actions: %w", err)
 	}
 
-	// Apply rage to combatant
+	// Apply rage to combatant and persist
 	ragedCombatant := ApplyRageToCombatant(cmd.Combatant)
-
-	// Persist rage state
-	ragedCombatant, err = s.store.UpdateCombatantRage(ctx, refdata.UpdateCombatantRageParams{
-		ID:                      cmd.Combatant.ID,
-		IsRaging:                ragedCombatant.IsRaging,
-		RageRoundsRemaining:     ragedCombatant.RageRoundsRemaining,
-		RageAttackedThisRound:   ragedCombatant.RageAttackedThisRound,
-		RageTookDamageThisRound: ragedCombatant.RageTookDamageThisRound,
-	})
+	ragedCombatant, err = s.persistRageState(ctx, ragedCombatant)
 	if err != nil {
 		return RageResult{}, fmt.Errorf("updating combatant rage: %w", err)
 	}
@@ -327,14 +300,7 @@ func (s *Service) EndRage(ctx context.Context, cmd RageCommand) (RageResult, err
 	}
 
 	cleared := ClearRageFromCombatant(cmd.Combatant)
-
-	cleared, err := s.store.UpdateCombatantRage(ctx, refdata.UpdateCombatantRageParams{
-		ID:                      cmd.Combatant.ID,
-		IsRaging:                cleared.IsRaging,
-		RageRoundsRemaining:     cleared.RageRoundsRemaining,
-		RageAttackedThisRound:   cleared.RageAttackedThisRound,
-		RageTookDamageThisRound: cleared.RageTookDamageThisRound,
-	})
+	cleared, err := s.persistRageState(ctx, cleared)
 	if err != nil {
 		return RageResult{}, fmt.Errorf("updating combatant rage: %w", err)
 	}
@@ -343,6 +309,17 @@ func (s *Service) EndRage(ctx context.Context, cmd RageCommand) (RageResult, err
 		Combatant: cleared,
 		CombatLog: FormatRageEndVoluntary(cmd.Combatant.DisplayName),
 	}, nil
+}
+
+// persistRageState saves the combatant's rage fields to the database.
+func (s *Service) persistRageState(ctx context.Context, c refdata.Combatant) (refdata.Combatant, error) {
+	return s.store.UpdateCombatantRage(ctx, refdata.UpdateCombatantRageParams{
+		ID:                      c.ID,
+		IsRaging:                c.IsRaging,
+		RageRoundsRemaining:     c.RageRoundsRemaining,
+		RageAttackedThisRound:   c.RageAttackedThisRound,
+		RageTookDamageThisRound: c.RageTookDamageThisRound,
+	})
 }
 
 // parseRageUses extracts rage uses from character feature_uses JSON.

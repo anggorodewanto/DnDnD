@@ -224,19 +224,7 @@ func HasFeat(features pqtype.NullRawMessage, featID string) bool {
 
 // HasBarbarianClass checks whether a character's classes JSON includes a Barbarian entry.
 func HasBarbarianClass(classesJSON json.RawMessage) bool {
-	if len(classesJSON) == 0 {
-		return false
-	}
-	var classes []CharacterClass
-	if err := json.Unmarshal(classesJSON, &classes); err != nil {
-		return false
-	}
-	for _, c := range classes {
-		if strings.EqualFold(c.Class, "Barbarian") {
-			return true
-		}
-	}
-	return false
+	return barbarianLevel(classesJSON) > 0
 }
 
 // VersatileDamageExpression builds the damage expression using versatile_damage if available.
