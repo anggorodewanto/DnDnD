@@ -439,7 +439,7 @@ func TestAbilityLabel(t *testing.T) {
 	tests := []struct{ input, want string }{
 		{"str", "STR"}, {"dex", "DEX"}, {"con", "CON"},
 		{"int", "INT"}, {"wis", "WIS"}, {"cha", "CHA"},
-		{"unknown", "unknown"},
+		{"unknown", "UNKNOWN"},
 	}
 	for _, tc := range tests {
 		assert.Equal(t, tc.want, abilityLabel(tc.input))
@@ -479,7 +479,9 @@ func TestStandFromProneCost_SmallSpeed(t *testing.T) {
 
 // --- TDD Cycle 8: EffectiveSpeed applied in ResolveTurnResources ---
 
-func TestResolveTurnResources_GrappledZeroSpeed(t *testing.T) {
+// newSpeedTestService creates a Service with a mock store for a character with 30ft speed.
+// Returns the service and the character ID.
+func newSpeedTestService() (*Service, uuid.UUID) {
 	charID := uuid.New()
 	ms := &mockStore{
 		getCharacterFn: func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -497,7 +499,11 @@ func TestResolveTurnResources_GrappledZeroSpeed(t *testing.T) {
 			}, nil
 		},
 	}
-	svc := NewService(ms)
+	return NewService(ms), charID
+}
+
+func TestResolveTurnResources_GrappledZeroSpeed(t *testing.T) {
+	svc, charID := newSpeedTestService()
 	combatant := refdata.Combatant{
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
 		Conditions:  mustMarshal([]CombatCondition{{Condition: "grappled"}}),
@@ -509,24 +515,7 @@ func TestResolveTurnResources_GrappledZeroSpeed(t *testing.T) {
 }
 
 func TestResolveTurnResources_NormalSpeedNoConditions(t *testing.T) {
-	charID := uuid.New()
-	ms := &mockStore{
-		getCharacterFn: func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
-			return refdata.Character{
-				ID:               charID,
-				SpeedFt:          30,
-				ProficiencyBonus: 2,
-				AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":10,"int":10,"wis":10,"cha":10}`),
-				Classes:          json.RawMessage(`[{"class":"Fighter","level":1}]`),
-			}, nil
-		},
-		getClassFn: func(ctx context.Context, id string) (refdata.Class, error) {
-			return refdata.Class{
-				AttacksPerAction: json.RawMessage(`{"1":1}`),
-			}, nil
-		},
-	}
-	svc := NewService(ms)
+	svc, charID := newSpeedTestService()
 	combatant := refdata.Combatant{
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
 		Conditions:  json.RawMessage(`[]`),
@@ -538,24 +527,7 @@ func TestResolveTurnResources_NormalSpeedNoConditions(t *testing.T) {
 }
 
 func TestResolveTurnResources_RestrainedZeroSpeed(t *testing.T) {
-	charID := uuid.New()
-	ms := &mockStore{
-		getCharacterFn: func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
-			return refdata.Character{
-				ID:               charID,
-				SpeedFt:          30,
-				ProficiencyBonus: 2,
-				AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":10,"int":10,"wis":10,"cha":10}`),
-				Classes:          json.RawMessage(`[{"class":"Fighter","level":1}]`),
-			}, nil
-		},
-		getClassFn: func(ctx context.Context, id string) (refdata.Class, error) {
-			return refdata.Class{
-				AttacksPerAction: json.RawMessage(`{"1":1}`),
-			}, nil
-		},
-	}
-	svc := NewService(ms)
+	svc, charID := newSpeedTestService()
 	combatant := refdata.Combatant{
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
 		Conditions:  mustMarshal([]CombatCondition{{Condition: "restrained"}}),
@@ -580,48 +552,20 @@ func TestResolveTurnResources_NPCGrappledZeroSpeed(t *testing.T) {
 
 // --- TDD Cycle 9: Auto-skip incapacitated turns in AdvanceTurn ---
 
-func TestAdvanceTurn_SkipsIncapacitatedCombatant(t *testing.T) {
-	encounterID := uuid.New()
-	stunnedID := uuid.New()
-	activeID := uuid.New()
-
-	stunned := refdata.Combatant{
-		ID:              stunnedID,
-		DisplayName:     "Stunned Fighter",
-		Conditions:      mustMarshal([]CombatCondition{{Condition: "stunned"}}),
-		IsAlive:         true,
-		InitiativeOrder: 1,
-		IsNpc:           true,
-	}
-	active := refdata.Combatant{
-		ID:              activeID,
-		DisplayName:     "Rogue",
-		Conditions:      json.RawMessage(`[]`),
-		IsAlive:         true,
-		InitiativeOrder: 2,
-		IsNpc:           true,
-	}
-
+// newAdvanceTurnMock creates a mock store pre-configured for AdvanceTurn tests
+// with an active encounter at round 2 and the given combatants.
+func newAdvanceTurnMock(combatants []refdata.Combatant) *mockStore {
 	ms := defaultMockStore()
 	ms.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
-		return refdata.Encounter{
-			ID:          id,
-			Status:      "active",
-			RoundNumber: 2,
-		}, nil
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 2}, nil
 	}
 	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
-		return []refdata.Combatant{stunned, active}, nil
+		return combatants, nil
 	}
 	ms.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
-		return nil, nil // no turns taken yet
+		return nil, nil
 	}
-
-	var skippedTurnCreated bool
 	ms.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
-		if arg.CombatantID == stunnedID && arg.Status == "skipped" {
-			skippedTurnCreated = true
-		}
 		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
 	}
 	ms.skipTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
@@ -629,6 +573,34 @@ func TestAdvanceTurn_SkipsIncapacitatedCombatant(t *testing.T) {
 	}
 	ms.updateEncounterCurrentTurnFn = func(ctx context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error) {
 		return refdata.Encounter{ID: arg.ID}, nil
+	}
+	return ms
+}
+
+func TestAdvanceTurn_SkipsIncapacitatedCombatant(t *testing.T) {
+	encounterID := uuid.New()
+	stunnedID := uuid.New()
+	activeID := uuid.New()
+
+	stunned := refdata.Combatant{
+		ID: stunnedID, DisplayName: "Stunned Fighter",
+		Conditions: mustMarshal([]CombatCondition{{Condition: "stunned"}}),
+		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
+	}
+	active := refdata.Combatant{
+		ID: activeID, DisplayName: "Rogue",
+		Conditions: json.RawMessage(`[]`),
+		IsAlive: true, InitiativeOrder: 2, IsNpc: true,
+	}
+
+	ms := newAdvanceTurnMock([]refdata.Combatant{stunned, active})
+
+	var skippedTurnCreated bool
+	ms.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		if arg.CombatantID == stunnedID && arg.Status == "skipped" {
+			skippedTurnCreated = true
+		}
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
 	}
 
 	svc := NewService(ms)
@@ -644,46 +616,17 @@ func TestAdvanceTurn_ParalyzedCombatantSkipped(t *testing.T) {
 	activeID := uuid.New()
 
 	paralyzed := refdata.Combatant{
-		ID:              paralyzedID,
-		DisplayName:     "Paralyzed Wizard",
-		Conditions:      mustMarshal([]CombatCondition{{Condition: "paralyzed"}}),
-		IsAlive:         true,
-		InitiativeOrder: 1,
-		IsNpc:           true,
+		ID: paralyzedID, DisplayName: "Paralyzed Wizard",
+		Conditions: mustMarshal([]CombatCondition{{Condition: "paralyzed"}}),
+		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
 	}
 	active := refdata.Combatant{
-		ID:              activeID,
-		DisplayName:     "Rogue",
-		Conditions:      json.RawMessage(`[]`),
-		IsAlive:         true,
-		InitiativeOrder: 2,
-		IsNpc:           true,
+		ID: activeID, DisplayName: "Rogue",
+		Conditions: json.RawMessage(`[]`),
+		IsAlive: true, InitiativeOrder: 2, IsNpc: true,
 	}
 
-	ms := defaultMockStore()
-	ms.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
-		return refdata.Encounter{
-			ID:          id,
-			Status:      "active",
-			RoundNumber: 2,
-		}, nil
-	}
-	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
-		return []refdata.Combatant{paralyzed, active}, nil
-	}
-	ms.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
-		return nil, nil
-	}
-	ms.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
-		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
-	}
-	ms.skipTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
-		return refdata.Turn{ID: id, Status: "skipped"}, nil
-	}
-	ms.updateEncounterCurrentTurnFn = func(ctx context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error) {
-		return refdata.Encounter{ID: arg.ID}, nil
-	}
-
+	ms := newAdvanceTurnMock([]refdata.Combatant{paralyzed, active})
 	svc := NewService(ms)
 	info, err := svc.AdvanceTurn(context.Background(), encounterID)
 	assert.NoError(t, err)
@@ -691,70 +634,37 @@ func TestAdvanceTurn_ParalyzedCombatantSkipped(t *testing.T) {
 }
 
 func TestSkipCombatantTurn_CreateTurnError(t *testing.T) {
-	encounterID := uuid.New()
-	stunnedID := uuid.New()
-
 	stunned := refdata.Combatant{
-		ID:              stunnedID,
-		DisplayName:     "Stunned Fighter",
-		Conditions:      mustMarshal([]CombatCondition{{Condition: "stunned"}}),
-		IsAlive:         true,
-		InitiativeOrder: 1,
-		IsNpc:           true,
+		ID: uuid.New(), DisplayName: "Stunned Fighter",
+		Conditions: mustMarshal([]CombatCondition{{Condition: "stunned"}}),
+		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
 	}
 
-	ms := defaultMockStore()
-	ms.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
-		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 2}, nil
-	}
-	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
-		return []refdata.Combatant{stunned}, nil
-	}
-	ms.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
-		return nil, nil
-	}
+	ms := newAdvanceTurnMock([]refdata.Combatant{stunned})
 	ms.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
 		return refdata.Turn{}, fmt.Errorf("db error")
 	}
 
 	svc := NewService(ms)
-	_, err := svc.AdvanceTurn(context.Background(), encounterID)
+	_, err := svc.AdvanceTurn(context.Background(), uuid.New())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating skipped turn for incapacitated")
 }
 
 func TestSkipCombatantTurn_SkipTurnError(t *testing.T) {
-	encounterID := uuid.New()
-	stunnedID := uuid.New()
-
 	stunned := refdata.Combatant{
-		ID:              stunnedID,
-		DisplayName:     "Stunned Fighter",
-		Conditions:      mustMarshal([]CombatCondition{{Condition: "stunned"}}),
-		IsAlive:         true,
-		InitiativeOrder: 1,
-		IsNpc:           true,
+		ID: uuid.New(), DisplayName: "Stunned Fighter",
+		Conditions: mustMarshal([]CombatCondition{{Condition: "stunned"}}),
+		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
 	}
 
-	ms := defaultMockStore()
-	ms.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
-		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 2}, nil
-	}
-	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
-		return []refdata.Combatant{stunned}, nil
-	}
-	ms.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
-		return nil, nil
-	}
-	ms.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
-		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, Status: "skipped"}, nil
-	}
+	ms := newAdvanceTurnMock([]refdata.Combatant{stunned})
 	ms.skipTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
 		return refdata.Turn{}, fmt.Errorf("skip db error")
 	}
 
 	svc := NewService(ms)
-	_, err := svc.AdvanceTurn(context.Background(), encounterID)
+	_, err := svc.AdvanceTurn(context.Background(), uuid.New())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "skipping incapacitated turn")
 }
@@ -762,47 +672,25 @@ func TestSkipCombatantTurn_SkipTurnError(t *testing.T) {
 // TestAdvanceTurn_AllIncapacitatedAdvancesRound verifies that when all combatants in a round
 // are incapacitated, the round advances and conditions are re-checked (not given an active turn).
 func TestAdvanceTurn_AllIncapacitatedAdvancesRound(t *testing.T) {
-	encounterID := uuid.New()
-	stunnedID := uuid.New()
-
 	stunned := refdata.Combatant{
-		ID:              stunnedID,
-		DisplayName:     "Stunned Fighter",
-		Conditions:      mustMarshal([]CombatCondition{{Condition: "stunned", DurationRounds: 2, StartedRound: 2}}),
-		IsAlive:         true,
-		InitiativeOrder: 1,
-		IsNpc:           true,
+		ID: uuid.New(), DisplayName: "Stunned Fighter",
+		Conditions: mustMarshal([]CombatCondition{{Condition: "stunned", DurationRounds: 2, StartedRound: 2}}),
+		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
 	}
 
 	roundAdvanced := false
-	ms := defaultMockStore()
-	ms.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
-		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 2}, nil
-	}
-	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
-		return []refdata.Combatant{stunned}, nil
-	}
-	ms.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
-		return nil, nil
-	}
-	ms.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
-		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, Status: arg.Status}, nil
-	}
-	ms.skipTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
-		return refdata.Turn{ID: id, Status: "skipped"}, nil
-	}
+	ms := newAdvanceTurnMock([]refdata.Combatant{stunned})
 	ms.updateEncounterRoundFn = func(ctx context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
 		roundAdvanced = true
 		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber}, nil
 	}
 
 	svc := NewService(ms)
-	_, err := svc.AdvanceTurn(context.Background(), encounterID)
+	_, err := svc.AdvanceTurn(context.Background(), uuid.New())
 
 	// Should advance the round but NOT give an active turn to stunned combatant.
 	// Since the combatant is still incapacitated in round 3, they get skipped again,
 	// resulting in "no alive combatants" or another round advance.
-	// The key assertion: round was advanced AND we don't get an active turn.
 	assert.True(t, roundAdvanced, "round should advance when all combatants are incapacitated")
 	assert.Error(t, err, "should not create active turn for incapacitated combatant")
 }

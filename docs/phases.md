@@ -223,7 +223,7 @@
   - Depends on: Phase 24, Phase 3
   - Done when: Integration tests verify condition application, duration countdown, auto-expiration timing (start vs end of turn), indefinite condition persistence, combat log output.
 
-- [ ] **Phase 40: Condition Effects — Saves, Checks, Attacks, Speed, Action Blocking**
+- [x] **Phase 40: Condition Effects — Saves, Checks, Attacks, Speed, Action Blocking**
   - Scope: Implement all condition effect tables from spec. Saves: paralyzed/stunned/unconscious/petrified auto-fail STR/DEX; restrained disadv on DEX; dodge adv on DEX. Checks: frightened/poisoned disadv; blinded auto-fail sight checks; deafened auto-fail hearing checks. Attacks: all attacker/target modifiers per table. Speed: grappled/restrained = 0; prone stand cost; frightened can't approach source. Action blocking: incapacitated/stunned/paralyzed/unconscious/petrified block actions/reactions, auto-skip turn. Charmed attack restriction.
   - Depends on: Phase 39, Phase 35
   - Done when: Unit tests for every condition effect on saves, checks, attacks, speed, and action blocking; auto-skip of incapacitated turns.

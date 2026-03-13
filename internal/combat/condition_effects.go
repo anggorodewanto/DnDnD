@@ -3,6 +3,7 @@ package combat
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ab/dndnd/internal/dice"
 )
@@ -20,7 +21,7 @@ var autoFailSTRDEXConditions = map[string]bool{
 // and a list of reason strings.
 func CheckSaveConditionEffects(conditions []CombatCondition, ability string) (bool, dice.RollMode, []string) {
 	var reasons []string
-	var hasAdv, hasDisadv bool
+	var advReasons, disadvReasons []string
 
 	for _, c := range conditions {
 		// Auto-fail STR/DEX saves
@@ -31,53 +32,25 @@ func CheckSaveConditionEffects(conditions []CombatCondition, ability string) (bo
 
 		// Restrained: disadvantage on DEX saves
 		if c.Condition == "restrained" && ability == "dex" {
-			hasDisadv = true
-			reasons = append(reasons, "restrained: disadvantage on DEX save")
+			reason := "restrained: disadvantage on DEX save"
+			disadvReasons = append(disadvReasons, reason)
+			reasons = append(reasons, reason)
 		}
 
 		// Dodge: advantage on DEX saves
 		if c.Condition == "dodge" && ability == "dex" {
-			hasAdv = true
-			reasons = append(reasons, "dodge: advantage on DEX save")
+			reason := "dodge: advantage on DEX save"
+			advReasons = append(advReasons, reason)
+			reasons = append(reasons, reason)
 		}
 	}
 
-	mode := resolveSaveMode(hasAdv, hasDisadv)
-	return false, mode, reasons
-}
-
-// resolveSaveMode applies 5e cancellation for saves.
-func resolveSaveMode(hasAdv, hasDisadv bool) dice.RollMode {
-	if hasAdv && hasDisadv {
-		return dice.AdvantageAndDisadvantage
-	}
-	if hasAdv {
-		return dice.Advantage
-	}
-	if hasDisadv {
-		return dice.Disadvantage
-	}
-	return dice.Normal
+	return false, resolveMode(advReasons, disadvReasons), reasons
 }
 
 // abilityLabel returns the uppercase short label for an ability.
 func abilityLabel(ability string) string {
-	switch ability {
-	case "str":
-		return "STR"
-	case "dex":
-		return "DEX"
-	case "con":
-		return "CON"
-	case "int":
-		return "INT"
-	case "wis":
-		return "WIS"
-	case "cha":
-		return "CHA"
-	default:
-		return ability
-	}
+	return strings.ToUpper(ability)
 }
 
 // AbilityCheckContext provides context for ability check condition effects.
