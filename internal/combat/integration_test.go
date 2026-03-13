@@ -713,6 +713,10 @@ func (a *testStoreAdapter) UpdateCharacterFeatureUses(ctx context.Context, arg r
 	return a.Queries.UpdateCharacterFeatureUses(ctx, arg)
 }
 
+func (a *testStoreAdapter) UpdateCharacterSpellSlots(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+	return a.Queries.UpdateCharacterSpellSlots(ctx, arg)
+}
+
 func TestIntegration_ConditionAutoExpiration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

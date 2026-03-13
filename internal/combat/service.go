@@ -82,6 +82,9 @@ type Store interface {
 
 	// Character feature uses
 	UpdateCharacterFeatureUses(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
+
+	// Character spell slots
+	UpdateCharacterSpellSlots(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
 }
 
 // Service manages combat encounters and their entities.

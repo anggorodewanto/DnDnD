@@ -60,6 +60,11 @@ UPDATE characters SET feature_uses = $2, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateCharacterSpellSlots :one
+UPDATE characters SET spell_slots = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteCharacter :exec
 DELETE FROM characters WHERE id = $1;
 
