@@ -268,7 +268,7 @@
   - Depends on: Phase 44, Phase 36
   - Done when: Integration tests verify martial arts die scaling, DEX/STR auto-select, bonus unarmed strike, unarmored defense AC, unarmored movement speed bonus.
 
-- [ ] **Phase 48b: Monk — Ki Abilities**
+- [x] **Phase 48b: Monk — Ki Abilities**
   - Scope: Ki point tracking (feature_uses, recharge short rest). `/bonus flurry-of-blows` (1 ki, 2 unarmed strikes, replaces martial-arts bonus). `/bonus patient-defense` (1 ki, dodge as bonus action). `/bonus step-of-the-wind` (1 ki, dash or disengage as bonus action). Stunning Strike (auto-prompt on melee hit, 1 ki, CON save or stunned for 1 round). Ki validation (sufficient points, correct class).
   - Depends on: Phase 48a
   - Done when: Integration tests verify each ki ability's cost and effect, stunning strike prompt and save, ki deduction and validation, short rest recharge.
