@@ -228,7 +228,7 @@
   - Depends on: Phase 39, Phase 35
   - Done when: Unit tests for every condition effect on saves, checks, attacks, speed, and action blocking; auto-skip of incapacitated turns.
 
-- [ ] **Phase 41: Moving While Prone**
+- [x] **Phase 41: Moving While Prone**
   - Scope: When prone combatant uses `/move`: prompt for Stand & Move vs Crawl. Stand: deduct half max speed then normal movement. Crawl: x2 movement cost (stacks with difficult terrain for x3). Confirmation prompt reflects chosen mode. Skip prompt if already stood this turn via `/action stand`.
   - Depends on: Phase 30, Phase 40
   - Done when: Integration tests verify stand-and-move cost, crawl cost, crawl+difficult terrain stacking, prompt skip after prior stand.

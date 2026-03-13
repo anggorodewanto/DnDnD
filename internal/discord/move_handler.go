@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -347,88 +348,44 @@ func buildOccupants(all []refdata.Combatant, mover refdata.Combatant) []pathfind
 	return occupants
 }
 
-// HandleProneStandAndMove handles the Stand & Move button click for a prone combatant.
-// It validates the move with stand cost deducted, then shows a confirmation prompt.
-func (h *MoveHandler) HandleProneStandAndMove(interaction *discordgo.Interaction, turnID, combatantID uuid.UUID, destCol, destRow, maxSpeed int) {
-	ctx := context.Background()
-
-	turn, err := h.turnProvider.GetTurn(ctx, turnID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Turn no longer active.")
-		return
-	}
-
-	combatant, err := h.combatService.GetCombatant(ctx, combatantID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to get combatant data.")
-		return
-	}
-
-	moveReq := combat.MoveRequest{
-		DestCol:      destCol,
-		DestRow:      destRow,
-		Turn:         turn,
-		Combatant:    combatant,
-		Grid:         nil, // will be set below
-		SizeCategory: pathfinding.SizeMedium,
-	}
-
-	// We need the grid - re-fetch encounter and map
-	encounterID := turn.EncounterID
-	encounter, err := h.combatService.GetEncounter(ctx, encounterID)
+// buildGridForTurn fetches the map and combatant data needed to build a pathfinding grid.
+// Returns an error string for the user if any step fails (empty string on success).
+func (h *MoveHandler) buildGridForTurn(ctx context.Context, turn refdata.Turn, mover refdata.Combatant) (*pathfinding.Grid, string) {
+	encounter, err := h.combatService.GetEncounter(ctx, turn.EncounterID)
 	if err != nil || !encounter.MapID.Valid {
-		respondEphemeral(h.session, interaction, "Failed to get map data.")
-		return
+		return nil, "Failed to get map data."
 	}
 
 	mapData, err := h.mapProvider.GetByID(ctx, encounter.MapID.UUID)
 	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to load map data.")
-		return
+		return nil, "Failed to load map data."
 	}
 
 	md, err := renderer.ParseTiledJSON(mapData.TiledJson, nil, nil)
 	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to parse map data.")
-		return
+		return nil, "Failed to parse map data."
 	}
 
-	allCombatants, err := h.combatService.ListCombatantsByEncounterID(ctx, encounterID)
+	allCombatants, err := h.combatService.ListCombatantsByEncounterID(ctx, turn.EncounterID)
 	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to list combatants.")
-		return
+		return nil, "Failed to list combatants."
 	}
 
-	occupants := buildOccupants(allCombatants, combatant)
-	moveReq.Grid = &pathfinding.Grid{
+	return &pathfinding.Grid{
 		Width:     md.Width,
 		Height:    md.Height,
 		Terrain:   md.TerrainGrid,
 		Walls:     md.Walls,
-		Occupants: occupants,
-	}
+		Occupants: buildOccupants(allCombatants, mover),
+	}, ""
+}
 
-	result, err := combat.ValidateProneMoveStandAndMove(moveReq, maxSpeed)
-	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Move error: %v", err))
-		return
-	}
-
-	if !result.Valid {
-		respondEphemeral(h.session, interaction, result.Reason)
-		return
-	}
-
-	confirmMsg := combat.FormatMoveConfirmation(result)
-
-	confirmID := fmt.Sprintf("move_confirm:%s:%s:%d:%d:%d:stand_and_move:%d",
-		turnID.String(), combatantID.String(), destCol, destRow, result.CostFt, result.StandCostFt)
-	cancelID := fmt.Sprintf("move_cancel:%s", turnID.String())
-
+// respondUpdateConfirmCancel sends an update-message response with Confirm and Cancel buttons.
+func (h *MoveHandler) respondUpdateConfirmCancel(interaction *discordgo.Interaction, msg, confirmID, cancelID string) {
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
-			Content: confirmMsg,
+			Content: msg,
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
@@ -451,6 +408,56 @@ func (h *MoveHandler) HandleProneStandAndMove(interaction *discordgo.Interaction
 	})
 }
 
+// HandleProneStandAndMove handles the Stand & Move button click for a prone combatant.
+// It validates the move with stand cost deducted, then shows a confirmation prompt.
+func (h *MoveHandler) HandleProneStandAndMove(interaction *discordgo.Interaction, turnID, combatantID uuid.UUID, destCol, destRow, maxSpeed int) {
+	ctx := context.Background()
+
+	turn, err := h.turnProvider.GetTurn(ctx, turnID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Turn no longer active.")
+		return
+	}
+
+	combatant, err := h.combatService.GetCombatant(ctx, combatantID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to get combatant data.")
+		return
+	}
+
+	grid, errMsg := h.buildGridForTurn(ctx, turn, combatant)
+	if errMsg != "" {
+		respondEphemeral(h.session, interaction, errMsg)
+		return
+	}
+
+	moveReq := combat.MoveRequest{
+		DestCol:      destCol,
+		DestRow:      destRow,
+		Turn:         turn,
+		Combatant:    combatant,
+		Grid:         grid,
+		SizeCategory: pathfinding.SizeMedium,
+	}
+
+	result, err := combat.ValidateProneMoveStandAndMove(moveReq, maxSpeed)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Move error: %v", err))
+		return
+	}
+
+	if !result.Valid {
+		respondEphemeral(h.session, interaction, result.Reason)
+		return
+	}
+
+	confirmID := fmt.Sprintf("move_confirm:%s:%s:%d:%d:%d:stand_and_move:%d",
+		turnID.String(), combatantID.String(), destCol, destRow, result.CostFt, result.StandCostFt)
+	cancelID := fmt.Sprintf("move_cancel:%s", turnID.String())
+
+	h.respondUpdateConfirmCancel(interaction, combat.FormatMoveConfirmation(result), confirmID, cancelID)
+}
+
 // HandleProneCrawl handles the Crawl button click for a prone combatant.
 // It validates the move with crawl costs, then shows a confirmation prompt.
 func (h *MoveHandler) HandleProneCrawl(interaction *discordgo.Interaction, turnID, combatantID uuid.UUID, destCol, destRow int) {
@@ -468,47 +475,19 @@ func (h *MoveHandler) HandleProneCrawl(interaction *discordgo.Interaction, turnI
 		return
 	}
 
+	grid, errMsg := h.buildGridForTurn(ctx, turn, combatant)
+	if errMsg != "" {
+		respondEphemeral(h.session, interaction, errMsg)
+		return
+	}
+
 	moveReq := combat.MoveRequest{
 		DestCol:      destCol,
 		DestRow:      destRow,
 		Turn:         turn,
 		Combatant:    combatant,
+		Grid:         grid,
 		SizeCategory: pathfinding.SizeMedium,
-	}
-
-	// Re-fetch encounter and map for grid
-	encounterID := turn.EncounterID
-	encounter, err := h.combatService.GetEncounter(ctx, encounterID)
-	if err != nil || !encounter.MapID.Valid {
-		respondEphemeral(h.session, interaction, "Failed to get map data.")
-		return
-	}
-
-	mapData, err := h.mapProvider.GetByID(ctx, encounter.MapID.UUID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to load map data.")
-		return
-	}
-
-	md, err := renderer.ParseTiledJSON(mapData.TiledJson, nil, nil)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to parse map data.")
-		return
-	}
-
-	allCombatants, err := h.combatService.ListCombatantsByEncounterID(ctx, encounterID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to list combatants.")
-		return
-	}
-
-	occupants := buildOccupants(allCombatants, combatant)
-	moveReq.Grid = &pathfinding.Grid{
-		Width:     md.Width,
-		Height:    md.Height,
-		Terrain:   md.TerrainGrid,
-		Walls:     md.Walls,
-		Occupants: occupants,
 	}
 
 	result, err := combat.ValidateProneMoveCrawl(moveReq)
@@ -522,36 +501,11 @@ func (h *MoveHandler) HandleProneCrawl(interaction *discordgo.Interaction, turnI
 		return
 	}
 
-	confirmMsg := combat.FormatMoveConfirmation(result)
-
 	confirmID := fmt.Sprintf("move_confirm:%s:%s:%d:%d:%d:crawl:0",
 		turnID.String(), combatantID.String(), destCol, destRow, result.CostFt)
 	cancelID := fmt.Sprintf("move_cancel:%s", turnID.String())
 
-	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseUpdateMessage,
-		Data: &discordgo.InteractionResponseData{
-			Content: confirmMsg,
-			Components: []discordgo.MessageComponent{
-				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{
-						discordgo.Button{
-							Label:    "Confirm",
-							Style:    discordgo.SuccessButton,
-							CustomID: confirmID,
-							Emoji:    &discordgo.ComponentEmoji{Name: "\u2705"},
-						},
-						discordgo.Button{
-							Label:    "Cancel",
-							Style:    discordgo.DangerButton,
-							CustomID: cancelID,
-							Emoji:    &discordgo.ComponentEmoji{Name: "\u274c"},
-						},
-					},
-				},
-			},
-		},
-	})
+	h.respondUpdateConfirmCancel(interaction, combat.FormatMoveConfirmation(result), confirmID, cancelID)
 }
 
 // HandleMoveConfirmWithMode processes a move confirmation with an explicit move mode.
@@ -659,14 +613,13 @@ func ParseMoveConfirmWithModeData(customID string) (turnID, combatantID uuid.UUI
 		return uuid.Nil, uuid.Nil, 0, 0, 0, "", 0, fmt.Errorf("invalid move confirm with mode data: %q", customID)
 	}
 
-	// mode may contain ":standCost" suffix — split it
-	parts := splitLast(mode, ':')
-	if len(parts) == 2 {
-		mode = parts[0]
-		_, scanErr = fmt.Sscanf(parts[1], "%d", &standCostFt)
+	// mode may contain ":standCost" suffix — split at the last colon
+	if idx := strings.LastIndex(mode, ":"); idx >= 0 {
+		_, scanErr = fmt.Sscanf(mode[idx+1:], "%d", &standCostFt)
 		if scanErr != nil {
 			return uuid.Nil, uuid.Nil, 0, 0, 0, "", 0, fmt.Errorf("invalid stand cost in: %q", customID)
 		}
+		mode = mode[:idx]
 	}
 
 	turnID, err = uuid.Parse(turnStr)
@@ -700,13 +653,4 @@ func ParseProneMoveData(customID string, prefix string) (turnID, combatantID uui
 	return turnID, combatantID, destCol, destRow, maxSpeed, nil
 }
 
-// splitLast splits a string at the last occurrence of sep.
-func splitLast(s string, sep byte) []string {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == sep {
-			return []string{s[:i], s[i+1:]}
-		}
-	}
-	return []string{s}
-}
 

@@ -1518,13 +1518,6 @@ func TestMoveHandler_HandleMoveConfirmWithMode_PositionError(t *testing.T) {
 	}
 }
 
-func TestSplitLast_NoSep(t *testing.T) {
-	parts := splitLast("noseparator", ':')
-	if len(parts) != 1 || parts[0] != "noseparator" {
-		t.Errorf("expected single element, got %v", parts)
-	}
-}
-
 func TestMoveHandler_OutOfBounds(t *testing.T) {
 	sess := &mockMoveSession{}
 	handler, _, _, _ := setupMoveHandler(sess)
