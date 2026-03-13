@@ -18,7 +18,7 @@ func ApplyDamageResistances(rawDamage int, damageType string, resistances, immun
 		return 0, "immune to " + dt
 	}
 
-	isResistant := containsCI(resistances, dt) || hasPetrified(conditions)
+	isResistant := containsCI(resistances, dt) || hasCondition(conditions, "petrified")
 	isVulnerable := containsCI(vulnerabilities, dt)
 
 	if isResistant && isVulnerable {
@@ -38,16 +38,6 @@ func ApplyDamageResistances(rawDamage int, damageType string, resistances, immun
 func containsCI(slice []string, target string) bool {
 	for _, s := range slice {
 		if strings.EqualFold(s, target) {
-			return true
-		}
-	}
-	return false
-}
-
-// hasPetrified checks if conditions include the petrified condition.
-func hasPetrified(conditions []CombatCondition) bool {
-	for _, c := range conditions {
-		if c.Condition == "petrified" {
 			return true
 		}
 	}

@@ -233,7 +233,7 @@
   - Depends on: Phase 30, Phase 40
   - Done when: Integration tests verify stand-and-move cost, crawl cost, crawl+difficult terrain stacking, prompt skip after prior stand.
 
-- [ ] **Phase 42: Damage Processing**
+- [x] **Phase 42: Damage Processing**
   - Scope: Damage pipeline: resistance (half), immunity (zero), vulnerability (double). Resistance+vulnerability cancel. Immunity trumps all. Petrified resistance to all damage. Temp HP absorption (damage temp HP first, remainder to real HP). Temp HP doesn't stack (keep higher). Temp HP can't be healed. Exhaustion (progressive, levels 1-6, cumulative effects, auto-apply speed/disadv/HP halving/death). Condition immunity check on condition application.
   - Depends on: Phase 39
   - Done when: Unit tests cover all damage type interactions (R, I, V, R+V, I+V), temp HP, exhaustion levels 1-6, condition immunity.
