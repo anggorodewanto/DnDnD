@@ -63,5 +63,13 @@ UPDATE combatants SET
     updated_at = now()
 WHERE id = $1 RETURNING *;
 
+-- name: UpdateCombatantBardicInspiration :one
+UPDATE combatants SET
+    bardic_inspiration_die = $2,
+    bardic_inspiration_source = $3,
+    bardic_inspiration_granted_at = $4,
+    updated_at = now()
+WHERE id = $1 RETURNING *;
+
 -- name: DeleteCombatant :exec
 DELETE FROM combatants WHERE id = $1;

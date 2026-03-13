@@ -149,9 +149,12 @@ type Combatant struct {
 	IsWildShaped            bool                  `json:"is_wild_shaped"`
 	WildShapeCreatureRef    sql.NullString        `json:"wild_shape_creature_ref"`
 	WildShapeOriginal       pqtype.NullRawMessage `json:"wild_shape_original"`
-	SummonerID              uuid.NullUUID         `json:"summoner_id"`
-	CreatedAt               time.Time             `json:"created_at"`
-	UpdatedAt               time.Time             `json:"updated_at"`
+	SummonerID                 uuid.NullUUID         `json:"summoner_id"`
+	BardicInspirationDie       sql.NullString        `json:"bardic_inspiration_die"`
+	BardicInspirationSource    sql.NullString        `json:"bardic_inspiration_source"`
+	BardicInspirationGrantedAt sql.NullTime          `json:"bardic_inspiration_granted_at"`
+	CreatedAt                  time.Time             `json:"created_at"`
+	UpdatedAt                  time.Time             `json:"updated_at"`
 }
 
 type ConditionsRef struct {

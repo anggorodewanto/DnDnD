@@ -52,8 +52,9 @@ type mockStore struct {
 	getWeaponFn                       func(ctx context.Context, id string) (refdata.Weapon, error)
 	updateCharacterInventoryFn        func(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error
 	updateCombatantRageFn             func(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error)
-	updateCombatantWildShapeFn        func(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error)
-	getArmorFn                        func(ctx context.Context, id string) (refdata.Armor, error)
+	updateCombatantWildShapeFn             func(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error)
+	updateCombatantBardicInspirationFn     func(ctx context.Context, arg refdata.UpdateCombatantBardicInspirationParams) (refdata.Combatant, error)
+	getArmorFn                             func(ctx context.Context, id string) (refdata.Armor, error)
 	updateCharacterFeatureUsesFn      func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
 }
 
@@ -161,6 +162,9 @@ func (m *mockStore) UpdateCombatantRage(ctx context.Context, arg refdata.UpdateC
 }
 func (m *mockStore) UpdateCombatantWildShape(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error) {
 	return m.updateCombatantWildShapeFn(ctx, arg)
+}
+func (m *mockStore) UpdateCombatantBardicInspiration(ctx context.Context, arg refdata.UpdateCombatantBardicInspirationParams) (refdata.Combatant, error) {
+	return m.updateCombatantBardicInspirationFn(ctx, arg)
 }
 func (m *mockStore) GetArmor(ctx context.Context, id string) (refdata.Armor, error) {
 	return m.getArmorFn(ctx, id)

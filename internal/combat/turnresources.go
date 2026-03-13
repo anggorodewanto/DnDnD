@@ -249,6 +249,15 @@ func FormatTurnStartPrompt(encounterName string, roundNumber int32, combatantNam
 	return b.String()
 }
 
+// BuildResourceListWithInspiration returns buildResourceList plus Bardic Inspiration status if present.
+func BuildResourceListWithInspiration(turn refdata.Turn, combatant refdata.Combatant) []string {
+	parts := buildResourceList(turn)
+	if CombatantHasBardicInspiration(combatant) {
+		parts = append(parts, FormatBardicInspirationStatus(combatant.BardicInspirationDie.String))
+	}
+	return parts
+}
+
 // FormatRemainingResources produces the status line appended after each command in #combat-log.
 func FormatRemainingResources(turn refdata.Turn) string {
 	parts := buildResourceList(turn)
