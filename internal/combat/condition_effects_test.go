@@ -123,35 +123,35 @@ func TestCheckSaveConditionEffects_AdvAndDisadvCancel(t *testing.T) {
 
 func TestCheckAbilityCheckEffects_BlindedAutoFailSight(t *testing.T) {
 	conds := []CombatCondition{{Condition: "blinded"}}
-	autoFail, _, reasons := CheckAbilityCheckEffects(conds, true, false, false)
+	autoFail, _, reasons := CheckAbilityCheckEffects(conds, AbilityCheckContext{RequiresSight: true})
 	assert.True(t, autoFail)
 	assert.Contains(t, reasons, "blinded: auto-fail (requires sight)")
 }
 
 func TestCheckAbilityCheckEffects_BlindedNoEffectNonSight(t *testing.T) {
 	conds := []CombatCondition{{Condition: "blinded"}}
-	autoFail, mode, _ := CheckAbilityCheckEffects(conds, false, false, false)
+	autoFail, mode, _ := CheckAbilityCheckEffects(conds, AbilityCheckContext{})
 	assert.False(t, autoFail)
 	assert.Equal(t, dice.Normal, mode)
 }
 
 func TestCheckAbilityCheckEffects_DeafenedAutoFailHearing(t *testing.T) {
 	conds := []CombatCondition{{Condition: "deafened"}}
-	autoFail, _, reasons := CheckAbilityCheckEffects(conds, false, true, false)
+	autoFail, _, reasons := CheckAbilityCheckEffects(conds, AbilityCheckContext{RequiresHearing: true})
 	assert.True(t, autoFail)
 	assert.Contains(t, reasons, "deafened: auto-fail (requires hearing)")
 }
 
 func TestCheckAbilityCheckEffects_DeafenedNoEffectNonHearing(t *testing.T) {
 	conds := []CombatCondition{{Condition: "deafened"}}
-	autoFail, mode, _ := CheckAbilityCheckEffects(conds, false, false, false)
+	autoFail, mode, _ := CheckAbilityCheckEffects(conds, AbilityCheckContext{})
 	assert.False(t, autoFail)
 	assert.Equal(t, dice.Normal, mode)
 }
 
 func TestCheckAbilityCheckEffects_FrightenedDisadvWhenVisible(t *testing.T) {
 	conds := []CombatCondition{{Condition: "frightened"}}
-	autoFail, mode, reasons := CheckAbilityCheckEffects(conds, false, false, true)
+	autoFail, mode, reasons := CheckAbilityCheckEffects(conds, AbilityCheckContext{FearSourceVisible: true})
 	assert.False(t, autoFail)
 	assert.Equal(t, dice.Disadvantage, mode)
 	assert.Contains(t, reasons, "frightened: disadvantage on ability checks (fear source visible)")
@@ -159,7 +159,7 @@ func TestCheckAbilityCheckEffects_FrightenedDisadvWhenVisible(t *testing.T) {
 
 func TestCheckAbilityCheckEffects_FrightenedNoEffectWhenNotVisible(t *testing.T) {
 	conds := []CombatCondition{{Condition: "frightened"}}
-	autoFail, mode, reasons := CheckAbilityCheckEffects(conds, false, false, false)
+	autoFail, mode, reasons := CheckAbilityCheckEffects(conds, AbilityCheckContext{})
 	assert.False(t, autoFail)
 	assert.Equal(t, dice.Normal, mode)
 	assert.Empty(t, reasons)
@@ -167,14 +167,14 @@ func TestCheckAbilityCheckEffects_FrightenedNoEffectWhenNotVisible(t *testing.T)
 
 func TestCheckAbilityCheckEffects_PoisonedDisadv(t *testing.T) {
 	conds := []CombatCondition{{Condition: "poisoned"}}
-	autoFail, mode, reasons := CheckAbilityCheckEffects(conds, false, false, false)
+	autoFail, mode, reasons := CheckAbilityCheckEffects(conds, AbilityCheckContext{})
 	assert.False(t, autoFail)
 	assert.Equal(t, dice.Disadvantage, mode)
 	assert.Contains(t, reasons, "poisoned: disadvantage on ability checks")
 }
 
 func TestCheckAbilityCheckEffects_NoConds(t *testing.T) {
-	autoFail, mode, reasons := CheckAbilityCheckEffects(nil, false, false, false)
+	autoFail, mode, reasons := CheckAbilityCheckEffects(nil, AbilityCheckContext{})
 	assert.False(t, autoFail)
 	assert.Equal(t, dice.Normal, mode)
 	assert.Empty(t, reasons)
@@ -185,7 +185,7 @@ func TestCheckAbilityCheckEffects_MultiplePoisonedAndFrightenedVisible(t *testin
 		{Condition: "poisoned"},
 		{Condition: "frightened"},
 	}
-	autoFail, mode, reasons := CheckAbilityCheckEffects(conds, false, false, true)
+	autoFail, mode, reasons := CheckAbilityCheckEffects(conds, AbilityCheckContext{FearSourceVisible: true})
 	assert.False(t, autoFail)
 	assert.Equal(t, dice.Disadvantage, mode)
 	assert.Len(t, reasons, 2)
@@ -196,7 +196,7 @@ func TestCheckAbilityCheckEffects_MultiplePoisonedAndFrightenedNotVisible(t *tes
 		{Condition: "poisoned"},
 		{Condition: "frightened"},
 	}
-	autoFail, mode, reasons := CheckAbilityCheckEffects(conds, false, false, false)
+	autoFail, mode, reasons := CheckAbilityCheckEffects(conds, AbilityCheckContext{})
 	assert.False(t, autoFail)
 	assert.Equal(t, dice.Disadvantage, mode)
 	// Only poisoned should contribute, not frightened (fear source not visible)
@@ -690,7 +690,7 @@ func TestAdvanceTurn_ParalyzedCombatantSkipped(t *testing.T) {
 	assert.Equal(t, activeID, info.CombatantID)
 }
 
-func TestSkipIncapacitatedTurn_CreateTurnError(t *testing.T) {
+func TestSkipCombatantTurn_CreateTurnError(t *testing.T) {
 	encounterID := uuid.New()
 	stunnedID := uuid.New()
 
@@ -723,7 +723,7 @@ func TestSkipIncapacitatedTurn_CreateTurnError(t *testing.T) {
 	assert.Contains(t, err.Error(), "creating skipped turn for incapacitated")
 }
 
-func TestSkipIncapacitatedTurn_SkipTurnError(t *testing.T) {
+func TestSkipCombatantTurn_SkipTurnError(t *testing.T) {
 	encounterID := uuid.New()
 	stunnedID := uuid.New()
 
@@ -757,4 +757,52 @@ func TestSkipIncapacitatedTurn_SkipTurnError(t *testing.T) {
 	_, err := svc.AdvanceTurn(context.Background(), encounterID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "skipping incapacitated turn")
+}
+
+// TestAdvanceTurn_AllIncapacitatedAdvancesRound verifies that when all combatants in a round
+// are incapacitated, the round advances and conditions are re-checked (not given an active turn).
+func TestAdvanceTurn_AllIncapacitatedAdvancesRound(t *testing.T) {
+	encounterID := uuid.New()
+	stunnedID := uuid.New()
+
+	stunned := refdata.Combatant{
+		ID:              stunnedID,
+		DisplayName:     "Stunned Fighter",
+		Conditions:      mustMarshal([]CombatCondition{{Condition: "stunned", DurationRounds: 2, StartedRound: 2}}),
+		IsAlive:         true,
+		InitiativeOrder: 1,
+		IsNpc:           true,
+	}
+
+	roundAdvanced := false
+	ms := defaultMockStore()
+	ms.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 2}, nil
+	}
+	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{stunned}, nil
+	}
+	ms.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return nil, nil
+	}
+	ms.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, Status: arg.Status}, nil
+	}
+	ms.skipTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: id, Status: "skipped"}, nil
+	}
+	ms.updateEncounterRoundFn = func(ctx context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
+		roundAdvanced = true
+		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber}, nil
+	}
+
+	svc := NewService(ms)
+	_, err := svc.AdvanceTurn(context.Background(), encounterID)
+
+	// Should advance the round but NOT give an active turn to stunned combatant.
+	// Since the combatant is still incapacitated in round 3, they get skipped again,
+	// resulting in "no alive combatants" or another round advance.
+	// The key assertion: round was advanced AND we don't get an active turn.
+	assert.True(t, roundAdvanced, "round should advance when all combatants are incapacitated")
+	assert.Error(t, err, "should not create active turn for incapacitated combatant")
 }

@@ -80,28 +80,35 @@ func abilityLabel(ability string) string {
 	}
 }
 
+// AbilityCheckContext provides context for ability check condition effects.
+type AbilityCheckContext struct {
+	RequiresSight    bool
+	RequiresHearing  bool
+	FearSourceVisible bool
+}
+
 // CheckAbilityCheckEffects checks conditions for effects on ability checks.
-// The fearSourceVisible parameter controls whether frightened applies disadvantage
-// (per 5e rules, only when the source of fear is within line of sight).
+// The context parameter controls which sensory requirements apply and whether
+// the frightened condition's fear source is visible (per 5e rules).
 // Returns autoFail, rollMode, and reasons.
-func CheckAbilityCheckEffects(conditions []CombatCondition, requiresSight bool, requiresHearing bool, fearSourceVisible bool) (bool, dice.RollMode, []string) {
+func CheckAbilityCheckEffects(conditions []CombatCondition, ctx AbilityCheckContext) (bool, dice.RollMode, []string) {
 	var reasons []string
 	var hasDisadv bool
 
 	for _, c := range conditions {
 		switch c.Condition {
 		case "blinded":
-			if requiresSight {
+			if ctx.RequiresSight {
 				reasons = append(reasons, "blinded: auto-fail (requires sight)")
 				return true, dice.Normal, reasons
 			}
 		case "deafened":
-			if requiresHearing {
+			if ctx.RequiresHearing {
 				reasons = append(reasons, "deafened: auto-fail (requires hearing)")
 				return true, dice.Normal, reasons
 			}
 		case "frightened":
-			if fearSourceVisible {
+			if ctx.FearSourceVisible {
 				hasDisadv = true
 				reasons = append(reasons, "frightened: disadvantage on ability checks (fear source visible)")
 			}

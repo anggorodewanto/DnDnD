@@ -591,8 +591,8 @@ func buildCritDiceDisplay(weapon refdata.Weapon, dmgMod int) string {
 
 // CheckAutoCrit checks if an attack should auto-crit based on target conditions and distance.
 // Returns (autoCrit bool, reason string).
-func CheckAutoCrit(conditions json.RawMessage, distFt int, isMelee bool) (bool, string) {
-	if !isMelee || distFt > 5 {
+func CheckAutoCrit(conditions json.RawMessage, distFt int) (bool, string) {
+	if distFt > 5 {
 		return false, ""
 	}
 
@@ -942,8 +942,7 @@ func buildAttackInput(
 	dmAdvantage, dmDisadvantage bool,
 	overrideDmgMod *int,
 ) AttackInput {
-	isMelee := !IsRangedWeapon(weapon)
-	autoCrit, autoCritReason := CheckAutoCrit(target.Conditions, distFt, isMelee)
+	autoCrit, autoCritReason := CheckAutoCrit(target.Conditions, distFt)
 	attackerConds, _ := parseConditions(attacker.Conditions)
 	targetConds, _ := parseConditions(target.Conditions)
 

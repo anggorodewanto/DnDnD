@@ -773,7 +773,7 @@ func TestService_AdvanceTurn_SkipSurprisedSkipTurnError(t *testing.T) {
 	svc := NewService(store)
 	_, err := svc.AdvanceTurn(context.Background(), uuid.New())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "skipping turn")
+	assert.Contains(t, err.Error(), "skipping surprised turn")
 }
 
 func TestService_AdvanceTurn_SkipSurprisedUpdateConditionsError(t *testing.T) {

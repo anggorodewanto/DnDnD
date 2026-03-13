@@ -105,6 +105,7 @@ var combatOnlyConditions = map[string]bool{
 	"blinded":       true,
 	"deafened":      true,
 	"surprised":     true,
+	"dodge":         true,
 }
 
 // ClearCombatConditions removes combat-only conditions (stunned, frightened, charmed,
@@ -385,59 +386,85 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 	}
 
 	// Iterate through candidates, skipping surprised and incapacitated ones
+	allSurprised := roundNumber == 1
+	allIncapacitated := true
 	for _, candidate := range candidates {
-		if roundNumber == 1 && IsSurprised(candidate.Conditions) {
+		conds, _ := parseConditions(candidate.Conditions)
+
+		if roundNumber == 1 && hasCondition(conds, "surprised") {
 			if err := s.skipSurprisedTurn(ctx, encounterID, roundNumber, candidate); err != nil {
 				return TurnInfo{}, err
 			}
 			continue
 		}
+		allSurprised = false
 
 		// Skip incapacitated combatants (stunned, paralyzed, unconscious, petrified, incapacitated)
-		if IsIncapacitatedRaw(candidate.Conditions) {
-			if err := s.skipIncapacitatedTurn(ctx, encounterID, roundNumber, candidate); err != nil {
+		if IsIncapacitated(conds) {
+			if err := s.skipCombatantTurn(ctx, encounterID, roundNumber, candidate, "incapacitated"); err != nil {
 				return TurnInfo{}, err
 			}
 			continue
 		}
+		allIncapacitated = false
 
 		// Create active turn for this combatant
 		return s.createActiveTurn(ctx, encounterID, roundNumber, candidate)
 	}
 
 	// All candidates were surprised in round 1 — advance to round 2
-	roundNumber++
-	if _, err := s.store.UpdateEncounterRound(ctx, refdata.UpdateEncounterRoundParams{
-		ID:          encounterID,
-		RoundNumber: roundNumber,
-	}); err != nil {
-		return TurnInfo{}, fmt.Errorf("advancing round after all surprised: %w", err)
+	if allSurprised {
+		roundNumber++
+		if _, err := s.store.UpdateEncounterRound(ctx, refdata.UpdateEncounterRoundParams{
+			ID:          encounterID,
+			RoundNumber: roundNumber,
+		}); err != nil {
+			return TurnInfo{}, fmt.Errorf("advancing round after all surprised: %w", err)
+		}
+
+		// Start round 2 with first alive combatant
+		for _, c := range combatants {
+			if c.IsAlive {
+				return s.createActiveTurn(ctx, encounterID, roundNumber, c)
+			}
+		}
+		return TurnInfo{}, errors.New("no alive combatants")
 	}
 
-	// Start round 2 with first alive combatant
-	for _, c := range combatants {
-		if c.IsAlive {
+	// All candidates were incapacitated — advance round and re-check
+	if allIncapacitated {
+		roundNumber++
+		if _, err := s.store.UpdateEncounterRound(ctx, refdata.UpdateEncounterRoundParams{
+			ID:          encounterID,
+			RoundNumber: roundNumber,
+		}); err != nil {
+			return TurnInfo{}, fmt.Errorf("advancing round after all incapacitated: %w", err)
+		}
+
+		// Re-iterate: skip still-incapacitated, give turn to first non-incapacitated
+		for _, c := range combatants {
+			if !c.IsAlive {
+				continue
+			}
+			conds, _ := parseConditions(c.Conditions)
+			if IsIncapacitated(conds) {
+				if err := s.skipCombatantTurn(ctx, encounterID, roundNumber, c, "incapacitated"); err != nil {
+					return TurnInfo{}, err
+				}
+				continue
+			}
 			return s.createActiveTurn(ctx, encounterID, roundNumber, c)
 		}
+		return TurnInfo{}, errors.New("no alive combatants")
 	}
 
 	return TurnInfo{}, errors.New("no alive combatants")
 }
 
-// skipSurprisedTurn creates and immediately skips a turn for a surprised combatant,
-// then removes the surprised condition.
+// skipSurprisedTurn skips a surprised combatant's turn and removes the surprised condition.
 func (s *Service) skipSurprisedTurn(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant) error {
-	turn, err := s.store.CreateTurn(ctx, refdata.CreateTurnParams{
-		EncounterID: encounterID,
-		CombatantID: combatant.ID,
-		RoundNumber: roundNumber,
-		Status:      "skipped",
-	})
-	if err != nil {
-		return fmt.Errorf("creating skipped turn: %w", err)
-	}
-	if _, err := s.store.SkipTurn(ctx, turn.ID); err != nil {
-		return fmt.Errorf("skipping turn: %w", err)
+	if err := s.skipCombatantTurn(ctx, encounterID, roundNumber, combatant, "surprised"); err != nil {
+		return err
 	}
 	newConds, err := RemoveSurprisedCondition(combatant.Conditions)
 	if err != nil {
@@ -453,8 +480,8 @@ func (s *Service) skipSurprisedTurn(ctx context.Context, encounterID uuid.UUID, 
 	return nil
 }
 
-// skipIncapacitatedTurn creates and immediately skips a turn for an incapacitated combatant.
-func (s *Service) skipIncapacitatedTurn(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant) error {
+// skipCombatantTurn creates and immediately skips a turn for the given reason.
+func (s *Service) skipCombatantTurn(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant, reason string) error {
 	turn, err := s.store.CreateTurn(ctx, refdata.CreateTurnParams{
 		EncounterID: encounterID,
 		CombatantID: combatant.ID,
@@ -462,12 +489,22 @@ func (s *Service) skipIncapacitatedTurn(ctx context.Context, encounterID uuid.UU
 		Status:      "skipped",
 	})
 	if err != nil {
-		return fmt.Errorf("creating skipped turn for incapacitated: %w", err)
+		return fmt.Errorf("creating skipped turn for %s: %w", reason, err)
 	}
 	if _, err := s.store.SkipTurn(ctx, turn.ID); err != nil {
-		return fmt.Errorf("skipping incapacitated turn: %w", err)
+		return fmt.Errorf("skipping %s turn: %w", reason, err)
 	}
 	return nil
+}
+
+// hasCondition checks if a parsed condition slice contains a specific condition name.
+func hasCondition(conds []CombatCondition, name string) bool {
+	for _, c := range conds {
+		if c.Condition == name {
+			return true
+		}
+	}
+	return false
 }
 
 // createActiveTurn creates an active turn and updates the encounter's current turn.

@@ -1288,14 +1288,14 @@ func TestClearCombatConditions_EmptyInput(t *testing.T) {
 	assert.Equal(t, "[]", string(result2))
 }
 
-// --- TDD Cycle 46: ClearCombatConditions removes all 11 combat conditions ---
+// --- TDD Cycle 46: ClearCombatConditions removes all 12 combat conditions ---
 
 func TestClearCombatConditions_AllCombatConditions(t *testing.T) {
 	allCombat := []CombatCondition{
 		{Condition: "stunned"}, {Condition: "frightened"}, {Condition: "charmed"},
 		{Condition: "restrained"}, {Condition: "grappled"}, {Condition: "prone"},
 		{Condition: "incapacitated"}, {Condition: "paralyzed"}, {Condition: "blinded"},
-		{Condition: "deafened"}, {Condition: "surprised"},
+		{Condition: "deafened"}, {Condition: "surprised"}, {Condition: "dodge"},
 	}
 	input, _ := json.Marshal(allCombat)
 	result, err := ClearCombatConditions(input)

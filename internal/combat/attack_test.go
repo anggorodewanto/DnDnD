@@ -864,49 +864,55 @@ func TestCheckAutoCrit(t *testing.T) {
 		name       string
 		conditions json.RawMessage
 		distFt     int
-		isMelee    bool
 		expectCrit bool
 	}{
 		{
 			name:       "paralyzed within 5ft melee",
 			conditions: json.RawMessage(`[{"condition":"paralyzed"}]`),
 			distFt:     5,
-			isMelee:    true,
 			expectCrit: true,
 		},
 		{
 			name:       "unconscious within 5ft melee",
 			conditions: json.RawMessage(`[{"condition":"unconscious"}]`),
 			distFt:     5,
-			isMelee:    true,
 			expectCrit: true,
 		},
 		{
-			name:       "paralyzed but ranged",
+			name:       "paralyzed ranged within 5ft",
 			conditions: json.RawMessage(`[{"condition":"paralyzed"}]`),
 			distFt:     5,
-			isMelee:    false,
+			expectCrit: true,
+		},
+		{
+			name:       "unconscious ranged within 5ft",
+			conditions: json.RawMessage(`[{"condition":"unconscious"}]`),
+			distFt:     5,
+			expectCrit: true,
+		},
+		{
+			name:       "paralyzed ranged beyond 5ft",
+			conditions: json.RawMessage(`[{"condition":"paralyzed"}]`),
+			distFt:     30,
 			expectCrit: false,
 		},
 		{
 			name:       "paralyzed but beyond 5ft",
 			conditions: json.RawMessage(`[{"condition":"paralyzed"}]`),
 			distFt:     10,
-			isMelee:    true,
 			expectCrit: false,
 		},
 		{
 			name:       "no conditions",
 			conditions: json.RawMessage(`[]`),
 			distFt:     5,
-			isMelee:    true,
 			expectCrit: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			crit, _ := CheckAutoCrit(tt.conditions, tt.distFt, tt.isMelee)
+			crit, _ := CheckAutoCrit(tt.conditions, tt.distFt)
 			assert.Equal(t, tt.expectCrit, crit)
 		})
 	}
@@ -1108,7 +1114,7 @@ func TestResolveAttack_NatOneAlwaysMisses(t *testing.T) {
 }
 
 func TestCheckAutoCrit_BadJSON(t *testing.T) {
-	crit, reason := CheckAutoCrit(json.RawMessage(`invalid`), 5, true)
+	crit, reason := CheckAutoCrit(json.RawMessage(`invalid`), 5)
 	assert.False(t, crit)
 	assert.Equal(t, "", reason)
 }
