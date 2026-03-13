@@ -3,6 +3,7 @@ package combat
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
 
@@ -92,7 +93,7 @@ func DetectOpportunityAttacks(
 			continue
 		}
 
-		exitLabel := renderer.ColumnLabel(exitCol) + fmt.Sprintf("%d", exitRow+1)
+		exitLabel := renderer.ColumnLabel(exitCol) + strconv.Itoa(exitRow+1)
 
 		triggers = append(triggers, OATrigger{
 			HostileID:   hostile.ID,
@@ -129,7 +130,7 @@ func resolveHostileReach(hostile refdata.Combatant, creatureAttacks map[string][
 // combatantGridPos returns the 0-indexed grid position of a combatant.
 // Returns (-1, -1) if position cannot be parsed.
 func combatantGridPos(c refdata.Combatant) (col, row int) {
-	coord := c.PositionCol + fmt.Sprintf("%d", c.PositionRow)
+	coord := c.PositionCol + strconv.Itoa(int(c.PositionRow))
 	col, row, err := renderer.ParseCoordinate(coord)
 	if err != nil {
 		return -1, -1
@@ -166,17 +167,15 @@ func findReachExit(path []pathfinding.Point, hostileCol, hostileRow, reachSquare
 // chebyshevDist returns the Chebyshev distance between two points.
 func chebyshevDist(col1, row1, col2, row2 int) int {
 	dc := col1 - col2
-	if dc < 0 {
-		dc = -dc
-	}
 	dr := row1 - row2
-	if dr < 0 {
-		dr = -dr
+	return max(abs(dc), abs(dr))
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
 	}
-	if dc > dr {
-		return dc
-	}
-	return dr
+	return n
 }
 
 // FormatOAPrompt formats the opportunity attack prompt message for a player.
