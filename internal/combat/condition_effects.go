@@ -196,6 +196,61 @@ func IsIncapacitatedRaw(conditions json.RawMessage) bool {
 	return IsIncapacitated(conds)
 }
 
+// EffectiveSpeedWithExhaustion returns the effective speed after both condition
+// and exhaustion effects. Conditions (grappled/restrained) override to 0;
+// exhaustion level 5+ overrides to 0; exhaustion level 2+ halves.
+func EffectiveSpeedWithExhaustion(baseSpeed int, conditions []CombatCondition, exhaustionLevel int) int {
+	speed := EffectiveSpeed(baseSpeed, conditions)
+	if speed == 0 {
+		return 0
+	}
+	return ExhaustionEffectiveSpeed(speed, exhaustionLevel)
+}
+
+// CheckSaveWithExhaustion extends CheckSaveConditionEffects with exhaustion effects.
+// Exhaustion level 3+ adds disadvantage on saving throws.
+func CheckSaveWithExhaustion(conditions []CombatCondition, ability string, exhaustionLevel int) (bool, dice.RollMode, []string) {
+	autoFail, mode, reasons := CheckSaveConditionEffects(conditions, ability)
+	if autoFail {
+		return autoFail, mode, reasons
+	}
+
+	_, _, saveDisadv := ExhaustionRollEffect(exhaustionLevel)
+	if saveDisadv {
+		reasons = append(reasons, "exhaustion (level 3+): disadvantage on saving throws")
+		mode = applyDisadvantage(mode)
+	}
+	return false, mode, reasons
+}
+
+// CheckAbilityCheckWithExhaustion extends CheckAbilityCheckEffects with exhaustion effects.
+// Exhaustion level 1+ adds disadvantage on ability checks.
+func CheckAbilityCheckWithExhaustion(conditions []CombatCondition, ctx AbilityCheckContext, exhaustionLevel int) (bool, dice.RollMode, []string) {
+	autoFail, mode, reasons := CheckAbilityCheckEffects(conditions, ctx)
+	if autoFail {
+		return autoFail, mode, reasons
+	}
+
+	checkDisadv, _, _ := ExhaustionRollEffect(exhaustionLevel)
+	if checkDisadv {
+		reasons = append(reasons, "exhaustion (level 1+): disadvantage on ability checks")
+		mode = applyDisadvantage(mode)
+	}
+	return false, mode, reasons
+}
+
+// applyDisadvantage adds disadvantage to an existing roll mode.
+func applyDisadvantage(current dice.RollMode) dice.RollMode {
+	switch current {
+	case dice.Advantage:
+		return dice.AdvantageAndDisadvantage
+	case dice.Normal:
+		return dice.Disadvantage
+	default:
+		return current // already disadvantage or cancel
+	}
+}
+
 // StandFromProneCost returns the movement cost to stand from prone,
 // which is half the creature's maximum speed (rounded down).
 func StandFromProneCost(maxSpeed int) int {

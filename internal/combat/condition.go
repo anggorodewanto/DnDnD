@@ -131,11 +131,25 @@ func CheckExpiredConditions(conditions json.RawMessage, currentRound int, trigge
 }
 
 // ApplyCondition applies a condition to a combatant and returns the updated
-// combatant and combat log messages.
+// combatant and combat log messages. If the combatant has a creature_ref_id,
+// condition immunities are checked first; immune conditions are blocked with
+// a log message.
 func (s *Service) ApplyCondition(ctx context.Context, combatantID uuid.UUID, condition CombatCondition) (refdata.Combatant, []string, error) {
 	c, err := s.store.GetCombatant(ctx, combatantID)
 	if err != nil {
 		return refdata.Combatant{}, nil, fmt.Errorf("getting combatant: %w", err)
+	}
+
+	// Check condition immunity for creatures
+	if c.CreatureRefID.Valid && c.CreatureRefID.String != "" {
+		creature, err := s.store.GetCreature(ctx, c.CreatureRefID.String)
+		if err != nil {
+			return refdata.Combatant{}, nil, fmt.Errorf("getting creature for immunity check: %w", err)
+		}
+		if CheckConditionImmunity(condition.Condition, creature.ConditionImmunities) {
+			msg := fmt.Sprintf("🛡️ %s is immune to %s", c.DisplayName, condition.Condition)
+			return c, []string{msg}, nil
+		}
 	}
 
 	newConds, err := AddCondition(c.Conditions, condition)
