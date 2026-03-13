@@ -293,7 +293,7 @@
   - Depends on: Phase 44, Phase 28
   - Done when: Integration tests verify healing, pool tracking, adjacency check, disease/poison cure, self-targeting.
 
-- [ ] **Phase 53: Action Surge (Fighter)**
+- [x] **Phase 53: Action Surge (Fighter)**
   - Scope: `/action surge`: grants additional action. Tracked in feature_uses (1 use short rest, 2 at level 17). Resets action_used and attacks_remaining. Prevents double surge per turn (action_surged flag). Not an extra bonus action or reaction. Combat log.
   - Depends on: Phase 44, Phase 28
   - Done when: Integration tests verify surge grants action, extra attack sequence, double-surge prevention, recharge on short rest.

@@ -209,17 +209,22 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 		speedFt = 30
 	}
 
-	// Parse character classes to determine attacks per action
+	return int32(EffectiveSpeed(int(speedFt), conds)), int32(s.resolveAttacksPerAction(ctx, char)), nil
+}
+
+// resolveAttacksPerAction determines the number of attacks per action for a character
+// based on their class data.
+func (s *Service) resolveAttacksPerAction(ctx context.Context, char refdata.Character) int {
 	var classes []CharacterClass
 	if err := json.Unmarshal(char.Classes, &classes); err != nil {
-		return speedFt, 1, nil
+		return 1
 	}
 
 	bestAttacks := 1
 	for _, cc := range classes {
 		classInfo, err := s.store.GetClass(ctx, cc.Class)
 		if err != nil {
-			continue // Class not found; default to 1 attack
+			continue
 		}
 		var attacksMap map[string]int
 		if err := json.Unmarshal(classInfo.AttacksPerAction, &attacksMap); err != nil {
@@ -231,7 +236,7 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 		}
 	}
 
-	return int32(EffectiveSpeed(int(speedFt), conds)), int32(bestAttacks), nil
+	return bestAttacks
 }
 
 // FormatTurnStartPrompt produces the turn start notification shown in #your-turn.
