@@ -283,7 +283,7 @@
   - Depends on: Phase 44, Phase 28
   - Done when: Integration tests verify Turn Undead saves, Destroy Undead CR threshold, Preserve Life HP distribution, DM-queue routing for narrative options.
 
-- [ ] **Phase 51: Divine Smite (Paladin)**
+- [x] **Phase 51: Divine Smite (Paladin)**
   - Scope: After melee weapon hit: ephemeral prompt with available slot levels. Smite damage (2d8 + 1d8 per slot above 1st, max 5d8). +1d8 vs undead/fiend. Crit doubles smite dice. 30s timeout. Spell slot deduction. Combat log output. Driven by `resource_on_hit` effect type.
   - Depends on: Phase 44, Phase 34
   - Done when: Integration tests verify prompt appearance, slot selection, damage calculation, undead bonus, crit doubling, timeout behavior.

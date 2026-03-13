@@ -160,8 +160,6 @@ func TestIntegration_DivineSmite_BasicSlotDeduction(t *testing.T) {
 		"1": {Current: 3, Max: 4},
 		"2": {Current: 2, Max: 3},
 	}
-	creatureID := createTestCreature(t, testutil.NewMigratedTestDB(t, dbfs.Migrations))
-	_ = creatureID // just seeding; we'll use a fresh fixture
 	f := setupDivineSmiteFixture(t, "", slots)
 	ctx := context.Background()
 

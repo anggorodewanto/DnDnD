@@ -17,11 +17,7 @@ import (
 // SmiteDiceCount returns the number of d8s for a Divine Smite at the given slot level.
 // 1st=2d8, 2nd=3d8, 3rd=4d8, 4th+=5d8 (max 5d8).
 func SmiteDiceCount(slotLevel int) int {
-	count := 1 + slotLevel // 1st=2, 2nd=3, etc.
-	if count > 5 {
-		return 5
-	}
-	return count
+	return min(1+slotLevel, 5)
 }
 
 // SlotInfo represents the current and max values for a spell slot level.
@@ -197,7 +193,7 @@ func (s *Service) DivineSmite(ctx context.Context, cmd DivineSmiteCommand, rolle
 	}
 
 	// Check if target is undead or fiend
-	isUndead := false
+	var isUndead bool
 	if cmd.Target.CreatureRefID.Valid && cmd.Target.CreatureRefID.String != "" {
 		creature, err := s.store.GetCreature(ctx, cmd.Target.CreatureRefID.String)
 		if err == nil {
@@ -205,12 +201,9 @@ func (s *Service) DivineSmite(ctx context.Context, cmd DivineSmiteCommand, rolle
 		}
 	}
 
-	// Calculate dice
-	diceCount, diceStr := SmiteDamageFormula(cmd.SlotLevel, isUndead, cmd.IsCritical)
-
-	// Roll damage
-	rollExpr := fmt.Sprintf("%dd8", diceCount)
-	rollResult, err := roller.Roll(rollExpr)
+	// Calculate and roll damage
+	_, diceStr := SmiteDamageFormula(cmd.SlotLevel, isUndead, cmd.IsCritical)
+	rollResult, err := roller.Roll(diceStr)
 	if err != nil {
 		return DivineSmiteResult{}, fmt.Errorf("rolling smite damage: %w", err)
 	}
