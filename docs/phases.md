@@ -303,7 +303,7 @@
   - Depends on: Phase 28, Phase 40, Phase 18
   - Done when: Integration tests verify each standard action's resource cost, mechanical effect, and combat log output. Rogue cunning-action dash and disengage verified as bonus actions with class check.
 
-- [ ] **Phase 55: Opportunity Attacks**
+- [x] **Phase 55: Opportunity Attacks**
   - Scope: Auto-detect when creature leaves hostile's melee reach during `/move`. Check Disengage suppression (has_disengaged). Queue-and-continue: movement completes, OA trigger recorded at exit tile. Prompt hostile (player: ping in #your-turn; DM: dashboard prompt). Uses reaction. End-of-round forfeiture. If OA kills target, DM handles retroactive correction. Interaction with reach weapons (10ft reach).
   - Depends on: Phase 30, Phase 34, Phase 54
   - Done when: Integration tests verify OA trigger detection, disengage suppression, prompt delivery, reaction consumption, reach weapon interaction, forfeiture.
