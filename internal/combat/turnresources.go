@@ -235,12 +235,18 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 }
 
 // FormatTurnStartPrompt produces the turn start notification shown in #your-turn.
-func FormatTurnStartPrompt(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn) string {
+// An optional combatant may be passed to include Bardic Inspiration status.
+func FormatTurnStartPrompt(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn, combatant ...refdata.Combatant) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", encounterName, roundNumber)
 	fmt.Fprintf(&b, "\U0001f514 @%s \u2014 it's your turn!\n", combatantName)
 
-	parts := buildResourceList(turn)
+	var parts []string
+	if len(combatant) > 0 {
+		parts = BuildResourceListWithInspiration(turn, combatant[0])
+	} else {
+		parts = buildResourceList(turn)
+	}
 	if len(parts) > 0 {
 		fmt.Fprintf(&b, "\U0001f4cb Available: %s", strings.Join(parts, " | "))
 	} else {
@@ -259,8 +265,14 @@ func BuildResourceListWithInspiration(turn refdata.Turn, combatant refdata.Comba
 }
 
 // FormatRemainingResources produces the status line appended after each command in #combat-log.
-func FormatRemainingResources(turn refdata.Turn) string {
-	parts := buildResourceList(turn)
+// An optional combatant may be passed to include Bardic Inspiration status.
+func FormatRemainingResources(turn refdata.Turn, combatant ...refdata.Combatant) string {
+	var parts []string
+	if len(combatant) > 0 {
+		parts = BuildResourceListWithInspiration(turn, combatant[0])
+	} else {
+		parts = buildResourceList(turn)
+	}
 	if len(parts) == 0 {
 		return "\U0001f4cb All actions spent \u2014 type /done to end your turn."
 	}

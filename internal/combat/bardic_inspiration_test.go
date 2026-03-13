@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -510,4 +511,140 @@ func TestFormatBardicInspirationNotification(t *testing.T) {
 	assert.Contains(t, result, "attack roll")
 	assert.Contains(t, result, "ability check")
 	assert.Contains(t, result, "saving throw")
+}
+
+// --- TDD Cycle 19: UseBardicInspiration happy path ---
+
+func TestUseBardicInspiration_HappyPath(t *testing.T) {
+	targetID := uuid.New()
+	store := defaultMockStore()
+	store.updateCombatantBardicInspirationFn = func(ctx context.Context, arg refdata.UpdateCombatantBardicInspirationParams) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:          targetID,
+			DisplayName: "Aria",
+			// Cleared
+			BardicInspirationDie:       arg.BardicInspirationDie,
+			BardicInspirationSource:    arg.BardicInspirationSource,
+			BardicInspirationGrantedAt: arg.BardicInspirationGrantedAt,
+		}, nil
+	}
+
+	svc := NewService(store)
+	roller := dice.NewRoller(func(max int) int { return 4 }) // always rolls 4
+
+	result, err := svc.UseBardicInspiration(context.Background(), UseBardicInspirationCommand{
+		Combatant: refdata.Combatant{
+			ID:                      targetID,
+			DisplayName:             "Aria",
+			BardicInspirationDie:    sql.NullString{String: "d8", Valid: true},
+			BardicInspirationSource: sql.NullString{String: "Thorn", Valid: true},
+			BardicInspirationGrantedAt: sql.NullTime{Time: time.Now(), Valid: true},
+		},
+		OriginalTotal: 14,
+	}, roller)
+
+	require.NoError(t, err)
+	assert.Equal(t, 4, result.DieResult)
+	assert.Equal(t, 18, result.NewTotal)
+	assert.Equal(t, "d8", result.Die)
+	assert.Contains(t, result.CombatLog, "Aria")
+	assert.Contains(t, result.CombatLog, "+4")
+	assert.Contains(t, result.CombatLog, "d8")
+	assert.Contains(t, result.CombatLog, "18")
+	// Combatant should have inspiration cleared
+	assert.False(t, CombatantHasBardicInspiration(result.Combatant))
+}
+
+// --- TDD Cycle 20: UseBardicInspiration no inspiration ---
+
+func TestUseBardicInspiration_NoInspiration(t *testing.T) {
+	store := defaultMockStore()
+	svc := NewService(store)
+	roller := dice.NewRoller(nil)
+
+	_, err := svc.UseBardicInspiration(context.Background(), UseBardicInspirationCommand{
+		Combatant:     refdata.Combatant{DisplayName: "Aria"},
+		OriginalTotal: 14,
+	}, roller)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not have Bardic Inspiration")
+}
+
+// --- TDD Cycle 21: UseBardicInspiration persist error ---
+
+func TestUseBardicInspiration_PersistError(t *testing.T) {
+	store := defaultMockStore()
+	store.updateCombatantBardicInspirationFn = func(ctx context.Context, arg refdata.UpdateCombatantBardicInspirationParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, fmt.Errorf("db error")
+	}
+	svc := NewService(store)
+	roller := dice.NewRoller(func(max int) int { return 3 })
+
+	_, err := svc.UseBardicInspiration(context.Background(), UseBardicInspirationCommand{
+		Combatant: refdata.Combatant{
+			ID:                      uuid.New(),
+			DisplayName:             "Aria",
+			BardicInspirationDie:    sql.NullString{String: "d6", Valid: true},
+			BardicInspirationSource: sql.NullString{String: "Thorn", Valid: true},
+			BardicInspirationGrantedAt: sql.NullTime{Time: time.Now(), Valid: true},
+		},
+		OriginalTotal: 10,
+	}, roller)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "clearing bardic inspiration")
+}
+
+// --- TDD Cycle 22: GrantBardicInspiration accepts time.Time parameter ---
+
+func TestGrantBardicInspiration_AcceptsNowParameter(t *testing.T) {
+	charID := uuid.New()
+	bardID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	char := bardTestCharacter(5, 16, 3)
+	char.ID = charID
+
+	fixedTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	var capturedGrantedAt time.Time
+
+	store := defaultMockStore()
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return char, nil
+	}
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, BonusActionUsed: true}, nil
+	}
+	store.updateCombatantBardicInspirationFn = func(ctx context.Context, arg refdata.UpdateCombatantBardicInspirationParams) (refdata.Combatant, error) {
+		capturedGrantedAt = arg.BardicInspirationGrantedAt.Time
+		return refdata.Combatant{
+			ID:                         targetID,
+			DisplayName:                "Aria",
+			BardicInspirationDie:       arg.BardicInspirationDie,
+			BardicInspirationSource:    arg.BardicInspirationSource,
+			BardicInspirationGrantedAt: arg.BardicInspirationGrantedAt,
+		}, nil
+	}
+
+	svc := NewService(store)
+	result, err := svc.GrantBardicInspiration(context.Background(), BardicInspirationCommand{
+		Bard: refdata.Combatant{
+			ID:          bardID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Thorn",
+		},
+		Target: refdata.Combatant{
+			ID:          targetID,
+			DisplayName: "Aria",
+		},
+		Turn: refdata.Turn{ID: turnID},
+		Now:  fixedTime,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "d8", result.Die)
+	assert.Equal(t, fixedTime, capturedGrantedAt)
 }

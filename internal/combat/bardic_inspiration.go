@@ -9,6 +9,7 @@ import (
 
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -148,6 +149,7 @@ type BardicInspirationCommand struct {
 	Bard   refdata.Combatant
 	Target refdata.Combatant
 	Turn   refdata.Turn
+	Now    time.Time // optional; defaults to time.Now() if zero
 }
 
 // BardicInspirationResult holds the result of granting Bardic Inspiration.
@@ -234,7 +236,10 @@ func (s *Service) GrantBardicInspiration(ctx context.Context, cmd BardicInspirat
 	die := BardicInspirationDie(bl)
 
 	// Apply inspiration to target
-	now := time.Now()
+	now := cmd.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
 	updatedTarget := ApplyBardicInspirationToCombatant(cmd.Target, die, cmd.Bard.DisplayName, now)
 	updatedTarget, err = s.persistBardicInspirationState(ctx, updatedTarget)
 	if err != nil {
@@ -265,4 +270,54 @@ func (s *Service) persistBardicInspirationState(ctx context.Context, c refdata.C
 		BardicInspirationSource:    c.BardicInspirationSource,
 		BardicInspirationGrantedAt: c.BardicInspirationGrantedAt,
 	})
+}
+
+// UseBardicInspirationCommand holds the inputs for using Bardic Inspiration.
+type UseBardicInspirationCommand struct {
+	Combatant     refdata.Combatant
+	OriginalTotal int
+}
+
+// UseBardicInspirationResult holds the result of using Bardic Inspiration.
+type UseBardicInspirationResult struct {
+	Combatant refdata.Combatant
+	DieResult int
+	NewTotal  int
+	Die       string
+	CombatLog string
+}
+
+// UseBardicInspiration rolls the inspiration die, adds it to the original total,
+// clears the combatant's inspiration state, and returns the formatted result.
+func (s *Service) UseBardicInspiration(ctx context.Context, cmd UseBardicInspirationCommand, roller *dice.Roller) (UseBardicInspirationResult, error) {
+	if !CombatantHasBardicInspiration(cmd.Combatant) {
+		return UseBardicInspirationResult{}, fmt.Errorf("%s does not have Bardic Inspiration", cmd.Combatant.DisplayName)
+	}
+
+	die := cmd.Combatant.BardicInspirationDie.String
+
+	// Roll the inspiration die
+	rollResult, err := roller.Roll("1" + die)
+	if err != nil {
+		return UseBardicInspirationResult{}, fmt.Errorf("rolling bardic inspiration die: %w", err)
+	}
+	dieResult := rollResult.Total
+	newTotal := cmd.OriginalTotal + dieResult
+
+	// Clear inspiration from combatant
+	cleared := ClearBardicInspirationFromCombatant(cmd.Combatant)
+	cleared, err = s.persistBardicInspirationState(ctx, cleared)
+	if err != nil {
+		return UseBardicInspirationResult{}, fmt.Errorf("clearing bardic inspiration: %w", err)
+	}
+
+	combatLog := FormatBardicInspirationUse(cmd.Combatant.DisplayName, dieResult, die, newTotal)
+
+	return UseBardicInspirationResult{
+		Combatant: cleared,
+		DieResult: dieResult,
+		NewTotal:  newTotal,
+		Die:       die,
+		CombatLog: combatLog,
+	}, nil
 }

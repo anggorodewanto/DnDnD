@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"testing"
+	"time"
 
 	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/combat"
@@ -826,4 +827,129 @@ func TestIntegration_ConditionAutoExpiration(t *testing.T) {
 	assert.Contains(t, logs[0].Description.String, "frightened")
 	assert.Contains(t, logs[0].Description.String, "Goblin")
 	assert.Contains(t, logs[0].Description.String, "Aragorn")
+}
+
+// --- Integration: Bardic Inspiration grant flow against real DB ---
+
+func createTestBardCharacter(t *testing.T, db *sql.DB, campaignID uuid.UUID) uuid.UUID {
+	t.Helper()
+	id := uuid.New()
+	featureUses, _ := json.Marshal(map[string]int{"bardic-inspiration": 3})
+	_, err := db.Exec(`INSERT INTO characters (id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, ac, speed_ft, proficiency_bonus, hit_dice_remaining, languages, feature_uses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		id, campaignID, "Thorn", "half-elf", `[{"class":"Bard","level":5}]`, 5,
+		`{"str":10,"dex":14,"con":12,"int":10,"wis":12,"cha":16}`,
+		35, 35, 14, 30, 3, `[{"die":"d8","remaining":5}]`, `{Common}`,
+		pqtype.NullRawMessage{RawMessage: featureUses, Valid: true})
+	require.NoError(t, err)
+	return id
+}
+
+func TestIntegration_BardicInspirationGrantFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db, queries := setupTestDB(t)
+	ctx := context.Background()
+	campaignID := createTestCampaign(t, db)
+
+	// Create bard character
+	bardCharID := createTestBardCharacter(t, db, campaignID)
+
+	// Create encounter
+	enc, err := queries.CreateEncounter(ctx, refdata.CreateEncounterParams{
+		CampaignID: campaignID,
+		Name:       "Bardic Test",
+		Status:     "active",
+	})
+	require.NoError(t, err)
+
+	// Create bard combatant
+	bard, err := queries.CreateCombatant(ctx, refdata.CreateCombatantParams{
+		EncounterID: enc.ID,
+		CharacterID: uuid.NullUUID{UUID: bardCharID, Valid: true},
+		ShortID:     "TH",
+		DisplayName: "Thorn",
+		HpMax:       35,
+		HpCurrent:   35,
+		Ac:          14,
+		Conditions:  json.RawMessage(`[]`),
+		PositionCol: "A",
+		PositionRow: 1,
+		IsVisible:   true,
+		IsAlive:     true,
+		IsNpc:       false,
+	})
+	require.NoError(t, err)
+
+	// Create target combatant (a fighter)
+	targetCharID := createTestCharacter(t, db, campaignID)
+	target, err := queries.CreateCombatant(ctx, refdata.CreateCombatantParams{
+		EncounterID: enc.ID,
+		CharacterID: uuid.NullUUID{UUID: targetCharID, Valid: true},
+		ShortID:     "AR",
+		DisplayName: "Aragorn",
+		HpMax:       45,
+		HpCurrent:   45,
+		Ac:          18,
+		Conditions:  json.RawMessage(`[]`),
+		PositionCol: "B",
+		PositionRow: 1,
+		IsVisible:   true,
+		IsAlive:     true,
+		IsNpc:       false,
+	})
+	require.NoError(t, err)
+
+	// Create bard's turn
+	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
+		EncounterID:         enc.ID,
+		CombatantID:         bard.ID,
+		RoundNumber:         1,
+		Status:              "active",
+		MovementRemainingFt: 30,
+		AttacksRemaining:    1,
+	})
+	require.NoError(t, err)
+
+	// Grant Bardic Inspiration via service
+	svc := combat.NewService(&testStoreAdapter{queries})
+	fixedNow := time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)
+	result, err := svc.GrantBardicInspiration(ctx, combat.BardicInspirationCommand{
+		Bard:   bard,
+		Target: target,
+		Turn:   turn,
+		Now:    fixedNow,
+	})
+	require.NoError(t, err)
+
+	// Verify result
+	assert.Equal(t, "d8", result.Die) // level 5 bard => d8
+	assert.Equal(t, 2, result.UsesLeft)
+	assert.Contains(t, result.CombatLog, "Thorn")
+	assert.Contains(t, result.CombatLog, "Aragorn")
+	assert.Contains(t, result.CombatLog, "d8")
+	assert.Contains(t, result.Notification, "d8")
+
+	// Verify target combatant in DB has inspiration
+	fetchedTarget, err := queries.GetCombatant(ctx, target.ID)
+	require.NoError(t, err)
+	assert.True(t, combat.CombatantHasBardicInspiration(fetchedTarget))
+	assert.Equal(t, "d8", fetchedTarget.BardicInspirationDie.String)
+	assert.Equal(t, "Thorn", fetchedTarget.BardicInspirationSource.String)
+	assert.True(t, fetchedTarget.BardicInspirationGrantedAt.Valid)
+	assert.Equal(t, fixedNow.Unix(), fetchedTarget.BardicInspirationGrantedAt.Time.Unix())
+
+	// Verify bard's feature_uses decremented
+	fetchedChar, err := queries.GetCharacter(ctx, bardCharID)
+	require.NoError(t, err)
+	var featureUses map[string]int
+	err = json.Unmarshal(fetchedChar.FeatureUses.RawMessage, &featureUses)
+	require.NoError(t, err)
+	assert.Equal(t, 2, featureUses["bardic-inspiration"])
+
+	// Verify turn had bonus action consumed
+	fetchedTurn, err := queries.GetTurn(ctx, turn.ID)
+	require.NoError(t, err)
+	assert.True(t, fetchedTurn.BonusActionUsed)
 }

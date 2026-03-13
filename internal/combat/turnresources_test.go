@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 
@@ -543,4 +544,50 @@ func TestUseResource_UnsupportedForMovementAndAttack(t *testing.T) {
 	_, err = UseResource(turn2, ResourceAttack)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "UseAttack")
+}
+
+// --- TDD Cycle: FormatTurnStartPrompt shows Bardic Inspiration when combatant passed ---
+
+func TestFormatTurnStartPrompt_WithBardicInspiration(t *testing.T) {
+	turn := refdata.Turn{
+		MovementRemainingFt: 30,
+		AttacksRemaining:    1,
+	}
+	combatant := refdata.Combatant{
+		BardicInspirationDie: sql.NullString{String: "d8", Valid: true},
+	}
+	result := FormatTurnStartPrompt("Test", 1, "Aria", turn, combatant)
+	assert.Contains(t, result, "Bardic Inspiration (d8)")
+}
+
+func TestFormatTurnStartPrompt_WithoutCombatant_NoInspiration(t *testing.T) {
+	turn := refdata.Turn{
+		MovementRemainingFt: 30,
+		AttacksRemaining:    1,
+	}
+	result := FormatTurnStartPrompt("Test", 1, "Aria", turn)
+	assert.NotContains(t, result, "Bardic Inspiration")
+}
+
+// --- TDD Cycle: FormatRemainingResources shows Bardic Inspiration when combatant passed ---
+
+func TestFormatRemainingResources_WithBardicInspiration(t *testing.T) {
+	turn := refdata.Turn{
+		MovementRemainingFt: 30,
+		AttacksRemaining:    1,
+	}
+	combatant := refdata.Combatant{
+		BardicInspirationDie: sql.NullString{String: "d6", Valid: true},
+	}
+	result := FormatRemainingResources(turn, combatant)
+	assert.Contains(t, result, "Bardic Inspiration (d6)")
+}
+
+func TestFormatRemainingResources_WithoutCombatant_NoInspiration(t *testing.T) {
+	turn := refdata.Turn{
+		MovementRemainingFt: 30,
+		AttacksRemaining:    1,
+	}
+	result := FormatRemainingResources(turn)
+	assert.NotContains(t, result, "Bardic Inspiration")
 }
