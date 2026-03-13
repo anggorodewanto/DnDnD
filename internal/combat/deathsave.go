@@ -57,12 +57,7 @@ func CheckInstantDeath(overflowDamage, maxHP int) bool {
 func ProcessDropToZeroHP(name string, overflowDamage, maxHP int) DeathSaveOutcome {
 	if CheckInstantDeath(overflowDamage, maxHP) {
 		return DeathSaveOutcome{
-			DeathSaves: DeathSaves{},
 			TokenState: TokenDead,
-			HPCurrent:  0,
-			IsAlive:    false,
-			IsDying:    false,
-			IsStable:   false,
 			Messages: []string{
 				fmt.Sprintf("💀  %s is killed outright! (%d overflow damage ≥ %d max HP — instant death, no death saves)", name, overflowDamage, maxHP),
 			},
@@ -70,12 +65,9 @@ func ProcessDropToZeroHP(name string, overflowDamage, maxHP int) DeathSaveOutcom
 	}
 
 	return DeathSaveOutcome{
-		DeathSaves: DeathSaves{},
 		TokenState: TokenDying,
-		HPCurrent:  0,
 		IsAlive:    true,
 		IsDying:    true,
-		IsStable:   false,
 		Messages: []string{
 			fmt.Sprintf("💔  %s drops to 0 HP — unconscious and dying (death saves begin next turn)", name),
 		},
@@ -85,83 +77,52 @@ func ProcessDropToZeroHP(name string, overflowDamage, maxHP int) DeathSaveOutcom
 // RollDeathSave processes a death saving throw with the given d20 roll value.
 // Applies nat 20 (regain 1 HP), nat 1 (2 failures), and normal success/failure rules.
 func RollDeathSave(name string, ds DeathSaves, roll int) DeathSaveOutcome {
-	// Nat 20: regain 1 HP, tallies reset
 	if roll == 20 {
 		return DeathSaveOutcome{
-			DeathSaves: DeathSaves{},
 			TokenState: TokenAlive,
 			HPCurrent:  1,
 			IsAlive:    true,
-			IsDying:    false,
-			IsStable:   false,
 			Messages: []string{
 				fmt.Sprintf("🎲  %s rolls death save — 🎯 NAT 20 — %s regains 1 HP and is conscious! (tallies reset)", name, name),
 			},
 		}
 	}
 
-	// Nat 1: 2 failures
-	if roll == 1 {
-		newDS := DeathSaves{Successes: ds.Successes, Failures: ds.Failures + 2}
-		return buildDeathSaveOutcome(name, newDS, roll, true)
+	newDS := ds
+	switch {
+	case roll == 1:
+		newDS.Failures += 2
+	case roll >= 10:
+		newDS.Successes++
+	default:
+		newDS.Failures++
 	}
-
-	// Normal roll
-	if roll >= 10 {
-		newDS := DeathSaves{Successes: ds.Successes + 1, Failures: ds.Failures}
-		return buildDeathSaveOutcome(name, newDS, roll, false)
-	}
-
-	newDS := DeathSaves{Successes: ds.Successes, Failures: ds.Failures + 1}
-	return buildDeathSaveOutcome(name, newDS, roll, false)
+	return buildDeathSaveOutcome(name, newDS, roll)
 }
 
 // buildDeathSaveOutcome constructs the outcome after updating death save tallies.
-func buildDeathSaveOutcome(name string, ds DeathSaves, roll int, isNat1 bool) DeathSaveOutcome {
-	// 3+ failures -> dead
+func buildDeathSaveOutcome(name string, ds DeathSaves, roll int) DeathSaveOutcome {
+	tally := fmt.Sprintf("(%dS / %dF)", ds.Successes, ds.Failures)
+	rollDesc := deathSaveRollDesc(roll)
+
+	msg := fmt.Sprintf("🎲  %s rolls death save — %s %s", name, rollDesc, tally)
+
 	if ds.Failures >= 3 {
-		var msg string
-		if isNat1 {
-			msg = fmt.Sprintf("🎲  %s rolls death save — 💥 NAT 1 — 2 failures! (%dS / %dF) — dead",
-				name, ds.Successes, ds.Failures)
-		} else {
-			msg = fmt.Sprintf("🎲  %s rolls death save — %d — Failure (%dS / %dF) — dead",
-				name, roll, ds.Successes, ds.Failures)
-		}
 		return DeathSaveOutcome{
 			DeathSaves: ds,
 			TokenState: TokenDead,
-			IsAlive:    false,
-			IsDying:    false,
-			Messages:   []string{msg},
+			Messages:   []string{msg + " — dead"},
 		}
 	}
 
-	// 3+ successes -> stabilized
 	if ds.Successes >= 3 {
-		msg := fmt.Sprintf("🎲  %s rolls death save — %d — Success (%dS / %dF) — stabilized",
-			name, roll, ds.Successes, ds.Failures)
 		return DeathSaveOutcome{
 			DeathSaves: ds,
 			TokenState: TokenStable,
 			IsAlive:    true,
-			IsDying:    false,
 			IsStable:   true,
-			Messages:   []string{msg},
+			Messages:   []string{msg + " — stabilized"},
 		}
-	}
-
-	// Still dying
-	var msg string
-	if isNat1 {
-		msg = fmt.Sprintf("🎲  %s rolls death save — 💥 NAT 1 — 2 failures! (%dS / %dF)",
-			name, ds.Successes, ds.Failures)
-	} else if roll >= 10 {
-		msg = fmt.Sprintf("🎲  %s rolls death save — %d — Success (%dS / %dF)",
-			name, roll, ds.Successes, ds.Failures)
-	} else {
-		msg = fmt.Sprintf("🎲  %s rolls death save — %d — Failure (%dS / %dF)",
-			name, roll, ds.Successes, ds.Failures)
 	}
 
 	return DeathSaveOutcome{
@@ -171,6 +132,17 @@ func buildDeathSaveOutcome(name string, ds DeathSaves, roll int, isNat1 bool) De
 		IsDying:    true,
 		Messages:   []string{msg},
 	}
+}
+
+// deathSaveRollDesc returns the display text for a death save roll value.
+func deathSaveRollDesc(roll int) string {
+	if roll == 1 {
+		return "💥 NAT 1 — 2 failures!"
+	}
+	if roll >= 10 {
+		return fmt.Sprintf("%d — Success", roll)
+	}
+	return fmt.Sprintf("%d — Failure", roll)
 }
 
 // ApplyDamageAtZeroHP processes damage taken while at 0 HP.
@@ -214,12 +186,9 @@ func ApplyDamageAtZeroHP(name string, ds DeathSaves, isCrit bool) DeathSaveOutco
 // HP = 0 + healAmount, tallies reset, character is conscious (still prone).
 func HealFromZeroHP(name string, ds DeathSaves, healAmount int) DeathSaveOutcome {
 	return DeathSaveOutcome{
-		DeathSaves: DeathSaves{},
 		TokenState: TokenAlive,
 		HPCurrent:  healAmount,
 		IsAlive:    true,
-		IsDying:    false,
-		IsStable:   false,
 		Messages: []string{
 			fmt.Sprintf("💚  %s receives %d HP of healing — conscious at %d HP (death save tallies reset)", name, healAmount, healAmount),
 		},
@@ -232,9 +201,7 @@ func StabilizeTarget(name string, ds DeathSaves, method string) DeathSaveOutcome
 	return DeathSaveOutcome{
 		DeathSaves: DeathSaves{Successes: 3, Failures: ds.Failures},
 		TokenState: TokenStable,
-		HPCurrent:  0,
 		IsAlive:    true,
-		IsDying:    false,
 		IsStable:   true,
 		Messages: []string{
 			fmt.Sprintf("🩹  %s is stabilized via %s (unconscious at 0 HP, no further death saves)", name, method),

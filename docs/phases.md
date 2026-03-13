@@ -238,7 +238,7 @@
   - Depends on: Phase 39
   - Done when: Unit tests cover all damage type interactions (R, I, V, R+V, I+V), temp HP, exhaustion levels 1-6, condition immunity.
 
-- [ ] **Phase 43: Death Saves & Unconsciousness**
+- [x] **Phase 43: Death Saves & Unconsciousness**
   - Scope: Drop to 0 HP: unconscious, prone, break concentration, block commands except `/deathsave`. Instant death check (overflow >= max HP). Death saves: d20, >=10 success, <10 failure. Nat 20 = regain 1 HP. Nat 1 = 2 failures. 3 successes = stabilized. 3 failures = dead. Damage at 0 HP: 1 failure per hit, 2 for crit. Stabilization: Medicine DC 10, Spare the Dying. Healing from 0 HP: reset tallies, still prone. Token states (dying, dead, stable).
   - Depends on: Phase 42, Phase 18
   - Done when: Unit tests cover full death save state machine, instant death, damage at 0 HP, stabilization paths, healing from 0, nat 1/nat 20 edge cases.
