@@ -12,7 +12,7 @@ import (
 )
 
 const completeTurn = `-- name: CompleteTurn :one
-UPDATE turns SET status = 'completed', completed_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at
+UPDATE turns SET status = 'completed', completed_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn
 `
 
 func (q *Queries) CompleteTurn(ctx context.Context, id uuid.UUID) (Turn, error) {
@@ -38,6 +38,7 @@ func (q *Queries) CompleteTurn(ctx context.Context, id uuid.UUID) (Turn, error) 
 		&i.TimeoutAt,
 		&i.CompletedAt,
 		&i.CreatedAt,
+		&i.HasStoodThisTurn,
 	)
 	return i, err
 }
@@ -45,7 +46,7 @@ func (q *Queries) CompleteTurn(ctx context.Context, id uuid.UUID) (Turn, error) 
 const createTurn = `-- name: CreateTurn :one
 INSERT INTO turns (encounter_id, combatant_id, round_number, status, movement_remaining_ft, attacks_remaining)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at
+RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn
 `
 
 type CreateTurnParams struct {
@@ -87,12 +88,13 @@ func (q *Queries) CreateTurn(ctx context.Context, arg CreateTurnParams) (Turn, e
 		&i.TimeoutAt,
 		&i.CompletedAt,
 		&i.CreatedAt,
+		&i.HasStoodThisTurn,
 	)
 	return i, err
 }
 
 const getActiveTurnByEncounterID = `-- name: GetActiveTurnByEncounterID :one
-SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at FROM turns WHERE encounter_id = $1 AND status = 'active' LIMIT 1
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn FROM turns WHERE encounter_id = $1 AND status = 'active' LIMIT 1
 `
 
 func (q *Queries) GetActiveTurnByEncounterID(ctx context.Context, encounterID uuid.UUID) (Turn, error) {
@@ -118,12 +120,13 @@ func (q *Queries) GetActiveTurnByEncounterID(ctx context.Context, encounterID uu
 		&i.TimeoutAt,
 		&i.CompletedAt,
 		&i.CreatedAt,
+		&i.HasStoodThisTurn,
 	)
 	return i, err
 }
 
 const getTurn = `-- name: GetTurn :one
-SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at FROM turns WHERE id = $1
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn FROM turns WHERE id = $1
 `
 
 func (q *Queries) GetTurn(ctx context.Context, id uuid.UUID) (Turn, error) {
@@ -149,12 +152,13 @@ func (q *Queries) GetTurn(ctx context.Context, id uuid.UUID) (Turn, error) {
 		&i.TimeoutAt,
 		&i.CompletedAt,
 		&i.CreatedAt,
+		&i.HasStoodThisTurn,
 	)
 	return i, err
 }
 
 const listTurnsByEncounterAndRound = `-- name: ListTurnsByEncounterAndRound :many
-SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at FROM turns WHERE encounter_id = $1 AND round_number = $2 ORDER BY created_at ASC
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn FROM turns WHERE encounter_id = $1 AND round_number = $2 ORDER BY created_at ASC
 `
 
 type ListTurnsByEncounterAndRoundParams struct {
@@ -191,6 +195,7 @@ func (q *Queries) ListTurnsByEncounterAndRound(ctx context.Context, arg ListTurn
 			&i.TimeoutAt,
 			&i.CompletedAt,
 			&i.CreatedAt,
+			&i.HasStoodThisTurn,
 		); err != nil {
 			return nil, err
 		}
@@ -206,7 +211,7 @@ func (q *Queries) ListTurnsByEncounterAndRound(ctx context.Context, arg ListTurn
 }
 
 const skipTurn = `-- name: SkipTurn :one
-UPDATE turns SET status = 'skipped', completed_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at
+UPDATE turns SET status = 'skipped', completed_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn
 `
 
 func (q *Queries) SkipTurn(ctx context.Context, id uuid.UUID) (Turn, error) {
@@ -232,6 +237,7 @@ func (q *Queries) SkipTurn(ctx context.Context, id uuid.UUID) (Turn, error) {
 		&i.TimeoutAt,
 		&i.CompletedAt,
 		&i.CreatedAt,
+		&i.HasStoodThisTurn,
 	)
 	return i, err
 }
@@ -247,9 +253,10 @@ UPDATE turns SET
     free_interact_used = $8,
     attacks_remaining = $9,
     has_disengaged = $10,
-    action_surged = $11
+    action_surged = $11,
+    has_stood_this_turn = $12
 WHERE id = $1
-RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at
+RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn
 `
 
 type UpdateTurnActionsParams struct {
@@ -264,6 +271,7 @@ type UpdateTurnActionsParams struct {
 	AttacksRemaining     int32     `json:"attacks_remaining"`
 	HasDisengaged        bool      `json:"has_disengaged"`
 	ActionSurged         bool      `json:"action_surged"`
+	HasStoodThisTurn     bool      `json:"has_stood_this_turn"`
 }
 
 func (q *Queries) UpdateTurnActions(ctx context.Context, arg UpdateTurnActionsParams) (Turn, error) {
@@ -279,6 +287,7 @@ func (q *Queries) UpdateTurnActions(ctx context.Context, arg UpdateTurnActionsPa
 		arg.AttacksRemaining,
 		arg.HasDisengaged,
 		arg.ActionSurged,
+		arg.HasStoodThisTurn,
 	)
 	var i Turn
 	err := row.Scan(
@@ -301,6 +310,7 @@ func (q *Queries) UpdateTurnActions(ctx context.Context, arg UpdateTurnActionsPa
 		&i.TimeoutAt,
 		&i.CompletedAt,
 		&i.CreatedAt,
+		&i.HasStoodThisTurn,
 	)
 	return i, err
 }

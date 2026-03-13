@@ -516,6 +516,7 @@ func TestTurnToUpdateParams(t *testing.T) {
 		AttacksRemaining:     1,
 		HasDisengaged:        true,
 		ActionSurged:         false,
+		HasStoodThisTurn:     true,
 	}
 	params := TurnToUpdateParams(turn)
 	assert.Equal(t, turnID, params.ID)
@@ -529,6 +530,7 @@ func TestTurnToUpdateParams(t *testing.T) {
 	assert.Equal(t, int32(1), params.AttacksRemaining)
 	assert.True(t, params.HasDisengaged)
 	assert.False(t, params.ActionSurged)
+	assert.True(t, params.HasStoodThisTurn)
 }
 
 func TestUseResource_UnsupportedForMovementAndAttack(t *testing.T) {

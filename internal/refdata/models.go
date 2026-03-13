@@ -350,6 +350,7 @@ type Turn struct {
 	TimeoutAt            sql.NullTime `json:"timeout_at"`
 	CompletedAt          sql.NullTime `json:"completed_at"`
 	CreatedAt            time.Time    `json:"created_at"`
+	HasStoodThisTurn     bool         `json:"has_stood_this_turn"`
 }
 
 type Weapon struct {

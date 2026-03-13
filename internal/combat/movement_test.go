@@ -512,6 +512,263 @@ func TestValidateEndTurnPosition_DifferentAltitudeOK(t *testing.T) {
 	}
 }
 
+// --- Phase 41: Prone movement tests ---
+
+func TestValidateProneMoveStandAndMove_BasicPath(t *testing.T) {
+	// 5x1 grid, mover at A1, target C1 (col=2, row=0)
+	// maxSpeed=30, stand cost = 15, path cost = 10ft (2 tiles normal), remaining = 5
+	terrain := make([]renderer.TerrainType, 5)
+	grid := &pathfinding.Grid{
+		Width:   5,
+		Height:  1,
+		Terrain: terrain,
+	}
+
+	turn := refdata.Turn{MovementRemainingFt: 30}
+	combatant := refdata.Combatant{PositionCol: "A", PositionRow: 1}
+
+	req := MoveRequest{
+		DestCol:      2,
+		DestRow:      0,
+		Turn:         turn,
+		Combatant:    combatant,
+		Grid:         grid,
+		SizeCategory: pathfinding.SizeMedium,
+	}
+
+	result, err := ValidateProneMoveStandAndMove(req, 30)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Valid {
+		t.Fatalf("expected valid move, got: %s", result.Reason)
+	}
+	if result.MoveMode != MoveModeStandAndMove {
+		t.Errorf("expected mode stand_and_move, got %q", result.MoveMode)
+	}
+	if result.StandCostFt != 15 {
+		t.Errorf("expected stand cost 15, got %d", result.StandCostFt)
+	}
+	// path cost is 10ft (2 tiles), total deduction is 15+10=25, remaining = 5
+	if result.CostFt != 10 {
+		t.Errorf("expected path cost 10, got %d", result.CostFt)
+	}
+	if result.RemainingFt != 5 {
+		t.Errorf("expected 5ft remaining, got %d", result.RemainingFt)
+	}
+}
+
+func TestValidateProneMoveStandAndMove_NotEnoughForPath(t *testing.T) {
+	// maxSpeed=30, stand cost = 15, remaining after stand = 15
+	// but path requires 20ft (4 tiles) — should be invalid
+	terrain := make([]renderer.TerrainType, 5)
+	grid := &pathfinding.Grid{
+		Width:   5,
+		Height:  1,
+		Terrain: terrain,
+	}
+
+	turn := refdata.Turn{MovementRemainingFt: 30}
+	combatant := refdata.Combatant{PositionCol: "A", PositionRow: 1}
+
+	req := MoveRequest{
+		DestCol:      4,
+		DestRow:      0,
+		Turn:         turn,
+		Combatant:    combatant,
+		Grid:         grid,
+		SizeCategory: pathfinding.SizeMedium,
+	}
+
+	result, err := ValidateProneMoveStandAndMove(req, 30)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Valid {
+		t.Fatal("expected invalid move — not enough movement after standing")
+	}
+}
+
+func TestValidateProneMoveStandAndMove_StandOnly(t *testing.T) {
+	// maxSpeed=30, stand cost = 15, remaining = 15 but movement = 15
+	// with only 15ft, standing takes it all. Should still be valid but 0 remaining.
+	// Actually, if we have exactly stand cost and destination is same as start:
+	// that doesn't make sense. Let's test stand cost == remaining: can stand but can't move far.
+	// With 16ft remaining and maxSpeed=30 (stand cost=15), we get 1ft after stand — but path needs 5ft min.
+	// Let's test exact stand cost = remaining: stand allowed but no further movement.
+	terrain := make([]renderer.TerrainType, 5)
+	grid := &pathfinding.Grid{
+		Width:   5,
+		Height:  1,
+		Terrain: terrain,
+	}
+
+	turn := refdata.Turn{MovementRemainingFt: 15}
+	combatant := refdata.Combatant{PositionCol: "A", PositionRow: 1}
+
+	// Moving 1 tile requires 5ft, after standing (15ft) we have 0ft — not enough
+	req := MoveRequest{
+		DestCol:      1,
+		DestRow:      0,
+		Turn:         turn,
+		Combatant:    combatant,
+		Grid:         grid,
+		SizeCategory: pathfinding.SizeMedium,
+	}
+
+	result, err := ValidateProneMoveStandAndMove(req, 30)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Valid {
+		t.Fatal("expected invalid move — no movement left after standing")
+	}
+}
+
+func TestValidateProneMoveStandAndMove_InsufficientForStand(t *testing.T) {
+	// movement remaining (10) < stand cost (15) — can't even stand
+	terrain := make([]renderer.TerrainType, 5)
+	grid := &pathfinding.Grid{
+		Width:   5,
+		Height:  1,
+		Terrain: terrain,
+	}
+
+	turn := refdata.Turn{MovementRemainingFt: 10}
+	combatant := refdata.Combatant{PositionCol: "A", PositionRow: 1}
+
+	req := MoveRequest{
+		DestCol:      1,
+		DestRow:      0,
+		Turn:         turn,
+		Combatant:    combatant,
+		Grid:         grid,
+		SizeCategory: pathfinding.SizeMedium,
+	}
+
+	result, err := ValidateProneMoveStandAndMove(req, 30)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Valid {
+		t.Fatal("expected invalid move — not enough movement to stand")
+	}
+}
+
+func TestValidateProneMoveCrawl_BasicPath(t *testing.T) {
+	// Crawling: movement costs double. 2 tiles = 20ft (2*10)
+	terrain := make([]renderer.TerrainType, 5)
+	grid := &pathfinding.Grid{
+		Width:   5,
+		Height:  1,
+		Terrain: terrain,
+	}
+
+	turn := refdata.Turn{MovementRemainingFt: 30}
+	combatant := refdata.Combatant{PositionCol: "A", PositionRow: 1}
+
+	req := MoveRequest{
+		DestCol:      2,
+		DestRow:      0,
+		Turn:         turn,
+		Combatant:    combatant,
+		Grid:         grid,
+		SizeCategory: pathfinding.SizeMedium,
+	}
+
+	result, err := ValidateProneMoveCrawl(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Valid {
+		t.Fatalf("expected valid move, got: %s", result.Reason)
+	}
+	if result.MoveMode != MoveModeCrawl {
+		t.Errorf("expected mode crawl, got %q", result.MoveMode)
+	}
+	// 2 tiles * 10ft each (crawling) = 20ft
+	if result.CostFt != 20 {
+		t.Errorf("expected cost 20ft, got %d", result.CostFt)
+	}
+	if result.RemainingFt != 10 {
+		t.Errorf("expected 10ft remaining, got %d", result.RemainingFt)
+	}
+}
+
+func TestValidateProneMoveCrawl_DifficultTerrain(t *testing.T) {
+	// Crawl + difficult terrain = x3 cost: 1 tile = 15ft
+	terrain := make([]renderer.TerrainType, 3)
+	terrain[1] = renderer.TerrainDifficultTerrain
+	grid := &pathfinding.Grid{
+		Width:   3,
+		Height:  1,
+		Terrain: terrain,
+	}
+
+	turn := refdata.Turn{MovementRemainingFt: 30}
+	combatant := refdata.Combatant{PositionCol: "A", PositionRow: 1}
+
+	req := MoveRequest{
+		DestCol:      1,
+		DestRow:      0,
+		Turn:         turn,
+		Combatant:    combatant,
+		Grid:         grid,
+		SizeCategory: pathfinding.SizeMedium,
+	}
+
+	result, err := ValidateProneMoveCrawl(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Valid {
+		t.Fatalf("expected valid move, got: %s", result.Reason)
+	}
+	// 1 tile with difficult terrain while prone: 15ft (5 base + 5 difficult + 5 prone)
+	if result.CostFt != 15 {
+		t.Errorf("expected cost 15ft (crawl+difficult), got %d", result.CostFt)
+	}
+}
+
+func TestFormatMoveConfirmation_StandAndMove(t *testing.T) {
+	result := &MoveResult{
+		DestLabel:   "D4",
+		CostFt:      10,
+		RemainingFt: 5,
+		MoveMode:    MoveModeStandAndMove,
+		StandCostFt: 15,
+	}
+	msg := FormatMoveConfirmation(result)
+	if !strings.Contains(msg, "Stand & move") {
+		t.Errorf("expected 'Stand & move' in message, got: %s", msg)
+	}
+	if !strings.Contains(msg, "15ft stand") {
+		t.Errorf("expected '15ft stand' in message, got: %s", msg)
+	}
+	if !strings.Contains(msg, "10ft move") {
+		t.Errorf("expected '10ft move' in message, got: %s", msg)
+	}
+	if !strings.Contains(msg, "5ft remaining") {
+		t.Errorf("expected '5ft remaining' in message, got: %s", msg)
+	}
+}
+
+func TestFormatMoveConfirmation_Crawl(t *testing.T) {
+	result := &MoveResult{
+		DestLabel:   "D4",
+		CostFt:      20,
+		RemainingFt: 10,
+		MoveMode:    MoveModeCrawl,
+	}
+	msg := FormatMoveConfirmation(result)
+	if !strings.Contains(msg, "Crawl") {
+		t.Errorf("expected 'Crawl' in message, got: %s", msg)
+	}
+	if !strings.Contains(msg, "20ft") {
+		t.Errorf("expected '20ft' in message, got: %s", msg)
+	}
+}
+
 func TestValidateEndTurnPosition_SelfIgnored(t *testing.T) {
 	id := uuid.New()
 	combatant := refdata.Combatant{

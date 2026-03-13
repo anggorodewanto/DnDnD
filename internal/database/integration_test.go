@@ -68,7 +68,12 @@ func TestIntegration_MigrateDown(t *testing.T) {
 		t.Fatalf("MigrateUp failed: %v", err)
 	}
 
-	// Roll back the encounters migration (most recent)
+	// Roll back the has_stood_this_turn migration (most recent)
+	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
+		t.Fatalf("MigrateDown (has_stood_this_turn) failed: %v", err)
+	}
+
+	// Roll back the encounters migration
 	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
 		t.Fatalf("MigrateDown (encounters) failed: %v", err)
 	}

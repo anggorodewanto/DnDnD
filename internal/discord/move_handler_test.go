@@ -878,6 +878,541 @@ func TestMoveHandler_SplitMovement(t *testing.T) {
 	}
 }
 
+// --- Phase 41: Prone movement handler tests ---
+
+func setupProneMoveHandler(sess *mockMoveSession) (*MoveHandler, uuid.UUID, uuid.UUID, uuid.UUID) {
+	handler, encounterID, turnID, combatantID := setupMoveHandler(sess)
+
+	// Override combatant to be prone
+	proneConditions, _ := json.Marshal([]map[string]interface{}{
+		{"condition": "prone"},
+	})
+
+	handler.combatService = &mockMoveService{
+		getEncounter: handler.combatService.(*mockMoveService).getEncounter,
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:          combatantID,
+				PositionCol: "A",
+				PositionRow: 1,
+				IsAlive:     true,
+				IsNpc:       false,
+				Conditions:  proneConditions,
+			}, nil
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: combatantID, PositionCol: "A", PositionRow: 1, IsAlive: true, IsNpc: false, Conditions: proneConditions},
+			}, nil
+		},
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
+	}
+
+	return handler, encounterID, turnID, combatantID
+}
+
+func TestMoveHandler_ProneShowsChoicePrompt(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _ := setupProneMoveHandler(sess)
+
+	interaction := makeMoveInteraction("D1")
+	handler.Handle(interaction)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "prone") {
+		t.Errorf("expected prone prompt, got: %s", content)
+	}
+	// Should have Stand & Move and Crawl buttons
+	if len(sess.lastResponse.Data.Components) == 0 {
+		t.Error("expected buttons in response")
+	}
+}
+
+func TestMoveHandler_ProneSkipsPromptIfAlreadyStood(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	// Override turn to have HasStoodThisTurn=true
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: 30,
+				HasStoodThisTurn:    true,
+			}, nil
+		},
+		updateTurnActions: func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{}, nil
+		},
+	}
+
+	interaction := makeMoveInteraction("D1")
+	handler.Handle(interaction)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response")
+	}
+	content := sess.lastResponse.Data.Content
+	// Should show normal move confirmation, not prone prompt
+	if strings.Contains(content, "prone") {
+		t.Errorf("should skip prone prompt when already stood, got: %s", content)
+	}
+	if !strings.Contains(content, "Move to D1") {
+		t.Errorf("expected normal move confirmation, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleProneStandAndMove(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+
+	handler.HandleProneStandAndMove(interaction, turnID, combatantID, 3, 0, 30)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Stand & move") {
+		t.Errorf("expected stand & move confirmation, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleProneCrawl(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+
+	handler.HandleProneCrawl(interaction, turnID, combatantID, 3, 0)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Crawl") {
+		t.Errorf("expected crawl confirmation, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirm_StandAndMove_RemovesProne(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	var updatedParams refdata.UpdateTurnActionsParams
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: 30,
+			}, nil
+		},
+		updateTurnActions: func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			updatedParams = arg
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: arg.MovementRemainingFt,
+				HasStoodThisTurn:    arg.HasStoodThisTurn,
+			}, nil
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+
+	// Use stand_and_move mode — costFt is total (stand + path), standCost encoded in custom ID
+	handler.HandleMoveConfirmWithMode(interaction, turnID, combatantID, 3, 0, 10, "stand_and_move", 15)
+
+	if !updatedParams.HasStoodThisTurn {
+		t.Error("expected HasStoodThisTurn to be true after stand_and_move")
+	}
+	// Total deduction: stand cost (15) + path cost (10) = 25
+	expectedRemaining := int32(30) - 15 - 10
+	if updatedParams.MovementRemainingFt != expectedRemaining {
+		t.Errorf("expected %d remaining, got %d", expectedRemaining, updatedParams.MovementRemainingFt)
+	}
+}
+
+func TestParseProneMoveData(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	customID := "prone_stand:" + turnID.String() + ":" + combatantID.String() + ":3:0:30"
+
+	gotTurnID, gotCombatantID, gotCol, gotRow, gotMaxSpeed, err := ParseProneMoveData(customID, "prone_stand")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotTurnID != turnID {
+		t.Errorf("turn ID mismatch")
+	}
+	if gotCombatantID != combatantID {
+		t.Errorf("combatant ID mismatch")
+	}
+	if gotCol != 3 || gotRow != 0 || gotMaxSpeed != 30 {
+		t.Errorf("expected (3,0,30), got (%d,%d,%d)", gotCol, gotRow, gotMaxSpeed)
+	}
+}
+
+func TestParseMoveConfirmWithModeData(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	customID := "move_confirm:" + turnID.String() + ":" + combatantID.String() + ":3:0:10:stand_and_move:15"
+
+	gotTurnID, gotCombatantID, gotCol, gotRow, gotCost, gotMode, gotStandCost, err := ParseMoveConfirmWithModeData(customID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotTurnID != turnID || gotCombatantID != combatantID {
+		t.Error("ID mismatch")
+	}
+	if gotCol != 3 || gotRow != 0 || gotCost != 10 {
+		t.Errorf("expected (3,0,10), got (%d,%d,%d)", gotCol, gotRow, gotCost)
+	}
+	if gotMode != "stand_and_move" {
+		t.Errorf("expected mode stand_and_move, got %q", gotMode)
+	}
+	if gotStandCost != 15 {
+		t.Errorf("expected stand cost 15, got %d", gotStandCost)
+	}
+}
+
+func TestMoveHandler_HandleProneStandAndMove_TurnError(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _ := setupProneMoveHandler(sess)
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{}, errors.New("turn gone")
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleProneStandAndMove(interaction, uuid.New(), uuid.New(), 3, 0, 30)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Turn no longer active") {
+		t.Errorf("expected turn error, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleProneStandAndMove_CombatantError(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+	handler.combatService = &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{}, nil
+		},
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{}, errors.New("combatant error")
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, nil
+		},
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleProneStandAndMove(interaction, turnID, combatantID, 3, 0, 30)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Failed to get combatant") {
+		t.Errorf("expected combatant error, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleProneCrawl_TurnError(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _ := setupProneMoveHandler(sess)
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{}, errors.New("turn gone")
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleProneCrawl(interaction, uuid.New(), uuid.New(), 3, 0)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Turn no longer active") {
+		t.Errorf("expected turn error, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleProneCrawl_CombatantError(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+	handler.combatService = &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{}, nil
+		},
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{}, errors.New("combatant error")
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, nil
+		},
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleProneCrawl(interaction, turnID, combatantID, 3, 0)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Failed to get combatant") {
+		t.Errorf("expected combatant error, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirmWithMode_TurnError(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _ := setupProneMoveHandler(sess)
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{}, errors.New("turn gone")
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirmWithMode(interaction, uuid.New(), uuid.New(), 3, 0, 10, "crawl", 0)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Turn no longer active") {
+		t.Errorf("expected turn error, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirmWithMode_CrawlMode(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: 30,
+			}, nil
+		},
+		updateTurnActions: func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: arg.MovementRemainingFt,
+			}, nil
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirmWithMode(interaction, turnID, combatantID, 3, 0, 20, "crawl", 0)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Crawled to") {
+		t.Errorf("expected crawl confirmation, got: %s", content)
+	}
+}
+
+func TestParseProneMoveData_Invalid(t *testing.T) {
+	_, _, _, _, _, err := ParseProneMoveData("invalid", "prone_stand")
+	if err == nil {
+		t.Error("expected error for invalid prone data")
+	}
+}
+
+func TestParseMoveConfirmWithModeData_Invalid(t *testing.T) {
+	_, _, _, _, _, _, _, err := ParseMoveConfirmWithModeData("invalid")
+	if err == nil {
+		t.Error("expected error for invalid data")
+	}
+}
+
+func TestMoveHandler_HandleProneStandAndMove_MapError(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	// Encounter has no valid map
+	handler.combatService = &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{MapID: uuid.NullUUID{Valid: false}}, nil
+		},
+		getCombatant: handler.combatService.(*mockMoveService).getCombatant,
+		listCombatants: handler.combatService.(*mockMoveService).listCombatants,
+		updateCombatantPos: handler.combatService.(*mockMoveService).updateCombatantPos,
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleProneStandAndMove(interaction, turnID, combatantID, 3, 0, 30)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Failed to get map") {
+		t.Errorf("expected map error, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleProneCrawl_MapError(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+
+	handler.combatService = &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{MapID: uuid.NullUUID{Valid: false}}, nil
+		},
+		getCombatant: handler.combatService.(*mockMoveService).getCombatant,
+		listCombatants: handler.combatService.(*mockMoveService).listCombatants,
+		updateCombatantPos: handler.combatService.(*mockMoveService).updateCombatantPos,
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleProneCrawl(interaction, turnID, combatantID, 3, 0)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Failed to get map") {
+		t.Errorf("expected map error, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirmWithMode_NotEnoughMovement(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: 5,
+			}, nil
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirmWithMode(interaction, turnID, combatantID, 3, 0, 10, "stand_and_move", 15)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Cannot move") {
+		t.Errorf("expected cannot move error, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirmWithMode_UpdateTurnError(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: 30,
+			}, nil
+		},
+		updateTurnActions: func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{}, errors.New("update error")
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirmWithMode(interaction, turnID, combatantID, 3, 0, 10, "crawl", 0)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Failed to update turn") {
+		t.Errorf("expected update error, got: %s", content)
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirmWithMode_PositionError(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupProneMoveHandler(sess)
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				MovementRemainingFt: 30,
+			}, nil
+		},
+		updateTurnActions: func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{MovementRemainingFt: 10}, nil
+		},
+	}
+	handler.combatService = &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) { return refdata.Encounter{}, nil },
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, errors.New("pos error")
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirmWithMode(interaction, turnID, combatantID, 3, 0, 10, "crawl", 0)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Failed to update position") {
+		t.Errorf("expected position error, got: %s", content)
+	}
+}
+
+func TestSplitLast_NoSep(t *testing.T) {
+	parts := splitLast("noseparator", ':')
+	if len(parts) != 1 || parts[0] != "noseparator" {
+		t.Errorf("expected single element, got %v", parts)
+	}
+}
+
 func TestMoveHandler_OutOfBounds(t *testing.T) {
 	sess := &mockMoveSession{}
 	handler, _, _, _ := setupMoveHandler(sess)

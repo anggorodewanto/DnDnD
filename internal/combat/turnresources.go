@@ -159,6 +159,7 @@ func TurnToUpdateParams(turn refdata.Turn) refdata.UpdateTurnActionsParams {
 		AttacksRemaining:     turn.AttacksRemaining,
 		HasDisengaged:        turn.HasDisengaged,
 		ActionSurged:         turn.ActionSurged,
+		HasStoodThisTurn:     turn.HasStoodThisTurn,
 	}
 }
 

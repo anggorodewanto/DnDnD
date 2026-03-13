@@ -29,6 +29,7 @@ UPDATE turns SET
     free_interact_used = $8,
     attacks_remaining = $9,
     has_disengaged = $10,
-    action_surged = $11
+    action_surged = $11,
+    has_stood_this_turn = $12
 WHERE id = $1
 RETURNING *;
