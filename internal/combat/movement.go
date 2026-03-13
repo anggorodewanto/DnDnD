@@ -194,7 +194,7 @@ func FormatMoveConfirmation(result *MoveResult) string {
 		return fmt.Sprintf("\U0001f3c3 Stand & move to %s — %dft stand + %dft move, %dft remaining after.",
 			result.DestLabel, result.StandCostFt, result.CostFt, result.RemainingFt)
 	case MoveModeCrawl:
-		return fmt.Sprintf("\U0001f40b Crawl to %s — %dft, %dft remaining after.",
+		return fmt.Sprintf("\U0001f41b Crawl to %s — %dft, %dft remaining after.",
 			result.DestLabel, result.CostFt, result.RemainingFt)
 	default:
 		msg := fmt.Sprintf("\U0001f3c3 Move to %s — %dft", result.DestLabel, result.CostFt)

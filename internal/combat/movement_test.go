@@ -767,6 +767,9 @@ func TestFormatMoveConfirmation_Crawl(t *testing.T) {
 	if !strings.Contains(msg, "20ft") {
 		t.Errorf("expected '20ft' in message, got: %s", msg)
 	}
+	if !strings.Contains(msg, "\U0001f41b") {
+		t.Errorf("expected bug emoji in crawl message, got: %s", msg)
+	}
 }
 
 func TestValidateEndTurnPosition_SelfIgnored(t *testing.T) {
