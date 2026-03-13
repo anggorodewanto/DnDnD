@@ -135,22 +135,8 @@ func UnarmoredMovementFeature(monkLevel int) FeatureDefinition {
 	}
 }
 
-// MartialArtsDie returns the martial arts die string for a given monk level.
-// 1d4 (1-4), 1d6 (5-10), 1d8 (11-16), 1d10 (17+).
-func MartialArtsDie(monkLevel int) string {
-	if monkLevel >= 17 {
-		return "1d10"
-	}
-	if monkLevel >= 11 {
-		return "1d8"
-	}
-	if monkLevel >= 5 {
-		return "1d6"
-	}
-	return "1d4"
-}
-
 // MartialArtsDieSides returns the die sides for a given monk level.
+// 4 (1-4), 6 (5-10), 8 (11-16), 10 (17+).
 func MartialArtsDieSides(monkLevel int) int {
 	if monkLevel >= 17 {
 		return 10
@@ -164,12 +150,18 @@ func MartialArtsDieSides(monkLevel int) int {
 	return 4
 }
 
+// MartialArtsDie returns the martial arts die string for a given monk level.
+// 1d4 (1-4), 1d6 (5-10), 1d8 (11-16), 1d10 (17+).
+func MartialArtsDie(monkLevel int) string {
+	return fmt.Sprintf("1d%d", MartialArtsDieSides(monkLevel))
+}
+
 // MonkDamageExpression returns the effective damage die for a monk weapon or unarmed strike.
 // For unarmed strikes, always uses the martial arts die.
 // For monk weapons, uses whichever is higher: weapon die or martial arts die.
 func MonkDamageExpression(weapon refdata.Weapon, monkLevel int) string {
-	maDie := MartialArtsDie(monkLevel)
 	maSides := MartialArtsDieSides(monkLevel)
+	maDie := fmt.Sprintf("1d%d", maSides)
 
 	// Unarmed strikes always use martial arts die
 	if weapon.ID == "unarmed-strike" {
@@ -182,8 +174,7 @@ func MonkDamageExpression(weapon refdata.Weapon, monkLevel int) string {
 		return maDie
 	}
 
-	weaponSides := expr.Groups[0].Sides
-	if maSides > weaponSides {
+	if maSides > expr.Groups[0].Sides {
 		return maDie
 	}
 	return weapon.Damage

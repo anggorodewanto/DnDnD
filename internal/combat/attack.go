@@ -572,10 +572,7 @@ func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, twoHa
 
 	// Monk weapon: upgrade damage die if martial arts die is higher
 	if ml > 0 && IsMonkWeapon(weapon) {
-		upgraded := MonkDamageExpression(weapon, ml)
-		if upgraded != weapon.Damage {
-			weapon.Damage = upgraded
-		}
+		weapon.Damage = MonkDamageExpression(weapon, ml)
 	}
 
 	useVersatile := twoHanded && weapon.VersatileDamage.Valid && weapon.VersatileDamage.String != ""

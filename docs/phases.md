@@ -263,7 +263,7 @@
   - Depends on: Phase 6, Phase 44, Phase 28
   - Done when: Integration tests verify transformation, stat swap, CR validation, HP overflow, auto-revert, spellcasting block, concentration maintenance.
 
-- [ ] **Phase 48a: Monk — Martial Arts & Unarmored Defense/Movement**
+- [x] **Phase 48a: Monk — Martial Arts & Unarmored Defense/Movement**
   - Scope: Martial Arts: DEX/STR auto-select for monk weapons and unarmed strikes, martial arts die scaling (1d4/1d6/1d8/1d10 by level), `/bonus martial-arts` free unarmed strike after Attack action. Unarmored Defense (ac_formula: 10 + DEX + WIS when no armor). Unarmored Movement (+speed scaling when no armor/shield).
   - Depends on: Phase 44, Phase 36
   - Done when: Integration tests verify martial arts die scaling, DEX/STR auto-select, bonus unarmed strike, unarmored defense AC, unarmored movement speed bonus.
