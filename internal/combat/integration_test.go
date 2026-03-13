@@ -9,6 +9,7 @@ import (
 
 	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/testutil"
 	"github.com/google/uuid"
@@ -952,4 +953,220 @@ func TestIntegration_BardicInspirationGrantFlow(t *testing.T) {
 	fetchedTurn, err := queries.GetTurn(ctx, turn.ID)
 	require.NoError(t, err)
 	assert.True(t, fetchedTurn.BonusActionUsed)
+}
+
+// --- Integration TDD Cycle 13: UseBardicInspiration against real DB ---
+
+func TestIntegration_BardicInspirationUseFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db, queries := setupTestDB(t)
+	ctx := context.Background()
+	campaignID := createTestCampaign(t, db)
+
+	// Create bard character and encounter
+	bardCharID := createTestBardCharacter(t, db, campaignID)
+
+	enc, err := queries.CreateEncounter(ctx, refdata.CreateEncounterParams{
+		CampaignID: campaignID,
+		Name:       "Bardic Use Test",
+		Status:     "active",
+	})
+	require.NoError(t, err)
+
+	// Create bard combatant
+	bard, err := queries.CreateCombatant(ctx, refdata.CreateCombatantParams{
+		EncounterID: enc.ID,
+		CharacterID: uuid.NullUUID{UUID: bardCharID, Valid: true},
+		ShortID:     "TH",
+		DisplayName: "Thorn",
+		HpMax:       35,
+		HpCurrent:   35,
+		Ac:          14,
+		Conditions:  json.RawMessage(`[]`),
+		PositionCol: "A",
+		PositionRow: 1,
+		IsVisible:   true,
+		IsAlive:     true,
+		IsNpc:       false,
+	})
+	require.NoError(t, err)
+
+	// Create target combatant
+	targetCharID := createTestCharacter(t, db, campaignID)
+	target, err := queries.CreateCombatant(ctx, refdata.CreateCombatantParams{
+		EncounterID: enc.ID,
+		CharacterID: uuid.NullUUID{UUID: targetCharID, Valid: true},
+		ShortID:     "AR",
+		DisplayName: "Aragorn",
+		HpMax:       45,
+		HpCurrent:   45,
+		Ac:          18,
+		Conditions:  json.RawMessage(`[]`),
+		PositionCol: "B",
+		PositionRow: 1,
+		IsVisible:   true,
+		IsAlive:     true,
+		IsNpc:       false,
+	})
+	require.NoError(t, err)
+
+	// Create bard's turn and grant inspiration first
+	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
+		EncounterID:         enc.ID,
+		CombatantID:         bard.ID,
+		RoundNumber:         1,
+		Status:              "active",
+		MovementRemainingFt: 30,
+		AttacksRemaining:    1,
+	})
+	require.NoError(t, err)
+
+	svc := combat.NewService(&testStoreAdapter{queries})
+	fixedNow := time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)
+	grantResult, err := svc.GrantBardicInspiration(ctx, combat.BardicInspirationCommand{
+		Bard:   bard,
+		Target: target,
+		Turn:   turn,
+		Now:    fixedNow,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "d8", grantResult.Die)
+
+	// Re-fetch target from DB (it now has inspiration)
+	inspiredTarget, err := queries.GetCombatant(ctx, target.ID)
+	require.NoError(t, err)
+	require.True(t, combat.CombatantHasBardicInspiration(inspiredTarget))
+
+	// Use Bardic Inspiration with a deterministic roller (always returns 5)
+	roller := dice.NewRoller(func(max int) int { return 5 })
+	useResult, err := svc.UseBardicInspiration(ctx, combat.UseBardicInspirationCommand{
+		Combatant:     inspiredTarget,
+		OriginalTotal: 12,
+	}, roller)
+	require.NoError(t, err)
+
+	// Verify die result and new total
+	assert.Equal(t, 5, useResult.DieResult)
+	assert.Equal(t, 17, useResult.NewTotal) // 12 + 5
+	assert.Equal(t, "d8", useResult.Die)
+	assert.Contains(t, useResult.CombatLog, "Aragorn")
+	assert.Contains(t, useResult.CombatLog, "+5")
+	assert.Contains(t, useResult.CombatLog, "d8")
+
+	// Verify inspiration was cleared from DB
+	fetchedTarget, err := queries.GetCombatant(ctx, target.ID)
+	require.NoError(t, err)
+	assert.False(t, combat.CombatantHasBardicInspiration(fetchedTarget))
+	assert.False(t, fetchedTarget.BardicInspirationDie.Valid)
+	assert.False(t, fetchedTarget.BardicInspirationSource.Valid)
+	assert.False(t, fetchedTarget.BardicInspirationGrantedAt.Valid)
+}
+
+// --- Integration TDD Cycle 14: Bardic Inspiration expiration detection against real DB ---
+
+func TestIntegration_BardicInspirationExpirationFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db, queries := setupTestDB(t)
+	ctx := context.Background()
+	campaignID := createTestCampaign(t, db)
+
+	// Create bard character and encounter
+	bardCharID := createTestBardCharacter(t, db, campaignID)
+
+	enc, err := queries.CreateEncounter(ctx, refdata.CreateEncounterParams{
+		CampaignID: campaignID,
+		Name:       "Bardic Expiration Test",
+		Status:     "active",
+	})
+	require.NoError(t, err)
+
+	// Create bard combatant
+	bard, err := queries.CreateCombatant(ctx, refdata.CreateCombatantParams{
+		EncounterID: enc.ID,
+		CharacterID: uuid.NullUUID{UUID: bardCharID, Valid: true},
+		ShortID:     "TH",
+		DisplayName: "Thorn",
+		HpMax:       35,
+		HpCurrent:   35,
+		Ac:          14,
+		Conditions:  json.RawMessage(`[]`),
+		PositionCol: "A",
+		PositionRow: 1,
+		IsVisible:   true,
+		IsAlive:     true,
+		IsNpc:       false,
+	})
+	require.NoError(t, err)
+
+	// Create target combatant
+	targetCharID := createTestCharacter(t, db, campaignID)
+	target, err := queries.CreateCombatant(ctx, refdata.CreateCombatantParams{
+		EncounterID: enc.ID,
+		CharacterID: uuid.NullUUID{UUID: targetCharID, Valid: true},
+		ShortID:     "AR",
+		DisplayName: "Aragorn",
+		HpMax:       45,
+		HpCurrent:   45,
+		Ac:          18,
+		Conditions:  json.RawMessage(`[]`),
+		PositionCol: "B",
+		PositionRow: 1,
+		IsVisible:   true,
+		IsAlive:     true,
+		IsNpc:       false,
+	})
+	require.NoError(t, err)
+
+	// Create bard's turn and grant inspiration with a timestamp 11 minutes ago
+	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
+		EncounterID:         enc.ID,
+		CombatantID:         bard.ID,
+		RoundNumber:         1,
+		Status:              "active",
+		MovementRemainingFt: 30,
+		AttacksRemaining:    1,
+	})
+	require.NoError(t, err)
+
+	svc := combat.NewService(&testStoreAdapter{queries})
+	elevenMinutesAgo := time.Now().Add(-11 * time.Minute)
+	_, err = svc.GrantBardicInspiration(ctx, combat.BardicInspirationCommand{
+		Bard:   bard,
+		Target: target,
+		Turn:   turn,
+		Now:    elevenMinutesAgo,
+	})
+	require.NoError(t, err)
+
+	// Verify target has inspiration in DB
+	inspiredTarget, err := queries.GetCombatant(ctx, target.ID)
+	require.NoError(t, err)
+	require.True(t, combat.CombatantHasBardicInspiration(inspiredTarget))
+
+	// Verify expiration is detected
+	assert.True(t, combat.IsBardicInspirationExpired(inspiredTarget.BardicInspirationGrantedAt.Time, time.Now()))
+
+	// Simulate clearing expired inspiration (what the system would do when detected)
+	cleared := combat.ClearBardicInspirationFromCombatant(inspiredTarget)
+	_, err = queries.UpdateCombatantBardicInspiration(ctx, refdata.UpdateCombatantBardicInspirationParams{
+		ID:                         cleared.ID,
+		BardicInspirationDie:       cleared.BardicInspirationDie,
+		BardicInspirationSource:    cleared.BardicInspirationSource,
+		BardicInspirationGrantedAt: cleared.BardicInspirationGrantedAt,
+	})
+	require.NoError(t, err)
+
+	// Verify inspiration was cleared from DB
+	fetchedTarget, err := queries.GetCombatant(ctx, target.ID)
+	require.NoError(t, err)
+	assert.False(t, combat.CombatantHasBardicInspiration(fetchedTarget))
+	assert.False(t, fetchedTarget.BardicInspirationDie.Valid)
+	assert.False(t, fetchedTarget.BardicInspirationSource.Valid)
+	assert.False(t, fetchedTarget.BardicInspirationGrantedAt.Valid)
 }
