@@ -118,7 +118,6 @@ func CombatantHasBardicInspiration(c refdata.Combatant) bool {
 	return c.BardicInspirationDie.Valid && c.BardicInspirationDie.String != ""
 }
 
-
 // BardicInspirationCommand holds the service-level inputs for granting Bardic Inspiration.
 type BardicInspirationCommand struct {
 	Bard   refdata.Combatant
@@ -141,65 +140,44 @@ type BardicInspirationResult struct {
 
 // GrantBardicInspiration handles the /bonus bardic-inspiration command.
 func (s *Service) GrantBardicInspiration(ctx context.Context, cmd BardicInspirationCommand) (BardicInspirationResult, error) {
-	// Validate bonus action
 	if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
 		return BardicInspirationResult{}, err
 	}
-
-	// Must be a PC
 	if !cmd.Bard.CharacterID.Valid {
 		return BardicInspirationResult{}, fmt.Errorf("Bardic Inspiration requires a character (not NPC)")
 	}
-
-	// Cannot target self
 	if cmd.Bard.ID == cmd.Target.ID {
 		return BardicInspirationResult{}, fmt.Errorf("cannot grant Bardic Inspiration to yourself")
 	}
 
-	// Get character
 	char, err := s.store.GetCharacter(ctx, cmd.Bard.CharacterID.UUID)
 	if err != nil {
 		return BardicInspirationResult{}, fmt.Errorf("getting character: %w", err)
 	}
 
-	// Must be bard
 	bl := ClassLevelFromJSON(char.Classes, "Bard")
-
-	// Check target doesn't already have inspiration
-	targetHasInspiration := CombatantHasBardicInspiration(cmd.Target)
-
-	// Parse feature_uses
 	featureUses, usesRemaining, err := ParseFeatureUses(char, FeatureKeyBardicInspiration)
 	if err != nil {
 		return BardicInspirationResult{}, err
 	}
-
-	// Validate
-	if err := ValidateBardicInspiration(bl, targetHasInspiration, usesRemaining); err != nil {
+	if err := ValidateBardicInspiration(bl, CombatantHasBardicInspiration(cmd.Target), usesRemaining); err != nil {
 		return BardicInspirationResult{}, err
 	}
 
-	// Deduct use
 	newUsesRemaining, err := s.DeductFeatureUse(ctx, char, FeatureKeyBardicInspiration, featureUses, usesRemaining)
 	if err != nil {
 		return BardicInspirationResult{}, err
 	}
 
-	// Use bonus action
 	updatedTurn, err := UseResource(cmd.Turn, ResourceBonusAction)
 	if err != nil {
 		return BardicInspirationResult{}, fmt.Errorf("using bonus action: %w", err)
 	}
-
-	// Persist turn
 	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
 		return BardicInspirationResult{}, fmt.Errorf("updating turn actions: %w", err)
 	}
 
-	// Determine die
 	die := BardicInspirationDie(bl)
-
-	// Apply inspiration to target
 	now := cmd.Now
 	if now.IsZero() {
 		now = time.Now()
@@ -210,17 +188,13 @@ func (s *Service) GrantBardicInspiration(ctx context.Context, cmd BardicInspirat
 		return BardicInspirationResult{}, fmt.Errorf("updating combatant bardic inspiration: %w", err)
 	}
 
-	combatLog := FormatBardicInspirationGrant(cmd.Bard.DisplayName, cmd.Target.DisplayName, die)
-	notification := FormatBardicInspirationNotification(die, cmd.Bard.DisplayName)
-	remaining := FormatRemainingResources(updatedTurn, nil)
-
 	return BardicInspirationResult{
 		Bard:         cmd.Bard,
 		Target:       updatedTarget,
 		Turn:         updatedTurn,
-		CombatLog:    combatLog,
-		Notification: notification,
-		Remaining:    remaining,
+		CombatLog:    FormatBardicInspirationGrant(cmd.Bard.DisplayName, cmd.Target.DisplayName, die),
+		Notification: FormatBardicInspirationNotification(die, cmd.Bard.DisplayName),
+		Remaining:    FormatRemainingResources(updatedTurn, nil),
 		UsesLeft:     newUsesRemaining,
 		Die:          die,
 	}, nil
@@ -259,8 +233,6 @@ func (s *Service) UseBardicInspiration(ctx context.Context, cmd UseBardicInspira
 	}
 
 	die := cmd.Combatant.BardicInspirationDie.String
-
-	// Roll the inspiration die
 	rollResult, err := roller.Roll("1" + die)
 	if err != nil {
 		return UseBardicInspirationResult{}, fmt.Errorf("rolling bardic inspiration die: %w", err)
@@ -268,20 +240,17 @@ func (s *Service) UseBardicInspiration(ctx context.Context, cmd UseBardicInspira
 	dieResult := rollResult.Total
 	newTotal := cmd.OriginalTotal + dieResult
 
-	// Clear inspiration from combatant
 	cleared := ClearBardicInspirationFromCombatant(cmd.Combatant)
 	cleared, err = s.persistBardicInspirationState(ctx, cleared)
 	if err != nil {
 		return UseBardicInspirationResult{}, fmt.Errorf("clearing bardic inspiration: %w", err)
 	}
 
-	combatLog := FormatBardicInspirationUse(cmd.Combatant.DisplayName, dieResult, die, newTotal)
-
 	return UseBardicInspirationResult{
 		Combatant: cleared,
 		DieResult: dieResult,
 		NewTotal:  newTotal,
 		Die:       die,
-		CombatLog: combatLog,
+		CombatLog: FormatBardicInspirationUse(cmd.Combatant.DisplayName, dieResult, die, newTotal),
 	}, nil
 }

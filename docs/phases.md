@@ -273,7 +273,7 @@
   - Depends on: Phase 48a
   - Done when: Integration tests verify each ki ability's cost and effect, stunning strike prompt and save, ki deduction and validation, short rest recharge.
 
-- [ ] **Phase 49: Bardic Inspiration**
+- [x] **Phase 49: Bardic Inspiration**
   - Scope: `/bonus bardic-inspiration [target]`: grant die to ally. Uses tracked in feature_uses (CHA mod uses, recharge long/short by level). Die scaling (d6/d8/d10/d12 by Bard level). Usage prompt on attack/check/save (ephemeral, player sees roll before deciding). 30s timeout on prompt. 10-minute real-time expiration. Turn status visibility. Combat log output.
   - Depends on: Phase 44, Phase 28
   - Done when: Integration tests verify granting, die scaling, usage prompt flow, expiration, turn status display.

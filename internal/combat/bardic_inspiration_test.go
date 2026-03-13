@@ -17,8 +17,6 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// --- TDD Cycle 1: BardicInspirationDie scaling ---
-
 func TestBardicInspirationDie(t *testing.T) {
 	tests := []struct {
 		level    int
@@ -38,8 +36,6 @@ func TestBardicInspirationDie(t *testing.T) {
 	}
 }
 
-// --- TDD Cycle 2: BardicInspirationMaxUses (CHA mod, min 1) ---
-
 func TestBardicInspirationMaxUses(t *testing.T) {
 	tests := []struct {
 		chaScore int
@@ -55,16 +51,12 @@ func TestBardicInspirationMaxUses(t *testing.T) {
 	}
 }
 
-// --- TDD Cycle 3: FontOfInspiration recharge type ---
-
 func TestBardicInspirationRechargeType(t *testing.T) {
 	assert.Equal(t, "long", BardicInspirationRechargeType(1))
 	assert.Equal(t, "long", BardicInspirationRechargeType(4))
 	assert.Equal(t, "short", BardicInspirationRechargeType(5))
 	assert.Equal(t, "short", BardicInspirationRechargeType(20))
 }
-
-// --- TDD Cycle 4: ValidateBardicInspiration ---
 
 func TestValidateBardicInspiration(t *testing.T) {
 	t.Run("not a bard", func(t *testing.T) {
@@ -91,16 +83,12 @@ func TestValidateBardicInspiration(t *testing.T) {
 	})
 }
 
-// --- TDD Cycle 5: FormatBardicInspirationGrant ---
-
 func TestFormatBardicInspirationGrant(t *testing.T) {
 	result := FormatBardicInspirationGrant("Thorn", "Aria", "d6")
 	assert.Contains(t, result, "Thorn")
 	assert.Contains(t, result, "Aria")
 	assert.Contains(t, result, "d6")
 }
-
-// --- TDD Cycle 6: FormatBardicInspirationUse ---
 
 func TestFormatBardicInspirationUse(t *testing.T) {
 	result := FormatBardicInspirationUse("Aria", 4, "d6", 18)
@@ -110,15 +98,11 @@ func TestFormatBardicInspirationUse(t *testing.T) {
 	assert.Contains(t, result, "18")
 }
 
-// --- TDD Cycle 7: FormatBardicInspirationExpired ---
-
 func TestFormatBardicInspirationExpired(t *testing.T) {
 	result := FormatBardicInspirationExpired("Thorn")
 	assert.Contains(t, result, "Thorn")
 	assert.Contains(t, result, "expired")
 }
-
-// --- TDD Cycle 8: ClassLevelFromJSON (Bard) ---
 
 func TestBardLevelFromJSON(t *testing.T) {
 	assert.Equal(t, 5, ClassLevelFromJSON([]byte(`[{"class":"Bard","level":5}]`), "Bard"))
@@ -127,15 +111,11 @@ func TestBardLevelFromJSON(t *testing.T) {
 	assert.Equal(t, 0, ClassLevelFromJSON([]byte(`invalid`), "Bard"))
 }
 
-// --- TDD Cycle 9: HasBardClass ---
-
 func TestHasBardClass(t *testing.T) {
 	assert.True(t, HasBardClass([]byte(`[{"class":"Bard","level":3}]`)))
 	assert.False(t, HasBardClass([]byte(`[{"class":"Fighter","level":10}]`)))
 	assert.False(t, HasBardClass(nil))
 }
-
-// --- TDD Cycle 10: IsBardicInspirationExpired ---
 
 func TestIsBardicInspirationExpired(t *testing.T) {
 	now := time.Now()
@@ -157,8 +137,6 @@ func TestIsBardicInspirationExpired(t *testing.T) {
 	})
 }
 
-// --- TDD Cycle 11: ApplyBardicInspirationToCombatant and ClearBardicInspirationFromCombatant ---
-
 func TestApplyAndClearBardicInspiration(t *testing.T) {
 	c := refdata.Combatant{DisplayName: "Aria"}
 	now := time.Now()
@@ -178,15 +156,11 @@ func TestApplyAndClearBardicInspiration(t *testing.T) {
 	assert.False(t, c.BardicInspirationGrantedAt.Valid)
 }
 
-// --- TDD Cycle 12: FormatBardicInspirationStatus ---
-
 func TestFormatBardicInspirationStatus(t *testing.T) {
 	result := FormatBardicInspirationStatus("d8")
 	assert.Contains(t, result, "d8")
 	assert.Contains(t, result, "Bardic Inspiration")
 }
-
-// --- TDD Cycle 13: Turn status includes Bardic Inspiration ---
 
 func TestBuildResourceListWithBardicInspiration(t *testing.T) {
 	turn := refdata.Turn{
@@ -220,8 +194,6 @@ func TestBuildResourceListWithoutBardicInspiration(t *testing.T) {
 		assert.NotContains(t, p, "Bardic Inspiration")
 	}
 }
-
-// --- TDD Cycle 14: Service.GrantBardicInspiration happy path ---
 
 func bardTestCharacter(bardLevel int, chaScore int, usesRemaining int) refdata.Character {
 	classes, _ := json.Marshal([]CharacterClass{{Class: "Bard", Level: bardLevel}})
@@ -285,8 +257,6 @@ func TestGrantBardicInspiration_HappyPath(t *testing.T) {
 	assert.Contains(t, result.Notification, "d8")
 	assert.Contains(t, result.Notification, "Thorn")
 }
-
-// --- TDD Cycle 15: Service.GrantBardicInspiration validation errors ---
 
 func TestGrantBardicInspiration_BonusActionSpent(t *testing.T) {
 	store := defaultMockStore()
@@ -388,10 +358,6 @@ func TestGrantBardicInspiration_NoUsesRemaining(t *testing.T) {
 	assert.Contains(t, err.Error(), "no Bardic Inspiration uses remaining")
 }
 
-// --- TDD Cycle 16: FormatBardicInspirationNotification ---
-
-// --- TDD Cycle 17: parseBardicInspirationUses with no feature_uses ---
-
 func TestParseBardicInspirationUses_NoFeatureUses(t *testing.T) {
 	char := refdata.Character{}
 	featureUses, remaining, err := ParseFeatureUses(char, FeatureKeyBardicInspiration)
@@ -407,8 +373,6 @@ func TestParseBardicInspirationUses_InvalidJSON(t *testing.T) {
 	_, _, err := ParseFeatureUses(char, FeatureKeyBardicInspiration)
 	assert.Error(t, err)
 }
-
-// --- TDD Cycle 18: GrantBardicInspiration error paths in store calls ---
 
 func TestGrantBardicInspiration_GetCharacterError(t *testing.T) {
 	store := defaultMockStore()
@@ -513,8 +477,6 @@ func TestFormatBardicInspirationNotification(t *testing.T) {
 	assert.Contains(t, result, "saving throw")
 }
 
-// --- TDD Cycle 19: UseBardicInspiration happy path ---
-
 func TestUseBardicInspiration_HappyPath(t *testing.T) {
 	targetID := uuid.New()
 	store := defaultMockStore()
@@ -555,8 +517,6 @@ func TestUseBardicInspiration_HappyPath(t *testing.T) {
 	assert.False(t, CombatantHasBardicInspiration(result.Combatant))
 }
 
-// --- TDD Cycle 20: UseBardicInspiration no inspiration ---
-
 func TestUseBardicInspiration_NoInspiration(t *testing.T) {
 	store := defaultMockStore()
 	svc := NewService(store)
@@ -570,8 +530,6 @@ func TestUseBardicInspiration_NoInspiration(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "does not have Bardic Inspiration")
 }
-
-// --- TDD Cycle 21: UseBardicInspiration persist error ---
 
 func TestUseBardicInspiration_PersistError(t *testing.T) {
 	store := defaultMockStore()
@@ -595,8 +553,6 @@ func TestUseBardicInspiration_PersistError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "clearing bardic inspiration")
 }
-
-// --- TDD Cycle 22: GrantBardicInspiration accepts time.Time parameter ---
 
 func TestGrantBardicInspiration_AcceptsNowParameter(t *testing.T) {
 	charID := uuid.New()
