@@ -288,7 +288,7 @@
   - Depends on: Phase 44, Phase 34
   - Done when: Integration tests verify prompt appearance, slot selection, damage calculation, undead bonus, crit doubling, timeout behavior.
 
-- [ ] **Phase 52: Lay on Hands (Paladin)**
+- [x] **Phase 52: Lay on Hands (Paladin)**
   - Scope: `/action lay-on-hands [target] [hp]`: costs action. Healing pool (5 x Paladin level, recharge long rest). Adjacency validation. Undead/construct rejection. Self-targeting shorthand. Cure disease/poison (5 HP per cure, `--cure-poison`/`--cure-disease` flags). Combat log.
   - Depends on: Phase 44, Phase 28
   - Done when: Integration tests verify healing, pool tracking, adjacency check, disease/poison cure, self-targeting.

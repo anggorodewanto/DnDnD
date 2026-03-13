@@ -2,46 +2,20 @@ package combat
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/sqlc-dev/pqtype"
-
 	"github.com/ab/dndnd/internal/refdata"
 )
-
-const FeatureKeyLayOnHands = "lay-on-hands"
 
 // LayOnHandsPoolMax returns the total Lay on Hands healing pool (5 x paladin level).
 func LayOnHandsPoolMax(paladinLevel int) int {
 	return 5 * paladinLevel
 }
 
-// isUndeadOrConstruct checks if a creature type is undead or construct.
 func isUndeadOrConstruct(creatureType string) bool {
 	lower := strings.ToLower(creatureType)
 	return lower == "undead" || lower == "construct"
-}
-
-// DeductFeaturePool deducts a variable amount from a feature's pool, persists, and returns the new remaining value.
-func (s *Service) DeductFeaturePool(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]int, current int, amount int) (int, error) {
-	if amount > current {
-		return 0, fmt.Errorf("insufficient %s pool: need %d, have %d", featureKey, amount, current)
-	}
-	newRemaining := current - amount
-	featureUses[featureKey] = newRemaining
-	featureUsesJSON, err := json.Marshal(featureUses)
-	if err != nil {
-		return 0, fmt.Errorf("marshaling feature_uses: %w", err)
-	}
-	if _, err := s.store.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
-		ID:          char.ID,
-		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
-	}); err != nil {
-		return 0, fmt.Errorf("updating feature_uses: %w", err)
-	}
-	return newRemaining, nil
 }
 
 // LayOnHandsCommand holds the inputs for a Lay on Hands action.
@@ -131,11 +105,6 @@ func (s *Service) LayOnHands(ctx context.Context, cmd LayOnHandsCommand) (LayOnH
 		return LayOnHandsResult{}, fmt.Errorf("must spend at least 1 HP from pool")
 	}
 
-	if totalCost > poolRemaining {
-		return LayOnHandsResult{}, fmt.Errorf("insufficient lay-on-hands pool: need %d, have %d", totalCost, poolRemaining)
-	}
-
-	// Deduct from pool
 	newPoolRemaining, err := s.DeductFeaturePool(ctx, char, FeatureKeyLayOnHands, featureUses, poolRemaining, totalCost)
 	if err != nil {
 		return LayOnHandsResult{}, err
@@ -171,22 +140,17 @@ func (s *Service) LayOnHands(ctx context.Context, cmd LayOnHandsCommand) (LayOnH
 	}
 
 	// Cure poison/disease conditions
-	curedPoison := false
-	curedDisease := false
-	if cmd.CurePoison {
-		if HasCondition(cmd.Target.Conditions, "poisoned") {
-			if _, _, err := s.RemoveConditionFromCombatant(ctx, cmd.Target.ID, "poisoned"); err != nil {
-				return LayOnHandsResult{}, fmt.Errorf("removing poisoned condition: %w", err)
-			}
-			curedPoison = true
+	curedPoison := cmd.CurePoison && HasCondition(cmd.Target.Conditions, "poisoned")
+	curedDisease := cmd.CureDisease && HasCondition(cmd.Target.Conditions, "diseased")
+
+	if curedPoison {
+		if _, _, err := s.RemoveConditionFromCombatant(ctx, cmd.Target.ID, "poisoned"); err != nil {
+			return LayOnHandsResult{}, fmt.Errorf("removing poisoned condition: %w", err)
 		}
 	}
-	if cmd.CureDisease {
-		if HasCondition(cmd.Target.Conditions, "diseased") {
-			if _, _, err := s.RemoveConditionFromCombatant(ctx, cmd.Target.ID, "diseased"); err != nil {
-				return LayOnHandsResult{}, fmt.Errorf("removing diseased condition: %w", err)
-			}
-			curedDisease = true
+	if curedDisease {
+		if _, _, err := s.RemoveConditionFromCombatant(ctx, cmd.Target.ID, "diseased"); err != nil {
+			return LayOnHandsResult{}, fmt.Errorf("removing diseased condition: %w", err)
 		}
 	}
 

@@ -16,6 +16,7 @@ const (
 	FeatureKeyKi                = "ki"
 	FeatureKeyWildShape         = "wild_shape"
 	FeatureKeyBardicInspiration = "bardic-inspiration"
+	FeatureKeyLayOnHands        = "lay-on-hands"
 )
 
 // ParseFeatureUses extracts the feature_uses map and a named feature's remaining count.
@@ -42,9 +43,12 @@ func ClassLevelFromJSON(classesJSON []byte, className string) int {
 	return classLevel(classes, className)
 }
 
-// DeductFeatureUse decrements a feature's remaining uses by 1, persists, and returns the new count.
-func (s *Service) DeductFeatureUse(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]int, current int) (int, error) {
-	newRemaining := current - 1
+// DeductFeaturePool deducts a variable amount from a feature's pool, persists, and returns the new remaining value.
+func (s *Service) DeductFeaturePool(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]int, current int, amount int) (int, error) {
+	if amount > current {
+		return 0, fmt.Errorf("insufficient %s pool: need %d, have %d", featureKey, amount, current)
+	}
+	newRemaining := current - amount
 	featureUses[featureKey] = newRemaining
 	featureUsesJSON, err := json.Marshal(featureUses)
 	if err != nil {
@@ -57,6 +61,11 @@ func (s *Service) DeductFeatureUse(ctx context.Context, char refdata.Character, 
 		return 0, fmt.Errorf("updating feature_uses: %w", err)
 	}
 	return newRemaining, nil
+}
+
+// DeductFeatureUse decrements a feature's remaining uses by 1, persists, and returns the new count.
+func (s *Service) DeductFeatureUse(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]int, current int) (int, error) {
+	return s.DeductFeaturePool(ctx, char, featureKey, featureUses, current, 1)
 }
 
 // SneakAttackFeature returns the FeatureDefinition for Sneak Attack at the given rogue level.
