@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/sqlc-dev/pqtype"
 
@@ -79,6 +78,15 @@ func RageFeature(barbarianLevel int) FeatureDefinition {
 					AbilityUsed: "str",
 				},
 			},
+			{
+				Type:    EffectConditionalAdvantage,
+				Trigger: TriggerOnSave,
+				On:      "advantage",
+				Conditions: EffectConditions{
+					WhenRaging:  true,
+					AbilityUsed: "str",
+				},
+			},
 		},
 	}
 }
@@ -129,7 +137,7 @@ func FormatRageEndVoluntary(name string) string {
 	return fmt.Sprintf("\U0001f525  %s ends their Rage", name)
 }
 
-// ApplyRageToCombbatant sets rage state on a combatant.
+// ApplyRageToCombatant sets rage state on a combatant.
 func ApplyRageToCombatant(c refdata.Combatant) refdata.Combatant {
 	c.IsRaging = true
 	c.RageRoundsRemaining = sql.NullInt32{Int32: RageRounds, Valid: true}
@@ -358,10 +366,5 @@ func barbarianLevel(classesJSON json.RawMessage) int {
 	if err := json.Unmarshal(classesJSON, &classes); err != nil {
 		return 0
 	}
-	for _, c := range classes {
-		if strings.EqualFold(c.Class, "Barbarian") {
-			return c.Level
-		}
-	}
-	return 0
+	return classLevel(classes, "Barbarian")
 }

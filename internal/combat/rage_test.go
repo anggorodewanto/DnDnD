@@ -931,6 +931,31 @@ func TestRageFeature_DamageScaling(t *testing.T) {
 	}
 }
 
+func TestRageEffects_AdvantageSTRSaves(t *testing.T) {
+	features := []FeatureDefinition{RageFeature(5)}
+
+	// Raging + STR save: advantage
+	ctx := EffectContext{IsRaging: true, AbilityUsed: "str"}
+	result := ProcessEffects(features, TriggerOnSave, ctx)
+	if result.RollMode != 1 { // dice.Advantage
+		t.Errorf("STR save raging: RollMode = %v, want Advantage", result.RollMode)
+	}
+
+	// Raging + DEX save: no advantage
+	ctx = EffectContext{IsRaging: true, AbilityUsed: "dex"}
+	result = ProcessEffects(features, TriggerOnSave, ctx)
+	if result.RollMode != 0 { // dice.Normal
+		t.Errorf("DEX save raging: RollMode = %v, want Normal", result.RollMode)
+	}
+
+	// Not raging + STR save: no advantage
+	ctx = EffectContext{IsRaging: false, AbilityUsed: "str"}
+	result = ProcessEffects(features, TriggerOnSave, ctx)
+	if result.RollMode != 0 { // dice.Normal
+		t.Errorf("STR save not raging: RollMode = %v, want Normal", result.RollMode)
+	}
+}
+
 func TestRageFeature_Level1(t *testing.T) {
 	fd := RageFeature(1)
 
@@ -940,8 +965,8 @@ func TestRageFeature_Level1(t *testing.T) {
 	if fd.Source != "barbarian" {
 		t.Errorf("Source = %q, want %q", fd.Source, "barbarian")
 	}
-	if len(fd.Effects) != 3 {
-		t.Fatalf("expected 3 effects, got %d", len(fd.Effects))
+	if len(fd.Effects) != 4 {
+		t.Fatalf("expected 4 effects, got %d", len(fd.Effects))
 	}
 
 	// Effect 0: damage bonus
@@ -993,5 +1018,20 @@ func TestRageFeature_Level1(t *testing.T) {
 	}
 	if e2.Conditions.AbilityUsed != "str" {
 		t.Errorf("Effect[2].AbilityUsed = %q, want str", e2.Conditions.AbilityUsed)
+	}
+
+	// Effect 3: advantage on STR saves
+	e3 := fd.Effects[3]
+	if e3.Type != EffectConditionalAdvantage {
+		t.Errorf("Effect[3].Type = %q, want %q", e3.Type, EffectConditionalAdvantage)
+	}
+	if e3.Trigger != TriggerOnSave {
+		t.Errorf("Effect[3].Trigger = %q, want %q", e3.Trigger, TriggerOnSave)
+	}
+	if !e3.Conditions.WhenRaging {
+		t.Error("Effect[3] expected WhenRaging = true")
+	}
+	if e3.Conditions.AbilityUsed != "str" {
+		t.Errorf("Effect[3].AbilityUsed = %q, want str", e3.Conditions.AbilityUsed)
 	}
 }
