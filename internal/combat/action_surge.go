@@ -62,10 +62,7 @@ func (s *Service) ActionSurge(ctx context.Context, cmd ActionSurgeCommand) (Acti
 	}
 
 	// Determine attacks per action for the fighter
-	attacksPerAction, err := s.resolveAttacksPerAction(ctx, char)
-	if err != nil {
-		return ActionSurgeResult{}, fmt.Errorf("resolving attacks per action: %w", err)
-	}
+	attacksPerAction := s.resolveAttacksPerAction(ctx, char)
 
 	// Reset action and attacks
 	updatedTurn := cmd.Turn
@@ -90,10 +87,10 @@ func (s *Service) ActionSurge(ctx context.Context, cmd ActionSurgeCommand) (Acti
 
 // resolveAttacksPerAction determines the number of attacks per action for a character
 // based on their class data.
-func (s *Service) resolveAttacksPerAction(ctx context.Context, char refdata.Character) (int, error) {
+func (s *Service) resolveAttacksPerAction(ctx context.Context, char refdata.Character) int {
 	var classes []CharacterClass
 	if err := json.Unmarshal(char.Classes, &classes); err != nil {
-		return 1, nil
+		return 1
 	}
 
 	bestAttacks := 1
@@ -112,5 +109,5 @@ func (s *Service) resolveAttacksPerAction(ctx context.Context, char refdata.Char
 		}
 	}
 
-	return bestAttacks, nil
+	return bestAttacks
 }

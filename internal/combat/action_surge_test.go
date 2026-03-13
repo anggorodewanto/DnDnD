@@ -405,9 +405,9 @@ func TestActionSurge_ParseFeatureUsesError(t *testing.T) {
 	assert.Contains(t, err.Error(), "parsing feature_uses")
 }
 
-// TDD Cycle 9: Invalid classes JSON defaults to 1 attack
+// TDD Cycle 9: Invalid AttacksPerAction JSON defaults to 1 attack
 
-func TestActionSurge_InvalidClassesJSON(t *testing.T) {
+func TestActionSurge_InvalidAttacksPerActionJSON(t *testing.T) {
 	encounterID, combatantID, charID, ms := makeActionSurgeTestSetup()
 
 	fighter := makeFighterCombatant(combatantID, encounterID, charID)
@@ -446,6 +446,41 @@ func TestActionSurge_InvalidClassesJSON(t *testing.T) {
 	require.NoError(t, err)
 	// Falls back to 1 attack when class lookup fails to parse
 	assert.Equal(t, int32(1), result.Turn.AttacksRemaining)
+}
+
+// TDD Cycle 9b: GetClass returns error — falls back gracefully
+
+func TestResolveAttacksPerAction_GetClassError(t *testing.T) {
+	_, _, _, ms := makeActionSurgeTestSetup()
+
+	ms.getClassFn = func(ctx context.Context, id string) (refdata.Class, error) {
+		return refdata.Class{}, fmt.Errorf("class not found")
+	}
+
+	svc := NewService(ms)
+
+	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Fighter", Level: 5}})
+	char := refdata.Character{
+		Classes: classesJSON,
+	}
+
+	attacks := svc.resolveAttacksPerAction(context.Background(), char)
+	assert.Equal(t, 1, attacks, "should default to 1 when GetClass errors")
+}
+
+// TDD Cycle 9c: Invalid classes JSON in resolveAttacksPerAction defaults to 1
+
+func TestResolveAttacksPerAction_InvalidClassesJSON(t *testing.T) {
+	_, _, _, ms := makeActionSurgeTestSetup()
+
+	svc := NewService(ms)
+
+	char := refdata.Character{
+		Classes: json.RawMessage(`invalid`),
+	}
+
+	attacks := svc.resolveAttacksPerAction(context.Background(), char)
+	assert.Equal(t, 1, attacks, "should default to 1 when classes JSON is invalid")
 }
 
 // TDD Cycle 10: Bonus action and reaction NOT reset
