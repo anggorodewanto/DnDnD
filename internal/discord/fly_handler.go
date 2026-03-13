@@ -167,7 +167,7 @@ func (h *FlyHandler) HandleFlyConfirm(interaction *discordgo.Interaction, turnID
 		return
 	}
 
-	remaining := combat.FormatRemainingResources(updatedTurn)
+	remaining := combat.FormatRemainingResources(updatedTurn, nil)
 	var msg string
 	if newAltitude == 0 {
 		msg = fmt.Sprintf("\U0001f985 Descended to ground level. %s", remaining)

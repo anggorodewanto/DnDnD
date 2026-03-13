@@ -1,11 +1,63 @@
 package combat
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/sqlc-dev/pqtype"
+
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+const (
+	FeatureKeyRage              = "rage"
+	FeatureKeyKi                = "ki"
+	FeatureKeyWildShape         = "wild_shape"
+	FeatureKeyBardicInspiration = "bardic-inspiration"
+)
+
+// ParseFeatureUses extracts the feature_uses map and a named feature's remaining count.
+func ParseFeatureUses(char refdata.Character, featureKey string) (map[string]int, int, error) {
+	featureUses := make(map[string]int)
+	if char.FeatureUses.Valid && len(char.FeatureUses.RawMessage) > 0 {
+		if err := json.Unmarshal(char.FeatureUses.RawMessage, &featureUses); err != nil {
+			return nil, 0, fmt.Errorf("parsing feature_uses: %w", err)
+		}
+	}
+	remaining, _ := featureUses[featureKey]
+	return featureUses, remaining, nil
+}
+
+// ClassLevelFromJSON returns the level for the named class from raw JSON.
+func ClassLevelFromJSON(classesJSON []byte, className string) int {
+	if len(classesJSON) == 0 {
+		return 0
+	}
+	var classes []CharacterClass
+	if err := json.Unmarshal(classesJSON, &classes); err != nil {
+		return 0
+	}
+	return classLevel(classes, className)
+}
+
+// DeductFeatureUse decrements a feature's remaining uses by 1, persists, and returns the new count.
+func (s *Service) DeductFeatureUse(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]int, current int) (int, error) {
+	newRemaining := current - 1
+	featureUses[featureKey] = newRemaining
+	featureUsesJSON, err := json.Marshal(featureUses)
+	if err != nil {
+		return 0, fmt.Errorf("marshaling feature_uses: %w", err)
+	}
+	if _, err := s.store.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
+		ID:          char.ID,
+		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
+	}); err != nil {
+		return 0, fmt.Errorf("updating feature_uses: %w", err)
+	}
+	return newRemaining, nil
+}
 
 // SneakAttackFeature returns the FeatureDefinition for Sneak Attack at the given rogue level.
 // Sneak Attack adds extra damage dice once per turn when using a finesse or ranged weapon

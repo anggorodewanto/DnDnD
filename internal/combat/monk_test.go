@@ -511,24 +511,24 @@ func TestSplitMechanicalEffects(t *testing.T) {
 
 func TestMonkLevelFromJSON(t *testing.T) {
 	classesJSON := []byte(`[{"class":"Monk","level":8}]`)
-	got := monkLevelFromJSON(classesJSON)
+	got := ClassLevelFromJSON(classesJSON, "Monk")
 	if got != 8 {
-		t.Errorf("monkLevelFromJSON = %d, want 8", got)
+		t.Errorf("ClassLevelFromJSON = %d, want 8", got)
 	}
 }
 
 func TestMonkLevelFromJSON_NotMonk(t *testing.T) {
 	classesJSON := []byte(`[{"class":"Fighter","level":5}]`)
-	got := monkLevelFromJSON(classesJSON)
+	got := ClassLevelFromJSON(classesJSON, "Monk")
 	if got != 0 {
-		t.Errorf("monkLevelFromJSON (fighter) = %d, want 0", got)
+		t.Errorf("ClassLevelFromJSON (fighter) = %d, want 0", got)
 	}
 }
 
 func TestMonkLevelFromJSON_Empty(t *testing.T) {
-	got := monkLevelFromJSON(nil)
+	got := ClassLevelFromJSON(nil, "Monk")
 	if got != 0 {
-		t.Errorf("monkLevelFromJSON (nil) = %d, want 0", got)
+		t.Errorf("ClassLevelFromJSON (nil) = %d, want 0", got)
 	}
 }
 
@@ -587,11 +587,11 @@ func TestMonkDamageExpression_UnparseableDamage(t *testing.T) {
 	}
 }
 
-// Edge: monkLevelFromJSON with bad JSON
+// Edge: ClassLevelFromJSON with bad JSON
 func TestMonkLevelFromJSON_BadJSON(t *testing.T) {
-	got := monkLevelFromJSON([]byte("bad json"))
+	got := ClassLevelFromJSON([]byte("bad json"), "Monk")
 	if got != 0 {
-		t.Errorf("monkLevelFromJSON(bad) = %d, want 0", got)
+		t.Errorf("ClassLevelFromJSON(bad) = %d, want 0", got)
 	}
 }
 
@@ -1037,7 +1037,7 @@ func TestParseKiUses_WithKiPoints(t *testing.T) {
 	char := refdata.Character{
 		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
 	}
-	uses, remaining, err := parseKiUses(char)
+	uses, remaining, err := ParseFeatureUses(char, FeatureKeyKi)
 	require.NoError(t, err)
 	assert.Equal(t, 3, remaining)
 	assert.Equal(t, 3, uses["ki"])
@@ -1045,7 +1045,7 @@ func TestParseKiUses_WithKiPoints(t *testing.T) {
 
 func TestParseKiUses_Empty(t *testing.T) {
 	char := refdata.Character{}
-	uses, remaining, err := parseKiUses(char)
+	uses, remaining, err := ParseFeatureUses(char, FeatureKeyKi)
 	require.NoError(t, err)
 	assert.Equal(t, 0, remaining)
 	assert.NotNil(t, uses)
@@ -1055,7 +1055,7 @@ func TestParseKiUses_BadJSON(t *testing.T) {
 	char := refdata.Character{
 		FeatureUses: pqtype.NullRawMessage{RawMessage: json.RawMessage(`bad`), Valid: true},
 	}
-	_, _, err := parseKiUses(char)
+	_, _, err := ParseFeatureUses(char, FeatureKeyKi)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing feature_uses")
 }

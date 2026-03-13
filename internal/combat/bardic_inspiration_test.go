@@ -118,13 +118,13 @@ func TestFormatBardicInspirationExpired(t *testing.T) {
 	assert.Contains(t, result, "expired")
 }
 
-// --- TDD Cycle 8: bardLevelFromJSON ---
+// --- TDD Cycle 8: ClassLevelFromJSON (Bard) ---
 
 func TestBardLevelFromJSON(t *testing.T) {
-	assert.Equal(t, 5, bardLevelFromJSON([]byte(`[{"class":"Bard","level":5}]`)))
-	assert.Equal(t, 0, bardLevelFromJSON([]byte(`[{"class":"Fighter","level":10}]`)))
-	assert.Equal(t, 0, bardLevelFromJSON(nil))
-	assert.Equal(t, 0, bardLevelFromJSON([]byte(`invalid`)))
+	assert.Equal(t, 5, ClassLevelFromJSON([]byte(`[{"class":"Bard","level":5}]`), "Bard"))
+	assert.Equal(t, 0, ClassLevelFromJSON([]byte(`[{"class":"Fighter","level":10}]`), "Bard"))
+	assert.Equal(t, 0, ClassLevelFromJSON(nil, "Bard"))
+	assert.Equal(t, 0, ClassLevelFromJSON([]byte(`invalid`), "Bard"))
 }
 
 // --- TDD Cycle 9: HasBardClass ---
@@ -394,7 +394,7 @@ func TestGrantBardicInspiration_NoUsesRemaining(t *testing.T) {
 
 func TestParseBardicInspirationUses_NoFeatureUses(t *testing.T) {
 	char := refdata.Character{}
-	featureUses, remaining, err := parseBardicInspirationUses(char)
+	featureUses, remaining, err := ParseFeatureUses(char, FeatureKeyBardicInspiration)
 	require.NoError(t, err)
 	assert.Equal(t, 0, remaining)
 	assert.NotNil(t, featureUses)
@@ -404,7 +404,7 @@ func TestParseBardicInspirationUses_InvalidJSON(t *testing.T) {
 	char := refdata.Character{
 		FeatureUses: pqtype.NullRawMessage{RawMessage: json.RawMessage(`invalid`), Valid: true},
 	}
-	_, _, err := parseBardicInspirationUses(char)
+	_, _, err := ParseFeatureUses(char, FeatureKeyBardicInspiration)
 	assert.Error(t, err)
 }
 

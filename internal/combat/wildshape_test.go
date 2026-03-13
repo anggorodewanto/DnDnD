@@ -564,7 +564,7 @@ func TestDruidLevel(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := druidLevel(tt.classes)
+			got := ClassLevelFromJSON(tt.classes, "Druid")
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -665,14 +665,14 @@ func TestParseWildShapeUses(t *testing.T) {
 			Valid:      true,
 		},
 	}
-	uses, remaining, err := parseWildShapeUses(char)
+	uses, remaining, err := ParseFeatureUses(char, FeatureKeyWildShape)
 	require.NoError(t, err)
 	assert.Equal(t, 2, remaining)
 	assert.Equal(t, 2, uses["wild_shape"])
 
 	// No feature uses
 	char = refdata.Character{}
-	uses, remaining, err = parseWildShapeUses(char)
+	uses, remaining, err = ParseFeatureUses(char, FeatureKeyWildShape)
 	require.NoError(t, err)
 	assert.Equal(t, 0, remaining)
 	assert.Empty(t, uses)
@@ -684,7 +684,7 @@ func TestParseWildShapeUses(t *testing.T) {
 			Valid:      true,
 		},
 	}
-	_, _, err = parseWildShapeUses(char)
+	_, _, err = ParseFeatureUses(char, FeatureKeyWildShape)
 	assert.Error(t, err)
 }
 

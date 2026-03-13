@@ -235,7 +235,7 @@ func HasFeat(features pqtype.NullRawMessage, featID string) bool {
 
 // HasBarbarianClass checks whether a character's classes JSON includes a Barbarian entry.
 func HasBarbarianClass(classesJSON json.RawMessage) bool {
-	return barbarianLevel(classesJSON) > 0
+	return ClassLevelFromJSON(classesJSON, "Barbarian") > 0
 }
 
 // VersatileDamageExpression builds the damage expression using versatile_damage if available.
@@ -804,7 +804,7 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 
 	// Monk martial arts: set monk level for DEX/STR auto-select and die upgrade
 	if char != nil {
-		input.MonkLevel = monkLevelFromJSON(char.Classes)
+		input.MonkLevel = ClassLevelFromJSON(char.Classes, "Monk")
 	}
 
 	return s.resolveAndPersistAttack(ctx, input, updatedTurn, roller)

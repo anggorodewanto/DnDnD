@@ -236,14 +236,14 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 
 // FormatTurnStartPrompt produces the turn start notification shown in #your-turn.
 // An optional combatant may be passed to include Bardic Inspiration status.
-func FormatTurnStartPrompt(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn, combatant ...refdata.Combatant) string {
+func FormatTurnStartPrompt(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn, combatant *refdata.Combatant) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", encounterName, roundNumber)
 	fmt.Fprintf(&b, "\U0001f514 @%s \u2014 it's your turn!\n", combatantName)
 
 	var parts []string
-	if len(combatant) > 0 {
-		parts = BuildResourceListWithInspiration(turn, combatant[0])
+	if combatant != nil {
+		parts = BuildResourceListWithInspiration(turn, *combatant)
 	} else {
 		parts = buildResourceList(turn)
 	}
@@ -266,10 +266,10 @@ func BuildResourceListWithInspiration(turn refdata.Turn, combatant refdata.Comba
 
 // FormatRemainingResources produces the status line appended after each command in #combat-log.
 // An optional combatant may be passed to include Bardic Inspiration status.
-func FormatRemainingResources(turn refdata.Turn, combatant ...refdata.Combatant) string {
+func FormatRemainingResources(turn refdata.Turn, combatant *refdata.Combatant) string {
 	var parts []string
-	if len(combatant) > 0 {
-		parts = BuildResourceListWithInspiration(turn, combatant[0])
+	if combatant != nil {
+		parts = BuildResourceListWithInspiration(turn, *combatant)
 	} else {
 		parts = buildResourceList(turn)
 	}

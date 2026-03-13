@@ -203,7 +203,7 @@ func TestFormatTurnStartPrompt_FullResources(t *testing.T) {
 		ReactionUsed:        false,
 		AttacksRemaining:    2,
 	}
-	result := FormatTurnStartPrompt("Rooftop Ambush", 3, "Aria", turn)
+	result := FormatTurnStartPrompt("Rooftop Ambush", 3, "Aria", turn, nil)
 	assert.Contains(t, result, "Rooftop Ambush")
 	assert.Contains(t, result, "Round 3")
 	assert.Contains(t, result, "@Aria")
@@ -223,7 +223,7 @@ func TestFormatTurnStartPrompt_AllSpent(t *testing.T) {
 		ReactionUsed:        true,
 		AttacksRemaining:    0,
 	}
-	result := FormatTurnStartPrompt("Test", 1, "Bob", turn)
+	result := FormatTurnStartPrompt("Test", 1, "Bob", turn, nil)
 	assert.Contains(t, result, "All actions spent")
 	assert.Contains(t, result, "/done")
 }
@@ -233,7 +233,7 @@ func TestFormatTurnStartPrompt_SingleAttack(t *testing.T) {
 		MovementRemainingFt: 30,
 		AttacksRemaining:    1,
 	}
-	result := FormatTurnStartPrompt("Test", 1, "Bob", turn)
+	result := FormatTurnStartPrompt("Test", 1, "Bob", turn, nil)
 	assert.Contains(t, result, "1 attack")
 	assert.NotContains(t, result, "attacks") // singular
 }
@@ -247,7 +247,7 @@ func TestFormatRemainingResources_SomeSpent(t *testing.T) {
 		ReactionUsed:        false,
 		AttacksRemaining:    1,
 	}
-	result := FormatRemainingResources(turn)
+	result := FormatRemainingResources(turn, nil)
 	assert.Contains(t, result, "5ft move")
 	assert.Contains(t, result, "1 attack")
 	assert.Contains(t, result, "Bonus action")
@@ -264,7 +264,7 @@ func TestFormatRemainingResources_AllSpent(t *testing.T) {
 		ReactionUsed:        true,
 		AttacksRemaining:    0,
 	}
-	result := FormatRemainingResources(turn)
+	result := FormatRemainingResources(turn, nil)
 	assert.Contains(t, result, "All actions spent")
 	assert.Contains(t, result, "/done")
 }
@@ -278,7 +278,7 @@ func TestFormatRemainingResources_OnlyMovement(t *testing.T) {
 		ReactionUsed:        true,
 		AttacksRemaining:    0,
 	}
-	result := FormatRemainingResources(turn)
+	result := FormatRemainingResources(turn, nil)
 	assert.Contains(t, result, "15ft move")
 	assert.NotContains(t, result, "All actions spent")
 }
@@ -556,7 +556,7 @@ func TestFormatTurnStartPrompt_WithBardicInspiration(t *testing.T) {
 	combatant := refdata.Combatant{
 		BardicInspirationDie: sql.NullString{String: "d8", Valid: true},
 	}
-	result := FormatTurnStartPrompt("Test", 1, "Aria", turn, combatant)
+	result := FormatTurnStartPrompt("Test", 1, "Aria", turn, &combatant)
 	assert.Contains(t, result, "Bardic Inspiration (d8)")
 }
 
@@ -565,7 +565,7 @@ func TestFormatTurnStartPrompt_WithoutCombatant_NoInspiration(t *testing.T) {
 		MovementRemainingFt: 30,
 		AttacksRemaining:    1,
 	}
-	result := FormatTurnStartPrompt("Test", 1, "Aria", turn)
+	result := FormatTurnStartPrompt("Test", 1, "Aria", turn, nil)
 	assert.NotContains(t, result, "Bardic Inspiration")
 }
 
@@ -579,7 +579,7 @@ func TestFormatRemainingResources_WithBardicInspiration(t *testing.T) {
 	combatant := refdata.Combatant{
 		BardicInspirationDie: sql.NullString{String: "d6", Valid: true},
 	}
-	result := FormatRemainingResources(turn, combatant)
+	result := FormatRemainingResources(turn, &combatant)
 	assert.Contains(t, result, "Bardic Inspiration (d6)")
 }
 
@@ -588,6 +588,6 @@ func TestFormatRemainingResources_WithoutCombatant_NoInspiration(t *testing.T) {
 		MovementRemainingFt: 30,
 		AttacksRemaining:    1,
 	}
-	result := FormatRemainingResources(turn)
+	result := FormatRemainingResources(turn, nil)
 	assert.NotContains(t, result, "Bardic Inspiration")
 }

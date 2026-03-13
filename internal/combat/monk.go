@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
@@ -31,17 +30,6 @@ func FormatMartialArtsBonusAttack(name string) string {
 	return fmt.Sprintf("\U0001f44a  %s makes a Martial Arts bonus unarmed strike!", name)
 }
 
-// monkLevelFromJSON returns the monk level from character classes JSON.
-func monkLevelFromJSON(classesJSON []byte) int {
-	if len(classesJSON) == 0 {
-		return 0
-	}
-	var classes []CharacterClass
-	if err := json.Unmarshal(classesJSON, &classes); err != nil {
-		return 0
-	}
-	return classLevel(classes, "Monk")
-}
 
 // MartialArtsBonusAttackCommand holds the inputs for a martial arts bonus unarmed strike.
 type MartialArtsBonusAttackCommand struct {
@@ -71,7 +59,7 @@ func (s *Service) MartialArtsBonusAttack(ctx context.Context, cmd MartialArtsBon
 		return AttackResult{}, fmt.Errorf("getting character: %w", err)
 	}
 
-	ml := monkLevelFromJSON(char.Classes)
+	ml := ClassLevelFromJSON(char.Classes, "Monk")
 	if err := ValidateMartialArtsBonusAttack(ml, cmd.Turn.ActionUsed); err != nil {
 		return AttackResult{}, err
 	}
@@ -127,22 +115,12 @@ func (s *Service) FlurryOfBlows(ctx context.Context, cmd FlurryOfBlowsCommand, r
 		return FlurryOfBlowsResult{}, fmt.Errorf("flurry of blows requires a character (not NPC)")
 	}
 
-	char, err := s.store.GetCharacter(ctx, cmd.Attacker.CharacterID.UUID)
+	if !cmd.Turn.ActionUsed {
+		return FlurryOfBlowsResult{}, fmt.Errorf("Martial Arts bonus attack requires the Attack action this turn")
+	}
+
+	char, newKi, ml, err := s.deductKi(ctx, cmd.Attacker.CharacterID.UUID, "flurry-of-blows")
 	if err != nil {
-		return FlurryOfBlowsResult{}, fmt.Errorf("getting character: %w", err)
-	}
-
-	ml := monkLevelFromJSON(char.Classes)
-	if err := ValidateMartialArtsBonusAttack(ml, cmd.Turn.ActionUsed); err != nil {
-		return FlurryOfBlowsResult{}, err
-	}
-
-	featureUses, kiRemaining, err := parseKiUses(char)
-	if err != nil {
-		return FlurryOfBlowsResult{}, err
-	}
-
-	if err := ValidateKiAbility(ml, kiRemaining, "flurry-of-blows"); err != nil {
 		return FlurryOfBlowsResult{}, err
 	}
 
@@ -151,21 +129,6 @@ func (s *Service) FlurryOfBlows(ctx context.Context, cmd FlurryOfBlowsCommand, r
 		return FlurryOfBlowsResult{}, fmt.Errorf("parsing ability scores: %w", err)
 	}
 
-	// Deduct 1 ki point
-	newKi := kiRemaining - 1
-	featureUses["ki"] = newKi
-	featureUsesJSON, err := json.Marshal(featureUses)
-	if err != nil {
-		return FlurryOfBlowsResult{}, fmt.Errorf("marshaling feature_uses: %w", err)
-	}
-	if _, err := s.store.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
-		ID:          char.ID,
-		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
-	}); err != nil {
-		return FlurryOfBlowsResult{}, fmt.Errorf("updating feature_uses: %w", err)
-	}
-
-	// Use bonus action
 	updatedTurn, err := UseResource(cmd.Turn, ResourceBonusAction)
 	if err != nil {
 		return FlurryOfBlowsResult{}, fmt.Errorf("using bonus action: %w", err)
@@ -174,7 +137,6 @@ func (s *Service) FlurryOfBlows(ctx context.Context, cmd FlurryOfBlowsCommand, r
 	weapon := UnarmedStrike()
 	distFt := combatantDistance(cmd.Attacker, cmd.Target)
 
-	// Make 2 unarmed strikes
 	var attacks []AttackResult
 	for i := 0; i < 2; i++ {
 		input := buildAttackInput(
@@ -191,7 +153,6 @@ func (s *Service) FlurryOfBlows(ctx context.Context, cmd FlurryOfBlowsCommand, r
 		attacks = append(attacks, result)
 	}
 
-	// Persist turn
 	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
 		return FlurryOfBlowsResult{}, fmt.Errorf("updating turn actions: %w", err)
 	}
@@ -218,35 +179,38 @@ type KiAbilityResult struct {
 	Turn        refdata.Turn
 }
 
-// spendKi is a shared helper that validates monk class, ki points, and bonus action,
-// then deducts 1 ki point and uses the bonus action. Returns the updated turn, new ki remaining, and char.
-func (s *Service) spendKi(ctx context.Context, charID uuid.UUID, turn refdata.Turn, abilityName string) (refdata.Turn, int, refdata.Character, error) {
+// deductKi validates monk class and ki points, deducts 1 ki point, and persists.
+// Returns the character, new ki remaining, and monk level.
+func (s *Service) deductKi(ctx context.Context, charID uuid.UUID, abilityName string) (refdata.Character, int, int, error) {
 	char, err := s.store.GetCharacter(ctx, charID)
 	if err != nil {
-		return turn, 0, refdata.Character{}, fmt.Errorf("getting character: %w", err)
+		return refdata.Character{}, 0, 0, fmt.Errorf("getting character: %w", err)
 	}
 
-	ml := monkLevelFromJSON(char.Classes)
-	featureUses, kiRemaining, err := parseKiUses(char)
+	ml := ClassLevelFromJSON(char.Classes, "Monk")
+	featureUses, kiRemaining, err := ParseFeatureUses(char, FeatureKeyKi)
 	if err != nil {
-		return turn, 0, refdata.Character{}, err
+		return refdata.Character{}, 0, 0, err
 	}
 
 	if err := ValidateKiAbility(ml, kiRemaining, abilityName); err != nil {
-		return turn, 0, refdata.Character{}, err
+		return refdata.Character{}, 0, 0, err
 	}
 
-	newKi := kiRemaining - 1
-	featureUses["ki"] = newKi
-	featureUsesJSON, err := json.Marshal(featureUses)
+	newKi, err := s.DeductFeatureUse(ctx, char, FeatureKeyKi, featureUses, kiRemaining)
 	if err != nil {
-		return turn, 0, refdata.Character{}, fmt.Errorf("marshaling feature_uses: %w", err)
+		return refdata.Character{}, 0, 0, err
 	}
-	if _, err := s.store.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
-		ID:          char.ID,
-		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
-	}); err != nil {
-		return turn, 0, refdata.Character{}, fmt.Errorf("updating feature_uses: %w", err)
+
+	return char, newKi, ml, nil
+}
+
+// spendKi is a shared helper that validates monk class, ki points, and bonus action,
+// then deducts 1 ki point and uses the bonus action. Returns the updated turn, new ki remaining, and char.
+func (s *Service) spendKi(ctx context.Context, charID uuid.UUID, turn refdata.Turn, abilityName string) (refdata.Turn, int, refdata.Character, error) {
+	char, newKi, _, err := s.deductKi(ctx, charID, abilityName)
+	if err != nil {
+		return turn, 0, refdata.Character{}, err
 	}
 
 	updatedTurn, err := UseResource(turn, ResourceBonusAction)
@@ -374,38 +338,14 @@ func (s *Service) StunningStrike(ctx context.Context, cmd StunningStrikeCommand,
 		return StunningStrikeResult{}, fmt.Errorf("stunning strike requires a character (not NPC)")
 	}
 
-	char, err := s.store.GetCharacter(ctx, cmd.Attacker.CharacterID.UUID)
+	char, newKi, _, err := s.deductKi(ctx, cmd.Attacker.CharacterID.UUID, "stunning-strike")
 	if err != nil {
-		return StunningStrikeResult{}, fmt.Errorf("getting character: %w", err)
-	}
-
-	ml := monkLevelFromJSON(char.Classes)
-	featureUses, kiRemaining, err := parseKiUses(char)
-	if err != nil {
-		return StunningStrikeResult{}, err
-	}
-
-	if err := ValidateKiAbility(ml, kiRemaining, "stunning-strike"); err != nil {
 		return StunningStrikeResult{}, err
 	}
 
 	scores, err := ParseAbilityScores(char.AbilityScores)
 	if err != nil {
 		return StunningStrikeResult{}, fmt.Errorf("parsing ability scores: %w", err)
-	}
-
-	// Deduct 1 ki point
-	newKi := kiRemaining - 1
-	featureUses["ki"] = newKi
-	featureUsesJSON, err := json.Marshal(featureUses)
-	if err != nil {
-		return StunningStrikeResult{}, fmt.Errorf("marshaling feature_uses: %w", err)
-	}
-	if _, err := s.store.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
-		ID:          char.ID,
-		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
-	}); err != nil {
-		return StunningStrikeResult{}, fmt.Errorf("updating feature_uses: %w", err)
 	}
 
 	dc := StunningStrikeDC(int(char.ProficiencyBonus), scores.Wis)
@@ -603,17 +543,6 @@ func ValidateKiAbility(monkLevel int, kiRemaining int, abilityName string) error
 	return nil
 }
 
-// parseKiUses extracts ki point uses from character feature_uses JSON.
-func parseKiUses(char refdata.Character) (map[string]int, int, error) {
-	featureUses := make(map[string]int)
-	if char.FeatureUses.Valid && len(char.FeatureUses.RawMessage) > 0 {
-		if err := json.Unmarshal(char.FeatureUses.RawMessage, &featureUses); err != nil {
-			return nil, 0, fmt.Errorf("parsing feature_uses: %w", err)
-		}
-	}
-	kiRemaining, _ := featureUses["ki"]
-	return featureUses, kiRemaining, nil
-}
 
 // IsMonkWeapon returns true if the weapon qualifies as a monk weapon:
 // unarmed strikes, shortswords, or any simple melee weapon without the

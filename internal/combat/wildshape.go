@@ -189,21 +189,9 @@ func ParseCR(cr string) float64 {
 	return val
 }
 
-// druidLevel returns the druid level from character classes JSON.
-func druidLevel(classesJSON json.RawMessage) int {
-	if len(classesJSON) == 0 {
-		return 0
-	}
-	var classes []CharacterClass
-	if err := json.Unmarshal(classesJSON, &classes); err != nil {
-		return 0
-	}
-	return classLevel(classes, "Druid")
-}
-
 // HasDruidClass checks whether a character's classes JSON includes a Druid entry.
 func HasDruidClass(classesJSON json.RawMessage) bool {
-	return druidLevel(classesJSON) > 0
+	return ClassLevelFromJSON(classesJSON, "Druid") > 0
 }
 
 // isCircleOfMoon checks if the character has the Circle of the Moon subclass.
@@ -211,17 +199,6 @@ func isCircleOfMoon(features pqtype.NullRawMessage) bool {
 	return hasFeatureEffect(features, "circle_of_the_moon")
 }
 
-// parseWildShapeUses extracts wild shape uses from character feature_uses JSON.
-func parseWildShapeUses(char refdata.Character) (map[string]int, int, error) {
-	featureUses := make(map[string]int)
-	if char.FeatureUses.Valid && len(char.FeatureUses.RawMessage) > 0 {
-		if err := json.Unmarshal(char.FeatureUses.RawMessage, &featureUses); err != nil {
-			return nil, 0, fmt.Errorf("parsing feature_uses: %w", err)
-		}
-	}
-	remaining, _ := featureUses["wild_shape"]
-	return featureUses, remaining, nil
-}
 
 // getBeastWalkSpeed extracts the walk speed from a beast's speed JSON.
 func getBeastWalkSpeed(speed json.RawMessage) int32 {
@@ -272,7 +249,7 @@ func (s *Service) ActivateWildShape(ctx context.Context, cmd WildShapeCommand) (
 	}
 
 	// Check Wild Shape uses
-	featureUses, wsRemaining, err := parseWildShapeUses(char)
+	featureUses, wsRemaining, err := ParseFeatureUses(char, FeatureKeyWildShape)
 	if err != nil {
 		return WildShapeResult{}, err
 	}
@@ -287,24 +264,16 @@ func (s *Service) ActivateWildShape(ctx context.Context, cmd WildShapeCommand) (
 	}
 
 	// Validate Wild Shape preconditions
-	dLevel := druidLevel(char.Classes)
+	dLevel := ClassLevelFromJSON(char.Classes, "Druid")
 	moon := isCircleOfMoon(char.Features)
 	if err := ValidateWildShapeActivation(cmd.Combatant.IsWildShaped, beast.Type, beast.Cr, dLevel, moon, beast.Speed); err != nil {
 		return WildShapeResult{}, err
 	}
 
 	// Deduct Wild Shape use
-	newUsesRemaining := wsRemaining - 1
-	featureUses["wild_shape"] = newUsesRemaining
-	featureUsesJSON, err := json.Marshal(featureUses)
+	newUsesRemaining, err := s.DeductFeatureUse(ctx, char, FeatureKeyWildShape, featureUses, wsRemaining)
 	if err != nil {
-		return WildShapeResult{}, fmt.Errorf("marshaling feature_uses: %w", err)
-	}
-	if _, err := s.store.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
-		ID:          char.ID,
-		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
-	}); err != nil {
-		return WildShapeResult{}, fmt.Errorf("updating feature_uses: %w", err)
+		return WildShapeResult{}, err
 	}
 
 	// Use bonus action
@@ -343,7 +312,7 @@ func (s *Service) ActivateWildShape(ctx context.Context, cmd WildShapeCommand) (
 	walkSpeed := getBeastWalkSpeed(beast.Speed)
 	combatLog := FormatWildShapeActivation(cmd.Combatant.DisplayName, beast.Name, newUsesRemaining,
 		beast.HpAverage, beast.Ac, walkSpeed, "")
-	remaining := FormatRemainingResources(updatedTurn)
+	remaining := FormatRemainingResources(updatedTurn, nil)
 
 	return WildShapeResult{
 		Combatant:     persisted,

@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sqlc-dev/pqtype"
-
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -86,21 +84,9 @@ func FormatBardicInspirationStatus(die string) string {
 	return fmt.Sprintf("\U0001f3b5 Bardic Inspiration (%s)", die)
 }
 
-// bardLevelFromJSON returns the bard level from character classes JSON.
-func bardLevelFromJSON(classesJSON []byte) int {
-	if len(classesJSON) == 0 {
-		return 0
-	}
-	var classes []CharacterClass
-	if err := json.Unmarshal(classesJSON, &classes); err != nil {
-		return 0
-	}
-	return classLevel(classes, "Bard")
-}
-
 // HasBardClass checks whether a character's classes JSON includes a Bard entry.
 func HasBardClass(classesJSON json.RawMessage) bool {
-	return bardLevelFromJSON(classesJSON) > 0
+	return ClassLevelFromJSON(classesJSON, "Bard") > 0
 }
 
 // BardicInspirationExpirationDuration is the real-time expiration for Bardic Inspiration.
@@ -132,17 +118,6 @@ func CombatantHasBardicInspiration(c refdata.Combatant) bool {
 	return c.BardicInspirationDie.Valid && c.BardicInspirationDie.String != ""
 }
 
-// parseBardicInspirationUses extracts bardic-inspiration uses from character feature_uses JSON.
-func parseBardicInspirationUses(char refdata.Character) (map[string]int, int, error) {
-	featureUses := make(map[string]int)
-	if char.FeatureUses.Valid && len(char.FeatureUses.RawMessage) > 0 {
-		if err := json.Unmarshal(char.FeatureUses.RawMessage, &featureUses); err != nil {
-			return nil, 0, fmt.Errorf("parsing feature_uses: %w", err)
-		}
-	}
-	remaining, _ := featureUses["bardic-inspiration"]
-	return featureUses, remaining, nil
-}
 
 // BardicInspirationCommand holds the service-level inputs for granting Bardic Inspiration.
 type BardicInspirationCommand struct {
@@ -188,16 +163,13 @@ func (s *Service) GrantBardicInspiration(ctx context.Context, cmd BardicInspirat
 	}
 
 	// Must be bard
-	bl := bardLevelFromJSON(char.Classes)
-	if bl <= 0 {
-		return BardicInspirationResult{}, fmt.Errorf("Bardic Inspiration requires Bard class")
-	}
+	bl := ClassLevelFromJSON(char.Classes, "Bard")
 
 	// Check target doesn't already have inspiration
 	targetHasInspiration := CombatantHasBardicInspiration(cmd.Target)
 
 	// Parse feature_uses
-	featureUses, usesRemaining, err := parseBardicInspirationUses(char)
+	featureUses, usesRemaining, err := ParseFeatureUses(char, FeatureKeyBardicInspiration)
 	if err != nil {
 		return BardicInspirationResult{}, err
 	}
@@ -208,17 +180,9 @@ func (s *Service) GrantBardicInspiration(ctx context.Context, cmd BardicInspirat
 	}
 
 	// Deduct use
-	newUsesRemaining := usesRemaining - 1
-	featureUses["bardic-inspiration"] = newUsesRemaining
-	featureUsesJSON, err := json.Marshal(featureUses)
+	newUsesRemaining, err := s.DeductFeatureUse(ctx, char, FeatureKeyBardicInspiration, featureUses, usesRemaining)
 	if err != nil {
-		return BardicInspirationResult{}, fmt.Errorf("marshaling feature_uses: %w", err)
-	}
-	if _, err := s.store.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
-		ID:          char.ID,
-		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
-	}); err != nil {
-		return BardicInspirationResult{}, fmt.Errorf("updating feature_uses: %w", err)
+		return BardicInspirationResult{}, err
 	}
 
 	// Use bonus action
@@ -248,7 +212,7 @@ func (s *Service) GrantBardicInspiration(ctx context.Context, cmd BardicInspirat
 
 	combatLog := FormatBardicInspirationGrant(cmd.Bard.DisplayName, cmd.Target.DisplayName, die)
 	notification := FormatBardicInspirationNotification(die, cmd.Bard.DisplayName)
-	remaining := FormatRemainingResources(updatedTurn)
+	remaining := FormatRemainingResources(updatedTurn, nil)
 
 	return BardicInspirationResult{
 		Bard:         cmd.Bard,

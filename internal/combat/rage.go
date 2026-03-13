@@ -3,10 +3,7 @@ package combat
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-
-	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -233,12 +230,12 @@ func (s *Service) ActivateRage(ctx context.Context, cmd RageCommand) (RageResult
 	}
 
 	// Parse feature_uses and check rage remaining
-	featureUses, ragesRemaining, err := parseRageUses(char)
+	featureUses, ragesRemaining, err := ParseFeatureUses(char, FeatureKeyRage)
 	if err != nil {
 		return RageResult{}, err
 	}
 
-	barbLevel := barbarianLevel(char.Classes)
+	barbLevel := ClassLevelFromJSON(char.Classes, "Barbarian")
 	maxRages := RageUsesPerDay(barbLevel)
 
 	// Unlimited rages at level 20
@@ -249,17 +246,10 @@ func (s *Service) ActivateRage(ctx context.Context, cmd RageCommand) (RageResult
 	// Deduct rage use (unless unlimited)
 	newRagesRemaining := ragesRemaining
 	if maxRages != -1 {
-		newRagesRemaining = ragesRemaining - 1
-		featureUses["rage"] = newRagesRemaining
-		featureUsesJSON, err := json.Marshal(featureUses)
-		if err != nil {
-			return RageResult{}, fmt.Errorf("marshaling feature_uses: %w", err)
-		}
-		if _, err := s.store.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
-			ID:          char.ID,
-			FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
-		}); err != nil {
-			return RageResult{}, fmt.Errorf("updating feature_uses: %w", err)
+		var deductErr error
+		newRagesRemaining, deductErr = s.DeductFeatureUse(ctx, char, FeatureKeyRage, featureUses, ragesRemaining)
+		if deductErr != nil {
+			return RageResult{}, deductErr
 		}
 	}
 
@@ -282,7 +272,7 @@ func (s *Service) ActivateRage(ctx context.Context, cmd RageCommand) (RageResult
 	}
 
 	combatLog := FormatRageActivation(cmd.Combatant.DisplayName, newRagesRemaining)
-	remaining := FormatRemainingResources(updatedTurn)
+	remaining := FormatRemainingResources(updatedTurn, nil)
 
 	return RageResult{
 		Combatant: ragedCombatant,
@@ -322,26 +312,3 @@ func (s *Service) persistRageState(ctx context.Context, c refdata.Combatant) (re
 	})
 }
 
-// parseRageUses extracts rage uses from character feature_uses JSON.
-func parseRageUses(char refdata.Character) (map[string]int, int, error) {
-	featureUses := make(map[string]int)
-	if char.FeatureUses.Valid && len(char.FeatureUses.RawMessage) > 0 {
-		if err := json.Unmarshal(char.FeatureUses.RawMessage, &featureUses); err != nil {
-			return nil, 0, fmt.Errorf("parsing feature_uses: %w", err)
-		}
-	}
-	ragesRemaining, _ := featureUses["rage"]
-	return featureUses, ragesRemaining, nil
-}
-
-// barbarianLevel returns the barbarian level from character classes JSON.
-func barbarianLevel(classesJSON json.RawMessage) int {
-	if len(classesJSON) == 0 {
-		return 0
-	}
-	var classes []CharacterClass
-	if err := json.Unmarshal(classesJSON, &classes); err != nil {
-		return 0
-	}
-	return classLevel(classes, "Barbarian")
-}

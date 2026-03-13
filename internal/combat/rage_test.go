@@ -643,9 +643,9 @@ func TestBarbarianLevel(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := barbarianLevel(tt.classes)
+			got := ClassLevelFromJSON(tt.classes, "Barbarian")
 			if got != tt.want {
-				t.Errorf("barbarianLevel() = %d, want %d", got, tt.want)
+				t.Errorf("ClassLevelFromJSON() = %d, want %d", got, tt.want)
 			}
 		})
 	}
@@ -719,7 +719,7 @@ func TestService_ActivateRage_NoArmorEquipped(t *testing.T) {
 
 func TestParseRageUses_NoFeatureUses(t *testing.T) {
 	char := refdata.Character{}
-	uses, remaining, err := parseRageUses(char)
+	uses, remaining, err := ParseFeatureUses(char, FeatureKeyRage)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -863,7 +863,7 @@ func TestParseRageUses_InvalidJSON(t *testing.T) {
 			Valid:      true,
 		},
 	}
-	_, _, err := parseRageUses(char)
+	_, _, err := ParseFeatureUses(char, FeatureKeyRage)
 	if err == nil {
 		t.Error("expected error for invalid JSON")
 	}

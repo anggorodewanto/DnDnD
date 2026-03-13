@@ -303,7 +303,7 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 		return
 	}
 
-	remaining := combat.FormatRemainingResources(updatedTurn)
+	remaining := combat.FormatRemainingResources(updatedTurn, nil)
 	msg := fmt.Sprintf("\U0001f3c3 Moved to %s%d. %s", destLabel, destRow+1, remaining)
 
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
@@ -567,7 +567,7 @@ func (h *MoveHandler) HandleMoveConfirmWithMode(interaction *discordgo.Interacti
 		return
 	}
 
-	remaining := combat.FormatRemainingResources(updatedTurn)
+	remaining := combat.FormatRemainingResources(updatedTurn, nil)
 	var msg string
 	if mode == "stand_and_move" {
 		msg = fmt.Sprintf("\U0001f3c3 Stood up and moved to %s%d. %s", destLabel, destRow+1, remaining)
