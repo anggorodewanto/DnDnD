@@ -459,5 +459,112 @@ func TestIntegration_ChannelDivinity_NoUsesRemaining(t *testing.T) {
 	assert.Contains(t, err.Error(), "no Channel Divinity uses remaining")
 }
 
+// Integration Test: Vow of Enmity (Vengeance Paladin)
+
+func TestIntegration_VowOfEnmity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	queries := refdata.New(db)
+	svc := combat.NewService(&testStoreAdapter{queries})
+	ctx := context.Background()
+
+	campaignID := createTestCampaign(t, db)
+	mapID := createTestMap(t, db, campaignID)
+
+	// Create paladin character
+	charID := uuid.New()
+	classesJSON, _ := json.Marshal([]map[string]interface{}{{"class": "Paladin", "level": 3}})
+	featureUsesJSON, _ := json.Marshal(map[string]int{"channel-divinity": 1})
+	_, err := db.Exec(`INSERT INTO characters (id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, ac, speed_ft, proficiency_bonus, hit_dice_remaining, languages, feature_uses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		charID, campaignID, "Oath", "human", classesJSON, 3,
+		`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`,
+		30, 30, 18, 30, 2, `[{"die":"d10","remaining":3}]`, `{Common}`,
+		featureUsesJSON)
+	require.NoError(t, err)
+
+	enc, err := queries.CreateEncounter(ctx, refdata.CreateEncounterParams{
+		CampaignID:  campaignID,
+		MapID:       uuid.NullUUID{UUID: mapID, Valid: true},
+		Name:        "Vow of Enmity Test",
+		Status:      "active",
+		RoundNumber: 1,
+	})
+	require.NoError(t, err)
+
+	paladin, err := queries.CreateCombatant(ctx, refdata.CreateCombatantParams{
+		EncounterID: enc.ID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		ShortID:     "OA",
+		DisplayName: "Oath",
+		PositionCol: "A",
+		PositionRow: 1,
+		HpMax:       30,
+		HpCurrent:   30,
+		Ac:          18,
+		Conditions:  json.RawMessage(`[]`),
+		IsVisible:   true,
+		IsAlive:     true,
+		IsNpc:       false,
+	})
+	require.NoError(t, err)
+
+	// Create target NPC within 10ft
+	target, err := queries.CreateCombatant(ctx, refdata.CreateCombatantParams{
+		EncounterID: enc.ID,
+		ShortID:     "FI",
+		DisplayName: "Fiend",
+		PositionCol: "B",
+		PositionRow: 1,
+		HpMax:       50,
+		HpCurrent:   50,
+		Ac:          15,
+		Conditions:  json.RawMessage(`[]`),
+		IsVisible:   true,
+		IsAlive:     true,
+		IsNpc:       true,
+	})
+	require.NoError(t, err)
+
+	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
+		EncounterID:        enc.ID,
+		CombatantID:        paladin.ID,
+		RoundNumber:        1,
+		Status:             "active",
+		MovementRemainingFt: 30,
+	})
+	require.NoError(t, err)
+
+	result, err := svc.VowOfEnmity(ctx, combat.VowOfEnmityCommand{
+		Paladin:      paladin,
+		Target:       target,
+		Turn:         turn,
+		CurrentRound: 1,
+	})
+	require.NoError(t, err)
+	assert.Contains(t, result.CombatLog, "Vow of Enmity")
+	assert.Contains(t, result.CombatLog, "Fiend")
+	assert.Equal(t, 0, result.UsesLeft)
+
+	// Verify vow_of_enmity condition is in DB on the target
+	updated, err := queries.GetCombatant(ctx, target.ID)
+	require.NoError(t, err)
+	assert.True(t, combat.HasCondition(updated.Conditions, "vow_of_enmity"))
+
+	// Verify channel divinity use was deducted
+	char, err := queries.GetCharacter(ctx, charID)
+	require.NoError(t, err)
+	var fu map[string]int
+	require.NoError(t, json.Unmarshal(char.FeatureUses.RawMessage, &fu))
+	assert.Equal(t, 0, fu["channel-divinity"])
+
+	// Verify action was used
+	updatedTurn, err := queries.GetTurn(ctx, turn.ID)
+	require.NoError(t, err)
+	assert.True(t, updatedTurn.ActionUsed)
+}
+
 // Suppress unused import warnings
 var _ = pqtype.NullRawMessage{}

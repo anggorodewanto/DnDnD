@@ -650,7 +650,282 @@ func TestSacredWeapon(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Contains(t, result.CombatLog, "Sacred Weapon")
-	// CHA mod = +3, should be applied to attack rolls via condition
+	assert.Equal(t, 3, result.CHAModifier)
+	assert.Equal(t, 0, result.UsesLeft)
+}
+
+func TestSacredWeapon_CHAModClampedToMinimum1(t *testing.T) {
+	paladinID := uuid.New()
+	paladinCombatantID := uuid.New()
+	encounterID := uuid.New()
+	turnID := uuid.New()
+
+	char := refdata.Character{
+		ID:               paladinID,
+		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":8}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+
+	paladin := refdata.Combatant{
+		ID:          paladinCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{paladin}, nil)
+	svc := NewService(ms)
+
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: paladinCombatantID}
+
+	result, err := svc.SacredWeapon(ctx, SacredWeaponCommand{
+		Paladin:      paladin,
+		Turn:         turn,
+		CurrentRound: 1,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.CHAModifier) // CHA 8 = -1 modifier, clamped to 1
+	assert.Equal(t, 0, result.UsesLeft)
+}
+
+func TestSacredWeapon_GetCharacterError(t *testing.T) {
+	paladinCombatantID := uuid.New()
+
+	paladin := refdata.Combatant{
+		ID:          paladinCombatantID,
+		CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		DisplayName: "Oath",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.SacredWeapon(ctx, SacredWeaponCommand{
+		Paladin: paladin, Turn: refdata.Turn{}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
+}
+
+func TestSacredWeapon_ParseFeatureUsesError(t *testing.T) {
+	paladinID := uuid.New()
+	paladinCombatantID := uuid.New()
+
+	char := refdata.Character{
+		ID:           paladinID,
+		Classes:      json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		FeatureUses:  pqtype.NullRawMessage{RawMessage: json.RawMessage(`{invalid`), Valid: true},
+	}
+
+	paladin := refdata.Combatant{
+		ID:          paladinCombatantID,
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.SacredWeapon(ctx, SacredWeaponCommand{
+		Paladin: paladin, Turn: refdata.Turn{}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+}
+
+func TestSacredWeapon_ValidateChannelDivinityError(t *testing.T) {
+	paladinID := uuid.New()
+	paladinCombatantID := uuid.New()
+
+	char := refdata.Character{
+		ID:               paladinID,
+		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":0}`), Valid: true},
+	}
+
+	paladin := refdata.Combatant{
+		ID:          paladinCombatantID,
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.SacredWeapon(ctx, SacredWeaponCommand{
+		Paladin: paladin, Turn: refdata.Turn{}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no Channel Divinity uses remaining")
+}
+
+func TestSacredWeapon_ParseAbilityScoresError(t *testing.T) {
+	paladinID := uuid.New()
+	paladinCombatantID := uuid.New()
+
+	char := refdata.Character{
+		ID:               paladinID,
+		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		AbilityScores:    json.RawMessage(`{invalid`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+
+	paladin := refdata.Combatant{
+		ID:          paladinCombatantID,
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.SacredWeapon(ctx, SacredWeaponCommand{
+		Paladin: paladin, Turn: refdata.Turn{}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing ability scores")
+}
+
+func TestSacredWeapon_DeductFeatureUseError(t *testing.T) {
+	paladinID := uuid.New()
+	paladinCombatantID := uuid.New()
+	encounterID := uuid.New()
+
+	char := refdata.Character{
+		ID:               paladinID,
+		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+
+	paladin := refdata.Combatant{
+		ID:          paladinCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{paladin}, nil)
+	ms.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.SacredWeapon(ctx, SacredWeaponCommand{
+		Paladin: paladin, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: paladinCombatantID}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+}
+
+func TestSacredWeapon_UpdateTurnActionsError(t *testing.T) {
+	paladinID := uuid.New()
+	paladinCombatantID := uuid.New()
+	encounterID := uuid.New()
+
+	char := refdata.Character{
+		ID:               paladinID,
+		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+
+	paladin := refdata.Combatant{
+		ID:          paladinCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{paladin}, nil)
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.SacredWeapon(ctx, SacredWeaponCommand{
+		Paladin: paladin, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: paladinCombatantID}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "updating turn actions")
+}
+
+func TestSacredWeapon_ApplyConditionError(t *testing.T) {
+	paladinID := uuid.New()
+	paladinCombatantID := uuid.New()
+	encounterID := uuid.New()
+
+	char := refdata.Character{
+		ID:               paladinID,
+		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+
+	paladin := refdata.Combatant{
+		ID:          paladinCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{paladin}, nil)
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.SacredWeapon(ctx, SacredWeaponCommand{
+		Paladin: paladin, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: paladinCombatantID}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "applying sacred_weapon condition")
+}
+
+func TestSacredWeapon_ActionAlreadyUsed(t *testing.T) {
+	paladin := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		DisplayName: "Oath",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	svc := NewService(ms)
+
+	_, err := svc.SacredWeapon(ctx, SacredWeaponCommand{
+		Paladin: paladin, Turn: refdata.Turn{ActionUsed: true}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "resource already spent")
 }
 
 func TestVowOfEnmity(t *testing.T) {
@@ -705,6 +980,266 @@ func TestVowOfEnmity(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, result.CombatLog, "Vow of Enmity")
 	assert.Contains(t, result.CombatLog, "Fiend")
+	assert.Equal(t, 0, result.UsesLeft)
+}
+
+func TestVowOfEnmity_GetCharacterError(t *testing.T) {
+	paladin := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		DisplayName: "Oath",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          uuid.New(),
+		DisplayName: "Fiend",
+		PositionCol: "B",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.VowOfEnmity(ctx, VowOfEnmityCommand{
+		Paladin: paladin, Target: target, Turn: refdata.Turn{}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
+}
+
+func TestVowOfEnmity_ParseFeatureUsesError(t *testing.T) {
+	paladinID := uuid.New()
+	char := refdata.Character{
+		ID:          paladinID,
+		Classes:     json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		FeatureUses: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{invalid`), Valid: true},
+	}
+	paladin := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          uuid.New(),
+		DisplayName: "Fiend",
+		PositionCol: "B",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.VowOfEnmity(ctx, VowOfEnmityCommand{
+		Paladin: paladin, Target: target, Turn: refdata.Turn{}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+}
+
+func TestVowOfEnmity_ValidateChannelDivinityError(t *testing.T) {
+	paladinID := uuid.New()
+	char := refdata.Character{
+		ID:               paladinID,
+		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":0}`), Valid: true},
+	}
+	paladin := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          uuid.New(),
+		DisplayName: "Fiend",
+		PositionCol: "B",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.VowOfEnmity(ctx, VowOfEnmityCommand{
+		Paladin: paladin, Target: target, Turn: refdata.Turn{}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no Channel Divinity uses remaining")
+}
+
+func TestVowOfEnmity_DeductFeatureUseError(t *testing.T) {
+	paladinID := uuid.New()
+	paladinCombatantID := uuid.New()
+	encounterID := uuid.New()
+	targetID := uuid.New()
+
+	char := refdata.Character{
+		ID:               paladinID,
+		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+	paladin := refdata.Combatant{
+		ID:          paladinCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Fiend",
+		PositionCol: "B",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{paladin, target}, nil)
+	ms.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.VowOfEnmity(ctx, VowOfEnmityCommand{
+		Paladin: paladin, Target: target, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: paladinCombatantID}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+}
+
+func TestVowOfEnmity_UpdateTurnActionsError(t *testing.T) {
+	paladinID := uuid.New()
+	paladinCombatantID := uuid.New()
+	encounterID := uuid.New()
+	targetID := uuid.New()
+
+	char := refdata.Character{
+		ID:               paladinID,
+		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+	paladin := refdata.Combatant{
+		ID:          paladinCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Fiend",
+		PositionCol: "B",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{paladin, target}, nil)
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.VowOfEnmity(ctx, VowOfEnmityCommand{
+		Paladin: paladin, Target: target, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: paladinCombatantID}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "updating turn actions")
+}
+
+func TestVowOfEnmity_ApplyConditionError(t *testing.T) {
+	paladinID := uuid.New()
+	paladinCombatantID := uuid.New()
+	encounterID := uuid.New()
+	targetID := uuid.New()
+
+	char := refdata.Character{
+		ID:               paladinID,
+		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+	paladin := refdata.Combatant{
+		ID:          paladinCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: paladinID, Valid: true},
+		DisplayName: "Oath",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Fiend",
+		PositionCol: "B",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{paladin, target}, nil)
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.VowOfEnmity(ctx, VowOfEnmityCommand{
+		Paladin: paladin, Target: target, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: paladinCombatantID}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "applying vow_of_enmity condition")
+}
+
+func TestVowOfEnmity_ActionAlreadyUsed(t *testing.T) {
+	paladin := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		DisplayName: "Oath",
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          uuid.New(),
+		DisplayName: "Fiend",
+		PositionCol: "B",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	svc := NewService(ms)
+
+	_, err := svc.VowOfEnmity(ctx, VowOfEnmityCommand{
+		Paladin: paladin, Target: target, Turn: refdata.Turn{ActionUsed: true}, CurrentRound: 1,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "resource already spent")
 }
 
 func TestVowOfEnmity_OutOfRange(t *testing.T) {
@@ -1018,6 +1553,195 @@ func TestPreserveLife_NotACharacter(t *testing.T) {
 	assert.Contains(t, err.Error(), "character (not NPC)")
 }
 
+func TestPreserveLife_ActionAlreadyUsed(t *testing.T) {
+	cleric := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		DisplayName: "Thorn",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	svc := NewService(ms)
+
+	_, err := svc.PreserveLife(ctx, PreserveLifeCommand{
+		Cleric: cleric, Turn: refdata.Turn{ActionUsed: true}, TargetHealing: map[string]int32{},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "resource already spent")
+}
+
+func TestPreserveLife_GetCharacterError(t *testing.T) {
+	cleric := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		DisplayName: "Thorn",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.PreserveLife(ctx, PreserveLifeCommand{
+		Cleric: cleric, Turn: refdata.Turn{}, TargetHealing: map[string]int32{},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
+}
+
+func TestPreserveLife_ParseFeatureUsesError(t *testing.T) {
+	clericID := uuid.New()
+	char := refdata.Character{
+		ID:          clericID,
+		Classes:     json.RawMessage(`[{"class":"Cleric","level":5}]`),
+		FeatureUses: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{invalid`), Valid: true},
+	}
+	cleric := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: clericID, Valid: true},
+		DisplayName: "Thorn",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.PreserveLife(ctx, PreserveLifeCommand{
+		Cleric: cleric, Turn: refdata.Turn{}, TargetHealing: map[string]int32{},
+	})
+	assert.Error(t, err)
+}
+
+func TestPreserveLife_ValidateChannelDivinityError(t *testing.T) {
+	clericID := uuid.New()
+	char := refdata.Character{
+		ID:               clericID,
+		Classes:          json.RawMessage(`[{"class":"Cleric","level":5}]`),
+		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
+		ProficiencyBonus: 3,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":0}`), Valid: true},
+	}
+	cleric := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: clericID, Valid: true},
+		DisplayName: "Thorn",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.PreserveLife(ctx, PreserveLifeCommand{
+		Cleric: cleric, Turn: refdata.Turn{}, TargetHealing: map[string]int32{},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no Channel Divinity uses remaining")
+}
+
+func TestPreserveLife_DeductFeatureUseError(t *testing.T) {
+	clericID := uuid.New()
+	clericCombatantID := uuid.New()
+	encounterID := uuid.New()
+	allyID := uuid.New()
+
+	char := refdata.Character{
+		ID:               clericID,
+		Classes:          json.RawMessage(`[{"class":"Cleric","level":5}]`),
+		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
+		ProficiencyBonus: 3,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+	cleric := refdata.Combatant{
+		ID:          clericCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: clericID, Valid: true},
+		DisplayName: "Thorn",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	ally := refdata.Combatant{
+		ID:          allyID,
+		EncounterID: encounterID,
+		DisplayName: "Ally",
+		PositionCol: "A",
+		PositionRow: 3,
+		HpCurrent:   5,
+		HpMax:       30,
+		IsAlive:     true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{cleric, ally}, nil)
+	ms.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.PreserveLife(ctx, PreserveLifeCommand{
+		Cleric: cleric, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: clericCombatantID},
+		TargetHealing: map[string]int32{allyID.String(): 5},
+	})
+	assert.Error(t, err)
+}
+
+func TestPreserveLife_UpdateTurnActionsError(t *testing.T) {
+	clericID := uuid.New()
+	clericCombatantID := uuid.New()
+	encounterID := uuid.New()
+	allyID := uuid.New()
+
+	char := refdata.Character{
+		ID:               clericID,
+		Classes:          json.RawMessage(`[{"class":"Cleric","level":5}]`),
+		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
+		ProficiencyBonus: 3,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+	cleric := refdata.Combatant{
+		ID:          clericCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: clericID, Valid: true},
+		DisplayName: "Thorn",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	ally := refdata.Combatant{
+		ID:          allyID,
+		EncounterID: encounterID,
+		DisplayName: "Ally",
+		PositionCol: "A",
+		PositionRow: 3,
+		HpCurrent:   5,
+		HpMax:       30,
+		IsAlive:     true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{cleric, ally}, nil)
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.PreserveLife(ctx, PreserveLifeCommand{
+		Cleric: cleric, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: clericCombatantID},
+		TargetHealing: map[string]int32{allyID.String(): 5},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "updating turn actions")
+}
+
 func TestSacredWeapon_NotACharacter(t *testing.T) {
 	npc := refdata.Combatant{
 		ID:          uuid.New(),
@@ -1050,6 +1774,165 @@ func TestVowOfEnmity_NotACharacter(t *testing.T) {
 	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "character (not NPC)")
+}
+
+func TestChannelDivinityDMQueue_ActionAlreadyUsed(t *testing.T) {
+	caster := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		DisplayName: "Thorn",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	svc := NewService(ms)
+
+	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
+		Caster: caster, Turn: refdata.Turn{ActionUsed: true}, OptionName: "test", ClassName: "Cleric",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "resource already spent")
+}
+
+func TestChannelDivinityDMQueue_GetCharacterError(t *testing.T) {
+	caster := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		DisplayName: "Thorn",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
+		Caster: caster, Turn: refdata.Turn{}, OptionName: "test", ClassName: "Cleric",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
+}
+
+func TestChannelDivinityDMQueue_ParseFeatureUsesError(t *testing.T) {
+	clericID := uuid.New()
+	char := refdata.Character{
+		ID:          clericID,
+		Classes:     json.RawMessage(`[{"class":"Cleric","level":3}]`),
+		FeatureUses: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{invalid`), Valid: true},
+	}
+	caster := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: clericID, Valid: true},
+		DisplayName: "Thorn",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
+		Caster: caster, Turn: refdata.Turn{}, OptionName: "test", ClassName: "Cleric",
+	})
+	assert.Error(t, err)
+}
+
+func TestChannelDivinityDMQueue_ValidateChannelDivinityError(t *testing.T) {
+	clericID := uuid.New()
+	char := refdata.Character{
+		ID:               clericID,
+		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":0}`), Valid: true},
+	}
+	caster := refdata.Combatant{
+		ID:          uuid.New(),
+		CharacterID: uuid.NullUUID{UUID: clericID, Valid: true},
+		DisplayName: "Thorn",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
+		Caster: caster, Turn: refdata.Turn{}, OptionName: "test", ClassName: "Cleric",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no Channel Divinity uses remaining")
+}
+
+func TestChannelDivinityDMQueue_DeductFeatureUseError(t *testing.T) {
+	clericID := uuid.New()
+	clericCombatantID := uuid.New()
+	encounterID := uuid.New()
+
+	char := refdata.Character{
+		ID:               clericID,
+		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+	caster := refdata.Combatant{
+		ID:          clericCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: clericID, Valid: true},
+		DisplayName: "Thorn",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{caster}, nil)
+	ms.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
+		Caster: caster, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: clericCombatantID}, OptionName: "test", ClassName: "Cleric",
+	})
+	assert.Error(t, err)
+}
+
+func TestChannelDivinityDMQueue_UpdateTurnActionsError(t *testing.T) {
+	clericID := uuid.New()
+	clericCombatantID := uuid.New()
+	encounterID := uuid.New()
+
+	char := refdata.Character{
+		ID:               clericID,
+		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":1}`), Valid: true},
+	}
+	caster := refdata.Combatant{
+		ID:          clericCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: clericID, Valid: true},
+		DisplayName: "Thorn",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{caster}, nil)
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{}, fmt.Errorf("db error")
+	}
+	svc := NewService(ms)
+
+	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
+		Caster: caster, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: clericCombatantID}, OptionName: "test", ClassName: "Cleric",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "updating turn actions")
 }
 
 func TestChannelDivinityDMQueue_NotACharacter(t *testing.T) {
