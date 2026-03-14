@@ -370,11 +370,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 			// If not consumed, add item to inventory
 			if !matResult.MaterialConsumed {
 				newItems := AddInventoryItem(inventory, matResult.ComponentName)
-				itemsJSON, err := json.Marshal(newItems)
-				if err != nil {
-					return CastResult{}, fmt.Errorf("marshaling inventory: %w", err)
-				}
-				if err := s.store.UpdateCharacterInventory(ctx, char.ID, pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true}); err != nil {
+				if err := s.persistInventory(ctx, char.ID, newItems); err != nil {
 					return CastResult{}, fmt.Errorf("updating inventory: %w", err)
 				}
 			}
@@ -383,11 +379,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 			// Component found in inventory — consume if needed after cast succeeds
 			if matResult.MaterialConsumed {
 				newItems := RemoveInventoryItem(inventory, matResult.ComponentName)
-				itemsJSON, err := json.Marshal(newItems)
-				if err != nil {
-					return CastResult{}, fmt.Errorf("marshaling inventory: %w", err)
-				}
-				if err := s.store.UpdateCharacterInventory(ctx, char.ID, pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true}); err != nil {
+				if err := s.persistInventory(ctx, char.ID, newItems); err != nil {
 					return CastResult{}, fmt.Errorf("updating inventory: %w", err)
 				}
 			}
@@ -914,6 +906,15 @@ func RemoveInventoryItem(items []InventoryItem, name string) []InventoryItem {
 		result = append(result, item)
 	}
 	return result
+}
+
+// persistInventory marshals and saves the inventory to the database.
+func (s *Service) persistInventory(ctx context.Context, charID uuid.UUID, items []InventoryItem) error {
+	itemsJSON, err := json.Marshal(items)
+	if err != nil {
+		return fmt.Errorf("marshaling inventory: %w", err)
+	}
+	return s.store.UpdateCharacterInventory(ctx, charID, pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true})
 }
 
 // AddInventoryItem adds an item to the inventory. If an item with the same name exists, increments quantity.
