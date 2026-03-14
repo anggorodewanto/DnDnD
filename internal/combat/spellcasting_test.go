@@ -2162,18 +2162,9 @@ func TestAddInventoryItem(t *testing.T) {
 	}
 }
 
-// TDD Cycle P63-9: Cast rejects when costly component missing and insufficient gold
-func TestCast_MaterialComponent_Rejected(t *testing.T) {
-	charID := uuid.New()
-	char := makeWizardCharacter(charID)
-	char.Gold = 50
-	char.Inventory = pqtype.NullRawMessage{
-		RawMessage: json.RawMessage(`[]`),
-		Valid:      true,
-	}
-	caster := makeSpellCaster(charID)
-
-	spell := refdata.Spell{
+// makeRevivify returns a Revivify spell with a costly consumed material component.
+func makeRevivify() refdata.Spell {
+	return refdata.Spell{
 		ID:                  "revivify",
 		Name:                "Revivify",
 		Level:               3,
@@ -2184,6 +2175,40 @@ func TestCast_MaterialComponent_Rejected(t *testing.T) {
 		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
 		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
 	}
+}
+
+// makeIdentify returns an Identify spell with a costly non-consumed material component.
+func makeIdentify() refdata.Spell {
+	return refdata.Spell{
+		ID:                  "identify",
+		Name:                "Identify",
+		Level:               1,
+		CastingTime:         "1 action",
+		RangeType:           "touch",
+		ResolutionMode:      "auto",
+		MaterialDescription: sql.NullString{String: "a pearl worth 100gp", Valid: true},
+		MaterialCostGp:      sql.NullFloat64{Float64: 100, Valid: true},
+		MaterialConsumed:    sql.NullBool{Bool: false, Valid: true},
+	}
+}
+
+// emptyInventory returns a NullRawMessage representing an empty inventory.
+func emptyInventory() pqtype.NullRawMessage {
+	return pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[]`),
+		Valid:      true,
+	}
+}
+
+// TDD Cycle P63-9: Cast rejects when costly component missing and insufficient gold
+func TestCast_MaterialComponent_Rejected(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	char.Gold = 50
+	char.Inventory = emptyInventory()
+	caster := makeSpellCaster(charID)
+
+	spell := makeRevivify()
 
 	store := defaultMockStore()
 	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
@@ -2208,23 +2233,10 @@ func TestCast_MaterialComponent_GoldFallback(t *testing.T) {
 	charID := uuid.New()
 	char := makeWizardCharacter(charID)
 	char.Gold = 500
-	char.Inventory = pqtype.NullRawMessage{
-		RawMessage: json.RawMessage(`[]`),
-		Valid:      true,
-	}
+	char.Inventory = emptyInventory()
 	caster := makeSpellCaster(charID)
 
-	spell := refdata.Spell{
-		ID:                  "revivify",
-		Name:                "Revivify",
-		Level:               3,
-		CastingTime:         "1 action",
-		RangeType:           "touch",
-		ResolutionMode:      "auto",
-		MaterialDescription: sql.NullString{String: "a diamond worth 300gp", Valid: true},
-		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
-		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
-	}
+	spell := makeRevivify()
 
 	store := defaultMockStore()
 	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
@@ -2256,17 +2268,7 @@ func TestCast_MaterialComponent_InInventory_Consumed(t *testing.T) {
 	caster := makeSpellCaster(charID)
 	turnID := uuid.New()
 
-	spell := refdata.Spell{
-		ID:                  "revivify",
-		Name:                "Revivify",
-		Level:               3,
-		CastingTime:         "1 action",
-		RangeType:           "touch",
-		ResolutionMode:      "auto",
-		MaterialDescription: sql.NullString{String: "a diamond worth 300gp", Valid: true},
-		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
-		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
-	}
+	spell := makeRevivify()
 
 	var savedInventory pqtype.NullRawMessage
 	store := defaultMockStore()
@@ -2304,24 +2306,11 @@ func TestCast_MaterialComponent_GoldFallback_Confirmed(t *testing.T) {
 	charID := uuid.New()
 	char := makeWizardCharacter(charID)
 	char.Gold = 500
-	char.Inventory = pqtype.NullRawMessage{
-		RawMessage: json.RawMessage(`[]`),
-		Valid:      true,
-	}
+	char.Inventory = emptyInventory()
 	caster := makeSpellCaster(charID)
 	turnID := uuid.New()
 
-	spell := refdata.Spell{
-		ID:                  "revivify",
-		Name:                "Revivify",
-		Level:               3,
-		CastingTime:         "1 action",
-		RangeType:           "touch",
-		ResolutionMode:      "auto",
-		MaterialDescription: sql.NullString{String: "a diamond worth 300gp", Valid: true},
-		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
-		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
-	}
+	spell := makeRevivify()
 
 	var savedGold int32
 	goldUpdated := false
@@ -2364,17 +2353,7 @@ func TestCast_MaterialComponent_InInventory_NotConsumed(t *testing.T) {
 	caster := makeSpellCaster(charID)
 	turnID := uuid.New()
 
-	spell := refdata.Spell{
-		ID:                  "identify",
-		Name:                "Identify",
-		Level:               1,
-		CastingTime:         "1 action",
-		RangeType:           "touch",
-		ResolutionMode:      "auto",
-		MaterialDescription: sql.NullString{String: "a pearl worth 100gp", Valid: true},
-		MaterialCostGp:      sql.NullFloat64{Float64: 100, Valid: true},
-		MaterialConsumed:    sql.NullBool{Bool: false, Valid: true},
-	}
+	spell := makeIdentify()
 
 	inventoryUpdated := false
 	store := defaultMockStore()
@@ -2406,24 +2385,11 @@ func TestCast_MaterialComponent_GoldFallback_NotConsumed_AddsItem(t *testing.T) 
 	charID := uuid.New()
 	char := makeWizardCharacter(charID)
 	char.Gold = 500
-	char.Inventory = pqtype.NullRawMessage{
-		RawMessage: json.RawMessage(`[]`),
-		Valid:      true,
-	}
+	char.Inventory = emptyInventory()
 	caster := makeSpellCaster(charID)
 	turnID := uuid.New()
 
-	spell := refdata.Spell{
-		ID:                  "identify",
-		Name:                "Identify",
-		Level:               1,
-		CastingTime:         "1 action",
-		RangeType:           "touch",
-		ResolutionMode:      "auto",
-		MaterialDescription: sql.NullString{String: "a pearl worth 100gp", Valid: true},
-		MaterialCostGp:      sql.NullFloat64{Float64: 100, Valid: true},
-		MaterialConsumed:    sql.NullBool{Bool: false, Valid: true},
-	}
+	spell := makeIdentify()
 
 	var savedInventory pqtype.NullRawMessage
 	var savedGold int32

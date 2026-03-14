@@ -840,43 +840,35 @@ func ValidateMaterialComponent(spell refdata.Spell, inventory []InventoryItem, g
 		return MaterialComponentResult{Outcome: MaterialCheckProceed}
 	}
 
-	costGp := spell.MaterialCostGp.Float64
 	desc := ""
 	if spell.MaterialDescription.Valid {
 		desc = spell.MaterialDescription.String
 	}
-	consumed := spell.MaterialConsumed.Valid && spell.MaterialConsumed.Bool
+
+	base := MaterialComponentResult{
+		ComponentName:    desc,
+		CostGp:           spell.MaterialCostGp.Float64,
+		CurrentGold:      gold,
+		MaterialConsumed: spell.MaterialConsumed.Valid && spell.MaterialConsumed.Bool,
+	}
 
 	// Check inventory for the required item (match by material description, case-insensitive)
 	for _, item := range inventory {
 		if strings.EqualFold(item.Name, desc) && item.Quantity > 0 {
-			return MaterialComponentResult{
-				Outcome:          MaterialCheckProceed,
-				ComponentName:    desc,
-				CostGp:           costGp,
-				MaterialConsumed: consumed,
-			}
+			base.Outcome = MaterialCheckProceed
+			return base
 		}
 	}
 
 	// No component found — check gold
-	if gold >= int32(costGp) {
-		return MaterialComponentResult{
-			Outcome:          MaterialCheckNeedsGoldConfirmation,
-			ComponentName:    desc,
-			CostGp:           costGp,
-			CurrentGold:      gold,
-			MaterialConsumed: consumed,
-		}
+	if gold >= int32(base.CostGp) {
+		base.Outcome = MaterialCheckNeedsGoldConfirmation
+		return base
 	}
 
 	// Neither component nor gold
-	return MaterialComponentResult{
-		Outcome:       MaterialCheckRejected,
-		ComponentName: desc,
-		CostGp:        costGp,
-		CurrentGold:   gold,
-	}
+	base.Outcome = MaterialCheckRejected
+	return base
 }
 
 // FormatMaterialRejection formats the rejection message when a costly material component is missing.
@@ -895,15 +887,14 @@ func FormatGoldFallbackPrompt(r MaterialComponentResult) string {
 func RemoveInventoryItem(items []InventoryItem, name string) []InventoryItem {
 	result := make([]InventoryItem, 0, len(items))
 	for _, item := range items {
-		if strings.EqualFold(item.Name, name) {
-			if item.Quantity > 1 {
-				item.Quantity--
-				result = append(result, item)
-			}
-			// quantity <= 1: remove entirely
+		if !strings.EqualFold(item.Name, name) {
+			result = append(result, item)
 			continue
 		}
-		result = append(result, item)
+		if item.Quantity > 1 {
+			item.Quantity--
+			result = append(result, item)
+		}
 	}
 	return result
 }
