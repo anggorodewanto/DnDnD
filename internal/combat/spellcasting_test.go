@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -2786,6 +2787,123 @@ func TestDeductAndPersistPactSlot_DBError(t *testing.T) {
 	_, err := svc.deductAndPersistPactSlot(context.Background(), uuid.New(), PactMagicSlotState{SlotLevel: 3, Current: 2, Max: 2})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "updating pact magic slots")
+}
+
+// TDD Cycle P64-7: RechargePactMagicSlots restores fully depleted slots
+func TestRechargePactMagicSlots_FullyDepleted(t *testing.T) {
+	charID := uuid.New()
+	char := makeWarlockWizardCharacter(charID)
+	// Deplete pact slots completely
+	pactJSON, _ := json.Marshal(PactMagicSlotState{SlotLevel: 2, Current: 0, Max: 2})
+	char.PactMagicSlots = pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true}
+
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	var savedPactSlots pqtype.NullRawMessage
+	store.updateCharacterPactMagicSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+		savedPactSlots = arg.PactMagicSlots
+		return refdata.Character{ID: arg.ID, PactMagicSlots: arg.PactMagicSlots}, nil
+	}
+
+	svc := NewService(store)
+	err := svc.RechargePactMagicSlots(context.Background(), charID)
+	require.NoError(t, err)
+
+	// Verify the saved state has current == max
+	var saved PactMagicSlotState
+	require.NoError(t, json.Unmarshal(savedPactSlots.RawMessage, &saved))
+	assert.Equal(t, 2, saved.Current, "current should be restored to max")
+	assert.Equal(t, 2, saved.Max, "max should be preserved")
+	assert.Equal(t, 2, saved.SlotLevel, "slot level should be preserved")
+}
+
+// TDD Cycle P64-8: RechargePactMagicSlots restores partially depleted slots
+func TestRechargePactMagicSlots_PartiallyDepleted(t *testing.T) {
+	charID := uuid.New()
+	char := makeWarlockWizardCharacter(charID)
+	// Partially deplete: 1 of 2 remaining
+	pactJSON, _ := json.Marshal(PactMagicSlotState{SlotLevel: 3, Current: 1, Max: 2})
+	char.PactMagicSlots = pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true}
+
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	var savedPactSlots pqtype.NullRawMessage
+	store.updateCharacterPactMagicSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+		savedPactSlots = arg.PactMagicSlots
+		return refdata.Character{ID: arg.ID, PactMagicSlots: arg.PactMagicSlots}, nil
+	}
+
+	svc := NewService(store)
+	err := svc.RechargePactMagicSlots(context.Background(), charID)
+	require.NoError(t, err)
+
+	var saved PactMagicSlotState
+	require.NoError(t, json.Unmarshal(savedPactSlots.RawMessage, &saved))
+	assert.Equal(t, 2, saved.Current, "current should be restored to max")
+	assert.Equal(t, 2, saved.Max)
+	assert.Equal(t, 3, saved.SlotLevel, "slot level should be preserved")
+}
+
+// TDD Cycle P64-9: RechargePactMagicSlots is no-op for non-warlocks
+func TestRechargePactMagicSlots_NonWarlock(t *testing.T) {
+	charID := uuid.New()
+	char := makeWarlockWizardCharacter(charID)
+	// No pact magic slots (nil)
+	char.PactMagicSlots = pqtype.NullRawMessage{}
+
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	updateCalled := false
+	store.updateCharacterPactMagicSlotsFn = func(_ context.Context, _ refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+		updateCalled = true
+		return refdata.Character{}, nil
+	}
+
+	svc := NewService(store)
+	err := svc.RechargePactMagicSlots(context.Background(), charID)
+	require.NoError(t, err)
+	assert.False(t, updateCalled, "should not call update for non-warlock characters")
+}
+
+// TDD Cycle P64-10: RechargePactMagicSlots DB error propagation
+func TestRechargePactMagicSlots_DBError(t *testing.T) {
+	charID := uuid.New()
+	char := makeWarlockWizardCharacter(charID)
+
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.updateCharacterPactMagicSlotsFn = func(_ context.Context, _ refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+		return refdata.Character{}, errors.New("connection refused")
+	}
+
+	svc := NewService(store)
+	err := svc.RechargePactMagicSlots(context.Background(), charID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating pact magic slots")
+}
+
+// TDD Cycle P64-11: RechargePactMagicSlots GetCharacter error
+func TestRechargePactMagicSlots_GetCharacterError(t *testing.T) {
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, errors.New("not found")
+	}
+
+	svc := NewService(store)
+	err := svc.RechargePactMagicSlots(context.Background(), uuid.New())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting character")
 }
 
 // TDD Cycle P64-6: FormatCastLog shows regular slot usage (unchanged)

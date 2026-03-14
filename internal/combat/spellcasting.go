@@ -582,6 +582,36 @@ func parsePactMagicSlots(raw []byte) (PactMagicSlotState, error) {
 	return ps, nil
 }
 
+// RechargePactMagicSlots restores all pact magic slots to their maximum.
+// This is called on short rest. No-op for characters without pact magic slots.
+func (s *Service) RechargePactMagicSlots(ctx context.Context, charID uuid.UUID) error {
+	char, err := s.store.GetCharacter(ctx, charID)
+	if err != nil {
+		return fmt.Errorf("getting character: %w", err)
+	}
+
+	pact, err := parsePactMagicSlots(char.PactMagicSlots.RawMessage)
+	if err != nil {
+		return err
+	}
+	if pact.Max == 0 {
+		return nil
+	}
+
+	pact.Current = pact.Max
+	pactJSON, err := json.Marshal(pact)
+	if err != nil {
+		return fmt.Errorf("marshaling pact magic slots: %w", err)
+	}
+	if _, err := s.store.UpdateCharacterPactMagicSlots(ctx, refdata.UpdateCharacterPactMagicSlotsParams{
+		ID:             charID,
+		PactMagicSlots: pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("updating pact magic slots: %w", err)
+	}
+	return nil
+}
+
 // deductAndPersistPactSlot deducts one pact magic slot and persists the change.
 func (s *Service) deductAndPersistPactSlot(ctx context.Context, charID uuid.UUID, pact PactMagicSlotState) (SlotDeduction, error) {
 	pact.Current--
