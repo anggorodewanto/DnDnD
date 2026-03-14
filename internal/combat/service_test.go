@@ -62,6 +62,8 @@ type mockStore struct {
 	updateCharacterPactMagicSlotsFn   func(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error)
 	getSpellFn                        func(ctx context.Context, id string) (refdata.Spell, error)
 	updateCharacterGoldFn             func(ctx context.Context, id uuid.UUID, gold int32) error
+	listSpellsByClassFn               func(ctx context.Context, class string) ([]refdata.Spell, error)
+	updateCharacterDataFn             func(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error)
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -204,6 +206,18 @@ func (m *mockStore) UpdateCharacterGold(ctx context.Context, id uuid.UUID, gold 
 		return m.updateCharacterGoldFn(ctx, id, gold)
 	}
 	return nil
+}
+func (m *mockStore) ListSpellsByClass(ctx context.Context, class string) ([]refdata.Spell, error) {
+	if m.listSpellsByClassFn != nil {
+		return m.listSpellsByClassFn(ctx, class)
+	}
+	return nil, nil
+}
+func (m *mockStore) UpdateCharacterData(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error) {
+	if m.updateCharacterDataFn != nil {
+		return m.updateCharacterDataFn(ctx, arg)
+	}
+	return refdata.Character{ID: arg.ID, CharacterData: arg.CharacterData}, nil
 }
 
 func defaultMockStore() *mockStore {

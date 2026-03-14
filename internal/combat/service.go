@@ -95,6 +95,10 @@ type Store interface {
 
 	// Spells
 	GetSpell(ctx context.Context, id string) (refdata.Spell, error)
+	ListSpellsByClass(ctx context.Context, class string) ([]refdata.Spell, error)
+
+	// Character data
+	UpdateCharacterData(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error)
 }
 
 // Service manages combat encounters and their entities.

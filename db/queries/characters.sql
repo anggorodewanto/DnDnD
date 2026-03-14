@@ -70,6 +70,11 @@ UPDATE characters SET pact_magic_slots = $2, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateCharacterData :one
+UPDATE characters SET character_data = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteCharacter :exec
 DELETE FROM characters WHERE id = $1;
 
