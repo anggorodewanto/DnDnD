@@ -438,7 +438,7 @@ func TestCast_WithMetamagic_DeductsSorceryPoints(t *testing.T) {
 	var savedFeatureUses pqtype.NullRawMessage
 	store := defaultMockStore()
 	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return makeFireball(), nil
+		return makeFireballWithAoE(), nil
 	}
 	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
 		return char, nil

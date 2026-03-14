@@ -161,6 +161,16 @@ type CastResult struct {
 	MaterialComponent *CastMaterialComponentInfo // material component outcome, nil if no costly component
 	MetamagicCost          int // total sorcery points spent on metamagic
 	SorceryPointsRemaining int // sorcery points remaining after metamagic cost
+	// Metamagic effect fields
+	CarefulSpellCreatures int    // number of creatures that auto-succeed on AoE save (CHA mod)
+	DistantRange          string // new range description after Distant Spell
+	IsEmpowered           bool   // true if Empowered Spell is active (reroll damage dice)
+	EmpoweredRerolls      int    // max damage dice that can be rerolled (CHA mod)
+	ExtendedDuration      string // doubled duration after Extended Spell
+	IsHeightened          bool   // true if target has disadvantage on first save
+	IsSubtle              bool   // true if V/S components removed (bypasses Counterspell/Silence)
+	TwinTargetName        string // display name of the second target for Twinned Spell
+	TwinTargetID          string // ID of the second target for Twinned Spell
 }
 
 // FormatCastLog produces the combat log output for a spell cast.
@@ -239,6 +249,29 @@ func FormatCastLog(result CastResult) string {
 		}
 	}
 
+	// Metamagic effects
+	if result.CarefulSpellCreatures > 0 {
+		fmt.Fprintf(&b, "\u2728 Careful Spell: up to %d creatures auto-succeed on the save\n", result.CarefulSpellCreatures)
+	}
+	if result.DistantRange != "" {
+		fmt.Fprintf(&b, "\u2728 Distant Spell: range extended to %s\n", result.DistantRange)
+	}
+	if result.IsEmpowered {
+		fmt.Fprintf(&b, "\u2728 Empowered Spell: may reroll up to %d damage dice\n", result.EmpoweredRerolls)
+	}
+	if result.ExtendedDuration != "" {
+		fmt.Fprintf(&b, "\u2728 Extended Spell: duration is %s\n", result.ExtendedDuration)
+	}
+	if result.IsHeightened {
+		b.WriteString("\u2728 Heightened Spell: target has disadvantage on first save\n")
+	}
+	if result.IsSubtle {
+		b.WriteString("\u2728 Subtle Spell: no verbal/somatic components\n")
+	}
+	if result.TwinTargetName != "" {
+		fmt.Fprintf(&b, "\u2728 Twinned Spell: also targets %s\n", result.TwinTargetName)
+	}
+
 	// DM required
 	if result.ResolutionMode == "dm_required" {
 		b.WriteString("\U0001f4e8 Routed to DM for resolution\n")
@@ -266,6 +299,7 @@ type CastCommand struct {
 	CompanionDestRow     int32     // companion teleport destination row
 	GoldFallback         bool      // true if user confirmed "Buy & Cast" gold fallback
 	Metamagic            []string  // metamagic options: "careful", "distant", "empowered", etc.
+	TwinTargetID         uuid.UUID // second target for Twinned Spell
 }
 
 // Cast orchestrates the full spell casting flow:
@@ -422,6 +456,9 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		if err := ValidateMetamagic(cmd.Metamagic, spellLevel, metamagicCurrentPoints); err != nil {
 			return CastResult{}, err
 		}
+		if err := ValidateMetamagicOptions(cmd.Metamagic, spell); err != nil {
+			return CastResult{}, err
+		}
 		metamagicCost, err = MetamagicTotalCost(cmd.Metamagic, spellLevel)
 		if err != nil {
 			return CastResult{}, err
@@ -480,6 +517,26 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		if err == nil {
 			result.ScaledHealingDice = ScaleHealingDice(healInfo, spellLevel, effectiveSlotLevel)
 		}
+	}
+
+	// 9c. Apply metamagic effects to result
+	if len(cmd.Metamagic) > 0 {
+		applyMetamagicEffects(&result, cmd.Metamagic, spell, scores.Cha)
+	}
+
+	// 9d. Resolve Twinned Spell second target
+	if hasMetamagic(cmd.Metamagic, "twinned") && cmd.TwinTargetID != uuid.Nil {
+		twinTarget, err := s.store.GetCombatant(ctx, cmd.TwinTargetID)
+		if err != nil {
+			return CastResult{}, fmt.Errorf("getting twin target: %w", err)
+		}
+		// Validate twin target is in range
+		twinDistFt := combatantDistance(caster, twinTarget)
+		if err := ValidateSpellRange(spell, twinDistFt); err != nil {
+			return CastResult{}, fmt.Errorf("twin target out of range: %w", err)
+		}
+		result.TwinTargetName = twinTarget.DisplayName
+		result.TwinTargetID = twinTarget.ID.String()
 	}
 
 	// 10. Resolve concentration
