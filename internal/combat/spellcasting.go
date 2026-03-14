@@ -155,6 +155,7 @@ type CastResult struct {
 	ScaledDamageDice string // damage dice after upcast/cantrip scaling
 	DamageType      string // damage type from spell damage JSON
 	ScaledHealingDice string // healing dice after upcast scaling
+	Teleport        *TeleportResult // teleportation outcome, nil if not a teleport spell
 }
 
 // FormatCastLog produces the combat log output for a spell cast.
@@ -216,6 +217,19 @@ func FormatCastLog(result CastResult) string {
 		fmt.Fprintf(&b, "\U0001f9e0 Concentrating on %s\n", result.Concentration.NewConcentration)
 	}
 
+	// Teleportation
+	if result.Teleport != nil {
+		if result.Teleport.CasterMoved {
+			fmt.Fprintf(&b, "\U0001f300 %s teleports to %s%d\n", result.CasterName, result.Teleport.CasterDestCol, result.Teleport.CasterDestRow)
+		}
+		if result.Teleport.CompanionMoved {
+			fmt.Fprintf(&b, "\U0001f300 %s teleports to %s%d\n", result.Teleport.CompanionName, result.Teleport.CompanionDestCol, result.Teleport.CompanionDestRow)
+		}
+		if result.Teleport.AdditionalEffects != "" {
+			fmt.Fprintf(&b, "\u26a1 %s\n", result.Teleport.AdditionalEffects)
+		}
+	}
+
 	// DM required
 	if result.ResolutionMode == "dm_required" {
 		b.WriteString("\U0001f4e8 Routed to DM for resolution\n")
@@ -234,6 +248,12 @@ type CastCommand struct {
 	SlotLevel            int    // explicit slot choice; 0 = auto-select lowest available
 	IsRitual             bool   // true = cast as ritual (no slot consumed)
 	EncounterStatus      string // encounter status for ritual validation ("preparing", "active", "completed")
+	EncounterID          uuid.UUID // encounter ID (needed for teleport occupant checks)
+	TeleportDestCol      string    // teleport destination column (e.g. "D")
+	TeleportDestRow      int32     // teleport destination row (e.g. 5)
+	CompanionID          uuid.UUID // companion combatant ID for self+creature teleports
+	CompanionDestCol     string    // companion teleport destination column
+	CompanionDestRow     int32     // companion teleport destination row
 }
 
 // Cast orchestrates the full spell casting flow:
@@ -387,6 +407,76 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		result.AttackTotal = d20Result.Total
 		result.TargetAC = int(target.Ac)
 		result.Hit = d20Result.Total >= int(target.Ac)
+	}
+
+	// 12a. Teleportation handling
+	if spell.Teleport.Valid && len(spell.Teleport.RawMessage) > 0 {
+		teleportInfo, parseErr := ParseTeleportInfo(spell.Teleport.RawMessage)
+		if parseErr != nil {
+			return CastResult{}, fmt.Errorf("parsing teleport data: %w", parseErr)
+		}
+
+		// DM queue routing for narrative teleports
+		if IsDMQueueTeleport(teleportInfo.Target) {
+			result.Teleport = &TeleportResult{DMQueueRouted: true}
+			result.ResolutionMode = "dm_required"
+		} else {
+			// Validate destination
+			occupants, listErr := s.store.ListCombatantsByEncounterID(ctx, cmd.EncounterID)
+			if listErr != nil {
+				return CastResult{}, fmt.Errorf("listing combatants for teleport: %w", listErr)
+			}
+
+			var companion *refdata.Combatant
+			if teleportInfo.Target == "self+creature" && cmd.CompanionID != uuid.Nil {
+				comp, compErr := s.store.GetCombatant(ctx, cmd.CompanionID)
+				if compErr != nil {
+					return CastResult{}, fmt.Errorf("getting companion: %w", compErr)
+				}
+				companion = &comp
+			}
+
+			if valErr := ValidateTeleportDestination(teleportInfo, caster, cmd.TeleportDestCol, cmd.TeleportDestRow, occupants, companion); valErr != nil {
+				return CastResult{}, valErr
+			}
+
+			teleResult := &TeleportResult{
+				AdditionalEffects: teleportInfo.AdditionalEffects,
+			}
+
+			// Move caster for "self" and "self+creature" targets
+			if teleportInfo.Target == "self" || teleportInfo.Target == "self+creature" {
+				if _, posErr := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
+					ID:          caster.ID,
+					PositionCol: cmd.TeleportDestCol,
+					PositionRow: cmd.TeleportDestRow,
+					AltitudeFt:  caster.AltitudeFt,
+				}); posErr != nil {
+					return CastResult{}, fmt.Errorf("moving caster: %w", posErr)
+				}
+				teleResult.CasterMoved = true
+				teleResult.CasterDestCol = cmd.TeleportDestCol
+				teleResult.CasterDestRow = cmd.TeleportDestRow
+			}
+
+			// Move companion for "self+creature" targets
+			if teleportInfo.Target == "self+creature" && companion != nil && cmd.CompanionDestCol != "" {
+				if _, posErr := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
+					ID:          companion.ID,
+					PositionCol: cmd.CompanionDestCol,
+					PositionRow: cmd.CompanionDestRow,
+					AltitudeFt:  companion.AltitudeFt,
+				}); posErr != nil {
+					return CastResult{}, fmt.Errorf("moving companion: %w", posErr)
+				}
+				teleResult.CompanionMoved = true
+				teleResult.CompanionName = companion.DisplayName
+				teleResult.CompanionDestCol = cmd.CompanionDestCol
+				teleResult.CompanionDestRow = cmd.CompanionDestRow
+			}
+
+			result.Teleport = teleResult
+		}
 	}
 
 	// 13. Use action/bonus action resource

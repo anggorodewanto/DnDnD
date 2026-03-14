@@ -15,7 +15,7 @@ const (
 	ClassCount     = 12
 	RaceCount      = 9
 	FeatCount      = 41
-	SpellCount     = 354
+	SpellCount     = 358
 	CreatureCount  = 327
 	MagicItemCount = 70
 )
