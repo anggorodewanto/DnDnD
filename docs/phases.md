@@ -403,7 +403,7 @@
   - Depends on: Phase 13, Phase 15
   - Done when: Integration tests verify freeform posting, cancellation flow, already-resolved rejection, no-pending rejection.
 
-- [ ] **Phase 74: Free Object Interaction (`/interact`)**
+- [x] **Phase 74: Free Object Interaction (`/interact`)**
   - Scope: First `/interact` per turn is free (sets free_interact_used). Second costs action (rejected if action spent). Auto-resolvable interactions (draw/sheathe weapon, open unlocked door) resolve immediately. Others route to #dm-queue.
   - Depends on: Phase 28
   - Done when: Integration tests verify free first interaction, action cost for second, auto-resolve vs DM queue routing.

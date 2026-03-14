@@ -60,36 +60,24 @@ func (s *Service) Interact(ctx context.Context, cmd InteractCommand) (InteractRe
 		return InteractResult{}, fmt.Errorf("%s", reason)
 	}
 
-	updatedTurn := cmd.Turn
-	isSecond := cmd.Turn.FreeInteractUsed
-
-	if !isSecond {
-		// First interaction: free, just use the free interact resource
-		var err error
-		updatedTurn, err = UseResource(cmd.Turn, ResourceFreeInteract)
-		if err != nil {
-			return InteractResult{}, err
-		}
-	} else {
-		// Second interaction: costs the action
+	resource := ResourceFreeInteract
+	if cmd.Turn.FreeInteractUsed {
 		if err := ValidateResource(cmd.Turn, ResourceAction); err != nil {
 			return InteractResult{}, fmt.Errorf("Free interaction already used and action is spent")
 		}
-		var err error
-		updatedTurn, err = UseResource(cmd.Turn, ResourceAction)
-		if err != nil {
-			return InteractResult{}, err
-		}
+		resource = ResourceAction
 	}
 
-	// Persist turn resource changes
+	updatedTurn, err := UseResource(cmd.Turn, resource)
+	if err != nil {
+		return InteractResult{}, err
+	}
+
 	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
 		return InteractResult{}, fmt.Errorf("updating turn actions: %w", err)
 	}
 
-	autoResolved := isAutoResolvable(cmd.Description)
-
-	if autoResolved {
+	if isAutoResolvable(cmd.Description) {
 		combatLog := fmt.Sprintf("🤚 %s: %s", cmd.Combatant.DisplayName, cmd.Description)
 		return InteractResult{
 			Turn:         updatedTurn,
@@ -98,7 +86,6 @@ func (s *Service) Interact(ctx context.Context, cmd InteractCommand) (InteractRe
 		}, nil
 	}
 
-	// Route to DM queue
 	pendingAction, err := s.store.CreatePendingAction(ctx, refdata.CreatePendingActionParams{
 		EncounterID: cmd.Turn.EncounterID,
 		CombatantID: cmd.Combatant.ID,
@@ -116,6 +103,5 @@ func (s *Service) Interact(ctx context.Context, cmd InteractCommand) (InteractRe
 		PendingAction:  pendingAction,
 		CombatLog:      combatLog,
 		DMQueueMessage: dmQueueMsg,
-		AutoResolved:   false,
 	}, nil
 }
