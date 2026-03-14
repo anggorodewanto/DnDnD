@@ -112,6 +112,16 @@ type mockStore struct {
 	getPendingActionByCombatantFn     func(ctx context.Context, combatantID uuid.UUID) (refdata.PendingAction, error)
 	updatePendingActionStatusFn       func(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error)
 	updatePendingActionDMQueueMessageFn func(ctx context.Context, arg refdata.UpdatePendingActionDMQueueMessageParams) (refdata.PendingAction, error)
+
+	// Turn Timeout Resolution (Phase 76b)
+	listTurnsTimedOutFn                func(ctx context.Context) ([]refdata.Turn, error)
+	updateTurnDMDecisionSentFn         func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	listTurnsNeedingDMAutoResolveFn    func(ctx context.Context) ([]refdata.Turn, error)
+	updateTurnAutoResolvedFn           func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	updateTurnWaitExtendedFn           func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	resetTurnNudgeAndWarningFn         func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	updateCombatantAutoResolveCountFn  func(ctx context.Context, arg refdata.UpdateCombatantAutoResolveCountParams) (refdata.Combatant, error)
+	resetCombatantAutoResolveCountFn   func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -494,6 +504,54 @@ func (m *mockStore) GetCampaignByEncounterID(ctx context.Context, id uuid.UUID) 
 		return m.getCampaignByEncounterIDFn(ctx, id)
 	}
 	return refdata.Campaign{}, nil
+}
+func (m *mockStore) ListTurnsTimedOut(ctx context.Context) ([]refdata.Turn, error) {
+	if m.listTurnsTimedOutFn != nil {
+		return m.listTurnsTimedOutFn(ctx)
+	}
+	return []refdata.Turn{}, nil
+}
+func (m *mockStore) UpdateTurnDMDecisionSent(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	if m.updateTurnDMDecisionSentFn != nil {
+		return m.updateTurnDMDecisionSentFn(ctx, id)
+	}
+	return refdata.Turn{ID: id}, nil
+}
+func (m *mockStore) ListTurnsNeedingDMAutoResolve(ctx context.Context) ([]refdata.Turn, error) {
+	if m.listTurnsNeedingDMAutoResolveFn != nil {
+		return m.listTurnsNeedingDMAutoResolveFn(ctx)
+	}
+	return []refdata.Turn{}, nil
+}
+func (m *mockStore) UpdateTurnAutoResolved(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	if m.updateTurnAutoResolvedFn != nil {
+		return m.updateTurnAutoResolvedFn(ctx, id)
+	}
+	return refdata.Turn{ID: id, AutoResolved: true, Status: "completed"}, nil
+}
+func (m *mockStore) UpdateTurnWaitExtended(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	if m.updateTurnWaitExtendedFn != nil {
+		return m.updateTurnWaitExtendedFn(ctx, id)
+	}
+	return refdata.Turn{ID: id, WaitExtended: true}, nil
+}
+func (m *mockStore) ResetTurnNudgeAndWarning(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	if m.resetTurnNudgeAndWarningFn != nil {
+		return m.resetTurnNudgeAndWarningFn(ctx, id)
+	}
+	return refdata.Turn{ID: id}, nil
+}
+func (m *mockStore) UpdateCombatantAutoResolveCount(ctx context.Context, arg refdata.UpdateCombatantAutoResolveCountParams) (refdata.Combatant, error) {
+	if m.updateCombatantAutoResolveCountFn != nil {
+		return m.updateCombatantAutoResolveCountFn(ctx, arg)
+	}
+	return refdata.Combatant{ID: arg.ID, ConsecutiveAutoResolves: arg.ConsecutiveAutoResolves, IsAbsent: arg.IsAbsent}, nil
+}
+func (m *mockStore) ResetCombatantAutoResolveCount(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+	if m.resetCombatantAutoResolveCountFn != nil {
+		return m.resetCombatantAutoResolveCountFn(ctx, id)
+	}
+	return refdata.Combatant{ID: id}, nil
 }
 
 func defaultMockStore() *mockStore {

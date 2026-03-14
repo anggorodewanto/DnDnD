@@ -69,3 +69,32 @@ UPDATE turns SET timeout_at = NULL WHERE id = $1 RETURNING *;
 
 -- name: SetTurnTimeout :one
 UPDATE turns SET timeout_at = $2, started_at = COALESCE(started_at, now()) WHERE id = $1 RETURNING *;
+
+-- name: ListTurnsTimedOut :many
+SELECT * FROM turns
+WHERE status = 'active'
+  AND timeout_at IS NOT NULL
+  AND started_at IS NOT NULL
+  AND dm_decision_sent_at IS NULL
+  AND now() >= timeout_at
+ORDER BY timeout_at ASC;
+
+-- name: UpdateTurnDMDecisionSent :one
+UPDATE turns SET dm_decision_sent_at = now(), dm_decision_deadline = now() + interval '1 hour' WHERE id = $1 RETURNING *;
+
+-- name: ListTurnsNeedingDMAutoResolve :many
+SELECT * FROM turns
+WHERE status = 'active'
+  AND dm_decision_sent_at IS NOT NULL
+  AND dm_decision_deadline IS NOT NULL
+  AND now() >= dm_decision_deadline
+ORDER BY dm_decision_deadline ASC;
+
+-- name: UpdateTurnAutoResolved :one
+UPDATE turns SET auto_resolved = true, status = 'completed', completed_at = now() WHERE id = $1 RETURNING *;
+
+-- name: UpdateTurnWaitExtended :one
+UPDATE turns SET wait_extended = true WHERE id = $1 RETURNING *;
+
+-- name: ResetTurnNudgeAndWarning :one
+UPDATE turns SET nudge_sent_at = NULL, warning_sent_at = NULL, dm_decision_sent_at = NULL, dm_decision_deadline = NULL WHERE id = $1 RETURNING *;

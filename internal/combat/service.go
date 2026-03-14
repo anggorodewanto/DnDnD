@@ -151,6 +151,16 @@ type Store interface {
 
 	// Campaign lookup from encounter
 	GetCampaignByEncounterID(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
+
+	// Turn Timeout Resolution (Phase 76b)
+	ListTurnsTimedOut(ctx context.Context) ([]refdata.Turn, error)
+	UpdateTurnDMDecisionSent(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	ListTurnsNeedingDMAutoResolve(ctx context.Context) ([]refdata.Turn, error)
+	UpdateTurnAutoResolved(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	UpdateTurnWaitExtended(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	ResetTurnNudgeAndWarning(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	UpdateCombatantAutoResolveCount(ctx context.Context, arg refdata.UpdateCombatantAutoResolveCountParams) (refdata.Combatant, error)
+	ResetCombatantAutoResolveCount(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 }
 
 // Service manages combat encounters and their entities.

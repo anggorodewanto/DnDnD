@@ -61,12 +61,18 @@ func (t *TurnTimer) run() {
 	}
 }
 
-// PollOnce performs one poll cycle: checks for turns needing nudge or warning.
+// PollOnce performs one poll cycle: checks for nudges, warnings, timeouts, and DM auto-resolves.
 func (t *TurnTimer) PollOnce(ctx context.Context) error {
 	if err := t.processNudges(ctx); err != nil {
 		return err
 	}
-	return t.processWarnings(ctx)
+	if err := t.processWarnings(ctx); err != nil {
+		return err
+	}
+	if err := t.processTimeouts(ctx); err != nil {
+		return err
+	}
+	return t.processDMAutoResolves(ctx)
 }
 
 func (t *TurnTimer) processNudges(ctx context.Context) error {

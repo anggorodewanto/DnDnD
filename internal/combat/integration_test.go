@@ -729,6 +729,32 @@ func (a *testStoreAdapter) UpdateCharacterEquipment(ctx context.Context, arg ref
 	return a.Queries.UpdateCharacterEquipment(ctx, arg)
 }
 
+// Phase 76b stubs
+func (a *testStoreAdapter) ListTurnsTimedOut(ctx context.Context) ([]refdata.Turn, error) {
+	return []refdata.Turn{}, nil
+}
+func (a *testStoreAdapter) UpdateTurnDMDecisionSent(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	return refdata.Turn{ID: id}, nil
+}
+func (a *testStoreAdapter) ListTurnsNeedingDMAutoResolve(ctx context.Context) ([]refdata.Turn, error) {
+	return []refdata.Turn{}, nil
+}
+func (a *testStoreAdapter) UpdateTurnAutoResolved(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	return refdata.Turn{ID: id}, nil
+}
+func (a *testStoreAdapter) UpdateTurnWaitExtended(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	return refdata.Turn{ID: id}, nil
+}
+func (a *testStoreAdapter) ResetTurnNudgeAndWarning(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	return refdata.Turn{ID: id}, nil
+}
+func (a *testStoreAdapter) UpdateCombatantAutoResolveCount(ctx context.Context, arg refdata.UpdateCombatantAutoResolveCountParams) (refdata.Combatant, error) {
+	return refdata.Combatant{ID: arg.ID}, nil
+}
+func (a *testStoreAdapter) ResetCombatantAutoResolveCount(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+	return refdata.Combatant{ID: id}, nil
+}
+
 func TestIntegration_ConditionAutoExpiration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

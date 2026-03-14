@@ -155,6 +155,8 @@ type Combatant struct {
 	BardicInspirationDie       sql.NullString        `json:"bardic_inspiration_die"`
 	BardicInspirationSource    sql.NullString        `json:"bardic_inspiration_source"`
 	BardicInspirationGrantedAt sql.NullTime          `json:"bardic_inspiration_granted_at"`
+	ConsecutiveAutoResolves    int32                 `json:"consecutive_auto_resolves"`
+	IsAbsent                   bool                  `json:"is_absent"`
 }
 
 type ConditionsRef struct {
@@ -408,6 +410,10 @@ type Turn struct {
 	HasStoodThisTurn     bool         `json:"has_stood_this_turn"`
 	NudgeSentAt          sql.NullTime `json:"nudge_sent_at"`
 	WarningSentAt        sql.NullTime `json:"warning_sent_at"`
+	DmDecisionSentAt     sql.NullTime `json:"dm_decision_sent_at"`
+	DmDecisionDeadline   sql.NullTime `json:"dm_decision_deadline"`
+	WaitExtended         bool         `json:"wait_extended"`
+	AutoResolved         bool         `json:"auto_resolved"`
 }
 
 type Weapon struct {

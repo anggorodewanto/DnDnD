@@ -77,3 +77,9 @@ WHERE id = $1 RETURNING *;
 
 -- name: DeleteCombatant :exec
 DELETE FROM combatants WHERE id = $1;
+
+-- name: UpdateCombatantAutoResolveCount :one
+UPDATE combatants SET consecutive_auto_resolves = $2, is_absent = $3, updated_at = now() WHERE id = $1 RETURNING *;
+
+-- name: ResetCombatantAutoResolveCount :one
+UPDATE combatants SET consecutive_auto_resolves = 0, is_absent = false, updated_at = now() WHERE id = $1 RETURNING *;
