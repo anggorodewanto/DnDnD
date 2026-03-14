@@ -19,8 +19,7 @@ type VisionSource struct {
 	RangeTiles      int  // base vision range in tiles
 	DarkvisionTiles int  // darkvision range in tiles (0 = none)
 	BlindsightTiles int  // blindsight range in tiles (0 = none)
-	TruesightTiles  int  // truesight range in tiles (0 = none)
-	HasDevilsSight  bool // can see in magical darkness
+	TruesightTiles int // truesight range in tiles (0 = none)
 }
 
 // FogOfWar holds the computed visibility state for each tile on the map.
@@ -41,6 +40,12 @@ func (f *FogOfWar) StateAt(col, row int) VisibilityState {
 // ComputeVisibility computes the fog of war visibility for the map by unioning
 // the visible tiles from all vision sources.
 func ComputeVisibility(sources []VisionSource, walls []WallSegment, width, height int) *FogOfWar {
+	return ComputeVisibilityWithLights(sources, nil, walls, width, height)
+}
+
+// ComputeVisibilityWithLights computes the fog of war visibility by unioning
+// visible tiles from all vision sources and light sources.
+func ComputeVisibilityWithLights(sources []VisionSource, lights []LightSource, walls []WallSegment, width, height int) *FogOfWar {
 	fow := &FogOfWar{
 		Width:  width,
 		Height: height,
@@ -48,7 +53,6 @@ func ComputeVisibility(sources []VisionSource, walls []WallSegment, width, heigh
 	}
 
 	for _, src := range sources {
-		// Effective range is max of all vision ranges
 		effectiveRange := src.RangeTiles
 		if src.DarkvisionTiles > effectiveRange {
 			effectiveRange = src.DarkvisionTiles
@@ -61,6 +65,16 @@ func ComputeVisibility(sources []VisionSource, walls []WallSegment, width, heigh
 		}
 
 		visible := shadowcast(src.Col, src.Row, effectiveRange, walls, width, height)
+		for pos := range visible {
+			idx := pos.Row*width + pos.Col
+			if idx >= 0 && idx < len(fow.States) {
+				fow.States[idx] = Visible
+			}
+		}
+	}
+
+	for _, light := range lights {
+		visible := shadowcast(light.Col, light.Row, light.RangeTiles, walls, width, height)
 		for pos := range visible {
 			idx := pos.Row*width + pos.Col
 			if idx >= 0 && idx < len(fow.States) {

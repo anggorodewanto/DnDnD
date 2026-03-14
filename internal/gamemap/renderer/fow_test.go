@@ -8,33 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TDD Cycle 1: wallsBetween detects horizontal wall between vertically adjacent tiles
-func TestWallsBetween_HorizontalWall(t *testing.T) {
-	walls := []WallSegment{
-		{X1: 2, Y1: 3, X2: 3, Y2: 3}, // wall on north edge of tile (2,3)
-	}
-	wm := buildWallMap(walls, 5, 5)
-
-	// Wall between (2,2) and (2,3) — vertically adjacent
-	assert.True(t, wallsBetween(wm, 2, 2, 2, 3))
-	// No wall between other tiles
-	assert.False(t, wallsBetween(wm, 1, 2, 1, 3))
-}
-
-// TDD Cycle 2: wallsBetween detects vertical wall between horizontally adjacent tiles
-func TestWallsBetween_VerticalWall(t *testing.T) {
-	walls := []WallSegment{
-		{X1: 3, Y1: 1, X2: 3, Y2: 2}, // wall on left edge of col 3, rows 1-2
-	}
-	wm := buildWallMap(walls, 5, 5)
-
-	// Wall between (2,1) and (3,1) — horizontally adjacent
-	assert.True(t, wallsBetween(wm, 2, 1, 3, 1))
-	// No wall between tiles not covered
-	assert.False(t, wallsBetween(wm, 2, 0, 3, 0))
-	assert.False(t, wallsBetween(wm, 2, 2, 3, 2))
-}
-
 // TDD Cycle 3: Shadowcasting in open area — all tiles within range visible
 func TestShadowcast_OpenArea(t *testing.T) {
 	visible := shadowcast(2, 2, 3, nil, 5, 5)
@@ -252,26 +225,37 @@ func TestFilterCombatantsForFog(t *testing.T) {
 		Height: 5,
 		States: make([]VisibilityState, 25),
 	}
-	fow.States[2*5+2] = Visible // (2,2) visible
+	fow.States[2*5+2] = Visible  // (2,2) visible
+	fow.States[3*5+3] = Explored // (3,3) explored
 
 	combatants := []Combatant{
 		{ShortID: "P1", Col: 2, Row: 2, IsPlayer: true},  // player in visible
 		{ShortID: "P2", Col: 4, Row: 4, IsPlayer: true},  // player in fog
 		{ShortID: "E1", Col: 2, Row: 2, IsPlayer: false}, // enemy in visible
-		{ShortID: "E2", Col: 4, Row: 4, IsPlayer: false}, // enemy in fog
+		{ShortID: "E2", Col: 4, Row: 4, IsPlayer: false}, // enemy in unexplored fog
+		{ShortID: "E3", Col: 3, Row: 3, IsPlayer: false}, // enemy in explored tile
 	}
 
 	filtered := filterCombatantsForFog(combatants, fow)
-	assert.Len(t, filtered, 3)
+	assert.Len(t, filtered, 4) // P1, P2, E1, E3 (not E2)
 
-	ids := make(map[string]bool)
+	byID := make(map[string]Combatant)
 	for _, c := range filtered {
-		ids[c.ShortID] = true
+		byID[c.ShortID] = c
 	}
-	assert.True(t, ids["P1"])  // player always shown
-	assert.True(t, ids["P2"])  // player always shown even in fog
-	assert.True(t, ids["E1"])  // enemy in visible tile shown
-	assert.False(t, ids["E2"]) // enemy in fog hidden
+	assert.Contains(t, byID, "P1")  // player always shown
+	assert.Contains(t, byID, "P2")  // player always shown even in fog
+	assert.Contains(t, byID, "E1")  // enemy in visible tile shown
+	assert.NotContains(t, byID, "E2") // enemy in unexplored hidden
+	assert.Contains(t, byID, "E3")  // enemy in explored tile shown
+
+	// E3 should be marked as in fog (greyed)
+	assert.True(t, byID["E3"].InFog, "enemy on explored tile should have InFog=true")
+	// E1 visible enemy should NOT be in fog
+	assert.False(t, byID["E1"].InFog, "enemy on visible tile should not have InFog")
+	// Players never marked InFog
+	assert.False(t, byID["P1"].InFog)
+	assert.False(t, byID["P2"].InFog)
 }
 
 // TDD Cycle 9c: filterCombatantsForFog with nil fog returns all
@@ -413,28 +397,101 @@ func TestRenderMap_AutoComputesFog(t *testing.T) {
 	assert.Equal(t, Visible, md.FogOfWar.StateAt(2, 2))
 }
 
-// TDD Cycle 18: wallsBetween edge cases
-func TestWallsBetween_EmptyMap(t *testing.T) {
-	wm := buildWallMap(nil, 5, 5)
-	assert.False(t, wallsBetween(wm, 0, 0, 1, 0))
-}
-
-func TestMakeWallEdge_Canonical(t *testing.T) {
-	// Same result regardless of argument order
-	e1 := makeWallEdge(0, 0, 1, 0)
-	e2 := makeWallEdge(1, 0, 0, 0)
-	assert.Equal(t, e1, e2)
-
-	// Row-based ordering
-	e3 := makeWallEdge(2, 3, 2, 1)
-	e4 := makeWallEdge(2, 1, 2, 3)
-	assert.Equal(t, e3, e4)
-}
-
-func TestBuildWallMap_BoundaryWalls(t *testing.T) {
-	walls := []WallSegment{
-		{X1: 0, Y1: 0, X2: 5, Y2: 0}, // top edge - row=0 boundary
+// TDD Cycle 19: Light sources contribute visible tiles
+func TestComputeVisibility_LightSources(t *testing.T) {
+	// No vision sources, but a light source at (5,5) with range 3
+	lights := []LightSource{
+		{Col: 5, Row: 5, RangeTiles: 3},
 	}
-	wm := buildWallMap(walls, 5, 5)
-	assert.Empty(t, wm) // boundary walls at row=0 don't create valid edges
+
+	fow := ComputeVisibilityWithLights(nil, lights, nil, 11, 11)
+	require.NotNil(t, fow)
+
+	// Tile at origin of light should be visible
+	assert.Equal(t, Visible, fow.StateAt(5, 5))
+	// Tile within range should be visible
+	assert.Equal(t, Visible, fow.StateAt(5, 3)) // dist 2
+	// Tile beyond range should be unexplored
+	assert.Equal(t, Unexplored, fow.StateAt(0, 0)) // dist ~7.07
 }
+
+// TDD Cycle 20: Light sources union with vision sources
+func TestComputeVisibility_LightAndVisionUnion(t *testing.T) {
+	sources := []VisionSource{
+		{Col: 0, Row: 0, RangeTiles: 2},
+	}
+	lights := []LightSource{
+		{Col: 9, Row: 9, RangeTiles: 2},
+	}
+
+	fow := ComputeVisibilityWithLights(sources, lights, nil, 10, 10)
+	require.NotNil(t, fow)
+
+	// Vision source area visible
+	assert.Equal(t, Visible, fow.StateAt(0, 0))
+	assert.Equal(t, Visible, fow.StateAt(1, 1))
+	// Light source area visible
+	assert.Equal(t, Visible, fow.StateAt(9, 9))
+	assert.Equal(t, Visible, fow.StateAt(8, 8))
+	// Middle of map unexplored
+	assert.Equal(t, Unexplored, fow.StateAt(5, 5))
+}
+
+// TDD Cycle 21: Light sources blocked by walls
+func TestComputeVisibility_LightBlockedByWall(t *testing.T) {
+	walls := []WallSegment{
+		{X1: 0, Y1: 3, X2: 7, Y2: 3}, // horizontal wall at y=3
+	}
+	lights := []LightSource{
+		{Col: 3, Row: 4, RangeTiles: 10},
+	}
+
+	fow := ComputeVisibilityWithLights(nil, lights, walls, 7, 7)
+	require.NotNil(t, fow)
+
+	// Below wall is visible
+	assert.Equal(t, Visible, fow.StateAt(3, 4))
+	assert.Equal(t, Visible, fow.StateAt(3, 3)) // row 3 south side of wall
+	// Above wall is NOT visible
+	assert.Equal(t, Unexplored, fow.StateAt(3, 1))
+}
+
+// TDD Cycle 22: LightSources in MapData auto-computed
+func TestRenderMap_WithLightSources(t *testing.T) {
+	md := &MapData{
+		Width:    5,
+		Height:   5,
+		TileSize: 48,
+		TerrainGrid: func() []TerrainType {
+			g := make([]TerrainType, 25)
+			return g
+		}(),
+		LightSources: []LightSource{
+			{Col: 2, Row: 2, RangeTiles: 3},
+		},
+	}
+
+	data, err := RenderMap(md)
+	require.NoError(t, err)
+	assert.NotEmpty(t, data)
+
+	require.NotNil(t, md.FogOfWar)
+	assert.Equal(t, Visible, md.FogOfWar.StateAt(2, 2))
+}
+
+// TDD Cycle 23: InFog enemies rendered with greyed appearance
+func TestDrawTokens_InFogEnemyGreyed(t *testing.T) {
+	md := &MapData{
+		Width:    5,
+		Height:   5,
+		TileSize: 48,
+		Combatants: []Combatant{
+			{ShortID: "E1", Col: 2, Row: 2, HPMax: 10, HPCurrent: 10, IsPlayer: false, InFog: true},
+		},
+	}
+
+	dc := gg.NewContext(5*48, 5*48)
+	// Should render without error — greyed token
+	DrawTokens(dc, md)
+}
+

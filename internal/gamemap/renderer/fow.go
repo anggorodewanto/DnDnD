@@ -2,62 +2,6 @@ package renderer
 
 import "math"
 
-// wallEdge represents a blocked edge between two adjacent tiles, stored in canonical order.
-type wallEdge struct {
-	col1, row1, col2, row2 int
-}
-
-func makeWallEdge(col1, row1, col2, row2 int) wallEdge {
-	if row1 > row2 || (row1 == row2 && col1 > col2) {
-		return wallEdge{col2, row2, col1, row1}
-	}
-	return wallEdge{col1, row1, col2, row2}
-}
-
-// buildWallMap pre-processes wall segments into a set of blocked tile edges.
-func buildWallMap(walls []WallSegment, width, height int) map[wallEdge]bool {
-	m := make(map[wallEdge]bool)
-	for _, w := range walls {
-		addFOWWallEdges(m, w, width, height)
-	}
-	return m
-}
-
-func addFOWWallEdges(m map[wallEdge]bool, w WallSegment, width, height int) {
-	// Horizontal wall segment: y1 == y2, spans x range
-	if w.Y1 == w.Y2 {
-		y := w.Y1
-		row := int(y)
-		xMin := math.Min(w.X1, w.X2)
-		xMax := math.Max(w.X1, w.X2)
-		for col := int(xMin); col < int(xMax); col++ {
-			if row > 0 && row <= height && col >= 0 && col < width {
-				m[makeWallEdge(col, row-1, col, row)] = true
-			}
-		}
-		return
-	}
-
-	// Vertical wall segment: x1 == x2, spans y range
-	if w.X1 == w.X2 {
-		x := w.X1
-		col := int(x)
-		yMin := math.Min(w.Y1, w.Y2)
-		yMax := math.Max(w.Y1, w.Y2)
-		for row := int(yMin); row < int(yMax); row++ {
-			if col > 0 && col <= width && row >= 0 && row < height {
-				m[makeWallEdge(col-1, row, col, row)] = true
-			}
-		}
-		return
-	}
-}
-
-// wallsBetween checks if a wall edge exists between two adjacent tiles.
-func wallsBetween(wm map[wallEdge]bool, col1, row1, col2, row2 int) bool {
-	return wm[makeWallEdge(col1, row1, col2, row2)]
-}
-
 // wallLine is a line segment for ray intersection testing.
 type wallLine struct {
 	x1, y1, x2, y2 float64

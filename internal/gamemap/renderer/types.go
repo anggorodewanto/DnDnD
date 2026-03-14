@@ -120,6 +120,7 @@ type Combatant struct {
 	IsPlayer    bool
 	IsDying     bool // 0 HP, making death saves
 	IsStable    bool // 0 HP, stabilized
+	InFog       bool // true when on an explored (dim) tile — rendered greyed out
 }
 
 // HealthTier computes the health tier for a combatant.
@@ -178,6 +179,15 @@ type ZoneOverlay struct {
 	MarkerIcon    string
 }
 
+// LightSource represents a light source on the map (torch, Light cantrip, etc.).
+// Light sources contribute additional visible tiles, acting like vision sources
+// without a specific viewer.
+type LightSource struct {
+	Col        int // zero-based column
+	Row        int // zero-based row
+	RangeTiles int // illumination range in tiles
+}
+
 // MapData holds all the data needed to render a map image.
 type MapData struct {
 	Width         int           // map width in tiles
@@ -191,5 +201,6 @@ type MapData struct {
 
 	// Fog of War fields
 	VisionSources []VisionSource // player vision sources; if non-empty, fog is computed
-	FogOfWar      *FogOfWar      // pre-computed fog; if nil and VisionSources set, computed automatically
+	LightSources  []LightSource  // light sources (torches, Light cantrip, etc.)
+	FogOfWar      *FogOfWar      // pre-computed fog; if nil and VisionSources/LightSources set, computed automatically
 }

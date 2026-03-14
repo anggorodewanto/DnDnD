@@ -39,6 +39,11 @@ func DrawTokens(dc *gg.Context, md *MapData) {
 				cy -= offset
 			}
 
+			if c.InFog {
+				drawFoggedToken(dc, cx, cy, radius, c.ShortID, ts)
+				continue
+			}
+
 			tier := c.HealthTier()
 			drawTokenCircle(dc, cx, cy, radius, tier)
 			drawTokenLabel(dc, cx, cy, c.ShortID, tier, ts)
@@ -175,6 +180,26 @@ func drawTierIcon(dc *gg.Context, cx, cy, radius float64, tier HealthTier) {
 		dc.DrawRectangle(ix-iconSize*0.5, iy-hw, iconSize, hw*2)
 		dc.Fill()
 	}
+}
+
+// drawFoggedToken renders a greyed-out token for enemies on explored (dim) tiles.
+func drawFoggedToken(dc *gg.Context, cx, cy, radius float64, label string, tileSize float64) {
+	// Grey fill with reduced alpha
+	dc.SetColor(color.RGBA{R: 0x77, G: 0x77, B: 0x77, A: 0x88})
+	dc.DrawCircle(cx, cy, radius)
+	dc.Fill()
+
+	// Dim border
+	dc.SetColor(color.RGBA{R: 0x55, G: 0x55, B: 0x55, A: 0x88})
+	dc.SetLineWidth(1.5)
+	dc.DrawCircle(cx, cy, radius)
+	dc.Stroke()
+
+	// Dimmed label
+	fontSize := max(8, tileSize*0.22)
+	_ = dc.LoadFontFace("", fontSize)
+	dc.SetColor(color.RGBA{R: 0xCC, G: 0xCC, B: 0xCC, A: 0x88})
+	dc.DrawStringAnchored(label, cx, cy, 0.5, 0.5)
 }
 
 // groupByPosition groups combatants by their (Col, Row) position.

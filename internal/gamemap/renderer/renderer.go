@@ -29,9 +29,9 @@ func RenderMap(md *MapData) ([]byte, error) {
 	dc.SetRGB(1, 1, 1)
 	dc.Clear()
 
-	// Compute fog of war if vision sources are provided but fog is not pre-computed
-	if len(md.VisionSources) > 0 && md.FogOfWar == nil {
-		md.FogOfWar = ComputeVisibility(md.VisionSources, md.Walls, md.Width, md.Height)
+	// Compute fog of war if vision sources or light sources are provided but fog is not pre-computed
+	if (len(md.VisionSources) > 0 || len(md.LightSources) > 0) && md.FogOfWar == nil {
+		md.FogOfWar = ComputeVisibilityWithLights(md.VisionSources, md.LightSources, md.Walls, md.Width, md.Height)
 	}
 
 	// Filter combatants based on fog visibility

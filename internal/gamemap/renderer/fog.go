@@ -41,7 +41,8 @@ func DrawFogOfWar(dc *gg.Context, md *MapData) {
 
 // filterCombatantsForFog returns combatants that should be rendered given the fog state.
 // Player tokens are always rendered. Enemy tokens on unexplored tiles are hidden.
-// If fog is nil, all combatants are returned (DM mode).
+// Enemy tokens on explored (dim) tiles are included but marked with InFog=true
+// so they render greyed out. If fog is nil, all combatants are returned (DM mode).
 func filterCombatantsForFog(combatants []Combatant, fow *FogOfWar) []Combatant {
 	if fow == nil {
 		return combatants
@@ -55,10 +56,14 @@ func filterCombatantsForFog(combatants []Combatant, fow *FogOfWar) []Combatant {
 		}
 
 		state := fow.StateAt(c.Col, c.Row)
-		if state == Visible {
-			result = append(result, c)
+		if state == Unexplored {
+			continue
 		}
-		// Unexplored and Explored enemies are hidden
+
+		if state == Explored {
+			c.InFog = true
+		}
+		result = append(result, c)
 	}
 	return result
 }
