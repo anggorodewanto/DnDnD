@@ -2079,10 +2079,7 @@ func TestFormatMaterialRejection(t *testing.T) {
 		CurrentGold:   50,
 	}
 	msg := FormatMaterialRejection(r)
-	assert.Contains(t, msg, "a diamond worth 300gp")
-	assert.Contains(t, msg, "300gp")
-	assert.Contains(t, msg, "50gp")
-	assert.Contains(t, msg, "can't afford it")
+	assert.Equal(t, "Requires a diamond worth 300gp — you don't have one and can't afford it (current gold: 50gp).", msg)
 }
 
 // TDD Cycle P63-6: FormatGoldFallbackPrompt
@@ -2092,9 +2089,7 @@ func TestFormatGoldFallbackPrompt(t *testing.T) {
 		CostGp:        300,
 	}
 	msg := FormatGoldFallbackPrompt(r)
-	assert.Contains(t, msg, "a diamond worth 300gp")
-	assert.Contains(t, msg, "300gp")
-	assert.Contains(t, msg, "buy one")
+	assert.Equal(t, "You don't have a diamond worth 300gp — buy one for 300gp?", msg)
 }
 
 // TDD Cycle P63-7: RemoveInventoryItem

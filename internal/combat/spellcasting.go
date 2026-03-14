@@ -881,14 +881,14 @@ func ValidateMaterialComponent(spell refdata.Spell, inventory []InventoryItem, g
 
 // FormatMaterialRejection formats the rejection message when a costly material component is missing.
 func FormatMaterialRejection(r MaterialComponentResult) string {
-	return fmt.Sprintf("Requires %s worth %dgp — you don't have one and can't afford it (current gold: %dgp).",
-		r.ComponentName, int(r.CostGp), r.CurrentGold)
+	return fmt.Sprintf("Requires %s — you don't have one and can't afford it (current gold: %dgp).",
+		r.ComponentName, r.CurrentGold)
 }
 
 // FormatGoldFallbackPrompt formats the gold fallback prompt message.
 func FormatGoldFallbackPrompt(r MaterialComponentResult) string {
-	return fmt.Sprintf("You don't have %s (%dgp) — buy one for %dgp?",
-		r.ComponentName, int(r.CostGp), int(r.CostGp))
+	return fmt.Sprintf("You don't have %s — buy one for %dgp?",
+		r.ComponentName, int(r.CostGp))
 }
 
 // RemoveInventoryItem decrements the quantity of a named item by 1, removing it if quantity reaches 0.
