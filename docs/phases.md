@@ -388,7 +388,7 @@
   - Depends on: Phase 24, Phase 27
   - Done when: Integration tests verify declaration CRUD, one-per-round enforcement, DM resolution flow, cancellation, encounter-end cleanup.
 
-- [ ] **Phase 71: Readied Actions**
+- [x] **Phase 71: Readied Actions**
   - Scope: `/action ready [description]`: costs action. Fires using reaction when trigger occurs (DM resolves). Expires at start of creature's next turn (with expiry notice). Readied spells: slot expended on ready, concentration held, lost if concentration breaks. Expiry notice in turn-start prompt. `/status` shows active readied actions.
   - Depends on: Phase 70, Phase 54
   - Done when: Integration tests verify action cost, expiry timing, readied spell slot/concentration, expiry notice, status display.

@@ -91,11 +91,7 @@ func (s *Service) ExpireReadiedActions(ctx context.Context, combatantID, encount
 	}
 
 	var notices []string
-	for _, decl := range active {
-		if !decl.IsReadiedAction {
-			continue
-		}
-
+	for _, decl := range filterReadiedActions(active) {
 		if _, err := s.store.CancelReactionDeclaration(ctx, decl.ID); err != nil {
 			return nil, fmt.Errorf("cancelling expired readied action: %w", err)
 		}
@@ -120,13 +116,18 @@ func (s *Service) ListReadiedActions(ctx context.Context, combatantID, encounter
 		return nil, fmt.Errorf("listing active reactions: %w", err)
 	}
 
+	return filterReadiedActions(active), nil
+}
+
+// filterReadiedActions returns only the declarations that are readied actions.
+func filterReadiedActions(decls []refdata.ReactionDeclaration) []refdata.ReactionDeclaration {
 	var readied []refdata.ReactionDeclaration
-	for _, decl := range active {
-		if decl.IsReadiedAction {
-			readied = append(readied, decl)
+	for _, d := range decls {
+		if d.IsReadiedAction {
+			readied = append(readied, d)
 		}
 	}
-	return readied, nil
+	return readied
 }
 
 // FormatReadiedActionsStatus produces a status display string listing active readied actions.

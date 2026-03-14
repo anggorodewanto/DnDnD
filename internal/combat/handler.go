@@ -329,6 +329,15 @@ func toReactionDeclarationResponse(d refdata.ReactionDeclaration) reactionDeclar
 	}
 }
 
+// toReactionDeclarationResponses converts a slice of declarations to their JSON responses.
+func toReactionDeclarationResponses(decls []refdata.ReactionDeclaration) []reactionDeclarationResponse {
+	resp := make([]reactionDeclarationResponse, len(decls))
+	for i, d := range decls {
+		resp[i] = toReactionDeclarationResponse(d)
+	}
+	return resp
+}
+
 // DeclareReaction handles POST /api/combat/{encounterID}/reactions.
 func (h *Handler) DeclareReaction(w http.ResponseWriter, r *http.Request) {
 	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
@@ -372,12 +381,7 @@ func (h *Handler) ListReactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := make([]reactionDeclarationResponse, len(decls))
-	for i, d := range decls {
-		resp[i] = toReactionDeclarationResponse(d)
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, toReactionDeclarationResponses(decls))
 }
 
 // ResolveReaction handles POST /api/combat/{encounterID}/reactions/{reactionID}/resolve.
@@ -539,10 +543,5 @@ func (h *Handler) ListReadiedActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := make([]reactionDeclarationResponse, len(readied))
-	for i, d := range readied {
-		resp[i] = toReactionDeclarationResponse(d)
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, toReactionDeclarationResponses(readied))
 }
