@@ -33,10 +33,6 @@ func FormatTacticalSummary(combatant refdata.Combatant, turn refdata.Turn, adjac
 		fmt.Fprintf(&b, "\U0001f4cb Available: %s\n", strings.Join(resources, " | "))
 	}
 
-	if turn.ActionSurged {
-		// already included in resources
-	}
-
 	if len(adjacentEnemies) > 0 {
 		var enemyNames []string
 		for _, e := range adjacentEnemies {

@@ -111,11 +111,8 @@ func (t *TurnTimer) sendNudge(ctx context.Context, turn refdata.Turn) error {
 	}
 
 	if channelID != "" {
-		timeRemaining := time.Until(turn.TimeoutAt.Time)
-		if timeRemaining < 0 {
-			timeRemaining = 0
-		}
-		msg := FormatNudgeMessage(combatant.DisplayName, timeRemaining)
+		remaining := clampDuration(time.Until(turn.TimeoutAt.Time))
+		msg := FormatNudgeMessage(combatant.DisplayName, remaining)
 
 		if err := t.notifier.SendMessage(channelID, msg); err != nil {
 			return err
@@ -144,12 +141,8 @@ func (t *TurnTimer) sendWarning(ctx context.Context, turn refdata.Turn) error {
 		}
 
 		adjacentEnemies := findAdjacentEnemies(combatant, allCombatants)
-
-		timeRemaining := time.Until(turn.TimeoutAt.Time)
-		if timeRemaining < 0 {
-			timeRemaining = 0
-		}
-		msg := FormatTacticalSummary(combatant, turn, adjacentEnemies, timeRemaining)
+		remaining := clampDuration(time.Until(turn.TimeoutAt.Time))
+		msg := FormatTacticalSummary(combatant, turn, adjacentEnemies, remaining)
 
 		if err := t.notifier.SendMessage(channelID, msg); err != nil {
 			return err
@@ -160,24 +153,30 @@ func (t *TurnTimer) sendWarning(ctx context.Context, turn refdata.Turn) error {
 	return err
 }
 
+// clampDuration returns d if positive, otherwise 0.
+func clampDuration(d time.Duration) time.Duration {
+	if d < 0 {
+		return 0
+	}
+	return d
+}
+
 func (t *TurnTimer) getYourTurnChannel(ctx context.Context, encounterID uuid.UUID) (string, error) {
 	camp, err := t.store.GetCampaignByEncounterID(ctx, encounterID)
 	if err != nil {
 		return "", err
 	}
 
-	var settings campaign.Settings
-	if camp.Settings.Valid {
-		if err := json.Unmarshal(camp.Settings.RawMessage, &settings); err != nil {
-			return "", err
-		}
+	if !camp.Settings.Valid {
+		return "", nil
 	}
 
-	channelID := settings.ChannelIDs["your-turn"]
-	if channelID == "" {
-		return "", nil // no channel configured, silently skip
+	var settings campaign.Settings
+	if err := json.Unmarshal(camp.Settings.RawMessage, &settings); err != nil {
+		return "", err
 	}
-	return channelID, nil
+
+	return settings.ChannelIDs["your-turn"], nil
 }
 
 // findAdjacentEnemies returns enemy combatants within 1 tile (adjacent) of the target.
@@ -188,22 +187,12 @@ func findAdjacentEnemies(target refdata.Combatant, allCombatants []refdata.Comba
 
 	var adjacent []refdata.Combatant
 	for _, c := range allCombatants {
-		if c.ID == target.ID {
-			continue
-		}
-		if !c.IsAlive {
-			continue
-		}
-		// "Enemy" means NPC if target is PC, or PC if target is NPC
-		if c.IsNpc == target.IsNpc {
+		if c.ID == target.ID || !c.IsAlive || c.IsNpc == target.IsNpc {
 			continue
 		}
 
-		col := colToIndex(c.PositionCol)
-		row := int(c.PositionRow)
-
-		dCol := abs(col - targetCol)
-		dRow := abs(row - targetRow)
+		dCol := abs(colToIndex(c.PositionCol) - targetCol)
+		dRow := abs(int(c.PositionRow) - targetRow)
 
 		if dCol <= 1 && dRow <= 1 {
 			adjacent = append(adjacent, c)

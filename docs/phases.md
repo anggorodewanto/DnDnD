@@ -418,7 +418,7 @@
   - Depends on: Phase 75a, Phase 44
   - Done when: Integration tests verify AC recalculation for all armor types and unarmored formulas, STR penalty application, stealth disadvantage enforcement.
 
-- [ ] **Phase 76a: Turn Timeout — Timer Infrastructure & Nudges**
+- [x] **Phase 76a: Turn Timeout — Timer Infrastructure & Nudges**
   - Scope: Turn timeout (24h default, DM-configurable 1-72h). Polling goroutine (30s interval) checks deadlines from DB. Escalation: 50% nudge message, 75% tactical summary (HP, AC, conditions, resources, adjacent enemies). DM manual overrides: skip now, extend, pause combat.
   - Depends on: Phase 28, Phase 43
   - Done when: Integration tests verify timer polling, 50% nudge delivery, 75% tactical summary content, DM override commands.
