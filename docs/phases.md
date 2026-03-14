@@ -348,7 +348,7 @@
   - Depends on: Phase 58
   - Done when: Integration tests verify free component bypass, costly component inventory check, gold fallback, consumed component removal, rejection message.
 
-- [ ] **Phase 64: Pact Magic (Warlock)**
+- [x] **Phase 64: Pact Magic (Warlock)**
   - Scope: Separate `pact_magic_slots` pool. Fewer slots, all same level, recharge on short rest. `/cast` draws from pact slots first. Multiclass: `--spell-slot` flag to draw from regular pool. Upcast must be <= pact slot level. Both pools displayed separately.
   - Depends on: Phase 58
   - Done when: Integration tests verify pact slot usage, short rest recharge, multiclass pool selection, upcast validation.

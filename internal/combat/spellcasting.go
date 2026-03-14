@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -332,15 +333,13 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		}
 	}
 
-	// 6c. Parse pact magic slots
+	// 6c. Parse pact magic slots and select spell slot (unless ritual or cantrip)
 	pactSlots, _ := parsePactMagicSlots(char.PactMagicSlots.RawMessage)
 
-	// 6c2. Select spell slot (unless ritual or cantrip)
 	effectiveSlotLevel := 0
 	usePactSlot := false
 	if spellLevel > 0 && !cmd.IsRitual {
-		// Determine if pact slot should be used:
-		// Use pact slot if: has pact slots with current > 0, spell fits, and not forced to regular
+		// Use pact slot if available, spell fits, and not forced to regular slots
 		if !cmd.UseSpellSlot && pactSlots.Current > 0 && spellLevel <= pactSlots.SlotLevel {
 			effectiveSlotLevel = pactSlots.SlotLevel
 			usePactSlot = true
@@ -562,12 +561,8 @@ func (s *Service) deductAndPersistSlot(ctx context.Context, charID uuid.UUID, sl
 	return SlotDeduction{SlotUsed: slotLevel, SlotsRemaining: remaining}, nil
 }
 
-// PactMagicSlotState holds the parsed pact magic slot data from a character.
-type PactMagicSlotState struct {
-	SlotLevel int `json:"slot_level"`
-	Current   int `json:"current"`
-	Max       int `json:"max"`
-}
+// PactMagicSlotState is an alias for character.PactMagicSlots used within the combat package.
+type PactMagicSlotState = character.PactMagicSlots
 
 // parsePactMagicSlots parses the pact_magic_slots JSONB column.
 // Returns zero-value if data is nil/empty or unparseable.
@@ -580,6 +575,21 @@ func parsePactMagicSlots(raw []byte) (PactMagicSlotState, error) {
 		return PactMagicSlotState{}, fmt.Errorf("parsing pact magic slots: %w", err)
 	}
 	return ps, nil
+}
+
+// persistPactMagicSlots marshals and saves pact magic slot state to the database.
+func (s *Service) persistPactMagicSlots(ctx context.Context, charID uuid.UUID, pact PactMagicSlotState) error {
+	pactJSON, err := json.Marshal(pact)
+	if err != nil {
+		return fmt.Errorf("marshaling pact magic slots: %w", err)
+	}
+	if _, err := s.store.UpdateCharacterPactMagicSlots(ctx, refdata.UpdateCharacterPactMagicSlotsParams{
+		ID:             charID,
+		PactMagicSlots: pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("updating pact magic slots: %w", err)
+	}
+	return nil
 }
 
 // RechargePactMagicSlots restores all pact magic slots to their maximum.
@@ -599,31 +609,14 @@ func (s *Service) RechargePactMagicSlots(ctx context.Context, charID uuid.UUID) 
 	}
 
 	pact.Current = pact.Max
-	pactJSON, err := json.Marshal(pact)
-	if err != nil {
-		return fmt.Errorf("marshaling pact magic slots: %w", err)
-	}
-	if _, err := s.store.UpdateCharacterPactMagicSlots(ctx, refdata.UpdateCharacterPactMagicSlotsParams{
-		ID:             charID,
-		PactMagicSlots: pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true},
-	}); err != nil {
-		return fmt.Errorf("updating pact magic slots: %w", err)
-	}
-	return nil
+	return s.persistPactMagicSlots(ctx, charID, pact)
 }
 
 // deductAndPersistPactSlot deducts one pact magic slot and persists the change.
 func (s *Service) deductAndPersistPactSlot(ctx context.Context, charID uuid.UUID, pact PactMagicSlotState) (SlotDeduction, error) {
 	pact.Current--
-	pactJSON, err := json.Marshal(pact)
-	if err != nil {
-		return SlotDeduction{}, fmt.Errorf("marshaling pact magic slots: %w", err)
-	}
-	if _, err := s.store.UpdateCharacterPactMagicSlots(ctx, refdata.UpdateCharacterPactMagicSlotsParams{
-		ID:             charID,
-		PactMagicSlots: pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true},
-	}); err != nil {
-		return SlotDeduction{}, fmt.Errorf("updating pact magic slots: %w", err)
+	if err := s.persistPactMagicSlots(ctx, charID, pact); err != nil {
+		return SlotDeduction{}, err
 	}
 	return SlotDeduction{SlotUsed: pact.SlotLevel, SlotsRemaining: pact.Current}, nil
 }
