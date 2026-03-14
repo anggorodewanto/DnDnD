@@ -328,7 +328,7 @@
   - Depends on: Phase 58, Phase 33
   - Done when: Integration tests verify each AoE shape, creature overlap calculation, save flow (player ping, DM roll), half-damage-on-save, cover DEX bonus.
 
-- [ ] **Phase 60: Spell Casting — Upcasting, Ritual, Cantrip Scaling**
+- [x] **Phase 60: Spell Casting — Upcasting, Ritual, Cantrip Scaling**
   - Scope: `--slot N` for upcasting: validate slot level >= spell level, parse `higher_levels` for scaled damage/healing. Default to lowest available slot. `--ritual` for ritual spells: no slot cost, only out of combat, class feature check. Cantrip damage scaling by character level (2 dice at 5, 3 at 11, 4 at 17).
   - Depends on: Phase 58
   - Done when: Unit tests verify upcast damage scaling, ritual validation, cantrip scaling at each breakpoint.

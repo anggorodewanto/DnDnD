@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
@@ -453,25 +452,9 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	}
 
 	// 16. Deduct spell slot and persist
-	slotUsed := 0
-	slotsRemaining := 0
-	if effectiveSlotLevel > 0 {
-		newSlots := DeductSpellSlot(slots, effectiveSlotLevel)
-		slotUsed = effectiveSlotLevel
-		if info, ok := newSlots[effectiveSlotLevel]; ok {
-			slotsRemaining = info.Current
-		}
-
-		slotsJSON, err := json.Marshal(intToStringKeyedSlots(newSlots))
-		if err != nil {
-			return AoECastResult{}, fmt.Errorf("marshaling spell slots: %w", err)
-		}
-		if _, err := s.store.UpdateCharacterSpellSlots(ctx, refdata.UpdateCharacterSpellSlotsParams{
-			ID:         char.ID,
-			SpellSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
-		}); err != nil {
-			return AoECastResult{}, fmt.Errorf("updating spell slots: %w", err)
-		}
+	deduction, err := s.deductAndPersistSlot(ctx, char.ID, slots, effectiveSlotLevel)
+	if err != nil {
+		return AoECastResult{}, err
 	}
 
 	return AoECastResult{
@@ -484,8 +467,8 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		AffectedNames:  affectedNames,
 		PendingSaves:   pendingSaves,
 		Concentration:  concentration,
-		SlotUsed:       slotUsed,
-		SlotsRemaining: slotsRemaining,
+		SlotUsed:       deduction.SlotUsed,
+		SlotsRemaining: deduction.SlotsRemaining,
 		OriginCol:      originCol,
 		OriginRow:      originRow,
 	}, nil

@@ -212,7 +212,7 @@ func FormatCastLog(result CastResult) string {
 	if result.Concentration.DroppedPrevious {
 		fmt.Fprintf(&b, "\u26a0\ufe0f Dropped concentration on %s\n", result.Concentration.PreviousSpell)
 	}
-	if result.Concentration.NewConcentration != "" && result.Concentration.NewConcentration == result.SpellName {
+	if result.Concentration.NewConcentration == result.SpellName && result.Concentration.NewConcentration != "" {
 		fmt.Fprintf(&b, "\U0001f9e0 Concentrating on %s\n", result.Concentration.NewConcentration)
 	}
 
@@ -250,14 +250,12 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	isBonusAction := IsBonusActionSpell(spell)
 
 	// 2. Validate action/bonus action resource
+	resource := ResourceAction
 	if isBonusAction {
-		if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
-			return CastResult{}, err
-		}
-	} else {
-		if err := ValidateResource(cmd.Turn, ResourceAction); err != nil {
-			return CastResult{}, err
-		}
+		resource = ResourceBonusAction
+	}
+	if err := ValidateResource(cmd.Turn, resource); err != nil {
+		return CastResult{}, err
 	}
 
 	// 3. Validate bonus action spell restriction (both directions)
@@ -288,13 +286,14 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		return CastResult{}, err
 	}
 
-	// 6a. Ritual validation
+	// 6a. Parse classes (needed for ritual validation and spellcasting ability)
+	var classes []CharacterClass
+	if err := json.Unmarshal(char.Classes, &classes); err != nil {
+		return CastResult{}, fmt.Errorf("parsing classes: %w", err)
+	}
+
+	// 6b. Ritual validation
 	if cmd.IsRitual {
-		// Determine primary class for ritual casting check
-		var classes []CharacterClass
-		if err := json.Unmarshal(char.Classes, &classes); err != nil {
-			return CastResult{}, fmt.Errorf("parsing classes: %w", err)
-		}
 		primaryClass := ""
 		if len(classes) > 0 {
 			primaryClass = classes[0].Class
@@ -304,7 +303,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		}
 	}
 
-	// 6b. Select spell slot (unless ritual or cantrip)
+	// 6c. Select spell slot (unless ritual or cantrip)
 	effectiveSlotLevel := 0
 	if spellLevel > 0 && !cmd.IsRitual {
 		effectiveSlotLevel, err = SelectSpellSlot(slots, spellLevel, cmd.SlotLevel)
@@ -329,11 +328,6 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 
 	// 8. Determine spellcasting ability
-	var classes []CharacterClass
-	if err := json.Unmarshal(char.Classes, &classes); err != nil {
-		return CastResult{}, fmt.Errorf("parsing classes: %w", err)
-	}
-
 	scores, err := ParseAbilityScores(char.AbilityScores)
 	if err != nil {
 		return CastResult{}, fmt.Errorf("parsing ability scores: %w", err)
@@ -397,20 +391,14 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 
 	// 13. Use action/bonus action resource
 	turn := cmd.Turn
+	turn, err = UseResource(turn, resource)
+	if err != nil {
+		return CastResult{}, err
+	}
 	if isBonusAction {
-		turn, err = UseResource(turn, ResourceBonusAction)
-		if err != nil {
-			return CastResult{}, err
-		}
 		turn.BonusActionSpellCast = true
-	} else {
-		turn, err = UseResource(turn, ResourceAction)
-		if err != nil {
-			return CastResult{}, err
-		}
-		if spellLevel > 0 {
-			turn.ActionSpellCast = true
-		}
+	} else if spellLevel > 0 {
+		turn.ActionSpellCast = true
 	}
 
 	// 14. Persist turn state
@@ -419,26 +407,45 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 
 	// 15. Deduct spell slot and persist (leveled spells, not rituals)
-	if effectiveSlotLevel > 0 {
-		newSlots := DeductSpellSlot(slots, effectiveSlotLevel)
-		result.SlotUsed = effectiveSlotLevel
-		if info, ok := newSlots[effectiveSlotLevel]; ok {
-			result.SlotsRemaining = info.Current
-		}
-
-		slotsJSON, err := json.Marshal(intToStringKeyedSlots(newSlots))
-		if err != nil {
-			return CastResult{}, fmt.Errorf("marshaling spell slots: %w", err)
-		}
-		if _, err := s.store.UpdateCharacterSpellSlots(ctx, refdata.UpdateCharacterSpellSlotsParams{
-			ID:         char.ID,
-			SpellSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
-		}); err != nil {
-			return CastResult{}, fmt.Errorf("updating spell slots: %w", err)
-		}
+	deduction, err := s.deductAndPersistSlot(ctx, char.ID, slots, effectiveSlotLevel)
+	if err != nil {
+		return CastResult{}, err
 	}
+	result.SlotUsed = deduction.SlotUsed
+	result.SlotsRemaining = deduction.SlotsRemaining
 
 	return result, nil
+}
+
+// SlotDeduction holds the outcome of deducting a spell slot.
+type SlotDeduction struct {
+	SlotUsed       int
+	SlotsRemaining int
+}
+
+// deductAndPersistSlot deducts a spell slot and persists the change to the database.
+// Returns zero values if slotLevel is 0 (cantrip or ritual).
+func (s *Service) deductAndPersistSlot(ctx context.Context, charID uuid.UUID, slots map[int]SlotInfo, slotLevel int) (SlotDeduction, error) {
+	if slotLevel <= 0 {
+		return SlotDeduction{}, nil
+	}
+	newSlots := DeductSpellSlot(slots, slotLevel)
+	remaining := 0
+	if info, ok := newSlots[slotLevel]; ok {
+		remaining = info.Current
+	}
+
+	slotsJSON, err := json.Marshal(intToStringKeyedSlots(newSlots))
+	if err != nil {
+		return SlotDeduction{}, fmt.Errorf("marshaling spell slots: %w", err)
+	}
+	if _, err := s.store.UpdateCharacterSpellSlots(ctx, refdata.UpdateCharacterSpellSlotsParams{
+		ID:         charID,
+		SpellSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+	}); err != nil {
+		return SlotDeduction{}, fmt.Errorf("updating spell slots: %w", err)
+	}
+	return SlotDeduction{SlotUsed: slotLevel, SlotsRemaining: remaining}, nil
 }
 
 // parseIntKeyedSlots parses spell slots JSON (string-keyed) into int-keyed map.
