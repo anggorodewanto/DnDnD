@@ -20,6 +20,8 @@ type AdvantageInput struct {
 	Reckless            bool
 	AttackerHidden      bool
 	TargetHidden        bool
+	AttackerObscurement ObscurementLevel
+	TargetObscurement   ObscurementLevel
 }
 
 // DetectAdvantage examines attacker/target conditions, weapon properties, and combat
@@ -47,6 +49,14 @@ func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 	}
 	if input.DMDisadvantage {
 		disadvReasons = append(disadvReasons, "DM override")
+	}
+
+	// Obscurement effects (Blinded-like for heavily obscured)
+	if input.AttackerObscurement == HeavilyObscured {
+		disadvReasons = append(disadvReasons, "heavily obscured (blinded)")
+	}
+	if input.TargetObscurement == HeavilyObscured {
+		advReasons = append(advReasons, "target heavily obscured (blinded)")
 	}
 
 	// Attacker conditions
