@@ -89,6 +89,10 @@ type mockStore struct {
 	cancelReactionDeclarationFn                func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
 	cancelAllReactionDeclarationsByCombatantFn func(ctx context.Context, arg refdata.CancelAllReactionDeclarationsByCombatantParams) error
 	deleteReactionDeclarationsByEncounterFn    func(ctx context.Context, encounterID uuid.UUID) error
+
+	// Counterspell
+	updateReactionDeclarationCounterspellPromptFn   func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellPromptParams) (refdata.ReactionDeclaration, error)
+	updateReactionDeclarationCounterspellResolvedFn func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellResolvedParams) (refdata.ReactionDeclaration, error)
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -369,6 +373,18 @@ func (m *mockStore) DeleteReactionDeclarationsByEncounter(ctx context.Context, e
 		return m.deleteReactionDeclarationsByEncounterFn(ctx, encounterID)
 	}
 	return nil
+}
+func (m *mockStore) UpdateReactionDeclarationCounterspellPrompt(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellPromptParams) (refdata.ReactionDeclaration, error) {
+	if m.updateReactionDeclarationCounterspellPromptFn != nil {
+		return m.updateReactionDeclarationCounterspellPromptFn(ctx, arg)
+	}
+	return refdata.ReactionDeclaration{}, nil
+}
+func (m *mockStore) UpdateReactionDeclarationCounterspellResolved(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellResolvedParams) (refdata.ReactionDeclaration, error) {
+	if m.updateReactionDeclarationCounterspellResolvedFn != nil {
+		return m.updateReactionDeclarationCounterspellResolvedFn(ctx, arg)
+	}
+	return refdata.ReactionDeclaration{}, nil
 }
 
 func defaultMockStore() *mockStore {

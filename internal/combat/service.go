@@ -124,6 +124,10 @@ type Store interface {
 	CancelReactionDeclaration(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
 	CancelAllReactionDeclarationsByCombatant(ctx context.Context, arg refdata.CancelAllReactionDeclarationsByCombatantParams) error
 	DeleteReactionDeclarationsByEncounter(ctx context.Context, encounterID uuid.UUID) error
+
+	// Counterspell
+	UpdateReactionDeclarationCounterspellPrompt(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellPromptParams) (refdata.ReactionDeclaration, error)
+	UpdateReactionDeclarationCounterspellResolved(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellResolvedParams) (refdata.ReactionDeclaration, error)
 }
 
 // Service manages combat encounters and their entities.

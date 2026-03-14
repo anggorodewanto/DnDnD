@@ -41,6 +41,13 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		// Readied actions
 		r.Post("/{encounterID}/combatants/{combatantID}/ready", h.ReadyAction)
 		r.Get("/{encounterID}/combatants/{combatantID}/readied-actions", h.ListReadiedActions)
+
+		// Counterspell
+		r.Post("/{encounterID}/reactions/{reactionID}/counterspell/trigger", h.TriggerCounterspell)
+		r.Post("/{encounterID}/reactions/{reactionID}/counterspell/resolve", h.ResolveCounterspell)
+		r.Post("/{encounterID}/reactions/{reactionID}/counterspell/check", h.ResolveCounterspellCheck)
+		r.Post("/{encounterID}/reactions/{reactionID}/counterspell/pass", h.PassCounterspell)
+		r.Post("/{encounterID}/reactions/{reactionID}/counterspell/forfeit", h.ForfeitCounterspell)
 	})
 }
 
@@ -544,4 +551,186 @@ func (h *Handler) ListReadiedActions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, toReactionDeclarationResponses(readied))
+}
+
+// --- Counterspell handler types ---
+
+type triggerCounterspellRequest struct {
+	EnemySpellName string `json:"enemy_spell_name"`
+	EnemyCastLevel int    `json:"enemy_cast_level"`
+}
+
+type counterspellPromptResponse struct {
+	DeclarationID  string `json:"declaration_id"`
+	CasterName     string `json:"caster_name"`
+	EnemySpellName string `json:"enemy_spell_name"`
+	AvailableSlots []int  `json:"available_slots"`
+}
+
+type resolveCounterspellRequest struct {
+	SlotLevel int `json:"slot_level"`
+}
+
+type resolveCounterspellCheckRequest struct {
+	CheckTotal int `json:"check_total"`
+}
+
+type counterspellResultResponse struct {
+	Outcome        string `json:"outcome"`
+	CasterName     string `json:"caster_name"`
+	EnemySpellName string `json:"enemy_spell_name"`
+	EnemyCastLevel int    `json:"enemy_cast_level,omitempty"`
+	SlotUsed       int    `json:"slot_used,omitempty"`
+	DC             int    `json:"dc,omitempty"`
+	CombatLog      string `json:"combat_log"`
+}
+
+func toCounterspellResultResponse(r CounterspellResult) counterspellResultResponse {
+	return counterspellResultResponse{
+		Outcome:        string(r.Outcome),
+		CasterName:     r.CasterName,
+		EnemySpellName: r.EnemySpellName,
+		EnemyCastLevel: r.EnemyCastLevel,
+		SlotUsed:       r.SlotUsed,
+		DC:             r.DC,
+		CombatLog:      FormatCounterspellLog(r),
+	}
+}
+
+// TriggerCounterspell handles POST /api/combat/{encounterID}/reactions/{reactionID}/counterspell/trigger.
+func (h *Handler) TriggerCounterspell(w http.ResponseWriter, r *http.Request) {
+	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
+	if err != nil {
+		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		return
+	}
+
+	var req triggerCounterspellRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	prompt, err := h.svc.TriggerCounterspell(r.Context(), reactionID, req.EnemySpellName, req.EnemyCastLevel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, counterspellPromptResponse{
+		DeclarationID:  prompt.DeclarationID.String(),
+		CasterName:     prompt.CasterName,
+		EnemySpellName: prompt.EnemySpellName,
+		AvailableSlots: prompt.AvailableSlots,
+	})
+}
+
+// ResolveCounterspell handles POST /api/combat/{encounterID}/reactions/{reactionID}/counterspell/resolve.
+func (h *Handler) ResolveCounterspell(w http.ResponseWriter, r *http.Request) {
+	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
+	if err != nil {
+		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		return
+	}
+
+	var req resolveCounterspellRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.svc.ResolveCounterspell(r.Context(), reactionID, req.SlotLevel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toCounterspellResultResponse(result))
+}
+
+// ResolveCounterspellCheck handles POST /api/combat/{encounterID}/reactions/{reactionID}/counterspell/check.
+func (h *Handler) ResolveCounterspellCheck(w http.ResponseWriter, r *http.Request) {
+	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
+	if err != nil {
+		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		return
+	}
+
+	var req resolveCounterspellCheckRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.svc.ResolveCounterspellCheck(r.Context(), reactionID, req.CheckTotal)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toCounterspellResultResponse(result))
+}
+
+// PassCounterspell handles POST /api/combat/{encounterID}/reactions/{reactionID}/counterspell/pass.
+func (h *Handler) PassCounterspell(w http.ResponseWriter, r *http.Request) {
+	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
+	if err != nil {
+		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.svc.PassCounterspell(r.Context(), reactionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toCounterspellResultResponse(result))
+}
+
+// ForfeitCounterspell handles POST /api/combat/{encounterID}/reactions/{reactionID}/counterspell/forfeit.
+func (h *Handler) ForfeitCounterspell(w http.ResponseWriter, r *http.Request) {
+	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
+	if err != nil {
+		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.svc.ForfeitCounterspell(r.Context(), reactionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toCounterspellResultResponse(result))
 }

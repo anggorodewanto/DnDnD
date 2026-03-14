@@ -40,5 +40,17 @@ UPDATE reaction_declarations
 SET status = 'cancelled'
 WHERE combatant_id = $1 AND encounter_id = $2 AND status = 'active';
 
+-- name: UpdateReactionDeclarationCounterspellPrompt :one
+UPDATE reaction_declarations
+SET counterspell_enemy_spell = $2, counterspell_enemy_level = $3, counterspell_status = 'prompted'
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateReactionDeclarationCounterspellResolved :one
+UPDATE reaction_declarations
+SET counterspell_slot_used = $2, counterspell_status = $3, counterspell_dc = $4
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteReactionDeclarationsByEncounter :exec
 DELETE FROM reaction_declarations WHERE encounter_id = $1;
