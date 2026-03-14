@@ -317,31 +317,30 @@ func (s *Service) Hide(ctx context.Context, cmd HideCommand, roller *dice.Roller
 		return HideResult{}, err
 	}
 
-	return s.resolveHide(ctx, cmd, roller)
-}
-
-// resolveHide performs the core hide logic (stealth check vs passive perception).
-// Extracted so it can be reused by both Hide (action) and CunningAction hide (bonus action).
-func (s *Service) resolveHide(ctx context.Context, cmd HideCommand, roller *dice.Roller) (HideResult, error) {
-	// Determine stealth modifier and roll mode
-	stealthMod, rollMode, err := s.stealthModAndMode(ctx, cmd.Combatant)
-	if err != nil {
-		return HideResult{}, err
-	}
-
 	updatedTurn, err := UseResource(cmd.Turn, ResourceAction)
 	if err != nil {
 		return HideResult{}, err
 	}
 
-	// Roll stealth
+	logHeader := fmt.Sprintf("\U0001f648 %s attempts to Hide", cmd.Combatant.DisplayName)
+	return s.resolveHide(ctx, cmd, updatedTurn, logHeader, roller)
+}
+
+// resolveHide performs the core hide logic (stealth check vs passive perception).
+// Accepts an already-consumed turn and a log header (e.g. "🙈 Rogue attempts to Hide")
+// so it can be reused by both Hide (action) and CunningAction hide (bonus action).
+func (s *Service) resolveHide(ctx context.Context, cmd HideCommand, updatedTurn refdata.Turn, logHeader string, roller *dice.Roller) (HideResult, error) {
+	stealthMod, rollMode, err := s.stealthModAndMode(ctx, cmd.Combatant)
+	if err != nil {
+		return HideResult{}, err
+	}
+
 	stealthResult, err := roller.RollD20(stealthMod, rollMode)
 	if err != nil {
 		return HideResult{}, fmt.Errorf("rolling stealth: %w", err)
 	}
 	stealthTotal := stealthResult.Total
 
-	// Calculate highest passive Perception among hostiles, track who spotted
 	highestPP := 0
 	var spottedBy string
 	for _, h := range cmd.Hostiles {
@@ -358,7 +357,6 @@ func (s *Service) resolveHide(ctx context.Context, cmd HideCommand, roller *dice
 	success := stealthTotal > highestPP
 	updatedCombatant := cmd.Combatant
 	if success {
-		updatedCombatant.IsVisible = false
 		updatedCombatant, err = s.store.UpdateCombatantVisibility(ctx, refdata.UpdateCombatantVisibilityParams{
 			ID:        cmd.Combatant.ID,
 			IsVisible: false,
@@ -374,11 +372,11 @@ func (s *Service) resolveHide(ctx context.Context, cmd HideCommand, roller *dice
 
 	var log string
 	if success {
-		log = fmt.Sprintf("\U0001f648 %s attempts to Hide — \U0001f3b2 Stealth: %d — Hidden from all hostiles",
-			cmd.Combatant.DisplayName, stealthTotal)
+		log = fmt.Sprintf("%s — \U0001f3b2 Stealth: %d — Hidden from all hostiles",
+			logHeader, stealthTotal)
 	} else {
-		log = fmt.Sprintf("\U0001f648 %s attempts to Hide — \U0001f3b2 Stealth: %d — Failed (spotted by %s)",
-			cmd.Combatant.DisplayName, stealthTotal, spottedBy)
+		log = fmt.Sprintf("%s — \U0001f3b2 Stealth: %d — Failed (spotted by %s)",
+			logHeader, stealthTotal, spottedBy)
 	}
 
 	return HideResult{
@@ -850,69 +848,21 @@ func (s *Service) CunningAction(ctx context.Context, cmd CunningActionCommand, r
 			return CunningActionResult{}, err
 		}
 
-		// Stealth mod and mode
-		stealthMod, rollMode, err := s.stealthModAndMode(ctx, cmd.Combatant)
+		hideCmd := HideCommand{
+			Combatant: cmd.Combatant,
+			Turn:      cmd.Turn,
+			Encounter: cmd.Encounter,
+			Hostiles:  cmd.Hostiles,
+		}
+		logHeader := fmt.Sprintf("\u26a1 %s uses Cunning Action: Hide", cmd.Combatant.DisplayName)
+		hr, err := s.resolveHide(ctx, hideCmd, updatedTurn, logHeader, roller[0])
 		if err != nil {
 			return CunningActionResult{}, err
 		}
 
-		stealthResult, err := roller[0].RollD20(stealthMod, rollMode)
-		if err != nil {
-			return CunningActionResult{}, fmt.Errorf("rolling stealth: %w", err)
-		}
-		stealthTotal := stealthResult.Total
-
-		highestPP := 0
-		var spottedBy string
-		for _, h := range cmd.Hostiles {
-			pp, err := s.passivePerception(ctx, h)
-			if err != nil {
-				return CunningActionResult{}, err
-			}
-			if pp > highestPP {
-				highestPP = pp
-				spottedBy = h.DisplayName
-			}
-		}
-
-		success := stealthTotal > highestPP
-		updatedCombatant := cmd.Combatant
-		if success {
-			updatedCombatant.IsVisible = false
-			updatedCombatant, err = s.store.UpdateCombatantVisibility(ctx, refdata.UpdateCombatantVisibilityParams{
-				ID:        cmd.Combatant.ID,
-				IsVisible: false,
-			})
-			if err != nil {
-				return CunningActionResult{}, fmt.Errorf("persisting hide visibility: %w", err)
-			}
-		}
-
-		if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
-			return CunningActionResult{}, fmt.Errorf("updating turn actions: %w", err)
-		}
-
-		var log string
-		if success {
-			log = fmt.Sprintf("\u26a1 %s uses Cunning Action: Hide — \U0001f3b2 Stealth: %d — Hidden from all hostiles",
-				cmd.Combatant.DisplayName, stealthTotal)
-		} else {
-			log = fmt.Sprintf("\u26a1 %s uses Cunning Action: Hide — \U0001f3b2 Stealth: %d — Failed (spotted by %s)",
-				cmd.Combatant.DisplayName, stealthTotal, spottedBy)
-		}
-
-		hr := HideResult{
-			Turn:              updatedTurn,
-			Combatant:         updatedCombatant,
-			CombatLog:         log,
-			Success:           success,
-			StealthRoll:       stealthTotal,
-			HighestPerception: highestPP,
-		}
-
 		return CunningActionResult{
-			Turn:       updatedTurn,
-			CombatLog:  log,
+			Turn:       hr.Turn,
+			CombatLog:  hr.CombatLog,
 			HideResult: &hr,
 		}, nil
 	}

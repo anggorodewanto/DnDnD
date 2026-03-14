@@ -313,7 +313,7 @@
   - Depends on: Phase 54, Phase 40
   - Done when: Integration tests verify grapple (free hand, size, contested check, condition), shove (prone/push, destination check), dragging (prompt, x2 cost, release option, multiple targets), combat log.
 
-- [ ] **Phase 57: Stealth & Hiding**
+- [x] **Phase 57: Stealth & Hiding**
   - Scope: `/action hide`: Stealth check vs all hostiles' passive Perception. Success: is_visible=false, token hidden from player map. Failure: remains visible. While hidden: attacks against have disadvantage, first attack from hidden has advantage, attacking reveals. Rogues: `/bonus cunning-action hide`. Passive Perception calculation (10 + Perception mod + proficiency). Equipment stealth disadvantage (armor with stealth_disadv).
   - Depends on: Phase 54, Phase 35
   - Done when: Integration tests verify hide success/failure, hidden attack advantage, auto-reveal on attack, Rogue bonus action hide, armor stealth penalty.
