@@ -343,7 +343,7 @@
   - Depends on: Phase 58
   - Done when: Integration tests verify teleportation bypasses pathfinding, destination validation, companion range check, DM queue routing for narrative teleports.
 
-- [ ] **Phase 63: Spell Casting — Material Components**
+- [x] **Phase 63: Spell Casting — Material Components**
   - Scope: Focus/component pouch assumed for non-costly components. Costly components: check inventory for required item. If missing but can afford: gold fallback prompt ("Buy & Cast" or "Cancel"). If `material_consumed=true`: remove item. Neither component nor gold: reject with message.
   - Depends on: Phase 58
   - Done when: Integration tests verify free component bypass, costly component inventory check, gold fallback, consumed component removal, rejection message.
