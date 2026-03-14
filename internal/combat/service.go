@@ -86,6 +86,9 @@ type Store interface {
 
 	// Character spell slots
 	UpdateCharacterSpellSlots(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
+
+	// Spells
+	GetSpell(ctx context.Context, id string) (refdata.Spell, error)
 }
 
 // Service manages combat encounters and their entities.

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -58,6 +59,7 @@ type mockStore struct {
 	getArmorFn                             func(ctx context.Context, id string) (refdata.Armor, error)
 	updateCharacterFeatureUsesFn      func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
 	updateCharacterSpellSlotsFn       func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
+	getSpellFn                        func(ctx context.Context, id string) (refdata.Spell, error)
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -182,6 +184,12 @@ func (m *mockStore) UpdateCharacterSpellSlots(ctx context.Context, arg refdata.U
 		return m.updateCharacterSpellSlotsFn(ctx, arg)
 	}
 	return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+}
+func (m *mockStore) GetSpell(ctx context.Context, id string) (refdata.Spell, error) {
+	if m.getSpellFn != nil {
+		return m.getSpellFn(ctx, id)
+	}
+	return refdata.Spell{}, fmt.Errorf("spell %q not found", id)
 }
 
 func defaultMockStore() *mockStore {
