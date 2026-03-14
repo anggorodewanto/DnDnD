@@ -13,9 +13,8 @@ import (
 // EquipCommand holds the inputs for the /equip command.
 type EquipCommand struct {
 	Character refdata.Character
-	Combatant *refdata.Combatant  // nil if out of combat
-	Turn      *refdata.Turn       // nil if out of combat
-	Encounter *refdata.Encounter  // nil if out of combat
+	Combatant *refdata.Combatant // nil if out of combat
+	Turn      *refdata.Turn      // nil if out of combat
 	ItemName  string
 	Offhand   bool
 	Armor     bool
@@ -151,15 +150,8 @@ func (s *Service) equipShield(ctx context.Context, cmd EquipCommand, armor refda
 		cmd.Turn = &updatedTurn
 	}
 
-	// If off-hand has a weapon, stow it automatically (no extra cost)
-	if char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
-		// Check if it's not already a shield
-		existingArmor, err := s.store.GetArmor(ctx, char.EquippedOffHand.String)
-		if err != nil || existingArmor.ArmorType != "shield" {
-			// It's a weapon — stow it
-		}
-	}
-
+	// Off-hand weapon (if any) is automatically stowed when equipping a shield (no extra cost).
+	// The off-hand slot is overwritten below.
 	char.EquippedOffHand = sql.NullString{String: armor.ID, Valid: true}
 	newAC := oldAC + 2 // Shield gives +2 AC
 
@@ -404,8 +396,6 @@ func (s *Service) calculateArmorAC(char refdata.Character, armor refdata.Armor) 
 
 	// Add shield bonus if shield is equipped
 	if char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
-		// We'd need to check if off-hand is a shield, but for simplicity
-		// we look up the armor record
 		shieldArmor, err := s.store.GetArmor(context.Background(), char.EquippedOffHand.String)
 		if err == nil && shieldArmor.ArmorType == "shield" {
 			ac += 2
@@ -415,7 +405,7 @@ func (s *Service) calculateArmorAC(char refdata.Character, armor refdata.Armor) 
 	return ac
 }
 
-// calculateBaseAC computes base AC (10 + DEX mod) or uses ac_formula if set.
+// calculateBaseAC computes unarmored AC (10 + DEX mod).
 func (s *Service) calculateBaseAC(char refdata.Character) int32 {
 	return 10 + int32(getDexMod(char))
 }

@@ -408,7 +408,7 @@
   - Depends on: Phase 28
   - Done when: Integration tests verify free first interaction, action cost for second, auto-resolve vs DM queue routing.
 
-- [ ] **Phase 75a: Equipment Management — `/equip` Command & Hand Management**
+- [x] **Phase 75a: Equipment Management — `/equip` Command & Hand Management**
   - Scope: `/equip [weapon]` (main hand), `--offhand`, `--armor`. `/equip none` to unequip. In-combat weapon equip costs free object interaction. Shield: donning/doffing costs action in combat, instant out of combat. Armor: blocked in combat. Two-handed weapon validation (off-hand must be free). Grapple free-hand check. Somatic component free-hand check.
   - Depends on: Phase 7, Phase 74
   - Done when: Integration tests verify all equip flows, combat restrictions, hand management, shield action cost, armor combat block.
