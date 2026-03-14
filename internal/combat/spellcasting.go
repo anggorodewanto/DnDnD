@@ -428,7 +428,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 			}
 
 			var companion *refdata.Combatant
-			if teleportInfo.Target == "self+creature" && cmd.CompanionID != uuid.Nil {
+			if teleportInfo.Target == TeleportTargetSelfCreature && cmd.CompanionID != uuid.Nil {
 				comp, compErr := s.store.GetCombatant(ctx, cmd.CompanionID)
 				if compErr != nil {
 					return CastResult{}, fmt.Errorf("getting companion: %w", compErr)
@@ -445,7 +445,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 			}
 
 			// Move caster for "self" and "self+creature" targets
-			if teleportInfo.Target == "self" || teleportInfo.Target == "self+creature" {
+			if teleportInfo.Target == TeleportTargetSelf || teleportInfo.Target == TeleportTargetSelfCreature {
 				if _, posErr := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
 					ID:          caster.ID,
 					PositionCol: cmd.TeleportDestCol,
@@ -460,7 +460,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 			}
 
 			// Move companion for "self+creature" targets
-			if teleportInfo.Target == "self+creature" && companion != nil && cmd.CompanionDestCol != "" {
+			if teleportInfo.Target == TeleportTargetSelfCreature && companion != nil && cmd.CompanionDestCol != "" {
 				if _, posErr := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
 					ID:          companion.ID,
 					PositionCol: cmd.CompanionDestCol,

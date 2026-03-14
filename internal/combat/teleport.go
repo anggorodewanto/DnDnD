@@ -8,6 +8,13 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
+// Teleport target constants matching the spell JSONB "target" field.
+const (
+	TeleportTargetSelf         = "self"
+	TeleportTargetSelfCreature = "self+creature"
+	TeleportTargetCreature     = "creature"
+)
+
 // TeleportInfo holds parsed teleport JSONB data from a spell.
 type TeleportInfo struct {
 	Target            string `json:"target"`
@@ -81,7 +88,7 @@ func ValidateTeleportDestination(info TeleportInfo, caster refdata.Combatant, de
 	// actual fog-of-war LOS is a separate phase)
 
 	// 4. Companion range check for "self+creature"
-	if info.Target == "self+creature" && companion != nil {
+	if info.Target == TeleportTargetSelfCreature && companion != nil {
 		companionDist := combatantDistance(caster, *companion)
 		if companionDist > info.CompanionRangeFt {
 			return fmt.Errorf("companion is %dft away — must be within %dft", companionDist, info.CompanionRangeFt)
