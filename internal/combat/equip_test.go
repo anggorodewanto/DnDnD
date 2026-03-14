@@ -1138,3 +1138,396 @@ func TestCheckSomaticComponent_NoSomatic(t *testing.T) {
 	err := CheckSomaticComponent(char, spell, false)
 	assert.NoError(t, err)
 }
+
+// === Phase 75b: AC Recalculation & Enforcement ===
+
+// TDD Cycle 75b-1: RecalculateAC with Barbarian unarmored defense formula (no armor)
+func TestRecalculateAC_BarbarianUnarmoredDefense(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":16,"dex":14,"con":16,"int":10,"wis":13,"cha":8}`),
+		AcFormula:     sql.NullString{String: "10 + DEX + CON", Valid: true},
+	}
+
+	ac := RecalculateAC(char, nil, false)
+	// Formula: 10 + DEX(+2) + CON(+3) = 15, base: 10 + DEX(+2) = 12, take max = 15
+	assert.Equal(t, int32(15), ac)
+}
+
+// TDD Cycle 75b-2: RecalculateAC with Monk unarmored defense formula
+func TestRecalculateAC_MonkUnarmoredDefense(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":10,"dex":18,"con":12,"int":10,"wis":16,"cha":8}`),
+		AcFormula:     sql.NullString{String: "10 + DEX + WIS", Valid: true},
+	}
+
+	ac := RecalculateAC(char, nil, false)
+	// Formula: 10 + DEX(+4) + WIS(+3) = 17
+	assert.Equal(t, int32(17), ac)
+}
+
+// TDD Cycle 75b-3: RecalculateAC with armor ignores formula
+func TestRecalculateAC_ArmorIgnoresFormula(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":16,"dex":14,"con":16,"int":10,"wis":13,"cha":8}`),
+		AcFormula:     sql.NullString{String: "10 + DEX + CON", Valid: true},
+	}
+	armor := &refdata.Armor{
+		ID:         "chain-mail",
+		AcBase:     16,
+		AcDexBonus: sql.NullBool{Bool: false, Valid: true},
+		ArmorType:  "heavy",
+	}
+
+	ac := RecalculateAC(char, armor, false)
+	assert.Equal(t, int32(16), ac)
+}
+
+// TDD Cycle 75b-4: RecalculateAC with shield adds +2
+func TestRecalculateAC_WithShield(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":10,"dex":18,"con":12,"int":10,"wis":16,"cha":8}`),
+		AcFormula:     sql.NullString{String: "10 + DEX + WIS", Valid: true},
+	}
+
+	ac := RecalculateAC(char, nil, true)
+	// Formula: 10 + 4 + 3 = 17, + 2 shield = 19
+	assert.Equal(t, int32(19), ac)
+}
+
+// TDD Cycle 75b-5: RecalculateAC medium armor caps DEX at +2
+func TestRecalculateAC_MediumArmorDexCap(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":10,"dex":18,"con":12,"int":10,"wis":13,"cha":8}`),
+	}
+	armor := &refdata.Armor{
+		ID:         "half-plate",
+		AcBase:     15,
+		AcDexBonus: sql.NullBool{Bool: true, Valid: true},
+		AcDexMax:   sql.NullInt32{Int32: 2, Valid: true},
+		ArmorType:  "medium",
+	}
+
+	ac := RecalculateAC(char, armor, false)
+	// 15 + min(+4, 2) = 17
+	assert.Equal(t, int32(17), ac)
+}
+
+// TDD Cycle 75b-6: RecalculateAC light armor full DEX
+func TestRecalculateAC_LightArmorFullDex(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":10,"dex":18,"con":12,"int":10,"wis":13,"cha":8}`),
+	}
+	armor := &refdata.Armor{
+		ID:         "leather",
+		AcBase:     11,
+		AcDexBonus: sql.NullBool{Bool: true, Valid: true},
+		ArmorType:  "light",
+	}
+
+	ac := RecalculateAC(char, armor, false)
+	// 11 + 4 = 15
+	assert.Equal(t, int32(15), ac)
+}
+
+// TDD Cycle 75b-7: RecalculateAC no armor, no formula = base 10 + DEX
+func TestRecalculateAC_BaseAC(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":10,"dex":14,"con":12,"int":10,"wis":13,"cha":8}`),
+	}
+
+	ac := RecalculateAC(char, nil, false)
+	// 10 + 2 = 12
+	assert.Equal(t, int32(12), ac)
+}
+
+// TDD Cycle 75b-8: RecalculateAC Lizardfolk natural armor (13 + DEX)
+func TestRecalculateAC_NaturalArmor(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":10,"dex":14,"con":12,"int":10,"wis":13,"cha":8}`),
+		AcFormula:     sql.NullString{String: "13 + DEX", Valid: true},
+	}
+
+	ac := RecalculateAC(char, nil, false)
+	// Formula: 13 + 2 = 15, base: 10 + 2 = 12, take max = 15
+	assert.Equal(t, int32(15), ac)
+}
+
+// TDD Cycle 75b-8b: RecalculateAC formula with all ability types
+func TestRecalculateAC_FormulaAllAbilities(t *testing.T) {
+	tests := []struct {
+		name    string
+		formula string
+		scores  string
+		want    int32
+	}{
+		{
+			name:    "STR formula",
+			formula: "10 + STR",
+			scores:  `{"str":16,"dex":10,"con":10,"int":10,"wis":10,"cha":10}`,
+			want:    13, // 10 + 3
+		},
+		{
+			name:    "INT formula",
+			formula: "10 + INT",
+			scores:  `{"str":10,"dex":10,"con":10,"int":18,"wis":10,"cha":10}`,
+			want:    14, // 10 + 4
+		},
+		{
+			name:    "CHA formula",
+			formula: "10 + CHA",
+			scores:  `{"str":10,"dex":10,"con":10,"int":10,"wis":10,"cha":20}`,
+			want:    15, // 10 + 5
+		},
+		{
+			name:    "lowercase formula",
+			formula: "10 + dex + wis",
+			scores:  `{"str":10,"dex":14,"con":10,"int":10,"wis":16,"cha":10}`,
+			want:    15, // 10 + 2 + 3
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			char := refdata.Character{
+				AbilityScores: json.RawMessage(tt.scores),
+				AcFormula:     sql.NullString{String: tt.formula, Valid: true},
+			}
+			ac := RecalculateAC(char, nil, false)
+			assert.Equal(t, tt.want, ac)
+		})
+	}
+}
+
+// TDD Cycle 75b-9: CheckHeavyArmorPenalty — STR below requirement
+func TestCheckHeavyArmorPenalty_BelowReq(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":13,"dex":14,"con":12,"int":10,"wis":13,"cha":8}`),
+	}
+	armor := refdata.Armor{
+		ID:          "plate",
+		ArmorType:   "heavy",
+		StrengthReq: sql.NullInt32{Int32: 15, Valid: true},
+	}
+
+	penalty := CheckHeavyArmorPenalty(char, armor)
+	assert.Equal(t, int32(10), penalty)
+}
+
+// TDD Cycle 75b-10: CheckHeavyArmorPenalty — STR meets requirement
+func TestCheckHeavyArmorPenalty_MeetsReq(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":15,"dex":14,"con":12,"int":10,"wis":13,"cha":8}`),
+	}
+	armor := refdata.Armor{
+		ID:          "plate",
+		ArmorType:   "heavy",
+		StrengthReq: sql.NullInt32{Int32: 15, Valid: true},
+	}
+
+	penalty := CheckHeavyArmorPenalty(char, armor)
+	assert.Equal(t, int32(0), penalty)
+}
+
+// TDD Cycle 75b-11: CheckHeavyArmorPenalty — no STR requirement on armor
+func TestCheckHeavyArmorPenalty_NoReq(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":10,"dex":14,"con":12,"int":10,"wis":13,"cha":8}`),
+	}
+	armor := refdata.Armor{
+		ID:        "chain-mail",
+		ArmorType: "heavy",
+	}
+
+	penalty := CheckHeavyArmorPenalty(char, armor)
+	assert.Equal(t, int32(0), penalty)
+}
+
+// TDD Cycle 75b-12: Equipping heavy armor with low STR reports speed penalty in EquipResult
+func TestEquip_HeavyArmor_SpeedPenalty(t *testing.T) {
+	_, _, charID, ms := makeStdTestSetup()
+
+	char := makeEquipChar(charID)
+	char.AbilityScores = json.RawMessage(`{"str":13,"dex":14,"con":12,"int":10,"wis":13,"cha":8}`)
+	ms.getArmorFn = func(ctx context.Context, id string) (refdata.Armor, error) {
+		if id == "plate" {
+			return refdata.Armor{
+				ID:          "plate",
+				Name:        "Plate",
+				ArmorType:   "heavy",
+				AcBase:      18,
+				AcDexBonus:  sql.NullBool{Bool: false, Valid: true},
+				StrengthReq: sql.NullInt32{Int32: 15, Valid: true},
+			}, nil
+		}
+		return refdata.Armor{}, fmt.Errorf("not found")
+	}
+	setupEquipMock(ms, char)
+
+	svc := NewService(ms)
+	result, err := svc.Equip(context.Background(), EquipCommand{
+		Character: char,
+		ItemName:  "plate",
+		Armor:     true,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(18), result.NewAC)
+	assert.Equal(t, int32(10), result.SpeedPenalty)
+	assert.Contains(t, result.CombatLog, "speed reduced by 10ft")
+}
+
+// TDD Cycle 75b-13: Equipping heavy armor with sufficient STR — no penalty
+func TestEquip_HeavyArmor_NoSpeedPenalty(t *testing.T) {
+	_, _, charID, ms := makeStdTestSetup()
+
+	char := makeEquipChar(charID) // STR 16
+	ms.getArmorFn = func(ctx context.Context, id string) (refdata.Armor, error) {
+		if id == "plate" {
+			return refdata.Armor{
+				ID:          "plate",
+				Name:        "Plate",
+				ArmorType:   "heavy",
+				AcBase:      18,
+				AcDexBonus:  sql.NullBool{Bool: false, Valid: true},
+				StrengthReq: sql.NullInt32{Int32: 15, Valid: true},
+			}, nil
+		}
+		return refdata.Armor{}, fmt.Errorf("not found")
+	}
+	setupEquipMock(ms, char)
+
+	svc := NewService(ms)
+	result, err := svc.Equip(context.Background(), EquipCommand{
+		Character: char,
+		ItemName:  "plate",
+		Armor:     true,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(18), result.NewAC)
+	assert.Equal(t, int32(0), result.SpeedPenalty)
+}
+
+// TDD Cycle 75b-14: Doffing armor with ac_formula recalculates using formula
+func TestEquip_DoffArmor_WithACFormula(t *testing.T) {
+	_, _, charID, ms := makeStdTestSetup()
+
+	// Barbarian: STR 16, DEX 14 (+2), CON 16 (+3)
+	char := makeEquipChar(charID)
+	char.AbilityScores = json.RawMessage(`{"str":16,"dex":14,"con":16,"int":10,"wis":13,"cha":8}`)
+	char.AcFormula = sql.NullString{String: "10 + DEX + CON", Valid: true}
+	char.Ac = 16 // chain mail
+	char.EquippedArmor = sql.NullString{String: "chain-mail", Valid: true}
+
+	ms.getArmorFn = func(ctx context.Context, id string) (refdata.Armor, error) {
+		return refdata.Armor{}, fmt.Errorf("not found")
+	}
+	setupEquipMock(ms, char)
+
+	svc := NewService(ms)
+	result, err := svc.Equip(context.Background(), EquipCommand{
+		Character: char,
+		ItemName:  "none",
+		Armor:     true,
+	})
+
+	require.NoError(t, err)
+	// Unarmored defense: 10 + DEX(+2) + CON(+3) = 15
+	assert.Equal(t, int32(15), result.NewAC)
+	assert.True(t, result.ACChanged)
+}
+
+// TDD Cycle 75b-15: Equipping armor when barbarian has higher unarmored defense
+func TestEquip_ArmorLowerThanFormula(t *testing.T) {
+	_, _, charID, ms := makeStdTestSetup()
+
+	// Barbarian: DEX 18 (+4), CON 18 (+4) => unarmored = 10+4+4=18
+	char := makeEquipChar(charID)
+	char.AbilityScores = json.RawMessage(`{"str":16,"dex":18,"con":18,"int":10,"wis":13,"cha":8}`)
+	char.AcFormula = sql.NullString{String: "10 + DEX + CON", Valid: true}
+	char.Ac = 18 // unarmored
+
+	ms.getArmorFn = func(ctx context.Context, id string) (refdata.Armor, error) {
+		if id == "chain-mail" {
+			return refdata.Armor{
+				ID:         "chain-mail",
+				Name:       "Chain Mail",
+				ArmorType:  "heavy",
+				AcBase:     16,
+				AcDexBonus: sql.NullBool{Bool: false, Valid: true},
+			}, nil
+		}
+		return refdata.Armor{}, fmt.Errorf("not found")
+	}
+	setupEquipMock(ms, char)
+
+	svc := NewService(ms)
+	result, err := svc.Equip(context.Background(), EquipCommand{
+		Character: char,
+		ItemName:  "chain-mail",
+		Armor:     true,
+	})
+
+	require.NoError(t, err)
+	// When armor is equipped, formula is ignored. AC = 16 (armor AC)
+	assert.Equal(t, int32(16), result.NewAC)
+}
+
+// TDD Cycle 75b-16: Shield equip uses RecalculateAC with formula
+func TestEquip_Shield_WithACFormula(t *testing.T) {
+	_, _, charID, ms := makeStdTestSetup()
+
+	// Monk: DEX 18 (+4), WIS 16 (+3) => unarmored = 10+4+3=17
+	char := makeEquipChar(charID)
+	char.AbilityScores = json.RawMessage(`{"str":10,"dex":18,"con":12,"int":10,"wis":16,"cha":8}`)
+	char.AcFormula = sql.NullString{String: "10 + DEX + WIS", Valid: true}
+	char.Ac = 17 // unarmored monk
+
+	ms.getArmorFn = func(ctx context.Context, id string) (refdata.Armor, error) {
+		if id == "shield" {
+			return refdata.Armor{ID: "shield", Name: "Shield", ArmorType: "shield", AcBase: 2}, nil
+		}
+		return refdata.Armor{}, fmt.Errorf("not found")
+	}
+	setupEquipMock(ms, char)
+
+	svc := NewService(ms)
+	result, err := svc.Equip(context.Background(), EquipCommand{
+		Character: char,
+		ItemName:  "shield",
+	})
+
+	require.NoError(t, err)
+	// 17 (unarmored) + 2 (shield) = 19
+	assert.Equal(t, int32(19), result.NewAC)
+}
+
+// TDD Cycle 75b-17: Shield unequip uses RecalculateAC with formula
+func TestEquip_DoffShield_WithACFormula(t *testing.T) {
+	_, _, charID, ms := makeStdTestSetup()
+
+	// Monk with shield: AC = 19 (17 unarmored + 2 shield)
+	char := makeEquipChar(charID)
+	char.AbilityScores = json.RawMessage(`{"str":10,"dex":18,"con":12,"int":10,"wis":16,"cha":8}`)
+	char.AcFormula = sql.NullString{String: "10 + DEX + WIS", Valid: true}
+	char.Ac = 19
+	char.EquippedOffHand = sql.NullString{String: "shield", Valid: true}
+
+	ms.getArmorFn = func(ctx context.Context, id string) (refdata.Armor, error) {
+		if id == "shield" {
+			return refdata.Armor{ID: "shield", Name: "Shield", ArmorType: "shield", AcBase: 2}, nil
+		}
+		return refdata.Armor{}, fmt.Errorf("not found")
+	}
+	setupEquipMock(ms, char)
+
+	svc := NewService(ms)
+	result, err := svc.Equip(context.Background(), EquipCommand{
+		Character: char,
+		ItemName:  "none",
+		Offhand:   true,
+	})
+
+	require.NoError(t, err)
+	// 10 + DEX(+4) + WIS(+3) = 17 (no shield)
+	assert.Equal(t, int32(17), result.NewAC)
+}

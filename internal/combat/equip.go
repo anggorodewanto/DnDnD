@@ -22,12 +22,13 @@ type EquipCommand struct {
 
 // EquipResult holds the outputs of the /equip command.
 type EquipResult struct {
-	Character refdata.Character
-	Turn      *refdata.Turn
-	CombatLog string
-	ACChanged bool
-	OldAC     int32
-	NewAC     int32
+	Character    refdata.Character
+	Turn         *refdata.Turn
+	CombatLog    string
+	ACChanged    bool
+	OldAC        int32
+	NewAC        int32
+	SpeedPenalty int32 // heavy armor STR penalty (10ft if STR below requirement)
 }
 
 // HasFreeHand returns true if either main hand or off-hand is empty.
@@ -153,7 +154,16 @@ func (s *Service) equipShield(ctx context.Context, cmd EquipCommand, armor refda
 	// Off-hand weapon (if any) is automatically stowed when equipping a shield (no extra cost).
 	// The off-hand slot is overwritten below.
 	char.EquippedOffHand = sql.NullString{String: armor.ID, Valid: true}
-	newAC := oldAC + 2 // Shield gives +2 AC
+
+	// Recalculate AC with shield using unified function
+	var equippedArmor *refdata.Armor
+	if char.EquippedArmor.Valid && char.EquippedArmor.String != "" {
+		a, aErr := s.store.GetArmor(ctx, char.EquippedArmor.String)
+		if aErr == nil && a.ArmorType != "shield" {
+			equippedArmor = &a
+		}
+	}
+	newAC := RecalculateAC(char, equippedArmor, true)
 
 	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
 		ID:               char.ID,
@@ -172,7 +182,7 @@ func (s *Service) equipShield(ctx context.Context, cmd EquipCommand, armor refda
 		Character: updatedChar,
 		Turn:      cmd.Turn,
 		CombatLog: combatLog,
-		ACChanged: true,
+		ACChanged: oldAC != newAC,
 		OldAC:     oldAC,
 		NewAC:     newAC,
 	}, nil
@@ -198,8 +208,20 @@ func (s *Service) equipArmor(ctx context.Context, cmd EquipCommand) (EquipResult
 
 	char.EquippedArmor = sql.NullString{String: armor.ID, Valid: true}
 
-	// Calculate new AC based on armor
-	newAC := s.calculateArmorAC(char, armor)
+	// Determine if off-hand has a shield
+	hasShield := false
+	if char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
+		shieldArmor, shErr := s.store.GetArmor(ctx, char.EquippedOffHand.String)
+		if shErr == nil && shieldArmor.ArmorType == "shield" {
+			hasShield = true
+		}
+	}
+
+	// Calculate new AC using unified RecalculateAC
+	newAC := RecalculateAC(char, &armor, hasShield)
+
+	// Check heavy armor STR penalty
+	speedPenalty := CheckHeavyArmorPenalty(char, armor)
 
 	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
 		ID:               char.ID,
@@ -213,14 +235,18 @@ func (s *Service) equipArmor(ctx context.Context, cmd EquipCommand) (EquipResult
 	}
 
 	combatLog := fmt.Sprintf("🛡️ %s dons %s (AC %d → %d)", char.Name, armor.Name, oldAC, newAC)
+	if speedPenalty > 0 {
+		combatLog += fmt.Sprintf(" ⚠️ speed reduced by %dft (STR below %d)", speedPenalty, armor.StrengthReq.Int32)
+	}
 
 	return EquipResult{
-		Character: updatedChar,
-		Turn:      cmd.Turn,
-		CombatLog: combatLog,
-		ACChanged: oldAC != newAC,
-		OldAC:     oldAC,
-		NewAC:     newAC,
+		Character:    updatedChar,
+		Turn:         cmd.Turn,
+		CombatLog:    combatLog,
+		ACChanged:    oldAC != newAC,
+		OldAC:        oldAC,
+		NewAC:        newAC,
+		SpeedPenalty: speedPenalty,
 	}, nil
 }
 
@@ -234,16 +260,18 @@ func (s *Service) unequip(ctx context.Context, cmd EquipCommand) (EquipResult, e
 			return EquipResult{}, fmt.Errorf("You can't don or doff armor during combat.")
 		}
 		char.EquippedArmor = sql.NullString{}
-		// Recalculate AC: base 10 + DEX mod
-		newAC := s.calculateBaseAC(char)
 
-		// Add shield bonus if shield is equipped
+		// Determine if off-hand has a shield
+		hasShield := false
 		if char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
-			shieldArmor, err := s.store.GetArmor(ctx, char.EquippedOffHand.String)
-			if err == nil && shieldArmor.ArmorType == "shield" {
-				newAC += 2
+			shieldArmor, shErr := s.store.GetArmor(ctx, char.EquippedOffHand.String)
+			if shErr == nil && shieldArmor.ArmorType == "shield" {
+				hasShield = true
 			}
 		}
+
+		// Recalculate AC using unified function (considers ac_formula)
+		newAC := RecalculateAC(char, nil, hasShield)
 
 		updatedChar, err := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
 			ID:               char.ID,
@@ -301,12 +329,23 @@ func (s *Service) unequip(ctx context.Context, cmd EquipCommand) (EquipResult, e
 				cmd.Turn = &updatedTurn
 			}
 
-			newAC := oldAC
+			char.EquippedOffHand = sql.NullString{}
+
+			var newAC int32
 			if isShield {
-				newAC = oldAC - 2
+				// Recalculate AC without shield using unified function
+				var equippedArmor *refdata.Armor
+				if char.EquippedArmor.Valid && char.EquippedArmor.String != "" {
+					a, aErr := s.store.GetArmor(ctx, char.EquippedArmor.String)
+					if aErr == nil && a.ArmorType != "shield" {
+						equippedArmor = &a
+					}
+				}
+				newAC = RecalculateAC(char, equippedArmor, false)
+			} else {
+				newAC = oldAC
 			}
 
-			char.EquippedOffHand = sql.NullString{}
 			updatedChar, err := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
 				ID:               char.ID,
 				EquippedMainHand: char.EquippedMainHand,
@@ -380,35 +419,92 @@ func (s *Service) unequip(ctx context.Context, cmd EquipCommand) (EquipResult, e
 	}, nil
 }
 
-// calculateArmorAC computes AC for body armor + DEX bonus.
-func (s *Service) calculateArmorAC(char refdata.Character, armor refdata.Armor) int32 {
-	ac := armor.AcBase
-	dexMod := int32(getDexMod(char))
+// RecalculateAC computes the cached AC for a character based on equipped armor,
+// ac_formula (Unarmored Defense / Natural Armor), and shield. Does NOT include
+// modify_ac effects — those are applied at resolution time.
+//
+// Rules:
+//   - If armor is equipped, use armor AC (base + DEX, capped as appropriate)
+//   - If no armor and ac_formula is set, take max of base AC (10+DEX) and formula AC
+//   - If no armor and no formula, use base AC (10+DEX)
+//   - Shield adds +2 in all cases
+func RecalculateAC(char refdata.Character, armor *refdata.Armor, hasShield bool) int32 {
+	scores := parseAbilityScores(char.AbilityScores)
+	dexMod := int32(AbilityModifier(scores.Dex))
 
-	if armor.AcDexBonus.Valid && armor.AcDexBonus.Bool {
-		if armor.AcDexMax.Valid && armor.AcDexMax.Int32 > 0 {
-			if dexMod > armor.AcDexMax.Int32 {
-				dexMod = armor.AcDexMax.Int32
+	var ac int32
+	if armor != nil {
+		// Armor-based AC
+		ac = armor.AcBase
+		if armor.AcDexBonus.Valid && armor.AcDexBonus.Bool {
+			cappedDex := dexMod
+			if armor.AcDexMax.Valid && armor.AcDexMax.Int32 > 0 {
+				if cappedDex > armor.AcDexMax.Int32 {
+					cappedDex = armor.AcDexMax.Int32
+				}
+			}
+			ac += cappedDex
+		}
+	} else {
+		// No armor: base AC
+		ac = 10 + dexMod
+
+		// Check ac_formula (Unarmored Defense)
+		if char.AcFormula.Valid && char.AcFormula.String != "" {
+			formulaAC := evaluateACFormula(scores, char.AcFormula.String)
+			if formulaAC > ac {
+				ac = formulaAC
 			}
 		}
-		ac += dexMod
 	}
 
-	// Add shield bonus if shield is equipped
-	if char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
-		shieldArmor, err := s.store.GetArmor(context.Background(), char.EquippedOffHand.String)
-		if err == nil && shieldArmor.ArmorType == "shield" {
-			ac += 2
-		}
+	if hasShield {
+		ac += 2
 	}
 
 	return ac
 }
 
-// calculateBaseAC computes unarmored AC (10 + DEX mod).
-func (s *Service) calculateBaseAC(char refdata.Character) int32 {
-	return 10 + int32(getDexMod(char))
+// evaluateACFormula parses formulas like "10 + DEX + WIS" against combat ability scores.
+func evaluateACFormula(scores AbilityScores, formula string) int32 {
+	result := int32(0)
+	parts := strings.Fields(strings.ReplaceAll(formula, "+", " "))
+	for _, part := range parts {
+		switch strings.ToUpper(part) {
+		case "STR":
+			result += int32(AbilityModifier(scores.Str))
+		case "DEX":
+			result += int32(AbilityModifier(scores.Dex))
+		case "CON":
+			result += int32(AbilityModifier(scores.Con))
+		case "INT":
+			result += int32(AbilityModifier(scores.Int))
+		case "WIS":
+			result += int32(AbilityModifier(scores.Wis))
+		case "CHA":
+			result += int32(AbilityModifier(scores.Cha))
+		default:
+			n := int32(0)
+			fmt.Sscanf(part, "%d", &n)
+			result += n
+		}
+	}
+	return result
 }
+
+// CheckHeavyArmorPenalty returns the speed penalty (in feet) for a character
+// whose STR score is below the armor's strength_req. Returns 0 if no penalty.
+func CheckHeavyArmorPenalty(char refdata.Character, armor refdata.Armor) int32 {
+	if !armor.StrengthReq.Valid || armor.StrengthReq.Int32 <= 0 {
+		return 0
+	}
+	scores := parseAbilityScores(char.AbilityScores)
+	if int32(scores.Str) >= armor.StrengthReq.Int32 {
+		return 0
+	}
+	return 10
+}
+
 
 // CheckSomaticComponent validates that a character has a free hand for somatic
 // spell components. Returns nil if the character has a free hand, or if the
@@ -432,12 +528,6 @@ func CheckSomaticComponent(char refdata.Character, spell refdata.Spell, hasWarCa
 		return nil
 	}
 	return fmt.Errorf("cannot cast %s — somatic component requires a free hand", spell.Name)
-}
-
-// getDexMod extracts the DEX modifier from ability scores.
-func getDexMod(char refdata.Character) int {
-	scores := parseAbilityScores(char.AbilityScores)
-	return AbilityModifier(scores.Dex)
 }
 
 // parseAbilityScores parses the JSON ability scores.
