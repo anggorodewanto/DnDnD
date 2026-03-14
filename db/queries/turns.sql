@@ -1,6 +1,6 @@
 -- name: CreateTurn :one
-INSERT INTO turns (encounter_id, combatant_id, round_number, status, movement_remaining_ft, attacks_remaining)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO turns (encounter_id, combatant_id, round_number, status, movement_remaining_ft, attacks_remaining, started_at, timeout_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetTurn :one
@@ -33,3 +33,39 @@ UPDATE turns SET
     has_stood_this_turn = $12
 WHERE id = $1
 RETURNING *;
+
+-- name: ListTurnsNeedingNudge :many
+SELECT * FROM turns
+WHERE status = 'active'
+  AND timeout_at IS NOT NULL
+  AND started_at IS NOT NULL
+  AND nudge_sent_at IS NULL
+  AND now() >= started_at + (timeout_at - started_at) * 0.5
+ORDER BY started_at ASC;
+
+-- name: ListTurnsNeedingWarning :many
+SELECT * FROM turns
+WHERE status = 'active'
+  AND timeout_at IS NOT NULL
+  AND started_at IS NOT NULL
+  AND warning_sent_at IS NULL
+  AND now() >= started_at + (timeout_at - started_at) * 0.75
+ORDER BY started_at ASC;
+
+-- name: UpdateTurnNudgeSent :one
+UPDATE turns SET nudge_sent_at = now() WHERE id = $1 RETURNING *;
+
+-- name: UpdateTurnWarningSent :one
+UPDATE turns SET warning_sent_at = now() WHERE id = $1 RETURNING *;
+
+-- name: UpdateTurnTimeout :one
+UPDATE turns SET timeout_at = $2 WHERE id = $1 RETURNING *;
+
+-- name: ListActiveTurnsByEncounterID :many
+SELECT * FROM turns WHERE encounter_id = $1 AND status = 'active';
+
+-- name: ClearTurnTimeout :one
+UPDATE turns SET timeout_at = NULL WHERE id = $1 RETURNING *;
+
+-- name: SetTurnTimeout :one
+UPDATE turns SET timeout_at = $2, started_at = COALESCE(started_at, now()) WHERE id = $1 RETURNING *;

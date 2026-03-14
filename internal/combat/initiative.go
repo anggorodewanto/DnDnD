@@ -2,14 +2,17 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -518,6 +521,32 @@ func (s *Service) skipCombatantTurn(ctx context.Context, encounterID uuid.UUID, 
 	return nil
 }
 
+// resolveTimerForTurn looks up the campaign's timeout setting and returns
+// started_at (now) and timeout_at for a new turn. Returns zero values
+// if the campaign lookup fails (graceful degradation).
+func (s *Service) resolveTimerForTurn(ctx context.Context, encounterID uuid.UUID) (sql.NullTime, sql.NullTime) {
+	camp, err := s.store.GetCampaignByEncounterID(ctx, encounterID)
+	if err != nil {
+		return sql.NullTime{}, sql.NullTime{}
+	}
+
+	var settings campaign.Settings
+	if camp.Settings.Valid {
+		if err := json.Unmarshal(camp.Settings.RawMessage, &settings); err != nil {
+			return sql.NullTime{}, sql.NullTime{}
+		}
+	}
+
+	hours := settings.TurnTimeoutHours
+	if hours <= 0 {
+		hours = 24
+	}
+
+	now := time.Now()
+	return sql.NullTime{Time: now, Valid: true},
+		sql.NullTime{Time: now.Add(time.Duration(hours) * time.Hour), Valid: true}
+}
+
 // hasCondition checks if a parsed condition slice contains a specific condition name.
 func hasCondition(conds []CombatCondition, name string) bool {
 	for _, c := range conds {
@@ -530,20 +559,30 @@ func hasCondition(conds []CombatCondition, name string) bool {
 
 // createActiveTurn creates an active turn and updates the encounter's current turn.
 // It processes turn-start condition expiration before creating the turn.
+// For PC combatants, it sets started_at and timeout_at based on campaign settings.
 func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant) (TurnInfo, error) {
 	speedFt, attacksRemaining, err := s.ResolveTurnResources(ctx, combatant)
 	if err != nil {
 		return TurnInfo{}, fmt.Errorf("resolving turn resources: %w", err)
 	}
 
-	turn, err := s.store.CreateTurn(ctx, refdata.CreateTurnParams{
+	params := refdata.CreateTurnParams{
 		EncounterID:         encounterID,
 		CombatantID:         combatant.ID,
 		RoundNumber:         roundNumber,
 		Status:              "active",
 		MovementRemainingFt: speedFt,
 		AttacksRemaining:    attacksRemaining,
-	})
+	}
+
+	// Set timer for PC turns only
+	if !combatant.IsNpc {
+		startedAt, timeoutAt := s.resolveTimerForTurn(ctx, encounterID)
+		params.StartedAt = startedAt
+		params.TimeoutAt = timeoutAt
+	}
+
+	turn, err := s.store.CreateTurn(ctx, params)
 	if err != nil {
 		return TurnInfo{}, fmt.Errorf("creating turn: %w", err)
 	}

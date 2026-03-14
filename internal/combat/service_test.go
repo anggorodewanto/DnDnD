@@ -98,6 +98,17 @@ type mockStore struct {
 	// Pending Actions
 	createPendingActionFn             func(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error)
 	getPendingActionFn                func(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error)
+
+	// Turn Timer
+	listTurnsNeedingNudgeFn          func(ctx context.Context) ([]refdata.Turn, error)
+	listTurnsNeedingWarningFn        func(ctx context.Context) ([]refdata.Turn, error)
+	updateTurnNudgeSentFn            func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	updateTurnWarningSentFn          func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	updateTurnTimeoutFn              func(ctx context.Context, arg refdata.UpdateTurnTimeoutParams) (refdata.Turn, error)
+	listActiveTurnsByEncounterIDFn   func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Turn, error)
+	clearTurnTimeoutFn               func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	setTurnTimeoutFn                 func(ctx context.Context, arg refdata.SetTurnTimeoutParams) (refdata.Turn, error)
+	getCampaignByEncounterIDFn       func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
 	getPendingActionByCombatantFn     func(ctx context.Context, combatantID uuid.UUID) (refdata.PendingAction, error)
 	updatePendingActionStatusFn       func(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error)
 	updatePendingActionDMQueueMessageFn func(ctx context.Context, arg refdata.UpdatePendingActionDMQueueMessageParams) (refdata.PendingAction, error)
@@ -429,6 +440,60 @@ func (m *mockStore) UpdatePendingActionDMQueueMessage(ctx context.Context, arg r
 		return m.updatePendingActionDMQueueMessageFn(ctx, arg)
 	}
 	return refdata.PendingAction{ID: arg.ID, DmQueueMessageID: arg.DmQueueMessageID, DmQueueChannelID: arg.DmQueueChannelID}, nil
+}
+func (m *mockStore) ListTurnsNeedingNudge(ctx context.Context) ([]refdata.Turn, error) {
+	if m.listTurnsNeedingNudgeFn != nil {
+		return m.listTurnsNeedingNudgeFn(ctx)
+	}
+	return []refdata.Turn{}, nil
+}
+func (m *mockStore) ListTurnsNeedingWarning(ctx context.Context) ([]refdata.Turn, error) {
+	if m.listTurnsNeedingWarningFn != nil {
+		return m.listTurnsNeedingWarningFn(ctx)
+	}
+	return []refdata.Turn{}, nil
+}
+func (m *mockStore) UpdateTurnNudgeSent(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	if m.updateTurnNudgeSentFn != nil {
+		return m.updateTurnNudgeSentFn(ctx, id)
+	}
+	return refdata.Turn{ID: id}, nil
+}
+func (m *mockStore) UpdateTurnWarningSent(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	if m.updateTurnWarningSentFn != nil {
+		return m.updateTurnWarningSentFn(ctx, id)
+	}
+	return refdata.Turn{ID: id}, nil
+}
+func (m *mockStore) UpdateTurnTimeout(ctx context.Context, arg refdata.UpdateTurnTimeoutParams) (refdata.Turn, error) {
+	if m.updateTurnTimeoutFn != nil {
+		return m.updateTurnTimeoutFn(ctx, arg)
+	}
+	return refdata.Turn{ID: arg.ID, TimeoutAt: arg.TimeoutAt}, nil
+}
+func (m *mockStore) ListActiveTurnsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Turn, error) {
+	if m.listActiveTurnsByEncounterIDFn != nil {
+		return m.listActiveTurnsByEncounterIDFn(ctx, encounterID)
+	}
+	return []refdata.Turn{}, nil
+}
+func (m *mockStore) ClearTurnTimeout(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	if m.clearTurnTimeoutFn != nil {
+		return m.clearTurnTimeoutFn(ctx, id)
+	}
+	return refdata.Turn{ID: id}, nil
+}
+func (m *mockStore) SetTurnTimeout(ctx context.Context, arg refdata.SetTurnTimeoutParams) (refdata.Turn, error) {
+	if m.setTurnTimeoutFn != nil {
+		return m.setTurnTimeoutFn(ctx, arg)
+	}
+	return refdata.Turn{ID: arg.ID, TimeoutAt: arg.TimeoutAt}, nil
+}
+func (m *mockStore) GetCampaignByEncounterID(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+	if m.getCampaignByEncounterIDFn != nil {
+		return m.getCampaignByEncounterIDFn(ctx, id)
+	}
+	return refdata.Campaign{}, nil
 }
 
 func defaultMockStore() *mockStore {

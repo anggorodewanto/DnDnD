@@ -138,6 +138,19 @@ type Store interface {
 	GetPendingActionByCombatant(ctx context.Context, combatantID uuid.UUID) (refdata.PendingAction, error)
 	UpdatePendingActionStatus(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error)
 	UpdatePendingActionDMQueueMessage(ctx context.Context, arg refdata.UpdatePendingActionDMQueueMessageParams) (refdata.PendingAction, error)
+
+	// Turn Timer
+	ListTurnsNeedingNudge(ctx context.Context) ([]refdata.Turn, error)
+	ListTurnsNeedingWarning(ctx context.Context) ([]refdata.Turn, error)
+	UpdateTurnNudgeSent(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	UpdateTurnWarningSent(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	UpdateTurnTimeout(ctx context.Context, arg refdata.UpdateTurnTimeoutParams) (refdata.Turn, error)
+	ListActiveTurnsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Turn, error)
+	ClearTurnTimeout(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	SetTurnTimeout(ctx context.Context, arg refdata.SetTurnTimeoutParams) (refdata.Turn, error)
+
+	// Campaign lookup from encounter
+	GetCampaignByEncounterID(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
 }
 
 // Service manages combat encounters and their entities.

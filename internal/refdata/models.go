@@ -406,6 +406,8 @@ type Turn struct {
 	CompletedAt          sql.NullTime `json:"completed_at"`
 	CreatedAt            time.Time    `json:"created_at"`
 	HasStoodThisTurn     bool         `json:"has_stood_this_turn"`
+	NudgeSentAt          sql.NullTime `json:"nudge_sent_at"`
+	WarningSentAt        sql.NullTime `json:"warning_sent_at"`
 }
 
 type Weapon struct {
