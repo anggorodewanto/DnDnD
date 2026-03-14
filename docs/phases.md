@@ -338,7 +338,7 @@
   - Depends on: Phase 58, Phase 39
   - Done when: Integration tests verify concentration save trigger, auto-break on incapacitation, silence zone interaction, spell effect cleanup.
 
-- [ ] **Phase 62: Spell Casting — Teleportation Spells**
+- [x] **Phase 62: Spell Casting — Teleportation Spells**
   - Scope: Spells with `teleport` JSONB: bypass path validation, no movement cost/difficult terrain/OA. Validate: destination unoccupied, within range, line of sight if required, companion within range. SRD teleportation spells (Misty Step, Thunder Step, Dimension Door, Far Step, etc.). Higher-level teleports route to #dm-queue.
   - Depends on: Phase 58
   - Done when: Integration tests verify teleportation bypasses pathfinding, destination validation, companion range check, DM queue routing for narrative teleports.

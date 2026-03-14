@@ -411,71 +411,13 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 
 	// 12a. Teleportation handling
 	if spell.Teleport.Valid && len(spell.Teleport.RawMessage) > 0 {
-		teleportInfo, parseErr := ParseTeleportInfo(spell.Teleport.RawMessage)
-		if parseErr != nil {
-			return CastResult{}, fmt.Errorf("parsing teleport data: %w", parseErr)
+		teleResult, err := s.resolveTeleport(ctx, spell.Teleport.RawMessage, caster, cmd)
+		if err != nil {
+			return CastResult{}, err
 		}
-
-		// DM queue routing for narrative teleports
-		if IsDMQueueTeleport(teleportInfo.Target) {
-			result.Teleport = &TeleportResult{DMQueueRouted: true}
+		result.Teleport = teleResult
+		if teleResult.DMQueueRouted {
 			result.ResolutionMode = "dm_required"
-		} else {
-			// Validate destination
-			occupants, listErr := s.store.ListCombatantsByEncounterID(ctx, cmd.EncounterID)
-			if listErr != nil {
-				return CastResult{}, fmt.Errorf("listing combatants for teleport: %w", listErr)
-			}
-
-			var companion *refdata.Combatant
-			if teleportInfo.Target == TeleportTargetSelfCreature && cmd.CompanionID != uuid.Nil {
-				comp, compErr := s.store.GetCombatant(ctx, cmd.CompanionID)
-				if compErr != nil {
-					return CastResult{}, fmt.Errorf("getting companion: %w", compErr)
-				}
-				companion = &comp
-			}
-
-			if valErr := ValidateTeleportDestination(teleportInfo, caster, cmd.TeleportDestCol, cmd.TeleportDestRow, occupants, companion); valErr != nil {
-				return CastResult{}, valErr
-			}
-
-			teleResult := &TeleportResult{
-				AdditionalEffects: teleportInfo.AdditionalEffects,
-			}
-
-			// Move caster for "self" and "self+creature" targets
-			if teleportInfo.Target == TeleportTargetSelf || teleportInfo.Target == TeleportTargetSelfCreature {
-				if _, posErr := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
-					ID:          caster.ID,
-					PositionCol: cmd.TeleportDestCol,
-					PositionRow: cmd.TeleportDestRow,
-					AltitudeFt:  caster.AltitudeFt,
-				}); posErr != nil {
-					return CastResult{}, fmt.Errorf("moving caster: %w", posErr)
-				}
-				teleResult.CasterMoved = true
-				teleResult.CasterDestCol = cmd.TeleportDestCol
-				teleResult.CasterDestRow = cmd.TeleportDestRow
-			}
-
-			// Move companion for "self+creature" targets
-			if teleportInfo.Target == TeleportTargetSelfCreature && companion != nil && cmd.CompanionDestCol != "" {
-				if _, posErr := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
-					ID:          companion.ID,
-					PositionCol: cmd.CompanionDestCol,
-					PositionRow: cmd.CompanionDestRow,
-					AltitudeFt:  companion.AltitudeFt,
-				}); posErr != nil {
-					return CastResult{}, fmt.Errorf("moving companion: %w", posErr)
-				}
-				teleResult.CompanionMoved = true
-				teleResult.CompanionName = companion.DisplayName
-				teleResult.CompanionDestCol = cmd.CompanionDestCol
-				teleResult.CompanionDestRow = cmd.CompanionDestRow
-			}
-
-			result.Teleport = teleResult
 		}
 	}
 
@@ -736,6 +678,74 @@ func SelectSpellSlot(slots map[int]SlotInfo, spellLevel int, slotLevel int) (int
 		}
 	}
 	return 0, fmt.Errorf("no spell slots remaining at level %d or above", spellLevel)
+}
+
+// resolveTeleport handles the teleportation portion of a spell cast: parses teleport data,
+// validates destinations, and moves combatants on the grid.
+func (s *Service) resolveTeleport(ctx context.Context, raw json.RawMessage, caster refdata.Combatant, cmd CastCommand) (*TeleportResult, error) {
+	info, err := ParseTeleportInfo(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parsing teleport data: %w", err)
+	}
+
+	if IsDMQueueTeleport(info.Target) {
+		return &TeleportResult{DMQueueRouted: true}, nil
+	}
+
+	occupants, err := s.store.ListCombatantsByEncounterID(ctx, cmd.EncounterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing combatants for teleport: %w", err)
+	}
+
+	var companion *refdata.Combatant
+	if info.Target == TeleportTargetSelfCreature && cmd.CompanionID != uuid.Nil {
+		comp, err := s.store.GetCombatant(ctx, cmd.CompanionID)
+		if err != nil {
+			return nil, fmt.Errorf("getting companion: %w", err)
+		}
+		companion = &comp
+	}
+
+	if err := ValidateTeleportDestination(info, caster, cmd.TeleportDestCol, cmd.TeleportDestRow, occupants, companion); err != nil {
+		return nil, err
+	}
+
+	result := &TeleportResult{
+		AdditionalEffects: info.AdditionalEffects,
+	}
+
+	// Move caster for "self" and "self+creature" targets
+	if info.Target == TeleportTargetSelf || info.Target == TeleportTargetSelfCreature {
+		if _, err := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
+			ID:          caster.ID,
+			PositionCol: cmd.TeleportDestCol,
+			PositionRow: cmd.TeleportDestRow,
+			AltitudeFt:  caster.AltitudeFt,
+		}); err != nil {
+			return nil, fmt.Errorf("moving caster: %w", err)
+		}
+		result.CasterMoved = true
+		result.CasterDestCol = cmd.TeleportDestCol
+		result.CasterDestRow = cmd.TeleportDestRow
+	}
+
+	// Move companion for "self+creature" targets
+	if info.Target == TeleportTargetSelfCreature && companion != nil && cmd.CompanionDestCol != "" {
+		if _, err := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
+			ID:          companion.ID,
+			PositionCol: cmd.CompanionDestCol,
+			PositionRow: cmd.CompanionDestRow,
+			AltitudeFt:  companion.AltitudeFt,
+		}); err != nil {
+			return nil, fmt.Errorf("moving companion: %w", err)
+		}
+		result.CompanionMoved = true
+		result.CompanionName = companion.DisplayName
+		result.CompanionDestCol = cmd.CompanionDestCol
+		result.CompanionDestRow = cmd.CompanionDestRow
+	}
+
+	return result, nil
 }
 
 // resolveSpellcastingAbilityScore determines the highest applicable spellcasting

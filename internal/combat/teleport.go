@@ -63,31 +63,21 @@ type TeleportResult struct {
 }
 
 // ValidateTeleportDestination validates that a teleport destination is valid:
-// (1) destination is unoccupied, (2) within range, (3) line of sight if required,
-// (4) companion within companion_range_ft if applicable.
+// (1) destination is unoccupied, (2) within range,
+// (3) companion within companion_range_ft if applicable.
 // The companion parameter is only needed for "self+creature" targets.
 func ValidateTeleportDestination(info TeleportInfo, caster refdata.Combatant, destCol string, destRow int32, occupants []refdata.Combatant, companion *refdata.Combatant) error {
-	// 1. Check destination is unoccupied
 	for _, occ := range occupants {
 		if occ.PositionCol == destCol && occ.PositionRow == destRow {
 			return fmt.Errorf("destination %s%d is occupied", destCol, destRow)
 		}
 	}
 
-	// 2. Check destination is within teleport range
-	casterCol := colToIndex(caster.PositionCol)
-	casterRow := int(caster.PositionRow) - 1
-	destColIdx := colToIndex(destCol)
-	destRowIdx := int(destRow) - 1
-	distFt := Distance3D(casterCol, casterRow, int(caster.AltitudeFt), destColIdx, destRowIdx, 0)
+	distFt := positionDistance(caster.PositionCol, caster.PositionRow, caster.AltitudeFt, destCol, destRow, 0)
 	if info.RangeFt > 0 && distFt > info.RangeFt {
 		return fmt.Errorf("destination is %dft away — teleport range is %dft", distFt, info.RangeFt)
 	}
 
-	// 3. Line of sight (for now, requires_sight is validated by ensuring destination is within range;
-	// actual fog-of-war LOS is a separate phase)
-
-	// 4. Companion range check for "self+creature"
 	if info.Target == TeleportTargetSelfCreature && companion != nil {
 		companionDist := combatantDistance(caster, *companion)
 		if companionDist > info.CompanionRangeFt {
@@ -96,4 +86,12 @@ func ValidateTeleportDestination(info TeleportInfo, caster refdata.Combatant, de
 	}
 
 	return nil
+}
+
+// positionDistance returns the 3D distance in feet between two grid positions.
+func positionDistance(col1 string, row1 int32, alt1 int32, col2 string, row2 int32, alt2 int32) int {
+	return Distance3D(
+		colToIndex(col1), int(row1)-1, int(alt1),
+		colToIndex(col2), int(row2)-1, int(alt2),
+	)
 }
