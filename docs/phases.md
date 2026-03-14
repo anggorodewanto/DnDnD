@@ -368,7 +368,7 @@
   - Depends on: Phase 66a
   - Done when: Integration tests verify each metamagic option's effect, cost, and validation; Empowered+other combo works; Twinned target validation.
 
-- [ ] **Phase 67: Spell Effect Zones (Encounter Zones)**
+- [x] **Phase 67: Spell Effect Zones (Encounter Zones)**
   - Scope: Migration for `encounter_zones` table. Create zones on persistent AoE spell cast (Fog Cloud, Spirit Guardians, Wall of Fire, Darkness, etc.). Anchor modes (static vs combatant). Auto-removal on concentration break, duration expiry, encounter end, DM manual. Enter/leave triggers (damage zones: once per creature per turn). Zone rendering on map (colored overlays, origin markers). Map legend integration.
   - Depends on: Phase 58, Phase 22, Phase 24
   - Done when: Integration tests verify zone creation, movement triggers, concentration cleanup, duration expiry, map rendering with overlays.

@@ -61,12 +61,28 @@ type ZoneTriggerResult struct {
 	Details     map[string]interface{}
 }
 
+// parseTriggers extracts zone triggers from a nullable JSON field.
+func parseTriggers(raw pqtype.NullRawMessage) []ZoneTrigger {
+	if !raw.Valid || len(raw.RawMessage) == 0 {
+		return nil
+	}
+	var triggers []ZoneTrigger
+	_ = json.Unmarshal(raw.RawMessage, &triggers)
+	return triggers
+}
+
+// parseTriggeredMap extracts the per-combatant trigger tracking map.
+func parseTriggeredMap(raw pqtype.NullRawMessage) map[string]bool {
+	triggered := make(map[string]bool)
+	if !raw.Valid || len(raw.RawMessage) == 0 {
+		return triggered
+	}
+	_ = json.Unmarshal(raw.RawMessage, &triggered)
+	return triggered
+}
+
 // zoneInfoFromModel converts a refdata.EncounterZone to a ZoneInfo.
 func zoneInfoFromModel(z refdata.EncounterZone) ZoneInfo {
-	var triggers []ZoneTrigger
-	if z.ZoneTriggers.Valid && len(z.ZoneTriggers.RawMessage) > 0 {
-		_ = json.Unmarshal(z.ZoneTriggers.RawMessage, &triggers)
-	}
 	markerIcon := ""
 	if z.MarkerIcon.Valid {
 		markerIcon = z.MarkerIcon.String
@@ -87,7 +103,7 @@ func zoneInfoFromModel(z refdata.EncounterZone) ZoneInfo {
 		MarkerIcon:            markerIcon,
 		RequiresConcentration: z.RequiresConcentration,
 		ExpiresAtRound:        z.ExpiresAtRound,
-		Triggers:              triggers,
+		Triggers:              parseTriggers(z.ZoneTriggers),
 	}
 }
 
@@ -186,17 +202,12 @@ func (s *Service) CheckZoneTriggers(ctx context.Context, combatantID uuid.UUID, 
 		return nil, fmt.Errorf("listing zones: %w", err)
 	}
 
+	combatantKey := combatantID.String()
 	var results []ZoneTriggerResult
 	for _, z := range zones {
-		// Parse triggers
-		var triggers []ZoneTrigger
-		if z.ZoneTriggers.Valid && len(z.ZoneTriggers.RawMessage) > 0 {
-			if err := json.Unmarshal(z.ZoneTriggers.RawMessage, &triggers); err != nil {
-				continue
-			}
-		}
+		triggers := parseTriggers(z.ZoneTriggers)
 
-		// Check if any trigger matches the trigger type
+		// Find matching trigger for the requested type
 		var matchingTrigger *ZoneTrigger
 		for i := range triggers {
 			if triggers[i].Trigger == triggerType {
@@ -208,28 +219,18 @@ func (s *Service) CheckZoneTriggers(ctx context.Context, combatantID uuid.UUID, 
 			continue
 		}
 
-		// Check if already triggered this round for this combatant
-		if z.TriggeredThisRound.Valid && len(z.TriggeredThisRound.RawMessage) > 0 {
-			var triggered map[string]bool
-			if err := json.Unmarshal(z.TriggeredThisRound.RawMessage, &triggered); err == nil {
-				if triggered[combatantID.String()] {
-					continue
-				}
-			}
+		// Parse triggered-this-round map once for both check and update
+		triggered := parseTriggeredMap(z.TriggeredThisRound)
+		if triggered[combatantKey] {
+			continue
 		}
 
-		// Calculate affected tiles for this zone
-		tiles := zoneAffectedTiles(z)
-		if !tileInSet(col, row, tiles) {
+		if !tileInSet(col, row, zoneAffectedTiles(z)) {
 			continue
 		}
 
 		// Mark as triggered for this combatant this round
-		triggered := make(map[string]bool)
-		if z.TriggeredThisRound.Valid && len(z.TriggeredThisRound.RawMessage) > 0 {
-			_ = json.Unmarshal(z.TriggeredThisRound.RawMessage, &triggered)
-		}
-		triggered[combatantID.String()] = true
+		triggered[combatantKey] = true
 		triggeredJSON, _ := json.Marshal(triggered)
 
 		if _, err := s.store.UpdateEncounterZoneTriggeredThisRound(ctx, refdata.UpdateEncounterZoneTriggeredThisRoundParams{
@@ -293,10 +294,8 @@ func zoneAffectedTiles(z refdata.EncounterZone) []GridPos {
 	case "square":
 		return SquareAffectedTiles(originCol, originRow, dims.SideFt)
 	case "rectangle":
-		// Treat as square with width
 		return SquareAffectedTiles(originCol, originRow, dims.WidthFt)
 	default:
-		// For line/cone, include origin tile as minimum
 		return []GridPos{{Col: originCol, Row: originRow}}
 	}
 }
