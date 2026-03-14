@@ -133,8 +133,8 @@ func TestGroupByPosition(t *testing.T) {
 		{ShortID: "C", Col: 1, Row: 1},
 	}
 	groups := groupByPosition(combatants)
-	key00 := posKey{Col: 0, Row: 0}
-	key11 := posKey{Col: 1, Row: 1}
+	key00 := GridPos{Col: 0, Row: 0}
+	key11 := GridPos{Col: 1, Row: 1}
 
 	if len(groups[key00]) != 2 {
 		t.Errorf("expected 2 at (0,0), got %d", len(groups[key00]))

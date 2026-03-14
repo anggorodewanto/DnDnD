@@ -373,12 +373,12 @@
   - Depends on: Phase 58, Phase 22, Phase 24
   - Done when: Integration tests verify zone creation, movement triggers, concentration cleanup, duration expiry, map rendering with overlays.
 
-- [ ] **Phase 68: Dynamic Fog of War**
+- [x] **Phase 68: Dynamic Fog of War**
   - Scope: Symmetric shadowcasting (Albert Ford's algorithm) from each player token against walls/obstacles. Union of all party tokens' visible cells. Three visibility states: visible, explored (dim), unexplored (black). Enemy tokens hidden in fog, greyed in dim. Vision sources: base vision, darkvision, blindsight, truesight, Devil's Sight. Light sources (torches, Light cantrip). Rendering layers (base map, fog overlay, tokens, grid). DM sees all.
   - Depends on: Phase 22, Phase 19
   - Done when: Unit tests verify shadowcasting correctness (symmetry), vision union, darkvision interaction with darkness. Map renders correctly with fog layers.
 
-- [ ] **Phase 69: Obscurement & Lighting Zones**
+- [x] **Phase 69: Obscurement & Lighting Zones**
   - Scope: Zone types: dim light, darkness, magical darkness, fog/heavy obscurement, light obscurement. Combat effects: heavily obscured = effectively blinded; lightly obscured = perception disadvantage + hide available. Darkvision interaction (darkness->dim, dim->bright). Magical darkness ignores darkvision. Auto-applied combat modifiers on attacks and checks. Combat log shows lighting modifier.
   - Depends on: Phase 67, Phase 68, Phase 35
   - Done when: Integration tests verify each zone type's combat effects, darkvision interactions, auto-applied modifiers, combat log output.

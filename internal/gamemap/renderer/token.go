@@ -8,10 +8,6 @@ import (
 	"github.com/fogleman/gg"
 )
 
-type posKey struct {
-	Col, Row int
-}
-
 // DrawTokens renders all combatant tokens on the map context.
 func DrawTokens(dc *gg.Context, md *MapData) {
 	if len(md.Combatants) == 0 {
@@ -203,10 +199,10 @@ func drawFoggedToken(dc *gg.Context, cx, cy, radius float64, label string, tileS
 }
 
 // groupByPosition groups combatants by their (Col, Row) position.
-func groupByPosition(combatants []Combatant) map[posKey][]Combatant {
-	groups := map[posKey][]Combatant{}
+func groupByPosition(combatants []Combatant) map[GridPos][]Combatant {
+	groups := map[GridPos][]Combatant{}
 	for _, c := range combatants {
-		key := posKey{Col: c.Col, Row: c.Row}
+		key := GridPos{Col: c.Col, Row: c.Row}
 		groups[key] = append(groups[key], c)
 	}
 	return groups
