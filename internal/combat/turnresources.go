@@ -260,6 +260,17 @@ func FormatTurnStartPrompt(encounterName string, roundNumber int32, combatantNam
 	return b.String()
 }
 
+// FormatTurnStartPromptWithExpiry produces the turn start notification with optional
+// readied action expiry notices prepended.
+func FormatTurnStartPromptWithExpiry(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn, combatant *refdata.Combatant, expiryNotices []string) string {
+	var b strings.Builder
+	for _, notice := range expiryNotices {
+		fmt.Fprintf(&b, "%s\n", notice)
+	}
+	b.WriteString(FormatTurnStartPrompt(encounterName, roundNumber, combatantName, turn, combatant))
+	return b.String()
+}
+
 // BuildResourceListWithInspiration returns buildResourceList plus Bardic Inspiration status if present.
 func BuildResourceListWithInspiration(turn refdata.Turn, combatant refdata.Combatant) []string {
 	parts := buildResourceList(turn)

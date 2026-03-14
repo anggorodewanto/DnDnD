@@ -80,6 +80,7 @@ type mockStore struct {
 
 	// Reaction Declarations
 	createReactionDeclarationFn                func(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error)
+	createReadiedActionDeclarationFn           func(ctx context.Context, arg refdata.CreateReadiedActionDeclarationParams) (refdata.ReactionDeclaration, error)
 	getReactionDeclarationFn                   func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
 	listActiveReactionDeclarationsByEncounterFn func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error)
 	listReactionDeclarationsByCombatantFn      func(ctx context.Context, arg refdata.ListReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
@@ -312,6 +313,12 @@ func (m *mockStore) ResetAllTriggeredThisRound(ctx context.Context, encounterID 
 func (m *mockStore) CreateReactionDeclaration(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error) {
 	if m.createReactionDeclarationFn != nil {
 		return m.createReactionDeclarationFn(ctx, arg)
+	}
+	return refdata.ReactionDeclaration{}, nil
+}
+func (m *mockStore) CreateReadiedActionDeclaration(ctx context.Context, arg refdata.CreateReadiedActionDeclarationParams) (refdata.ReactionDeclaration, error) {
+	if m.createReadiedActionDeclarationFn != nil {
+		return m.createReadiedActionDeclarationFn(ctx, arg)
 	}
 	return refdata.ReactionDeclaration{}, nil
 }

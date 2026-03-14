@@ -37,6 +37,10 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/{encounterID}/reactions/{reactionID}/resolve", h.ResolveReaction)
 		r.Post("/{encounterID}/reactions/{reactionID}/cancel", h.CancelReaction)
 		r.Post("/{encounterID}/combatants/{combatantID}/reactions/cancel-all", h.CancelAllReactions)
+
+		// Readied actions
+		r.Post("/{encounterID}/combatants/{combatantID}/ready", h.ReadyAction)
+		r.Get("/{encounterID}/combatants/{combatantID}/readied-actions", h.ListReadiedActions)
 	})
 }
 
@@ -442,4 +446,103 @@ func (h *Handler) CancelAllReactions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, cancelAllReactionsResponse{Status: "ok"})
+}
+
+// readyActionRequest is the JSON request body for readying an action.
+type readyActionRequest struct {
+	Description    string `json:"description"`
+	SpellName      string `json:"spell_name,omitempty"`
+	SpellSlotLevel int    `json:"spell_slot_level,omitempty"`
+}
+
+// readyActionResponse is the JSON response for readying an action.
+type readyActionResponse struct {
+	Declaration reactionDeclarationResponse `json:"declaration"`
+	CombatLog   string                      `json:"combat_log"`
+}
+
+// ReadyAction handles POST /api/combat/{encounterID}/combatants/{combatantID}/ready.
+func (h *Handler) ReadyAction(w http.ResponseWriter, r *http.Request) {
+	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	combatantID, err := uuid.Parse(chi.URLParam(r, "combatantID"))
+	if err != nil {
+		http.Error(w, "invalid combatant ID", http.StatusBadRequest)
+		return
+	}
+
+	var req readyActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	combatant, err := h.svc.GetCombatant(r.Context(), combatantID)
+	if err != nil {
+		http.Error(w, "combatant not found", http.StatusNotFound)
+		return
+	}
+
+	turn, err := h.svc.store.GetActiveTurnByEncounterID(r.Context(), encounterID)
+	if err != nil {
+		http.Error(w, "no active turn", http.StatusBadRequest)
+		return
+	}
+	if turn.CombatantID != combatantID {
+		http.Error(w, "not this combatant's turn", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.svc.ReadyAction(r.Context(), ReadyActionCommand{
+		Combatant:      combatant,
+		Turn:           turn,
+		Description:    req.Description,
+		SpellName:      req.SpellName,
+		SpellSlotLevel: req.SpellSlotLevel,
+	})
+	if err != nil {
+		if errors.Is(err, ErrResourceSpent) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, readyActionResponse{
+		Declaration: toReactionDeclarationResponse(result.Declaration),
+		CombatLog:   result.CombatLog,
+	})
+}
+
+// ListReadiedActions handles GET /api/combat/{encounterID}/combatants/{combatantID}/readied-actions.
+func (h *Handler) ListReadiedActions(w http.ResponseWriter, r *http.Request) {
+	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	combatantID, err := uuid.Parse(chi.URLParam(r, "combatantID"))
+	if err != nil {
+		http.Error(w, "invalid combatant ID", http.StatusBadRequest)
+		return
+	}
+
+	readied, err := h.svc.ListReadiedActions(r.Context(), combatantID, encounterID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp := make([]reactionDeclarationResponse, len(readied))
+	for i, d := range readied {
+		resp[i] = toReactionDeclarationResponse(d)
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }

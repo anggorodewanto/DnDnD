@@ -3,6 +3,11 @@ INSERT INTO reaction_declarations (encounter_id, combatant_id, description)
 VALUES ($1, $2, $3)
 RETURNING *;
 
+-- name: CreateReadiedActionDeclaration :one
+INSERT INTO reaction_declarations (encounter_id, combatant_id, description, is_readied_action, spell_name, spell_slot_level)
+VALUES ($1, $2, $3, true, $4, $5)
+RETURNING *;
+
 -- name: GetReactionDeclaration :one
 SELECT * FROM reaction_declarations WHERE id = $1;
 
