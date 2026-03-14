@@ -1333,7 +1333,7 @@ func TestResolveCounterspell_UpdateCounterError(t *testing.T) {
 	svc := NewService(store)
 	_, err := svc.ResolveCounterspell(context.Background(), declID, 3)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "updating counterspell resolved")
+	assert.Contains(t, err.Error(), "updating counterspell countered")
 }
 
 func TestResolveCounterspell_NeedsCheckUpdateError(t *testing.T) {

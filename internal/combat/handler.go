@@ -3,6 +3,7 @@ package combat
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -393,15 +394,9 @@ func (h *Handler) ListReactions(w http.ResponseWriter, r *http.Request) {
 
 // ResolveReaction handles POST /api/combat/{encounterID}/reactions/{reactionID}/resolve.
 func (h *Handler) ResolveReaction(w http.ResponseWriter, r *http.Request) {
-	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	_, reactionID, err := parseReactionRouteParams(r)
 	if err != nil {
-		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
-		return
-	}
-
-	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
-	if err != nil {
-		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -416,15 +411,9 @@ func (h *Handler) ResolveReaction(w http.ResponseWriter, r *http.Request) {
 
 // CancelReaction handles POST /api/combat/{encounterID}/reactions/{reactionID}/cancel.
 func (h *Handler) CancelReaction(w http.ResponseWriter, r *http.Request) {
-	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	_, reactionID, err := parseReactionRouteParams(r)
 	if err != nil {
-		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
-		return
-	}
-
-	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
-	if err != nil {
-		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -553,6 +542,19 @@ func (h *Handler) ListReadiedActions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toReactionDeclarationResponses(readied))
 }
 
+// parseReactionRouteParams extracts and validates encounterID and reactionID from URL params.
+func parseReactionRouteParams(r *http.Request) (uuid.UUID, uuid.UUID, error) {
+	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("invalid encounter ID")
+	}
+	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("invalid reaction ID")
+	}
+	return encounterID, reactionID, nil
+}
+
 // --- Counterspell handler types ---
 
 type triggerCounterspellRequest struct {
@@ -599,15 +601,9 @@ func toCounterspellResultResponse(r CounterspellResult) counterspellResultRespon
 
 // TriggerCounterspell handles POST /api/combat/{encounterID}/reactions/{reactionID}/counterspell/trigger.
 func (h *Handler) TriggerCounterspell(w http.ResponseWriter, r *http.Request) {
-	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	_, reactionID, err := parseReactionRouteParams(r)
 	if err != nil {
-		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
-		return
-	}
-
-	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
-	if err != nil {
-		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -633,15 +629,9 @@ func (h *Handler) TriggerCounterspell(w http.ResponseWriter, r *http.Request) {
 
 // ResolveCounterspell handles POST /api/combat/{encounterID}/reactions/{reactionID}/counterspell/resolve.
 func (h *Handler) ResolveCounterspell(w http.ResponseWriter, r *http.Request) {
-	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	_, reactionID, err := parseReactionRouteParams(r)
 	if err != nil {
-		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
-		return
-	}
-
-	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
-	if err != nil {
-		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -662,15 +652,9 @@ func (h *Handler) ResolveCounterspell(w http.ResponseWriter, r *http.Request) {
 
 // ResolveCounterspellCheck handles POST /api/combat/{encounterID}/reactions/{reactionID}/counterspell/check.
 func (h *Handler) ResolveCounterspellCheck(w http.ResponseWriter, r *http.Request) {
-	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	_, reactionID, err := parseReactionRouteParams(r)
 	if err != nil {
-		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
-		return
-	}
-
-	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
-	if err != nil {
-		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -691,15 +675,9 @@ func (h *Handler) ResolveCounterspellCheck(w http.ResponseWriter, r *http.Reques
 
 // PassCounterspell handles POST /api/combat/{encounterID}/reactions/{reactionID}/counterspell/pass.
 func (h *Handler) PassCounterspell(w http.ResponseWriter, r *http.Request) {
-	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	_, reactionID, err := parseReactionRouteParams(r)
 	if err != nil {
-		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
-		return
-	}
-
-	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
-	if err != nil {
-		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -714,15 +692,9 @@ func (h *Handler) PassCounterspell(w http.ResponseWriter, r *http.Request) {
 
 // ForfeitCounterspell handles POST /api/combat/{encounterID}/reactions/{reactionID}/counterspell/forfeit.
 func (h *Handler) ForfeitCounterspell(w http.ResponseWriter, r *http.Request) {
-	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	_, reactionID, err := parseReactionRouteParams(r)
 	if err != nil {
-		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
-		return
-	}
-
-	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
-	if err != nil {
-		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

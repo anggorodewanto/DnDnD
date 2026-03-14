@@ -393,7 +393,7 @@
   - Depends on: Phase 70, Phase 54
   - Done when: Integration tests verify action cost, expiry timing, readied spell slot/concentration, expiry notice, status display.
 
-- [ ] **Phase 72: Counterspell Resolution**
+- [x] **Phase 72: Counterspell Resolution**
   - Scope: Two-step Counterspell flow: DM triggers from Active Reactions Panel -> player prompted with slot level buttons + Pass (spell name revealed, cast level hidden). If slot >= enemy level: auto-counter. If slot < enemy level: spellcasting ability check (DC 10 + enemy spell level). Async timing: enemy turn continues, success removes effects retroactively. Timeout = forfeited.
   - Depends on: Phase 70, Phase 58
   - Done when: Integration tests verify full Counterspell flow: prompt, auto-counter, ability check, timeout forfeiture, retroactive removal.

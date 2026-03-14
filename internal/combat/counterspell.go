@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -78,7 +78,6 @@ func (s *Service) TriggerCounterspell(ctx context.Context, declarationID uuid.UU
 		return CounterspellPrompt{}, fmt.Errorf("no spell slots available for Counterspell (level 3+)")
 	}
 
-	// Persist enemy spell info to the declaration
 	if _, err := s.store.UpdateReactionDeclarationCounterspellPrompt(ctx, refdata.UpdateReactionDeclarationCounterspellPromptParams{
 		ID:                     declarationID,
 		CounterspellEnemySpell: sql.NullString{String: enemySpellName, Valid: true},
@@ -121,14 +120,12 @@ func (s *Service) ResolveCounterspell(ctx context.Context, declarationID uuid.UU
 		return CounterspellResult{}, fmt.Errorf("getting character: %w", err)
 	}
 
-	// Deduct the spell slot
 	slots, err := parseIntKeyedSlots(char.SpellSlots.RawMessage)
 	if err != nil {
 		return CounterspellResult{}, fmt.Errorf("parsing spell slots: %w", err)
 	}
 	pactSlots, _ := parsePactMagicSlots(char.PactMagicSlots.RawMessage)
 
-	// Try pact slot first if it matches
 	if pactSlots.Current > 0 && pactSlots.SlotLevel == chosenSlotLevel {
 		if _, err := s.deductAndPersistPactSlot(ctx, char.ID, pactSlots); err != nil {
 			return CounterspellResult{}, fmt.Errorf("deducting pact slot: %w", err)
@@ -139,49 +136,38 @@ func (s *Service) ResolveCounterspell(ctx context.Context, declarationID uuid.UU
 		}
 	}
 
-	// Consume the reaction via ResolveReaction
 	if _, err := s.ResolveReaction(ctx, declarationID); err != nil {
 		return CounterspellResult{}, fmt.Errorf("resolving reaction: %w", err)
 	}
 
 	enemyCastLevel := int(decl.CounterspellEnemyLevel.Int32)
-	enemySpellName := decl.CounterspellEnemySpell.String
 
 	result := CounterspellResult{
 		CasterName:     combatant.DisplayName,
-		EnemySpellName: enemySpellName,
+		EnemySpellName: decl.CounterspellEnemySpell.String,
+		EnemyCastLevel: enemyCastLevel,
 		SlotUsed:       chosenSlotLevel,
 		DeclarationID:  declarationID,
 	}
 
-	if chosenSlotLevel >= enemyCastLevel {
-		result.Outcome = CounterspellCountered
-		result.EnemyCastLevel = enemyCastLevel
-
-		if _, err := s.store.UpdateReactionDeclarationCounterspellResolved(ctx, refdata.UpdateReactionDeclarationCounterspellResolvedParams{
-			ID:                   declarationID,
-			CounterspellSlotUsed: sql.NullInt32{Int32: int32(chosenSlotLevel), Valid: true},
-			CounterspellStatus:   sql.NullString{String: "countered", Valid: true},
-		}); err != nil {
-			return CounterspellResult{}, fmt.Errorf("updating counterspell resolved: %w", err)
-		}
-
-		return result, nil
-	}
-
-	// Slot < enemy cast level: needs ability check
-	dc := 10 + enemyCastLevel
-	result.Outcome = CounterspellNeedsCheck
-	result.EnemyCastLevel = enemyCastLevel
-	result.DC = dc
-
-	if _, err := s.store.UpdateReactionDeclarationCounterspellResolved(ctx, refdata.UpdateReactionDeclarationCounterspellResolvedParams{
+	resolvedParams := refdata.UpdateReactionDeclarationCounterspellResolvedParams{
 		ID:                   declarationID,
 		CounterspellSlotUsed: sql.NullInt32{Int32: int32(chosenSlotLevel), Valid: true},
-		CounterspellStatus:   sql.NullString{String: "needs_check", Valid: true},
-		CounterspellDc:       sql.NullInt32{Int32: int32(dc), Valid: true},
-	}); err != nil {
-		return CounterspellResult{}, fmt.Errorf("updating counterspell needs_check: %w", err)
+	}
+
+	if chosenSlotLevel >= enemyCastLevel {
+		result.Outcome = CounterspellCountered
+		resolvedParams.CounterspellStatus = sql.NullString{String: "countered", Valid: true}
+	} else {
+		dc := 10 + enemyCastLevel
+		result.Outcome = CounterspellNeedsCheck
+		result.DC = dc
+		resolvedParams.CounterspellStatus = sql.NullString{String: "needs_check", Valid: true}
+		resolvedParams.CounterspellDc = sql.NullInt32{Int32: int32(dc), Valid: true}
+	}
+
+	if _, err := s.store.UpdateReactionDeclarationCounterspellResolved(ctx, resolvedParams); err != nil {
+		return CounterspellResult{}, fmt.Errorf("updating counterspell %s: %w", resolvedParams.CounterspellStatus.String, err)
 	}
 
 	return result, nil
@@ -248,7 +234,6 @@ func (s *Service) PassCounterspell(ctx context.Context, declarationID uuid.UUID)
 		return CounterspellResult{}, fmt.Errorf("getting combatant: %w", err)
 	}
 
-	// Clear counterspell state — declaration stays active, reaction NOT consumed
 	if _, err := s.store.UpdateReactionDeclarationCounterspellResolved(ctx, refdata.UpdateReactionDeclarationCounterspellResolvedParams{
 		ID:               declarationID,
 		CounterspellStatus: sql.NullString{String: "passed", Valid: true},
@@ -280,7 +265,6 @@ func (s *Service) ForfeitCounterspell(ctx context.Context, declarationID uuid.UU
 		return CounterspellResult{}, fmt.Errorf("getting combatant: %w", err)
 	}
 
-	// Consume the reaction (marks declaration as used, sets reaction_used on turn)
 	if _, err := s.ResolveReaction(ctx, declarationID); err != nil {
 		return CounterspellResult{}, fmt.Errorf("resolving reaction for forfeit: %w", err)
 	}
@@ -328,19 +312,9 @@ func AvailableCounterspellSlots(slots map[int]SlotInfo, pact PactMagicSlotState)
 			levels = append(levels, level)
 		}
 	}
-	if pact.Current > 0 && pact.SlotLevel >= 3 {
-		// Avoid duplicate if pact slot level already present
-		found := false
-		for _, l := range levels {
-			if l == pact.SlotLevel {
-				found = true
-				break
-			}
-		}
-		if !found {
-			levels = append(levels, pact.SlotLevel)
-		}
+	if pact.Current > 0 && pact.SlotLevel >= 3 && !slices.Contains(levels, pact.SlotLevel) {
+		levels = append(levels, pact.SlotLevel)
 	}
-	sort.Ints(levels)
+	slices.Sort(levels)
 	return levels
 }
