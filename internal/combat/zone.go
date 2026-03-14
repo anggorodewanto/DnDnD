@@ -1,0 +1,312 @@
+package combat
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
+
+	"github.com/ab/dndnd/internal/refdata"
+)
+
+// CreateZoneInput holds parameters for creating an encounter zone.
+type CreateZoneInput struct {
+	EncounterID           uuid.UUID
+	SourceCombatantID     uuid.UUID
+	SourceSpell           string
+	Shape                 string
+	OriginCol             string
+	OriginRow             int32
+	Dimensions            json.RawMessage
+	AnchorMode            string
+	AnchorCombatantID     uuid.NullUUID
+	ZoneType              string
+	OverlayColor          string
+	MarkerIcon            string
+	RequiresConcentration bool
+	ExpiresAtRound        sql.NullInt32
+	Triggers              []ZoneTrigger
+}
+
+// ZoneInfo holds the result of creating or listing a zone.
+type ZoneInfo struct {
+	ID                    uuid.UUID
+	EncounterID           uuid.UUID
+	SourceCombatantID     uuid.UUID
+	SourceSpell           string
+	Shape                 string
+	OriginCol             string
+	OriginRow             int32
+	Dimensions            json.RawMessage
+	AnchorMode            string
+	AnchorCombatantID     uuid.NullUUID
+	ZoneType              string
+	OverlayColor          string
+	MarkerIcon            string
+	RequiresConcentration bool
+	ExpiresAtRound        sql.NullInt32
+	Triggers              []ZoneTrigger
+}
+
+// ZoneTriggerResult holds the outcome of a zone trigger check.
+type ZoneTriggerResult struct {
+	ZoneID      uuid.UUID
+	SourceSpell string
+	ZoneType    string
+	Effect      string
+	Trigger     string
+	Details     map[string]interface{}
+}
+
+// zoneInfoFromModel converts a refdata.EncounterZone to a ZoneInfo.
+func zoneInfoFromModel(z refdata.EncounterZone) ZoneInfo {
+	var triggers []ZoneTrigger
+	if z.ZoneTriggers.Valid && len(z.ZoneTriggers.RawMessage) > 0 {
+		_ = json.Unmarshal(z.ZoneTriggers.RawMessage, &triggers)
+	}
+	markerIcon := ""
+	if z.MarkerIcon.Valid {
+		markerIcon = z.MarkerIcon.String
+	}
+	return ZoneInfo{
+		ID:                    z.ID,
+		EncounterID:           z.EncounterID,
+		SourceCombatantID:     z.SourceCombatantID,
+		SourceSpell:           z.SourceSpell,
+		Shape:                 z.Shape,
+		OriginCol:             z.OriginCol,
+		OriginRow:             z.OriginRow,
+		Dimensions:            z.Dimensions,
+		AnchorMode:            z.AnchorMode,
+		AnchorCombatantID:     z.AnchorCombatantID,
+		ZoneType:              z.ZoneType,
+		OverlayColor:          z.OverlayColor,
+		MarkerIcon:            markerIcon,
+		RequiresConcentration: z.RequiresConcentration,
+		ExpiresAtRound:        z.ExpiresAtRound,
+		Triggers:              triggers,
+	}
+}
+
+// CreateZone inserts a new encounter zone.
+func (s *Service) CreateZone(ctx context.Context, input CreateZoneInput) (ZoneInfo, error) {
+	triggersJSON, err := json.Marshal(input.Triggers)
+	if err != nil {
+		return ZoneInfo{}, fmt.Errorf("marshalling triggers: %w", err)
+	}
+
+	zone, err := s.store.CreateEncounterZone(ctx, refdata.CreateEncounterZoneParams{
+		EncounterID:       input.EncounterID,
+		SourceCombatantID: input.SourceCombatantID,
+		SourceSpell:       input.SourceSpell,
+		Shape:             input.Shape,
+		OriginCol:         input.OriginCol,
+		OriginRow:         input.OriginRow,
+		Dimensions:        input.Dimensions,
+		AnchorMode:        input.AnchorMode,
+		AnchorCombatantID: input.AnchorCombatantID,
+		ZoneType:          input.ZoneType,
+		OverlayColor:      input.OverlayColor,
+		MarkerIcon:        sql.NullString{String: input.MarkerIcon, Valid: input.MarkerIcon != ""},
+		RequiresConcentration: input.RequiresConcentration,
+		ExpiresAtRound:        input.ExpiresAtRound,
+		ZoneTriggers: pqtype.NullRawMessage{
+			RawMessage: triggersJSON,
+			Valid:      true,
+		},
+		TriggeredThisRound: pqtype.NullRawMessage{
+			RawMessage: json.RawMessage(`{}`),
+			Valid:      true,
+		},
+	})
+	if err != nil {
+		return ZoneInfo{}, fmt.Errorf("creating encounter zone: %w", err)
+	}
+
+	return zoneInfoFromModel(zone), nil
+}
+
+// DeleteZone removes a zone by ID (DM manual removal).
+func (s *Service) DeleteZone(ctx context.Context, zoneID uuid.UUID) error {
+	return s.store.DeleteEncounterZone(ctx, zoneID)
+}
+
+// CleanupConcentrationZones deletes all concentration zones for a combatant.
+func (s *Service) CleanupConcentrationZones(ctx context.Context, combatantID uuid.UUID) error {
+	return s.store.DeleteConcentrationZonesByCombatant(ctx, combatantID)
+}
+
+// CleanupExpiredZones deletes zones that have expired by the given round.
+func (s *Service) CleanupExpiredZones(ctx context.Context, encounterID uuid.UUID, currentRound int32) error {
+	return s.store.DeleteExpiredZones(ctx, refdata.DeleteExpiredZonesParams{
+		EncounterID:    encounterID,
+		ExpiresAtRound: sql.NullInt32{Int32: currentRound, Valid: true},
+	})
+}
+
+// CleanupEncounterZones deletes all zones for an encounter (encounter end cleanup).
+func (s *Service) CleanupEncounterZones(ctx context.Context, encounterID uuid.UUID) error {
+	return s.store.DeleteEncounterZonesByEncounterID(ctx, encounterID)
+}
+
+// UpdateZoneAnchor updates the origin of all zones anchored to a combatant.
+func (s *Service) UpdateZoneAnchor(ctx context.Context, combatantID uuid.UUID, newCol string, newRow int32) error {
+	combatant, err := s.store.GetCombatant(ctx, combatantID)
+	if err != nil {
+		return fmt.Errorf("getting combatant: %w", err)
+	}
+
+	zones, err := s.store.ListEncounterZonesByEncounterID(ctx, combatant.EncounterID)
+	if err != nil {
+		return fmt.Errorf("listing zones: %w", err)
+	}
+
+	for _, z := range zones {
+		if z.AnchorMode != "combatant" || !z.AnchorCombatantID.Valid || z.AnchorCombatantID.UUID != combatantID {
+			continue
+		}
+		if _, err := s.store.UpdateEncounterZoneOrigin(ctx, refdata.UpdateEncounterZoneOriginParams{
+			ID:        z.ID,
+			OriginCol: newCol,
+			OriginRow: newRow,
+		}); err != nil {
+			return fmt.Errorf("updating zone origin %s: %w", z.ID, err)
+		}
+	}
+	return nil
+}
+
+// CheckZoneTriggers checks if a combatant at the given position triggers any zone effects.
+func (s *Service) CheckZoneTriggers(ctx context.Context, combatantID uuid.UUID, col, row int, encounterID uuid.UUID, triggerType string) ([]ZoneTriggerResult, error) {
+	zones, err := s.store.ListEncounterZonesByEncounterID(ctx, encounterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing zones: %w", err)
+	}
+
+	var results []ZoneTriggerResult
+	for _, z := range zones {
+		// Parse triggers
+		var triggers []ZoneTrigger
+		if z.ZoneTriggers.Valid && len(z.ZoneTriggers.RawMessage) > 0 {
+			if err := json.Unmarshal(z.ZoneTriggers.RawMessage, &triggers); err != nil {
+				continue
+			}
+		}
+
+		// Check if any trigger matches the trigger type
+		var matchingTrigger *ZoneTrigger
+		for i := range triggers {
+			if triggers[i].Trigger == triggerType {
+				matchingTrigger = &triggers[i]
+				break
+			}
+		}
+		if matchingTrigger == nil {
+			continue
+		}
+
+		// Check if already triggered this round for this combatant
+		if z.TriggeredThisRound.Valid && len(z.TriggeredThisRound.RawMessage) > 0 {
+			var triggered map[string]bool
+			if err := json.Unmarshal(z.TriggeredThisRound.RawMessage, &triggered); err == nil {
+				if triggered[combatantID.String()] {
+					continue
+				}
+			}
+		}
+
+		// Calculate affected tiles for this zone
+		tiles := zoneAffectedTiles(z)
+		if !tileInSet(col, row, tiles) {
+			continue
+		}
+
+		// Mark as triggered for this combatant this round
+		triggered := make(map[string]bool)
+		if z.TriggeredThisRound.Valid && len(z.TriggeredThisRound.RawMessage) > 0 {
+			_ = json.Unmarshal(z.TriggeredThisRound.RawMessage, &triggered)
+		}
+		triggered[combatantID.String()] = true
+		triggeredJSON, _ := json.Marshal(triggered)
+
+		if _, err := s.store.UpdateEncounterZoneTriggeredThisRound(ctx, refdata.UpdateEncounterZoneTriggeredThisRoundParams{
+			ID: z.ID,
+			TriggeredThisRound: pqtype.NullRawMessage{
+				RawMessage: triggeredJSON,
+				Valid:      true,
+			},
+		}); err != nil {
+			return nil, fmt.Errorf("updating triggered_this_round: %w", err)
+		}
+
+		results = append(results, ZoneTriggerResult{
+			ZoneID:      z.ID,
+			SourceSpell: z.SourceSpell,
+			ZoneType:    z.ZoneType,
+			Effect:      matchingTrigger.Effect,
+			Trigger:     matchingTrigger.Trigger,
+			Details:     matchingTrigger.Details,
+		})
+	}
+
+	return results, nil
+}
+
+// ResetZoneTriggersForRound resets all triggered_this_round tracking for an encounter.
+func (s *Service) ResetZoneTriggersForRound(ctx context.Context, encounterID uuid.UUID) error {
+	return s.store.ResetAllTriggeredThisRound(ctx, encounterID)
+}
+
+// ListZonesForEncounter returns all active zones for an encounter.
+func (s *Service) ListZonesForEncounter(ctx context.Context, encounterID uuid.UUID) ([]ZoneInfo, error) {
+	zones, err := s.store.ListEncounterZonesByEncounterID(ctx, encounterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing zones: %w", err)
+	}
+	result := make([]ZoneInfo, len(zones))
+	for i, z := range zones {
+		result[i] = zoneInfoFromModel(z)
+	}
+	return result, nil
+}
+
+// zoneAffectedTiles calculates the tiles affected by a zone based on its shape and dimensions.
+func zoneAffectedTiles(z refdata.EncounterZone) []GridPos {
+	originCol := colToIndex(z.OriginCol)
+	originRow := int(z.OriginRow) - 1
+
+	var dims struct {
+		RadiusFt int `json:"radius_ft"`
+		WidthFt  int `json:"width_ft"`
+		HeightFt int `json:"height_ft"`
+		LengthFt int `json:"length_ft"`
+		SideFt   int `json:"side_ft"`
+	}
+	_ = json.Unmarshal(z.Dimensions, &dims)
+
+	switch z.Shape {
+	case "circle":
+		return SphereAffectedTiles(originCol, originRow, dims.RadiusFt)
+	case "square":
+		return SquareAffectedTiles(originCol, originRow, dims.SideFt)
+	case "rectangle":
+		// Treat as square with width
+		return SquareAffectedTiles(originCol, originRow, dims.WidthFt)
+	default:
+		// For line/cone, include origin tile as minimum
+		return []GridPos{{Col: originCol, Row: originRow}}
+	}
+}
+
+// tileInSet checks if a position (0-based col, 0-based row) is in the set of affected tiles.
+func tileInSet(col, row int, tiles []GridPos) bool {
+	for _, t := range tiles {
+		if t.Col == col && t.Row == row {
+			return true
+		}
+	}
+	return false
+}

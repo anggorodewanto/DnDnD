@@ -221,6 +221,27 @@ type EncounterTemplate struct {
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
+type EncounterZone struct {
+	ID                    uuid.UUID             `json:"id"`
+	EncounterID           uuid.UUID             `json:"encounter_id"`
+	SourceCombatantID     uuid.UUID             `json:"source_combatant_id"`
+	SourceSpell           string                `json:"source_spell"`
+	Shape                 string                `json:"shape"`
+	OriginCol             string                `json:"origin_col"`
+	OriginRow             int32                 `json:"origin_row"`
+	Dimensions            json.RawMessage       `json:"dimensions"`
+	AnchorMode            string                `json:"anchor_mode"`
+	AnchorCombatantID     uuid.NullUUID         `json:"anchor_combatant_id"`
+	ZoneType              string                `json:"zone_type"`
+	OverlayColor          string                `json:"overlay_color"`
+	MarkerIcon            sql.NullString        `json:"marker_icon"`
+	RequiresConcentration bool                  `json:"requires_concentration"`
+	ExpiresAtRound        sql.NullInt32         `json:"expires_at_round"`
+	ZoneTriggers          pqtype.NullRawMessage `json:"zone_triggers"`
+	TriggeredThisRound    pqtype.NullRawMessage `json:"triggered_this_round"`
+	CreatedAt             time.Time             `json:"created_at"`
+}
+
 type Feat struct {
 	ID               string                `json:"id"`
 	Name             string                `json:"name"`

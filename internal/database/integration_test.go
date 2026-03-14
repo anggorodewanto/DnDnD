@@ -68,7 +68,12 @@ func TestIntegration_MigrateDown(t *testing.T) {
 		t.Fatalf("MigrateUp failed: %v", err)
 	}
 
-	// Roll back the bardic_inspiration migration (most recent)
+	// Roll back the encounter_zones migration (most recent)
+	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
+		t.Fatalf("MigrateDown (encounter_zones) failed: %v", err)
+	}
+
+	// Roll back the bardic_inspiration migration
 	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
 		t.Fatalf("MigrateDown (bardic_inspiration) failed: %v", err)
 	}

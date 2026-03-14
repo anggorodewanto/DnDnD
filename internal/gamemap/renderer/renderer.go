@@ -36,6 +36,9 @@ func RenderMap(md *MapData) ([]byte, error) {
 	// 1. Terrain layer
 	DrawTerrain(dc, md)
 
+	// 1.5. Zone overlays (between terrain and grid so grid lines show over overlays)
+	DrawZoneOverlays(dc, md)
+
 	// 2. Grid lines
 	DrawGrid(dc, md)
 

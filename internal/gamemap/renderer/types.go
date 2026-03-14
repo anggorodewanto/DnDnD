@@ -163,6 +163,21 @@ type ActiveEffect struct {
 	Rounds     int    // remaining rounds
 }
 
+// GridPos represents a 0-based grid position (col, row).
+type GridPos struct {
+	Col int
+	Row int
+}
+
+// ZoneOverlay represents a zone effect overlay to render on the map.
+type ZoneOverlay struct {
+	OriginCol     int
+	OriginRow     int
+	AffectedTiles []GridPos
+	Color         color.RGBA
+	MarkerIcon    string
+}
+
 // MapData holds all the data needed to render a map image.
 type MapData struct {
 	Width         int           // map width in tiles
@@ -172,4 +187,5 @@ type MapData struct {
 	Walls         []WallSegment
 	Combatants    []Combatant
 	ActiveEffects []ActiveEffect
+	ZoneOverlays  []ZoneOverlay
 }

@@ -99,6 +99,19 @@ type Store interface {
 
 	// Character data
 	UpdateCharacterData(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error)
+
+	// Encounter Zones
+	CreateEncounterZone(ctx context.Context, arg refdata.CreateEncounterZoneParams) (refdata.EncounterZone, error)
+	GetEncounterZone(ctx context.Context, id uuid.UUID) (refdata.EncounterZone, error)
+	ListEncounterZonesByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.EncounterZone, error)
+	ListConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) ([]refdata.EncounterZone, error)
+	DeleteEncounterZone(ctx context.Context, id uuid.UUID) error
+	DeleteEncounterZonesByEncounterID(ctx context.Context, encounterID uuid.UUID) error
+	DeleteConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) error
+	DeleteExpiredZones(ctx context.Context, arg refdata.DeleteExpiredZonesParams) error
+	UpdateEncounterZoneOrigin(ctx context.Context, arg refdata.UpdateEncounterZoneOriginParams) (refdata.EncounterZone, error)
+	UpdateEncounterZoneTriggeredThisRound(ctx context.Context, arg refdata.UpdateEncounterZoneTriggeredThisRoundParams) (refdata.EncounterZone, error)
+	ResetAllTriggeredThisRound(ctx context.Context, encounterID uuid.UUID) error
 }
 
 // Service manages combat encounters and their entities.
@@ -449,6 +462,11 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 		if _, err := s.store.CompleteTurn(ctx, enc.CurrentTurnID.UUID); err != nil {
 			return EndCombatResult{}, fmt.Errorf("completing active turn: %w", err)
 		}
+	}
+
+	// Clean up all encounter zones
+	if err := s.store.DeleteEncounterZonesByEncounterID(ctx, encounterID); err != nil {
+		return EndCombatResult{}, fmt.Errorf("cleaning up encounter zones: %w", err)
 	}
 
 	// Set status to completed

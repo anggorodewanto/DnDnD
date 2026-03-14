@@ -64,6 +64,19 @@ type mockStore struct {
 	updateCharacterGoldFn             func(ctx context.Context, id uuid.UUID, gold int32) error
 	listSpellsByClassFn               func(ctx context.Context, class string) ([]refdata.Spell, error)
 	updateCharacterDataFn             func(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error)
+
+	// Encounter Zones
+	createEncounterZoneFn                   func(ctx context.Context, arg refdata.CreateEncounterZoneParams) (refdata.EncounterZone, error)
+	getEncounterZoneFn                      func(ctx context.Context, id uuid.UUID) (refdata.EncounterZone, error)
+	listEncounterZonesByEncounterIDFn       func(ctx context.Context, encounterID uuid.UUID) ([]refdata.EncounterZone, error)
+	listConcentrationZonesByCombatantFn     func(ctx context.Context, sourceCombatantID uuid.UUID) ([]refdata.EncounterZone, error)
+	deleteEncounterZoneFn                   func(ctx context.Context, id uuid.UUID) error
+	deleteEncounterZonesByEncounterIDFn     func(ctx context.Context, encounterID uuid.UUID) error
+	deleteConcentrationZonesByCombatantFn   func(ctx context.Context, sourceCombatantID uuid.UUID) error
+	deleteExpiredZonesFn                    func(ctx context.Context, arg refdata.DeleteExpiredZonesParams) error
+	updateEncounterZoneOriginFn             func(ctx context.Context, arg refdata.UpdateEncounterZoneOriginParams) (refdata.EncounterZone, error)
+	updateEncounterZoneTriggeredThisRoundFn func(ctx context.Context, arg refdata.UpdateEncounterZoneTriggeredThisRoundParams) (refdata.EncounterZone, error)
+	resetAllTriggeredThisRoundFn            func(ctx context.Context, encounterID uuid.UUID) error
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -218,6 +231,72 @@ func (m *mockStore) UpdateCharacterData(ctx context.Context, arg refdata.UpdateC
 		return m.updateCharacterDataFn(ctx, arg)
 	}
 	return refdata.Character{ID: arg.ID, CharacterData: arg.CharacterData}, nil
+}
+func (m *mockStore) CreateEncounterZone(ctx context.Context, arg refdata.CreateEncounterZoneParams) (refdata.EncounterZone, error) {
+	if m.createEncounterZoneFn != nil {
+		return m.createEncounterZoneFn(ctx, arg)
+	}
+	return refdata.EncounterZone{}, nil
+}
+func (m *mockStore) GetEncounterZone(ctx context.Context, id uuid.UUID) (refdata.EncounterZone, error) {
+	if m.getEncounterZoneFn != nil {
+		return m.getEncounterZoneFn(ctx, id)
+	}
+	return refdata.EncounterZone{}, nil
+}
+func (m *mockStore) ListEncounterZonesByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.EncounterZone, error) {
+	if m.listEncounterZonesByEncounterIDFn != nil {
+		return m.listEncounterZonesByEncounterIDFn(ctx, encounterID)
+	}
+	return []refdata.EncounterZone{}, nil
+}
+func (m *mockStore) ListConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) ([]refdata.EncounterZone, error) {
+	if m.listConcentrationZonesByCombatantFn != nil {
+		return m.listConcentrationZonesByCombatantFn(ctx, sourceCombatantID)
+	}
+	return []refdata.EncounterZone{}, nil
+}
+func (m *mockStore) DeleteEncounterZone(ctx context.Context, id uuid.UUID) error {
+	if m.deleteEncounterZoneFn != nil {
+		return m.deleteEncounterZoneFn(ctx, id)
+	}
+	return nil
+}
+func (m *mockStore) DeleteEncounterZonesByEncounterID(ctx context.Context, encounterID uuid.UUID) error {
+	if m.deleteEncounterZonesByEncounterIDFn != nil {
+		return m.deleteEncounterZonesByEncounterIDFn(ctx, encounterID)
+	}
+	return nil
+}
+func (m *mockStore) DeleteConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) error {
+	if m.deleteConcentrationZonesByCombatantFn != nil {
+		return m.deleteConcentrationZonesByCombatantFn(ctx, sourceCombatantID)
+	}
+	return nil
+}
+func (m *mockStore) DeleteExpiredZones(ctx context.Context, arg refdata.DeleteExpiredZonesParams) error {
+	if m.deleteExpiredZonesFn != nil {
+		return m.deleteExpiredZonesFn(ctx, arg)
+	}
+	return nil
+}
+func (m *mockStore) UpdateEncounterZoneOrigin(ctx context.Context, arg refdata.UpdateEncounterZoneOriginParams) (refdata.EncounterZone, error) {
+	if m.updateEncounterZoneOriginFn != nil {
+		return m.updateEncounterZoneOriginFn(ctx, arg)
+	}
+	return refdata.EncounterZone{}, nil
+}
+func (m *mockStore) UpdateEncounterZoneTriggeredThisRound(ctx context.Context, arg refdata.UpdateEncounterZoneTriggeredThisRoundParams) (refdata.EncounterZone, error) {
+	if m.updateEncounterZoneTriggeredThisRoundFn != nil {
+		return m.updateEncounterZoneTriggeredThisRoundFn(ctx, arg)
+	}
+	return refdata.EncounterZone{}, nil
+}
+func (m *mockStore) ResetAllTriggeredThisRound(ctx context.Context, encounterID uuid.UUID) error {
+	if m.resetAllTriggeredThisRoundFn != nil {
+		return m.resetAllTriggeredThisRoundFn(ctx, encounterID)
+	}
+	return nil
 }
 
 func defaultMockStore() *mockStore {
