@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -213,17 +214,16 @@ func TestFindAffectedCombatants(t *testing.T) {
 	t.Run("finds combatants in affected tiles", func(t *testing.T) {
 		// Tiles covering col C row 3 = col index 2, row index 2 (0-based from 1-based row)
 		// colToIndex("C") = 2, row 3 - 1 = 2
-		// Also includes Dead Goblin at same position
 		tiles := []GridPos{{2, 2}, {4, 4}, {10, 10}}
 		affected := FindAffectedCombatants(tiles, combatants)
-		require.Len(t, affected, 3) // Goblin A + Goblin B + Dead Goblin
+		require.Len(t, affected, 2) // Goblin A + Goblin B (dead excluded)
 		var names []string
 		for _, a := range affected {
 			names = append(names, a.DisplayName)
 		}
 		assert.Contains(t, names, "Goblin A")
 		assert.Contains(t, names, "Goblin B")
-		assert.Contains(t, names, "Dead Goblin")
+		assert.NotContains(t, names, "Dead Goblin")
 	})
 
 	t.Run("excludes combatants not in area", func(t *testing.T) {
@@ -232,11 +232,12 @@ func TestFindAffectedCombatants(t *testing.T) {
 		assert.Empty(t, affected)
 	})
 
-	t.Run("includes dead combatants on affected tiles", func(t *testing.T) {
-		// Dead combatants are still in the area, just not alive
+	t.Run("excludes dead combatants from affected tiles", func(t *testing.T) {
+		// Dead combatants on affected tiles should NOT be returned
 		tiles := []GridPos{{2, 2}}
 		affected := FindAffectedCombatants(tiles, combatants)
-		assert.Len(t, affected, 2) // Goblin A + Dead Goblin at same position
+		assert.Len(t, affected, 1) // Only Goblin A (alive), Dead Goblin excluded
+		assert.Equal(t, "Goblin A", affected[0].DisplayName)
 	})
 }
 
@@ -1256,4 +1257,772 @@ func TestFormatAoECastLog_Cantrip(t *testing.T) {
 	log := FormatAoECastLog(result)
 	assert.NotContains(t, log, "slot")
 	assert.Contains(t, log, "DC 15")
+}
+
+// TDD Cycle 2 (iter2): ResolveAoESaves applies full damage on failed save
+func TestResolveAoESaves_FullDamageOnFail(t *testing.T) {
+	goblinID := uuid.New()
+
+	goblin := refdata.Combatant{
+		ID: goblinID, DisplayName: "Goblin", HpMax: 30, HpCurrent: 30,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	var capturedHP refdata.UpdateCombatantHPParams
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == goblinID {
+			return goblin, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		capturedHP = arg
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, TempHp: arg.TempHp, IsAlive: arg.IsAlive}, nil
+	}
+
+	// Use a deterministic roller that always rolls 4 (8d6 = 32)
+	roller := dice.NewRoller(func(max int) int { return 4 })
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		EncounterID: uuid.New(),
+		SpellName:   "Fireball",
+		DamageDice:  "8d6",
+		DamageType:  "fire",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{
+			{CombatantID: goblinID, Rolled: 8, Total: 8, Success: false, CoverBonus: 0},
+		},
+	}
+
+	result, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.NoError(t, err)
+	require.Len(t, result.Targets, 1)
+	assert.Equal(t, goblinID, result.Targets[0].CombatantID)
+	assert.Equal(t, "Goblin", result.Targets[0].DisplayName)
+	assert.False(t, result.Targets[0].SaveSuccess)
+	assert.Equal(t, 32, result.Targets[0].DamageDealt) // full damage: 8*4=32
+	assert.Equal(t, 30, result.Targets[0].HPBefore)
+	assert.Equal(t, 0, result.Targets[0].HPAfter) // 30-32 = clamped to 0
+	assert.Equal(t, int32(0), capturedHP.HpCurrent)
+	assert.False(t, capturedHP.IsAlive)
+}
+
+// TDD Cycle 3 (iter2): ResolveAoESaves applies half damage on successful save
+func TestResolveAoESaves_HalfDamageOnSave(t *testing.T) {
+	goblinID := uuid.New()
+
+	goblin := refdata.Combatant{
+		ID: goblinID, DisplayName: "Goblin", HpMax: 50, HpCurrent: 50,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	var capturedHP refdata.UpdateCombatantHPParams
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == goblinID {
+			return goblin, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		capturedHP = arg
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	// Deterministic roller: always rolls 3 (8d6 = 24)
+	roller := dice.NewRoller(func(max int) int { return 3 })
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		EncounterID: uuid.New(),
+		SpellName:   "Fireball",
+		DamageDice:  "8d6",
+		DamageType:  "fire",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{
+			{CombatantID: goblinID, Rolled: 15, Total: 15, Success: true},
+		},
+	}
+
+	result, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.NoError(t, err)
+	require.Len(t, result.Targets, 1)
+	assert.True(t, result.Targets[0].SaveSuccess)
+	// 24 * 0.5 = 12 (half damage, rounded down)
+	assert.Equal(t, 12, result.Targets[0].DamageDealt)
+	assert.Equal(t, 50, result.Targets[0].HPBefore)
+	assert.Equal(t, 38, result.Targets[0].HPAfter) // 50-12=38
+	assert.Equal(t, int32(38), capturedHP.HpCurrent)
+	assert.True(t, capturedHP.IsAlive)
+}
+
+// TDD Cycle 4 (iter2): ResolveAoESaves applies no damage on save with no_effect
+func TestResolveAoESaves_NoEffectOnSave(t *testing.T) {
+	goblinID := uuid.New()
+
+	goblin := refdata.Combatant{
+		ID: goblinID, DisplayName: "Goblin", HpMax: 30, HpCurrent: 30,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return goblin, nil
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 5 })
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		EncounterID: uuid.New(),
+		SpellName:   "Entangle",
+		DamageDice:  "2d6",
+		DamageType:  "bludgeoning",
+		SaveEffect:  "no_effect",
+		SaveResults: []SaveResult{
+			{CombatantID: goblinID, Rolled: 18, Total: 18, Success: true},
+		},
+	}
+
+	result, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.NoError(t, err)
+	require.Len(t, result.Targets, 1)
+	assert.True(t, result.Targets[0].SaveSuccess)
+	assert.Equal(t, 0, result.Targets[0].DamageDealt) // no damage on save
+	assert.Equal(t, 30, result.Targets[0].HPAfter)     // unchanged
+}
+
+// TDD Cycle 5 (iter2): ResolveAoESaves with multiple targets, mixed saves
+func TestResolveAoESaves_MultipleTargetsMixedSaves(t *testing.T) {
+	goblinAID := uuid.New()
+	goblinBID := uuid.New()
+	fighterID := uuid.New()
+
+	goblinA := refdata.Combatant{
+		ID: goblinAID, DisplayName: "Goblin A", HpMax: 30, HpCurrent: 30,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+	goblinB := refdata.Combatant{
+		ID: goblinBID, DisplayName: "Goblin B", HpMax: 30, HpCurrent: 30,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+	fighter := refdata.Combatant{
+		ID: fighterID, DisplayName: "Fighter", HpMax: 50, HpCurrent: 50,
+		IsAlive: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	hpUpdates := map[uuid.UUID]refdata.UpdateCombatantHPParams{}
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		switch id {
+		case goblinAID:
+			return goblinA, nil
+		case goblinBID:
+			return goblinB, nil
+		case fighterID:
+			return fighter, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpUpdates[arg.ID] = arg
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	// 8d6 always rolling 4 = 32 total damage
+	roller := dice.NewRoller(func(max int) int { return 4 })
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		EncounterID: uuid.New(),
+		SpellName:   "Fireball",
+		DamageDice:  "8d6",
+		DamageType:  "fire",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{
+			{CombatantID: goblinAID, Success: false}, // full damage: 32
+			{CombatantID: goblinBID, Success: false}, // full damage: 32
+			{CombatantID: fighterID, Success: true},  // half damage: 16
+		},
+	}
+
+	result, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.NoError(t, err)
+	require.Len(t, result.Targets, 3)
+
+	// Goblin A: 30 - 32 = 0 (clamped), dead
+	assert.Equal(t, 32, result.Targets[0].DamageDealt)
+	assert.Equal(t, 0, result.Targets[0].HPAfter)
+	assert.False(t, hpUpdates[goblinAID].IsAlive)
+
+	// Goblin B: 30 - 32 = 0 (clamped), dead
+	assert.Equal(t, 32, result.Targets[1].DamageDealt)
+	assert.Equal(t, 0, result.Targets[1].HPAfter)
+
+	// Fighter: 50 - 16 = 34, alive
+	assert.Equal(t, 16, result.Targets[2].DamageDealt)
+	assert.Equal(t, 34, result.Targets[2].HPAfter)
+	assert.True(t, hpUpdates[fighterID].IsAlive)
+
+	// Total damage
+	assert.Equal(t, 80, result.TotalDamage) // 32+32+16
+}
+
+// TDD Cycle 6 (iter2): ResolveAoESaves error - combatant not found
+func TestResolveAoESaves_CombatantNotFound(t *testing.T) {
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 3 })
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		DamageDice:  "8d6",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{{CombatantID: uuid.New(), Success: false}},
+	}
+
+	_, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting combatant")
+}
+
+// TDD Cycle 7 (iter2): ResolveAoESaves error - update HP fails
+func TestResolveAoESaves_UpdateHPError(t *testing.T) {
+	goblinID := uuid.New()
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: goblinID, DisplayName: "Goblin", HpCurrent: 30, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.updateCombatantHPFn = func(_ context.Context, _ refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, fmt.Errorf("db error")
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 3 })
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		DamageDice:  "2d6",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{{CombatantID: goblinID, Success: false}},
+	}
+
+	_, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating HP")
+}
+
+// TDD Cycle 8 (iter2): ResolveAoESaves error - invalid damage dice
+func TestResolveAoESaves_InvalidDamageDice(t *testing.T) {
+	store := defaultMockStore()
+	roller := dice.NewRoller(func(max int) int { return 3 })
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		DamageDice:  "invalid",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{{CombatantID: uuid.New(), Success: false}},
+	}
+
+	_, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rolling damage")
+}
+
+// TDD Cycle 9 (iter2): Integration test - Full CastAoE -> ResolveAoESaves (Fireball sphere)
+func TestIntegration_Fireball_CastAndResolve(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "E"
+	caster.PositionRow = 5
+
+	goblinA := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin A",
+		PositionCol: "H", PositionRow: 8, HpMax: 30, HpCurrent: 30,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+	goblinB := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin B",
+		PositionCol: "I", PositionRow: 8, HpMax: 30, HpCurrent: 30,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+	fighter := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Fighter",
+		PositionCol: "H", PositionRow: 9, HpMax: 60, HpCurrent: 60,
+		IsAlive: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	fireball := makeFireball()
+	fireball.AreaOfEffect = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`{"shape":"sphere","radius_ft":20}`),
+		Valid:      true,
+	}
+	fireball.SaveEffect = sql.NullString{String: "half_damage", Valid: true}
+	fireball.Damage = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`{"dice":"8d6","type":"fire"}`),
+		Valid:      true,
+	}
+
+	hpUpdates := map[uuid.UUID]refdata.UpdateCombatantHPParams{}
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return fireball, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		switch id {
+		case caster.ID:
+			return caster, nil
+		case goblinA.ID:
+			return goblinA, nil
+		case goblinB.ID:
+			return goblinB, nil
+		case fighter.ID:
+			return fighter, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster, goblinA, goblinB, fighter}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpUpdates[arg.ID] = arg
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	svc := NewService(store)
+
+	// Step 1: Cast Fireball
+	castCmd := AoECastCommand{
+		SpellID:     "fireball",
+		CasterID:    caster.ID,
+		EncounterID: uuid.New(),
+		TargetCol:   "H",
+		TargetRow:   8,
+		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	castResult, err := svc.CastAoE(context.Background(), castCmd)
+	require.NoError(t, err)
+	assert.Equal(t, "Fireball", castResult.SpellName)
+	assert.Len(t, castResult.AffectedNames, 3) // Goblin A, Goblin B, Fighter
+	assert.Len(t, castResult.PendingSaves, 3)
+	assert.Equal(t, 15, castResult.SaveDC)
+	assert.Equal(t, "dex", castResult.SaveAbility)
+
+	// Step 2: Resolve saves - Goblin A fails, Goblin B fails, Fighter saves
+	roller := dice.NewRoller(func(max int) int { return 4 }) // 8d6 = 32
+	resolveInput := AoEDamageInput{
+		EncounterID: castCmd.EncounterID,
+		SpellName:   castResult.SpellName,
+		DamageDice:  "8d6",
+		DamageType:  "fire",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{
+			{CombatantID: goblinA.ID, Success: false, Total: 8},
+			{CombatantID: goblinB.ID, Success: false, Total: 10},
+			{CombatantID: fighter.ID, Success: true, Total: 18, CoverBonus: 0},
+		},
+	}
+
+	resolveResult, err := svc.ResolveAoESaves(context.Background(), resolveInput, roller)
+	require.NoError(t, err)
+	require.Len(t, resolveResult.Targets, 3)
+
+	// Goblin A: 30 HP - 32 dmg = 0 HP (dead)
+	assert.Equal(t, "Goblin A", resolveResult.Targets[0].DisplayName)
+	assert.Equal(t, 32, resolveResult.Targets[0].DamageDealt)
+	assert.Equal(t, 0, resolveResult.Targets[0].HPAfter)
+	assert.False(t, hpUpdates[goblinA.ID].IsAlive)
+
+	// Goblin B: 30 HP - 32 dmg = 0 HP (dead)
+	assert.Equal(t, "Goblin B", resolveResult.Targets[1].DisplayName)
+	assert.Equal(t, 32, resolveResult.Targets[1].DamageDealt)
+	assert.Equal(t, 0, resolveResult.Targets[1].HPAfter)
+
+	// Fighter saves: 60 HP - 16 dmg = 44 HP (alive)
+	assert.Equal(t, "Fighter", resolveResult.Targets[2].DisplayName)
+	assert.True(t, resolveResult.Targets[2].SaveSuccess)
+	assert.Equal(t, 16, resolveResult.Targets[2].DamageDealt) // half of 32
+	assert.Equal(t, 44, resolveResult.Targets[2].HPAfter)
+	assert.True(t, hpUpdates[fighter.ID].IsAlive)
+}
+
+// TDD Cycle 10 (iter2): Integration test - Burning Hands (cone) with cover DEX bonus
+func TestIntegration_BurningHands_ConeWithCover(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "E"
+	caster.PositionRow = 5
+
+	goblin := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin",
+		PositionCol: "F", PositionRow: 5, HpMax: 20, HpCurrent: 20,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	burningHands := refdata.Spell{
+		ID: "burning-hands", Name: "Burning Hands", Level: 1,
+		CastingTime: "1 action", RangeType: "self",
+		SaveAbility: sql.NullString{String: "dex", Valid: true},
+		SaveEffect:  sql.NullString{String: "half_damage", Valid: true},
+		AreaOfEffect: pqtype.NullRawMessage{
+			RawMessage: json.RawMessage(`{"shape":"cone","length_ft":15}`),
+			Valid:      true,
+		},
+		ResolutionMode: "auto",
+		Concentration:  sql.NullBool{Bool: false, Valid: true},
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return burningHands, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return goblin, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster, goblin}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	svc := NewService(store)
+
+	// Step 1: Cast Burning Hands
+	castCmd := AoECastCommand{
+		SpellID:     "burning-hands",
+		CasterID:    caster.ID,
+		EncounterID: uuid.New(),
+		TargetCol:   "H",
+		TargetRow:   5,
+		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	castResult, err := svc.CastAoE(context.Background(), castCmd)
+	require.NoError(t, err)
+	assert.Contains(t, castResult.AffectedNames, "Goblin")
+	assert.Equal(t, "dex", castResult.SaveAbility)
+	// Cone origin is caster for cover calculation
+	assert.Equal(t, 4, castResult.OriginCol) // colToIndex("E")=4
+	assert.Equal(t, 4, castResult.OriginRow) // 5-1=4
+
+	// Step 2: Resolve with save result
+	roller := dice.NewRoller(func(max int) int { return 3 }) // 3d6 = 9
+	resolveInput := AoEDamageInput{
+		EncounterID: castCmd.EncounterID,
+		SpellName:   castResult.SpellName,
+		DamageDice:  "3d6",
+		DamageType:  "fire",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{
+			{CombatantID: goblin.ID, Success: true, Total: 16, CoverBonus: 2},
+		},
+	}
+
+	resolveResult, err := svc.ResolveAoESaves(context.Background(), resolveInput, roller)
+	require.NoError(t, err)
+	require.Len(t, resolveResult.Targets, 1)
+	assert.True(t, resolveResult.Targets[0].SaveSuccess)
+	assert.Equal(t, 2, resolveResult.Targets[0].CoverBonus)
+	// 9 * 0.5 = 4 (half damage)
+	assert.Equal(t, 4, resolveResult.Targets[0].DamageDealt)
+	assert.Equal(t, 16, resolveResult.Targets[0].HPAfter) // 20-4=16
+}
+
+// TDD Cycle 11 (iter2): Integration test - Lightning Bolt (line) hits creatures in a line
+func TestIntegration_LightningBolt_Line(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "A"
+	caster.PositionRow = 5
+
+	// Creatures in a line east from caster
+	goblinA := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin A",
+		PositionCol: "C", PositionRow: 5, HpMax: 25, HpCurrent: 25,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+	goblinB := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin B",
+		PositionCol: "F", PositionRow: 5, HpMax: 25, HpCurrent: 25,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+	// Creature off to the side, should NOT be hit
+	offside := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Offside",
+		PositionCol: "C", PositionRow: 8, HpMax: 25, HpCurrent: 25,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	lightningBolt := refdata.Spell{
+		ID: "lightning-bolt", Name: "Lightning Bolt", Level: 3,
+		CastingTime: "1 action", RangeType: "self",
+		SaveAbility: sql.NullString{String: "dex", Valid: true},
+		SaveEffect:  sql.NullString{String: "half_damage", Valid: true},
+		AreaOfEffect: pqtype.NullRawMessage{
+			RawMessage: json.RawMessage(`{"shape":"line","length_ft":100,"width_ft":5}`),
+			Valid:      true,
+		},
+		ResolutionMode: "auto",
+		Concentration:  sql.NullBool{Bool: false, Valid: true},
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return lightningBolt, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		switch id {
+		case caster.ID:
+			return caster, nil
+		case goblinA.ID:
+			return goblinA, nil
+		case goblinB.ID:
+			return goblinB, nil
+		case offside.ID:
+			return offside, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster, goblinA, goblinB, offside}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	svc := NewService(store)
+
+	// Cast Lightning Bolt east
+	castCmd := AoECastCommand{
+		SpellID:     "lightning-bolt",
+		CasterID:    caster.ID,
+		EncounterID: uuid.New(),
+		TargetCol:   "T", // direction: east
+		TargetRow:   5,
+		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	castResult, err := svc.CastAoE(context.Background(), castCmd)
+	require.NoError(t, err)
+	// Goblin A (C5) and Goblin B (F5) should be in the line
+	assert.Contains(t, castResult.AffectedNames, "Goblin A")
+	assert.Contains(t, castResult.AffectedNames, "Goblin B")
+	// Offside (C8) should NOT be in the line
+	assert.NotContains(t, castResult.AffectedNames, "Offside")
+
+	// Resolve: both fail save
+	roller := dice.NewRoller(func(max int) int { return 4 }) // 8d6=32
+	resolveInput := AoEDamageInput{
+		EncounterID: castCmd.EncounterID,
+		SpellName:   castResult.SpellName,
+		DamageDice:  "8d6",
+		DamageType:  "lightning",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{
+			{CombatantID: goblinA.ID, Success: false},
+			{CombatantID: goblinB.ID, Success: true}, // saves
+		},
+	}
+
+	resolveResult, err := svc.ResolveAoESaves(context.Background(), resolveInput, roller)
+	require.NoError(t, err)
+	require.Len(t, resolveResult.Targets, 2)
+	assert.Equal(t, 32, resolveResult.Targets[0].DamageDealt) // full
+	assert.Equal(t, 16, resolveResult.Targets[1].DamageDealt) // half
+}
+
+// TDD Cycle 12 (iter2): Cover DEX bonus is reflected in PendingSaves from CastAoE
+func TestIntegration_CoverDEXBonus_InPendingSaves(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "A"
+	caster.PositionRow = 1
+
+	// Goblin at the fireball's target point
+	goblin := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin",
+		PositionCol: "H", PositionRow: 8, HpMax: 20, HpCurrent: 20,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	fireball := makeFireball()
+	fireball.AreaOfEffect = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`{"shape":"sphere","radius_ft":20}`),
+		Valid:      true,
+	}
+	fireball.SaveEffect = sql.NullString{String: "half_damage", Valid: true}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return fireball, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return goblin, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster, goblin}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	svc := NewService(store)
+
+	// Caster at A1 targeting H8 (far away so caster is not in 20ft sphere)
+	castCmd := AoECastCommand{
+		SpellID:     "fireball",
+		CasterID:    caster.ID,
+		EncounterID: uuid.New(),
+		TargetCol:   "H",
+		TargetRow:   8,
+		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	castResult, err := svc.CastAoE(context.Background(), castCmd)
+	require.NoError(t, err)
+	require.Len(t, castResult.PendingSaves, 1) // only goblin
+	assert.Equal(t, goblin.ID, castResult.PendingSaves[0].CombatantID)
+	assert.Equal(t, 0, castResult.PendingSaves[0].CoverBonus) // no walls = no cover
+	assert.Equal(t, "dex", castResult.PendingSaves[0].SaveAbility)
+	assert.Equal(t, 15, castResult.PendingSaves[0].DC)
+	assert.True(t, castResult.PendingSaves[0].IsNPC)
+}
+
+// TDD Cycle 13 (iter2): ResolveAoESaves with special save effect returns 0 damage
+func TestResolveAoESaves_SpecialSaveEffect(t *testing.T) {
+	goblinID := uuid.New()
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: goblinID, DisplayName: "Goblin", HpMax: 30, HpCurrent: 30,
+			IsAlive: true, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 5 })
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		DamageDice:  "4d6",
+		SaveEffect:  "special",
+		SaveResults: []SaveResult{
+			{CombatantID: goblinID, Success: false},
+		},
+	}
+
+	result, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.NoError(t, err)
+	require.Len(t, result.Targets, 1)
+	// Special returns -1.0 multiplier, which is clamped to 0 damage
+	assert.Equal(t, 0, result.Targets[0].DamageDealt)
+	assert.Equal(t, 30, result.Targets[0].HPAfter) // unchanged
+}
+
+// TDD Cycle 14 (iter2): ResolveAoESaves with empty save results returns empty result
+func TestResolveAoESaves_EmptySaveResults(t *testing.T) {
+	store := defaultMockStore()
+	roller := dice.NewRoller(func(max int) int { return 3 })
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		DamageDice:  "8d6",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{},
+	}
+
+	result, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.NoError(t, err)
+	assert.Empty(t, result.Targets)
+	assert.Equal(t, 0, result.TotalDamage)
+}
+
+// TDD Cycle 15 (iter2): Half damage rounds down
+func TestResolveAoESaves_HalfDamageRoundsDown(t *testing.T) {
+	goblinID := uuid.New()
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: goblinID, DisplayName: "Goblin", HpMax: 50, HpCurrent: 50,
+			IsAlive: true, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	// Roll 7 total (odd number to test rounding): 1d6 always rolling 7 won't work,
+	// use 7d6 each rolling 1 = 7 total
+	roller := dice.NewRoller(func(max int) int { return 1 })
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		DamageDice:  "7d6",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{
+			{CombatantID: goblinID, Success: true},
+		},
+	}
+
+	result, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.NoError(t, err)
+	// 7 * 0.5 = 3.5, int() truncates to 3 (rounds down)
+	assert.Equal(t, 3, result.Targets[0].DamageDealt)
+	assert.Equal(t, 47, result.Targets[0].HPAfter) // 50-3=47
 }

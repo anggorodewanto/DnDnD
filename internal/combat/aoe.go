@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -202,6 +203,9 @@ func FindAffectedCombatants(affectedTiles []GridPos, combatants []refdata.Combat
 
 	var result []refdata.Combatant
 	for _, c := range combatants {
+		if !c.IsAlive {
+			continue
+		}
 		pos := GridPos{Col: colToIndex(c.PositionCol), Row: int(c.PositionRow) - 1}
 		if tileSet[pos] {
 			result = append(result, c)
@@ -471,9 +475,6 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	var pendingSaves []PendingSave
 	var affectedNames []string
 	for _, c := range affected {
-		if !c.IsAlive {
-			continue
-		}
 		affectedNames = append(affectedNames, c.DisplayName)
 		if saveAbility != "" {
 			ps := CalculateAoECover(originCol, originRow, c, saveAbility, saveDC, cmd.Walls)
@@ -543,5 +544,96 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		SlotsRemaining: slotsRemaining,
 		OriginCol:      originCol,
 		OriginRow:      originRow,
+	}, nil
+}
+
+// AoEDamageInput holds the inputs for resolving AoE save results and applying damage.
+type AoEDamageInput struct {
+	EncounterID uuid.UUID
+	SpellName   string
+	DamageDice  string // e.g., "8d6"
+	DamageType  string // e.g., "fire"
+	SaveEffect  string // "half_damage", "no_effect", "special"
+	SaveResults []SaveResult
+}
+
+// AoEDamageResult holds the outcomes of resolving AoE saves and applying damage.
+type AoEDamageResult struct {
+	Targets    []AoETargetOutcome
+	TotalDamage int
+}
+
+// AoETargetOutcome holds the outcome for a single target of an AoE spell.
+type AoETargetOutcome struct {
+	CombatantID uuid.UUID
+	DisplayName string
+	SaveSuccess bool
+	SaveTotal   int
+	CoverBonus  int
+	DamageDealt int
+	HPBefore    int
+	HPAfter     int
+}
+
+// ResolveAoESaves rolls damage once, applies save multipliers, and updates combatant HP.
+func (s *Service) ResolveAoESaves(ctx context.Context, input AoEDamageInput, roller *dice.Roller) (AoEDamageResult, error) {
+	// 1. Roll damage once for all targets
+	rollResult, err := roller.Roll(input.DamageDice)
+	if err != nil {
+		return AoEDamageResult{}, fmt.Errorf("rolling damage %q: %w", input.DamageDice, err)
+	}
+	baseDamage := rollResult.Total
+
+	var targets []AoETargetOutcome
+	totalDamage := 0
+
+	for _, sr := range input.SaveResults {
+		// 2. Look up combatant
+		combatant, err := s.store.GetCombatant(ctx, sr.CombatantID)
+		if err != nil {
+			return AoEDamageResult{}, fmt.Errorf("getting combatant %s: %w", sr.CombatantID, err)
+		}
+
+		// 3. Apply save multiplier
+		multiplier := ApplySaveResult(sr.Success, input.SaveEffect)
+		damage := int(float64(baseDamage) * multiplier)
+		if damage < 0 {
+			damage = 0 // special case: DM resolution needed
+		}
+
+		// 4. Apply damage to HP
+		hpBefore := int(combatant.HpCurrent)
+		newHP := int(combatant.HpCurrent) - damage
+		if newHP < 0 {
+			newHP = 0
+		}
+		isAlive := newHP > 0
+
+		_, err = s.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
+			ID:        combatant.ID,
+			HpCurrent: int32(newHP),
+			TempHp:    combatant.TempHp,
+			IsAlive:   isAlive,
+		})
+		if err != nil {
+			return AoEDamageResult{}, fmt.Errorf("updating HP for %s: %w", combatant.DisplayName, err)
+		}
+
+		targets = append(targets, AoETargetOutcome{
+			CombatantID: combatant.ID,
+			DisplayName: combatant.DisplayName,
+			SaveSuccess: sr.Success,
+			SaveTotal:   sr.Total,
+			CoverBonus:  sr.CoverBonus,
+			DamageDealt: damage,
+			HPBefore:    hpBefore,
+			HPAfter:     newHP,
+		})
+		totalDamage += damage
+	}
+
+	return AoEDamageResult{
+		Targets:     targets,
+		TotalDamage: totalDamage,
 	}, nil
 }
