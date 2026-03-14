@@ -413,7 +413,7 @@
   - Depends on: Phase 7, Phase 74
   - Done when: Integration tests verify all equip flows, combat restrictions, hand management, shield action cost, armor combat block.
 
-- [ ] **Phase 75b: Equipment Management — AC Recalculation & Enforcement**
+- [x] **Phase 75b: Equipment Management — AC Recalculation & Enforcement**
   - Scope: AC recalculation engine triggered on any equipment change: armor-based AC, unarmored defense formulas (Barbarian 10+DEX+CON, Monk 10+DEX+WIS), shield bonus, modify_ac effects layered on top. Equipment enforcement: heavy armor STR requirement (speed -10ft penalty), stealth disadvantage from armor with stealth_disadv flag.
   - Depends on: Phase 75a, Phase 44
   - Done when: Integration tests verify AC recalculation for all armor types and unarmored formulas, STR penalty application, stealth disadvantage enforcement.

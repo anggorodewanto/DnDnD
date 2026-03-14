@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -31,16 +32,67 @@ type EquipResult struct {
 	SpeedPenalty int32 // heavy armor STR penalty (10ft if STR below requirement)
 }
 
+// slotOccupied returns true if a NullString equipment slot has a value.
+func slotOccupied(slot sql.NullString) bool {
+	return slot.Valid && slot.String != ""
+}
+
 // HasFreeHand returns true if either main hand or off-hand is empty.
 func HasFreeHand(char refdata.Character) bool {
-	mainOccupied := char.EquippedMainHand.Valid && char.EquippedMainHand.String != ""
-	offOccupied := char.EquippedOffHand.Valid && char.EquippedOffHand.String != ""
-	return !mainOccupied || !offOccupied
+	return !slotOccupied(char.EquippedMainHand) || !slotOccupied(char.EquippedOffHand)
 }
 
 // BothHandsOccupied returns true if both main hand and off-hand are occupied.
 func BothHandsOccupied(char refdata.Character) bool {
 	return !HasFreeHand(char)
+}
+
+// useResourceAndSave validates a turn resource, consumes it, and persists the update.
+// userMsg is the error message shown when the resource is unavailable.
+func (s *Service) useResourceAndSave(ctx context.Context, turn refdata.Turn, resource ResourceType, userMsg string) (refdata.Turn, error) {
+	if err := ValidateResource(turn, resource); err != nil {
+		return turn, errors.New(userMsg)
+	}
+	updated, err := UseResource(turn, resource)
+	if err != nil {
+		return turn, err
+	}
+	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updated)); err != nil {
+		return turn, fmt.Errorf("updating turn actions: %w", err)
+	}
+	return updated, nil
+}
+
+// hasEquippedShield checks whether the character's off-hand slot holds a shield.
+func (s *Service) hasEquippedShield(ctx context.Context, char refdata.Character) bool {
+	if !slotOccupied(char.EquippedOffHand) {
+		return false
+	}
+	a, err := s.store.GetArmor(ctx, char.EquippedOffHand.String)
+	return err == nil && a.ArmorType == "shield"
+}
+
+// lookupBodyArmor returns the equipped body armor (non-shield), or nil if none.
+func (s *Service) lookupBodyArmor(ctx context.Context, char refdata.Character) *refdata.Armor {
+	if !slotOccupied(char.EquippedArmor) {
+		return nil
+	}
+	a, err := s.store.GetArmor(ctx, char.EquippedArmor.String)
+	if err != nil || a.ArmorType == "shield" {
+		return nil
+	}
+	return &a
+}
+
+// equipUpdateParams builds the standard UpdateCharacterEquipmentParams from a character.
+func equipUpdateParams(char refdata.Character, ac int32) refdata.UpdateCharacterEquipmentParams {
+	return refdata.UpdateCharacterEquipmentParams{
+		ID:               char.ID,
+		EquippedMainHand: char.EquippedMainHand,
+		EquippedOffHand:  char.EquippedOffHand,
+		EquippedArmor:    char.EquippedArmor,
+		Ac:               ac,
+	}
 }
 
 // Equip handles the /equip command for weapons, shields, and armor.
@@ -74,21 +126,15 @@ func (s *Service) equipWeapon(ctx context.Context, cmd EquipCommand, weapon refd
 	oldAC := char.Ac
 
 	// Two-handed weapon: off-hand must be free
-	if HasProperty(weapon, "two-handed") && char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
+	if HasProperty(weapon, "two-handed") && slotOccupied(char.EquippedOffHand) {
 		return EquipResult{}, fmt.Errorf("cannot equip %s — off-hand must be free for two-handed weapons", weapon.Name)
 	}
 
 	// In combat: weapon equip costs free object interaction
 	if cmd.Turn != nil {
-		if err := ValidateResource(*cmd.Turn, ResourceFreeInteract); err != nil {
-			return EquipResult{}, fmt.Errorf("Free object interaction already used this turn.")
-		}
-		updatedTurn, err := UseResource(*cmd.Turn, ResourceFreeInteract)
+		updatedTurn, err := s.useResourceAndSave(ctx, *cmd.Turn, ResourceFreeInteract, "Free object interaction already used this turn.")
 		if err != nil {
 			return EquipResult{}, err
-		}
-		if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
-			return EquipResult{}, fmt.Errorf("updating turn actions: %w", err)
 		}
 		cmd.Turn = &updatedTurn
 	}
@@ -96,12 +142,8 @@ func (s *Service) equipWeapon(ctx context.Context, cmd EquipCommand, weapon refd
 	// Set the equipped slot
 	slot := "main hand"
 	if cmd.Offhand {
-		// If off-hand has a shield, must doff it first
-		if char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
-			offArmor, err := s.store.GetArmor(ctx, char.EquippedOffHand.String)
-			if err == nil && offArmor.ArmorType == "shield" {
-				return EquipResult{}, fmt.Errorf("off-hand has a shield equipped — doff the shield first (requires action in combat)")
-			}
+		if s.hasEquippedShield(ctx, char) {
+			return EquipResult{}, fmt.Errorf("off-hand has a shield equipped — doff the shield first (requires action in combat)")
 		}
 		char.EquippedOffHand = sql.NullString{String: weapon.ID, Valid: true}
 		slot = "off-hand"
@@ -109,23 +151,15 @@ func (s *Service) equipWeapon(ctx context.Context, cmd EquipCommand, weapon refd
 		char.EquippedMainHand = sql.NullString{String: weapon.ID, Valid: true}
 	}
 
-	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
-		ID:               char.ID,
-		EquippedMainHand: char.EquippedMainHand,
-		EquippedOffHand:  char.EquippedOffHand,
-		EquippedArmor:    char.EquippedArmor,
-		Ac:               char.Ac,
-	})
+	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, equipUpdateParams(char, char.Ac))
 	if err != nil {
 		return EquipResult{}, fmt.Errorf("updating character equipment: %w", err)
 	}
 
-	combatLog := fmt.Sprintf("⚔️ %s equips %s (%s)", char.Name, weapon.Name, slot)
-
 	return EquipResult{
 		Character: updatedChar,
 		Turn:      cmd.Turn,
-		CombatLog: combatLog,
+		CombatLog: fmt.Sprintf("⚔️ %s equips %s (%s)", char.Name, weapon.Name, slot),
 		ACChanged: oldAC != char.Ac,
 		OldAC:     oldAC,
 		NewAC:     char.Ac,
@@ -138,50 +172,27 @@ func (s *Service) equipShield(ctx context.Context, cmd EquipCommand, armor refda
 
 	// In combat: shield don/doff costs action
 	if cmd.Turn != nil {
-		if err := ValidateResource(*cmd.Turn, ResourceAction); err != nil {
-			return EquipResult{}, fmt.Errorf("Action already used — donning/doffing a shield requires an action.")
-		}
-		updatedTurn, err := UseResource(*cmd.Turn, ResourceAction)
+		updatedTurn, err := s.useResourceAndSave(ctx, *cmd.Turn, ResourceAction, "Action already used — donning/doffing a shield requires an action.")
 		if err != nil {
 			return EquipResult{}, err
-		}
-		if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
-			return EquipResult{}, fmt.Errorf("updating turn actions: %w", err)
 		}
 		cmd.Turn = &updatedTurn
 	}
 
 	// Off-hand weapon (if any) is automatically stowed when equipping a shield (no extra cost).
-	// The off-hand slot is overwritten below.
 	char.EquippedOffHand = sql.NullString{String: armor.ID, Valid: true}
 
-	// Recalculate AC with shield using unified function
-	var equippedArmor *refdata.Armor
-	if char.EquippedArmor.Valid && char.EquippedArmor.String != "" {
-		a, aErr := s.store.GetArmor(ctx, char.EquippedArmor.String)
-		if aErr == nil && a.ArmorType != "shield" {
-			equippedArmor = &a
-		}
-	}
-	newAC := RecalculateAC(char, equippedArmor, true)
+	newAC := RecalculateAC(char, s.lookupBodyArmor(ctx, char), true)
 
-	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
-		ID:               char.ID,
-		EquippedMainHand: char.EquippedMainHand,
-		EquippedOffHand:  char.EquippedOffHand,
-		EquippedArmor:    char.EquippedArmor,
-		Ac:               newAC,
-	})
+	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, equipUpdateParams(char, newAC))
 	if err != nil {
 		return EquipResult{}, fmt.Errorf("updating character equipment: %w", err)
 	}
 
-	combatLog := fmt.Sprintf("🛡️ %s equips %s (off-hand, AC %d → %d)", char.Name, armor.Name, oldAC, newAC)
-
 	return EquipResult{
 		Character: updatedChar,
 		Turn:      cmd.Turn,
-		CombatLog: combatLog,
+		CombatLog: fmt.Sprintf("🛡️ %s equips %s (off-hand, AC %d → %d)", char.Name, armor.Name, oldAC, newAC),
 		ACChanged: oldAC != newAC,
 		OldAC:     oldAC,
 		NewAC:     newAC,
@@ -192,7 +203,6 @@ func (s *Service) equipArmor(ctx context.Context, cmd EquipCommand) (EquipResult
 	char := cmd.Character
 	oldAC := char.Ac
 
-	// Blocked in combat
 	if cmd.Turn != nil {
 		return EquipResult{}, fmt.Errorf("You can't don or doff armor during combat.")
 	}
@@ -201,35 +211,15 @@ func (s *Service) equipArmor(ctx context.Context, cmd EquipCommand) (EquipResult
 	if err != nil {
 		return EquipResult{}, fmt.Errorf("armor %q not found", cmd.ItemName)
 	}
-
 	if armor.ArmorType == "shield" {
 		return EquipResult{}, fmt.Errorf("use /equip %s without --armor for shields", cmd.ItemName)
 	}
 
 	char.EquippedArmor = sql.NullString{String: armor.ID, Valid: true}
-
-	// Determine if off-hand has a shield
-	hasShield := false
-	if char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
-		shieldArmor, shErr := s.store.GetArmor(ctx, char.EquippedOffHand.String)
-		if shErr == nil && shieldArmor.ArmorType == "shield" {
-			hasShield = true
-		}
-	}
-
-	// Calculate new AC using unified RecalculateAC
-	newAC := RecalculateAC(char, &armor, hasShield)
-
-	// Check heavy armor STR penalty
+	newAC := RecalculateAC(char, &armor, s.hasEquippedShield(ctx, char))
 	speedPenalty := CheckHeavyArmorPenalty(char, armor)
 
-	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
-		ID:               char.ID,
-		EquippedMainHand: char.EquippedMainHand,
-		EquippedOffHand:  char.EquippedOffHand,
-		EquippedArmor:    char.EquippedArmor,
-		Ac:               newAC,
-	})
+	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, equipUpdateParams(char, newAC))
 	if err != nil {
 		return EquipResult{}, fmt.Errorf("updating character equipment: %w", err)
 	}
@@ -251,171 +241,119 @@ func (s *Service) equipArmor(ctx context.Context, cmd EquipCommand) (EquipResult
 }
 
 func (s *Service) unequip(ctx context.Context, cmd EquipCommand) (EquipResult, error) {
+	if cmd.Armor {
+		return s.unequipArmor(ctx, cmd)
+	}
+	if cmd.Offhand {
+		return s.unequipOffHand(ctx, cmd)
+	}
+	return s.unequipMainHand(ctx, cmd)
+}
+
+func (s *Service) unequipArmor(ctx context.Context, cmd EquipCommand) (EquipResult, error) {
+	if cmd.Turn != nil {
+		return EquipResult{}, fmt.Errorf("You can't don or doff armor during combat.")
+	}
+
+	char := cmd.Character
+	oldAC := char.Ac
+	char.EquippedArmor = sql.NullString{}
+	newAC := RecalculateAC(char, nil, s.hasEquippedShield(ctx, char))
+
+	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, equipUpdateParams(char, newAC))
+	if err != nil {
+		return EquipResult{}, fmt.Errorf("updating character equipment: %w", err)
+	}
+
+	return EquipResult{
+		Character: updatedChar,
+		Turn:      cmd.Turn,
+		CombatLog: fmt.Sprintf("🛡️ %s doffs armor (AC %d → %d)", char.Name, oldAC, newAC),
+		ACChanged: oldAC != newAC,
+		OldAC:     oldAC,
+		NewAC:     newAC,
+	}, nil
+}
+
+func (s *Service) unequipOffHand(ctx context.Context, cmd EquipCommand) (EquipResult, error) {
 	char := cmd.Character
 	oldAC := char.Ac
 
-	if cmd.Armor {
-		// Unequip armor
-		if cmd.Turn != nil {
-			return EquipResult{}, fmt.Errorf("You can't don or doff armor during combat.")
-		}
-		char.EquippedArmor = sql.NullString{}
-
-		// Determine if off-hand has a shield
-		hasShield := false
-		if char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
-			shieldArmor, shErr := s.store.GetArmor(ctx, char.EquippedOffHand.String)
-			if shErr == nil && shieldArmor.ArmorType == "shield" {
-				hasShield = true
-			}
-		}
-
-		// Recalculate AC using unified function (considers ac_formula)
-		newAC := RecalculateAC(char, nil, hasShield)
-
-		updatedChar, err := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
-			ID:               char.ID,
-			EquippedMainHand: char.EquippedMainHand,
-			EquippedOffHand:  char.EquippedOffHand,
-			EquippedArmor:    char.EquippedArmor,
-			Ac:               newAC,
-		})
-		if err != nil {
-			return EquipResult{}, fmt.Errorf("updating character equipment: %w", err)
-		}
-
-		combatLog := fmt.Sprintf("🛡️ %s doffs armor (AC %d → %d)", char.Name, oldAC, newAC)
-		return EquipResult{
-			Character: updatedChar,
-			Turn:      cmd.Turn,
-			CombatLog: combatLog,
-			ACChanged: oldAC != newAC,
-			OldAC:     oldAC,
-			NewAC:     newAC,
-		}, nil
-	}
-
-	if cmd.Offhand {
-		// Unequip off-hand
-		// Check if it's a shield — shield doff costs action in combat
-		if char.EquippedOffHand.Valid && char.EquippedOffHand.String != "" {
-			shieldArmor, err := s.store.GetArmor(ctx, char.EquippedOffHand.String)
-			isShield := err == nil && shieldArmor.ArmorType == "shield"
-
-			if isShield && cmd.Turn != nil {
-				if err := ValidateResource(*cmd.Turn, ResourceAction); err != nil {
-					return EquipResult{}, fmt.Errorf("Action already used — donning/doffing a shield requires an action.")
-				}
-				updatedTurn, err := UseResource(*cmd.Turn, ResourceAction)
-				if err != nil {
-					return EquipResult{}, err
-				}
-				if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
-					return EquipResult{}, fmt.Errorf("updating turn actions: %w", err)
-				}
-				cmd.Turn = &updatedTurn
-			} else if !isShield && cmd.Turn != nil {
-				// Weapon unequip costs free interact
-				if err := ValidateResource(*cmd.Turn, ResourceFreeInteract); err != nil {
-					return EquipResult{}, fmt.Errorf("Free object interaction already used this turn.")
-				}
-				updatedTurn, err := UseResource(*cmd.Turn, ResourceFreeInteract)
-				if err != nil {
-					return EquipResult{}, err
-				}
-				if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
-					return EquipResult{}, fmt.Errorf("updating turn actions: %w", err)
-				}
-				cmd.Turn = &updatedTurn
-			}
-
-			char.EquippedOffHand = sql.NullString{}
-
-			var newAC int32
-			if isShield {
-				// Recalculate AC without shield using unified function
-				var equippedArmor *refdata.Armor
-				if char.EquippedArmor.Valid && char.EquippedArmor.String != "" {
-					a, aErr := s.store.GetArmor(ctx, char.EquippedArmor.String)
-					if aErr == nil && a.ArmorType != "shield" {
-						equippedArmor = &a
-					}
-				}
-				newAC = RecalculateAC(char, equippedArmor, false)
-			} else {
-				newAC = oldAC
-			}
-
-			updatedChar, err := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
-				ID:               char.ID,
-				EquippedMainHand: char.EquippedMainHand,
-				EquippedOffHand:  char.EquippedOffHand,
-				EquippedArmor:    char.EquippedArmor,
-				Ac:               newAC,
-			})
-			if err != nil {
-				return EquipResult{}, fmt.Errorf("updating character equipment: %w", err)
-			}
-
-			var combatLog string
-			if isShield {
-				combatLog = fmt.Sprintf("🛡️ %s doffs shield (AC %d → %d)", char.Name, oldAC, newAC)
-			} else {
-				combatLog = fmt.Sprintf("⚔️ %s unequips off-hand weapon", char.Name)
-			}
-
-			return EquipResult{
-				Character: updatedChar,
-				Turn:      cmd.Turn,
-				CombatLog: combatLog,
-				ACChanged: oldAC != newAC,
-				OldAC:     oldAC,
-				NewAC:     newAC,
-			}, nil
-		}
-
-		// Off-hand already empty
+	if !slotOccupied(char.EquippedOffHand) {
 		return EquipResult{
 			Character: char,
 			CombatLog: fmt.Sprintf("⚔️ %s — off-hand is already empty", char.Name),
 		}, nil
 	}
 
-	// Unequip main hand (defaults to unarmed)
+	isShield := s.hasEquippedShield(ctx, char)
+
+	// In combat: shield doff costs action, weapon stow costs free interact
 	if cmd.Turn != nil {
-		// Stowing a weapon costs free interact
-		if char.EquippedMainHand.Valid && char.EquippedMainHand.String != "" {
-			if err := ValidateResource(*cmd.Turn, ResourceFreeInteract); err != nil {
-				return EquipResult{}, fmt.Errorf("Free object interaction already used this turn.")
-			}
-			updatedTurn, err := UseResource(*cmd.Turn, ResourceFreeInteract)
+		if isShield {
+			updatedTurn, err := s.useResourceAndSave(ctx, *cmd.Turn, ResourceAction, "Action already used — donning/doffing a shield requires an action.")
 			if err != nil {
 				return EquipResult{}, err
 			}
-			if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
-				return EquipResult{}, fmt.Errorf("updating turn actions: %w", err)
+			cmd.Turn = &updatedTurn
+		} else {
+			updatedTurn, err := s.useResourceAndSave(ctx, *cmd.Turn, ResourceFreeInteract, "Free object interaction already used this turn.")
+			if err != nil {
+				return EquipResult{}, err
 			}
 			cmd.Turn = &updatedTurn
 		}
 	}
 
-	char.EquippedMainHand = sql.NullString{}
-	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
-		ID:               char.ID,
-		EquippedMainHand: char.EquippedMainHand,
-		EquippedOffHand:  char.EquippedOffHand,
-		EquippedArmor:    char.EquippedArmor,
-		Ac:               char.Ac,
-	})
+	char.EquippedOffHand = sql.NullString{}
+
+	newAC := oldAC
+	if isShield {
+		newAC = RecalculateAC(char, s.lookupBodyArmor(ctx, char), false)
+	}
+
+	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, equipUpdateParams(char, newAC))
 	if err != nil {
 		return EquipResult{}, fmt.Errorf("updating character equipment: %w", err)
 	}
 
-	combatLog := fmt.Sprintf("⚔️ %s unequips main hand (unarmed strike)", char.Name)
+	combatLog := fmt.Sprintf("⚔️ %s unequips off-hand weapon", char.Name)
+	if isShield {
+		combatLog = fmt.Sprintf("🛡️ %s doffs shield (AC %d → %d)", char.Name, oldAC, newAC)
+	}
+
 	return EquipResult{
 		Character: updatedChar,
 		Turn:      cmd.Turn,
 		CombatLog: combatLog,
+		ACChanged: oldAC != newAC,
+		OldAC:     oldAC,
+		NewAC:     newAC,
+	}, nil
+}
+
+func (s *Service) unequipMainHand(ctx context.Context, cmd EquipCommand) (EquipResult, error) {
+	char := cmd.Character
+
+	// Stowing a weapon costs free interact in combat
+	if cmd.Turn != nil && slotOccupied(char.EquippedMainHand) {
+		updatedTurn, err := s.useResourceAndSave(ctx, *cmd.Turn, ResourceFreeInteract, "Free object interaction already used this turn.")
+		if err != nil {
+			return EquipResult{}, err
+		}
+		cmd.Turn = &updatedTurn
+	}
+
+	char.EquippedMainHand = sql.NullString{}
+	updatedChar, err := s.store.UpdateCharacterEquipment(ctx, equipUpdateParams(char, char.Ac))
+	if err != nil {
+		return EquipResult{}, fmt.Errorf("updating character equipment: %w", err)
+	}
+
+	return EquipResult{
+		Character: updatedChar,
+		Turn:      cmd.Turn,
+		CombatLog: fmt.Sprintf("⚔️ %s unequips main hand (unarmed strike)", char.Name),
 	}, nil
 }
 
@@ -467,7 +405,7 @@ func RecalculateAC(char refdata.Character, armor *refdata.Armor, hasShield bool)
 
 // evaluateACFormula parses formulas like "10 + DEX + WIS" against combat ability scores.
 func evaluateACFormula(scores AbilityScores, formula string) int32 {
-	result := int32(0)
+	var result int32
 	parts := strings.Fields(strings.ReplaceAll(formula, "+", " "))
 	for _, part := range parts {
 		switch strings.ToUpper(part) {
@@ -484,7 +422,7 @@ func evaluateACFormula(scores AbilityScores, formula string) int32 {
 		case "CHA":
 			result += int32(AbilityModifier(scores.Cha))
 		default:
-			n := int32(0)
+			var n int32
 			fmt.Sscanf(part, "%d", &n)
 			result += n
 		}
@@ -504,7 +442,6 @@ func CheckHeavyArmorPenalty(char refdata.Character, armor refdata.Armor) int32 {
 	}
 	return 10
 }
-
 
 // CheckSomaticComponent validates that a character has a free hand for somatic
 // spell components. Returns nil if the character has a free hand, or if the
