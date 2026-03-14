@@ -2008,3 +2008,497 @@ func TestSelectSpellSlot(t *testing.T) {
 		})
 	}
 }
+
+// --- Phase 63: Material Components ---
+
+// TDD Cycle P63-1: ValidateMaterialComponent - no costly component (free material)
+func TestValidateMaterialComponent_NoCostlyComponent(t *testing.T) {
+	spell := refdata.Spell{
+		Name:                "Fire Bolt",
+		MaterialDescription: sql.NullString{}, // no material cost
+		MaterialCostGp:      sql.NullFloat64{}, // null = no costly component
+	}
+	items := []InventoryItem{}
+
+	result := ValidateMaterialComponent(spell, items, 0)
+	assert.Equal(t, MaterialCheckProceed, result.Outcome)
+}
+
+// TDD Cycle P63-2: ValidateMaterialComponent - component in inventory
+func TestValidateMaterialComponent_ComponentInInventory(t *testing.T) {
+	spell := refdata.Spell{
+		Name:                "Revivify",
+		MaterialDescription: sql.NullString{String: "a diamond worth 300gp", Valid: true},
+		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
+		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
+	}
+	items := []InventoryItem{{Name: "a diamond worth 300gp", Quantity: 1, Type: "component"}}
+
+	result := ValidateMaterialComponent(spell, items, 50)
+	assert.Equal(t, MaterialCheckProceed, result.Outcome)
+	assert.True(t, result.MaterialConsumed)
+	assert.Equal(t, "a diamond worth 300gp", result.ComponentName)
+}
+
+// TDD Cycle P63-3: ValidateMaterialComponent - no component, sufficient gold
+func TestValidateMaterialComponent_GoldFallback(t *testing.T) {
+	spell := refdata.Spell{
+		Name:                "Revivify",
+		MaterialDescription: sql.NullString{String: "a diamond worth 300gp", Valid: true},
+		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
+		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
+	}
+	items := []InventoryItem{} // no diamond
+
+	result := ValidateMaterialComponent(spell, items, 500)
+	assert.Equal(t, MaterialCheckNeedsGoldConfirmation, result.Outcome)
+	assert.Equal(t, float64(300), result.CostGp)
+	assert.Equal(t, int32(500), result.CurrentGold)
+}
+
+// TDD Cycle P63-4: ValidateMaterialComponent - neither component nor gold
+func TestValidateMaterialComponent_Rejected(t *testing.T) {
+	spell := refdata.Spell{
+		Name:                "Revivify",
+		MaterialDescription: sql.NullString{String: "a diamond worth 300gp", Valid: true},
+		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
+		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
+	}
+	items := []InventoryItem{} // no diamond
+
+	result := ValidateMaterialComponent(spell, items, 50)
+	assert.Equal(t, MaterialCheckRejected, result.Outcome)
+	assert.Equal(t, int32(50), result.CurrentGold)
+}
+
+// TDD Cycle P63-5: FormatMaterialRejection
+func TestFormatMaterialRejection(t *testing.T) {
+	r := MaterialComponentResult{
+		ComponentName: "a diamond worth 300gp",
+		CostGp:        300,
+		CurrentGold:   50,
+	}
+	msg := FormatMaterialRejection(r)
+	assert.Contains(t, msg, "a diamond worth 300gp")
+	assert.Contains(t, msg, "300gp")
+	assert.Contains(t, msg, "50gp")
+	assert.Contains(t, msg, "can't afford it")
+}
+
+// TDD Cycle P63-6: FormatGoldFallbackPrompt
+func TestFormatGoldFallbackPrompt(t *testing.T) {
+	r := MaterialComponentResult{
+		ComponentName: "a diamond worth 300gp",
+		CostGp:        300,
+	}
+	msg := FormatGoldFallbackPrompt(r)
+	assert.Contains(t, msg, "a diamond worth 300gp")
+	assert.Contains(t, msg, "300gp")
+	assert.Contains(t, msg, "buy one")
+}
+
+// TDD Cycle P63-7: RemoveInventoryItem
+func TestRemoveInventoryItem(t *testing.T) {
+	tests := []struct {
+		name   string
+		items  []InventoryItem
+		remove string
+		want   []InventoryItem
+	}{
+		{
+			name:   "remove last of item",
+			items:  []InventoryItem{{Name: "diamond", Quantity: 1, Type: "gem"}},
+			remove: "diamond",
+			want:   []InventoryItem{},
+		},
+		{
+			name:   "decrement quantity",
+			items:  []InventoryItem{{Name: "diamond", Quantity: 3, Type: "gem"}},
+			remove: "diamond",
+			want:   []InventoryItem{{Name: "diamond", Quantity: 2, Type: "gem"}},
+		},
+		{
+			name:   "case insensitive",
+			items:  []InventoryItem{{Name: "Diamond", Quantity: 1, Type: "gem"}},
+			remove: "diamond",
+			want:   []InventoryItem{},
+		},
+		{
+			name:   "item not found leaves inventory unchanged",
+			items:  []InventoryItem{{Name: "sword", Quantity: 1, Type: "weapon"}},
+			remove: "diamond",
+			want:   []InventoryItem{{Name: "sword", Quantity: 1, Type: "weapon"}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := RemoveInventoryItem(tc.items, tc.remove)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TDD Cycle P63-8: AddInventoryItem
+func TestAddInventoryItem(t *testing.T) {
+	tests := []struct {
+		name  string
+		items []InventoryItem
+		add   string
+		want  []InventoryItem
+	}{
+		{
+			name:  "add new item",
+			items: []InventoryItem{},
+			add:   "diamond",
+			want:  []InventoryItem{{Name: "diamond", Quantity: 1, Type: "component"}},
+		},
+		{
+			name:  "increment existing",
+			items: []InventoryItem{{Name: "diamond", Quantity: 1, Type: "gem"}},
+			add:   "diamond",
+			want:  []InventoryItem{{Name: "diamond", Quantity: 2, Type: "gem"}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := AddInventoryItem(tc.items, tc.add)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TDD Cycle P63-9: Cast rejects when costly component missing and insufficient gold
+func TestCast_MaterialComponent_Rejected(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	char.Gold = 50
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[]`),
+		Valid:      true,
+	}
+	caster := makeSpellCaster(charID)
+
+	spell := refdata.Spell{
+		ID:                  "revivify",
+		Name:                "Revivify",
+		Level:               3,
+		CastingTime:         "1 action",
+		RangeType:           "touch",
+		ResolutionMode:      "auto",
+		MaterialDescription: sql.NullString{String: "a diamond worth 300gp", Valid: true},
+		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
+		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) { return caster, nil }
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "revivify",
+		CasterID: caster.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "a diamond worth 300gp")
+	assert.Contains(t, err.Error(), "can't afford it")
+	assert.Contains(t, err.Error(), "50gp")
+}
+
+// TDD Cycle P63-10: Cast returns NeedsGoldConfirmation when component missing but gold sufficient
+func TestCast_MaterialComponent_GoldFallback(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	char.Gold = 500
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[]`),
+		Valid:      true,
+	}
+	caster := makeSpellCaster(charID)
+
+	spell := refdata.Spell{
+		ID:                  "revivify",
+		Name:                "Revivify",
+		Level:               3,
+		CastingTime:         "1 action",
+		RangeType:           "touch",
+		ResolutionMode:      "auto",
+		MaterialDescription: sql.NullString{String: "a diamond worth 300gp", Valid: true},
+		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
+		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) { return caster, nil }
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "revivify",
+		CasterID: caster.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	require.NotNil(t, result.MaterialComponent)
+	assert.True(t, result.MaterialComponent.NeedsGoldConfirmation)
+	assert.Equal(t, float64(300), result.MaterialComponent.CostGp)
+}
+
+// TDD Cycle P63-11: Cast proceeds when costly component is in inventory (consumed)
+func TestCast_MaterialComponent_InInventory_Consumed(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	char.Gold = 50
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"a diamond worth 300gp","quantity":1,"type":"component"}]`),
+		Valid:      true,
+	}
+	caster := makeSpellCaster(charID)
+	turnID := uuid.New()
+
+	spell := refdata.Spell{
+		ID:                  "revivify",
+		Name:                "Revivify",
+		Level:               3,
+		CastingTime:         "1 action",
+		RangeType:           "touch",
+		ResolutionMode:      "auto",
+		MaterialDescription: sql.NullString{String: "a diamond worth 300gp", Valid: true},
+		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
+		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
+	}
+
+	var savedInventory pqtype.NullRawMessage
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) { return caster, nil }
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID}, nil
+	}
+	store.updateCharacterInventoryFn = func(_ context.Context, _ uuid.UUID, inv pqtype.NullRawMessage) error {
+		savedInventory = inv
+		return nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "revivify",
+		CasterID: caster.ID,
+		Turn:     refdata.Turn{ID: turnID, CombatantID: caster.ID},
+	}
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, "Revivify", result.SpellName)
+
+	// Verify inventory was updated (diamond consumed)
+	require.True(t, savedInventory.Valid)
+	var items []InventoryItem
+	err = json.Unmarshal(savedInventory.RawMessage, &items)
+	require.NoError(t, err)
+	assert.Empty(t, items) // diamond was consumed
+}
+
+// TDD Cycle P63-12: Cast with GoldFallback=true deducts gold and proceeds
+func TestCast_MaterialComponent_GoldFallback_Confirmed(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	char.Gold = 500
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[]`),
+		Valid:      true,
+	}
+	caster := makeSpellCaster(charID)
+	turnID := uuid.New()
+
+	spell := refdata.Spell{
+		ID:                  "revivify",
+		Name:                "Revivify",
+		Level:               3,
+		CastingTime:         "1 action",
+		RangeType:           "touch",
+		ResolutionMode:      "auto",
+		MaterialDescription: sql.NullString{String: "a diamond worth 300gp", Valid: true},
+		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
+		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
+	}
+
+	var savedGold int32
+	goldUpdated := false
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) { return caster, nil }
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID}, nil
+	}
+	store.updateCharacterGoldFn = func(_ context.Context, id uuid.UUID, gold int32) error {
+		savedGold = gold
+		goldUpdated = true
+		return nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:      "revivify",
+		CasterID:     caster.ID,
+		Turn:         refdata.Turn{ID: turnID, CombatantID: caster.ID},
+		GoldFallback: true,
+	}
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, "Revivify", result.SpellName)
+	assert.True(t, goldUpdated)
+	assert.Equal(t, int32(200), savedGold) // 500 - 300
+}
+
+// TDD Cycle P63-13: Cast with non-consumed component in inventory keeps item
+func TestCast_MaterialComponent_InInventory_NotConsumed(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	char.Gold = 50
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"a pearl worth 100gp","quantity":1,"type":"component"}]`),
+		Valid:      true,
+	}
+	caster := makeSpellCaster(charID)
+	turnID := uuid.New()
+
+	spell := refdata.Spell{
+		ID:                  "identify",
+		Name:                "Identify",
+		Level:               1,
+		CastingTime:         "1 action",
+		RangeType:           "touch",
+		ResolutionMode:      "auto",
+		MaterialDescription: sql.NullString{String: "a pearl worth 100gp", Valid: true},
+		MaterialCostGp:      sql.NullFloat64{Float64: 100, Valid: true},
+		MaterialConsumed:    sql.NullBool{Bool: false, Valid: true},
+	}
+
+	inventoryUpdated := false
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) { return caster, nil }
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID}, nil
+	}
+	store.updateCharacterInventoryFn = func(_ context.Context, _ uuid.UUID, inv pqtype.NullRawMessage) error {
+		inventoryUpdated = true
+		return nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "identify",
+		CasterID: caster.ID,
+		Turn:     refdata.Turn{ID: turnID, CombatantID: caster.ID},
+	}
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, "Identify", result.SpellName)
+	assert.False(t, inventoryUpdated) // not consumed, so inventory not updated
+}
+
+// TDD Cycle P63-14: GoldFallback with non-consumed material adds item to inventory
+func TestCast_MaterialComponent_GoldFallback_NotConsumed_AddsItem(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	char.Gold = 500
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[]`),
+		Valid:      true,
+	}
+	caster := makeSpellCaster(charID)
+	turnID := uuid.New()
+
+	spell := refdata.Spell{
+		ID:                  "identify",
+		Name:                "Identify",
+		Level:               1,
+		CastingTime:         "1 action",
+		RangeType:           "touch",
+		ResolutionMode:      "auto",
+		MaterialDescription: sql.NullString{String: "a pearl worth 100gp", Valid: true},
+		MaterialCostGp:      sql.NullFloat64{Float64: 100, Valid: true},
+		MaterialConsumed:    sql.NullBool{Bool: false, Valid: true},
+	}
+
+	var savedInventory pqtype.NullRawMessage
+	var savedGold int32
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) { return caster, nil }
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID}, nil
+	}
+	store.updateCharacterGoldFn = func(_ context.Context, id uuid.UUID, gold int32) error {
+		savedGold = gold
+		return nil
+	}
+	store.updateCharacterInventoryFn = func(_ context.Context, _ uuid.UUID, inv pqtype.NullRawMessage) error {
+		savedInventory = inv
+		return nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:      "identify",
+		CasterID:     caster.ID,
+		Turn:         refdata.Turn{ID: turnID, CombatantID: caster.ID},
+		GoldFallback: true,
+	}
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, "Identify", result.SpellName)
+	assert.Equal(t, int32(400), savedGold) // 500 - 100
+
+	// Verify item was added to inventory
+	require.True(t, savedInventory.Valid)
+	var items []InventoryItem
+	err = json.Unmarshal(savedInventory.RawMessage, &items)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, "a pearl worth 100gp", items[0].Name)
+}
+
+// TDD Cycle P63-15: Cast with no costly component proceeds normally
+func TestCast_MaterialComponent_NoCostlyComponent(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	turnID := uuid.New()
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return makeFireball(), nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "fireball",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: turnID, CombatantID: caster.ID},
+	}
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, "Fireball", result.SpellName)
+	assert.Nil(t, result.MaterialComponent) // no costly component
+}

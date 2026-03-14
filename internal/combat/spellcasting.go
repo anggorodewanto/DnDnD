@@ -155,7 +155,8 @@ type CastResult struct {
 	ScaledDamageDice string // damage dice after upcast/cantrip scaling
 	DamageType      string // damage type from spell damage JSON
 	ScaledHealingDice string // healing dice after upcast scaling
-	Teleport        *TeleportResult // teleportation outcome, nil if not a teleport spell
+	Teleport          *TeleportResult          // teleportation outcome, nil if not a teleport spell
+	MaterialComponent *CastMaterialComponentInfo // material component outcome, nil if no costly component
 }
 
 // FormatCastLog produces the combat log output for a spell cast.
@@ -254,6 +255,7 @@ type CastCommand struct {
 	CompanionID          uuid.UUID // companion combatant ID for self+creature teleports
 	CompanionDestCol     string    // companion teleport destination column
 	CompanionDestRow     int32     // companion teleport destination row
+	GoldFallback         bool      // true if user confirmed "Buy & Cast" gold fallback
 }
 
 // Cast orchestrates the full spell casting flow:
@@ -329,6 +331,66 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		effectiveSlotLevel, err = SelectSpellSlot(slots, spellLevel, cmd.SlotLevel)
 		if err != nil {
 			return CastResult{}, err
+		}
+	}
+
+	// 6d. Material component check
+	if spell.MaterialCostGp.Valid {
+		inventory, err := ParseInventory(char.Inventory.RawMessage)
+		if err != nil {
+			return CastResult{}, fmt.Errorf("parsing inventory: %w", err)
+		}
+
+		matResult := ValidateMaterialComponent(spell, inventory, char.Gold)
+
+		switch matResult.Outcome {
+		case MaterialCheckRejected:
+			return CastResult{}, errors.New(FormatMaterialRejection(matResult))
+
+		case MaterialCheckNeedsGoldConfirmation:
+			if !cmd.GoldFallback {
+				// Return a result indicating gold confirmation is needed
+				return CastResult{
+					CasterName: caster.DisplayName,
+					SpellName:  spell.Name,
+					SpellLevel: spellLevel,
+					MaterialComponent: &CastMaterialComponentInfo{
+						NeedsGoldConfirmation: true,
+						ComponentName:         matResult.ComponentName,
+						CostGp:                matResult.CostGp,
+						CurrentGold:           matResult.CurrentGold,
+					},
+				}, nil
+			}
+			// User confirmed: deduct gold
+			newGold := char.Gold - int32(matResult.CostGp)
+			if err := s.store.UpdateCharacterGold(ctx, char.ID, newGold); err != nil {
+				return CastResult{}, fmt.Errorf("deducting gold: %w", err)
+			}
+			// If not consumed, add item to inventory
+			if !matResult.MaterialConsumed {
+				newItems := AddInventoryItem(inventory, matResult.ComponentName)
+				itemsJSON, err := json.Marshal(newItems)
+				if err != nil {
+					return CastResult{}, fmt.Errorf("marshaling inventory: %w", err)
+				}
+				if err := s.store.UpdateCharacterInventory(ctx, char.ID, pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true}); err != nil {
+					return CastResult{}, fmt.Errorf("updating inventory: %w", err)
+				}
+			}
+
+		case MaterialCheckProceed:
+			// Component found in inventory — consume if needed after cast succeeds
+			if matResult.MaterialConsumed {
+				newItems := RemoveInventoryItem(inventory, matResult.ComponentName)
+				itemsJSON, err := json.Marshal(newItems)
+				if err != nil {
+					return CastResult{}, fmt.Errorf("marshaling inventory: %w", err)
+				}
+				if err := s.store.UpdateCharacterInventory(ctx, char.ID, pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true}); err != nil {
+					return CastResult{}, fmt.Errorf("updating inventory: %w", err)
+				}
+			}
 		}
 	}
 
@@ -746,6 +808,125 @@ func (s *Service) resolveTeleport(ctx context.Context, raw json.RawMessage, cast
 	}
 
 	return result, nil
+}
+
+// CastMaterialComponentInfo holds material component information returned from Cast.
+type CastMaterialComponentInfo struct {
+	NeedsGoldConfirmation bool    // true if the user must confirm gold purchase
+	ComponentName         string  // description of the material component
+	CostGp                float64 // gold cost
+	CurrentGold           int32   // character's current gold
+}
+
+// MaterialCheckOutcome represents the result of a material component validation.
+type MaterialCheckOutcome int
+
+const (
+	// MaterialCheckProceed means the cast can proceed (no costly component, or component found).
+	MaterialCheckProceed MaterialCheckOutcome = iota
+	// MaterialCheckNeedsGoldConfirmation means the component is missing but gold is sufficient.
+	MaterialCheckNeedsGoldConfirmation
+	// MaterialCheckRejected means neither component nor gold is available.
+	MaterialCheckRejected
+)
+
+// MaterialComponentResult holds the outcome of a material component check.
+type MaterialComponentResult struct {
+	Outcome             MaterialCheckOutcome
+	ComponentName       string  // material description
+	CostGp              float64 // gold cost
+	CurrentGold         int32   // character's current gold
+	MaterialConsumed    bool    // whether the material is consumed on cast
+}
+
+// ValidateMaterialComponent checks whether a spell's material component requirements are met.
+// Returns MaterialCheckProceed if no costly component or if the item is in inventory.
+// Returns MaterialCheckNeedsGoldConfirmation if the item is missing but the caster has enough gold.
+// Returns MaterialCheckRejected if neither component nor gold is available.
+func ValidateMaterialComponent(spell refdata.Spell, inventory []InventoryItem, gold int32) MaterialComponentResult {
+	if !spell.MaterialCostGp.Valid {
+		return MaterialComponentResult{Outcome: MaterialCheckProceed}
+	}
+
+	costGp := spell.MaterialCostGp.Float64
+	desc := ""
+	if spell.MaterialDescription.Valid {
+		desc = spell.MaterialDescription.String
+	}
+	consumed := spell.MaterialConsumed.Valid && spell.MaterialConsumed.Bool
+
+	// Check inventory for the required item (match by material description, case-insensitive)
+	for _, item := range inventory {
+		if strings.EqualFold(item.Name, desc) && item.Quantity > 0 {
+			return MaterialComponentResult{
+				Outcome:          MaterialCheckProceed,
+				ComponentName:    desc,
+				CostGp:           costGp,
+				MaterialConsumed: consumed,
+			}
+		}
+	}
+
+	// No component found — check gold
+	if gold >= int32(costGp) {
+		return MaterialComponentResult{
+			Outcome:          MaterialCheckNeedsGoldConfirmation,
+			ComponentName:    desc,
+			CostGp:           costGp,
+			CurrentGold:      gold,
+			MaterialConsumed: consumed,
+		}
+	}
+
+	// Neither component nor gold
+	return MaterialComponentResult{
+		Outcome:       MaterialCheckRejected,
+		ComponentName: desc,
+		CostGp:        costGp,
+		CurrentGold:   gold,
+	}
+}
+
+// FormatMaterialRejection formats the rejection message when a costly material component is missing.
+func FormatMaterialRejection(r MaterialComponentResult) string {
+	return fmt.Sprintf("Requires %s worth %dgp — you don't have one and can't afford it (current gold: %dgp).",
+		r.ComponentName, int(r.CostGp), r.CurrentGold)
+}
+
+// FormatGoldFallbackPrompt formats the gold fallback prompt message.
+func FormatGoldFallbackPrompt(r MaterialComponentResult) string {
+	return fmt.Sprintf("You don't have %s (%dgp) — buy one for %dgp?",
+		r.ComponentName, int(r.CostGp), int(r.CostGp))
+}
+
+// RemoveInventoryItem decrements the quantity of a named item by 1, removing it if quantity reaches 0.
+func RemoveInventoryItem(items []InventoryItem, name string) []InventoryItem {
+	result := make([]InventoryItem, 0, len(items))
+	for _, item := range items {
+		if strings.EqualFold(item.Name, name) {
+			if item.Quantity > 1 {
+				item.Quantity--
+				result = append(result, item)
+			}
+			// quantity <= 1: remove entirely
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+// AddInventoryItem adds an item to the inventory. If an item with the same name exists, increments quantity.
+func AddInventoryItem(items []InventoryItem, name string) []InventoryItem {
+	for i := range items {
+		if strings.EqualFold(items[i].Name, name) {
+			result := make([]InventoryItem, len(items))
+			copy(result, items)
+			result[i].Quantity++
+			return result
+		}
+	}
+	return append(items, InventoryItem{Name: name, Quantity: 1, Type: "component"})
 }
 
 // resolveSpellcastingAbilityScore determines the highest applicable spellcasting

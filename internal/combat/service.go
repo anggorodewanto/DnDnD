@@ -81,6 +81,9 @@ type Store interface {
 	// Character inventory
 	UpdateCharacterInventory(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error
 
+	// Character gold
+	UpdateCharacterGold(ctx context.Context, id uuid.UUID, gold int32) error
+
 	// Character feature uses
 	UpdateCharacterFeatureUses(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
 

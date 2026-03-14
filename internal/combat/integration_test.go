@@ -717,6 +717,10 @@ func (a *testStoreAdapter) UpdateCharacterSpellSlots(ctx context.Context, arg re
 	return a.Queries.UpdateCharacterSpellSlots(ctx, arg)
 }
 
+func (a *testStoreAdapter) UpdateCharacterGold(ctx context.Context, id uuid.UUID, gold int32) error {
+	return nil // stub for tests
+}
+
 func TestIntegration_ConditionAutoExpiration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

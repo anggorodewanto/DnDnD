@@ -60,6 +60,7 @@ type mockStore struct {
 	updateCharacterFeatureUsesFn      func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
 	updateCharacterSpellSlotsFn       func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
 	getSpellFn                        func(ctx context.Context, id string) (refdata.Spell, error)
+	updateCharacterGoldFn             func(ctx context.Context, id uuid.UUID, gold int32) error
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -190,6 +191,12 @@ func (m *mockStore) GetSpell(ctx context.Context, id string) (refdata.Spell, err
 		return m.getSpellFn(ctx, id)
 	}
 	return refdata.Spell{}, fmt.Errorf("spell %q not found", id)
+}
+func (m *mockStore) UpdateCharacterGold(ctx context.Context, id uuid.UUID, gold int32) error {
+	if m.updateCharacterGoldFn != nil {
+		return m.updateCharacterGoldFn(ctx, id, gold)
+	}
+	return nil
 }
 
 func defaultMockStore() *mockStore {
