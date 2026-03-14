@@ -286,6 +286,18 @@ type Map struct {
 	UpdatedAt         time.Time             `json:"updated_at"`
 }
 
+type PendingAction struct {
+	ID               uuid.UUID `json:"id"`
+	EncounterID      uuid.UUID `json:"encounter_id"`
+	CombatantID      uuid.UUID `json:"combatant_id"`
+	ActionText       string    `json:"action_text"`
+	DmQueueMessageID string    `json:"dm_queue_message_id"`
+	DmQueueChannelID string    `json:"dm_queue_channel_id"`
+	Status           string    `json:"status"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
 type PlayerCharacter struct {
 	ID            uuid.UUID      `json:"id"`
 	CampaignID    uuid.UUID      `json:"campaign_id"`

@@ -93,6 +93,13 @@ type mockStore struct {
 	// Counterspell
 	updateReactionDeclarationCounterspellPromptFn   func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellPromptParams) (refdata.ReactionDeclaration, error)
 	updateReactionDeclarationCounterspellResolvedFn func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellResolvedParams) (refdata.ReactionDeclaration, error)
+
+	// Pending Actions
+	createPendingActionFn             func(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error)
+	getPendingActionFn                func(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error)
+	getPendingActionByCombatantFn     func(ctx context.Context, combatantID uuid.UUID) (refdata.PendingAction, error)
+	updatePendingActionStatusFn       func(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error)
+	updatePendingActionDMQueueMessageFn func(ctx context.Context, arg refdata.UpdatePendingActionDMQueueMessageParams) (refdata.PendingAction, error)
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -385,6 +392,36 @@ func (m *mockStore) UpdateReactionDeclarationCounterspellResolved(ctx context.Co
 		return m.updateReactionDeclarationCounterspellResolvedFn(ctx, arg)
 	}
 	return refdata.ReactionDeclaration{}, nil
+}
+func (m *mockStore) CreatePendingAction(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error) {
+	if m.createPendingActionFn != nil {
+		return m.createPendingActionFn(ctx, arg)
+	}
+	return refdata.PendingAction{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, ActionText: arg.ActionText, Status: "pending"}, nil
+}
+func (m *mockStore) GetPendingAction(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error) {
+	if m.getPendingActionFn != nil {
+		return m.getPendingActionFn(ctx, id)
+	}
+	return refdata.PendingAction{}, fmt.Errorf("not found")
+}
+func (m *mockStore) GetPendingActionByCombatant(ctx context.Context, combatantID uuid.UUID) (refdata.PendingAction, error) {
+	if m.getPendingActionByCombatantFn != nil {
+		return m.getPendingActionByCombatantFn(ctx, combatantID)
+	}
+	return refdata.PendingAction{}, fmt.Errorf("no pending action")
+}
+func (m *mockStore) UpdatePendingActionStatus(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
+	if m.updatePendingActionStatusFn != nil {
+		return m.updatePendingActionStatusFn(ctx, arg)
+	}
+	return refdata.PendingAction{ID: arg.ID, Status: arg.Status}, nil
+}
+func (m *mockStore) UpdatePendingActionDMQueueMessage(ctx context.Context, arg refdata.UpdatePendingActionDMQueueMessageParams) (refdata.PendingAction, error) {
+	if m.updatePendingActionDMQueueMessageFn != nil {
+		return m.updatePendingActionDMQueueMessageFn(ctx, arg)
+	}
+	return refdata.PendingAction{ID: arg.ID, DmQueueMessageID: arg.DmQueueMessageID, DmQueueChannelID: arg.DmQueueChannelID}, nil
 }
 
 func defaultMockStore() *mockStore {
