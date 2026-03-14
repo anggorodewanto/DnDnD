@@ -63,15 +63,18 @@ func EffectiveObscurement(level ObscurementLevel, zoneType string, vision Vision
 		return NotObscured
 	}
 
+	// Darkness-based zones are affected by darkvision and Devil's Sight;
+	// fog/obscurement zones are not.
+	isDarknessZone := zoneType == "darkness" || zoneType == "dim_light"
+
 	// Devil's Sight penetrates all darkness (including magical) within 120ft
 	if vision.HasDevilsSight && distanceFt <= devilsSightRange {
-		if zoneType == "darkness" || zoneType == "magical_darkness" || zoneType == "dim_light" {
+		if isDarknessZone || zoneType == "magical_darkness" {
 			return NotObscured
 		}
 	}
 
 	// Darkvision only helps with darkness-based zones (not fog/heavy obscurement)
-	isDarknessZone := zoneType == "darkness" || zoneType == "dim_light"
 	if vision.DarkvisionFt > 0 && vision.DarkvisionFt >= distanceFt && isDarknessZone {
 		// Darkvision downgrades: heavily -> lightly, lightly -> none
 		if level == HeavilyObscured {
