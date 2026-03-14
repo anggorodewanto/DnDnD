@@ -383,7 +383,7 @@
   - Depends on: Phase 67, Phase 68, Phase 35
   - Done when: Integration tests verify each zone type's combat effects, darkvision interactions, auto-applied modifiers, combat log output.
 
-- [ ] **Phase 70: Reactions System**
+- [x] **Phase 70: Reactions System**
   - Scope: `/reaction` command: freeform declaration, stored in `reaction_declarations` table. Multiple active declarations. Persist until used/cancelled/encounter ends. One reaction per round (tracked on turns.reaction_used, resets at creature's turn start). `/reaction cancel [desc]` and `/reaction cancel-all`. DM resolution flow: Active Reactions Panel shows all declarations, DM triggers, resolves, marks spent.
   - Depends on: Phase 24, Phase 27
   - Done when: Integration tests verify declaration CRUD, one-per-round enforcement, DM resolution flow, cancellation, encounter-end cleanup.

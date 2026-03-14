@@ -155,7 +155,7 @@ func TestResolveReaction_GetActiveTurnError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.ResolveReaction(context.Background(), declID, 1)
+	_, err := svc.ResolveReaction(context.Background(), declID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting active turn")
 }
@@ -183,7 +183,7 @@ func TestResolveReaction_UpdateTurnError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.ResolveReaction(context.Background(), declID, 1)
+	_, err := svc.ResolveReaction(context.Background(), declID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "marking reaction used on turn")
 }
@@ -214,7 +214,7 @@ func TestResolveReaction_UpdateDeclarationError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.ResolveReaction(context.Background(), declID, 1)
+	_, err := svc.ResolveReaction(context.Background(), declID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "updating reaction status to used")
 }
@@ -226,7 +226,7 @@ func TestResolveReaction_GetDeclarationError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.ResolveReaction(context.Background(), uuid.New(), 1)
+	_, err := svc.ResolveReaction(context.Background(), uuid.New())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting reaction declaration")
 }
@@ -295,7 +295,7 @@ func TestResolveReaction_Success(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	decl, err := svc.ResolveReaction(context.Background(), declID, 2)
+	decl, err := svc.ResolveReaction(context.Background(), declID)
 	require.NoError(t, err)
 	assert.Equal(t, "used", decl.Status)
 }
@@ -309,7 +309,7 @@ func TestResolveReaction_AlreadyUsed(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.ResolveReaction(context.Background(), declID, 1)
+	_, err := svc.ResolveReaction(context.Background(), declID)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrReactionNotActive)
 }
@@ -323,7 +323,7 @@ func TestResolveReaction_Cancelled(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.ResolveReaction(context.Background(), declID, 1)
+	_, err := svc.ResolveReaction(context.Background(), declID)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrReactionNotActive)
 }
@@ -355,7 +355,7 @@ func TestResolveReaction_ReactionAlreadyUsedThisRound(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.ResolveReaction(context.Background(), declID, 2)
+	_, err := svc.ResolveReaction(context.Background(), declID)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrReactionAlreadyUsed)
 }
@@ -382,7 +382,7 @@ func TestResolveReaction_NoTurnForDeclarant(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.ResolveReaction(context.Background(), declID, 1)
+	_, err := svc.ResolveReaction(context.Background(), declID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no turn found for declaring combatant")
 }
@@ -403,7 +403,7 @@ func TestResolveReaction_ListTurnsError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.ResolveReaction(context.Background(), declID, 1)
+	_, err := svc.ResolveReaction(context.Background(), declID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "listing turns for round")
 }
@@ -455,7 +455,7 @@ func TestResolveReaction_MarksDeclaringCombatantTurn(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	decl, err := svc.ResolveReaction(context.Background(), declID, 2)
+	decl, err := svc.ResolveReaction(context.Background(), declID)
 	require.NoError(t, err)
 	assert.Equal(t, "used", decl.Status)
 }

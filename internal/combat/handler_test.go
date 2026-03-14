@@ -631,9 +631,7 @@ func TestHandler_ResolveReaction_Success(t *testing.T) {
 
 	_, r := newTestCombatRouter(store)
 
-	body := map[string]interface{}{"round_number": 2}
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/reactions/"+declID.String()+"/resolve", bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/reactions/"+declID.String()+"/resolve", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -777,9 +775,7 @@ func TestHandler_ResolveReaction_ServiceError(t *testing.T) {
 	}
 	_, r := newTestCombatRouter(store)
 
-	body := map[string]interface{}{"round_number": 1}
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions/"+uuid.New().String()+"/resolve", bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions/"+uuid.New().String()+"/resolve", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -826,12 +822,3 @@ func TestHandler_DeclareReaction_ServiceError(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-func TestHandler_ResolveReaction_InvalidJSON(t *testing.T) {
-	_, r := newTestCombatRouter(defaultMockStore())
-
-	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions/"+uuid.New().String()+"/resolve", bytes.NewReader([]byte("bad")))
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}

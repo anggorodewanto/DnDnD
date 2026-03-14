@@ -71,7 +71,7 @@ func (s *Service) CancelAllReactions(ctx context.Context, combatantID, encounter
 
 // ResolveReaction marks a reaction declaration as used (DM resolves it),
 // and sets reaction_used=true on the combatant's current turn.
-func (s *Service) ResolveReaction(ctx context.Context, declarationID uuid.UUID, roundNumber int32) (refdata.ReactionDeclaration, error) {
+func (s *Service) ResolveReaction(ctx context.Context, declarationID uuid.UUID) (refdata.ReactionDeclaration, error) {
 	decl, err := s.store.GetReactionDeclaration(ctx, declarationID)
 	if err != nil {
 		return refdata.ReactionDeclaration{}, fmt.Errorf("getting reaction declaration: %w", err)
@@ -80,7 +80,6 @@ func (s *Service) ResolveReaction(ctx context.Context, declarationID uuid.UUID, 
 		return refdata.ReactionDeclaration{}, fmt.Errorf("status=%q: %w", decl.Status, ErrReactionNotActive)
 	}
 
-	// Find the declaring combatant's turn for this round to mark reaction_used
 	activeTurn, err := s.store.GetActiveTurnByEncounterID(ctx, decl.EncounterID)
 	if err != nil {
 		return refdata.ReactionDeclaration{}, fmt.Errorf("getting active turn: %w", err)
@@ -105,21 +104,18 @@ func (s *Service) ResolveReaction(ctx context.Context, declarationID uuid.UUID, 
 		return refdata.ReactionDeclaration{}, fmt.Errorf("no turn found for declaring combatant in current round")
 	}
 
-	// Check if this combatant already used their reaction this round
 	if declarantTurn.ReactionUsed {
 		return refdata.ReactionDeclaration{}, fmt.Errorf("combatant already used reaction this round: %w", ErrReactionAlreadyUsed)
 	}
 
-	// Mark the declaring combatant's turn's reaction as used
 	declarantTurn.ReactionUsed = true
 	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(*declarantTurn)); err != nil {
 		return refdata.ReactionDeclaration{}, fmt.Errorf("marking reaction used on turn: %w", err)
 	}
 
-	// Mark the declaration as used
 	resolved, err := s.store.UpdateReactionDeclarationStatusUsed(ctx, refdata.UpdateReactionDeclarationStatusUsedParams{
 		ID:          declarationID,
-		UsedOnRound: sql.NullInt32{Int32: roundNumber, Valid: true},
+		UsedOnRound: sql.NullInt32{Int32: activeTurn.RoundNumber, Valid: true},
 	})
 	if err != nil {
 		return refdata.ReactionDeclaration{}, fmt.Errorf("updating reaction status to used: %w", err)

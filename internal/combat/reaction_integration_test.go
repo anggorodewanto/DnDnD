@@ -186,7 +186,7 @@ func TestIntegration_ReactionDeclaration_Resolve(t *testing.T) {
 	decl, err := svc.DeclareReaction(ctx, encounterID, combatantID, "Shield if I get hit")
 	require.NoError(t, err)
 
-	resolved, err := svc.ResolveReaction(ctx, decl.ID, 1)
+	resolved, err := svc.ResolveReaction(ctx, decl.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "used", resolved.Status)
 	assert.True(t, resolved.UsedOnRound.Valid)
@@ -198,7 +198,7 @@ func TestIntegration_ReactionDeclaration_Resolve(t *testing.T) {
 	assert.True(t, updatedTurn.ReactionUsed)
 
 	// Cannot resolve an already-used declaration
-	_, err = svc.ResolveReaction(ctx, decl.ID, 1)
+	_, err = svc.ResolveReaction(ctx, decl.ID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not active")
 }

@@ -128,11 +128,6 @@ type declareReactionRequest struct {
 	Description string `json:"description"`
 }
 
-// resolveReactionRequest is the JSON request body for resolving a reaction.
-type resolveReactionRequest struct {
-	RoundNumber int32 `json:"round_number"`
-}
-
 // cancelAllReactionsResponse is the JSON response for cancel-all.
 type cancelAllReactionsResponse struct {
 	Status string `json:"status"`
@@ -395,13 +390,7 @@ func (h *Handler) ResolveReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req resolveReactionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
-		return
-	}
-
-	decl, err := h.svc.ResolveReaction(r.Context(), reactionID, req.RoundNumber)
+	decl, err := h.svc.ResolveReaction(r.Context(), reactionID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
