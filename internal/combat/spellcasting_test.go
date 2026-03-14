@@ -626,7 +626,7 @@ func TestCast_NoSlotsRemaining(t *testing.T) {
 
 	_, err := svc.Cast(context.Background(), cmd, testRoller())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no 3rd-level spell slots remaining")
+	assert.Contains(t, err.Error(), "no spell slots remaining")
 }
 
 // TDD Cycle 12: Cast enforces range
@@ -1201,4 +1201,810 @@ func TestIntToStringKeyedSlots(t *testing.T) {
 	strSlots := intToStringKeyedSlots(slots)
 	assert.Equal(t, SlotInfo{Current: 3, Max: 4}, strSlots["1"])
 	assert.Equal(t, SlotInfo{Current: 1, Max: 3}, strSlots["2"])
+}
+
+// === Phase 60: Upcasting, Ritual, Cantrip Scaling ===
+
+// Edge case: parseDiceExpr with no 'd' prefix
+func TestParseDiceExpr(t *testing.T) {
+	// normal case
+	count, die := parseDiceExpr("8d6")
+	assert.Equal(t, 8, count)
+	assert.Equal(t, "d6", die)
+
+	// with modifier suffix
+	count, die = parseDiceExpr("1d8+mod")
+	assert.Equal(t, 1, count)
+	assert.Equal(t, "d8+mod", die)
+
+	// no 'd' at all
+	count, die = parseDiceExpr("hello")
+	assert.Equal(t, 0, count)
+	assert.Equal(t, "hello", die)
+
+	// invalid count before d
+	count, die = parseDiceExpr("xd6")
+	assert.Equal(t, 1, count)
+	assert.Equal(t, "d6", die)
+}
+
+// Edge case: Cast with upcast damage scaling (fireball with damage JSON)
+func TestCast_UpcastDamageScaling(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+
+	fireball := makeFireball()
+	fireball.Damage = pqtype.NullRawMessage{
+		RawMessage: []byte(`{"dice": "8d6", "type": "fire", "higher_level_dice": "1d6"}`),
+		Valid:      true,
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return fireball, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed, ActionSpellCast: arg.ActionSpellCast}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	svc := NewService(store)
+
+	// Upcast fireball to 5th level
+	cmd := CastCommand{
+		SpellID:  "fireball",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	// Need 5th level slots
+	slotsJSON, _ := json.Marshal(map[string]SlotInfo{
+		"1": {Current: 4, Max: 4},
+		"2": {Current: 3, Max: 3},
+		"3": {Current: 2, Max: 2},
+		"4": {Current: 1, Max: 1},
+		"5": {Current: 1, Max: 1},
+	})
+	char.SpellSlots = pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+
+	cmd.SlotLevel = 5
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, "10d6", result.ScaledDamageDice)
+	assert.Equal(t, "fire", result.DamageType)
+	assert.Equal(t, 5, result.SlotUsed)
+}
+
+// Edge case: Cast with healing upcast
+func TestCast_UpcastHealingScaling(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	// Make this a cleric for healing spells
+	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "cleric", Level: 8}})
+	char.Classes = classesJSON
+	scoresJSON, _ := json.Marshal(AbilityScores{
+		Str: 10, Dex: 10, Con: 14, Int: 10, Wis: 18, Cha: 10,
+	})
+	char.AbilityScores = scoresJSON
+
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	target.PositionRow = 6
+
+	cureWounds := refdata.Spell{
+		ID:             "cure-wounds",
+		Name:           "Cure Wounds",
+		Level:          1,
+		CastingTime:    "1 action",
+		RangeType:      "touch",
+		ResolutionMode: "auto",
+		Concentration:  sql.NullBool{Bool: false, Valid: true},
+		Healing: pqtype.NullRawMessage{
+			RawMessage: []byte(`{"dice": "1d8+mod", "higher_level_dice": "1d8"}`),
+			Valid:      true,
+		},
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return cureWounds, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+
+	svc := NewService(store)
+
+	// Upcast cure wounds to 3rd level
+	cmd := CastCommand{
+		SpellID:  "cure-wounds",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		SlotLevel: 3,
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, "3d8+mod", result.ScaledHealingDice)
+	assert.Equal(t, 3, result.SlotUsed)
+}
+
+// Edge case: ritual casting with non-ritual class
+func TestCast_RitualNonRitualClass(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	// Make this a sorcerer (no ritual casting)
+	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "sorcerer", Level: 8}})
+	char.Classes = classesJSON
+	caster := makeSpellCaster(charID)
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return refdata.Spell{
+			ID:             "detect-magic",
+			Name:           "Detect Magic",
+			Level:          1,
+			CastingTime:    "1 action",
+			RangeType:      "self",
+			Ritual:         sql.NullBool{Bool: true, Valid: true},
+			Concentration:  sql.NullBool{Bool: true, Valid: true},
+			ResolutionMode: "auto",
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return caster, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:         "detect-magic",
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		IsRitual:        true,
+		EncounterStatus: "preparing",
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not have the Ritual Casting feature")
+}
+
+// Edge case: FormatCastLog with ritual flag
+func TestFormatCastLog_Ritual(t *testing.T) {
+	result := CastResult{
+		CasterName: "Gandalf",
+		SpellName:  "Detect Magic",
+		SpellLevel: 1,
+		IsRitual:   true,
+	}
+	log := FormatCastLog(result)
+	assert.Contains(t, log, "ritual")
+	assert.NotContains(t, log, "slot")
+}
+
+// Edge case: FormatCastLog with upcast
+func TestFormatCastLog_Upcast(t *testing.T) {
+	result := CastResult{
+		CasterName:      "Gandalf",
+		SpellName:       "Fireball",
+		SpellLevel:      3,
+		SlotUsed:        5,
+		SlotsRemaining:  0,
+		ScaledDamageDice: "10d6",
+		DamageType:      "fire",
+	}
+	log := FormatCastLog(result)
+	assert.Contains(t, log, "5th-level slot")
+	assert.Contains(t, log, "10d6 fire")
+}
+
+// TDD Cycle P60-2: CantripDiceMultiplier scales by character level
+func TestCantripDiceMultiplier(t *testing.T) {
+	tests := []struct {
+		charLevel int
+		want      int
+	}{
+		{1, 1}, {4, 1},
+		{5, 2}, {10, 2},
+		{11, 3}, {16, 3},
+		{17, 4}, {20, 4},
+	}
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("level_%d", tc.charLevel), func(t *testing.T) {
+			assert.Equal(t, tc.want, CantripDiceMultiplier(tc.charLevel))
+		})
+	}
+}
+
+// TDD Cycle P60-3: ParseSpellDamage parses damage JSON
+func TestParseSpellDamage(t *testing.T) {
+	t.Run("simple damage", func(t *testing.T) {
+		raw := []byte(`{"dice": "8d6", "type": "fire", "higher_level_dice": "1d6"}`)
+		d, err := ParseSpellDamage(raw)
+		require.NoError(t, err)
+		assert.Equal(t, "8d6", d.Dice)
+		assert.Equal(t, "fire", d.DamageType)
+		assert.Equal(t, "1d6", d.HigherLevelDice)
+		assert.False(t, d.CantripScaling)
+	})
+
+	t.Run("cantrip with scaling", func(t *testing.T) {
+		raw := []byte(`{"dice": "1d8", "type": "fire", "cantrip_scaling": true}`)
+		d, err := ParseSpellDamage(raw)
+		require.NoError(t, err)
+		assert.Equal(t, "1d8", d.Dice)
+		assert.True(t, d.CantripScaling)
+	})
+
+	t.Run("multi-ray format", func(t *testing.T) {
+		raw := []byte(`{"dice": "3x2d6", "type": "fire", "higher_level_dice": "1x2d6"}`)
+		d, err := ParseSpellDamage(raw)
+		require.NoError(t, err)
+		assert.Equal(t, "3x2d6", d.Dice)
+		assert.Equal(t, "1x2d6", d.HigherLevelDice)
+	})
+
+	t.Run("empty returns error", func(t *testing.T) {
+		_, err := ParseSpellDamage(nil)
+		assert.Error(t, err)
+	})
+}
+
+// TDD Cycle P60-4: ScaleSpellDice computes the dice string for upcast/cantrip
+func TestScaleSpellDice(t *testing.T) {
+	tests := []struct {
+		name       string
+		baseDice   string
+		higherDice string
+		cantrip    bool
+		spellLevel int
+		slotLevel  int
+		charLevel  int
+		want       string
+	}{
+		{
+			name:       "fireball at base level",
+			baseDice:   "8d6",
+			higherDice: "1d6",
+			spellLevel: 3,
+			slotLevel:  3,
+			want:       "8d6",
+		},
+		{
+			name:       "fireball upcast to 5th",
+			baseDice:   "8d6",
+			higherDice: "1d6",
+			spellLevel: 3,
+			slotLevel:  5,
+			want:       "10d6",
+		},
+		{
+			name:       "fireball upcast to 4th",
+			baseDice:   "8d6",
+			higherDice: "1d6",
+			spellLevel: 3,
+			slotLevel:  4,
+			want:       "9d6",
+		},
+		{
+			name:       "scorching ray upcast to 3rd (ray format)",
+			baseDice:   "3x2d6",
+			higherDice: "1x2d6",
+			spellLevel: 2,
+			slotLevel:  3,
+			want:       "4x2d6",
+		},
+		{
+			name:       "scorching ray upcast to 5th",
+			baseDice:   "3x2d6",
+			higherDice: "1x2d6",
+			spellLevel: 2,
+			slotLevel:  5,
+			want:       "6x2d6",
+		},
+		{
+			name:      "cantrip at level 1",
+			baseDice:  "1d8",
+			cantrip:   true,
+			charLevel: 1,
+			want:      "1d8",
+		},
+		{
+			name:      "cantrip at level 5",
+			baseDice:  "1d8",
+			cantrip:   true,
+			charLevel: 5,
+			want:      "2d8",
+		},
+		{
+			name:      "cantrip at level 11",
+			baseDice:  "1d10",
+			cantrip:   true,
+			charLevel: 11,
+			want:      "3d10",
+		},
+		{
+			name:      "cantrip at level 17",
+			baseDice:  "1d10",
+			cantrip:   true,
+			charLevel: 17,
+			want:      "4d10",
+		},
+		{
+			name:       "no higher dice, no upcast effect",
+			baseDice:   "2d10",
+			higherDice: "",
+			spellLevel: 2,
+			slotLevel:  4,
+			want:       "2d10",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := SpellDamageInfo{
+				Dice:           tc.baseDice,
+				HigherLevelDice: tc.higherDice,
+				CantripScaling: tc.cantrip,
+			}
+			result := ScaleSpellDice(d, tc.spellLevel, tc.slotLevel, tc.charLevel)
+			assert.Equal(t, tc.want, result)
+		})
+	}
+}
+
+// TDD Cycle P60-5: ParseSpellHealing and ScaleHealingDice
+func TestScaleHealingDice(t *testing.T) {
+	t.Run("cure wounds at base level", func(t *testing.T) {
+		raw := []byte(`{"dice": "1d8+mod", "higher_level_dice": "1d8"}`)
+		h, err := ParseSpellHealing(raw)
+		require.NoError(t, err)
+		result := ScaleHealingDice(h, 1, 1)
+		assert.Equal(t, "1d8+mod", result)
+	})
+
+	t.Run("cure wounds upcast to 3rd", func(t *testing.T) {
+		raw := []byte(`{"dice": "1d8+mod", "higher_level_dice": "1d8"}`)
+		h, err := ParseSpellHealing(raw)
+		require.NoError(t, err)
+		result := ScaleHealingDice(h, 1, 3)
+		assert.Equal(t, "3d8+mod", result)
+	})
+
+	t.Run("cure wounds upcast to 2nd", func(t *testing.T) {
+		raw := []byte(`{"dice": "1d8+mod", "higher_level_dice": "1d8"}`)
+		h, err := ParseSpellHealing(raw)
+		require.NoError(t, err)
+		result := ScaleHealingDice(h, 1, 2)
+		assert.Equal(t, "2d8+mod", result)
+	})
+
+	t.Run("no higher_level_dice", func(t *testing.T) {
+		raw := []byte(`{"dice": "2d8+mod"}`)
+		h, err := ParseSpellHealing(raw)
+		require.NoError(t, err)
+		result := ScaleHealingDice(h, 2, 5)
+		assert.Equal(t, "2d8+mod", result)
+	})
+
+	t.Run("empty returns error", func(t *testing.T) {
+		_, err := ParseSpellHealing(nil)
+		assert.Error(t, err)
+	})
+}
+
+// TDD Cycle P60-6: ValidateRitual checks ritual casting rules
+func TestValidateRitual(t *testing.T) {
+	tests := []struct {
+		name            string
+		spellRitual     bool
+		encounterStatus string
+		className       string
+		wantErr         string
+	}{
+		{
+			name:            "valid ritual: wizard out of combat",
+			spellRitual:     true,
+			encounterStatus: "preparing",
+			className:       "wizard",
+		},
+		{
+			name:            "valid ritual: cleric out of combat",
+			spellRitual:     true,
+			encounterStatus: "completed",
+			className:       "cleric",
+		},
+		{
+			name:            "spell is not ritual",
+			spellRitual:     false,
+			encounterStatus: "preparing",
+			className:       "wizard",
+			wantErr:         "cannot be cast as a ritual",
+		},
+		{
+			name:            "in active combat",
+			spellRitual:     true,
+			encounterStatus: "active",
+			className:       "wizard",
+			wantErr:         "cannot cast rituals during active combat",
+		},
+		{
+			name:            "class cannot ritual cast",
+			spellRitual:     true,
+			encounterStatus: "preparing",
+			className:       "sorcerer",
+			wantErr:         "does not have the Ritual Casting feature",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateRitual(tc.spellRitual, tc.encounterStatus, tc.className)
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
+}
+
+// TDD Cycle P60-7: HasRitualCasting checks class feature
+func TestHasRitualCasting(t *testing.T) {
+	assert.True(t, HasRitualCasting("wizard"))
+	assert.True(t, HasRitualCasting("cleric"))
+	assert.True(t, HasRitualCasting("druid"))
+	assert.True(t, HasRitualCasting("bard"))
+	assert.False(t, HasRitualCasting("sorcerer"))
+	assert.False(t, HasRitualCasting("warlock"))
+	assert.False(t, HasRitualCasting("paladin"))
+	assert.False(t, HasRitualCasting("ranger"))
+	assert.False(t, HasRitualCasting("barbarian"))
+}
+
+// TDD Cycle P60-8: Cast with explicit upcast slot
+func TestCast_UpcastExplicitSlot(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+
+	var savedSlots pqtype.NullRawMessage
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeFireball(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed, ActionSpellCast: arg.ActionSpellCast}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		savedSlots = arg.SpellSlots
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "fireball",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	// Upcast fireball (3rd level) using a 2nd level slot -> should fail
+	cmd.SlotLevel = 2
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "slot level 2 is below spell level 3")
+
+	// Upcast fireball to 2nd level slot which doesn't exist at level 2 for this spell
+	// Actually, let's test valid upcast: 3rd level spell into 3rd level slot (not upcast)
+	cmd.SlotLevel = 3
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, 3, result.SlotUsed)
+
+	// Verify slot 3 was deducted
+	require.True(t, savedSlots.Valid)
+	var slots map[string]SlotInfo
+	require.NoError(t, json.Unmarshal(savedSlots.RawMessage, &slots))
+	assert.Equal(t, 1, slots["3"].Current) // was 2, now 1
+}
+
+// TDD Cycle P60-9: Cast with auto-select slot skips depleted levels
+func TestCast_UpcastAutoSelect(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	// Deplete 1st level slots, spell is level 1
+	slotsJSON, _ := json.Marshal(map[string]SlotInfo{
+		"1": {Current: 0, Max: 4},
+		"2": {Current: 3, Max: 3},
+		"3": {Current: 2, Max: 2},
+	})
+	char.SpellSlots = pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true}
+
+	caster := makeSpellCaster(charID)
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeMistyStep(), nil // level 2 bonus action spell
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return caster, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "misty-step",
+		CasterID: caster.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		// SlotLevel 0 = auto
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.SlotUsed) // Auto-selected 2nd level
+}
+
+// TDD Cycle P60-10: Cast ritual spell uses no slot
+func TestCast_RitualNoSlot(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+
+	slotUpdateCalled := false
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return refdata.Spell{
+			ID:             "detect-magic",
+			Name:           "Detect Magic",
+			Level:          1,
+			CastingTime:    "1 action",
+			RangeType:      "self",
+			Ritual:         sql.NullBool{Bool: true, Valid: true},
+			Concentration:  sql.NullBool{Bool: true, Valid: true},
+			ResolutionMode: "auto",
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return caster, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		slotUpdateCalled = true
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:         "detect-magic",
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		IsRitual:        true,
+		EncounterStatus: "preparing",
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, "Detect Magic", result.SpellName)
+	assert.True(t, result.IsRitual)
+	assert.False(t, slotUpdateCalled, "ritual should not consume slot")
+	assert.Equal(t, 0, result.SlotUsed)
+}
+
+// TDD Cycle P60-11: Cast ritual in active combat fails
+func TestCast_RitualInCombatFails(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return refdata.Spell{
+			ID:             "detect-magic",
+			Name:           "Detect Magic",
+			Level:          1,
+			CastingTime:    "1 action",
+			RangeType:      "self",
+			Ritual:         sql.NullBool{Bool: true, Valid: true},
+			Concentration:  sql.NullBool{Bool: true, Valid: true},
+			ResolutionMode: "auto",
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return caster, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:         "detect-magic",
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		IsRitual:        true,
+		EncounterStatus: "active",
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot cast rituals during active combat")
+}
+
+// TDD Cycle P60-12: Cast cantrip with scaling populates CharacterLevel
+func TestCast_CantripScaling(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	char.Level = 11 // Level 11 = 3 dice for cantrips
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	target.PositionRow = 6
+
+	store := defaultMockStore()
+	firebolt := makeFireBolt()
+	firebolt.Damage = pqtype.NullRawMessage{
+		RawMessage: []byte(`{"dice": "1d10", "type": "fire", "cantrip_scaling": true}`),
+		Valid:      true,
+	}
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return firebolt, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "fire-bolt",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, "3d10", result.ScaledDamageDice)
+	assert.Equal(t, "fire", result.DamageType)
+}
+
+// TDD Cycle P60-1: SelectSpellSlot picks lowest available slot >= spell level
+func TestSelectSpellSlot(t *testing.T) {
+	tests := []struct {
+		name       string
+		slots      map[int]SlotInfo
+		spellLevel int
+		slotLevel  int // 0 means "auto-select"
+		wantSlot   int
+		wantErr    string
+	}{
+		{
+			name:       "auto-select lowest available",
+			slots:      map[int]SlotInfo{1: {Current: 2, Max: 4}, 2: {Current: 3, Max: 3}, 3: {Current: 2, Max: 2}},
+			spellLevel: 1,
+			slotLevel:  0,
+			wantSlot:   1,
+		},
+		{
+			name:       "auto-select skips depleted",
+			slots:      map[int]SlotInfo{1: {Current: 0, Max: 4}, 2: {Current: 3, Max: 3}, 3: {Current: 2, Max: 2}},
+			spellLevel: 1,
+			slotLevel:  0,
+			wantSlot:   2,
+		},
+		{
+			name:       "auto-select for higher level spell",
+			slots:      map[int]SlotInfo{1: {Current: 2, Max: 4}, 2: {Current: 3, Max: 3}, 3: {Current: 2, Max: 2}},
+			spellLevel: 3,
+			slotLevel:  0,
+			wantSlot:   3,
+		},
+		{
+			name:       "explicit slot level",
+			slots:      map[int]SlotInfo{1: {Current: 2, Max: 4}, 2: {Current: 3, Max: 3}, 3: {Current: 2, Max: 2}},
+			spellLevel: 1,
+			slotLevel:  3,
+			wantSlot:   3,
+		},
+		{
+			name:       "explicit slot level too low",
+			slots:      map[int]SlotInfo{1: {Current: 2, Max: 4}, 2: {Current: 3, Max: 3}, 3: {Current: 2, Max: 2}},
+			spellLevel: 3,
+			slotLevel:  2,
+			wantErr:    "slot level 2 is below spell level 3",
+		},
+		{
+			name:       "explicit slot no remaining",
+			slots:      map[int]SlotInfo{1: {Current: 2, Max: 4}, 2: {Current: 0, Max: 3}},
+			spellLevel: 1,
+			slotLevel:  2,
+			wantErr:    "no 2nd-level spell slots remaining",
+		},
+		{
+			name:       "auto-select no slots available at any level",
+			slots:      map[int]SlotInfo{1: {Current: 0, Max: 4}, 2: {Current: 0, Max: 3}},
+			spellLevel: 1,
+			slotLevel:  0,
+			wantErr:    "no spell slots remaining",
+		},
+		{
+			name:       "cantrip returns 0",
+			slots:      nil,
+			spellLevel: 0,
+			slotLevel:  0,
+			wantSlot:   0,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			slot, err := SelectSpellSlot(tc.slots, tc.spellLevel, tc.slotLevel)
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantSlot, slot)
+		})
+	}
 }

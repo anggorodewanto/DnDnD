@@ -303,6 +303,7 @@ type AoECastCommand struct {
 	Turn                 refdata.Turn
 	CurrentConcentration string
 	Walls                []renderer.WallSegment
+	SlotLevel            int // explicit slot choice; 0 = auto-select lowest available
 }
 
 // CastAoE orchestrates the AoE spell casting flow:
@@ -347,14 +348,18 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		return AoECastResult{}, fmt.Errorf("getting character: %w", err)
 	}
 
-	// 6. Parse spell slots and validate
+	// 6. Parse spell slots and select slot level
 	spellLevel := int(spell.Level)
 	slots, err := parseIntKeyedSlots(char.SpellSlots.RawMessage)
 	if err != nil {
 		return AoECastResult{}, err
 	}
-	if err := ValidateSpellSlot(slots, spellLevel); err != nil {
-		return AoECastResult{}, err
+	effectiveSlotLevel := 0
+	if spellLevel > 0 {
+		effectiveSlotLevel, err = SelectSpellSlot(slots, spellLevel, cmd.SlotLevel)
+		if err != nil {
+			return AoECastResult{}, err
+		}
 	}
 
 	// 7. Validate range to target coordinate
@@ -450,10 +455,10 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	// 16. Deduct spell slot and persist
 	slotUsed := 0
 	slotsRemaining := 0
-	if spellLevel > 0 {
-		newSlots := DeductSpellSlot(slots, spellLevel)
-		slotUsed = spellLevel
-		if info, ok := newSlots[spellLevel]; ok {
+	if effectiveSlotLevel > 0 {
+		newSlots := DeductSpellSlot(slots, effectiveSlotLevel)
+		slotUsed = effectiveSlotLevel
+		if info, ok := newSlots[effectiveSlotLevel]; ok {
 			slotsRemaining = info.Current
 		}
 

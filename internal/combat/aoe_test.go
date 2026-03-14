@@ -759,7 +759,7 @@ func TestCastAoE_NoSlotsRemaining(t *testing.T) {
 
 	_, err := svc.CastAoE(context.Background(), cmd)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no 3rd-level spell slots remaining")
+	assert.Contains(t, err.Error(), "no spell slots remaining")
 }
 
 // Edge case: CastAoE bonus action spell

@@ -135,22 +135,26 @@ func SpellcastingAbilityForClass(className string) string {
 
 // CastResult holds the outcome of a /cast command.
 type CastResult struct {
-	CasterName     string
-	SpellName      string
-	SpellLevel     int
-	IsBonusAction  bool
-	IsAttack       bool
-	AttackRoll     int
-	AttackTotal    int
-	TargetAC       int
-	Hit            bool
-	TargetName     string
-	SaveDC         int
-	SaveAbility    string
-	Concentration  ConcentrationResult
-	ResolutionMode string
-	SlotUsed       int
-	SlotsRemaining int
+	CasterName      string
+	SpellName       string
+	SpellLevel      int
+	IsBonusAction   bool
+	IsAttack        bool
+	AttackRoll      int
+	AttackTotal     int
+	TargetAC        int
+	Hit             bool
+	TargetName      string
+	SaveDC          int
+	SaveAbility     string
+	Concentration   ConcentrationResult
+	ResolutionMode  string
+	SlotUsed        int
+	SlotsRemaining  int
+	IsRitual        bool
+	ScaledDamageDice string // damage dice after upcast/cantrip scaling
+	DamageType      string // damage type from spell damage JSON
+	ScaledHealingDice string // healing dice after upcast scaling
 }
 
 // FormatCastLog produces the combat log output for a spell cast.
@@ -159,6 +163,10 @@ func FormatCastLog(result CastResult) string {
 
 	// Header
 	fmt.Fprintf(&b, "\u2728 %s casts %s", result.CasterName, result.SpellName)
+
+	if result.IsRitual {
+		b.WriteString(" (ritual)")
+	}
 
 	if result.IsBonusAction {
 		b.WriteString(" (bonus action)")
@@ -170,9 +178,19 @@ func FormatCastLog(result CastResult) string {
 
 	b.WriteString("\n")
 
-	// Slot usage
-	if result.SpellLevel > 0 {
+	// Slot usage (not for rituals or cantrips)
+	if result.SpellLevel > 0 && !result.IsRitual {
 		fmt.Fprintf(&b, "\U0001f4a0 Used %s-level slot (%d remaining)\n", ordinal(result.SlotUsed), result.SlotsRemaining)
+	}
+
+	// Scaled damage dice
+	if result.ScaledDamageDice != "" {
+		fmt.Fprintf(&b, "\U0001f4a5 Damage: %s %s\n", result.ScaledDamageDice, result.DamageType)
+	}
+
+	// Scaled healing dice
+	if result.ScaledHealingDice != "" {
+		fmt.Fprintf(&b, "\U0001f49a Healing: %s\n", result.ScaledHealingDice)
 	}
 
 	// Attack roll
@@ -213,6 +231,9 @@ type CastCommand struct {
 	TargetID             uuid.UUID // zero value for self spells
 	Turn                 refdata.Turn
 	CurrentConcentration string // name of current concentration spell, if any
+	SlotLevel            int    // explicit slot choice; 0 = auto-select lowest available
+	IsRitual             bool   // true = cast as ritual (no slot consumed)
+	EncounterStatus      string // encounter status for ritual validation ("preparing", "active", "completed")
 }
 
 // Cast orchestrates the full spell casting flow:
@@ -266,8 +287,30 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	if err != nil {
 		return CastResult{}, err
 	}
-	if err := ValidateSpellSlot(slots, spellLevel); err != nil {
-		return CastResult{}, err
+
+	// 6a. Ritual validation
+	if cmd.IsRitual {
+		// Determine primary class for ritual casting check
+		var classes []CharacterClass
+		if err := json.Unmarshal(char.Classes, &classes); err != nil {
+			return CastResult{}, fmt.Errorf("parsing classes: %w", err)
+		}
+		primaryClass := ""
+		if len(classes) > 0 {
+			primaryClass = classes[0].Class
+		}
+		if err := ValidateRitual(spell.Ritual.Valid && spell.Ritual.Bool, cmd.EncounterStatus, primaryClass); err != nil {
+			return CastResult{}, err
+		}
+	}
+
+	// 6b. Select spell slot (unless ritual or cantrip)
+	effectiveSlotLevel := 0
+	if spellLevel > 0 && !cmd.IsRitual {
+		effectiveSlotLevel, err = SelectSpellSlot(slots, spellLevel, cmd.SlotLevel)
+		if err != nil {
+			return CastResult{}, err
+		}
 	}
 
 	// 7. Resolve target and validate range
@@ -305,10 +348,28 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		SpellLevel:     spellLevel,
 		IsBonusAction:  isBonusAction,
 		ResolutionMode: spell.ResolutionMode,
+		IsRitual:       cmd.IsRitual,
 	}
 
 	if hasTarget {
 		result.TargetName = target.DisplayName
+	}
+
+	// 9a. Compute scaled damage dice (cantrip scaling or upcast)
+	if spell.Damage.Valid && len(spell.Damage.RawMessage) > 0 {
+		dmgInfo, err := ParseSpellDamage(spell.Damage.RawMessage)
+		if err == nil {
+			result.DamageType = dmgInfo.DamageType
+			result.ScaledDamageDice = ScaleSpellDice(dmgInfo, spellLevel, effectiveSlotLevel, int(char.Level))
+		}
+	}
+
+	// 9b. Compute scaled healing dice (upcast)
+	if spell.Healing.Valid && len(spell.Healing.RawMessage) > 0 {
+		healInfo, err := ParseSpellHealing(spell.Healing.RawMessage)
+		if err == nil {
+			result.ScaledHealingDice = ScaleHealingDice(healInfo, spellLevel, effectiveSlotLevel)
+		}
 	}
 
 	// 10. Resolve concentration
@@ -357,11 +418,11 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		return CastResult{}, fmt.Errorf("updating turn: %w", err)
 	}
 
-	// 15. Deduct spell slot and persist (only for leveled spells)
-	if spellLevel > 0 {
-		newSlots := DeductSpellSlot(slots, spellLevel)
-		result.SlotUsed = spellLevel
-		if info, ok := newSlots[spellLevel]; ok {
+	// 15. Deduct spell slot and persist (leveled spells, not rituals)
+	if effectiveSlotLevel > 0 {
+		newSlots := DeductSpellSlot(slots, effectiveSlotLevel)
+		result.SlotUsed = effectiveSlotLevel
+		if info, ok := newSlots[effectiveSlotLevel]; ok {
 			result.SlotsRemaining = info.Current
 		}
 
@@ -404,6 +465,180 @@ func intToStringKeyedSlots(slots map[int]SlotInfo) map[string]SlotInfo {
 		result[strconv.Itoa(k)] = v
 	}
 	return result
+}
+
+// SpellDamageInfo holds parsed damage data from a spell's Damage JSON.
+type SpellDamageInfo struct {
+	Dice           string `json:"dice"`
+	DamageType     string `json:"type"`
+	HigherLevelDice string `json:"higher_level_dice"`
+	CantripScaling bool   `json:"cantrip_scaling"`
+}
+
+// ParseSpellDamage parses the damage JSON from a spell.
+func ParseSpellDamage(raw []byte) (SpellDamageInfo, error) {
+	if len(raw) == 0 {
+		return SpellDamageInfo{}, errors.New("damage data is empty")
+	}
+	var d SpellDamageInfo
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return SpellDamageInfo{}, fmt.Errorf("parsing damage: %w", err)
+	}
+	return d, nil
+}
+
+// SpellHealingInfo holds parsed healing data from a spell's Healing JSON.
+type SpellHealingInfo struct {
+	Dice           string `json:"dice"`
+	HigherLevelDice string `json:"higher_level_dice"`
+}
+
+// ParseSpellHealing parses the healing JSON from a spell.
+func ParseSpellHealing(raw []byte) (SpellHealingInfo, error) {
+	if len(raw) == 0 {
+		return SpellHealingInfo{}, errors.New("healing data is empty")
+	}
+	var h SpellHealingInfo
+	if err := json.Unmarshal(raw, &h); err != nil {
+		return SpellHealingInfo{}, fmt.Errorf("parsing healing: %w", err)
+	}
+	return h, nil
+}
+
+// ScaleSpellDice computes the effective dice string considering upcasting and cantrip scaling.
+// For cantrips with cantrip_scaling: multiplies the base dice count by CantripDiceMultiplier.
+// For upcasting: adds (slotLevel - spellLevel) * higher_level_dice to the base.
+// Supports both simple format "8d6" and ray format "3x2d6".
+func ScaleSpellDice(d SpellDamageInfo, spellLevel, slotLevel, charLevel int) string {
+	if d.CantripScaling {
+		return scaleCantripDice(d.Dice, charLevel)
+	}
+	if d.HigherLevelDice == "" || slotLevel <= spellLevel {
+		return d.Dice
+	}
+	levelsAbove := slotLevel - spellLevel
+	return addDice(d.Dice, d.HigherLevelDice, levelsAbove)
+}
+
+// ScaleHealingDice computes the effective healing dice string for upcasting.
+func ScaleHealingDice(h SpellHealingInfo, spellLevel, slotLevel int) string {
+	if h.HigherLevelDice == "" || slotLevel <= spellLevel {
+		return h.Dice
+	}
+	levelsAbove := slotLevel - spellLevel
+	return addDice(h.Dice, h.HigherLevelDice, levelsAbove)
+}
+
+// scaleCantripDice multiplies the dice count in a dice string by the cantrip multiplier.
+// e.g., "1d8" at level 5 -> "2d8"
+func scaleCantripDice(baseDice string, charLevel int) string {
+	mult := CantripDiceMultiplier(charLevel)
+	count, die := parseDiceExpr(baseDice)
+	return fmt.Sprintf("%d%s", count*mult, die)
+}
+
+// addDice adds bonus dice to a base dice expression.
+// Supports "NdX" format (adds to count) and "NxMdX" format (adds to multiplier).
+func addDice(base, bonus string, times int) string {
+	// Try ray format: "NxMdX"
+	if strings.Contains(base, "x") && strings.Contains(bonus, "x") {
+		baseParts := strings.SplitN(base, "x", 2)
+		bonusParts := strings.SplitN(bonus, "x", 2)
+		baseCount, _ := strconv.Atoi(baseParts[0])
+		bonusCount, _ := strconv.Atoi(bonusParts[0])
+		return fmt.Sprintf("%dx%s", baseCount+bonusCount*times, baseParts[1])
+	}
+
+	// Simple format: "NdX" or "NdX+mod"
+	baseCount, baseDie := parseDiceExpr(base)
+	bonusCount, _ := parseDiceExpr(bonus)
+	return fmt.Sprintf("%d%s", baseCount+bonusCount*times, baseDie)
+}
+
+// parseDiceExpr splits a dice expression "NdX" into count and "dX" (keeping any suffix like "+mod").
+// Returns (N, "dX+suffix").
+func parseDiceExpr(expr string) (int, string) {
+	dIdx := strings.Index(expr, "d")
+	if dIdx < 0 {
+		return 0, expr
+	}
+	countStr := expr[:dIdx]
+	rest := expr[dIdx:] // e.g., "d8+mod"
+	count, err := strconv.Atoi(countStr)
+	if err != nil {
+		return 1, rest
+	}
+	return count, rest
+}
+
+// HasRitualCasting returns true if the given class has the Ritual Casting feature.
+func HasRitualCasting(className string) bool {
+	switch strings.ToLower(className) {
+	case "wizard", "cleric", "druid", "bard":
+		return true
+	default:
+		return false
+	}
+}
+
+// ValidateRitual checks that a spell can be cast as a ritual.
+func ValidateRitual(spellRitual bool, encounterStatus string, className string) error {
+	if !spellRitual {
+		return errors.New("this spell cannot be cast as a ritual")
+	}
+	if encounterStatus == "active" {
+		return errors.New("cannot cast rituals during active combat")
+	}
+	if !HasRitualCasting(className) {
+		return fmt.Errorf("%s does not have the Ritual Casting feature", className)
+	}
+	return nil
+}
+
+// CantripDiceMultiplier returns how many dice a cantrip rolls based on character level.
+// Level 1-4: 1, Level 5-10: 2, Level 11-16: 3, Level 17+: 4.
+func CantripDiceMultiplier(charLevel int) int {
+	if charLevel >= 17 {
+		return 4
+	}
+	if charLevel >= 11 {
+		return 3
+	}
+	if charLevel >= 5 {
+		return 2
+	}
+	return 1
+}
+
+// SelectSpellSlot determines which spell slot level to use.
+// For cantrips (spellLevel 0), returns 0.
+// If slotLevel is specified (> 0), validates it is >= spellLevel and has remaining slots.
+// If slotLevel is 0 (auto), picks the lowest available slot >= spellLevel.
+func SelectSpellSlot(slots map[int]SlotInfo, spellLevel int, slotLevel int) (int, error) {
+	if spellLevel == 0 {
+		return 0, nil
+	}
+
+	// Explicit slot selection
+	if slotLevel > 0 {
+		if slotLevel < spellLevel {
+			return 0, fmt.Errorf("slot level %d is below spell level %d", slotLevel, spellLevel)
+		}
+		info, ok := slots[slotLevel]
+		if !ok || info.Current <= 0 {
+			return 0, fmt.Errorf("no %s-level spell slots remaining", ordinal(slotLevel))
+		}
+		return slotLevel, nil
+	}
+
+	// Auto-select: find lowest available slot >= spellLevel
+	for level := spellLevel; level <= 9; level++ {
+		info, ok := slots[level]
+		if ok && info.Current > 0 {
+			return level, nil
+		}
+	}
+	return 0, fmt.Errorf("no spell slots remaining at level %d or above", spellLevel)
 }
 
 // resolveSpellcastingAbilityScore determines the highest applicable spellcasting
