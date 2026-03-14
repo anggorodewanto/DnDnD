@@ -160,6 +160,8 @@ type CastResult struct {
 	ScaledHealingDice string // healing dice after upcast scaling
 	Teleport          *TeleportResult          // teleportation outcome, nil if not a teleport spell
 	MaterialComponent *CastMaterialComponentInfo // material component outcome, nil if no costly component
+	MetamagicCost          int // total sorcery points spent on metamagic
+	SorceryPointsRemaining int // sorcery points remaining after metamagic cost
 }
 
 // FormatCastLog produces the combat log output for a spell cast.
@@ -264,6 +266,7 @@ type CastCommand struct {
 	CompanionDestCol     string    // companion teleport destination column
 	CompanionDestRow     int32     // companion teleport destination row
 	GoldFallback         bool      // true if user confirmed "Buy & Cast" gold fallback
+	Metamagic            []string  // metamagic options: "careful", "distant", "empowered", etc.
 }
 
 // Cast orchestrates the full spell casting flow:
@@ -278,6 +281,11 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 
 	isBonusAction := IsBonusActionSpell(spell)
+
+	// 1a. Quickened Spell metamagic changes casting time to bonus action
+	if hasMetamagic(cmd.Metamagic, "quickened") {
+		isBonusAction = true
+	}
 
 	// 2. Validate action/bonus action resource
 	resource := ResourceAction
@@ -403,6 +411,24 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		}
 	}
 
+	// 6e. Metamagic validation and sorcery point tracking
+	var metamagicCost int
+	var metamagicFeatureUses map[string]int
+	var metamagicCurrentPoints int
+	if len(cmd.Metamagic) > 0 {
+		metamagicFeatureUses, metamagicCurrentPoints, err = ParseFeatureUses(char, FeatureKeySorceryPoints)
+		if err != nil {
+			return CastResult{}, err
+		}
+		if err := ValidateMetamagic(cmd.Metamagic, spellLevel, metamagicCurrentPoints); err != nil {
+			return CastResult{}, err
+		}
+		metamagicCost, err = MetamagicTotalCost(cmd.Metamagic, spellLevel)
+		if err != nil {
+			return CastResult{}, err
+		}
+	}
+
 	// 7. Resolve target and validate range
 	var target refdata.Combatant
 	hasTarget := cmd.TargetID != uuid.Nil
@@ -525,6 +551,16 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		}
 		result.SlotUsed = deduction.SlotUsed
 		result.SlotsRemaining = deduction.SlotsRemaining
+	}
+
+	// 16. Deduct sorcery points for metamagic
+	if metamagicCost > 0 {
+		newPoints, err := s.DeductFeaturePool(ctx, char, FeatureKeySorceryPoints, metamagicFeatureUses, metamagicCurrentPoints, metamagicCost)
+		if err != nil {
+			return CastResult{}, err
+		}
+		result.MetamagicCost = metamagicCost
+		result.SorceryPointsRemaining = newPoints
 	}
 
 	return result, nil

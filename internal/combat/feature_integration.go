@@ -18,6 +18,7 @@ const (
 	FeatureKeyBardicInspiration = "bardic-inspiration"
 	FeatureKeyLayOnHands        = "lay-on-hands"
 	FeatureKeyActionSurge       = "action-surge"
+	FeatureKeySorceryPoints     = "sorcery-points"
 )
 
 // ParseFeatureUses extracts the feature_uses map and a named feature's remaining count.
