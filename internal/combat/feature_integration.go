@@ -50,8 +50,12 @@ func (s *Service) DeductFeaturePool(ctx context.Context, char refdata.Character,
 	if amount > current {
 		return 0, fmt.Errorf("insufficient %s pool: need %d, have %d", featureKey, amount, current)
 	}
-	newRemaining := current - amount
-	featureUses[featureKey] = newRemaining
+	return s.SetFeaturePool(ctx, char, featureKey, featureUses, current-amount)
+}
+
+// SetFeaturePool sets a feature's pool to an absolute value, persists, and returns the new value.
+func (s *Service) SetFeaturePool(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]int, value int) (int, error) {
+	featureUses[featureKey] = value
 	featureUsesJSON, err := json.Marshal(featureUses)
 	if err != nil {
 		return 0, fmt.Errorf("marshaling feature_uses: %w", err)
@@ -62,7 +66,7 @@ func (s *Service) DeductFeaturePool(ctx context.Context, char refdata.Character,
 	}); err != nil {
 		return 0, fmt.Errorf("updating feature_uses: %w", err)
 	}
-	return newRemaining, nil
+	return value, nil
 }
 
 // DeductFeatureUse decrements a feature's remaining uses by 1, persists, and returns the new count.

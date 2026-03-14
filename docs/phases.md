@@ -358,7 +358,7 @@
   - Depends on: Phase 58
   - Done when: Integration tests verify prepare flow, count validation, always-prepared spells excluded from count, long-rest reminder.
 
-- [ ] **Phase 66a: Metamagic — Sorcery Points & Framework (Sorcerer)**
+- [x] **Phase 66a: Metamagic — Sorcery Points & Framework (Sorcerer)**
   - Scope: Sorcery points tracking (feature_uses, recharge long rest). `/bonus font-of-magic` for slot/point conversion (both directions, level-based point costs). Metamagic framework: validate `/cast` metamagic flags, enforce one metamagic per spell (except Empowered combos), deduct sorcery points.
   - Depends on: Phase 58, Phase 44
   - Done when: Integration tests verify sorcery point tracking, Font of Magic conversion, metamagic flag validation, one-per-spell enforcement, point deduction.

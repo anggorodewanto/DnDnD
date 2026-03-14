@@ -136,107 +136,111 @@ type FontOfMagicResult struct {
 	Remaining       string
 }
 
-// FontOfMagicConvertSlot converts a spell slot into sorcery points.
-func (s *Service) FontOfMagicConvertSlot(ctx context.Context, cmd FontOfMagicCommand) (FontOfMagicResult, error) {
-	// 1. Validate bonus action
+// fontOfMagicContext holds the validated state shared by both Font of Magic operations.
+type fontOfMagicContext struct {
+	caster        refdata.Combatant
+	char          refdata.Character
+	sorcLevel     int
+	featureUses   map[string]int
+	currentPoints int
+}
+
+// validateFontOfMagic performs the shared validation for Font of Magic:
+// bonus action availability, player character check, sorcerer level 2+, and sorcery point parsing.
+func (s *Service) validateFontOfMagic(ctx context.Context, cmd FontOfMagicCommand) (fontOfMagicContext, error) {
 	if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
-		return FontOfMagicResult{}, err
+		return fontOfMagicContext{}, err
 	}
 
-	// 2. Look up caster
 	caster, err := s.store.GetCombatant(ctx, cmd.CasterID)
 	if err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("getting caster: %w", err)
+		return fontOfMagicContext{}, fmt.Errorf("getting caster: %w", err)
 	}
 	if !caster.CharacterID.Valid {
-		return FontOfMagicResult{}, fmt.Errorf("Font of Magic requires a player character")
+		return fontOfMagicContext{}, fmt.Errorf("Font of Magic requires a player character")
 	}
 
-	// 3. Look up character
 	char, err := s.store.GetCharacter(ctx, caster.CharacterID.UUID)
 	if err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("getting character: %w", err)
+		return fontOfMagicContext{}, fmt.Errorf("getting character: %w", err)
 	}
 
-	// 4. Validate sorcerer level 2+
 	sorcLevel := ClassLevelFromJSON(char.Classes, "Sorcerer")
 	if sorcLevel < 2 {
-		return FontOfMagicResult{}, fmt.Errorf("Font of Magic requires Sorcerer level 2+, have level %d", sorcLevel)
+		return fontOfMagicContext{}, fmt.Errorf("Font of Magic requires Sorcerer level 2+, have level %d", sorcLevel)
 	}
 
-	// 5. Parse feature uses for sorcery points
 	featureUses, currentPoints, err := ParseFeatureUses(char, FeatureKeySorceryPoints)
+	if err != nil {
+		return fontOfMagicContext{}, err
+	}
+
+	return fontOfMagicContext{
+		caster:        caster,
+		char:          char,
+		sorcLevel:     sorcLevel,
+		featureUses:   featureUses,
+		currentPoints: currentPoints,
+	}, nil
+}
+
+// useBonusActionAndPersist consumes a bonus action and persists the turn update.
+func (s *Service) useBonusActionAndPersist(ctx context.Context, turn refdata.Turn) (refdata.Turn, error) {
+	updated, err := UseResource(turn, ResourceBonusAction)
+	if err != nil {
+		return refdata.Turn{}, err
+	}
+	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updated)); err != nil {
+		return refdata.Turn{}, fmt.Errorf("updating turn: %w", err)
+	}
+	return updated, nil
+}
+
+// FontOfMagicConvertSlot converts a spell slot into sorcery points.
+func (s *Service) FontOfMagicConvertSlot(ctx context.Context, cmd FontOfMagicCommand) (FontOfMagicResult, error) {
+	fom, err := s.validateFontOfMagic(ctx, cmd)
 	if err != nil {
 		return FontOfMagicResult{}, err
 	}
 
-	// 6. Check that gaining points won't exceed max
-	maxPoints := sorcLevel
+	// Check that gaining points won't exceed max (max = sorcerer level)
 	pointsGained := cmd.SlotLevel
-	if currentPoints+pointsGained > maxPoints {
-		return FontOfMagicResult{}, fmt.Errorf("conversion would exceed sorcery point maximum (%d + %d > %d)", currentPoints, pointsGained, maxPoints)
+	if fom.currentPoints+pointsGained > fom.sorcLevel {
+		return FontOfMagicResult{}, fmt.Errorf("conversion would exceed sorcery point maximum (%d + %d > %d)", fom.currentPoints, pointsGained, fom.sorcLevel)
 	}
 
-	// 7. Parse and validate spell slot
-	slots, err := parseIntKeyedSlots(char.SpellSlots.RawMessage)
+	// Validate and deduct spell slot
+	slots, err := parseIntKeyedSlots(fom.char.SpellSlots.RawMessage)
 	if err != nil {
 		return FontOfMagicResult{}, err
 	}
 	if err := ValidateSpellSlot(slots, cmd.SlotLevel); err != nil {
 		return FontOfMagicResult{}, err
 	}
-
-	// 8. Deduct spell slot
-	newSlots := DeductSpellSlot(slots, cmd.SlotLevel)
-	slotsJSON, err := json.Marshal(intToStringKeyedSlots(newSlots))
-	if err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("marshaling spell slots: %w", err)
-	}
-	if _, err := s.store.UpdateCharacterSpellSlots(ctx, refdata.UpdateCharacterSpellSlotsParams{
-		ID:         char.ID,
-		SpellSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
-	}); err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("updating spell slots: %w", err)
+	if _, err := s.deductAndPersistSlot(ctx, fom.char.ID, slots, cmd.SlotLevel); err != nil {
+		return FontOfMagicResult{}, err
 	}
 
-	// 9. Add sorcery points
-	newPoints := currentPoints + pointsGained
-	featureUses[FeatureKeySorceryPoints] = newPoints
-	featureUsesJSON, err := json.Marshal(featureUses)
-	if err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("marshaling feature_uses: %w", err)
-	}
-	if _, err := s.store.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
-		ID:          char.ID,
-		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
-	}); err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("updating feature_uses: %w", err)
-	}
-
-	// 10. Use bonus action
-	turn, err := UseResource(cmd.Turn, ResourceBonusAction)
+	// Add sorcery points
+	newPoints, err := s.SetFeaturePool(ctx, fom.char, FeatureKeySorceryPoints, fom.featureUses, fom.currentPoints+pointsGained)
 	if err != nil {
 		return FontOfMagicResult{}, err
 	}
-	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(turn)); err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("updating turn: %w", err)
+
+	turn, err := s.useBonusActionAndPersist(ctx, cmd.Turn)
+	if err != nil {
+		return FontOfMagicResult{}, err
 	}
 
 	return FontOfMagicResult{
 		PointsRemaining: newPoints,
-		CombatLog:       FormatFontOfMagicConvert(caster.DisplayName, cmd.SlotLevel, pointsGained, newPoints),
+		CombatLog:       FormatFontOfMagicConvert(fom.caster.DisplayName, cmd.SlotLevel, pointsGained, newPoints),
 		Remaining:       FormatRemainingResources(turn, nil),
 	}, nil
 }
 
 // FontOfMagicCreateSlot creates a spell slot from sorcery points.
 func (s *Service) FontOfMagicCreateSlot(ctx context.Context, cmd FontOfMagicCommand) (FontOfMagicResult, error) {
-	// 1. Validate bonus action
-	if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
-		return FontOfMagicResult{}, err
-	}
-
-	// 2. Validate slot level
 	if cmd.CreateSlotLevel < 1 || cmd.CreateSlotLevel > 5 {
 		return FontOfMagicResult{}, fmt.Errorf("cannot create slots above 5th level (requested %d)", cmd.CreateSlotLevel)
 	}
@@ -246,84 +250,59 @@ func (s *Service) FontOfMagicCreateSlot(ctx context.Context, cmd FontOfMagicComm
 		return FontOfMagicResult{}, err
 	}
 
-	// 3. Look up caster
-	caster, err := s.store.GetCombatant(ctx, cmd.CasterID)
-	if err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("getting caster: %w", err)
-	}
-	if !caster.CharacterID.Valid {
-		return FontOfMagicResult{}, fmt.Errorf("Font of Magic requires a player character")
-	}
-
-	// 4. Look up character
-	char, err := s.store.GetCharacter(ctx, caster.CharacterID.UUID)
-	if err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("getting character: %w", err)
-	}
-
-	// 5. Validate sorcerer level 2+
-	sorcLevel := ClassLevelFromJSON(char.Classes, "Sorcerer")
-	if sorcLevel < 2 {
-		return FontOfMagicResult{}, fmt.Errorf("Font of Magic requires Sorcerer level 2+, have level %d", sorcLevel)
-	}
-
-	// 6. Parse feature uses and validate points
-	featureUses, currentPoints, err := ParseFeatureUses(char, FeatureKeySorceryPoints)
+	fom, err := s.validateFontOfMagic(ctx, cmd)
 	if err != nil {
 		return FontOfMagicResult{}, err
 	}
-	if cost > currentPoints {
+
+	if cost > fom.currentPoints {
 		return FontOfMagicResult{}, fmt.Errorf("insufficient sorcery points: need %d to create %s-level slot, have %d",
-			cost, ordinal(cmd.CreateSlotLevel), currentPoints)
+			cost, ordinal(cmd.CreateSlotLevel), fom.currentPoints)
 	}
 
-	// 7. Deduct sorcery points
-	newPoints := currentPoints - cost
-	featureUses[FeatureKeySorceryPoints] = newPoints
-	featureUsesJSON, err := json.Marshal(featureUses)
-	if err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("marshaling feature_uses: %w", err)
-	}
-	if _, err := s.store.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
-		ID:          char.ID,
-		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
-	}); err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("updating feature_uses: %w", err)
-	}
-
-	// 8. Add spell slot
-	slots, err := parseIntKeyedSlots(char.SpellSlots.RawMessage)
+	// Deduct sorcery points
+	newPoints, err := s.DeductFeaturePool(ctx, fom.char, FeatureKeySorceryPoints, fom.featureUses, fom.currentPoints, cost)
 	if err != nil {
 		return FontOfMagicResult{}, err
 	}
-	info := slots[cmd.CreateSlotLevel]
-	info.Current++
-	slots[cmd.CreateSlotLevel] = info
-	slotsJSON, err := json.Marshal(intToStringKeyedSlots(slots))
-	if err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("marshaling spell slots: %w", err)
-	}
-	if _, err := s.store.UpdateCharacterSpellSlots(ctx, refdata.UpdateCharacterSpellSlotsParams{
-		ID:         char.ID,
-		SpellSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
-	}); err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("updating spell slots: %w", err)
-	}
 
-	// 9. Use bonus action
-	turn, err := UseResource(cmd.Turn, ResourceBonusAction)
-	if err != nil {
+	// Add spell slot
+	if err := s.addAndPersistSlot(ctx, fom.char.ID, fom.char.SpellSlots.RawMessage, cmd.CreateSlotLevel); err != nil {
 		return FontOfMagicResult{}, err
 	}
-	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(turn)); err != nil {
-		return FontOfMagicResult{}, fmt.Errorf("updating turn: %w", err)
+
+	turn, err := s.useBonusActionAndPersist(ctx, cmd.Turn)
+	if err != nil {
+		return FontOfMagicResult{}, err
 	}
 
 	return FontOfMagicResult{
 		PointsRemaining: newPoints,
-		CombatLog:       FormatFontOfMagicCreate(caster.DisplayName, cmd.CreateSlotLevel, currentPoints, newPoints),
+		CombatLog:       FormatFontOfMagicCreate(fom.caster.DisplayName, cmd.CreateSlotLevel, fom.currentPoints, newPoints),
 		Remaining:       FormatRemainingResources(turn, nil),
 	}, nil
+}
+
+// addAndPersistSlot adds one spell slot at the given level and persists the change.
+func (s *Service) addAndPersistSlot(ctx context.Context, charID uuid.UUID, slotsRaw json.RawMessage, slotLevel int) error {
+	slots, err := parseIntKeyedSlots(slotsRaw)
+	if err != nil {
+		return err
+	}
+	info := slots[slotLevel]
+	info.Current++
+	slots[slotLevel] = info
+	slotsJSON, err := json.Marshal(intToStringKeyedSlots(slots))
+	if err != nil {
+		return fmt.Errorf("marshaling spell slots: %w", err)
+	}
+	if _, err := s.store.UpdateCharacterSpellSlots(ctx, refdata.UpdateCharacterSpellSlotsParams{
+		ID:         charID,
+		SpellSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("updating spell slots: %w", err)
+	}
+	return nil
 }
 
 // hasMetamagic returns true if the metamagic list contains the given option.
