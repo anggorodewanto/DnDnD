@@ -163,13 +163,20 @@ func TestResolveReaction_GetActiveTurnError(t *testing.T) {
 func TestResolveReaction_UpdateTurnError(t *testing.T) {
 	declID := uuid.New()
 	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
 
 	store := defaultMockStore()
 	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
-		return refdata.ReactionDeclaration{ID: declID, EncounterID: encounterID, Status: "active"}, nil
+		return refdata.ReactionDeclaration{ID: declID, EncounterID: encounterID, CombatantID: combatantID, Status: "active"}, nil
 	}
 	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
-		return refdata.Turn{ID: uuid.New(), Status: "active"}, nil
+		return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 1, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{
+			{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 1, Status: "active"},
+		}, nil
 	}
 	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
 		return refdata.Turn{}, errors.New("update failed")
@@ -184,13 +191,20 @@ func TestResolveReaction_UpdateTurnError(t *testing.T) {
 func TestResolveReaction_UpdateDeclarationError(t *testing.T) {
 	declID := uuid.New()
 	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
 
 	store := defaultMockStore()
 	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
-		return refdata.ReactionDeclaration{ID: declID, EncounterID: encounterID, Status: "active"}, nil
+		return refdata.ReactionDeclaration{ID: declID, EncounterID: encounterID, CombatantID: combatantID, Status: "active"}, nil
 	}
 	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
-		return refdata.Turn{ID: uuid.New(), Status: "active"}, nil
+		return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 1, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{
+			{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 1, Status: "active"},
+		}, nil
 	}
 	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
 		return refdata.Turn{}, nil
@@ -264,12 +278,18 @@ func TestResolveReaction_Success(t *testing.T) {
 			Status:      "active",
 		}, nil
 	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{
+			{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 2, Status: "active"},
+		}, nil
+	}
 	store.updateReactionDeclarationStatusUsedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error) {
 		assert.Equal(t, declID, arg.ID)
 		assert.Equal(t, int32(2), arg.UsedOnRound.Int32)
 		return refdata.ReactionDeclaration{ID: declID, Status: "used"}, nil
 	}
 	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		assert.Equal(t, turnID, arg.ID)
 		assert.True(t, arg.ReactionUsed)
 		return refdata.Turn{ID: turnID, ReactionUsed: true}, nil
 	}
@@ -291,7 +311,7 @@ func TestResolveReaction_AlreadyUsed(t *testing.T) {
 	svc := NewService(store)
 	_, err := svc.ResolveReaction(context.Background(), declID, 1)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not active")
+	assert.ErrorIs(t, err, ErrReactionNotActive)
 }
 
 func TestResolveReaction_Cancelled(t *testing.T) {
@@ -305,7 +325,139 @@ func TestResolveReaction_Cancelled(t *testing.T) {
 	svc := NewService(store)
 	_, err := svc.ResolveReaction(context.Background(), declID, 1)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not active")
+	assert.ErrorIs(t, err, ErrReactionNotActive)
+}
+
+// --- TDD Cycle: ResolveReaction rejects if combatant already used reaction this round ---
+
+func TestResolveReaction_ReactionAlreadyUsedThisRound(t *testing.T) {
+	declID := uuid.New()
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{
+			ID:          declID,
+			EncounterID: encounterID,
+			CombatantID: combatantID,
+			Status:      "active",
+		}, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), RoundNumber: 2, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{
+			{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 2, Status: "completed", ReactionUsed: true},
+		}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.ResolveReaction(context.Background(), declID, 2)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrReactionAlreadyUsed)
+}
+
+func TestResolveReaction_NoTurnForDeclarant(t *testing.T) {
+	declID := uuid.New()
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{
+			ID:          declID,
+			EncounterID: encounterID,
+			CombatantID: combatantID,
+			Status:      "active",
+		}, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), RoundNumber: 1, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil // no turn for this combatant
+	}
+
+	svc := NewService(store)
+	_, err := svc.ResolveReaction(context.Background(), declID, 1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no turn found for declaring combatant")
+}
+
+func TestResolveReaction_ListTurnsError(t *testing.T) {
+	declID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID, EncounterID: encounterID, CombatantID: uuid.New(), Status: "active"}, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: encounterID, RoundNumber: 1, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return nil, errors.New("db error")
+	}
+
+	svc := NewService(store)
+	_, err := svc.ResolveReaction(context.Background(), declID, 1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listing turns for round")
+}
+
+// --- TDD Cycle: ResolveReaction marks the declaring combatant's turn, not the active turn ---
+
+func TestResolveReaction_MarksDeclaringCombatantTurn(t *testing.T) {
+	declID := uuid.New()
+	encounterID := uuid.New()
+	aragornID := uuid.New()  // declaring combatant
+	goblinID := uuid.New()   // active turn combatant (different!)
+	aragornTurnID := uuid.New()
+	goblinTurnID := uuid.New()
+
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{
+			ID:          declID,
+			EncounterID: encounterID,
+			CombatantID: aragornID,
+			Status:      "active",
+		}, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID:          goblinTurnID,
+			EncounterID: encounterID,
+			CombatantID: goblinID,
+			RoundNumber: 2,
+			Status:      "active",
+		}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		assert.Equal(t, encounterID, arg.EncounterID)
+		assert.Equal(t, int32(2), arg.RoundNumber)
+		return []refdata.Turn{
+			{ID: aragornTurnID, EncounterID: encounterID, CombatantID: aragornID, RoundNumber: 2, Status: "completed"},
+			{ID: goblinTurnID, EncounterID: encounterID, CombatantID: goblinID, RoundNumber: 2, Status: "active"},
+		}, nil
+	}
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		// Must update Aragorn's turn, NOT goblin's
+		assert.Equal(t, aragornTurnID, arg.ID, "should mark reaction_used on declaring combatant's turn")
+		assert.True(t, arg.ReactionUsed)
+		return refdata.Turn{ID: aragornTurnID, ReactionUsed: true}, nil
+	}
+	store.updateReactionDeclarationStatusUsedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID, Status: "used"}, nil
+	}
+
+	svc := NewService(store)
+	decl, err := svc.ResolveReaction(context.Background(), declID, 2)
+	require.NoError(t, err)
+	assert.Equal(t, "used", decl.Status)
 }
 
 // --- TDD Cycle 6: ListActiveReactions ---

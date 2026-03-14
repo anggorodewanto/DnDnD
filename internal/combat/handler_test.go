@@ -617,6 +617,11 @@ func TestHandler_ResolveReaction_Success(t *testing.T) {
 	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
 		return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 2, Status: "active"}, nil
 	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{
+			{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 2, Status: "active"},
+		}, nil
+	}
 	store.updateReactionDeclarationStatusUsedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error) {
 		return refdata.ReactionDeclaration{ID: declID, Status: "used"}, nil
 	}

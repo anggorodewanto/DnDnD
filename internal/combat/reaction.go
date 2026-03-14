@@ -14,6 +14,9 @@ import (
 // ErrReactionNotActive is returned when trying to resolve a non-active reaction declaration.
 var ErrReactionNotActive = fmt.Errorf("reaction declaration is not active")
 
+// ErrReactionAlreadyUsed is returned when a combatant tries to use a reaction but already used one this round.
+var ErrReactionAlreadyUsed = fmt.Errorf("reaction already used this round")
+
 // DeclareReaction creates a new reaction declaration for a combatant in an encounter.
 func (s *Service) DeclareReaction(ctx context.Context, encounterID, combatantID uuid.UUID, description string) (refdata.ReactionDeclaration, error) {
 	description = strings.TrimSpace(description)
@@ -74,18 +77,42 @@ func (s *Service) ResolveReaction(ctx context.Context, declarationID uuid.UUID, 
 		return refdata.ReactionDeclaration{}, fmt.Errorf("getting reaction declaration: %w", err)
 	}
 	if decl.Status != "active" {
-		return refdata.ReactionDeclaration{}, fmt.Errorf("reaction declaration is not active (status=%q)", decl.Status)
+		return refdata.ReactionDeclaration{}, fmt.Errorf("status=%q: %w", decl.Status, ErrReactionNotActive)
 	}
 
-	// Get the active turn for this encounter to mark reaction_used
-	turn, err := s.store.GetActiveTurnByEncounterID(ctx, decl.EncounterID)
+	// Find the declaring combatant's turn for this round to mark reaction_used
+	activeTurn, err := s.store.GetActiveTurnByEncounterID(ctx, decl.EncounterID)
 	if err != nil {
 		return refdata.ReactionDeclaration{}, fmt.Errorf("getting active turn: %w", err)
 	}
 
-	// Mark the turn's reaction as used
-	turn.ReactionUsed = true
-	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(turn)); err != nil {
+	turns, err := s.store.ListTurnsByEncounterAndRound(ctx, refdata.ListTurnsByEncounterAndRoundParams{
+		EncounterID: decl.EncounterID,
+		RoundNumber: activeTurn.RoundNumber,
+	})
+	if err != nil {
+		return refdata.ReactionDeclaration{}, fmt.Errorf("listing turns for round: %w", err)
+	}
+
+	var declarantTurn *refdata.Turn
+	for i := range turns {
+		if turns[i].CombatantID == decl.CombatantID {
+			declarantTurn = &turns[i]
+			break
+		}
+	}
+	if declarantTurn == nil {
+		return refdata.ReactionDeclaration{}, fmt.Errorf("no turn found for declaring combatant in current round")
+	}
+
+	// Check if this combatant already used their reaction this round
+	if declarantTurn.ReactionUsed {
+		return refdata.ReactionDeclaration{}, fmt.Errorf("combatant already used reaction this round: %w", ErrReactionAlreadyUsed)
+	}
+
+	// Mark the declaring combatant's turn's reaction as used
+	declarantTurn.ReactionUsed = true
+	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(*declarantTurn)); err != nil {
 		return refdata.ReactionDeclaration{}, fmt.Errorf("marking reaction used on turn: %w", err)
 	}
 
