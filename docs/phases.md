@@ -353,7 +353,7 @@
   - Depends on: Phase 58
   - Done when: Integration tests verify pact slot usage, short rest recharge, multiclass pool selection, upcast validation.
 
-- [ ] **Phase 65: Spell Preparation (`/prepare`)**
+- [x] **Phase 65: Spell Preparation (`/prepare`)**
   - Scope: `/prepare` for prepared casters (Cleric, Druid, Paladin): ephemeral message with current prepared spells, full class spell list, remaining slots. Select/deselect via Discord select menus (paginated by level). Confirm/cancel. Validate count <= max prepared. Domain/Oath/Circle spells always prepared, shown separately. Post long-rest reminder.
   - Depends on: Phase 58
   - Done when: Integration tests verify prepare flow, count validation, always-prepared spells excluded from count, long-rest reminder.

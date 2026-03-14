@@ -136,23 +136,37 @@ func AvailableSlotLevels(slots map[int]SlotInfo) map[int]bool {
 	return result
 }
 
+// toStringSet converts a slice of strings to a set (map[string]bool).
+func toStringSet(ids []string) map[string]bool {
+	s := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		s[id] = true
+	}
+	return s
+}
+
+// countNonAlwaysPrepared counts how many spells in selected are not in alwaysSet.
+func countNonAlwaysPrepared(selected []string, alwaysSet map[string]bool) int {
+	count := 0
+	for _, id := range selected {
+		if !alwaysSet[id] {
+			count++
+		}
+	}
+	return count
+}
+
 // ValidateSpellPreparation validates a prepared spell list.
 // Always-prepared spells (alwaysIDs) are excluded from the max count.
 // All selected spells must be on the class spell list and within available slot levels.
 func ValidateSpellPreparation(selected []string, maxPrepared int, slotLevels map[int]bool, classSpells []refdata.Spell, alwaysIDs []string) error {
-	// Build set of class spell IDs and levels
 	classSpellMap := make(map[string]int32, len(classSpells))
 	for _, s := range classSpells {
 		classSpellMap[s.ID] = s.Level
 	}
 
-	// Build set of always-prepared IDs
-	alwaysSet := make(map[string]bool, len(alwaysIDs))
-	for _, id := range alwaysIDs {
-		alwaysSet[id] = true
-	}
+	alwaysSet := toStringSet(alwaysIDs)
 
-	// Count non-always-prepared spells and validate each
 	counted := 0
 	for _, spellID := range selected {
 		level, ok := classSpellMap[spellID]
@@ -176,24 +190,35 @@ func ValidateSpellPreparation(selected []string, maxPrepared int, slotLevels map
 
 // PreparationInfo holds the data needed to render the /prepare UI.
 type PreparationInfo struct {
-	MaxPrepared        int
-	CurrentPrepared    []string
-	ClassSpells        []refdata.Spell
-	AlwaysPrepared     []string
+	MaxPrepared         int
+	CurrentPrepared     []string
+	ClassSpells         []refdata.Spell
+	AlwaysPrepared      []string
 	AvailableSlotLevels map[int]bool
 }
 
-// GetPreparationInfo returns the current preparation state for a character,
-// used to render the ephemeral /prepare message.
-func (s *Service) GetPreparationInfo(ctx context.Context, charID uuid.UUID, className, subclass string) (PreparationInfo, error) {
+// preparationContext holds the resolved character data shared by
+// GetPreparationInfo and PrepareSpells.
+type preparationContext struct {
+	char        refdata.Character
+	classLevel  int
+	maxPrepared int
+	slotLevels  map[int]bool
+	classSpells []refdata.Spell
+	alwaysIDs   []string
+}
+
+// resolvePreparationContext loads and parses the character data needed for
+// spell preparation operations.
+func (s *Service) resolvePreparationContext(ctx context.Context, charID uuid.UUID, className, subclass string) (preparationContext, error) {
 	char, err := s.store.GetCharacter(ctx, charID)
 	if err != nil {
-		return PreparationInfo{}, fmt.Errorf("getting character: %w", err)
+		return preparationContext{}, fmt.Errorf("getting character: %w", err)
 	}
 
 	var classes []CharacterClass
 	if err := json.Unmarshal(char.Classes, &classes); err != nil {
-		return PreparationInfo{}, fmt.Errorf("parsing classes: %w", err)
+		return preparationContext{}, fmt.Errorf("parsing classes: %w", err)
 	}
 
 	classLevel := 0
@@ -204,49 +229,64 @@ func (s *Service) GetPreparationInfo(ctx context.Context, charID uuid.UUID, clas
 		}
 	}
 	if classLevel == 0 {
-		return PreparationInfo{}, fmt.Errorf("character has no levels in %s", className)
+		return preparationContext{}, fmt.Errorf("character has no levels in %s", className)
 	}
 
 	scores, err := ParseAbilityScores(char.AbilityScores)
 	if err != nil {
-		return PreparationInfo{}, fmt.Errorf("parsing ability scores: %w", err)
+		return preparationContext{}, fmt.Errorf("parsing ability scores: %w", err)
 	}
-	spellAbility := SpellcastingAbilityForClass(className)
-	abilityMod := AbilityModifier(scores.ScoreByName(spellAbility))
+	abilityMod := AbilityModifier(scores.ScoreByName(SpellcastingAbilityForClass(className)))
 	maxPrepared := MaxPreparedSpells(abilityMod, classLevel)
 
 	slots, err := parseIntKeyedSlots(char.SpellSlots.RawMessage)
 	if err != nil {
-		return PreparationInfo{}, fmt.Errorf("parsing spell slots: %w", err)
+		return preparationContext{}, fmt.Errorf("parsing spell slots: %w", err)
 	}
 	slotLevels := AvailableSlotLevels(slots)
 
 	classSpells, err := s.store.ListSpellsByClass(ctx, strings.ToLower(className))
 	if err != nil {
-		return PreparationInfo{}, fmt.Errorf("listing class spells: %w", err)
+		return preparationContext{}, fmt.Errorf("listing class spells: %w", err)
+	}
+
+	return preparationContext{
+		char:        char,
+		classLevel:  classLevel,
+		maxPrepared: maxPrepared,
+		slotLevels:  slotLevels,
+		classSpells: classSpells,
+		alwaysIDs:   AlwaysPreparedSpells(className, subclass, classLevel),
+	}, nil
+}
+
+// GetPreparationInfo returns the current preparation state for a character,
+// used to render the ephemeral /prepare message.
+func (s *Service) GetPreparationInfo(ctx context.Context, charID uuid.UUID, className, subclass string) (PreparationInfo, error) {
+	pc, err := s.resolvePreparationContext(ctx, charID, className, subclass)
+	if err != nil {
+		return PreparationInfo{}, err
 	}
 
 	// Filter class spells to only include spells at available slot levels
-	filtered := make([]refdata.Spell, 0, len(classSpells))
-	for _, sp := range classSpells {
-		if sp.Level == 0 || slotLevels[int(sp.Level)] {
+	filtered := make([]refdata.Spell, 0, len(pc.classSpells))
+	for _, sp := range pc.classSpells {
+		if sp.Level == 0 || pc.slotLevels[int(sp.Level)] {
 			filtered = append(filtered, sp)
 		}
 	}
 
-	currentPrepared, err := ParsePreparedSpells(char.CharacterData.RawMessage)
+	currentPrepared, err := ParsePreparedSpells(pc.char.CharacterData.RawMessage)
 	if err != nil {
 		return PreparationInfo{}, fmt.Errorf("parsing prepared spells: %w", err)
 	}
 
-	alwaysIDs := AlwaysPreparedSpells(className, subclass, classLevel)
-
 	return PreparationInfo{
-		MaxPrepared:        maxPrepared,
-		CurrentPrepared:    currentPrepared,
-		ClassSpells:        filtered,
-		AlwaysPrepared:     alwaysIDs,
-		AvailableSlotLevels: slotLevels,
+		MaxPrepared:         pc.maxPrepared,
+		CurrentPrepared:     currentPrepared,
+		ClassSpells:         filtered,
+		AlwaysPrepared:      pc.alwaysIDs,
+		AvailableSlotLevels: pc.slotLevels,
 	}, nil
 }
 
@@ -265,34 +305,19 @@ func LongRestPrepareReminder(classes []CharacterClass) string {
 func FormatPreparationMessage(charName string, info PreparationInfo) string {
 	var b strings.Builder
 
-	// Count non-always-prepared from current
-	alwaysSet := make(map[string]bool, len(info.AlwaysPrepared))
-	for _, id := range info.AlwaysPrepared {
-		alwaysSet[id] = true
-	}
-	counted := 0
-	for _, id := range info.CurrentPrepared {
-		if !alwaysSet[id] {
-			counted++
-		}
-	}
+	alwaysSet := toStringSet(info.AlwaysPrepared)
+	preparedSet := toStringSet(info.CurrentPrepared)
+	counted := countNonAlwaysPrepared(info.CurrentPrepared, alwaysSet)
 
 	fmt.Fprintf(&b, "**%s — Spell Preparation**\n", charName)
 	fmt.Fprintf(&b, "**%d / %d** spells prepared\n\n", counted, info.MaxPrepared)
 
-	// Always-prepared section
 	if len(info.AlwaysPrepared) > 0 {
 		b.WriteString("**Always Prepared** (subclass, do not count against limit):\n")
 		for _, id := range info.AlwaysPrepared {
 			fmt.Fprintf(&b, "  - %s\n", id)
 		}
 		b.WriteString("\n")
-	}
-
-	// Current prepared (non-always)
-	preparedSet := make(map[string]bool, len(info.CurrentPrepared))
-	for _, id := range info.CurrentPrepared {
-		preparedSet[id] = true
 	}
 
 	if counted > 0 {
@@ -305,7 +330,6 @@ func FormatPreparationMessage(charName string, info PreparationInfo) string {
 		b.WriteString("\n")
 	}
 
-	// Available spells by level
 	byLevel := make(map[int32][]refdata.Spell)
 	for _, sp := range info.ClassSpells {
 		if sp.Level > 0 {
@@ -353,88 +377,33 @@ func (s *Service) PrepareSpells(ctx context.Context, input PrepareSpellsInput) (
 		return PrepareSpellsResult{}, fmt.Errorf("%s is not a prepared caster", input.ClassName)
 	}
 
-	// Look up character
-	char, err := s.store.GetCharacter(ctx, input.CharacterID)
+	pc, err := s.resolvePreparationContext(ctx, input.CharacterID, input.ClassName, input.Subclass)
 	if err != nil {
-		return PrepareSpellsResult{}, fmt.Errorf("getting character: %w", err)
-	}
-
-	// Parse classes to find class level
-	var classes []CharacterClass
-	if err := json.Unmarshal(char.Classes, &classes); err != nil {
-		return PrepareSpellsResult{}, fmt.Errorf("parsing classes: %w", err)
-	}
-
-	classLevel := 0
-	for _, c := range classes {
-		if strings.EqualFold(c.Class, input.ClassName) {
-			classLevel = c.Level
-			break
-		}
-	}
-	if classLevel == 0 {
-		return PrepareSpellsResult{}, fmt.Errorf("character has no levels in %s", input.ClassName)
-	}
-
-	// Parse ability scores and compute max prepared
-	scores, err := ParseAbilityScores(char.AbilityScores)
-	if err != nil {
-		return PrepareSpellsResult{}, fmt.Errorf("parsing ability scores: %w", err)
-	}
-	spellAbility := SpellcastingAbilityForClass(input.ClassName)
-	abilityMod := AbilityModifier(scores.ScoreByName(spellAbility))
-	maxPrepared := MaxPreparedSpells(abilityMod, classLevel)
-
-	// Parse spell slots to find available levels
-	slots, err := parseIntKeyedSlots(char.SpellSlots.RawMessage)
-	if err != nil {
-		return PrepareSpellsResult{}, fmt.Errorf("parsing spell slots: %w", err)
-	}
-	slotLevels := AvailableSlotLevels(slots)
-
-	// Get class spell list
-	classSpells, err := s.store.ListSpellsByClass(ctx, strings.ToLower(input.ClassName))
-	if err != nil {
-		return PrepareSpellsResult{}, fmt.Errorf("listing class spells: %w", err)
-	}
-
-	// Determine always-prepared spells
-	alwaysIDs := AlwaysPreparedSpells(input.ClassName, input.Subclass, classLevel)
-
-	// Validate
-	if err := ValidateSpellPreparation(input.Selected, maxPrepared, slotLevels, classSpells, alwaysIDs); err != nil {
 		return PrepareSpellsResult{}, err
 	}
 
-	// Build updated character_data
-	newData, err := BuildCharacterDataWithPreparedSpells(char.CharacterData.RawMessage, input.Selected)
+	if err := ValidateSpellPreparation(input.Selected, pc.maxPrepared, pc.slotLevels, pc.classSpells, pc.alwaysIDs); err != nil {
+		return PrepareSpellsResult{}, err
+	}
+
+	newData, err := BuildCharacterDataWithPreparedSpells(pc.char.CharacterData.RawMessage, input.Selected)
 	if err != nil {
 		return PrepareSpellsResult{}, fmt.Errorf("building character data: %w", err)
 	}
 
-	// Persist
 	if _, err := s.store.UpdateCharacterData(ctx, refdata.UpdateCharacterDataParams{
-		ID:            char.ID,
+		ID:            pc.char.ID,
 		CharacterData: pqtype.NullRawMessage{RawMessage: newData, Valid: true},
 	}); err != nil {
 		return PrepareSpellsResult{}, fmt.Errorf("updating character data: %w", err)
 	}
 
-	// Count non-always-prepared spells
-	alwaysSet := make(map[string]bool, len(alwaysIDs))
-	for _, id := range alwaysIDs {
-		alwaysSet[id] = true
-	}
-	counted := 0
-	for _, spellID := range input.Selected {
-		if !alwaysSet[spellID] {
-			counted++
-		}
-	}
+	alwaysSet := toStringSet(pc.alwaysIDs)
+	counted := countNonAlwaysPrepared(input.Selected, alwaysSet)
 
 	return PrepareSpellsResult{
 		PreparedCount:  counted,
-		MaxPrepared:    maxPrepared,
-		AlwaysPrepared: alwaysIDs,
+		MaxPrepared:    pc.maxPrepared,
+		AlwaysPrepared: pc.alwaysIDs,
 	}, nil
 }
