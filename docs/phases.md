@@ -333,7 +333,7 @@
   - Depends on: Phase 58
   - Done when: Unit tests verify upcast damage scaling, ritual validation, cantrip scaling at each breakpoint.
 
-- [ ] **Phase 61: Spell Casting — Concentration Checks & Breaking**
+- [x] **Phase 61: Spell Casting — Concentration Checks & Breaking**
   - Scope: Damage triggers concentration check: ping caster for `/save con` (DC = max(10, half damage)). Failure breaks concentration. Incapacitation (stunned, paralyzed, unconscious, petrified) auto-breaks concentration. Silence zone breaks concentration on V/S spells. `/cast` blocked in Silence zone for V/S spells. Active spell effect removal on concentration break.
   - Depends on: Phase 58, Phase 39
   - Done when: Integration tests verify concentration save trigger, auto-break on incapacitation, silence zone interaction, spell effect cleanup.

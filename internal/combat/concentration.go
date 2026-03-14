@@ -98,17 +98,14 @@ func ValidateSilenceZone(inSilence bool, spell refdata.Spell) error {
 // CheckConcentrationInSilence checks if being in a silence zone breaks
 // concentration on a spell with V or S components.
 func CheckConcentrationInSilence(currentConcentration string, inSilence bool, spell refdata.Spell) ConcentrationBreakResult {
-	if currentConcentration == "" || !inSilence {
+	if currentConcentration == "" || !inSilence || !HasVerbalOrSomaticComponent(spell) {
 		return ConcentrationBreakResult{}
 	}
-	if HasVerbalOrSomaticComponent(spell) {
-		return ConcentrationBreakResult{
-			Broken:    true,
-			SpellName: currentConcentration,
-			Reason:    "silence",
-		}
+	return ConcentrationBreakResult{
+		Broken:    true,
+		SpellName: currentConcentration,
+		Reason:    "silence",
 	}
-	return ConcentrationBreakResult{}
 }
 
 // ConcentrationCleanupFunc is a callback invoked when concentration breaks

@@ -1,7 +1,6 @@
 package combat
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -288,9 +287,8 @@ func TestCheckConcentrationInSilence(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			spell := refdata.Spell{
-				Name:          tc.wantSpell,
-				Components:    tc.components,
-				Concentration: sql.NullBool{Bool: true, Valid: true},
+				Name:       tc.wantSpell,
+				Components: tc.components,
 			}
 			result := CheckConcentrationInSilence(tc.currentConcentration, tc.inSilence, spell)
 			assert.Equal(t, tc.wantBroken, result.Broken)
@@ -406,9 +404,8 @@ func TestIntegration_IncapacitationAutoBreaks(t *testing.T) {
 // TDD Cycle 8c: Integration test — silence zone blocks V/S cast and breaks concentration
 func TestIntegration_SilenceZoneInteraction(t *testing.T) {
 	spell := refdata.Spell{
-		Name:          "Hold Person",
-		Components:    []string{"V", "S", "M"},
-		Concentration: sql.NullBool{Bool: true, Valid: true},
+		Name:       "Hold Person",
+		Components: []string{"V", "S", "M"},
 	}
 
 	// Cast blocked in silence
