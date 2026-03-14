@@ -188,4 +188,8 @@ type MapData struct {
 	Combatants    []Combatant
 	ActiveEffects []ActiveEffect
 	ZoneOverlays  []ZoneOverlay
+
+	// Fog of War fields
+	VisionSources []VisionSource // player vision sources; if non-empty, fog is computed
+	FogOfWar      *FogOfWar      // pre-computed fog; if nil and VisionSources set, computed automatically
 }

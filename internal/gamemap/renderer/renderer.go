@@ -29,6 +29,17 @@ func RenderMap(md *MapData) ([]byte, error) {
 	dc.SetRGB(1, 1, 1)
 	dc.Clear()
 
+	// Compute fog of war if vision sources are provided but fog is not pre-computed
+	if len(md.VisionSources) > 0 && md.FogOfWar == nil {
+		md.FogOfWar = ComputeVisibility(md.VisionSources, md.Walls, md.Width, md.Height)
+	}
+
+	// Filter combatants based on fog visibility
+	originalCombatants := md.Combatants
+	if md.FogOfWar != nil {
+		md.Combatants = filterCombatantsForFog(md.Combatants, md.FogOfWar)
+	}
+
 	// Push offset for the map area (after label margin)
 	dc.Push()
 	dc.Translate(float64(margin), float64(margin))
@@ -38,6 +49,9 @@ func RenderMap(md *MapData) ([]byte, error) {
 
 	// 1.5. Zone overlays (between terrain and grid so grid lines show over overlays)
 	DrawZoneOverlays(dc, md)
+
+	// 1.8. Fog of war overlay (between zones and grid)
+	DrawFogOfWar(dc, md)
 
 	// 2. Grid lines
 	DrawGrid(dc, md)
@@ -49,6 +63,9 @@ func RenderMap(md *MapData) ([]byte, error) {
 	DrawTokens(dc, md)
 
 	dc.Pop()
+
+	// Restore original combatants list
+	md.Combatants = originalCombatants
 
 	// 5. Coordinate labels (drawn in full context with margin)
 	DrawCoordinateLabels(dc, md)
