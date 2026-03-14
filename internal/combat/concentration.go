@@ -2,7 +2,6 @@ package combat
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -91,7 +90,7 @@ func ValidateSilenceZone(inSilence bool, spell refdata.Spell) error {
 		return nil
 	}
 	if HasVerbalOrSomaticComponent(spell) {
-		return errors.New("cannot cast a spell with verbal or somatic components in a silence zone")
+		return fmt.Errorf("You cannot cast %s — you are inside a zone of Silence (requires verbal/somatic components).", spell.Name)
 	}
 	return nil
 }

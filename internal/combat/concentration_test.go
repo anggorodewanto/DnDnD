@@ -212,22 +212,24 @@ func TestValidateSilenceZone(t *testing.T) {
 	tests := []struct {
 		name       string
 		inSilence  bool
+		spellName  string
 		components []string
 		wantErr    bool
+		wantMsg    string
 	}{
-		{"not in silence — OK", false, []string{"V", "S", "M"}, false},
-		{"in silence with V — blocked", true, []string{"V", "M"}, true},
-		{"in silence with S — blocked", true, []string{"S"}, true},
-		{"in silence with M only — OK", true, []string{"M"}, false},
-		{"in silence with no components — OK", true, nil, false},
+		{"not in silence — OK", false, "Bless", []string{"V", "S", "M"}, false, ""},
+		{"in silence with V — blocked", true, "Bless", []string{"V", "M"}, true, "You cannot cast Bless — you are inside a zone of Silence (requires verbal/somatic components)."},
+		{"in silence with S — blocked", true, "Hold Person", []string{"S"}, true, "You cannot cast Hold Person — you are inside a zone of Silence (requires verbal/somatic components)."},
+		{"in silence with M only — OK", true, "Identify", []string{"M"}, false, ""},
+		{"in silence with no components — OK", true, "Test", nil, false, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			spell := refdata.Spell{Components: tc.components}
+			spell := refdata.Spell{Name: tc.spellName, Components: tc.components}
 			err := ValidateSilenceZone(tc.inSilence, spell)
 			if tc.wantErr {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "silence")
+				assert.Equal(t, tc.wantMsg, err.Error())
 			} else {
 				assert.NoError(t, err)
 			}
