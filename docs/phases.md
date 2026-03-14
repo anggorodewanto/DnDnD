@@ -323,7 +323,7 @@
   - Depends on: Phase 5, Phase 28, Phase 18, Phase 33
   - Done when: Integration tests verify slot deduction, range check, save DC, spell attacks, bonus action detection, bonus action restriction, concentration tracking.
 
-- [ ] **Phase 59: Spell Casting — AoE & Saves**
+- [x] **Phase 59: Spell Casting — AoE & Saves**
   - Scope: AoE targeting: sphere (radius from point), cone (from caster toward target), line (length + width from caster). Calculate affected creatures by shape overlap. Spell saves: ping affected players to roll `/save`. Enemy saves rolled by DM from dashboard. Apply damage/effects once all saves resolved. Half damage on save (if applicable). AoE + cover interaction (DEX save bonus).
   - Depends on: Phase 58, Phase 33
   - Done when: Integration tests verify each AoE shape, creature overlap calculation, save flow (player ping, DM roll), half-damage-on-save, cover DEX bonus.

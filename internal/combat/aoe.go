@@ -61,17 +61,14 @@ func SphereAffectedTiles(originCol, originRow, radiusFt int) []GridPos {
 	return tiles
 }
 
-// ConeAffectedTiles returns all grid tiles within a 53-degree cone.
-// The cone emanates from the caster's tile edge toward the target direction.
-// In 5e, at distance d along the cone axis, the cone's width equals d.
-// The caster's own tile is excluded.
-func ConeAffectedTiles(casterCol, casterRow, targetCol, targetRow, lengthFt int) []GridPos {
+// directedAffectedTiles returns grid tiles along a direction from the caster,
+// filtered by a halfWidthFn that returns the allowed perpendicular half-width
+// at a given projection distance (in feet). The caster's own tile is excluded.
+func directedAffectedTiles(casterCol, casterRow, targetCol, targetRow, lengthFt int, halfWidthFn func(projFt float64) float64) []GridPos {
 	if lengthFt <= 0 {
 		return nil
 	}
 
-	lengthSquares := lengthFt / 5
-	// Direction vector from caster to target
 	dx := float64(targetCol - casterCol)
 	dy := float64(targetRow - casterRow)
 	dirLen := math.Sqrt(dx*dx + dy*dy)
@@ -81,100 +78,50 @@ func ConeAffectedTiles(casterCol, casterRow, targetCol, targetRow, lengthFt int)
 	dx /= dirLen
 	dy /= dirLen
 
+	lengthSquares := lengthFt / 5
+	lengthFtF := float64(lengthFt)
 	var tiles []GridPos
-	seen := make(map[GridPos]bool)
 
 	for dc := -lengthSquares; dc <= lengthSquares; dc++ {
 		for dr := -lengthSquares; dr <= lengthSquares; dr++ {
 			if dc == 0 && dr == 0 {
-				continue // exclude caster tile
+				continue
 			}
 			fc := float64(dc)
 			fr := float64(dr)
 
-			// Project tile offset onto direction vector (distance along cone axis)
-			proj := fc*dx + fr*dy
-			if proj <= 0 {
-				continue // behind the caster
-			}
-			projFt := proj * 5.0
-			if projFt > float64(lengthFt) {
-				continue // beyond cone length
+			projFt := (fc*dx + fr*dy) * 5.0
+			if projFt <= 0 || projFt > lengthFtF {
+				continue
 			}
 
-			// Perpendicular distance from cone axis
-			perpDist := math.Abs(fc*(-dy) + fr*dx)
-			perpFt := perpDist * 5.0
-
-			// In 5e, cone width at projected distance d = d. Half-width = d/2.
-			halfWidth := projFt / 2.0
-			if perpFt <= halfWidth {
-				pos := GridPos{casterCol + dc, casterRow + dr}
-				if !seen[pos] {
-					seen[pos] = true
-					tiles = append(tiles, pos)
-				}
+			perpFt := math.Abs(fc*(-dy)+fr*dx) * 5.0
+			if perpFt <= halfWidthFn(projFt) {
+				tiles = append(tiles, GridPos{casterCol + dc, casterRow + dr})
 			}
 		}
 	}
 	return tiles
 }
 
+// ConeAffectedTiles returns all grid tiles within a 53-degree cone.
+// The cone emanates from the caster's tile edge toward the target direction.
+// In 5e, at distance d along the cone axis, the cone's width equals d.
+// The caster's own tile is excluded.
+func ConeAffectedTiles(casterCol, casterRow, targetCol, targetRow, lengthFt int) []GridPos {
+	return directedAffectedTiles(casterCol, casterRow, targetCol, targetRow, lengthFt, func(projFt float64) float64 {
+		return projFt / 2.0
+	})
+}
+
 // LineAffectedTiles returns all grid tiles within a rectangular line from the caster
 // toward the target with the given length and width (in feet).
 // The caster's own tile is excluded.
 func LineAffectedTiles(casterCol, casterRow, targetCol, targetRow, lengthFt, widthFt int) []GridPos {
-	if lengthFt <= 0 {
-		return nil
-	}
-
-	lengthSquares := lengthFt / 5
-	// Direction vector from caster to target
-	dx := float64(targetCol - casterCol)
-	dy := float64(targetRow - casterRow)
-	dirLen := math.Sqrt(dx*dx + dy*dy)
-	if dirLen == 0 {
-		return nil
-	}
-	dx /= dirLen
-	dy /= dirLen
-
 	halfWidthFt := float64(widthFt) / 2.0
-	var tiles []GridPos
-	seen := make(map[GridPos]bool)
-
-	for dc := -lengthSquares; dc <= lengthSquares; dc++ {
-		for dr := -lengthSquares; dr <= lengthSquares; dr++ {
-			if dc == 0 && dr == 0 {
-				continue // exclude caster tile
-			}
-			fc := float64(dc)
-			fr := float64(dr)
-
-			// Project tile offset onto direction vector
-			proj := fc*dx + fr*dy
-			if proj <= 0 {
-				continue // behind the caster
-			}
-			projFt := proj * 5.0
-			if projFt > float64(lengthFt) {
-				continue // beyond line length
-			}
-
-			// Perpendicular distance from line axis
-			perpDist := math.Abs(fc*(-dy) + fr*dx)
-			perpFt := perpDist * 5.0
-
-			if perpFt <= halfWidthFt {
-				pos := GridPos{casterCol + dc, casterRow + dr}
-				if !seen[pos] {
-					seen[pos] = true
-					tiles = append(tiles, pos)
-				}
-			}
-		}
-	}
-	return tiles
+	return directedAffectedTiles(casterCol, casterRow, targetCol, targetRow, lengthFt, func(_ float64) float64 {
+		return halfWidthFt
+	})
 }
 
 // SquareAffectedTiles returns all grid tiles within a square area.
@@ -339,7 +286,7 @@ func FormatAoECastLog(result AoECastResult) string {
 	if result.Concentration.DroppedPrevious {
 		fmt.Fprintf(&b, "\u26a0\ufe0f Dropped concentration on %s\n", result.Concentration.PreviousSpell)
 	}
-	if result.Concentration.NewConcentration != "" && result.Concentration.NewConcentration == result.SpellName {
+	if result.Concentration.NewConcentration == result.SpellName && result.Concentration.NewConcentration != "" {
 		fmt.Fprintf(&b, "\U0001f9e0 Concentrating on %s\n", result.Concentration.NewConcentration)
 	}
 
@@ -371,14 +318,12 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	isBonusAction := IsBonusActionSpell(spell)
 
 	// 2. Validate action/bonus action resource
+	resource := ResourceAction
 	if isBonusAction {
-		if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
-			return AoECastResult{}, err
-		}
-	} else {
-		if err := ValidateResource(cmd.Turn, ResourceAction); err != nil {
-			return AoECastResult{}, err
-		}
+		resource = ResourceBonusAction
+	}
+	if err := ValidateResource(cmd.Turn, resource); err != nil {
+		return AoECastResult{}, err
 	}
 
 	// 3. Validate bonus action spell restriction
@@ -487,20 +432,14 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 
 	// 14. Use action/bonus action resource
 	turn := cmd.Turn
+	turn, err = UseResource(turn, resource)
+	if err != nil {
+		return AoECastResult{}, err
+	}
 	if isBonusAction {
-		turn, err = UseResource(turn, ResourceBonusAction)
-		if err != nil {
-			return AoECastResult{}, err
-		}
 		turn.BonusActionSpellCast = true
-	} else {
-		turn, err = UseResource(turn, ResourceAction)
-		if err != nil {
-			return AoECastResult{}, err
-		}
-		if spellLevel > 0 {
-			turn.ActionSpellCast = true
-		}
+	} else if spellLevel > 0 {
+		turn.ActionSpellCast = true
 	}
 
 	// 15. Persist turn state
