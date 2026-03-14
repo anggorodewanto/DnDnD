@@ -63,6 +63,7 @@ type mockStore struct {
 	getSpellFn                        func(ctx context.Context, id string) (refdata.Spell, error)
 	updateCharacterGoldFn             func(ctx context.Context, id uuid.UUID, gold int32) error
 	listSpellsByClassFn               func(ctx context.Context, class string) ([]refdata.Spell, error)
+	updateCharacterEquipmentFn        func(ctx context.Context, arg refdata.UpdateCharacterEquipmentParams) (refdata.Character, error)
 	updateCharacterDataFn             func(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error)
 
 	// Encounter Zones
@@ -248,6 +249,12 @@ func (m *mockStore) ListSpellsByClass(ctx context.Context, class string) ([]refd
 		return m.listSpellsByClassFn(ctx, class)
 	}
 	return nil, nil
+}
+func (m *mockStore) UpdateCharacterEquipment(ctx context.Context, arg refdata.UpdateCharacterEquipmentParams) (refdata.Character, error) {
+	if m.updateCharacterEquipmentFn != nil {
+		return m.updateCharacterEquipmentFn(ctx, arg)
+	}
+	return refdata.Character{ID: arg.ID, EquippedMainHand: arg.EquippedMainHand, EquippedOffHand: arg.EquippedOffHand, EquippedArmor: arg.EquippedArmor, Ac: arg.Ac}, nil
 }
 func (m *mockStore) UpdateCharacterData(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error) {
 	if m.updateCharacterDataFn != nil {

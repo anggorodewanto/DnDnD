@@ -725,6 +725,10 @@ func (a *testStoreAdapter) UpdateCharacterGold(ctx context.Context, id uuid.UUID
 	return nil // stub for tests
 }
 
+func (a *testStoreAdapter) UpdateCharacterEquipment(ctx context.Context, arg refdata.UpdateCharacterEquipmentParams) (refdata.Character, error) {
+	return a.Queries.UpdateCharacterEquipment(ctx, arg)
+}
+
 func TestIntegration_ConditionAutoExpiration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

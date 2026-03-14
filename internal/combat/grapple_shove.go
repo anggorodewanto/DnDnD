@@ -443,9 +443,7 @@ func (s *Service) checkFreeHand(ctx context.Context, combatant refdata.Combatant
 	if err != nil {
 		return fmt.Errorf("getting character for free hand check: %w", err)
 	}
-	mainOccupied := char.EquippedMainHand.Valid && char.EquippedMainHand.String != ""
-	offOccupied := char.EquippedOffHand.Valid && char.EquippedOffHand.String != ""
-	if mainOccupied && offOccupied {
+	if BothHandsOccupied(char) {
 		return fmt.Errorf("grapple requires a free hand (both hands are occupied)")
 	}
 	return nil

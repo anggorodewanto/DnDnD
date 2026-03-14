@@ -313,6 +313,11 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Name:        "offhand",
 					Description: "Equip in off-hand",
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "armor",
+					Description: "Equip as body armor",
+				},
 			},
 		},
 		{

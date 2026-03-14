@@ -75,6 +75,16 @@ UPDATE characters SET character_data = $2, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateCharacterEquipment :one
+UPDATE characters SET
+    equipped_main_hand = $2,
+    equipped_off_hand = $3,
+    equipped_armor = $4,
+    ac = $5,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteCharacter :exec
 DELETE FROM characters WHERE id = $1;
 

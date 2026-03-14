@@ -477,6 +477,72 @@ func (q *Queries) UpdateCharacterData(ctx context.Context, arg UpdateCharacterDa
 	return i, err
 }
 
+const updateCharacterEquipment = `-- name: UpdateCharacterEquipment :one
+UPDATE characters SET
+    equipped_main_hand = $2,
+    equipped_off_hand = $3,
+    equipped_armor = $4,
+    ac = $5,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+`
+
+type UpdateCharacterEquipmentParams struct {
+	ID               uuid.UUID      `json:"id"`
+	EquippedMainHand sql.NullString `json:"equipped_main_hand"`
+	EquippedOffHand  sql.NullString `json:"equipped_off_hand"`
+	EquippedArmor    sql.NullString `json:"equipped_armor"`
+	Ac               int32          `json:"ac"`
+}
+
+func (q *Queries) UpdateCharacterEquipment(ctx context.Context, arg UpdateCharacterEquipmentParams) (Character, error) {
+	row := q.db.QueryRowContext(ctx, updateCharacterEquipment,
+		arg.ID,
+		arg.EquippedMainHand,
+		arg.EquippedOffHand,
+		arg.EquippedArmor,
+		arg.Ac,
+	)
+	var i Character
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.Name,
+		&i.Race,
+		&i.Classes,
+		&i.Level,
+		&i.AbilityScores,
+		&i.HpMax,
+		&i.HpCurrent,
+		&i.TempHp,
+		&i.Ac,
+		&i.AcFormula,
+		&i.SpeedFt,
+		&i.ProficiencyBonus,
+		&i.EquippedMainHand,
+		&i.EquippedOffHand,
+		&i.EquippedArmor,
+		&i.SpellSlots,
+		&i.PactMagicSlots,
+		&i.HitDiceRemaining,
+		&i.FeatureUses,
+		&i.Features,
+		&i.Proficiencies,
+		&i.Gold,
+		&i.AttunementSlots,
+		pq.Array(&i.Languages),
+		&i.Inventory,
+		&i.CharacterData,
+		&i.DdbUrl,
+		&i.Homebrew,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CardMessageID,
+	)
+	return i, err
+}
+
 const updateCharacterFeatureUses = `-- name: UpdateCharacterFeatureUses :one
 UPDATE characters SET feature_uses = $2, updated_at = now()
 WHERE id = $1

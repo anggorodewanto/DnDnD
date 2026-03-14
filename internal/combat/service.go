@@ -97,6 +97,9 @@ type Store interface {
 	GetSpell(ctx context.Context, id string) (refdata.Spell, error)
 	ListSpellsByClass(ctx context.Context, class string) ([]refdata.Spell, error)
 
+	// Character equipment
+	UpdateCharacterEquipment(ctx context.Context, arg refdata.UpdateCharacterEquipmentParams) (refdata.Character, error)
+
 	// Character data
 	UpdateCharacterData(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error)
 
