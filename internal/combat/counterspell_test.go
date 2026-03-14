@@ -137,8 +137,7 @@ func TestTriggerCounterspell_Success(t *testing.T) {
 	assert.Equal(t, "Fireball", prompt.EnemySpellName)
 	assert.Equal(t, []int{3, 4, 5}, prompt.AvailableSlots)
 	assert.Equal(t, "Gandalf", prompt.CasterName)
-	// Enemy cast level should NOT be in the prompt
-	assert.Zero(t, prompt.EnemyCastLevel)
+	// Enemy cast level is intentionally not in CounterspellPrompt struct
 }
 
 func TestTriggerCounterspell_DeclarationNotActive(t *testing.T) {

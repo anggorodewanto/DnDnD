@@ -23,11 +23,11 @@ const (
 )
 
 // CounterspellPrompt represents the prompt sent to the player with available slot levels.
+// EnemyCastLevel is intentionally NOT included — it is hidden until the ability check step.
 type CounterspellPrompt struct {
 	DeclarationID  uuid.UUID
 	CasterName     string
 	EnemySpellName string
-	EnemyCastLevel int // intentionally zero in prompt — not revealed until ability check step
 	AvailableSlots []int
 }
 
@@ -35,7 +35,6 @@ type CounterspellPrompt struct {
 type CounterspellResult struct {
 	Outcome        CounterspellOutcome
 	CasterName     string
-	EnemyCasterID  uuid.UUID
 	EnemySpellName string
 	EnemyCastLevel int
 	SlotUsed       int
