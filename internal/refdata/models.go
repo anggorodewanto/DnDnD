@@ -312,6 +312,17 @@ type Race struct {
 	UpdatedAt      time.Time             `json:"updated_at"`
 }
 
+type ReactionDeclaration struct {
+	ID          uuid.UUID     `json:"id"`
+	EncounterID uuid.UUID     `json:"encounter_id"`
+	CombatantID uuid.UUID     `json:"combatant_id"`
+	Description string        `json:"description"`
+	Status      string        `json:"status"`
+	CreatedAt   time.Time     `json:"created_at"`
+	UsedAt      sql.NullTime  `json:"used_at"`
+	UsedOnRound sql.NullInt32 `json:"used_on_round"`
+}
+
 type Session struct {
 	ID             uuid.UUID    `json:"id"`
 	DiscordUserID  string       `json:"discord_user_id"`

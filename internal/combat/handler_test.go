@@ -495,3 +495,338 @@ func TestHandler_CheckHostilesDefeated_ServiceError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
+
+// --- TDD Cycle: POST /api/combat/{encounterID}/reactions success ---
+
+func TestHandler_DeclareReaction_Success(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	declID := uuid.New()
+
+	store := defaultMockStore()
+	store.createReactionDeclarationFn = func(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{
+			ID: declID, EncounterID: encounterID, CombatantID: combatantID,
+			Description: arg.Description, Status: "active",
+		}, nil
+	}
+
+	_, r := newTestCombatRouter(store)
+
+	body := map[string]interface{}{
+		"combatant_id": combatantID.String(),
+		"description":  "Shield if I get hit",
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/reactions", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
+
+	var resp reactionDeclarationResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, declID.String(), resp.ID)
+	assert.Equal(t, "active", resp.Status)
+	assert.Equal(t, "Shield if I get hit", resp.Description)
+}
+
+func TestHandler_DeclareReaction_InvalidEncounterID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	body := map[string]interface{}{"combatant_id": uuid.New().String(), "description": "Shield"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/not-uuid/reactions", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_DeclareReaction_InvalidJSON(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions", bytes.NewReader([]byte("bad")))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_DeclareReaction_InvalidCombatantID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	body := map[string]interface{}{"combatant_id": "not-uuid", "description": "Shield"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle: GET /api/combat/{encounterID}/reactions success ---
+
+func TestHandler_ListReactions_Success(t *testing.T) {
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.listActiveReactionDeclarationsByEncounterFn = func(ctx context.Context, encID uuid.UUID) ([]refdata.ReactionDeclaration, error) {
+		return []refdata.ReactionDeclaration{
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), Description: "Shield", Status: "active"},
+		}, nil
+	}
+
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/"+encounterID.String()+"/reactions", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp []reactionDeclarationResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Len(t, resp, 1)
+}
+
+func TestHandler_ListReactions_InvalidEncounterID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/not-uuid/reactions", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle: POST /api/combat/{encounterID}/reactions/{reactionID}/resolve success ---
+
+func TestHandler_ResolveReaction_Success(t *testing.T) {
+	encounterID := uuid.New()
+	declID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID, EncounterID: encounterID, CombatantID: combatantID, Status: "active"}, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 2, Status: "active"}, nil
+	}
+	store.updateReactionDeclarationStatusUsedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID, Status: "used"}, nil
+	}
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, ReactionUsed: true}, nil
+	}
+
+	_, r := newTestCombatRouter(store)
+
+	body := map[string]interface{}{"round_number": 2}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/reactions/"+declID.String()+"/resolve", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp reactionDeclarationResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "used", resp.Status)
+}
+
+func TestHandler_ResolveReaction_InvalidReactionID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions/not-uuid/resolve", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle: POST /api/combat/{encounterID}/reactions/{reactionID}/cancel success ---
+
+func TestHandler_CancelReaction_Success(t *testing.T) {
+	encounterID := uuid.New()
+	declID := uuid.New()
+
+	store := defaultMockStore()
+	store.cancelReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID, Status: "cancelled"}, nil
+	}
+
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/reactions/"+declID.String()+"/cancel", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp reactionDeclarationResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "cancelled", resp.Status)
+}
+
+func TestHandler_CancelReaction_InvalidReactionID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions/not-uuid/cancel", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- TDD Cycle: POST /api/combat/{encounterID}/combatants/{combatantID}/reactions/cancel-all ---
+
+func TestHandler_CancelAllReactions_Success(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.cancelAllReactionDeclarationsByCombatantFn = func(ctx context.Context, arg refdata.CancelAllReactionDeclarationsByCombatantParams) error {
+		assert.Equal(t, combatantID, arg.CombatantID)
+		assert.Equal(t, encounterID, arg.EncounterID)
+		return nil
+	}
+
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/reactions/cancel-all", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestHandler_CancelAllReactions_InvalidEncounterID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/not-uuid/combatants/"+uuid.New().String()+"/reactions/cancel-all", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_CancelAllReactions_InvalidCombatantID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/combatants/not-uuid/reactions/cancel-all", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_CancelAllReactions_ServiceError(t *testing.T) {
+	store := defaultMockStore()
+	store.cancelAllReactionDeclarationsByCombatantFn = func(ctx context.Context, arg refdata.CancelAllReactionDeclarationsByCombatantParams) error {
+		return errors.New("db error")
+	}
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/combatants/"+uuid.New().String()+"/reactions/cancel-all", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestHandler_ListReactions_ServiceError(t *testing.T) {
+	store := defaultMockStore()
+	store.listActiveReactionDeclarationsByEncounterFn = func(ctx context.Context, encID uuid.UUID) ([]refdata.ReactionDeclaration, error) {
+		return nil, errors.New("db error")
+	}
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/"+uuid.New().String()+"/reactions", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestHandler_ResolveReaction_InvalidEncounterID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/not-uuid/reactions/"+uuid.New().String()+"/resolve", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_ResolveReaction_ServiceError(t *testing.T) {
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{}, errors.New("db error")
+	}
+	_, r := newTestCombatRouter(store)
+
+	body := map[string]interface{}{"round_number": 1}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions/"+uuid.New().String()+"/resolve", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_CancelReaction_InvalidEncounterID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/not-uuid/reactions/"+uuid.New().String()+"/cancel", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_CancelReaction_ServiceError(t *testing.T) {
+	store := defaultMockStore()
+	store.cancelReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{}, errors.New("not found")
+	}
+	_, r := newTestCombatRouter(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions/"+uuid.New().String()+"/cancel", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_DeclareReaction_ServiceError(t *testing.T) {
+	store := defaultMockStore()
+	store.createReactionDeclarationFn = func(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{}, errors.New("db error")
+	}
+	_, r := newTestCombatRouter(store)
+
+	body := map[string]interface{}{"combatant_id": uuid.New().String(), "description": "Shield"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_ResolveReaction_InvalidJSON(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions/"+uuid.New().String()+"/resolve", bytes.NewReader([]byte("bad")))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}

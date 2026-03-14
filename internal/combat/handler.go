@@ -30,6 +30,13 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/characters", h.ListCharacters)
 		r.Post("/{encounterID}/end", h.EndCombat)
 		r.Get("/{encounterID}/hostiles-defeated", h.CheckHostilesDefeated)
+
+		// Reaction declarations
+		r.Post("/{encounterID}/reactions", h.DeclareReaction)
+		r.Get("/{encounterID}/reactions", h.ListReactions)
+		r.Post("/{encounterID}/reactions/{reactionID}/resolve", h.ResolveReaction)
+		r.Post("/{encounterID}/reactions/{reactionID}/cancel", h.CancelReaction)
+		r.Post("/{encounterID}/combatants/{combatantID}/reactions/cancel-all", h.CancelAllReactions)
 	})
 }
 
@@ -104,6 +111,31 @@ type endCombatResponse struct {
 // hostilesDefeatedResponse is the JSON response for the hostiles-defeated check.
 type hostilesDefeatedResponse struct {
 	AllDefeated bool `json:"all_defeated"`
+}
+
+// reactionDeclarationResponse is the JSON representation of a reaction declaration.
+type reactionDeclarationResponse struct {
+	ID          string `json:"id"`
+	EncounterID string `json:"encounter_id"`
+	CombatantID string `json:"combatant_id"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
+}
+
+// declareReactionRequest is the JSON request body for declaring a reaction.
+type declareReactionRequest struct {
+	CombatantID string `json:"combatant_id"`
+	Description string `json:"description"`
+}
+
+// resolveReactionRequest is the JSON request body for resolving a reaction.
+type resolveReactionRequest struct {
+	RoundNumber int32 `json:"round_number"`
+}
+
+// cancelAllReactionsResponse is the JSON response for cancel-all.
+type cancelAllReactionsResponse struct {
+	Status string `json:"status"`
 }
 
 // writeJSON writes a JSON response with the given status code.
@@ -285,4 +317,140 @@ func (h *Handler) CheckHostilesDefeated(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, hostilesDefeatedResponse{AllDefeated: defeated})
+}
+
+// toReactionDeclarationResponse converts a refdata.ReactionDeclaration to its JSON response.
+func toReactionDeclarationResponse(d refdata.ReactionDeclaration) reactionDeclarationResponse {
+	return reactionDeclarationResponse{
+		ID:          d.ID.String(),
+		EncounterID: d.EncounterID.String(),
+		CombatantID: d.CombatantID.String(),
+		Description: d.Description,
+		Status:      d.Status,
+	}
+}
+
+// DeclareReaction handles POST /api/combat/{encounterID}/reactions.
+func (h *Handler) DeclareReaction(w http.ResponseWriter, r *http.Request) {
+	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	var req declareReactionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	combatantID, err := uuid.Parse(req.CombatantID)
+	if err != nil {
+		http.Error(w, "invalid combatant_id", http.StatusBadRequest)
+		return
+	}
+
+	decl, err := h.svc.DeclareReaction(r.Context(), encounterID, combatantID, req.Description)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, toReactionDeclarationResponse(decl))
+}
+
+// ListReactions handles GET /api/combat/{encounterID}/reactions.
+func (h *Handler) ListReactions(w http.ResponseWriter, r *http.Request) {
+	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	decls, err := h.svc.ListActiveReactions(r.Context(), encounterID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp := make([]reactionDeclarationResponse, len(decls))
+	for i, d := range decls {
+		resp[i] = toReactionDeclarationResponse(d)
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ResolveReaction handles POST /api/combat/{encounterID}/reactions/{reactionID}/resolve.
+func (h *Handler) ResolveReaction(w http.ResponseWriter, r *http.Request) {
+	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
+	if err != nil {
+		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		return
+	}
+
+	var req resolveReactionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	decl, err := h.svc.ResolveReaction(r.Context(), reactionID, req.RoundNumber)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toReactionDeclarationResponse(decl))
+}
+
+// CancelReaction handles POST /api/combat/{encounterID}/reactions/{reactionID}/cancel.
+func (h *Handler) CancelReaction(w http.ResponseWriter, r *http.Request) {
+	_, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	reactionID, err := uuid.Parse(chi.URLParam(r, "reactionID"))
+	if err != nil {
+		http.Error(w, "invalid reaction ID", http.StatusBadRequest)
+		return
+	}
+
+	decl, err := h.svc.CancelReaction(r.Context(), reactionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toReactionDeclarationResponse(decl))
+}
+
+// CancelAllReactions handles POST /api/combat/{encounterID}/combatants/{combatantID}/reactions/cancel-all.
+func (h *Handler) CancelAllReactions(w http.ResponseWriter, r *http.Request) {
+	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	combatantID, err := uuid.Parse(chi.URLParam(r, "combatantID"))
+	if err != nil {
+		http.Error(w, "invalid combatant ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.svc.CancelAllReactions(r.Context(), combatantID, encounterID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, cancelAllReactionsResponse{Status: "ok"})
 }

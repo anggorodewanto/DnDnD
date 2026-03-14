@@ -112,6 +112,17 @@ type Store interface {
 	UpdateEncounterZoneOrigin(ctx context.Context, arg refdata.UpdateEncounterZoneOriginParams) (refdata.EncounterZone, error)
 	UpdateEncounterZoneTriggeredThisRound(ctx context.Context, arg refdata.UpdateEncounterZoneTriggeredThisRoundParams) (refdata.EncounterZone, error)
 	ResetAllTriggeredThisRound(ctx context.Context, encounterID uuid.UUID) error
+
+	// Reaction Declarations
+	CreateReactionDeclaration(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error)
+	GetReactionDeclaration(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
+	ListActiveReactionDeclarationsByEncounter(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error)
+	ListReactionDeclarationsByCombatant(ctx context.Context, arg refdata.ListReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
+	ListActiveReactionDeclarationsByCombatant(ctx context.Context, arg refdata.ListActiveReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
+	UpdateReactionDeclarationStatusUsed(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error)
+	CancelReactionDeclaration(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
+	CancelAllReactionDeclarationsByCombatant(ctx context.Context, arg refdata.CancelAllReactionDeclarationsByCombatantParams) error
+	DeleteReactionDeclarationsByEncounter(ctx context.Context, encounterID uuid.UUID) error
 }
 
 // Service manages combat encounters and their entities.
@@ -467,6 +478,11 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 	// Clean up all encounter zones
 	if err := s.store.DeleteEncounterZonesByEncounterID(ctx, encounterID); err != nil {
 		return EndCombatResult{}, fmt.Errorf("cleaning up encounter zones: %w", err)
+	}
+
+	// Clean up all reaction declarations
+	if err := s.CleanupReactionsOnEncounterEnd(ctx, encounterID); err != nil {
+		return EndCombatResult{}, fmt.Errorf("cleaning up reaction declarations: %w", err)
 	}
 
 	// Set status to completed

@@ -77,6 +77,17 @@ type mockStore struct {
 	updateEncounterZoneOriginFn             func(ctx context.Context, arg refdata.UpdateEncounterZoneOriginParams) (refdata.EncounterZone, error)
 	updateEncounterZoneTriggeredThisRoundFn func(ctx context.Context, arg refdata.UpdateEncounterZoneTriggeredThisRoundParams) (refdata.EncounterZone, error)
 	resetAllTriggeredThisRoundFn            func(ctx context.Context, encounterID uuid.UUID) error
+
+	// Reaction Declarations
+	createReactionDeclarationFn                func(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error)
+	getReactionDeclarationFn                   func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
+	listActiveReactionDeclarationsByEncounterFn func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error)
+	listReactionDeclarationsByCombatantFn      func(ctx context.Context, arg refdata.ListReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
+	listActiveReactionDeclarationsByCombatantFn func(ctx context.Context, arg refdata.ListActiveReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
+	updateReactionDeclarationStatusUsedFn      func(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error)
+	cancelReactionDeclarationFn                func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
+	cancelAllReactionDeclarationsByCombatantFn func(ctx context.Context, arg refdata.CancelAllReactionDeclarationsByCombatantParams) error
+	deleteReactionDeclarationsByEncounterFn    func(ctx context.Context, encounterID uuid.UUID) error
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -295,6 +306,60 @@ func (m *mockStore) UpdateEncounterZoneTriggeredThisRound(ctx context.Context, a
 func (m *mockStore) ResetAllTriggeredThisRound(ctx context.Context, encounterID uuid.UUID) error {
 	if m.resetAllTriggeredThisRoundFn != nil {
 		return m.resetAllTriggeredThisRoundFn(ctx, encounterID)
+	}
+	return nil
+}
+func (m *mockStore) CreateReactionDeclaration(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error) {
+	if m.createReactionDeclarationFn != nil {
+		return m.createReactionDeclarationFn(ctx, arg)
+	}
+	return refdata.ReactionDeclaration{}, nil
+}
+func (m *mockStore) GetReactionDeclaration(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+	if m.getReactionDeclarationFn != nil {
+		return m.getReactionDeclarationFn(ctx, id)
+	}
+	return refdata.ReactionDeclaration{}, nil
+}
+func (m *mockStore) ListActiveReactionDeclarationsByEncounter(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error) {
+	if m.listActiveReactionDeclarationsByEncounterFn != nil {
+		return m.listActiveReactionDeclarationsByEncounterFn(ctx, encounterID)
+	}
+	return []refdata.ReactionDeclaration{}, nil
+}
+func (m *mockStore) ListReactionDeclarationsByCombatant(ctx context.Context, arg refdata.ListReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error) {
+	if m.listReactionDeclarationsByCombatantFn != nil {
+		return m.listReactionDeclarationsByCombatantFn(ctx, arg)
+	}
+	return []refdata.ReactionDeclaration{}, nil
+}
+func (m *mockStore) ListActiveReactionDeclarationsByCombatant(ctx context.Context, arg refdata.ListActiveReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error) {
+	if m.listActiveReactionDeclarationsByCombatantFn != nil {
+		return m.listActiveReactionDeclarationsByCombatantFn(ctx, arg)
+	}
+	return []refdata.ReactionDeclaration{}, nil
+}
+func (m *mockStore) UpdateReactionDeclarationStatusUsed(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error) {
+	if m.updateReactionDeclarationStatusUsedFn != nil {
+		return m.updateReactionDeclarationStatusUsedFn(ctx, arg)
+	}
+	return refdata.ReactionDeclaration{}, nil
+}
+func (m *mockStore) CancelReactionDeclaration(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+	if m.cancelReactionDeclarationFn != nil {
+		return m.cancelReactionDeclarationFn(ctx, id)
+	}
+	return refdata.ReactionDeclaration{}, nil
+}
+func (m *mockStore) CancelAllReactionDeclarationsByCombatant(ctx context.Context, arg refdata.CancelAllReactionDeclarationsByCombatantParams) error {
+	if m.cancelAllReactionDeclarationsByCombatantFn != nil {
+		return m.cancelAllReactionDeclarationsByCombatantFn(ctx, arg)
+	}
+	return nil
+}
+func (m *mockStore) DeleteReactionDeclarationsByEncounter(ctx context.Context, encounterID uuid.UUID) error {
+	if m.deleteReactionDeclarationsByEncounterFn != nil {
+		return m.deleteReactionDeclarationsByEncounterFn(ctx, encounterID)
 	}
 	return nil
 }
