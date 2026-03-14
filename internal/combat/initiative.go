@@ -35,6 +35,27 @@ type AbilityScores struct {
 	Cha int `json:"cha"`
 }
 
+// ScoreByName returns the ability score for a given abbreviation (e.g. "str", "int").
+// Returns 0 for unrecognized names.
+func (s AbilityScores) ScoreByName(ability string) int {
+	switch strings.ToLower(ability) {
+	case "str":
+		return s.Str
+	case "dex":
+		return s.Dex
+	case "con":
+		return s.Con
+	case "int":
+		return s.Int
+	case "wis":
+		return s.Wis
+	case "cha":
+		return s.Cha
+	default:
+		return 0
+	}
+}
+
 // ParseAbilityScores parses a JSONB ability_scores column into an AbilityScores struct.
 func ParseAbilityScores(raw json.RawMessage) (AbilityScores, error) {
 	var scores AbilityScores

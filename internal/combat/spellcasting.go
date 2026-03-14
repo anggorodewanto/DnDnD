@@ -107,23 +107,13 @@ type ConcentrationResult struct {
 // If the new spell requires concentration and the caster is already concentrating,
 // the previous spell's concentration is dropped.
 func ResolveConcentration(currentConcentration string, spell refdata.Spell) ConcentrationResult {
-	isConcentration := spell.Concentration.Valid && spell.Concentration.Bool
-
-	if !isConcentration {
-		return ConcentrationResult{
-			NewConcentration: currentConcentration,
-		}
-	}
-
-	if currentConcentration != "" {
-		return ConcentrationResult{
-			DroppedPrevious:  true,
-			PreviousSpell:    currentConcentration,
-			NewConcentration: spell.Name,
-		}
+	if !spell.Concentration.Valid || !spell.Concentration.Bool {
+		return ConcentrationResult{NewConcentration: currentConcentration}
 	}
 
 	return ConcentrationResult{
+		DroppedPrevious:  currentConcentration != "",
+		PreviousSpell:    currentConcentration,
 		NewConcentration: spell.Name,
 	}
 }
@@ -272,14 +262,12 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 
 	// 6. Parse spell slots and validate
 	spellLevel := int(spell.Level)
-	if spellLevel > 0 {
-		slots, err := parseIntKeyedSlots(char.SpellSlots.RawMessage)
-		if err != nil {
-			return CastResult{}, err
-		}
-		if err := ValidateSpellSlot(slots, spellLevel); err != nil {
-			return CastResult{}, err
-		}
+	slots, err := parseIntKeyedSlots(char.SpellSlots.RawMessage)
+	if err != nil {
+		return CastResult{}, err
+	}
+	if err := ValidateSpellSlot(slots, spellLevel); err != nil {
+		return CastResult{}, err
 	}
 
 	// 7. Resolve target and validate range
@@ -371,16 +359,13 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 
 	// 15. Deduct spell slot and persist (only for leveled spells)
 	if spellLevel > 0 {
-		slots, _ := parseIntKeyedSlots(char.SpellSlots.RawMessage)
 		newSlots := DeductSpellSlot(slots, spellLevel)
 		result.SlotUsed = spellLevel
 		if info, ok := newSlots[spellLevel]; ok {
 			result.SlotsRemaining = info.Current
 		}
 
-		// Convert back to string-keyed for DB storage
-		dbSlots := intToStringKeyedSlots(newSlots)
-		slotsJSON, err := json.Marshal(dbSlots)
+		slotsJSON, err := json.Marshal(intToStringKeyedSlots(newSlots))
 		if err != nil {
 			return CastResult{}, fmt.Errorf("marshaling spell slots: %w", err)
 		}
@@ -430,30 +415,10 @@ func resolveSpellcastingAbilityScore(classes []CharacterClass, scores AbilitySco
 		if ability == "" {
 			continue
 		}
-		score := abilityScoreByName(scores, ability)
+		score := scores.ScoreByName(ability)
 		if score > best {
 			best = score
 		}
 	}
 	return best
-}
-
-// abilityScoreByName returns the ability score for a given abbreviation.
-func abilityScoreByName(scores AbilityScores, ability string) int {
-	switch strings.ToLower(ability) {
-	case "str":
-		return scores.Str
-	case "dex":
-		return scores.Dex
-	case "con":
-		return scores.Con
-	case "int":
-		return scores.Int
-	case "wis":
-		return scores.Wis
-	case "cha":
-		return scores.Cha
-	default:
-		return 0
-	}
 }

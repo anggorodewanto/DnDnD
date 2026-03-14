@@ -1112,16 +1112,16 @@ func TestCast_ActionAlreadyUsed(t *testing.T) {
 	assert.Contains(t, err.Error(), "resource already spent")
 }
 
-// Edge case: abilityScoreByName covers all branches
-func TestAbilityScoreByName(t *testing.T) {
+// Edge case: AbilityScores.ScoreByName covers all branches
+func TestAbilityScores_ScoreByName(t *testing.T) {
 	scores := AbilityScores{Str: 10, Dex: 12, Con: 14, Int: 16, Wis: 18, Cha: 20}
-	assert.Equal(t, 10, abilityScoreByName(scores, "str"))
-	assert.Equal(t, 12, abilityScoreByName(scores, "dex"))
-	assert.Equal(t, 14, abilityScoreByName(scores, "con"))
-	assert.Equal(t, 16, abilityScoreByName(scores, "int"))
-	assert.Equal(t, 18, abilityScoreByName(scores, "wis"))
-	assert.Equal(t, 20, abilityScoreByName(scores, "cha"))
-	assert.Equal(t, 0, abilityScoreByName(scores, "unknown"))
+	assert.Equal(t, 10, scores.ScoreByName("str"))
+	assert.Equal(t, 12, scores.ScoreByName("dex"))
+	assert.Equal(t, 14, scores.ScoreByName("con"))
+	assert.Equal(t, 16, scores.ScoreByName("int"))
+	assert.Equal(t, 18, scores.ScoreByName("wis"))
+	assert.Equal(t, 20, scores.ScoreByName("cha"))
+	assert.Equal(t, 0, scores.ScoreByName("unknown"))
 }
 
 // Edge case: resolveSpellcastingAbilityScore with no spellcasting class

@@ -318,7 +318,7 @@
   - Depends on: Phase 54, Phase 35
   - Done when: Integration tests verify hide success/failure, hidden attack advantage, auto-reveal on attack, Rogue bonus action hide, armor stealth penalty.
 
-- [ ] **Phase 58: Spell Casting — Basic (`/cast`)**
+- [x] **Phase 58: Spell Casting — Basic (`/cast`)**
   - Scope: `/cast` command: parse spell + target (coordinate or combatant ID). Spell slot validation and deduction. Range enforcement (touch=5ft, self, ranged). Spell save DC calculation (8 + prof + ability mod). Spell attack rolls. Bonus action spell auto-detection from casting_time. Bonus action spell restriction (both directions). Concentration tracking (one at a time, new drops old). Combat log output. `#roll-history` posting.
   - Depends on: Phase 5, Phase 28, Phase 18, Phase 33
   - Done when: Integration tests verify slot deduction, range check, save DC, spell attacks, bonus action detection, bonus action restriction, concentration tracking.
