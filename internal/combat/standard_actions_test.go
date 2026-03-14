@@ -2122,3 +2122,171 @@ func TestPassivePerception_CreatureWithSkills(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 15, pp) // 10 + pre-calculated perception skill (5)
 }
+
+// TDD Cycle P57-iter2-1: Hide success must persist visibility to DB
+func TestHide_Success_PersistsVisibility(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(combatantID, encounterID, charID, "Shadow")
+	char := makeBasicChar(charID, 30)
+	char.AbilityScores = json.RawMessage(`{"str":10,"dex":18,"con":12,"int":14,"wis":13,"cha":8}`) // DEX +4
+
+	hostile := makeNPCCombatantWithCreature(uuid.New(), encounterID, "Goblin", "goblin")
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "goblin",
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`), // PP=9
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	visibilityCalled := false
+	var visibilityParams refdata.UpdateCombatantVisibilityParams
+	ms.updateCombatantVisibilityFn = func(ctx context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error) {
+		visibilityCalled = true
+		visibilityParams = arg
+		return refdata.Combatant{ID: arg.ID, IsVisible: arg.IsVisible, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	encounter := makeBasicEncounter(encounterID, 1)
+	roller := dice.NewRoller(deterministic) // rolls max (20)
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	cmd := HideCommand{Combatant: combatant, Turn: turn, Encounter: encounter, Hostiles: []refdata.Combatant{hostile}}
+	result, err := svc.Hide(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	assert.True(t, result.Success)
+	assert.True(t, visibilityCalled, "UpdateCombatantVisibility must be called on hide success")
+	assert.Equal(t, combatantID, visibilityParams.ID)
+	assert.False(t, visibilityParams.IsVisible)
+}
+
+// TDD Cycle P57-iter2-2: Hide tie-breaking — tie goes to spotter (failure)
+func TestHide_TieGoesToSpotter(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(combatantID, encounterID, charID, "Shadow")
+	char := makeBasicChar(charID, 30)
+	// DEX 10 => +0 mod. With roller returning 2 (rolls 3 on d20), stealth total = 3.
+	// We want stealth == PP. Guard with WIS 6 => -2 mod, PP = 8. Need stealth=8.
+	// DEX 16 => +3 mod. Roller returns 4 (rolls 5), stealth = 5+3 = 8. PP: WIS 16 => +3, PP=13. No.
+	// Simpler: DEX 12 => +1 mod. Roller returns 9 (rolls 10), stealth = 10+1 = 11.
+	// Hostile WIS 12 => +1, PP = 11. Tie at 11.
+	char.AbilityScores = json.RawMessage(`{"str":10,"dex":12,"con":12,"int":14,"wis":13,"cha":8}`) // DEX +1
+
+	hostile := makeNPCCombatantWithCreature(uuid.New(), encounterID, "Guard", "guard")
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "guard",
+			AbilityScores: json.RawMessage(`{"str":14,"dex":12,"con":12,"int":10,"wis":12,"cha":10}`), // WIS 12 => +1, PP=11
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	// Roller returns 9 => d20 result is 10, stealth total = 10 + 1 = 11 == PP of 11
+	roller := dice.NewRoller(func(n int) int { return 9 })
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+	encounter := makeBasicEncounter(encounterID, 1)
+
+	cmd := HideCommand{Combatant: combatant, Turn: turn, Encounter: encounter, Hostiles: []refdata.Combatant{hostile}}
+	result, err := svc.Hide(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	assert.False(t, result.Success, "tie should go to spotter, hide should fail")
+	assert.True(t, result.Combatant.IsVisible, "should remain visible on tie")
+	assert.Contains(t, result.CombatLog, "Failed (spotted by")
+}
+
+// TDD Cycle P57-iter2-3: CunningAction hide persists visibility to DB
+func TestCunningAction_Hide_PersistsVisibility(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(combatantID, encounterID, charID, "Shadow")
+	char := makeRogueChar(charID, 5)
+	char.AbilityScores = json.RawMessage(`{"str":10,"dex":18,"con":12,"int":14,"wis":13,"cha":8}`) // DEX +4
+	char.Proficiencies = profJSON([]string{"stealth"}, nil, false)
+	encounter := makeBasicEncounter(encounterID, 1)
+
+	hostile := makeNPCCombatantWithCreature(uuid.New(), encounterID, "Goblin", "goblin")
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "goblin",
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`), // PP=9
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	visibilityCalled := false
+	var visibilityParams refdata.UpdateCombatantVisibilityParams
+	ms.updateCombatantVisibilityFn = func(ctx context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error) {
+		visibilityCalled = true
+		visibilityParams = arg
+		return refdata.Combatant{ID: arg.ID, IsVisible: arg.IsVisible, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	roller := dice.NewRoller(deterministic) // rolls max
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	cmd := CunningActionCommand{
+		Combatant: combatant, Turn: turn, Encounter: encounter,
+		Action: "hide", Hostiles: []refdata.Combatant{hostile},
+	}
+	result, err := svc.CunningAction(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	assert.True(t, result.HideResult.Success)
+	assert.True(t, visibilityCalled, "UpdateCombatantVisibility must be called on cunning action hide success")
+	assert.Equal(t, combatantID, visibilityParams.ID)
+	assert.False(t, visibilityParams.IsVisible)
+}
+
+// TDD Cycle P57-iter2-4: CunningAction hide tie-breaking — tie goes to spotter
+func TestCunningAction_Hide_TieGoesToSpotter(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(combatantID, encounterID, charID, "Shadow")
+	char := makeRogueChar(charID, 5)
+	char.AbilityScores = json.RawMessage(`{"str":10,"dex":12,"con":12,"int":14,"wis":13,"cha":8}`) // DEX +1
+	encounter := makeBasicEncounter(encounterID, 1)
+
+	hostile := makeNPCCombatantWithCreature(uuid.New(), encounterID, "Guard", "guard")
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "guard",
+			AbilityScores: json.RawMessage(`{"str":14,"dex":12,"con":12,"int":10,"wis":12,"cha":10}`), // WIS +1, PP=11
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	// Roller returns 9 => d20 = 10, stealth total = 10+1 = 11 == PP 11
+	roller := dice.NewRoller(func(n int) int { return 9 })
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	cmd := CunningActionCommand{
+		Combatant: combatant, Turn: turn, Encounter: encounter,
+		Action: "hide", Hostiles: []refdata.Combatant{hostile},
+	}
+	result, err := svc.CunningAction(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	assert.NotNil(t, result.HideResult)
+	assert.False(t, result.HideResult.Success, "tie should go to spotter, hide should fail")
+	assert.Contains(t, result.CombatLog, "Failed (spotted by")
+}

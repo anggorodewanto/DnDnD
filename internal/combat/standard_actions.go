@@ -355,10 +355,17 @@ func (s *Service) resolveHide(ctx context.Context, cmd HideCommand, roller *dice
 		}
 	}
 
-	success := stealthTotal >= highestPP
+	success := stealthTotal > highestPP
 	updatedCombatant := cmd.Combatant
 	if success {
 		updatedCombatant.IsVisible = false
+		updatedCombatant, err = s.store.UpdateCombatantVisibility(ctx, refdata.UpdateCombatantVisibilityParams{
+			ID:        cmd.Combatant.ID,
+			IsVisible: false,
+		})
+		if err != nil {
+			return HideResult{}, fmt.Errorf("persisting hide visibility: %w", err)
+		}
 	}
 
 	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
@@ -838,17 +845,6 @@ func (s *Service) CunningAction(ctx context.Context, cmd CunningActionCommand, r
 		if len(roller) == 0 {
 			return CunningActionResult{}, fmt.Errorf("roller required for hide")
 		}
-		// Build a HideCommand that uses the bonus action
-		hideCmd := HideCommand{
-			Combatant: cmd.Combatant,
-			Turn:      cmd.Turn,
-			Encounter: cmd.Encounter,
-			Hostiles:  cmd.Hostiles,
-		}
-		// Override: use bonus action instead of action
-		hideCmd.Turn.ActionUsed = true // pretend action is used so resolveHide uses the provided turn
-		// Actually, resolveHide calls UseResource(ResourceAction), so we need to handle this differently.
-		// We'll use bonus action directly and call resolveHide's core logic.
 		updatedTurn, err := UseResource(cmd.Turn, ResourceBonusAction)
 		if err != nil {
 			return CunningActionResult{}, err
@@ -879,10 +875,17 @@ func (s *Service) CunningAction(ctx context.Context, cmd CunningActionCommand, r
 			}
 		}
 
-		success := stealthTotal >= highestPP
+		success := stealthTotal > highestPP
 		updatedCombatant := cmd.Combatant
 		if success {
 			updatedCombatant.IsVisible = false
+			updatedCombatant, err = s.store.UpdateCombatantVisibility(ctx, refdata.UpdateCombatantVisibilityParams{
+				ID:        cmd.Combatant.ID,
+				IsVisible: false,
+			})
+			if err != nil {
+				return CunningActionResult{}, fmt.Errorf("persisting hide visibility: %w", err)
+			}
 		}
 
 		if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
