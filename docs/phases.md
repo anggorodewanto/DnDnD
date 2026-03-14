@@ -398,7 +398,7 @@
   - Depends on: Phase 70, Phase 58
   - Done when: Integration tests verify full Counterspell flow: prompt, auto-counter, ability check, timeout forfeiture, retroactive removal.
 
-- [ ] **Phase 73: Freeform Actions & `/action cancel`**
+- [x] **Phase 73: Freeform Actions & `/action cancel`**
   - Scope: `/action [freeform text]`: post to `#dm-queue`, DM resolves from dashboard. `/action cancel`: withdraw pending action (if DM hasn't resolved), strikethrough in #dm-queue, ephemeral confirmation. Rejection if already resolved or nothing pending.
   - Depends on: Phase 13, Phase 15
   - Done when: Integration tests verify freeform posting, cancellation flow, already-resolved rejection, no-pending rejection.
