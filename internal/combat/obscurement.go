@@ -1,6 +1,10 @@
 package combat
 
-import "github.com/ab/dndnd/internal/dice"
+import (
+	"encoding/json"
+
+	"github.com/ab/dndnd/internal/dice"
+)
 
 // ObscurementLevel represents the visibility level in a zone.
 type ObscurementLevel int
@@ -52,10 +56,10 @@ func EffectiveObscurement(level ObscurementLevel, zoneType string, vision Vision
 	}
 
 	// Blindsight and truesight penetrate all obscurement types
-	if vision.BlindsightFt >= distanceFt {
+	if vision.BlindsightFt > 0 && vision.BlindsightFt >= distanceFt {
 		return NotObscured
 	}
-	if vision.TruesightFt >= distanceFt {
+	if vision.TruesightFt > 0 && vision.TruesightFt >= distanceFt {
 		return NotObscured
 	}
 
@@ -68,7 +72,7 @@ func EffectiveObscurement(level ObscurementLevel, zoneType string, vision Vision
 
 	// Darkvision only helps with darkness-based zones (not fog/heavy obscurement)
 	isDarknessZone := zoneType == "darkness" || zoneType == "dim_light"
-	if vision.DarkvisionFt >= distanceFt && isDarknessZone {
+	if vision.DarkvisionFt > 0 && vision.DarkvisionFt >= distanceFt && isDarknessZone {
 		// Darkvision downgrades: heavily -> lightly, lightly -> none
 		if level == HeavilyObscured {
 			return LightlyObscured
@@ -133,8 +137,59 @@ func ObscurementReasonString(zoneType string, vision VisionCapabilities, distanc
 		return "heavy obscurement"
 	case "light_obscurement":
 		return "light obscurement"
+	}
+
+	// Unreachable: ZoneObscurement only returns non-NotObscured for the
+	// zone types handled above. Kept for compiler satisfaction.
+	return ""
+}
+
+// CombatantObscurement determines the worst effective obscurement level for a
+// combatant at a given 0-based grid position, considering all active zones and
+// the combatant's vision capabilities. Distance for vision checks is assumed
+// to be 0 (combatant is inside the zone).
+func CombatantObscurement(col, row int, zones []ZoneInfo, vision VisionCapabilities) ObscurementLevel {
+	worst := NotObscured
+	for _, z := range zones {
+		baseLevel := ZoneObscurement(z.ZoneType)
+		if baseLevel == NotObscured {
+			continue
+		}
+		if !tileInSet(col, row, zoneInfoAffectedTiles(z)) {
+			continue
+		}
+		// Distance 0: combatant is inside the zone
+		effective := EffectiveObscurement(baseLevel, z.ZoneType, vision, 0)
+		if effective > worst {
+			worst = effective
+		}
+	}
+	return worst
+}
+
+// zoneInfoAffectedTiles calculates the tiles affected by a ZoneInfo.
+func zoneInfoAffectedTiles(z ZoneInfo) []GridPos {
+	originCol := colToIndex(z.OriginCol)
+	originRow := int(z.OriginRow) - 1
+
+	var dims struct {
+		RadiusFt int `json:"radius_ft"`
+		WidthFt  int `json:"width_ft"`
+		HeightFt int `json:"height_ft"`
+		LengthFt int `json:"length_ft"`
+		SideFt   int `json:"side_ft"`
+	}
+	_ = json.Unmarshal(z.Dimensions, &dims)
+
+	switch z.Shape {
+	case "circle":
+		return SphereAffectedTiles(originCol, originRow, dims.RadiusFt)
+	case "square":
+		return SquareAffectedTiles(originCol, originRow, dims.SideFt)
+	case "rectangle":
+		return SquareAffectedTiles(originCol, originRow, dims.WidthFt)
 	default:
-		return ""
+		return []GridPos{{Col: originCol, Row: originRow}}
 	}
 }
 

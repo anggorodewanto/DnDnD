@@ -325,6 +325,8 @@ type AttackInput struct {
 	MonkLevel           int  // Monk level (0 = not a monk)
 	AttackerHidden      bool // Attacker is hidden (not visible)
 	TargetHidden        bool // Target is hidden (not visible)
+	AttackerObscurement ObscurementLevel // Effective obscurement for attacker
+	TargetObscurement   ObscurementLevel // Effective obscurement for target
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -365,6 +367,8 @@ type OffhandAttackCommand struct {
 	AttackerSize        string
 	DMAdvantage         bool
 	DMDisadvantage      bool
+	AttackerVision      VisionCapabilities
+	TargetVision        VisionCapabilities
 }
 
 // AttackCommand holds the service-level inputs for an attack.
@@ -384,6 +388,8 @@ type AttackCommand struct {
 	GWM                  bool // Great Weapon Master flag
 	Sharpshooter         bool // Sharpshooter flag
 	Reckless             bool // Reckless Attack flag
+	AttackerVision       VisionCapabilities // Vision capabilities of the attacker
+	TargetVision         VisionCapabilities // Vision capabilities of the target
 }
 
 // ResolveAttack resolves a single attack using pure inputs. Returns an error if the target
@@ -478,6 +484,8 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		Reckless:            input.Reckless,
 		AttackerHidden:      input.AttackerHidden,
 		TargetHidden:        input.TargetHidden,
+		AttackerObscurement: input.AttackerObscurement,
+		TargetObscurement:   input.TargetObscurement,
 	}
 	rollMode, advReasons, disadvReasons := DetectAdvantage(advInput)
 	// Thrown/improvised-thrown in long range: add disadvantage
@@ -823,6 +831,14 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		input.MonkLevel = ClassLevelFromJSON(char.Classes, "Monk")
 	}
 
+	// Obscurement from encounter zones
+	attackerObs, targetObs, err := s.resolveObscurement(ctx, cmd)
+	if err != nil {
+		return AttackResult{}, err
+	}
+	input.AttackerObscurement = attackerObs
+	input.TargetObscurement = targetObs
+
 	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 }
 
@@ -861,6 +877,14 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	input.IsImprovised = true
 	input.ImprovisedThrown = cmd.ImprovisedThrown
 	input.HasTavernBrawler = hasTavernBrawler
+
+	// Obscurement from encounter zones
+	attackerObs, targetObs, err := s.resolveObscurement(ctx, cmd)
+	if err != nil {
+		return AttackResult{}, err
+	}
+	input.AttackerObscurement = attackerObs
+	input.TargetObscurement = targetObs
 
 	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 }
@@ -928,6 +952,20 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 		cmd.HostileNearAttacker, cmd.AttackerSize,
 		cmd.DMAdvantage, cmd.DMDisadvantage, &dmgMod,
 	)
+
+	// Obscurement from encounter zones
+	zones, err := s.ListZonesForEncounter(ctx, cmd.Attacker.EncounterID)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("listing zones for obscurement: %w", err)
+	}
+	if len(zones) > 0 {
+		attackerCol := colToIndex(cmd.Attacker.PositionCol)
+		attackerRow := int(cmd.Attacker.PositionRow) - 1
+		targetCol := colToIndex(cmd.Target.PositionCol)
+		targetRow := int(cmd.Target.PositionRow) - 1
+		input.AttackerObscurement = CombatantObscurement(attackerCol, attackerRow, zones, cmd.AttackerVision)
+		input.TargetObscurement = CombatantObscurement(targetCol, targetRow, zones, cmd.TargetVision)
+	}
 
 	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 }
@@ -1012,6 +1050,28 @@ func buildAttackInput(
 		AttackerHidden:      !attacker.IsVisible,
 		TargetHidden:        !target.IsVisible,
 	}
+}
+
+// resolveObscurement looks up encounter zones and computes effective obscurement
+// for both attacker and target based on their positions and vision capabilities.
+func (s *Service) resolveObscurement(ctx context.Context, cmd AttackCommand) (ObscurementLevel, ObscurementLevel, error) {
+	zones, err := s.ListZonesForEncounter(ctx, cmd.Attacker.EncounterID)
+	if err != nil {
+		return NotObscured, NotObscured, fmt.Errorf("listing zones for obscurement: %w", err)
+	}
+	if len(zones) == 0 {
+		return NotObscured, NotObscured, nil
+	}
+
+	attackerCol := colToIndex(cmd.Attacker.PositionCol)
+	attackerRow := int(cmd.Attacker.PositionRow) - 1
+	targetCol := colToIndex(cmd.Target.PositionCol)
+	targetRow := int(cmd.Target.PositionRow) - 1
+
+	attackerObs := CombatantObscurement(attackerCol, attackerRow, zones, cmd.AttackerVision)
+	targetObs := CombatantObscurement(targetCol, targetRow, zones, cmd.TargetVision)
+
+	return attackerObs, targetObs, nil
 }
 
 // colToIndex converts a column letter (A-Z) to a 0-based index.

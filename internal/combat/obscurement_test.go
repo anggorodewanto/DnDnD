@@ -1,11 +1,14 @@
 package combat
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/refdata"
 )
 
 func TestZoneObscurement_HeavyObscurement(t *testing.T) {
@@ -237,6 +240,12 @@ func TestObscurementReasonString_NoObscurement(t *testing.T) {
 	assert.Equal(t, "", reason)
 }
 
+func TestObscurementReasonString_DimLightWithDarkvision(t *testing.T) {
+	// Darkvision in dim light: treats as bright, so no reason string
+	reason := ObscurementReasonString("dim_light", VisionCapabilities{DarkvisionFt: 60}, 30)
+	assert.Equal(t, "", reason)
+}
+
 func TestObscurementReasonString_BlindsightNegates(t *testing.T) {
 	reason := ObscurementReasonString("magical_darkness", VisionCapabilities{BlindsightFt: 60}, 30)
 	assert.Equal(t, "", reason)
@@ -315,6 +324,163 @@ func TestObscurementReasonString_TruesightInFog(t *testing.T) {
 	vision := VisionCapabilities{TruesightFt: 60}
 	reason := ObscurementReasonString("heavy_obscurement", vision, 30)
 	assert.Equal(t, "", reason)
+}
+
+// --- CombatantObscurement tests ---
+
+func TestCombatantObscurement_NoZones(t *testing.T) {
+	level := CombatantObscurement(2, 3, nil, VisionCapabilities{})
+	assert.Equal(t, NotObscured, level)
+}
+
+func TestCombatantObscurement_NotInAnyZone(t *testing.T) {
+	zones := []ZoneInfo{
+		{
+			ZoneType:  "darkness",
+			Shape:     "circle",
+			OriginCol: "F",
+			OriginRow: 6,
+			Dimensions: json.RawMessage(`{"radius_ft":10}`),
+		},
+	}
+	level := CombatantObscurement(0, 0, zones, VisionCapabilities{}) // A1, far from F6
+	assert.Equal(t, NotObscured, level)
+}
+
+func TestCombatantObscurement_InDarknessZone_NoDarkvision(t *testing.T) {
+	zones := []ZoneInfo{
+		{
+			ZoneType:  "darkness",
+			Shape:     "circle",
+			OriginCol: "C",
+			OriginRow: 3,
+			Dimensions: json.RawMessage(`{"radius_ft":15}`),
+		},
+	}
+	// C3 origin, radius 15ft => covers C3 area. Combatant at col=2 (C), row=2 (row 3, 0-based)
+	level := CombatantObscurement(2, 2, zones, VisionCapabilities{})
+	assert.Equal(t, HeavilyObscured, level)
+}
+
+func TestCombatantObscurement_InDarknessZone_WithDarkvision(t *testing.T) {
+	zones := []ZoneInfo{
+		{
+			ZoneType:  "darkness",
+			Shape:     "circle",
+			OriginCol: "C",
+			OriginRow: 3,
+			Dimensions: json.RawMessage(`{"radius_ft":15}`),
+		},
+	}
+	vision := VisionCapabilities{DarkvisionFt: 60}
+	level := CombatantObscurement(2, 2, zones, vision)
+	assert.Equal(t, LightlyObscured, level) // Darkvision downgrades darkness to dim
+}
+
+func TestCombatantObscurement_InMagicalDarkness_WithDarkvision(t *testing.T) {
+	zones := []ZoneInfo{
+		{
+			ZoneType:  "magical_darkness",
+			Shape:     "circle",
+			OriginCol: "C",
+			OriginRow: 3,
+			Dimensions: json.RawMessage(`{"radius_ft":15}`),
+		},
+	}
+	vision := VisionCapabilities{DarkvisionFt: 60}
+	level := CombatantObscurement(2, 2, zones, vision)
+	assert.Equal(t, HeavilyObscured, level) // Darkvision doesn't help with magical darkness
+}
+
+func TestCombatantObscurement_WorstZoneWins(t *testing.T) {
+	// Combatant in both dim_light and darkness zone — darkness wins
+	zones := []ZoneInfo{
+		{
+			ZoneType:  "dim_light",
+			Shape:     "circle",
+			OriginCol: "C",
+			OriginRow: 3,
+			Dimensions: json.RawMessage(`{"radius_ft":15}`),
+		},
+		{
+			ZoneType:  "darkness",
+			Shape:     "circle",
+			OriginCol: "C",
+			OriginRow: 3,
+			Dimensions: json.RawMessage(`{"radius_ft":15}`),
+		},
+	}
+	level := CombatantObscurement(2, 2, zones, VisionCapabilities{})
+	assert.Equal(t, HeavilyObscured, level)
+}
+
+func TestCombatantObscurement_DamageZoneIgnored(t *testing.T) {
+	zones := []ZoneInfo{
+		{
+			ZoneType:  "damage",
+			Shape:     "circle",
+			OriginCol: "C",
+			OriginRow: 3,
+			Dimensions: json.RawMessage(`{"radius_ft":15}`),
+		},
+	}
+	level := CombatantObscurement(2, 2, zones, VisionCapabilities{})
+	assert.Equal(t, NotObscured, level)
+}
+
+// --- AttackInput obscurement wiring tests ---
+
+func TestResolveAttack_AttackerInHeavyObscurement_GetsDisadvantage(t *testing.T) {
+	roller := dice.NewRoller(func(n int) int { return n - 1 }) // always max
+	input := AttackInput{
+		AttackerName:        "Thorn",
+		TargetName:          "Goblin",
+		TargetAC:            12,
+		Weapon:              refdata.Weapon{ID: "longsword", Name: "Longsword", Damage: "1d8", DamageType: "slashing", WeaponType: "martial_melee"},
+		Scores:              AbilityScores{Str: 16, Dex: 12, Con: 14, Int: 10, Wis: 12, Cha: 8},
+		ProfBonus:           2,
+		DistanceFt:          5,
+		AttackerObscurement: HeavilyObscured,
+	}
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.Equal(t, dice.Disadvantage, result.RollMode)
+	assert.Contains(t, result.DisadvantageReasons, "heavily obscured (blinded)")
+}
+
+func TestResolveAttack_TargetInHeavyObscurement_GetsAdvantage(t *testing.T) {
+	roller := dice.NewRoller(func(n int) int { return n - 1 })
+	input := AttackInput{
+		AttackerName:       "Aria",
+		TargetName:         "Goblin",
+		TargetAC:           12,
+		Weapon:             refdata.Weapon{ID: "longsword", Name: "Longsword", Damage: "1d8", DamageType: "slashing", WeaponType: "martial_melee"},
+		Scores:             AbilityScores{Str: 16, Dex: 12, Con: 14, Int: 10, Wis: 12, Cha: 8},
+		ProfBonus:          2,
+		DistanceFt:         5,
+		TargetObscurement:  HeavilyObscured,
+	}
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.Equal(t, dice.Advantage, result.RollMode)
+	assert.Contains(t, result.AdvantageReasons, "target heavily obscured (blinded)")
+}
+
+func TestResolveAttack_LightObscurement_NoAttackEffect(t *testing.T) {
+	roller := dice.NewRoller(func(n int) int { return n - 1 })
+	input := AttackInput{
+		AttackerName:        "Thorn",
+		TargetName:          "Goblin",
+		TargetAC:            12,
+		Weapon:              refdata.Weapon{ID: "longsword", Name: "Longsword", Damage: "1d8", DamageType: "slashing", WeaponType: "martial_melee"},
+		Scores:              AbilityScores{Str: 16, Dex: 12, Con: 14, Int: 10, Wis: 12, Cha: 8},
+		ProfBonus:           2,
+		DistanceFt:          5,
+		AttackerObscurement: LightlyObscured,
+	}
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.Equal(t, dice.Normal, result.RollMode)
 }
 
 func TestDetectAdvantage_NotObscured_NoEffect(t *testing.T) {
