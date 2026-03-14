@@ -429,8 +429,18 @@ func TestValidateMetamagicOptions_TwinnedTouchSpell(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TDD Cycle 19: Cast with --careful on AoE spell populates CarefulSpellCreatures
-func TestCast_CarefulSpell_Integration(t *testing.T) {
+// metamagicTestFixture sets up the common sorcerer cast test infrastructure.
+// Returns a service, caster ID, target ID, and a function to customize the store's getSpellFn.
+type metamagicTestFixture struct {
+	svc      *Service
+	store    *mockStore
+	casterID uuid.UUID
+	targetID uuid.UUID
+}
+
+// newMetamagicTestFixture creates a standard sorcerer casting test setup with
+// the given spell provider. Includes all store mocks needed for a successful cast.
+func newMetamagicTestFixture(spell refdata.Spell) metamagicTestFixture {
 	charID := uuid.New()
 	char := makeSorcererCharacter(charID, 5, 5) // CHA 18 => mod 4
 	caster := makeSorcererCombatant(charID)
@@ -438,7 +448,7 @@ func TestCast_CarefulSpell_Integration(t *testing.T) {
 
 	store := defaultMockStore()
 	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return makeFireballWithAoE(), nil
+		return spell, nil
 	}
 	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
 		return char, nil
@@ -456,14 +466,29 @@ func TestCast_CarefulSpell_Integration(t *testing.T) {
 		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
 	}
 
-	svc := NewService(store)
-	result, err := svc.Cast(context.Background(), CastCommand{
-		SpellID:   "fireball",
-		CasterID:  caster.ID,
-		TargetID:  target.ID,
-		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
-		Metamagic: []string{"careful"},
+	return metamagicTestFixture{
+		svc:      NewService(store),
+		store:    store,
+		casterID: caster.ID,
+		targetID: target.ID,
+	}
+}
+
+// castWithMetamagic is a convenience method that casts with the given metamagic options.
+func (f metamagicTestFixture) castWithMetamagic(metamagic []string) (CastResult, error) {
+	return f.svc.Cast(context.Background(), CastCommand{
+		SpellID:   "test-spell",
+		CasterID:  f.casterID,
+		TargetID:  f.targetID,
+		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: f.casterID},
+		Metamagic: metamagic,
 	}, testRoller())
+}
+
+// TDD Cycle 19: Cast with --careful on AoE spell populates CarefulSpellCreatures
+func TestCast_CarefulSpell_Integration(t *testing.T) {
+	f := newMetamagicTestFixture(makeFireballWithAoE())
+	result, err := f.castWithMetamagic([]string{"careful"})
 
 	require.NoError(t, err)
 	assert.Equal(t, 4, result.CarefulSpellCreatures) // CHA mod = 4
@@ -471,33 +496,8 @@ func TestCast_CarefulSpell_Integration(t *testing.T) {
 
 // TDD Cycle 20: Cast with --careful on non-AoE spell is rejected
 func TestCast_CarefulSpell_RejectsNonAoE(t *testing.T) {
-	charID := uuid.New()
-	char := makeSorcererCharacter(charID, 5, 5)
-	caster := makeSorcererCombatant(charID)
-	target := makeSpellTarget()
-
-	store := defaultMockStore()
-	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return makeFireball(), nil // no AoE
-	}
-	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
-		return char, nil
-	}
-	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
-		if id == caster.ID {
-			return caster, nil
-		}
-		return target, nil
-	}
-
-	svc := NewService(store)
-	_, err := svc.Cast(context.Background(), CastCommand{
-		SpellID:   "fireball",
-		CasterID:  caster.ID,
-		TargetID:  target.ID,
-		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
-		Metamagic: []string{"careful"},
-	}, testRoller())
+	f := newMetamagicTestFixture(makeFireball()) // no AoE
+	_, err := f.castWithMetamagic([]string{"careful"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "area of effect")
@@ -505,39 +505,8 @@ func TestCast_CarefulSpell_RejectsNonAoE(t *testing.T) {
 
 // TDD Cycle 21: Cast with --distant doubles range
 func TestCast_DistantSpell_Integration(t *testing.T) {
-	charID := uuid.New()
-	char := makeSorcererCharacter(charID, 5, 5)
-	caster := makeSorcererCombatant(charID)
-	target := makeSpellTarget()
-
-	store := defaultMockStore()
-	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return makeFireball(), nil // 150ft ranged
-	}
-	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
-		return char, nil
-	}
-	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
-		if id == caster.ID {
-			return caster, nil
-		}
-		return target, nil
-	}
-	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
-		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
-	}
-	store.updateCharacterFeatureUsesFn = func(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
-	}
-
-	svc := NewService(store)
-	result, err := svc.Cast(context.Background(), CastCommand{
-		SpellID:   "fireball",
-		CasterID:  caster.ID,
-		TargetID:  target.ID,
-		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
-		Metamagic: []string{"distant"},
-	}, testRoller())
+	f := newMetamagicTestFixture(makeFireball()) // 150ft ranged
+	result, err := f.castWithMetamagic([]string{"distant"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "300 ft.", result.DistantRange)
@@ -545,39 +514,8 @@ func TestCast_DistantSpell_Integration(t *testing.T) {
 
 // TDD Cycle 22: Cast with --empowered sets flags
 func TestCast_EmpoweredSpell_Integration(t *testing.T) {
-	charID := uuid.New()
-	char := makeSorcererCharacter(charID, 5, 5)
-	caster := makeSorcererCombatant(charID)
-	target := makeSpellTarget()
-
-	store := defaultMockStore()
-	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return makeFireballWithAoE(), nil // has damage
-	}
-	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
-		return char, nil
-	}
-	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
-		if id == caster.ID {
-			return caster, nil
-		}
-		return target, nil
-	}
-	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
-		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
-	}
-	store.updateCharacterFeatureUsesFn = func(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
-	}
-
-	svc := NewService(store)
-	result, err := svc.Cast(context.Background(), CastCommand{
-		SpellID:   "fireball",
-		CasterID:  caster.ID,
-		TargetID:  target.ID,
-		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
-		Metamagic: []string{"empowered"},
-	}, testRoller())
+	f := newMetamagicTestFixture(makeFireballWithAoE()) // has damage
+	result, err := f.castWithMetamagic([]string{"empowered"})
 
 	require.NoError(t, err)
 	assert.True(t, result.IsEmpowered)
@@ -586,40 +524,8 @@ func TestCast_EmpoweredSpell_Integration(t *testing.T) {
 
 // TDD Cycle 23: Cast with --extended doubles duration
 func TestCast_ExtendedSpell_Integration(t *testing.T) {
-	charID := uuid.New()
-	char := makeSorcererCharacter(charID, 5, 5)
-	caster := makeSorcererCombatant(charID)
-	target := makeSpellTarget()
-
-	store := defaultMockStore()
-	holdPerson := makeSingleTargetSaveSpell() // "Up to 1 minute"
-	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return holdPerson, nil
-	}
-	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
-		return char, nil
-	}
-	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
-		if id == caster.ID {
-			return caster, nil
-		}
-		return target, nil
-	}
-	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
-		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
-	}
-	store.updateCharacterFeatureUsesFn = func(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
-	}
-
-	svc := NewService(store)
-	result, err := svc.Cast(context.Background(), CastCommand{
-		SpellID:   "hold-person",
-		CasterID:  caster.ID,
-		TargetID:  target.ID,
-		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
-		Metamagic: []string{"extended"},
-	}, testRoller())
+	f := newMetamagicTestFixture(makeSingleTargetSaveSpell()) // "Up to 1 minute"
+	result, err := f.castWithMetamagic([]string{"extended"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "Up to 2 minutes", result.ExtendedDuration)
@@ -627,39 +533,8 @@ func TestCast_ExtendedSpell_Integration(t *testing.T) {
 
 // TDD Cycle 24: Cast with --heightened sets flag
 func TestCast_HeightenedSpell_Integration(t *testing.T) {
-	charID := uuid.New()
-	char := makeSorcererCharacter(charID, 5, 5)
-	caster := makeSorcererCombatant(charID)
-	target := makeSpellTarget()
-
-	store := defaultMockStore()
-	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return makeFireball(), nil // has save
-	}
-	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
-		return char, nil
-	}
-	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
-		if id == caster.ID {
-			return caster, nil
-		}
-		return target, nil
-	}
-	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
-		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
-	}
-	store.updateCharacterFeatureUsesFn = func(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
-	}
-
-	svc := NewService(store)
-	result, err := svc.Cast(context.Background(), CastCommand{
-		SpellID:   "fireball",
-		CasterID:  caster.ID,
-		TargetID:  target.ID,
-		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
-		Metamagic: []string{"heightened"},
-	}, testRoller())
+	f := newMetamagicTestFixture(makeFireball()) // has save
+	result, err := f.castWithMetamagic([]string{"heightened"})
 
 	require.NoError(t, err)
 	assert.True(t, result.IsHeightened)
@@ -667,39 +542,8 @@ func TestCast_HeightenedSpell_Integration(t *testing.T) {
 
 // TDD Cycle 25: Cast with --subtle sets flag
 func TestCast_SubtleSpell_Integration(t *testing.T) {
-	charID := uuid.New()
-	char := makeSorcererCharacter(charID, 5, 5)
-	caster := makeSorcererCombatant(charID)
-	target := makeSpellTarget()
-
-	store := defaultMockStore()
-	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return makeFireball(), nil
-	}
-	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
-		return char, nil
-	}
-	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
-		if id == caster.ID {
-			return caster, nil
-		}
-		return target, nil
-	}
-	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
-		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
-	}
-	store.updateCharacterFeatureUsesFn = func(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
-	}
-
-	svc := NewService(store)
-	result, err := svc.Cast(context.Background(), CastCommand{
-		SpellID:   "fireball",
-		CasterID:  caster.ID,
-		TargetID:  target.ID,
-		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
-		Metamagic: []string{"subtle"},
-	}, testRoller())
+	f := newMetamagicTestFixture(makeFireball())
+	result, err := f.castWithMetamagic([]string{"subtle"})
 
 	require.NoError(t, err)
 	assert.True(t, result.IsSubtle)
@@ -707,39 +551,8 @@ func TestCast_SubtleSpell_Integration(t *testing.T) {
 
 // TDD Cycle 26: Empowered + Careful combo works
 func TestCast_EmpoweredPlusCareful_Integration(t *testing.T) {
-	charID := uuid.New()
-	char := makeSorcererCharacter(charID, 5, 5)
-	caster := makeSorcererCombatant(charID)
-	target := makeSpellTarget()
-
-	store := defaultMockStore()
-	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return makeFireballWithAoE(), nil
-	}
-	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
-		return char, nil
-	}
-	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
-		if id == caster.ID {
-			return caster, nil
-		}
-		return target, nil
-	}
-	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
-		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
-	}
-	store.updateCharacterFeatureUsesFn = func(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
-	}
-
-	svc := NewService(store)
-	result, err := svc.Cast(context.Background(), CastCommand{
-		SpellID:   "fireball",
-		CasterID:  caster.ID,
-		TargetID:  target.ID,
-		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
-		Metamagic: []string{"empowered", "careful"},
-	}, testRoller())
+	f := newMetamagicTestFixture(makeFireballWithAoE())
+	result, err := f.castWithMetamagic([]string{"empowered", "careful"})
 
 	require.NoError(t, err)
 	assert.True(t, result.IsEmpowered)
@@ -750,10 +563,7 @@ func TestCast_EmpoweredPlusCareful_Integration(t *testing.T) {
 
 // TDD Cycle 27: Twinned Spell integration - resolves second target
 func TestCast_TwinnedSpell_Integration(t *testing.T) {
-	charID := uuid.New()
-	char := makeSorcererCharacter(charID, 5, 5)
-	caster := makeSorcererCombatant(charID)
-	target := makeSpellTarget()
+	f := newMetamagicTestFixture(makeSingleTargetSaveSpell())
 	twinTarget := refdata.Combatant{
 		ID:          uuid.New(),
 		DisplayName: "Orc",
@@ -765,36 +575,21 @@ func TestCast_TwinnedSpell_Integration(t *testing.T) {
 		Conditions:  json.RawMessage(`[]`),
 	}
 
-	store := defaultMockStore()
-	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return makeSingleTargetSaveSpell(), nil // hold person, single target
-	}
-	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
-		return char, nil
-	}
-	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
-		if id == caster.ID {
-			return caster, nil
-		}
+	// Add twin target to combatant lookup
+	originalGetCombatantFn := f.store.getCombatantFn
+	f.store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
 		if id == twinTarget.ID {
 			return twinTarget, nil
 		}
-		return target, nil
-	}
-	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
-		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
-	}
-	store.updateCharacterFeatureUsesFn = func(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
+		return originalGetCombatantFn(ctx, id)
 	}
 
-	svc := NewService(store)
-	result, err := svc.Cast(context.Background(), CastCommand{
+	result, err := f.svc.Cast(context.Background(), CastCommand{
 		SpellID:      "hold-person",
-		CasterID:     caster.ID,
-		TargetID:     target.ID,
+		CasterID:     f.casterID,
+		TargetID:     f.targetID,
 		TwinTargetID: twinTarget.ID,
-		Turn:         refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		Turn:         refdata.Turn{ID: uuid.New(), CombatantID: f.casterID},
 		Metamagic:    []string{"twinned"},
 	}, testRoller())
 
@@ -806,26 +601,23 @@ func TestCast_TwinnedSpell_Integration(t *testing.T) {
 
 // TDD Cycle 28: Twinned Spell rejects self-range spell
 func TestCast_TwinnedSpell_RejectsSelfRange(t *testing.T) {
-	charID := uuid.New()
-	char := makeSorcererCharacter(charID, 5, 5)
-	caster := makeSorcererCombatant(charID)
-
-	store := defaultMockStore()
-	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return makeShield(), nil // self-range
-	}
-	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
-		return char, nil
-	}
-	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
-		return caster, nil
+	f := newMetamagicTestFixture(makeShield()) // self-range
+	// Override combatant lookup to only return caster (no target needed)
+	f.store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:          f.casterID,
+			DisplayName: "Sorcerer",
+			CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+			PositionCol: "C",
+			PositionRow: 3,
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
 	}
 
-	svc := NewService(store)
-	_, err := svc.Cast(context.Background(), CastCommand{
+	_, err := f.svc.Cast(context.Background(), CastCommand{
 		SpellID:   "shield",
-		CasterID:  caster.ID,
-		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		CasterID:  f.casterID,
+		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: f.casterID},
 		Metamagic: []string{"twinned"},
 	}, testRoller())
 
@@ -918,33 +710,8 @@ func TestFormatCastLog_MetamagicEffects(t *testing.T) {
 
 // TDD Cycle 29: Twinned Spell rejects AoE spell
 func TestCast_TwinnedSpell_RejectsAoE(t *testing.T) {
-	charID := uuid.New()
-	char := makeSorcererCharacter(charID, 5, 5)
-	caster := makeSorcererCombatant(charID)
-	target := makeSpellTarget()
-
-	store := defaultMockStore()
-	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
-		return makeFireballWithAoE(), nil
-	}
-	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
-		return char, nil
-	}
-	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
-		if id == caster.ID {
-			return caster, nil
-		}
-		return target, nil
-	}
-
-	svc := NewService(store)
-	_, err := svc.Cast(context.Background(), CastCommand{
-		SpellID:   "fireball",
-		CasterID:  caster.ID,
-		TargetID:  target.ID,
-		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
-		Metamagic: []string{"twinned"},
-	}, testRoller())
+	f := newMetamagicTestFixture(makeFireballWithAoE())
+	_, err := f.castWithMetamagic([]string{"twinned"})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "area of effect")

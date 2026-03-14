@@ -43,11 +43,25 @@ func validateSingleMetamagicOption(option string, spell refdata.Spell) error {
 	}
 }
 
+// Spell predicate helpers used by multiple metamagic validators.
+
+func hasAreaOfEffect(spell refdata.Spell) bool {
+	return spell.AreaOfEffect.Valid && len(spell.AreaOfEffect.RawMessage) > 0
+}
+
+func hasSavingThrow(spell refdata.Spell) bool {
+	return spell.SaveAbility.Valid && spell.SaveAbility.String != ""
+}
+
+func hasDamage(spell refdata.Spell) bool {
+	return spell.Damage.Valid && len(spell.Damage.RawMessage) > 0
+}
+
 func validateCarefulSpell(spell refdata.Spell) error {
-	if !spell.AreaOfEffect.Valid || len(spell.AreaOfEffect.RawMessage) == 0 {
+	if !hasAreaOfEffect(spell) {
 		return fmt.Errorf("Careful Spell requires a spell with an area of effect")
 	}
-	if !spell.SaveAbility.Valid || spell.SaveAbility.String == "" {
+	if !hasSavingThrow(spell) {
 		return fmt.Errorf("Careful Spell requires a spell with a saving throw")
 	}
 	return nil
@@ -64,7 +78,7 @@ func validateDistantSpell(spell refdata.Spell) error {
 }
 
 func validateEmpoweredSpell(spell refdata.Spell) error {
-	if !spell.Damage.Valid || len(spell.Damage.RawMessage) == 0 {
+	if !hasDamage(spell) {
 		return fmt.Errorf("Empowered Spell requires a spell that deals damage")
 	}
 	return nil
@@ -78,15 +92,14 @@ func validateExtendedSpell(spell refdata.Spell) error {
 }
 
 func validateHeightenedSpell(spell refdata.Spell) error {
-	if !spell.SaveAbility.Valid || spell.SaveAbility.String == "" {
+	if !hasSavingThrow(spell) {
 		return fmt.Errorf("Heightened Spell requires a spell with a saving throw")
 	}
 	return nil
 }
 
 func validateQuickenedSpell(spell refdata.Spell) error {
-	ct := strings.ToLower(spell.CastingTime)
-	if !strings.Contains(ct, "1 action") {
+	if !strings.Contains(strings.ToLower(spell.CastingTime), "1 action") {
 		return fmt.Errorf("Quickened Spell requires a spell with casting time of 1 action")
 	}
 	return nil
@@ -96,7 +109,7 @@ func validateTwinnedSpell(spell refdata.Spell) error {
 	if spell.RangeType == "self" || spell.RangeType == "self (radius)" {
 		return fmt.Errorf("Twinned Spell cannot target a self-range spell")
 	}
-	if spell.AreaOfEffect.Valid && len(spell.AreaOfEffect.RawMessage) > 0 {
+	if hasAreaOfEffect(spell) {
 		return fmt.Errorf("Twinned Spell cannot target a spell with an area of effect")
 	}
 	return nil
@@ -200,9 +213,8 @@ func applyMetamagicEffects(result *CastResult, metamagics []string, spell refdat
 	}
 }
 
-// CarefulSpellCreatureCount returns the number of creatures that can auto-succeed
-// on the save, which equals the caster's CHA modifier (minimum 1).
-func CarefulSpellCreatureCount(chaScore int) int {
+// chaModMin1 returns the CHA modifier for the given score, with a minimum of 1.
+func chaModMin1(chaScore int) int {
 	mod := AbilityModifier(chaScore)
 	if mod < 1 {
 		return 1
@@ -210,12 +222,14 @@ func CarefulSpellCreatureCount(chaScore int) int {
 	return mod
 }
 
+// CarefulSpellCreatureCount returns the number of creatures that can auto-succeed
+// on the save, which equals the caster's CHA modifier (minimum 1).
+func CarefulSpellCreatureCount(chaScore int) int {
+	return chaModMin1(chaScore)
+}
+
 // EmpoweredRerollCount returns the max number of damage dice the caster can reroll,
 // which equals the caster's CHA modifier (minimum 1).
 func EmpoweredRerollCount(chaScore int) int {
-	mod := AbilityModifier(chaScore)
-	if mod < 1 {
-		return 1
-	}
-	return mod
+	return chaModMin1(chaScore)
 }

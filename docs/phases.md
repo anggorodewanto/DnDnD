@@ -363,7 +363,7 @@
   - Depends on: Phase 58, Phase 44
   - Done when: Integration tests verify sorcery point tracking, Font of Magic conversion, metamagic flag validation, one-per-spell enforcement, point deduction.
 
-- [ ] **Phase 66b: Metamagic — Individual Options (Sorcerer)**
+- [x] **Phase 66b: Metamagic — Individual Options (Sorcerer)**
   - Scope: Implement all 8 SRD Metamagic options as `/cast` flags: `--careful` (chosen creatures auto-succeed on AoE save), `--distant` (double range or touch->30ft), `--empowered` (reroll damage dice up to CHA mod), `--extended` (double duration), `--heightened` (disadvantage on first save), `--quickened` (cast as bonus action), `--subtle` (no V/S components), `--twinned [target]` (single-target spell hits second target, costs spell level in points). Per-option validation rules.
   - Depends on: Phase 66a
   - Done when: Integration tests verify each metamagic option's effect, cost, and validation; Empowered+other combo works; Twinned target validation.

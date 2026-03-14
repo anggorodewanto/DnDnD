@@ -503,7 +503,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 
 	// 9a. Compute scaled damage dice (cantrip scaling or upcast)
-	if spell.Damage.Valid && len(spell.Damage.RawMessage) > 0 {
+	if hasDamage(spell) {
 		dmgInfo, err := ParseSpellDamage(spell.Damage.RawMessage)
 		if err == nil {
 			result.DamageType = dmgInfo.DamageType
@@ -543,7 +543,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	result.Concentration = ResolveConcentration(cmd.CurrentConcentration, spell)
 
 	// 11. Save DC for save-based spells
-	if spell.SaveAbility.Valid && spell.SaveAbility.String != "" {
+	if hasSavingThrow(spell) {
 		result.SaveDC = SpellSaveDC(int(char.ProficiencyBonus), spellAbilityScore)
 		result.SaveAbility = spell.SaveAbility.String
 	}
