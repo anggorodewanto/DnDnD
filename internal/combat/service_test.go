@@ -59,6 +59,7 @@ type mockStore struct {
 	getArmorFn                             func(ctx context.Context, id string) (refdata.Armor, error)
 	updateCharacterFeatureUsesFn      func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
 	updateCharacterSpellSlotsFn       func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
+	updateCharacterPactMagicSlotsFn   func(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error)
 	getSpellFn                        func(ctx context.Context, id string) (refdata.Spell, error)
 	updateCharacterGoldFn             func(ctx context.Context, id uuid.UUID, gold int32) error
 }
@@ -185,6 +186,12 @@ func (m *mockStore) UpdateCharacterSpellSlots(ctx context.Context, arg refdata.U
 		return m.updateCharacterSpellSlotsFn(ctx, arg)
 	}
 	return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+}
+func (m *mockStore) UpdateCharacterPactMagicSlots(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+	if m.updateCharacterPactMagicSlotsFn != nil {
+		return m.updateCharacterPactMagicSlotsFn(ctx, arg)
+	}
+	return refdata.Character{ID: arg.ID, PactMagicSlots: arg.PactMagicSlots}, nil
 }
 func (m *mockStore) GetSpell(ctx context.Context, id string) (refdata.Spell, error) {
 	if m.getSpellFn != nil {

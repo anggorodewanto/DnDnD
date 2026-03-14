@@ -170,3 +170,38 @@ func TestCalculateSpellSlots_MulticlassSlots(t *testing.T) {
 		t.Errorf("CalculateSpellSlots multiclass = %v, want %v", got, want)
 	}
 }
+
+func TestPactMagicSlotsForLevel(t *testing.T) {
+	tests := []struct {
+		name      string
+		level     int
+		wantSlots PactMagicSlots
+	}{
+		{"level 0 returns zero", 0, PactMagicSlots{}},
+		{"level 1: 1 slot, 1st level", 1, PactMagicSlots{SlotLevel: 1, Current: 1, Max: 1}},
+		{"level 2: 2 slots, 1st level", 2, PactMagicSlots{SlotLevel: 1, Current: 2, Max: 2}},
+		{"level 3: 2 slots, 2nd level", 3, PactMagicSlots{SlotLevel: 2, Current: 2, Max: 2}},
+		{"level 4: 2 slots, 2nd level", 4, PactMagicSlots{SlotLevel: 2, Current: 2, Max: 2}},
+		{"level 5: 2 slots, 3rd level", 5, PactMagicSlots{SlotLevel: 3, Current: 2, Max: 2}},
+		{"level 6: 2 slots, 3rd level", 6, PactMagicSlots{SlotLevel: 3, Current: 2, Max: 2}},
+		{"level 7: 2 slots, 4th level", 7, PactMagicSlots{SlotLevel: 4, Current: 2, Max: 2}},
+		{"level 8: 2 slots, 4th level", 8, PactMagicSlots{SlotLevel: 4, Current: 2, Max: 2}},
+		{"level 9: 2 slots, 5th level", 9, PactMagicSlots{SlotLevel: 5, Current: 2, Max: 2}},
+		{"level 10: 2 slots, 5th level", 10, PactMagicSlots{SlotLevel: 5, Current: 2, Max: 2}},
+		{"level 16: 2 slots, 5th level", 16, PactMagicSlots{SlotLevel: 5, Current: 2, Max: 2}},
+		{"level 17: 3 slots, 5th level", 17, PactMagicSlots{SlotLevel: 5, Current: 3, Max: 3}},
+		{"level 18: 3 slots, 5th level", 18, PactMagicSlots{SlotLevel: 5, Current: 3, Max: 3}},
+		{"level 19: 4 slots, 5th level", 19, PactMagicSlots{SlotLevel: 5, Current: 4, Max: 4}},
+		{"level 20: 4 slots, 5th level", 20, PactMagicSlots{SlotLevel: 5, Current: 4, Max: 4}},
+		{"level 21 out of range returns zero", 21, PactMagicSlots{}},
+		{"level -1 out of range returns zero", -1, PactMagicSlots{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := PactMagicSlotsForLevel(tc.level)
+			if got != tc.wantSlots {
+				t.Errorf("PactMagicSlotsForLevel(%d) = %+v, want %+v", tc.level, got, tc.wantSlots)
+			}
+		})
+	}
+}

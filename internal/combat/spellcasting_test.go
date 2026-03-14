@@ -2463,3 +2463,342 @@ func TestCast_MaterialComponent_NoCostlyComponent(t *testing.T) {
 	assert.Equal(t, "Fireball", result.SpellName)
 	assert.Nil(t, result.MaterialComponent) // no costly component
 }
+
+// --- Phase 64: Pact Magic ---
+
+// helper to make a warlock character with pact magic slots
+func makeWarlockCharacter(id uuid.UUID) refdata.Character {
+	slotsJSON, _ := json.Marshal(map[string]SlotInfo{}) // warlocks have no regular slots (pure warlock)
+	pactJSON, _ := json.Marshal(map[string]interface{}{
+		"slot_level": 3,
+		"current":    2,
+		"max":        2,
+	})
+	scoresJSON, _ := json.Marshal(AbilityScores{
+		Str: 8, Dex: 14, Con: 12, Int: 10, Wis: 10, Cha: 18,
+	})
+	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "warlock", Level: 5}})
+	return refdata.Character{
+		ID:               id,
+		Name:             "Eldritch",
+		ProficiencyBonus: 3,
+		Classes:          classesJSON,
+		AbilityScores:    scoresJSON,
+		SpellSlots:       pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+		PactMagicSlots:   pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true},
+		Level:            5,
+	}
+}
+
+// helper: warlock/wizard multiclass character
+func makeWarlockWizardCharacter(id uuid.UUID) refdata.Character {
+	slotsJSON, _ := json.Marshal(map[string]SlotInfo{
+		"1": {Current: 4, Max: 4},
+		"2": {Current: 3, Max: 3},
+		"3": {Current: 2, Max: 2},
+	})
+	pactJSON, _ := json.Marshal(map[string]interface{}{
+		"slot_level": 2,
+		"current":    2,
+		"max":        2,
+	})
+	scoresJSON, _ := json.Marshal(AbilityScores{
+		Str: 8, Dex: 14, Con: 12, Int: 16, Wis: 10, Cha: 16,
+	})
+	classesJSON, _ := json.Marshal([]CharacterClass{
+		{Class: "wizard", Level: 5},
+		{Class: "warlock", Level: 3},
+	})
+	return refdata.Character{
+		ID:               id,
+		Name:             "Multiclass",
+		ProficiencyBonus: 3,
+		Classes:          classesJSON,
+		AbilityScores:    scoresJSON,
+		SpellSlots:       pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+		PactMagicSlots:   pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true},
+		Level:            8,
+	}
+}
+
+func makeEldritchBlast() refdata.Spell {
+	return refdata.Spell{
+		ID:             "eldritch-blast",
+		Name:           "Eldritch Blast",
+		Level:          0,
+		CastingTime:    "1 action",
+		RangeType:      "ranged",
+		RangeFt:        sql.NullInt32{Int32: 120, Valid: true},
+		AttackType:     sql.NullString{String: "ranged", Valid: true},
+		ResolutionMode: "auto",
+		Concentration:  sql.NullBool{Bool: false, Valid: true},
+	}
+}
+
+func makeHexSpell() refdata.Spell {
+	return refdata.Spell{
+		ID:             "hex",
+		Name:           "Hex",
+		Level:          1,
+		CastingTime:    "1 bonus action",
+		RangeType:      "ranged",
+		RangeFt:        sql.NullInt32{Int32: 90, Valid: true},
+		ResolutionMode: "auto",
+		Concentration:  sql.NullBool{Bool: true, Valid: true},
+	}
+}
+
+// TDD Cycle P64-1: Warlock casts leveled spell using pact slot
+func TestCast_PactSlot_UsedFirst(t *testing.T) {
+	charID := uuid.New()
+	char := makeWarlockCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.DisplayName = "Eldritch"
+	target := makeSpellTarget()
+
+	var savedPactSlots pqtype.NullRawMessage
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeHexSpell(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+	store.updateCharacterPactMagicSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+		savedPactSlots = arg.PactMagicSlots
+		return refdata.Character{ID: arg.ID, PactMagicSlots: arg.PactMagicSlots}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "hex",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, "Hex", result.SpellName)
+	assert.True(t, result.UsedPactSlot, "should use pact slot first")
+	assert.Equal(t, 3, result.SlotUsed, "pact slots are 3rd level, spell auto-upcasts")
+	assert.Equal(t, 1, result.PactSlotsRemaining)
+
+	// Verify pact slots were persisted
+	require.True(t, savedPactSlots.Valid)
+}
+
+// TDD Cycle P64-2: Multiclass warlock uses --spell-slot flag to force regular slots
+func TestCast_PactSlot_UseSpellSlotFlag(t *testing.T) {
+	charID := uuid.New()
+	char := makeWarlockWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+
+	var savedRegularSlots pqtype.NullRawMessage
+	pactSlotUpdateCalled := false
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeHexSpell(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		savedRegularSlots = arg.SpellSlots
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.updateCharacterPactMagicSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+		pactSlotUpdateCalled = true
+		return refdata.Character{ID: arg.ID, PactMagicSlots: arg.PactMagicSlots}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:      "hex",
+		CasterID:     caster.ID,
+		TargetID:     target.ID,
+		Turn:         refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		UseSpellSlot: true, // force regular slot
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.False(t, result.UsedPactSlot, "should NOT use pact slot when --spell-slot is set")
+	assert.Equal(t, 1, result.SlotUsed, "should use 1st-level regular slot")
+	assert.False(t, pactSlotUpdateCalled, "pact slots should not be touched")
+	require.True(t, savedRegularSlots.Valid)
+}
+
+// TDD Cycle P64-3: Pact slot not used when spell level > pact slot level
+func TestCast_PactSlot_SpellTooHighLevel(t *testing.T) {
+	charID := uuid.New()
+	char := makeWarlockWizardCharacter(charID) // pact slots are level 2
+	// Add higher-level regular slots
+	slotsJSON, _ := json.Marshal(map[string]SlotInfo{
+		"1": {Current: 4, Max: 4},
+		"2": {Current: 3, Max: 3},
+		"3": {Current: 2, Max: 2},
+	})
+	char.SpellSlots = pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true}
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeFireball(), nil // level 3
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "fireball",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.False(t, result.UsedPactSlot, "pact slot level 2 cannot hold level 3 spell")
+	assert.Equal(t, 3, result.SlotUsed, "should use regular 3rd-level slot")
+}
+
+// TDD Cycle P64-4: Pact slot empty, falls back to regular slots
+func TestCast_PactSlot_Empty_FallsBackToRegular(t *testing.T) {
+	charID := uuid.New()
+	char := makeWarlockWizardCharacter(charID)
+	// Deplete pact slots
+	pactJSON, _ := json.Marshal(map[string]interface{}{
+		"slot_level": 2,
+		"current":    0,
+		"max":        2,
+	})
+	char.PactMagicSlots = pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true}
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeHexSpell(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "hex",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.False(t, result.UsedPactSlot)
+	assert.Equal(t, 1, result.SlotUsed, "should fall back to regular 1st-level slot")
+}
+
+// TDD Cycle P64-5: FormatCastLog shows pact slot usage
+func TestFormatCastLog_PactSlot(t *testing.T) {
+	result := CastResult{
+		CasterName:         "Eldritch",
+		SpellName:          "Hex",
+		SpellLevel:         1,
+		SlotUsed:           3,
+		UsedPactSlot:       true,
+		PactSlotsRemaining: 1,
+	}
+	log := FormatCastLog(result)
+	assert.Contains(t, log, "Used pact slot")
+	assert.Contains(t, log, "1 remaining")
+	assert.NotContains(t, log, "3rd-level slot")
+}
+
+// TDD Cycle P64-5b: parsePactMagicSlots edge cases
+func TestParsePactMagicSlots(t *testing.T) {
+	// nil/empty returns zero value
+	ps, err := parsePactMagicSlots(nil)
+	assert.NoError(t, err)
+	assert.Equal(t, PactMagicSlotState{}, ps)
+
+	ps, err = parsePactMagicSlots([]byte{})
+	assert.NoError(t, err)
+	assert.Equal(t, PactMagicSlotState{}, ps)
+
+	// valid JSON
+	ps, err = parsePactMagicSlots([]byte(`{"slot_level":3,"current":2,"max":2}`))
+	assert.NoError(t, err)
+	assert.Equal(t, PactMagicSlotState{SlotLevel: 3, Current: 2, Max: 2}, ps)
+
+	// invalid JSON
+	_, err = parsePactMagicSlots([]byte(`{invalid`))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing pact magic slots")
+}
+
+// TDD Cycle P64-5c: deductAndPersistPactSlot DB error
+func TestDeductAndPersistPactSlot_DBError(t *testing.T) {
+	store := defaultMockStore()
+	store.updateCharacterPactMagicSlotsFn = func(_ context.Context, _ refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+		return refdata.Character{}, fmt.Errorf("db error")
+	}
+	svc := NewService(store)
+	_, err := svc.deductAndPersistPactSlot(context.Background(), uuid.New(), PactMagicSlotState{SlotLevel: 3, Current: 2, Max: 2})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating pact magic slots")
+}
+
+// TDD Cycle P64-6: FormatCastLog shows regular slot usage (unchanged)
+func TestFormatCastLog_RegularSlot(t *testing.T) {
+	result := CastResult{
+		CasterName:     "Gandalf",
+		SpellName:      "Fireball",
+		SpellLevel:     3,
+		SlotUsed:       3,
+		SlotsRemaining: 1,
+	}
+	log := FormatCastLog(result)
+	assert.Contains(t, log, "Used 3rd-level slot")
+	assert.Contains(t, log, "1 remaining")
+	assert.NotContains(t, log, "pact slot")
+}

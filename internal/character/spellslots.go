@@ -63,6 +63,45 @@ func CalculateCasterLevel(classes []ClassEntry, spellcasting map[string]ClassSpe
 	return total
 }
 
+// pactMagicTable maps warlock level (1-20) to {slotCount, slotLevel}.
+var pactMagicTable = [21][2]int{
+	0:  {0, 0},
+	1:  {1, 1},
+	2:  {2, 1},
+	3:  {2, 2},
+	4:  {2, 2},
+	5:  {2, 3},
+	6:  {2, 3},
+	7:  {2, 4},
+	8:  {2, 4},
+	9:  {2, 5},
+	10: {2, 5},
+	11: {2, 5},
+	12: {2, 5},
+	13: {2, 5},
+	14: {2, 5},
+	15: {2, 5},
+	16: {2, 5},
+	17: {3, 5},
+	18: {3, 5},
+	19: {4, 5},
+	20: {4, 5},
+}
+
+// PactMagicSlotsForLevel returns the pact magic slot configuration for a given warlock level.
+// Returns zero-value PactMagicSlots for levels outside 1-20.
+func PactMagicSlotsForLevel(warlockLevel int) PactMagicSlots {
+	if warlockLevel < 1 || warlockLevel > 20 {
+		return PactMagicSlots{}
+	}
+	entry := pactMagicTable[warlockLevel]
+	return PactMagicSlots{
+		SlotLevel: entry[1],
+		Current:   entry[0],
+		Max:       entry[0],
+	}
+}
+
 // CalculateSpellSlots computes the spell slots for a character.
 // For single-class characters, uses own progression (which matches the multiclass table for full casters).
 // For multiclass, sums caster levels and looks up the multiclass table.

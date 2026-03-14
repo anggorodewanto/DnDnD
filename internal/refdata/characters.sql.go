@@ -477,6 +477,58 @@ func (q *Queries) UpdateCharacterFeatureUses(ctx context.Context, arg UpdateChar
 	return i, err
 }
 
+const updateCharacterPactMagicSlots = `-- name: UpdateCharacterPactMagicSlots :one
+UPDATE characters SET pact_magic_slots = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id
+`
+
+type UpdateCharacterPactMagicSlotsParams struct {
+	ID             uuid.UUID             `json:"id"`
+	PactMagicSlots pqtype.NullRawMessage `json:"pact_magic_slots"`
+}
+
+func (q *Queries) UpdateCharacterPactMagicSlots(ctx context.Context, arg UpdateCharacterPactMagicSlotsParams) (Character, error) {
+	row := q.db.QueryRowContext(ctx, updateCharacterPactMagicSlots, arg.ID, arg.PactMagicSlots)
+	var i Character
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.Name,
+		&i.Race,
+		&i.Classes,
+		&i.Level,
+		&i.AbilityScores,
+		&i.HpMax,
+		&i.HpCurrent,
+		&i.TempHp,
+		&i.Ac,
+		&i.AcFormula,
+		&i.SpeedFt,
+		&i.ProficiencyBonus,
+		&i.EquippedMainHand,
+		&i.EquippedOffHand,
+		&i.EquippedArmor,
+		&i.SpellSlots,
+		&i.PactMagicSlots,
+		&i.HitDiceRemaining,
+		&i.FeatureUses,
+		&i.Features,
+		&i.Proficiencies,
+		&i.Gold,
+		&i.AttunementSlots,
+		pq.Array(&i.Languages),
+		&i.Inventory,
+		&i.CharacterData,
+		&i.DdbUrl,
+		&i.Homebrew,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CardMessageID,
+	)
+	return i, err
+}
+
 const updateCharacterSpellSlots = `-- name: UpdateCharacterSpellSlots :one
 UPDATE characters SET spell_slots = $2, updated_at = now()
 WHERE id = $1

@@ -120,6 +120,11 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Name:        "empowered",
 					Description: "Use Empowered Spell metamagic",
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "spell-slot",
+					Description: "Force using a regular spell slot instead of pact magic slot (multiclass warlocks)",
+				},
 			},
 		},
 		{

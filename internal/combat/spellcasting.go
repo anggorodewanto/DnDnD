@@ -149,8 +149,10 @@ type CastResult struct {
 	SaveAbility     string
 	Concentration   ConcentrationResult
 	ResolutionMode  string
-	SlotUsed        int
-	SlotsRemaining  int
+	SlotUsed           int
+	SlotsRemaining     int
+	UsedPactSlot       bool
+	PactSlotsRemaining int
 	IsRitual        bool
 	ScaledDamageDice string // damage dice after upcast/cantrip scaling
 	DamageType      string // damage type from spell damage JSON
@@ -182,7 +184,11 @@ func FormatCastLog(result CastResult) string {
 
 	// Slot usage (not for rituals or cantrips)
 	if result.SpellLevel > 0 && !result.IsRitual {
-		fmt.Fprintf(&b, "\U0001f4a0 Used %s-level slot (%d remaining)\n", ordinal(result.SlotUsed), result.SlotsRemaining)
+		if result.UsedPactSlot {
+			fmt.Fprintf(&b, "\U0001f4a0 Used pact slot (%d remaining)\n", result.PactSlotsRemaining)
+		} else {
+			fmt.Fprintf(&b, "\U0001f4a0 Used %s-level slot (%d remaining)\n", ordinal(result.SlotUsed), result.SlotsRemaining)
+		}
 	}
 
 	// Scaled damage dice
@@ -247,6 +253,7 @@ type CastCommand struct {
 	Turn                 refdata.Turn
 	CurrentConcentration string // name of current concentration spell, if any
 	SlotLevel            int    // explicit slot choice; 0 = auto-select lowest available
+	UseSpellSlot         bool   // true = force using regular spell slots instead of pact slots
 	IsRitual             bool   // true = cast as ritual (no slot consumed)
 	EncounterStatus      string // encounter status for ritual validation ("preparing", "active", "completed")
 	EncounterID          uuid.UUID // encounter ID (needed for teleport occupant checks)
@@ -325,12 +332,23 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		}
 	}
 
-	// 6c. Select spell slot (unless ritual or cantrip)
+	// 6c. Parse pact magic slots
+	pactSlots, _ := parsePactMagicSlots(char.PactMagicSlots.RawMessage)
+
+	// 6c2. Select spell slot (unless ritual or cantrip)
 	effectiveSlotLevel := 0
+	usePactSlot := false
 	if spellLevel > 0 && !cmd.IsRitual {
-		effectiveSlotLevel, err = SelectSpellSlot(slots, spellLevel, cmd.SlotLevel)
-		if err != nil {
-			return CastResult{}, err
+		// Determine if pact slot should be used:
+		// Use pact slot if: has pact slots with current > 0, spell fits, and not forced to regular
+		if !cmd.UseSpellSlot && pactSlots.Current > 0 && spellLevel <= pactSlots.SlotLevel {
+			effectiveSlotLevel = pactSlots.SlotLevel
+			usePactSlot = true
+		} else {
+			effectiveSlotLevel, err = SelectSpellSlot(slots, spellLevel, cmd.SlotLevel)
+			if err != nil {
+				return CastResult{}, err
+			}
 		}
 	}
 
@@ -493,12 +511,22 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 
 	// 15. Deduct spell slot and persist (leveled spells, not rituals)
-	deduction, err := s.deductAndPersistSlot(ctx, char.ID, slots, effectiveSlotLevel)
-	if err != nil {
-		return CastResult{}, err
+	if usePactSlot {
+		deduction, err := s.deductAndPersistPactSlot(ctx, char.ID, pactSlots)
+		if err != nil {
+			return CastResult{}, err
+		}
+		result.SlotUsed = effectiveSlotLevel
+		result.UsedPactSlot = true
+		result.PactSlotsRemaining = deduction.SlotsRemaining
+	} else {
+		deduction, err := s.deductAndPersistSlot(ctx, char.ID, slots, effectiveSlotLevel)
+		if err != nil {
+			return CastResult{}, err
+		}
+		result.SlotUsed = deduction.SlotUsed
+		result.SlotsRemaining = deduction.SlotsRemaining
 	}
-	result.SlotUsed = deduction.SlotUsed
-	result.SlotsRemaining = deduction.SlotsRemaining
 
 	return result, nil
 }
@@ -532,6 +560,42 @@ func (s *Service) deductAndPersistSlot(ctx context.Context, charID uuid.UUID, sl
 		return SlotDeduction{}, fmt.Errorf("updating spell slots: %w", err)
 	}
 	return SlotDeduction{SlotUsed: slotLevel, SlotsRemaining: remaining}, nil
+}
+
+// PactMagicSlotState holds the parsed pact magic slot data from a character.
+type PactMagicSlotState struct {
+	SlotLevel int `json:"slot_level"`
+	Current   int `json:"current"`
+	Max       int `json:"max"`
+}
+
+// parsePactMagicSlots parses the pact_magic_slots JSONB column.
+// Returns zero-value if data is nil/empty or unparseable.
+func parsePactMagicSlots(raw []byte) (PactMagicSlotState, error) {
+	if len(raw) == 0 {
+		return PactMagicSlotState{}, nil
+	}
+	var ps PactMagicSlotState
+	if err := json.Unmarshal(raw, &ps); err != nil {
+		return PactMagicSlotState{}, fmt.Errorf("parsing pact magic slots: %w", err)
+	}
+	return ps, nil
+}
+
+// deductAndPersistPactSlot deducts one pact magic slot and persists the change.
+func (s *Service) deductAndPersistPactSlot(ctx context.Context, charID uuid.UUID, pact PactMagicSlotState) (SlotDeduction, error) {
+	pact.Current--
+	pactJSON, err := json.Marshal(pact)
+	if err != nil {
+		return SlotDeduction{}, fmt.Errorf("marshaling pact magic slots: %w", err)
+	}
+	if _, err := s.store.UpdateCharacterPactMagicSlots(ctx, refdata.UpdateCharacterPactMagicSlotsParams{
+		ID:             charID,
+		PactMagicSlots: pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true},
+	}); err != nil {
+		return SlotDeduction{}, fmt.Errorf("updating pact magic slots: %w", err)
+	}
+	return SlotDeduction{SlotUsed: pact.SlotLevel, SlotsRemaining: pact.Current}, nil
 }
 
 // parseIntKeyedSlots parses spell slots JSON (string-keyed) into int-keyed map.

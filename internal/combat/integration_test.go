@@ -717,6 +717,10 @@ func (a *testStoreAdapter) UpdateCharacterSpellSlots(ctx context.Context, arg re
 	return a.Queries.UpdateCharacterSpellSlots(ctx, arg)
 }
 
+func (a *testStoreAdapter) UpdateCharacterPactMagicSlots(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
+	return a.Queries.UpdateCharacterPactMagicSlots(ctx, arg)
+}
+
 func (a *testStoreAdapter) UpdateCharacterGold(ctx context.Context, id uuid.UUID, gold int32) error {
 	return nil // stub for tests
 }

@@ -90,6 +90,9 @@ type Store interface {
 	// Character spell slots
 	UpdateCharacterSpellSlots(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
 
+	// Character pact magic slots
+	UpdateCharacterPactMagicSlots(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error)
+
 	// Spells
 	GetSpell(ctx context.Context, id string) (refdata.Spell, error)
 }
