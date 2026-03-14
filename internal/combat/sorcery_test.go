@@ -863,3 +863,56 @@ func TestFontOfMagic_SlotToPoints_NoSlotAvailable(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no 1st-level spell slots remaining")
 }
+
+// TDD Cycle 23: Quickened spell must obey bonus-action-spell restriction (reverse direction)
+// If a leveled action spell was already cast this turn, a quickened leveled spell should be rejected
+// because quickened changes it to a bonus action spell.
+func TestCast_QuickenedSpell_RejectedAfterActionSpellCast(t *testing.T) {
+	charID := uuid.New()
+	char := makeSorcererCharacter(charID, 5, 5)
+	caster := makeSorcererCombatant(charID)
+	target := makeSpellTarget()
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
+		return makeFireball(), nil // "1 action" casting time, level 3
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:   "fireball",
+		CasterID:  caster.ID,
+		TargetID:  target.ID,
+		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID, ActionSpellCast: true},
+		Metamagic: []string{"quickened"},
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "leveled spell with your action")
+}
+
+// TDD Cycle 24: ValidateMetamagic normalizes inputs to lowercase
+func TestValidateMetamagic_CaseInsensitive(t *testing.T) {
+	// "Quickened" (uppercase) should be recognized and not rejected as unknown
+	err := ValidateMetamagic([]string{"Quickened"}, 3, 5)
+	assert.NoError(t, err)
+
+	// "EMPOWERED" + "Quickened" should be valid combo (empowered can combine)
+	err = ValidateMetamagic([]string{"EMPOWERED", "Quickened"}, 3, 5)
+	assert.NoError(t, err)
+
+	// Two non-empowered with mixed case should still fail
+	err = ValidateMetamagic([]string{"Careful", "Quickened"}, 3, 5)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "only one Metamagic option")
+}

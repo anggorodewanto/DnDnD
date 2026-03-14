@@ -68,10 +68,16 @@ func ValidateMetamagic(metamagics []string, spellLevel int, sorceryPoints int) e
 		return nil
 	}
 
+	// Normalize all inputs to lowercase for consistent comparison
+	normalized := make([]string, len(metamagics))
+	for i, m := range metamagics {
+		normalized[i] = strings.ToLower(m)
+	}
+
 	// Check one-per-spell rule: only one metamagic unless one of them is empowered
-	if len(metamagics) > 1 {
+	if len(normalized) > 1 {
 		nonEmpowered := 0
-		for _, m := range metamagics {
+		for _, m := range normalized {
 			if m != "empowered" {
 				nonEmpowered++
 			}
@@ -82,7 +88,7 @@ func ValidateMetamagic(metamagics []string, spellLevel int, sorceryPoints int) e
 	}
 
 	// Validate all options and compute total cost
-	totalCost, err := MetamagicTotalCost(metamagics, spellLevel)
+	totalCost, err := MetamagicTotalCost(normalized, spellLevel)
 	if err != nil {
 		return err
 	}

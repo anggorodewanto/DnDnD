@@ -84,7 +84,7 @@ func TestValidateBonusActionSpellRestriction(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateBonusActionSpellRestriction(tc.turn, tc.spell)
+			err := ValidateBonusActionSpellRestriction(tc.turn, tc.spell, IsBonusActionSpell(tc.spell))
 			if tc.wantErr == "" {
 				assert.NoError(t, err)
 			} else {

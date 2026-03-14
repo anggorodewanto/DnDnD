@@ -327,7 +327,7 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	}
 
 	// 3. Validate bonus action spell restriction
-	if err := ValidateBonusActionSpellRestriction(cmd.Turn, spell); err != nil {
+	if err := ValidateBonusActionSpellRestriction(cmd.Turn, spell, isBonusAction); err != nil {
 		return AoECastResult{}, err
 	}
 

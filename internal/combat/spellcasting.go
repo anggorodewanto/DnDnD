@@ -22,10 +22,9 @@ func IsBonusActionSpell(spell refdata.Spell) bool {
 }
 
 // ValidateBonusActionSpellRestriction enforces the 5e bonus action spell restriction
-// in both directions per Sage Advice.
-func ValidateBonusActionSpellRestriction(turn refdata.Turn, spell refdata.Spell) error {
-	isBonusAction := IsBonusActionSpell(spell)
-
+// in both directions per Sage Advice. The isBonusAction parameter indicates whether
+// the spell is effectively a bonus action spell (accounting for metamagic like Quickened Spell).
+func ValidateBonusActionSpellRestriction(turn refdata.Turn, spell refdata.Spell, isBonusAction bool) error {
 	// Forward: if a bonus action spell was already cast this turn,
 	// only cantrips can be cast with the action.
 	if turn.BonusActionSpellCast && !isBonusAction && spell.Level > 0 {
@@ -297,7 +296,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 
 	// 3. Validate bonus action spell restriction (both directions)
-	if err := ValidateBonusActionSpellRestriction(cmd.Turn, spell); err != nil {
+	if err := ValidateBonusActionSpellRestriction(cmd.Turn, spell, isBonusAction); err != nil {
 		return CastResult{}, err
 	}
 
