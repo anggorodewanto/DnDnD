@@ -304,7 +304,12 @@ while true; do
             echo -e "  ${DIM}After answering, tell it to continue the implement/review loop${RESET}"
             echo -e "  ${DIM}or mark the phase done if the work is complete.${RESET}"
             echo ""
-            claude --resume "$SESSION_ID" || true
+            if claude --resume "$SESSION_ID" < /dev/tty; then
+                echo ""
+            else
+                echo ""
+                echo -e "  ${YELLOW}Interactive session exited with error (exit $?).${RESET}"
+            fi
         else
             echo -e "  ${RED}No session ID found. Answer questions manually:${RESET}"
             echo -e "  ${DIM}claude /implement-phase $PHASE${RESET}"
@@ -324,7 +329,7 @@ while true; do
             echo ""
             echo -e "  ${YELLOW}Phase $PHASE still not marked complete after interactive session.${RESET}"
             echo -e "  ${CYAN}(d=mark done / r=retry from scratch / q=quit)${RESET}"
-            read -r choice
+            read -r choice < /dev/tty
             case "$choice" in
                 d|D) mark_phase_done "$PHASE"; PHASES_COMPLETED=$((PHASES_COMPLETED + 1)) ;;
                 r|R) START_PHASE="$PHASE"; continue ;;
@@ -417,14 +422,19 @@ while true; do
         else
             echo -e "  ${CYAN}(d=mark done / r=retry / q=quit)${RESET}"
         fi
-        read -r choice
+        read -r choice < /dev/tty
         case "$choice" in
             a|A)
                 if [ -n "$SESSION_ID" ]; then
                     echo -e "  ${DIM}Reminder: the resumed session no longer has the skill prompt.${RESET}"
                     echo -e "  ${DIM}Guide the agent to complete the remaining work, then /exit.${RESET}"
                     echo ""
-                    claude --resume "$SESSION_ID" || true
+                    if claude --resume "$SESSION_ID" < /dev/tty; then
+                        echo ""
+                    else
+                        echo ""
+                        echo -e "  ${YELLOW}Interactive session exited with error (exit $?).${RESET}"
+                    fi
                     # Check if phase is now complete instead of blindly marking done
                     if grep -q "\[x\].*Phase ${PHASE}" "$PHASES_FILE" 2>/dev/null || \
                        git log --oneline -5 2>/dev/null | grep -qi "Phase ${PHASE} complete"; then
@@ -433,7 +443,7 @@ while true; do
                     else
                         echo -e "  ${YELLOW}Phase still not marked complete.${RESET}"
                         echo -e "  ${CYAN}(d=mark done / r=retry / q=quit)${RESET}"
-                        read -r choice2
+                        read -r choice2 < /dev/tty
                         case "$choice2" in
                             d|D) mark_phase_done "$PHASE"; PHASES_COMPLETED=$((PHASES_COMPLETED + 1)) ;;
                             r|R) START_PHASE="$PHASE"; continue ;;

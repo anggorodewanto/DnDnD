@@ -419,13 +419,13 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 	h.turnNotifier.NotifyTurnStart(h.session, yourTurnCh, content)
 
 	// Regenerate and post combat map
-	h.postCombatMap(ctx, encounterID, channelIDs)
+	PostCombatMap(ctx, h.session, h.mapRegenerator, encounterID, channelIDs)
 }
 
-// postCombatMap regenerates the combat map and posts it to #combat-map.
+// PostCombatMap regenerates the combat map and posts it to #combat-map.
 // Best-effort: failures are silently ignored.
-func (h *DoneHandler) postCombatMap(ctx context.Context, encounterID uuid.UUID, channelIDs map[string]string) {
-	if h.mapRegenerator == nil {
+func PostCombatMap(ctx context.Context, session Session, mr MapRegenerator, encounterID uuid.UUID, channelIDs map[string]string) {
+	if mr == nil {
 		return
 	}
 
@@ -434,12 +434,12 @@ func (h *DoneHandler) postCombatMap(ctx context.Context, encounterID uuid.UUID, 
 		return
 	}
 
-	pngData, err := h.mapRegenerator.RegenerateMap(ctx, encounterID)
+	pngData, err := mr.RegenerateMap(ctx, encounterID)
 	if err != nil {
 		return
 	}
 
-	_, _ = h.session.ChannelMessageSendComplex(combatMapCh, &discordgo.MessageSend{
+	_, _ = session.ChannelMessageSendComplex(combatMapCh, &discordgo.MessageSend{
 		Files: []*discordgo.File{{
 			Name:   "combat-map.png",
 			Reader: bytes.NewReader(pngData),

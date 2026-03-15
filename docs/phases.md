@@ -438,6 +438,11 @@
   - Depends on: Phase 26a, Phase 29, Phase 6, Phase 70
   - Done when: DM can run full enemy turns from dashboard with smart defaults; reactions surfaced; combat log posted to Discord.
 
+- [ ] **Phase 78c: Enemy/NPC Turns — Bonus Action Parsing**
+  - Scope: Parse bonus actions from creature stat block abilities text. Add structured `bonus_actions` field to creature data model. Turn builder generates bonus action steps from parsed data. Dashboard UI shows bonus action step in turn builder flow.
+  - Depends on: Phase 78a, Phase 6
+  - Done when: Creatures with bonus actions (e.g., Goblin's Nimble Escape) generate bonus action steps in the turn builder; tests verify parsing and step generation.
+
 - [ ] **Phase 78b: Enemy/NPC Turns — Legendary & Lair Actions**
   - Scope: Legendary actions: mini-turns between other combatants' turns, budget tracking (3/round typical, configurable per creature), cost per action (1-3), reset at creature's turn start, DM picks from stat block legendary action list. Lair actions: fire at initiative count 20 (losing ties), no consecutive repeats of same lair action, DM selects from lair action list. Both integrated into turn queue display.
   - Depends on: Phase 78a

@@ -114,6 +114,7 @@
     <div class="tb-result">
       <h3>Turn Complete</h3>
       <pre class="combat-log">{executionResult.combat_log}</pre>
+      <p class="posted-indicator">Sent to #combat-log</p>
       <button class="tb-btn primary" onclick={onclose}>Close</button>
     </div>
   {:else if plan}
@@ -440,6 +441,12 @@
 
   .tb-result {
     text-align: center;
+  }
+
+  .posted-indicator {
+    color: #28a745;
+    font-size: 0.85rem;
+    margin: 0.5rem 0;
   }
 
   .combat-log {

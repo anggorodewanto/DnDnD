@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -233,4 +234,153 @@ func TestIndexToColLabel(t *testing.T) {
 	assert.Equal(t, "B", indexToColLabel(1))
 	assert.Equal(t, "Z", indexToColLabel(25))
 	assert.Equal(t, "AA", indexToColLabel(26))
+}
+
+// --- TDD Cycle 14: EnemyTurnNotifier called after execute ---
+
+type mockEnemyTurnNotifier struct {
+	called      bool
+	encounterID uuid.UUID
+	combatLog   string
+	done        chan struct{}
+}
+
+func newMockEnemyTurnNotifier() *mockEnemyTurnNotifier {
+	return &mockEnemyTurnNotifier{done: make(chan struct{})}
+}
+
+func (m *mockEnemyTurnNotifier) NotifyEnemyTurnExecuted(ctx context.Context, encounterID uuid.UUID, combatLog string) {
+	m.called = true
+	m.encounterID = encounterID
+	m.combatLog = combatLog
+	close(m.done)
+}
+
+func TestExecuteEnemyTurn_NotifiesOnSuccess(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			if id == npcID {
+				return refdata.Combatant{
+					ID:          npcID,
+					DisplayName: "Goblin",
+					IsNpc:       true,
+					IsAlive:     true,
+				}, nil
+			}
+			return refdata.Combatant{
+				ID:          targetID,
+				DisplayName: "Aragorn",
+				IsNpc:       false,
+				IsAlive:     true,
+				HpCurrent:   45,
+				Ac:          16,
+			}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: eid, CombatantID: npcID}, nil
+		},
+		updateCombatantHPFn: func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent}, nil
+		},
+		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+			return refdata.ActionLog{ID: uuid.New()}, nil
+		},
+		updateTurnActionsFn: func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+		},
+	}
+
+	svc := NewService(store)
+	roller := newDeterministicRoller(15, 4, 3)
+	handler := NewHandler(svc, roller)
+
+	notifier := newMockEnemyTurnNotifier()
+	handler.SetEnemyTurnNotifier(notifier)
+
+	r := chi.NewRouter()
+	handler.RegisterEnemyTurnRoutes(r)
+
+	body := `{
+		"combatant_id": "` + npcID.String() + `",
+		"steps": [
+			{
+				"type": "attack",
+				"attack": {
+					"weapon_name": "Scimitar",
+					"to_hit": 4,
+					"damage_dice": "1d6+2",
+					"damage_type": "slashing",
+					"reach_ft": 5,
+					"target_id": "` + targetID.String() + `",
+					"target_name": "Aragorn"
+				}
+			}
+		]
+	}`
+
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/enemy-turn", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Wait for async goroutine to complete
+	select {
+	case <-notifier.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("notifier was not called within timeout")
+	}
+
+	assert.True(t, notifier.called, "notifier should be called after successful execution")
+	assert.Equal(t, encounterID, notifier.encounterID)
+	assert.NotEmpty(t, notifier.combatLog)
+}
+
+func TestExecuteEnemyTurn_NoNotifierNoPanic(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	turnID := uuid.New()
+
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:          npcID,
+				DisplayName: "Goblin",
+				IsNpc:       true,
+				IsAlive:     true,
+			}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: eid, CombatantID: npcID}, nil
+		},
+		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+			return refdata.ActionLog{ID: uuid.New()}, nil
+		},
+		updateTurnActionsFn: func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{ID: arg.ID}, nil
+		},
+	}
+
+	svc := NewService(store)
+	roller := newDeterministicRoller()
+	handler := NewHandler(svc, roller)
+	// No notifier set — should not panic
+
+	r := chi.NewRouter()
+	handler.RegisterEnemyTurnRoutes(r)
+
+	body := `{"combatant_id": "` + npcID.String() + `", "steps": []}`
+
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/enemy-turn", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
 }

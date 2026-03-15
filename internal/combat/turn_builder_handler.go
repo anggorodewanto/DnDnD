@@ -15,6 +15,17 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
+// EnemyTurnNotifier is called after a successful enemy turn execution to post
+// the combat log to Discord and trigger map regeneration.
+type EnemyTurnNotifier interface {
+	NotifyEnemyTurnExecuted(ctx context.Context, encounterID uuid.UUID, combatLog string)
+}
+
+// SetEnemyTurnNotifier sets the optional notifier called after enemy turn execution.
+func (h *Handler) SetEnemyTurnNotifier(n EnemyTurnNotifier) {
+	h.enemyTurnNotifier = n
+}
+
 // RegisterEnemyTurnRoutes mounts enemy turn plan routes on the router.
 func (h *Handler) RegisterEnemyTurnRoutes(r chi.Router) {
 	r.Get("/api/combat/{encounterID}/enemy-turn/{combatantID}/plan", h.GetEnemyTurnPlan)
@@ -142,6 +153,19 @@ func (h *Handler) ExecuteEnemyTurn(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Best-effort async notification to Discord (combat log + map regeneration).
+	// Uses context.Background() so it isn't cancelled when the HTTP response completes.
+	if h.enemyTurnNotifier != nil {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("enemy turn notifier panic: %v\n", r)
+				}
+			}()
+			h.enemyTurnNotifier.NotifyEnemyTurnExecuted(context.Background(), encounterID, result.CombatLog)
+		}()
 	}
 
 	writeJSON(w, http.StatusOK, executeEnemyTurnResponse{
