@@ -423,7 +423,7 @@
   - Depends on: Phase 28, Phase 43
   - Done when: Integration tests verify timer polling, 50% nudge delivery, 75% tactical summary content, DM override commands.
 
-- [ ] **Phase 76b: Turn Timeout — 100% Resolution & Prolonged Absence**
+- [x] **Phase 76b: Turn Timeout — 100% Resolution & Prolonged Absence**
   - Scope: 100% timeout: DM decision prompt (Wait/Roll for Player/Auto-Resolve). Wait: extend 50%, once per timeout. Auto-Resolve: Dodge + no movement (normal turn), auto-roll pending saves/death saves, forfeit unanswered prompts, decline on-hit decisions. DM 1-hour auto-resolve fallback. Prolonged absence (3 consecutive auto-resolves -> flagged absent). Stale state scan on startup.
   - Depends on: Phase 76a
   - Done when: Integration tests verify DM decision prompt, Wait extension, auto-resolve behavior (Dodge applied, saves rolled), prolonged absence flagging, startup stale state recovery.
