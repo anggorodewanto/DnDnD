@@ -238,6 +238,7 @@ while true; do
         --fallback-model "$FALLBACK_MODEL"
         --dangerously-skip-permissions
         --name "$SESSION_NAME"
+        --tools "$ALLOWED_TOOLS"
     )
     [ -n "$MODEL" ] && CMD+=(--model "$MODEL")
 
@@ -281,6 +282,59 @@ while true; do
     DURATION_MS=$(echo "$RESULT" | jq -r '.duration_api_ms // empty' 2>/dev/null || true)
     NUM_TURNS=$(echo "$RESULT" | jq -r '.num_turns // empty' 2>/dev/null || true)
     STOP_REASON=$(echo "$RESULT" | jq -r '.stop_reason // empty' 2>/dev/null || true)
+
+    # --- Check for questions (before error handling — questions may cause non-zero exit) ---
+    if echo "$RESULT_TEXT" | grep -q "$QUESTION_MARKER"; then
+        echo ""
+        echo -e "  ${YELLOW}${BOLD}Phase $PHASE has questions that need your input.${RESET}"
+        log_run "$PHASE" "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "questions" "$SESSION_ID"
+        print_run_stats "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "$NUM_TURNS"
+        echo ""
+
+        # Print the questions
+        echo "$RESULT_TEXT" | awk "/$QUESTION_MARKER/,0" | head -30
+        echo ""
+
+        if [ -n "$SESSION_ID" ]; then
+            echo -e "  ${CYAN}Dropping into interactive mode to answer questions...${RESET}"
+            echo -e "  ${DIM}Answer the questions, then tell the agent to continue.${RESET}"
+            echo -e "  ${DIM}Type /exit when done to return to the auto-implement loop.${RESET}"
+            echo -e ""
+            echo -e "  ${DIM}Reminder: the resumed session no longer has the skill prompt.${RESET}"
+            echo -e "  ${DIM}After answering, tell it to continue the implement/review loop${RESET}"
+            echo -e "  ${DIM}or mark the phase done if the work is complete.${RESET}"
+            echo ""
+            claude --resume "$SESSION_ID" || true
+        else
+            echo -e "  ${RED}No session ID found. Answer questions manually:${RESET}"
+            echo -e "  ${DIM}claude /implement-phase $PHASE${RESET}"
+            cleanup 1
+        fi
+
+        # After interactive session, check if the phase was actually completed
+        # rather than blindly marking done — the user may have only answered
+        # questions and the agent still needs more iterations.
+        if grep -q "\[x\].*Phase ${PHASE}" "$PHASES_FILE" 2>/dev/null || \
+           git log --oneline -5 2>/dev/null | grep -qi "Phase ${PHASE} complete"; then
+            mark_phase_done "$PHASE"
+            echo ""
+            echo -e "  ${GREEN}Phase $PHASE completed.${RESET}"
+            PHASES_COMPLETED=$((PHASES_COMPLETED + 1))
+        else
+            echo ""
+            echo -e "  ${YELLOW}Phase $PHASE still not marked complete after interactive session.${RESET}"
+            echo -e "  ${CYAN}(d=mark done / r=retry from scratch / q=quit)${RESET}"
+            read -r choice
+            case "$choice" in
+                d|D) mark_phase_done "$PHASE"; PHASES_COMPLETED=$((PHASES_COMPLETED + 1)) ;;
+                r|R) START_PHASE="$PHASE"; continue ;;
+                q|Q) cleanup 0 ;;
+                *)   START_PHASE="$PHASE"; continue ;; # default: retry
+            esac
+        fi
+        CONSECUTIVE_FAILURES=0
+        continue
+    fi
 
     # --- Check for rate limit (in stderr, result text, or is_error) ---
     if is_rate_limited "$ERRORS" || is_rate_limited "$RESULT_TEXT"; then
@@ -339,37 +393,6 @@ while true; do
     log_run "$PHASE" "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "success" "$SESSION_ID"
     print_run_stats "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "$NUM_TURNS"
 
-    # --- Check for questions ---
-    if echo "$RESULT_TEXT" | grep -q "$QUESTION_MARKER"; then
-        echo ""
-        echo -e "  ${YELLOW}${BOLD}Phase $PHASE has questions that need your input.${RESET}"
-        echo ""
-
-        # Print the questions
-        echo "$RESULT_TEXT" | awk "/$QUESTION_MARKER/,0" | head -30
-        echo ""
-
-        if [ -n "$SESSION_ID" ]; then
-            echo -e "  ${CYAN}Dropping into interactive mode to answer questions...${RESET}"
-            echo -e "  ${DIM}Type /exit when done to continue the loop.${RESET}"
-            echo ""
-            claude --resume "$SESSION_ID" || true
-        else
-            echo -e "  ${RED}No session ID found. Answer questions manually:${RESET}"
-            echo -e "  ${DIM}claude /implement-phase $PHASE${RESET}"
-            cleanup 1
-        fi
-
-        # After interactive session, always mark phase done and move on.
-        # The agent in --resume mode loses the system prompt context and
-        # won't reliably mark the checkbox itself, so the script handles it.
-        mark_phase_done "$PHASE"
-        echo ""
-        echo -e "  ${GREEN}Phase $PHASE completed.${RESET}"
-        PHASES_COMPLETED=$((PHASES_COMPLETED + 1))
-        continue
-    fi
-
     # --- Check if phase was actually completed ---
     if grep -q "\[x\].*Phase ${PHASE}" "$PHASES_FILE" 2>/dev/null || \
        git log --oneline -5 2>/dev/null | grep -qi "Phase ${PHASE} complete"; then
@@ -398,9 +421,26 @@ while true; do
         case "$choice" in
             a|A)
                 if [ -n "$SESSION_ID" ]; then
+                    echo -e "  ${DIM}Reminder: the resumed session no longer has the skill prompt.${RESET}"
+                    echo -e "  ${DIM}Guide the agent to complete the remaining work, then /exit.${RESET}"
+                    echo ""
                     claude --resume "$SESSION_ID" || true
-                    mark_phase_done "$PHASE"
-                    PHASES_COMPLETED=$((PHASES_COMPLETED + 1))
+                    # Check if phase is now complete instead of blindly marking done
+                    if grep -q "\[x\].*Phase ${PHASE}" "$PHASES_FILE" 2>/dev/null || \
+                       git log --oneline -5 2>/dev/null | grep -qi "Phase ${PHASE} complete"; then
+                        mark_phase_done "$PHASE"
+                        PHASES_COMPLETED=$((PHASES_COMPLETED + 1))
+                    else
+                        echo -e "  ${YELLOW}Phase still not marked complete.${RESET}"
+                        echo -e "  ${CYAN}(d=mark done / r=retry / q=quit)${RESET}"
+                        read -r choice2
+                        case "$choice2" in
+                            d|D) mark_phase_done "$PHASE"; PHASES_COMPLETED=$((PHASES_COMPLETED + 1)) ;;
+                            r|R) START_PHASE="$PHASE"; continue ;;
+                            q|Q) cleanup 0 ;;
+                            *)   START_PHASE="$PHASE"; continue ;;
+                        esac
+                    fi
                 else
                     echo -e "  ${RED}No session ID available.${RESET}"
                     START_PHASE="$PHASE"; continue
