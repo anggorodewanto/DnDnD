@@ -6,11 +6,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
-	"github.com/ab/dndnd/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
@@ -53,7 +51,7 @@ func createTestFiend(t *testing.T, db *sql.DB) string {
 
 func setupDivineSmiteFixture(t *testing.T, creatureRefID string, spellSlots map[string]combat.SlotInfo) divineSmiteFixture {
 	t.Helper()
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
 	svc := combat.NewService(&testStoreAdapter{queries})
 	ctx := context.Background()
@@ -502,7 +500,7 @@ func TestIntegration_DivineSmite_NoDivineSmiteFeature(t *testing.T) {
 	}
 
 	// Create a fixture manually with a fighter (no Divine Smite)
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
 	svc := combat.NewService(&testStoreAdapter{queries})
 	ctx := context.Background()

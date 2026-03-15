@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
-	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/refdata"
-	"github.com/ab/dndnd/internal/testutil"
 )
 
 func TestIntegration_ReferenceTablesMigration(t *testing.T) {
@@ -15,7 +13,29 @@ func TestIntegration_ReferenceTablesMigration(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
+
+	// Clean up test rows from reference tables after this test so they
+	// don't pollute count-based assertions in other tests.
+	type refRow struct{ table, id string }
+	testRefs := []refRow{
+		{"weapons", "test-sword"},
+		{"armor", "test-armor"},
+		{"conditions_ref", "test-condition"},
+		{"classes", "test-class"},
+		{"races", "test-race"},
+		{"feats", "test-feat"},
+		{"spells", "test-spell"},
+		{"creatures", "test-creature"},
+		{"magic_items", "test-magic-item"},
+	}
+	t.Cleanup(func() {
+		for _, ref := range testRefs {
+			if _, err := db.Exec("DELETE FROM "+ref.table+" WHERE id = $1", ref.id); err != nil {
+				t.Logf("cleanup %s/%s: %v", ref.table, ref.id, err)
+			}
+		}
+	})
 
 	// Verify weapons table exists
 	_, err := db.Exec(`INSERT INTO weapons (id, name, damage, damage_type, weapon_type) VALUES ($1, $2, $3, $4, $5)`,
@@ -86,7 +106,7 @@ func TestIntegration_SeedCreaturesAndMagicItems(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	ctx := context.Background()
 
 	if err := refdata.SeedAll(ctx, db); err != nil {

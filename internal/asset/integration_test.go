@@ -9,9 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/refdata"
-	"github.com/ab/dndnd/internal/testutil"
 )
 
 func TestAssetCRUD_Integration(t *testing.T) {
@@ -19,7 +17,7 @@ func TestAssetCRUD_Integration(t *testing.T) {
 		t.Skip("set INTEGRATION=1 to run")
 	}
 
-	testDB := testutil.NewMigratedTestDB(t, db.Migrations)
+	testDB := sharedDB.AcquireDB(t)
 	queries := refdata.New(testDB)
 	ctx := context.Background()
 
@@ -71,7 +69,7 @@ func TestAssetFK_BackgroundImage_Integration(t *testing.T) {
 		t.Skip("set INTEGRATION=1 to run")
 	}
 
-	testDB := testutil.NewMigratedTestDB(t, db.Migrations)
+	testDB := sharedDB.AcquireDB(t)
 	queries := refdata.New(testDB)
 	ctx := context.Background()
 

@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"testing"
 
-	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/refdata"
-	"github.com/ab/dndnd/internal/testutil"
 )
 
 func setupSeededDB(t *testing.T) *refdata.Queries {
 	t.Helper()
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	ctx := context.Background()
 	if err := refdata.SeedAll(ctx, db); err != nil {
 		t.Fatalf("SeedAll failed: %v", err)
@@ -765,7 +763,7 @@ func TestIntegration_SeedAll_Idempotent(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	ctx := context.Background()
 
 	// Seed twice

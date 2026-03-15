@@ -10,10 +10,8 @@ import (
 	"testing"
 	"time"
 
-	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/refdata"
-	"github.com/ab/dndnd/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,7 +33,7 @@ type turnLockTestData struct {
 
 func setupTurnLockTest(t *testing.T) turnLockTestData {
 	t.Helper()
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
 	ctx := context.Background()
 
@@ -281,7 +279,7 @@ func TestIntegration_TurnValidation_NPC_DMOnly(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
 	ctx := context.Background()
 
@@ -347,7 +345,7 @@ func TestIntegration_TurnLock_DifferentEncountersDontBlock(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
 	ctx := context.Background()
 
@@ -707,7 +705,7 @@ func TestIntegration_TurnValidation_NoActiveTurn(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
 	ctx := context.Background()
 

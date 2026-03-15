@@ -6,11 +6,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
-	"github.com/ab/dndnd/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
@@ -30,7 +28,7 @@ type channelDivinityFixture struct {
 
 func setupChannelDivinityFixture(t *testing.T, clericLevel int, featureUses int) channelDivinityFixture {
 	t.Helper()
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
 	svc := combat.NewService(&testStoreAdapter{queries})
 	ctx := context.Background()
@@ -366,7 +364,7 @@ func TestIntegration_SacredWeapon(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
 	svc := combat.NewService(&testStoreAdapter{queries})
 	ctx := context.Background()
@@ -466,7 +464,7 @@ func TestIntegration_VowOfEnmity(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
 	svc := combat.NewService(&testStoreAdapter{queries})
 	ctx := context.Background()

@@ -6,10 +6,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/registration"
-	"github.com/ab/dndnd/internal/testutil"
 	"github.com/google/uuid"
 )
 
@@ -17,7 +15,7 @@ import (
 // a refdata.Queries instance.
 func setupTestDB(t *testing.T) (context.Context, *sql.DB, *refdata.Queries) {
 	t.Helper()
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	return context.Background(), db, refdata.New(db)
 }
 

@@ -5,9 +5,7 @@ import (
 	"testing"
 	"time"
 
-	db "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/auth"
-	"github.com/ab/dndnd/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +13,7 @@ import (
 
 func newTestSessionStore(t *testing.T) *auth.SessionStore {
 	t.Helper()
-	testDB := testutil.NewMigratedTestDB(t, db.Migrations)
+	testDB := sharedDB.AcquireDB(t)
 	return auth.NewSessionStore(testDB)
 }
 

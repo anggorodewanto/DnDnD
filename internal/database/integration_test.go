@@ -68,9 +68,24 @@ func TestIntegration_MigrateDown(t *testing.T) {
 		t.Fatalf("MigrateUp failed: %v", err)
 	}
 
-	// Roll back the encounter_zones migration (most recent)
-	if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
-		t.Fatalf("MigrateDown (encounter_zones) failed: %v", err)
+	// Roll back migrations from most recent to oldest.
+	// 23: pending_saves, 22: timeout_resolution_columns,
+	// 21: turn_timer_columns, 20: pending_actions,
+	// 19: counterspell_fields, 18: readied_action_fields,
+	// 17: reaction_declarations, 16: encounter_zones
+	for _, name := range []string{
+		"pending_saves",
+		"timeout_resolution_columns",
+		"turn_timer_columns",
+		"pending_actions",
+		"counterspell_fields",
+		"readied_action_fields",
+		"reaction_declarations",
+		"encounter_zones",
+	} {
+		if err := database.MigrateDown(db, dbfs.Migrations); err != nil {
+			t.Fatalf("MigrateDown (%s) failed: %v", name, err)
+		}
 	}
 
 	// Roll back the bardic_inspiration migration

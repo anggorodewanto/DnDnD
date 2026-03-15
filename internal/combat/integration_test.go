@@ -7,11 +7,9 @@ import (
 	"testing"
 	"time"
 
-	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
-	"github.com/ab/dndnd/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +18,7 @@ import (
 
 func setupTestDB(t *testing.T) (*sql.DB, *refdata.Queries) {
 	t.Helper()
-	db := testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	db := sharedDB.AcquireDB(t)
 	return db, refdata.New(db)
 }
 

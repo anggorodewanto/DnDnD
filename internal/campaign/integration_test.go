@@ -6,10 +6,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/refdata"
-	"github.com/ab/dndnd/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +15,7 @@ import (
 
 func setupTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	return testutil.NewMigratedTestDB(t, dbfs.Migrations)
+	return sharedDB.AcquireDB(t)
 }
 
 func setupService(t *testing.T) (*campaign.Service, *sql.DB) {
