@@ -106,11 +106,10 @@ func FormatRecap(logs []refdata.ListActionLogWithRoundsRow, subtitle string) str
 			currentRound = log.RoundNumber
 			sb.WriteString(fmt.Sprintf("\n\u2500\u2500 Round %d \u2500\u2500\n", currentRound))
 		}
-		desc := log.Description.String
-		if !log.Description.Valid || desc == "" {
+		if !log.Description.Valid || log.Description.String == "" {
 			continue
 		}
-		sb.WriteString(desc + "\n")
+		sb.WriteString(log.Description.String + "\n")
 	}
 
 	return sb.String()

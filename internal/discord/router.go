@@ -240,6 +240,14 @@ func isMoveConfirmWithMode(customID string) bool {
 	return strings.Count(customID, ":") >= 7
 }
 
+// discordUserID extracts the Discord user ID from an interaction, returning "" if unavailable.
+func discordUserID(interaction *discordgo.Interaction) string {
+	if interaction.Member != nil && interaction.Member.User != nil {
+		return interaction.Member.User.ID
+	}
+	return ""
+}
+
 // respondEphemeral sends an ephemeral message as an interaction response.
 func respondEphemeral(s Session, interaction *discordgo.Interaction, msg string) {
 	_ = s.InteractionRespond(interaction, &discordgo.InteractionResponse{

@@ -67,7 +67,7 @@ func (h *RecapHandler) Handle(interaction *discordgo.Interaction) {
 	hasRoundsArg := false
 	for _, opt := range data.Options {
 		if opt.Name == "rounds" {
-			roundsArg = int64(opt.Value.(float64))
+			roundsArg = opt.IntValue()
 			hasRoundsArg = true
 		}
 	}
@@ -109,31 +109,26 @@ func (h *RecapHandler) Handle(interaction *discordgo.Interaction) {
 
 // findEncounter tries to find an active encounter, then falls back to the most recent completed one.
 func (h *RecapHandler) findEncounter(ctx context.Context, guildID string) (uuid.UUID, refdata.Encounter, error) {
-	// Try active encounter first
-	encounterID, activeErr := h.encounterProvider.GetActiveEncounterID(ctx, guildID)
-	if activeErr == nil {
+	encounterID, err := h.encounterProvider.GetActiveEncounterID(ctx, guildID)
+	if err == nil {
 		enc, encErr := h.svc.GetEncounter(ctx, encounterID)
 		if encErr == nil {
 			return encounterID, enc, nil
 		}
 	}
 
-	// Fall back to most recent completed encounter via campaign lookup
 	if h.campaignProvider == nil {
-		if activeErr != nil {
-			return uuid.Nil, refdata.Encounter{}, activeErr
-		}
 		return uuid.Nil, refdata.Encounter{}, errors.New("no encounter available")
 	}
 
-	campaign, campErr := h.campaignProvider.GetCampaignByGuildID(ctx, guildID)
-	if campErr != nil {
-		return uuid.Nil, refdata.Encounter{}, campErr
+	campaign, err := h.campaignProvider.GetCampaignByGuildID(ctx, guildID)
+	if err != nil {
+		return uuid.Nil, refdata.Encounter{}, err
 	}
 
-	enc, encErr := h.svc.GetMostRecentCompletedEncounter(ctx, campaign.ID)
-	if encErr != nil {
-		return uuid.Nil, refdata.Encounter{}, encErr
+	enc, err := h.svc.GetMostRecentCompletedEncounter(ctx, campaign.ID)
+	if err != nil {
+		return uuid.Nil, refdata.Encounter{}, err
 	}
 
 	return enc.ID, enc, nil
@@ -146,31 +141,32 @@ func (h *RecapHandler) filterSinceLastTurn(
 	interaction *discordgo.Interaction,
 	logs []refdata.ListActionLogWithRoundsRow,
 ) ([]refdata.ListActionLogWithRoundsRow, string) {
-	if h.playerLookup == nil {
+	allLogs := func() ([]refdata.ListActionLogWithRoundsRow, string) {
 		return logs, combat.RecapRoundRange(logs)
 	}
 
-	userID := ""
-	if interaction.Member != nil && interaction.Member.User != nil {
-		userID = interaction.Member.User.ID
+	if h.playerLookup == nil {
+		return allLogs()
 	}
 
+	userID := discordUserID(interaction)
 	combatantID, err := h.playerLookup.GetCombatantIDByDiscordUser(ctx, encounterID, userID)
 	if err != nil {
-		return logs, combat.RecapRoundRange(logs)
+		return allLogs()
 	}
 
 	lastTurn, err := h.svc.GetLastCompletedTurnByCombatant(ctx, encounterID, combatantID)
 	if err != nil {
-		return logs, combat.RecapRoundRange(logs)
+		return allLogs()
+	}
+
+	// No completed turn timestamp means include all logs
+	if !lastTurn.CompletedAt.Valid {
+		return logs, "since your last turn"
 	}
 
 	var filtered []refdata.ListActionLogWithRoundsRow
 	for _, l := range logs {
-		if !lastTurn.CompletedAt.Valid {
-			filtered = append(filtered, l)
-			continue
-		}
 		if l.CreatedAt.After(lastTurn.CompletedAt.Time) {
 			filtered = append(filtered, l)
 		}

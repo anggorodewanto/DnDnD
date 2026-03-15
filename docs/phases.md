@@ -453,7 +453,7 @@
   - Depends on: Phase 26a, Phase 58, Phase 34
   - Done when: Integration tests verify summon creation, `/command` routing, turn flow, dismissal, concentration link, death removal.
 
-- [ ] **Phase 80: Combat Recap (`/recap`)**
+- [x] **Phase 80: Combat Recap (`/recap`)**
   - Scope: `/recap` (no args): all combat log entries since player's last turn (ephemeral). `/recap N`: last N rounds. Grouped by round and turn. Direct replay of log entries. Usable during or after combat (until encounter archived). If no active combat, show final rounds of most recent completed encounter.
   - Depends on: Phase 24
   - Done when: Integration tests verify recap content, round grouping, turn filtering, post-combat access.
