@@ -428,7 +428,7 @@
   - Depends on: Phase 76a
   - Done when: Integration tests verify DM decision prompt, Wait extension, auto-resolve behavior (Dodge applied, saves rolled), prolonged absence flagging, startup stale state recovery.
 
-- [ ] **Phase 77: Player Turn Flow — Turn Start & Done**
+- [x] **Phase 77: Player Turn Flow — Turn Start & Done**
   - Scope: Turn start: expire conditions, apply start-of-turn effects, ping player with turn status (personal impact summary of events since last turn). `/done`: warn if unused resources (ephemeral confirmation prompt with buttons), end turn, advance initiative, ping next player. Map regeneration on turn end. DM can end any turn. Auto-skip for incapacitated combatants.
   - Depends on: Phase 28, Phase 39, Phase 22
   - Done when: Integration tests verify turn start sequence, impact summary, `/done` confirmation prompt, initiative advancement, map regen, incapacitated skip.
