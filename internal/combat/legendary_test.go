@@ -334,6 +334,22 @@ func TestParseLegendaryActions_DefaultBudgetWhenNotParseable(t *testing.T) {
 	assert.Equal(t, 3, info.Budget)
 }
 
+func TestParseLairInfo_StopsAtNextSection(t *testing.T) {
+	abilities := []CreatureAbilityEntry{
+		{Name: "Lair Actions", Description: "On initiative count 20..."},
+		{Name: "Magma Eruption", Description: "Magma erupts."},
+		{Name: "Tremor", Description: "A tremor shakes."},
+		{Name: "Reactions", Description: "The dragon can take reactions."},
+		{Name: "Tail Swipe", Description: "When hit, the dragon swipes."},
+	}
+
+	info := ParseLairInfo(abilities)
+	require.NotNil(t, info)
+	require.Len(t, info.Actions, 2)
+	assert.Equal(t, "Magma Eruption", info.Actions[0].Name)
+	assert.Equal(t, "Tremor", info.Actions[1].Name)
+}
+
 func TestLegendaryActionBudget_ZeroCost(t *testing.T) {
 	budget := NewLegendaryActionBudget(3)
 	b2, err := budget.Spend(0)

@@ -13,12 +13,13 @@ import (
 )
 
 // RegisterLegendaryRoutes mounts legendary and lair action routes on the router.
+// The router should already be scoped to /api/combat.
 func (h *Handler) RegisterLegendaryRoutes(r chi.Router) {
-	r.Get("/api/combat/{encounterID}/legendary/{combatantID}/plan", h.GetLegendaryActionPlan)
-	r.Post("/api/combat/{encounterID}/legendary", h.ExecuteLegendaryAction)
-	r.Get("/api/combat/{encounterID}/lair-action/plan", h.GetLairActionPlan)
-	r.Post("/api/combat/{encounterID}/lair-action", h.ExecuteLairAction)
-	r.Get("/api/combat/{encounterID}/turn-queue", h.GetTurnQueue)
+	r.Get("/{encounterID}/legendary/{combatantID}/plan", h.GetLegendaryActionPlan)
+	r.Post("/{encounterID}/legendary", h.ExecuteLegendaryAction)
+	r.Get("/{encounterID}/lair-action/plan", h.GetLairActionPlan)
+	r.Post("/{encounterID}/lair-action", h.ExecuteLairAction)
+	r.Get("/{encounterID}/turn-queue", h.GetTurnQueue)
 }
 
 // legendaryActionPlanResponse is the JSON response for a legendary action plan.
@@ -337,8 +338,6 @@ func (h *Handler) ExecuteLairAction(w http.ResponseWriter, r *http.Request) {
 	if h.enemyTurnNotifier != nil {
 		go h.enemyTurnNotifier.NotifyEnemyTurnExecuted(r.Context(), encounterID, combatLog)
 	}
-
-	_ = creature
 
 	writeJSON(w, http.StatusOK, executeLairActionResponse{
 		Success:        true,

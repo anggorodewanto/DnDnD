@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -55,7 +56,7 @@ func TestGetLegendaryActionPlan_Success(t *testing.T) {
 	handler := NewHandler(svc, roller)
 
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/legendary/"+npcID.String()+"/plan", nil)
 	w := httptest.NewRecorder()
@@ -95,7 +96,7 @@ func TestGetLegendaryActionPlan_NoLegendaryActions(t *testing.T) {
 	handler := NewHandler(svc, roller)
 
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/legendary/"+npcID.String()+"/plan", nil)
 	w := httptest.NewRecorder()
@@ -133,7 +134,7 @@ func TestGetLegendaryActionPlan_WithBudgetQuery(t *testing.T) {
 	handler := NewHandler(svc, dice.NewRoller(nil))
 
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/legendary/"+npcID.String()+"/plan?budget_remaining=1", nil)
 	w := httptest.NewRecorder()
@@ -194,7 +195,7 @@ func TestExecuteLegendaryAction_Success(t *testing.T) {
 	handler := NewHandler(svc, dice.NewRoller(nil))
 
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	body := `{
 		"combatant_id": "` + npcID.String() + `",
@@ -247,7 +248,7 @@ func TestExecuteLegendaryAction_InsufficientBudget(t *testing.T) {
 	handler := NewHandler(svc, dice.NewRoller(nil))
 
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	body := `{
 		"combatant_id": "` + npcID.String() + `",
@@ -288,7 +289,7 @@ func TestExecuteLegendaryAction_UnknownAction(t *testing.T) {
 	svc := NewService(store)
 	handler := NewHandler(svc, dice.NewRoller(nil))
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	body := `{"combatant_id": "` + npcID.String() + `", "action_name": "Nonexistent", "budget_remaining": 3}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/legendary", strings.NewReader(body))
@@ -334,7 +335,7 @@ func TestGetLairActionPlan_Success(t *testing.T) {
 	handler := NewHandler(svc, dice.NewRoller(nil))
 
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/lair-action/plan", nil)
 	w := httptest.NewRecorder()
@@ -366,7 +367,7 @@ func TestGetLairActionPlan_NoLairCreature(t *testing.T) {
 	svc := NewService(store)
 	handler := NewHandler(svc, dice.NewRoller(nil))
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/lair-action/plan", nil)
 	w := httptest.NewRecorder()
@@ -420,7 +421,7 @@ func TestExecuteLairAction_Success(t *testing.T) {
 	handler := NewHandler(svc, dice.NewRoller(nil))
 
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	body := `{"action_name": "Magma Eruption", "last_used_action": ""}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/lair-action", strings.NewReader(body))
@@ -463,7 +464,7 @@ func TestExecuteLairAction_ConsecutiveRepeat(t *testing.T) {
 	svc := NewService(store)
 	handler := NewHandler(svc, dice.NewRoller(nil))
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	body := `{"action_name": "Magma Eruption", "last_used_action": "Magma Eruption"}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/lair-action", strings.NewReader(body))
@@ -498,7 +499,7 @@ func TestExecuteLairAction_UnknownAction(t *testing.T) {
 	svc := NewService(store)
 	handler := NewHandler(svc, dice.NewRoller(nil))
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	body := `{"action_name": "Nonexistent", "last_used_action": ""}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/lair-action", strings.NewReader(body))
@@ -540,7 +541,7 @@ func TestGetTurnQueue_WithLegendaryAndLair(t *testing.T) {
 	svc := NewService(store)
 	handler := NewHandler(svc, dice.NewRoller(nil))
 	r := chi.NewRouter()
-	handler.RegisterLegendaryRoutes(r)
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
 
 	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/turn-queue", nil)
 	w := httptest.NewRecorder()
@@ -554,4 +555,616 @@ func TestGetTurnQueue_WithLegendaryAndLair(t *testing.T) {
 
 	assert.Equal(t, TurnQueueLairAction, resp.Entries[0].Type)
 	assert.Equal(t, int32(20), resp.Entries[0].Initiative)
+}
+
+// --- Error-path tests for GetLegendaryActionPlan ---
+
+func TestGetLegendaryActionPlan_InvalidCombatantID(t *testing.T) {
+	svc := NewService(&mockStore{})
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+uuid.New().String()+"/legendary/not-a-uuid/plan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid combatant ID")
+}
+
+func TestGetLegendaryActionPlan_CombatantNotFound(t *testing.T) {
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{}, fmt.Errorf("not found")
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+uuid.New().String()+"/legendary/"+uuid.New().String()+"/plan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "combatant not found")
+}
+
+func TestGetLegendaryActionPlan_NoCreatureRef(t *testing.T) {
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:            id,
+				DisplayName:   "Goblin",
+				CreatureRefID: sql.NullString{Valid: false},
+			}, nil
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+uuid.New().String()+"/legendary/"+uuid.New().String()+"/plan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "combatant has no creature reference")
+}
+
+func TestGetLegendaryActionPlan_CreatureNotFound(t *testing.T) {
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:            id,
+				DisplayName:   "Dragon",
+				CreatureRefID: sql.NullString{String: "dragon", Valid: true},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{}, fmt.Errorf("not found")
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+uuid.New().String()+"/legendary/"+uuid.New().String()+"/plan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "creature not found")
+}
+
+// --- Error-path tests for ExecuteLegendaryAction ---
+
+func TestExecuteLegendaryAction_InvalidEncounterID(t *testing.T) {
+	svc := NewService(&mockStore{})
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	body := `{"combatant_id": "` + uuid.New().String() + `", "action_name": "Detect", "budget_remaining": 3}`
+	req := httptest.NewRequest("POST", "/api/combat/not-a-uuid/legendary", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid encounter ID")
+}
+
+func TestExecuteLegendaryAction_InvalidJSON(t *testing.T) {
+	svc := NewService(&mockStore{})
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/legendary", strings.NewReader(`not json`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid JSON body")
+}
+
+func TestExecuteLegendaryAction_InvalidCombatantIDInBody(t *testing.T) {
+	svc := NewService(&mockStore{})
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	body := `{"combatant_id": "not-a-uuid", "action_name": "Detect", "budget_remaining": 3}`
+	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/legendary", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid combatant_id")
+}
+
+func TestExecuteLegendaryAction_CombatantNotFound(t *testing.T) {
+	npcID := uuid.New()
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{}, fmt.Errorf("not found")
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	body := `{"combatant_id": "` + npcID.String() + `", "action_name": "Detect", "budget_remaining": 3}`
+	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/legendary", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "combatant not found")
+}
+
+func TestExecuteLegendaryAction_NoCreatureRef(t *testing.T) {
+	npcID := uuid.New()
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:            npcID,
+				DisplayName:   "Goblin",
+				CreatureRefID: sql.NullString{Valid: false},
+			}, nil
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	body := `{"combatant_id": "` + npcID.String() + `", "action_name": "Detect", "budget_remaining": 3}`
+	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/legendary", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "combatant has no creature reference")
+}
+
+func TestExecuteLegendaryAction_CreatureNotFound(t *testing.T) {
+	npcID := uuid.New()
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:            npcID,
+				DisplayName:   "Dragon",
+				CreatureRefID: sql.NullString{String: "dragon", Valid: true},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{}, fmt.Errorf("not found")
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	body := `{"combatant_id": "` + npcID.String() + `", "action_name": "Detect", "budget_remaining": 3}`
+	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/legendary", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "creature not found")
+}
+
+func TestExecuteLegendaryAction_NoLegendaryActions(t *testing.T) {
+	npcID := uuid.New()
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:            npcID,
+				DisplayName:   "Goblin",
+				CreatureRefID: sql.NullString{String: "goblin", Valid: true},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{ID: "goblin", Name: "Goblin"}, nil
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	body := `{"combatant_id": "` + npcID.String() + `", "action_name": "Detect", "budget_remaining": 3}`
+	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/legendary", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "creature has no legendary actions")
+}
+
+// --- Error-path tests for GetLairActionPlan ---
+
+func TestGetLairActionPlan_InvalidEncounterID(t *testing.T) {
+	svc := NewService(&mockStore{})
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/not-a-uuid/lair-action/plan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// chi won't match: 404/405
+	assert.NotEqual(t, http.StatusOK, w.Code)
+}
+
+func TestGetLairActionPlan_ListCombatantsError(t *testing.T) {
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, fmt.Errorf("db error")
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+uuid.New().String()+"/lair-action/plan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestGetLairActionPlan_NoLairActions(t *testing.T) {
+	npcID := uuid.New()
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: npcID, DisplayName: "Dragon", IsNpc: true, IsAlive: true, CreatureRefID: sql.NullString{String: "dragon", Valid: true}},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{
+				ID: "dragon", Name: "Dragon",
+				Abilities: pqtype.NullRawMessage{Valid: true, RawMessage: json.RawMessage(`[
+					{"name":"Legendary Actions","description":"The dragon can take 3 legendary actions."},
+					{"name":"Detect","description":"Check."}
+				]`)},
+			}, nil
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+uuid.New().String()+"/lair-action/plan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestGetLairActionPlan_WithLastUsedQuery(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: npcID, DisplayName: "Dragon", IsNpc: true, IsAlive: true, CreatureRefID: sql.NullString{String: "dragon", Valid: true}},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{
+				ID: "dragon", Name: "Dragon",
+				Abilities: pqtype.NullRawMessage{Valid: true, RawMessage: json.RawMessage(`[
+					{"name":"Lair Actions","description":"On init 20..."},
+					{"name":"Magma Eruption","description":"erupts."},
+					{"name":"Tremor","description":"shakes."}
+				]`)},
+			}, nil
+		},
+	}
+
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/lair-action/plan?last_used=Magma+Eruption", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp lairActionPlanResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.Len(t, resp.AvailableActions, 1)
+	assert.Equal(t, "Tremor", resp.AvailableActions[0].Name)
+	require.Len(t, resp.DisabledActions, 1)
+	assert.Equal(t, "Magma Eruption", resp.DisabledActions[0].Name)
+}
+
+// --- Error-path tests for ExecuteLairAction ---
+
+func TestExecuteLairAction_InvalidEncounterID(t *testing.T) {
+	svc := NewService(&mockStore{})
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("POST", "/api/combat/not-a-uuid/lair-action", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.NotEqual(t, http.StatusOK, w.Code)
+}
+
+func TestExecuteLairAction_InvalidJSON(t *testing.T) {
+	npcID := uuid.New()
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: npcID, DisplayName: "Dragon", IsNpc: true, IsAlive: true, CreatureRefID: sql.NullString{String: "dragon", Valid: true}},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{
+				ID: "dragon", Name: "Dragon",
+				Abilities: pqtype.NullRawMessage{Valid: true, RawMessage: json.RawMessage(`[
+					{"name":"Lair Actions","description":"On init 20..."},
+					{"name":"Tremor","description":"shakes."}
+				]`)},
+			}, nil
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/lair-action", strings.NewReader(`not json`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid JSON body")
+}
+
+func TestExecuteLairAction_FindLairCreatureError(t *testing.T) {
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, fmt.Errorf("db error")
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	body := `{"action_name": "Tremor", "last_used_action": ""}`
+	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/lair-action", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestExecuteLairAction_NoLairActions(t *testing.T) {
+	npcID := uuid.New()
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: npcID, DisplayName: "Dragon", IsNpc: true, IsAlive: true, CreatureRefID: sql.NullString{String: "dragon", Valid: true}},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{ID: "dragon", Name: "Dragon"}, nil
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	body := `{"action_name": "Tremor", "last_used_action": ""}`
+	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/lair-action", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// --- Error-path tests for GetTurnQueue ---
+
+func TestGetTurnQueue_InvalidEncounterID(t *testing.T) {
+	svc := NewService(&mockStore{})
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/not-a-uuid/turn-queue", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.NotEqual(t, http.StatusOK, w.Code)
+}
+
+func TestGetTurnQueue_ListCombatantsError(t *testing.T) {
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, fmt.Errorf("db error")
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+uuid.New().String()+"/turn-queue", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "failed to list combatants")
+}
+
+func TestGetTurnQueue_GetCreatureError(t *testing.T) {
+	npcID := uuid.New()
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: npcID, DisplayName: "Dragon", InitiativeRoll: 15, IsNpc: true, IsAlive: true, CreatureRefID: sql.NullString{String: "dragon", Valid: true}},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{}, fmt.Errorf("not found")
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+uuid.New().String()+"/turn-queue", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Should still succeed but without legendary/lair entries (creature error is skipped)
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp turnQueueResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.Len(t, resp.Entries, 1) // only the combatant, no legendary/lair
+}
+
+// --- findLairCreature error-path tests ---
+
+func TestFindLairCreature_NpcWithoutCreatureRef(t *testing.T) {
+	encounterID := uuid.New()
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: uuid.New(), DisplayName: "Spirit", IsNpc: true, IsAlive: true, CreatureRefID: sql.NullString{Valid: false}},
+			}, nil
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/lair-action/plan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestFindLairCreature_DeadNpc(t *testing.T) {
+	encounterID := uuid.New()
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: uuid.New(), DisplayName: "Dragon", IsNpc: true, IsAlive: false, CreatureRefID: sql.NullString{String: "dragon", Valid: true}},
+			}, nil
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/lair-action/plan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestFindLairCreature_PlayerCombatant(t *testing.T) {
+	encounterID := uuid.New()
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: uuid.New(), DisplayName: "Aragorn", IsNpc: false, IsAlive: true},
+			}, nil
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/lair-action/plan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestFindLairCreature_GetCreatureError(t *testing.T) {
+	encounterID := uuid.New()
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: uuid.New(), DisplayName: "Dragon", IsNpc: true, IsAlive: true, CreatureRefID: sql.NullString{String: "dragon", Valid: true}},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{}, fmt.Errorf("db error")
+		},
+	}
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/lair-action/plan", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
