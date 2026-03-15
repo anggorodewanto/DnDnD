@@ -48,6 +48,10 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/{encounterID}/enemy-turn/{combatantID}/plan", h.GetEnemyTurnPlan)
 		r.Post("/{encounterID}/enemy-turn", h.ExecuteEnemyTurn)
 
+		// Summoned creatures
+		r.Post("/{encounterID}/command", h.CommandCreatureHandler)
+		r.Post("/{encounterID}/summon", h.SummonCreatureHandler)
+
 		// Legendary actions, lair actions, turn queue
 		h.RegisterLegendaryRoutes(r)
 
