@@ -473,7 +473,7 @@
   - Depends on: Phase 7, Phase 15
   - Done when: Integration tests verify hit dice spending, feature recharge, full long rest benefits, prepared caster reminder.
 
-- [ ] **Phase 83b: Short & Long Rests — Party Rest & Interruption**
+- [x] **Phase 83b: Short & Long Rests — Party Rest & Interruption**
   - Scope: DM-initiated Party Rest from dashboard: select characters, choose short/long, batch processing. Rest interruption: DM cancels mid-rest, 1-hour threshold for long rest (if >= 1 hour elapsed, long rest benefits still apply per 5e rules). Interrupted rest notifications to players.
   - Depends on: Phase 83a
   - Done when: Integration tests verify party rest batch flow, interruption logic, 1-hour threshold, player notifications.

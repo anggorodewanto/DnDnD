@@ -144,11 +144,7 @@ func (h *PartyRestHandler) HandlePartyRest(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Build selected set
-	selectedSet := make(map[uuid.UUID]bool, len(req.CharacterIDs))
-	for _, id := range req.CharacterIDs {
-		selectedSet[id] = true
-	}
+	selectedSet := uuidSet(req.CharacterIDs)
 
 	// Partition into rested and excluded
 	var rested []PartyCharacterInfo
@@ -212,39 +208,46 @@ func (h *PartyRestHandler) applyPartyLongRest(ctx context.Context, chars []Party
 
 func (h *PartyRestHandler) applyPartyShortRest(ctx context.Context, chars []PartyCharacterInfo) {
 	for _, c := range chars {
-		// Apply feature recharge and pact slot restore (no hit dice spent yet)
-		input := ShortRestInput{
-			HPCurrent:        c.HPCurrent,
-			HPMax:            c.HPMax,
-			CONModifier:      c.CONModifier,
-			HitDiceRemaining: c.HitDiceRemaining,
-			HitDiceSpend:     map[string]int{}, // no dice spent in party rest
-			FeatureUses:      c.FeatureUses,
-			PactMagicSlots:   c.PactMagicSlots,
-			Classes:          c.Classes,
-		}
-
-		result, err := h.restService.ShortRest(input)
-		if err != nil {
+		if !h.applyCharShortRest(ctx, c) {
 			continue
 		}
 
-		update := CharacterRestUpdate{
-			CharacterID:      c.ID,
-			HPCurrent:        result.HPAfter,
-			HitDiceRemaining: result.HitDiceRemaining,
-			FeatureUses:      c.FeatureUses,
-			PactMagicSlots:   c.PactMagicSlots,
-		}
-		_ = h.updater.ApplyRestUpdate(ctx, update)
-
-		// Send hit dice prompt to player
 		_ = h.notifier.NotifyPlayer(ctx, PlayerNotification{
 			DiscordUserID: c.DiscordUserID,
 			CharacterName: c.Name,
 			Message:       "Short rest started. Use your hit dice buttons to heal.",
 		})
 	}
+}
+
+// applyCharShortRest applies a short rest (feature recharge, pact slots) to a
+// single character and persists the update. Returns false if the rest failed.
+func (h *PartyRestHandler) applyCharShortRest(ctx context.Context, c PartyCharacterInfo) bool {
+	input := ShortRestInput{
+		HPCurrent:        c.HPCurrent,
+		HPMax:            c.HPMax,
+		CONModifier:      c.CONModifier,
+		HitDiceRemaining: c.HitDiceRemaining,
+		HitDiceSpend:     map[string]int{},
+		FeatureUses:      c.FeatureUses,
+		PactMagicSlots:   c.PactMagicSlots,
+		Classes:          c.Classes,
+	}
+
+	result, err := h.restService.ShortRest(input)
+	if err != nil {
+		return false
+	}
+
+	update := CharacterRestUpdate{
+		CharacterID:      c.ID,
+		HPCurrent:        result.HPAfter,
+		HitDiceRemaining: result.HitDiceRemaining,
+		FeatureUses:      c.FeatureUses,
+		PactMagicSlots:   c.PactMagicSlots,
+	}
+	_ = h.updater.ApplyRestUpdate(ctx, update)
+	return true
 }
 
 // RegisterPartyRestRoutes registers party rest API endpoints on the given mux.
@@ -269,11 +272,7 @@ func (h *PartyRestHandler) HandleInterruptRest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Build selected set
-	selectedSet := make(map[uuid.UUID]bool, len(req.CharacterIDs))
-	for _, id := range req.CharacterIDs {
-		selectedSet[id] = true
-	}
+	selectedSet := uuidSet(req.CharacterIDs)
 
 	result := InterruptRest(req.RestType, req.OneHourElapsed)
 	grantBenefits := result.Benefits == "short"
@@ -283,30 +282,8 @@ func (h *PartyRestHandler) HandleInterruptRest(w http.ResponseWriter, r *http.Re
 			continue
 		}
 
-		// If benefits granted (long rest >= 1 hour), apply short rest
 		if grantBenefits {
-			input := ShortRestInput{
-				HPCurrent:        c.HPCurrent,
-				HPMax:            c.HPMax,
-				CONModifier:      c.CONModifier,
-				HitDiceRemaining: c.HitDiceRemaining,
-				HitDiceSpend:     map[string]int{},
-				FeatureUses:      c.FeatureUses,
-				PactMagicSlots:   c.PactMagicSlots,
-				Classes:          c.Classes,
-			}
-
-			shortResult, err := h.restService.ShortRest(input)
-			if err == nil {
-				update := CharacterRestUpdate{
-					CharacterID:      c.ID,
-					HPCurrent:        shortResult.HPAfter,
-					HitDiceRemaining: shortResult.HitDiceRemaining,
-					FeatureUses:      c.FeatureUses,
-					PactMagicSlots:   c.PactMagicSlots,
-				}
-				_ = h.updater.ApplyRestUpdate(ctx, update)
-			}
+			h.applyCharShortRest(ctx, c)
 		}
 
 		msg := FormatInterruptNotification(c.Name, req.RestType, req.Reason, grantBenefits)
@@ -319,4 +296,13 @@ func (h *PartyRestHandler) HandleInterruptRest(w http.ResponseWriter, r *http.Re
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// uuidSet builds a lookup set from a slice of UUIDs.
+func uuidSet(ids []uuid.UUID) map[uuid.UUID]bool {
+	set := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		set[id] = true
+	}
+	return set
 }
