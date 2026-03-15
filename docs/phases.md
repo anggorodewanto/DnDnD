@@ -433,7 +433,7 @@
   - Depends on: Phase 28, Phase 39, Phase 22
   - Done when: Integration tests verify turn start sequence, impact summary, `/done` confirmation prompt, initiative advancement, map regen, incapacitated skip.
 
-- [ ] **Phase 78a: Enemy/NPC Turns — Dashboard Turn Builder**
+- [x] **Phase 78a: Enemy/NPC Turns — Dashboard Turn Builder**
   - Scope: DM dashboard structured multi-step turn builder: movement step (shortest path suggestion via A*), action step (pre-filled from stat block: single attack, multiattack, special abilities with recharge), bonus action step (if available), review & adjust (roll fudging, reorder, remove), confirm & post. Pending reactions surfaced during enemy turn. Combat log output.
   - Depends on: Phase 26a, Phase 29, Phase 6, Phase 70
   - Done when: DM can run full enemy turns from dashboard with smart defaults; reactions surfaced; combat log posted to Discord.
