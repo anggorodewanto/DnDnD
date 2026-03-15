@@ -96,6 +96,7 @@ log_run() {
     local output_tok="$4"
     local duration="$5"
     local status="$6"
+    local session="${7:-}"
 
     # Accumulate totals
     if [ -n "$cost" ] && [ "$cost" != "null" ]; then
@@ -109,7 +110,7 @@ log_run() {
     fi
 
     # Append to persistent log
-    echo "$(date -Iseconds) phase=$phase status=$status cost=\$${cost:-0} tokens_in=${input_tok:-0} tokens_out=${output_tok:-0} duration_ms=${duration:-0} cumulative_cost=\$$TOTAL_COST" >> "$RUN_LOG"
+    echo "$(date -Iseconds) phase=$phase status=$status session=${session:-none} cost=\$${cost:-0} tokens_in=${input_tok:-0} tokens_out=${output_tok:-0} duration_ms=${duration:-0} cumulative_cost=\$$TOTAL_COST" >> "$RUN_LOG"
 }
 
 print_run_stats() {
@@ -224,6 +225,11 @@ while true; do
 
     print_phase_header "$PHASE"
 
+    # --- Build session name from phase title ---
+    PHASE_TITLE=$(grep -oP "\*\*Phase ${PHASE}: \K[^*]+" "$PHASES_FILE" 2>/dev/null | head -1)
+    SESSION_NAME="phase-${PHASE}"
+    [ -n "$PHASE_TITLE" ] && SESSION_NAME="p${PHASE}-$(echo "$PHASE_TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[—–]/-/g' | tr ' ' '-' | tr -cd 'a-z0-9-' | sed 's/--*/-/g; s/-$//' | cut -c1-40)"
+
     # --- Build claude command ---
     CMD=(claude -p "Implement Phase $PHASE of $PHASES_FILE"
         --append-system-prompt-file "$SKILL_FILE"
@@ -231,6 +237,7 @@ while true; do
         --max-turns "$MAX_TURNS"
         --fallback-model "$FALLBACK_MODEL"
         --dangerously-skip-permissions
+        --name "$SESSION_NAME"
     )
     [ -n "$MODEL" ] && CMD+=(--model "$MODEL")
 
@@ -280,7 +287,7 @@ while true; do
         echo ""
         echo -e "  ${YELLOW}${BOLD}Rate limit hit!${RESET}"
         echo -e "  ${YELLOW}Claude Max limits reset on a rolling window.${RESET}"
-        log_run "$PHASE" "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "rate_limited"
+        log_run "$PHASE" "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "rate_limited" "$SESSION_ID"
         CONSECUTIVE_FAILURES=0  # rate limit isn't a failure
         countdown "$COOLDOWN" "Retrying phase $PHASE"
         START_PHASE="$PHASE"
@@ -293,7 +300,7 @@ while true; do
         echo ""
         echo -e "  ${RED}Claude returned an error:${RESET}"
         echo "$RESULT_TEXT" | head -5
-        log_run "$PHASE" "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "error"
+        log_run "$PHASE" "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "error" "$SESSION_ID"
 
         if [ "$CONSECUTIVE_FAILURES" -ge "$MAX_CONSECUTIVE_FAILURES" ]; then
             echo ""
@@ -313,7 +320,7 @@ while true; do
         echo ""
         echo -e "  ${RED}Error (exit code $EXIT_CODE):${RESET}"
         echo "$ERRORS" | head -5
-        log_run "$PHASE" "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "exit_error"
+        log_run "$PHASE" "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "exit_error" "$SESSION_ID"
 
         if [ "$CONSECUTIVE_FAILURES" -ge "$MAX_CONSECUTIVE_FAILURES" ]; then
             echo ""
@@ -329,7 +336,7 @@ while true; do
 
     # --- Success path ---
     CONSECUTIVE_FAILURES=0
-    log_run "$PHASE" "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "success"
+    log_run "$PHASE" "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "success" "$SESSION_ID"
     print_run_stats "$RUN_COST" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "$NUM_TURNS"
 
     # --- Check for questions ---
@@ -381,9 +388,24 @@ while true; do
         fi
 
         echo ""
-        echo -e "  ${CYAN}(d=mark done & continue / r=retry / q=quit)${RESET}"
+        if [ -n "$SESSION_ID" ]; then
+            echo -e "  ${DIM}Session: $SESSION_ID${RESET}"
+            echo -e "  ${CYAN}(a=answer/resume interactive / d=mark done / r=retry / q=quit)${RESET}"
+        else
+            echo -e "  ${CYAN}(d=mark done / r=retry / q=quit)${RESET}"
+        fi
         read -r choice
         case "$choice" in
+            a|A)
+                if [ -n "$SESSION_ID" ]; then
+                    claude --resume "$SESSION_ID" || true
+                    mark_phase_done "$PHASE"
+                    PHASES_COMPLETED=$((PHASES_COMPLETED + 1))
+                else
+                    echo -e "  ${RED}No session ID available.${RESET}"
+                    START_PHASE="$PHASE"; continue
+                fi
+                ;;
             d|D) mark_phase_done "$PHASE"; PHASES_COMPLETED=$((PHASES_COMPLETED + 1)) ;;
             r|R) START_PHASE="$PHASE"; continue ;;
             q|Q) cleanup 0 ;;
