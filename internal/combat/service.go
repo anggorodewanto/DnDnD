@@ -538,6 +538,9 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 		}
 	}
 
+	// Clean up summoned creature turn resources
+	s.summonedResources.Clear()
+
 	// Clean up all encounter zones
 	if err := s.store.DeleteEncounterZonesByEncounterID(ctx, encounterID); err != nil {
 		return EndCombatResult{}, fmt.Errorf("cleaning up encounter zones: %w", err)

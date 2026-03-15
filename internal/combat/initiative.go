@@ -256,7 +256,7 @@ func (s *Service) RollInitiative(ctx context.Context, encounterID uuid.UUID, rol
 	// Filter out summoned creatures — they share their summoner's turn.
 	var rollable []refdata.Combatant
 	for _, c := range combatants {
-		if !c.SummonerID.Valid {
+		if !IsSummonedCreature(c) {
 			rollable = append(rollable, c)
 		}
 	}
@@ -402,7 +402,7 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 	// Summoned creatures share their summoner's turn — they never get their own.
 	var candidates []refdata.Combatant
 	for _, c := range combatants {
-		if !c.IsAlive || hadTurn[c.ID] || c.SummonerID.Valid {
+		if !c.IsAlive || hadTurn[c.ID] || IsSummonedCreature(c) {
 			continue
 		}
 		candidates = append(candidates, c)
@@ -419,7 +419,7 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 		}
 		// Reset candidates to all alive non-summoned combatants
 		for _, c := range combatants {
-			if c.IsAlive && !c.SummonerID.Valid {
+			if c.IsAlive && !IsSummonedCreature(c) {
 				candidates = append(candidates, c)
 			}
 		}
@@ -504,7 +504,7 @@ func (s *Service) skipOrActivate(ctx context.Context, encounterID uuid.UUID, rou
 // and returns a TurnInfo for the first combatant that can act.
 func (s *Service) findFirstActiveCombatant(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatants []refdata.Combatant, skippedCombatants []SkippedInfo) (TurnInfo, error) {
 	for _, c := range combatants {
-		if !c.IsAlive || c.SummonerID.Valid {
+		if !c.IsAlive || IsSummonedCreature(c) {
 			continue
 		}
 		conds, _ := parseConditions(c.Conditions)
@@ -629,7 +629,9 @@ func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, r
 	}
 
 	// Reset summoned creature turn resources for this summoner's creatures
-	s.resetSummonedCreatureResources(ctx, encounterID, combatant.ID)
+	if err := s.resetSummonedCreatureResources(ctx, encounterID, combatant.ID); err != nil {
+		return TurnInfo{}, fmt.Errorf("resetting summoned creature resources: %w", err)
+	}
 
 	if _, err := s.store.UpdateEncounterCurrentTurn(ctx, refdata.UpdateEncounterCurrentTurnParams{
 		ID:            encounterID,

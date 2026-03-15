@@ -766,11 +766,15 @@ func TestCommandCreature_ListFails(t *testing.T) {
 
 func TestCommandCreature_DismissDeleteFails(t *testing.T) {
 	summonerID := uuid.New()
+	creatureID := uuid.New()
 	ms := &mockStore{
 		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
 			return []refdata.Combatant{
-				{ID: uuid.New(), ShortID: "FAM", SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}},
+				{ID: creatureID, ShortID: "FAM", SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}},
 			}, nil
+		},
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: creatureID, ShortID: "FAM", SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}}, nil
 		},
 		deleteCombatantFn: func(ctx context.Context, id uuid.UUID) error {
 			return fmt.Errorf("db error")
@@ -784,16 +788,16 @@ func TestCommandCreature_DismissDeleteFails(t *testing.T) {
 }
 
 func TestSummonMultipleCreatures_Failure(t *testing.T) {
-	callCount := 0
+	createCount := 0
 	ms := &mockStore{
 		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
-			callCount++
-			if callCount > 1 {
-				return refdata.Creature{}, fmt.Errorf("db error")
-			}
 			return refdata.Creature{ID: "wolf", HpAverage: 11, Ac: 13, Speed: json.RawMessage(`{"walk":40}`)}, nil
 		},
 		createCombatantFn: func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+			createCount++
+			if createCount > 1 {
+				return refdata.Combatant{}, fmt.Errorf("db error")
+			}
 			return refdata.Combatant{ID: uuid.New(), ShortID: arg.ShortID}, nil
 		},
 	}
@@ -1096,6 +1100,9 @@ func TestCommandCreature_Dismiss_RemovesResources(t *testing.T) {
 			return []refdata.Combatant{
 				{ID: creatureID, ShortID: "FAM", DisplayName: "Aria's Owl", SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}, IsAlive: true, Conditions: json.RawMessage(`[]`)},
 			}, nil
+		},
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: creatureID, ShortID: "FAM", DisplayName: "Aria's Owl", SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
 		},
 		deleteCombatantFn: func(ctx context.Context, id uuid.UUID) error {
 			return nil

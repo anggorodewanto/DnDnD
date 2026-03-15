@@ -8,11 +8,19 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/refdata"
+)
+
+// Command action constants.
+const (
+	CommandActionDismiss = "dismiss"
+	CommandActionDone    = "done"
+	CommandActionMove    = "move"
 )
 
 // ErrNotSummoner is returned when a player tries to command a creature they didn't summon.
@@ -83,6 +91,7 @@ func (s *Service) DismissSummon(ctx context.Context, creatureID, summonerID uuid
 	if err := s.store.DeleteCombatant(ctx, creatureID); err != nil {
 		return DismissResult{}, fmt.Errorf("removing summoned creature: %w", err)
 	}
+	s.summonedResources.Remove(creatureID)
 
 	return DismissResult{
 		ShortID:     creature.ShortID,
@@ -105,22 +114,34 @@ type SummonMultipleInput struct {
 // SummonMultipleCreatures summons multiple instances of a creature (e.g., Conjure Animals).
 // Each gets a numbered short ID (WF1, WF2, ...) and display name.
 func (s *Service) SummonMultipleCreatures(ctx context.Context, input SummonMultipleInput) ([]refdata.Combatant, error) {
+	creature, err := s.store.GetCreature(ctx, input.CreatureRefID)
+	if err != nil {
+		return nil, fmt.Errorf("looking up creature %q: %w", input.CreatureRefID, err)
+	}
+
 	results := make([]refdata.Combatant, 0, input.Quantity)
 	for i := 1; i <= input.Quantity; i++ {
 		shortID := fmt.Sprintf("%s%d", input.BaseShortID, i)
 		displayName := fmt.Sprintf("%s #%d", input.BaseDisplayName, i)
 
-		c, err := s.SummonCreature(ctx, SummonCreatureInput{
+		c, err := s.store.CreateCombatant(ctx, refdata.CreateCombatantParams{
 			EncounterID:   input.EncounterID,
-			SummonerID:    input.SummonerID,
-			CreatureRefID: input.CreatureRefID,
+			CreatureRefID: sql.NullString{String: input.CreatureRefID, Valid: true},
 			ShortID:       shortID,
 			DisplayName:   displayName,
 			PositionCol:   input.PositionCol,
 			PositionRow:   input.PositionRow,
+			HpMax:         creature.HpAverage,
+			HpCurrent:     creature.HpAverage,
+			Ac:            creature.Ac,
+			Conditions:    json.RawMessage(`[]`),
+			IsNpc:         true,
+			IsAlive:       true,
+			IsVisible:     true,
+			SummonerID:    uuid.NullUUID{UUID: input.SummonerID, Valid: true},
 		})
 		if err != nil {
-			return nil, fmt.Errorf("summoning creature %d: %w", i, err)
+			return nil, fmt.Errorf("creating summoned creature %d: %w", i, err)
 		}
 		results = append(results, c)
 	}
@@ -136,24 +157,21 @@ func (s *Service) DismissSummonsByConcentration(ctx context.Context, encounterID
 		return 0, fmt.Errorf("listing combatants for concentration dismissal: %w", err)
 	}
 
-	removed := 0
-	for _, c := range combatants {
-		if !c.SummonerID.Valid || c.SummonerID.UUID != summonerID {
-			continue
-		}
+	summoned := ListSummonedCreatures(combatants, summonerID)
+	for _, c := range summoned {
 		if err := s.store.DeleteCombatant(ctx, c.ID); err != nil {
-			return removed, fmt.Errorf("removing summoned creature %s: %w", c.ShortID, err)
+			return 0, fmt.Errorf("removing summoned creature %s: %w", c.ShortID, err)
 		}
-		removed++
+		s.summonedResources.Remove(c.ID)
 	}
-	return removed, nil
+	return len(summoned), nil
 }
 
 // HandleSummonDeath checks if a combatant is a summoned creature at 0 HP and removes it.
 // Summoned creatures are removed immediately on death (no death saves).
 // Returns true if the creature was removed, false if not applicable.
 func (s *Service) HandleSummonDeath(ctx context.Context, creature refdata.Combatant) (bool, error) {
-	if !creature.SummonerID.Valid {
+	if !IsSummonedCreature(creature) {
 		return false, nil
 	}
 	if creature.IsAlive || creature.HpCurrent > 0 {
@@ -163,6 +181,7 @@ func (s *Service) HandleSummonDeath(ctx context.Context, creature refdata.Combat
 	if err := s.store.DeleteCombatant(ctx, creature.ID); err != nil {
 		return false, fmt.Errorf("removing dead summoned creature: %w", err)
 	}
+	s.summonedResources.Remove(creature.ID)
 	return true, nil
 }
 
@@ -199,24 +218,23 @@ func (s *Service) CommandCreature(ctx context.Context, input CommandCreatureInpu
 	}
 
 	switch input.Action {
-	case "dismiss":
-		if err := s.store.DeleteCombatant(ctx, creature.ID); err != nil {
+	case CommandActionDismiss:
+		if _, err := s.DismissSummon(ctx, creature.ID, input.SummonerID); err != nil {
 			return CommandCreatureResult{}, fmt.Errorf("dismissing creature: %w", err)
 		}
-		s.summonedResources.Remove(creature.ID)
 		return CommandCreatureResult{
-			Action:    "dismiss",
+			Action:    CommandActionDismiss,
 			CombatLog: FormatSummonDismissLog(input.SummonerName, creature.DisplayName, creature.ShortID),
 		}, nil
 
-	case "done":
+	case CommandActionDone:
 		s.summonedResources.MarkDone(creature.ID)
 		return CommandCreatureResult{
-			Action:    "done",
+			Action:    CommandActionDone,
 			CombatLog: fmt.Sprintf("%s (%s) ends their turn", creature.DisplayName, creature.ShortID),
 		}, nil
 
-	case "move":
+	case CommandActionMove:
 		s.summonedResources.UseMovement(creature.ID)
 		return CommandCreatureResult{
 			Action:    input.Action,
@@ -307,7 +325,7 @@ func FormatSummonLog(summonerName, creatureName, shortID, position string) strin
 // ValidateCommandOwnership checks that the given combatant is a summoned creature
 // and that the caller is the summoner.
 func ValidateCommandOwnership(creature refdata.Combatant, callerCombatantID uuid.UUID) error {
-	if !creature.SummonerID.Valid {
+	if !IsSummonedCreature(creature) {
 		return ErrNotSummoned
 	}
 	if creature.SummonerID.UUID != callerCombatantID {
@@ -318,16 +336,15 @@ func ValidateCommandOwnership(creature refdata.Combatant, callerCombatantID uuid
 
 // resetSummonedCreatureResources resets turn resources for all summoned creatures
 // belonging to the given summoner. Called at the start of the summoner's turn.
-func (s *Service) resetSummonedCreatureResources(ctx context.Context, encounterID, summonerID uuid.UUID) {
+func (s *Service) resetSummonedCreatureResources(ctx context.Context, encounterID, summonerID uuid.UUID) error {
 	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
 	if err != nil {
-		return // best-effort
+		return fmt.Errorf("listing combatants for resource reset: %w", err)
 	}
-	for _, c := range combatants {
-		if c.SummonerID.Valid && c.SummonerID.UUID == summonerID {
-			s.summonedResources.Reset(c.ID)
-		}
+	for _, c := range ListSummonedCreatures(combatants, summonerID) {
+		s.summonedResources.Reset(c.ID)
 	}
+	return nil
 }
 
 // --- Summoned Creature Turn Resources ---
@@ -341,8 +358,9 @@ type summonedCreatureResources struct {
 }
 
 // SummonedTurnResources tracks per-creature turn resources for all summoned creatures.
-// Keyed by creature combatant ID.
+// Thread-safe; keyed by creature combatant ID.
 type SummonedTurnResources struct {
+	mu        sync.RWMutex
 	creatures map[uuid.UUID]*summonedCreatureResources
 }
 
@@ -353,7 +371,7 @@ func NewSummonedTurnResources() *SummonedTurnResources {
 	}
 }
 
-// getOrInit returns existing resources or creates fresh ones.
+// getOrInit returns existing resources or creates fresh ones. Caller must hold s.mu.
 func (s *SummonedTurnResources) getOrInit(creatureID uuid.UUID) *summonedCreatureResources {
 	if r, ok := s.creatures[creatureID]; ok {
 		return r
@@ -365,69 +383,103 @@ func (s *SummonedTurnResources) getOrInit(creatureID uuid.UUID) *summonedCreatur
 
 // Reset resets all turn resources for a creature (called at start of summoner's turn).
 func (s *SummonedTurnResources) Reset(creatureID uuid.UUID) {
+	s.mu.Lock()
 	s.creatures[creatureID] = &summonedCreatureResources{}
+	s.mu.Unlock()
 }
 
 // Remove removes a creature's resources (called on dismissal/death).
 func (s *SummonedTurnResources) Remove(creatureID uuid.UUID) {
+	s.mu.Lock()
 	delete(s.creatures, creatureID)
+	s.mu.Unlock()
+}
+
+// Clear removes all tracked resources (called on encounter end).
+func (s *SummonedTurnResources) Clear() {
+	s.mu.Lock()
+	s.creatures = make(map[uuid.UUID]*summonedCreatureResources)
+	s.mu.Unlock()
 }
 
 // HasAction returns true if the creature's action is still available.
 func (s *SummonedTurnResources) HasAction(creatureID uuid.UUID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return !s.getOrInit(creatureID).ActionUsed
 }
 
 // HasMovement returns true if the creature's movement is still available.
 func (s *SummonedTurnResources) HasMovement(creatureID uuid.UUID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return !s.getOrInit(creatureID).MovementUsed
 }
 
 // HasBonusAction returns true if the creature's bonus action is still available.
 func (s *SummonedTurnResources) HasBonusAction(creatureID uuid.UUID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return !s.getOrInit(creatureID).BonusActionUsed
 }
 
 // IsDone returns true if the creature has been marked done for this turn.
 func (s *SummonedTurnResources) IsDone(creatureID uuid.UUID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.getOrInit(creatureID).Done
 }
 
 // UseAction marks the creature's action as used.
 func (s *SummonedTurnResources) UseAction(creatureID uuid.UUID) {
+	s.mu.Lock()
 	s.getOrInit(creatureID).ActionUsed = true
+	s.mu.Unlock()
 }
 
 // UseMovement marks the creature's movement as used.
 func (s *SummonedTurnResources) UseMovement(creatureID uuid.UUID) {
+	s.mu.Lock()
 	s.getOrInit(creatureID).MovementUsed = true
+	s.mu.Unlock()
 }
 
 // UseBonusAction marks the creature's bonus action as used.
 func (s *SummonedTurnResources) UseBonusAction(creatureID uuid.UUID) {
+	s.mu.Lock()
 	s.getOrInit(creatureID).BonusActionUsed = true
+	s.mu.Unlock()
 }
 
 // MarkDone marks the creature as done for this turn.
 func (s *SummonedTurnResources) MarkDone(creatureID uuid.UUID) {
+	s.mu.Lock()
 	s.getOrInit(creatureID).Done = true
+	s.mu.Unlock()
 }
 
 // FormatCreatureResources returns a display string of available resources for a creature.
 func (s *SummonedTurnResources) FormatCreatureResources(creatureID uuid.UUID, displayName, shortID string) string {
+	s.mu.Lock()
 	r := s.getOrInit(creatureID)
-	if r.Done {
+	done := r.Done
+	action := r.ActionUsed
+	movement := r.MovementUsed
+	bonus := r.BonusActionUsed
+	s.mu.Unlock()
+
+	if done {
 		return fmt.Sprintf("%s (%s): done", displayName, shortID)
 	}
 
 	var parts []string
-	if !r.ActionUsed {
+	if !action {
 		parts = append(parts, "action")
 	}
-	if !r.MovementUsed {
+	if !movement {
 		parts = append(parts, "movement")
 	}
-	if !r.BonusActionUsed {
+	if !bonus {
 		parts = append(parts, "bonus")
 	}
 	if len(parts) == 0 {
