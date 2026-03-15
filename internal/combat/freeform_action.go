@@ -70,17 +70,20 @@ func (s *Service) FreeformAction(ctx context.Context, cmd FreeformActionCommand)
 // CancelFreeformActionCommand holds the inputs for cancelling a freeform action.
 type CancelFreeformActionCommand struct {
 	Combatant refdata.Combatant
+	Turn      refdata.Turn
 }
 
 // CancelFreeformActionResult holds the outputs of cancelling a freeform action.
 type CancelFreeformActionResult struct {
+	Turn                refdata.Turn
 	PendingAction       refdata.PendingAction
 	CombatLog           string
 	DMQueueEditMessage  string
 }
 
 // CancelFreeformAction handles the /action cancel command.
-// Finds the combatant's pending freeform action and marks it cancelled.
+// Finds the combatant's pending freeform action, marks it cancelled, and refunds the action.
+// Resource refund is persisted first so the player keeps their action even if the status update fails.
 func (s *Service) CancelFreeformAction(ctx context.Context, cmd CancelFreeformActionCommand) (CancelFreeformActionResult, error) {
 	pendingAction, err := s.store.GetPendingActionByCombatant(ctx, cmd.Combatant.ID)
 	if err != nil {
@@ -89,6 +92,12 @@ func (s *Service) CancelFreeformAction(ctx context.Context, cmd CancelFreeformAc
 
 	if pendingAction.Status == "resolved" {
 		return CancelFreeformActionResult{}, ErrActionAlreadyResolved
+	}
+
+	// Refund the action resource first so the player keeps their action even on partial failure.
+	updatedTurn := RefundResource(cmd.Turn, ResourceAction)
+	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
+		return CancelFreeformActionResult{}, fmt.Errorf("refunding action: %w", err)
 	}
 
 	updatedAction, err := s.store.UpdatePendingActionStatus(ctx, refdata.UpdatePendingActionStatusParams{
@@ -105,6 +114,7 @@ func (s *Service) CancelFreeformAction(ctx context.Context, cmd CancelFreeformAc
 		cmd.Combatant.DisplayName, pendingAction.ActionText)
 
 	return CancelFreeformActionResult{
+		Turn:               updatedTurn,
 		PendingAction:      updatedAction,
 		CombatLog:          combatLog,
 		DMQueueEditMessage: dmEditMsg,

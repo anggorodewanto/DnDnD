@@ -146,6 +146,8 @@ func TestCancelFreeformAction_HappyPath(t *testing.T) {
 	pendingActionID := uuid.New()
 
 	combatant := makeNPCCombatant(combatantID, encounterID, "Thorn")
+	turn := makeBasicTurn()
+	turn.ActionUsed = true // action was consumed by the freeform action
 
 	ms.getPendingActionByCombatantFn = func(ctx context.Context, cid uuid.UUID) (refdata.PendingAction, error) {
 		return refdata.PendingAction{
@@ -169,10 +171,12 @@ func TestCancelFreeformAction_HappyPath(t *testing.T) {
 	svc := NewService(ms)
 	result, err := svc.CancelFreeformAction(context.Background(), CancelFreeformActionCommand{
 		Combatant: combatant,
+		Turn:      turn,
 	})
 
 	require.NoError(t, err)
 	assert.Equal(t, "cancelled", result.PendingAction.Status)
+	assert.False(t, result.Turn.ActionUsed, "action should be refunded")
 	assert.Contains(t, result.CombatLog, "Thorn")
 	assert.Contains(t, result.CombatLog, "cancelled")
 	assert.Contains(t, result.CombatLog, "flip the table")
@@ -192,6 +196,7 @@ func TestCancelFreeformAction_NoPendingAction(t *testing.T) {
 	svc := NewService(ms)
 	_, err := svc.CancelFreeformAction(context.Background(), CancelFreeformActionCommand{
 		Combatant: combatant,
+		Turn:      makeBasicTurn(),
 	})
 
 	require.Error(t, err)
@@ -217,6 +222,7 @@ func TestCancelFreeformAction_AlreadyResolved(t *testing.T) {
 	svc := NewService(ms)
 	_, err := svc.CancelFreeformAction(context.Background(), CancelFreeformActionCommand{
 		Combatant: combatant,
+		Turn:      makeBasicTurn(),
 	})
 
 	require.Error(t, err)
@@ -244,6 +250,7 @@ func TestCancelFreeformAction_UpdateStatusFails(t *testing.T) {
 	svc := NewService(ms)
 	_, err := svc.CancelFreeformAction(context.Background(), CancelFreeformActionCommand{
 		Combatant: combatant,
+		Turn:      makeBasicTurn(),
 	})
 
 	require.Error(t, err)
@@ -271,6 +278,76 @@ func TestFreeformAction_DMQueueMessageFormat(t *testing.T) {
 	assert.Equal(t, `🎭 **Action** — Thorn: "flip the table"`, result.DMQueueMessage)
 }
 
+func TestCancelFreeformAction_RefundsActionAndPersists(t *testing.T) {
+	_, combatantID, _, ms := makeStdTestSetup()
+	encounterID := uuid.New()
+
+	combatant := makeNPCCombatant(combatantID, encounterID, "Thorn")
+	turn := makeBasicTurn()
+	turn.ActionUsed = true // action was consumed
+
+	ms.getPendingActionByCombatantFn = func(ctx context.Context, cid uuid.UUID) (refdata.PendingAction, error) {
+		return refdata.PendingAction{
+			ID:          uuid.New(),
+			CombatantID: cid,
+			ActionText:  "flip the table",
+			Status:      "pending",
+		}, nil
+	}
+	ms.updatePendingActionStatusFn = func(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
+		return refdata.PendingAction{ID: arg.ID, Status: arg.Status, ActionText: "flip the table"}, nil
+	}
+
+	var capturedParams refdata.UpdateTurnActionsParams
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		capturedParams = arg
+		return refdata.Turn{}, nil
+	}
+
+	svc := NewService(ms)
+	result, err := svc.CancelFreeformAction(context.Background(), CancelFreeformActionCommand{
+		Combatant: combatant,
+		Turn:      turn,
+	})
+
+	require.NoError(t, err)
+	assert.False(t, result.Turn.ActionUsed, "action should be refunded")
+	assert.False(t, capturedParams.ActionUsed, "DB should persist action_used=false")
+}
+
+func TestCancelFreeformAction_UpdateTurnFails(t *testing.T) {
+	_, combatantID, _, ms := makeStdTestSetup()
+	encounterID := uuid.New()
+
+	combatant := makeNPCCombatant(combatantID, encounterID, "Thorn")
+	turn := makeBasicTurn()
+	turn.ActionUsed = true
+
+	ms.getPendingActionByCombatantFn = func(ctx context.Context, cid uuid.UUID) (refdata.PendingAction, error) {
+		return refdata.PendingAction{
+			ID:          uuid.New(),
+			CombatantID: cid,
+			ActionText:  "flip the table",
+			Status:      "pending",
+		}, nil
+	}
+	ms.updatePendingActionStatusFn = func(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
+		return refdata.PendingAction{ID: arg.ID, Status: arg.Status, ActionText: "flip the table"}, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	_, err := svc.CancelFreeformAction(context.Background(), CancelFreeformActionCommand{
+		Combatant: combatant,
+		Turn:      turn,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "refunding action")
+}
+
 func TestCancelFreeformAction_DMQueueEditFormat(t *testing.T) {
 	_, combatantID, _, ms := makeStdTestSetup()
 	encounterID := uuid.New()
@@ -292,6 +369,7 @@ func TestCancelFreeformAction_DMQueueEditFormat(t *testing.T) {
 	svc := NewService(ms)
 	result, err := svc.CancelFreeformAction(context.Background(), CancelFreeformActionCommand{
 		Combatant: combatant,
+		Turn:      makeBasicTurn(),
 	})
 
 	require.NoError(t, err)

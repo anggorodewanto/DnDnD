@@ -591,3 +591,35 @@ func TestFormatRemainingResources_WithoutCombatant_NoInspiration(t *testing.T) {
 	result := FormatRemainingResources(turn, nil)
 	assert.NotContains(t, result, "Bardic Inspiration")
 }
+
+// --- TDD Cycle: RefundResource ---
+
+func TestRefundResource_Action(t *testing.T) {
+	turn := refdata.Turn{ActionUsed: true}
+	updated := RefundResource(turn, ResourceAction)
+	assert.False(t, updated.ActionUsed)
+}
+
+func TestRefundResource_BonusAction(t *testing.T) {
+	turn := refdata.Turn{BonusActionUsed: true}
+	updated := RefundResource(turn, ResourceBonusAction)
+	assert.False(t, updated.BonusActionUsed)
+}
+
+func TestRefundResource_Reaction(t *testing.T) {
+	turn := refdata.Turn{ReactionUsed: true}
+	updated := RefundResource(turn, ResourceReaction)
+	assert.False(t, updated.ReactionUsed)
+}
+
+func TestRefundResource_FreeInteract(t *testing.T) {
+	turn := refdata.Turn{FreeInteractUsed: true}
+	updated := RefundResource(turn, ResourceFreeInteract)
+	assert.False(t, updated.FreeInteractUsed)
+}
+
+func TestRefundResource_AlreadyAvailable(t *testing.T) {
+	turn := refdata.Turn{ActionUsed: false}
+	updated := RefundResource(turn, ResourceAction)
+	assert.False(t, updated.ActionUsed) // no-op, still false
+}

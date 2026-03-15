@@ -94,6 +94,25 @@ func UseResource(turn refdata.Turn, resource ResourceType) (refdata.Turn, error)
 	return turn, nil
 }
 
+// RefundResource marks a boolean resource as available again (sets it back to false/unused).
+// Used when a pending action is cancelled and the resource should be returned.
+// For movement and attacks, use dedicated refund functions instead.
+func RefundResource(turn refdata.Turn, resource ResourceType) refdata.Turn {
+	switch resource {
+	case ResourceAction:
+		turn.ActionUsed = false
+	case ResourceBonusAction:
+		turn.BonusActionUsed = false
+	case ResourceReaction:
+		turn.ReactionUsed = false
+	case ResourceFreeInteract:
+		turn.FreeInteractUsed = false
+	case ResourceMovement, ResourceAttack:
+		// Movement and attacks are not boolean resources; no-op here.
+	}
+	return turn
+}
+
 // UseMovement deducts the given feet from movement remaining.
 // Returns an error if feet is not positive, ErrResourceSpent if no movement remains,
 // or an error if requesting more movement than available.
