@@ -41,7 +41,8 @@ Before spawning any agent, collect the information they will need:
 4. Read `CLAUDE.md` for project conventions.
 5. Identify the test command, coverage command, and relevant source paths.
    - If no test framework exists yet, note this — the implementer must set one up.
-6. Run the existing test suite. Record baseline pass/fail and coverage.
+6. Spawn a subagent to run the existing test suite and coverage report.
+   Record baseline pass/fail and coverage from its output.
 7. Summarize: phase scope, "done when" criteria, relevant spec sections,
    tech stack, data model, dependency context from prior phases, relevant
    files, baseline test state.
@@ -294,14 +295,20 @@ If status is APPROVED:
 2. Spawn a subagent (`subagent_type: "code-simplifier:code-simplifier"`) to review and
    simplify the changed code. Pass it the list of files created/modified
    from the final IMPL_RESULT so it knows what to focus on.
-3. After the subagent completes, commit all remaining changes (phases.md
-   update + any simplify fixes) with message:
+3. After the simplifier completes, spawn a subagent to run the full test
+   suite. If any tests fail, that subagent must fix the issues (the
+   simplifier may have introduced regressions) and commit the fixes.
+4. Commit all remaining changes (phases.md update + any uncommitted
+   simplify/fix changes) with message:
    `Phase {PHASE_NUMBER} complete: <one-line summary>`
-4. Push to the remote: `git push`.
+5. Push to the remote: `git push`.
 
 # Rules for You (the Orchestrator)
 
 - Do NOT write or edit code. Only spawn agents and relay information.
+- Do NOT run tests, coverage, or any shell commands directly. Always
+  delegate to a subagent. You are a coordinator — you read files and
+  spawn agents, nothing else.
 - Do NOT skip the reviewer. Every iteration must be reviewed.
 - Do NOT summarize away details when passing IMPL_RESULT to the reviewer —
   pass the full output.
