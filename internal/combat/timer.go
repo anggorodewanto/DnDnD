@@ -168,6 +168,11 @@ func clampDuration(d time.Duration) time.Duration {
 }
 
 func (t *TurnTimer) getYourTurnChannel(ctx context.Context, encounterID uuid.UUID) (string, error) {
+	return t.getChannel(ctx, encounterID, "your-turn")
+}
+
+// getChannel returns a named channel ID from the campaign settings for the given encounter.
+func (t *TurnTimer) getChannel(ctx context.Context, encounterID uuid.UUID, channelName string) (string, error) {
 	camp, err := t.store.GetCampaignByEncounterID(ctx, encounterID)
 	if err != nil {
 		return "", err
@@ -182,7 +187,7 @@ func (t *TurnTimer) getYourTurnChannel(ctx context.Context, encounterID uuid.UUI
 		return "", err
 	}
 
-	return settings.ChannelIDs["your-turn"], nil
+	return settings.ChannelIDs[channelName], nil
 }
 
 // findAdjacentEnemies returns enemy combatants within 1 tile (adjacent) of the target.

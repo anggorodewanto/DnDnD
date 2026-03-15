@@ -13,7 +13,7 @@ import (
 )
 
 const clearTurnTimeout = `-- name: ClearTurnTimeout :one
-UPDATE turns SET timeout_at = NULL WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at
+UPDATE turns SET timeout_at = NULL WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
 `
 
 func (q *Queries) ClearTurnTimeout(ctx context.Context, id uuid.UUID) (Turn, error) {
@@ -42,12 +42,16 @@ func (q *Queries) ClearTurnTimeout(ctx context.Context, id uuid.UUID) (Turn, err
 		&i.HasStoodThisTurn,
 		&i.NudgeSentAt,
 		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
 	)
 	return i, err
 }
 
 const completeTurn = `-- name: CompleteTurn :one
-UPDATE turns SET status = 'completed', completed_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at
+UPDATE turns SET status = 'completed', completed_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
 `
 
 func (q *Queries) CompleteTurn(ctx context.Context, id uuid.UUID) (Turn, error) {
@@ -76,6 +80,10 @@ func (q *Queries) CompleteTurn(ctx context.Context, id uuid.UUID) (Turn, error) 
 		&i.HasStoodThisTurn,
 		&i.NudgeSentAt,
 		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
 	)
 	return i, err
 }
@@ -83,7 +91,7 @@ func (q *Queries) CompleteTurn(ctx context.Context, id uuid.UUID) (Turn, error) 
 const createTurn = `-- name: CreateTurn :one
 INSERT INTO turns (encounter_id, combatant_id, round_number, status, movement_remaining_ft, attacks_remaining, started_at, timeout_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at
+RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
 `
 
 type CreateTurnParams struct {
@@ -132,12 +140,16 @@ func (q *Queries) CreateTurn(ctx context.Context, arg CreateTurnParams) (Turn, e
 		&i.HasStoodThisTurn,
 		&i.NudgeSentAt,
 		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
 	)
 	return i, err
 }
 
 const getActiveTurnByEncounterID = `-- name: GetActiveTurnByEncounterID :one
-SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at FROM turns WHERE encounter_id = $1 AND status = 'active' LIMIT 1
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved FROM turns WHERE encounter_id = $1 AND status = 'active' LIMIT 1
 `
 
 func (q *Queries) GetActiveTurnByEncounterID(ctx context.Context, encounterID uuid.UUID) (Turn, error) {
@@ -166,12 +178,16 @@ func (q *Queries) GetActiveTurnByEncounterID(ctx context.Context, encounterID uu
 		&i.HasStoodThisTurn,
 		&i.NudgeSentAt,
 		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
 	)
 	return i, err
 }
 
 const getTurn = `-- name: GetTurn :one
-SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at FROM turns WHERE id = $1
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved FROM turns WHERE id = $1
 `
 
 func (q *Queries) GetTurn(ctx context.Context, id uuid.UUID) (Turn, error) {
@@ -200,12 +216,16 @@ func (q *Queries) GetTurn(ctx context.Context, id uuid.UUID) (Turn, error) {
 		&i.HasStoodThisTurn,
 		&i.NudgeSentAt,
 		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
 	)
 	return i, err
 }
 
 const listActiveTurnsByEncounterID = `-- name: ListActiveTurnsByEncounterID :many
-SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at FROM turns WHERE encounter_id = $1 AND status = 'active'
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved FROM turns WHERE encounter_id = $1 AND status = 'active'
 `
 
 func (q *Queries) ListActiveTurnsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]Turn, error) {
@@ -240,6 +260,10 @@ func (q *Queries) ListActiveTurnsByEncounterID(ctx context.Context, encounterID 
 			&i.HasStoodThisTurn,
 			&i.NudgeSentAt,
 			&i.WarningSentAt,
+			&i.DmDecisionSentAt,
+			&i.DmDecisionDeadline,
+			&i.WaitExtended,
+			&i.AutoResolved,
 		); err != nil {
 			return nil, err
 		}
@@ -255,7 +279,7 @@ func (q *Queries) ListActiveTurnsByEncounterID(ctx context.Context, encounterID 
 }
 
 const listTurnsByEncounterAndRound = `-- name: ListTurnsByEncounterAndRound :many
-SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at FROM turns WHERE encounter_id = $1 AND round_number = $2 ORDER BY created_at ASC
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved FROM turns WHERE encounter_id = $1 AND round_number = $2 ORDER BY created_at ASC
 `
 
 type ListTurnsByEncounterAndRoundParams struct {
@@ -295,6 +319,69 @@ func (q *Queries) ListTurnsByEncounterAndRound(ctx context.Context, arg ListTurn
 			&i.HasStoodThisTurn,
 			&i.NudgeSentAt,
 			&i.WarningSentAt,
+			&i.DmDecisionSentAt,
+			&i.DmDecisionDeadline,
+			&i.WaitExtended,
+			&i.AutoResolved,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTurnsNeedingDMAutoResolve = `-- name: ListTurnsNeedingDMAutoResolve :many
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved FROM turns
+WHERE status = 'active'
+  AND dm_decision_sent_at IS NOT NULL
+  AND dm_decision_deadline IS NOT NULL
+  AND now() >= dm_decision_deadline
+ORDER BY dm_decision_deadline ASC
+`
+
+func (q *Queries) ListTurnsNeedingDMAutoResolve(ctx context.Context) ([]Turn, error) {
+	rows, err := q.db.QueryContext(ctx, listTurnsNeedingDMAutoResolve)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Turn{}
+	for rows.Next() {
+		var i Turn
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncounterID,
+			&i.CombatantID,
+			&i.RoundNumber,
+			&i.Status,
+			&i.MovementRemainingFt,
+			&i.ActionUsed,
+			&i.BonusActionUsed,
+			&i.BonusActionSpellCast,
+			&i.ActionSpellCast,
+			&i.ReactionUsed,
+			&i.FreeInteractUsed,
+			&i.AttacksRemaining,
+			&i.HasDisengaged,
+			&i.ActionSurged,
+			&i.StartedAt,
+			&i.TimeoutAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.HasStoodThisTurn,
+			&i.NudgeSentAt,
+			&i.WarningSentAt,
+			&i.DmDecisionSentAt,
+			&i.DmDecisionDeadline,
+			&i.WaitExtended,
+			&i.AutoResolved,
 		); err != nil {
 			return nil, err
 		}
@@ -310,7 +397,7 @@ func (q *Queries) ListTurnsByEncounterAndRound(ctx context.Context, arg ListTurn
 }
 
 const listTurnsNeedingNudge = `-- name: ListTurnsNeedingNudge :many
-SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at FROM turns
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved FROM turns
 WHERE status = 'active'
   AND timeout_at IS NOT NULL
   AND started_at IS NOT NULL
@@ -351,6 +438,10 @@ func (q *Queries) ListTurnsNeedingNudge(ctx context.Context) ([]Turn, error) {
 			&i.HasStoodThisTurn,
 			&i.NudgeSentAt,
 			&i.WarningSentAt,
+			&i.DmDecisionSentAt,
+			&i.DmDecisionDeadline,
+			&i.WaitExtended,
+			&i.AutoResolved,
 		); err != nil {
 			return nil, err
 		}
@@ -366,7 +457,7 @@ func (q *Queries) ListTurnsNeedingNudge(ctx context.Context) ([]Turn, error) {
 }
 
 const listTurnsNeedingWarning = `-- name: ListTurnsNeedingWarning :many
-SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at FROM turns
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved FROM turns
 WHERE status = 'active'
   AND timeout_at IS NOT NULL
   AND started_at IS NOT NULL
@@ -407,6 +498,10 @@ func (q *Queries) ListTurnsNeedingWarning(ctx context.Context) ([]Turn, error) {
 			&i.HasStoodThisTurn,
 			&i.NudgeSentAt,
 			&i.WarningSentAt,
+			&i.DmDecisionSentAt,
+			&i.DmDecisionDeadline,
+			&i.WaitExtended,
+			&i.AutoResolved,
 		); err != nil {
 			return nil, err
 		}
@@ -421,8 +516,106 @@ func (q *Queries) ListTurnsNeedingWarning(ctx context.Context) ([]Turn, error) {
 	return items, nil
 }
 
+const listTurnsTimedOut = `-- name: ListTurnsTimedOut :many
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved FROM turns
+WHERE status = 'active'
+  AND timeout_at IS NOT NULL
+  AND started_at IS NOT NULL
+  AND dm_decision_sent_at IS NULL
+  AND now() >= timeout_at
+ORDER BY timeout_at ASC
+`
+
+func (q *Queries) ListTurnsTimedOut(ctx context.Context) ([]Turn, error) {
+	rows, err := q.db.QueryContext(ctx, listTurnsTimedOut)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Turn{}
+	for rows.Next() {
+		var i Turn
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncounterID,
+			&i.CombatantID,
+			&i.RoundNumber,
+			&i.Status,
+			&i.MovementRemainingFt,
+			&i.ActionUsed,
+			&i.BonusActionUsed,
+			&i.BonusActionSpellCast,
+			&i.ActionSpellCast,
+			&i.ReactionUsed,
+			&i.FreeInteractUsed,
+			&i.AttacksRemaining,
+			&i.HasDisengaged,
+			&i.ActionSurged,
+			&i.StartedAt,
+			&i.TimeoutAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.HasStoodThisTurn,
+			&i.NudgeSentAt,
+			&i.WarningSentAt,
+			&i.DmDecisionSentAt,
+			&i.DmDecisionDeadline,
+			&i.WaitExtended,
+			&i.AutoResolved,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const resetTurnNudgeAndWarning = `-- name: ResetTurnNudgeAndWarning :one
+UPDATE turns SET nudge_sent_at = NULL, warning_sent_at = NULL, dm_decision_sent_at = NULL, dm_decision_deadline = NULL WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
+`
+
+func (q *Queries) ResetTurnNudgeAndWarning(ctx context.Context, id uuid.UUID) (Turn, error) {
+	row := q.db.QueryRowContext(ctx, resetTurnNudgeAndWarning, id)
+	var i Turn
+	err := row.Scan(
+		&i.ID,
+		&i.EncounterID,
+		&i.CombatantID,
+		&i.RoundNumber,
+		&i.Status,
+		&i.MovementRemainingFt,
+		&i.ActionUsed,
+		&i.BonusActionUsed,
+		&i.BonusActionSpellCast,
+		&i.ActionSpellCast,
+		&i.ReactionUsed,
+		&i.FreeInteractUsed,
+		&i.AttacksRemaining,
+		&i.HasDisengaged,
+		&i.ActionSurged,
+		&i.StartedAt,
+		&i.TimeoutAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.HasStoodThisTurn,
+		&i.NudgeSentAt,
+		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
+	)
+	return i, err
+}
+
 const setTurnTimeout = `-- name: SetTurnTimeout :one
-UPDATE turns SET timeout_at = $2, started_at = COALESCE(started_at, now()) WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at
+UPDATE turns SET timeout_at = $2, started_at = COALESCE(started_at, now()) WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
 `
 
 type SetTurnTimeoutParams struct {
@@ -456,12 +649,16 @@ func (q *Queries) SetTurnTimeout(ctx context.Context, arg SetTurnTimeoutParams) 
 		&i.HasStoodThisTurn,
 		&i.NudgeSentAt,
 		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
 	)
 	return i, err
 }
 
 const skipTurn = `-- name: SkipTurn :one
-UPDATE turns SET status = 'skipped', completed_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at
+UPDATE turns SET status = 'skipped', completed_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
 `
 
 func (q *Queries) SkipTurn(ctx context.Context, id uuid.UUID) (Turn, error) {
@@ -490,6 +687,10 @@ func (q *Queries) SkipTurn(ctx context.Context, id uuid.UUID) (Turn, error) {
 		&i.HasStoodThisTurn,
 		&i.NudgeSentAt,
 		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
 	)
 	return i, err
 }
@@ -508,7 +709,7 @@ UPDATE turns SET
     action_surged = $11,
     has_stood_this_turn = $12
 WHERE id = $1
-RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at
+RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
 `
 
 type UpdateTurnActionsParams struct {
@@ -565,12 +766,92 @@ func (q *Queries) UpdateTurnActions(ctx context.Context, arg UpdateTurnActionsPa
 		&i.HasStoodThisTurn,
 		&i.NudgeSentAt,
 		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
+	)
+	return i, err
+}
+
+const updateTurnAutoResolved = `-- name: UpdateTurnAutoResolved :one
+UPDATE turns SET auto_resolved = true, status = 'completed', completed_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
+`
+
+func (q *Queries) UpdateTurnAutoResolved(ctx context.Context, id uuid.UUID) (Turn, error) {
+	row := q.db.QueryRowContext(ctx, updateTurnAutoResolved, id)
+	var i Turn
+	err := row.Scan(
+		&i.ID,
+		&i.EncounterID,
+		&i.CombatantID,
+		&i.RoundNumber,
+		&i.Status,
+		&i.MovementRemainingFt,
+		&i.ActionUsed,
+		&i.BonusActionUsed,
+		&i.BonusActionSpellCast,
+		&i.ActionSpellCast,
+		&i.ReactionUsed,
+		&i.FreeInteractUsed,
+		&i.AttacksRemaining,
+		&i.HasDisengaged,
+		&i.ActionSurged,
+		&i.StartedAt,
+		&i.TimeoutAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.HasStoodThisTurn,
+		&i.NudgeSentAt,
+		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
+	)
+	return i, err
+}
+
+const updateTurnDMDecisionSent = `-- name: UpdateTurnDMDecisionSent :one
+UPDATE turns SET dm_decision_sent_at = now(), dm_decision_deadline = now() + interval '1 hour' WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
+`
+
+func (q *Queries) UpdateTurnDMDecisionSent(ctx context.Context, id uuid.UUID) (Turn, error) {
+	row := q.db.QueryRowContext(ctx, updateTurnDMDecisionSent, id)
+	var i Turn
+	err := row.Scan(
+		&i.ID,
+		&i.EncounterID,
+		&i.CombatantID,
+		&i.RoundNumber,
+		&i.Status,
+		&i.MovementRemainingFt,
+		&i.ActionUsed,
+		&i.BonusActionUsed,
+		&i.BonusActionSpellCast,
+		&i.ActionSpellCast,
+		&i.ReactionUsed,
+		&i.FreeInteractUsed,
+		&i.AttacksRemaining,
+		&i.HasDisengaged,
+		&i.ActionSurged,
+		&i.StartedAt,
+		&i.TimeoutAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.HasStoodThisTurn,
+		&i.NudgeSentAt,
+		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
 	)
 	return i, err
 }
 
 const updateTurnNudgeSent = `-- name: UpdateTurnNudgeSent :one
-UPDATE turns SET nudge_sent_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at
+UPDATE turns SET nudge_sent_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
 `
 
 func (q *Queries) UpdateTurnNudgeSent(ctx context.Context, id uuid.UUID) (Turn, error) {
@@ -599,12 +880,16 @@ func (q *Queries) UpdateTurnNudgeSent(ctx context.Context, id uuid.UUID) (Turn, 
 		&i.HasStoodThisTurn,
 		&i.NudgeSentAt,
 		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
 	)
 	return i, err
 }
 
 const updateTurnTimeout = `-- name: UpdateTurnTimeout :one
-UPDATE turns SET timeout_at = $2 WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at
+UPDATE turns SET timeout_at = $2 WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
 `
 
 type UpdateTurnTimeoutParams struct {
@@ -638,12 +923,54 @@ func (q *Queries) UpdateTurnTimeout(ctx context.Context, arg UpdateTurnTimeoutPa
 		&i.HasStoodThisTurn,
 		&i.NudgeSentAt,
 		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
+	)
+	return i, err
+}
+
+const updateTurnWaitExtended = `-- name: UpdateTurnWaitExtended :one
+UPDATE turns SET wait_extended = true WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
+`
+
+func (q *Queries) UpdateTurnWaitExtended(ctx context.Context, id uuid.UUID) (Turn, error) {
+	row := q.db.QueryRowContext(ctx, updateTurnWaitExtended, id)
+	var i Turn
+	err := row.Scan(
+		&i.ID,
+		&i.EncounterID,
+		&i.CombatantID,
+		&i.RoundNumber,
+		&i.Status,
+		&i.MovementRemainingFt,
+		&i.ActionUsed,
+		&i.BonusActionUsed,
+		&i.BonusActionSpellCast,
+		&i.ActionSpellCast,
+		&i.ReactionUsed,
+		&i.FreeInteractUsed,
+		&i.AttacksRemaining,
+		&i.HasDisengaged,
+		&i.ActionSurged,
+		&i.StartedAt,
+		&i.TimeoutAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.HasStoodThisTurn,
+		&i.NudgeSentAt,
+		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
 	)
 	return i, err
 }
 
 const updateTurnWarningSent = `-- name: UpdateTurnWarningSent :one
-UPDATE turns SET warning_sent_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at
+UPDATE turns SET warning_sent_at = now() WHERE id = $1 RETURNING id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved
 `
 
 func (q *Queries) UpdateTurnWarningSent(ctx context.Context, id uuid.UUID) (Turn, error) {
@@ -672,6 +999,10 @@ func (q *Queries) UpdateTurnWarningSent(ctx context.Context, id uuid.UUID) (Turn
 		&i.HasStoodThisTurn,
 		&i.NudgeSentAt,
 		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
 	)
 	return i, err
 }

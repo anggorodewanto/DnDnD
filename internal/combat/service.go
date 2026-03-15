@@ -138,6 +138,15 @@ type Store interface {
 	GetPendingActionByCombatant(ctx context.Context, combatantID uuid.UUID) (refdata.PendingAction, error)
 	UpdatePendingActionStatus(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error)
 	UpdatePendingActionDMQueueMessage(ctx context.Context, arg refdata.UpdatePendingActionDMQueueMessageParams) (refdata.PendingAction, error)
+	CancelAllPendingActionsByCombatant(ctx context.Context, arg refdata.CancelAllPendingActionsByCombatantParams) error
+
+	// Pending Saves
+	CreatePendingSave(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error)
+	GetPendingSave(ctx context.Context, id uuid.UUID) (refdata.PendingSafe, error)
+	ListPendingSavesByCombatant(ctx context.Context, combatantID uuid.UUID) ([]refdata.PendingSafe, error)
+	ListPendingSavesByEncounter(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingSafe, error)
+	UpdatePendingSaveResult(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error)
+	CancelAllPendingSavesByCombatant(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error
 
 	// Turn Timer
 	ListTurnsNeedingNudge(ctx context.Context) ([]refdata.Turn, error)

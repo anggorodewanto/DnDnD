@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,16 @@ import (
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+// actionsContain returns true if any action string contains the substring.
+func actionsContain(actions []string, substr string) bool {
+	for _, a := range actions {
+		if strings.Contains(a, substr) {
+			return true
+		}
+	}
+	return false
+}
 
 // --- Format Tests ---
 
@@ -236,16 +247,7 @@ func TestAutoResolveTurn_DyingCombatant(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, deathSavesUpdated)
-	// Should have a death save message
-	found := false
-	for _, a := range actions {
-		if assert.ObjectsAreEqual(true, len(a) > 0) {
-			if containsStr(a, "death save") {
-				found = true
-			}
-		}
-	}
-	assert.True(t, found, "should contain death save message")
+	assert.True(t, actionsContain(actions, "death save"), "should contain death save message")
 }
 
 func TestAutoResolveTurn_DyingCombatant_Nat20(t *testing.T) {
@@ -290,13 +292,7 @@ func TestAutoResolveTurn_DyingCombatant_Nat20(t *testing.T) {
 	actions, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
 	require.NoError(t, err)
 	assert.True(t, hpUpdated)
-	found := false
-	for _, a := range actions {
-		if containsStr(a, "NAT 20") {
-			found = true
-		}
-	}
-	assert.True(t, found, "should contain NAT 20 message")
+	assert.True(t, actionsContain(actions, "NAT 20"), "should contain NAT 20 message")
 }
 
 func TestAutoResolveTurn_ForfeitsReactionDeclarations(t *testing.T) {
@@ -416,14 +412,7 @@ func TestAutoResolveTurn_FlagsAbsentAfterThreeConsecutive(t *testing.T) {
 	actions, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
 	require.NoError(t, err)
 	assert.True(t, capturedAbsent)
-	// Should mention absent in actions
-	found := false
-	for _, a := range actions {
-		if containsStr(a, "absent") {
-			found = true
-		}
-	}
-	assert.True(t, found, "should flag absent")
+	assert.True(t, actionsContain(actions, "absent"), "should flag absent")
 }
 
 func TestAutoResolveTurn_PostsToCombatLog(t *testing.T) {
@@ -462,16 +451,16 @@ func TestAutoResolveTurn_PostsToCombatLog(t *testing.T) {
 
 	msgs := notifier.getMessages()
 	require.NotEmpty(t, msgs)
-	// Find the combat log message
-	found := false
-	for _, m := range msgs {
-		if m.channelID == "chan-combat-log" {
-			found = true
-			assert.Contains(t, m.content, "auto-resolved")
-			assert.Contains(t, m.content, "player timed out")
+	var combatLogMsg *sentMessage
+	for i := range msgs {
+		if msgs[i].channelID == "chan-combat-log" {
+			combatLogMsg = &msgs[i]
+			break
 		}
 	}
-	assert.True(t, found, "should post to combat-log channel")
+	require.NotNil(t, combatLogMsg, "should post to combat-log channel")
+	assert.Contains(t, combatLogMsg.content, "auto-resolved")
+	assert.Contains(t, combatLogMsg.content, "player timed out")
 }
 
 // --- WaitExtendTurn Tests ---
@@ -940,17 +929,218 @@ func TestAutoResolveTurn_NoCombatLogChannel(t *testing.T) {
 	assert.Empty(t, notifier.getMessages())
 }
 
-// --- Helper ---
+// --- Pending Saves Auto-Resolve Tests ---
 
-func containsStr(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && findSubstr(s, substr))
-}
+func TestAutoResolveTurn_RollsPendingSaves(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+	saveID := uuid.New()
 
-func findSubstr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
+	store := defaultMockStore()
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID: turnID, EncounterID: encounterID, CombatantID: combatantID,
+			Status: "active", ActionUsed: true,
+		}, nil
 	}
-	return false
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: combatantID, EncounterID: encounterID, DisplayName: "Aria",
+			HpCurrent: 20, HpMax: 30, IsAlive: true, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: uuid.New(), Settings: settingsJSON(24)}, nil
+	}
+
+	// One pending WIS save, DC 15
+	store.listPendingSavesByCombatantFn = func(ctx context.Context, cID uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{{
+			ID: saveID, EncounterID: encounterID, CombatantID: combatantID,
+			Ability: "WIS", Dc: 15, Source: "Hold Person", Status: "pending",
+		}}, nil
+	}
+
+	var capturedResult refdata.UpdatePendingSaveResultParams
+	store.updatePendingSaveResultFn = func(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+		capturedResult = arg
+		return refdata.PendingSafe{ID: arg.ID, Status: "rolled", RollResult: arg.RollResult, Success: arg.Success}, nil
+	}
+
+	notifier := &mockNotifier{}
+	timer := NewTurnTimer(store, notifier, 30*time.Second)
+	// Roll 12 -> 12 < 15 DC = failure
+	roller := dice.NewRoller(func(max int) int { return 12 })
+
+	actions, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
+	require.NoError(t, err)
+
+	assert.Equal(t, saveID, capturedResult.ID)
+	assert.True(t, capturedResult.RollResult.Valid)
+	assert.Equal(t, int32(12), capturedResult.RollResult.Int32)
+	assert.True(t, capturedResult.Success.Valid)
+	assert.False(t, capturedResult.Success.Bool) // 12 < 15 = failure
+
+	assert.True(t, actionsContain(actions, "WIS save") && actionsContain(actions, "Hold Person"),
+		"should contain pending save result message, got: %v", actions)
 }
+
+func TestAutoResolveTurn_RollsPendingSaves_Success(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+	saveID := uuid.New()
+
+	store := defaultMockStore()
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID: turnID, EncounterID: encounterID, CombatantID: combatantID,
+			Status: "active", ActionUsed: true,
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: combatantID, EncounterID: encounterID, DisplayName: "Aria",
+			HpCurrent: 20, HpMax: 30, IsAlive: true, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: uuid.New(), Settings: settingsJSON(24)}, nil
+	}
+
+	store.listPendingSavesByCombatantFn = func(ctx context.Context, cID uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{{
+			ID: saveID, EncounterID: encounterID, CombatantID: combatantID,
+			Ability: "DEX", Dc: 13, Source: "Fireball", Status: "pending",
+		}}, nil
+	}
+
+	var capturedResult refdata.UpdatePendingSaveResultParams
+	store.updatePendingSaveResultFn = func(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+		capturedResult = arg
+		return refdata.PendingSafe{ID: arg.ID, Status: "rolled"}, nil
+	}
+
+	notifier := &mockNotifier{}
+	timer := NewTurnTimer(store, notifier, 30*time.Second)
+	// Roll 16 -> 16 >= 13 DC = success
+	roller := dice.NewRoller(func(max int) int { return 16 })
+
+	actions, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
+	require.NoError(t, err)
+
+	assert.True(t, capturedResult.Success.Valid)
+	assert.True(t, capturedResult.Success.Bool) // 16 >= 13 = success
+
+	assert.True(t, actionsContain(actions, "DEX save") && actionsContain(actions, "Fireball"),
+		"should contain save result, got: %v", actions)
+}
+
+func TestAutoResolveTurn_CancelsPendingActions(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID: turnID, EncounterID: encounterID, CombatantID: combatantID,
+			Status: "active", ActionUsed: true,
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: combatantID, EncounterID: encounterID, DisplayName: "Aria",
+			HpCurrent: 20, HpMax: 30, IsAlive: true, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: uuid.New(), Settings: settingsJSON(24)}, nil
+	}
+
+	pendingActionsCancelled := false
+	store.cancelAllPendingActionsByCombatantFn = func(ctx context.Context, arg refdata.CancelAllPendingActionsByCombatantParams) error {
+		pendingActionsCancelled = true
+		assert.Equal(t, combatantID, arg.CombatantID)
+		assert.Equal(t, encounterID, arg.EncounterID)
+		return nil
+	}
+
+	notifier := &mockNotifier{}
+	timer := NewTurnTimer(store, notifier, 30*time.Second)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	actions, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
+	require.NoError(t, err)
+
+	assert.True(t, pendingActionsCancelled)
+	assert.Contains(t, actions, "Pending actions forfeited")
+}
+
+func TestAutoResolveTurn_MultiplePendingSaves(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID: turnID, EncounterID: encounterID, CombatantID: combatantID,
+			Status: "active", ActionUsed: true,
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: combatantID, EncounterID: encounterID, DisplayName: "Borr",
+			HpCurrent: 20, HpMax: 30, IsAlive: true, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: uuid.New(), Settings: settingsJSON(24)}, nil
+	}
+
+	// Two pending saves
+	store.listPendingSavesByCombatantFn = func(ctx context.Context, cID uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: uuid.New(), Ability: "CON", Dc: 10, Source: "Concentration", Status: "pending"},
+			{ID: uuid.New(), Ability: "WIS", Dc: 14, Source: "Charm Person", Status: "pending"},
+		}, nil
+	}
+
+	saveResultCount := 0
+	store.updatePendingSaveResultFn = func(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+		saveResultCount++
+		return refdata.PendingSafe{ID: arg.ID, Status: "rolled"}, nil
+	}
+
+	notifier := &mockNotifier{}
+	timer := NewTurnTimer(store, notifier, 30*time.Second)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, saveResultCount, "should roll both pending saves")
+}
+
+func TestFormatDMDecisionPrompt_ShowsPendingSaves(t *testing.T) {
+	turn := refdata.Turn{
+		MovementRemainingFt: 30,
+		AttacksRemaining:    1,
+		BonusActionUsed:     true,
+	}
+	combatant := refdata.Combatant{DisplayName: "Aria"}
+	pendingSaves := []refdata.PendingSafe{
+		{Ability: "WIS", Dc: 15, Source: "Hold Person"},
+		{Ability: "DEX", Dc: 13, Source: "Fireball"},
+	}
+
+	msg := FormatDMDecisionPromptWithSaves(combatant, turn, pendingSaves)
+	assert.Contains(t, msg, "Aria")
+	assert.Contains(t, msg, "timed out")
+	assert.Contains(t, msg, "WIS save DC 15 (Hold Person)")
+	assert.Contains(t, msg, "DEX save DC 13 (Fireball)")
+	assert.Contains(t, msg, "Pending saves")
+}
+

@@ -96,8 +96,17 @@ type mockStore struct {
 	updateReactionDeclarationCounterspellResolvedFn func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellResolvedParams) (refdata.ReactionDeclaration, error)
 
 	// Pending Actions
-	createPendingActionFn             func(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error)
-	getPendingActionFn                func(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error)
+	createPendingActionFn                  func(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error)
+	getPendingActionFn                     func(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error)
+	cancelAllPendingActionsByCombatantFn   func(ctx context.Context, arg refdata.CancelAllPendingActionsByCombatantParams) error
+
+	// Pending Saves
+	createPendingSaveFn                    func(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error)
+	getPendingSaveFn                       func(ctx context.Context, id uuid.UUID) (refdata.PendingSafe, error)
+	listPendingSavesByCombatantFn          func(ctx context.Context, combatantID uuid.UUID) ([]refdata.PendingSafe, error)
+	listPendingSavesByEncounterFn          func(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingSafe, error)
+	updatePendingSaveResultFn              func(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error)
+	cancelAllPendingSavesByCombatantFn     func(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error
 
 	// Turn Timer
 	listTurnsNeedingNudgeFn          func(ctx context.Context) ([]refdata.Turn, error)
@@ -450,6 +459,48 @@ func (m *mockStore) UpdatePendingActionDMQueueMessage(ctx context.Context, arg r
 		return m.updatePendingActionDMQueueMessageFn(ctx, arg)
 	}
 	return refdata.PendingAction{ID: arg.ID, DmQueueMessageID: arg.DmQueueMessageID, DmQueueChannelID: arg.DmQueueChannelID}, nil
+}
+func (m *mockStore) CancelAllPendingActionsByCombatant(ctx context.Context, arg refdata.CancelAllPendingActionsByCombatantParams) error {
+	if m.cancelAllPendingActionsByCombatantFn != nil {
+		return m.cancelAllPendingActionsByCombatantFn(ctx, arg)
+	}
+	return nil
+}
+func (m *mockStore) CreatePendingSave(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+	if m.createPendingSaveFn != nil {
+		return m.createPendingSaveFn(ctx, arg)
+	}
+	return refdata.PendingSafe{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, Ability: arg.Ability, Dc: arg.Dc, Source: arg.Source, Status: "pending"}, nil
+}
+func (m *mockStore) GetPendingSave(ctx context.Context, id uuid.UUID) (refdata.PendingSafe, error) {
+	if m.getPendingSaveFn != nil {
+		return m.getPendingSaveFn(ctx, id)
+	}
+	return refdata.PendingSafe{}, fmt.Errorf("not found")
+}
+func (m *mockStore) ListPendingSavesByCombatant(ctx context.Context, combatantID uuid.UUID) ([]refdata.PendingSafe, error) {
+	if m.listPendingSavesByCombatantFn != nil {
+		return m.listPendingSavesByCombatantFn(ctx, combatantID)
+	}
+	return []refdata.PendingSafe{}, nil
+}
+func (m *mockStore) ListPendingSavesByEncounter(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingSafe, error) {
+	if m.listPendingSavesByEncounterFn != nil {
+		return m.listPendingSavesByEncounterFn(ctx, encounterID)
+	}
+	return []refdata.PendingSafe{}, nil
+}
+func (m *mockStore) UpdatePendingSaveResult(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+	if m.updatePendingSaveResultFn != nil {
+		return m.updatePendingSaveResultFn(ctx, arg)
+	}
+	return refdata.PendingSafe{ID: arg.ID, Status: "rolled", RollResult: arg.RollResult, Success: arg.Success}, nil
+}
+func (m *mockStore) CancelAllPendingSavesByCombatant(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error {
+	if m.cancelAllPendingSavesByCombatantFn != nil {
+		return m.cancelAllPendingSavesByCombatantFn(ctx, arg)
+	}
+	return nil
 }
 func (m *mockStore) ListTurnsNeedingNudge(ctx context.Context) ([]refdata.Turn, error) {
 	if m.listTurnsNeedingNudgeFn != nil {

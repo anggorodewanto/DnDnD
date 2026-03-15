@@ -11,6 +11,22 @@ import (
 	"github.com/google/uuid"
 )
 
+const cancelAllPendingActionsByCombatant = `-- name: CancelAllPendingActionsByCombatant :exec
+UPDATE pending_actions
+SET status = 'cancelled', updated_at = now()
+WHERE combatant_id = $1 AND encounter_id = $2 AND status = 'pending'
+`
+
+type CancelAllPendingActionsByCombatantParams struct {
+	CombatantID uuid.UUID `json:"combatant_id"`
+	EncounterID uuid.UUID `json:"encounter_id"`
+}
+
+func (q *Queries) CancelAllPendingActionsByCombatant(ctx context.Context, arg CancelAllPendingActionsByCombatantParams) error {
+	_, err := q.db.ExecContext(ctx, cancelAllPendingActionsByCombatant, arg.CombatantID, arg.EncounterID)
+	return err
+}
+
 const createPendingAction = `-- name: CreatePendingAction :one
 INSERT INTO pending_actions (encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status)
 VALUES ($1, $2, $3, $4, $5, 'pending')

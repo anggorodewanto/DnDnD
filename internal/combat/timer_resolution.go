@@ -3,7 +3,6 @@ package combat
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -20,6 +19,11 @@ var ErrWaitAlreadyUsed = fmt.Errorf("wait has already been used for this timeout
 
 // FormatDMDecisionPrompt produces the DM decision prompt message when a turn times out.
 func FormatDMDecisionPrompt(combatant refdata.Combatant, turn refdata.Turn) string {
+	return FormatDMDecisionPromptWithSaves(combatant, turn, nil)
+}
+
+// FormatDMDecisionPromptWithSaves produces the DM decision prompt including pending saves.
+func FormatDMDecisionPromptWithSaves(combatant refdata.Combatant, turn refdata.Turn, pendingSaves []refdata.PendingSafe) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "\u26a1 @DM \u2014 %s's turn has timed out!\n", combatant.DisplayName)
@@ -36,6 +40,18 @@ func FormatDMDecisionPrompt(combatant refdata.Combatant, turn refdata.Turn) stri
 	}
 	if len(pending) > 0 {
 		fmt.Fprintf(&b, "\U0001f4cb Pending: %s\n", strings.Join(pending, " | "))
+	}
+
+	if len(pendingSaves) > 0 {
+		var saveDescs []string
+		for _, s := range pendingSaves {
+			desc := fmt.Sprintf("%s save DC %d", s.Ability, s.Dc)
+			if s.Source != "" {
+				desc += fmt.Sprintf(" (%s)", s.Source)
+			}
+			saveDescs = append(saveDescs, desc)
+		}
+		fmt.Fprintf(&b, "\U0001f3b2 Pending saves: %s\n", strings.Join(saveDescs, ", "))
 	}
 
 	b.WriteString("[\u23f3 Wait] [\U0001f3ae Roll for Player] [\u26a1 Auto-Resolve]")
@@ -81,7 +97,8 @@ func (t *TurnTimer) sendDMDecisionPrompt(ctx context.Context, turn refdata.Turn)
 	}
 
 	if channelID != "" {
-		msg := FormatDMDecisionPrompt(combatant, turn)
+		pendingSaves, _ := t.store.ListPendingSavesByCombatant(ctx, combatant.ID)
+		msg := FormatDMDecisionPromptWithSaves(combatant, turn, pendingSaves)
 		if err := t.notifier.SendMessage(channelID, msg); err != nil {
 			return err
 		}
@@ -124,13 +141,13 @@ func (t *TurnTimer) AutoResolveTurn(ctx context.Context, turnID uuid.UUID, rolle
 	var actions []string
 
 	// Check if dying — auto-roll death save
-	if IsDying(combatant.IsAlive, int(combatant.HpCurrent), mustParseDeathSaves(combatant.DeathSaves)) {
+	ds := mustParseDeathSaves(combatant.DeathSaves)
+	if IsDying(combatant.IsAlive, int(combatant.HpCurrent), ds) {
 		rollResult, err := roller.Roll("1d20")
 		if err != nil {
 			return nil, fmt.Errorf("rolling death save: %w", err)
 		}
 		roll := rollResult.Total
-		ds := mustParseDeathSaves(combatant.DeathSaves)
 		outcome := RollDeathSave(combatant.DisplayName, ds, roll)
 		actions = append(actions, outcome.Messages...)
 
@@ -188,6 +205,46 @@ func (t *TurnTimer) AutoResolveTurn(ctx context.Context, turnID uuid.UUID, rolle
 		}
 		actions = append(actions, "No movement")
 	}
+
+	// Auto-roll pending saves
+	pendingSaves, err := t.store.ListPendingSavesByCombatant(ctx, combatant.ID)
+	if err != nil {
+		return nil, fmt.Errorf("listing pending saves: %w", err)
+	}
+	for _, ps := range pendingSaves {
+		rollResult, err := roller.Roll("1d20")
+		if err != nil {
+			return nil, fmt.Errorf("rolling pending save: %w", err)
+		}
+		roll := rollResult.Total
+		success := roll >= int(ps.Dc)
+		if _, err := t.store.UpdatePendingSaveResult(ctx, refdata.UpdatePendingSaveResultParams{
+			ID:         ps.ID,
+			RollResult: sql.NullInt32{Int32: int32(roll), Valid: true},
+			Success:    sql.NullBool{Bool: success, Valid: true},
+		}); err != nil {
+			return nil, fmt.Errorf("updating pending save result: %w", err)
+		}
+		outcome := "FAIL"
+		if success {
+			outcome = "PASS"
+		}
+		source := ps.Source
+		if source == "" {
+			source = "unknown"
+		}
+		actions = append(actions, fmt.Sprintf("%s save vs DC %d (%s): rolled %d — %s",
+			ps.Ability, ps.Dc, source, roll, outcome))
+	}
+
+	// Forfeit pending actions
+	if err := t.store.CancelAllPendingActionsByCombatant(ctx, refdata.CancelAllPendingActionsByCombatantParams{
+		CombatantID: combatant.ID,
+		EncounterID: turn.EncounterID,
+	}); err != nil {
+		return nil, fmt.Errorf("cancelling pending actions: %w", err)
+	}
+	actions = append(actions, "Pending actions forfeited")
 
 	// Forfeit all active reaction declarations
 	if err := t.store.CancelAllReactionDeclarationsByCombatant(ctx, refdata.CancelAllReactionDeclarationsByCombatantParams{
@@ -272,54 +329,17 @@ func (t *TurnTimer) WaitExtendTurn(ctx context.Context, turnID uuid.UUID) error 
 }
 
 // ScanStaleTurns processes turns that should have been escalated but weren't (bot was down).
+// It reuses the same processTimeouts and processDMAutoResolves logic used in normal polling.
 func (t *TurnTimer) ScanStaleTurns(ctx context.Context) error {
-	// Process timed-out turns that never got a DM decision prompt
-	timedOut, err := t.store.ListTurnsTimedOut(ctx)
-	if err != nil {
-		return fmt.Errorf("listing stale timed-out turns: %w", err)
+	if err := t.processTimeouts(ctx); err != nil {
+		return fmt.Errorf("scanning stale timed-out turns: %w", err)
 	}
-	for _, turn := range timedOut {
-		if err := t.sendDMDecisionPrompt(ctx, turn); err != nil {
-			log.Printf("stale scan: failed to send DM decision prompt for turn %s: %v", turn.ID, err)
-			continue
-		}
-	}
-
-	// Process turns where DM deadline has passed
-	dmExpired, err := t.store.ListTurnsNeedingDMAutoResolve(ctx)
-	if err != nil {
-		return fmt.Errorf("listing stale DM auto-resolve turns: %w", err)
-	}
-	roller := dice.NewRoller(nil)
-	for _, turn := range dmExpired {
-		if _, err := t.AutoResolveTurn(ctx, turn.ID, roller); err != nil {
-			log.Printf("stale scan: failed to auto-resolve turn %s: %v", turn.ID, err)
-			continue
-		}
-	}
-
-	return nil
+	return t.processDMAutoResolves(ctx)
 }
 
 // getCombatLogChannel returns the combat-log channel ID for the encounter's campaign.
 func (t *TurnTimer) getCombatLogChannel(ctx context.Context, encounterID uuid.UUID) (string, error) {
-	camp, err := t.store.GetCampaignByEncounterID(ctx, encounterID)
-	if err != nil {
-		return "", err
-	}
-
-	if !camp.Settings.Valid {
-		return "", nil
-	}
-
-	var settings struct {
-		ChannelIDs map[string]string `json:"channel_ids,omitempty"`
-	}
-	if err := json.Unmarshal(camp.Settings.RawMessage, &settings); err != nil {
-		return "", err
-	}
-
-	return settings.ChannelIDs["combat-log"], nil
+	return t.getChannel(ctx, encounterID, "combat-log")
 }
 
 // mustParseDeathSaves parses death saves, returning zero value on error.

@@ -23,3 +23,8 @@ UPDATE pending_actions
 SET dm_queue_message_id = $2, dm_queue_channel_id = $3, updated_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- name: CancelAllPendingActionsByCombatant :exec
+UPDATE pending_actions
+SET status = 'cancelled', updated_at = now()
+WHERE combatant_id = $1 AND encounter_id = $2 AND status = 'pending';

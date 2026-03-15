@@ -300,6 +300,20 @@ type PendingAction struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
+type PendingSafe struct {
+	ID          uuid.UUID     `json:"id"`
+	EncounterID uuid.UUID     `json:"encounter_id"`
+	CombatantID uuid.UUID     `json:"combatant_id"`
+	Ability     string        `json:"ability"`
+	Dc          int32         `json:"dc"`
+	Source      string        `json:"source"`
+	Status      string        `json:"status"`
+	RollResult  sql.NullInt32 `json:"roll_result"`
+	Success     sql.NullBool  `json:"success"`
+	CreatedAt   time.Time     `json:"created_at"`
+	UpdatedAt   time.Time     `json:"updated_at"`
+}
+
 type PlayerCharacter struct {
 	ID            uuid.UUID      `json:"id"`
 	CampaignID    uuid.UUID      `json:"campaign_id"`
