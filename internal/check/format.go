@@ -6,6 +6,8 @@ import (
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/ab/dndnd/internal/dice"
 )
 
 // titleCase capitalizes the first letter of each word.
@@ -29,7 +31,7 @@ func FormatSingleCheckResult(charName string, result SingleCheckResult) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "**%s** — %s Check: **%d** (%s)", charName, skillLabel, result.Total, result.D20Result.Breakdown)
 
-	if result.D20Result.Mode != 0 {
+	if result.D20Result.Mode != dice.Normal {
 		fmt.Fprintf(&b, " [%s]", result.D20Result.Mode)
 	}
 

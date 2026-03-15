@@ -94,8 +94,8 @@ func makeCheckInteraction(skill string, adv, disadv bool, target ...string) *dis
 
 func makeTestCharacter() refdata.Character {
 	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 18, CHA: 8})
-	profs, _ := json.Marshal(character.Proficiencies{
-		Skills: []string{"perception", "insight", "medicine"},
+	profs, _ := json.Marshal(map[string]interface{}{
+		"skills": []string{"perception", "insight", "medicine"},
 	})
 	return refdata.Character{
 		ID:               uuid.New(),
@@ -158,6 +158,60 @@ func TestCheckHandler_BasicSkillCheck(t *testing.T) {
 	// Roll logged
 	if len(logger.logged) != 1 {
 		t.Errorf("expected 1 roll logged, got %d", len(logger.logged))
+	}
+}
+
+func TestCheckHandler_ExpertiseAndJackOfAllTrades(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	scores, _ := json.Marshal(character.AbilityScores{DEX: 14, CHA: 12}) // DEX +2, CHA +1
+	profs, _ := json.Marshal(map[string]interface{}{
+		"skills":             []string{"stealth", "perception"},
+		"expertise":          []string{"stealth"},
+		"jack_of_all_trades": true,
+	})
+	char := refdata.Character{
+		ID:               uuid.New(),
+		CampaignID:       campaignID,
+		Name:             "Bard",
+		Level:            5,
+		ProficiencyBonus: 3,
+		AbilityScores:    scores,
+		Proficiencies:    pqtype.NullRawMessage{RawMessage: profs, Valid: true},
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	logger := &mockCheckRollLogger{}
+
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		nil, nil,
+		logger,
+	)
+
+	// Stealth with expertise: d20(10) + DEX(2) + expertise(3*2=6) = 18
+	h.Handle(makeCheckInteraction("stealth", false, false))
+	if !strings.Contains(responded, "18") {
+		t.Errorf("expected total 18 with expertise, got: %s", responded)
+	}
+
+	// Persuasion (not proficient) with Jack of All Trades: d20(10) + CHA(1) + JoAT(3/2=1) = 12
+	h.Handle(makeCheckInteraction("persuasion", false, false))
+	if !strings.Contains(responded, "12") {
+		t.Errorf("expected total 12 with jack of all trades, got: %s", responded)
 	}
 }
 

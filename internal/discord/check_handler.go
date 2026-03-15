@@ -98,7 +98,7 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	// Parse character data
-	scores, profs, err := parseCharacterData(char)
+	charData, err := parseCharacterData(char)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Error reading character data.")
 		return
@@ -114,25 +114,22 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 		rollMode = dice.Disadvantage
 	}
 
-	// Look up conditions from combat if active
-	condInfo := h.lookupCombatConditions(ctx, interaction.GuildID, char.ID)
-
 	// Build input
 	input := check.SingleCheckInput{
-		Scores:           scores,
+		Scores:           charData.Scores,
 		Skill:            strings.ToLower(skill),
-		ProficientSkills: profs.Skills,
-		ExpertiseSkills:  h.getExpertiseSkills(profs),
-		JackOfAllTrades:  h.hasJackOfAllTrades(char),
+		ProficientSkills: charData.Skills,
+		ExpertiseSkills:  charData.Expertise,
+		JackOfAllTrades:  charData.JackOfAllTrades,
 		ProfBonus:        int(char.ProficiencyBonus),
 		RollMode:         rollMode,
 	}
 
 	// Apply condition effects if in combat
-	if len(condInfo) > 0 {
-		conds, _ := check.ParseConditions(condInfo[0].Conditions)
+	if condInfo, ok := h.lookupCombatConditions(ctx, interaction.GuildID, char.ID); ok {
+		conds, _ := check.ParseConditions(condInfo.Conditions)
 		input.Conditions = conds
-		input.ExhaustionLevel = condInfo[0].ExhaustionLevel
+		input.ExhaustionLevel = condInfo.ExhaustionLevel
 	}
 
 	result, err := h.checkService.SingleCheck(input)
@@ -174,61 +171,65 @@ func (h *CheckHandler) parseOptions(opts []*discordgo.ApplicationCommandInteract
 	return
 }
 
-// parseCharacterData extracts ability scores and proficiencies from a character.
-func parseCharacterData(char refdata.Character) (character.AbilityScores, character.Proficiencies, error) {
+// characterData holds parsed character data needed for checks.
+type characterData struct {
+	Scores          character.AbilityScores
+	Skills          []string
+	Expertise       []string
+	JackOfAllTrades bool
+}
+
+// parseCharacterData extracts ability scores and proficiency data from a character.
+func parseCharacterData(char refdata.Character) (characterData, error) {
 	var scores character.AbilityScores
 	if err := json.Unmarshal(char.AbilityScores, &scores); err != nil {
-		return scores, character.Proficiencies{}, fmt.Errorf("parsing ability scores: %w", err)
+		return characterData{}, fmt.Errorf("parsing ability scores: %w", err)
 	}
 
-	var profs character.Proficiencies
+	var profData struct {
+		Skills          []string `json:"skills"`
+		Expertise       []string `json:"expertise"`
+		JackOfAllTrades bool     `json:"jack_of_all_trades"`
+	}
 	if char.Proficiencies.Valid {
-		if err := json.Unmarshal(char.Proficiencies.RawMessage, &profs); err != nil {
-			return scores, character.Proficiencies{}, fmt.Errorf("parsing proficiencies: %w", err)
+		if err := json.Unmarshal(char.Proficiencies.RawMessage, &profData); err != nil {
+			return characterData{}, fmt.Errorf("parsing proficiencies: %w", err)
 		}
 	}
 
-	return scores, profs, nil
+	return characterData{
+		Scores:          scores,
+		Skills:          profData.Skills,
+		Expertise:       profData.Expertise,
+		JackOfAllTrades: profData.JackOfAllTrades,
+	}, nil
 }
 
 // lookupCombatConditions checks if the character is in active combat and returns their conditions.
-func (h *CheckHandler) lookupCombatConditions(ctx context.Context, guildID string, charID uuid.UUID) []check.ConditionInfo {
+func (h *CheckHandler) lookupCombatConditions(ctx context.Context, guildID string, charID uuid.UUID) (check.ConditionInfo, bool) {
 	if h.encounterProvider == nil || h.combatantLookup == nil {
-		return nil
+		return check.ConditionInfo{}, false
 	}
 
 	encounterID, err := h.encounterProvider.GetActiveEncounterID(ctx, guildID)
 	if err != nil {
-		return nil
+		return check.ConditionInfo{}, false
 	}
 
 	combatants, err := h.combatantLookup.ListCombatantsByEncounterID(ctx, encounterID)
 	if err != nil {
-		return nil
+		return check.ConditionInfo{}, false
 	}
 
 	for _, c := range combatants {
 		if !c.CharacterID.Valid || c.CharacterID.UUID != charID {
 			continue
 		}
-		return []check.ConditionInfo{{
+		return check.ConditionInfo{
 			Conditions:      c.Conditions,
 			ExhaustionLevel: int(c.ExhaustionLevel),
-		}}
+		}, true
 	}
 
-	return nil
-}
-
-// getExpertiseSkills returns expertise skills. Currently reads from proficiencies.
-// In 5e, expertise is typically stored separately; for now we check the same field.
-func (h *CheckHandler) getExpertiseSkills(_ character.Proficiencies) []string {
-	// TODO: wire expertise from character data when stored
-	return nil
-}
-
-// hasJackOfAllTrades checks if the character has Jack of All Trades (Bard feature).
-func (h *CheckHandler) hasJackOfAllTrades(_ refdata.Character) bool {
-	// TODO: wire from character features when stored
-	return false
+	return check.ConditionInfo{}, false
 }

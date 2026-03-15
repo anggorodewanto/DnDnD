@@ -458,7 +458,7 @@
   - Depends on: Phase 24
   - Done when: Integration tests verify recap content, round grouping, turn filtering, post-combat access.
 
-- [ ] **Phase 81: Skill & Ability Checks (`/check`)**
+- [x] **Phase 81: Skill & Ability Checks (`/check`)**
   - Scope: `/check [skill/ability]`: d20 + ability mod + proficiency (if proficient). Expertise (double proficiency). Jack of All Trades (half proficiency on non-proficient). `--adv`/`--disadv` flags. Targeted checks (`/check medicine AR`): adjacency validation, action cost in combat. DM-prompted checks. Passive checks (10 + mod). Group checks (DM triggers, half must succeed). Contested checks. Auto-applied condition modifiers. Post to `#roll-history`, DM narrates outcome.
   - Depends on: Phase 7, Phase 18, Phase 40
   - Done when: Integration tests verify check calculations, expertise, JoAT, targeted checks, group checks, contested checks, condition modifiers.
