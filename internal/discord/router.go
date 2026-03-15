@@ -20,6 +20,7 @@ type CommandRouter struct {
 	moveHandler *MoveHandler
 	flyHandler  *FlyHandler
 	doneHandler *DoneHandler
+	restHandler *RestHandler
 }
 
 // SetMoveHandler registers the MoveHandler for button callback routing.
@@ -63,9 +64,10 @@ func (r *CommandRouter) SetSaveHandler(h *SaveHandler) {
 	r.handlers["save"] = h
 }
 
-// SetRestHandler registers the RestHandler for the /rest command.
+// SetRestHandler registers the RestHandler for the /rest command and component callbacks.
 func (r *CommandRouter) SetRestHandler(h *RestHandler) {
 	r.handlers["rest"] = h
+	r.restHandler = h
 }
 
 // RegistrationDeps holds the optional dependencies for registration command handlers.
@@ -226,6 +228,14 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 
 		if customID == "done_cancel" {
 			r.doneHandler.HandleDoneCancel(interaction)
+			return
+		}
+	}
+
+	// Rest hit dice button callbacks
+	if r.restHandler != nil {
+		if strings.HasPrefix(customID, "rest_hitdice:") {
+			r.restHandler.HandleHitDiceComponent(interaction)
 			return
 		}
 	}

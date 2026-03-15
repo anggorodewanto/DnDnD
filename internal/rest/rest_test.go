@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
@@ -464,13 +465,13 @@ func TestFormatShortRestResult(t *testing.T) {
 	if msg == "" {
 		t.Fatal("expected non-empty message")
 	}
-	if !contains(msg, "Short Rest") {
+	if !strings.Contains(msg, "Short Rest") {
 		t.Errorf("expected 'Short Rest' in message, got: %s", msg)
 	}
-	if !contains(msg, "16 HP") {
+	if !strings.Contains(msg, "16 HP") {
 		t.Errorf("expected '16 HP' in message, got: %s", msg)
 	}
-	if !contains(msg, "action-surge") {
+	if !strings.Contains(msg, "action-surge") {
 		t.Errorf("expected 'action-surge' in message, got: %s", msg)
 	}
 }
@@ -495,10 +496,10 @@ func TestFormatLongRestResult(t *testing.T) {
 	if msg == "" {
 		t.Fatal("expected non-empty message")
 	}
-	if !contains(msg, "Long Rest") {
+	if !strings.Contains(msg, "Long Rest") {
 		t.Errorf("expected 'Long Rest' in message, got: %s", msg)
 	}
-	if !contains(msg, "40/40 HP") {
+	if !strings.Contains(msg, "40/40 HP") {
 		t.Errorf("expected '40/40 HP' in message, got: %s", msg)
 	}
 }
@@ -515,23 +516,11 @@ func TestFormatLongRestResult_PreparedCasterReminder(t *testing.T) {
 	}
 
 	msg := FormatLongRestResult("Elara", result)
-	if !contains(msg, "/prepare") {
+	if !strings.Contains(msg, "/prepare") {
 		t.Errorf("expected '/prepare' reminder in message, got: %s", msg)
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && containsSubstring(s, substr)
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 // --- TDD Cycle 18: Short rest negative CON modifier floor at 0 ---
 
@@ -655,7 +644,7 @@ func TestFormatShortRestResult_NoHealing(t *testing.T) {
 	}
 
 	msg := FormatShortRestResult("Thorin", result)
-	if !contains(msg, "No hit dice spent") {
+	if !strings.Contains(msg, "No hit dice spent") {
 		t.Errorf("expected 'No hit dice spent' in message, got: %s", msg)
 	}
 }
@@ -673,7 +662,7 @@ func TestFormatShortRestResult_PactRestore(t *testing.T) {
 	}
 
 	msg := FormatShortRestResult("Eldarin", result)
-	if !contains(msg, "Pact magic slots restored") {
+	if !strings.Contains(msg, "Pact magic slots restored") {
 		t.Errorf("expected pact restore message, got: %s", msg)
 	}
 }
@@ -728,6 +717,41 @@ func TestLongRest_AllClassHitDice(t *testing.T) {
 	// Level 4 total, restore 2
 	if result.HitDiceRestored != 2 {
 		t.Errorf("HitDiceRestored = %d, want 2", result.HitDiceRestored)
+	}
+}
+
+// --- TDD Cycle 33: FormatShortRestResult shows HPMax not HPAfter ---
+
+func TestFormatShortRestResult_ShowsHPMax(t *testing.T) {
+	result := ShortRestResult{
+		HPBefore:         20,
+		HPAfter:          36,
+		HPMax:            44,
+		HPHealed:         16,
+		HitDieRolls:      []HitDieRoll{{DieType: "d10", Rolled: 6, CONMod: 2, Healed: 8}},
+		HitDiceRemaining: map[string]int{"d10": 4},
+	}
+
+	msg := FormatShortRestResult("Thorin", result)
+	if !strings.Contains(msg, "36/44") {
+		t.Errorf("expected '36/44' (HPAfter/HPMax) in message, got: %s", msg)
+	}
+}
+
+// --- TDD Cycle 34: FormatShortRestResult no healing shows HPMax ---
+
+func TestFormatShortRestResult_NoHealing_ShowsHPMax(t *testing.T) {
+	result := ShortRestResult{
+		HPBefore:         40,
+		HPAfter:          40,
+		HPMax:            44,
+		HPHealed:         0,
+		HitDiceRemaining: map[string]int{"d10": 5},
+	}
+
+	msg := FormatShortRestResult("Thorin", result)
+	if !strings.Contains(msg, "40/44") {
+		t.Errorf("expected '40/44' in message, got: %s", msg)
 	}
 }
 

@@ -13,12 +13,12 @@ func FormatShortRestResult(charName string, result ShortRestResult) string {
 	fmt.Fprintf(&b, "**%s** — Short Rest Complete\n", charName)
 
 	if result.HPHealed > 0 {
-		fmt.Fprintf(&b, "> Healed **%d HP** (%d → %d/%d)\n", result.HPHealed, result.HPBefore, result.HPAfter, result.HPAfter)
+		fmt.Fprintf(&b, "> Healed **%d HP** (%d → %d/%d)\n", result.HPHealed, result.HPBefore, result.HPAfter, result.HPMax)
 		for _, roll := range result.HitDieRolls {
 			fmt.Fprintf(&b, "> • %s: rolled %d + %d CON = %d HP\n", roll.DieType, roll.Rolled, roll.CONMod, roll.Healed)
 		}
 	} else {
-		fmt.Fprintf(&b, "> No hit dice spent. HP: %d/%d\n", result.HPAfter, result.HPAfter)
+		fmt.Fprintf(&b, "> No hit dice spent. HP: %d/%d\n", result.HPAfter, result.HPMax)
 	}
 
 	if len(result.FeaturesRecharged) > 0 {

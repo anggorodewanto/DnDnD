@@ -41,6 +41,7 @@ type HitDieRoll struct {
 type ShortRestResult struct {
 	HPBefore            int
 	HPAfter             int
+	HPMax               int
 	HPHealed            int
 	HitDieRolls         []HitDieRoll
 	HitDiceRemaining    map[string]int
@@ -53,6 +54,7 @@ type ShortRestResult struct {
 func (s *Service) ShortRest(input ShortRestInput) (ShortRestResult, error) {
 	result := ShortRestResult{
 		HPBefore:         input.HPCurrent,
+		HPMax:            input.HPMax,
 		HitDiceRemaining: copyMap(input.HitDiceRemaining),
 	}
 

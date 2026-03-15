@@ -265,19 +265,498 @@ func TestRestHandler_NoCampaign(t *testing.T) {
 // --- TDD Cycle 26: Short rest with auto-spend 0 dice (for now, auto-approve with 0 dice spend) ---
 
 func TestRestHandler_ShortRest_FeatureRecharge(t *testing.T) {
+	var editContent string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		return nil
+	}
+	sess.InteractionResponseEditFunc = func(_ *discordgo.Interaction, edit *discordgo.WebhookEdit) (*discordgo.Message, error) {
+		if edit.Content != nil {
+			editContent = *edit.Content
+		}
+		return &discordgo.Message{}, nil
+	}
+
+	campaignID := uuid.New()
+	char := makeRestTestCharacter()
+	char.CampaignID = campaignID
+	roller := dice.NewRoller(func(max int) int { return 6 })
+
+	h := NewRestHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		&mockRestCharacterUpdater{
+			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+				return refdata.Character{ID: arg.ID}, nil
+			},
+		},
+		&mockCheckRollLogger{},
+		nil,
+	)
+
+	// Simulate button click: spend 0 dice (skip) to trigger features
+	componentInteraction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "rest_hitdice:" + char.ID.String() + ":d10:0",
+		},
+	}
+
+	h.HandleHitDiceComponent(componentInteraction)
+
+	// Features should be recharged in the edit response
+	if !strings.Contains(editContent, "action-surge") {
+		t.Errorf("expected 'action-surge' in response, got: %s", editContent)
+	}
+	if !strings.Contains(editContent, "second-wind") {
+		t.Errorf("expected 'second-wind' in response, got: %s", editContent)
+	}
+}
+
+// --- TDD Cycle 35: Long rest persistLongRest uses correct new values in single UpdateCharacter call ---
+
+func TestRestHandler_LongRest_PersistCorrectValues(t *testing.T) {
 	var responded string
+	var capturedParams refdata.UpdateCharacterParams
 	sess := newTestMock()
 	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
 		responded = resp.Data.Content
 		return nil
 	}
 
+	campaignID := uuid.New()
+
+	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8})
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "fighter", Level: 5}})
+	hitDice, _ := json.Marshal(map[string]int{"d10": 2})
+	featureUses, _ := json.Marshal(map[string]character.FeatureUse{
+		"action-surge": {Current: 0, Max: 1, Recharge: "short"},
+	})
+	spellSlots, _ := json.Marshal(map[string]character.SlotInfo{
+		"1": {Current: 0, Max: 4},
+	})
+	pactSlots, _ := json.Marshal(character.PactMagicSlots{SlotLevel: 3, Current: 0, Max: 2})
+
+	char := refdata.Character{
+		ID:               uuid.New(),
+		CampaignID:       campaignID,
+		Name:             "Thorin",
+		Level:            5,
+		HpMax:            44,
+		HpCurrent:        20,
+		AbilityScores:    scores,
+		Classes:          classes,
+		HitDiceRemaining: hitDice,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: featureUses, Valid: true},
+		SpellSlots:       pqtype.NullRawMessage{RawMessage: spellSlots, Valid: true},
+		PactMagicSlots:   pqtype.NullRawMessage{RawMessage: pactSlots, Valid: true},
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 6 })
+
+	h := NewRestHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		&mockRestCharacterUpdater{
+			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+				capturedParams = arg
+				return refdata.Character{ID: arg.ID}, nil
+			},
+		},
+		&mockCheckRollLogger{},
+		nil,
+	)
+
+	h.Handle(makeRestInteraction("long"))
+
+	if responded == "" {
+		t.Fatal("expected a response")
+	}
+
+	// HP should be set to HPMax
+	if capturedParams.HpCurrent != 44 {
+		t.Errorf("HpCurrent = %d, want 44", capturedParams.HpCurrent)
+	}
+
+	// Feature uses should be recharged (marshaled new values)
+	var persistedFeatures map[string]character.FeatureUse
+	if capturedParams.FeatureUses.Valid {
+		if err := json.Unmarshal(capturedParams.FeatureUses.RawMessage, &persistedFeatures); err != nil {
+			t.Fatalf("unmarshal feature uses: %v", err)
+		}
+		as, ok := persistedFeatures["action-surge"]
+		if !ok {
+			t.Error("action-surge not in persisted features")
+		} else if as.Current != 1 {
+			t.Errorf("action-surge.Current = %d, want 1 (recharged)", as.Current)
+		}
+	} else {
+		t.Error("FeatureUses not valid in UpdateCharacterParams")
+	}
+
+	// Spell slots should be restored
+	var persistedSlots map[string]character.SlotInfo
+	if capturedParams.SpellSlots.Valid {
+		if err := json.Unmarshal(capturedParams.SpellSlots.RawMessage, &persistedSlots); err != nil {
+			t.Fatalf("unmarshal spell slots: %v", err)
+		}
+		slot1, ok := persistedSlots["1"]
+		if !ok {
+			t.Error("spell slot level 1 not in persisted slots")
+		} else if slot1.Current != 4 {
+			t.Errorf("slot1.Current = %d, want 4 (restored)", slot1.Current)
+		}
+	} else {
+		t.Error("SpellSlots not valid in UpdateCharacterParams")
+	}
+
+	// Pact magic slots should be restored
+	if capturedParams.PactMagicSlots.Valid {
+		var persistedPact character.PactMagicSlots
+		if err := json.Unmarshal(capturedParams.PactMagicSlots.RawMessage, &persistedPact); err != nil {
+			t.Fatalf("unmarshal pact slots: %v", err)
+		}
+		if persistedPact.Current != 2 {
+			t.Errorf("pact.Current = %d, want 2 (restored)", persistedPact.Current)
+		}
+	} else {
+		t.Error("PactMagicSlots not valid in UpdateCharacterParams")
+	}
+
+	// Hit dice should be restored (fighter 5, had 2, restore 2 = 4)
+	var persistedHitDice map[string]int
+	if err := json.Unmarshal(capturedParams.HitDiceRemaining, &persistedHitDice); err != nil {
+		t.Fatalf("unmarshal hit dice: %v", err)
+	}
+	if persistedHitDice["d10"] != 4 {
+		t.Errorf("hit dice d10 = %d, want 4", persistedHitDice["d10"])
+	}
+}
+
+// --- TDD Cycle 36: Short rest sends hit dice button prompt ---
+
+func TestRestHandler_ShortRest_HitDicePrompt(t *testing.T) {
+	var responded *discordgo.InteractionResponse
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp
+		return nil
+	}
+
 	h := setupRestHandler(sess)
 	h.Handle(makeRestInteraction("short"))
 
-	// Features should be recharged
-	if !strings.Contains(responded, "action-surge") && !strings.Contains(responded, "second-wind") {
-		t.Logf("Response: %s", responded)
+	if responded == nil {
+		t.Fatal("expected a response")
+	}
+
+	// Should have action row components for hit dice selection
+	if len(responded.Data.Components) == 0 {
+		t.Error("expected action row components for hit dice buttons")
+	}
+
+	// Should contain the hit dice info text
+	if !strings.Contains(responded.Data.Content, "hit dice") {
+		t.Errorf("expected 'hit dice' in prompt message, got: %s", responded.Data.Content)
+	}
+}
+
+// --- TDD Cycle 37: Short rest hit dice component handler applies healing ---
+
+func TestRestHandler_HitDiceComponent_AppliesHealing(t *testing.T) {
+	var updatedParams refdata.UpdateCharacterParams
+	var finalResponse *discordgo.WebhookEdit
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		return nil
+	}
+	sess.InteractionResponseEditFunc = func(_ *discordgo.Interaction, edit *discordgo.WebhookEdit) (*discordgo.Message, error) {
+		finalResponse = edit
+		return &discordgo.Message{}, nil
+	}
+
+	campaignID := uuid.New()
+	charID := uuid.New()
+	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8})
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "fighter", Level: 5}})
+	hitDice, _ := json.Marshal(map[string]int{"d10": 5})
+	featureUses, _ := json.Marshal(map[string]character.FeatureUse{
+		"action-surge": {Current: 0, Max: 1, Recharge: "short"},
+	})
+	spellSlots, _ := json.Marshal(map[string]character.SlotInfo{})
+
+	char := refdata.Character{
+		ID:               charID,
+		CampaignID:       campaignID,
+		Name:             "Thorin",
+		Level:            5,
+		HpMax:            44,
+		HpCurrent:        20,
+		AbilityScores:    scores,
+		Classes:          classes,
+		HitDiceRemaining: hitDice,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: featureUses, Valid: true},
+		SpellSlots:       pqtype.NullRawMessage{RawMessage: spellSlots, Valid: true},
+		ProficiencyBonus: 3,
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 6 }) // always rolls 6
+
+	h := NewRestHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		&mockRestCharacterUpdater{
+			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+				updatedParams = arg
+				return refdata.Character{ID: arg.ID}, nil
+			},
+		},
+		&mockCheckRollLogger{},
+		nil,
+	)
+
+	// Simulate button click: spend 2 d10 hit dice
+	componentInteraction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "rest_hitdice:" + charID.String() + ":d10:2",
+		},
+	}
+
+	h.HandleHitDiceComponent(componentInteraction)
+
+	// Should have updated HP: 20 + 2*(6+2) = 36
+	if updatedParams.HpCurrent != 36 {
+		t.Errorf("HpCurrent = %d, want 36", updatedParams.HpCurrent)
+	}
+
+	// Should have response edit showing healing results
+	if finalResponse == nil {
+		t.Fatal("expected edit response for hit dice result")
+	}
+	if !strings.Contains(*finalResponse.Content, "Short Rest") {
+		t.Errorf("expected 'Short Rest' in final message, got: %s", *finalResponse.Content)
+	}
+}
+
+// --- TDD Cycle 38: Short rest skip button (spend 0) ---
+
+func TestRestHandler_HitDiceComponent_SpendZero(t *testing.T) {
+	var finalResponse *discordgo.WebhookEdit
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		return nil
+	}
+	sess.InteractionResponseEditFunc = func(_ *discordgo.Interaction, edit *discordgo.WebhookEdit) (*discordgo.Message, error) {
+		finalResponse = edit
+		return &discordgo.Message{}, nil
+	}
+
+	campaignID := uuid.New()
+	charID := uuid.New()
+	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8})
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "fighter", Level: 5}})
+	hitDice, _ := json.Marshal(map[string]int{"d10": 5})
+	featureUses, _ := json.Marshal(map[string]character.FeatureUse{
+		"action-surge": {Current: 0, Max: 1, Recharge: "short"},
+	})
+	spellSlots, _ := json.Marshal(map[string]character.SlotInfo{})
+
+	char := refdata.Character{
+		ID:               charID,
+		CampaignID:       campaignID,
+		Name:             "Thorin",
+		Level:            5,
+		HpMax:            44,
+		HpCurrent:        20,
+		AbilityScores:    scores,
+		Classes:          classes,
+		HitDiceRemaining: hitDice,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: featureUses, Valid: true},
+		SpellSlots:       pqtype.NullRawMessage{RawMessage: spellSlots, Valid: true},
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 6 })
+
+	h := NewRestHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		&mockRestCharacterUpdater{
+			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+				return refdata.Character{ID: arg.ID}, nil
+			},
+		},
+		&mockCheckRollLogger{},
+		nil,
+	)
+
+	componentInteraction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "rest_hitdice:" + charID.String() + ":d10:0",
+		},
+	}
+
+	h.HandleHitDiceComponent(componentInteraction)
+
+	if finalResponse == nil {
+		t.Fatal("expected edit response")
+	}
+	if !strings.Contains(*finalResponse.Content, "Short Rest") {
+		t.Errorf("expected 'Short Rest' in message, got: %s", *finalResponse.Content)
+	}
+	if !strings.Contains(*finalResponse.Content, "action-surge") {
+		t.Errorf("expected feature recharge in message, got: %s", *finalResponse.Content)
+	}
+}
+
+// --- TDD Cycle 39: BuildHitDiceButtons creates proper button layout ---
+
+func TestBuildHitDiceButtons_SingleClass(t *testing.T) {
+	hitDice := map[string]int{"d10": 5}
+	charID := uuid.New()
+	components := BuildHitDiceButtons(charID, hitDice)
+
+	if len(components) == 0 {
+		t.Fatal("expected at least one action row")
+	}
+
+	// Should have buttons from 0 to 5
+	row := components[0]
+	actionsRow, ok := row.(*discordgo.ActionsRow)
+	if !ok {
+		t.Fatal("expected ActionsRow component")
+	}
+	if len(actionsRow.Components) < 2 {
+		t.Errorf("expected at least 2 buttons (0 and more), got %d", len(actionsRow.Components))
+	}
+}
+
+func TestBuildHitDiceButtons_Multiclass(t *testing.T) {
+	hitDice := map[string]int{"d10": 3, "d8": 2}
+	charID := uuid.New()
+	components := BuildHitDiceButtons(charID, hitDice)
+
+	// Should have separate rows per die type
+	if len(components) < 2 {
+		t.Errorf("expected at least 2 action rows for multiclass, got %d", len(components))
+	}
+}
+
+// --- TDD Cycle 40: ParseHitDiceCustomID error cases ---
+
+func TestParseHitDiceCustomID_InvalidFormat(t *testing.T) {
+	_, _, _, err := ParseHitDiceCustomID("invalid")
+	if err == nil {
+		t.Error("expected error for invalid custom ID")
+	}
+}
+
+func TestParseHitDiceCustomID_InvalidCharID(t *testing.T) {
+	_, _, _, err := ParseHitDiceCustomID("rest_hitdice:bad-id:d10:2")
+	if err == nil {
+		t.Error("expected error for invalid character ID")
+	}
+}
+
+func TestParseHitDiceCustomID_InvalidCount(t *testing.T) {
+	_, _, _, err := ParseHitDiceCustomID("rest_hitdice:" + uuid.New().String() + ":d10:abc")
+	if err == nil {
+		t.Error("expected error for invalid count")
+	}
+}
+
+func TestParseHitDiceCustomID_Valid(t *testing.T) {
+	id := uuid.New()
+	charID, dieType, count, err := ParseHitDiceCustomID("rest_hitdice:" + id.String() + ":d10:3")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if charID != id {
+		t.Errorf("charID = %s, want %s", charID, id)
+	}
+	if dieType != "d10" {
+		t.Errorf("dieType = %s, want d10", dieType)
+	}
+	if count != 3 {
+		t.Errorf("count = %d, want 3", count)
+	}
+}
+
+// --- TDD Cycle 41: HandleHitDiceComponent wrong character ---
+
+func TestRestHandler_HitDiceComponent_WrongCharacter(t *testing.T) {
+	var editContent string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		return nil
+	}
+	sess.InteractionResponseEditFunc = func(_ *discordgo.Interaction, edit *discordgo.WebhookEdit) (*discordgo.Message, error) {
+		if edit.Content != nil {
+			editContent = *edit.Content
+		}
+		return &discordgo.Message{}, nil
+	}
+
+	h := setupRestHandler(sess)
+
+	// Use a different char ID than what the handler finds
+	otherID := uuid.New()
+	componentInteraction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "rest_hitdice:" + otherID.String() + ":d10:1",
+		},
+	}
+
+	h.HandleHitDiceComponent(componentInteraction)
+
+	if !strings.Contains(editContent, "not for your character") {
+		t.Errorf("expected 'not for your character' message, got: %s", editContent)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -25,6 +26,9 @@ type RestCharacterUpdater interface {
 }
 
 // RestHandler handles the /rest slash command.
+// TODO: Wire DM approval flow when the DM queue approval callback system is built.
+// The dmQueueFunc field is reserved for posting rest requests to #dm-queue and
+// waiting for DM approval before applying rest benefits.
 type RestHandler struct {
 	session           Session
 	restService       *rest.Service
@@ -33,7 +37,7 @@ type RestHandler struct {
 	encounterProvider CheckEncounterProvider
 	charUpdater      RestCharacterUpdater
 	rollLogger       dice.RollHistoryLogger
-	dmQueueFunc      func(guildID string) string
+	dmQueueFunc      func(guildID string) string // reserved for future DM approval flow
 }
 
 // NewRestHandler creates a new RestHandler.
@@ -106,15 +110,78 @@ func (h *RestHandler) Handle(interaction *discordgo.Interaction) {
 	}
 }
 
-func (h *RestHandler) handleShortRest(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, charData restCharacterData) {
-	// For Phase 83a: auto-approve, spend 0 hit dice (hit dice spending will be interactive in future)
-	// The service still recharges features and pact slots
+func (h *RestHandler) handleShortRest(_ context.Context, interaction *discordgo.Interaction, char refdata.Character, charData restCharacterData) {
+	// Build hit dice prompt with buttons
+	var prompt strings.Builder
+	prompt.WriteString("**Short Rest** — Select hit dice to spend:\n")
+	for dieType, remaining := range charData.HitDiceRemaining {
+		prompt.WriteString(fmt.Sprintf("> You have **%d** hit dice remaining (%s)\n", remaining, dieType))
+	}
+	prompt.WriteString("> Each hit die heals 1dX + CON modifier\n")
+
+	components := BuildHitDiceButtons(char.ID, charData.HitDiceRemaining)
+
+	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content:    prompt.String(),
+			Flags:      discordgo.MessageFlagsEphemeral,
+			Components: components,
+		},
+	})
+}
+
+// HandleHitDiceComponent processes a hit dice button click from the short rest prompt.
+func (h *RestHandler) HandleHitDiceComponent(interaction *discordgo.Interaction) {
+	ctx := context.Background()
+
+	data := interaction.Data.(discordgo.MessageComponentInteractionData)
+	charID, dieType, count, err := ParseHitDiceCustomID(data.CustomID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Invalid hit dice data: %v", err))
+		return
+	}
+
+	// Acknowledge the component interaction immediately
+	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredMessageUpdate,
+	})
+
+	campaign, err := h.campaignProvider.GetCampaignByGuildID(ctx, interaction.GuildID)
+	if err != nil {
+		h.editInteraction(interaction, "No campaign found for this server.")
+		return
+	}
+
+	userID := discordUserID(interaction)
+	char, err := h.characterLookup.GetCharacterByCampaignAndDiscord(ctx, campaign.ID, userID)
+	if err != nil {
+		h.editInteraction(interaction, "Could not find your character.")
+		return
+	}
+
+	if char.ID != charID {
+		h.editInteraction(interaction, "This hit dice prompt is not for your character.")
+		return
+	}
+
+	charData, err := parseRestCharacterData(char)
+	if err != nil {
+		h.editInteraction(interaction, "Error reading character data.")
+		return
+	}
+
+	spend := map[string]int{}
+	if count > 0 {
+		spend[dieType] = count
+	}
+
 	input := rest.ShortRestInput{
 		HPCurrent:        int(char.HpCurrent),
 		HPMax:            int(char.HpMax),
 		CONModifier:      character.AbilityModifier(charData.Scores.CON),
 		HitDiceRemaining: charData.HitDiceRemaining,
-		HitDiceSpend:     map[string]int{}, // no dice spent in auto-mode
+		HitDiceSpend:     spend,
 		FeatureUses:      charData.FeatureUses,
 		PactMagicSlots:   charData.PactMagicSlots,
 		Classes:          charData.Classes,
@@ -122,24 +189,139 @@ func (h *RestHandler) handleShortRest(ctx context.Context, interaction *discordg
 
 	result, err := h.restService.ShortRest(input)
 	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Rest failed: %v", err))
+		h.editInteraction(interaction, fmt.Sprintf("Rest failed: %v", err))
 		return
 	}
 
-	// Persist feature uses
-	if len(result.FeaturesRecharged) > 0 {
-		h.persistFeatureUses(ctx, char.ID, charData.FeatureUses)
-	}
-
-	// Persist pact magic slots
-	if result.PactSlotsRestored && charData.PactMagicSlots != nil {
-		h.persistPactMagicSlots(ctx, char.ID, charData.PactMagicSlots)
-	}
+	// Persist all short rest changes in a single UpdateCharacter call
+	h.persistShortRest(ctx, char, charData, result)
 
 	msg := rest.FormatShortRestResult(char.Name, result)
-	respondEphemeral(h.session, interaction, msg)
+	h.editInteraction(interaction, msg)
 
 	h.logRestToHistory(char.Name, "Short Rest", msg)
+}
+
+func (h *RestHandler) editInteraction(interaction *discordgo.Interaction, content string) {
+	empty := []discordgo.MessageComponent{}
+	_, _ = h.session.InteractionResponseEdit(interaction, &discordgo.WebhookEdit{
+		Content:    &content,
+		Components: &empty,
+	})
+}
+
+func (h *RestHandler) persistShortRest(ctx context.Context, char refdata.Character, charData restCharacterData, result rest.ShortRestResult) {
+	if h.charUpdater == nil {
+		return
+	}
+
+	hitDiceData, _ := json.Marshal(result.HitDiceRemaining)
+	featureData, _ := json.Marshal(charData.FeatureUses)
+
+	params := refdata.UpdateCharacterParams{
+		ID:               char.ID,
+		Name:             char.Name,
+		Race:             char.Race,
+		Classes:          char.Classes,
+		Level:            char.Level,
+		AbilityScores:    char.AbilityScores,
+		HpMax:            char.HpMax,
+		HpCurrent:        int32(result.HPAfter),
+		TempHp:           char.TempHp,
+		Ac:               char.Ac,
+		AcFormula:        char.AcFormula,
+		SpeedFt:          char.SpeedFt,
+		ProficiencyBonus: char.ProficiencyBonus,
+		EquippedMainHand: char.EquippedMainHand,
+		EquippedOffHand:  char.EquippedOffHand,
+		EquippedArmor:    char.EquippedArmor,
+		SpellSlots:       char.SpellSlots,
+		HitDiceRemaining: hitDiceData,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: featureData, Valid: true},
+		Features:         char.Features,
+		Proficiencies:    char.Proficiencies,
+		Gold:             char.Gold,
+		AttunementSlots:  char.AttunementSlots,
+		Languages:        char.Languages,
+		Inventory:        char.Inventory,
+		CharacterData:    char.CharacterData,
+		DdbUrl:           char.DdbUrl,
+		Homebrew:         char.Homebrew,
+	}
+
+	// Pact magic slots (mutated by service)
+	if charData.PactMagicSlots != nil {
+		pactData, err := json.Marshal(charData.PactMagicSlots)
+		if err == nil {
+			params.PactMagicSlots = pqtype.NullRawMessage{RawMessage: pactData, Valid: true}
+		}
+	} else {
+		params.PactMagicSlots = char.PactMagicSlots
+	}
+
+	_, _ = h.charUpdater.UpdateCharacter(ctx, params)
+}
+
+// BuildHitDiceButtons creates Discord button components for hit dice selection.
+// Single-class: one row with buttons [0] [1] ... [N].
+// Multiclass: one row per die type with buttons [0] [1] ... [N].
+func BuildHitDiceButtons(charID uuid.UUID, hitDiceRemaining map[string]int) []discordgo.MessageComponent {
+	var components []discordgo.MessageComponent
+
+	dieTypes := sortedDieTypes(hitDiceRemaining)
+	for _, dieType := range dieTypes {
+		remaining := hitDiceRemaining[dieType]
+		var buttons []discordgo.MessageComponent
+
+		// Cap at 5 buttons per row (Discord limit)
+		maxButtons := remaining
+		if maxButtons > 4 {
+			maxButtons = 4
+		}
+
+		for i := 0; i <= maxButtons; i++ {
+			label := fmt.Sprintf("%d", i)
+			if i == 0 {
+				label = "Skip"
+			}
+			buttons = append(buttons, discordgo.Button{
+				Label:    fmt.Sprintf("%s %s", dieType, label),
+				Style:    discordgo.SecondaryButton,
+				CustomID: fmt.Sprintf("rest_hitdice:%s:%s:%d", charID.String(), dieType, i),
+			})
+		}
+
+		components = append(components, &discordgo.ActionsRow{Components: buttons})
+	}
+
+	return components
+}
+
+// ParseHitDiceCustomID parses a custom ID like "rest_hitdice:<charID>:<dieType>:<count>".
+func ParseHitDiceCustomID(customID string) (uuid.UUID, string, int, error) {
+	parts := strings.Split(customID, ":")
+	if len(parts) != 4 || parts[0] != "rest_hitdice" {
+		return uuid.Nil, "", 0, fmt.Errorf("invalid hit dice custom ID: %s", customID)
+	}
+	charID, err := uuid.Parse(parts[1])
+	if err != nil {
+		return uuid.Nil, "", 0, fmt.Errorf("invalid character ID: %w", err)
+	}
+	dieType := parts[2]
+	var count int
+	if _, err := fmt.Sscanf(parts[3], "%d", &count); err != nil {
+		return uuid.Nil, "", 0, fmt.Errorf("invalid count: %w", err)
+	}
+	return charID, dieType, count, nil
+}
+
+func sortedDieTypes(m map[string]int) []string {
+	types := make([]string, 0, len(m))
+	for k := range m {
+		types = append(types, k)
+	}
+	sort.Strings(types)
+	return types
 }
 
 func (h *RestHandler) handleLongRest(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, charData restCharacterData) {
@@ -164,61 +346,17 @@ func (h *RestHandler) handleLongRest(ctx context.Context, interaction *discordgo
 	h.logRestToHistory(char.Name, "Long Rest", msg)
 }
 
-func (h *RestHandler) persistFeatureUses(ctx context.Context, charID uuid.UUID, featureUses map[string]character.FeatureUse) {
-	if h.charUpdater == nil {
-		return
-	}
-	data, err := json.Marshal(featureUses)
-	if err != nil {
-		return
-	}
-	_, _ = h.charUpdater.UpdateCharacterFeatureUses(ctx, refdata.UpdateCharacterFeatureUsesParams{
-		ID:          charID,
-		FeatureUses: pqtype.NullRawMessage{RawMessage: data, Valid: true},
-	})
-}
-
-func (h *RestHandler) persistPactMagicSlots(ctx context.Context, charID uuid.UUID, pact *character.PactMagicSlots) {
-	if h.charUpdater == nil {
-		return
-	}
-	data, err := json.Marshal(pact)
-	if err != nil {
-		return
-	}
-	_, _ = h.charUpdater.UpdateCharacterPactMagicSlots(ctx, refdata.UpdateCharacterPactMagicSlotsParams{
-		ID:             charID,
-		PactMagicSlots: pqtype.NullRawMessage{RawMessage: data, Valid: true},
-	})
-}
-
 func (h *RestHandler) persistLongRest(ctx context.Context, char refdata.Character, charData restCharacterData, result rest.LongRestResult) {
 	if h.charUpdater == nil {
 		return
 	}
 
-	// Update feature uses
-	h.persistFeatureUses(ctx, char.ID, charData.FeatureUses)
-
-	// Update spell slots
-	if len(result.SpellSlots) > 0 {
-		data, err := json.Marshal(result.SpellSlots)
-		if err == nil {
-			_, _ = h.charUpdater.UpdateCharacterSpellSlots(ctx, refdata.UpdateCharacterSpellSlotsParams{
-				ID:         char.ID,
-				SpellSlots: pqtype.NullRawMessage{RawMessage: data, Valid: true},
-			})
-		}
-	}
-
-	// Update pact magic slots
-	if result.PactSlotsRestored && charData.PactMagicSlots != nil {
-		h.persistPactMagicSlots(ctx, char.ID, charData.PactMagicSlots)
-	}
-
-	// Update HP and hit dice remaining
+	// Marshal all updated values into a single UpdateCharacter call
 	hitDiceData, _ := json.Marshal(result.HitDiceRemaining)
-	_, _ = h.charUpdater.UpdateCharacter(ctx, refdata.UpdateCharacterParams{
+	featureData, _ := json.Marshal(charData.FeatureUses)
+	spellSlotsData, _ := json.Marshal(result.SpellSlots)
+
+	params := refdata.UpdateCharacterParams{
 		ID:               char.ID,
 		Name:             char.Name,
 		Race:             char.Race,
@@ -235,10 +373,9 @@ func (h *RestHandler) persistLongRest(ctx context.Context, char refdata.Characte
 		EquippedMainHand: char.EquippedMainHand,
 		EquippedOffHand:  char.EquippedOffHand,
 		EquippedArmor:    char.EquippedArmor,
-		SpellSlots:       char.SpellSlots,
-		PactMagicSlots:   char.PactMagicSlots,
+		SpellSlots:       pqtype.NullRawMessage{RawMessage: spellSlotsData, Valid: true},
 		HitDiceRemaining: hitDiceData,
-		FeatureUses:      char.FeatureUses,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: featureData, Valid: true},
 		Features:         char.Features,
 		Proficiencies:    char.Proficiencies,
 		Gold:             char.Gold,
@@ -248,7 +385,19 @@ func (h *RestHandler) persistLongRest(ctx context.Context, char refdata.Characte
 		CharacterData:    char.CharacterData,
 		DdbUrl:           char.DdbUrl,
 		Homebrew:         char.Homebrew,
-	})
+	}
+
+	// Marshal pact magic slots (mutated by service)
+	if charData.PactMagicSlots != nil {
+		pactData, err := json.Marshal(charData.PactMagicSlots)
+		if err == nil {
+			params.PactMagicSlots = pqtype.NullRawMessage{RawMessage: pactData, Valid: true}
+		}
+	} else {
+		params.PactMagicSlots = char.PactMagicSlots
+	}
+
+	_, _ = h.charUpdater.UpdateCharacter(ctx, params)
 }
 
 func (h *RestHandler) logRestToHistory(charName, restType, msg string) {
