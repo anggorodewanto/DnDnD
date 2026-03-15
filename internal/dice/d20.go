@@ -81,6 +81,21 @@ func (r *Roller) RollD20(modifier int, mode RollMode) (D20Result, error) {
 	return result, nil
 }
 
+// CombineRollModes merges two roll modes. When both are non-normal and
+// different (advantage vs disadvantage), they cancel to AdvantageAndDisadvantage.
+func CombineRollModes(a, b RollMode) RollMode {
+	if a == Normal {
+		return b
+	}
+	if b == Normal {
+		return a
+	}
+	if a == b {
+		return a
+	}
+	return AdvantageAndDisadvantage
+}
+
 func formatD20Breakdown(r D20Result) string {
 	if len(r.Rolls) == 1 {
 		if r.Modifier == 0 {

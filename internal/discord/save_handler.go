@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/check"
@@ -79,14 +78,7 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	rollMode := dice.Normal
-	if adv && disadv {
-		rollMode = dice.AdvantageAndDisadvantage
-	} else if adv {
-		rollMode = dice.Advantage
-	} else if disadv {
-		rollMode = dice.Disadvantage
-	}
+	rollMode := rollModeFromFlags(adv, disadv)
 
 	input := save.SaveInput{
 		Scores:          charData.Scores,
@@ -97,7 +89,7 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	// Apply condition effects if in combat
-	if condInfo, ok := h.lookupCombatConditions(ctx, interaction.GuildID, char.ID); ok {
+	if condInfo, ok := lookupCombatConditions(ctx, h.encounterProvider, h.combatantLookup, interaction.GuildID, char.ID); ok {
 		conds, _ := check.ParseConditions(condInfo.Conditions)
 		input.Conditions = conds
 		input.ExhaustionLevel = condInfo.ExhaustionLevel
@@ -167,33 +159,4 @@ func parseSaveCharacterData(char refdata.Character) (saveCharacterData, error) {
 		Scores: scores,
 		Saves:  profData.Saves,
 	}, nil
-}
-
-// lookupCombatConditions checks if the character is in active combat and returns their conditions.
-func (h *SaveHandler) lookupCombatConditions(ctx context.Context, guildID string, charID uuid.UUID) (check.ConditionInfo, bool) {
-	if h.encounterProvider == nil || h.combatantLookup == nil {
-		return check.ConditionInfo{}, false
-	}
-
-	encounterID, err := h.encounterProvider.GetActiveEncounterID(ctx, guildID)
-	if err != nil {
-		return check.ConditionInfo{}, false
-	}
-
-	combatants, err := h.combatantLookup.ListCombatantsByEncounterID(ctx, encounterID)
-	if err != nil {
-		return check.ConditionInfo{}, false
-	}
-
-	for _, c := range combatants {
-		if !c.CharacterID.Valid || c.CharacterID.UUID != charID {
-			continue
-		}
-		return check.ConditionInfo{
-			Conditions:      c.Conditions,
-			ExhaustionLevel: int(c.ExhaustionLevel),
-		}, true
-	}
-
-	return check.ConditionInfo{}, false
 }

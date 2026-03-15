@@ -104,15 +104,7 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// Determine roll mode from flags
-	rollMode := dice.Normal
-	if adv && disadv {
-		rollMode = dice.AdvantageAndDisadvantage
-	} else if adv {
-		rollMode = dice.Advantage
-	} else if disadv {
-		rollMode = dice.Disadvantage
-	}
+	rollMode := rollModeFromFlags(adv, disadv)
 
 	// Build input
 	input := check.SingleCheckInput{
@@ -126,7 +118,7 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	// Apply condition effects if in combat
-	if condInfo, ok := h.lookupCombatConditions(ctx, interaction.GuildID, char.ID); ok {
+	if condInfo, ok := lookupCombatConditions(ctx, h.encounterProvider, h.combatantLookup, interaction.GuildID, char.ID); ok {
 		conds, _ := check.ParseConditions(condInfo.Conditions)
 		input.Conditions = conds
 		input.ExhaustionLevel = condInfo.ExhaustionLevel
@@ -205,18 +197,32 @@ func parseCharacterData(char refdata.Character) (characterData, error) {
 	}, nil
 }
 
+// rollModeFromFlags converts advantage/disadvantage boolean flags to a dice.RollMode.
+func rollModeFromFlags(adv, disadv bool) dice.RollMode {
+	if adv && disadv {
+		return dice.AdvantageAndDisadvantage
+	}
+	if adv {
+		return dice.Advantage
+	}
+	if disadv {
+		return dice.Disadvantage
+	}
+	return dice.Normal
+}
+
 // lookupCombatConditions checks if the character is in active combat and returns their conditions.
-func (h *CheckHandler) lookupCombatConditions(ctx context.Context, guildID string, charID uuid.UUID) (check.ConditionInfo, bool) {
-	if h.encounterProvider == nil || h.combatantLookup == nil {
+func lookupCombatConditions(ctx context.Context, encounterProvider CheckEncounterProvider, combatantLookup CheckCombatantLookup, guildID string, charID uuid.UUID) (check.ConditionInfo, bool) {
+	if encounterProvider == nil || combatantLookup == nil {
 		return check.ConditionInfo{}, false
 	}
 
-	encounterID, err := h.encounterProvider.GetActiveEncounterID(ctx, guildID)
+	encounterID, err := encounterProvider.GetActiveEncounterID(ctx, guildID)
 	if err != nil {
 		return check.ConditionInfo{}, false
 	}
 
-	combatants, err := h.combatantLookup.ListCombatantsByEncounterID(ctx, encounterID)
+	combatants, err := combatantLookup.ListCombatantsByEncounterID(ctx, encounterID)
 	if err != nil {
 		return check.ConditionInfo{}, false
 	}

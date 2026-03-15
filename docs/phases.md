@@ -463,7 +463,7 @@
   - Depends on: Phase 7, Phase 18, Phase 40
   - Done when: Integration tests verify check calculations, expertise, JoAT, targeted checks, group checks, contested checks, condition modifiers.
 
-- [ ] **Phase 82: Saving Throws (`/save`)**
+- [x] **Phase 82: Saving Throws (`/save`)**
   - Scope: `/save [ability]`: d20 + ability mod + proficiency (if proficient). Auto-include all modifiers: Paladin Aura of Protection, Bless, condition effects (exhaustion disadv, dodge adv on DEX), magic item bonuses. Full breakdown in combat log. DM-prompted saves. Auto-fail for paralyzed/stunned/unconscious/petrified on STR/DEX. Condition effects on saves (restrained disadv DEX, dodge adv DEX).
   - Depends on: Phase 18, Phase 44, Phase 40
   - Done when: Integration tests verify save calculations, all modifier sources, auto-fail conditions, full breakdown output.

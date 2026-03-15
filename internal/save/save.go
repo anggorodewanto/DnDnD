@@ -87,8 +87,8 @@ func (s *Service) Save(input SaveInput) (SaveResult, error) {
 	}
 
 	// Combine all roll modes
-	finalMode := combineRollModes(input.RollMode, condMode)
-	finalMode = combineRollModes(finalMode, featureMode)
+	finalMode := dice.CombineRollModes(input.RollMode, condMode)
+	finalMode = dice.CombineRollModes(finalMode, featureMode)
 
 	totalModifier := modifier + result.FeatureBonus
 
@@ -100,18 +100,4 @@ func (s *Service) Save(input SaveInput) (SaveResult, error) {
 	result.D20Result = d20
 	result.Total = d20.Total
 	return result, nil
-}
-
-// combineRollModes combines a player-requested mode with a condition-imposed mode.
-func combineRollModes(requested, condition dice.RollMode) dice.RollMode {
-	if requested == dice.Normal {
-		return condition
-	}
-	if condition == dice.Normal {
-		return requested
-	}
-	if requested == condition {
-		return requested
-	}
-	return dice.AdvantageAndDisadvantage
 }

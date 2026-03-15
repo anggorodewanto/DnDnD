@@ -95,7 +95,7 @@ func (s *Service) SingleCheck(input SingleCheckInput) (SingleCheckResult, error)
 	}
 
 	// Combine requested roll mode with condition-imposed mode
-	finalMode := combineRollModes(input.RollMode, condMode)
+	finalMode := dice.CombineRollModes(input.RollMode, condMode)
 
 	d20, err := s.roller.RollD20(modifier, finalMode)
 	if err != nil {
@@ -265,17 +265,3 @@ func (s *Service) ContestedCheck(input ContestedCheckInput) ContestedCheckResult
 	return result
 }
 
-// combineRollModes combines a player-requested mode with a condition-imposed mode.
-func combineRollModes(requested, condition dice.RollMode) dice.RollMode {
-	if requested == dice.Normal {
-		return condition
-	}
-	if condition == dice.Normal {
-		return requested
-	}
-	// Both non-normal: if same, keep; if different, they cancel
-	if requested == condition {
-		return requested
-	}
-	return dice.AdvantageAndDisadvantage
-}

@@ -311,9 +311,9 @@ func TestCombineRollModes(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := combineRollModes(tc.requested, tc.condition)
+			got := dice.CombineRollModes(tc.requested, tc.condition)
 			if got != tc.expected {
-				t.Errorf("combineRollModes(%v, %v) = %v, want %v", tc.requested, tc.condition, got, tc.expected)
+				t.Errorf("CombineRollModes(%v, %v) = %v, want %v", tc.requested, tc.condition, got, tc.expected)
 			}
 		})
 	}
