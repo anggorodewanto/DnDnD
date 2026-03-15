@@ -438,7 +438,7 @@
   - Depends on: Phase 26a, Phase 29, Phase 6, Phase 70
   - Done when: DM can run full enemy turns from dashboard with smart defaults; reactions surfaced; combat log posted to Discord.
 
-- [ ] **Phase 78c: Enemy/NPC Turns — Bonus Action Parsing**
+- [x] **Phase 78c: Enemy/NPC Turns — Bonus Action Parsing**
   - Scope: Parse bonus actions from creature stat block abilities text. Add structured `bonus_actions` field to creature data model. Turn builder generates bonus action steps from parsed data. Dashboard UI shows bonus action step in turn builder flow.
   - Depends on: Phase 78a, Phase 6
   - Done when: Creatures with bonus actions (e.g., Goblin's Nimble Escape) generate bonus action steps in the turn builder; tests verify parsing and step generation.
