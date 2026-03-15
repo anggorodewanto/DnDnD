@@ -63,6 +63,11 @@ func (r *CommandRouter) SetSaveHandler(h *SaveHandler) {
 	r.handlers["save"] = h
 }
 
+// SetRestHandler registers the RestHandler for the /rest command.
+func (r *CommandRouter) SetRestHandler(h *RestHandler) {
+	r.handlers["rest"] = h
+}
+
 // RegistrationDeps holds the optional dependencies for registration command handlers.
 // When nil, the router uses plain stub handlers for registration commands.
 type RegistrationDeps struct {
