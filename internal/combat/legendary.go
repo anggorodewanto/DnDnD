@@ -264,18 +264,18 @@ func BuildLairActionPlan(info *LairInfo, tracker LairActionTracker) LairActionPl
 
 // HasLegendaryActions returns true if the abilities list contains a "Legendary Actions" header.
 func HasLegendaryActions(abilities []CreatureAbilityEntry) bool {
-	for _, a := range abilities {
-		if strings.EqualFold(a.Name, "Legendary Actions") {
-			return true
-		}
-	}
-	return false
+	return hasAbilityHeader(abilities, "Legendary Actions")
 }
 
 // HasLairActions returns true if the abilities list contains a "Lair Actions" header.
 func HasLairActions(abilities []CreatureAbilityEntry) bool {
+	return hasAbilityHeader(abilities, "Lair Actions")
+}
+
+// hasAbilityHeader returns true if any ability entry matches the given header name (case-insensitive).
+func hasAbilityHeader(abilities []CreatureAbilityEntry, header string) bool {
 	for _, a := range abilities {
-		if strings.EqualFold(a.Name, "Lair Actions") {
+		if strings.EqualFold(a.Name, header) {
 			return true
 		}
 	}
@@ -352,11 +352,5 @@ func AvailableLairActions(info *LairInfo, tracker LairActionTracker) []LairActio
 	if info == nil {
 		return nil
 	}
-	var available []LairAction
-	for _, a := range info.Actions {
-		if tracker.CanUse(a.Name) {
-			available = append(available, a)
-		}
-	}
-	return available
+	return BuildLairActionPlan(info, tracker).AvailableActions
 }

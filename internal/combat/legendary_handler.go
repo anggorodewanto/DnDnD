@@ -180,22 +180,7 @@ func (h *Handler) ExecuteLegendaryAction(w http.ResponseWriter, r *http.Request)
 	budgetSpent := budget.Total - newBudget.Remaining
 	combatLog := FormatLegendaryActionLog(combatant.DisplayName, *selectedAction, budgetSpent, budget.Total)
 
-	// Log to action_log
-	turn, err := h.svc.store.GetActiveTurnByEncounterID(r.Context(), encounterID)
-	if err == nil {
-		h.svc.store.CreateActionLog(r.Context(), refdata.CreateActionLogParams{
-			TurnID:      turn.ID,
-			EncounterID: encounterID,
-			ActionType:  "legendary_action",
-			ActorID:     combatantID,
-			Description: nullString(combatLog),
-		})
-	}
-
-	// Notify Discord
-	if h.enemyTurnNotifier != nil {
-		go h.enemyTurnNotifier.NotifyEnemyTurnExecuted(r.Context(), encounterID, combatLog)
-	}
+	h.logActionAndNotify(r.Context(), encounterID, combatantID, "legendary_action", combatLog)
 
 	writeJSON(w, http.StatusOK, executeLegendaryActionResponse{
 		Success:         true,
@@ -224,16 +209,9 @@ func (h *Handler) GetLairActionPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	creature, combatant, err := h.findLairCreature(r.Context(), encounterID)
+	combatant, info, err := h.findLairCreature(r.Context(), encounterID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	abilities := parseCreatureAbilitiesFromCreature(*creature)
-	info := ParseLairInfo(abilities)
-	if info == nil {
-		http.Error(w, "no lair actions found", http.StatusNotFound)
 		return
 	}
 
@@ -287,16 +265,9 @@ func (h *Handler) ExecuteLairAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	creature, combatant, err := h.findLairCreature(r.Context(), encounterID)
+	combatant, info, err := h.findLairCreature(r.Context(), encounterID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	abilities := parseCreatureAbilitiesFromCreature(*creature)
-	info := ParseLairInfo(abilities)
-	if info == nil {
-		http.Error(w, "no lair actions found", http.StatusNotFound)
 		return
 	}
 
@@ -322,22 +293,7 @@ func (h *Handler) ExecuteLairAction(w http.ResponseWriter, r *http.Request) {
 
 	combatLog := FormatLairActionLog(*selectedAction)
 
-	// Log to action_log
-	turn, err := h.svc.store.GetActiveTurnByEncounterID(r.Context(), encounterID)
-	if err == nil {
-		h.svc.store.CreateActionLog(r.Context(), refdata.CreateActionLogParams{
-			TurnID:      turn.ID,
-			EncounterID: encounterID,
-			ActionType:  "lair_action",
-			ActorID:     combatant.ID,
-			Description: nullString(combatLog),
-		})
-	}
-
-	// Notify Discord
-	if h.enemyTurnNotifier != nil {
-		go h.enemyTurnNotifier.NotifyEnemyTurnExecuted(r.Context(), encounterID, combatLog)
-	}
+	h.logActionAndNotify(r.Context(), encounterID, combatant.ID, "lair_action", combatLog)
 
 	writeJSON(w, http.StatusOK, executeLairActionResponse{
 		Success:        true,
@@ -346,8 +302,26 @@ func (h *Handler) ExecuteLairAction(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// logActionAndNotify records a combat action to the action log and notifies Discord.
+func (h *Handler) logActionAndNotify(ctx context.Context, encounterID, actorID uuid.UUID, actionType, combatLog string) {
+	turn, err := h.svc.store.GetActiveTurnByEncounterID(ctx, encounterID)
+	if err == nil {
+		h.svc.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
+			TurnID:      turn.ID,
+			EncounterID: encounterID,
+			ActionType:  actionType,
+			ActorID:     actorID,
+			Description: nullString(combatLog),
+		})
+	}
+	if h.enemyTurnNotifier != nil {
+		go h.enemyTurnNotifier.NotifyEnemyTurnExecuted(ctx, encounterID, combatLog)
+	}
+}
+
 // findLairCreature finds the NPC combatant in an encounter that has lair actions.
-func (h *Handler) findLairCreature(ctx context.Context, encounterID uuid.UUID) (*refdata.Creature, *refdata.Combatant, error) {
+// Returns the combatant and its parsed LairInfo to avoid redundant re-parsing.
+func (h *Handler) findLairCreature(ctx context.Context, encounterID uuid.UUID) (*refdata.Combatant, *LairInfo, error) {
 	combatants, err := h.svc.store.ListCombatantsByEncounterID(ctx, encounterID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("listing combatants: %w", err)
@@ -365,7 +339,7 @@ func (h *Handler) findLairCreature(ctx context.Context, encounterID uuid.UUID) (
 		info := ParseLairInfo(abilities)
 		if info != nil {
 			cc := c // copy to avoid closure issues
-			return &creature, &cc, nil
+			return &cc, info, nil
 		}
 	}
 	return nil, nil, fmt.Errorf("no creature with lair actions found in encounter")

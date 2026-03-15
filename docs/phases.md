@@ -443,7 +443,7 @@
   - Depends on: Phase 78a, Phase 6
   - Done when: Creatures with bonus actions (e.g., Goblin's Nimble Escape) generate bonus action steps in the turn builder; tests verify parsing and step generation.
 
-- [ ] **Phase 78b: Enemy/NPC Turns — Legendary & Lair Actions**
+- [x] **Phase 78b: Enemy/NPC Turns — Legendary & Lair Actions**
   - Scope: Legendary actions: mini-turns between other combatants' turns, budget tracking (3/round typical, configurable per creature), cost per action (1-3), reset at creature's turn start, DM picks from stat block legendary action list. Lair actions: fire at initiative count 20 (losing ties), no consecutive repeats of same lair action, DM selects from lair action list. Both integrated into turn queue display.
   - Depends on: Phase 78a
   - Done when: Integration tests verify legendary action budget, cost deduction, reset timing, lair action initiative 20 trigger, no-repeat enforcement, turn queue display.
