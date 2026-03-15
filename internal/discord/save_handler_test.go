@@ -1,0 +1,339 @@
+package discord
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
+
+	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/refdata"
+	"github.com/sqlc-dev/pqtype"
+)
+
+func makeSaveInteraction(ability string, adv, disadv bool) *discordgo.Interaction {
+	opts := []*discordgo.ApplicationCommandInteractionDataOption{
+		{Name: "ability", Value: ability, Type: discordgo.ApplicationCommandOptionString},
+	}
+	if adv {
+		opts = append(opts, &discordgo.ApplicationCommandInteractionDataOption{
+			Name: "adv", Value: true, Type: discordgo.ApplicationCommandOptionBoolean,
+		})
+	}
+	if disadv {
+		opts = append(opts, &discordgo.ApplicationCommandInteractionDataOption{
+			Name: "disadv", Value: true, Type: discordgo.ApplicationCommandOptionBoolean,
+		})
+	}
+	return &discordgo.Interaction{
+		Type:    discordgo.InteractionApplicationCommand,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name:    "save",
+			Options: opts,
+		},
+	}
+}
+
+func makeTestCharacterWithSaves() refdata.Character {
+	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 18, CHA: 8})
+	profs, _ := json.Marshal(map[string]interface{}{
+		"saves":  []string{"wis", "cha"},
+		"skills": []string{"perception"},
+	})
+	return refdata.Character{
+		ID:               uuid.New(),
+		CampaignID:       uuid.New(),
+		Name:             "Aria",
+		Level:            5,
+		ProficiencyBonus: 3,
+		AbilityScores:    scores,
+		Proficiencies:    pqtype.NullRawMessage{RawMessage: profs, Valid: true},
+	}
+}
+
+func setupSaveHandler(sess *MockSession) (*SaveHandler, *mockCheckRollLogger) {
+	campaignID := uuid.New()
+	char := makeTestCharacterWithSaves()
+	char.CampaignID = campaignID
+
+	roller := dice.NewRoller(func(max int) int { return 12 })
+	logger := &mockCheckRollLogger{}
+
+	h := NewSaveHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		nil,
+		logger,
+	)
+	return h, logger
+}
+
+func TestSaveHandler_BasicSave(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, logger := setupSaveHandler(sess)
+	h.Handle(makeSaveInteraction("wis", false, false))
+
+	if responded == "" {
+		t.Fatal("expected a response")
+	}
+	if !strings.Contains(responded, "Aria") {
+		t.Errorf("expected Aria in response, got: %s", responded)
+	}
+	if !strings.Contains(responded, "WIS Save") {
+		t.Errorf("expected WIS Save in response, got: %s", responded)
+	}
+	// Roll logged
+	if len(logger.logged) != 1 {
+		t.Errorf("expected 1 roll logged, got %d", len(logger.logged))
+	}
+	if !strings.Contains(logger.logged[0].Purpose, "save") {
+		t.Errorf("expected save in purpose, got: %s", logger.logged[0].Purpose)
+	}
+}
+
+func TestSaveHandler_AdvantageFlag(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupSaveHandler(sess)
+	h.Handle(makeSaveInteraction("dex", true, false))
+
+	if !strings.Contains(responded, "advantage") {
+		t.Errorf("expected advantage in response, got: %s", responded)
+	}
+}
+
+func TestSaveHandler_NoAbility(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupSaveHandler(sess)
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionApplicationCommand,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name:    "save",
+			Options: nil,
+		},
+	}
+	h.Handle(interaction)
+
+	if !strings.Contains(responded, "specify") {
+		t.Errorf("expected specify prompt, got: %s", responded)
+	}
+}
+
+func TestSaveHandler_NoCampaign(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewSaveHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{}, errors.New("no campaign")
+		}},
+		nil, nil, nil, nil,
+	)
+	h.Handle(makeSaveInteraction("dex", false, false))
+
+	if !strings.Contains(responded, "No campaign") {
+		t.Errorf("expected no campaign message, got: %s", responded)
+	}
+}
+
+func TestSaveHandler_NoCharacter(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewSaveHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: uuid.New()}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return refdata.Character{}, errors.New("not found")
+		}},
+		nil, nil, nil,
+	)
+	h.Handle(makeSaveInteraction("dex", false, false))
+
+	if !strings.Contains(responded, "register") || !strings.Contains(responded, "character") {
+		t.Errorf("expected register prompt, got: %s", responded)
+	}
+}
+
+func TestSaveHandler_WithCombatConditions(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	charID := uuid.New()
+	encounterID := uuid.New()
+	char := makeTestCharacterWithSaves()
+	char.ID = charID
+	char.CampaignID = campaignID
+
+	condJSON, _ := json.Marshal([]map[string]interface{}{
+		{"condition": "paralyzed"},
+	})
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	logger := &mockCheckRollLogger{}
+
+	h := NewSaveHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{
+					CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+					Conditions:  condJSON,
+				},
+			}, nil
+		}},
+		logger,
+	)
+
+	h.Handle(makeSaveInteraction("dex", false, false))
+
+	if !strings.Contains(responded, "Auto-fail") {
+		t.Errorf("expected Auto-fail for paralyzed DEX save, got: %s", responded)
+	}
+	// Auto-fail should not log a roll
+	if len(logger.logged) != 0 {
+		t.Errorf("expected 0 rolls logged for auto-fail, got %d", len(logger.logged))
+	}
+}
+
+func TestSetSaveHandler_RoutesCommand(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	bot := &Bot{session: sess}
+	router := NewCommandRouter(bot, nil)
+
+	h, _ := setupSaveHandler(sess)
+	router.SetSaveHandler(h)
+
+	router.Handle(makeSaveInteraction("wis", false, false))
+
+	if !strings.Contains(responded, "WIS Save") {
+		t.Errorf("expected WIS Save routed through save handler, got: %s", responded)
+	}
+}
+
+func TestSaveHandler_InvalidAbility(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupSaveHandler(sess)
+	h.Handle(makeSaveInteraction("luck", false, false))
+
+	if !strings.Contains(responded, "failed") || !strings.Contains(responded, "unknown") {
+		t.Errorf("expected error about unknown ability, got: %s", responded)
+	}
+}
+
+func TestSaveHandler_BadProficienciesJSON(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	scores, _ := json.Marshal(character.AbilityScores{WIS: 16})
+	char := refdata.Character{
+		ID:               uuid.New(),
+		CampaignID:       campaignID,
+		Name:             "Bad",
+		Level:            5,
+		ProficiencyBonus: 3,
+		AbilityScores:    scores,
+		Proficiencies:    pqtype.NullRawMessage{RawMessage: []byte(`{bad json`), Valid: true},
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewSaveHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		nil, nil, nil,
+	)
+
+	h.Handle(makeSaveInteraction("wis", false, false))
+
+	if !strings.Contains(responded, "Error") {
+		t.Errorf("expected Error for bad JSON, got: %s", responded)
+	}
+}

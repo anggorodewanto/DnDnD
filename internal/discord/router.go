@@ -58,6 +58,11 @@ func (r *CommandRouter) SetCheckHandler(h *CheckHandler) {
 	r.handlers["check"] = h
 }
 
+// SetSaveHandler registers the SaveHandler for the /save command.
+func (r *CommandRouter) SetSaveHandler(h *SaveHandler) {
+	r.handlers["save"] = h
+}
+
 // RegistrationDeps holds the optional dependencies for registration command handlers.
 // When nil, the router uses plain stub handlers for registration commands.
 type RegistrationDeps struct {
