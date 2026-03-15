@@ -8,3 +8,10 @@ SELECT * FROM action_log WHERE encounter_id = $1 ORDER BY created_at ASC;
 
 -- name: ListActionLogByTurnID :many
 SELECT * FROM action_log WHERE turn_id = $1 ORDER BY created_at ASC;
+
+-- name: ListActionLogSinceTurn :many
+SELECT * FROM action_log
+WHERE encounter_id = $1
+  AND target_id = $2
+  AND created_at > $3
+ORDER BY created_at ASC;

@@ -148,6 +148,13 @@ type Store interface {
 	UpdatePendingSaveResult(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error)
 	CancelAllPendingSavesByCombatant(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error
 
+	// Impact Summary
+	GetLastCompletedTurnByCombatant(ctx context.Context, arg refdata.GetLastCompletedTurnByCombatantParams) (refdata.Turn, error)
+	ListActionLogSinceTurn(ctx context.Context, arg refdata.ListActionLogSinceTurnParams) ([]refdata.ActionLog, error)
+
+	// Player Characters
+	GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
+
 	// Turn Timer
 	ListTurnsNeedingNudge(ctx context.Context) ([]refdata.Turn, error)
 	ListTurnsNeedingWarning(ctx context.Context) ([]refdata.Turn, error)

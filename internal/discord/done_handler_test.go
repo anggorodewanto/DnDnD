@@ -60,8 +60,11 @@ func setupDoneHandler(sess *mockMoveSession) (*DoneHandler, uuid.UUID, uuid.UUID
 	turnProv := &mockMoveTurnProvider{
 		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{
-				ID:          turnID,
-				CombatantID: combatantID,
+				ID:              turnID,
+				CombatantID:     combatantID,
+				ActionUsed:      true,
+				BonusActionUsed: true,
+				AttacksRemaining: 0,
 			}, nil
 		},
 	}

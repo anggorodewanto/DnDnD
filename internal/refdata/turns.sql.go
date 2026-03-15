@@ -186,6 +186,54 @@ func (q *Queries) GetActiveTurnByEncounterID(ctx context.Context, encounterID uu
 	return i, err
 }
 
+const getLastCompletedTurnByCombatant = `-- name: GetLastCompletedTurnByCombatant :one
+SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved FROM turns
+WHERE encounter_id = $1
+  AND combatant_id = $2
+  AND status IN ('completed', 'skipped')
+ORDER BY completed_at DESC
+LIMIT 1
+`
+
+type GetLastCompletedTurnByCombatantParams struct {
+	EncounterID uuid.UUID `json:"encounter_id"`
+	CombatantID uuid.UUID `json:"combatant_id"`
+}
+
+func (q *Queries) GetLastCompletedTurnByCombatant(ctx context.Context, arg GetLastCompletedTurnByCombatantParams) (Turn, error) {
+	row := q.db.QueryRowContext(ctx, getLastCompletedTurnByCombatant, arg.EncounterID, arg.CombatantID)
+	var i Turn
+	err := row.Scan(
+		&i.ID,
+		&i.EncounterID,
+		&i.CombatantID,
+		&i.RoundNumber,
+		&i.Status,
+		&i.MovementRemainingFt,
+		&i.ActionUsed,
+		&i.BonusActionUsed,
+		&i.BonusActionSpellCast,
+		&i.ActionSpellCast,
+		&i.ReactionUsed,
+		&i.FreeInteractUsed,
+		&i.AttacksRemaining,
+		&i.HasDisengaged,
+		&i.ActionSurged,
+		&i.StartedAt,
+		&i.TimeoutAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.HasStoodThisTurn,
+		&i.NudgeSentAt,
+		&i.WarningSentAt,
+		&i.DmDecisionSentAt,
+		&i.DmDecisionDeadline,
+		&i.WaitExtended,
+		&i.AutoResolved,
+	)
+	return i, err
+}
+
 const getTurn = `-- name: GetTurn :one
 SELECT id, encounter_id, combatant_id, round_number, status, movement_remaining_ft, action_used, bonus_action_used, bonus_action_spell_cast, action_spell_cast, reaction_used, free_interact_used, attacks_remaining, has_disengaged, action_surged, started_at, timeout_at, completed_at, created_at, has_stood_this_turn, nudge_sent_at, warning_sent_at, dm_decision_sent_at, dm_decision_deadline, wait_extended, auto_resolved FROM turns WHERE id = $1
 `

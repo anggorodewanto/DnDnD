@@ -19,6 +19,7 @@ type CommandRouter struct {
 	handlers    map[string]CommandHandler
 	moveHandler *MoveHandler
 	flyHandler  *FlyHandler
+	doneHandler *DoneHandler
 }
 
 // SetMoveHandler registers the MoveHandler for button callback routing.
@@ -29,6 +30,12 @@ func (r *CommandRouter) SetMoveHandler(h *MoveHandler) {
 // SetFlyHandler registers the FlyHandler for button callback routing.
 func (r *CommandRouter) SetFlyHandler(h *FlyHandler) {
 	r.flyHandler = h
+}
+
+// SetDoneHandler registers the DoneHandler for button callback routing.
+func (r *CommandRouter) SetDoneHandler(h *DoneHandler) {
+	r.doneHandler = h
+	r.handlers["done"] = h
 }
 
 // SetDistanceHandler registers the DistanceHandler for the /distance command.
@@ -175,6 +182,25 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 
 		if strings.HasPrefix(customID, "move_cancel:") {
 			r.moveHandler.HandleMoveCancel(interaction)
+			return
+		}
+	}
+
+	// Done button callbacks
+	if r.doneHandler != nil {
+		if strings.HasPrefix(customID, "done_confirm:") {
+			encounterIDStr := strings.TrimPrefix(customID, "done_confirm:")
+			encounterID, err := uuid.Parse(encounterIDStr)
+			if err != nil {
+				respondEphemeral(r.bot.session, interaction, "Invalid encounter ID.")
+				return
+			}
+			r.doneHandler.HandleDoneConfirm(interaction, encounterID)
+			return
+		}
+
+		if customID == "done_cancel" {
+			r.doneHandler.HandleDoneCancel(interaction)
 			return
 		}
 	}

@@ -98,3 +98,11 @@ UPDATE turns SET wait_extended = true WHERE id = $1 RETURNING *;
 
 -- name: ResetTurnNudgeAndWarning :one
 UPDATE turns SET nudge_sent_at = NULL, warning_sent_at = NULL, dm_decision_sent_at = NULL, dm_decision_deadline = NULL WHERE id = $1 RETURNING *;
+
+-- name: GetLastCompletedTurnByCombatant :one
+SELECT * FROM turns
+WHERE encounter_id = $1
+  AND combatant_id = $2
+  AND status IN ('completed', 'skipped')
+ORDER BY completed_at DESC
+LIMIT 1;

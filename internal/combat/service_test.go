@@ -131,6 +131,11 @@ type mockStore struct {
 	resetTurnNudgeAndWarningFn         func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
 	updateCombatantAutoResolveCountFn  func(ctx context.Context, arg refdata.UpdateCombatantAutoResolveCountParams) (refdata.Combatant, error)
 	resetCombatantAutoResolveCountFn   func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
+
+	// Impact Summary (Phase 77)
+	getLastCompletedTurnByCombatantFn func(ctx context.Context, arg refdata.GetLastCompletedTurnByCombatantParams) (refdata.Turn, error)
+	listActionLogSinceTurnFn          func(ctx context.Context, arg refdata.ListActionLogSinceTurnParams) ([]refdata.ActionLog, error)
+	getPlayerCharacterByCharacterFn   func(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -603,6 +608,28 @@ func (m *mockStore) ResetCombatantAutoResolveCount(ctx context.Context, id uuid.
 		return m.resetCombatantAutoResolveCountFn(ctx, id)
 	}
 	return refdata.Combatant{ID: id}, nil
+}
+
+// Impact Summary (Phase 77)
+func (m *mockStore) GetLastCompletedTurnByCombatant(ctx context.Context, arg refdata.GetLastCompletedTurnByCombatantParams) (refdata.Turn, error) {
+	if m.getLastCompletedTurnByCombatantFn != nil {
+		return m.getLastCompletedTurnByCombatantFn(ctx, arg)
+	}
+	return refdata.Turn{}, fmt.Errorf("not found")
+}
+
+func (m *mockStore) ListActionLogSinceTurn(ctx context.Context, arg refdata.ListActionLogSinceTurnParams) ([]refdata.ActionLog, error) {
+	if m.listActionLogSinceTurnFn != nil {
+		return m.listActionLogSinceTurnFn(ctx, arg)
+	}
+	return nil, nil
+}
+
+func (m *mockStore) GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error) {
+	if m.getPlayerCharacterByCharacterFn != nil {
+		return m.getPlayerCharacterByCharacterFn(ctx, arg)
+	}
+	return refdata.PlayerCharacter{}, fmt.Errorf("not found")
 }
 
 func defaultMockStore() *mockStore {

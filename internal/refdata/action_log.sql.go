@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
@@ -106,6 +107,55 @@ SELECT id, turn_id, encounter_id, action_type, actor_id, target_id, description,
 
 func (q *Queries) ListActionLogByTurnID(ctx context.Context, turnID uuid.UUID) ([]ActionLog, error) {
 	rows, err := q.db.QueryContext(ctx, listActionLogByTurnID, turnID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ActionLog{}
+	for rows.Next() {
+		var i ActionLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.TurnID,
+			&i.EncounterID,
+			&i.ActionType,
+			&i.ActorID,
+			&i.TargetID,
+			&i.Description,
+			&i.BeforeState,
+			&i.AfterState,
+			&i.DiceRolls,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActionLogSinceTurn = `-- name: ListActionLogSinceTurn :many
+SELECT id, turn_id, encounter_id, action_type, actor_id, target_id, description, before_state, after_state, dice_rolls, created_at FROM action_log
+WHERE encounter_id = $1
+  AND target_id = $2
+  AND created_at > $3
+ORDER BY created_at ASC
+`
+
+type ListActionLogSinceTurnParams struct {
+	EncounterID uuid.UUID     `json:"encounter_id"`
+	TargetID    uuid.NullUUID `json:"target_id"`
+	CreatedAt   time.Time     `json:"created_at"`
+}
+
+func (q *Queries) ListActionLogSinceTurn(ctx context.Context, arg ListActionLogSinceTurnParams) ([]ActionLog, error) {
+	rows, err := q.db.QueryContext(ctx, listActionLogSinceTurn, arg.EncounterID, arg.TargetID, arg.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
