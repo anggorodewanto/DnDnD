@@ -166,6 +166,13 @@
             </div>
           {/if}
 
+          {#if step.type === 'bonus_action' && step.ability}
+            <div class="step-detail">
+              <p><strong>{step.ability.name}</strong></p>
+              <p class="ability-desc">{step.ability.description}</p>
+            </div>
+          {/if}
+
           <div class="step-actions">
             <button class="tb-btn confirm" onclick={nextStep}>
               {currentStep < plan.steps.length - 1 ? 'Confirm & Next' : 'Review'}
@@ -203,6 +210,9 @@
               {/if}
             {/if}
             {#if step.type === 'ability' && step.ability}
+              <span>{step.ability.name}</span>
+            {/if}
+            {#if step.type === 'bonus_action' && step.ability}
               <span>{step.ability.name}</span>
             {/if}
             <button class="remove-btn" onclick={() => removeStep(i)}>Remove</button>

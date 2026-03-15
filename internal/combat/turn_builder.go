@@ -152,6 +152,19 @@ func BuildTurnPlan(input BuildTurnPlanInput) (*TurnPlan, error) {
 		}
 	}
 
+	// Step 4: Bonus actions
+	bonusActions := ParseBonusActions(abilities)
+	for _, ba := range bonusActions {
+		plan.Steps = append(plan.Steps, TurnStep{
+			Type:      StepTypeBonusAction,
+			Suggested: true,
+			Ability: &AbilityStep{
+				Name:        ba.Name,
+				Description: ba.Description,
+			},
+		})
+	}
+
 	_ = distFt
 
 	return plan, nil
@@ -404,6 +417,24 @@ func hasMultiattackAbility(abilities []CreatureAbilityEntry) bool {
 	return false
 }
 
+// ParseBonusActions filters abilities whose description mentions "bonus action" (case-insensitive).
+// It excludes Multiattack and Recharge abilities.
+func ParseBonusActions(abilities []CreatureAbilityEntry) []CreatureAbilityEntry {
+	var result []CreatureAbilityEntry
+	for _, a := range abilities {
+		if strings.EqualFold(a.Name, "Multiattack") {
+			continue
+		}
+		if isRechargeAbility(a.Name) {
+			continue
+		}
+		if strings.Contains(strings.ToLower(a.Description), "bonus action") {
+			result = append(result, a)
+		}
+	}
+	return result
+}
+
 // isRechargeAbility checks if an ability name contains a recharge notation.
 func isRechargeAbility(name string) bool {
 	return strings.Contains(name, "Recharge")
@@ -488,6 +519,10 @@ func FormatCombatLog(plan TurnPlan) string {
 		case StepTypeAbility:
 			if step.Ability != nil {
 				fmt.Fprintf(&b, "\u2728 Uses %s\n", step.Ability.Name)
+			}
+		case StepTypeBonusAction:
+			if step.Ability != nil {
+				fmt.Fprintf(&b, "\u26a1 Bonus Action: %s\n", step.Ability.Name)
 			}
 		}
 	}

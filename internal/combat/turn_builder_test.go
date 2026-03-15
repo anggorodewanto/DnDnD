@@ -600,6 +600,24 @@ func TestFormatCombatLog_Critical(t *testing.T) {
 	assert.Contains(t, log, "14 slashing damage")
 }
 
+func TestFormatCombatLog_BonusAction(t *testing.T) {
+	plan := TurnPlan{
+		DisplayName: "Goblin",
+		Steps: []TurnStep{
+			{
+				Type: StepTypeBonusAction,
+				Ability: &AbilityStep{
+					Name:        "Nimble Escape",
+					Description: "The goblin can take the Disengage or Hide action as a bonus action on each of its turns.",
+				},
+			},
+		},
+	}
+	log := FormatCombatLog(plan)
+	assert.Contains(t, log, "Goblin's Turn")
+	assert.Contains(t, log, "Nimble Escape")
+}
+
 func TestFindNearestHostile_SkipsDeadTargets(t *testing.T) {
 	npc := refdata.Combatant{
 		ID:          uuid.New(),
@@ -620,4 +638,166 @@ func TestFindNearestHostile_SkipsDeadTargets(t *testing.T) {
 
 	nearest, _ := findNearestHostile(npc, []refdata.Combatant{npc, deadPC})
 	assert.Nil(t, nearest)
+}
+
+// --- Phase 78c: Bonus Action Parsing ---
+
+func TestParseBonusActions_GoblinNimbleEscape(t *testing.T) {
+	abilities := []CreatureAbilityEntry{
+		{Name: "Nimble Escape", Description: "The goblin can take the Disengage or Hide action as a bonus action on each of its turns."},
+	}
+	bonusActions := ParseBonusActions(abilities)
+	require.Len(t, bonusActions, 1)
+	assert.Equal(t, "Nimble Escape", bonusActions[0].Name)
+	assert.Contains(t, bonusActions[0].Description, "bonus action")
+}
+
+func TestParseBonusActions_NoBonus(t *testing.T) {
+	abilities := []CreatureAbilityEntry{
+		{Name: "Keen Senses", Description: "The wolf has advantage on Wisdom (Perception) checks that rely on hearing or smell."},
+	}
+	bonusActions := ParseBonusActions(abilities)
+	assert.Len(t, bonusActions, 0)
+}
+
+func TestParseBonusActions_MultipleMixed(t *testing.T) {
+	abilities := []CreatureAbilityEntry{
+		{Name: "Nimble Escape", Description: "The goblin can take the Disengage or Hide action as a bonus action on each of its turns."},
+		{Name: "Keen Senses", Description: "The goblin has advantage on Perception checks."},
+		{Name: "Aggressive", Description: "As a bonus action, the orc can move up to its speed toward a hostile creature that it can see."},
+	}
+	bonusActions := ParseBonusActions(abilities)
+	require.Len(t, bonusActions, 2)
+	assert.Equal(t, "Nimble Escape", bonusActions[0].Name)
+	assert.Equal(t, "Aggressive", bonusActions[1].Name)
+}
+
+func TestParseBonusActions_CaseInsensitive(t *testing.T) {
+	abilities := []CreatureAbilityEntry{
+		{Name: "Shadow Stealth", Description: "While in dim light or darkness, the shadow can take the Hide action as a Bonus Action."},
+	}
+	bonusActions := ParseBonusActions(abilities)
+	require.Len(t, bonusActions, 1)
+	assert.Equal(t, "Shadow Stealth", bonusActions[0].Name)
+}
+
+func TestParseBonusActions_ExcludesMultiattack(t *testing.T) {
+	abilities := []CreatureAbilityEntry{
+		{Name: "Multiattack", Description: "The creature makes two attacks."},
+		{Name: "Rampage", Description: "When the gnoll reduces a creature to 0 hit points with a melee attack on its turn, the gnoll can take a bonus action to move up to half its speed and make a bite attack."},
+	}
+	bonusActions := ParseBonusActions(abilities)
+	require.Len(t, bonusActions, 1)
+	assert.Equal(t, "Rampage", bonusActions[0].Name)
+}
+
+func TestParseBonusActions_Nil(t *testing.T) {
+	bonusActions := ParseBonusActions(nil)
+	assert.Len(t, bonusActions, 0)
+}
+
+func TestBuildTurnPlan_BonusAction_GoblinNimbleEscape(t *testing.T) {
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	npc := refdata.Combatant{
+		ID:          npcID,
+		DisplayName: "Goblin",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsNpc:       true,
+		IsAlive:     true,
+		HpCurrent:   7,
+	}
+	pc := refdata.Combatant{
+		ID:          pcID,
+		DisplayName: "Gandalf",
+		PositionCol: "A",
+		PositionRow: 2,
+		IsNpc:       false,
+		IsAlive:     true,
+		HpCurrent:   40,
+	}
+
+	creature := refdata.Creature{
+		Size:    "Small",
+		Speed:   json.RawMessage(`{"walk":30}`),
+		Attacks: json.RawMessage(`[{"name":"Scimitar","to_hit":4,"damage":"1d6+2","damage_type":"slashing","reach_ft":5}]`),
+		Abilities: toNullRawMessage(json.RawMessage(`[
+			{"name":"Nimble Escape","description":"The goblin can take the Disengage or Hide action as a bonus action on each of its turns."}
+		]`)),
+	}
+
+	grid := &pathfinding.Grid{
+		Width:   5,
+		Height:  5,
+		Terrain: testTerrainGrid(5, 5),
+	}
+
+	plan, err := BuildTurnPlan(BuildTurnPlanInput{
+		Combatant:  npc,
+		Creature:   creature,
+		Combatants: []refdata.Combatant{npc, pc},
+		Grid:       grid,
+		SpeedFt:    30,
+	})
+	require.NoError(t, err)
+
+	bonusSteps := filterStepsByType(plan.Steps, StepTypeBonusAction)
+	require.Len(t, bonusSteps, 1)
+	require.NotNil(t, bonusSteps[0].Ability)
+	assert.Equal(t, "Nimble Escape", bonusSteps[0].Ability.Name)
+	assert.Contains(t, bonusSteps[0].Ability.Description, "bonus action")
+	assert.True(t, bonusSteps[0].Suggested)
+}
+
+func TestBuildTurnPlan_NoBonusAction_WhenNonePresent(t *testing.T) {
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	npc := refdata.Combatant{
+		ID:          npcID,
+		DisplayName: "Wolf",
+		PositionCol: "C",
+		PositionRow: 3,
+		IsNpc:       true,
+		IsAlive:     true,
+		HpCurrent:   11,
+	}
+	pc := refdata.Combatant{
+		ID:          pcID,
+		DisplayName: "Frodo",
+		PositionCol: "C",
+		PositionRow: 4,
+		IsNpc:       false,
+		IsAlive:     true,
+		HpCurrent:   20,
+	}
+
+	creature := refdata.Creature{
+		Size:    "Medium",
+		Speed:   json.RawMessage(`{"walk":40}`),
+		Attacks: json.RawMessage(`[{"name":"Bite","to_hit":4,"damage":"2d4+2","damage_type":"piercing","reach_ft":5}]`),
+		Abilities: toNullRawMessage(json.RawMessage(`[
+			{"name":"Keen Hearing and Smell","description":"The wolf has advantage on Wisdom (Perception) checks that rely on hearing or smell."}
+		]`)),
+	}
+
+	grid := &pathfinding.Grid{
+		Width:   10,
+		Height:  10,
+		Terrain: testTerrainGrid(10, 10),
+	}
+
+	plan, err := BuildTurnPlan(BuildTurnPlanInput{
+		Combatant:  npc,
+		Creature:   creature,
+		Combatants: []refdata.Combatant{npc, pc},
+		Grid:       grid,
+		SpeedFt:    40,
+	})
+	require.NoError(t, err)
+
+	bonusSteps := filterStepsByType(plan.Steps, StepTypeBonusAction)
+	assert.Len(t, bonusSteps, 0)
 }
