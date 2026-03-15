@@ -53,6 +53,11 @@ func (r *CommandRouter) SetRecapHandler(h *RecapHandler) {
 	r.handlers["recap"] = h
 }
 
+// SetCheckHandler registers the CheckHandler for the /check command.
+func (r *CommandRouter) SetCheckHandler(h *CheckHandler) {
+	r.handlers["check"] = h
+}
+
 // RegistrationDeps holds the optional dependencies for registration command handlers.
 // When nil, the router uses plain stub handlers for registration commands.
 type RegistrationDeps struct {

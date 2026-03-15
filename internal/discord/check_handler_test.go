@@ -1,0 +1,628 @@
+package discord
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
+
+	"errors"
+
+	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/refdata"
+	"github.com/sqlc-dev/pqtype"
+)
+
+// --- Mock types for CheckHandler ---
+
+type mockCheckCharacterLookup struct {
+	fn func(ctx context.Context, campaignID uuid.UUID, discordUserID string) (refdata.Character, error)
+}
+
+func (m *mockCheckCharacterLookup) GetCharacterByCampaignAndDiscord(ctx context.Context, campaignID uuid.UUID, discordUserID string) (refdata.Character, error) {
+	return m.fn(ctx, campaignID, discordUserID)
+}
+
+type mockCheckCampaignProvider struct {
+	fn func(ctx context.Context, guildID string) (refdata.Campaign, error)
+}
+
+func (m *mockCheckCampaignProvider) GetCampaignByGuildID(ctx context.Context, guildID string) (refdata.Campaign, error) {
+	return m.fn(ctx, guildID)
+}
+
+type mockCheckEncounterProvider struct {
+	fn func(ctx context.Context, guildID string) (uuid.UUID, error)
+}
+
+func (m *mockCheckEncounterProvider) GetActiveEncounterID(ctx context.Context, guildID string) (uuid.UUID, error) {
+	return m.fn(ctx, guildID)
+}
+
+type mockCheckCombatantLookup struct {
+	listFn func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
+}
+
+func (m *mockCheckCombatantLookup) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
+	return m.listFn(ctx, encounterID)
+}
+
+type mockCheckRollLogger struct {
+	logged []dice.RollLogEntry
+}
+
+func (m *mockCheckRollLogger) LogRoll(entry dice.RollLogEntry) error {
+	m.logged = append(m.logged, entry)
+	return nil
+}
+
+// --- Helper to build a /check interaction ---
+
+func makeCheckInteraction(skill string, adv, disadv bool, target ...string) *discordgo.Interaction {
+	opts := []*discordgo.ApplicationCommandInteractionDataOption{
+		{Name: "skill", Value: skill, Type: discordgo.ApplicationCommandOptionString},
+	}
+	if adv {
+		opts = append(opts, &discordgo.ApplicationCommandInteractionDataOption{
+			Name: "adv", Value: true, Type: discordgo.ApplicationCommandOptionBoolean,
+		})
+	}
+	if disadv {
+		opts = append(opts, &discordgo.ApplicationCommandInteractionDataOption{
+			Name: "disadv", Value: true, Type: discordgo.ApplicationCommandOptionBoolean,
+		})
+	}
+	if len(target) > 0 {
+		opts = append(opts, &discordgo.ApplicationCommandInteractionDataOption{
+			Name: "target", Value: target[0], Type: discordgo.ApplicationCommandOptionString,
+		})
+	}
+	return &discordgo.Interaction{
+		Type:    discordgo.InteractionApplicationCommand,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name:    "check",
+			Options: opts,
+		},
+	}
+}
+
+func makeTestCharacter() refdata.Character {
+	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 18, CHA: 8})
+	profs, _ := json.Marshal(character.Proficiencies{
+		Skills: []string{"perception", "insight", "medicine"},
+	})
+	return refdata.Character{
+		ID:               uuid.New(),
+		CampaignID:       uuid.New(),
+		Name:             "Aria",
+		Level:            5,
+		ProficiencyBonus: 3,
+		AbilityScores:    scores,
+		Proficiencies:    pqtype.NullRawMessage{RawMessage: profs, Valid: true},
+	}
+}
+
+func setupCheckHandler(sess *MockSession) (*CheckHandler, *mockCheckRollLogger) {
+	campaignID := uuid.New()
+	char := makeTestCharacter()
+	char.CampaignID = campaignID
+
+	roller := dice.NewRoller(func(max int) int { return 12 })
+
+	logger := &mockCheckRollLogger{}
+
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		nil, // combatant lookup not needed for basic tests
+		logger,
+	)
+	return h, logger
+}
+
+func TestCheckHandler_BasicSkillCheck(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, logger := setupCheckHandler(sess)
+	h.Handle(makeCheckInteraction("perception", false, false))
+
+	if responded == "" {
+		t.Fatal("expected a response")
+	}
+	if !strings.Contains(responded, "Aria") {
+		t.Errorf("expected Aria in response, got: %s", responded)
+	}
+	if !strings.Contains(responded, "Perception") {
+		t.Errorf("expected Perception in response, got: %s", responded)
+	}
+	// Roll logged
+	if len(logger.logged) != 1 {
+		t.Errorf("expected 1 roll logged, got %d", len(logger.logged))
+	}
+}
+
+func TestCheckHandler_AdvantageFlag(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	h.Handle(makeCheckInteraction("athletics", true, false))
+
+	if !strings.Contains(responded, "advantage") {
+		t.Errorf("expected advantage in response, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_DisadvantageFlag(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	h.Handle(makeCheckInteraction("stealth", false, true))
+
+	if !strings.Contains(responded, "disadvantage") {
+		t.Errorf("expected disadvantage in response, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_RawAbilityCheck(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	h.Handle(makeCheckInteraction("str", false, false))
+
+	if !strings.Contains(responded, "Str") {
+		t.Errorf("expected Str in response, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_InvalidSkill(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	h.Handle(makeCheckInteraction("bogus", false, false))
+
+	if !strings.Contains(responded, "unknown") && !strings.Contains(responded, "Unknown") {
+		t.Errorf("expected error about unknown skill, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_BothAdvDisadv(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	h.Handle(makeCheckInteraction("perception", true, true))
+
+	// Both adv and disadv cancel out
+	if responded == "" {
+		t.Fatal("expected a response")
+	}
+	// Should succeed, just with normal roll
+	if !strings.Contains(responded, "Perception") {
+		t.Errorf("expected Perception in response, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_NoCampaign(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{}, errors.New("no campaign")
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return refdata.Character{}, errors.New("no char")
+		}},
+		nil, nil, nil,
+	)
+	h.Handle(makeCheckInteraction("perception", false, false))
+
+	if !strings.Contains(responded, "No campaign") {
+		t.Errorf("expected no campaign message, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_NoCharacter(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: uuid.New()}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return refdata.Character{}, errors.New("not found")
+		}},
+		nil, nil, nil,
+	)
+	h.Handle(makeCheckInteraction("perception", false, false))
+
+	if !strings.Contains(responded, "register") || !strings.Contains(responded, "character") {
+		t.Errorf("expected register prompt, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_WithCombatConditions(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	charID := uuid.New()
+	encounterID := uuid.New()
+	char := makeTestCharacter()
+	char.ID = charID
+	char.CampaignID = campaignID
+
+	condJSON, _ := json.Marshal([]map[string]interface{}{
+		{"condition": "poisoned"},
+	})
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	logger := &mockCheckRollLogger{}
+
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{
+					CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+					Conditions:  condJSON,
+				},
+			}, nil
+		}},
+		logger,
+	)
+
+	h.Handle(makeCheckInteraction("athletics", false, false))
+
+	if !strings.Contains(responded, "poisoned") {
+		t.Errorf("expected poisoned in response, got: %s", responded)
+	}
+}
+
+func TestSetCheckHandler_RoutesCommand(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	bot := &Bot{session: sess}
+	router := NewCommandRouter(bot, nil)
+
+	h, _ := setupCheckHandler(sess)
+	router.SetCheckHandler(h)
+
+	router.Handle(makeCheckInteraction("perception", false, false))
+
+	if !strings.Contains(responded, "Perception") {
+		t.Errorf("expected Perception routed through check handler, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_CombatConditions_NoCombatant(t *testing.T) {
+	// Character is not in combat (no matching combatant)
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	char := makeTestCharacter()
+	char.CampaignID = campaignID
+	encounterID := uuid.New()
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{}, nil // no combatants match
+		}},
+		nil,
+	)
+
+	h.Handle(makeCheckInteraction("perception", false, false))
+
+	if !strings.Contains(responded, "Perception") {
+		t.Errorf("expected Perception in response (no combat conditions), got: %s", responded)
+	}
+}
+
+func TestCheckHandler_BadProficienciesJSON(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	scores, _ := json.Marshal(character.AbilityScores{WIS: 16})
+	char := refdata.Character{
+		ID:               uuid.New(),
+		CampaignID:       campaignID,
+		Name:             "Bad",
+		Level:            5,
+		ProficiencyBonus: 3,
+		AbilityScores:    scores,
+		Proficiencies:    pqtype.NullRawMessage{RawMessage: []byte(`{bad json`), Valid: true},
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		nil, nil, nil,
+	)
+
+	h.Handle(makeCheckInteraction("perception", false, false))
+
+	if !strings.Contains(responded, "Error") {
+		t.Errorf("expected Error for bad JSON, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_CombatantLookupError(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	char := makeTestCharacter()
+	char.CampaignID = campaignID
+	encounterID := uuid.New()
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, errors.New("db error")
+		}},
+		nil,
+	)
+
+	h.Handle(makeCheckInteraction("perception", false, false))
+
+	// Should still succeed without conditions
+	if !strings.Contains(responded, "Perception") {
+		t.Errorf("expected Perception (graceful fallback), got: %s", responded)
+	}
+}
+
+func TestCheckHandler_NilEncounterProvider(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	char := makeTestCharacter()
+	char.CampaignID = campaignID
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		nil, // no encounter provider
+		nil, // no combatant lookup
+		nil,
+	)
+
+	h.Handle(makeCheckInteraction("perception", false, false))
+
+	if !strings.Contains(responded, "Perception") {
+		t.Errorf("expected Perception (no combat), got: %s", responded)
+	}
+}
+
+func TestCheckHandler_BadAbilityScoresJSON(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	char := refdata.Character{
+		ID:               uuid.New(),
+		CampaignID:       campaignID,
+		Name:             "Bad",
+		Level:            5,
+		ProficiencyBonus: 3,
+		AbilityScores:    []byte(`{bad`),
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		nil, nil, nil,
+	)
+
+	h.Handle(makeCheckInteraction("perception", false, false))
+
+	if !strings.Contains(responded, "Error") {
+		t.Errorf("expected Error for bad ability scores, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_NilCombatantLookup(t *testing.T) {
+	// encounterProvider exists but combatantLookup is nil
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	char := makeTestCharacter()
+	char.CampaignID = campaignID
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.New(), nil
+		}},
+		nil, // combatant lookup is nil
+		nil,
+	)
+
+	h.Handle(makeCheckInteraction("perception", false, false))
+
+	if !strings.Contains(responded, "Perception") {
+		t.Errorf("expected successful check, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_NoOptions(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionApplicationCommand,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name:    "check",
+			Options: nil,
+		},
+	}
+	h.Handle(interaction)
+
+	if responded == "" {
+		t.Fatal("expected a response for no options")
+	}
+}
