@@ -302,12 +302,20 @@ func (s *Service) RollInitiative(ctx context.Context, encounterID uuid.UUID, rol
 	return result, nil
 }
 
+// SkippedInfo holds details about a combatant whose turn was auto-skipped.
+type SkippedInfo struct {
+	CombatantID   uuid.UUID
+	DisplayName   string
+	ConditionName string
+}
+
 // TurnInfo holds information about the current turn after advancing.
 type TurnInfo struct {
-	Turn        refdata.Turn
-	CombatantID uuid.UUID
-	RoundNumber int32
-	Skipped     bool
+	Turn               refdata.Turn
+	CombatantID        uuid.UUID
+	RoundNumber        int32
+	Skipped            bool
+	SkippedCombatants  []SkippedInfo
 }
 
 // MarkSurprised adds the surprised condition to a combatant.
@@ -412,6 +420,7 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 	// Iterate through candidates, skipping surprised and incapacitated ones
 	allSurprised := roundNumber == 1
 	allIncapacitated := true
+	var skippedCombatants []SkippedInfo
 	for _, candidate := range candidates {
 		conds, _ := parseConditions(candidate.Conditions)
 
@@ -425,15 +434,26 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 
 		// Skip incapacitated combatants (stunned, paralyzed, unconscious, petrified, incapacitated)
 		if IsIncapacitated(conds) {
+			condName := GetIncapacitatingConditionName(conds)
 			if err := s.skipCombatantTurn(ctx, encounterID, roundNumber, candidate, "incapacitated"); err != nil {
 				return TurnInfo{}, err
 			}
+			skippedCombatants = append(skippedCombatants, SkippedInfo{
+				CombatantID:   candidate.ID,
+				DisplayName:   candidate.DisplayName,
+				ConditionName: condName,
+			})
 			continue
 		}
 		allIncapacitated = false
 
 		// Create active turn for this combatant
-		return s.createActiveTurn(ctx, encounterID, roundNumber, candidate)
+		info, err := s.createActiveTurn(ctx, encounterID, roundNumber, candidate)
+		if err != nil {
+			return TurnInfo{}, err
+		}
+		info.SkippedCombatants = skippedCombatants
+		return info, nil
 	}
 
 	// All candidates were surprised in round 1 — advance to round 2
@@ -472,12 +492,23 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 			}
 			conds, _ := parseConditions(c.Conditions)
 			if IsIncapacitated(conds) {
+				condName := GetIncapacitatingConditionName(conds)
 				if err := s.skipCombatantTurn(ctx, encounterID, roundNumber, c, "incapacitated"); err != nil {
 					return TurnInfo{}, err
 				}
+				skippedCombatants = append(skippedCombatants, SkippedInfo{
+					CombatantID:   c.ID,
+					DisplayName:   c.DisplayName,
+					ConditionName: condName,
+				})
 				continue
 			}
-			return s.createActiveTurn(ctx, encounterID, roundNumber, c)
+			info, err := s.createActiveTurn(ctx, encounterID, roundNumber, c)
+			if err != nil {
+				return TurnInfo{}, err
+			}
+			info.SkippedCombatants = skippedCombatants
+			return info, nil
 		}
 		return TurnInfo{}, errors.New("no alive combatants")
 	}

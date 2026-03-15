@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
@@ -693,4 +694,31 @@ func TestAdvanceTurn_AllIncapacitatedAdvancesRound(t *testing.T) {
 	// resulting in "no alive combatants" or another round advance.
 	assert.True(t, roundAdvanced, "round should advance when all combatants are incapacitated")
 	assert.Error(t, err, "should not create active turn for incapacitated combatant")
+}
+
+func TestAdvanceTurn_PopulatesSkippedCombatants(t *testing.T) {
+	encounterID := uuid.New()
+	stunnedID := uuid.New()
+	activeID := uuid.New()
+
+	stunned := refdata.Combatant{
+		ID: stunnedID, DisplayName: "Stunned Fighter",
+		Conditions: mustMarshal([]CombatCondition{{Condition: "stunned"}}),
+		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
+	}
+	active := refdata.Combatant{
+		ID: activeID, DisplayName: "Rogue",
+		Conditions: json.RawMessage(`[]`),
+		IsAlive: true, InitiativeOrder: 2, IsNpc: true,
+	}
+
+	ms := newAdvanceTurnMock([]refdata.Combatant{stunned, active})
+	svc := NewService(ms)
+	info, err := svc.AdvanceTurn(context.Background(), encounterID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, activeID, info.CombatantID)
+	require.Len(t, info.SkippedCombatants, 1, "should have one skipped combatant")
+	assert.Equal(t, "Stunned Fighter", info.SkippedCombatants[0].DisplayName)
+	assert.Equal(t, "stunned", info.SkippedCombatants[0].ConditionName)
 }

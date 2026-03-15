@@ -2,12 +2,14 @@ package discord
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -27,15 +29,68 @@ type DonePlayerLookup interface {
 	GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
 }
 
+// DefaultCampaignSettingsProvider looks up channel IDs via campaign settings from the encounter.
+type DefaultCampaignSettingsProvider struct {
+	getCampaign func(ctx context.Context, encounterID uuid.UUID) (refdata.Campaign, error)
+}
+
+// GetChannelIDs returns the channel_ids map from the campaign associated with the encounter.
+func (p *DefaultCampaignSettingsProvider) GetChannelIDs(ctx context.Context, encounterID uuid.UUID) (map[string]string, error) {
+	camp, err := p.getCampaign(ctx, encounterID)
+	if err != nil {
+		return nil, err
+	}
+	if !camp.Settings.Valid {
+		return nil, nil
+	}
+	var settings campaign.Settings
+	if err := json.Unmarshal(camp.Settings.RawMessage, &settings); err != nil {
+		return nil, err
+	}
+	return settings.ChannelIDs, nil
+}
+
+// DefaultTurnNotifier sends messages via ChannelMessageSend.
+type DefaultTurnNotifier struct{}
+
+// NotifyTurnStart sends the turn-start notification to the given channel.
+func (d *DefaultTurnNotifier) NotifyTurnStart(session Session, channelID string, content string) {
+	_, _ = session.ChannelMessageSend(channelID, content)
+}
+
+// NotifyAutoSkip sends an auto-skip notification to the given channel.
+func (d *DefaultTurnNotifier) NotifyAutoSkip(session Session, channelID string, content string) {
+	_, _ = session.ChannelMessageSend(channelID, content)
+}
+
+// TurnNotifier sends notifications to Discord channels on turn events.
+type TurnNotifier interface {
+	NotifyTurnStart(session Session, channelID string, content string)
+	NotifyAutoSkip(session Session, channelID string, content string)
+}
+
+// CampaignSettingsProvider looks up channel IDs from campaign settings.
+type CampaignSettingsProvider interface {
+	GetChannelIDs(ctx context.Context, encounterID uuid.UUID) (map[string]string, error)
+}
+
+// ImpactSummaryProvider gets the impact summary for a combatant.
+type ImpactSummaryProvider interface {
+	GetImpactSummary(ctx context.Context, encounterID, combatantID uuid.UUID) string
+}
+
 // DoneHandler handles the /done slash command.
 type DoneHandler struct {
-	session           Session
-	combatService     MoveService
-	turnProvider      MoveTurnProvider
-	encounterProvider MoveEncounterProvider
-	turnAdvancer      DoneTurnAdvancer
-	campaignProvider  DoneCampaignProvider
-	playerLookup      DonePlayerLookup
+	session                  Session
+	combatService            MoveService
+	turnProvider             MoveTurnProvider
+	encounterProvider        MoveEncounterProvider
+	turnAdvancer             DoneTurnAdvancer
+	campaignProvider         DoneCampaignProvider
+	playerLookup             DonePlayerLookup
+	turnNotifier             TurnNotifier
+	campaignSettingsProvider CampaignSettingsProvider
+	impactSummaryProvider    ImpactSummaryProvider
 }
 
 // NewDoneHandler creates a new DoneHandler.
@@ -66,6 +121,21 @@ func (h *DoneHandler) SetCampaignProvider(cp DoneCampaignProvider) {
 // SetPlayerLookup sets the player lookup for ownership check.
 func (h *DoneHandler) SetPlayerLookup(pl DonePlayerLookup) {
 	h.playerLookup = pl
+}
+
+// SetTurnNotifier sets the turn notification dependency.
+func (h *DoneHandler) SetTurnNotifier(tn TurnNotifier) {
+	h.turnNotifier = tn
+}
+
+// SetCampaignSettingsProvider sets the campaign settings provider.
+func (h *DoneHandler) SetCampaignSettingsProvider(csp CampaignSettingsProvider) {
+	h.campaignSettingsProvider = csp
+}
+
+// SetImpactSummaryProvider sets the impact summary provider.
+func (h *DoneHandler) SetImpactSummaryProvider(isp ImpactSummaryProvider) {
+	h.impactSummaryProvider = isp
 }
 
 // Handle processes the /done command interaction.
@@ -256,6 +326,8 @@ func (h *DoneHandler) endTurn(ctx context.Context, interaction *discordgo.Intera
 		return
 	}
 
+	h.sendTurnNotifications(ctx, encounterID, nextTurnInfo, nextCombatant)
+
 	msg := fmt.Sprintf("\u2705 Turn ended. Next up: **%s** (Round %d)", nextCombatant.DisplayName, nextTurnInfo.RoundNumber)
 	respondEphemeral(h.session, interaction, msg)
 }
@@ -297,6 +369,8 @@ func (h *DoneHandler) endTurnFromComponent(ctx context.Context, interaction *dis
 		return
 	}
 
+	h.sendTurnNotifications(ctx, encounterID, nextTurnInfo, nextCombatant)
+
 	var skippedParts []string
 	// Collect skip messages from the TurnInfo
 	if nextTurnInfo.Skipped {
@@ -315,4 +389,57 @@ func (h *DoneHandler) endTurnFromComponent(ctx context.Context, interaction *dis
 			Components: []discordgo.MessageComponent{},
 		},
 	})
+}
+
+// sendTurnNotifications posts auto-skip messages to #combat-log and
+// the turn-start notification to #your-turn. Best-effort: failures are silently ignored.
+func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uuid.UUID, turnInfo combat.TurnInfo, nextCombatant refdata.Combatant) {
+	if h.turnNotifier == nil || h.campaignSettingsProvider == nil {
+		return
+	}
+
+	channelIDs, err := h.campaignSettingsProvider.GetChannelIDs(ctx, encounterID)
+	if err != nil {
+		return
+	}
+
+	// Post auto-skip messages to #combat-log
+	if combatLogCh, ok := channelIDs["combat-log"]; ok && combatLogCh != "" {
+		for _, skipped := range turnInfo.SkippedCombatants {
+			msg := combat.FormatAutoSkipMessage(skipped.DisplayName, skipped.ConditionName)
+			h.turnNotifier.NotifyAutoSkip(h.session, combatLogCh, msg)
+		}
+	}
+
+	// Post turn-start notification to #your-turn
+	yourTurnCh, ok := channelIDs["your-turn"]
+	if !ok || yourTurnCh == "" {
+		return
+	}
+
+	// Get encounter for name/round info
+	encounter, err := h.combatService.GetEncounter(ctx, encounterID)
+	if err != nil {
+		return
+	}
+
+	encounterName := encounter.Name
+	if encounter.DisplayName.Valid && encounter.DisplayName.String != "" {
+		encounterName = encounter.DisplayName.String
+	}
+
+	var impactSummary string
+	if h.impactSummaryProvider != nil {
+		impactSummary = h.impactSummaryProvider.GetImpactSummary(ctx, encounterID, nextCombatant.ID)
+	}
+
+	content := combat.FormatTurnStartPromptWithImpact(
+		encounterName,
+		turnInfo.RoundNumber,
+		nextCombatant.DisplayName,
+		turnInfo.Turn,
+		&nextCombatant,
+		impactSummary,
+	)
+	h.turnNotifier.NotifyTurnStart(h.session, yourTurnCh, content)
 }

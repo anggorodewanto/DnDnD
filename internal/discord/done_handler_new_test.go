@@ -2,12 +2,14 @@ package discord
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/refdata"
@@ -37,6 +39,39 @@ type mockDonePlayerLookup struct {
 
 func (m *mockDonePlayerLookup) GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error) {
 	return m.getPC(ctx, arg)
+}
+
+type mockTurnNotifier struct {
+	notifyTurnStart func(s Session, channelID string, content string)
+	notifyAutoSkip  func(s Session, channelID string, content string)
+}
+
+func (m *mockTurnNotifier) NotifyTurnStart(s Session, channelID string, content string) {
+	if m.notifyTurnStart != nil {
+		m.notifyTurnStart(s, channelID, content)
+	}
+}
+
+func (m *mockTurnNotifier) NotifyAutoSkip(s Session, channelID string, content string) {
+	if m.notifyAutoSkip != nil {
+		m.notifyAutoSkip(s, channelID, content)
+	}
+}
+
+type mockCampaignSettingsProvider struct {
+	getSettings func(ctx context.Context, encounterID uuid.UUID) (map[string]string, error)
+}
+
+func (m *mockCampaignSettingsProvider) GetChannelIDs(ctx context.Context, encounterID uuid.UUID) (map[string]string, error) {
+	return m.getSettings(ctx, encounterID)
+}
+
+type mockImpactSummaryProvider struct {
+	getImpactSummary func(ctx context.Context, encounterID, combatantID uuid.UUID) string
+}
+
+func (m *mockImpactSummaryProvider) GetImpactSummary(ctx context.Context, encounterID, combatantID uuid.UUID) string {
+	return m.getImpactSummary(ctx, encounterID, combatantID)
 }
 
 func setupFullDoneHandler(sess *mockMoveSession) (*DoneHandler, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) {
@@ -597,6 +632,270 @@ func TestDoneHandler_HandleDoneConfirm_NoAdvancer(t *testing.T) {
 	content := sess.lastResponse.Data.Content
 	if !strings.Contains(content, "Turn ended") {
 		t.Errorf("expected turn ended, got: %s", content)
+	}
+}
+
+// --- HandleDoneConfirm with skipped combatant ---
+
+func TestDoneHandler_HandleDoneConfirm_Skipped(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, encounterID, _, _, nextCombatantID := setupFullDoneHandler(sess)
+
+	handler.turnAdvancer = &mockDoneTurnAdvancer{
+		advanceTurn: func(_ context.Context, _ uuid.UUID) (combat.TurnInfo, error) {
+			return combat.TurnInfo{
+				CombatantID: nextCombatantID,
+				RoundNumber: 2,
+				Skipped:     true,
+			}, nil
+		},
+	}
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member: &discordgo.Member{
+			User: &discordgo.User{ID: "user1"},
+		},
+	}
+
+	handler.HandleDoneConfirm(interaction, encounterID)
+
+	if sess.lastResponse == nil {
+		t.Fatal("expected response")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "skipped") {
+		t.Errorf("expected skipped message, got: %s", content)
+	}
+	if !strings.Contains(content, "Goblin #1") {
+		t.Errorf("expected next combatant name in skipped message, got: %s", content)
+	}
+}
+
+// --- Turn-start notification sent to #your-turn channel ---
+
+func TestDoneHandler_SendsTurnStartNotification(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, _ := setupFullDoneHandler(sess)
+
+	var sentChannel, sentContent string
+	notifier := &mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {
+			sentChannel = channelID
+			sentContent = content
+		},
+		notifyAutoSkip: func(s Session, channelID string, content string) {},
+	}
+	handler.SetTurnNotifier(notifier)
+
+	// Set campaign settings provider that returns channel_ids
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, encounterID uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-your-turn", "combat-log": "chan-combat-log"}, nil
+		},
+	})
+
+	// Set impact summary provider
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, encounterID, combatantID uuid.UUID) string {
+			return ""
+		},
+	})
+
+	interaction := makeDoneInteraction()
+	handler.Handle(interaction)
+
+	if sentChannel != "chan-your-turn" {
+		t.Errorf("expected notification to #your-turn channel, got: %s", sentChannel)
+	}
+	if !strings.Contains(sentContent, "Goblin #1") {
+		t.Errorf("expected next combatant name in turn start notification, got: %s", sentContent)
+	}
+}
+
+// --- No notification when providers not set ---
+
+func TestDoneHandler_NoNotificationWithoutProviders(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, _ := setupFullDoneHandler(sess)
+	// Don't set any notification providers
+
+	interaction := makeDoneInteraction()
+	handler.Handle(interaction)
+
+	// Should still end turn successfully
+	if sess.lastResponse == nil {
+		t.Fatal("expected response")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Turn ended") {
+		t.Errorf("expected turn ended, got: %s", content)
+	}
+}
+
+// --- Turn-start notification includes impact summary ---
+
+func TestDoneHandler_TurnStartNotification_WithImpact(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, _ := setupFullDoneHandler(sess)
+
+	var sentContent string
+	notifier := &mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {
+			sentContent = content
+		},
+		notifyAutoSkip: func(s Session, channelID string, content string) {},
+	}
+	handler.SetTurnNotifier(notifier)
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string {
+			return "\u26a0\ufe0f Since your last turn: Orc hit you for 8 damage."
+		},
+	})
+
+	interaction := makeDoneInteraction()
+	handler.Handle(interaction)
+
+	if !strings.Contains(sentContent, "Since your last turn") {
+		t.Errorf("expected impact summary in turn start notification, got: %s", sentContent)
+	}
+	if !strings.Contains(sentContent, "Orc hit you for 8 damage") {
+		t.Errorf("expected impact details, got: %s", sentContent)
+	}
+}
+
+// --- Auto-skip messages posted to #combat-log ---
+
+func TestDoneHandler_PostsAutoSkipToCombatLog(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, nextCombatantID := setupFullDoneHandler(sess)
+
+	handler.turnAdvancer = &mockDoneTurnAdvancer{
+		advanceTurn: func(_ context.Context, _ uuid.UUID) (combat.TurnInfo, error) {
+			return combat.TurnInfo{
+				CombatantID: nextCombatantID,
+				RoundNumber: 1,
+				SkippedCombatants: []combat.SkippedInfo{
+					{DisplayName: "Stunned Fighter", ConditionName: "stunned"},
+					{DisplayName: "Paralyzed Wizard", ConditionName: "paralyzed"},
+				},
+			}, nil
+		},
+	}
+
+	var autoSkipMessages []string
+	var autoSkipChannels []string
+	notifier := &mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {},
+		notifyAutoSkip: func(s Session, channelID string, content string) {
+			autoSkipChannels = append(autoSkipChannels, channelID)
+			autoSkipMessages = append(autoSkipMessages, content)
+		},
+	}
+	handler.SetTurnNotifier(notifier)
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-your-turn", "combat-log": "chan-combat-log"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+
+	interaction := makeDoneInteraction()
+	handler.Handle(interaction)
+
+	if len(autoSkipMessages) != 2 {
+		t.Fatalf("expected 2 auto-skip messages, got %d", len(autoSkipMessages))
+	}
+	if autoSkipChannels[0] != "chan-combat-log" || autoSkipChannels[1] != "chan-combat-log" {
+		t.Errorf("expected messages to combat-log channel, got: %v", autoSkipChannels)
+	}
+	if !strings.Contains(autoSkipMessages[0], "Stunned Fighter") {
+		t.Errorf("expected first skip message about Stunned Fighter, got: %s", autoSkipMessages[0])
+	}
+	if !strings.Contains(autoSkipMessages[1], "Paralyzed Wizard") {
+		t.Errorf("expected second skip message about Paralyzed Wizard, got: %s", autoSkipMessages[1])
+	}
+}
+
+// --- DefaultTurnNotifier sends via ChannelMessageSend ---
+
+func TestDefaultTurnNotifier_NotifyTurnStart(t *testing.T) {
+	sess := &mockMoveSession{}
+	notifier := &DefaultTurnNotifier{}
+
+	var sentChannel, sentContent string
+	origSend := sess.ChannelMessageSend
+	_ = origSend
+	// We need to capture what's sent - enhance mockMoveSession
+	captureSess := &captureMoveSession{}
+	notifier.NotifyTurnStart(captureSess, "chan-1", "Hello turn!")
+
+	if captureSess.lastChannelID != "chan-1" {
+		t.Errorf("expected channel chan-1, got: %s", captureSess.lastChannelID)
+	}
+	if captureSess.lastContent != "Hello turn!" {
+		t.Errorf("expected content 'Hello turn!', got: %s", captureSess.lastContent)
+	}
+	_ = sentChannel
+	_ = sentContent
+}
+
+func TestDefaultTurnNotifier_NotifyAutoSkip(t *testing.T) {
+	captureSess := &captureMoveSession{}
+	notifier := &DefaultTurnNotifier{}
+	notifier.NotifyAutoSkip(captureSess, "chan-log", "Skip msg")
+
+	if captureSess.lastChannelID != "chan-log" {
+		t.Errorf("expected channel chan-log, got: %s", captureSess.lastChannelID)
+	}
+	if captureSess.lastContent != "Skip msg" {
+		t.Errorf("expected content 'Skip msg', got: %s", captureSess.lastContent)
+	}
+}
+
+// captureMoveSession captures ChannelMessageSend calls.
+type captureMoveSession struct {
+	mockMoveSession
+	lastChannelID string
+	lastContent   string
+}
+
+func (m *captureMoveSession) ChannelMessageSend(channelID, content string) (*discordgo.Message, error) {
+	m.lastChannelID = channelID
+	m.lastContent = content
+	return nil, nil
+}
+
+// --- DefaultCampaignSettingsProvider ---
+
+func TestDefaultCampaignSettingsProvider_ReturnsChannelIDs(t *testing.T) {
+	encounterID := uuid.New()
+	provider := &DefaultCampaignSettingsProvider{
+		getCampaign: func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+			settings := `{"channel_ids":{"your-turn":"ch1","combat-log":"ch2"}}`
+			return refdata.Campaign{
+				Settings: pqtype.NullRawMessage{RawMessage: json.RawMessage(settings), Valid: true},
+			}, nil
+		},
+	}
+
+	channels, err := provider.GetChannelIDs(context.Background(), encounterID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if channels["your-turn"] != "ch1" {
+		t.Errorf("expected your-turn=ch1, got: %s", channels["your-turn"])
+	}
+	if channels["combat-log"] != "ch2" {
+		t.Errorf("expected combat-log=ch2, got: %s", channels["combat-log"])
 	}
 }
 

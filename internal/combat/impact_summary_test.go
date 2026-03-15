@@ -13,9 +13,6 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// suppress unused import warnings
-var _ = fmt.Sprintf
-
 func TestBuildImpactSummary_NoLogs(t *testing.T) {
 	result := BuildImpactSummary(nil)
 	assert.Equal(t, "", result)

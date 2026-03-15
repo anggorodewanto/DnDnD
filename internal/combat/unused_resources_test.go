@@ -51,6 +51,35 @@ func TestCheckUnusedResources_MultipleUnused(t *testing.T) {
 	assert.True(t, len(unused) >= 2)
 }
 
+func TestCheckUnusedResources_UnusedAction(t *testing.T) {
+	turn := refdata.Turn{
+		ActionUsed:       false,
+		BonusActionUsed:  true,
+		AttacksRemaining: 0,
+	}
+	unused := CheckUnusedResources(turn)
+	found := false
+	for _, u := range unused {
+		if u == "\U0001f4a5 Action" {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected unused action warning, got: %v", unused)
+}
+
+func TestCheckUnusedResources_ActionUsedNoAttacks(t *testing.T) {
+	// If action was used (e.g., Dash/Dodge) but 0 attacks remain, no action warning
+	turn := refdata.Turn{
+		ActionUsed:       true,
+		BonusActionUsed:  true,
+		AttacksRemaining: 0,
+	}
+	unused := CheckUnusedResources(turn)
+	for _, u := range unused {
+		assert.NotContains(t, u, "Action")
+	}
+}
+
 func TestFormatUnusedResourcesWarning_Empty(t *testing.T) {
 	msg := FormatUnusedResourcesWarning(nil)
 	assert.Equal(t, "", msg)
