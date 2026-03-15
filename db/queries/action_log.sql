@@ -15,3 +15,12 @@ WHERE encounter_id = $1
   AND target_id = $2
   AND created_at > $3
 ORDER BY created_at ASC;
+
+-- name: ListActionLogWithRounds :many
+SELECT al.id, al.turn_id, al.encounter_id, al.action_type, al.actor_id, al.target_id,
+       al.description, al.before_state, al.after_state, al.dice_rolls, al.created_at,
+       t.round_number, t.combatant_id as turn_combatant_id
+FROM action_log al
+JOIN turns t ON al.turn_id = t.id
+WHERE al.encounter_id = $1
+ORDER BY t.round_number ASC, al.created_at ASC;

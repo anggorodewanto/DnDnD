@@ -48,6 +48,11 @@ func (r *CommandRouter) SetSummonCommandHandler(h *SummonCommandHandler) {
 	r.handlers["command"] = h
 }
 
+// SetRecapHandler registers the RecapHandler for the /recap command.
+func (r *CommandRouter) SetRecapHandler(h *RecapHandler) {
+	r.handlers["recap"] = h
+}
+
 // RegistrationDeps holds the optional dependencies for registration command handlers.
 // When nil, the router uses plain stub handlers for registration commands.
 type RegistrationDeps struct {

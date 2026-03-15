@@ -188,3 +188,66 @@ func (q *Queries) ListActionLogSinceTurn(ctx context.Context, arg ListActionLogS
 	}
 	return items, nil
 }
+
+const listActionLogWithRounds = `-- name: ListActionLogWithRounds :many
+SELECT al.id, al.turn_id, al.encounter_id, al.action_type, al.actor_id, al.target_id,
+       al.description, al.before_state, al.after_state, al.dice_rolls, al.created_at,
+       t.round_number, t.combatant_id as turn_combatant_id
+FROM action_log al
+JOIN turns t ON al.turn_id = t.id
+WHERE al.encounter_id = $1
+ORDER BY t.round_number ASC, al.created_at ASC
+`
+
+type ListActionLogWithRoundsRow struct {
+	ID              uuid.UUID             `json:"id"`
+	TurnID          uuid.UUID             `json:"turn_id"`
+	EncounterID     uuid.UUID             `json:"encounter_id"`
+	ActionType      string                `json:"action_type"`
+	ActorID         uuid.UUID             `json:"actor_id"`
+	TargetID        uuid.NullUUID         `json:"target_id"`
+	Description     sql.NullString        `json:"description"`
+	BeforeState     json.RawMessage       `json:"before_state"`
+	AfterState      json.RawMessage       `json:"after_state"`
+	DiceRolls       pqtype.NullRawMessage `json:"dice_rolls"`
+	CreatedAt       time.Time             `json:"created_at"`
+	RoundNumber     int32                 `json:"round_number"`
+	TurnCombatantID uuid.UUID             `json:"turn_combatant_id"`
+}
+
+func (q *Queries) ListActionLogWithRounds(ctx context.Context, encounterID uuid.UUID) ([]ListActionLogWithRoundsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActionLogWithRounds, encounterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActionLogWithRoundsRow{}
+	for rows.Next() {
+		var i ListActionLogWithRoundsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TurnID,
+			&i.EncounterID,
+			&i.ActionType,
+			&i.ActorID,
+			&i.TargetID,
+			&i.Description,
+			&i.BeforeState,
+			&i.AfterState,
+			&i.DiceRolls,
+			&i.CreatedAt,
+			&i.RoundNumber,
+			&i.TurnCombatantID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -136,6 +136,10 @@ type mockStore struct {
 	getLastCompletedTurnByCombatantFn func(ctx context.Context, arg refdata.GetLastCompletedTurnByCombatantParams) (refdata.Turn, error)
 	listActionLogSinceTurnFn          func(ctx context.Context, arg refdata.ListActionLogSinceTurnParams) ([]refdata.ActionLog, error)
 	getPlayerCharacterByCharacterFn   func(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
+
+	// Recap
+	listActionLogWithRoundsFn          func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error)
+	getMostRecentCompletedEncounterFn  func(ctx context.Context, campaignID uuid.UUID) (refdata.Encounter, error)
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -630,6 +634,20 @@ func (m *mockStore) GetPlayerCharacterByCharacter(ctx context.Context, arg refda
 		return m.getPlayerCharacterByCharacterFn(ctx, arg)
 	}
 	return refdata.PlayerCharacter{}, fmt.Errorf("not found")
+}
+
+func (m *mockStore) ListActionLogWithRounds(ctx context.Context, encounterID uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+	if m.listActionLogWithRoundsFn != nil {
+		return m.listActionLogWithRoundsFn(ctx, encounterID)
+	}
+	return nil, nil
+}
+
+func (m *mockStore) GetMostRecentCompletedEncounter(ctx context.Context, campaignID uuid.UUID) (refdata.Encounter, error) {
+	if m.getMostRecentCompletedEncounterFn != nil {
+		return m.getMostRecentCompletedEncounterFn(ctx, campaignID)
+	}
+	return refdata.Encounter{}, fmt.Errorf("not found")
 }
 
 func defaultMockStore() *mockStore {

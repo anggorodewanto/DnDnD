@@ -109,6 +109,32 @@ func (q *Queries) GetEncounter(ctx context.Context, id uuid.UUID) (Encounter, er
 	return i, err
 }
 
+const getMostRecentCompletedEncounter = `-- name: GetMostRecentCompletedEncounter :one
+SELECT id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at FROM encounters
+WHERE campaign_id = $1 AND status = 'completed'
+ORDER BY updated_at DESC
+LIMIT 1
+`
+
+func (q *Queries) GetMostRecentCompletedEncounter(ctx context.Context, campaignID uuid.UUID) (Encounter, error) {
+	row := q.db.QueryRowContext(ctx, getMostRecentCompletedEncounter, campaignID)
+	var i Encounter
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.MapID,
+		&i.Name,
+		&i.DisplayName,
+		&i.TemplateID,
+		&i.Status,
+		&i.RoundNumber,
+		&i.CurrentTurnID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listEncountersByCampaignID = `-- name: ListEncountersByCampaignID :many
 SELECT id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at FROM encounters WHERE campaign_id = $1 ORDER BY created_at DESC
 `
