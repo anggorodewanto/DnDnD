@@ -448,7 +448,7 @@
   - Depends on: Phase 78a
   - Done when: Integration tests verify legendary action budget, cost deduction, reset timing, lair action initiative 20 trigger, no-repeat enforcement, turn queue display.
 
-- [ ] **Phase 79: Summoned Creatures & Companions**
+- [x] **Phase 79: Summoned Creatures & Companions**
   - Scope: Summoning flow: spell creates combatant entries from reference stat blocks, assigns short IDs, adds to initiative/map. `/command [creature-id] [action] [target?]`: validate summoner ownership, stat block actions, per-creature turn resources. Initiative placement (own turn vs caster's turn). Ping summoning player for creature turns. `/command [id] done`. `/command [id] dismiss`. Death: remove from encounter. Concentration-based dismissal.
   - Depends on: Phase 26a, Phase 58, Phase 34
   - Done when: Integration tests verify summon creation, `/command` routing, turn flow, dismissal, concentration link, death removal.
