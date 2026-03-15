@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { uploadAsset } from './api.js';
+import { uploadAsset, getEnemyTurnPlan, executeEnemyTurn } from './api.js';
 
 describe('uploadAsset', () => {
   beforeEach(() => {
@@ -48,5 +48,54 @@ describe('uploadAsset', () => {
       type: 'bogus',
       file,
     })).rejects.toThrow('invalid asset type');
+  });
+});
+
+describe('getEnemyTurnPlan', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('fetches turn plan for an NPC combatant', async () => {
+    const mockPlan = {
+      combatant_id: 'npc-uuid',
+      display_name: 'Goblin',
+      steps: [{ type: 'attack' }],
+      reactions: [],
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockPlan),
+    });
+
+    const result = await getEnemyTurnPlan('encounter-uuid', 'npc-uuid');
+    expect(result).toEqual(mockPlan);
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/combat/encounter-uuid/enemy-turn/npc-uuid/plan',
+      undefined,
+    );
+  });
+});
+
+describe('executeEnemyTurn', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends finalized plan and returns result', async () => {
+    const mockResult = { combat_log: 'Goblin attacks...', success: true };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResult),
+    });
+
+    const plan = { combatant_id: 'npc-uuid', steps: [{ type: 'attack' }] };
+    const result = await executeEnemyTurn('encounter-uuid', plan);
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/encounter-uuid/enemy-turn');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual(plan);
   });
 });

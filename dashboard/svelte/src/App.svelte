@@ -3,10 +3,14 @@
   import MapList from './MapList.svelte';
   import EncounterBuilder from './EncounterBuilder.svelte';
   import EncounterList from './EncounterList.svelte';
+  import TurnBuilder from './TurnBuilder.svelte';
 
   let currentView = $state('list');
   let editingMapId = $state(null);
   let editingEncounterId = $state(null);
+  let turnBuilderEncounterId = $state(null);
+  let turnBuilderCombatantId = $state(null);
+  let turnBuilderCombatantName = $state(null);
   // For demo purposes, use a fixed campaign ID. In production this comes from session.
   let campaignId = $state('00000000-0000-0000-0000-000000000001');
 
@@ -15,6 +19,7 @@
     const hash = window.location.hash;
     if (hash === '#encounters') return 'encounter-list';
     if (hash === '#encounter-new') return 'encounter-editor';
+    if (hash.startsWith('#turn-builder')) return 'turn-builder';
     return 'list';
   }
 
@@ -57,6 +62,20 @@
   function onShowMaps() {
     currentView = 'list';
   }
+
+  function onOpenTurnBuilder(encId, combId, combName) {
+    turnBuilderEncounterId = encId;
+    turnBuilderCombatantId = combId;
+    turnBuilderCombatantName = combName;
+    currentView = 'turn-builder';
+  }
+
+  function onCloseTurnBuilder() {
+    currentView = 'encounter-list';
+    turnBuilderEncounterId = null;
+    turnBuilderCombatantId = null;
+    turnBuilderCombatantName = null;
+  }
 </script>
 
 <main>
@@ -70,6 +89,7 @@
     <nav class="view-nav">
       <button class:active={currentView === 'list' || currentView === 'editor'} onclick={onShowMaps}>Maps</button>
       <button class:active={currentView === 'encounter-list' || currentView === 'encounter-editor'} onclick={onShowEncounters}>Encounters</button>
+      <button class:active={currentView === 'turn-builder'} onclick={() => currentView = 'turn-builder'}>Turn Builder</button>
     </nav>
 
     {#if currentView === 'editor'}
@@ -88,6 +108,13 @@
     <EncounterList {campaignId} oncreate={onCreateEncounter} onedit={onEditEncounter} />
   {:else if currentView === 'encounter-editor'}
     <EncounterBuilder {campaignId} encounterId={editingEncounterId} onback={onBackFromEncounter} />
+  {:else if currentView === 'turn-builder'}
+    <TurnBuilder
+      encounterId={turnBuilderEncounterId}
+      combatantId={turnBuilderCombatantId}
+      combatantName={turnBuilderCombatantName}
+      onclose={onCloseTurnBuilder}
+    />
   {/if}
 </main>
 

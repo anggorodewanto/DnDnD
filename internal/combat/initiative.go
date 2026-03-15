@@ -167,8 +167,8 @@ func SortByInitiative(entries []InitiativeEntry) {
 	})
 }
 
-// encounterDisplayName returns the display name if set, otherwise the slug name.
-func encounterDisplayName(encounter refdata.Encounter) string {
+// EncounterDisplayName returns the display name if set, otherwise the slug name.
+func EncounterDisplayName(encounter refdata.Encounter) string {
 	if encounter.DisplayName.Valid && encounter.DisplayName.String != "" {
 		return encounter.DisplayName.String
 	}
@@ -186,7 +186,7 @@ func formatCombatantLine(c refdata.Combatant) string {
 // FormatInitiativeTracker produces the Discord message for the initiative tracker.
 func FormatInitiativeTracker(encounter refdata.Encounter, combatants []refdata.Combatant, currentTurnCombatantID uuid.UUID) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", encounterDisplayName(encounter), encounter.RoundNumber)
+	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", EncounterDisplayName(encounter), encounter.RoundNumber)
 
 	for _, c := range combatants {
 		if c.ID == currentTurnCombatantID {
@@ -203,7 +203,7 @@ func FormatInitiativeTracker(encounter refdata.Encounter, combatants []refdata.C
 // No active turn indicator is shown and a "--- Combat Complete ---" footer is appended.
 func FormatCompletedInitiativeTracker(encounter refdata.Encounter, combatants []refdata.Combatant) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", encounterDisplayName(encounter), encounter.RoundNumber)
+	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", EncounterDisplayName(encounter), encounter.RoundNumber)
 
 	for _, c := range combatants {
 		fmt.Fprintf(&b, "%s\n", formatCombatantLine(c))
@@ -432,87 +432,80 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 		}
 		allSurprised = false
 
-		// Skip incapacitated combatants (stunned, paralyzed, unconscious, petrified, incapacitated)
-		if IsIncapacitated(conds) {
-			condName := GetIncapacitatingConditionName(conds)
-			if err := s.skipCombatantTurn(ctx, encounterID, roundNumber, candidate, "incapacitated"); err != nil {
-				return TurnInfo{}, err
-			}
-			skippedCombatants = append(skippedCombatants, SkippedInfo{
-				CombatantID:   candidate.ID,
-				DisplayName:   candidate.DisplayName,
-				ConditionName: condName,
-			})
-			continue
-		}
-		allIncapacitated = false
-
-		// Create active turn for this combatant
-		info, err := s.createActiveTurn(ctx, encounterID, roundNumber, candidate)
+		info, skipped, err := s.skipOrActivate(ctx, encounterID, roundNumber, candidate, conds, skippedCombatants)
 		if err != nil {
 			return TurnInfo{}, err
 		}
-		info.SkippedCombatants = skippedCombatants
+		if skipped != nil {
+			skippedCombatants = append(skippedCombatants, *skipped)
+			continue
+		}
+		allIncapacitated = false
 		return info, nil
 	}
 
-	// All candidates were surprised in round 1 — advance to round 2
-	if allSurprised {
+	// All candidates were surprised or incapacitated — advance to next round
+	if allSurprised || allIncapacitated {
+		reason := "all surprised"
+		if allIncapacitated {
+			reason = "all incapacitated"
+		}
 		roundNumber++
 		if _, err := s.store.UpdateEncounterRound(ctx, refdata.UpdateEncounterRoundParams{
 			ID:          encounterID,
 			RoundNumber: roundNumber,
 		}); err != nil {
-			return TurnInfo{}, fmt.Errorf("advancing round after all surprised: %w", err)
+			return TurnInfo{}, fmt.Errorf("advancing round after %s: %w", reason, err)
 		}
 
-		// Start round 2 with first alive combatant
-		for _, c := range combatants {
-			if c.IsAlive {
-				return s.createActiveTurn(ctx, encounterID, roundNumber, c)
-			}
-		}
-		return TurnInfo{}, errors.New("no alive combatants")
+		return s.findFirstActiveCombatant(ctx, encounterID, roundNumber, combatants, skippedCombatants)
 	}
 
-	// All candidates were incapacitated — advance round and re-check
-	if allIncapacitated {
-		roundNumber++
-		if _, err := s.store.UpdateEncounterRound(ctx, refdata.UpdateEncounterRoundParams{
-			ID:          encounterID,
-			RoundNumber: roundNumber,
-		}); err != nil {
-			return TurnInfo{}, fmt.Errorf("advancing round after all incapacitated: %w", err)
-		}
+	return TurnInfo{}, errors.New("no alive combatants")
+}
 
-		// Re-iterate: skip still-incapacitated, give turn to first non-incapacitated
-		for _, c := range combatants {
-			if !c.IsAlive {
-				continue
-			}
-			conds, _ := parseConditions(c.Conditions)
-			if IsIncapacitated(conds) {
-				condName := GetIncapacitatingConditionName(conds)
-				if err := s.skipCombatantTurn(ctx, encounterID, roundNumber, c, "incapacitated"); err != nil {
-					return TurnInfo{}, err
-				}
-				skippedCombatants = append(skippedCombatants, SkippedInfo{
-					CombatantID:   c.ID,
-					DisplayName:   c.DisplayName,
-					ConditionName: condName,
-				})
-				continue
-			}
-			info, err := s.createActiveTurn(ctx, encounterID, roundNumber, c)
-			if err != nil {
-				return TurnInfo{}, err
-			}
-			info.SkippedCombatants = skippedCombatants
-			return info, nil
+// skipOrActivate checks if a combatant is incapacitated: if so, skips their turn and
+// returns the SkippedInfo; otherwise creates an active turn. Returns (info, nil, nil)
+// for an active turn or (zero, skipped, nil) for a skipped turn.
+func (s *Service) skipOrActivate(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant, conds []CombatCondition, priorSkipped []SkippedInfo) (TurnInfo, *SkippedInfo, error) {
+	if IsIncapacitated(conds) {
+		condName := GetIncapacitatingConditionName(conds)
+		if err := s.skipCombatantTurn(ctx, encounterID, roundNumber, combatant, "incapacitated"); err != nil {
+			return TurnInfo{}, nil, err
 		}
-		return TurnInfo{}, errors.New("no alive combatants")
+		return TurnInfo{}, &SkippedInfo{
+			CombatantID:   combatant.ID,
+			DisplayName:   combatant.DisplayName,
+			ConditionName: condName,
+		}, nil
 	}
 
+	info, err := s.createActiveTurn(ctx, encounterID, roundNumber, combatant)
+	if err != nil {
+		return TurnInfo{}, nil, err
+	}
+	info.SkippedCombatants = priorSkipped
+	return info, nil, nil
+}
+
+// findFirstActiveCombatant iterates alive combatants, skipping incapacitated ones,
+// and returns a TurnInfo for the first combatant that can act.
+func (s *Service) findFirstActiveCombatant(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatants []refdata.Combatant, skippedCombatants []SkippedInfo) (TurnInfo, error) {
+	for _, c := range combatants {
+		if !c.IsAlive {
+			continue
+		}
+		conds, _ := parseConditions(c.Conditions)
+		info, skipped, err := s.skipOrActivate(ctx, encounterID, roundNumber, c, conds, skippedCombatants)
+		if err != nil {
+			return TurnInfo{}, err
+		}
+		if skipped != nil {
+			skippedCombatants = append(skippedCombatants, *skipped)
+			continue
+		}
+		return info, nil
+	}
 	return TurnInfo{}, errors.New("no alive combatants")
 }
 
@@ -633,6 +626,5 @@ func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, r
 		Turn:        turn,
 		CombatantID: combatant.ID,
 		RoundNumber: roundNumber,
-		Skipped:     false,
 	}, nil
 }

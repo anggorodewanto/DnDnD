@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -218,20 +217,19 @@ func (h *DoneHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	// All resources spent — end turn immediately
-	h.endTurn(ctx, interaction, encounterID, encounter)
+	h.endTurn(ctx, interaction, encounterID)
 }
 
 // HandleDoneConfirm processes the "End Turn" button click.
 func (h *DoneHandler) HandleDoneConfirm(interaction *discordgo.Interaction, encounterID uuid.UUID) {
 	ctx := context.Background()
 
-	encounter, err := h.combatService.GetEncounter(ctx, encounterID)
-	if err != nil {
+	if _, err := h.combatService.GetEncounter(ctx, encounterID); err != nil {
 		respondEphemeral(h.session, interaction, "Failed to get encounter data.")
 		return
 	}
 
-	h.endTurnFromComponent(ctx, interaction, encounterID, encounter)
+	h.endTurnFromComponent(ctx, interaction, encounterID)
 }
 
 // HandleDoneCancel processes the "Cancel" button click.
@@ -317,90 +315,58 @@ func (h *DoneHandler) sendConfirmation(interaction *discordgo.Interaction, warni
 	})
 }
 
-// endTurn advances the turn and responds.
-func (h *DoneHandler) endTurn(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, encounter refdata.Encounter) {
-	if h.turnAdvancer == nil {
-		// Backward compat: no advancer set, send stub message
-		respondEphemeral(h.session, interaction, "Turn ended. Use /done is not yet fully implemented.")
-		return
+// endTurn advances the turn and responds via ephemeral slash command response.
+func (h *DoneHandler) endTurn(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID) {
+	respond := func(msg string) {
+		respondEphemeral(h.session, interaction, msg)
 	}
-
-	nextTurnInfo, err := h.turnAdvancer.AdvanceTurn(ctx, encounterID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to advance turn: %v", err))
-		return
-	}
-
-	// Get next combatant info
-	nextCombatant, err := h.combatService.GetCombatant(ctx, nextTurnInfo.CombatantID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Turn ended, but failed to get next combatant info.")
-		return
-	}
-
-	h.sendTurnNotifications(ctx, encounterID, nextTurnInfo, nextCombatant)
-
-	msg := fmt.Sprintf("\u2705 Turn ended. Next up: **%s** (Round %d)", nextCombatant.DisplayName, nextTurnInfo.RoundNumber)
-	respondEphemeral(h.session, interaction, msg)
+	h.advanceAndRespond(ctx, encounterID, respond, false)
 }
 
-// endTurnFromComponent is like endTurn but responds as a component update.
-func (h *DoneHandler) endTurnFromComponent(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, encounter refdata.Encounter) {
-	if h.turnAdvancer == nil {
+// endTurnFromComponent advances the turn and responds via component update.
+func (h *DoneHandler) endTurnFromComponent(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID) {
+	respond := func(msg string) {
 		_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseUpdateMessage,
 			Data: &discordgo.InteractionResponseData{
-				Content:    "Turn ended.",
+				Content:    msg,
 				Components: []discordgo.MessageComponent{},
 			},
 		})
+	}
+	h.advanceAndRespond(ctx, encounterID, respond, true)
+}
+
+// advanceAndRespond contains the shared logic for ending a turn: advance, notify, respond.
+// When includeSkipInfo is true, skipped combatant messages are prepended to the response.
+func (h *DoneHandler) advanceAndRespond(ctx context.Context, encounterID uuid.UUID, respond func(string), includeSkipInfo bool) {
+	if h.turnAdvancer == nil {
+		respond("Turn ended. Use /done is not yet fully implemented.")
 		return
 	}
 
 	nextTurnInfo, err := h.turnAdvancer.AdvanceTurn(ctx, encounterID)
 	if err != nil {
-		_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseUpdateMessage,
-			Data: &discordgo.InteractionResponseData{
-				Content:    fmt.Sprintf("Failed to advance turn: %v", err),
-				Components: []discordgo.MessageComponent{},
-			},
-		})
+		respond(fmt.Sprintf("Failed to advance turn: %v", err))
 		return
 	}
 
 	nextCombatant, err := h.combatService.GetCombatant(ctx, nextTurnInfo.CombatantID)
 	if err != nil {
-		_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseUpdateMessage,
-			Data: &discordgo.InteractionResponseData{
-				Content:    "Turn ended, but failed to get next combatant info.",
-				Components: []discordgo.MessageComponent{},
-			},
-		})
+		respond("Turn ended, but failed to get next combatant info.")
 		return
 	}
 
 	h.sendTurnNotifications(ctx, encounterID, nextTurnInfo, nextCombatant)
 
-	var skippedParts []string
-	// Collect skip messages from the TurnInfo
-	if nextTurnInfo.Skipped {
-		skippedParts = append(skippedParts, fmt.Sprintf("\u23ed\ufe0f  %s's turn was skipped", nextCombatant.DisplayName))
-	}
-
 	msg := fmt.Sprintf("\u2705 Turn ended. Next up: **%s** (Round %d)", nextCombatant.DisplayName, nextTurnInfo.RoundNumber)
-	if len(skippedParts) > 0 {
-		msg = strings.Join(skippedParts, "\n") + "\n" + msg
+
+	if includeSkipInfo && nextTurnInfo.Skipped {
+		skipMsg := fmt.Sprintf("\u23ed\ufe0f  %s's turn was skipped", nextCombatant.DisplayName)
+		msg = skipMsg + "\n" + msg
 	}
 
-	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseUpdateMessage,
-		Data: &discordgo.InteractionResponseData{
-			Content:    msg,
-			Components: []discordgo.MessageComponent{},
-		},
-	})
+	respond(msg)
 }
 
 // sendTurnNotifications posts auto-skip messages to #combat-log and
@@ -435,10 +401,7 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 		return
 	}
 
-	encounterName := encounter.Name
-	if encounter.DisplayName.Valid && encounter.DisplayName.String != "" {
-		encounterName = encounter.DisplayName.String
-	}
+	encounterName := combat.EncounterDisplayName(encounter)
 
 	var impactSummary string
 	if h.impactSummaryProvider != nil {

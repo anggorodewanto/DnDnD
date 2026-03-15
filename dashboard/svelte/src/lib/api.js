@@ -180,3 +180,33 @@ export async function listCreatures() {
   const res = await apiFetch('/api/creatures');
   return res.json();
 }
+
+// --- Enemy Turn Builder API ---
+
+const COMBAT_BASE = '/api/combat';
+
+/**
+ * Get a suggested turn plan for an NPC combatant.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} combatantId - Combatant UUID.
+ * @returns {Promise<object>} The turn plan.
+ */
+export async function getEnemyTurnPlan(encounterId, combatantId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/enemy-turn/${combatantId}/plan`);
+  return res.json();
+}
+
+/**
+ * Execute a finalized enemy turn plan.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {object} plan - { combatant_id, steps }
+ * @returns {Promise<object>} The execution result.
+ */
+export async function executeEnemyTurn(encounterId, plan) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/enemy-turn`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(plan),
+  });
+  return res.json();
+}
