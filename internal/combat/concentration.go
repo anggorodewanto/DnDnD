@@ -1,9 +1,12 @@
 package combat
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -133,6 +136,20 @@ func BreakConcentration(casterName, spellName, reason string, cleanup Concentrat
 		Reason:    reason,
 		Message:   msg,
 	}
+}
+
+// BreakConcentrationAndDismissSummons breaks concentration, invokes cleanup, and also
+// dismisses all summoned creatures belonging to the caster. Returns the break result
+// and the number of dismissed summons.
+func (s *Service) BreakConcentrationAndDismissSummons(ctx context.Context, encounterID, casterID uuid.UUID, casterName, spellName, reason string, cleanup ConcentrationCleanupFunc) (FullConcentrationBreakResult, int, error) {
+	result := BreakConcentration(casterName, spellName, reason, cleanup)
+
+	dismissed, err := s.DismissSummonsByConcentration(ctx, encounterID, casterID)
+	if err != nil {
+		return result, 0, fmt.Errorf("dismissing summons on concentration break: %w", err)
+	}
+
+	return result, dismissed, nil
 }
 
 // FormatConcentrationBreakLog produces the combat log message for concentration loss.

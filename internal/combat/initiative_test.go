@@ -1273,3 +1273,72 @@ func TestService_AdvanceTurn_ResolveTurnResourcesError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolving turn resources")
 }
+
+func TestService_AdvanceTurn_SkipsSummonedCreatures(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	summonerID := uuid.New()
+	summonedID := uuid.New()
+
+	// Scenario: summoner already had turn this round, summoned creature is the only
+	// "alive" candidate left. Without filtering, AdvanceTurn would try to create a
+	// turn for the summoned creature. With filtering, it should advance to next round.
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
+			CurrentTurnID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		}, nil
+	}
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: id, CombatantID: summonerID, RoundNumber: 1}, nil
+	}
+	store.completeTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: id, Status: "completed"}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: summonerID, InitiativeOrder: 1, DisplayName: "Aria", Conditions: json.RawMessage(`[]`), IsAlive: true, IsNpc: false},
+			// Summoned creature — should never get its own turn
+			{ID: summonedID, InitiativeOrder: 0, DisplayName: "Aria's Owl", Conditions: json.RawMessage(`[]`), IsAlive: true, IsNpc: true, SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}},
+		}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		// Summoner already had a turn this round
+		return []refdata.Turn{
+			{ID: uuid.New(), CombatantID: summonerID, RoundNumber: 1},
+		}, nil
+	}
+
+	var createdTurnCombatantIDs []uuid.UUID
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		createdTurnCombatantIDs = append(createdTurnCombatantIDs, arg.CombatantID)
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+
+	// Expect listActionLogSinceTurnFn and other turn-end processing
+	store.listEncounterZonesByEncounterIDFn = func(ctx context.Context, encounterID uuid.UUID) ([]refdata.EncounterZone, error) {
+		return nil, nil
+	}
+	store.listActiveReactionDeclarationsByEncounterFn = func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error) {
+		return nil, nil
+	}
+	store.listActiveReactionDeclarationsByCombatantFn = func(ctx context.Context, arg refdata.ListActiveReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error) {
+		return nil, nil
+	}
+	store.cancelAllReactionDeclarationsByCombatantFn = func(ctx context.Context, arg refdata.CancelAllReactionDeclarationsByCombatantParams) error {
+		return nil
+	}
+
+	svc := NewService(store)
+	turnInfo, err := svc.AdvanceTurn(ctx, encounterID)
+	require.NoError(t, err)
+
+	// The turn should go to the summoner (round 2), NOT the summoned creature
+	for _, id := range createdTurnCombatantIDs {
+		assert.NotEqual(t, summonedID, id, "summoned creature should never get its own turn")
+	}
+	assert.Equal(t, summonerID, turnInfo.CombatantID)
+}

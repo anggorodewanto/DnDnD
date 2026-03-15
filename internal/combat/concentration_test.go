@@ -1,9 +1,12 @@
 package combat
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/stretchr/testify/assert"
@@ -434,4 +437,46 @@ func TestIntegration_SpellEffectCleanupOnBreak(t *testing.T) {
 	// Break via silence
 	BreakConcentration("Aria", "Fog Cloud", "silence", cleanup)
 	assert.Equal(t, []string{"Bless", "Fog Cloud"}, cleanedSpells)
+}
+
+func TestBreakConcentrationAndDismissSummons(t *testing.T) {
+	summonerID := uuid.New()
+	encounterID := uuid.New()
+	wolf1ID := uuid.New()
+	wolf2ID := uuid.New()
+
+	var deletedIDs []uuid.UUID
+	var cleanedSpell string
+
+	ms := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: wolf1ID, SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}, ShortID: "WF1"},
+				{ID: wolf2ID, SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}, ShortID: "WF2"},
+				{ID: uuid.New(), SummonerID: uuid.NullUUID{}, ShortID: "G1"},
+			}, nil
+		},
+		deleteCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+			deletedIDs = append(deletedIDs, id)
+			return nil
+		},
+	}
+
+	svc := NewService(ms)
+	cleanup := func(spellName string) {
+		cleanedSpell = spellName
+	}
+
+	result, dismissed, err := svc.BreakConcentrationAndDismissSummons(
+		context.Background(), encounterID, summonerID,
+		"Aria", "Conjure Animals", "failed CON save", cleanup,
+	)
+	require.NoError(t, err)
+	assert.True(t, result.Broken)
+	assert.Equal(t, "Conjure Animals", result.SpellName)
+	assert.Contains(t, result.Message, "Aria")
+	assert.Equal(t, "Conjure Animals", cleanedSpell)
+	assert.Equal(t, 2, dismissed)
+	assert.Contains(t, deletedIDs, wolf1ID)
+	assert.Contains(t, deletedIDs, wolf2ID)
 }

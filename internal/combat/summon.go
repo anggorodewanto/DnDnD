@@ -203,18 +203,28 @@ func (s *Service) CommandCreature(ctx context.Context, input CommandCreatureInpu
 		if err := s.store.DeleteCombatant(ctx, creature.ID); err != nil {
 			return CommandCreatureResult{}, fmt.Errorf("dismissing creature: %w", err)
 		}
+		s.summonedResources.Remove(creature.ID)
 		return CommandCreatureResult{
 			Action:    "dismiss",
 			CombatLog: FormatSummonDismissLog(input.SummonerName, creature.DisplayName, creature.ShortID),
 		}, nil
 
 	case "done":
+		s.summonedResources.MarkDone(creature.ID)
 		return CommandCreatureResult{
 			Action:    "done",
 			CombatLog: fmt.Sprintf("%s (%s) ends their turn", creature.DisplayName, creature.ShortID),
 		}, nil
 
+	case "move":
+		s.summonedResources.UseMovement(creature.ID)
+		return CommandCreatureResult{
+			Action:    input.Action,
+			CombatLog: fmt.Sprintf("%s (%s) moves", creature.DisplayName, creature.ShortID),
+		}, nil
+
 	default:
+		s.summonedResources.UseAction(creature.ID)
 		return CommandCreatureResult{
 			Action:    input.Action,
 			CombatLog: fmt.Sprintf("%s (%s) uses %s", creature.DisplayName, creature.ShortID, input.Action),
@@ -304,6 +314,143 @@ func ValidateCommandOwnership(creature refdata.Combatant, callerCombatantID uuid
 		return ErrNotSummoner
 	}
 	return nil
+}
+
+// resetSummonedCreatureResources resets turn resources for all summoned creatures
+// belonging to the given summoner. Called at the start of the summoner's turn.
+func (s *Service) resetSummonedCreatureResources(ctx context.Context, encounterID, summonerID uuid.UUID) {
+	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return // best-effort
+	}
+	for _, c := range combatants {
+		if c.SummonerID.Valid && c.SummonerID.UUID == summonerID {
+			s.summonedResources.Reset(c.ID)
+		}
+	}
+}
+
+// --- Summoned Creature Turn Resources ---
+
+// summonedCreatureResources tracks action/movement/bonus for one summoned creature.
+type summonedCreatureResources struct {
+	ActionUsed      bool
+	MovementUsed    bool
+	BonusActionUsed bool
+	Done            bool
+}
+
+// SummonedTurnResources tracks per-creature turn resources for all summoned creatures.
+// Keyed by creature combatant ID.
+type SummonedTurnResources struct {
+	creatures map[uuid.UUID]*summonedCreatureResources
+}
+
+// NewSummonedTurnResources creates a new SummonedTurnResources tracker.
+func NewSummonedTurnResources() *SummonedTurnResources {
+	return &SummonedTurnResources{
+		creatures: make(map[uuid.UUID]*summonedCreatureResources),
+	}
+}
+
+// getOrInit returns existing resources or creates fresh ones.
+func (s *SummonedTurnResources) getOrInit(creatureID uuid.UUID) *summonedCreatureResources {
+	if r, ok := s.creatures[creatureID]; ok {
+		return r
+	}
+	r := &summonedCreatureResources{}
+	s.creatures[creatureID] = r
+	return r
+}
+
+// Reset resets all turn resources for a creature (called at start of summoner's turn).
+func (s *SummonedTurnResources) Reset(creatureID uuid.UUID) {
+	s.creatures[creatureID] = &summonedCreatureResources{}
+}
+
+// Remove removes a creature's resources (called on dismissal/death).
+func (s *SummonedTurnResources) Remove(creatureID uuid.UUID) {
+	delete(s.creatures, creatureID)
+}
+
+// HasAction returns true if the creature's action is still available.
+func (s *SummonedTurnResources) HasAction(creatureID uuid.UUID) bool {
+	return !s.getOrInit(creatureID).ActionUsed
+}
+
+// HasMovement returns true if the creature's movement is still available.
+func (s *SummonedTurnResources) HasMovement(creatureID uuid.UUID) bool {
+	return !s.getOrInit(creatureID).MovementUsed
+}
+
+// HasBonusAction returns true if the creature's bonus action is still available.
+func (s *SummonedTurnResources) HasBonusAction(creatureID uuid.UUID) bool {
+	return !s.getOrInit(creatureID).BonusActionUsed
+}
+
+// IsDone returns true if the creature has been marked done for this turn.
+func (s *SummonedTurnResources) IsDone(creatureID uuid.UUID) bool {
+	return s.getOrInit(creatureID).Done
+}
+
+// UseAction marks the creature's action as used.
+func (s *SummonedTurnResources) UseAction(creatureID uuid.UUID) {
+	s.getOrInit(creatureID).ActionUsed = true
+}
+
+// UseMovement marks the creature's movement as used.
+func (s *SummonedTurnResources) UseMovement(creatureID uuid.UUID) {
+	s.getOrInit(creatureID).MovementUsed = true
+}
+
+// UseBonusAction marks the creature's bonus action as used.
+func (s *SummonedTurnResources) UseBonusAction(creatureID uuid.UUID) {
+	s.getOrInit(creatureID).BonusActionUsed = true
+}
+
+// MarkDone marks the creature as done for this turn.
+func (s *SummonedTurnResources) MarkDone(creatureID uuid.UUID) {
+	s.getOrInit(creatureID).Done = true
+}
+
+// FormatCreatureResources returns a display string of available resources for a creature.
+func (s *SummonedTurnResources) FormatCreatureResources(creatureID uuid.UUID, displayName, shortID string) string {
+	r := s.getOrInit(creatureID)
+	if r.Done {
+		return fmt.Sprintf("%s (%s): done", displayName, shortID)
+	}
+
+	var parts []string
+	if !r.ActionUsed {
+		parts = append(parts, "action")
+	}
+	if !r.MovementUsed {
+		parts = append(parts, "movement")
+	}
+	if !r.BonusActionUsed {
+		parts = append(parts, "bonus")
+	}
+	if len(parts) == 0 {
+		return fmt.Sprintf("%s (%s): all resources spent", displayName, shortID)
+	}
+	return fmt.Sprintf("%s (%s): %s", displayName, shortID, strings.Join(parts, ", "))
+}
+
+// FormatSummonedCreaturesPrompt returns a prompt section listing summoned creatures
+// and their available resources. Included in the summoner's turn start notification.
+func FormatSummonedCreaturesPrompt(creatures []refdata.Combatant, resources *SummonedTurnResources) string {
+	if len(creatures) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n\U0001f43e **Summoned Creatures** (use /command):\n")
+	for _, c := range creatures {
+		b.WriteString("  \u2022 ")
+		b.WriteString(resources.FormatCreatureResources(c.ID, c.DisplayName, c.ShortID))
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // --- HTTP Handlers ---

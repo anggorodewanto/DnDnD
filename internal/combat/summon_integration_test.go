@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -395,4 +396,103 @@ func TestIntegration_SummonMultiple(t *testing.T) {
 	combatants, err := svc.ListCombatantsByEncounterID(context.Background(), enc.ID)
 	require.NoError(t, err)
 	assert.Len(t, combatants, 5) // 1 PC + 4 wolves
+}
+
+func TestIntegration_SummonedCreaturesExcludedFromInitiative(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db, queries := setupTestDB(t)
+	campaignID := createTestCampaign(t, db)
+	mapID := createTestMap(t, db, campaignID)
+	charID := createTestCharacter(t, db, campaignID)
+	createTestCreatureForSummon(t, db, "owl", "Owl", 11, 1)
+
+	svc := combat.NewService(&testStoreAdapter{queries})
+	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
+		CampaignID: campaignID,
+		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
+		Name:       "init-test",
+	})
+	require.NoError(t, err)
+
+	summoner, err := svc.AddCombatant(context.Background(), enc.ID, combat.CombatantParams{
+		CharacterID: charID.String(), ShortID: "AR", DisplayName: "Aragorn",
+		HPMax: 45, HPCurrent: 45, AC: 18, SpeedFt: 30,
+		PositionCol: "A", PositionRow: 1, IsAlive: true, IsVisible: true,
+	})
+	require.NoError(t, err)
+
+	// Summon an owl before initiative is rolled
+	_, err = svc.SummonCreature(context.Background(), combat.SummonCreatureInput{
+		EncounterID: enc.ID, SummonerID: summoner.ID, CreatureRefID: "owl",
+		ShortID: "FAM", DisplayName: "Aragorn's Owl", PositionCol: "C", PositionRow: 5,
+	})
+	require.NoError(t, err)
+
+	// Roll initiative — owl should not be included
+	roller := dice.NewRoller(func(n int) int { return n / 2 })
+	sorted, err := svc.RollInitiative(context.Background(), enc.ID, roller)
+	require.NoError(t, err)
+
+	// Only the summoner should have initiative
+	assert.Len(t, sorted, 1)
+	assert.Equal(t, "Aragorn", sorted[0].DisplayName)
+}
+
+func TestIntegration_BreakConcentrationDismissesSummons(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db, queries := setupTestDB(t)
+	campaignID := createTestCampaign(t, db)
+	mapID := createTestMap(t, db, campaignID)
+	charID := createTestCharacter(t, db, campaignID)
+	createTestCreatureForSummon(t, db, "owl", "Owl", 11, 1)
+
+	svc := combat.NewService(&testStoreAdapter{queries})
+	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
+		CampaignID: campaignID,
+		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
+		Name:       "conc-break-test",
+	})
+	require.NoError(t, err)
+
+	summoner, err := svc.AddCombatant(context.Background(), enc.ID, combat.CombatantParams{
+		CharacterID: charID.String(), ShortID: "AR", DisplayName: "Aragorn",
+		HPMax: 45, HPCurrent: 45, AC: 18, SpeedFt: 30,
+		PositionCol: "A", PositionRow: 1, IsAlive: true, IsVisible: true,
+	})
+	require.NoError(t, err)
+
+	// Summon an owl
+	_, err = svc.SummonCreature(context.Background(), combat.SummonCreatureInput{
+		EncounterID: enc.ID, SummonerID: summoner.ID, CreatureRefID: "owl",
+		ShortID: "FAM", DisplayName: "Aragorn's Owl", PositionCol: "C", PositionRow: 5,
+	})
+	require.NoError(t, err)
+
+	// Verify 2 combatants
+	combatants, err := svc.ListCombatantsByEncounterID(context.Background(), enc.ID)
+	require.NoError(t, err)
+	assert.Len(t, combatants, 2)
+
+	// Break concentration using the combined method
+	result, dismissed, err := svc.BreakConcentrationAndDismissSummons(
+		context.Background(), enc.ID, summoner.ID,
+		"Aragorn", "Find Familiar", "failed CON save", nil,
+	)
+	require.NoError(t, err)
+	assert.True(t, result.Broken)
+	assert.Equal(t, 1, dismissed)
+	assert.Contains(t, result.Message, "Aragorn")
+	assert.Contains(t, result.Message, "Find Familiar")
+
+	// Verify only PC remains
+	combatants, err = svc.ListCombatantsByEncounterID(context.Background(), enc.ID)
+	require.NoError(t, err)
+	assert.Len(t, combatants, 1)
+	assert.Equal(t, "AR", combatants[0].ShortID)
 }

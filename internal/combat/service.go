@@ -181,12 +181,21 @@ type Store interface {
 
 // Service manages combat encounters and their entities.
 type Service struct {
-	store Store
+	store             Store
+	summonedResources *SummonedTurnResources
 }
 
 // NewService creates a new combat Service.
 func NewService(store Store) *Service {
-	return &Service{store: store}
+	return &Service{
+		store:             store,
+		summonedResources: NewSummonedTurnResources(),
+	}
+}
+
+// SummonedResources returns the summoned creature turn resource tracker.
+func (s *Service) SummonedResources() *SummonedTurnResources {
+	return s.summonedResources
 }
 
 // CreateEncounterInput holds parameters for creating an encounter.

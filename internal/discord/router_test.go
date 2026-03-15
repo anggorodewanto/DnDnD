@@ -498,3 +498,43 @@ func TestCommandRouter_StubResponseIncludesCommandName(t *testing.T) {
 		t.Errorf("expected response to mention 'attack', got: %s", respondedContent)
 	}
 }
+
+func TestCommandRouter_SetSummonCommandHandler(t *testing.T) {
+	mock := newTestMock()
+	var respondedContent string
+	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		if resp.Data != nil {
+			respondedContent = resp.Data.Content
+		}
+		return nil
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	router := NewCommandRouter(bot, nil)
+
+	// Create a real SummonCommandHandler with a mock service
+	handler := &SummonCommandHandler{
+		session: mock,
+	}
+	router.SetSummonCommandHandler(handler)
+
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionApplicationCommand,
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name: "command",
+			Options: []*discordgo.ApplicationCommandInteractionDataOption{
+				{Name: "creature_id", Value: "FAM"},
+				{Name: "action", Value: "done"},
+			},
+		},
+		GuildID: "guild-1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user-1"}},
+	}
+
+	router.Handle(interaction)
+
+	// Since there's no encounter service wired, it should respond with an error
+	if respondedContent == "" {
+		t.Fatal("expected a response from the SummonCommandHandler")
+	}
+}

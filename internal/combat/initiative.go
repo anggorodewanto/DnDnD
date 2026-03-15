@@ -253,8 +253,19 @@ func (s *Service) RollInitiative(ctx context.Context, encounterID uuid.UUID, rol
 		return nil, errors.New("no combatants in encounter")
 	}
 
-	entries := make([]InitiativeEntry, len(combatants))
-	for i, c := range combatants {
+	// Filter out summoned creatures — they share their summoner's turn.
+	var rollable []refdata.Combatant
+	for _, c := range combatants {
+		if !c.SummonerID.Valid {
+			rollable = append(rollable, c)
+		}
+	}
+	if len(rollable) == 0 {
+		return nil, errors.New("no combatants in encounter")
+	}
+
+	entries := make([]InitiativeEntry, len(rollable))
+	for i, c := range rollable {
 		dexMod, err := s.getDexModifier(ctx, c)
 		if err != nil {
 			return nil, err
@@ -387,10 +398,11 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 		hadTurn[t.CombatantID] = true
 	}
 
-	// Build ordered list of candidates (alive combatants who haven't gone yet)
+	// Build ordered list of candidates (alive combatants who haven't gone yet).
+	// Summoned creatures share their summoner's turn — they never get their own.
 	var candidates []refdata.Combatant
 	for _, c := range combatants {
-		if !c.IsAlive || hadTurn[c.ID] {
+		if !c.IsAlive || hadTurn[c.ID] || c.SummonerID.Valid {
 			continue
 		}
 		candidates = append(candidates, c)
@@ -405,9 +417,9 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 		}); err != nil {
 			return TurnInfo{}, fmt.Errorf("advancing round: %w", err)
 		}
-		// Reset candidates to all alive combatants
+		// Reset candidates to all alive non-summoned combatants
 		for _, c := range combatants {
-			if c.IsAlive {
+			if c.IsAlive && !c.SummonerID.Valid {
 				candidates = append(candidates, c)
 			}
 		}
@@ -492,7 +504,7 @@ func (s *Service) skipOrActivate(ctx context.Context, encounterID uuid.UUID, rou
 // and returns a TurnInfo for the first combatant that can act.
 func (s *Service) findFirstActiveCombatant(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatants []refdata.Combatant, skippedCombatants []SkippedInfo) (TurnInfo, error) {
 	for _, c := range combatants {
-		if !c.IsAlive {
+		if !c.IsAlive || c.SummonerID.Valid {
 			continue
 		}
 		conds, _ := parseConditions(c.Conditions)
@@ -615,6 +627,9 @@ func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, r
 	if _, err := s.ProcessTurnStartWithLog(ctx, encounterID, combatant, roundNumber, turn.ID); err != nil {
 		return TurnInfo{}, fmt.Errorf("processing turn start conditions: %w", err)
 	}
+
+	// Reset summoned creature turn resources for this summoner's creatures
+	s.resetSummonedCreatureResources(ctx, encounterID, combatant.ID)
 
 	if _, err := s.store.UpdateEncounterCurrentTurn(ctx, refdata.UpdateEncounterCurrentTurnParams{
 		ID:            encounterID,

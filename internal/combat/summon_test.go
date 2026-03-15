@@ -368,7 +368,7 @@ func TestCommandCreature_WrongOwner(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotSummoner)
 }
 
-func TestCommandCreature_Done(t *testing.T) {
+func TestCommandCreature_Done_MarksDone(t *testing.T) {
 	summonerID := uuid.New()
 	encounterID := uuid.New()
 	creatureID := uuid.New()
@@ -382,6 +382,9 @@ func TestCommandCreature_Done(t *testing.T) {
 	}
 
 	svc := NewService(ms)
+	// Reset resources for the creature first
+	svc.SummonedResources().Reset(creatureID)
+
 	result, err := svc.CommandCreature(context.Background(), CommandCreatureInput{
 		EncounterID:     encounterID,
 		SummonerID:      summonerID,
@@ -391,6 +394,36 @@ func TestCommandCreature_Done(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "done", result.Action)
 	assert.Contains(t, result.CombatLog, "ends their turn")
+	assert.True(t, svc.SummonedResources().IsDone(creatureID))
+}
+
+func TestCommandCreature_Action_UsesActionResource(t *testing.T) {
+	summonerID := uuid.New()
+	encounterID := uuid.New()
+	creatureID := uuid.New()
+
+	ms := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: creatureID, ShortID: "FAM", DisplayName: "Aria's Owl", SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+			}, nil
+		},
+	}
+
+	svc := NewService(ms)
+	svc.SummonedResources().Reset(creatureID)
+
+	result, err := svc.CommandCreature(context.Background(), CommandCreatureInput{
+		EncounterID:     encounterID,
+		SummonerID:      summonerID,
+		CreatureShortID: "FAM",
+		Action:          "help",
+		Args:            []string{"Thorn", "G1"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "help", result.Action)
+	// Action should now be used
+	assert.False(t, svc.SummonedResources().HasAction(creatureID))
 }
 
 func TestCommandCreature_GenericAction(t *testing.T) {
@@ -883,6 +916,204 @@ func TestFindCombatantByShortID(t *testing.T) {
 
 	_, err = FindCombatantByShortID(combatants, "NOTFOUND")
 	assert.Error(t, err)
+}
+
+func TestSummonedCreatureTurnResources_InitAndConsume(t *testing.T) {
+	creatureID := uuid.New()
+
+	res := NewSummonedTurnResources()
+	assert.True(t, res.HasAction(creatureID), "should have action before init — defaults to available")
+
+	res.Reset(creatureID)
+	assert.True(t, res.HasAction(creatureID))
+	assert.True(t, res.HasMovement(creatureID))
+	assert.True(t, res.HasBonusAction(creatureID))
+
+	res.UseAction(creatureID)
+	assert.False(t, res.HasAction(creatureID))
+	assert.True(t, res.HasMovement(creatureID))
+
+	res.UseMovement(creatureID)
+	assert.False(t, res.HasMovement(creatureID))
+
+	res.UseBonusAction(creatureID)
+	assert.False(t, res.HasBonusAction(creatureID))
+
+	// Reset should restore all
+	res.Reset(creatureID)
+	assert.True(t, res.HasAction(creatureID))
+	assert.True(t, res.HasMovement(creatureID))
+	assert.True(t, res.HasBonusAction(creatureID))
+}
+
+func TestSummonedCreatureTurnResources_MarkDone(t *testing.T) {
+	creatureID := uuid.New()
+
+	res := NewSummonedTurnResources()
+	res.Reset(creatureID)
+	assert.False(t, res.IsDone(creatureID))
+
+	res.MarkDone(creatureID)
+	assert.True(t, res.IsDone(creatureID))
+
+	// Reset clears done status
+	res.Reset(creatureID)
+	assert.False(t, res.IsDone(creatureID))
+}
+
+func TestSummonedCreatureTurnResources_Remove(t *testing.T) {
+	creatureID := uuid.New()
+
+	res := NewSummonedTurnResources()
+	res.Reset(creatureID)
+	assert.True(t, res.HasAction(creatureID))
+
+	res.Remove(creatureID)
+	// After removal, defaults apply (creature is treated as having resources since it has no entry)
+	assert.True(t, res.HasAction(creatureID))
+}
+
+func TestResetSummonedResourcesOnTurnStart(t *testing.T) {
+	summonerID := uuid.New()
+	creatureID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
+			CurrentTurnID: uuid.NullUUID{},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: summonerID, InitiativeOrder: 1, DisplayName: "Aria", Conditions: json.RawMessage(`[]`), IsAlive: true, IsNpc: false},
+			{ID: creatureID, InitiativeOrder: 0, DisplayName: "Owl", Conditions: json.RawMessage(`[]`), IsAlive: true, IsNpc: true, SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}},
+		}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+
+	svc := NewService(store)
+	// Simulate the creature having used its action in a previous turn
+	svc.SummonedResources().Reset(creatureID)
+	svc.SummonedResources().UseAction(creatureID)
+	svc.SummonedResources().MarkDone(creatureID)
+	assert.False(t, svc.SummonedResources().HasAction(creatureID))
+	assert.True(t, svc.SummonedResources().IsDone(creatureID))
+
+	// Advance turn to the summoner — should reset creature resources
+	_, err := svc.AdvanceTurn(context.Background(), encounterID)
+	require.NoError(t, err)
+
+	assert.True(t, svc.SummonedResources().HasAction(creatureID), "creature action should be reset on summoner turn start")
+	assert.False(t, svc.SummonedResources().IsDone(creatureID), "creature done should be reset on summoner turn start")
+}
+
+func TestFormatCreatureResources(t *testing.T) {
+	creatureID := uuid.New()
+	res := NewSummonedTurnResources()
+	res.Reset(creatureID)
+
+	// Full resources
+	s := res.FormatCreatureResources(creatureID, "Wolf #1", "WF1")
+	assert.Contains(t, s, "WF1")
+	assert.Contains(t, s, "action")
+	assert.Contains(t, s, "movement")
+	assert.Contains(t, s, "bonus")
+
+	// After using action
+	res.UseAction(creatureID)
+	s = res.FormatCreatureResources(creatureID, "Wolf #1", "WF1")
+	assert.NotContains(t, s, "action,")
+
+	// After marking done
+	res.MarkDone(creatureID)
+	s = res.FormatCreatureResources(creatureID, "Wolf #1", "WF1")
+	assert.Contains(t, s, "done")
+}
+
+func TestFormatTurnStartPromptWithSummons(t *testing.T) {
+	summonerID := uuid.New()
+	creatureID := uuid.New()
+
+	res := NewSummonedTurnResources()
+	res.Reset(creatureID)
+
+	creatures := []refdata.Combatant{
+		{ID: creatureID, ShortID: "FAM", DisplayName: "Aria's Owl", SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}},
+	}
+
+	prompt := FormatSummonedCreaturesPrompt(creatures, res)
+	assert.Contains(t, prompt, "Aria's Owl")
+	assert.Contains(t, prompt, "FAM")
+	assert.Contains(t, prompt, "/command")
+}
+
+func TestCommandCreature_Move_UsesMovementResource(t *testing.T) {
+	summonerID := uuid.New()
+	encounterID := uuid.New()
+	creatureID := uuid.New()
+
+	ms := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: creatureID, ShortID: "FAM", DisplayName: "Aria's Owl", SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+			}, nil
+		},
+	}
+
+	svc := NewService(ms)
+	svc.SummonedResources().Reset(creatureID)
+
+	result, err := svc.CommandCreature(context.Background(), CommandCreatureInput{
+		EncounterID:     encounterID,
+		SummonerID:      summonerID,
+		CreatureShortID: "FAM",
+		Action:          "move",
+		Args:            []string{"C5"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "move", result.Action)
+	assert.Contains(t, result.CombatLog, "moves")
+	assert.False(t, svc.SummonedResources().HasMovement(creatureID))
+	assert.True(t, svc.SummonedResources().HasAction(creatureID)) // action not consumed
+}
+
+func TestCommandCreature_Dismiss_RemovesResources(t *testing.T) {
+	summonerID := uuid.New()
+	encounterID := uuid.New()
+	creatureID := uuid.New()
+
+	ms := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: creatureID, ShortID: "FAM", DisplayName: "Aria's Owl", SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+			}, nil
+		},
+		deleteCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+			return nil
+		},
+	}
+
+	svc := NewService(ms)
+	svc.SummonedResources().Reset(creatureID)
+
+	_, err := svc.CommandCreature(context.Background(), CommandCreatureInput{
+		EncounterID:     encounterID,
+		SummonerID:      summonerID,
+		SummonerName:    "Aria",
+		CreatureShortID: "FAM",
+		Action:          "dismiss",
+	})
+	require.NoError(t, err)
+	// Resources should be cleaned up (Remove was called, so getOrInit returns fresh)
 }
 
 func TestHandleSummonDeath_IgnoresAlive(t *testing.T) {
