@@ -234,7 +234,7 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 
 	// Rest hit dice button callbacks
 	if r.restHandler != nil {
-		if strings.HasPrefix(customID, "rest_hitdice:") {
+		if strings.HasPrefix(customID, hitDicePrefix+":") {
 			r.restHandler.HandleHitDiceComponent(interaction)
 			return
 		}

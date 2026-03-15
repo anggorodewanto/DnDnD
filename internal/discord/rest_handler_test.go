@@ -18,31 +18,7 @@ import (
 // --- Mock types for RestHandler ---
 
 type mockRestCharacterUpdater struct {
-	updateFeatureUsesFn   func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
-	updateSpellSlotsFn    func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
-	updatePactMagicSlotsFn func(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error)
-	updateCharacterFn     func(ctx context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error)
-}
-
-func (m *mockRestCharacterUpdater) UpdateCharacterFeatureUses(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-	if m.updateFeatureUsesFn != nil {
-		return m.updateFeatureUsesFn(ctx, arg)
-	}
-	return refdata.Character{}, nil
-}
-
-func (m *mockRestCharacterUpdater) UpdateCharacterSpellSlots(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
-	if m.updateSpellSlotsFn != nil {
-		return m.updateSpellSlotsFn(ctx, arg)
-	}
-	return refdata.Character{}, nil
-}
-
-func (m *mockRestCharacterUpdater) UpdateCharacterPactMagicSlots(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
-	if m.updatePactMagicSlotsFn != nil {
-		return m.updatePactMagicSlotsFn(ctx, arg)
-	}
-	return refdata.Character{}, nil
+	updateCharacterFn func(ctx context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error)
 }
 
 func (m *mockRestCharacterUpdater) UpdateCharacter(ctx context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
@@ -105,15 +81,6 @@ func setupRestHandler(sess *MockSession) *RestHandler {
 	updater := &mockRestCharacterUpdater{
 		updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
 			return refdata.Character{ID: arg.ID, HpCurrent: arg.HpCurrent}, nil
-		},
-		updateFeatureUsesFn: func(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-			return refdata.Character{ID: arg.ID}, nil
-		},
-		updateSpellSlotsFn: func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
-			return refdata.Character{ID: arg.ID}, nil
-		},
-		updatePactMagicSlotsFn: func(_ context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
-			return refdata.Character{ID: arg.ID}, nil
 		},
 	}
 
@@ -760,6 +727,172 @@ func TestRestHandler_HitDiceComponent_WrongCharacter(t *testing.T) {
 	}
 }
 
+// --- Multiclass multi-step hit dice: first click shows updated buttons for remaining types ---
+
+func TestRestHandler_HitDiceComponent_MulticlassMultiStep(t *testing.T) {
+	var editComponents *[]discordgo.MessageComponent
+	var editContent string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		return nil
+	}
+	sess.InteractionResponseEditFunc = func(_ *discordgo.Interaction, edit *discordgo.WebhookEdit) (*discordgo.Message, error) {
+		if edit.Content != nil {
+			editContent = *edit.Content
+		}
+		if edit.Components != nil {
+			editComponents = edit.Components
+		}
+		return &discordgo.Message{}, nil
+	}
+
+	campaignID := uuid.New()
+	charID := uuid.New()
+	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8})
+	classes, _ := json.Marshal([]character.ClassEntry{
+		{Class: "fighter", Level: 3},
+		{Class: "rogue", Level: 2},
+	})
+	hitDice, _ := json.Marshal(map[string]int{"d10": 3, "d8": 2})
+	featureUses, _ := json.Marshal(map[string]character.FeatureUse{})
+	spellSlots, _ := json.Marshal(map[string]character.SlotInfo{})
+
+	char := refdata.Character{
+		ID:               charID,
+		CampaignID:       campaignID,
+		Name:             "Kael",
+		Level:            5,
+		HpMax:            44,
+		HpCurrent:        20,
+		AbilityScores:    scores,
+		Classes:          classes,
+		HitDiceRemaining: hitDice,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: featureUses, Valid: true},
+		SpellSlots:       pqtype.NullRawMessage{RawMessage: spellSlots, Valid: true},
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 6 })
+
+	h := NewRestHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		&mockRestCharacterUpdater{
+			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+				return refdata.Character{ID: arg.ID}, nil
+			},
+		},
+		&mockCheckRollLogger{},
+		nil,
+	)
+
+	// First click: spend 1 d10. Since d8 dice remain, should show updated buttons
+	componentInteraction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "rest_hitdice:" + charID.String() + ":d10:1",
+		},
+	}
+
+	h.HandleHitDiceComponent(componentInteraction)
+
+	// Should show updated prompt with "Spend more" text and remaining buttons
+	if !strings.Contains(editContent, "Spend more hit dice") {
+		t.Errorf("expected multi-step prompt, got: %s", editContent)
+	}
+	// Should have components (buttons for remaining d8 dice + Done button)
+	if editComponents == nil || len(*editComponents) < 2 {
+		t.Errorf("expected at least 2 component rows (d8 buttons + Done), got %v", editComponents)
+	}
+}
+
+// --- Done button finalizes without spending more dice ---
+
+func TestRestHandler_HitDiceComponent_DoneButton(t *testing.T) {
+	var editContent string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		return nil
+	}
+	sess.InteractionResponseEditFunc = func(_ *discordgo.Interaction, edit *discordgo.WebhookEdit) (*discordgo.Message, error) {
+		if edit.Content != nil {
+			editContent = *edit.Content
+		}
+		return &discordgo.Message{}, nil
+	}
+
+	campaignID := uuid.New()
+	charID := uuid.New()
+	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8})
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "fighter", Level: 5}})
+	hitDice, _ := json.Marshal(map[string]int{"d10": 5})
+	featureUses, _ := json.Marshal(map[string]character.FeatureUse{})
+	spellSlots, _ := json.Marshal(map[string]character.SlotInfo{})
+
+	char := refdata.Character{
+		ID:               charID,
+		CampaignID:       campaignID,
+		Name:             "Thorin",
+		Level:            5,
+		HpMax:            44,
+		HpCurrent:        20,
+		AbilityScores:    scores,
+		Classes:          classes,
+		HitDiceRemaining: hitDice,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: featureUses, Valid: true},
+		SpellSlots:       pqtype.NullRawMessage{RawMessage: spellSlots, Valid: true},
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 6 })
+
+	h := NewRestHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		&mockRestCharacterUpdater{
+			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+				return refdata.Character{ID: arg.ID}, nil
+			},
+		},
+		&mockCheckRollLogger{},
+		nil,
+	)
+
+	componentInteraction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "rest_hitdice:" + charID.String() + ":done:0",
+		},
+	}
+
+	h.HandleHitDiceComponent(componentInteraction)
+
+	// Done button should finalize the rest
+	if !strings.Contains(editContent, "Short Rest Complete") {
+		t.Errorf("expected 'Short Rest Complete' after Done button, got: %s", editContent)
+	}
+}
+
 // --- TDD Cycle 27: Long rest restores HP and features ---
 
 func TestRestHandler_LongRest_FullRestore(t *testing.T) {
@@ -863,12 +996,6 @@ func TestRestHandler_LongRest_WithWarlock(t *testing.T) {
 		}},
 		&mockRestCharacterUpdater{
 			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
-				return refdata.Character{ID: arg.ID}, nil
-			},
-			updateFeatureUsesFn: func(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-				return refdata.Character{ID: arg.ID}, nil
-			},
-			updatePactMagicSlotsFn: func(_ context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
 				return refdata.Character{ID: arg.ID}, nil
 			},
 		},
@@ -1005,12 +1132,6 @@ func TestRestHandler_LongRest_PreparedCasterReminder(t *testing.T) {
 		}},
 		&mockRestCharacterUpdater{
 			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
-				return refdata.Character{ID: arg.ID}, nil
-			},
-			updateFeatureUsesFn: func(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-				return refdata.Character{ID: arg.ID}, nil
-			},
-			updateSpellSlotsFn: func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
 				return refdata.Character{ID: arg.ID}, nil
 			},
 		},

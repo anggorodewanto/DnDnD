@@ -2,6 +2,7 @@ package rest
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
@@ -55,7 +56,7 @@ func (s *Service) ShortRest(input ShortRestInput) (ShortRestResult, error) {
 	result := ShortRestResult{
 		HPBefore:         input.HPCurrent,
 		HPMax:            input.HPMax,
-		HitDiceRemaining: copyMap(input.HitDiceRemaining),
+		HitDiceRemaining: maps.Clone(input.HitDiceRemaining),
 	}
 
 	hp := input.HPCurrent
@@ -147,6 +148,7 @@ type LongRestInput struct {
 type LongRestResult struct {
 	HPBefore              int
 	HPAfter               int
+	HPMax                 int
 	HPHealed              int
 	HitDiceRemaining      map[string]int
 	HitDiceRestored       int
@@ -169,8 +171,9 @@ func (s *Service) LongRest(input LongRestInput) LongRestResult {
 	result := LongRestResult{
 		HPBefore:         input.HPCurrent,
 		HPAfter:          input.HPMax,
+		HPMax:            input.HPMax,
 		HPHealed:         input.HPMax - input.HPCurrent,
-		HitDiceRemaining: copyMap(input.HitDiceRemaining),
+		HitDiceRemaining: maps.Clone(input.HitDiceRemaining),
 	}
 
 	// Restore spell slots
@@ -260,12 +263,4 @@ func classHitDie(class string) string {
 	default:
 		return "d8"
 	}
-}
-
-func copyMap(m map[string]int) map[string]int {
-	out := make(map[string]int, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
 }

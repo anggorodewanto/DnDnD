@@ -482,6 +482,7 @@ func TestFormatLongRestResult(t *testing.T) {
 	result := LongRestResult{
 		HPBefore:              10,
 		HPAfter:               40,
+		HPMax:                 40,
 		HPHealed:              30,
 		HitDiceRemaining:      map[string]int{"d10": 4},
 		HitDiceRestored:       2,
