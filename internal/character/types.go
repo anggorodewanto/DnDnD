@@ -81,11 +81,19 @@ type AttunementSlot struct {
 
 // InventoryItem represents a single item in the character's inventory.
 type InventoryItem struct {
-	ItemID   string `json:"item_id"`
-	Quantity int    `json:"quantity"`
-	Equipped bool   `json:"equipped"`
-	Type     string `json:"type"`
-	IsMagic  bool   `json:"is_magic"`
+	ItemID             string `json:"item_id"`
+	Name               string `json:"name"`
+	Quantity           int    `json:"quantity"`
+	Equipped           bool   `json:"equipped"`
+	EquipSlot          string `json:"equip_slot,omitempty"`
+	Type               string `json:"type"`
+	IsMagic            bool   `json:"is_magic"`
+	MagicBonus         int    `json:"magic_bonus,omitempty"`
+	MagicProperties    string `json:"magic_properties,omitempty"`
+	RequiresAttunement bool   `json:"requires_attunement,omitempty"`
+	Rarity             string `json:"rarity,omitempty"`
+	Charges            int    `json:"charges,omitempty"`
+	MaxCharges         int    `json:"max_charges,omitempty"`
 }
 
 // ArmorInfo represents the armor data needed for AC calculation.

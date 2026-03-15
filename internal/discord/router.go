@@ -64,6 +64,21 @@ func (r *CommandRouter) SetSaveHandler(h *SaveHandler) {
 	r.handlers["save"] = h
 }
 
+// SetInventoryHandler registers the InventoryHandler for the /inventory command.
+func (r *CommandRouter) SetInventoryHandler(h *InventoryHandler) {
+	r.handlers["inventory"] = h
+}
+
+// SetUseHandler registers the UseHandler for the /use command.
+func (r *CommandRouter) SetUseHandler(h *UseHandler) {
+	r.handlers["use"] = h
+}
+
+// SetGiveHandler registers the GiveHandler for the /give command.
+func (r *CommandRouter) SetGiveHandler(h *GiveHandler) {
+	r.handlers["give"] = h
+}
+
 // SetRestHandler registers the RestHandler for the /rest command and component callbacks.
 func (r *CommandRouter) SetRestHandler(h *RestHandler) {
 	r.handlers["rest"] = h

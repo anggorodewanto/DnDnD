@@ -85,6 +85,26 @@ UPDATE characters SET
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateCharacterInventory :one
+UPDATE characters SET inventory = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateCharacterGold :one
+UPDATE characters SET gold = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateCharacterInventoryAndHP :one
+UPDATE characters SET inventory = $2, hp_current = $3, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateCharacterInventoryAndGold :one
+UPDATE characters SET inventory = $2, gold = $3, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteCharacter :exec
 DELETE FROM characters WHERE id = $1;
 

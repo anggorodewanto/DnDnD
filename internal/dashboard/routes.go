@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ab/dndnd/internal/inventory"
 )
 
 // RegisterRoutes mounts dashboard routes on the given Chi router.
@@ -24,6 +26,17 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(http.Handler) 
 		}
 		fileServer := http.FileServer(http.FS(assetsFS))
 		r.Get("/app/*", http.StripPrefix("/dashboard/app", fileServer).ServeHTTP)
+	})
+}
+
+// RegisterInventoryAPI mounts the DM inventory management API endpoints.
+func RegisterInventoryAPI(r chi.Router, invHandler *inventory.APIHandler, authMiddleware func(http.Handler) http.Handler) {
+	r.Route("/api/inventory", func(r chi.Router) {
+		r.Use(authMiddleware)
+		r.Post("/add", invHandler.HandleAddItem)
+		r.Post("/remove", invHandler.HandleRemoveItem)
+		r.Post("/transfer", invHandler.HandleTransferItem)
+		r.Post("/gold", invHandler.HandleSetGold)
 	})
 }
 
