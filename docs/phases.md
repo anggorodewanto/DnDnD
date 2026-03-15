@@ -468,7 +468,7 @@
   - Depends on: Phase 18, Phase 44, Phase 40
   - Done when: Integration tests verify save calculations, all modifier sources, auto-fail conditions, full breakdown output.
 
-- [ ] **Phase 83a: Short & Long Rests — Individual Flow**
+- [x] **Phase 83a: Short & Long Rests — Individual Flow**
   - Scope: `/rest short`: DM approval, hit dice spending prompt (single-class simple buttons, multiclass grouped by die type). Feature recharge (short rest features). Warlock pact slot restore. `/rest long`: DM approval, full HP restore, all slots restore, all features reset, hit dice restore (half total level), death save tally reset, prepared caster reminder.
   - Depends on: Phase 7, Phase 15
   - Done when: Integration tests verify hit dice spending, feature recharge, full long rest benefits, prepared caster reminder.
