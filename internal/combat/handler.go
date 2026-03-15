@@ -48,6 +48,17 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/{encounterID}/enemy-turn/{combatantID}/plan", h.GetEnemyTurnPlan)
 		r.Post("/{encounterID}/enemy-turn", h.ExecuteEnemyTurn)
 
+		// Legendary actions
+		r.Get("/{encounterID}/legendary/{combatantID}/plan", h.GetLegendaryActionPlan)
+		r.Post("/{encounterID}/legendary", h.ExecuteLegendaryAction)
+
+		// Lair actions
+		r.Get("/{encounterID}/lair-action/plan", h.GetLairActionPlan)
+		r.Post("/{encounterID}/lair-action", h.ExecuteLairAction)
+
+		// Turn queue
+		r.Get("/{encounterID}/turn-queue", h.GetTurnQueue)
+
 		// Counterspell
 		r.Post("/{encounterID}/reactions/{reactionID}/counterspell/trigger", h.TriggerCounterspell)
 		r.Post("/{encounterID}/reactions/{reactionID}/counterspell/resolve", h.ResolveCounterspell)

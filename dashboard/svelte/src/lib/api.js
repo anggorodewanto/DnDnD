@@ -210,3 +210,74 @@ export async function executeEnemyTurn(encounterId, plan) {
   });
   return res.json();
 }
+
+/**
+ * Get a legendary action plan for an NPC combatant.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} combatantId - Combatant UUID.
+ * @param {number} [budgetRemaining] - Optional remaining budget.
+ * @returns {Promise<object>} The legendary action plan.
+ */
+export async function getLegendaryActionPlan(encounterId, combatantId, budgetRemaining) {
+  let url = `${COMBAT_BASE}/${encounterId}/legendary/${combatantId}/plan`;
+  if (budgetRemaining !== undefined) {
+    url += `?budget_remaining=${budgetRemaining}`;
+  }
+  const res = await apiFetch(url);
+  return res.json();
+}
+
+/**
+ * Execute a legendary action.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {object} data - { combatant_id, action_name, budget_remaining }
+ * @returns {Promise<object>} The execution result.
+ */
+export async function executeLegendaryAction(encounterId, data) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/legendary`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+/**
+ * Get a lair action plan for an encounter.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} [lastUsed] - Name of last used lair action.
+ * @returns {Promise<object>} The lair action plan.
+ */
+export async function getLairActionPlan(encounterId, lastUsed) {
+  let url = `${COMBAT_BASE}/${encounterId}/lair-action/plan`;
+  if (lastUsed) {
+    url += `?last_used=${encodeURIComponent(lastUsed)}`;
+  }
+  const res = await apiFetch(url);
+  return res.json();
+}
+
+/**
+ * Execute a lair action.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {object} data - { action_name, last_used_action }
+ * @returns {Promise<object>} The execution result.
+ */
+export async function executeLairAction(encounterId, data) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/lair-action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+/**
+ * Get the turn queue with legendary/lair action entries.
+ * @param {string} encounterId - Encounter UUID.
+ * @returns {Promise<object>} The turn queue.
+ */
+export async function getTurnQueue(encounterId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/turn-queue`);
+  return res.json();
+}
