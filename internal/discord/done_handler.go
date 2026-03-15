@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -79,6 +80,11 @@ type ImpactSummaryProvider interface {
 	GetImpactSummary(ctx context.Context, encounterID, combatantID uuid.UUID) string
 }
 
+// MapRegenerator generates a combat map image for an encounter.
+type MapRegenerator interface {
+	RegenerateMap(ctx context.Context, encounterID uuid.UUID) ([]byte, error)
+}
+
 // DoneHandler handles the /done slash command.
 type DoneHandler struct {
 	session                  Session
@@ -91,6 +97,7 @@ type DoneHandler struct {
 	turnNotifier             TurnNotifier
 	campaignSettingsProvider CampaignSettingsProvider
 	impactSummaryProvider    ImpactSummaryProvider
+	mapRegenerator           MapRegenerator
 }
 
 // NewDoneHandler creates a new DoneHandler.
@@ -136,6 +143,11 @@ func (h *DoneHandler) SetCampaignSettingsProvider(csp CampaignSettingsProvider) 
 // SetImpactSummaryProvider sets the impact summary provider.
 func (h *DoneHandler) SetImpactSummaryProvider(isp ImpactSummaryProvider) {
 	h.impactSummaryProvider = isp
+}
+
+// SetMapRegenerator sets the map regenerator for posting combat maps on turn end.
+func (h *DoneHandler) SetMapRegenerator(mr MapRegenerator) {
+	h.mapRegenerator = mr
 }
 
 // Handle processes the /done command interaction.
@@ -442,4 +454,32 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 		impactSummary,
 	)
 	h.turnNotifier.NotifyTurnStart(h.session, yourTurnCh, content)
+
+	// Regenerate and post combat map
+	h.postCombatMap(ctx, encounterID, channelIDs)
+}
+
+// postCombatMap regenerates the combat map and posts it to #combat-map.
+// Best-effort: failures are silently ignored.
+func (h *DoneHandler) postCombatMap(ctx context.Context, encounterID uuid.UUID, channelIDs map[string]string) {
+	if h.mapRegenerator == nil {
+		return
+	}
+
+	combatMapCh, ok := channelIDs["combat-map"]
+	if !ok || combatMapCh == "" {
+		return
+	}
+
+	pngData, err := h.mapRegenerator.RegenerateMap(ctx, encounterID)
+	if err != nil {
+		return
+	}
+
+	_, _ = h.session.ChannelMessageSendComplex(combatMapCh, &discordgo.MessageSend{
+		Files: []*discordgo.File{{
+			Name:   "combat-map.png",
+			Reader: bytes.NewReader(pngData),
+		}},
+	})
 }

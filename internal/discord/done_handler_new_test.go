@@ -942,3 +942,274 @@ func TestDoneHandler_AdvanceTurn_GetNextCombatantError(t *testing.T) {
 		t.Errorf("expected error about next combatant, got: %s", content)
 	}
 }
+
+// --- Map regeneration mock ---
+
+type mockMapRegenerator struct {
+	regenerateMap func(ctx context.Context, encounterID uuid.UUID) ([]byte, error)
+}
+
+func (m *mockMapRegenerator) RegenerateMap(ctx context.Context, encounterID uuid.UUID) ([]byte, error) {
+	return m.regenerateMap(ctx, encounterID)
+}
+
+// --- TDD Cycle: Map regeneration on turn end ---
+
+func TestDoneHandler_RegeneratesMapOnTurnEnd(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, _ := setupFullDoneHandler(sess)
+
+	var mapPostedToChannel string
+	var mapPostedFileName string
+	var mapPostedData []byte
+
+	// Use a capture session that records ChannelMessageSendComplex calls
+	capSess := &captureComplexSession{}
+	capSess.InteractionRespondFunc = func(i *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		sess.lastResponse = resp
+		return nil
+	}
+	capSess.onSendComplex = func(channelID string, data *discordgo.MessageSend) {
+		mapPostedToChannel = channelID
+		if len(data.Files) > 0 {
+			mapPostedFileName = data.Files[0].Name
+			buf := make([]byte, 1024)
+			n, _ := data.Files[0].Reader.Read(buf)
+			mapPostedData = buf[:n]
+		}
+	}
+	handler.session = capSess
+
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {},
+		notifyAutoSkip:  func(s Session, channelID string, content string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt", "combat-map": "chan-combat-map"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+
+	pngData := []byte("fake-png-data")
+	handler.SetMapRegenerator(&mockMapRegenerator{
+		regenerateMap: func(_ context.Context, _ uuid.UUID) ([]byte, error) {
+			return pngData, nil
+		},
+	})
+
+	interaction := makeDoneInteraction()
+	handler.Handle(interaction)
+
+	if mapPostedToChannel != "chan-combat-map" {
+		t.Errorf("expected map posted to chan-combat-map, got: %s", mapPostedToChannel)
+	}
+	if mapPostedFileName != "combat-map.png" {
+		t.Errorf("expected file name combat-map.png, got: %s", mapPostedFileName)
+	}
+	if string(mapPostedData) != string(pngData) {
+		t.Errorf("expected png data %q, got: %q", pngData, mapPostedData)
+	}
+}
+
+func TestDoneHandler_MapRegeneration_NoCombatMapChannel(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, _ := setupFullDoneHandler(sess)
+
+	mapCalled := false
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {},
+		notifyAutoSkip:  func(s Session, channelID string, content string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt"}, nil // no combat-map key
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+	handler.SetMapRegenerator(&mockMapRegenerator{
+		regenerateMap: func(_ context.Context, _ uuid.UUID) ([]byte, error) {
+			mapCalled = true
+			return nil, nil
+		},
+	})
+
+	interaction := makeDoneInteraction()
+	handler.Handle(interaction)
+
+	if mapCalled {
+		t.Error("expected map regeneration NOT to be called when no combat-map channel configured")
+	}
+}
+
+func TestDoneHandler_MapRegeneration_RegeneratorNotSet(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, _ := setupFullDoneHandler(sess)
+
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {},
+		notifyAutoSkip:  func(s Session, channelID string, content string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt", "combat-map": "chan-cm"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+	// Do NOT set map regenerator
+
+	interaction := makeDoneInteraction()
+	handler.Handle(interaction)
+
+	// Should complete without panic
+	if sess.lastResponse == nil {
+		t.Fatal("expected response")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Turn ended") {
+		t.Errorf("expected turn ended, got: %s", content)
+	}
+}
+
+func TestDoneHandler_MapRegeneration_ErrorSilentlyIgnored(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, _ := setupFullDoneHandler(sess)
+
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {},
+		notifyAutoSkip:  func(s Session, channelID string, content string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt", "combat-map": "chan-cm"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+	handler.SetMapRegenerator(&mockMapRegenerator{
+		regenerateMap: func(_ context.Context, _ uuid.UUID) ([]byte, error) {
+			return nil, errors.New("render error")
+		},
+	})
+
+	interaction := makeDoneInteraction()
+	handler.Handle(interaction)
+
+	// Should still complete successfully
+	if sess.lastResponse == nil {
+		t.Fatal("expected response")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Turn ended") {
+		t.Errorf("expected turn ended despite map error, got: %s", content)
+	}
+}
+
+// --- captureComplexSession captures ChannelMessageSendComplex ---
+
+type captureComplexSession struct {
+	mockMoveSession
+	InteractionRespondFunc func(*discordgo.Interaction, *discordgo.InteractionResponse) error
+	onSendComplex          func(channelID string, data *discordgo.MessageSend)
+}
+
+func (m *captureComplexSession) InteractionRespond(i *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+	if m.InteractionRespondFunc != nil {
+		return m.InteractionRespondFunc(i, resp)
+	}
+	return nil
+}
+
+func (m *captureComplexSession) ChannelMessageSendComplex(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error) {
+	if m.onSendComplex != nil {
+		m.onSendComplex(channelID, data)
+	}
+	return nil, nil
+}
+
+// --- DefaultCampaignSettingsProvider with invalid JSON ---
+
+func TestDefaultCampaignSettingsProvider_InvalidJSON(t *testing.T) {
+	encounterID := uuid.New()
+	provider := &DefaultCampaignSettingsProvider{
+		getCampaign: func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+			return refdata.Campaign{
+				Settings: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{not valid json`), Valid: true},
+			}, nil
+		},
+	}
+
+	_, err := provider.GetChannelIDs(context.Background(), encounterID)
+	if err == nil {
+		t.Error("expected error for invalid JSON settings")
+	}
+}
+
+// --- sendTurnNotifications error paths ---
+
+func TestDoneHandler_SendTurnNotifications_ChannelIDsError(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, nextCombatantID := setupFullDoneHandler(sess)
+
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {},
+		notifyAutoSkip:  func(s Session, channelID string, content string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return nil, errors.New("settings error")
+		},
+	})
+
+	encounterID := uuid.New()
+	turnInfo := combat.TurnInfo{CombatantID: nextCombatantID, RoundNumber: 1}
+	nextCombatant := refdata.Combatant{ID: nextCombatantID, DisplayName: "Goblin"}
+
+	// Should not panic — errors silently ignored
+	handler.sendTurnNotifications(context.Background(), encounterID, turnInfo, nextCombatant)
+}
+
+func TestDoneHandler_SendTurnNotifications_GetEncounterError(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, nextCombatantID := setupFullDoneHandler(sess)
+
+	turnStartCalled := false
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {
+			turnStartCalled = true
+		},
+		notifyAutoSkip: func(s Session, channelID string, content string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt"}, nil
+		},
+	})
+
+	// Override combat service to fail on GetEncounter
+	handler.combatService = &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{}, errors.New("db error")
+		},
+		getCombatant:       handler.combatService.(*mockMoveService).getCombatant,
+		listCombatants:     handler.combatService.(*mockMoveService).listCombatants,
+		updateCombatantPos: handler.combatService.(*mockMoveService).updateCombatantPos,
+	}
+
+	encounterID := uuid.New()
+	turnInfo := combat.TurnInfo{CombatantID: nextCombatantID, RoundNumber: 1}
+	nextCombatant := refdata.Combatant{ID: nextCombatantID, DisplayName: "Goblin"}
+
+	handler.sendTurnNotifications(context.Background(), encounterID, turnInfo, nextCombatant)
+
+	if turnStartCalled {
+		t.Error("expected turn start NOT to be called when GetEncounter fails")
+	}
+}
