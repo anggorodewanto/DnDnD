@@ -478,7 +478,7 @@
   - Depends on: Phase 83a
   - Done when: Integration tests verify party rest batch flow, interruption logic, 1-hour threshold, player notifications.
 
-- [ ] **Phase 84: Inventory Management**
+- [x] **Phase 84: Inventory Management**
   - Scope: `/inventory` (ephemeral: items grouped by type, quantities, equipped status, attunement, gold). `/use [item]` (consume + apply effect: healing potions auto-resolved, others to #dm-queue; costs action in combat). `/give [item] [target]` (adjacency check, both inventories updated, free interaction cost in combat). Gold tracking (integer gold field). DM inventory management from dashboard.
   - Depends on: Phase 7, Phase 28
   - Done when: Integration tests verify inventory display, consumable use, give flow, gold tracking, DM management.
