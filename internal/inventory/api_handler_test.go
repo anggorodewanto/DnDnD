@@ -19,15 +19,18 @@ import (
 
 // mockCharacterStore implements CharacterStore for tests.
 type mockCharacterStore struct {
-	chars        map[uuid.UUID]refdata.Character
-	lastInvUpdate map[uuid.UUID]json.RawMessage
+	chars          map[uuid.UUID]refdata.Character
+	lastInvUpdate  map[uuid.UUID]json.RawMessage
 	lastGoldUpdate map[uuid.UUID]int32
+	invUpdateErr   error // injected error for UpdateCharacterInventory
+	failOnSecond   bool  // fail on second call to UpdateCharacterInventory
+	invCallCount   int
 }
 
 func newMockStore() *mockCharacterStore {
 	return &mockCharacterStore{
-		chars:         make(map[uuid.UUID]refdata.Character),
-		lastInvUpdate: make(map[uuid.UUID]json.RawMessage),
+		chars:          make(map[uuid.UUID]refdata.Character),
+		lastInvUpdate:  make(map[uuid.UUID]json.RawMessage),
 		lastGoldUpdate: make(map[uuid.UUID]int32),
 	}
 }
@@ -41,8 +44,21 @@ func (m *mockCharacterStore) GetCharacter(ctx context.Context, id uuid.UUID) (re
 }
 
 func (m *mockCharacterStore) UpdateCharacterInventory(ctx context.Context, arg refdata.UpdateCharacterInventoryParams) (refdata.Character, error) {
+	m.invCallCount++
+	if m.failOnSecond && m.invCallCount == 2 {
+		return refdata.Character{}, assert.AnError
+	}
+	if m.invUpdateErr != nil {
+		return refdata.Character{}, m.invUpdateErr
+	}
 	m.lastInvUpdate[arg.ID] = arg.Inventory.RawMessage
 	return refdata.Character{}, nil
+}
+
+func (m *mockCharacterStore) UpdateTwoCharacterInventories(ctx context.Context, id1 uuid.UUID, inv1 pqtype.NullRawMessage, id2 uuid.UUID, inv2 pqtype.NullRawMessage) error {
+	m.lastInvUpdate[id1] = inv1.RawMessage
+	m.lastInvUpdate[id2] = inv2.RawMessage
+	return nil
 }
 
 func (m *mockCharacterStore) UpdateCharacterGold(ctx context.Context, arg refdata.UpdateCharacterGoldParams) (refdata.Character, error) {
@@ -499,5 +515,146 @@ func TestHandleRemoveItem_ItemNotFound(t *testing.T) {
 	handler.HandleRemoveItem(rec, req)
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandleTransferItem_Atomic(t *testing.T) {
+	// Transfer should use UpdateTwoCharacterInventories for atomic write
+	fromID := uuid.New()
+	toID := uuid.New()
+	store := newMockStore()
+
+	fromItems := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 3, Type: "consumable"},
+	}
+	fromJSON, _ := json.Marshal(fromItems)
+	toJSON, _ := json.Marshal([]character.InventoryItem{})
+
+	store.chars[fromID] = refdata.Character{ID: fromID, Name: "Aria", Inventory: pqtype.NullRawMessage{RawMessage: fromJSON, Valid: true}}
+	store.chars[toID] = refdata.Character{ID: toID, Name: "Gorak", Inventory: pqtype.NullRawMessage{RawMessage: toJSON, Valid: true}}
+
+	handler := NewAPIHandler(store)
+
+	body, _ := json.Marshal(TransferItemRequest{
+		FromCharacterID: fromID.String(),
+		ToCharacterID:   toID.String(),
+		ItemID:          "healing-potion",
+		Quantity:        1,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/transfer", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleTransferItem(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	// Both inventories should be updated atomically
+	assert.Contains(t, store.lastInvUpdate, fromID)
+	assert.Contains(t, store.lastInvUpdate, toID)
+}
+
+func TestHandleAddItem_CombatLog(t *testing.T) {
+	charID := uuid.New()
+	store := newMockStore()
+	store.chars[charID] = refdata.Character{ID: charID, Name: "Aria"}
+
+	var logged string
+	handler := NewAPIHandler(store)
+	handler.SetCombatLogFunc(func(msg string) { logged = msg })
+
+	body, _ := json.Marshal(AddItemRequest{
+		CharacterID: charID.String(),
+		Item: character.InventoryItem{
+			ItemID: "healing-potion", Name: "Healing Potion", Quantity: 2, Type: "consumable",
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/add", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleAddItem(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, logged, "Healing Potion")
+	assert.Contains(t, logged, "Aria")
+}
+
+func TestHandleRemoveItem_CombatLog(t *testing.T) {
+	charID := uuid.New()
+	store := newMockStore()
+
+	existingItems := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 3, Type: "consumable"},
+	}
+	existingJSON, _ := json.Marshal(existingItems)
+	store.chars[charID] = refdata.Character{ID: charID, Name: "Aria", Inventory: pqtype.NullRawMessage{RawMessage: existingJSON, Valid: true}}
+
+	var logged string
+	handler := NewAPIHandler(store)
+	handler.SetCombatLogFunc(func(msg string) { logged = msg })
+
+	body, _ := json.Marshal(RemoveItemRequest{
+		CharacterID: charID.String(),
+		ItemID:      "healing-potion",
+		Quantity:    1,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/remove", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleRemoveItem(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, logged, "Healing Potion")
+	assert.Contains(t, logged, "Aria")
+}
+
+func TestHandleTransferItem_CombatLog(t *testing.T) {
+	fromID := uuid.New()
+	toID := uuid.New()
+	store := newMockStore()
+
+	fromItems := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 3, Type: "consumable"},
+	}
+	fromJSON, _ := json.Marshal(fromItems)
+	toJSON, _ := json.Marshal([]character.InventoryItem{})
+
+	store.chars[fromID] = refdata.Character{ID: fromID, Name: "Aria", Inventory: pqtype.NullRawMessage{RawMessage: fromJSON, Valid: true}}
+	store.chars[toID] = refdata.Character{ID: toID, Name: "Gorak", Inventory: pqtype.NullRawMessage{RawMessage: toJSON, Valid: true}}
+
+	var logged string
+	handler := NewAPIHandler(store)
+	handler.SetCombatLogFunc(func(msg string) { logged = msg })
+
+	body, _ := json.Marshal(TransferItemRequest{
+		FromCharacterID: fromID.String(),
+		ToCharacterID:   toID.String(),
+		ItemID:          "healing-potion",
+		Quantity:        2,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/transfer", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleTransferItem(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, logged, "Healing Potion")
+	assert.Contains(t, logged, "Aria")
+	assert.Contains(t, logged, "Gorak")
+}
+
+func TestHandleSetGold_CombatLog(t *testing.T) {
+	charID := uuid.New()
+	store := newMockStore()
+	store.chars[charID] = refdata.Character{ID: charID, Name: "Aria", Gold: 50}
+
+	var logged string
+	handler := NewAPIHandler(store)
+	handler.SetCombatLogFunc(func(msg string) { logged = msg })
+
+	body, _ := json.Marshal(SetGoldRequest{
+		CharacterID: charID.String(),
+		Gold:        150,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/gold", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleSetGold(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, logged, "Aria")
+	assert.Contains(t, logged, "150")
 }
 

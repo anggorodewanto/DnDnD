@@ -19,11 +19,13 @@ type CharacterStore interface {
 	UpdateCharacterInventory(ctx context.Context, arg refdata.UpdateCharacterInventoryParams) (refdata.Character, error)
 	UpdateCharacterGold(ctx context.Context, arg refdata.UpdateCharacterGoldParams) (refdata.Character, error)
 	UpdateCharacterInventoryAndGold(ctx context.Context, arg refdata.UpdateCharacterInventoryAndGoldParams) (refdata.Character, error)
+	UpdateTwoCharacterInventories(ctx context.Context, id1 uuid.UUID, inv1 pqtype.NullRawMessage, id2 uuid.UUID, inv2 pqtype.NullRawMessage) error
 }
 
 // APIHandler handles DM inventory management HTTP endpoints.
 type APIHandler struct {
-	store CharacterStore
+	store        CharacterStore
+	combatLogFn  func(msg string)
 }
 
 // NewAPIHandler creates a new APIHandler.
@@ -31,9 +33,21 @@ func NewAPIHandler(store CharacterStore) *APIHandler {
 	return &APIHandler{store: store}
 }
 
+// SetCombatLogFunc sets the callback for posting messages to #combat-log.
+func (h *APIHandler) SetCombatLogFunc(fn func(msg string)) {
+	h.combatLogFn = fn
+}
+
+// logCombat posts a message to #combat-log if the callback is configured.
+func (h *APIHandler) logCombat(msg string) {
+	if h.combatLogFn != nil {
+		h.combatLogFn(msg)
+	}
+}
+
 // AddItemRequest is the request body for adding an item to a character.
 type AddItemRequest struct {
-	CharacterID string               `json:"character_id"`
+	CharacterID string                 `json:"character_id"`
 	Item        character.InventoryItem `json:"item"`
 }
 
@@ -98,6 +112,8 @@ func (h *APIHandler) HandleAddItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.logCombat(fmt.Sprintf("📦 DM added **%s** ×%d to **%s**'s inventory.", req.Item.Name, req.Item.Quantity, char.Name))
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
@@ -128,6 +144,15 @@ func (h *APIHandler) HandleRemoveItem(w http.ResponseWriter, r *http.Request) {
 		qty = 1
 	}
 
+	// Find item name before removing for combat log
+	itemName := req.ItemID
+	for _, item := range items {
+		if item.ItemID == req.ItemID {
+			itemName = item.Name
+			break
+		}
+	}
+
 	updated, err := removeItem(items, req.ItemID, qty)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -138,6 +163,8 @@ func (h *APIHandler) HandleRemoveItem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to update inventory", http.StatusInternalServerError)
 		return
 	}
+
+	h.logCombat(fmt.Sprintf("📦 DM removed **%s** ×%d from **%s**'s inventory.", itemName, qty, char.Name))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -181,6 +208,15 @@ func (h *APIHandler) HandleTransferItem(w http.ResponseWriter, r *http.Request) 
 	fromItems := parseInventoryItems(fromChar)
 	toItems := parseInventoryItems(toChar)
 
+	// Find item name for combat log
+	itemName := req.ItemID
+	for _, item := range fromItems {
+		if item.ItemID == req.ItemID {
+			itemName = item.Name
+			break
+		}
+	}
+
 	// Transfer qty units
 	for i := 0; i < qty; i++ {
 		result, giveErr := GiveItem(GiveInput{
@@ -198,14 +234,18 @@ func (h *APIHandler) HandleTransferItem(w http.ResponseWriter, r *http.Request) 
 		toItems = result.UpdatedReceiverItems
 	}
 
-	if err := h.persistInventory(r.Context(), fromID, fromItems); err != nil {
-		http.Error(w, "failed to update source inventory", http.StatusInternalServerError)
+	// Persist both inventories atomically
+	fromInvJSON, _ := json.Marshal(fromItems)
+	toInvJSON, _ := json.Marshal(toItems)
+	fromInvMsg := pqtype.NullRawMessage{RawMessage: fromInvJSON, Valid: true}
+	toInvMsg := pqtype.NullRawMessage{RawMessage: toInvJSON, Valid: true}
+
+	if err := h.store.UpdateTwoCharacterInventories(r.Context(), fromID, fromInvMsg, toID, toInvMsg); err != nil {
+		http.Error(w, "failed to update inventories", http.StatusInternalServerError)
 		return
 	}
-	if err := h.persistInventory(r.Context(), toID, toItems); err != nil {
-		http.Error(w, "failed to update target inventory", http.StatusInternalServerError)
-		return
-	}
+
+	h.logCombat(fmt.Sprintf("📦 DM transferred **%s** ×%d from **%s** to **%s**.", itemName, qty, fromChar.Name, toChar.Name))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -230,6 +270,13 @@ func (h *APIHandler) HandleSetGold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get character for logging
+	char, err := h.store.GetCharacter(r.Context(), charID)
+	if err != nil {
+		http.Error(w, "character not found", http.StatusNotFound)
+		return
+	}
+
 	_, err = h.store.UpdateCharacterGold(r.Context(), refdata.UpdateCharacterGoldParams{
 		ID:   charID,
 		Gold: int32(req.Gold),
@@ -238,6 +285,8 @@ func (h *APIHandler) HandleSetGold(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to update gold", http.StatusInternalServerError)
 		return
 	}
+
+	h.logCombat(fmt.Sprintf("💰 DM set **%s**'s gold to **%d** gp (was %d gp).", char.Name, req.Gold, char.Gold))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})

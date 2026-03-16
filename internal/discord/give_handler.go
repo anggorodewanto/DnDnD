@@ -119,14 +119,20 @@ func (h *GiveHandler) Handle(interaction *discordgo.Interaction) {
 	giverInvJSON, _ := json.Marshal(result.UpdatedGiverItems)
 	receiverInvJSON, _ := json.Marshal(result.UpdatedReceiverItems)
 
-	_, _ = h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
+	if _, err := h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
 		ID:        giver.ID,
 		Inventory: pqtype.NullRawMessage{RawMessage: giverInvJSON, Valid: true},
-	})
-	_, _ = h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
+	}); err != nil {
+		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+		return
+	}
+	if _, err := h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
 		ID:        receiver.ID,
 		Inventory: pqtype.NullRawMessage{RawMessage: receiverInvJSON, Valid: true},
-	})
+	}); err != nil {
+		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+		return
+	}
 
 	respondEphemeral(h.session, interaction, result.Message)
 }

@@ -17,13 +17,17 @@ import (
 
 // mockInventorySession captures the ephemeral response.
 type mockInventorySession struct {
-	lastResponse string
+	lastResponse    string
+	sentChannelID   string
+	sentChannelMsg  string
 }
 
 func (m *mockInventorySession) UserChannelCreate(recipientID string) (*discordgo.Channel, error) {
 	return nil, nil
 }
 func (m *mockInventorySession) ChannelMessageSend(channelID, content string) (*discordgo.Message, error) {
+	m.sentChannelID = channelID
+	m.sentChannelMsg = content
 	return nil, nil
 }
 func (m *mockInventorySession) ChannelMessageSendComplex(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error) {

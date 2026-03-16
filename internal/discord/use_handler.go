@@ -34,6 +34,7 @@ type UseHandler struct {
 	store           UseCharacterStore
 	invService      *inventory.Service
 	combatProv      UseCombatProvider
+	dmQueueFunc     func(guildID string) string
 }
 
 // NewUseHandler creates a new UseHandler.
@@ -53,6 +54,11 @@ func NewUseHandler(
 		invService:      inventory.NewService(randFn),
 		combatProv:      combatProv,
 	}
+}
+
+// SetDMQueueFunc sets the function that resolves a guild ID to a #dm-queue channel ID.
+func (h *UseHandler) SetDMQueueFunc(fn func(guildID string) string) {
+	h.dmQueueFunc = fn
 }
 
 // Handle processes the /use command interaction.
@@ -105,16 +111,39 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 	invMsg := pqtype.NullRawMessage{RawMessage: invJSON, Valid: true}
 
 	if result.HealingDone > 0 {
-		_, _ = h.store.UpdateCharacterInventoryAndHP(ctx, refdata.UpdateCharacterInventoryAndHPParams{
+		if _, err := h.store.UpdateCharacterInventoryAndHP(ctx, refdata.UpdateCharacterInventoryAndHPParams{
 			ID:        char.ID,
 			Inventory: invMsg,
 			HpCurrent: int32(result.HPAfter),
-		})
+		}); err != nil {
+			respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+			return
+		}
 	} else {
-		_, _ = h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
+		if _, err := h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
 			ID:        char.ID,
 			Inventory: invMsg,
-		})
+		}); err != nil {
+			respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+			return
+		}
+	}
+
+	// Post to #dm-queue if item requires DM adjudication
+	if result.DMQueueRequired && h.dmQueueFunc != nil {
+		channelID := h.dmQueueFunc(interaction.GuildID)
+		if channelID != "" {
+			// Find the item name from original items
+			usedItemName := itemID
+			for _, it := range items {
+				if it.ItemID == itemID {
+					usedItemName = it.Name
+					break
+				}
+			}
+			dmMsg := fmt.Sprintf("🧪 **%s** used **%s** — needs DM adjudication.", char.Name, usedItemName)
+			_, _ = h.session.ChannelMessageSend(channelID, dmMsg)
+		}
 	}
 
 	respondEphemeral(h.session, interaction, result.Message)

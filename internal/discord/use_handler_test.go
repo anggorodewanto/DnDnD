@@ -19,15 +19,23 @@ type mockUseCharacterStore struct {
 	updatedInventory json.RawMessage
 	updatedHPCurrent int32
 	char             refdata.Character
+	invAndHPErr      error
+	invErr           error
 }
 
 func (m *mockUseCharacterStore) UpdateCharacterInventoryAndHP(ctx context.Context, arg refdata.UpdateCharacterInventoryAndHPParams) (refdata.Character, error) {
+	if m.invAndHPErr != nil {
+		return refdata.Character{}, m.invAndHPErr
+	}
 	m.updatedInventory = arg.Inventory.RawMessage
 	m.updatedHPCurrent = arg.HpCurrent
 	return m.char, nil
 }
 
 func (m *mockUseCharacterStore) UpdateCharacterInventory(ctx context.Context, arg refdata.UpdateCharacterInventoryParams) (refdata.Character, error) {
+	if m.invErr != nil {
+		return refdata.Character{}, m.invErr
+	}
 	m.updatedInventory = arg.Inventory.RawMessage
 	return m.char, nil
 }
@@ -108,6 +116,157 @@ func TestUseHandler_ItemNotFound(t *testing.T) {
 	handler.Handle(interaction)
 
 	assert.Contains(t, sess.lastResponse, "not found")
+}
+
+func TestUseHandler_EmptyItemID(t *testing.T) {
+	sess := &mockInventorySession{}
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: uuid.New()}},
+		&mockInventoryCharacterLookup{char: refdata.Character{}},
+		&mockUseCharacterStore{},
+		nil, nil,
+	)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionApplicationCommand,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name:    "use",
+			Options: []*discordgo.ApplicationCommandInteractionDataOption{},
+		},
+	}
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "specify an item")
+}
+
+func TestUseHandler_NoCampaign(t *testing.T) {
+	sess := &mockInventorySession{}
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{err: assert.AnError},
+		&mockInventoryCharacterLookup{},
+		&mockUseCharacterStore{},
+		nil, nil,
+	)
+
+	interaction := makeUseInteraction("guild1", "user1", "healing-potion")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "No campaign")
+}
+
+func TestUseHandler_NoCharacter(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{err: assert.AnError},
+		&mockUseCharacterStore{},
+		nil, nil,
+	)
+
+	interaction := makeUseInteraction("guild1", "user1", "healing-potion")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Could not find your character")
+}
+
+func TestUseHandler_PersistInventoryAndHPError(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 2, Type: "consumable"},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	store := &mockUseCharacterStore{
+		char:        refdata.Character{ID: charID},
+		invAndHPErr: assert.AnError,
+	}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID: charID, CampaignID: campID, Name: "Aria",
+			HpCurrent: 10, HpMax: 30,
+			Inventory: pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+		}},
+		store,
+		func(max int) int { return 3 },
+		nil,
+	)
+
+	interaction := makeUseInteraction("guild1", "user1", "healing-potion")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Failed to save")
+}
+
+func TestUseHandler_PersistInventoryError(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "antitoxin", Name: "Antitoxin", Quantity: 1, Type: "consumable"},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	store := &mockUseCharacterStore{
+		char:   refdata.Character{ID: charID},
+		invErr: assert.AnError,
+	}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID: charID, CampaignID: campID, Name: "Aria",
+			HpCurrent: 10, HpMax: 30,
+			Inventory: pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+		}},
+		store,
+		nil,
+		nil,
+	)
+
+	interaction := makeUseInteraction("guild1", "user1", "antitoxin")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Failed to save")
+}
+
+func TestUseHandler_DMQueuePost(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "ball-bearings", Name: "Ball Bearings", Quantity: 1, Type: "consumable"},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	store := &mockUseCharacterStore{}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID: uuid.New(), CampaignID: campID, Name: "Aria",
+			Inventory: pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+		}},
+		store,
+		nil,
+		nil,
+	)
+	handler.SetDMQueueFunc(func(guildID string) string { return "dm-queue-ch" })
+
+	interaction := makeUseInteraction("guild1", "user1", "ball-bearings")
+	handler.Handle(interaction)
+
+	assert.Equal(t, "dm-queue-ch", sess.sentChannelID)
+	assert.Contains(t, sess.sentChannelMsg, "Ball Bearings")
+	assert.Contains(t, sess.sentChannelMsg, "Aria")
 }
 
 func TestUseHandler_DMQueueItem(t *testing.T) {

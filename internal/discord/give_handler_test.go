@@ -16,10 +16,14 @@ import (
 
 // mockGiveCharacterStore captures updates for both giver and receiver.
 type mockGiveCharacterStore struct {
-	updates map[uuid.UUID]json.RawMessage
+	updates  map[uuid.UUID]json.RawMessage
+	failOnID uuid.UUID // return error for this ID
 }
 
 func (m *mockGiveCharacterStore) UpdateCharacterInventory(ctx context.Context, arg refdata.UpdateCharacterInventoryParams) (refdata.Character, error) {
+	if m.failOnID == arg.ID {
+		return refdata.Character{}, assert.AnError
+	}
 	if m.updates == nil {
 		m.updates = make(map[uuid.UUID]json.RawMessage)
 	}
@@ -164,4 +168,101 @@ func TestGiveHandler_TargetNotFound(t *testing.T) {
 	handler.Handle(interaction)
 
 	assert.Contains(t, sess.lastResponse, "target")
+}
+
+func TestGiveHandler_NoCampaign(t *testing.T) {
+	sess := &mockInventorySession{}
+	handler := NewGiveHandler(sess,
+		&mockInventoryCampaignProvider{err: assert.AnError},
+		&mockInventoryCharacterLookup{},
+		&mockGiveTargetResolver{chars: map[string]refdata.Character{}},
+		&mockGiveCharacterStore{},
+		nil,
+	)
+
+	interaction := makeGiveInteraction("guild1", "user1", "healing-potion", "GK")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "No campaign")
+}
+
+func TestGiveHandler_NoCharacter(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	handler := NewGiveHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{err: assert.AnError},
+		&mockGiveTargetResolver{chars: map[string]refdata.Character{}},
+		&mockGiveCharacterStore{},
+		nil,
+	)
+
+	interaction := makeGiveInteraction("guild1", "user1", "healing-potion", "GK")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Could not find your character")
+}
+
+func TestGiveHandler_PersistGiverError(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+
+	giverItems := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 2, Type: "consumable"},
+	}
+	giverItemsJSON, _ := json.Marshal(giverItems)
+
+	store := &mockGiveCharacterStore{failOnID: giverID}
+
+	handler := NewGiveHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID: giverID, CampaignID: campID, Name: "Aria",
+			Inventory: pqtype.NullRawMessage{RawMessage: giverItemsJSON, Valid: true},
+		}},
+		&mockGiveTargetResolver{chars: map[string]refdata.Character{
+			"GK": {ID: receiverID, CampaignID: campID, Name: "Gorak"},
+		}},
+		store,
+		nil,
+	)
+
+	interaction := makeGiveInteraction("guild1", "user1", "healing-potion", "GK")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Failed to save")
+}
+
+func TestGiveHandler_PersistReceiverError(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+
+	giverItems := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 2, Type: "consumable"},
+	}
+	giverItemsJSON, _ := json.Marshal(giverItems)
+
+	store := &mockGiveCharacterStore{failOnID: receiverID}
+
+	handler := NewGiveHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID: giverID, CampaignID: campID, Name: "Aria",
+			Inventory: pqtype.NullRawMessage{RawMessage: giverItemsJSON, Valid: true},
+		}},
+		&mockGiveTargetResolver{chars: map[string]refdata.Character{
+			"GK": {ID: receiverID, CampaignID: campID, Name: "Gorak"},
+		}},
+		store,
+		nil,
+	)
+
+	interaction := makeGiveInteraction("guild1", "user1", "healing-potion", "GK")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Failed to save")
 }
