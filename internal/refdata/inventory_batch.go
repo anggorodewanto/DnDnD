@@ -2,30 +2,50 @@ package refdata
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 )
 
-// UpdateTwoCharacterInventories atomically updates the inventories of two characters
-// in a single SQL statement, ensuring both succeed or both fail.
-func (q *Queries) UpdateTwoCharacterInventories(ctx context.Context, id1 uuid.UUID, inv1 pqtype.NullRawMessage, id2 uuid.UUID, inv2 pqtype.NullRawMessage) error {
-	const query = `UPDATE characters SET
-		inventory = CASE id WHEN $1 THEN $2 WHEN $3 THEN $4 END,
-		updated_at = now()
-	WHERE id IN ($1, $3)`
+// TxBeginner is satisfied by *sql.DB and *sql.Tx (via nested transactions in some drivers).
+type TxBeginner interface {
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
+}
 
-	result, err := q.db.ExecContext(ctx, query, id1, inv1, id2, inv2)
-	if err != nil {
-		return fmt.Errorf("updating two character inventories: %w", err)
+// UpdateTwoCharacterInventories atomically updates the inventories of two characters
+// using a database transaction to ensure both succeed or both fail.
+func (q *Queries) UpdateTwoCharacterInventories(ctx context.Context, id1 uuid.UUID, inv1 pqtype.NullRawMessage, id2 uuid.UUID, inv2 pqtype.NullRawMessage) error {
+	beginner, ok := q.db.(TxBeginner)
+	if !ok {
+		return fmt.Errorf("database connection does not support transactions")
 	}
-	rows, err := result.RowsAffected()
+
+	tx, err := beginner.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("checking rows affected: %w", err)
+		return fmt.Errorf("beginning transaction: %w", err)
 	}
-	if rows != 2 {
-		return fmt.Errorf("expected 2 rows affected, got %d", rows)
+	defer tx.Rollback()
+
+	qtx := q.WithTx(tx)
+
+	if _, err := qtx.UpdateCharacterInventory(ctx, UpdateCharacterInventoryParams{
+		ID:        id1,
+		Inventory: inv1,
+	}); err != nil {
+		return fmt.Errorf("updating first character inventory: %w", err)
+	}
+
+	if _, err := qtx.UpdateCharacterInventory(ctx, UpdateCharacterInventoryParams{
+		ID:        id2,
+		Inventory: inv2,
+	}); err != nil {
+		return fmt.Errorf("updating second character inventory: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing transaction: %w", err)
 	}
 	return nil
 }

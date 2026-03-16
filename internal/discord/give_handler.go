@@ -2,7 +2,6 @@ package discord
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
@@ -14,9 +13,9 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// GiveCharacterStore persists inventory updates for both giver and receiver.
+// GiveCharacterStore persists inventory updates for both giver and receiver atomically.
 type GiveCharacterStore interface {
-	UpdateCharacterInventory(ctx context.Context, arg refdata.UpdateCharacterInventoryParams) (refdata.Character, error)
+	UpdateTwoCharacterInventories(ctx context.Context, id1 uuid.UUID, inv1 pqtype.NullRawMessage, id2 uuid.UUID, inv2 pqtype.NullRawMessage) error
 }
 
 // GiveTargetResolver resolves a name or ID to a character in the campaign.
@@ -86,9 +85,10 @@ func (h *GiveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	var giverItems []character.InventoryItem
-	if giver.Inventory.Valid {
-		_ = json.Unmarshal(giver.Inventory.RawMessage, &giverItems)
+	giverItems, err := character.ParseInventoryItems(giver.Inventory.RawMessage, giver.Inventory.Valid)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to read inventory. Please contact the DM.")
+		return
 	}
 
 	// Resolve target
@@ -98,9 +98,10 @@ func (h *GiveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	var receiverItems []character.InventoryItem
-	if receiver.Inventory.Valid {
-		_ = json.Unmarshal(receiver.Inventory.RawMessage, &receiverItems)
+	receiverItems, err := character.ParseInventoryItems(receiver.Inventory.RawMessage, receiver.Inventory.Valid)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to read target inventory. Please contact the DM.")
+		return
 	}
 
 	result, err := inventory.GiveItem(inventory.GiveInput{
@@ -115,21 +116,23 @@ func (h *GiveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// Persist both inventories
-	giverInvJSON, _ := json.Marshal(result.UpdatedGiverItems)
-	receiverInvJSON, _ := json.Marshal(result.UpdatedReceiverItems)
-
-	if _, err := h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
-		ID:        giver.ID,
-		Inventory: pqtype.NullRawMessage{RawMessage: giverInvJSON, Valid: true},
-	}); err != nil {
+	// Persist both inventories atomically
+	giverInvJSON, err := character.MarshalInventory(result.UpdatedGiverItems)
+	if err != nil {
 		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
 		return
 	}
-	if _, err := h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
-		ID:        receiver.ID,
-		Inventory: pqtype.NullRawMessage{RawMessage: receiverInvJSON, Valid: true},
-	}); err != nil {
+	receiverInvJSON, err := character.MarshalInventory(result.UpdatedReceiverItems)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+		return
+	}
+
+	if err := h.store.UpdateTwoCharacterInventories(ctx, giver.ID,
+		pqtype.NullRawMessage{RawMessage: giverInvJSON, Valid: true},
+		receiver.ID,
+		pqtype.NullRawMessage{RawMessage: receiverInvJSON, Valid: true},
+	); err != nil {
 		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
 		return
 	}

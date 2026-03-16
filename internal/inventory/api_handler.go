@@ -94,16 +94,10 @@ func (h *APIHandler) HandleAddItem(w http.ResponseWriter, r *http.Request) {
 
 	items := parseInventoryItems(char)
 
-	// Check if item already exists
-	found := false
-	for i := range items {
-		if items[i].ItemID == req.Item.ItemID {
-			items[i].Quantity += req.Item.Quantity
-			found = true
-			break
-		}
-	}
-	if !found {
+	idx := findItemIndex(items, req.Item.ItemID)
+	if idx >= 0 {
+		items[idx].Quantity += req.Item.Quantity
+	} else {
 		items = append(items, req.Item)
 	}
 
@@ -115,7 +109,7 @@ func (h *APIHandler) HandleAddItem(w http.ResponseWriter, r *http.Request) {
 	h.logCombat(fmt.Sprintf("📦 DM added **%s** ×%d to **%s**'s inventory.", req.Item.Name, req.Item.Quantity, char.Name))
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // HandleRemoveItem handles POST /api/inventory/remove.
@@ -144,16 +138,7 @@ func (h *APIHandler) HandleRemoveItem(w http.ResponseWriter, r *http.Request) {
 		qty = 1
 	}
 
-	// Find item name before removing for combat log
-	itemName := req.ItemID
-	for _, item := range items {
-		if item.ItemID == req.ItemID {
-			itemName = item.Name
-			break
-		}
-	}
-
-	updated, err := removeItem(items, req.ItemID, qty)
+	updated, itemName, err := removeItem(items, req.ItemID, qty)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -167,7 +152,7 @@ func (h *APIHandler) HandleRemoveItem(w http.ResponseWriter, r *http.Request) {
 	h.logCombat(fmt.Sprintf("📦 DM removed **%s** ×%d from **%s**'s inventory.", itemName, qty, char.Name))
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // HandleTransferItem handles POST /api/inventory/transfer.
@@ -208,35 +193,32 @@ func (h *APIHandler) HandleTransferItem(w http.ResponseWriter, r *http.Request) 
 	fromItems := parseInventoryItems(fromChar)
 	toItems := parseInventoryItems(toChar)
 
-	// Find item name for combat log
-	itemName := req.ItemID
-	for _, item := range fromItems {
-		if item.ItemID == req.ItemID {
-			itemName = item.Name
-			break
-		}
+	// Find item to transfer
+	idx := findItemIndex(fromItems, req.ItemID)
+	if idx == -1 {
+		http.Error(w, fmt.Sprintf("item %q not found", req.ItemID), http.StatusBadRequest)
+		return
+	}
+	item := fromItems[idx]
+	if item.Quantity < qty {
+		http.Error(w, fmt.Sprintf("not enough %q: have %d, need %d", item.Name, item.Quantity, qty), http.StatusBadRequest)
+		return
 	}
 
-	// Transfer qty units
-	for i := 0; i < qty; i++ {
-		result, giveErr := GiveItem(GiveInput{
-			GiverItems:    fromItems,
-			ReceiverItems: toItems,
-			ItemID:        req.ItemID,
-			GiverName:     fromChar.Name,
-			ReceiverName:  toChar.Name,
-		})
-		if giveErr != nil {
-			http.Error(w, giveErr.Error(), http.StatusBadRequest)
-			return
-		}
-		fromItems = result.UpdatedGiverItems
-		toItems = result.UpdatedReceiverItems
-	}
+	fromItems = decrementItem(fromItems, idx, qty)
+	toItems = addItemQuantity(toItems, item, qty)
 
 	// Persist both inventories atomically
-	fromInvJSON, _ := json.Marshal(fromItems)
-	toInvJSON, _ := json.Marshal(toItems)
+	fromInvJSON, err := character.MarshalInventory(fromItems)
+	if err != nil {
+		http.Error(w, "failed to marshal inventory", http.StatusInternalServerError)
+		return
+	}
+	toInvJSON, err := character.MarshalInventory(toItems)
+	if err != nil {
+		http.Error(w, "failed to marshal inventory", http.StatusInternalServerError)
+		return
+	}
 	fromInvMsg := pqtype.NullRawMessage{RawMessage: fromInvJSON, Valid: true}
 	toInvMsg := pqtype.NullRawMessage{RawMessage: toInvJSON, Valid: true}
 
@@ -245,10 +227,10 @@ func (h *APIHandler) HandleTransferItem(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	h.logCombat(fmt.Sprintf("📦 DM transferred **%s** ×%d from **%s** to **%s**.", itemName, qty, fromChar.Name, toChar.Name))
+	h.logCombat(fmt.Sprintf("📦 DM transferred **%s** ×%d from **%s** to **%s**.", item.Name, qty, fromChar.Name, toChar.Name))
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // HandleSetGold handles POST /api/inventory/gold.
@@ -289,7 +271,7 @@ func (h *APIHandler) HandleSetGold(w http.ResponseWriter, r *http.Request) {
 	h.logCombat(fmt.Sprintf("💰 DM set **%s**'s gold to **%d** gp (was %d gp).", char.Name, req.Gold, char.Gold))
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // parseInventoryItems extracts inventory items from a character.
@@ -301,22 +283,17 @@ func parseInventoryItems(char refdata.Character) []character.InventoryItem {
 	return items
 }
 
-// removeItem removes qty of the item from the list.
-func removeItem(items []character.InventoryItem, itemID string, qty int) ([]character.InventoryItem, error) {
-	for i := range items {
-		if items[i].ItemID != itemID {
-			continue
-		}
-		if items[i].Quantity < qty {
-			return nil, fmt.Errorf("not enough %q: have %d, removing %d", items[i].Name, items[i].Quantity, qty)
-		}
-		items[i].Quantity -= qty
-		if items[i].Quantity <= 0 {
-			return append(items[:i], items[i+1:]...), nil
-		}
-		return items, nil
+// removeItem removes qty of the item from the list, returning updated items and removed item name.
+func removeItem(items []character.InventoryItem, itemID string, qty int) ([]character.InventoryItem, string, error) {
+	idx := findItemIndex(items, itemID)
+	if idx == -1 {
+		return nil, "", fmt.Errorf("item %q not found", itemID)
 	}
-	return nil, fmt.Errorf("item %q not found", itemID)
+	if items[idx].Quantity < qty {
+		return nil, "", fmt.Errorf("not enough %q: have %d, removing %d", items[idx].Name, items[idx].Quantity, qty)
+	}
+	name := items[idx].Name
+	return decrementItem(items, idx, qty), name, nil
 }
 
 // persistInventory saves the updated inventory to the database.

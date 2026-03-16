@@ -2,7 +2,6 @@ package discord
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
@@ -90,9 +89,10 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	var items []character.InventoryItem
-	if char.Inventory.Valid {
-		_ = json.Unmarshal(char.Inventory.RawMessage, &items)
+	items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to read inventory. Please contact the DM.")
+		return
 	}
 
 	result, err := h.invService.UseConsumable(inventory.UseInput{
@@ -107,7 +107,11 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	// Persist changes
-	invJSON, _ := json.Marshal(result.UpdatedItems)
+	invJSON, err := character.MarshalInventory(result.UpdatedItems)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+		return
+	}
 	invMsg := pqtype.NullRawMessage{RawMessage: invJSON, Valid: true}
 
 	if result.HealingDone > 0 {

@@ -2,7 +2,6 @@ package discord
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -59,14 +58,16 @@ func (h *InventoryHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	var items []character.InventoryItem
-	if char.Inventory.Valid {
-		_ = json.Unmarshal(char.Inventory.RawMessage, &items)
+	items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to read inventory. Please contact the DM.")
+		return
 	}
 
-	var attunement []character.AttunementSlot
-	if char.AttunementSlots.Valid {
-		_ = json.Unmarshal(char.AttunementSlots.RawMessage, &attunement)
+	attunement, err := character.ParseAttunementSlots(char.AttunementSlots.RawMessage, char.AttunementSlots.Valid)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to read attunement data. Please contact the DM.")
+		return
 	}
 
 	msg := inventory.FormatInventory(char.Name, char.Gold, items, attunement)

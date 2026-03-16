@@ -32,6 +32,45 @@ var categoryOrder = []struct {
 	{TypeOther, "\U0001f4e6", "Other"},
 }
 
+// findItemIndex returns the index of the item with the given ID, or -1.
+func findItemIndex(items []character.InventoryItem, itemID string) int {
+	for i, item := range items {
+		if item.ItemID == itemID {
+			return i
+		}
+	}
+	return -1
+}
+
+// decrementItem removes qty units of the item at idx, removing the entry if quantity reaches 0.
+// Returns a new slice (does not mutate the input).
+func decrementItem(items []character.InventoryItem, idx int, qty int) []character.InventoryItem {
+	updated := make([]character.InventoryItem, len(items))
+	copy(updated, items)
+	updated[idx].Quantity -= qty
+	if updated[idx].Quantity <= 0 {
+		updated = append(updated[:idx], updated[idx+1:]...)
+	}
+	return updated
+}
+
+// addItemQuantity adds qty of the item (by ID) to a slice, either incrementing existing or appending.
+// source provides the item metadata when adding a new entry.
+func addItemQuantity(items []character.InventoryItem, source character.InventoryItem, qty int) []character.InventoryItem {
+	updated := make([]character.InventoryItem, len(items))
+	copy(updated, items)
+	idx := findItemIndex(updated, source.ItemID)
+	if idx >= 0 {
+		updated[idx].Quantity += qty
+		return updated
+	}
+	newItem := source
+	newItem.Quantity = qty
+	newItem.Equipped = false
+	newItem.EquipSlot = ""
+	return append(updated, newItem)
+}
+
 // Service handles inventory business logic.
 type Service struct {
 	roller *dice.Roller
@@ -68,13 +107,7 @@ var autoResolveItems = map[string]string{
 
 // UseConsumable consumes an item and applies its effect if auto-resolvable.
 func (s *Service) UseConsumable(input UseInput) (UseResult, error) {
-	idx := -1
-	for i, item := range input.Items {
-		if item.ItemID == input.ItemID {
-			idx = i
-			break
-		}
-	}
+	idx := findItemIndex(input.Items, input.ItemID)
 	if idx == -1 {
 		return UseResult{}, fmt.Errorf("item %q not found in inventory", input.ItemID)
 	}
@@ -87,13 +120,7 @@ func (s *Service) UseConsumable(input UseInput) (UseResult, error) {
 		return UseResult{}, fmt.Errorf("%q: none left", item.Name)
 	}
 
-	// Decrement quantity
-	updated := make([]character.InventoryItem, len(input.Items))
-	copy(updated, input.Items)
-	updated[idx].Quantity--
-	if updated[idx].Quantity <= 0 {
-		updated = append(updated[:idx], updated[idx+1:]...)
-	}
+	updated := decrementItem(input.Items, idx, 1)
 
 	result := UseResult{UpdatedItems: updated}
 
@@ -151,13 +178,7 @@ type GiveResult struct {
 
 // GiveItem transfers one unit of an item from giver to receiver.
 func GiveItem(input GiveInput) (GiveResult, error) {
-	idx := -1
-	for i, item := range input.GiverItems {
-		if item.ItemID == input.ItemID {
-			idx = i
-			break
-		}
-	}
+	idx := findItemIndex(input.GiverItems, input.ItemID)
 	if idx == -1 {
 		return GiveResult{}, fmt.Errorf("item %q not found in inventory", input.ItemID)
 	}
@@ -167,32 +188,8 @@ func GiveItem(input GiveInput) (GiveResult, error) {
 		return GiveResult{}, fmt.Errorf("%q: none left", item.Name)
 	}
 
-	// Update giver
-	giverUpdated := make([]character.InventoryItem, len(input.GiverItems))
-	copy(giverUpdated, input.GiverItems)
-	giverUpdated[idx].Quantity--
-	if giverUpdated[idx].Quantity <= 0 {
-		giverUpdated = append(giverUpdated[:idx], giverUpdated[idx+1:]...)
-	}
-
-	// Update receiver - find existing item or add new
-	receiverUpdated := make([]character.InventoryItem, len(input.ReceiverItems))
-	copy(receiverUpdated, input.ReceiverItems)
-	found := false
-	for i := range receiverUpdated {
-		if receiverUpdated[i].ItemID == input.ItemID {
-			receiverUpdated[i].Quantity++
-			found = true
-			break
-		}
-	}
-	if !found {
-		newItem := item
-		newItem.Quantity = 1
-		newItem.Equipped = false
-		newItem.EquipSlot = ""
-		receiverUpdated = append(receiverUpdated, newItem)
-	}
+	giverUpdated := decrementItem(input.GiverItems, idx, 1)
+	receiverUpdated := addItemQuantity(input.ReceiverItems, item, 1)
 
 	msg := fmt.Sprintf("\U0001f91d **%s** gave **%s** to **%s**.", input.GiverName, item.Name, input.ReceiverName)
 
@@ -258,7 +255,8 @@ func formatItem(item character.InventoryItem, attunedSet map[string]bool) string
 		fmt.Fprintf(&b, " [%s]", item.Rarity)
 	}
 
-	if attunedSet[item.ItemID] {
+	isAttuned := attunedSet[item.ItemID]
+	if isAttuned {
 		b.WriteString(" \u2728")
 	}
 
@@ -269,7 +267,7 @@ func formatItem(item character.InventoryItem, attunedSet map[string]bool) string
 	if item.EquipSlot != "" {
 		tags = append(tags, item.EquipSlot)
 	}
-	if attunedSet[item.ItemID] {
+	if isAttuned {
 		tags = append(tags, "attuned")
 	}
 	if item.Charges > 0 || item.MaxCharges > 0 {

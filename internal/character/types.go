@@ -1,5 +1,10 @@
 package character
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
 // AbilityScores represents the six core D&D ability scores.
 type AbilityScores struct {
 	STR int `json:"str"`
@@ -94,6 +99,35 @@ type InventoryItem struct {
 	Rarity             string `json:"rarity,omitempty"`
 	Charges            int    `json:"charges,omitempty"`
 	MaxCharges         int    `json:"max_charges,omitempty"`
+}
+
+// ParseInventoryItems unmarshals a character's JSONB inventory field.
+func ParseInventoryItems(raw []byte, valid bool) ([]InventoryItem, error) {
+	if !valid || len(raw) == 0 {
+		return nil, nil
+	}
+	var items []InventoryItem
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, fmt.Errorf("parsing inventory: %w", err)
+	}
+	return items, nil
+}
+
+// ParseAttunementSlots unmarshals a character's JSONB attunement_slots field.
+func ParseAttunementSlots(raw []byte, valid bool) ([]AttunementSlot, error) {
+	if !valid || len(raw) == 0 {
+		return nil, nil
+	}
+	var slots []AttunementSlot
+	if err := json.Unmarshal(raw, &slots); err != nil {
+		return nil, fmt.Errorf("parsing attunement slots: %w", err)
+	}
+	return slots, nil
+}
+
+// MarshalInventory marshals inventory items to a NullRawMessage-compatible byte slice.
+func MarshalInventory(items []InventoryItem) ([]byte, error) {
+	return json.Marshal(items)
 }
 
 // ArmorInfo represents the armor data needed for AC calculation.
