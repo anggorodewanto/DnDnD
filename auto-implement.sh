@@ -304,7 +304,7 @@ while true; do
             echo -e "  ${DIM}After answering, tell it to continue the implement/review loop${RESET}"
             echo -e "  ${DIM}or mark the phase done if the work is complete.${RESET}"
             echo ""
-            if claude --resume "$SESSION_ID" < /dev/tty; then
+            if claude --resume "$SESSION_ID" --dangerously-skip-permissions < /dev/tty; then
                 echo ""
             else
                 echo ""
@@ -429,7 +429,7 @@ while true; do
                     echo -e "  ${DIM}Reminder: the resumed session no longer has the skill prompt.${RESET}"
                     echo -e "  ${DIM}Guide the agent to complete the remaining work, then /exit.${RESET}"
                     echo ""
-                    if claude --resume "$SESSION_ID" < /dev/tty; then
+                    if claude --resume "$SESSION_ID" --dangerously-skip-permissions < /dev/tty; then
                         echo ""
                     else
                         echo ""
