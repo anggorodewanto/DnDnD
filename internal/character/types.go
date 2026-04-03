@@ -95,8 +95,9 @@ type InventoryItem struct {
 	IsMagic            bool   `json:"is_magic"`
 	MagicBonus         int    `json:"magic_bonus,omitempty"`
 	MagicProperties    string `json:"magic_properties,omitempty"`
-	RequiresAttunement bool   `json:"requires_attunement,omitempty"`
-	Rarity             string `json:"rarity,omitempty"`
+	RequiresAttunement    bool   `json:"requires_attunement,omitempty"`
+	AttunementRestriction string `json:"attunement_restriction,omitempty"`
+	Rarity                string `json:"rarity,omitempty"`
 	Charges            int    `json:"charges,omitempty"`
 	MaxCharges         int    `json:"max_charges,omitempty"`
 	Identified         *bool  `json:"identified,omitempty"` // nil or true = identified; false = unidentified

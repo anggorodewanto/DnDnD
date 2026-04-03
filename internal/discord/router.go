@@ -102,6 +102,11 @@ func (r *CommandRouter) SetUnattuneHandler(h *UnattuneHandler) {
 	r.handlers["unattune"] = h
 }
 
+// SetEquipHandler registers the EquipHandler for the /equip command.
+func (r *CommandRouter) SetEquipHandler(h *EquipHandler) {
+	r.handlers["equip"] = h
+}
+
 // RegistrationDeps holds the optional dependencies for registration command handlers.
 // When nil, the router uses plain stub handlers for registration commands.
 type RegistrationDeps struct {

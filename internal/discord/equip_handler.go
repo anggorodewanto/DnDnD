@@ -13,27 +13,27 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// AttuneCharacterStore persists attunement slot updates.
-type AttuneCharacterStore interface {
-	UpdateCharacterAttunementSlots(ctx context.Context, arg refdata.UpdateCharacterAttunementSlotsParams) (refdata.Character, error)
+// EquipCharacterStore persists inventory updates for the equip command.
+type EquipCharacterStore interface {
+	UpdateCharacterInventory(ctx context.Context, arg refdata.UpdateCharacterInventoryParams) (refdata.Character, error)
 }
 
-// AttuneHandler handles the /attune slash command.
-type AttuneHandler struct {
+// EquipHandler handles the /equip slash command.
+type EquipHandler struct {
 	session         Session
 	campaignProv    InventoryCampaignProvider
 	characterLookup InventoryCharacterLookup
-	store           AttuneCharacterStore
+	store           EquipCharacterStore
 }
 
-// NewAttuneHandler creates a new AttuneHandler.
-func NewAttuneHandler(
+// NewEquipHandler creates a new EquipHandler.
+func NewEquipHandler(
 	session Session,
 	campaignProv InventoryCampaignProvider,
 	characterLookup InventoryCharacterLookup,
-	store AttuneCharacterStore,
-) *AttuneHandler {
-	return &AttuneHandler{
+	store EquipCharacterStore,
+) *EquipHandler {
+	return &EquipHandler{
 		session:         session,
 		campaignProv:    campaignProv,
 		characterLookup: characterLookup,
@@ -41,19 +41,25 @@ func NewAttuneHandler(
 	}
 }
 
-// Handle processes the /attune command interaction.
-func (h *AttuneHandler) Handle(interaction *discordgo.Interaction) {
+// Handle processes the /equip command interaction.
+func (h *EquipHandler) Handle(interaction *discordgo.Interaction) {
 	ctx := context.Background()
 
 	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
-	itemID := ""
+	var itemID string
+	var offhand, armor bool
 	for _, opt := range data.Options {
-		if opt.Name == "item" {
+		switch opt.Name {
+		case "item":
 			itemID = opt.StringValue()
+		case "offhand":
+			offhand = opt.BoolValue()
+		case "armor":
+			armor = opt.BoolValue()
 		}
 	}
 	if itemID == "" {
-		respondEphemeral(h.session, interaction, "Please specify an item to attune to.")
+		respondEphemeral(h.session, interaction, "Please specify an item to equip.")
 		return
 	}
 
@@ -82,45 +88,35 @@ func (h *AttuneHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	var classes []character.ClassEntry
-	if len(char.Classes) > 0 {
-		_ = json.Unmarshal(char.Classes, &classes)
-	}
-
-	// Find the item to get its attunement restriction
-	var attunementRestriction string
-	for _, item := range items {
-		if item.ItemID == itemID {
-			attunementRestriction = item.AttunementRestriction
-			break
-		}
-	}
-
-	result, err := inventory.Attune(inventory.AttuneInput{
-		Items:                 items,
-		Slots:                 slots,
-		ItemID:                itemID,
-		Classes:               classes,
-		AttunementRestriction: attunementRestriction,
+	result, err := inventory.Equip(inventory.EquipInput{
+		Items:           items,
+		ItemID:          itemID,
+		OffHand:         offhand,
+		Armor:           armor,
+		AttunementSlots: slots,
 	})
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("%v", err))
 		return
 	}
 
-	slotsJSON, err := json.Marshal(result.UpdatedSlots)
+	invJSON, err := json.Marshal(result.UpdatedItems)
 	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to save attunement changes. Please try again.")
+		respondEphemeral(h.session, interaction, "Failed to save equipment changes. Please try again.")
 		return
 	}
 
-	if _, err := h.store.UpdateCharacterAttunementSlots(ctx, refdata.UpdateCharacterAttunementSlotsParams{
-		ID:              char.ID,
-		AttunementSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+	if _, err := h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
+		ID:        char.ID,
+		Inventory: pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
 	}); err != nil {
-		respondEphemeral(h.session, interaction, "Failed to save attunement changes. Please try again.")
+		respondEphemeral(h.session, interaction, "Failed to save equipment changes. Please try again.")
 		return
 	}
 
-	respondEphemeral(h.session, interaction, result.Message)
+	msg := result.Message
+	if result.Warning != "" {
+		msg += "\n" + result.Warning
+	}
+	respondEphemeral(h.session, interaction, msg)
 }

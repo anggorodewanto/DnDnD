@@ -244,3 +244,76 @@ func TestAttuneHandler_StoreError(t *testing.T) {
 
 	assert.Contains(t, sess.lastResponse, "Failed to save")
 }
+
+func TestAttuneHandler_ClassRestrictionDenied(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "holy-avenger", Name: "Holy Avenger", Quantity: 1, Type: "weapon", IsMagic: true, RequiresAttunement: true, AttunementRestriction: "paladin"},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	slots := []character.AttunementSlot{}
+	slotsJSON, _ := json.Marshal(slots)
+
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "fighter", Level: 5}})
+
+	store := &mockAttuneStore{char: refdata.Character{ID: charID}}
+
+	handler := NewAttuneHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:              charID,
+			CampaignID:      campID,
+			Name:            "Aria",
+			Classes:         classes,
+			Inventory:       pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+			AttunementSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+		}},
+		store,
+	)
+
+	interaction := makeAttuneInteraction("guild1", "user1", "holy-avenger")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "restriction")
+}
+
+func TestAttuneHandler_ClassRestrictionAllowed(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "holy-avenger", Name: "Holy Avenger", Quantity: 1, Type: "weapon", IsMagic: true, RequiresAttunement: true, AttunementRestriction: "paladin"},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	slots := []character.AttunementSlot{}
+	slotsJSON, _ := json.Marshal(slots)
+
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "paladin", Level: 5}})
+
+	store := &mockAttuneStore{char: refdata.Character{ID: charID}}
+
+	handler := NewAttuneHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:              charID,
+			CampaignID:      campID,
+			Name:            "Aria",
+			Classes:         classes,
+			Inventory:       pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+			AttunementSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+		}},
+		store,
+	)
+
+	interaction := makeAttuneInteraction("guild1", "user1", "holy-avenger")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Attuned")
+	assert.Contains(t, sess.lastResponse, "Holy Avenger")
+}
