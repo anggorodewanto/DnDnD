@@ -758,6 +758,153 @@ func TestFormatShortRestResult_NoHealing_ShowsHPMax(t *testing.T) {
 
 // --- Short rest error invalid die type ---
 
+func TestShortRest_StudyItem_Success(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int { return 1 })
+	svc := NewService(roller)
+
+	unidentified := false
+	items := []character.InventoryItem{
+		{ItemID: "mystery-ring", Name: "Ring of Invisibility", Quantity: 1, Type: "magic_item", IsMagic: true, Identified: &unidentified},
+	}
+
+	input := ShortRestInput{
+		HPCurrent:        40,
+		HPMax:            40,
+		CONModifier:      0,
+		HitDiceRemaining: map[string]int{"d8": 5},
+		HitDiceSpend:     map[string]int{},
+		FeatureUses:      map[string]character.FeatureUse{},
+		Classes:          []character.ClassEntry{{Class: "bard", Level: 5}},
+		Inventory:        items,
+		StudyItemID:      "mystery-ring",
+	}
+
+	result, err := svc.ShortRest(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !result.ItemStudied {
+		t.Error("expected ItemStudied to be true")
+	}
+	if result.StudiedItemName != "Ring of Invisibility" {
+		t.Errorf("StudiedItemName = %q, want %q", result.StudiedItemName, "Ring of Invisibility")
+	}
+	if len(result.UpdatedInventory) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.UpdatedInventory))
+	}
+	if result.UpdatedInventory[0].Identified == nil || !*result.UpdatedInventory[0].Identified {
+		t.Error("expected studied item to be identified")
+	}
+}
+
+func TestShortRest_StudyItem_NoStudy(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int { return 1 })
+	svc := NewService(roller)
+
+	input := ShortRestInput{
+		HPCurrent:        40,
+		HPMax:            40,
+		CONModifier:      0,
+		HitDiceRemaining: map[string]int{"d8": 5},
+		HitDiceSpend:     map[string]int{},
+		FeatureUses:      map[string]character.FeatureUse{},
+		Classes:          []character.ClassEntry{{Class: "bard", Level: 5}},
+	}
+
+	result, err := svc.ShortRest(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.ItemStudied {
+		t.Error("expected ItemStudied to be false when no study item specified")
+	}
+}
+
+func TestShortRest_StudyItem_ItemNotFound(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int { return 1 })
+	svc := NewService(roller)
+
+	input := ShortRestInput{
+		HPCurrent:        40,
+		HPMax:            40,
+		CONModifier:      0,
+		HitDiceRemaining: map[string]int{"d8": 5},
+		HitDiceSpend:     map[string]int{},
+		FeatureUses:      map[string]character.FeatureUse{},
+		Classes:          []character.ClassEntry{{Class: "bard", Level: 5}},
+		Inventory:        nil,
+		StudyItemID:      "nonexistent",
+	}
+
+	_, err := svc.ShortRest(input)
+	if err == nil {
+		t.Fatal("expected error for study of non-existent item")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error should mention 'not found', got: %v", err)
+	}
+}
+
+func TestShortRest_StudyItem_NotMagic(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int { return 1 })
+	svc := NewService(roller)
+
+	items := []character.InventoryItem{
+		{ItemID: "longsword", Name: "Longsword", Quantity: 1, Type: "weapon"},
+	}
+
+	input := ShortRestInput{
+		HPCurrent:        40,
+		HPMax:            40,
+		CONModifier:      0,
+		HitDiceRemaining: map[string]int{"d8": 5},
+		HitDiceSpend:     map[string]int{},
+		FeatureUses:      map[string]character.FeatureUse{},
+		Classes:          []character.ClassEntry{{Class: "bard", Level: 5}},
+		Inventory:        items,
+		StudyItemID:      "longsword",
+	}
+
+	_, err := svc.ShortRest(input)
+	if err == nil {
+		t.Fatal("expected error for studying non-magic item")
+	}
+	if !strings.Contains(err.Error(), "not a magic item") {
+		t.Errorf("error should mention 'not a magic item', got: %v", err)
+	}
+}
+
+func TestShortRest_StudyItem_AlreadyIdentified(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int { return 1 })
+	svc := NewService(roller)
+
+	items := []character.InventoryItem{
+		{ItemID: "ring", Name: "Ring of Protection", Quantity: 1, Type: "magic_item", IsMagic: true},
+	}
+
+	input := ShortRestInput{
+		HPCurrent:        40,
+		HPMax:            40,
+		CONModifier:      0,
+		HitDiceRemaining: map[string]int{"d8": 5},
+		HitDiceSpend:     map[string]int{},
+		FeatureUses:      map[string]character.FeatureUse{},
+		Classes:          []character.ClassEntry{{Class: "bard", Level: 5}},
+		Inventory:        items,
+		StudyItemID:      "ring",
+	}
+
+	_, err := svc.ShortRest(input)
+	if err == nil {
+		t.Fatal("expected error for studying already-identified item")
+	}
+	if !strings.Contains(err.Error(), "already identified") {
+		t.Errorf("error should mention 'already identified', got: %v", err)
+	}
+}
+
 func TestShortRest_Error_InvalidDieType(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 1 })
 	svc := NewService(roller)

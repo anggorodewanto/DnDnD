@@ -37,6 +37,7 @@ func RegisterInventoryAPI(r chi.Router, invHandler *inventory.APIHandler, authMi
 		r.Post("/remove", invHandler.HandleRemoveItem)
 		r.Post("/transfer", invHandler.HandleTransferItem)
 		r.Post("/gold", invHandler.HandleSetGold)
+		r.Post("/identify", invHandler.HandleIdentifyItem)
 	})
 }
 

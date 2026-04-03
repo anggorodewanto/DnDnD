@@ -636,6 +636,154 @@ func TestHandleTransferItem_CombatLog(t *testing.T) {
 	assert.Contains(t, logged, "Gorak")
 }
 
+func TestHandleIdentifyItem_SetToTrue(t *testing.T) {
+	charID := uuid.New()
+	store := newMockStore()
+
+	unidentified := false
+	existingItems := []character.InventoryItem{
+		{ItemID: "mystery-ring", Name: "Ring of Invisibility", Quantity: 1, Type: "magic_item", IsMagic: true, Identified: &unidentified},
+	}
+	existingJSON, _ := json.Marshal(existingItems)
+	store.chars[charID] = refdata.Character{ID: charID, Name: "Aria", Inventory: pqtype.NullRawMessage{RawMessage: existingJSON, Valid: true}}
+
+	handler := NewAPIHandler(store)
+
+	body, _ := json.Marshal(IdentifyItemRequest{
+		CharacterID: charID.String(),
+		ItemID:      "mystery-ring",
+		Identified:  true,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/identify", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleIdentifyItem(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var updatedItems []character.InventoryItem
+	require.NoError(t, json.Unmarshal(store.lastInvUpdate[charID], &updatedItems))
+	require.NotNil(t, updatedItems[0].Identified)
+	assert.True(t, *updatedItems[0].Identified)
+}
+
+func TestHandleIdentifyItem_SetToFalse(t *testing.T) {
+	charID := uuid.New()
+	store := newMockStore()
+
+	existingItems := []character.InventoryItem{
+		{ItemID: "ring", Name: "Ring of Protection", Quantity: 1, Type: "magic_item", IsMagic: true},
+	}
+	existingJSON, _ := json.Marshal(existingItems)
+	store.chars[charID] = refdata.Character{ID: charID, Name: "Aria", Inventory: pqtype.NullRawMessage{RawMessage: existingJSON, Valid: true}}
+
+	handler := NewAPIHandler(store)
+
+	body, _ := json.Marshal(IdentifyItemRequest{
+		CharacterID: charID.String(),
+		ItemID:      "ring",
+		Identified:  false,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/identify", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleIdentifyItem(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var updatedItems []character.InventoryItem
+	require.NoError(t, json.Unmarshal(store.lastInvUpdate[charID], &updatedItems))
+	require.NotNil(t, updatedItems[0].Identified)
+	assert.False(t, *updatedItems[0].Identified)
+}
+
+func TestHandleIdentifyItem_InvalidBody(t *testing.T) {
+	handler := NewAPIHandler(newMockStore())
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/identify", bytes.NewReader([]byte("bad")))
+	rec := httptest.NewRecorder()
+	handler.HandleIdentifyItem(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandleIdentifyItem_InvalidCharacterID(t *testing.T) {
+	handler := NewAPIHandler(newMockStore())
+	body, _ := json.Marshal(IdentifyItemRequest{CharacterID: "bad", ItemID: "x", Identified: true})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/identify", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleIdentifyItem(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandleIdentifyItem_CharacterNotFound(t *testing.T) {
+	handler := NewAPIHandler(newMockStore())
+	body, _ := json.Marshal(IdentifyItemRequest{CharacterID: uuid.New().String(), ItemID: "x", Identified: true})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/identify", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleIdentifyItem(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestHandleIdentifyItem_NotMagic(t *testing.T) {
+	charID := uuid.New()
+	store := newMockStore()
+	existingItems := []character.InventoryItem{
+		{ItemID: "longsword", Name: "Longsword", Quantity: 1, Type: "weapon"},
+	}
+	existingJSON, _ := json.Marshal(existingItems)
+	store.chars[charID] = refdata.Character{ID: charID, Name: "Aria", Inventory: pqtype.NullRawMessage{RawMessage: existingJSON, Valid: true}}
+
+	handler := NewAPIHandler(store)
+	body, _ := json.Marshal(IdentifyItemRequest{CharacterID: charID.String(), ItemID: "longsword", Identified: false})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/identify", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleIdentifyItem(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandleIdentifyItem_CombatLog(t *testing.T) {
+	charID := uuid.New()
+	store := newMockStore()
+
+	unidentified := false
+	existingItems := []character.InventoryItem{
+		{ItemID: "mystery-ring", Name: "Ring of Invisibility", Quantity: 1, Type: "magic_item", IsMagic: true, Identified: &unidentified},
+	}
+	existingJSON, _ := json.Marshal(existingItems)
+	store.chars[charID] = refdata.Character{ID: charID, Name: "Aria", Inventory: pqtype.NullRawMessage{RawMessage: existingJSON, Valid: true}}
+
+	var logged string
+	handler := NewAPIHandler(store)
+	handler.SetCombatLogFunc(func(msg string) { logged = msg })
+
+	body, _ := json.Marshal(IdentifyItemRequest{CharacterID: charID.String(), ItemID: "mystery-ring", Identified: true})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/identify", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleIdentifyItem(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, logged, "Ring of Invisibility")
+	assert.Contains(t, logged, "Aria")
+}
+
+func TestHandleIdentifyItem_PersistError(t *testing.T) {
+	charID := uuid.New()
+	store := newMockStore()
+
+	unidentified := false
+	existingItems := []character.InventoryItem{
+		{ItemID: "ring", Name: "Ring", Quantity: 1, Type: "magic_item", IsMagic: true, Identified: &unidentified},
+	}
+	existingJSON, _ := json.Marshal(existingItems)
+	store.chars[charID] = refdata.Character{ID: charID, Name: "Aria", Inventory: pqtype.NullRawMessage{RawMessage: existingJSON, Valid: true}}
+	store.invUpdateErr = assert.AnError
+
+	handler := NewAPIHandler(store)
+	body, _ := json.Marshal(IdentifyItemRequest{CharacterID: charID.String(), ItemID: "ring", Identified: true})
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/identify", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.HandleIdentifyItem(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
 func TestHandleSetGold_CombatLog(t *testing.T) {
 	charID := uuid.New()
 	store := newMockStore()

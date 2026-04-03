@@ -9,6 +9,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ab/dndnd/internal/inventory"
 )
 
 // mockAuthMiddleware injects a fake user ID for testing.
@@ -76,6 +78,21 @@ func TestRegisterRoutes_DashboardIncludesWSScript(t *testing.T) {
 	body := rec.Body.String()
 	require.Contains(t, body, "WebSocket")
 	require.Contains(t, body, "/dashboard/ws")
+}
+
+func TestRegisterInventoryAPI_IdentifyEndpoint(t *testing.T) {
+	r := chi.NewRouter()
+	// Use a nil store — we just need to verify the route is registered (will 400 on bad body)
+	invHandler := &inventory.APIHandler{}
+	RegisterInventoryAPI(r, invHandler, mockAuthMiddleware)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/inventory/identify", strings.NewReader("{}"))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	// Should not be 404/405 — route exists. Will be 400 since body is incomplete.
+	assert.NotEqual(t, http.StatusNotFound, rec.Code)
+	assert.NotEqual(t, http.StatusMethodNotAllowed, rec.Code)
 }
 
 func TestSvelteAppStub_ContainsMountPoint(t *testing.T) {

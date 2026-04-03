@@ -72,6 +72,57 @@ type SetGoldRequest struct {
 	Gold        int    `json:"gold"`
 }
 
+// IdentifyItemRequest is the request body for identifying/hiding a magic item.
+type IdentifyItemRequest struct {
+	CharacterID string `json:"character_id"`
+	ItemID      string `json:"item_id"`
+	Identified  bool   `json:"identified"`
+}
+
+// HandleIdentifyItem handles POST /api/inventory/identify.
+// DM can set identified = true (reveal) or false (hide) on a magic item.
+func (h *APIHandler) HandleIdentifyItem(w http.ResponseWriter, r *http.Request) {
+	var req IdentifyItemRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	charID, err := uuid.Parse(req.CharacterID)
+	if err != nil {
+		http.Error(w, "invalid character_id", http.StatusBadRequest)
+		return
+	}
+
+	char, err := h.store.GetCharacter(r.Context(), charID)
+	if err != nil {
+		http.Error(w, "character not found", http.StatusNotFound)
+		return
+	}
+
+	items := parseInventoryItems(char)
+
+	result, err := SetItemIdentified(SetIdentifiedInput{
+		Items:      items,
+		ItemID:     req.ItemID,
+		Identified: req.Identified,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.persistInventory(r.Context(), charID, result.UpdatedItems); err != nil {
+		http.Error(w, "failed to update inventory", http.StatusInternalServerError)
+		return
+	}
+
+	h.logCombat(fmt.Sprintf("🔍 DM updated identification of **%s** for **%s** (identified: %v).", result.ItemName, char.Name, req.Identified))
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
 // HandleAddItem handles POST /api/inventory/add.
 func (h *APIHandler) HandleAddItem(w http.ResponseWriter, r *http.Request) {
 	var req AddItemRequest
