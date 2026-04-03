@@ -65,11 +65,6 @@
     }
   }
 
-  function onItemsSelected(items) {
-    // Items selected from ItemPicker — we need to add them to the shop
-    addSelectedItems(items);
-  }
-
   async function addSelectedItems(items) {
     if (!currentShopId) {
       // Must save shop first
@@ -110,7 +105,7 @@
     postResult = '';
     error = '';
     try {
-      const result = await postShopToDiscord(campaignId, currentShopId);
+      await postShopToDiscord(campaignId, currentShopId);
       postResult = 'Posted to #the-story!';
     } catch (e) {
       error = 'Failed to post: ' + e.message;
@@ -170,7 +165,7 @@
     </div>
 
     {#if showItemPicker}
-      <ItemPicker {campaignId} onselect={onItemsSelected} />
+      <ItemPicker {campaignId} onselect={addSelectedItems} />
     {/if}
 
     {#if shopItems.length === 0}

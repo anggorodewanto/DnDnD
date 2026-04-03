@@ -494,7 +494,7 @@
   - Depends on: Phase 15, Phase 3, Phase 6
   - Done when: Item Picker renders in dashboard, search/filter works, custom entries added, used in loot pool and shop contexts.
 
-- [ ] **Phase 87: Shops & Merchants**
+- [x] **Phase 87: Shops & Merchants**
   - Scope: DM creates named shop templates from dashboard using Item Picker. Set prices. Save as reusable templates. "Post to #the-story" sends formatted item list. Impromptu shopping handled through narration + dashboard gold/inventory adjustments.
   - Depends on: Phase 86
   - Done when: DM can create shop, post to Discord, player purchases handled via DM dashboard adjustments.

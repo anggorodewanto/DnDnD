@@ -3,7 +3,6 @@ package shops_test
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -441,8 +440,3 @@ func TestUpdateShop_StoreUpdateError(t *testing.T) {
 	_, err := svc.UpdateShop(context.Background(), shopID, "New", "")
 	assert.Error(t, err)
 }
-
-// Ensure GetCampaignByID is part of the interface but we don't use it directly
-// (it's used by the handler for Discord posting)
-
-var _ = json.RawMessage{}

@@ -329,7 +329,7 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 }
 
 // jsonOK writes a JSON success response.
-func jsonOK(w http.ResponseWriter, v interface{}) {
+func jsonOK(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
 }

@@ -85,7 +85,6 @@ func (s *Service) UpdateShop(ctx context.Context, shopID uuid.UUID, name, descri
 	if name == "" {
 		return refdata.Shop{}, ErrNameRequired
 	}
-	// Verify shop exists
 	if _, err := s.store.GetShop(ctx, shopID); err != nil {
 		return refdata.Shop{}, ErrShopNotFound
 	}

@@ -739,11 +739,6 @@ func TestAPI_CreateShop_InternalError(t *testing.T) {
 
 // --- HandleDeleteShop internal error ---
 
-func TestAPI_DeleteShop_InternalError(t *testing.T) {
-	// This would require a mock — the integration test only gets NotFound.
-	// Already covered by the service mock tests.
-}
-
 // --- getTheStoryChannelID with invalid JSON settings ---
 
 func TestAPI_PostToDiscord_NullSettings(t *testing.T) {
