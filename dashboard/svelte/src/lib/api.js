@@ -281,3 +281,30 @@ export async function getTurnQueue(encounterId) {
   const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/turn-queue`);
   return res.json();
 }
+
+// --- Item Picker API ---
+
+/**
+ * Search items across weapons, armor, and magic items.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {object} params - { q?, category? }
+ * @returns {Promise<object[]>} Array of search results.
+ */
+export async function searchItems(campaignId, { q, category } = {}) {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (category) params.set('category', category);
+  const res = await apiFetch(`/api/campaigns/${campaignId}/items/search?${params}`);
+  return res.json();
+}
+
+/**
+ * Get creature inventories for a completed encounter (loot context).
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} encounterId - Encounter UUID.
+ * @returns {Promise<object>} { creatures: [...] }
+ */
+export async function getCreatureInventories(campaignId, encounterId) {
+  const res = await apiFetch(`/api/campaigns/${campaignId}/encounters/${encounterId}/creature-inventories/`);
+  return res.json();
+}
