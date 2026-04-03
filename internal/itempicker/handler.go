@@ -47,7 +47,7 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	q := strings.ToLower(r.URL.Query().Get("q"))
 	category := r.URL.Query().Get("category")
 
-	var results []SearchResult
+	results := []SearchResult{}
 
 	if category == "" || category == "weapons" {
 		weapons, err := h.store.ListWeapons(r.Context())
@@ -117,10 +117,6 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if results == nil {
-		results = []SearchResult{}
-	}
-
 	jsonOK(w, results)
 }
 
@@ -150,7 +146,7 @@ func (h *Handler) HandleCreatureInventories(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var creatures []CreatureInventory
+	creatures := []CreatureInventory{}
 	for _, c := range combatants {
 		if !c.IsNpc || c.IsAlive || !c.CharacterID.Valid {
 			continue
@@ -161,17 +157,7 @@ func (h *Handler) HandleCreatureInventories(w http.ResponseWriter, r *http.Reque
 			continue // skip if character not found
 		}
 
-		items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
-		if err != nil {
-			// Still include creature with gold but empty items
-			creatures = append(creatures, CreatureInventory{
-				Name:  c.DisplayName,
-				Gold:  char.Gold,
-				Items: []character.InventoryItem{},
-			})
-			continue
-		}
-
+		items, _ := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
 		if items == nil {
 			items = []character.InventoryItem{}
 		}
@@ -180,10 +166,6 @@ func (h *Handler) HandleCreatureInventories(w http.ResponseWriter, r *http.Reque
 			Gold:  char.Gold,
 			Items: items,
 		})
-	}
-
-	if creatures == nil {
-		creatures = []CreatureInventory{}
 	}
 
 	jsonOK(w, CreatureInventoriesResponse{Creatures: creatures})

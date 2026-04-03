@@ -114,20 +114,8 @@
     onselect(selectedItems);
   }
 
-  function updateNarrative(index, value) {
-    selectedItems[index].narrative = value;
-    selectedItems = [...selectedItems];
-    onselect(selectedItems);
-  }
-
-  function updatePriceOverride(index, value) {
-    selectedItems[index].price_override = parseInt(value) || 0;
-    selectedItems = [...selectedItems];
-    onselect(selectedItems);
-  }
-
-  function updateQuantity(index, value) {
-    selectedItems[index].quantity = parseInt(value) || 1;
+  function updateItemField(index, field, value) {
+    selectedItems[index][field] = value;
     selectedItems = [...selectedItems];
     onselect(selectedItems);
   }
@@ -252,17 +240,17 @@
             <label>
               Qty
               <input type="number" value={item.quantity} min="1"
-                oninput={(e) => updateQuantity(index, e.target.value)} />
+                oninput={(e) => updateItemField(index, 'quantity', parseInt(e.target.value) || 1)} />
             </label>
             <label>
               Price (gp)
               <input type="number" value={item.price_override} min="0"
-                oninput={(e) => updatePriceOverride(index, e.target.value)} />
+                oninput={(e) => updateItemField(index, 'price_override', parseInt(e.target.value) || 0)} />
             </label>
             <label class="narrative-label">
               Narrative
               <input type="text" value={item.narrative} placeholder="DM flavor note..."
-                oninput={(e) => updateNarrative(index, e.target.value)} />
+                oninput={(e) => updateItemField(index, 'narrative', e.target.value)} />
             </label>
           </div>
         </div>

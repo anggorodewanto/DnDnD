@@ -489,7 +489,7 @@
   - Depends on: Phase 26b, Phase 84
   - Done when: Integration tests verify loot pool creation, player claiming, single-claim enforcement, gold splitting.
 
-- [ ] **Phase 86: Item Picker (Dashboard Component)**
+- [x] **Phase 86: Item Picker (Dashboard Component)**
   - Scope: Shared dashboard component for item selection: search across SRD + homebrew, category filters, creature inventory source (for loot context), narrative description field, custom entry (freeform name/desc/quantity/gold), price override.
   - Depends on: Phase 15, Phase 3, Phase 6
   - Done when: Item Picker renders in dashboard, search/filter works, custom entries added, used in loot pool and shop contexts.
