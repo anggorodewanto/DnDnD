@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"database/sql"
 	"errors"
 
 	"github.com/go-chi/chi/v5"
@@ -517,5 +516,3 @@ func TestHandleSearch_UnknownCategory_ReturnsEmpty(t *testing.T) {
 	assert.Len(t, results, 0)
 }
 
-// Ensure unused imports are satisfied.
-var _ = sql.NullString{}

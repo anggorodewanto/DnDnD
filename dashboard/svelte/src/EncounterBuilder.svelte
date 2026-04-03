@@ -11,6 +11,7 @@
     terrainByGid,
     getWalls,
   } from './lib/mapdata.js';
+  import ItemPicker from './ItemPicker.svelte';
 
   let { campaignId, encounterId = null, onback } = $props();
 
@@ -42,6 +43,14 @@
   // Drag state for placing creatures
   let draggingCreature = $state(null);
   let dragPreviewPos = $state(null);
+
+  // Loot panel state
+  let showLootPanel = $state(false);
+  let lootItems = $state([]);
+
+  function onLootSelect(items) {
+    lootItems = items;
+  }
 
   // Short ID counter per creature type
   let shortIdCounters = $state({});
@@ -435,6 +444,19 @@
             <p class="no-results">No creatures added yet.</p>
           {/if}
         </div>
+
+        <div class="loot-section">
+          <button class="loot-toggle" onclick={() => showLootPanel = !showLootPanel}>
+            {showLootPanel ? 'Hide' : 'Show'} Loot Picker ({lootItems.length} items)
+          </button>
+          {#if showLootPanel}
+            <ItemPicker
+              {campaignId}
+              encounterId={savedEncounterId}
+              onselect={onLootSelect}
+            />
+          {/if}
+        </div>
       </div>
 
       <!-- Right panel: Map with creature placement -->
@@ -726,6 +748,28 @@
     font-size: 0.85rem;
     font-style: italic;
     padding: 0.5rem 0;
+  }
+
+  .loot-section {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    padding: 1rem;
+  }
+
+  .loot-toggle {
+    width: 100%;
+    padding: 0.5rem 1rem;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+
+  .loot-toggle:hover {
+    background: #0f3460;
   }
 
   .error {

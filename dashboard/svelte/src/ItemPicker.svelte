@@ -8,6 +8,8 @@
    *   encounterID {string|null} — encounter UUID (enables creature inventory tab)
    *   onselect {function} — callback receiving the selected items array
    */
+  import { searchItems, getCreatureInventories } from '$lib/api.js';
+
   let {
     campaignId = '',
     encounterId = null,
@@ -28,12 +30,10 @@
   async function fetchItems() {
     loading = true;
     try {
-      const params = new URLSearchParams();
-      if (searchQuery) params.set('q', searchQuery);
-      if (category) params.set('category', category);
-      const res = await fetch(`/api/campaigns/${campaignId}/items/search?${params}`);
-      if (!res.ok) throw new Error('Search failed');
-      searchResults = await res.json();
+      const opts = {};
+      if (searchQuery) opts.q = searchQuery;
+      if (category) opts.category = category;
+      searchResults = await searchItems(campaignId, opts);
     } catch (e) {
       console.error('Item search failed:', e);
       searchResults = [];
@@ -45,9 +45,7 @@
   async function fetchCreatureInventories() {
     if (!encounterId) return;
     try {
-      const res = await fetch(`/api/campaigns/${campaignId}/encounters/${encounterId}/creature-inventories/`);
-      if (!res.ok) throw new Error('Failed to load creature inventories');
-      const data = await res.json();
+      const data = await getCreatureInventories(campaignId, encounterId);
       creatureInventories = data.creatures || [];
     } catch (e) {
       console.error('Creature inventory fetch failed:', e);
