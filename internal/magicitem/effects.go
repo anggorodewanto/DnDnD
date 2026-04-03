@@ -8,52 +8,34 @@ import (
 	"github.com/ab/dndnd/internal/combat"
 )
 
-// ItemFeatures converts a magic inventory item's bonuses and passive effects
-// into FeatureDefinition structs for the Feature Effect System.
-// Returns nil for non-magic or unequipped items.
+// ItemFeatures converts a magic inventory item's MagicBonus into
+// FeatureDefinition structs for the Feature Effect System.
+// Returns nil for non-magic, unequipped, or zero-bonus items.
 func ItemFeatures(item character.InventoryItem) []combat.FeatureDefinition {
-	if !item.IsMagic || !item.Equipped {
+	if !item.IsMagic || !item.Equipped || item.MagicBonus == 0 {
 		return nil
 	}
 
-	var features []combat.FeatureDefinition
-
-	if item.MagicBonus > 0 {
-		f := combat.FeatureDefinition{
-			Name:   item.Name,
-			Source: "magic_item",
+	var effects []combat.Effect
+	switch item.Type {
+	case "weapon":
+		effects = []combat.Effect{
+			{Type: combat.EffectModifyAttackRoll, Trigger: combat.TriggerOnAttackRoll, Modifier: item.MagicBonus},
+			{Type: combat.EffectModifyDamageRoll, Trigger: combat.TriggerOnDamageRoll, Modifier: item.MagicBonus},
 		}
-
-		switch item.Type {
-		case "weapon":
-			f.Effects = []combat.Effect{
-				{
-					Type:     combat.EffectModifyAttackRoll,
-					Trigger:  combat.TriggerOnAttackRoll,
-					Modifier: item.MagicBonus,
-				},
-				{
-					Type:     combat.EffectModifyDamageRoll,
-					Trigger:  combat.TriggerOnDamageRoll,
-					Modifier: item.MagicBonus,
-				},
-			}
-		case "armor":
-			f.Effects = []combat.Effect{
-				{
-					Type:     combat.EffectModifyAC,
-					Trigger:  combat.TriggerOnAttackRoll,
-					Modifier: item.MagicBonus,
-				},
-			}
+	case "armor":
+		effects = []combat.Effect{
+			{Type: combat.EffectModifyAC, Trigger: combat.TriggerOnAttackRoll, Modifier: item.MagicBonus},
 		}
-
-		if len(f.Effects) > 0 {
-			features = append(features, f)
-		}
+	default:
+		return nil
 	}
 
-	return features
+	return []combat.FeatureDefinition{{
+		Name:    item.Name,
+		Source:  "magic_item",
+		Effects: effects,
+	}}
 }
 
 // CollectItemFeatures gathers FeatureDefinitions from all equipped magic items.

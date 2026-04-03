@@ -499,7 +499,7 @@
   - Depends on: Phase 86
   - Done when: DM can create shop, post to Discord, player purchases handled via DM dashboard adjustments.
 
-- [ ] **Phase 88a: Magic Items — Tracking, Bonuses & Passive Effects**
+- [x] **Phase 88a: Magic Items — Tracking, Bonuses & Passive Effects**
   - Scope: Magic item tracking in inventory (is_magic, magic_bonus, magic_properties, requires_attunement, rarity). Bonus weapons/armor: auto-apply +N to attack/damage/AC via Feature Effect System. Passive effects (Cloak of Protection, Ring of Resistance, etc.) via Feature Effect System vocabulary. `/inventory` display with rarity and attunement status.
   - Depends on: Phase 44, Phase 84
   - Done when: Integration tests verify magic bonus application to attacks/damage/AC, passive effect registration, inventory display with rarity.

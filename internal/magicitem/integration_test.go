@@ -1,6 +1,7 @@
 package magicitem_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,6 +10,7 @@ import (
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/magicitem"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -207,21 +209,26 @@ func TestIntegration_FormatInventoryShowsRarityAndAttunement(t *testing.T) {
 			Equipped:           true,
 			Quantity:           1,
 		},
+		{
+			ItemID:     "longsword-plus-1",
+			Name:       "+1 Longsword",
+			Type:       "weapon",
+			IsMagic:    true,
+			MagicBonus: 1,
+			Rarity:     "uncommon",
+			Equipped:   true,
+			Quantity:   1,
+		},
 	}
 	attunement := []character.AttunementSlot{
 		{ItemID: "cloak-of-protection", Name: "Cloak of Protection"},
 	}
 
-	// This test verifies that FormatInventory already shows rarity and attunement.
-	// It's imported from the inventory package, so we just verify the data structures are correct.
-	_ = items
-	_ = attunement
+	output := inventory.FormatInventory("Aria", 23, items, attunement)
 
-	// The FormatInventory function in inventory/service.go already displays:
-	// - [rarity] for items with rarity set
-	// - ✨ for attuned items
-	// - (attuned) tag
-	// This was verified by reading the code — FormatInventory already handles this.
-	assert.Equal(t, "uncommon", items[0].Rarity)
-	assert.True(t, items[0].IsMagic)
+	assert.True(t, strings.Contains(output, "[uncommon]"), "should show rarity in brackets")
+	assert.True(t, strings.Contains(output, "✨"), "should show attunement sparkle")
+	assert.True(t, strings.Contains(output, "attuned"), "should show attuned tag")
+	assert.True(t, strings.Contains(output, "Cloak of Protection"), "should show item name")
+	assert.True(t, strings.Contains(output, "+1 Longsword"), "should show magic weapon")
 }
