@@ -105,6 +105,16 @@ UPDATE characters SET inventory = $2, gold = $3, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateCharacterAttunementSlots :one
+UPDATE characters SET attunement_slots = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateCharacterAttunementAndInventory :one
+UPDATE characters SET attunement_slots = $2, inventory = $3, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteCharacter :exec
 DELETE FROM characters WHERE id = $1;
 

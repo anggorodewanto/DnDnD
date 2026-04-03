@@ -237,11 +237,21 @@ func FormatInventory(charName string, gold int32, items []character.InventoryIte
 	return b.String()
 }
 
+// isUnidentified returns true if an item is explicitly marked as unidentified.
+func isUnidentified(item character.InventoryItem) bool {
+	return item.Identified != nil && !*item.Identified
+}
+
 // formatItem produces the display string for a single inventory item.
 func formatItem(item character.InventoryItem, attunedSet map[string]bool) string {
 	// Consumables and ammunition always show quantity only
 	if item.Type == TypeConsumable || item.Type == TypeAmmunition {
 		return fmt.Sprintf("%s \u00d7%d", item.Name, item.Quantity)
+	}
+
+	// Unidentified magic items show generic description
+	if isUnidentified(item) {
+		return fmt.Sprintf("Unidentified %s", item.Type)
 	}
 
 	if item.Quantity > 1 {

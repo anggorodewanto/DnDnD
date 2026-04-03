@@ -295,6 +295,38 @@ func TestGiveItem_NoneLeft(t *testing.T) {
 	assert.Contains(t, err.Error(), "none left")
 }
 
+func TestFormatInventory_UnidentifiedItem(t *testing.T) {
+	identified := true
+	unidentified := false
+	items := []character.InventoryItem{
+		{ItemID: "mystery-sword", Name: "Flame Tongue", Quantity: 1, Type: "weapon", IsMagic: true, Identified: &unidentified},
+		{ItemID: "cloak-of-protection", Name: "Cloak of Protection", Quantity: 1, Type: "magic_item", IsMagic: true, Identified: &identified},
+		{ItemID: "longsword", Name: "Longsword", Quantity: 1, Type: "weapon"},
+	}
+
+	result := FormatInventory("Aria", 10, items, nil)
+
+	// Unidentified magic item should show as "Unidentified weapon"
+	assert.Contains(t, result, "Unidentified weapon")
+	assert.NotContains(t, result, "Flame Tongue")
+
+	// Identified items show normally
+	assert.Contains(t, result, "Cloak of Protection")
+
+	// Non-magic items with nil Identified show normally
+	assert.Contains(t, result, "Longsword")
+}
+
+func TestFormatInventory_UnidentifiedItemNilMeansIdentified(t *testing.T) {
+	items := []character.InventoryItem{
+		{ItemID: "cloak-of-protection", Name: "Cloak of Protection", Quantity: 1, Type: "magic_item", IsMagic: true},
+	}
+
+	result := FormatInventory("Aria", 10, items, nil)
+	// nil Identified means identified by default
+	assert.Contains(t, result, "Cloak of Protection")
+}
+
 func TestUseConsumable_Antitoxin(t *testing.T) {
 	svc := NewService(nil)
 

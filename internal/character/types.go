@@ -99,6 +99,7 @@ type InventoryItem struct {
 	Rarity             string `json:"rarity,omitempty"`
 	Charges            int    `json:"charges,omitempty"`
 	MaxCharges         int    `json:"max_charges,omitempty"`
+	Identified         *bool  `json:"identified,omitempty"` // nil or true = identified; false = unidentified
 }
 
 // ParseInventoryItems unmarshals a character's JSONB inventory field.
@@ -128,6 +129,11 @@ func ParseAttunementSlots(raw []byte, valid bool) ([]AttunementSlot, error) {
 // MarshalInventory marshals inventory items to a NullRawMessage-compatible byte slice.
 func MarshalInventory(items []InventoryItem) ([]byte, error) {
 	return json.Marshal(items)
+}
+
+// MarshalAttunementSlots marshals attunement slots to a NullRawMessage-compatible byte slice.
+func MarshalAttunementSlots(slots []AttunementSlot) ([]byte, error) {
+	return json.Marshal(slots)
 }
 
 // ArmorInfo represents the armor data needed for AC calculation.
