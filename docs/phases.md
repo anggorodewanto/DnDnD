@@ -484,7 +484,7 @@
   - Done when: Integration tests verify inventory display, consumable use, give flow, gold tracking, DM management.
   - Note: Combat-time resource costs (`/use` costs action/bonus action in combat, `/give` costs free object interaction or action in combat, `/give` adjacency check in combat) and `potion_bonus_action` campaign setting are deferred to the combat-items integration phase.
 
-- [ ] **Phase 85: Looting System**
+- [x] **Phase 85: Looting System**
   - Scope: Post-combat loot pool: DM populates via dashboard (auto-populate from defeated creatures + Item Picker). Gold auto-summed. Narrative descriptions on items. `/loot`: players claim items via Discord buttons. Single-claim enforcement. "Split Gold" from dashboard. Unclaimed items persist. Posted to `#combat-log`.
   - Depends on: Phase 26b, Phase 84
   - Done when: Integration tests verify loot pool creation, player claiming, single-claim enforcement, gold splitting.
