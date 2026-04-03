@@ -6,6 +6,7 @@ import (
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/inventory"
 )
 
 // Service handles rest logic (short and long rests).
@@ -132,57 +133,22 @@ func (s *Service) ShortRest(input ShortRestInput) (ShortRestResult, error) {
 
 	// Study a magic item during the rest (optional)
 	if input.StudyItemID != "" {
-		studyResult, err := studyItem(input.Inventory, input.StudyItemID)
+		identResult, err := inventory.StudyItemDuringRest(inventory.IdentifyInput{
+			Items:  input.Inventory,
+			ItemID: input.StudyItemID,
+		})
 		if err != nil {
 			return ShortRestResult{}, err
 		}
 		result.ItemStudied = true
-		result.StudiedItemName = studyResult.itemName
-		result.UpdatedInventory = studyResult.updatedItems
+		result.StudiedItemName = identResult.ItemName
+		result.UpdatedInventory = identResult.UpdatedItems
 	}
 
 	result.HPAfter = hp
 	result.HPHealed = hp - input.HPCurrent
 
 	return result, nil
-}
-
-type studyResult struct {
-	itemName     string
-	updatedItems []character.InventoryItem
-}
-
-// studyItem identifies a magic item during a short rest.
-func studyItem(items []character.InventoryItem, itemID string) (studyResult, error) {
-	idx := -1
-	for i, item := range items {
-		if item.ItemID == itemID {
-			idx = i
-			break
-		}
-	}
-	if idx == -1 {
-		return studyResult{}, fmt.Errorf("item %q not found in inventory", itemID)
-	}
-
-	item := items[idx]
-	if !item.IsMagic {
-		return studyResult{}, fmt.Errorf("%q is not a magic item", item.Name)
-	}
-
-	if item.Identified == nil || *item.Identified {
-		return studyResult{}, fmt.Errorf("%q is already identified", item.Name)
-	}
-
-	updated := make([]character.InventoryItem, len(items))
-	copy(updated, items)
-	identified := true
-	updated[idx].Identified = &identified
-
-	return studyResult{
-		itemName:     item.Name,
-		updatedItems: updated,
-	}, nil
 }
 
 // LongRestInput holds parameters for a long rest.

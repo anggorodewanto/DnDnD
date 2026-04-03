@@ -30,6 +30,10 @@ func FormatShortRestResult(charName string, result ShortRestResult) string {
 		fmt.Fprintf(&b, "> Pact magic slots restored to %d\n", result.PactSlotsCurrent)
 	}
 
+	if result.ItemStudied {
+		fmt.Fprintf(&b, "> Identified **%s** during rest\n", result.StudiedItemName)
+	}
+
 	return b.String()
 }
 
