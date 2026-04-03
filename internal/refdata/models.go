@@ -399,6 +399,28 @@ type Session struct {
 	ExpiresAt      time.Time    `json:"expires_at"`
 }
 
+type Shop struct {
+	ID          uuid.UUID `json:"id"`
+	CampaignID  uuid.UUID `json:"campaign_id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type ShopItem struct {
+	ID          uuid.UUID `json:"id"`
+	ShopID      uuid.UUID `json:"shop_id"`
+	ItemID      string    `json:"item_id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	PriceGp     int32     `json:"price_gp"`
+	Quantity    int32     `json:"quantity"`
+	Type        string    `json:"type"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 type Spell struct {
 	ID                  string                `json:"id"`
 	Name                string                `json:"name"`

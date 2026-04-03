@@ -4,10 +4,13 @@
   import EncounterBuilder from './EncounterBuilder.svelte';
   import EncounterList from './EncounterList.svelte';
   import TurnBuilder from './TurnBuilder.svelte';
+  import ShopList from './ShopList.svelte';
+  import ShopBuilder from './ShopBuilder.svelte';
 
   let currentView = $state('list');
   let editingMapId = $state(null);
   let editingEncounterId = $state(null);
+  let editingShopId = $state(null);
   let turnBuilderEncounterId = $state(null);
   let turnBuilderCombatantId = $state(null);
   let turnBuilderCombatantName = $state(null);
@@ -20,6 +23,8 @@
     if (hash === '#encounters') return 'encounter-list';
     if (hash === '#encounter-new') return 'encounter-editor';
     if (hash.startsWith('#turn-builder')) return 'turn-builder';
+    if (hash === '#shops') return 'shop-list';
+    if (hash === '#shop-new') return 'shop-editor';
     return 'list';
   }
 
@@ -76,12 +81,33 @@
     turnBuilderCombatantId = null;
     turnBuilderCombatantName = null;
   }
+
+  function onShowShops() {
+    currentView = 'shop-list';
+  }
+
+  function onCreateShop() {
+    editingShopId = null;
+    currentView = 'shop-editor';
+  }
+
+  function onEditShop(id) {
+    editingShopId = id;
+    currentView = 'shop-editor';
+  }
+
+  function onBackFromShop() {
+    currentView = 'shop-list';
+    editingShopId = null;
+  }
 </script>
 
 <main>
   <header>
     {#if currentView === 'list' || currentView === 'editor'}
       <h1>Map Editor</h1>
+    {:else if currentView === 'shop-list' || currentView === 'shop-editor'}
+      <h1>Shops & Merchants</h1>
     {:else}
       <h1>Encounter Builder</h1>
     {/if}
@@ -90,6 +116,7 @@
       <button class:active={currentView === 'list' || currentView === 'editor'} onclick={onShowMaps}>Maps</button>
       <button class:active={currentView === 'encounter-list' || currentView === 'encounter-editor'} onclick={onShowEncounters}>Encounters</button>
       <button class:active={currentView === 'turn-builder'} onclick={() => currentView = 'turn-builder'}>Turn Builder</button>
+      <button class:active={currentView === 'shop-list' || currentView === 'shop-editor'} onclick={onShowShops}>Shops</button>
     </nav>
 
     {#if currentView === 'editor'}
@@ -97,6 +124,9 @@
     {/if}
     {#if currentView === 'encounter-editor'}
       <button class="back-btn" onclick={onBackFromEncounter}>Back to Encounter List</button>
+    {/if}
+    {#if currentView === 'shop-editor'}
+      <button class="back-btn" onclick={onBackFromShop}>Back to Shop List</button>
     {/if}
   </header>
 
@@ -115,6 +145,10 @@
       combatantName={turnBuilderCombatantName}
       onclose={onCloseTurnBuilder}
     />
+  {:else if currentView === 'shop-list'}
+    <ShopList {campaignId} oncreate={onCreateShop} onedit={onEditShop} />
+  {:else if currentView === 'shop-editor'}
+    <ShopBuilder {campaignId} shopId={editingShopId} onback={onBackFromShop} />
   {/if}
 </main>
 

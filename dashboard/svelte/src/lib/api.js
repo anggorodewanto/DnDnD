@@ -308,3 +308,111 @@ export async function getCreatureInventories(campaignId, encounterId) {
   const res = await apiFetch(`/api/campaigns/${campaignId}/encounters/${encounterId}/creature-inventories/`);
   return res.json();
 }
+
+// --- Shops API ---
+
+/**
+ * List shops for a campaign.
+ * @param {string} campaignId - Campaign UUID.
+ * @returns {Promise<object[]>} Array of shops.
+ */
+export async function listShops(campaignId) {
+  const res = await apiFetch(`/api/campaigns/${campaignId}/shops`);
+  return res.json();
+}
+
+/**
+ * Create a new shop.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {object} params - { name, description }
+ * @returns {Promise<object>} The created shop.
+ */
+export async function createShop(campaignId, params) {
+  const res = await apiFetch(`/api/campaigns/${campaignId}/shops`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  return res.json();
+}
+
+/**
+ * Get a shop with its items.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} shopId - Shop UUID.
+ * @returns {Promise<object>} { shop, items }
+ */
+export async function getShop(campaignId, shopId) {
+  const res = await apiFetch(`/api/campaigns/${campaignId}/shops/${shopId}`);
+  return res.json();
+}
+
+/**
+ * Update a shop.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} shopId - Shop UUID.
+ * @param {object} params - { name, description }
+ * @returns {Promise<object>} The updated shop.
+ */
+export async function updateShop(campaignId, shopId, params) {
+  const res = await apiFetch(`/api/campaigns/${campaignId}/shops/${shopId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  return res.json();
+}
+
+/**
+ * Delete a shop.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} shopId - Shop UUID.
+ * @returns {Promise<void>}
+ */
+export async function deleteShop(campaignId, shopId) {
+  await apiFetch(`/api/campaigns/${campaignId}/shops/${shopId}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Add an item to a shop.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} shopId - Shop UUID.
+ * @param {object} params - { item_id, name, description, price_gp, quantity, type }
+ * @returns {Promise<object>} The created shop item.
+ */
+export async function addShopItem(campaignId, shopId, params) {
+  const res = await apiFetch(`/api/campaigns/${campaignId}/shops/${shopId}/items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  return res.json();
+}
+
+/**
+ * Remove an item from a shop.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} shopId - Shop UUID.
+ * @param {string} itemId - Item UUID.
+ * @returns {Promise<void>}
+ */
+export async function removeShopItem(campaignId, shopId, itemId) {
+  await apiFetch(`/api/campaigns/${campaignId}/shops/${shopId}/items/${itemId}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Post a shop to Discord's #the-story channel.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} shopId - Shop UUID.
+ * @returns {Promise<object>} { status, message }
+ */
+export async function postShopToDiscord(campaignId, shopId) {
+  const res = await apiFetch(`/api/campaigns/${campaignId}/shops/${shopId}/post`, {
+    method: 'POST',
+  });
+  return res.json();
+}
