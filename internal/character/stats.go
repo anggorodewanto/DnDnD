@@ -51,7 +51,9 @@ func CalculateHP(classes []ClassEntry, hitDice map[string]string, scores Ability
 // If formula is set and no armor, evaluates formula (Unarmored Defense).
 // If armor is equipped, formula is ignored (Unarmored Defense doesn't apply).
 // Shield adds +2 in all cases.
-func CalculateAC(scores AbilityScores, armor *ArmorInfo, hasShield bool, acFormula string) int {
+// magicACBonus is an optional variadic parameter for magic item AC bonuses
+// computed via the Feature Effect System.
+func CalculateAC(scores AbilityScores, armor *ArmorInfo, hasShield bool, acFormula string, magicACBonus ...int) int {
 	ac := calculateArmorAC(scores, armor)
 
 	if armor == nil && acFormula != "" {
@@ -61,6 +63,11 @@ func CalculateAC(scores AbilityScores, armor *ArmorInfo, hasShield bool, acFormu
 	if hasShield {
 		ac += 2
 	}
+
+	for _, bonus := range magicACBonus {
+		ac += bonus
+	}
+
 	return ac
 }
 

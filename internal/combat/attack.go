@@ -328,6 +328,7 @@ type AttackInput struct {
 	TargetHidden        bool // Target is hidden (not visible)
 	AttackerObscurement ObscurementLevel // Effective obscurement for attacker
 	TargetObscurement   ObscurementLevel // Effective obscurement for target
+	Features            []FeatureDefinition // Feature Effect System definitions (magic items, etc.)
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -448,6 +449,18 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	dmgMod := DamageModifier(input.Scores, input.Weapon, input.MonkLevel)
 	if input.OverrideDmgMod != nil {
 		dmgMod = *input.OverrideDmgMod
+	}
+
+	// Apply Feature Effect System bonuses (magic items, etc.)
+	if len(input.Features) > 0 {
+		attackCtx := BuildAttackEffectContext(AttackEffectInput{
+			Weapon: input.Weapon,
+		})
+		atkResult := ProcessEffects(input.Features, TriggerOnAttackRoll, attackCtx)
+		atkMod += atkResult.FlatModifier
+
+		dmgResult := ProcessEffects(input.Features, TriggerOnDamageRoll, attackCtx)
+		dmgMod += dmgResult.FlatModifier
 	}
 
 	// GWM / Sharpshooter: -5 to hit, +10 to damage

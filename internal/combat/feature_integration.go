@@ -259,8 +259,9 @@ func PackTacticsFeature() FeatureDefinition {
 
 // BuildFeatureDefinitions converts character classes and features into a slice
 // of FeatureDefinition for the effect processor. It maps mechanical_effect strings
-// to their corresponding feature definitions.
-func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeature) []FeatureDefinition {
+// to their corresponding feature definitions. Additional extra definitions (e.g.
+// from magic items via magicitem.CollectItemFeatures) are appended if provided.
+func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeature, extraDefs ...[]FeatureDefinition) []FeatureDefinition {
 	var defs []FeatureDefinition
 
 	rogueLevel := classLevel(classes, "Rogue")
@@ -304,6 +305,11 @@ func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeatu
 				defs = append(defs, UnarmoredMovementFeature(max(monkLevel, 2)))
 			}
 		}
+	}
+
+	// Merge extra feature definitions (e.g. magic items)
+	for _, extra := range extraDefs {
+		defs = append(defs, extra...)
 	}
 
 	return defs
