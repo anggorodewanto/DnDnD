@@ -206,7 +206,7 @@ func (h *APIHandler) HandleTransferItem(w http.ResponseWriter, r *http.Request) 
 	}
 
 	fromItems = decrementItem(fromItems, idx, qty)
-	toItems = addItemQuantity(toItems, item, qty)
+	toItems = AddItemQuantity(toItems, item, qty)
 
 	// Persist both inventories atomically
 	fromInvJSON, err := character.MarshalInventory(fromItems)

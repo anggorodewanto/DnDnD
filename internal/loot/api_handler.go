@@ -3,6 +3,7 @@ package loot
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -34,6 +35,22 @@ func (h *APIHandler) logCombat(msg string) {
 	}
 }
 
+// resolvePool parses the encounterID URL param and fetches the associated loot pool.
+// Returns the pool result and true on success, or writes an error response and returns false.
+func (h *APIHandler) resolvePool(w http.ResponseWriter, r *http.Request) (LootPoolResult, bool) {
+	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		jsonError(w, "invalid encounter_id", http.StatusBadRequest)
+		return LootPoolResult{}, false
+	}
+	result, err := h.svc.GetLootPool(r.Context(), encounterID)
+	if err != nil {
+		jsonError(w, "loot pool not found", http.StatusNotFound)
+		return LootPoolResult{}, false
+	}
+	return result, true
+}
+
 // jsonError writes a JSON error response.
 func jsonError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
@@ -49,18 +66,10 @@ func jsonOK(w http.ResponseWriter, v interface{}) {
 
 // HandleGetLootPool handles GET /api/campaigns/:id/encounters/:eid/loot.
 func (h *APIHandler) HandleGetLootPool(w http.ResponseWriter, r *http.Request) {
-	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
-	if err != nil {
-		jsonError(w, "invalid encounter_id", http.StatusBadRequest)
+	result, ok := h.resolvePool(w, r)
+	if !ok {
 		return
 	}
-
-	result, err := h.svc.GetLootPool(r.Context(), encounterID)
-	if err != nil {
-		jsonError(w, "loot pool not found", http.StatusNotFound)
-		return
-	}
-
 	jsonOK(w, result)
 }
 
@@ -74,10 +83,10 @@ func (h *APIHandler) HandleCreateLootPool(w http.ResponseWriter, r *http.Request
 
 	result, err := h.svc.CreateLootPool(r.Context(), encounterID)
 	if err != nil {
-		switch err {
-		case ErrEncounterNotCompleted:
+		switch {
+		case errors.Is(err, ErrEncounterNotCompleted):
 			jsonError(w, err.Error(), http.StatusBadRequest)
-		case ErrPoolAlreadyExists:
+		case errors.Is(err, ErrPoolAlreadyExists):
 			jsonError(w, err.Error(), http.StatusConflict)
 		default:
 			jsonError(w, "failed to create loot pool", http.StatusInternalServerError)
@@ -105,9 +114,8 @@ type AddItemRequest struct {
 
 // HandleAddItem handles POST /api/campaigns/:id/encounters/:eid/loot/items.
 func (h *APIHandler) HandleAddItem(w http.ResponseWriter, r *http.Request) {
-	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
-	if err != nil {
-		jsonError(w, "invalid encounter_id", http.StatusBadRequest)
+	result, ok := h.resolvePool(w, r)
+	if !ok {
 		return
 	}
 
@@ -128,13 +136,7 @@ func (h *APIHandler) HandleAddItem(w http.ResponseWriter, r *http.Request) {
 		req.Type = "other"
 	}
 
-	pool, err := h.svc.GetLootPool(r.Context(), encounterID)
-	if err != nil {
-		jsonError(w, "loot pool not found", http.StatusNotFound)
-		return
-	}
-
-	item, err := h.svc.AddItem(r.Context(), pool.Pool.ID, refdata.CreateLootPoolItemParams{
+	item, err := h.svc.AddItem(r.Context(), result.Pool.ID, refdata.CreateLootPoolItemParams{
 		ItemID:             sql.NullString{String: req.ItemID, Valid: req.ItemID != ""},
 		Name:               req.Name,
 		Description:        req.Description,
@@ -157,25 +159,18 @@ func (h *APIHandler) HandleAddItem(w http.ResponseWriter, r *http.Request) {
 
 // HandleRemoveItem handles DELETE /api/campaigns/:id/encounters/:eid/loot/items/:itemID.
 func (h *APIHandler) HandleRemoveItem(w http.ResponseWriter, r *http.Request) {
-	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
-	if err != nil {
-		jsonError(w, "invalid encounter_id", http.StatusBadRequest)
-		return
-	}
-
 	itemID, err := uuid.Parse(chi.URLParam(r, "itemID"))
 	if err != nil {
 		jsonError(w, "invalid item_id", http.StatusBadRequest)
 		return
 	}
 
-	pool, err := h.svc.GetLootPool(r.Context(), encounterID)
-	if err != nil {
-		jsonError(w, "loot pool not found", http.StatusNotFound)
+	result, ok := h.resolvePool(w, r)
+	if !ok {
 		return
 	}
 
-	if err := h.svc.RemoveItem(r.Context(), pool.Pool.ID, itemID); err != nil {
+	if err := h.svc.RemoveItem(r.Context(), result.Pool.ID, itemID); err != nil {
 		jsonError(w, "failed to remove item", http.StatusInternalServerError)
 		return
 	}
@@ -190,19 +185,12 @@ type SetGoldRequest struct {
 
 // HandleSplitGold handles POST /api/campaigns/:id/encounters/:eid/loot/split-gold.
 func (h *APIHandler) HandleSplitGold(w http.ResponseWriter, r *http.Request) {
-	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
-	if err != nil {
-		jsonError(w, "invalid encounter_id", http.StatusBadRequest)
+	result, ok := h.resolvePool(w, r)
+	if !ok {
 		return
 	}
 
-	pool, err := h.svc.GetLootPool(r.Context(), encounterID)
-	if err != nil {
-		jsonError(w, "loot pool not found", http.StatusNotFound)
-		return
-	}
-
-	share, err := h.svc.SplitGold(r.Context(), pool.Pool.ID)
+	share, err := h.svc.SplitGold(r.Context(), result.Pool.ID)
 	if err != nil {
 		jsonError(w, fmt.Sprintf("failed to split gold: %v", err), http.StatusInternalServerError)
 		return
@@ -214,15 +202,8 @@ func (h *APIHandler) HandleSplitGold(w http.ResponseWriter, r *http.Request) {
 
 // HandlePostAnnouncement handles POST /api/campaigns/:id/encounters/:eid/loot/post.
 func (h *APIHandler) HandlePostAnnouncement(w http.ResponseWriter, r *http.Request) {
-	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
-	if err != nil {
-		jsonError(w, "invalid encounter_id", http.StatusBadRequest)
-		return
-	}
-
-	result, err := h.svc.GetLootPool(r.Context(), encounterID)
-	if err != nil {
-		jsonError(w, "loot pool not found", http.StatusNotFound)
+	result, ok := h.resolvePool(w, r)
+	if !ok {
 		return
 	}
 
@@ -234,25 +215,18 @@ func (h *APIHandler) HandlePostAnnouncement(w http.ResponseWriter, r *http.Reque
 
 // HandleSetGold handles PUT for gold updates on the loot pool.
 func (h *APIHandler) HandleSetGold(w http.ResponseWriter, r *http.Request) {
-	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
-	if err != nil {
-		jsonError(w, "invalid encounter_id", http.StatusBadRequest)
-		return
-	}
-
 	var req SetGoldRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	pool, err := h.svc.GetLootPool(r.Context(), encounterID)
-	if err != nil {
-		jsonError(w, "loot pool not found", http.StatusNotFound)
+	result, ok := h.resolvePool(w, r)
+	if !ok {
 		return
 	}
 
-	updated, err := h.svc.SetGold(r.Context(), pool.Pool.ID, int32(req.Gold))
+	updated, err := h.svc.SetGold(r.Context(), result.Pool.ID, int32(req.Gold))
 	if err != nil {
 		jsonError(w, "failed to set gold", http.StatusInternalServerError)
 		return
@@ -263,19 +237,12 @@ func (h *APIHandler) HandleSetGold(w http.ResponseWriter, r *http.Request) {
 
 // HandleClearPool handles DELETE /api/campaigns/:id/encounters/:eid/loot.
 func (h *APIHandler) HandleClearPool(w http.ResponseWriter, r *http.Request) {
-	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
-	if err != nil {
-		jsonError(w, "invalid encounter_id", http.StatusBadRequest)
+	result, ok := h.resolvePool(w, r)
+	if !ok {
 		return
 	}
 
-	pool, err := h.svc.GetLootPool(r.Context(), encounterID)
-	if err != nil {
-		jsonError(w, "loot pool not found", http.StatusNotFound)
-		return
-	}
-
-	if err := h.svc.ClearPool(r.Context(), pool.Pool.ID); err != nil {
+	if err := h.svc.ClearPool(r.Context(), result.Pool.ID); err != nil {
 		jsonError(w, "failed to clear pool", http.StatusInternalServerError)
 		return
 	}

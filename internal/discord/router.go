@@ -265,24 +265,9 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 	// Loot claim button callbacks
 	if r.lootHandler != nil {
 		if strings.HasPrefix(customID, "loot_claim:") {
-			parts := strings.SplitN(customID, ":", 4)
-			if len(parts) != 4 {
-				respondEphemeral(r.bot.session, interaction, "Invalid loot claim data.")
-				return
-			}
-			poolID, err := uuid.Parse(parts[1])
+			poolID, itemID, characterID, err := ParseLootClaimData(customID)
 			if err != nil {
-				respondEphemeral(r.bot.session, interaction, "Invalid pool ID.")
-				return
-			}
-			itemID, err := uuid.Parse(parts[2])
-			if err != nil {
-				respondEphemeral(r.bot.session, interaction, "Invalid item ID.")
-				return
-			}
-			characterID, err := uuid.Parse(parts[3])
-			if err != nil {
-				respondEphemeral(r.bot.session, interaction, "Invalid character ID.")
+				respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Invalid loot claim data: %v", err))
 				return
 			}
 			r.lootHandler.HandleLootClaim(interaction, poolID, itemID, characterID)

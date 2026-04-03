@@ -141,6 +141,27 @@ func (h *LootHandler) Handle(interaction *discordgo.Interaction) {
 	})
 }
 
+// ParseLootClaimData parses a "loot_claim:poolID:itemID:characterID" custom ID.
+func ParseLootClaimData(customID string) (poolID, itemID, characterID uuid.UUID, err error) {
+	parts := strings.SplitN(customID, ":", 4)
+	if len(parts) != 4 {
+		return uuid.Nil, uuid.Nil, uuid.Nil, fmt.Errorf("expected 4 parts, got %d", len(parts))
+	}
+	poolID, err = uuid.Parse(parts[1])
+	if err != nil {
+		return uuid.Nil, uuid.Nil, uuid.Nil, fmt.Errorf("invalid pool ID: %w", err)
+	}
+	itemID, err = uuid.Parse(parts[2])
+	if err != nil {
+		return uuid.Nil, uuid.Nil, uuid.Nil, fmt.Errorf("invalid item ID: %w", err)
+	}
+	characterID, err = uuid.Parse(parts[3])
+	if err != nil {
+		return uuid.Nil, uuid.Nil, uuid.Nil, fmt.Errorf("invalid character ID: %w", err)
+	}
+	return poolID, itemID, characterID, nil
+}
+
 // HandleLootClaim processes a loot claim button click.
 func (h *LootHandler) HandleLootClaim(interaction *discordgo.Interaction, poolID, itemID, characterID uuid.UUID) {
 	ctx := context.Background()

@@ -54,9 +54,9 @@ func decrementItem(items []character.InventoryItem, idx int, qty int) []characte
 	return updated
 }
 
-// addItemQuantity adds qty of the item (by ID) to a slice, either incrementing existing or appending.
+// AddItemQuantity adds qty of the item (by ID) to a slice, either incrementing existing or appending.
 // source provides the item metadata when adding a new entry.
-func addItemQuantity(items []character.InventoryItem, source character.InventoryItem, qty int) []character.InventoryItem {
+func AddItemQuantity(items []character.InventoryItem, source character.InventoryItem, qty int) []character.InventoryItem {
 	updated := make([]character.InventoryItem, len(items))
 	copy(updated, items)
 	idx := findItemIndex(updated, source.ItemID)
@@ -189,7 +189,7 @@ func GiveItem(input GiveInput) (GiveResult, error) {
 	}
 
 	giverUpdated := decrementItem(input.GiverItems, idx, 1)
-	receiverUpdated := addItemQuantity(input.ReceiverItems, item, 1)
+	receiverUpdated := AddItemQuantity(input.ReceiverItems, item, 1)
 
 	msg := fmt.Sprintf("\U0001f91d **%s** gave **%s** to **%s**.", input.GiverName, item.Name, input.ReceiverName)
 

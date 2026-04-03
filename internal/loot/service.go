@@ -11,6 +11,7 @@ import (
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -214,18 +215,7 @@ func (s *Service) ClaimItem(ctx context.Context, poolID uuid.UUID, itemID uuid.U
 		Rarity:             claimed.Rarity,
 	}
 
-	// Check if item already exists in inventory
-	found := false
-	for i, existing := range items {
-		if existing.ItemID == newItem.ItemID && newItem.ItemID != "" {
-			items[i].Quantity += newItem.Quantity
-			found = true
-			break
-		}
-	}
-	if !found {
-		items = append(items, newItem)
-	}
+	items = inventory.AddItemQuantity(items, newItem, newItem.Quantity)
 
 	invJSON, err := character.MarshalInventory(items)
 	if err != nil {
