@@ -19,31 +19,42 @@ type IdentifyResult struct {
 	Message      string
 }
 
-// IdentifyItem sets identified = true on the specified inventory item.
-func IdentifyItem(input IdentifyInput) (IdentifyResult, error) {
-	idx := findItemIndex(input.Items, input.ItemID)
+// identifyUnidentifiedItem validates that the item exists, is magic, and is unidentified,
+// then returns a copy of the inventory with that item marked as identified.
+func identifyUnidentifiedItem(items []character.InventoryItem, itemID string) ([]character.InventoryItem, string, error) {
+	idx := findItemIndex(items, itemID)
 	if idx == -1 {
-		return IdentifyResult{}, fmt.Errorf("item %q not found in inventory", input.ItemID)
+		return nil, "", fmt.Errorf("item %q not found in inventory", itemID)
 	}
 
-	item := input.Items[idx]
+	item := items[idx]
 	if !item.IsMagic {
-		return IdentifyResult{}, fmt.Errorf("%q is not a magic item", item.Name)
+		return nil, "", fmt.Errorf("%q is not a magic item", item.Name)
 	}
 
 	if !isUnidentified(item) {
-		return IdentifyResult{}, fmt.Errorf("%q is already identified", item.Name)
+		return nil, "", fmt.Errorf("%q is already identified", item.Name)
 	}
 
-	updated := make([]character.InventoryItem, len(input.Items))
-	copy(updated, input.Items)
+	updated := make([]character.InventoryItem, len(items))
+	copy(updated, items)
 	identified := true
 	updated[idx].Identified = &identified
 
+	return updated, item.Name, nil
+}
+
+// IdentifyItem sets identified = true on the specified inventory item.
+func IdentifyItem(input IdentifyInput) (IdentifyResult, error) {
+	updated, name, err := identifyUnidentifiedItem(input.Items, input.ItemID)
+	if err != nil {
+		return IdentifyResult{}, err
+	}
+
 	return IdentifyResult{
 		UpdatedItems: updated,
-		ItemName:     item.Name,
-		Message:      fmt.Sprintf("🔍 **%s** has been identified!", item.Name),
+		ItemName:     name,
+		Message:      fmt.Sprintf("🔍 **%s** has been identified!", name),
 	}, nil
 }
 
@@ -79,24 +90,10 @@ func CastIdentify(input CastIdentifyInput) (CastIdentifyResult, error) {
 		}
 	}
 
-	idx := findItemIndex(input.Items, input.ItemID)
-	if idx == -1 {
-		return CastIdentifyResult{}, fmt.Errorf("item %q not found in inventory", input.ItemID)
+	updated, name, err := identifyUnidentifiedItem(input.Items, input.ItemID)
+	if err != nil {
+		return CastIdentifyResult{}, err
 	}
-
-	item := input.Items[idx]
-	if !item.IsMagic {
-		return CastIdentifyResult{}, fmt.Errorf("%q is not a magic item", item.Name)
-	}
-
-	if !isUnidentified(item) {
-		return CastIdentifyResult{}, fmt.Errorf("%q is already identified", item.Name)
-	}
-
-	updated := make([]character.InventoryItem, len(input.Items))
-	copy(updated, input.Items)
-	identified := true
-	updated[idx].Identified = &identified
 
 	slotsRemaining := 0
 	if !input.IsRitual {
@@ -105,39 +102,25 @@ func CastIdentify(input CastIdentifyInput) (CastIdentifyResult, error) {
 
 	return CastIdentifyResult{
 		UpdatedItems:   updated,
-		ItemName:       item.Name,
+		ItemName:       name,
 		SlotsRemaining: slotsRemaining,
 		IsRitual:       input.IsRitual,
-		Message:        fmt.Sprintf("✨ Cast **Identify** on **%s** — its properties are now revealed!", item.Name),
+		Message:        fmt.Sprintf("✨ Cast **Identify** on **%s** — its properties are now revealed!", name),
 	}, nil
 }
 
 // StudyItemDuringRest identifies a magic item during a short rest (1-hour study).
 // This is an alternative to the Identify spell per D&D 5e SRD.
 func StudyItemDuringRest(input IdentifyInput) (IdentifyResult, error) {
-	idx := findItemIndex(input.Items, input.ItemID)
-	if idx == -1 {
-		return IdentifyResult{}, fmt.Errorf("item %q not found in inventory", input.ItemID)
+	updated, name, err := identifyUnidentifiedItem(input.Items, input.ItemID)
+	if err != nil {
+		return IdentifyResult{}, err
 	}
-
-	item := input.Items[idx]
-	if !item.IsMagic {
-		return IdentifyResult{}, fmt.Errorf("%q is not a magic item", item.Name)
-	}
-
-	if !isUnidentified(item) {
-		return IdentifyResult{}, fmt.Errorf("%q is already identified", item.Name)
-	}
-
-	updated := make([]character.InventoryItem, len(input.Items))
-	copy(updated, input.Items)
-	identified := true
-	updated[idx].Identified = &identified
 
 	return IdentifyResult{
 		UpdatedItems: updated,
-		ItemName:     item.Name,
-		Message:      fmt.Sprintf("📖 You studied **%s** during your short rest and identified its properties!", item.Name),
+		ItemName:     name,
+		Message:      fmt.Sprintf("📖 You studied **%s** during your short rest and identified its properties!", name),
 	}, nil
 }
 

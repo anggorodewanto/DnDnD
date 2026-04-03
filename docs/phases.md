@@ -509,7 +509,7 @@
   - Depends on: Phase 88a
   - Done when: Integration tests verify active ability charges, recharge rolls, attunement limits and restrictions, unattuned suppression, unidentified item display.
 
-- [ ] **Phase 88c: Magic Items — Identification Flow**
+- [x] **Phase 88c: Magic Items — Identification Flow**
   - Scope: `/cast identify` sets `identified: true` on a target item (consumes spell slot or material component per SRD). `/cast detect-magic` reveals magical aura on nearby items. Short rest study (1 hour) as alternative identification method. DM dashboard endpoint to reveal/identify items. DM can set `identified: false` when assigning items.
   - Depends on: Phase 88b
   - Done when: Integration tests verify `/cast identify` identification, short rest study, DM dashboard reveal endpoint, unidentified→identified transitions.
