@@ -255,6 +255,35 @@ type Feat struct {
 	UpdatedAt        time.Time             `json:"updated_at"`
 }
 
+type LootPool struct {
+	ID          uuid.UUID `json:"id"`
+	EncounterID uuid.UUID `json:"encounter_id"`
+	CampaignID  uuid.UUID `json:"campaign_id"`
+	GoldTotal   int32     `json:"gold_total"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type LootPoolItem struct {
+	ID                 uuid.UUID      `json:"id"`
+	LootPoolID         uuid.UUID      `json:"loot_pool_id"`
+	ItemID             sql.NullString `json:"item_id"`
+	Name               string         `json:"name"`
+	Description        string         `json:"description"`
+	Quantity           int32          `json:"quantity"`
+	Type               string         `json:"type"`
+	ClaimedBy          uuid.NullUUID  `json:"claimed_by"`
+	ClaimedAt          sql.NullTime   `json:"claimed_at"`
+	IsMagic            bool           `json:"is_magic"`
+	MagicBonus         int32          `json:"magic_bonus"`
+	MagicProperties    string         `json:"magic_properties"`
+	RequiresAttunement bool           `json:"requires_attunement"`
+	Rarity             string         `json:"rarity"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+}
+
 type MagicItem struct {
 	ID                    string                `json:"id"`
 	CampaignID            uuid.NullUUID         `json:"campaign_id"`

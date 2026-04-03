@@ -21,6 +21,7 @@ type CommandRouter struct {
 	flyHandler  *FlyHandler
 	doneHandler *DoneHandler
 	restHandler *RestHandler
+	lootHandler *LootHandler
 }
 
 // SetMoveHandler registers the MoveHandler for button callback routing.
@@ -83,6 +84,12 @@ func (r *CommandRouter) SetGiveHandler(h *GiveHandler) {
 func (r *CommandRouter) SetRestHandler(h *RestHandler) {
 	r.handlers["rest"] = h
 	r.restHandler = h
+}
+
+// SetLootHandler registers the LootHandler for the /loot command and component callbacks.
+func (r *CommandRouter) SetLootHandler(h *LootHandler) {
+	r.handlers["loot"] = h
+	r.lootHandler = h
 }
 
 // RegistrationDeps holds the optional dependencies for registration command handlers.
@@ -251,6 +258,34 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 	if r.restHandler != nil {
 		if strings.HasPrefix(customID, hitDicePrefix+":") {
 			r.restHandler.HandleHitDiceComponent(interaction)
+			return
+		}
+	}
+
+	// Loot claim button callbacks
+	if r.lootHandler != nil {
+		if strings.HasPrefix(customID, "loot_claim:") {
+			parts := strings.SplitN(customID, ":", 4)
+			if len(parts) != 4 {
+				respondEphemeral(r.bot.session, interaction, "Invalid loot claim data.")
+				return
+			}
+			poolID, err := uuid.Parse(parts[1])
+			if err != nil {
+				respondEphemeral(r.bot.session, interaction, "Invalid pool ID.")
+				return
+			}
+			itemID, err := uuid.Parse(parts[2])
+			if err != nil {
+				respondEphemeral(r.bot.session, interaction, "Invalid item ID.")
+				return
+			}
+			characterID, err := uuid.Parse(parts[3])
+			if err != nil {
+				respondEphemeral(r.bot.session, interaction, "Invalid character ID.")
+				return
+			}
+			r.lootHandler.HandleLootClaim(interaction, poolID, itemID, characterID)
 			return
 		}
 	}
