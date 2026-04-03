@@ -45,16 +45,12 @@ func Attune(input AttuneInput) (AttuneResult, error) {
 		return AttuneResult{}, fmt.Errorf("%q does not require attunement", item.Name)
 	}
 
-	for _, slot := range input.Slots {
-		if slot.ItemID == input.ItemID {
-			return AttuneResult{}, fmt.Errorf("already attuned to %q", item.Name)
-		}
+	if isAttuned(input.Slots, input.ItemID) {
+		return AttuneResult{}, fmt.Errorf("already attuned to %q", item.Name)
 	}
 
-	if input.AttunementRestriction != "" {
-		if !meetsClassRestriction(input.Classes, input.AttunementRestriction) {
-			return AttuneResult{}, fmt.Errorf("attunement restriction not met: requires %s", input.AttunementRestriction)
-		}
+	if input.AttunementRestriction != "" && !meetsClassRestriction(input.Classes, input.AttunementRestriction) {
+		return AttuneResult{}, fmt.Errorf("attunement restriction not met: requires %s", input.AttunementRestriction)
 	}
 
 	updated := make([]character.AttunementSlot, len(input.Slots))

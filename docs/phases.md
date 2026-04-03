@@ -504,10 +504,15 @@
   - Depends on: Phase 44, Phase 84
   - Done when: Integration tests verify magic bonus application to attacks/damage/AC, passive effect registration, inventory display with rarity.
 
-- [ ] **Phase 88b: Magic Items — Active Abilities, Attunement & Identification**
-  - Scope: Active abilities (Wand of Fireballs: charges, spell casting from item). Recharge at dawn (roll recharge_dice, destroy_on_zero). Charge tracking and deduction. `/attune` (short rest, max 3, class/alignment restriction check). `/unattune`. Unattuned item warning (effects suppressed). Identifying (identified flag, `/cast identify` or short rest study). Unidentified items show generic description.
+- [x] **Phase 88b: Magic Items — Active Abilities, Attunement & Identification**
+  - Scope: Active abilities (Wand of Fireballs: charges, spell casting from item). Recharge at dawn (roll recharge_dice, destroy_on_zero). Charge tracking and deduction. `/attune` (short rest, max 3, class/alignment restriction check). `/unattune`. Unattuned item warning (effects suppressed). Unidentified items show generic description via `identified` flag on inventory items.
   - Depends on: Phase 88a
-  - Done when: Integration tests verify active ability charges, recharge rolls, attunement limits and restrictions, identification flow, unattuned suppression.
+  - Done when: Integration tests verify active ability charges, recharge rolls, attunement limits and restrictions, unattuned suppression, unidentified item display.
+
+- [ ] **Phase 88c: Magic Items — Identification Flow**
+  - Scope: `/cast identify` sets `identified: true` on a target item (consumes spell slot or material component per SRD). `/cast detect-magic` reveals magical aura on nearby items. Short rest study (1 hour) as alternative identification method. DM dashboard endpoint to reveal/identify items. DM can set `identified: false` when assigning items.
+  - Depends on: Phase 88b
+  - Done when: Integration tests verify `/cast identify` identification, short rest study, DM dashboard reveal endpoint, unidentified→identified transitions.
 
 - [ ] **Phase 89: Character Leveling**
   - Scope: Milestone only (no XP). DM edits class level in dashboard. Auto-recalculate: total level, HP, proficiency bonus, spell slots (multiclass table), attacks per action. Subclass selection at threshold. ASI/Feat selection: interactive prompt in Discord (buttons for +2/+1+1/Feat), select menu for scores or feats (with prerequisite check), DM approval via #dm-queue. Feat effects applied via Feature Effect System. Level-up notifications (public + private detail).

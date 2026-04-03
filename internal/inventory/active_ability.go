@@ -40,17 +40,8 @@ func UseCharges(input UseChargesInput) (UseChargesResult, error) {
 		return UseChargesResult{}, fmt.Errorf("%q has no charges", item.Name)
 	}
 
-	if item.RequiresAttunement {
-		attuned := false
-		for _, slot := range input.Attunement {
-			if slot.ItemID == input.ItemID {
-				attuned = true
-				break
-			}
-		}
-		if !attuned {
-			return UseChargesResult{}, fmt.Errorf("%q requires attunement to use its abilities", item.Name)
-		}
+	if item.RequiresAttunement && !isAttuned(input.Attunement, input.ItemID) {
+		return UseChargesResult{}, fmt.Errorf("%q requires attunement to use its abilities", item.Name)
 	}
 
 	if input.Amount > item.Charges {
