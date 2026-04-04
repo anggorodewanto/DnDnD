@@ -25,6 +25,7 @@ var SidebarNav = []NavEntry{
 	{Label: "Asset Library", Icon: "🖼️", Path: "/dashboard/assets"},
 	{Label: "Map Editor", Icon: "🗺️", Path: "/dashboard/map"},
 	{Label: "Character Overview", Icon: "👤", Path: "/dashboard/characters"},
+	{Label: "Create Character", Icon: "➕", Path: "/dashboard/characters/new"},
 }
 
 // CampaignHomeData holds the data for the Campaign Home view.
