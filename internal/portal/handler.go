@@ -18,11 +18,11 @@ type TokenValidator interface {
 
 // Handler serves the player portal pages.
 type Handler struct {
-	logger        *slog.Logger
-	validator     TokenValidator
-	landingTmpl   *template.Template
-	createTmpl    *template.Template
-	errorTmpl     *template.Template
+	logger      *slog.Logger
+	validator   TokenValidator
+	landingTmpl *template.Template
+	createTmpl  *template.Template
+	errorTmpl   *template.Template
 }
 
 // NewHandler creates a new portal Handler.
@@ -67,16 +67,7 @@ func (h *Handler) ServeLanding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := LandingData{UserID: userID}
-	var buf bytes.Buffer
-	if err := h.landingTmpl.Execute(&buf, data); err != nil {
-		h.logger.Error("failed to render landing template", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(buf.Bytes())
+	h.render(w, h.landingTmpl, LandingData{UserID: userID})
 }
 
 // CreateData holds data for the character builder page.
@@ -111,21 +102,11 @@ func (h *Handler) ServeCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := CreateData{
+	h.render(w, h.createTmpl, CreateData{
 		Token:      tok.Token,
 		CampaignID: tok.CampaignID.String(),
 		UserID:     tok.DiscordUserID,
-	}
-
-	var buf bytes.Buffer
-	if err := h.createTmpl.Execute(&buf, data); err != nil {
-		h.logger.Error("failed to render create template", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(buf.Bytes())
+	})
 }
 
 func (h *Handler) handleTokenError(w http.ResponseWriter, err error) {
@@ -152,16 +133,27 @@ type ErrorData struct {
 }
 
 func (h *Handler) renderError(w http.ResponseWriter, status int, title, message string) {
-	data := ErrorData{Title: title, Message: message}
+	h.renderWithStatus(w, status, h.errorTmpl, ErrorData{Title: title, Message: message})
+}
+
+// render executes a template into a buffer and writes the response with 200 OK.
+func (h *Handler) render(w http.ResponseWriter, tmpl *template.Template, data any) {
+	h.renderWithStatus(w, http.StatusOK, tmpl, data)
+}
+
+// renderWithStatus executes a template into a buffer and writes the response with the given status.
+func (h *Handler) renderWithStatus(w http.ResponseWriter, status int, tmpl *template.Template, data any) {
 	var buf bytes.Buffer
-	if err := h.errorTmpl.Execute(&buf, data); err != nil {
-		h.logger.Error("failed to render error template", "error", err)
+	if err := tmpl.Execute(&buf, data); err != nil {
+		h.logger.Error("failed to render template", "template", tmpl.Name(), "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
+	if status != http.StatusOK {
+		w.WriteHeader(status)
+	}
 	w.Write(buf.Bytes())
 }
 

@@ -529,7 +529,7 @@
   - Depends on: Phase 7, Phase 14
   - Done when: Integration tests verify import parsing, validation warnings, preview, approval flow, re-sync diff.
 
-- [ ] **Phase 91a: Player Portal — Auth & Scaffold**
+- [x] **Phase 91a: Player Portal — Auth & Scaffold**
   - Scope: Player portal web app scaffold: Discord OAuth2 authentication (reuse Phase 10 OAuth flow), session validation, one-time link generation from `/create-character` (24h expiry, single-use token), link validation and landing page. Portal shell layout (header, navigation, responsive).
   - Depends on: Phase 10
   - Done when: OAuth2 login works for player portal, one-time links generated and validated, expired/used links rejected, portal shell renders.
