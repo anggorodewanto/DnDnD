@@ -71,9 +71,23 @@ func CalculateLevelUp(
 // asiLevels are the standard class levels that grant an ASI.
 var asiLevels = map[int]bool{4: true, 8: true, 12: true, 16: true, 19: true}
 
+// extraASILevels maps class IDs to their additional ASI levels beyond the standard ones.
+// Fighter gets extra ASI at 6 and 14; Rogue gets extra ASI at 10.
+var extraASILevels = map[string]map[int]bool{
+	"fighter": {6: true, 14: true},
+	"rogue":   {10: true},
+}
+
 // IsASILevel returns true if the given class level grants an ASI/Feat choice.
-func IsASILevel(classLevel int) bool {
-	return asiLevels[classLevel]
+// classID is used to check for class-specific extra ASI levels (e.g. Fighter 6/14, Rogue 10).
+func IsASILevel(classID string, classLevel int) bool {
+	if asiLevels[classLevel] {
+		return true
+	}
+	if extras, ok := extraASILevels[classID]; ok {
+		return extras[classLevel]
+	}
+	return false
 }
 
 // NeedsSubclassSelection returns true if the class level has reached or passed

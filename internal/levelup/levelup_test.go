@@ -2,6 +2,7 @@ package levelup
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
@@ -75,21 +76,41 @@ func TestCalculateLevelUp_MulticlassWizardPaladin(t *testing.T) {
 
 func TestIsASILevel(t *testing.T) {
 	tests := []struct {
-		level int
-		want  bool
+		name    string
+		classID string
+		level   int
+		want    bool
 	}{
-		{1, false}, {2, false}, {3, false},
-		{4, true}, {5, false}, {6, false}, {7, false},
-		{8, true}, {9, false}, {10, false}, {11, false},
-		{12, true}, {13, false}, {14, false}, {15, false},
-		{16, true}, {17, false}, {18, false},
-		{19, true}, {20, false},
+		// Standard ASI levels for generic class
+		{"generic_1", "", 1, false},
+		{"generic_4", "", 4, true},
+		{"generic_6", "", 6, false},
+		{"generic_8", "", 8, true},
+		{"generic_10", "", 10, false},
+		{"generic_12", "", 12, true},
+		{"generic_14", "", 14, false},
+		{"generic_16", "", 16, true},
+		{"generic_19", "", 19, true},
+		{"generic_20", "", 20, false},
+		// Fighter gets extra ASI at 6 and 14
+		{"fighter_4", "fighter", 4, true},
+		{"fighter_6", "fighter", 6, true},
+		{"fighter_8", "fighter", 8, true},
+		{"fighter_14", "fighter", 14, true},
+		{"fighter_5", "fighter", 5, false},
+		// Rogue gets extra ASI at 10
+		{"rogue_4", "rogue", 4, true},
+		{"rogue_10", "rogue", 10, true},
+		{"rogue_9", "rogue", 9, false},
+		{"rogue_14", "rogue", 14, false},
 	}
 	for _, tt := range tests {
-		got := IsASILevel(tt.level)
-		if got != tt.want {
-			t.Errorf("IsASILevel(%d) = %v, want %v", tt.level, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsASILevel(tt.classID, tt.level)
+			if got != tt.want {
+				t.Errorf("IsASILevel(%q, %d) = %v, want %v", tt.classID, tt.level, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -344,6 +365,30 @@ func TestCheckFeatPrerequisites_AbilityOr_NoneMet(t *testing.T) {
 	}
 }
 
+func TestApplyASI_Plus1Plus1_Ability2AtCap(t *testing.T) {
+	scores := character.AbilityScores{STR: 16, DEX: 20, CON: 14, INT: 10, WIS: 12, CHA: 8}
+	_, err := ApplyASI(scores, ASIChoice{
+		Type:     ASIPlus1Plus1,
+		Ability:  "str",
+		Ability2: "dex",
+	})
+	if err == nil {
+		t.Error("expected error for ability2 already at 20")
+	}
+}
+
+func TestApplyASI_Plus1Plus1_Ability2Invalid(t *testing.T) {
+	scores := character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}
+	_, err := ApplyASI(scores, ASIChoice{
+		Type:     ASIPlus1Plus1,
+		Ability:  "str",
+		Ability2: "xyz",
+	})
+	if err == nil {
+		t.Error("expected error for invalid ability2 name")
+	}
+}
+
 func TestApplyASI_UnsupportedType(t *testing.T) {
 	scores := character.AbilityScores{STR: 16}
 	_, err := ApplyASI(scores, ASIChoice{Type: "unknown"})
@@ -400,7 +445,7 @@ func TestMaxAttacksPerAction_NoEntries(t *testing.T) {
 
 func TestFormatASIDeniedMessage(t *testing.T) {
 	msg := FormatASIDeniedMessage("Aria", "Choose STR instead")
-	if !containsStr(msg, "Aria") || !containsStr(msg, "Choose STR") {
+	if !strings.Contains(msg, "Aria") || !strings.Contains(msg, "Choose STR") {
 		t.Errorf("unexpected message: %s", msg)
 	}
 }

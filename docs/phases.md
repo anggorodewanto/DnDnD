@@ -519,6 +519,11 @@
   - Depends on: Phase 7, Phase 4, Phase 44
   - Done when: Integration tests verify level-up stat recalculation, ASI/feat prompt flow, DM approval, feat effect application, notifications.
 
+- [ ] **Phase 89d: Discord Interactive Components for ASI/Feat Selection**
+  - Scope: Implement discordgo button and select-menu components for the ASI/Feat interactive prompt. Players choose +2/+1+1/Feat via buttons, then select abilities or feats via select menus. DM approval via #dm-queue with approve/deny buttons. Replace the text-based notification flow with interactive components.
+  - Depends on: Phase 89, Phase 9a
+  - Done when: Integration tests verify button interactions, select menu selections, DM approval/denial via interactive components.
+
 - [ ] **Phase 90: D&D Beyond Import**
   - Scope: `/import <ddb-url>`: fetch from DDB character API, parse DDB JSON into internal format (ability scores, features, equipment, spells, HP, AC). Ephemeral preview. DM approval queue. Structural + advisory validation (warnings for rule issues). Re-sync for updates (diff + DM review). Exponential backoff for rate limiting.
   - Depends on: Phase 7, Phase 14

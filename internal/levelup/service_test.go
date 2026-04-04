@@ -130,7 +130,7 @@ func TestService_ApplyLevelUp_BasicFighter(t *testing.T) {
 
 	svc := NewService(charStore, classStore, notifier)
 
-	err := svc.ApplyLevelUp(context.Background(), charID, "fighter", 6)
+	_, err := svc.ApplyLevelUp(context.Background(), charID, "fighter", 6)
 	if err != nil {
 		t.Fatalf("ApplyLevelUp error: %v", err)
 	}
@@ -148,8 +148,9 @@ func TestService_ApplyLevelUp_BasicFighter(t *testing.T) {
 	if len(notifier.publicMessages) != 1 {
 		t.Errorf("public messages = %d, want 1", len(notifier.publicMessages))
 	}
-	if len(notifier.privateMessages) != 1 {
-		t.Errorf("private messages = %d, want 1", len(notifier.privateMessages))
+	// Fighter level 6 is an extra ASI level, so we get level-up + ASI prompt = 2 private messages
+	if len(notifier.privateMessages) != 2 {
+		t.Errorf("private messages = %d, want 2 (level-up detail + ASI prompt for fighter 6)", len(notifier.privateMessages))
 	}
 }
 
@@ -182,7 +183,7 @@ func TestService_ApplyLevelUp_ASILevel(t *testing.T) {
 
 	svc := NewService(charStore, classStore, notifier)
 
-	err := svc.ApplyLevelUp(context.Background(), charID, "fighter", 4)
+	_, err := svc.ApplyLevelUp(context.Background(), charID, "fighter", 4)
 	if err != nil {
 		t.Fatalf("ApplyLevelUp error: %v", err)
 	}
@@ -236,7 +237,7 @@ func TestService_ApplyLevelUp_NewMulticlass(t *testing.T) {
 	svc := NewService(charStore, classStore, notifier)
 
 	// Add cleric level 1 (multiclass)
-	err := svc.ApplyLevelUp(context.Background(), charID, "cleric", 1)
+	_, err := svc.ApplyLevelUp(context.Background(), charID, "cleric", 1)
 	if err != nil {
 		t.Fatalf("ApplyLevelUp error: %v", err)
 	}
@@ -276,7 +277,7 @@ func TestService_ApplyLevelUp_InvalidClass(t *testing.T) {
 
 	svc := NewService(charStore, classStore, notifier)
 
-	err := svc.ApplyLevelUp(context.Background(), charID, "nonexistent", 6)
+	_, err := svc.ApplyLevelUp(context.Background(), charID, "nonexistent", 6)
 	if err == nil {
 		t.Error("expected error for nonexistent class")
 	}
@@ -530,7 +531,7 @@ func TestService_ApplyLevelUp_WithSpellcasting(t *testing.T) {
 
 	svc := NewService(charStore, classStore, notifier)
 
-	err := svc.ApplyLevelUp(context.Background(), charID, "wizard", 5)
+	_, err := svc.ApplyLevelUp(context.Background(), charID, "wizard", 5)
 	if err != nil {
 		t.Fatalf("ApplyLevelUp error: %v", err)
 	}
@@ -538,6 +539,79 @@ func TestService_ApplyLevelUp_WithSpellcasting(t *testing.T) {
 	updated := charStore.chars[charID]
 	if updated.Level != 5 {
 		t.Errorf("Level = %d, want 5", updated.Level)
+	}
+}
+
+// mockErrorNotifier returns errors from all Send methods.
+type mockErrorNotifier struct{}
+
+func (m *mockErrorNotifier) SendPublicLevelUp(ctx context.Context, characterName string, newLevel int) error {
+	return fmt.Errorf("public notification failed")
+}
+func (m *mockErrorNotifier) SendPrivateLevelUp(ctx context.Context, discordUserID string, details LevelUpDetails) error {
+	return fmt.Errorf("private notification failed")
+}
+func (m *mockErrorNotifier) SendASIPrompt(ctx context.Context, discordUserID string, characterID uuid.UUID, characterName string) error {
+	return fmt.Errorf("ASI prompt failed")
+}
+func (m *mockErrorNotifier) SendASIDenied(ctx context.Context, discordUserID string, characterName string, reason string) error {
+	return fmt.Errorf("ASI denied notification failed")
+}
+
+func TestService_ApplyLevelUp_NotificationErrorsDoNotFail(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+
+	classes := []character.ClassEntry{{Class: "fighter", Level: 3}}
+	classesJSON, _ := json.Marshal(classes)
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:               charID,
+		Name:             "Errata",
+		DiscordUserID:    "user999",
+		Level:            3,
+		HPMax:            28,
+		HPCurrent:        28,
+		ProficiencyBonus: 2,
+		Classes:          classesJSON,
+		AbilityScores:    mustJSON(t, character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}),
+	}
+
+	classStore.classes["fighter"] = &ClassRefData{
+		HitDie:           "d10",
+		AttacksPerAction: map[int]int{1: 1, 5: 2},
+		SubclassLevel:    3,
+	}
+
+	svc := NewService(charStore, classStore, &mockErrorNotifier{})
+
+	// Level 4 triggers ASI prompt too, all 3 notifications will error but ApplyLevelUp should succeed
+	details, err := svc.ApplyLevelUp(context.Background(), charID, "fighter", 4)
+	if err != nil {
+		t.Fatalf("ApplyLevelUp should not fail when notifications error: %v", err)
+	}
+	if details.NewLevel != 4 {
+		t.Errorf("NewLevel = %d, want 4", details.NewLevel)
+	}
+}
+
+func TestService_DenyASI_NotificationErrorsDoNotFail(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Errata",
+		DiscordUserID: "user999",
+	}
+
+	svc := NewService(charStore, classStore, &mockErrorNotifier{})
+
+	err := svc.DenyASI(context.Background(), charID, "bad choice")
+	if err != nil {
+		t.Fatalf("DenyASI should not fail when notifications error: %v", err)
 	}
 }
 

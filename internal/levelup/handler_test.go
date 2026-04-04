@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
@@ -68,6 +69,65 @@ func TestHandler_HandleLevelUp_Success(t *testing.T) {
 	json.NewDecoder(w.Body).Decode(&resp)
 	if resp.NewLevel != 6 {
 		t.Errorf("resp.NewLevel = %d, want 6", resp.NewLevel)
+	}
+	if resp.HPGained <= 0 {
+		t.Errorf("resp.HPGained = %d, want > 0", resp.HPGained)
+	}
+	if resp.NewAttacksPerAction != 2 {
+		t.Errorf("resp.NewAttacksPerAction = %d, want 2", resp.NewAttacksPerAction)
+	}
+	// Fighter at level 5 didn't have a subclass set, so even at level 6
+	// the subclass is still needed (subclassLevel=3, hasSubclass=false).
+	if !resp.NeedsSubclass {
+		t.Error("resp.NeedsSubclass = false, want true (fighter has no subclass selected)")
+	}
+}
+
+func TestHandler_HandleLevelUp_NeedsSubclass(t *testing.T) {
+	h, charStore, classStore, _ := setupTestHandler(t)
+
+	charID := uuid.New()
+	classes := []character.ClassEntry{{Class: "fighter", Level: 2}}
+	classesJSON, _ := json.Marshal(classes)
+	scores := character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Brom",
+		DiscordUserID: "user456",
+		Level:         2,
+		HPMax:         22,
+		HPCurrent:     22,
+		Classes:       classesJSON,
+		AbilityScores: mustJSON(t, scores),
+	}
+
+	classStore.classes["fighter"] = &ClassRefData{
+		HitDie:           "d10",
+		AttacksPerAction: map[int]int{1: 1, 5: 2},
+		SubclassLevel:    3,
+	}
+
+	body, _ := json.Marshal(LevelUpRequest{
+		CharacterID: charID,
+		ClassID:     "fighter",
+		NewLevel:    3,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/levelup", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.HandleLevelUp(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp LevelUpResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if !resp.NeedsSubclass {
+		t.Error("resp.NeedsSubclass = false, want true (fighter at level 3 needs subclass)")
 	}
 }
 
@@ -314,6 +374,29 @@ func TestHandler_HandleCheckFeatPrereqs_InvalidBody(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandler_ServeLevelUpPage(t *testing.T) {
+	h, _, _, _ := setupTestHandler(t)
+
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/levelup", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "Level Up") {
+		t.Error("expected 'Level Up' in page body")
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Errorf("Content-Type = %q, want text/html", ct)
 	}
 }
 

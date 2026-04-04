@@ -1,6 +1,7 @@
 package levelup
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -33,13 +34,13 @@ func TestFormatPrivateLevelUpMessage(t *testing.T) {
 		t.Error("expected non-empty message")
 	}
 	// Should contain key info
-	if !containsStr(msg, "Aria") {
+	if !strings.Contains(msg, "Aria") {
 		t.Error("expected character name in message")
 	}
-	if !containsStr(msg, "Level: 6") {
+	if !strings.Contains(msg, "Level: 6") {
 		t.Error("expected new level in message")
 	}
-	if !containsStr(msg, "HP") {
+	if !strings.Contains(msg, "HP") {
 		t.Error("expected HP info in message")
 	}
 }
@@ -55,7 +56,7 @@ func TestFormatPrivateLevelUpMessage_WithASI(t *testing.T) {
 		GrantsASI:         true,
 	}
 	msg := FormatPrivateLevelUpMessage(details)
-	if !containsStr(msg, "ASI") {
+	if !strings.Contains(msg, "ASI") {
 		t.Error("expected ASI mention in message")
 	}
 }
@@ -71,7 +72,7 @@ func TestFormatPrivateLevelUpMessage_WithSubclass(t *testing.T) {
 		NeedsSubclass:     true,
 	}
 	msg := FormatPrivateLevelUpMessage(details)
-	if !containsStr(msg, "subclass") || !containsStr(msg, "Subclass") {
+	if !strings.Contains(msg, "subclass") || !strings.Contains(msg, "Subclass") {
 		t.Error("expected subclass mention in message")
 	}
 }
@@ -81,27 +82,14 @@ func TestFormatASIPromptMessage(t *testing.T) {
 	if msg == "" {
 		t.Error("expected non-empty message")
 	}
-	if !containsStr(msg, "+2") {
+	if !strings.Contains(msg, "+2") {
 		t.Error("expected +2 option in message")
 	}
-	if !containsStr(msg, "+1") {
+	if !strings.Contains(msg, "+1") {
 		t.Error("expected +1 option in message")
 	}
-	if !containsStr(msg, "Feat") || !containsStr(msg, "feat") {
+	if !strings.Contains(msg, "Feat") || !strings.Contains(msg, "feat") {
 		t.Error("expected feat option in message")
 	}
 }
 
-func containsStr(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && len(s) >= len(substr) &&
-		indexOf(s, substr) >= 0
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}

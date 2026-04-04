@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/google/uuid"
@@ -48,18 +49,20 @@ type ClassRefData struct {
 	FeaturesByLevel  map[string][]character.Feature
 }
 
-// LevelUpDetails holds information about the level-up for notifications.
+// LevelUpDetails holds information about the level-up for notifications and response.
 type LevelUpDetails struct {
-	CharacterName      string
-	CharacterID        uuid.UUID
-	OldLevel           int
-	NewLevel           int
-	HPGained           int
+	CharacterName       string
+	CharacterID         uuid.UUID
+	OldLevel            int
+	NewLevel            int
+	HPGained            int
+	NewHPMax            int
 	NewProficiencyBonus int
-	LeveledClass       string
-	LeveledClassLevel  int
-	GrantsASI          bool
-	NeedsSubclass      bool
+	NewAttacksPerAction int
+	LeveledClass        string
+	LeveledClassLevel   int
+	GrantsASI           bool
+	NeedsSubclass       bool
 }
 
 // CharacterStore is the interface for character data access.
@@ -101,29 +104,31 @@ func NewService(charStore CharacterStore, classStore ClassStore, notifier Notifi
 
 // ApplyLevelUp applies a level-up for a specific class entry.
 // classID is the class being leveled, newClassLevel is the new level for that class.
-func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, classID string, newClassLevel int) error {
+// Returns the LevelUpDetails for the caller to use (e.g. handler response, notifications).
+// NOTE: DDB-imported characters should re-import via Phase 90 instead of using this flow.
+func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, classID string, newClassLevel int) (*LevelUpDetails, error) {
 	// Load character
 	char, err := s.charStore.GetCharacterForLevelUp(ctx, characterID)
 	if err != nil {
-		return fmt.Errorf("loading character: %w", err)
+		return nil, fmt.Errorf("loading character: %w", err)
 	}
 
 	// Load class ref data
 	classRef, err := s.classStore.GetClassRefData(ctx, classID)
 	if err != nil {
-		return fmt.Errorf("loading class data: %w", err)
+		return nil, fmt.Errorf("loading class data: %w", err)
 	}
 
 	// Parse current classes
 	var oldClasses []character.ClassEntry
 	if err := json.Unmarshal(char.Classes, &oldClasses); err != nil {
-		return fmt.Errorf("parsing classes: %w", err)
+		return nil, fmt.Errorf("parsing classes: %w", err)
 	}
 
 	// Parse ability scores
 	var scores character.AbilityScores
 	if err := json.Unmarshal(char.AbilityScores, &scores); err != nil {
-		return fmt.Errorf("parsing ability scores: %w", err)
+		return nil, fmt.Errorf("parsing ability scores: %w", err)
 	}
 
 	// Build new classes
@@ -132,7 +137,7 @@ func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, class
 	// Build lookup maps for calculations
 	hitDice, spellcasting, attacksMap, err := s.buildRefMaps(ctx, newClasses, classRef, classID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Calculate level-up result
@@ -141,7 +146,7 @@ func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, class
 	// Build stats update
 	newClassesJSON, err := json.Marshal(newClasses)
 	if err != nil {
-		return fmt.Errorf("marshaling new classes: %w", err)
+		return nil, fmt.Errorf("marshaling new classes: %w", err)
 	}
 
 	update := StatsUpdate{
@@ -157,7 +162,7 @@ func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, class
 	if result.NewSpellSlots != nil {
 		slotsJSON, err := json.Marshal(result.NewSpellSlots)
 		if err != nil {
-			return fmt.Errorf("marshaling spell slots: %w", err)
+			return nil, fmt.Errorf("marshaling spell slots: %w", err)
 		}
 		update.SpellSlots = slotsJSON
 	}
@@ -166,18 +171,18 @@ func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, class
 	if result.NewPactSlots.Max > 0 {
 		pactJSON, err := json.Marshal(result.NewPactSlots)
 		if err != nil {
-			return fmt.Errorf("marshaling pact slots: %w", err)
+			return nil, fmt.Errorf("marshaling pact slots: %w", err)
 		}
 		update.PactMagicSlots = pactJSON
 	}
 
 	// Apply update
 	if err := s.charStore.UpdateCharacterStats(ctx, characterID, update); err != nil {
-		return fmt.Errorf("updating character: %w", err)
+		return nil, fmt.Errorf("updating character: %w", err)
 	}
 
 	// Determine if this level grants ASI
-	grantsASI := IsASILevel(newClassLevel)
+	grantsASI := IsASILevel(classID, newClassLevel)
 
 	// Determine if subclass selection is needed
 	var existingEntry *character.ClassEntry
@@ -191,30 +196,38 @@ func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, class
 	hasSubclass := existingEntry != nil && existingEntry.Subclass != ""
 	needsSubclass := NeedsSubclassSelection(newClassLevel, classRef.SubclassLevel, hasSubclass)
 
-	details := LevelUpDetails{
+	details := &LevelUpDetails{
 		CharacterName:       char.Name,
 		CharacterID:         characterID,
 		OldLevel:            result.OldLevel,
 		NewLevel:            result.NewLevel,
 		HPGained:            result.HPGained,
+		NewHPMax:            result.NewHPMax,
 		NewProficiencyBonus: result.NewProficiencyBonus,
+		NewAttacksPerAction: result.NewAttacksPerAction,
 		LeveledClass:        classID,
 		LeveledClassLevel:   newClassLevel,
 		GrantsASI:           grantsASI,
 		NeedsSubclass:       needsSubclass,
 	}
 
-	// Send notifications
+	// Send notifications (log errors rather than silently discarding)
 	if s.notifier != nil {
-		_ = s.notifier.SendPublicLevelUp(ctx, char.Name, result.NewLevel)
-		_ = s.notifier.SendPrivateLevelUp(ctx, char.DiscordUserID, details)
+		if err := s.notifier.SendPublicLevelUp(ctx, char.Name, result.NewLevel); err != nil {
+			slog.Error("failed to send public level-up notification", "error", err, "character", char.Name)
+		}
+		if err := s.notifier.SendPrivateLevelUp(ctx, char.DiscordUserID, *details); err != nil {
+			slog.Error("failed to send private level-up notification", "error", err, "character", char.Name)
+		}
 
 		if grantsASI {
-			_ = s.notifier.SendASIPrompt(ctx, char.DiscordUserID, characterID, char.Name)
+			if err := s.notifier.SendASIPrompt(ctx, char.DiscordUserID, characterID, char.Name); err != nil {
+				slog.Error("failed to send ASI prompt", "error", err, "character", char.Name)
+			}
 		}
 	}
 
-	return nil
+	return details, nil
 }
 
 // ApproveASI applies an approved ASI choice to a character's ability scores.
@@ -250,8 +263,12 @@ func (s *Service) DenyASI(ctx context.Context, characterID uuid.UUID, reason str
 	}
 
 	if s.notifier != nil {
-		_ = s.notifier.SendASIDenied(ctx, char.DiscordUserID, char.Name, reason)
-		_ = s.notifier.SendASIPrompt(ctx, char.DiscordUserID, characterID, char.Name)
+		if err := s.notifier.SendASIDenied(ctx, char.DiscordUserID, char.Name, reason); err != nil {
+			slog.Error("failed to send ASI denied notification", "error", err, "character", char.Name)
+		}
+		if err := s.notifier.SendASIPrompt(ctx, char.DiscordUserID, characterID, char.Name); err != nil {
+			slog.Error("failed to send ASI prompt after denial", "error", err, "character", char.Name)
+		}
 	}
 
 	return nil
