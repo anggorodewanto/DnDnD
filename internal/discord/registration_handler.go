@@ -325,11 +325,6 @@ func interactionUserID(interaction *discordgo.Interaction) string {
 	return ""
 }
 
-// GeneratePortalToken generates a stub token for the character builder portal.
-func GeneratePortalToken(campaignID uuid.UUID, discordUserID string) (string, error) {
-	return fmt.Sprintf("%s-%s-%d", campaignID.String()[:8], discordUserID, time.Now().Unix()), nil
-}
-
 // formatRelativeTime formats a duration as a human-readable relative time.
 func formatRelativeTime(d time.Duration) string {
 	if d < time.Minute {

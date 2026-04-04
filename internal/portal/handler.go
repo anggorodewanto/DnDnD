@@ -39,6 +39,21 @@ func NewHandler(logger *slog.Logger, validator TokenValidator) *Handler {
 	}
 }
 
+// SetLandingTemplate overrides the landing template (for testing).
+func (h *Handler) SetLandingTemplate(t *template.Template) {
+	h.landingTmpl = t
+}
+
+// SetCreateTemplate overrides the create template (for testing).
+func (h *Handler) SetCreateTemplate(t *template.Template) {
+	h.createTmpl = t
+}
+
+// SetErrorTemplate overrides the error template (for testing).
+func (h *Handler) SetErrorTemplate(t *template.Template) {
+	h.errorTmpl = t
+}
+
 // LandingData holds data for the landing page.
 type LandingData struct {
 	UserID string
@@ -88,6 +103,11 @@ func (h *Handler) ServeCreate(w http.ResponseWriter, r *http.Request) {
 	tok, err := h.validator.ValidateToken(r.Context(), tokenStr)
 	if err != nil {
 		h.handleTokenError(w, err)
+		return
+	}
+
+	if tok.DiscordUserID != userID {
+		h.renderError(w, http.StatusForbidden, "forbidden", "This link belongs to a different user.")
 		return
 	}
 

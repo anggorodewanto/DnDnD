@@ -10,6 +10,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/registration"
@@ -547,19 +548,6 @@ func TestTruncateURL(t *testing.T) {
 	}
 }
 
-func TestGeneratePortalToken_Format(t *testing.T) {
-	campID := testCampaignID()
-	token, err := GeneratePortalToken(campID, "player-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.HasPrefix(token, campID.String()[:8]) {
-		t.Errorf("token should start with campaign ID prefix, got: %s", token)
-	}
-	if !strings.Contains(token, "player-1") {
-		t.Errorf("token should contain player ID, got: %s", token)
-	}
-}
 
 func TestInteractionUserID_FromMember(t *testing.T) {
 	interaction := &discordgo.Interaction{
@@ -941,6 +929,7 @@ func TestNewCommandRouter_WithRegDeps_WiresRealHandlers(t *testing.T) {
 		CharCreator:  charCreator,
 		DMQueueFunc:  staticDMQueueFunc("dm-queue-1"),
 		DMUserFunc:   staticDMUserFunc("dm-user-1"),
+		TokenFunc:    func(_ uuid.UUID, _ string) (string, error) { return "test-token", nil },
 	}
 	router := NewCommandRouter(bot, nil, deps)
 
@@ -954,6 +943,22 @@ func TestNewCommandRouter_WithRegDeps_WiresRealHandlers(t *testing.T) {
 	if !strings.Contains(rc.Content, "No character found") {
 		t.Errorf("expected status-aware response for unregistered player, got: %s", rc.Content)
 	}
+}
+
+func TestNewCommandRouter_WithRegDeps_PanicsWithoutTokenFunc(t *testing.T) {
+	mock := newTestMock()
+	bot := NewBot(mock, "app-1", newTestLogger())
+	deps := &RegistrationDeps{
+		RegService:   newMockRegService(),
+		CampaignProv: newMockCampaignProvider(),
+		CharCreator:  &mockCharacterCreator{},
+		DMQueueFunc:  staticDMQueueFunc("dm-queue-1"),
+		DMUserFunc:   staticDMUserFunc("dm-user-1"),
+		// TokenFunc intentionally nil
+	}
+	assert.PanicsWithValue(t, "RegistrationDeps.TokenFunc is required", func() {
+		NewCommandRouter(bot, nil, deps)
+	})
 }
 
 func TestNewCommandRouter_WithoutRegDeps_UsesStubs(t *testing.T) {

@@ -159,11 +159,10 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 		// Wire registration commands to real handlers.
 		r.handlers["register"] = NewRegisterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.DMQueueFunc, deps.DMUserFunc)
 		r.handlers["import"] = NewImportHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc)
-		tokenFunc := deps.TokenFunc
-		if tokenFunc == nil {
-			tokenFunc = GeneratePortalToken
+		if deps.TokenFunc == nil {
+			panic("RegistrationDeps.TokenFunc is required")
 		}
-		r.handlers["create-character"] = NewCreateCharacterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc, tokenFunc)
+		r.handlers["create-character"] = NewCreateCharacterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc, deps.TokenFunc)
 	} else {
 		// Fallback: all stubs.
 		for _, name := range gameCommands {

@@ -159,3 +159,26 @@ func TestHandler_ServeCreate_Unauthenticated(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
+
+func TestHandler_ServeCreate_TokenBelongsToDifferentUser(t *testing.T) {
+	validator := &mockTokenValidator{
+		token: &portal.PortalToken{
+			Token:         "other-user-token",
+			CampaignID:    uuid.New(),
+			DiscordUserID: "user-owner",
+			Purpose:       "create_character",
+			ExpiresAt:     time.Now().Add(24 * time.Hour),
+		},
+	}
+	h := portal.NewHandler(slog.Default(), validator)
+
+	req := httptest.NewRequest(http.MethodGet, "/portal/create?token=other-user-token", nil)
+	ctx := auth.ContextWithDiscordUserID(req.Context(), "user-attacker")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	h.ServeCreate(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Contains(t, rec.Body.String(), "different user")
+}
