@@ -122,6 +122,7 @@ func mapCharacterToSheet(ch refdata.Character) (*CharacterSheetData, error) {
 	data.PactMagicSlots = parseNullJSONPtr[character.PactMagicSlots](ch.PactMagicSlots)
 	data.FeatureUses = parseNullJSONMap[character.FeatureUse](ch.FeatureUses)
 	data.HitDiceRemaining = parseHitDiceRemaining(ch.HitDiceRemaining)
+	data.Spells = extractSpells(ch.CharacterData)
 
 	return data, nil
 }
@@ -176,6 +177,74 @@ func parseNullJSONPtr[T any](nrm pqtype.NullRawMessage) *T {
 		return nil
 	}
 	return &v
+}
+
+// ddbSpellEntry matches the DDB import spell format in character_data.
+type ddbSpellEntry struct {
+	Name   string `json:"name"`
+	Level  int    `json:"level"`
+	Source string `json:"source"`
+}
+
+// extractSpells parses spells from character_data, handling both portal ([]string)
+// and DDB ([]ddbSpellEntry) formats. Also extracts prepared_spells for prepared indicators.
+func extractSpells(charData pqtype.NullRawMessage) []SpellDisplayEntry {
+	if !charData.Valid || len(charData.RawMessage) == 0 {
+		return nil
+	}
+
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal(charData.RawMessage, &data); err != nil {
+		return nil
+	}
+
+	spellsRaw, ok := data["spells"]
+	if !ok {
+		return nil
+	}
+
+	// Build prepared set from prepared_spells
+	preparedSet := make(map[string]bool)
+	if prepRaw, ok := data["prepared_spells"]; ok {
+		var prepared []string
+		if err := json.Unmarshal(prepRaw, &prepared); err == nil {
+			for _, id := range prepared {
+				preparedSet[id] = true
+			}
+		}
+	}
+
+	// Try portal format first: []string
+	var portalSpells []string
+	if err := json.Unmarshal(spellsRaw, &portalSpells); err == nil && len(portalSpells) > 0 {
+		// Check that first element is a string, not an object
+		// json.Unmarshal of [{"name":"x"}] into []string would fail, so this is safe
+		entries := make([]SpellDisplayEntry, len(portalSpells))
+		for i, id := range portalSpells {
+			entries[i] = SpellDisplayEntry{
+				ID:       id,
+				Name:     id, // Default to ID; enrichment with DB lookup can happen later
+				Prepared: preparedSet[id],
+			}
+		}
+		return entries
+	}
+
+	// Try DDB format: []ddbSpellEntry
+	var ddbSpells []ddbSpellEntry
+	if err := json.Unmarshal(spellsRaw, &ddbSpells); err == nil && len(ddbSpells) > 0 {
+		entries := make([]SpellDisplayEntry, len(ddbSpells))
+		for i, s := range ddbSpells {
+			entries[i] = SpellDisplayEntry{
+				Name:   s.Name,
+				Level:  s.Level,
+				Source: s.Source,
+			}
+		}
+		return entries
+	}
+
+	return nil
 }
 
 func parseHitDiceRemaining(raw json.RawMessage) map[string]int {

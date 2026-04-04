@@ -35,6 +35,8 @@ type CardData struct {
 	Exhaustion       int
 	Gold             int
 	Languages        []string
+	SpellCount       int
+	PreparedCount    int
 	Retired          bool
 }
 
@@ -72,6 +74,17 @@ func FormatCard(d CardData) string {
 	b.WriteString("Spell Slots: ")
 	b.WriteString(formatSpellSlots(d.SpellSlots))
 	b.WriteByte('\n')
+
+	// Spell count
+	if d.SpellCount > 0 {
+		b.WriteString("Spells: ")
+		if d.PreparedCount > 0 {
+			fmt.Fprintf(&b, "%d prepared / %d known", d.PreparedCount, d.SpellCount)
+		} else {
+			fmt.Fprintf(&b, "%d known", d.SpellCount)
+		}
+		b.WriteByte('\n')
+	}
 
 	// Conditions
 	b.WriteString("Conditions: ")

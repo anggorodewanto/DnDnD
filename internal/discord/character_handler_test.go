@@ -11,6 +11,7 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 )
 
 // mockCharacterLookup implements CharacterLookup for testing.
@@ -113,6 +114,161 @@ func TestCharacterHandler_Success(t *testing.T) {
 	// Should be ephemeral
 	if rc.Flags&discordgo.MessageFlagsEphemeral == 0 {
 		t.Error("expected ephemeral response")
+	}
+}
+
+func TestCharacterHandler_WithSpells(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	charID := uuid.New()
+	campID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Wizard", Level: 5}})
+
+	// character_data with spells (DDB format)
+	type ddbSpell struct {
+		Name   string `json:"name"`
+		Level  int    `json:"level"`
+		Source string `json:"source"`
+	}
+	charData := map[string]any{"spells": []ddbSpell{
+		{Name: "Fire Bolt", Level: 0, Source: "class"},
+		{Name: "Mage Hand", Level: 0, Source: "class"},
+		{Name: "Magic Missile", Level: 1, Source: "class"},
+		{Name: "Shield", Level: 1, Source: "class"},
+		{Name: "Fireball", Level: 3, Source: "class"},
+	}}
+	charDataJSON, _ := json.Marshal(charData)
+
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			CharacterID:   charID,
+			CampaignID:    campID,
+			DiscordUserID: "player-1",
+			Status:        "approved",
+		},
+		char: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          "Gandalf",
+			Race:          "Elf",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			HpMax:         22,
+			HpCurrent:     22,
+			Ac:            12,
+			SpeedFt:       30,
+			Languages:     []string{"Common"},
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+	}
+
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if rc.Embeds == nil || len(rc.Embeds) == 0 {
+		t.Fatal("expected embeds in response")
+	}
+
+	embed := rc.Embeds[0]
+	// Should contain spell count summary
+	if !strings.Contains(embed.Description, "Spells") {
+		t.Errorf("expected spell summary in description, got: %s", embed.Description)
+	}
+	if !strings.Contains(embed.Description, "Cantrips: 2") {
+		t.Errorf("expected 'Cantrips: 2' in description, got: %s", embed.Description)
+	}
+	if !strings.Contains(embed.Description, "1st: 2") {
+		t.Errorf("expected '1st: 2' in description, got: %s", embed.Description)
+	}
+	if !strings.Contains(embed.Description, "3rd: 1") {
+		t.Errorf("expected '3rd: 1' in description, got: %s", embed.Description)
+	}
+}
+
+func TestCharacterHandler_WithPortalSpells(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	charID := uuid.New()
+	campID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Wizard", Level: 3}})
+
+	// Portal format: array of spell IDs (strings)
+	charData := map[string]any{"spells": []string{"fire-bolt", "magic-missile", "shield"}}
+	charDataJSON, _ := json.Marshal(charData)
+
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			CharacterID:   charID,
+			CampaignID:    campID,
+			DiscordUserID: "player-1",
+			Status:        "approved",
+		},
+		char: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          "Wizard",
+			Race:          "Elf",
+			Level:         3,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+	}
+
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.test")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if rc.Embeds == nil || len(rc.Embeds) == 0 {
+		t.Fatal("expected embeds in response")
+	}
+
+	embed := rc.Embeds[0]
+	if !strings.Contains(embed.Description, "3 known") {
+		t.Errorf("expected '3 known' for portal spells, got: %s", embed.Description)
+	}
+}
+
+func TestCharacterHandler_NoSpells(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	charID := uuid.New()
+	campID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 1}})
+
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			CharacterID:   charID,
+			CampaignID:    campID,
+			DiscordUserID: "player-1",
+			Status:        "approved",
+		},
+		char: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          "Tank",
+			Race:          "Human",
+			Level:         1,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+		},
+	}
+
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.test")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	embed := rc.Embeds[0]
+	if strings.Contains(embed.Description, "Spells:") {
+		t.Errorf("expected no spell line for fighter, got: %s", embed.Description)
 	}
 }
 

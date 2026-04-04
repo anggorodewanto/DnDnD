@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 
 	"github.com/ab/dndnd/internal/auth"
@@ -91,6 +92,13 @@ func (h *CharacterSheetHandler) renderSheet(w http.ResponseWriter, data *Charact
 	w.Write(buf.Bytes())
 }
 
+// SpellLevelGroup groups spells by their level for template rendering.
+type SpellLevelGroup struct {
+	Level  int
+	Label  string
+	Spells []SpellDisplayEntry
+}
+
 func sheetFuncMap() template.FuncMap {
 	return template.FuncMap{
 		"formatModifier": func(mod int) string {
@@ -105,7 +113,40 @@ func sheetFuncMap() template.FuncMap {
 			}
 			return "○"
 		},
+		"groupSpellsByLevel": groupSpellsByLevel,
 	}
+}
+
+// groupSpellsByLevel organizes spells into groups by spell level, sorted ascending.
+func groupSpellsByLevel(spells []SpellDisplayEntry) []SpellLevelGroup {
+	if len(spells) == 0 {
+		return nil
+	}
+
+	grouped := make(map[int][]SpellDisplayEntry)
+	for _, s := range spells {
+		grouped[s.Level] = append(grouped[s.Level], s)
+	}
+
+	levels := make([]int, 0, len(grouped))
+	for lvl := range grouped {
+		levels = append(levels, lvl)
+	}
+	sort.Ints(levels)
+
+	result := make([]SpellLevelGroup, 0, len(levels))
+	for _, lvl := range levels {
+		label := "Level " + strconv.Itoa(lvl)
+		if lvl == 0 {
+			label = "Cantrips"
+		}
+		result = append(result, SpellLevelGroup{
+			Level:  lvl,
+			Label:  label,
+			Spells: grouped[lvl],
+		})
+	}
+	return result
 }
 
 const characterSheetTemplate = `<!DOCTYPE html>
@@ -346,6 +387,30 @@ const characterSheetTemplate = `<!DOCTYPE html>
                 <span>Level {{.PactMagicSlots.SlotLevel}} Pact Slots</span>
                 <span>{{.PactMagicSlots.Current}}/{{.PactMagicSlots.Max}}</span>
             </div>
+        </div>
+        {{end}}
+
+        {{if .Spells}}
+        <div class="section">
+            <h3>Spell List</h3>
+            {{range groupSpellsByLevel .Spells}}
+            <div style="margin-bottom: 0.75rem;">
+                <div style="color: #e94560; font-weight: bold; margin-bottom: 0.25rem;">{{.Label}}</div>
+                {{range .Spells}}
+                <div class="item-row">
+                    <span>
+                        {{if .Prepared}}<span class="prof-dot prof-yes">●</span>{{end}}
+                        {{.Name}}
+                        {{if .School}}<span style="color:#a0a0b0; font-size:0.8rem;">({{.School}})</span>{{end}}
+                    </span>
+                    <span style="color:#a0a0b0; font-size:0.8rem;">
+                        {{if .CastingTime}}{{.CastingTime}}{{end}}
+                        {{if .Range}} | {{.Range}}{{end}}
+                    </span>
+                </div>
+                {{end}}
+            </div>
+            {{end}}
         </div>
         {{end}}
 

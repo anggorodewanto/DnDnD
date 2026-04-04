@@ -299,6 +299,78 @@ func TestFormatCard_ConditionWithoutDuration(t *testing.T) {
 	assert.NotContains(t, result, "rounds remaining")
 }
 
+func TestFormatCard_SpellCount(t *testing.T) {
+	data := CardData{
+		Name:    "Mage",
+		ShortID: "MA",
+		Level:   5,
+		Race:    "Elf",
+		Classes: []character.ClassEntry{
+			{Class: "Wizard", Level: 5},
+		},
+		HpCurrent: 25,
+		HpMax:     25,
+		AC:        12,
+		SpeedFt:   30,
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, WIS: 12, INT: 18, CHA: 10},
+		SpellSlots: map[string]character.SlotInfo{
+			"1": {Current: 4, Max: 4},
+		},
+		SpellCount:     8,
+		PreparedCount:  5,
+		Gold:           50,
+		Languages:      []string{"Common"},
+	}
+
+	result := FormatCard(data)
+	assert.Contains(t, result, "Spells: 5 prepared / 8 known")
+}
+
+func TestFormatCard_SpellCount_ZeroPrepared(t *testing.T) {
+	data := CardData{
+		Name:    "Sorc",
+		ShortID: "SO",
+		Level:   3,
+		Race:    "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Sorcerer", Level: 3},
+		},
+		HpCurrent: 20,
+		HpMax:     20,
+		AC:        12,
+		SpeedFt:   30,
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, WIS: 10, INT: 10, CHA: 18},
+		SpellCount:    6,
+		Gold:          30,
+		Languages:     []string{"Common"},
+	}
+
+	result := FormatCard(data)
+	assert.Contains(t, result, "Spells: 6 known")
+}
+
+func TestFormatCard_NoSpellCount(t *testing.T) {
+	data := CardData{
+		Name:    "Tank",
+		ShortID: "TA",
+		Level:   5,
+		Race:    "Dwarf",
+		Classes: []character.ClassEntry{
+			{Class: "Barbarian", Level: 5},
+		},
+		HpCurrent: 50,
+		HpMax:     50,
+		AC:        15,
+		SpeedFt:   25,
+		AbilityScores: character.AbilityScores{STR: 18, DEX: 12, CON: 16, WIS: 10, INT: 8, CHA: 8},
+		Gold:          25,
+		Languages:     []string{"Common"},
+	}
+
+	result := FormatCard(data)
+	assert.NotContains(t, result, "Spells:")
+}
+
 func TestFormatCard_OnlyOffHand(t *testing.T) {
 	data := CardData{
 		Name:    "Shield",

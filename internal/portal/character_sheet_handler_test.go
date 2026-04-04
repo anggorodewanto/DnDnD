@@ -193,6 +193,92 @@ func TestServeCharacterSheet_FeatureUses(t *testing.T) {
 	assert.Contains(t, body, "short rest")
 }
 
+func TestServeCharacterSheet_SpellsSection(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			Name:             "Gandalf",
+			Race:             "Elf",
+			Level:            5,
+			ClassSummary:     "Wizard 5",
+			AbilityModifiers: map[string]int{"STR": 0, "DEX": 0, "CON": 0, "INT": 0, "WIS": 0, "CHA": 0},
+			Spells: []portal.SpellDisplayEntry{
+				{ID: "fire-bolt", Name: "Fire Bolt", Level: 0, School: "Evocation"},
+				{ID: "magic-missile", Name: "Magic Missile", Level: 1, School: "Evocation", Prepared: true},
+				{ID: "shield", Name: "Shield", Level: 1, School: "Abjuration"},
+				{ID: "fireball", Name: "Fireball", Level: 3, School: "Evocation", Prepared: true},
+			},
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "Spell List")
+	assert.Contains(t, body, "Fire Bolt")
+	assert.Contains(t, body, "Magic Missile")
+	assert.Contains(t, body, "Fireball")
+	assert.Contains(t, body, "Shield")
+}
+
+func TestServeCharacterSheet_NoSpellsSection(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			Name:             "Fighter",
+			Race:             "Human",
+			Level:            1,
+			ClassSummary:     "Fighter 1",
+			AbilityModifiers: map[string]int{"STR": 0, "DEX": 0, "CON": 0, "INT": 0, "WIS": 0, "CHA": 0},
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	// Spells section should not appear for non-casters
+	assert.NotContains(t, body, "Spell List")
+}
+
+func TestServeCharacterSheet_SpellsGroupedByLevel(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			Name:             "Gandalf",
+			Race:             "Elf",
+			Level:            9,
+			ClassSummary:     "Wizard 9",
+			AbilityModifiers: map[string]int{"STR": 0, "DEX": 0, "CON": 0, "INT": 0, "WIS": 0, "CHA": 0},
+			Spells: []portal.SpellDisplayEntry{
+				{Name: "Fire Bolt", Level: 0},
+				{Name: "Magic Missile", Level: 1},
+				{Name: "Fireball", Level: 3},
+				{Name: "Polymorph", Level: 4},
+			},
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "Cantrips")
+	assert.Contains(t, body, "Level 1")
+	assert.Contains(t, body, "Level 3")
+	assert.Contains(t, body, "Level 4")
+}
+
 func TestRegisterRoutes_CharacterSheet(t *testing.T) {
 	r := chi.NewRouter()
 	svc := &fakeCharacterSheetService{

@@ -46,11 +46,25 @@ type CharacterSheetData struct {
 	Languages        []string
 	Inventory        []character.InventoryItem
 
+	Spells []SpellDisplayEntry
+
 	// Computed fields for display
 	AbilityModifiers map[string]int
 	Skills           []SkillDisplay
 	SavingThrows     []SavingThrowDisplay
 	ClassSummary     string
+}
+
+// SpellDisplayEntry holds data for displaying a single spell on the character sheet.
+type SpellDisplayEntry struct {
+	ID          string
+	Name        string
+	Level       int
+	School      string
+	CastingTime string
+	Range       string
+	Prepared    bool
+	Source      string
 }
 
 // SkillDisplay holds display data for a single skill.

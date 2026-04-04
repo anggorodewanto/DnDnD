@@ -156,6 +156,60 @@ func TestService_PostCharacterCard(t *testing.T) {
 	assert.Equal(t, "msg-123", store.setCardMsgIDParams.CardMessageID.String)
 }
 
+func TestService_PostCharacterCard_WithSpells(t *testing.T) {
+	char := newTestCharacter()
+
+	// Add character_data with spells (DDB format)
+	charData := map[string]any{
+		"spells": []map[string]any{
+			{"name": "Fire Bolt", "level": 0, "source": "class"},
+			{"name": "Fireball", "level": 3, "source": "class"},
+			{"name": "Shield", "level": 1, "source": "class"},
+		},
+		"prepared_spells": []string{"fireball", "shield"},
+	}
+	charDataJSON, _ := json.Marshal(charData)
+	char.CharacterData = pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true}
+
+	campaign := newTestCampaign()
+	store := &mockStore{
+		character: char,
+		campaign:  campaign,
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.PostCharacterCard(context.Background(), char.ID, "Aria", "player1")
+	require.NoError(t, err)
+
+	// Card should contain spell count
+	assert.Contains(t, session.sentContent, "Spells: 2 prepared / 3 known")
+}
+
+func TestService_PostCharacterCard_WithPortalSpells(t *testing.T) {
+	char := newTestCharacter()
+
+	// Portal format: array of spell IDs
+	charData := map[string]any{
+		"spells": []string{"fire-bolt", "magic-missile", "shield", "fireball"},
+	}
+	charDataJSON, _ := json.Marshal(charData)
+	char.CharacterData = pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true}
+
+	campaign := newTestCampaign()
+	store := &mockStore{
+		character: char,
+		campaign:  campaign,
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.PostCharacterCard(context.Background(), char.ID, "Aria", "player1")
+	require.NoError(t, err)
+
+	assert.Contains(t, session.sentContent, "Spells: 4 known")
+}
+
 func TestService_PostCharacterCard_GetCharacterError(t *testing.T) {
 	store := &mockStore{
 		characterErr: errors.New("not found"),

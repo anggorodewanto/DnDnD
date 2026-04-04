@@ -212,6 +212,8 @@ func buildCardData(char refdata.Character, shortID string, retired bool) CardDat
 		_ = json.Unmarshal(char.SpellSlots.RawMessage, &spellSlots)
 	}
 
+	spellCount, preparedCount := extractSpellCounts(char)
+
 	return CardData{
 		Name:             char.Name,
 		ShortID:          shortID,
@@ -227,8 +229,51 @@ func buildCardData(char refdata.Character, shortID string, retired bool) CardDat
 		EquippedMainHand: char.EquippedMainHand.String,
 		EquippedOffHand:  char.EquippedOffHand.String,
 		SpellSlots:       spellSlots,
+		SpellCount:       spellCount,
+		PreparedCount:    preparedCount,
 		Gold:             int(char.Gold),
 		Languages:        char.Languages,
 		Retired:          retired,
 	}
+}
+
+// extractSpellCounts counts spells and prepared spells from character_data.
+func extractSpellCounts(char refdata.Character) (spellCount int, preparedCount int) {
+	if !char.CharacterData.Valid || len(char.CharacterData.RawMessage) == 0 {
+		return 0, 0
+	}
+
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal(char.CharacterData.RawMessage, &data); err != nil {
+		return 0, 0
+	}
+
+	spellsRaw, ok := data["spells"]
+	if !ok {
+		return 0, 0
+	}
+
+	// Try DDB format first: []{"name":..., "level":...}
+	var ddbSpells []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(spellsRaw, &ddbSpells); err == nil && len(ddbSpells) > 0 && ddbSpells[0].Name != "" {
+		spellCount = len(ddbSpells)
+	} else {
+		// Try portal format: []string
+		var portalSpells []string
+		if err := json.Unmarshal(spellsRaw, &portalSpells); err == nil {
+			spellCount = len(portalSpells)
+		}
+	}
+
+	// Count prepared spells
+	if prepRaw, ok := data["prepared_spells"]; ok {
+		var prepared []string
+		if err := json.Unmarshal(prepRaw, &prepared); err == nil {
+			preparedCount = len(prepared)
+		}
+	}
+
+	return spellCount, preparedCount
 }

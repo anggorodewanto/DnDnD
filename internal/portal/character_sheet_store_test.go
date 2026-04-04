@@ -139,6 +139,210 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet(t *testing.T) {
 	assert.Equal(t, 50, data.Gold)
 }
 
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PortalSpells(t *testing.T) {
+	charID := uuid.New()
+
+	scores := character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Wizard", Level: 5}}
+	classesJSON, _ := json.Marshal(classes)
+
+	// Portal format: array of spell ID strings
+	charData := map[string]any{"spells": []string{"fire-bolt", "magic-missile", "shield"}}
+	charDataJSON, _ := json.Marshal(charData)
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Gandalf",
+			Race:          "Elf",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	require.NotEmpty(t, data.Spells)
+	assert.Len(t, data.Spells, 3)
+	// Spells from portal format should have ID populated
+	assert.Equal(t, "fire-bolt", data.Spells[0].ID)
+	assert.Equal(t, "magic-missile", data.Spells[1].ID)
+	assert.Equal(t, "shield", data.Spells[2].ID)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_DDBSpells(t *testing.T) {
+	charID := uuid.New()
+
+	scores := character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Wizard", Level: 5}}
+	classesJSON, _ := json.Marshal(classes)
+
+	// DDB format: array of objects with name, level, source
+	type ddbSpell struct {
+		Name   string `json:"name"`
+		Level  int    `json:"level"`
+		Source string `json:"source"`
+	}
+	charData := map[string]any{"spells": []ddbSpell{
+		{Name: "Fireball", Level: 3, Source: "class"},
+		{Name: "Fire Bolt", Level: 0, Source: "class"},
+	}}
+	charDataJSON, _ := json.Marshal(charData)
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Gandalf",
+			Race:          "Elf",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	require.Len(t, data.Spells, 2)
+	// DDB spells should have name and level set directly
+	assert.Equal(t, "Fireball", data.Spells[0].Name)
+	assert.Equal(t, 3, data.Spells[0].Level)
+	assert.Equal(t, "class", data.Spells[0].Source)
+	assert.Equal(t, "Fire Bolt", data.Spells[1].Name)
+	assert.Equal(t, 0, data.Spells[1].Level)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PreparedSpells(t *testing.T) {
+	charID := uuid.New()
+
+	scores := character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Cleric", Level: 5}}
+	classesJSON, _ := json.Marshal(classes)
+
+	charData := map[string]any{
+		"spells":          []string{"bless", "cure-wounds", "shield-of-faith"},
+		"prepared_spells": []string{"bless", "cure-wounds"},
+	}
+	charDataJSON, _ := json.Marshal(charData)
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Cleric",
+			Race:          "Human",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	require.Len(t, data.Spells, 3)
+
+	// Check prepared indicators
+	preparedByID := make(map[string]bool)
+	for _, s := range data.Spells {
+		preparedByID[s.ID] = s.Prepared
+	}
+	assert.True(t, preparedByID["bless"])
+	assert.True(t, preparedByID["cure-wounds"])
+	assert.False(t, preparedByID["shield-of-faith"])
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_NoSpells(t *testing.T) {
+	charID := uuid.New()
+
+	scores := character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Fighter", Level: 1}}
+	classesJSON, _ := json.Marshal(classes)
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Fighter",
+			Race:          "Human",
+			Level:         1,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	assert.Empty(t, data.Spells)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_InvalidCharacterData(t *testing.T) {
+	charID := uuid.New()
+
+	scores := character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Fighter", Level: 1}}
+	classesJSON, _ := json.Marshal(classes)
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Broken",
+			Level:         1,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: []byte(`not-json`), Valid: true},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	assert.Empty(t, data.Spells)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_EmptySpellsArray(t *testing.T) {
+	charID := uuid.New()
+
+	scores := character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Fighter", Level: 1}}
+	classesJSON, _ := json.Marshal(classes)
+
+	charData := map[string]any{"spells": []string{}}
+	charDataJSON, _ := json.Marshal(charData)
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Empty",
+			Level:         1,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	assert.Empty(t, data.Spells)
+}
+
 func TestCharacterSheetStoreAdapter_GetCharacterForSheet_InvalidID(t *testing.T) {
 	store := portal.NewCharacterSheetStoreAdapter(&mockCharacterQuerier{})
 	_, err := store.GetCharacterForSheet(context.Background(), "not-a-uuid")

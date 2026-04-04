@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -110,12 +111,93 @@ func (h *CharacterHandler) buildCharacterEmbed(ch refdata.Character) *discordgo.
 	fmt.Fprintf(&desc, "Gold: %dgp\n", ch.Gold)
 
 	if len(ch.Languages) > 0 {
-		fmt.Fprintf(&desc, "Languages: %s", strings.Join(ch.Languages, ", "))
+		fmt.Fprintf(&desc, "Languages: %s\n", strings.Join(ch.Languages, ", "))
+	}
+
+	if spellSummary := buildSpellSummary(ch); spellSummary != "" {
+		fmt.Fprintf(&desc, "Spells: %s", spellSummary)
 	}
 
 	return &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("⚔️ %s", ch.Name),
 		Description: desc.String(),
 		Color:       0xe94560, // DnDnD red
+	}
+}
+
+// ddbSpellEntry matches the DDB import spell format in character_data.
+type ddbSpellEntry struct {
+	Name   string `json:"name"`
+	Level  int    `json:"level"`
+	Source string `json:"source"`
+}
+
+// buildSpellSummary extracts spells from character_data and returns a count-by-level summary.
+func buildSpellSummary(ch refdata.Character) string {
+	if !ch.CharacterData.Valid || len(ch.CharacterData.RawMessage) == 0 {
+		return ""
+	}
+
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal(ch.CharacterData.RawMessage, &data); err != nil {
+		return ""
+	}
+
+	spellsRaw, ok := data["spells"]
+	if !ok {
+		return ""
+	}
+
+	// Count spells by level
+	counts := make(map[int]int)
+
+	// Try DDB format: []ddbSpellEntry
+	var ddbSpells []ddbSpellEntry
+	if err := json.Unmarshal(spellsRaw, &ddbSpells); err == nil && len(ddbSpells) > 0 && ddbSpells[0].Name != "" {
+		for _, s := range ddbSpells {
+			counts[s.Level]++
+		}
+	} else {
+		// Try portal format: []string — no level info, just count total
+		var portalSpells []string
+		if err := json.Unmarshal(spellsRaw, &portalSpells); err == nil && len(portalSpells) > 0 {
+			return fmt.Sprintf("%d known", len(portalSpells))
+		}
+		return ""
+	}
+
+	if len(counts) == 0 {
+		return ""
+	}
+
+	// Sort levels and format
+	levels := make([]int, 0, len(counts))
+	for lvl := range counts {
+		levels = append(levels, lvl)
+	}
+	sort.Ints(levels)
+
+	parts := make([]string, 0, len(levels))
+	for _, lvl := range levels {
+		if lvl == 0 {
+			parts = append(parts, fmt.Sprintf("Cantrips: %d", counts[lvl]))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s: %d", slotOrdinal(lvl), counts[lvl]))
+		}
+	}
+	return strings.Join(parts, " | ")
+}
+
+// slotOrdinal converts a number to ordinal string.
+func slotOrdinal(level int) string {
+	switch level {
+	case 1:
+		return "1st"
+	case 2:
+		return "2nd"
+	case 3:
+		return "3rd"
+	default:
+		return fmt.Sprintf("%dth", level)
 	}
 }

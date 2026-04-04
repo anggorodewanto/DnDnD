@@ -46,6 +46,13 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		inventoryMsg = pqtype.NullRawMessage{RawMessage: invJSON, Valid: true}
 	}
 
+	var charDataMsg pqtype.NullRawMessage
+	if len(p.Spells) > 0 {
+		charData := map[string]any{"spells": p.Spells}
+		charDataJSON, _ := json.Marshal(charData)
+		charDataMsg = pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true}
+	}
+
 	campID, err := uuid.Parse(p.CampaignID)
 	if err != nil {
 		campID = uuid.New()
@@ -68,6 +75,7 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		Proficiencies:    pqtype.NullRawMessage{RawMessage: profJSON, Valid: true},
 		Languages:        p.Languages,
 		Inventory:        inventoryMsg,
+		CharacterData:    charDataMsg,
 		Gold:             0,
 		Homebrew:         sql.NullBool{Bool: false, Valid: true},
 	})
