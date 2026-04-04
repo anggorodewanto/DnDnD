@@ -539,7 +539,7 @@
   - Depends on: Phase 91a, Phase 7, Phase 4, Phase 5
   - Done when: Player can create a character through the full multi-step form, derived stats calculated correctly, submission appears in DM approval queue.
 
-- [ ] **Phase 91c: Player Portal — Starting Equipment Selection**
+- [x] **Phase 91c: Player Portal — Starting Equipment Selection**
   - Scope: Replace equipment placeholder in character builder with actual starting equipment selection: class default equipment packs, background equipment, manual add/remove. Equipment validated against class/background rules.
   - Depends on: Phase 91b
   - Done when: Player can select starting equipment during character creation, equipment saved with character.

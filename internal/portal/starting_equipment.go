@@ -61,7 +61,7 @@ var classStartingEquipment = map[string][]EquipmentPack{
 			Choices: []EquipmentChoice{
 				{Label: "Primary weapon", Options: []string{"shield", "any-simple"}},
 				{Label: "Secondary weapon", Options: []string{"scimitar", "any-simple-melee"}},
-				{Label: "Pack", Options: []string{"explorers-pack"},},
+				{Label: "Pack", Options: []string{"explorers-pack"}},
 			},
 			Guaranteed: []string{"leather", "druidic-focus"},
 		},
@@ -74,7 +74,7 @@ var classStartingEquipment = map[string][]EquipmentPack{
 				{Label: "Ranged weapon", Options: []string{"light-crossbow:1,crossbow-bolt:20", "handaxe:2"}},
 				{Label: "Pack", Options: []string{"dungeoneers-pack", "explorers-pack"}},
 			},
-			Guaranteed: []string{},
+			Guaranteed: nil,
 		},
 	},
 	"monk": {

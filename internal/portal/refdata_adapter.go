@@ -119,13 +119,13 @@ func (a *RefDataAdapter) ListEquipment(ctx context.Context) ([]EquipmentItem, er
 			Properties: w.Properties,
 		})
 	}
-	for _, a := range armors {
+	for _, ar := range armors {
 		items = append(items, EquipmentItem{
-			ID:        a.ID,
-			Name:      a.Name,
+			ID:        ar.ID,
+			Name:      ar.Name,
 			Category:  "armor",
-			ArmorType: a.ArmorType,
-			ACBase:    int(a.AcBase),
+			ArmorType: ar.ArmorType,
+			ACBase:    int(ar.AcBase),
 		})
 	}
 	return items, nil
