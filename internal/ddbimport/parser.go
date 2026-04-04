@@ -359,25 +359,26 @@ func parseSpells(spells *ddbSpells) []SpellEntry {
 	return result
 }
 
+// allModifiers collects modifiers from all sources (race, class, background, feat).
+func allModifiers(mods *ddbModifiers) []ddbModifier {
+	var all []ddbModifier
+	all = append(all, mods.Race...)
+	all = append(all, mods.Class...)
+	all = append(all, mods.Background...)
+	all = append(all, mods.Feat...)
+	return all
+}
+
 func parseLanguages(mods *ddbModifiers) []string {
 	seen := make(map[string]bool)
 	var langs []string
 
-	var allMods []ddbModifier
-	allMods = append(allMods, mods.Race...)
-	allMods = append(allMods, mods.Class...)
-	allMods = append(allMods, mods.Background...)
-	allMods = append(allMods, mods.Feat...)
-
-	for _, m := range allMods {
+	for _, m := range allModifiers(mods) {
 		if m.Type != "language" {
 			continue
 		}
 		name := m.FriendlySubtypeName
-		if name == "" {
-			continue
-		}
-		if seen[name] {
+		if name == "" || seen[name] {
 			continue
 		}
 		seen[name] = true
@@ -392,13 +393,7 @@ func parseProficiencies(mods *ddbModifiers) character.Proficiencies {
 	seenSaves := make(map[string]bool)
 	seenSkills := make(map[string]bool)
 
-	var allMods []ddbModifier
-	allMods = append(allMods, mods.Race...)
-	allMods = append(allMods, mods.Class...)
-	allMods = append(allMods, mods.Background...)
-	allMods = append(allMods, mods.Feat...)
-
-	for _, m := range allMods {
+	for _, m := range allModifiers(mods) {
 		if m.Type != "proficiency" {
 			continue
 		}
@@ -407,16 +402,13 @@ func parseProficiencies(mods *ddbModifiers) character.Proficiencies {
 			continue
 		}
 
-		if m.SubType == "saving-throws" {
-			if !seenSaves[name] {
-				seenSaves[name] = true
-				profs.Saves = append(profs.Saves, name)
-			}
-		} else if m.FriendlyTypeName == "Skill" {
-			if !seenSkills[name] {
-				seenSkills[name] = true
-				profs.Skills = append(profs.Skills, name)
-			}
+		switch {
+		case m.SubType == "saving-throws" && !seenSaves[name]:
+			seenSaves[name] = true
+			profs.Saves = append(profs.Saves, name)
+		case m.FriendlyTypeName == "Skill" && !seenSkills[name]:
+			seenSkills[name] = true
+			profs.Skills = append(profs.Skills, name)
 		}
 	}
 

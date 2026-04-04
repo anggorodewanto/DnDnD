@@ -27,23 +27,21 @@ func GenerateDiff(old, new *ParsedCharacter) []string {
 	}
 
 	// Ability scores
-	if old.AbilityScores.STR != new.AbilityScores.STR {
-		changes = append(changes, fmt.Sprintf("STR: %d -> %d", old.AbilityScores.STR, new.AbilityScores.STR))
-	}
-	if old.AbilityScores.DEX != new.AbilityScores.DEX {
-		changes = append(changes, fmt.Sprintf("DEX: %d -> %d", old.AbilityScores.DEX, new.AbilityScores.DEX))
-	}
-	if old.AbilityScores.CON != new.AbilityScores.CON {
-		changes = append(changes, fmt.Sprintf("CON: %d -> %d", old.AbilityScores.CON, new.AbilityScores.CON))
-	}
-	if old.AbilityScores.INT != new.AbilityScores.INT {
-		changes = append(changes, fmt.Sprintf("INT: %d -> %d", old.AbilityScores.INT, new.AbilityScores.INT))
-	}
-	if old.AbilityScores.WIS != new.AbilityScores.WIS {
-		changes = append(changes, fmt.Sprintf("WIS: %d -> %d", old.AbilityScores.WIS, new.AbilityScores.WIS))
-	}
-	if old.AbilityScores.CHA != new.AbilityScores.CHA {
-		changes = append(changes, fmt.Sprintf("CHA: %d -> %d", old.AbilityScores.CHA, new.AbilityScores.CHA))
+	for _, s := range []struct {
+		name     string
+		oldVal   int
+		newVal   int
+	}{
+		{"STR", old.AbilityScores.STR, new.AbilityScores.STR},
+		{"DEX", old.AbilityScores.DEX, new.AbilityScores.DEX},
+		{"CON", old.AbilityScores.CON, new.AbilityScores.CON},
+		{"INT", old.AbilityScores.INT, new.AbilityScores.INT},
+		{"WIS", old.AbilityScores.WIS, new.AbilityScores.WIS},
+		{"CHA", old.AbilityScores.CHA, new.AbilityScores.CHA},
+	} {
+		if s.oldVal != s.newVal {
+			changes = append(changes, fmt.Sprintf("%s: %d -> %d", s.name, s.oldVal, s.newVal))
+		}
 	}
 
 	if old.HPMax != new.HPMax {

@@ -267,7 +267,6 @@ func (h *CreateCharacterHandler) Handle(interaction *discordgo.Interaction) {
 	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, charName, userID, "create-character")
 }
 
-
 // postDMQueueNotification sends a registration notification to the DM queue channel.
 func postDMQueueNotification(session Session, dmQueueFunc, dmUserFunc func(string) string, guildID, characterName, playerUserID, via string) {
 	channelID := dmQueueFunc(guildID)

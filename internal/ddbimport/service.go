@@ -105,39 +105,43 @@ func (s *Service) Import(ctx context.Context, campaignID uuid.UUID, ddbURL strin
 	return result, nil
 }
 
+func marshalField(name string, v interface{}) ([]byte, error) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling %s: %w", name, err)
+	}
+	return data, nil
+}
+
 func buildCreateParams(campaignID uuid.UUID, ddbURL string, pc *ParsedCharacter) (refdata.CreateCharacterParams, error) {
-	scoresJSON, err := json.Marshal(pc.AbilityScores)
+	scoresJSON, err := marshalField("ability scores", pc.AbilityScores)
 	if err != nil {
-		return refdata.CreateCharacterParams{}, fmt.Errorf("marshaling ability scores: %w", err)
+		return refdata.CreateCharacterParams{}, err
 	}
 
-	classesJSON, err := json.Marshal(pc.Classes)
+	classesJSON, err := marshalField("classes", pc.Classes)
 	if err != nil {
-		return refdata.CreateCharacterParams{}, fmt.Errorf("marshaling classes: %w", err)
+		return refdata.CreateCharacterParams{}, err
 	}
 
-	inventoryJSON, err := json.Marshal(pc.Inventory)
+	inventoryJSON, err := marshalField("inventory", pc.Inventory)
 	if err != nil {
-		return refdata.CreateCharacterParams{}, fmt.Errorf("marshaling inventory: %w", err)
+		return refdata.CreateCharacterParams{}, err
 	}
 
-	profsJSON, err := json.Marshal(pc.Proficiencies)
+	profsJSON, err := marshalField("proficiencies", pc.Proficiencies)
 	if err != nil {
-		return refdata.CreateCharacterParams{}, fmt.Errorf("marshaling proficiencies: %w", err)
+		return refdata.CreateCharacterParams{}, err
 	}
 
-	featuresJSON, err := json.Marshal(pc.Features)
+	featuresJSON, err := marshalField("features", pc.Features)
 	if err != nil {
-		return refdata.CreateCharacterParams{}, fmt.Errorf("marshaling features: %w", err)
+		return refdata.CreateCharacterParams{}, err
 	}
 
-	// Build character_data with spells
-	charData := map[string]interface{}{
-		"spells": pc.Spells,
-	}
-	charDataJSON, err := json.Marshal(charData)
+	charDataJSON, err := marshalField("character data", map[string]interface{}{"spells": pc.Spells})
 	if err != nil {
-		return refdata.CreateCharacterParams{}, fmt.Errorf("marshaling character data: %w", err)
+		return refdata.CreateCharacterParams{}, err
 	}
 
 	// Compute proficiency bonus from level

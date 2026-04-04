@@ -10,17 +10,7 @@ func FormatPreview(pc *ParsedCharacter) string {
 	var b strings.Builder
 
 	b.WriteString(fmt.Sprintf("**%s** — %s\n", pc.Name, pc.Race))
-
-	// Classes
-	var classStrs []string
-	for _, c := range pc.Classes {
-		s := fmt.Sprintf("%s %d", c.Class, c.Level)
-		if c.Subclass != "" {
-			s = fmt.Sprintf("%s (%s) %d", c.Class, c.Subclass, c.Level)
-		}
-		classStrs = append(classStrs, s)
-	}
-	b.WriteString(fmt.Sprintf("Level %d — %s\n", pc.Level, strings.Join(classStrs, " / ")))
+	b.WriteString(fmt.Sprintf("Level %d — %s\n", pc.Level, formatClassList(pc)))
 
 	// HP and AC
 	b.WriteString(fmt.Sprintf("HP: %d/%d | AC: %d | Speed: %d ft\n", pc.HPCurrent, pc.HPMax, pc.AC, pc.SpeedFt))

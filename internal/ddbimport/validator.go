@@ -86,28 +86,12 @@ func Validate(pc *ParsedCharacter) ([]Warning, error) {
 				continue
 			}
 			for _, prereq := range prereqs {
-				if strings.Contains(prereq, ",") {
-					// OR prereq (e.g., STR or DEX for Fighter)
-					parts := strings.Split(prereq, ",")
-					anyMet := false
-					for _, p := range parts {
-						if scores[p] >= 13 {
-							anyMet = true
-							break
-						}
-					}
-					if !anyMet {
-						warnings = append(warnings, Warning{
-							Message: fmt.Sprintf("Multiclass %s — does not meet 13 %s minimum", cls.Class, prereq),
-						})
-					}
-				} else {
-					if scores[prereq] < 13 {
-						warnings = append(warnings, Warning{
-							Message: fmt.Sprintf("Multiclass %s — does not meet 13 %s minimum", cls.Class, prereq),
-						})
-					}
+				if meetsPrereq(scores, prereq) {
+					continue
 				}
+				warnings = append(warnings, Warning{
+					Message: fmt.Sprintf("Multiclass %s — does not meet 13 %s minimum", cls.Class, prereq),
+				})
 			}
 		}
 	}
@@ -126,4 +110,18 @@ func Validate(pc *ParsedCharacter) ([]Warning, error) {
 	}
 
 	return warnings, nil
+}
+
+// meetsPrereq checks if the given ability scores meet a prerequisite string.
+// A prereq like "STR,DEX" means either STR or DEX must be >= 13.
+func meetsPrereq(scores map[string]int, prereq string) bool {
+	if !strings.Contains(prereq, ",") {
+		return scores[prereq] >= 13
+	}
+	for _, p := range strings.Split(prereq, ",") {
+		if scores[p] >= 13 {
+			return true
+		}
+	}
+	return false
 }

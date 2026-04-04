@@ -524,7 +524,7 @@
   - Depends on: Phase 89, Phase 9a
   - Done when: Integration tests verify button interactions, select menu selections, DM approval/denial via interactive components.
 
-- [ ] **Phase 90: D&D Beyond Import**
+- [x] **Phase 90: D&D Beyond Import**
   - Scope: `/import <ddb-url>`: fetch from DDB character API, parse DDB JSON into internal format (ability scores, features, equipment, spells, HP, AC). Ephemeral preview. DM approval queue. Structural + advisory validation (warnings for rule issues). Re-sync for updates (diff + DM review). Exponential backoff for rate limiting.
   - Depends on: Phase 7, Phase 14
   - Done when: Integration tests verify import parsing, validation warnings, preview, approval flow, re-sync diff.
