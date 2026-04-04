@@ -1,0 +1,406 @@
+package levelup
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/ab/dndnd/internal/character"
+	"github.com/google/uuid"
+)
+
+// StoredCharacter holds the character data needed for level-up operations.
+type StoredCharacter struct {
+	ID               uuid.UUID       `json:"id"`
+	Name             string          `json:"name"`
+	DiscordUserID    string          `json:"discord_user_id"`
+	Level            int32           `json:"level"`
+	HPMax            int32           `json:"hp_max"`
+	HPCurrent        int32           `json:"hp_current"`
+	ProficiencyBonus int32           `json:"proficiency_bonus"`
+	Classes          json.RawMessage `json:"classes"`
+	AbilityScores    json.RawMessage `json:"ability_scores"`
+	SpellSlots       json.RawMessage `json:"spell_slots"`
+	PactMagicSlots   json.RawMessage `json:"pact_magic_slots"`
+	Features         json.RawMessage `json:"features"`
+}
+
+// StatsUpdate holds the fields to update after a level-up.
+type StatsUpdate struct {
+	Level            int
+	HPMax            int
+	HPCurrent        int
+	ProficiencyBonus int
+	Classes          json.RawMessage
+	SpellSlots       json.RawMessage
+	PactMagicSlots   json.RawMessage
+	AttacksPerAction int
+	Features         json.RawMessage
+}
+
+// ClassRefData holds the reference data for a class needed for level-up.
+type ClassRefData struct {
+	HitDie           string
+	Spellcasting     *character.ClassSpellcasting
+	AttacksPerAction map[int]int
+	SubclassLevel    int
+	Subclasses       map[string]any
+	FeaturesByLevel  map[string][]character.Feature
+}
+
+// LevelUpDetails holds information about the level-up for notifications.
+type LevelUpDetails struct {
+	CharacterName      string
+	CharacterID        uuid.UUID
+	OldLevel           int
+	NewLevel           int
+	HPGained           int
+	NewProficiencyBonus int
+	LeveledClass       string
+	LeveledClassLevel  int
+	GrantsASI          bool
+	NeedsSubclass      bool
+}
+
+// CharacterStore is the interface for character data access.
+type CharacterStore interface {
+	GetCharacterForLevelUp(ctx context.Context, id uuid.UUID) (*StoredCharacter, error)
+	UpdateCharacterStats(ctx context.Context, id uuid.UUID, update StatsUpdate) error
+	UpdateAbilityScores(ctx context.Context, id uuid.UUID, scores json.RawMessage) error
+	UpdateFeatures(ctx context.Context, id uuid.UUID, features json.RawMessage) error
+}
+
+// ClassStore is the interface for class reference data access.
+type ClassStore interface {
+	GetClassRefData(ctx context.Context, classID string) (*ClassRefData, error)
+}
+
+// Notifier sends level-up notifications.
+type Notifier interface {
+	SendPublicLevelUp(ctx context.Context, characterName string, newLevel int) error
+	SendPrivateLevelUp(ctx context.Context, discordUserID string, details LevelUpDetails) error
+	SendASIPrompt(ctx context.Context, discordUserID string, characterID uuid.UUID, characterName string) error
+	SendASIDenied(ctx context.Context, discordUserID string, characterName string, reason string) error
+}
+
+// Service orchestrates the level-up workflow.
+type Service struct {
+	charStore  CharacterStore
+	classStore ClassStore
+	notifier   Notifier
+}
+
+// NewService creates a new level-up Service.
+func NewService(charStore CharacterStore, classStore ClassStore, notifier Notifier) *Service {
+	return &Service{
+		charStore:  charStore,
+		classStore: classStore,
+		notifier:   notifier,
+	}
+}
+
+// ApplyLevelUp applies a level-up for a specific class entry.
+// classID is the class being leveled, newClassLevel is the new level for that class.
+func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, classID string, newClassLevel int) error {
+	// Load character
+	char, err := s.charStore.GetCharacterForLevelUp(ctx, characterID)
+	if err != nil {
+		return fmt.Errorf("loading character: %w", err)
+	}
+
+	// Load class ref data
+	classRef, err := s.classStore.GetClassRefData(ctx, classID)
+	if err != nil {
+		return fmt.Errorf("loading class data: %w", err)
+	}
+
+	// Parse current classes
+	var oldClasses []character.ClassEntry
+	if err := json.Unmarshal(char.Classes, &oldClasses); err != nil {
+		return fmt.Errorf("parsing classes: %w", err)
+	}
+
+	// Parse ability scores
+	var scores character.AbilityScores
+	if err := json.Unmarshal(char.AbilityScores, &scores); err != nil {
+		return fmt.Errorf("parsing ability scores: %w", err)
+	}
+
+	// Build new classes
+	newClasses := buildNewClasses(oldClasses, classID, newClassLevel)
+
+	// Build lookup maps for calculations
+	hitDice, spellcasting, attacksMap, err := s.buildRefMaps(ctx, newClasses, classRef, classID)
+	if err != nil {
+		return err
+	}
+
+	// Calculate level-up result
+	result := CalculateLevelUp(oldClasses, newClasses, hitDice, spellcasting, attacksMap, scores)
+
+	// Build stats update
+	newClassesJSON, err := json.Marshal(newClasses)
+	if err != nil {
+		return fmt.Errorf("marshaling new classes: %w", err)
+	}
+
+	update := StatsUpdate{
+		Level:            result.NewLevel,
+		HPMax:            result.NewHPMax,
+		HPCurrent:        int(char.HPCurrent) + result.HPGained,
+		ProficiencyBonus: result.NewProficiencyBonus,
+		Classes:          newClassesJSON,
+		AttacksPerAction: result.NewAttacksPerAction,
+	}
+
+	// Spell slots
+	if result.NewSpellSlots != nil {
+		slotsJSON, err := json.Marshal(result.NewSpellSlots)
+		if err != nil {
+			return fmt.Errorf("marshaling spell slots: %w", err)
+		}
+		update.SpellSlots = slotsJSON
+	}
+
+	// Pact magic slots
+	if result.NewPactSlots.Max > 0 {
+		pactJSON, err := json.Marshal(result.NewPactSlots)
+		if err != nil {
+			return fmt.Errorf("marshaling pact slots: %w", err)
+		}
+		update.PactMagicSlots = pactJSON
+	}
+
+	// Apply update
+	if err := s.charStore.UpdateCharacterStats(ctx, characterID, update); err != nil {
+		return fmt.Errorf("updating character: %w", err)
+	}
+
+	// Determine if this level grants ASI
+	grantsASI := IsASILevel(newClassLevel)
+
+	// Determine if subclass selection is needed
+	var existingEntry *character.ClassEntry
+	for _, c := range oldClasses {
+		if c.Class == classID {
+			e := c
+			existingEntry = &e
+			break
+		}
+	}
+	hasSubclass := existingEntry != nil && existingEntry.Subclass != ""
+	needsSubclass := NeedsSubclassSelection(newClassLevel, classRef.SubclassLevel, hasSubclass)
+
+	details := LevelUpDetails{
+		CharacterName:       char.Name,
+		CharacterID:         characterID,
+		OldLevel:            result.OldLevel,
+		NewLevel:            result.NewLevel,
+		HPGained:            result.HPGained,
+		NewProficiencyBonus: result.NewProficiencyBonus,
+		LeveledClass:        classID,
+		LeveledClassLevel:   newClassLevel,
+		GrantsASI:           grantsASI,
+		NeedsSubclass:       needsSubclass,
+	}
+
+	// Send notifications
+	if s.notifier != nil {
+		_ = s.notifier.SendPublicLevelUp(ctx, char.Name, result.NewLevel)
+		_ = s.notifier.SendPrivateLevelUp(ctx, char.DiscordUserID, details)
+
+		if grantsASI {
+			_ = s.notifier.SendASIPrompt(ctx, char.DiscordUserID, characterID, char.Name)
+		}
+	}
+
+	return nil
+}
+
+// ApproveASI applies an approved ASI choice to a character's ability scores.
+func (s *Service) ApproveASI(ctx context.Context, characterID uuid.UUID, choice ASIChoice) error {
+	char, err := s.charStore.GetCharacterForLevelUp(ctx, characterID)
+	if err != nil {
+		return fmt.Errorf("loading character: %w", err)
+	}
+
+	var scores character.AbilityScores
+	if err := json.Unmarshal(char.AbilityScores, &scores); err != nil {
+		return fmt.Errorf("parsing ability scores: %w", err)
+	}
+
+	newScores, err := ApplyASI(scores, choice)
+	if err != nil {
+		return fmt.Errorf("applying ASI: %w", err)
+	}
+
+	scoresJSON, err := json.Marshal(newScores)
+	if err != nil {
+		return fmt.Errorf("marshaling scores: %w", err)
+	}
+
+	return s.charStore.UpdateAbilityScores(ctx, characterID, scoresJSON)
+}
+
+// DenyASI denies a player's ASI choice and re-prompts them.
+func (s *Service) DenyASI(ctx context.Context, characterID uuid.UUID, reason string) error {
+	char, err := s.charStore.GetCharacterForLevelUp(ctx, characterID)
+	if err != nil {
+		return fmt.Errorf("loading character: %w", err)
+	}
+
+	if s.notifier != nil {
+		_ = s.notifier.SendASIDenied(ctx, char.DiscordUserID, char.Name, reason)
+		_ = s.notifier.SendASIPrompt(ctx, char.DiscordUserID, characterID, char.Name)
+	}
+
+	return nil
+}
+
+// ApplyFeat adds a feat to a character's features and applies any ASI bonuses.
+func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat FeatInfo) error {
+	char, err := s.charStore.GetCharacterForLevelUp(ctx, characterID)
+	if err != nil {
+		return fmt.Errorf("loading character: %w", err)
+	}
+
+	// Parse existing features
+	var features []character.Feature
+	if len(char.Features) > 0 {
+		if err := json.Unmarshal(char.Features, &features); err != nil {
+			return fmt.Errorf("parsing features: %w", err)
+		}
+	}
+
+	// Build mechanical_effect string from the array
+	mechanicalEffect := ""
+	if len(feat.MechanicalEffect) > 0 {
+		effectJSON, _ := json.Marshal(feat.MechanicalEffect)
+		mechanicalEffect = string(effectJSON)
+	}
+
+	// Add the feat as a feature
+	features = append(features, character.Feature{
+		Name:             feat.Name,
+		Source:           "feat",
+		Description:      fmt.Sprintf("Feat: %s", feat.Name),
+		MechanicalEffect: mechanicalEffect,
+	})
+
+	featuresJSON, err := json.Marshal(features)
+	if err != nil {
+		return fmt.Errorf("marshaling features: %w", err)
+	}
+
+	if err := s.charStore.UpdateFeatures(ctx, characterID, featuresJSON); err != nil {
+		return fmt.Errorf("updating features: %w", err)
+	}
+
+	// Apply ASI bonus from feat if present
+	if len(feat.ASIBonus) > 0 {
+		if err := s.applyFeatASI(ctx, char, feat.ASIBonus); err != nil {
+			return fmt.Errorf("applying feat ASI: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// applyFeatASI applies the ASI bonus from a feat (e.g. {"con": 1} or {"choose_ability": 1, "from": [...]}).
+func (s *Service) applyFeatASI(ctx context.Context, char *StoredCharacter, asiBonus map[string]any) error {
+	var scores character.AbilityScores
+	if err := json.Unmarshal(char.AbilityScores, &scores); err != nil {
+		return fmt.Errorf("parsing ability scores: %w", err)
+	}
+
+	// Direct ability bonuses (e.g. {"con": 1})
+	for ability, val := range asiBonus {
+		if ability == "choose_ability" || ability == "from" {
+			continue // handled by interactive prompt
+		}
+		bonus, ok := toInt(val)
+		if !ok {
+			continue
+		}
+		current := scores.Get(ability)
+		setScore(&scores, ability, current+bonus)
+	}
+
+	scoresJSON, err := json.Marshal(scores)
+	if err != nil {
+		return fmt.Errorf("marshaling scores: %w", err)
+	}
+
+	return s.charStore.UpdateAbilityScores(ctx, char.ID, scoresJSON)
+}
+
+// toInt converts a JSON number value to int.
+func toInt(v any) (int, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int(n), true
+	case int:
+		return n, true
+	case json.Number:
+		i, err := n.Int64()
+		return int(i), err == nil
+	}
+	return 0, false
+}
+
+// buildNewClasses creates the updated class list after a level change.
+func buildNewClasses(oldClasses []character.ClassEntry, classID string, newLevel int) []character.ClassEntry {
+	newClasses := make([]character.ClassEntry, len(oldClasses))
+	copy(newClasses, oldClasses)
+
+	found := false
+	for i, c := range newClasses {
+		if c.Class == classID {
+			newClasses[i].Level = newLevel
+			found = true
+			break
+		}
+	}
+	if !found {
+		newClasses = append(newClasses, character.ClassEntry{
+			Class: classID,
+			Level: newLevel,
+		})
+	}
+	return newClasses
+}
+
+// buildRefMaps builds the lookup maps needed for stat calculations.
+func (s *Service) buildRefMaps(
+	ctx context.Context,
+	classes []character.ClassEntry,
+	knownRef *ClassRefData,
+	knownClassID string,
+) (
+	hitDice map[string]string,
+	spellcasting map[string]character.ClassSpellcasting,
+	attacksMap map[string]map[int]int,
+	err error,
+) {
+	hitDice = make(map[string]string)
+	spellcasting = make(map[string]character.ClassSpellcasting)
+	attacksMap = make(map[string]map[int]int)
+
+	for _, c := range classes {
+		var ref *ClassRefData
+		if c.Class == knownClassID {
+			ref = knownRef
+		} else {
+			ref, err = s.classStore.GetClassRefData(ctx, c.Class)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("loading class %s: %w", c.Class, err)
+			}
+		}
+		hitDice[c.Class] = ref.HitDie
+		if ref.Spellcasting != nil {
+			spellcasting[c.Class] = *ref.Spellcasting
+		}
+		attacksMap[c.Class] = ref.AttacksPerAction
+	}
+	return
+}
