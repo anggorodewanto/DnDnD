@@ -231,11 +231,13 @@ const createTemplate = `<!DOCTYPE html>
     <div class="main">
         <h2>Character Builder</h2>
         <div class="card" id="character-builder">
-            <p>Character builder content will go here (Phase 91b).</p>
+            <p>Loading character builder...</p>
             <input type="hidden" id="portal-token" value="{{.Token}}">
             <input type="hidden" id="campaign-id" value="{{.CampaignID}}">
         </div>
     </div>
+    <script type="module" crossorigin src="/portal/app/assets/index-BpYdq-OB.js"></script>
+    <link rel="stylesheet" crossorigin href="/portal/app/assets/index-DsBqYogc.css">
 </body>
 </html>`
 

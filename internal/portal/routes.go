@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"io/fs"
 	"net/http"
 
 	"github.com/ab/dndnd/internal/auth"
@@ -12,12 +13,20 @@ type RouteOption func(*routeConfig)
 
 type routeConfig struct {
 	oauthSvc *auth.OAuthService
+	apiH     *APIHandler
 }
 
 // WithOAuth adds OAuth2 login/callback/logout routes to the portal.
 func WithOAuth(svc *auth.OAuthService) RouteOption {
 	return func(cfg *routeConfig) {
 		cfg.oauthSvc = svc
+	}
+}
+
+// WithAPI adds the portal API handler for reference data and character submission.
+func WithAPI(h *APIHandler) RouteOption {
+	return func(cfg *routeConfig) {
+		cfg.apiH = h
 	}
 }
 
@@ -42,6 +51,22 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(handler http.H
 			r.Use(authMiddleware)
 			r.Get("/", h.ServeLanding)
 			r.Get("/create", h.ServeCreate)
+
+			// API routes
+			if cfg.apiH != nil {
+				r.Route("/api", func(r chi.Router) {
+					r.Get("/races", cfg.apiH.ListRaces)
+					r.Get("/classes", cfg.apiH.ListClasses)
+					r.Get("/spells", cfg.apiH.ListSpells)
+					r.Post("/characters", cfg.apiH.SubmitCharacter)
+				})
+			}
 		})
+
+		// Serve built Svelte assets (no auth required for static files)
+		assetsFS, err := fs.Sub(Assets, "assets/assets")
+		if err == nil {
+			r.Handle("/app/assets/*", http.StripPrefix("/portal/app/assets/", http.FileServer(http.FS(assetsFS))))
+		}
 	})
 }
