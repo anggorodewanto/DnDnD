@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-	"strings"
-
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
@@ -128,12 +126,12 @@ func mapCharacterToSheet(ch refdata.Character) (*CharacterSheetData, error) {
 	}
 
 	data.Proficiencies = parseNullJSON[character.Proficiencies](ch.Proficiencies)
-	data.Features = parseNullJSONSlice[character.Feature](ch.Features)
-	data.Inventory = parseNullJSONSlice[character.InventoryItem](ch.Inventory)
-	data.AttunementSlots = parseNullJSONSlice[character.AttunementSlot](ch.AttunementSlots)
-	data.SpellSlots = parseNullJSONMap[character.SlotInfo](ch.SpellSlots)
+	data.Features = parseNullJSON[[]character.Feature](ch.Features)
+	data.Inventory = parseNullJSON[[]character.InventoryItem](ch.Inventory)
+	data.AttunementSlots = parseNullJSON[[]character.AttunementSlot](ch.AttunementSlots)
+	data.SpellSlots = parseNullJSON[map[string]character.SlotInfo](ch.SpellSlots)
 	data.PactMagicSlots = parseNullJSONPtr[character.PactMagicSlots](ch.PactMagicSlots)
-	data.FeatureUses = parseNullJSONMap[character.FeatureUse](ch.FeatureUses)
+	data.FeatureUses = parseNullJSON[map[string]character.FeatureUse](ch.FeatureUses)
 	data.HitDiceRemaining = parseHitDiceRemaining(ch.HitDiceRemaining)
 	data.Spells = extractSpells(ch.CharacterData)
 
@@ -155,28 +153,6 @@ func parseNullJSON[T any](nrm pqtype.NullRawMessage) T {
 	var v T
 	if err := json.Unmarshal(nrm.RawMessage, &v); err != nil {
 		return zero
-	}
-	return v
-}
-
-func parseNullJSONSlice[T any](nrm pqtype.NullRawMessage) []T {
-	if !nrm.Valid || len(nrm.RawMessage) == 0 {
-		return nil
-	}
-	var v []T
-	if err := json.Unmarshal(nrm.RawMessage, &v); err != nil {
-		return nil
-	}
-	return v
-}
-
-func parseNullJSONMap[V any](nrm pqtype.NullRawMessage) map[string]V {
-	if !nrm.Valid || len(nrm.RawMessage) == 0 {
-		return nil
-	}
-	var v map[string]V
-	if err := json.Unmarshal(nrm.RawMessage, &v); err != nil {
-		return nil
 	}
 	return v
 }
@@ -251,15 +227,8 @@ func formatSpellRange(s refdata.Spell) string {
 	}
 }
 
-// ddbSpellEntry matches the DDB import spell format in character_data.
-type ddbSpellEntry struct {
-	Name   string `json:"name"`
-	Level  int    `json:"level"`
-	Source string `json:"source"`
-}
-
 // extractSpells parses spells from character_data, handling both portal ([]string)
-// and DDB ([]ddbSpellEntry) formats. Also extracts prepared_spells for prepared indicators.
+// and DDB ([]character.DDBSpellEntry) formats. Also extracts prepared_spells for prepared indicators.
 func extractSpells(charData pqtype.NullRawMessage) []SpellDisplayEntry {
 	if !charData.Valid || len(charData.RawMessage) == 0 {
 		return nil
@@ -302,13 +271,13 @@ func extractSpells(charData pqtype.NullRawMessage) []SpellDisplayEntry {
 		return entries
 	}
 
-	// Try DDB format: []ddbSpellEntry
-	var ddbSpells []ddbSpellEntry
+	// Try DDB format: []character.DDBSpellEntry
+	var ddbSpells []character.DDBSpellEntry
 	if err := json.Unmarshal(spellsRaw, &ddbSpells); err == nil && len(ddbSpells) > 0 {
 		entries := make([]SpellDisplayEntry, len(ddbSpells))
 		for i, s := range ddbSpells {
 			entries[i] = SpellDisplayEntry{
-				ID:     slugify(s.Name),
+				ID:     character.Slugify(s.Name),
 				Name:   s.Name,
 				Level:  s.Level,
 				Source: s.Source,
@@ -318,11 +287,6 @@ func extractSpells(charData pqtype.NullRawMessage) []SpellDisplayEntry {
 	}
 
 	return nil
-}
-
-// slugify converts a spell name to a lowercase hyphenated ID (e.g., "Fire Bolt" -> "fire-bolt").
-func slugify(name string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "-"))
 }
 
 func parseHitDiceRemaining(raw json.RawMessage) map[string]int {

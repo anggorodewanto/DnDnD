@@ -126,13 +126,6 @@ func (h *CharacterHandler) buildCharacterEmbed(ch refdata.Character) *discordgo.
 	}
 }
 
-// ddbSpellEntry matches the DDB import spell format in character_data.
-type ddbSpellEntry struct {
-	Name   string `json:"name"`
-	Level  int    `json:"level"`
-	Source string `json:"source"`
-}
-
 // buildSpellSummary extracts spells from character_data, enriches from the
 // reference table, and returns a count-by-level summary.
 func (h *CharacterHandler) buildSpellSummary(ch refdata.Character) string {
@@ -153,17 +146,17 @@ func (h *CharacterHandler) buildSpellSummary(ch refdata.Character) string {
 	// Count spells by level
 	counts := make(map[int]int)
 
-	// Try DDB format: []ddbSpellEntry
-	var ddbSpells []ddbSpellEntry
+	// Try DDB format: []character.DDBSpellEntry
+	var ddbSpells []character.DDBSpellEntry
 	if err := json.Unmarshal(spellsRaw, &ddbSpells); err == nil && len(ddbSpells) > 0 && ddbSpells[0].Name != "" {
 		// Collect IDs for enrichment
 		ids := make([]string, len(ddbSpells))
 		for i, s := range ddbSpells {
-			ids[i] = slugifySpellName(s.Name)
+			ids[i] = character.Slugify(s.Name)
 		}
 		enriched := h.lookupSpellLevels(ids)
 		for _, s := range ddbSpells {
-			id := slugifySpellName(s.Name)
+			id := character.Slugify(s.Name)
 			if ref, ok := enriched[id]; ok {
 				counts[int(ref.Level)]++
 			} else {
@@ -222,11 +215,6 @@ func (h *CharacterHandler) lookupSpellLevels(ids []string) map[string]refdata.Sp
 		m[s.ID] = s
 	}
 	return m
-}
-
-// slugifySpellName converts "Fire Bolt" to "fire-bolt".
-func slugifySpellName(name string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "-"))
 }
 
 // slotOrdinal converts a number to ordinal string.

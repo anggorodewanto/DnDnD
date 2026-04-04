@@ -181,6 +181,18 @@ func FormatClassSummary(classes []ClassEntry) string {
 	return strings.Join(parts, " / ")
 }
 
+// Slugify converts a display name to a lowercase hyphenated ID (e.g., "Fire Bolt" -> "fire-bolt").
+func Slugify(name string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "-"))
+}
+
+// DDBSpellEntry matches the DDB import spell format stored in character_data.
+type DDBSpellEntry struct {
+	Name   string `json:"name"`
+	Level  int    `json:"level"`
+	Source string `json:"source"`
+}
+
 // SkillAbilityMap maps each skill to its associated ability.
 var SkillAbilityMap = map[string]string{
 	"acrobatics":      "dex",

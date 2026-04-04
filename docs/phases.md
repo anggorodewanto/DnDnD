@@ -549,6 +549,11 @@
   - Depends on: Phase 91b
   - Done when: Character sheet renders with full detail, accessible via link from `/character`.
 
+- [x] **Phase 92b: Character Spell List — Storage & Display**
+  - Scope: Persist known/prepared spells in `character_data` JSONB for all character creation paths. Fix portal builder to write selected spells to `character_data["spells"]`. Extract spell data from `character_data` in `CharacterSheetStoreAdapter` and display on character sheet (grouped by level, with prepared indicator for prepared casters). Include spell details (name, level, school, casting time, range) by joining against the `spells` reference table. Show spells in `/character` Discord embed (count by level). Update `#character-cards` to include prepared/known spell count.
+  - Depends on: Phase 92, Phase 65, Phase 5
+  - Done when: Portal-created characters have spells persisted; character sheet displays full spell list grouped by level with prepared indicators; `/character` embed shows spell summary; DDB-imported characters' spells display correctly.
+
 - [ ] **Phase 93a: DM Manual Character Creation — Basics Through Ability Scores (Dashboard)**
   - Scope: Dashboard character creation wizard first half: name, race, background, class/subclass selection, ability score entry (manual input or point-buy). DM-created characters are pre-approved (skip approval queue). Derived stats preview (HP, AC, proficiency bonus, saves, skills).
   - Depends on: Phase 15, Phase 7
