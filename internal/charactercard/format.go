@@ -43,7 +43,7 @@ func FormatCard(d CardData) string {
 	var b strings.Builder
 
 	// Header line
-	classStr := formatClasses(d.Classes)
+	classStr := character.FormatClassSummary(d.Classes)
 	header := fmt.Sprintf("⚔️ %s (%s) — Level %d %s %s", d.Name, d.ShortID, d.Level, d.Race, classStr)
 	if d.Retired {
 		header = "🏴 RETIRED — " + header
@@ -98,18 +98,6 @@ func FormatCard(d CardData) string {
 	b.WriteString(strings.Join(d.Languages, ", "))
 
 	return b.String()
-}
-
-func formatClasses(classes []character.ClassEntry) string {
-	parts := make([]string, 0, len(classes))
-	for _, c := range classes {
-		s := fmt.Sprintf("%s %d", c.Class, c.Level)
-		if c.Subclass != "" {
-			s += fmt.Sprintf(" (%s)", c.Subclass)
-		}
-		parts = append(parts, s)
-	}
-	return strings.Join(parts, " / ")
 }
 
 func formatEquipped(main, off string) string {

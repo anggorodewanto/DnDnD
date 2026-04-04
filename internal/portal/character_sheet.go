@@ -3,7 +3,7 @@ package portal
 import (
 	"context"
 	"errors"
-	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -110,7 +110,7 @@ func enrichCharacterSheet(data *CharacterSheetData) {
 	data.AbilityModifiers = computeAbilityModifiers(data.AbilityScores)
 	data.Skills = computeSkills(data.AbilityScores, data.Proficiencies, data.ProficiencyBonus)
 	data.SavingThrows = computeSavingThrows(data.AbilityScores, data.Proficiencies.Saves, data.ProficiencyBonus)
-	data.ClassSummary = formatClassSummary(data.Classes)
+	data.ClassSummary = character.FormatClassSummary(data.Classes)
 }
 
 func computeAbilityModifiers(scores character.AbilityScores) map[string]int {
@@ -135,7 +135,7 @@ func computeSkills(scores character.AbilityScores, profs character.Proficiencies
 	for _, name := range skillNames {
 		ability := character.SkillAbilityMap[name]
 		mod := character.SkillModifier(scores, name, profs.Skills, nil, false, profBonus)
-		proficient := containsSkill(profs.Skills, name)
+		proficient := slices.Contains(profs.Skills, name)
 		skills = append(skills, SkillDisplay{
 			Name:       formatSkillName(name),
 			Ability:    strings.ToUpper(ability),
@@ -144,15 +144,6 @@ func computeSkills(scores character.AbilityScores, profs character.Proficiencies
 		})
 	}
 	return skills
-}
-
-func containsSkill(skills []string, name string) bool {
-	for _, s := range skills {
-		if s == name {
-			return true
-		}
-	}
-	return false
 }
 
 func formatSkillName(name string) string {
@@ -170,7 +161,7 @@ func computeSavingThrows(scores character.AbilityScores, profSaves []string, pro
 	throws := make([]SavingThrowDisplay, 0, len(abilities))
 	for _, ab := range abilities {
 		mod := character.SavingThrowModifier(scores, ab, profSaves, profBonus)
-		proficient := containsSkill(profSaves, ab)
+		proficient := slices.Contains(profSaves, ab)
 		throws = append(throws, SavingThrowDisplay{
 			Ability:    strings.ToUpper(ab),
 			Modifier:   mod,
@@ -178,16 +169,4 @@ func computeSavingThrows(scores character.AbilityScores, profSaves []string, pro
 		})
 	}
 	return throws
-}
-
-func formatClassSummary(classes []character.ClassEntry) string {
-	parts := make([]string, 0, len(classes))
-	for _, c := range classes {
-		s := fmt.Sprintf("%s %d", c.Class, c.Level)
-		if c.Subclass != "" {
-			s += fmt.Sprintf(" (%s)", c.Subclass)
-		}
-		parts = append(parts, s)
-	}
-	return strings.Join(parts, " / ")
 }

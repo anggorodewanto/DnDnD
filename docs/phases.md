@@ -544,7 +544,7 @@
   - Depends on: Phase 91b
   - Done when: Player can select starting equipment during character creation, equipment saved with character.
 
-- [ ] **Phase 92: Player Portal — Character Sheet View**
+- [x] **Phase 92: Player Portal — Character Sheet View**
   - Scope: Read-only web character sheet: ability scores/modifiers, skills, languages, features with descriptions, spell list, inventory, all mechanical state. Accessible via `/character` command (ephemeral embed + link). Same data as character cards but full detail.
   - Depends on: Phase 91b
   - Done when: Character sheet renders with full detail, accessible via link from `/character`.

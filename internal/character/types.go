@@ -3,6 +3,7 @@ package character
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // AbilityScores represents the six core D&D ability scores.
@@ -164,6 +165,20 @@ func HitDieValue(hitDie string) int {
 		return 12
 	}
 	return 0
+}
+
+// FormatClassSummary formats a slice of ClassEntry into a human-readable summary
+// like "Fighter 5 / Wizard 3 (Evocation)".
+func FormatClassSummary(classes []ClassEntry) string {
+	parts := make([]string, 0, len(classes))
+	for _, c := range classes {
+		s := fmt.Sprintf("%s %d", c.Class, c.Level)
+		if c.Subclass != "" {
+			s += fmt.Sprintf(" (%s)", c.Subclass)
+		}
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, " / ")
 }
 
 // SkillAbilityMap maps each skill to its associated ability.

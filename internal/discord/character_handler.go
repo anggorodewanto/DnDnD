@@ -86,7 +86,7 @@ func (h *CharacterHandler) buildCharacterEmbed(ch refdata.Character) *discordgo.
 	var classes []character.ClassEntry
 	_ = json.Unmarshal(ch.Classes, &classes)
 
-	classStr := formatClassEntries(classes)
+	classStr := character.FormatClassSummary(classes)
 
 	var desc strings.Builder
 	fmt.Fprintf(&desc, "**Level %d %s %s**\n\n", ch.Level, ch.Race, classStr)
@@ -118,16 +118,4 @@ func (h *CharacterHandler) buildCharacterEmbed(ch refdata.Character) *discordgo.
 		Description: desc.String(),
 		Color:       0xe94560, // DnDnD red
 	}
-}
-
-func formatClassEntries(classes []character.ClassEntry) string {
-	parts := make([]string, 0, len(classes))
-	for _, c := range classes {
-		s := fmt.Sprintf("%s %d", c.Class, c.Level)
-		if c.Subclass != "" {
-			s += fmt.Sprintf(" (%s)", c.Subclass)
-		}
-		parts = append(parts, s)
-	}
-	return strings.Join(parts, " / ")
 }
