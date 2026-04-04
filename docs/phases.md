@@ -514,7 +514,7 @@
   - Depends on: Phase 88b
   - Done when: Integration tests verify `/cast identify` identification, short rest study, DM dashboard reveal endpoint, unidentified→identified transitions.
 
-- [ ] **Phase 89: Character Leveling**
+- [x] **Phase 89: Character Leveling**
   - Scope: Milestone only (no XP). DM edits class level in dashboard. Auto-recalculate: total level, HP, proficiency bonus, spell slots (multiclass table), attacks per action. Subclass selection at threshold. ASI/Feat selection: interactive prompt in Discord (buttons for +2/+1+1/Feat), select menu for scores or feats (with prerequisite check), DM approval via #dm-queue. Feat effects applied via Feature Effect System. Level-up notifications (public + private detail).
   - Depends on: Phase 7, Phase 4, Phase 44
   - Done when: Integration tests verify level-up stat recalculation, ASI/feat prompt flow, DM approval, feat effect application, notifications.

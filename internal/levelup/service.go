@@ -185,15 +185,7 @@ func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, class
 	grantsASI := IsASILevel(classID, newClassLevel)
 
 	// Determine if subclass selection is needed
-	var existingEntry *character.ClassEntry
-	for _, c := range oldClasses {
-		if c.Class == classID {
-			e := c
-			existingEntry = &e
-			break
-		}
-	}
-	hasSubclass := existingEntry != nil && existingEntry.Subclass != ""
+	hasSubclass := classHasSubclass(oldClasses, classID)
 	needsSubclass := NeedsSubclassSelection(newClassLevel, classRef.SubclassLevel, hasSubclass)
 
 	details := &LevelUpDetails{
@@ -289,20 +281,17 @@ func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat Fea
 		}
 	}
 
-	// Build mechanical_effect string from the array
-	mechanicalEffect := ""
+	// Add the feat as a feature
+	feature := character.Feature{
+		Name:        feat.Name,
+		Source:      "feat",
+		Description: fmt.Sprintf("Feat: %s", feat.Name),
+	}
 	if len(feat.MechanicalEffect) > 0 {
 		effectJSON, _ := json.Marshal(feat.MechanicalEffect)
-		mechanicalEffect = string(effectJSON)
+		feature.MechanicalEffect = string(effectJSON)
 	}
-
-	// Add the feat as a feature
-	features = append(features, character.Feature{
-		Name:             feat.Name,
-		Source:           "feat",
-		Description:      fmt.Sprintf("Feat: %s", feat.Name),
-		MechanicalEffect: mechanicalEffect,
-	})
+	features = append(features, feature)
 
 	featuresJSON, err := json.Marshal(features)
 	if err != nil {
@@ -420,4 +409,14 @@ func (s *Service) buildRefMaps(
 		attacksMap[c.Class] = ref.AttacksPerAction
 	}
 	return
+}
+
+// classHasSubclass checks whether the given class already has a subclass selected.
+func classHasSubclass(classes []character.ClassEntry, classID string) bool {
+	for _, c := range classes {
+		if c.Class == classID {
+			return c.Subclass != ""
+		}
+	}
+	return false
 }
