@@ -140,6 +140,59 @@ func TestServeCharacterSheet_InternalError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
+func TestServeCharacterSheet_HitDiceRemaining(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			Name:             "Thorn",
+			Race:             "Human",
+			Level:            5,
+			ClassSummary:     "Fighter 5",
+			AbilityModifiers: map[string]int{"STR": 0, "DEX": 0, "CON": 0, "INT": 0, "WIS": 0, "CHA": 0},
+			HitDiceRemaining: map[string]int{"d10": 3},
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "Hit Dice")
+	assert.Contains(t, body, "d10")
+	assert.Contains(t, body, "3")
+}
+
+func TestServeCharacterSheet_FeatureUses(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			Name:             "Thorn",
+			Race:             "Human",
+			Level:            5,
+			ClassSummary:     "Fighter 5",
+			AbilityModifiers: map[string]int{"STR": 0, "DEX": 0, "CON": 0, "INT": 0, "WIS": 0, "CHA": 0},
+			FeatureUses: map[string]character.FeatureUse{
+				"Second Wind": {Current: 0, Max: 1, Recharge: "short rest"},
+			},
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "Feature Uses")
+	assert.Contains(t, body, "Second Wind")
+	assert.Contains(t, body, "0/1")
+	assert.Contains(t, body, "short rest")
+}
+
 func TestRegisterRoutes_CharacterSheet(t *testing.T) {
 	r := chi.NewRouter()
 	svc := &fakeCharacterSheetService{

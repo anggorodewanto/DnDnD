@@ -222,6 +222,18 @@ const characterSheetTemplate = `<!DOCTYPE html>
             </div>
         </div>
 
+        {{if .HitDiceRemaining}}
+        <div class="section">
+            <h3>Hit Dice</h3>
+            {{range $die, $remaining := .HitDiceRemaining}}
+            <div class="slot-row">
+                <span>{{$die}}</span>
+                <span>{{$remaining}} remaining</span>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+
         <div class="ability-grid">
             <div class="ability-box">
                 <div class="ability-name">STR</div>
@@ -321,6 +333,18 @@ const characterSheetTemplate = `<!DOCTYPE html>
             <p class="empty-msg">No features</p>
             {{end}}
         </div>
+
+        {{if .FeatureUses}}
+        <div class="section">
+            <h3>Feature Uses</h3>
+            {{range $name, $use := .FeatureUses}}
+            <div class="slot-row">
+                <span>{{$name}}</span>
+                <span>{{$use.Current}}/{{$use.Max}} ({{$use.Recharge}})</span>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
 
         {{if .SpellSlots}}
         <div class="section">
