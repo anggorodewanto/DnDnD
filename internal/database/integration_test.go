@@ -69,11 +69,10 @@ func TestIntegration_MigrateDown(t *testing.T) {
 	}
 
 	// Roll back migrations from most recent to oldest.
-	// 23: pending_saves, 22: timeout_resolution_columns,
-	// 21: turn_timer_columns, 20: pending_actions,
-	// 19: counterspell_fields, 18: readied_action_fields,
-	// 17: reaction_declarations, 16: encounter_zones
 	for _, name := range []string{
+		"portal_tokens",
+		"shops",
+		"loot_pools",
 		"pending_saves",
 		"timeout_resolution_columns",
 		"turn_timer_columns",
