@@ -82,14 +82,24 @@ func TestFormatASIPromptMessage(t *testing.T) {
 	if msg == "" {
 		t.Error("expected non-empty message")
 	}
-	if !strings.Contains(msg, "+2") {
-		t.Error("expected +2 option in message")
+	if !strings.Contains(msg, "Ability Score Improvement") {
+		t.Error("expected ASI mention in message")
 	}
-	if !strings.Contains(msg, "+1") {
-		t.Error("expected +1 option in message")
+	if !strings.Contains(msg, "Aria") {
+		t.Error("expected character name in message")
 	}
-	if !strings.Contains(msg, "Feat") || !strings.Contains(msg, "feat") {
-		t.Error("expected feat option in message")
+}
+
+func TestFormatASIApprovedMessage(t *testing.T) {
+	msg := FormatASIApprovedMessage("Aria", "+2 STR (16 -> 18)")
+	if !strings.Contains(msg, "Aria") {
+		t.Error("expected character name")
+	}
+	if !strings.Contains(msg, "+2 STR") {
+		t.Error("expected choice description")
+	}
+	if !strings.Contains(msg, "approved") && !strings.Contains(msg, "applied") {
+		t.Error("expected approval indicator")
 	}
 }
 

@@ -22,6 +22,7 @@ type CommandRouter struct {
 	doneHandler *DoneHandler
 	restHandler *RestHandler
 	lootHandler *LootHandler
+	asiHandler  *ASIHandler
 }
 
 // SetMoveHandler registers the MoveHandler for button callback routing.
@@ -105,6 +106,11 @@ func (r *CommandRouter) SetUnattuneHandler(h *UnattuneHandler) {
 // SetEquipHandler registers the EquipHandler for the /equip command.
 func (r *CommandRouter) SetEquipHandler(h *EquipHandler) {
 	r.handlers["equip"] = h
+}
+
+// SetASIHandler registers the ASIHandler for ASI/Feat component callbacks.
+func (r *CommandRouter) SetASIHandler(h *ASIHandler) {
+	r.asiHandler = h
 }
 
 // RegistrationDeps holds the optional dependencies for registration command handlers.
@@ -286,6 +292,26 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 				return
 			}
 			r.lootHandler.HandleLootClaim(interaction, poolID, itemID, characterID)
+			return
+		}
+	}
+
+	// ASI/Feat button and select menu callbacks
+	if r.asiHandler != nil {
+		if strings.HasPrefix(customID, asiChoicePrefix+":") {
+			r.asiHandler.HandleASIChoice(interaction)
+			return
+		}
+		if strings.HasPrefix(customID, asiSelectPrefix+":") {
+			r.asiHandler.HandleASISelect(interaction)
+			return
+		}
+		if strings.HasPrefix(customID, asiApprovePrefix+":") {
+			r.asiHandler.HandleDMApprove(interaction)
+			return
+		}
+		if strings.HasPrefix(customID, asiDenyPrefix+":") {
+			r.asiHandler.HandleDMDeny(interaction)
 			return
 		}
 	}

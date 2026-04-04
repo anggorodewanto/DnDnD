@@ -36,17 +36,14 @@ func FormatPrivateLevelUpMessage(details LevelUpDetails) string {
 }
 
 // FormatASIPromptMessage returns the interactive prompt message for ASI/Feat choice.
+// This text accompanies interactive button components in the Discord message.
 func FormatASIPromptMessage(characterName string, characterID uuid.UUID) string {
-	var b strings.Builder
+	return fmt.Sprintf("\U0001f393 **%s** — Ability Score Improvement available! Choose below:", characterName)
+}
 
-	fmt.Fprintf(&b, "**%s** has earned an Ability Score Improvement!\n\n", characterName)
-	b.WriteString("Choose one of the following:\n")
-	b.WriteString("  [+2 to One Score] - Increase one ability score by 2 (max 20)\n")
-	b.WriteString("  [+1 to Two Scores] - Increase two different ability scores by 1 each (max 20)\n")
-	b.WriteString("  [Choose a Feat] - Select a feat from the available list\n")
-	fmt.Fprintf(&b, "\nCharacter ID: %s\n", characterID.String())
-
-	return b.String()
+// FormatASIApprovedMessage returns the confirmation message when an ASI/Feat is approved.
+func FormatASIApprovedMessage(characterName, choiceDescription string) string {
+	return fmt.Sprintf("\u2705 %s applied for **%s**!", choiceDescription, characterName)
 }
 
 // FormatASIDeniedMessage returns the message sent when a DM denies an ASI choice.
