@@ -1,0 +1,164 @@
+package portal_test
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/ab/dndnd/internal/auth"
+	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/portal"
+	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
+)
+
+// fakeCharacterSheetService implements the interface needed by the handler.
+type fakeCharacterSheetService struct {
+	data *portal.CharacterSheetData
+	err  error
+}
+
+func (f *fakeCharacterSheetService) LoadCharacterSheet(_ context.Context, characterID, userID string) (*portal.CharacterSheetData, error) {
+	return f.data, f.err
+}
+
+func newCharacterSheetRequest(charID, userID string) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, "/portal/character/"+charID, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("characterID", charID)
+	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+	if userID != "" {
+		ctx = auth.ContextWithDiscordUserID(ctx, userID)
+	}
+	return req.WithContext(ctx)
+}
+
+func TestServeCharacterSheet_Success(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			ID:               "char-1",
+			Name:             "Thorn",
+			Race:             "Human",
+			Level:            5,
+			ProficiencyBonus: 3,
+			Classes: []character.ClassEntry{
+				{Class: "Fighter", Level: 5},
+			},
+			AbilityScores:    character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 8, CHA: 13},
+			HpMax:            42,
+			HpCurrent:        35,
+			AC:               18,
+			SpeedFt:          30,
+			Languages:        []string{"Common", "Elvish"},
+			AbilityModifiers: map[string]int{"STR": 3, "DEX": 2, "CON": 1, "INT": 0, "WIS": -1, "CHA": 1},
+			ClassSummary:     "Fighter 5",
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Header().Get("Content-Type"), "text/html")
+	body := rec.Body.String()
+	assert.Contains(t, body, "Thorn")
+	assert.Contains(t, body, "Human")
+	assert.Contains(t, body, "Fighter 5")
+}
+
+func TestServeCharacterSheet_Unauthenticated(t *testing.T) {
+	h := portal.NewCharacterSheetHandler(slog.Default(), nil)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestServeCharacterSheet_MissingCharacterID(t *testing.T) {
+	h := portal.NewCharacterSheetHandler(slog.Default(), nil)
+	rec := httptest.NewRecorder()
+
+	req := httptest.NewRequest(http.MethodGet, "/portal/character/", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("characterID", "")
+	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+	ctx = auth.ContextWithDiscordUserID(ctx, "user-123")
+	req = req.WithContext(ctx)
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestServeCharacterSheet_NotOwner(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		err: portal.ErrNotOwner,
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-attacker")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestServeCharacterSheet_NotFound(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		err: portal.ErrCharacterNotFound,
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestServeCharacterSheet_InternalError(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		err: errors.New("db error"),
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestRegisterRoutes_CharacterSheet(t *testing.T) {
+	r := chi.NewRouter()
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			Name:             "Thorn",
+			Race:             "Human",
+			Level:            1,
+			ClassSummary:     "Fighter 1",
+			AbilityModifiers: map[string]int{"STR": 0, "DEX": 0, "CON": 0, "INT": 0, "WIS": 0, "CHA": 0},
+		},
+	}
+	h := portal.NewHandler(slog.Default(), nil)
+	csh := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	portal.RegisterRoutes(r, h, fakeAuthMiddleware, portal.WithCharacterSheet(csh))
+
+	req := httptest.NewRequest(http.MethodGet, "/portal/character/abc-123", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Thorn")
+}

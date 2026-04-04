@@ -14,6 +14,7 @@ type RouteOption func(*routeConfig)
 type routeConfig struct {
 	oauthSvc *auth.OAuthService
 	apiH     *APIHandler
+	sheetH   *CharacterSheetHandler
 }
 
 // WithOAuth adds OAuth2 login/callback/logout routes to the portal.
@@ -27,6 +28,13 @@ func WithOAuth(svc *auth.OAuthService) RouteOption {
 func WithAPI(h *APIHandler) RouteOption {
 	return func(cfg *routeConfig) {
 		cfg.apiH = h
+	}
+}
+
+// WithCharacterSheet adds the character sheet handler.
+func WithCharacterSheet(h *CharacterSheetHandler) RouteOption {
+	return func(cfg *routeConfig) {
+		cfg.sheetH = h
 	}
 }
 
@@ -51,6 +59,11 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(handler http.H
 			r.Use(authMiddleware)
 			r.Get("/", h.ServeLanding)
 			r.Get("/create", h.ServeCreate)
+
+			// Character sheet route
+			if cfg.sheetH != nil {
+				r.Get("/character/{characterID}", cfg.sheetH.ServeCharacterSheet)
+			}
 
 			// API routes
 			if cfg.apiH != nil {

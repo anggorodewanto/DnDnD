@@ -108,6 +108,11 @@ func (r *CommandRouter) SetEquipHandler(h *EquipHandler) {
 	r.handlers["equip"] = h
 }
 
+// SetCharacterHandler registers the CharacterHandler for the /character command.
+func (r *CommandRouter) SetCharacterHandler(h *CharacterHandler) {
+	r.handlers["character"] = h
+}
+
 // SetASIHandler registers the ASIHandler for ASI/Feat component callbacks.
 func (r *CommandRouter) SetASIHandler(h *ASIHandler) {
 	r.asiHandler = h
