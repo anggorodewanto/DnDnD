@@ -24,15 +24,30 @@ type RaceInfo struct {
 
 // ClassInfo is the API response for a class.
 type ClassInfo struct {
-	ID                string          `json:"id"`
-	Name              string          `json:"name"`
-	HitDie            string          `json:"hit_die"`
-	PrimaryAbility    string          `json:"primary_ability,omitempty"`
-	SaveProficiencies []string        `json:"save_proficiencies,omitempty"`
-	SkillChoices      json.RawMessage `json:"skill_choices,omitempty"`
-	Spellcasting      json.RawMessage `json:"spellcasting,omitempty"`
-	Subclasses        json.RawMessage `json:"subclasses,omitempty"`
-	SubclassLevel     int             `json:"subclass_level,omitempty"`
+	ID                  string          `json:"id"`
+	Name                string          `json:"name"`
+	HitDie              string          `json:"hit_die"`
+	PrimaryAbility      string          `json:"primary_ability,omitempty"`
+	SaveProficiencies   []string        `json:"save_proficiencies,omitempty"`
+	ArmorProficiencies  []string        `json:"armor_proficiencies,omitempty"`
+	WeaponProficiencies []string        `json:"weapon_proficiencies,omitempty"`
+	SkillChoices        json.RawMessage `json:"skill_choices,omitempty"`
+	Spellcasting        json.RawMessage `json:"spellcasting,omitempty"`
+	Subclasses          json.RawMessage `json:"subclasses,omitempty"`
+	SubclassLevel       int             `json:"subclass_level,omitempty"`
+}
+
+// EquipmentItem is the API response for a weapon or armor item.
+type EquipmentItem struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Category   string   `json:"category"` // "weapon" or "armor"
+	WeaponType string   `json:"weapon_type,omitempty"`
+	Damage     string   `json:"damage,omitempty"`
+	DamageType string   `json:"damage_type,omitempty"`
+	Properties []string `json:"properties,omitempty"`
+	ArmorType  string   `json:"armor_type,omitempty"`
+	ACBase     int      `json:"ac_base,omitempty"`
 }
 
 // SpellInfo is the API response for a spell.
@@ -52,6 +67,7 @@ type RefDataStore interface {
 	ListRaces(ctx context.Context) ([]RaceInfo, error)
 	ListClasses(ctx context.Context) ([]ClassInfo, error)
 	ListSpellsByClass(ctx context.Context, class string) ([]SpellInfo, error)
+	ListEquipment(ctx context.Context) ([]EquipmentItem, error)
 }
 
 // APIHandler serves the portal JSON API endpoints.
@@ -113,6 +129,34 @@ func (h *APIHandler) ListSpells(w http.ResponseWriter, r *http.Request) {
 		spells = []SpellInfo{}
 	}
 	writeJSON(w, http.StatusOK, spells)
+}
+
+// ListEquipment returns all weapons and armor as JSON.
+func (h *APIHandler) ListEquipment(w http.ResponseWriter, r *http.Request) {
+	items, err := h.refData.ListEquipment(r.Context())
+	if err != nil {
+		h.logger.Error("listing equipment", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if items == nil {
+		items = []EquipmentItem{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+// GetStartingEquipment returns starting equipment packs for a class.
+func (h *APIHandler) GetStartingEquipment(w http.ResponseWriter, r *http.Request) {
+	class := r.URL.Query().Get("class")
+	if class == "" {
+		http.Error(w, "class query parameter is required", http.StatusBadRequest)
+		return
+	}
+	packs := StartingEquipmentPacks(class)
+	if packs == nil {
+		packs = []EquipmentPack{}
+	}
+	writeJSON(w, http.StatusOK, packs)
 }
 
 // submitRequest is the JSON body for character submission.

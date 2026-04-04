@@ -1,5 +1,5 @@
 <script>
-  import { listRaces, listClasses, listSpells, submitCharacter } from './lib/api.js';
+  import { listRaces, listClasses, listSpells, listEquipment, getStartingEquipment, submitCharacter } from './lib/api.js';
   import { remainingPoints, abilityModifier, canIncrement, canDecrement, scoreCost } from './lib/pointbuy.js';
 
   let { token = '', campaignId = '' } = $props();
@@ -24,6 +24,13 @@
   let races = $state([]);
   let classes = $state([]);
   let spells = $state([]);
+  let allEquipment = $state([]);
+  let startingPacks = $state([]);
+
+  // Equipment selection state
+  let packChoices = $state({});   // { choiceIndex: selectedOptionIndex }
+  let manualEquipment = $state([]); // manually added item IDs
+  let equipmentSearch = $state('');
 
   // UI state
   let loading = $state(false);
@@ -49,10 +56,18 @@
     }
   }
 
-  // Load spells when class changes
+  // Load spells and starting equipment when class changes
   $effect(() => {
     if (selectedClass) {
       loadSpells(selectedClass);
+      loadStartingEquipment(selectedClass);
+    }
+  });
+
+  // Load full equipment list when entering equipment step
+  $effect(() => {
+    if (currentStep === 4 && allEquipment.length === 0) {
+      loadEquipment();
     }
   });
 
@@ -61,6 +76,23 @@
       spells = await listSpells(cls);
     } catch (e) {
       spells = [];
+    }
+  }
+
+  async function loadEquipment() {
+    try {
+      allEquipment = await listEquipment();
+    } catch (e) {
+      allEquipment = [];
+    }
+  }
+
+  async function loadStartingEquipment(cls) {
+    try {
+      startingPacks = await getStartingEquipment(cls);
+      packChoices = {};
+    } catch (e) {
+      startingPacks = [];
     }
   }
 
@@ -95,6 +127,62 @@
       selectedSkills = [...selectedSkills, skill];
     }
   }
+
+  function selectPackChoice(choiceIdx, optionIdx) {
+    packChoices = { ...packChoices, [choiceIdx]: optionIdx };
+  }
+
+  function addManualItem(itemId) {
+    if (!manualEquipment.includes(itemId)) {
+      manualEquipment = [...manualEquipment, itemId];
+    }
+  }
+
+  function removeManualItem(itemId) {
+    manualEquipment = manualEquipment.filter(id => id !== itemId);
+  }
+
+  // Derive the final equipment list from pack choices + manual items
+  let selectedEquipment = $derived(() => {
+    const items = [];
+    // Add items from pack choices
+    if (startingPacks.length > 0 && startingPacks[0]) {
+      const pack = startingPacks[0];
+      // Add guaranteed items
+      if (pack.guaranteed) {
+        for (const g of pack.guaranteed) {
+          items.push(g.split(':')[0]);
+        }
+      }
+      // Add chosen options
+      if (pack.choices) {
+        for (let i = 0; i < pack.choices.length; i++) {
+          const chosen = packChoices[i];
+          if (chosen !== undefined && pack.choices[i].options[chosen]) {
+            const opt = pack.choices[i].options[chosen];
+            // Option may contain comma-separated items with quantities
+            for (const part of opt.split(',')) {
+              items.push(part.split(':')[0]);
+            }
+          }
+        }
+      }
+    }
+    // Add manual items
+    for (const id of manualEquipment) {
+      if (!items.includes(id)) {
+        items.push(id);
+      }
+    }
+    return items;
+  });
+
+  // Filtered equipment for search
+  let filteredEquipment = $derived(() => {
+    if (!equipmentSearch) return allEquipment;
+    const q = equipmentSearch.toLowerCase();
+    return allEquipment.filter(e => e.name.toLowerCase().includes(q));
+  });
 
   function toggleSpell(spellId) {
     if (selectedSpells.includes(spellId)) {
@@ -163,7 +251,7 @@
         subclass,
         ability_scores: scores,
         skills: selectedSkills,
-        equipment,
+        equipment: selectedEquipment(),
         spells: selectedSpells,
       });
       submitted = true;
@@ -305,12 +393,93 @@
     {:else if currentStep === 4}
       <div class="step-content">
         <h3>Starting Equipment</h3>
-        <p>Default starting equipment will be assigned based on your class and background.</p>
         {#if selectedClassData}
           <p><strong>Class:</strong> {selectedClassData.name}</p>
         {/if}
         {#if background}
           <p><strong>Background:</strong> {background.replace(/-/g, ' ')}</p>
+        {/if}
+
+        <!-- Starting equipment packs -->
+        {#if startingPacks.length > 0 && startingPacks[0]}
+          <div class="equipment-section">
+            <h4>Starting Equipment Choices</h4>
+            {#if startingPacks[0].guaranteed && startingPacks[0].guaranteed.length > 0}
+              <div class="guaranteed-items">
+                <p><strong>Guaranteed items:</strong></p>
+                <ul>
+                  {#each startingPacks[0].guaranteed as item}
+                    <li>{item.replace(/-/g, ' ')}</li>
+                  {/each}
+                </ul>
+              </div>
+            {/if}
+
+            {#if startingPacks[0].choices}
+              {#each startingPacks[0].choices as choice, choiceIdx}
+                <div class="equipment-choice">
+                  <p><strong>{choice.label}:</strong></p>
+                  {#each choice.options as option, optIdx}
+                    <label class="equipment-option">
+                      <input
+                        type="radio"
+                        name="equip-choice-{choiceIdx}"
+                        checked={packChoices[choiceIdx] === optIdx}
+                        onchange={() => selectPackChoice(choiceIdx, optIdx)}
+                      />
+                      {option.replace(/-/g, ' ').replace(/:/g, ' x').replace(/,/g, ', ')}
+                    </label>
+                  {/each}
+                </div>
+              {/each}
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Manual equipment selection -->
+        <div class="equipment-section">
+          <h4>Additional Equipment (SRD Items)</h4>
+          <input
+            type="text"
+            bind:value={equipmentSearch}
+            placeholder="Search weapons and armor..."
+          />
+          {#if filteredEquipment().length > 0}
+            <div class="equipment-list">
+              {#each filteredEquipment().slice(0, 20) as item}
+                <div class="equipment-item">
+                  <span class="item-name">{item.name}</span>
+                  <span class="item-type">{item.category}</span>
+                  {#if item.damage}
+                    <span class="item-detail">{item.damage} {item.damage_type}</span>
+                  {/if}
+                  {#if item.ac_base}
+                    <span class="item-detail">AC {item.ac_base}</span>
+                  {/if}
+                  {#if manualEquipment.includes(item.id)}
+                    <button class="remove-btn" onclick={() => removeManualItem(item.id)}>Remove</button>
+                  {:else}
+                    <button class="add-btn" onclick={() => addManualItem(item.id)}>Add</button>
+                  {/if}
+                </div>
+              {/each}
+              {#if filteredEquipment().length > 20}
+                <p class="truncated">Showing first 20 of {filteredEquipment().length} items. Refine your search.</p>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Selected equipment summary -->
+        {#if selectedEquipment().length > 0}
+          <div class="equipment-section">
+            <h4>Selected Equipment ({selectedEquipment().length} items)</h4>
+            <ul class="selected-list">
+              {#each selectedEquipment() as itemId}
+                <li>{itemId.replace(/-/g, ' ')}</li>
+              {/each}
+            </ul>
+          </div>
         {/if}
       </div>
 
@@ -372,6 +541,13 @@
           <div class="review-section">
             <h4>Skills</h4>
             <p>{selectedSkills.map(s => s.replace(/-/g, ' ')).join(', ')}</p>
+          </div>
+        {/if}
+
+        {#if selectedEquipment().length > 0}
+          <div class="review-section">
+            <h4>Equipment</h4>
+            <p>{selectedEquipment().map(id => id.replace(/-/g, ' ')).join(', ')}</p>
           </div>
         {/if}
 
@@ -454,4 +630,26 @@
   .success { padding: 2rem; text-align: center; }
   .success h3 { color: #4caf50; }
   .error { background: #441111; border: 1px solid #ff4444; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; color: #ff8888; }
+  .equipment-section { margin-top: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
+  .equipment-section h4 { color: #e94560; margin-bottom: 0.5rem; }
+  .equipment-choice { margin-bottom: 0.75rem; }
+  .equipment-option { display: flex; align-items: center; gap: 0.5rem; padding: 0.2rem 0; cursor: pointer; }
+  .guaranteed-items ul { margin: 0.25rem 0; padding-left: 1.5rem; }
+  .guaranteed-items li { text-transform: capitalize; }
+  .equipment-list { max-height: 300px; overflow-y: auto; margin-top: 0.5rem; }
+  .equipment-item {
+    display: flex; align-items: center; gap: 0.75rem; padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid #0f3460;
+  }
+  .item-name { flex: 1; }
+  .item-type { color: #888; font-size: 0.85rem; text-transform: capitalize; }
+  .item-detail { color: #aaa; font-size: 0.85rem; }
+  .add-btn, .remove-btn {
+    padding: 0.2rem 0.6rem; border: none; border-radius: 3px; cursor: pointer; font-size: 0.8rem;
+  }
+  .add-btn { background: #0f3460; color: #e0e0e0; }
+  .remove-btn { background: #e94560; color: white; }
+  .selected-list { margin: 0.25rem 0; padding-left: 1.5rem; }
+  .selected-list li { text-transform: capitalize; }
+  .truncated { color: #888; font-size: 0.85rem; font-style: italic; }
 </style>

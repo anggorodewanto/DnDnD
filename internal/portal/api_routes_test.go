@@ -82,6 +82,41 @@ func TestAPIRoutes_ListSpells(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
+func TestAPIRoutes_ListEquipment(t *testing.T) {
+	r := chi.NewRouter()
+	h := portal.NewHandler(slog.Default(), nil)
+	refStore := &mockRefDataStore{
+		equipment: []portal.EquipmentItem{{ID: "longsword", Name: "Longsword", Category: "weapon"}},
+	}
+	apiH := portal.NewAPIHandler(slog.Default(), refStore, nil)
+	portal.RegisterRoutes(r, h, authMiddleware, portal.WithAPI(apiH))
+
+	req := httptest.NewRequest(http.MethodGet, "/portal/api/equipment", nil)
+	req.Header.Set("X-Test-User-ID", "user-1")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var items []portal.EquipmentItem
+	err := json.NewDecoder(rec.Body).Decode(&items)
+	require.NoError(t, err)
+	assert.Len(t, items, 1)
+}
+
+func TestAPIRoutes_GetStartingEquipment(t *testing.T) {
+	r := chi.NewRouter()
+	h := portal.NewHandler(slog.Default(), nil)
+	apiH := portal.NewAPIHandler(slog.Default(), &mockRefDataStore{}, nil)
+	portal.RegisterRoutes(r, h, authMiddleware, portal.WithAPI(apiH))
+
+	req := httptest.NewRequest(http.MethodGet, "/portal/api/starting-equipment?class=fighter", nil)
+	req.Header.Set("X-Test-User-ID", "user-1")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
 func TestAPIRoutes_SubmitCharacter(t *testing.T) {
 	r := chi.NewRouter()
 	h := portal.NewHandler(slog.Default(), nil)

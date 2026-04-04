@@ -27,6 +27,9 @@ func (e *errorRefDataStore) ListClasses(_ context.Context) ([]portal.ClassInfo, 
 func (e *errorRefDataStore) ListSpellsByClass(_ context.Context, _ string) ([]portal.SpellInfo, error) {
 	return nil, errors.New("db error")
 }
+func (e *errorRefDataStore) ListEquipment(_ context.Context) ([]portal.EquipmentItem, error) {
+	return nil, errors.New("db error")
+}
 
 func TestAPIHandler_ListRaces_Error(t *testing.T) {
 	h := portal.NewAPIHandler(slog.Default(), &errorRefDataStore{}, nil)
@@ -103,6 +106,30 @@ func TestAPIHandler_SubmitCharacter_ShortStoreError(t *testing.T) {
 	// Must not panic
 	h.SubmitCharacter(rec, req)
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestAPIHandler_ListEquipment_Error(t *testing.T) {
+	h := portal.NewAPIHandler(slog.Default(), &errorRefDataStore{}, nil)
+	req := httptest.NewRequest(http.MethodGet, "/portal/api/equipment", nil)
+	ctx := auth.ContextWithDiscordUserID(req.Context(), "u1")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	h.ListEquipment(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestAPIHandler_ListEquipment_EmptyResult(t *testing.T) {
+	store := &mockRefDataStore{equipment: nil}
+	h := portal.NewAPIHandler(slog.Default(), store, nil)
+	req := httptest.NewRequest(http.MethodGet, "/portal/api/equipment", nil)
+	ctx := auth.ContextWithDiscordUserID(req.Context(), "u1")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	h.ListEquipment(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var result []portal.EquipmentItem
+	json.NewDecoder(rec.Body).Decode(&result)
+	assert.Empty(t, result)
 }
 
 func TestAPIHandler_NewAPIHandler_NilLogger(t *testing.T) {

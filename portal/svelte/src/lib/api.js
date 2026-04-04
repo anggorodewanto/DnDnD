@@ -41,6 +41,22 @@ export async function listSpells(className) {
   return res.json();
 }
 
+/** List all equipment (weapons + armor). */
+export async function listEquipment() {
+  const res = await apiFetch(`${API_BASE}/equipment`);
+  return res.json();
+}
+
+/**
+ * Get starting equipment packs for a class.
+ * @param {string} className
+ * @returns {Promise<object[]>}
+ */
+export async function getStartingEquipment(className) {
+  const res = await apiFetch(`${API_BASE}/starting-equipment?class=${encodeURIComponent(className)}`);
+  return res.json();
+}
+
 /**
  * Submit a character for DM approval.
  * @param {object} data - The character submission payload.

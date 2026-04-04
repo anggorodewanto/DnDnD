@@ -224,6 +224,7 @@ type mockBuilderStore struct {
 
 	lastCharName        string
 	lastCharClass       string
+	lastCharEquipment   []string
 	lastPCStatus        string
 	lastPCCreatedVia    string
 	lastPCDiscordUserID string
@@ -233,6 +234,7 @@ type mockBuilderStore struct {
 func (m *mockBuilderStore) CreateCharacterRecord(_ context.Context, p portal.CreateCharacterParams) (string, error) {
 	m.lastCharName = p.Name
 	m.lastCharClass = p.Class
+	m.lastCharEquipment = p.Equipment
 	if m.createCharErr != nil {
 		return "", m.createCharErr
 	}
@@ -324,6 +326,18 @@ func TestBuilderService_CreateCharacter_Rogue(t *testing.T) {
 	sub.Class = "rogue"
 	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
 	assert.NoError(t, err)
+}
+
+func TestBuilderService_CreateCharacter_WithEquipment(t *testing.T) {
+	store := &mockBuilderStore{charID: "c-1", pcID: "pc-1"}
+	svc := portal.NewBuilderService(store)
+
+	sub := validSubmission()
+	sub.Equipment = []string{"longsword", "chain-mail", "shield"}
+	result, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
+	assert.NoError(t, err)
+	assert.Equal(t, "c-1", result.CharacterID)
+	assert.Equal(t, []string{"longsword", "chain-mail", "shield"}, store.lastCharEquipment)
 }
 
 func TestPointBuyCost(t *testing.T) {

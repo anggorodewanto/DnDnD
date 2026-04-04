@@ -13,6 +13,8 @@ type RefDataQuerier interface {
 	ListRaces(ctx context.Context) ([]refdata.Race, error)
 	ListClasses(ctx context.Context) ([]refdata.Class, error)
 	ListSpellsByClass(ctx context.Context, class string) ([]refdata.Spell, error)
+	ListWeapons(ctx context.Context) ([]refdata.Weapon, error)
+	ListArmor(ctx context.Context) ([]refdata.Armor, error)
 }
 
 // RefDataAdapter adapts refdata.Queries to the portal RefDataStore interface.
@@ -56,15 +58,17 @@ func (a *RefDataAdapter) ListClasses(ctx context.Context) ([]ClassInfo, error) {
 	result := make([]ClassInfo, len(classes))
 	for i, c := range classes {
 		result[i] = ClassInfo{
-			ID:                c.ID,
-			Name:              c.Name,
-			HitDie:            c.HitDie,
-			PrimaryAbility:    c.PrimaryAbility,
-			SaveProficiencies: c.SaveProficiencies,
-			SkillChoices:      nullRawToJSON(c.SkillChoices),
-			Spellcasting:      nullRawToJSON(c.Spellcasting),
-			Subclasses:        c.Subclasses,
-			SubclassLevel:     int(c.SubclassLevel),
+			ID:                  c.ID,
+			Name:                c.Name,
+			HitDie:              c.HitDie,
+			PrimaryAbility:      c.PrimaryAbility,
+			SaveProficiencies:   c.SaveProficiencies,
+			ArmorProficiencies:  c.ArmorProficiencies,
+			WeaponProficiencies: c.WeaponProficiencies,
+			SkillChoices:        nullRawToJSON(c.SkillChoices),
+			Spellcasting:        nullRawToJSON(c.Spellcasting),
+			Subclasses:          c.Subclasses,
+			SubclassLevel:       int(c.SubclassLevel),
 		}
 	}
 	return result, nil
@@ -90,6 +94,41 @@ func (a *RefDataAdapter) ListSpellsByClass(ctx context.Context, class string) ([
 		}
 	}
 	return result, nil
+}
+
+// ListEquipment returns all weapons and armor combined as EquipmentItems.
+func (a *RefDataAdapter) ListEquipment(ctx context.Context) ([]EquipmentItem, error) {
+	weapons, err := a.q.ListWeapons(ctx)
+	if err != nil {
+		return nil, err
+	}
+	armors, err := a.q.ListArmor(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]EquipmentItem, 0, len(weapons)+len(armors))
+	for _, w := range weapons {
+		items = append(items, EquipmentItem{
+			ID:         w.ID,
+			Name:       w.Name,
+			Category:   "weapon",
+			WeaponType: w.WeaponType,
+			Damage:     w.Damage,
+			DamageType: w.DamageType,
+			Properties: w.Properties,
+		})
+	}
+	for _, a := range armors {
+		items = append(items, EquipmentItem{
+			ID:        a.ID,
+			Name:      a.Name,
+			Category:  "armor",
+			ArmorType: a.ArmorType,
+			ACBase:    int(a.AcBase),
+		})
+	}
+	return items, nil
 }
 
 func nullRawToJSON(msg pqtype.NullRawMessage) json.RawMessage {

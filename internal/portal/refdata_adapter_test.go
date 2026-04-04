@@ -18,6 +18,8 @@ type mockQueries struct {
 	races   []refdata.Race
 	classes []refdata.Class
 	spells  []refdata.Spell
+	weapons []refdata.Weapon
+	armor   []refdata.Armor
 }
 
 func (m *mockQueries) ListRaces(_ context.Context) ([]refdata.Race, error) {
@@ -30,6 +32,14 @@ func (m *mockQueries) ListClasses(_ context.Context) ([]refdata.Class, error) {
 
 func (m *mockQueries) ListSpellsByClass(_ context.Context, class string) ([]refdata.Spell, error) {
 	return m.spells, nil
+}
+
+func (m *mockQueries) ListWeapons(_ context.Context) ([]refdata.Weapon, error) {
+	return m.weapons, nil
+}
+
+func (m *mockQueries) ListArmor(_ context.Context) ([]refdata.Armor, error) {
+	return m.armor, nil
 }
 
 func TestRefDataAdapter_ListRaces(t *testing.T) {
@@ -54,8 +64,11 @@ func TestRefDataAdapter_ListClasses(t *testing.T) {
 	mq := &mockQueries{
 		classes: []refdata.Class{
 			{ID: "fighter", Name: "Fighter", HitDie: "d10", PrimaryAbility: "str",
-				SaveProficiencies: []string{"str", "con"}, SkillChoices: skillChoices,
-				SubclassLevel: 3, Subclasses: json.RawMessage(`[]`)},
+				SaveProficiencies:  []string{"str", "con"},
+				ArmorProficiencies: []string{"light", "medium", "heavy", "shields"},
+				WeaponProficiencies: []string{"simple", "martial"},
+				SkillChoices:       skillChoices,
+				SubclassLevel:      3, Subclasses: json.RawMessage(`[]`)},
 		},
 	}
 	adapter := portal.NewRefDataAdapter(mq)
@@ -66,6 +79,8 @@ func TestRefDataAdapter_ListClasses(t *testing.T) {
 	assert.Equal(t, "fighter", classes[0].ID)
 	assert.Equal(t, "d10", classes[0].HitDie)
 	assert.Equal(t, 3, classes[0].SubclassLevel)
+	assert.Equal(t, []string{"light", "medium", "heavy", "shields"}, classes[0].ArmorProficiencies)
+	assert.Equal(t, []string{"simple", "martial"}, classes[0].WeaponProficiencies)
 }
 
 func TestRefDataAdapter_ListRaces_Error(t *testing.T) {
@@ -99,6 +114,57 @@ func (e *errorQueries) ListClasses(_ context.Context) ([]refdata.Class, error) {
 }
 func (e *errorQueries) ListSpellsByClass(_ context.Context, _ string) ([]refdata.Spell, error) {
 	return nil, errors.New("db error")
+}
+func (e *errorQueries) ListWeapons(_ context.Context) ([]refdata.Weapon, error) {
+	return nil, errors.New("db error")
+}
+func (e *errorQueries) ListArmor(_ context.Context) ([]refdata.Armor, error) {
+	return nil, errors.New("db error")
+}
+
+func TestRefDataAdapter_ListEquipment(t *testing.T) {
+	mq := &mockQueries{
+		weapons: []refdata.Weapon{
+			{ID: "longsword", Name: "Longsword", Damage: "1d8", DamageType: "slashing", WeaponType: "martial-melee", Properties: []string{"versatile"}},
+		},
+		armor: []refdata.Armor{
+			{ID: "chain-mail", Name: "Chain Mail", AcBase: 16, ArmorType: "heavy"},
+		},
+	}
+	adapter := portal.NewRefDataAdapter(mq)
+
+	items, err := adapter.ListEquipment(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, items, 2)
+	assert.Equal(t, "longsword", items[0].ID)
+	assert.Equal(t, "weapon", items[0].Category)
+	assert.Equal(t, "1d8", items[0].Damage)
+	assert.Equal(t, []string{"versatile"}, items[0].Properties)
+	assert.Equal(t, "chain-mail", items[1].ID)
+	assert.Equal(t, "armor", items[1].Category)
+	assert.Equal(t, 16, items[1].ACBase)
+}
+
+func TestRefDataAdapter_ListEquipment_WeaponsError(t *testing.T) {
+	mq := &errorQueries{}
+	adapter := portal.NewRefDataAdapter(mq)
+	_, err := adapter.ListEquipment(context.Background())
+	assert.Error(t, err)
+}
+
+func TestRefDataAdapter_ListEquipment_ArmorError(t *testing.T) {
+	// Weapons succeed but armor fails
+	mq := &armorErrorQueries{}
+	adapter := portal.NewRefDataAdapter(mq)
+	_, err := adapter.ListEquipment(context.Background())
+	assert.Error(t, err)
+}
+
+// armorErrorQueries returns an error only for ListArmor.
+type armorErrorQueries struct{ mockQueries }
+
+func (e *armorErrorQueries) ListArmor(_ context.Context) ([]refdata.Armor, error) {
+	return nil, errors.New("armor db error")
 }
 
 func TestRefDataAdapter_ListSpellsByClass(t *testing.T) {

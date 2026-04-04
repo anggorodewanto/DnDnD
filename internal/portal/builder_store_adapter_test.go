@@ -27,6 +27,31 @@ func TestBuilderStoreAdapter_RedeemToken_NilTokenSvc(t *testing.T) {
 }
 
 
+func TestBuilderStoreAdapter_EquipmentToInventory(t *testing.T) {
+	// Test that equipment strings are converted to inventory items
+	items := portal.EquipmentToInventory([]string{"longsword", "chain-mail", "shield"})
+	assert.Len(t, items, 3)
+	assert.Equal(t, "longsword", items[0].ItemID)
+	assert.Equal(t, "longsword", items[0].Name)
+	assert.Equal(t, 1, items[0].Quantity)
+	assert.Equal(t, "weapon", items[0].Type)
+	assert.Equal(t, "chain-mail", items[1].ItemID)
+	assert.Equal(t, "armor", items[1].Type)
+	assert.Equal(t, "shield", items[2].ItemID)
+	assert.Equal(t, "armor", items[2].Type)
+}
+
+func TestBuilderStoreAdapter_EquipmentToInventory_Empty(t *testing.T) {
+	items := portal.EquipmentToInventory(nil)
+	assert.Empty(t, items)
+}
+
+func TestBuilderStoreAdapter_EquipmentToInventory_UnknownItems(t *testing.T) {
+	items := portal.EquipmentToInventory([]string{"magic-wand", "potion-of-healing"})
+	assert.Len(t, items, 2)
+	assert.Equal(t, "gear", items[0].Type)
+}
+
 func TestDeriveCharacterSpeed_Default(t *testing.T) {
 	// classHitDie is tested indirectly; test the exported DeriveSpeed.
 	assert.Equal(t, 30, portal.DeriveSpeed("human"))

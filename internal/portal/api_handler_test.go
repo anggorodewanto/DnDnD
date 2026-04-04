@@ -17,9 +17,10 @@ import (
 
 // mockRefDataStore implements portal.RefDataStore for API handler tests.
 type mockRefDataStore struct {
-	races   []portal.RaceInfo
-	classes []portal.ClassInfo
-	spells  []portal.SpellInfo
+	races     []portal.RaceInfo
+	classes   []portal.ClassInfo
+	spells    []portal.SpellInfo
+	equipment []portal.EquipmentItem
 }
 
 func (m *mockRefDataStore) ListRaces(_ context.Context) ([]portal.RaceInfo, error) {
@@ -41,6 +42,10 @@ func (m *mockRefDataStore) ListSpellsByClass(_ context.Context, class string) ([
 		}
 	}
 	return result, nil
+}
+
+func (m *mockRefDataStore) ListEquipment(_ context.Context) ([]portal.EquipmentItem, error) {
+	return m.equipment, nil
 }
 
 func TestAPIHandler_ListRaces(t *testing.T) {
@@ -125,6 +130,97 @@ func TestAPIHandler_ListSpells_MissingClass(t *testing.T) {
 	h.ListSpells(rec, req)
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestAPIHandler_ListEquipment(t *testing.T) {
+	store := &mockRefDataStore{
+		equipment: []portal.EquipmentItem{
+			{ID: "longsword", Name: "Longsword", Category: "weapon", WeaponType: "martial-melee", Damage: "1d8", DamageType: "slashing"},
+			{ID: "chain-mail", Name: "Chain Mail", Category: "armor", ArmorType: "heavy", ACBase: 16},
+		},
+	}
+	h := portal.NewAPIHandler(slog.Default(), store, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/portal/api/equipment", nil)
+	ctx := auth.ContextWithDiscordUserID(req.Context(), "user-1")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	h.ListEquipment(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var items []portal.EquipmentItem
+	err := json.NewDecoder(rec.Body).Decode(&items)
+	require.NoError(t, err)
+	assert.Len(t, items, 2)
+	assert.Equal(t, "Longsword", items[0].Name)
+	assert.Equal(t, "Chain Mail", items[1].Name)
+}
+
+func TestStartingEquipmentPacks_Fighter(t *testing.T) {
+	packs := portal.StartingEquipmentPacks("fighter")
+	require.NotEmpty(t, packs)
+	// Fighter should have multiple equipment choices
+	assert.True(t, len(packs) >= 1, "fighter should have starting equipment packs")
+}
+
+func TestStartingEquipmentPacks_Unknown(t *testing.T) {
+	packs := portal.StartingEquipmentPacks("homebrew-class")
+	assert.Empty(t, packs)
+}
+
+func TestAPIHandler_GetStartingEquipment(t *testing.T) {
+	h := portal.NewAPIHandler(slog.Default(), &mockRefDataStore{}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/portal/api/starting-equipment?class=fighter", nil)
+	ctx := auth.ContextWithDiscordUserID(req.Context(), "user-1")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	h.GetStartingEquipment(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var packs []portal.EquipmentPack
+	err := json.NewDecoder(rec.Body).Decode(&packs)
+	require.NoError(t, err)
+	assert.NotEmpty(t, packs)
+}
+
+func TestAPIHandler_GetStartingEquipment_MissingClass(t *testing.T) {
+	h := portal.NewAPIHandler(slog.Default(), &mockRefDataStore{}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/portal/api/starting-equipment", nil)
+	ctx := auth.ContextWithDiscordUserID(req.Context(), "user-1")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	h.GetStartingEquipment(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestAPIHandler_GetStartingEquipment_UnknownClass(t *testing.T) {
+	h := portal.NewAPIHandler(slog.Default(), &mockRefDataStore{}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/portal/api/starting-equipment?class=homebrew", nil)
+	ctx := auth.ContextWithDiscordUserID(req.Context(), "user-1")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	h.GetStartingEquipment(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var packs []portal.EquipmentPack
+	json.NewDecoder(rec.Body).Decode(&packs)
+	assert.Empty(t, packs)
+}
+
+func TestStartingEquipmentPacks_AllSRDClasses(t *testing.T) {
+	srdClasses := []string{"barbarian", "bard", "cleric", "druid", "fighter", "monk", "paladin", "ranger", "rogue", "sorcerer", "warlock", "wizard"}
+	for _, cls := range srdClasses {
+		packs := portal.StartingEquipmentPacks(cls)
+		assert.NotEmpty(t, packs, "class %s should have starting equipment packs", cls)
+	}
 }
 
 func TestAPIHandler_SubmitCharacter_Valid(t *testing.T) {

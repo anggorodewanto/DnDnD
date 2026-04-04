@@ -40,6 +40,12 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		Saves:  p.Saves,
 	})
 
+	var inventoryMsg pqtype.NullRawMessage
+	if items := EquipmentToInventory(p.Equipment); len(items) > 0 {
+		invJSON, _ := json.Marshal(items)
+		inventoryMsg = pqtype.NullRawMessage{RawMessage: invJSON, Valid: true}
+	}
+
 	campID, err := uuid.Parse(p.CampaignID)
 	if err != nil {
 		campID = uuid.New()
@@ -61,6 +67,7 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		HitDiceRemaining: hitDiceJSON,
 		Proficiencies:    pqtype.NullRawMessage{RawMessage: profJSON, Valid: true},
 		Languages:        p.Languages,
+		Inventory:        inventoryMsg,
 		Gold:             0,
 		Homebrew:         sql.NullBool{Bool: false, Valid: true},
 	})
@@ -100,6 +107,54 @@ func (a *BuilderStoreAdapter) RedeemToken(ctx context.Context, token string) err
 		return nil
 	}
 	return a.tokenSvc.RedeemToken(ctx, token)
+}
+
+// knownWeapons is the set of weapon IDs from the SRD.
+var knownWeapons = map[string]bool{
+	"club": true, "dagger": true, "greatclub": true, "handaxe": true, "javelin": true,
+	"light-hammer": true, "mace": true, "quarterstaff": true, "sickle": true, "spear": true,
+	"light-crossbow": true, "dart": true, "shortbow": true, "sling": true,
+	"battleaxe": true, "flail": true, "glaive": true, "greataxe": true, "greatsword": true,
+	"halberd": true, "lance": true, "longsword": true, "maul": true, "morningstar": true,
+	"pike": true, "rapier": true, "scimitar": true, "shortsword": true, "trident": true,
+	"war-pick": true, "warhammer": true, "whip": true, "blowgun": true, "hand-crossbow": true,
+	"heavy-crossbow": true, "longbow": true, "net": true,
+}
+
+// knownArmor is the set of armor IDs from the SRD.
+var knownArmor = map[string]bool{
+	"padded": true, "leather": true, "studded-leather": true,
+	"hide": true, "chain-shirt": true, "scale-mail": true, "breastplate": true, "half-plate": true,
+	"ring-mail": true, "chain-mail": true, "splint": true, "plate": true,
+	"shield": true,
+}
+
+// itemType returns "weapon", "armor", or "gear" for an item ID.
+func itemType(id string) string {
+	if knownWeapons[id] {
+		return "weapon"
+	}
+	if knownArmor[id] {
+		return "armor"
+	}
+	return "gear"
+}
+
+// EquipmentToInventory converts equipment ID strings to InventoryItem structs.
+func EquipmentToInventory(equipment []string) []character.InventoryItem {
+	if len(equipment) == 0 {
+		return nil
+	}
+	items := make([]character.InventoryItem, len(equipment))
+	for i, id := range equipment {
+		items[i] = character.InventoryItem{
+			ItemID:   id,
+			Name:     id,
+			Quantity: 1,
+			Type:     itemType(id),
+		}
+	}
+	return items
 }
 
 // DeriveSpeed returns the default speed for a race (30 ft default).
