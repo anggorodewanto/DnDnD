@@ -355,6 +355,17 @@ type PlayerCharacter struct {
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
+type PortalToken struct {
+	ID            uuid.UUID `json:"id"`
+	Token         string    `json:"token"`
+	CampaignID    uuid.UUID `json:"campaign_id"`
+	DiscordUserID string    `json:"discord_user_id"`
+	Purpose       string    `json:"purpose"`
+	Used          bool      `json:"used"`
+	ExpiresAt     time.Time `json:"expires_at"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
 type Race struct {
 	ID             string                `json:"id"`
 	Name           string                `json:"name"`

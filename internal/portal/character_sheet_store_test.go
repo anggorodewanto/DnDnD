@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
@@ -21,6 +22,8 @@ type mockCharacterQuerier struct {
 	charErr   error
 	pc        refdata.PlayerCharacter
 	pcErr     error
+	spells    []refdata.Spell
+	spellsErr error
 }
 
 func (m *mockCharacterQuerier) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -29,6 +32,10 @@ func (m *mockCharacterQuerier) GetCharacter(_ context.Context, id uuid.UUID) (re
 
 func (m *mockCharacterQuerier) GetPlayerCharacterByCharacter(_ context.Context, _ refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error) {
 	return m.pc, m.pcErr
+}
+
+func (m *mockCharacterQuerier) GetSpellsByIDs(_ context.Context, ids []string) ([]refdata.Spell, error) {
+	return m.spells, m.spellsErr
 }
 
 func TestCharacterSheetStoreAdapter_GetCharacterOwner(t *testing.T) {
@@ -161,18 +168,39 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PortalSpells(t *testing
 			AbilityScores: scoresJSON,
 			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
 		},
+		spells: []refdata.Spell{
+			{ID: "fire-bolt", Name: "Fire Bolt", Level: 0, School: "Evocation", CastingTime: "1 action", RangeType: "ranged", RangeFt: sql.NullInt32{Int32: 120, Valid: true}},
+			{ID: "magic-missile", Name: "Magic Missile", Level: 1, School: "Evocation", CastingTime: "1 action", RangeType: "ranged", RangeFt: sql.NullInt32{Int32: 120, Valid: true}},
+			{ID: "shield", Name: "Shield", Level: 1, School: "Abjuration", CastingTime: "1 reaction", RangeType: "self"},
+		},
 	}
 
 	store := portal.NewCharacterSheetStoreAdapter(q)
 	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
 
 	require.NoError(t, err)
-	require.NotEmpty(t, data.Spells)
-	assert.Len(t, data.Spells, 3)
-	// Spells from portal format should have ID populated
-	assert.Equal(t, "fire-bolt", data.Spells[0].ID)
-	assert.Equal(t, "magic-missile", data.Spells[1].ID)
-	assert.Equal(t, "shield", data.Spells[2].ID)
+	require.Len(t, data.Spells, 3)
+
+	// Spells should be enriched from reference table
+	// Results ordered by level then name from the query
+	byID := make(map[string]portal.SpellDisplayEntry)
+	for _, s := range data.Spells {
+		byID[s.ID] = s
+	}
+	assert.Equal(t, "Fire Bolt", byID["fire-bolt"].Name)
+	assert.Equal(t, 0, byID["fire-bolt"].Level)
+	assert.Equal(t, "Evocation", byID["fire-bolt"].School)
+	assert.Equal(t, "1 action", byID["fire-bolt"].CastingTime)
+	assert.Equal(t, "120ft", byID["fire-bolt"].Range)
+
+	assert.Equal(t, "Magic Missile", byID["magic-missile"].Name)
+	assert.Equal(t, 1, byID["magic-missile"].Level)
+
+	assert.Equal(t, "Shield", byID["shield"].Name)
+	assert.Equal(t, 1, byID["shield"].Level)
+	assert.Equal(t, "Abjuration", byID["shield"].School)
+	assert.Equal(t, "1 reaction", byID["shield"].CastingTime)
+	assert.Equal(t, "Self", byID["shield"].Range)
 }
 
 func TestCharacterSheetStoreAdapter_GetCharacterForSheet_DDBSpells(t *testing.T) {
@@ -205,6 +233,10 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_DDBSpells(t *testing.T)
 			AbilityScores: scoresJSON,
 			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
 		},
+		spells: []refdata.Spell{
+			{ID: "fire-bolt", Name: "Fire Bolt", Level: 0, School: "Evocation", CastingTime: "1 action", RangeType: "ranged", RangeFt: sql.NullInt32{Int32: 120, Valid: true}},
+			{ID: "fireball", Name: "Fireball", Level: 3, School: "Evocation", CastingTime: "1 action", RangeType: "ranged", RangeFt: sql.NullInt32{Int32: 150, Valid: true}},
+		},
 	}
 
 	store := portal.NewCharacterSheetStoreAdapter(q)
@@ -212,12 +244,56 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_DDBSpells(t *testing.T)
 
 	require.NoError(t, err)
 	require.Len(t, data.Spells, 2)
-	// DDB spells should have name and level set directly
-	assert.Equal(t, "Fireball", data.Spells[0].Name)
-	assert.Equal(t, 3, data.Spells[0].Level)
-	assert.Equal(t, "class", data.Spells[0].Source)
-	assert.Equal(t, "Fire Bolt", data.Spells[1].Name)
-	assert.Equal(t, 0, data.Spells[1].Level)
+
+	// DDB spells should be enriched with school, casting_time, range from reference table
+	byID := make(map[string]portal.SpellDisplayEntry)
+	for _, s := range data.Spells {
+		byID[s.ID] = s
+	}
+	assert.Equal(t, "Fireball", byID["fireball"].Name)
+	assert.Equal(t, 3, byID["fireball"].Level)
+	assert.Equal(t, "Evocation", byID["fireball"].School)
+	assert.Equal(t, "1 action", byID["fireball"].CastingTime)
+	assert.Equal(t, "150ft", byID["fireball"].Range)
+	assert.Equal(t, "class", byID["fireball"].Source) // Source should be preserved
+
+	assert.Equal(t, "Fire Bolt", byID["fire-bolt"].Name)
+	assert.Equal(t, 0, byID["fire-bolt"].Level)
+	assert.Equal(t, "Evocation", byID["fire-bolt"].School)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_SpellRangeTouch(t *testing.T) {
+	charID := uuid.New()
+
+	scores := character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Cleric", Level: 5}}
+	classesJSON, _ := json.Marshal(classes)
+
+	charData := map[string]any{"spells": []string{"cure-wounds"}}
+	charDataJSON, _ := json.Marshal(charData)
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Healer",
+			Race:          "Human",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+		spells: []refdata.Spell{
+			{ID: "cure-wounds", Name: "Cure Wounds", Level: 1, School: "Evocation", CastingTime: "1 action", RangeType: "touch"},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	require.Len(t, data.Spells, 1)
+	assert.Equal(t, "Touch", data.Spells[0].Range)
 }
 
 func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PreparedSpells(t *testing.T) {
@@ -244,6 +320,11 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PreparedSpells(t *testi
 			AbilityScores: scoresJSON,
 			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
 		},
+		spells: []refdata.Spell{
+			{ID: "bless", Name: "Bless", Level: 1, School: "Enchantment", CastingTime: "1 action", RangeType: "ranged", RangeFt: sql.NullInt32{Int32: 30, Valid: true}},
+			{ID: "cure-wounds", Name: "Cure Wounds", Level: 1, School: "Evocation", CastingTime: "1 action", RangeType: "touch"},
+			{ID: "shield-of-faith", Name: "Shield of Faith", Level: 1, School: "Abjuration", CastingTime: "1 bonus action", RangeType: "ranged", RangeFt: sql.NullInt32{Int32: 60, Valid: true}},
+		},
 	}
 
 	store := portal.NewCharacterSheetStoreAdapter(q)
@@ -252,7 +333,7 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PreparedSpells(t *testi
 	require.NoError(t, err)
 	require.Len(t, data.Spells, 3)
 
-	// Check prepared indicators
+	// Check prepared indicators are preserved after enrichment
 	preparedByID := make(map[string]bool)
 	for _, s := range data.Spells {
 		preparedByID[s.ID] = s.Prepared
@@ -260,6 +341,82 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PreparedSpells(t *testi
 	assert.True(t, preparedByID["bless"])
 	assert.True(t, preparedByID["cure-wounds"])
 	assert.False(t, preparedByID["shield-of-faith"])
+
+	// Also check enrichment happened
+	byID := make(map[string]portal.SpellDisplayEntry)
+	for _, s := range data.Spells {
+		byID[s.ID] = s
+	}
+	assert.Equal(t, "Bless", byID["bless"].Name)
+	assert.Equal(t, 1, byID["bless"].Level)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_PortalSpells_NoRefData(t *testing.T) {
+	charID := uuid.New()
+
+	scores := character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Wizard", Level: 5}}
+	classesJSON, _ := json.Marshal(classes)
+
+	charData := map[string]any{"spells": []string{"unknown-spell"}}
+	charDataJSON, _ := json.Marshal(charData)
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Gandalf",
+			Race:          "Elf",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+		spells: []refdata.Spell{}, // no matches
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	require.Len(t, data.Spells, 1)
+	// Falls back to ID as name when not enriched
+	assert.Equal(t, "unknown-spell", data.Spells[0].Name)
+	assert.Equal(t, "unknown-spell", data.Spells[0].ID)
+	assert.Equal(t, 0, data.Spells[0].Level)
+}
+
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_SpellEnrichmentError(t *testing.T) {
+	charID := uuid.New()
+
+	scores := character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Wizard", Level: 5}}
+	classesJSON, _ := json.Marshal(classes)
+
+	charData := map[string]any{"spells": []string{"fire-bolt"}}
+	charDataJSON, _ := json.Marshal(charData)
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Gandalf",
+			Race:          "Elf",
+			Level:         5,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+		spellsErr: fmt.Errorf("db connection error"),
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	// Should still succeed, just without enrichment
+	require.NoError(t, err)
+	require.Len(t, data.Spells, 1)
+	assert.Equal(t, "fire-bolt", data.Spells[0].Name) // falls back to ID
 }
 
 func TestCharacterSheetStoreAdapter_GetCharacterForSheet_NoSpells(t *testing.T) {

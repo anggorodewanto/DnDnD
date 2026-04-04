@@ -49,3 +49,6 @@ SELECT * FROM spells WHERE level = $1 ORDER BY name;
 
 -- name: ListSpellsByResolutionMode :many
 SELECT * FROM spells WHERE resolution_mode = $1 ORDER BY level, name;
+
+-- name: GetSpellsByIDs :many
+SELECT * FROM spells WHERE id = ANY($1::text[]) ORDER BY level, name;

@@ -17,6 +17,7 @@ import (
 type CharacterLookup interface {
 	GetPlayerCharacterByDiscordUser(ctx context.Context, arg refdata.GetPlayerCharacterByDiscordUserParams) (refdata.PlayerCharacter, error)
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	GetSpellsByIDs(ctx context.Context, ids []string) ([]refdata.Spell, error)
 }
 
 // CharacterHandler handles the /character slash command.
@@ -114,7 +115,7 @@ func (h *CharacterHandler) buildCharacterEmbed(ch refdata.Character) *discordgo.
 		fmt.Fprintf(&desc, "Languages: %s\n", strings.Join(ch.Languages, ", "))
 	}
 
-	if spellSummary := buildSpellSummary(ch); spellSummary != "" {
+	if spellSummary := h.buildSpellSummary(ch); spellSummary != "" {
 		fmt.Fprintf(&desc, "Spells: %s", spellSummary)
 	}
 
@@ -132,8 +133,9 @@ type ddbSpellEntry struct {
 	Source string `json:"source"`
 }
 
-// buildSpellSummary extracts spells from character_data and returns a count-by-level summary.
-func buildSpellSummary(ch refdata.Character) string {
+// buildSpellSummary extracts spells from character_data, enriches from the
+// reference table, and returns a count-by-level summary.
+func (h *CharacterHandler) buildSpellSummary(ch refdata.Character) string {
 	if !ch.CharacterData.Valid || len(ch.CharacterData.RawMessage) == 0 {
 		return ""
 	}
@@ -154,16 +156,34 @@ func buildSpellSummary(ch refdata.Character) string {
 	// Try DDB format: []ddbSpellEntry
 	var ddbSpells []ddbSpellEntry
 	if err := json.Unmarshal(spellsRaw, &ddbSpells); err == nil && len(ddbSpells) > 0 && ddbSpells[0].Name != "" {
+		// Collect IDs for enrichment
+		ids := make([]string, len(ddbSpells))
+		for i, s := range ddbSpells {
+			ids[i] = slugifySpellName(s.Name)
+		}
+		enriched := h.lookupSpellLevels(ids)
 		for _, s := range ddbSpells {
-			counts[s.Level]++
+			id := slugifySpellName(s.Name)
+			if ref, ok := enriched[id]; ok {
+				counts[int(ref.Level)]++
+			} else {
+				counts[s.Level]++
+			}
 		}
 	} else {
-		// Try portal format: []string — no level info, just count total
+		// Try portal format: []string
 		var portalSpells []string
-		if err := json.Unmarshal(spellsRaw, &portalSpells); err == nil && len(portalSpells) > 0 {
-			return fmt.Sprintf("%d known", len(portalSpells))
+		if err := json.Unmarshal(spellsRaw, &portalSpells); err != nil || len(portalSpells) == 0 {
+			return ""
 		}
-		return ""
+		enriched := h.lookupSpellLevels(portalSpells)
+		for _, id := range portalSpells {
+			if ref, ok := enriched[id]; ok {
+				counts[int(ref.Level)]++
+			} else {
+				counts[0]++ // fallback to cantrip if not found
+			}
+		}
 	}
 
 	if len(counts) == 0 {
@@ -186,6 +206,27 @@ func buildSpellSummary(ch refdata.Character) string {
 		}
 	}
 	return strings.Join(parts, " | ")
+}
+
+// lookupSpellLevels fetches spells by IDs and returns a map of ID->Spell.
+func (h *CharacterHandler) lookupSpellLevels(ids []string) map[string]refdata.Spell {
+	if len(ids) == 0 {
+		return nil
+	}
+	spells, err := h.lookup.GetSpellsByIDs(context.Background(), ids)
+	if err != nil {
+		return nil
+	}
+	m := make(map[string]refdata.Spell, len(spells))
+	for _, s := range spells {
+		m[s.ID] = s
+	}
+	return m
+}
+
+// slugifySpellName converts "Fire Bolt" to "fire-bolt".
+func slugifySpellName(name string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "-"))
 }
 
 // slotOrdinal converts a number to ordinal string.

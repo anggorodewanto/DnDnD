@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	"strings"
+
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
@@ -17,6 +19,7 @@ import (
 type CharacterQuerier interface {
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
+	GetSpellsByIDs(ctx context.Context, ids []string) ([]refdata.Spell, error)
 }
 
 // CharacterSheetStoreAdapter implements CharacterSheetStore using refdata.Queries.
@@ -73,7 +76,17 @@ func (a *CharacterSheetStoreAdapter) GetCharacterForSheet(ctx context.Context, c
 		return nil, fmt.Errorf("getting character: %w", err)
 	}
 
-	return mapCharacterToSheet(ch)
+	data, err := mapCharacterToSheet(ch)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enrich spells from reference table
+	if len(data.Spells) > 0 {
+		a.enrichSpells(ctx, data.Spells)
+	}
+
+	return data, nil
 }
 
 func mapCharacterToSheet(ch refdata.Character) (*CharacterSheetData, error) {
@@ -179,6 +192,65 @@ func parseNullJSONPtr[T any](nrm pqtype.NullRawMessage) *T {
 	return &v
 }
 
+// enrichSpells looks up spell IDs in the reference table and populates
+// display fields (Name, Level, School, CastingTime, Range) on each entry.
+func (a *CharacterSheetStoreAdapter) enrichSpells(ctx context.Context, spells []SpellDisplayEntry) {
+	ids := collectSpellIDs(spells)
+	if len(ids) == 0 {
+		return
+	}
+
+	refSpells, err := a.q.GetSpellsByIDs(ctx, ids)
+	if err != nil || len(refSpells) == 0 {
+		return
+	}
+
+	byID := make(map[string]refdata.Spell, len(refSpells))
+	for _, s := range refSpells {
+		byID[s.ID] = s
+	}
+
+	for i := range spells {
+		ref, ok := byID[spells[i].ID]
+		if !ok {
+			continue
+		}
+		spells[i].Name = ref.Name
+		spells[i].Level = int(ref.Level)
+		spells[i].School = ref.School
+		spells[i].CastingTime = ref.CastingTime
+		spells[i].Range = formatSpellRange(ref)
+	}
+}
+
+// collectSpellIDs extracts unique spell IDs from display entries.
+func collectSpellIDs(spells []SpellDisplayEntry) []string {
+	seen := make(map[string]bool, len(spells))
+	var ids []string
+	for _, s := range spells {
+		if s.ID != "" && !seen[s.ID] {
+			seen[s.ID] = true
+			ids = append(ids, s.ID)
+		}
+	}
+	return ids
+}
+
+// formatSpellRange converts a refdata.Spell's range fields into a display string.
+func formatSpellRange(s refdata.Spell) string {
+	switch s.RangeType {
+	case "self":
+		return "Self"
+	case "touch":
+		return "Touch"
+	default:
+		if s.RangeFt.Valid {
+			return fmt.Sprintf("%dft", s.RangeFt.Int32)
+		}
+		return s.RangeType
+	}
+}
+
 // ddbSpellEntry matches the DDB import spell format in character_data.
 type ddbSpellEntry struct {
 	Name   string `json:"name"`
@@ -236,6 +308,7 @@ func extractSpells(charData pqtype.NullRawMessage) []SpellDisplayEntry {
 		entries := make([]SpellDisplayEntry, len(ddbSpells))
 		for i, s := range ddbSpells {
 			entries[i] = SpellDisplayEntry{
+				ID:     slugify(s.Name),
 				Name:   s.Name,
 				Level:  s.Level,
 				Source: s.Source,
@@ -245,6 +318,11 @@ func extractSpells(charData pqtype.NullRawMessage) []SpellDisplayEntry {
 	}
 
 	return nil
+}
+
+// slugify converts a spell name to a lowercase hyphenated ID (e.g., "Fire Bolt" -> "fire-bolt").
+func slugify(name string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "-"))
 }
 
 func parseHitDiceRemaining(raw json.RawMessage) map[string]int {

@@ -64,6 +64,62 @@ func (q *Queries) GetSpell(ctx context.Context, id string) (Spell, error) {
 	return i, err
 }
 
+const getSpellsByIDs = `-- name: GetSpellsByIDs :many
+SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at FROM spells WHERE id = ANY($1::text[]) ORDER BY level, name
+`
+
+func (q *Queries) GetSpellsByIDs(ctx context.Context, dollar_1 []string) ([]Spell, error) {
+	rows, err := q.db.QueryContext(ctx, getSpellsByIDs, pq.Array(dollar_1))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Spell{}
+	for rows.Next() {
+		var i Spell
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Level,
+			&i.School,
+			&i.CastingTime,
+			&i.RangeFt,
+			&i.RangeType,
+			pq.Array(&i.Components),
+			&i.MaterialDescription,
+			&i.MaterialCostGp,
+			&i.MaterialConsumed,
+			&i.Duration,
+			&i.Concentration,
+			&i.Ritual,
+			&i.Description,
+			&i.HigherLevels,
+			&i.Damage,
+			&i.Healing,
+			&i.SaveAbility,
+			&i.SaveEffect,
+			&i.AttackType,
+			&i.AreaOfEffect,
+			pq.Array(&i.ConditionsApplied),
+			&i.Teleport,
+			&i.ResolutionMode,
+			pq.Array(&i.Classes),
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSpells = `-- name: ListSpells :many
 SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at FROM spells ORDER BY name
 `

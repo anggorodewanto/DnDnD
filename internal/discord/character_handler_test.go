@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -16,10 +17,12 @@ import (
 
 // mockCharacterLookup implements CharacterLookup for testing.
 type mockCharacterLookup struct {
-	pc      refdata.PlayerCharacter
-	pcErr   error
-	char    refdata.Character
-	charErr error
+	pc        refdata.PlayerCharacter
+	pcErr     error
+	char      refdata.Character
+	charErr   error
+	spells    []refdata.Spell
+	spellsErr error
 }
 
 func (m *mockCharacterLookup) GetPlayerCharacterByDiscordUser(_ context.Context, _ refdata.GetPlayerCharacterByDiscordUserParams) (refdata.PlayerCharacter, error) {
@@ -28,6 +31,10 @@ func (m *mockCharacterLookup) GetPlayerCharacterByDiscordUser(_ context.Context,
 
 func (m *mockCharacterLookup) GetCharacter(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
 	return m.char, m.charErr
+}
+
+func (m *mockCharacterLookup) GetSpellsByIDs(_ context.Context, _ []string) ([]refdata.Spell, error) {
+	return m.spells, m.spellsErr
 }
 
 // captureFullResponse captures the full interaction response including embeds.
@@ -220,6 +227,11 @@ func TestCharacterHandler_WithPortalSpells(t *testing.T) {
 			AbilityScores: scoresJSON,
 			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
 		},
+		spells: []refdata.Spell{
+			{ID: "fire-bolt", Name: "Fire Bolt", Level: 0, School: "Evocation", CastingTime: "1 action", RangeType: "ranged"},
+			{ID: "magic-missile", Name: "Magic Missile", Level: 1, School: "Evocation", CastingTime: "1 action", RangeType: "ranged"},
+			{ID: "shield", Name: "Shield", Level: 1, School: "Abjuration", CastingTime: "1 reaction", RangeType: "self"},
+		},
 	}
 
 	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.test")
@@ -230,8 +242,59 @@ func TestCharacterHandler_WithPortalSpells(t *testing.T) {
 	}
 
 	embed := rc.Embeds[0]
-	if !strings.Contains(embed.Description, "3 known") {
-		t.Errorf("expected '3 known' for portal spells, got: %s", embed.Description)
+	// Portal spells should now show level-based breakdown after enrichment
+	if !strings.Contains(embed.Description, "Cantrips: 1") {
+		t.Errorf("expected 'Cantrips: 1' for enriched portal spells, got: %s", embed.Description)
+	}
+	if !strings.Contains(embed.Description, "1st: 2") {
+		t.Errorf("expected '1st: 2' for enriched portal spells, got: %s", embed.Description)
+	}
+}
+
+func TestCharacterHandler_WithPortalSpells_EnrichmentError(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	charID := uuid.New()
+	campID := uuid.New()
+
+	scoresJSON, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10})
+	classesJSON, _ := json.Marshal([]character.ClassEntry{{Class: "Wizard", Level: 3}})
+
+	charData := map[string]any{"spells": []string{"fire-bolt", "magic-missile"}}
+	charDataJSON, _ := json.Marshal(charData)
+
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			CharacterID:   charID,
+			CampaignID:    campID,
+			DiscordUserID: "player-1",
+			Status:        "approved",
+		},
+		char: refdata.Character{
+			ID:            charID,
+			CampaignID:    campID,
+			Name:          "Wizard",
+			Race:          "Elf",
+			Level:         3,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+		spellsErr: fmt.Errorf("db error"),
+	}
+
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.test")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if rc.Embeds == nil || len(rc.Embeds) == 0 {
+		t.Fatal("expected embeds in response")
+	}
+
+	embed := rc.Embeds[0]
+	// When enrichment fails, portal spells fall back to Cantrips (level 0)
+	if !strings.Contains(embed.Description, "Cantrips: 2") {
+		t.Errorf("expected 'Cantrips: 2' fallback for portal spells with enrichment error, got: %s", embed.Description)
 	}
 }
 
