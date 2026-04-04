@@ -534,7 +534,7 @@
   - Depends on: Phase 10
   - Done when: OAuth2 login works for player portal, one-time links generated and validated, expired/used links rejected, portal shell renders.
 
-- [ ] **Phase 91b: Player Portal — Character Builder Form & Submission**
+- [x] **Phase 91b: Player Portal — Character Builder Form & Submission**
   - Scope: Multi-step character builder form: basics (name, race, background), class/subclass selection, ability scores (point-buy calculator with remaining points display), skills/proficiencies, equipment (from class defaults + background), spells (for casters, filtered by class), review page with all derived stats auto-calculated. Submit to DM approval queue. Form state preserved across steps.
   - Depends on: Phase 91a, Phase 7, Phase 4, Phase 5
   - Done when: Player can create a character through the full multi-step form, derived stats calculated correctly, submission appears in DM approval queue.

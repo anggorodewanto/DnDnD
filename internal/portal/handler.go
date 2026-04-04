@@ -151,9 +151,7 @@ func (h *Handler) renderWithStatus(w http.ResponseWriter, status int, tmpl *temp
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if status != http.StatusOK {
-		w.WriteHeader(status)
-	}
+	w.WriteHeader(status)
 	w.Write(buf.Bytes())
 }
 

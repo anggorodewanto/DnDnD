@@ -146,10 +146,8 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 		CHA: sub.AbilityScores.CHA,
 	}
 
-	classes := []character.ClassEntry{{Class: sub.Class, Subclass: sub.Subclass, Level: 1}}
-	hitDice := map[string]string{sub.Class: ClassHitDie(sub.Class)}
-	hp := character.CalculateHP(classes, hitDice, scores)
-	ac := character.CalculateAC(scores, nil, false, "")
+	hp := DeriveHP(sub.Class, scores)
+	ac := DeriveAC(scores)
 	profBonus := character.ProficiencyBonus(1)
 
 	charParams := CreateCharacterParams{
@@ -162,7 +160,7 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 		AbilityScores: scores,
 		HPMax:         hp,
 		AC:            ac,
-		SpeedFt:       30, // default, overridden by race data if available
+		SpeedFt:       DeriveSpeed(sub.Race),
 		ProfBonus:     profBonus,
 		Skills:        sub.Skills,
 		Equipment:     sub.Equipment,
