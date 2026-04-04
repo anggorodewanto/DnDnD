@@ -87,6 +87,24 @@ func TestAPIHandler_SubmitCharacter_StoreError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
+func TestAPIHandler_SubmitCharacter_ShortStoreError(t *testing.T) {
+	// Regression: isValidationError must not panic on short error messages.
+	builderStore := &mockBuilderStore{createCharErr: errors.New("fail")}
+	builderSvc := portal.NewBuilderService(builderStore)
+	h := portal.NewAPIHandler(slog.Default(), &mockRefDataStore{}, builderSvc)
+
+	body := `{"token":"t","campaign_id":"c","name":"Test","race":"elf","background":"sage","class":"wizard","ability_scores":{"str":8,"dex":8,"con":8,"int":8,"wis":8,"cha":8},"skills":[]}`
+	req := httptest.NewRequest(http.MethodPost, "/portal/api/characters", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	ctx := auth.ContextWithDiscordUserID(req.Context(), "u1")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	// Must not panic
+	h.SubmitCharacter(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
 func TestAPIHandler_NewAPIHandler_NilLogger(t *testing.T) {
 	h := portal.NewAPIHandler(nil, &mockRefDataStore{}, nil)
 	assert.NotNil(t, h)

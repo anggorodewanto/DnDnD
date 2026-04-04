@@ -3,6 +3,7 @@ package portal_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/ab/dndnd/internal/portal"
@@ -113,6 +114,71 @@ func TestBuilderService_CreateCharacter_Valid(t *testing.T) {
 	assert.Equal(t, "discord-user-1", store.lastPCDiscordUserID)
 }
 
+func TestBuilderService_CreateCharacter_NotifiesDMQueue(t *testing.T) {
+	store := &mockBuilderStore{charID: "c-1", pcID: "pc-1"}
+	notifier := &mockDMQueueNotifier{}
+	svc := portal.NewBuilderService(store, portal.WithNotifier(notifier))
+
+	sub := validSubmission()
+	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
+	assert.NoError(t, err)
+	assert.True(t, notifier.called)
+	assert.Equal(t, "Thorin", notifier.charName)
+	assert.Equal(t, "discord-user-1", notifier.playerID)
+	assert.Equal(t, "portal-create", notifier.via)
+}
+
+func TestBuilderService_CreateCharacter_NotifierErrorDoesNotFail(t *testing.T) {
+	store := &mockBuilderStore{charID: "c-1", pcID: "pc-1"}
+	notifier := &mockDMQueueNotifier{err: errors.New("discord down")}
+	svc := portal.NewBuilderService(store, portal.WithNotifier(notifier))
+
+	sub := validSubmission()
+	result, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
+	assert.NoError(t, err)
+	assert.Equal(t, "c-1", result.CharacterID)
+}
+
+func TestBuilderService_WithLogger(t *testing.T) {
+	logger := slog.Default()
+	store := &mockBuilderStore{charID: "c-1", pcID: "pc-1"}
+	svc := portal.NewBuilderService(store, portal.WithLogger(logger))
+	// Verify it doesn't panic and produces results
+	sub := validSubmission()
+	result, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "u1", "tok", sub)
+	assert.NoError(t, err)
+	assert.Equal(t, "c-1", result.CharacterID)
+}
+
+func TestBuilderService_NotifierError_WithLogger(t *testing.T) {
+	store := &mockBuilderStore{charID: "c-1", pcID: "pc-1"}
+	notifier := &mockDMQueueNotifier{err: errors.New("discord down")}
+	logger := slog.Default()
+	svc := portal.NewBuilderService(store, portal.WithNotifier(notifier), portal.WithLogger(logger))
+
+	sub := validSubmission()
+	result, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "u1", "tok", sub)
+	assert.NoError(t, err)
+	assert.Equal(t, "c-1", result.CharacterID)
+	assert.True(t, notifier.called)
+}
+
+func TestBuilderService_RedeemTokenError_WithLogger(t *testing.T) {
+	store := &mockBuilderStore{
+		charID:         "c-1",
+		pcID:           "pc-1",
+		redeemTokenErr: errors.New("token expired"),
+	}
+	logger := slog.Default()
+	svc := portal.NewBuilderService(store, portal.WithLogger(logger))
+
+	sub := validSubmission()
+	result, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "u1", "tok", sub)
+	// Should succeed even though redeem failed
+	assert.NoError(t, err)
+	assert.Equal(t, "c-1", result.CharacterID)
+}
+
 func TestBuilderService_CreateCharacter_InvalidSubmission(t *testing.T) {
 	store := &mockBuilderStore{}
 	svc := portal.NewBuilderService(store)
@@ -150,10 +216,11 @@ func TestBuilderService_CreateCharacter_RedeemToken(t *testing.T) {
 
 // mockBuilderStore implements portal.BuilderStore for testing.
 type mockBuilderStore struct {
-	charID        string
-	pcID          string
-	createCharErr error
-	createPCErr   error
+	charID         string
+	pcID           string
+	createCharErr  error
+	createPCErr    error
+	redeemTokenErr error
 
 	lastCharName        string
 	lastCharClass       string
@@ -184,7 +251,24 @@ func (m *mockBuilderStore) CreatePlayerCharacterRecord(_ context.Context, p port
 
 func (m *mockBuilderStore) RedeemToken(_ context.Context, token string) error {
 	m.lastRedeemedToken = token
-	return nil
+	return m.redeemTokenErr
+}
+
+// mockDMQueueNotifier implements portal.DMQueueNotifier for testing.
+type mockDMQueueNotifier struct {
+	called   bool
+	charName string
+	playerID string
+	via      string
+	err      error
+}
+
+func (m *mockDMQueueNotifier) NotifyDMQueue(ctx context.Context, charName, playerDiscordID, via string) error {
+	m.called = true
+	m.charName = charName
+	m.playerID = playerDiscordID
+	m.via = via
+	return m.err
 }
 
 func TestBuilderService_CreateCharacter_PCStoreError(t *testing.T) {

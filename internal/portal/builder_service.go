@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -90,14 +91,42 @@ type BuilderStore interface {
 	RedeemToken(ctx context.Context, token string) error
 }
 
+// DMQueueNotifier sends notifications to the DM queue channel.
+type DMQueueNotifier interface {
+	NotifyDMQueue(ctx context.Context, characterName, playerDiscordID, via string) error
+}
+
+// BuilderServiceOption configures optional features of BuilderService.
+type BuilderServiceOption func(*BuilderService)
+
+// WithNotifier adds a DM queue notifier to the BuilderService.
+func WithNotifier(n DMQueueNotifier) BuilderServiceOption {
+	return func(svc *BuilderService) {
+		svc.notifier = n
+	}
+}
+
+// WithLogger adds a logger to the BuilderService.
+func WithLogger(l *slog.Logger) BuilderServiceOption {
+	return func(svc *BuilderService) {
+		svc.logger = l
+	}
+}
+
 // BuilderService handles character creation from the portal form.
 type BuilderService struct {
-	store BuilderStore
+	store    BuilderStore
+	notifier DMQueueNotifier
+	logger   *slog.Logger
 }
 
 // NewBuilderService creates a new BuilderService.
-func NewBuilderService(store BuilderStore) *BuilderService {
-	return &BuilderService{store: store}
+func NewBuilderService(store BuilderStore, opts ...BuilderServiceOption) *BuilderService {
+	svc := &BuilderService{store: store}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // CreateCharacter validates the submission, calculates derived stats,
@@ -118,7 +147,7 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 	}
 
 	classes := []character.ClassEntry{{Class: sub.Class, Subclass: sub.Subclass, Level: 1}}
-	hitDice := map[string]string{sub.Class: classHitDie(sub.Class)}
+	hitDice := map[string]string{sub.Class: ClassHitDie(sub.Class)}
 	hp := character.CalculateHP(classes, hitDice, scores)
 	ac := character.CalculateAC(scores, nil, false, "")
 	profBonus := character.ProficiencyBonus(1)
@@ -158,29 +187,20 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 		return CreateCharacterResult{}, fmt.Errorf("creating player character: %w", err)
 	}
 
-	if err := svc.store.RedeemToken(ctx, token); err != nil {
-		// Log but don't fail the creation
-		_ = err
+	if err := svc.store.RedeemToken(ctx, token); err != nil && svc.logger != nil {
+		svc.logger.Warn("redeeming token after character creation", "token", token, "error", err)
+	}
+
+	if svc.notifier != nil {
+		if err := svc.notifier.NotifyDMQueue(ctx, sub.Name, discordUserID, "portal-create"); err != nil && svc.logger != nil {
+			svc.logger.Warn("notifying dm queue", "error", err)
+		}
 	}
 
 	return CreateCharacterResult{
 		CharacterID:       charID,
 		PlayerCharacterID: pcID,
 	}, nil
-}
-
-// classHitDie returns the hit die for common classes. Falls back to d8.
-func classHitDie(class string) string {
-	switch strings.ToLower(class) {
-	case "barbarian":
-		return "d12"
-	case "fighter", "paladin", "ranger":
-		return "d10"
-	case "sorcerer", "wizard":
-		return "d6"
-	default:
-		return "d8"
-	}
 }
 
 // PointBuyScores holds the six ability scores for point-buy validation.

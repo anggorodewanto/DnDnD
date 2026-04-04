@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/ab/dndnd/internal/auth"
 )
@@ -153,7 +154,7 @@ func (h *APIHandler) SubmitCharacter(w http.ResponseWriter, r *http.Request) {
 }
 
 func isValidationError(err error) bool {
-	return err != nil && len(err.Error()) > 0 && err.Error()[:10] == "validation"
+	return err != nil && strings.HasPrefix(err.Error(), "validation")
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
