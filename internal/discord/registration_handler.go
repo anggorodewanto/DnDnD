@@ -9,6 +9,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/ddbimport"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/registration"
 )
@@ -29,6 +30,11 @@ type CampaignProvider interface {
 // CharacterCreator creates placeholder characters for import/create flows.
 type CharacterCreator interface {
 	CreatePlaceholder(ctx context.Context, campaignID uuid.UUID, name string, ddbURL string) (refdata.Character, error)
+}
+
+// DDBImporter handles D&D Beyond character import.
+type DDBImporter interface {
+	Import(ctx context.Context, campaignID uuid.UUID, ddbURL string) (*ddbimport.ImportResult, error)
 }
 
 // CharacterNameResolver resolves a character ID to its name.
@@ -103,11 +109,12 @@ func (h *RegisterHandler) Handle(interaction *discordgo.Interaction) {
 type ImportHandler struct {
 	registrationBase
 	charCreator CharacterCreator
+	ddbImporter DDBImporter
 }
 
 // NewImportHandler creates a new ImportHandler.
-func NewImportHandler(session Session, regService RegistrationService, campaignProv CampaignProvider, charCreator CharacterCreator, dmQueueFunc func(string) string, dmUserFunc func(string) string) *ImportHandler {
-	return &ImportHandler{
+func NewImportHandler(session Session, regService RegistrationService, campaignProv CampaignProvider, charCreator CharacterCreator, dmQueueFunc func(string) string, dmUserFunc func(string) string, opts ...ImportHandlerOption) *ImportHandler {
+	h := &ImportHandler{
 		registrationBase: registrationBase{
 			session:      session,
 			regService:   regService,
@@ -116,6 +123,20 @@ func NewImportHandler(session Session, regService RegistrationService, campaignP
 			dmUserFunc:   dmUserFunc,
 		},
 		charCreator: charCreator,
+	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
+
+// ImportHandlerOption configures the ImportHandler.
+type ImportHandlerOption func(*ImportHandler)
+
+// WithDDBImporter sets the DDB import service on the handler.
+func WithDDBImporter(importer DDBImporter) ImportHandlerOption {
+	return func(h *ImportHandler) {
+		h.ddbImporter = importer
 	}
 }
 
@@ -134,6 +155,46 @@ func (h *ImportHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	userID := interactionUserID(interaction)
+
+	// Use DDB importer if available (real import), otherwise fall back to placeholder
+	if h.ddbImporter != nil {
+		h.handleDDBImport(interaction, campaign, userID, ddbURL)
+		return
+	}
+
+	h.handlePlaceholderImport(interaction, campaign, userID, ddbURL)
+}
+
+func (h *ImportHandler) handleDDBImport(interaction *discordgo.Interaction, campaign refdata.Campaign, userID, ddbURL string) {
+	importResult, err := h.ddbImporter.Import(context.Background(), campaign.ID, ddbURL)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Import error: %s", err))
+		return
+	}
+
+	_, err = h.regService.Import(context.Background(), campaign.ID, userID, importResult.Character.ID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Import error: %s", err))
+		return
+	}
+
+	// Build ephemeral preview response
+	var msg string
+	if importResult.IsResync {
+		if len(importResult.Changes) == 0 {
+			msg = fmt.Sprintf("Re-import of **%s** — no changes detected.\n\n%s", importResult.Character.Name, importResult.Preview)
+		} else {
+			msg = fmt.Sprintf("Re-import of **%s** — changes detected and pending DM approval.\n\n%s", importResult.Character.Name, importResult.Preview)
+		}
+	} else {
+		msg = fmt.Sprintf("Import of **%s** submitted for DM approval.\n\n%s", importResult.Character.Name, importResult.Preview)
+	}
+
+	respondEphemeral(h.session, interaction, msg)
+	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, importResult.Character.Name, userID, "import")
+}
+
+func (h *ImportHandler) handlePlaceholderImport(interaction *discordgo.Interaction, campaign refdata.Campaign, userID, ddbURL string) {
 	charName := fmt.Sprintf("Imported (%s)", truncateURL(ddbURL, 40))
 
 	char, err := h.charCreator.CreatePlaceholder(context.Background(), campaign.ID, charName, ddbURL)
