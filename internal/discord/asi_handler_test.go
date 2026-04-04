@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
@@ -190,29 +191,17 @@ func TestFormatDMQueueASIMessage(t *testing.T) {
 	if msg == "" {
 		t.Fatal("expected non-empty message")
 	}
-	if !contains(msg, "Aria") {
+	if !strings.Contains(msg, "Aria") {
 		t.Error("expected character name")
 	}
-	if !contains(msg, "Fighter 8") {
+	if !strings.Contains(msg, "Fighter 8") {
 		t.Error("expected class info")
 	}
-	if !contains(msg, "+2 STR") {
+	if !strings.Contains(msg, "+2 STR") {
 		t.Error("expected choice description")
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 func TestParseDMApprovalCustomID(t *testing.T) {
 	charID := uuid.New()
@@ -297,7 +286,7 @@ func TestASIHandler_HandleASISelect_NoAbilities(t *testing.T) {
 
 	handler.HandleASISelect(interaction)
 
-	if !contains(respondedContent, "No abilities") {
+	if !strings.Contains(respondedContent, "No abilities") {
 		t.Errorf("expected 'No abilities' message, got: %s", respondedContent)
 	}
 }
@@ -331,7 +320,7 @@ func TestASIHandler_HandleASISelect_CharNotFound(t *testing.T) {
 
 	handler.HandleASISelect(interaction)
 
-	if !contains(respondedContent, "Could not load") {
+	if !strings.Contains(respondedContent, "Could not load") {
 		t.Errorf("expected error message, got: %s", respondedContent)
 	}
 }
@@ -408,7 +397,7 @@ func TestASIHandler_HandleDMApprove_ApproveError(t *testing.T) {
 
 	handler.HandleDMApprove(interaction)
 
-	if !contains(editedContent, "failed") {
+	if !strings.Contains(editedContent, "failed") {
 		t.Errorf("expected failure message, got: %s", editedContent)
 	}
 }
@@ -438,7 +427,7 @@ func TestASIHandler_HandleDMDeny_NoPending(t *testing.T) {
 
 	handler.HandleDMDeny(interaction)
 
-	if !contains(respondedContent, "No pending") {
+	if !strings.Contains(respondedContent, "No pending") {
 		t.Errorf("expected 'No pending' error, got: %s", respondedContent)
 	}
 }
@@ -534,10 +523,6 @@ type mockASIService struct {
 	denyASICalled bool
 	denyCharID    uuid.UUID
 	denyReason    string
-
-	applyFeatCalled bool
-	applyFeatCharID uuid.UUID
-	applyFeatID     string
 
 	character *ASICharacterData
 	charErr   error
@@ -832,7 +817,7 @@ func TestASIHandler_HandleASIChoiceButton_Feat(t *testing.T) {
 	if respondedContent == "" {
 		t.Fatal("expected response")
 	}
-	if !contains(respondedContent, "Feat selection") {
+	if !strings.Contains(respondedContent, "Feat selection") {
 		t.Errorf("expected feat placeholder message, got: %s", respondedContent)
 	}
 }
@@ -881,7 +866,7 @@ func TestASIHandler_HandleASISelect_Plus1Plus1(t *testing.T) {
 		t.Fatal("expected message to DM queue")
 	}
 	// Should mention both abilities
-	if !contains(sentMessage.Content, "STR") || !contains(sentMessage.Content, "DEX") {
+	if !strings.Contains(sentMessage.Content, "STR") || !strings.Contains(sentMessage.Content, "DEX") {
 		t.Errorf("expected both abilities in message, got: %s", sentMessage.Content)
 	}
 }
@@ -914,7 +899,7 @@ func TestASIHandler_HandleASIChoice_CharNotFound(t *testing.T) {
 
 	handler.HandleASIChoice(interaction)
 
-	if !contains(respondedContent, "Could not load") {
+	if !strings.Contains(respondedContent, "Could not load") {
 		t.Errorf("expected error message, got: %s", respondedContent)
 	}
 }
@@ -944,7 +929,7 @@ func TestASIHandler_HandleDMApprove_NoPending(t *testing.T) {
 
 	handler.HandleDMApprove(interaction)
 
-	if !contains(respondedContent, "No pending") {
+	if !strings.Contains(respondedContent, "No pending") {
 		t.Errorf("expected 'No pending' error, got: %s", respondedContent)
 	}
 }

@@ -3,8 +3,6 @@ package levelup
 import (
 	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 // FormatPublicLevelUpMessage returns the public announcement for #the-story.
@@ -37,7 +35,7 @@ func FormatPrivateLevelUpMessage(details LevelUpDetails) string {
 
 // FormatASIPromptMessage returns the interactive prompt message for ASI/Feat choice.
 // This text accompanies interactive button components in the Discord message.
-func FormatASIPromptMessage(characterName string, characterID uuid.UUID) string {
+func FormatASIPromptMessage(characterName string) string {
 	return fmt.Sprintf("\U0001f393 **%s** — Ability Score Improvement available! Choose below:", characterName)
 }
 

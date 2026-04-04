@@ -78,7 +78,7 @@ func TestFormatPrivateLevelUpMessage_WithSubclass(t *testing.T) {
 }
 
 func TestFormatASIPromptMessage(t *testing.T) {
-	msg := FormatASIPromptMessage("Aria", uuid.New())
+	msg := FormatASIPromptMessage("Aria")
 	if msg == "" {
 		t.Error("expected non-empty message")
 	}

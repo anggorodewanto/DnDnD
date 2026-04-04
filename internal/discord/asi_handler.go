@@ -62,11 +62,11 @@ func BuildASIPromptComponents(charID uuid.UUID) []discordgo.MessageComponent {
 	}
 }
 
-// ParseASIChoiceCustomID parses a custom ID like "asi_choice:<charID>:<type>".
-func ParseASIChoiceCustomID(customID string) (uuid.UUID, string, error) {
+// parseThreePartCustomID parses a custom ID like "prefix:<charID>:<type>" and validates the prefix.
+func parseThreePartCustomID(customID, wantPrefix string) (uuid.UUID, string, error) {
 	parts := strings.Split(customID, ":")
-	if len(parts) != 3 || parts[0] != asiChoicePrefix {
-		return uuid.Nil, "", fmt.Errorf("invalid ASI choice custom ID: %s", customID)
+	if len(parts) != 3 || parts[0] != wantPrefix {
+		return uuid.Nil, "", fmt.Errorf("invalid %s custom ID: %s", wantPrefix, customID)
 	}
 	charID, err := uuid.Parse(parts[1])
 	if err != nil {
@@ -75,17 +75,14 @@ func ParseASIChoiceCustomID(customID string) (uuid.UUID, string, error) {
 	return charID, parts[2], nil
 }
 
+// ParseASIChoiceCustomID parses a custom ID like "asi_choice:<charID>:<type>".
+func ParseASIChoiceCustomID(customID string) (uuid.UUID, string, error) {
+	return parseThreePartCustomID(customID, asiChoicePrefix)
+}
+
 // ParseASISelectCustomID parses a custom ID like "asi_select:<charID>:<type>".
 func ParseASISelectCustomID(customID string) (uuid.UUID, string, error) {
-	parts := strings.Split(customID, ":")
-	if len(parts) != 3 || parts[0] != asiSelectPrefix {
-		return uuid.Nil, "", fmt.Errorf("invalid ASI select custom ID: %s", customID)
-	}
-	charID, err := uuid.Parse(parts[1])
-	if err != nil {
-		return uuid.Nil, "", fmt.Errorf("invalid character ID: %w", err)
-	}
-	return charID, parts[2], nil
+	return parseThreePartCustomID(customID, asiSelectPrefix)
 }
 
 // BuildAbilitySelectMenu creates a select menu for choosing ability scores to increase.
@@ -118,7 +115,7 @@ func BuildAbilitySelectMenu(charID uuid.UUID, asiType string, scores character.A
 	if asiType == "plus1plus1" {
 		maxValues = 2
 	}
-	minValues := func() *int { v := maxValues; return &v }()
+	minValues := &maxValues
 
 	return []discordgo.MessageComponent{
 		&discordgo.ActionsRow{
