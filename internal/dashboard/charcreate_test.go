@@ -132,6 +132,7 @@ func TestValidateDMSubmission_MultipleErrors(t *testing.T) {
 
 func TestDeriveDMStats_SingleClassFighter(t *testing.T) {
 	sub := DMCharacterSubmission{
+		Race: "Human",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 5},
 		},
@@ -149,7 +150,49 @@ func TestDeriveDMStats_SingleClassFighter(t *testing.T) {
 	assert.Equal(t, 3, stats.ProficiencyBonus)
 	// Total level
 	assert.Equal(t, 5, stats.TotalLevel)
-	// Speed
+	// Speed: Human = 30
+	assert.Equal(t, 30, stats.SpeedFt)
+}
+
+func TestDeriveDMStats_DwarfSpeed(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Race: "Dwarf",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 14, DEX: 10, CON: 14, INT: 10, WIS: 10, CHA: 10,
+		},
+	}
+	stats := DeriveDMStats(sub)
+	assert.Equal(t, 25, stats.SpeedFt)
+}
+
+func TestDeriveDMStats_WoodElfSpeed(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Race: "Wood Elf",
+		Classes: []character.ClassEntry{
+			{Class: "Ranger", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 10, DEX: 16, CON: 10, INT: 10, WIS: 14, CHA: 10,
+		},
+	}
+	stats := DeriveDMStats(sub)
+	assert.Equal(t, 35, stats.SpeedFt)
+}
+
+func TestDeriveDMStats_UnknownRaceDefaultsTo30(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Race: "Homebrew Race",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10,
+		},
+	}
+	stats := DeriveDMStats(sub)
 	assert.Equal(t, 30, stats.SpeedFt)
 }
 
@@ -265,9 +308,146 @@ func TestClassSaveProficiencies_AllClasses(t *testing.T) {
 	}
 }
 
+func TestClassSkillProficiencies_AllClasses(t *testing.T) {
+	tests := []struct {
+		class  string
+		skills []string
+	}{
+		{"Barbarian", []string{"athletics", "perception"}},
+		{"Bard", []string{"performance", "persuasion", "deception"}},
+		{"Cleric", []string{"insight", "medicine"}},
+		{"Druid", []string{"nature", "perception"}},
+		{"Fighter", []string{"athletics", "perception"}},
+		{"Monk", []string{"acrobatics", "insight"}},
+		{"Paladin", []string{"athletics", "persuasion"}},
+		{"Ranger", []string{"perception", "survival", "stealth"}},
+		{"Rogue", []string{"acrobatics", "stealth", "perception", "deception"}},
+		{"Sorcerer", []string{"arcana", "persuasion"}},
+		{"Warlock", []string{"arcana", "deception"}},
+		{"Wizard", []string{"arcana", "investigation"}},
+		{"Unknown", nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.class, func(t *testing.T) {
+			classes := []character.ClassEntry{{Class: tc.class, Level: 1}}
+			result := classSkillProficiencies(classes)
+			assert.Equal(t, tc.skills, result)
+		})
+	}
+}
+
+func TestRaceSpeed(t *testing.T) {
+	tests := []struct {
+		race  string
+		speed int
+	}{
+		{"Human", 30},
+		{"Elf", 30},
+		{"High Elf", 30},
+		{"Wood Elf", 35},
+		{"Dwarf", 25},
+		{"Hill Dwarf", 25},
+		{"Mountain Dwarf", 25},
+		{"Halfling", 25},
+		{"Lightfoot Halfling", 25},
+		{"Stout Halfling", 25},
+		{"Gnome", 25},
+		{"Forest Gnome", 25},
+		{"Rock Gnome", 25},
+		{"Dragonborn", 30},
+		{"Half-Elf", 30},
+		{"Half-Orc", 30},
+		{"Tiefling", 30},
+		{"Unknown", 30},
+		{"", 30},
+	}
+	for _, tc := range tests {
+		t.Run(tc.race, func(t *testing.T) {
+			assert.Equal(t, tc.speed, raceSpeed(tc.race))
+		})
+	}
+}
+
+func TestClassSkillProficiencies_EmptyClasses(t *testing.T) {
+	result := classSkillProficiencies(nil)
+	assert.Nil(t, result)
+}
+
 func TestClassSaveProficiencies_EmptyClasses(t *testing.T) {
 	result := classSaveProficiencies(nil)
 	assert.Nil(t, result)
+}
+
+func TestDeriveDMStats_SkillModifiers_FighterProficiencies(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10,
+		},
+	}
+	stats := DeriveDMStats(sub)
+
+	// Skills field should be populated with all 18 skills
+	assert.Len(t, stats.Skills, 18)
+
+	// Fighter skill proficiencies: athletics, perception
+	// athletics: STR mod(+3) + prof(+2) = +5
+	assert.Equal(t, 5, stats.Skills["athletics"])
+
+	// perception: WIS mod(-1) + prof(+2) = +1 (proficient)
+	assert.Equal(t, 1, stats.Skills["perception"])
+
+	// acrobatics: DEX mod(+1), not proficient = +1
+	assert.Equal(t, 1, stats.Skills["acrobatics"])
+
+	// arcana: INT mod(+0), not proficient = 0
+	assert.Equal(t, 0, stats.Skills["arcana"])
+}
+
+func TestDeriveDMStats_SkillModifiers_AllSkillsPresent(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "Wizard", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10,
+		},
+	}
+	stats := DeriveDMStats(sub)
+
+	expectedSkills := []string{
+		"acrobatics", "animal-handling", "arcana", "athletics",
+		"deception", "history", "insight", "intimidation",
+		"investigation", "medicine", "nature", "perception",
+		"performance", "persuasion", "religion", "sleight-of-hand",
+		"stealth", "survival",
+	}
+	for _, skill := range expectedSkills {
+		_, ok := stats.Skills[skill]
+		assert.True(t, ok, "missing skill: %s", skill)
+	}
+}
+
+func TestDeriveDMStats_SkillModifiers_WithClassProficiency(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "Rogue", Level: 5},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 10, DEX: 16, CON: 10, INT: 10, WIS: 10, CHA: 10,
+		},
+	}
+	stats := DeriveDMStats(sub)
+
+	// Rogue has proficiency in stealth (DEX-based)
+	// DEX mod(+3) + prof bonus(+3) = +6
+	assert.Equal(t, 6, stats.Skills["stealth"])
+
+	// Non-proficient skill: athletics (STR-based)
+	// STR mod(+0) = 0
+	assert.Equal(t, 0, stats.Skills["athletics"])
 }
 
 func TestDeriveDMStats_HitDiceRemaining(t *testing.T) {

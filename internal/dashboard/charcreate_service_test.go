@@ -119,31 +119,6 @@ func TestDMCharCreateService_CreateCharacter_PCStoreError(t *testing.T) {
 	assert.Contains(t, err.Error(), "creating player character")
 }
 
-func TestDMCreateStoreAdapter_Delegates(t *testing.T) {
-	inner := &mockCharCreateStore{
-		charID: "char-del",
-		pcID:   "pc-del",
-	}
-	adapter := NewDMCreateStoreAdapter(inner)
-
-	charID, err := adapter.CreateCharacterRecord(context.Background(), portal.CreateCharacterParams{Name: "Test"})
-	require.NoError(t, err)
-	assert.Equal(t, "char-del", charID)
-
-	pcID, err := adapter.CreatePlayerCharacterRecord(context.Background(), portal.CreatePlayerCharacterParams{Status: "approved"})
-	require.NoError(t, err)
-	assert.Equal(t, "pc-del", pcID)
-}
-
-func TestClassSaveProficienciesLookup(t *testing.T) {
-	saves := classSaveProficienciesLookup("Fighter")
-	assert.Contains(t, saves, "str")
-	assert.Contains(t, saves, "con")
-
-	unknown := classSaveProficienciesLookup("Unknown")
-	assert.Nil(t, unknown)
-}
-
 func TestDMCharCreateService_CreateCharacter_Multiclass(t *testing.T) {
 	store := &mockCharCreateStore{
 		charID: "char-mc",

@@ -75,6 +75,7 @@ type DMDerivedStats struct {
 	ProficiencyBonus  int            `json:"proficiency_bonus"`
 	SaveProficiencies []string       `json:"save_proficiencies"`
 	Saves             map[string]int `json:"saves"`
+	Skills            map[string]int `json:"skills"`
 	HitDiceRemaining  map[string]int `json:"hit_dice_remaining"`
 }
 
@@ -102,6 +103,15 @@ func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
 		saves[ab] = character.SavingThrowModifier(sub.AbilityScores, ab, saveProficiencies, profBonus)
 	}
 
+	// Skill proficiencies from primary class
+	skillProfs := classSkillProficiencies(sub.Classes)
+
+	// Calculate skill modifiers for all 18 skills
+	skills := make(map[string]int, len(character.SkillAbilityMap))
+	for skill := range character.SkillAbilityMap {
+		skills[skill] = character.SkillModifier(sub.AbilityScores, skill, skillProfs, nil, false, profBonus)
+	}
+
 	// Hit dice remaining (starts full)
 	hitDiceRemaining := make(map[string]int, len(sub.Classes))
 	for _, c := range sub.Classes {
@@ -111,12 +121,66 @@ func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
 	return DMDerivedStats{
 		HPMax:             hp,
 		AC:                ac,
-		SpeedFt:           30,
+		SpeedFt:           raceSpeed(sub.Race),
 		TotalLevel:        totalLevel,
 		ProficiencyBonus:  profBonus,
 		SaveProficiencies: saveProficiencies,
 		Saves:             saves,
+		Skills:            skills,
 		HitDiceRemaining:  hitDiceRemaining,
+	}
+}
+
+// raceSpeed returns the base walking speed in feet for a race name.
+// Defaults to 30 ft for unknown races.
+func raceSpeed(race string) int {
+	switch strings.ToLower(race) {
+	case "dwarf", "hill dwarf", "mountain dwarf":
+		return 25
+	case "halfling", "lightfoot halfling", "stout halfling":
+		return 25
+	case "gnome", "forest gnome", "rock gnome":
+		return 25
+	case "wood elf":
+		return 35
+	default:
+		return 30
+	}
+}
+
+// classSkillProficiencies returns default skill proficiencies for the primary (first) class.
+// These are the SRD default skill proficiencies granted by each class.
+func classSkillProficiencies(classes []character.ClassEntry) []string {
+	if len(classes) == 0 {
+		return nil
+	}
+	switch strings.ToLower(classes[0].Class) {
+	case "barbarian":
+		return []string{"athletics", "perception"}
+	case "bard":
+		return []string{"performance", "persuasion", "deception"}
+	case "cleric":
+		return []string{"insight", "medicine"}
+	case "druid":
+		return []string{"nature", "perception"}
+	case "fighter":
+		return []string{"athletics", "perception"}
+	case "monk":
+		return []string{"acrobatics", "insight"}
+	case "paladin":
+		return []string{"athletics", "persuasion"}
+	case "ranger":
+		return []string{"perception", "survival", "stealth"}
+	case "rogue":
+		return []string{"acrobatics", "stealth", "perception", "deception"}
+	case "sorcerer":
+		return []string{"arcana", "persuasion"}
+	case "warlock":
+		return []string{"arcana", "deception"}
+	case "wizard":
+		return []string{"arcana", "investigation"}
+	default:
+		return nil
 	}
 }
 

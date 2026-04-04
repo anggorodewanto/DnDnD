@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/portal"
 )
 
@@ -75,31 +74,4 @@ func (svc *DMCharCreateService) CreateCharacter(ctx context.Context, campaignID 
 		CharacterID:       charID,
 		PlayerCharacterID: pcID,
 	}, nil
-}
-
-// DMCreateStoreAdapter adapts the portal BuilderStoreAdapter for DM character creation.
-// It reuses the same underlying store but customizes the character record creation
-// to support multiclass and proper derived stats.
-type DMCreateStoreAdapter struct {
-	inner CharCreateStore
-}
-
-// NewDMCreateStoreAdapter wraps an existing CharCreateStore.
-func NewDMCreateStoreAdapter(inner CharCreateStore) *DMCreateStoreAdapter {
-	return &DMCreateStoreAdapter{inner: inner}
-}
-
-// CreateCharacterRecord delegates to the inner store.
-func (a *DMCreateStoreAdapter) CreateCharacterRecord(ctx context.Context, p portal.CreateCharacterParams) (string, error) {
-	return a.inner.CreateCharacterRecord(ctx, p)
-}
-
-// CreatePlayerCharacterRecord delegates to the inner store.
-func (a *DMCreateStoreAdapter) CreatePlayerCharacterRecord(ctx context.Context, p portal.CreatePlayerCharacterParams) (string, error) {
-	return a.inner.CreatePlayerCharacterRecord(ctx, p)
-}
-
-// classSaveProficienciesLookup returns save proficiencies for a class name (for use in store adapters).
-func classSaveProficienciesLookup(className string) []string {
-	return classSaveProficiencies([]character.ClassEntry{{Class: className, Level: 1}})
 }
