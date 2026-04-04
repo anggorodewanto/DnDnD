@@ -270,11 +270,11 @@ func TestCharCreateHandler_HandleListRefClasses_Success(t *testing.T) {
 	assert.Len(t, classes, 1)
 }
 
-// mockRefDataForCreate implements portal.RefDataStore for testing.
+// mockRefDataForCreate implements RefDataForCreate for testing.
 type mockRefDataForCreate struct {
-	races   []portal.RaceInfo
-	classes []portal.ClassInfo
-	raceErr error
+	races    []portal.RaceInfo
+	classes  []portal.ClassInfo
+	raceErr  error
 	classErr error
 }
 
@@ -284,14 +284,6 @@ func (m *mockRefDataForCreate) ListRaces(ctx context.Context) ([]portal.RaceInfo
 
 func (m *mockRefDataForCreate) ListClasses(ctx context.Context) ([]portal.ClassInfo, error) {
 	return m.classes, m.classErr
-}
-
-func (m *mockRefDataForCreate) ListSpellsByClass(ctx context.Context, class string) ([]portal.SpellInfo, error) {
-	return nil, nil
-}
-
-func (m *mockRefDataForCreate) ListEquipment(ctx context.Context) ([]portal.EquipmentItem, error) {
-	return nil, nil
 }
 
 func TestCharCreateHandler_RegisterRoutes_CreatePageEndpoint(t *testing.T) {

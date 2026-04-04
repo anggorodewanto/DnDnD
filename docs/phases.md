@@ -554,7 +554,7 @@
   - Depends on: Phase 92, Phase 65, Phase 5
   - Done when: Portal-created characters have spells persisted; character sheet displays full spell list grouped by level with prepared indicators; `/character` embed shows spell summary; DDB-imported characters' spells display correctly.
 
-- [ ] **Phase 93a: DM Manual Character Creation — Basics Through Ability Scores (Dashboard)**
+- [x] **Phase 93a: DM Manual Character Creation — Basics Through Ability Scores (Dashboard)**
   - Scope: Dashboard character creation wizard first half: name, race, background, class/subclass selection, ability score entry (manual input or point-buy). DM-created characters are pre-approved (skip approval queue). Derived stats preview (HP, AC, proficiency bonus, saves, skills).
   - Depends on: Phase 15, Phase 7
   - Done when: DM can create character through ability scores step, derived stats preview correct, character saved as pre-approved.

@@ -135,11 +135,9 @@ func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
 // Defaults to 30 ft for unknown races.
 func raceSpeed(race string) int {
 	switch strings.ToLower(race) {
-	case "dwarf", "hill dwarf", "mountain dwarf":
-		return 25
-	case "halfling", "lightfoot halfling", "stout halfling":
-		return 25
-	case "gnome", "forest gnome", "rock gnome":
+	case "dwarf", "hill dwarf", "mountain dwarf",
+		"halfling", "lightfoot halfling", "stout halfling",
+		"gnome", "forest gnome", "rock gnome":
 		return 25
 	case "wood elf":
 		return 35
