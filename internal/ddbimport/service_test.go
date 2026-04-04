@@ -11,6 +11,7 @@ import (
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 )
 
 // mockClient implements Client for testing.
@@ -24,25 +25,25 @@ func (m *mockClient) FetchCharacter(ctx context.Context, id string) ([]byte, err
 
 // mockCharStore implements CharacterStore for testing.
 type mockCharStore struct {
-	CreateFunc           func(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error)
-	GetByDdbURLFunc      func(ctx context.Context, campaignID uuid.UUID, ddbURL string) (refdata.Character, error)
-	UpdateFunc           func(ctx context.Context, id uuid.UUID, params refdata.CreateCharacterParams) (refdata.Character, error)
+	CreateFunc      func(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error)
+	GetByDdbURLFunc func(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error)
+	UpdateFunc      func(ctx context.Context, params refdata.UpdateCharacterFullParams) (refdata.Character, error)
 }
 
-func (m *mockCharStore) CreateCharacterFull(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error) {
+func (m *mockCharStore) CreateCharacter(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error) {
 	return m.CreateFunc(ctx, params)
 }
 
-func (m *mockCharStore) GetCharacterByDdbURL(ctx context.Context, campaignID uuid.UUID, ddbURL string) (refdata.Character, error) {
+func (m *mockCharStore) GetCharacterByDdbURL(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error) {
 	if m.GetByDdbURLFunc != nil {
-		return m.GetByDdbURLFunc(ctx, campaignID, ddbURL)
+		return m.GetByDdbURLFunc(ctx, params)
 	}
 	return refdata.Character{}, sql.ErrNoRows
 }
 
-func (m *mockCharStore) UpdateCharacterFull(ctx context.Context, id uuid.UUID, params refdata.CreateCharacterParams) (refdata.Character, error) {
+func (m *mockCharStore) UpdateCharacterFull(ctx context.Context, params refdata.UpdateCharacterFullParams) (refdata.Character, error) {
 	if m.UpdateFunc != nil {
-		return m.UpdateFunc(ctx, id, params)
+		return m.UpdateFunc(ctx, params)
 	}
 	return refdata.Character{}, nil
 }
@@ -261,7 +262,7 @@ func TestService_Import_Resync(t *testing.T) {
 	classes, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 2}})
 
 	store := &mockCharStore{
-		GetByDdbURLFunc: func(ctx context.Context, cID uuid.UUID, url string) (refdata.Character, error) {
+		GetByDdbURLFunc: func(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error) {
 			return refdata.Character{
 				ID:            existingID,
 				CampaignID:    campaignID,
@@ -277,9 +278,9 @@ func TestService_Import_Resync(t *testing.T) {
 				DdbUrl:        sql.NullString{String: ddbURL, Valid: true},
 			}, nil
 		},
-		UpdateFunc: func(ctx context.Context, id uuid.UUID, params refdata.CreateCharacterParams) (refdata.Character, error) {
-			if id != existingID {
-				t.Errorf("update called with wrong ID: %s", id)
+		UpdateFunc: func(ctx context.Context, params refdata.UpdateCharacterFullParams) (refdata.Character, error) {
+			if params.ID != existingID {
+				t.Errorf("update called with wrong ID: %s", params.ID)
 			}
 			return refdata.Character{ID: existingID, Name: params.Name}, nil
 		},
@@ -320,7 +321,7 @@ func TestService_Import_ResyncNoChanges(t *testing.T) {
 	classes, _ := json.Marshal(parsed.Classes)
 
 	store := &mockCharStore{
-		GetByDdbURLFunc: func(ctx context.Context, cID uuid.UUID, url string) (refdata.Character, error) {
+		GetByDdbURLFunc: func(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error) {
 			return refdata.Character{
 				ID:            existingID,
 				CampaignID:    campaignID,
@@ -349,6 +350,82 @@ func TestService_Import_ResyncNoChanges(t *testing.T) {
 	}
 	if len(result.Changes) != 0 {
 		t.Errorf("expected no changes, got %v", result.Changes)
+	}
+}
+
+func TestCharacterToParseResult_FeaturesAndSpells(t *testing.T) {
+	features := []character.Feature{{Name: "Action Surge", Source: "Fighter", Level: 2}}
+	featuresJSON, _ := json.Marshal(features)
+	spells := []SpellEntry{{Name: "Fire Bolt", Level: 0, Source: "class"}}
+	charData := map[string]interface{}{"spells": spells}
+	charDataJSON, _ := json.Marshal(charData)
+
+	c := &refdata.Character{
+		Name:          "Test",
+		Race:          "Human",
+		Level:         5,
+		HpMax:         44,
+		HpCurrent:     39,
+		Ac:            18,
+		SpeedFt:       30,
+		Features:      pqtype.NullRawMessage{RawMessage: featuresJSON, Valid: true},
+		CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+	}
+
+	pc := characterToParseResult(c)
+	if len(pc.Features) != 1 || pc.Features[0].Name != "Action Surge" {
+		t.Errorf("Features = %v, want [{Action Surge ...}]", pc.Features)
+	}
+	if len(pc.Spells) != 1 || pc.Spells[0].Name != "Fire Bolt" {
+		t.Errorf("Spells = %v, want [{Fire Bolt ...}]", pc.Spells)
+	}
+}
+
+func TestBuildCreateParams_FeaturesAndSpells(t *testing.T) {
+	pc := validCharacter()
+	pc.Features = []character.Feature{
+		{Name: "Second Wind", Source: "Fighter", Level: 1, Description: "Regain HP"},
+	}
+	pc.Spells = []SpellEntry{
+		{Name: "Fire Bolt", Level: 0, Source: "class"},
+		{Name: "Magic Missile", Level: 1, Source: "class"},
+	}
+
+	params, err := buildCreateParams(uuid.New(), "https://dndbeyond.com/characters/1", pc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Features should be in the Features field
+	if !params.Features.Valid {
+		t.Fatal("expected Features to be valid")
+	}
+	var features []character.Feature
+	if err := json.Unmarshal(params.Features.RawMessage, &features); err != nil {
+		t.Fatalf("unmarshal features: %v", err)
+	}
+	if len(features) != 1 || features[0].Name != "Second Wind" {
+		t.Errorf("features = %v, want [{Second Wind ...}]", features)
+	}
+
+	// Spells should be in CharacterData
+	if !params.CharacterData.Valid {
+		t.Fatal("expected CharacterData to be valid")
+	}
+	var charData map[string]json.RawMessage
+	if err := json.Unmarshal(params.CharacterData.RawMessage, &charData); err != nil {
+		t.Fatalf("unmarshal character_data: %v", err)
+	}
+	spellsRaw, ok := charData["spells"]
+	if !ok {
+		t.Fatal("expected 'spells' key in character_data")
+	}
+	var spells []SpellEntry
+	if err := json.Unmarshal(spellsRaw, &spells); err != nil {
+		t.Fatalf("unmarshal spells: %v", err)
+	}
+	if len(spells) != 2 {
+		t.Errorf("expected 2 spells, got %d", len(spells))
 	}
 }
 

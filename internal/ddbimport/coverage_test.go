@@ -1,9 +1,12 @@
 package ddbimport
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
 )
 
@@ -288,6 +291,161 @@ func TestValidate_MissingRace_StillValid(t *testing.T) {
 		t.Fatalf("unexpected structural error for empty race: %v", err)
 	}
 	_ = warnings
+}
+
+func TestParseFeatures_NoSubclass(t *testing.T) {
+	classes := []ddbClass{
+		{
+			Definition: ddbClassDef{
+				Name:    "Fighter",
+				HitDice: 10,
+				ClassFeatures: []ddbClassFeature{
+					{Name: "Second Wind", RequiredLevel: 1, Description: "Regain HP"},
+					{Name: "Extra Attack", RequiredLevel: 5, Description: "Attack twice"},
+				},
+			},
+			Level: 3, // Should only get Second Wind (level 1), not Extra Attack (level 5)
+		},
+	}
+	features := parseFeatures(classes)
+	if len(features) != 1 {
+		t.Fatalf("expected 1 feature, got %d: %v", len(features), features)
+	}
+	if features[0].Name != "Second Wind" {
+		t.Errorf("expected Second Wind, got %s", features[0].Name)
+	}
+}
+
+func TestParseFeatures_HighLevelSubclassExcluded(t *testing.T) {
+	classes := []ddbClass{
+		{
+			Definition: ddbClassDef{
+				Name:    "Fighter",
+				HitDice: 10,
+			},
+			SubclassDefinition: &ddbSubclass{
+				Name: "Champion",
+				ClassFeatures: []ddbClassFeature{
+					{Name: "Improved Critical", RequiredLevel: 3, Description: "Crit on 19-20"},
+					{Name: "Remarkable Athlete", RequiredLevel: 7, Description: "Half prof to checks"},
+				},
+			},
+			Level: 5,
+		},
+	}
+	features := parseFeatures(classes)
+	if len(features) != 1 {
+		t.Fatalf("expected 1 feature, got %d", len(features))
+	}
+	if features[0].Name != "Improved Critical" {
+		t.Errorf("expected Improved Critical, got %s", features[0].Name)
+	}
+}
+
+func TestParseSpells_Empty(t *testing.T) {
+	spells := &ddbSpells{}
+	result := parseSpells(spells)
+	if len(result) != 0 {
+		t.Errorf("expected 0 spells, got %d", len(result))
+	}
+}
+
+func TestParseSpells_AllSources(t *testing.T) {
+	spells := &ddbSpells{
+		Class: []ddbSpellEntry{{Definition: ddbSpellDef{Name: "ClassSpell", Level: 1}}},
+		Race:  []ddbSpellEntry{{Definition: ddbSpellDef{Name: "RaceSpell", Level: 0}}},
+		Item:  []ddbSpellEntry{{Definition: ddbSpellDef{Name: "ItemSpell", Level: 2}}},
+		Feat:  []ddbSpellEntry{{Definition: ddbSpellDef{Name: "FeatSpell", Level: 0}}},
+	}
+	result := parseSpells(spells)
+	if len(result) != 4 {
+		t.Fatalf("expected 4 spells, got %d", len(result))
+	}
+	sources := map[string]bool{}
+	for _, s := range result {
+		sources[s.Source] = true
+	}
+	for _, src := range []string{"class", "race", "item", "feat"} {
+		if !sources[src] {
+			t.Errorf("missing source %q", src)
+		}
+	}
+}
+
+func TestBuildUpdateParams(t *testing.T) {
+	id := uuid.New()
+	params := refdata.CreateCharacterParams{
+		Name:  "Test",
+		Race:  "Human",
+		Level: 5,
+	}
+	up := buildUpdateParams(id, params)
+	if up.ID != id {
+		t.Errorf("ID = %s, want %s", up.ID, id)
+	}
+	if up.Name != "Test" {
+		t.Errorf("Name = %q, want %q", up.Name, "Test")
+	}
+	if up.Level != 5 {
+		t.Errorf("Level = %d, want 5", up.Level)
+	}
+}
+
+func TestGenerateDiff_AllAbilityScores(t *testing.T) {
+	old := validCharacter()
+	new := validCharacter()
+	new.AbilityScores.DEX = 16
+	new.AbilityScores.CON = 17
+	new.AbilityScores.INT = 12
+	new.AbilityScores.WIS = 14
+	new.AbilityScores.CHA = 10
+	diff := GenerateDiff(old, new)
+	if len(diff) != 5 {
+		t.Errorf("expected 5 ability score changes, got %d: %v", len(diff), diff)
+	}
+}
+
+func TestService_Import_CreateError(t *testing.T) {
+	client := &mockClient{
+		FetchFunc: func(ctx context.Context, id string) ([]byte, error) {
+			return minimalDDBJSON(), nil
+		},
+	}
+	store := &mockCharStore{
+		CreateFunc: func(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error) {
+			return refdata.Character{}, fmt.Errorf("db error")
+		},
+	}
+	svc := NewService(client, store)
+	_, err := svc.Import(context.Background(), uuid.New(), "https://www.dndbeyond.com/characters/12345")
+	if err == nil {
+		t.Fatal("expected error for create failure")
+	}
+}
+
+func TestService_Import_UpdateError(t *testing.T) {
+	campaignID := uuid.New()
+	existingID := uuid.New()
+	ddbURL := "https://www.dndbeyond.com/characters/12345"
+
+	client := &mockClient{
+		FetchFunc: func(ctx context.Context, id string) ([]byte, error) {
+			return minimalDDBJSON(), nil
+		},
+	}
+	store := &mockCharStore{
+		GetByDdbURLFunc: func(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error) {
+			return refdata.Character{ID: existingID, CampaignID: campaignID}, nil
+		},
+		UpdateFunc: func(ctx context.Context, params refdata.UpdateCharacterFullParams) (refdata.Character, error) {
+			return refdata.Character{}, fmt.Errorf("update failed")
+		},
+	}
+	svc := NewService(client, store)
+	_, err := svc.Import(context.Background(), campaignID, ddbURL)
+	if err == nil {
+		t.Fatal("expected error for update failure")
+	}
 }
 
 func TestBuildCreateParams_ProfBonusByLevel(t *testing.T) {

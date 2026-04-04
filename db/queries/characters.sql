@@ -115,6 +115,43 @@ UPDATE characters SET attunement_slots = $2, inventory = $3, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
+-- name: GetCharacterByDdbURL :one
+SELECT * FROM characters WHERE campaign_id = $1 AND ddb_url = $2;
+
+-- name: UpdateCharacterFull :one
+UPDATE characters SET
+    name = $2,
+    race = $3,
+    classes = $4,
+    level = $5,
+    ability_scores = $6,
+    hp_max = $7,
+    hp_current = $8,
+    temp_hp = $9,
+    ac = $10,
+    ac_formula = $11,
+    speed_ft = $12,
+    proficiency_bonus = $13,
+    equipped_main_hand = $14,
+    equipped_off_hand = $15,
+    equipped_armor = $16,
+    spell_slots = $17,
+    pact_magic_slots = $18,
+    hit_dice_remaining = $19,
+    feature_uses = $20,
+    features = $21,
+    proficiencies = $22,
+    gold = $23,
+    attunement_slots = $24,
+    languages = $25,
+    inventory = $26,
+    character_data = $27,
+    ddb_url = $28,
+    homebrew = $29,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteCharacter :exec
 DELETE FROM characters WHERE id = $1;
 

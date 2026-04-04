@@ -469,3 +469,240 @@ func TestParseDDBJSON_MulticlassLevel(t *testing.T) {
 		t.Fatalf("expected 2 classes, got %d", len(result.Classes))
 	}
 }
+
+func TestParseDDBJSON_Features(t *testing.T) {
+	jsonData := []byte(`{
+		"data": {
+			"name": "FeatTest",
+			"race": {"fullName": "Human"},
+			"classes": [
+				{
+					"definition": {
+						"name": "Fighter",
+						"hitDice": 10,
+						"classFeatures": [
+							{"id": 1, "name": "Fighting Style", "requiredLevel": 1, "description": "Choose a fighting style."},
+							{"id": 2, "name": "Second Wind", "requiredLevel": 1, "description": "Bonus action to regain HP."},
+							{"id": 3, "name": "Action Surge", "requiredLevel": 2, "description": "Take an additional action."},
+							{"id": 4, "name": "Extra Attack", "requiredLevel": 5, "description": "Attack twice."}
+						]
+					},
+					"subclassDefinition": {
+						"name": "Champion",
+						"classFeatures": [
+							{"id": 10, "name": "Improved Critical", "requiredLevel": 3, "description": "Crit on 19-20."}
+						]
+					},
+					"level": 5
+				}
+			],
+			"stats": [
+				{"id": 1, "value": 16},
+				{"id": 2, "value": 14},
+				{"id": 3, "value": 15},
+				{"id": 4, "value": 10},
+				{"id": 5, "value": 12},
+				{"id": 6, "value": 8}
+			],
+			"bonusStats": [{"id":1,"value":null},{"id":2,"value":null},{"id":3,"value":null},{"id":4,"value":null},{"id":5,"value":null},{"id":6,"value":null}],
+			"overrideStats": [{"id":1,"value":null},{"id":2,"value":null},{"id":3,"value":null},{"id":4,"value":null},{"id":5,"value":null},{"id":6,"value":null}],
+			"baseHitPoints": 44,
+			"bonusHitPoints": 0,
+			"removedHitPoints": 0,
+			"temporaryHitPoints": 0,
+			"inventory": [],
+			"currencies": {"gp": 0, "sp": 0, "cp": 0, "ep": 0, "pp": 0},
+			"modifiers": {
+				"race": [
+					{"type": "racial-trait", "subType": "darkvision", "friendlyTypeName": "Racial Trait", "friendlySubtypeName": "Darkvision"}
+				],
+				"class": [],
+				"background": [],
+				"item": [],
+				"feat": [],
+				"condition": []
+			},
+			"spells": {"class": [], "race": [], "item": [], "feat": []}
+		}
+	}`)
+	result, err := ParseDDBJSON(jsonData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Features) == 0 {
+		t.Fatal("expected features to be parsed")
+	}
+
+	// Should include class features up to character's class level (5)
+	featureNames := make(map[string]bool)
+	for _, f := range result.Features {
+		featureNames[f.Name] = true
+	}
+
+	// Fighting Style (level 1), Second Wind (level 1), Action Surge (level 2), Extra Attack (level 5)
+	for _, expected := range []string{"Fighting Style", "Second Wind", "Action Surge", "Extra Attack"} {
+		if !featureNames[expected] {
+			t.Errorf("expected feature %q not found in %v", expected, result.Features)
+		}
+	}
+
+	// Subclass feature: Improved Critical (level 3)
+	if !featureNames["Improved Critical"] {
+		t.Errorf("expected subclass feature 'Improved Critical' not found in %v", result.Features)
+	}
+
+	// Verify source attribution
+	for _, f := range result.Features {
+		if f.Name == "Second Wind" {
+			if f.Source != "Fighter" {
+				t.Errorf("Second Wind source = %q, want %q", f.Source, "Fighter")
+			}
+			if f.Level != 1 {
+				t.Errorf("Second Wind level = %d, want 1", f.Level)
+			}
+		}
+		if f.Name == "Improved Critical" {
+			if f.Source != "Champion" {
+				t.Errorf("Improved Critical source = %q, want %q", f.Source, "Champion")
+			}
+		}
+	}
+}
+
+func TestParseDDBJSON_Spells(t *testing.T) {
+	jsonData := []byte(`{
+		"data": {
+			"name": "Wizard",
+			"race": {"fullName": "Elf"},
+			"classes": [{"definition": {"name": "Wizard", "hitDice": 6}, "level": 3}],
+			"stats": [
+				{"id": 1, "value": 8},
+				{"id": 2, "value": 14},
+				{"id": 3, "value": 12},
+				{"id": 4, "value": 16},
+				{"id": 5, "value": 10},
+				{"id": 6, "value": 10}
+			],
+			"bonusStats": [{"id":1,"value":null},{"id":2,"value":null},{"id":3,"value":null},{"id":4,"value":null},{"id":5,"value":null},{"id":6,"value":null}],
+			"overrideStats": [{"id":1,"value":null},{"id":2,"value":null},{"id":3,"value":null},{"id":4,"value":null},{"id":5,"value":null},{"id":6,"value":null}],
+			"baseHitPoints": 20,
+			"bonusHitPoints": 0,
+			"removedHitPoints": 0,
+			"temporaryHitPoints": 0,
+			"inventory": [],
+			"currencies": {"gp": 0, "sp": 0, "cp": 0, "ep": 0, "pp": 0},
+			"modifiers": {"race": [], "class": [], "background": [], "item": [], "feat": [], "condition": []},
+			"spells": {
+				"class": [
+					{"definition": {"name": "Fire Bolt", "level": 0}},
+					{"definition": {"name": "Magic Missile", "level": 1}},
+					{"definition": {"name": "Shield", "level": 1}}
+				],
+				"race": [
+					{"definition": {"name": "Faerie Fire", "level": 1}}
+				],
+				"item": [],
+				"feat": [
+					{"definition": {"name": "Eldritch Blast", "level": 0}}
+				]
+			}
+		}
+	}`)
+	result, err := ParseDDBJSON(jsonData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Spells) != 5 {
+		t.Fatalf("expected 5 spells, got %d: %v", len(result.Spells), result.Spells)
+	}
+
+	// Verify a cantrip
+	found := false
+	for _, s := range result.Spells {
+		if s.Name == "Fire Bolt" && s.Level == 0 && s.Source == "class" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected Fire Bolt cantrip from class, got %v", result.Spells)
+	}
+
+	// Verify a race spell
+	found = false
+	for _, s := range result.Spells {
+		if s.Name == "Faerie Fire" && s.Source == "race" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected Faerie Fire from race, got %v", result.Spells)
+	}
+}
+
+func TestParseDDBJSON_SliceMutationSafety(t *testing.T) {
+	// This test ensures parseLanguages and parseProficiencies don't corrupt
+	// each other's data via shared slice mutation.
+	jsonData := []byte(`{
+		"data": {
+			"name": "SliceTest",
+			"race": {"fullName": "Human"},
+			"classes": [{"definition": {"name": "Fighter", "hitDice": 10}, "level": 1}],
+			"stats": [
+				{"id": 1, "value": 10},
+				{"id": 2, "value": 10},
+				{"id": 3, "value": 10},
+				{"id": 4, "value": 10},
+				{"id": 5, "value": 10},
+				{"id": 6, "value": 10}
+			],
+			"bonusStats": [{"id":1,"value":null},{"id":2,"value":null},{"id":3,"value":null},{"id":4,"value":null},{"id":5,"value":null},{"id":6,"value":null}],
+			"overrideStats": [{"id":1,"value":null},{"id":2,"value":null},{"id":3,"value":null},{"id":4,"value":null},{"id":5,"value":null},{"id":6,"value":null}],
+			"baseHitPoints": 10,
+			"bonusHitPoints": 0,
+			"removedHitPoints": 0,
+			"temporaryHitPoints": 0,
+			"inventory": [],
+			"currencies": {"gp": 0, "sp": 0, "cp": 0, "ep": 0, "pp": 0},
+			"modifiers": {
+				"race": [
+					{"type": "language", "subType": "common", "friendlyTypeName": "Language", "friendlySubtypeName": "Common"},
+					{"type": "language", "subType": "elvish", "friendlyTypeName": "Language", "friendlySubtypeName": "Elvish"}
+				],
+				"class": [
+					{"type": "proficiency", "subType": "saving-throws", "friendlyTypeName": "Saving Throws", "friendlySubtypeName": "Strength"},
+					{"type": "proficiency", "subType": "athletics", "friendlyTypeName": "Skill", "friendlySubtypeName": "Athletics"}
+				],
+				"background": [
+					{"type": "language", "subType": "dwarvish", "friendlyTypeName": "Language", "friendlySubtypeName": "Dwarvish"}
+				],
+				"item": [],
+				"feat": [],
+				"condition": []
+			},
+			"spells": {"class": [], "race": [], "item": [], "feat": []}
+		}
+	}`)
+	result, err := ParseDDBJSON(jsonData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify languages are correct (not corrupted by proficiency parsing)
+	expectedLangs := map[string]bool{"Common": true, "Elvish": true, "Dwarvish": true}
+	if len(result.Languages) != 3 {
+		t.Fatalf("expected 3 languages, got %d: %v", len(result.Languages), result.Languages)
+	}
+	for _, l := range result.Languages {
+		if !expectedLangs[l] {
+			t.Errorf("unexpected language %q in %v", l, result.Languages)
+		}
+	}
+
+	// Verify proficiencies are correct (not corrupted by language parsing)
+	if len(result.Proficiencies.Saves) != 1 || result.Proficiencies.Saves[0] != "Strength" {
+		t.Errorf("Saves = %v, want [Strength]", result.Proficiencies.Saves)
+	}
+	if len(result.Proficiencies.Skills) != 1 || result.Proficiencies.Skills[0] != "Athletics" {
+		t.Errorf("Skills = %v, want [Athletics]", result.Proficiencies.Skills)
+	}
+}

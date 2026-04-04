@@ -78,7 +78,7 @@ func (c *DDBClient) FetchCharacter(ctx context.Context, characterID string) ([]b
 		if resp.StatusCode == http.StatusTooManyRequests {
 			resp.Body.Close()
 			if attempt == c.maxRetries {
-				return nil, fmt.Errorf("rate limit exceeded after %d retries", c.maxRetries+1)
+				break
 			}
 			select {
 			case <-ctx.Done():

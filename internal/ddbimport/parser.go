@@ -7,6 +7,13 @@ import (
 	"github.com/ab/dndnd/internal/character"
 )
 
+// SpellEntry represents a spell known or prepared by the character.
+type SpellEntry struct {
+	Name   string `json:"name"`
+	Level  int    `json:"level"`
+	Source string `json:"source"`
+}
+
 // ParsedCharacter holds the parsed result from DDB JSON, ready for conversion to internal format.
 type ParsedCharacter struct {
 	Name          string
@@ -24,6 +31,7 @@ type ParsedCharacter struct {
 	Inventory     []character.InventoryItem
 	Proficiencies character.Proficiencies
 	Features      []character.Feature
+	Spells        []SpellEntry
 }
 
 // ddbResponse represents the top-level DDB API response.
@@ -60,12 +68,21 @@ type ddbClass struct {
 }
 
 type ddbClassDef struct {
-	Name    string `json:"name"`
-	HitDice int    `json:"hitDice"`
+	Name          string            `json:"name"`
+	HitDice       int               `json:"hitDice"`
+	ClassFeatures []ddbClassFeature `json:"classFeatures"`
 }
 
 type ddbSubclass struct {
-	Name string `json:"name"`
+	Name          string            `json:"name"`
+	ClassFeatures []ddbClassFeature `json:"classFeatures"`
+}
+
+type ddbClassFeature struct {
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	RequiredLevel int    `json:"requiredLevel"`
+	Description   string `json:"description"`
 }
 
 type ddbStat struct {
@@ -188,6 +205,12 @@ func ParseDDBJSON(data []byte) (*ParsedCharacter, error) {
 	// Parse proficiencies from modifiers
 	pc.Proficiencies = parseProficiencies(&d.Modifiers)
 
+	// Parse features from class definitions
+	pc.Features = parseFeatures(d.Classes)
+
+	// Parse spells from all sources
+	pc.Spells = parseSpells(&d.Spells)
+
 	// Speed defaults to 30 (DDB doesn't have a simple speed field; it's computed from modifiers)
 	pc.SpeedFt = 30
 
@@ -275,11 +298,74 @@ func computeAC(items []ddbItem, scores character.AbilityScores) int {
 	return baseAC + shieldBonus
 }
 
+func parseFeatures(classes []ddbClass) []character.Feature {
+	var features []character.Feature
+
+	for _, c := range classes {
+		for _, f := range c.Definition.ClassFeatures {
+			if f.RequiredLevel > c.Level {
+				continue
+			}
+			features = append(features, character.Feature{
+				Name:        f.Name,
+				Source:      c.Definition.Name,
+				Level:       f.RequiredLevel,
+				Description: f.Description,
+			})
+		}
+
+		if c.SubclassDefinition == nil {
+			continue
+		}
+		for _, f := range c.SubclassDefinition.ClassFeatures {
+			if f.RequiredLevel > c.Level {
+				continue
+			}
+			features = append(features, character.Feature{
+				Name:        f.Name,
+				Source:      c.SubclassDefinition.Name,
+				Level:       f.RequiredLevel,
+				Description: f.Description,
+			})
+		}
+	}
+
+	return features
+}
+
+func parseSpells(spells *ddbSpells) []SpellEntry {
+	var result []SpellEntry
+
+	sources := []struct {
+		entries []ddbSpellEntry
+		source  string
+	}{
+		{spells.Class, "class"},
+		{spells.Race, "race"},
+		{spells.Item, "item"},
+		{spells.Feat, "feat"},
+	}
+
+	for _, src := range sources {
+		for _, entry := range src.entries {
+			result = append(result, SpellEntry{
+				Name:   entry.Definition.Name,
+				Level:  entry.Definition.Level,
+				Source: src.source,
+			})
+		}
+	}
+
+	return result
+}
+
 func parseLanguages(mods *ddbModifiers) []string {
 	seen := make(map[string]bool)
 	var langs []string
 
-	allMods := append(mods.Race, mods.Class...)
+	var allMods []ddbModifier
+	allMods = append(allMods, mods.Race...)
+	allMods = append(allMods, mods.Class...)
 	allMods = append(allMods, mods.Background...)
 	allMods = append(allMods, mods.Feat...)
 
@@ -306,7 +392,9 @@ func parseProficiencies(mods *ddbModifiers) character.Proficiencies {
 	seenSaves := make(map[string]bool)
 	seenSkills := make(map[string]bool)
 
-	allMods := append(mods.Race, mods.Class...)
+	var allMods []ddbModifier
+	allMods = append(allMods, mods.Race...)
+	allMods = append(allMods, mods.Class...)
 	allMods = append(allMods, mods.Background...)
 	allMods = append(allMods, mods.Feat...)
 

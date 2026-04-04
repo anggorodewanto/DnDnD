@@ -13,9 +13,9 @@ import (
 
 // CharacterStore abstracts the database operations needed for import.
 type CharacterStore interface {
-	CreateCharacterFull(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error)
-	GetCharacterByDdbURL(ctx context.Context, campaignID uuid.UUID, ddbURL string) (refdata.Character, error)
-	UpdateCharacterFull(ctx context.Context, id uuid.UUID, params refdata.CreateCharacterParams) (refdata.Character, error)
+	CreateCharacter(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error)
+	GetCharacterByDdbURL(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error)
+	UpdateCharacterFull(ctx context.Context, params refdata.UpdateCharacterFullParams) (refdata.Character, error)
 }
 
 // ImportResult contains the result of an import operation.
@@ -75,21 +75,25 @@ func (s *Service) Import(ctx context.Context, campaignID uuid.UUID, ddbURL strin
 	}
 
 	// Check for existing character (re-sync)
-	existing, getErr := s.store.GetCharacterByDdbURL(ctx, campaignID, ddbURL)
+	existing, getErr := s.store.GetCharacterByDdbURL(ctx, refdata.GetCharacterByDdbURLParams{
+		CampaignID: campaignID,
+		DdbUrl:     sql.NullString{String: ddbURL, Valid: true},
+	})
 	if getErr == nil {
 		// Re-sync: diff and update
 		result.IsResync = true
 		oldParsed := characterToParseResult(&existing)
 		result.Changes = GenerateDiff(oldParsed, parsed)
 
-		updated, updateErr := s.store.UpdateCharacterFull(ctx, existing.ID, params)
+		updateParams := buildUpdateParams(existing.ID, params)
+		updated, updateErr := s.store.UpdateCharacterFull(ctx, updateParams)
 		if updateErr != nil {
 			return nil, fmt.Errorf("updating character: %w", updateErr)
 		}
 		result.Character = updated
 	} else {
 		// New import
-		char, createErr := s.store.CreateCharacterFull(ctx, params)
+		char, createErr := s.store.CreateCharacter(ctx, params)
 		if createErr != nil {
 			return nil, fmt.Errorf("creating character: %w", createErr)
 		}
@@ -120,6 +124,20 @@ func buildCreateParams(campaignID uuid.UUID, ddbURL string, pc *ParsedCharacter)
 	profsJSON, err := json.Marshal(pc.Proficiencies)
 	if err != nil {
 		return refdata.CreateCharacterParams{}, fmt.Errorf("marshaling proficiencies: %w", err)
+	}
+
+	featuresJSON, err := json.Marshal(pc.Features)
+	if err != nil {
+		return refdata.CreateCharacterParams{}, fmt.Errorf("marshaling features: %w", err)
+	}
+
+	// Build character_data with spells
+	charData := map[string]interface{}{
+		"spells": pc.Spells,
+	}
+	charDataJSON, err := json.Marshal(charData)
+	if err != nil {
+		return refdata.CreateCharacterParams{}, fmt.Errorf("marshaling character data: %w", err)
 	}
 
 	// Compute proficiency bonus from level
@@ -167,8 +185,45 @@ func buildCreateParams(campaignID uuid.UUID, ddbURL string, pc *ParsedCharacter)
 		Languages:        langs,
 		Inventory:        pqtype.NullRawMessage{RawMessage: inventoryJSON, Valid: true},
 		Proficiencies:    pqtype.NullRawMessage{RawMessage: profsJSON, Valid: true},
+		Features:         pqtype.NullRawMessage{RawMessage: featuresJSON, Valid: true},
+		CharacterData:    pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
 		DdbUrl:           sql.NullString{String: ddbURL, Valid: true},
 	}, nil
+}
+
+// buildUpdateParams converts CreateCharacterParams to UpdateCharacterFullParams with the given ID.
+func buildUpdateParams(id uuid.UUID, p refdata.CreateCharacterParams) refdata.UpdateCharacterFullParams {
+	return refdata.UpdateCharacterFullParams{
+		ID:               id,
+		Name:             p.Name,
+		Race:             p.Race,
+		Classes:          p.Classes,
+		Level:            p.Level,
+		AbilityScores:    p.AbilityScores,
+		HpMax:            p.HpMax,
+		HpCurrent:        p.HpCurrent,
+		TempHp:           p.TempHp,
+		Ac:               p.Ac,
+		AcFormula:        p.AcFormula,
+		SpeedFt:          p.SpeedFt,
+		ProficiencyBonus: p.ProficiencyBonus,
+		EquippedMainHand: p.EquippedMainHand,
+		EquippedOffHand:  p.EquippedOffHand,
+		EquippedArmor:    p.EquippedArmor,
+		SpellSlots:       p.SpellSlots,
+		PactMagicSlots:   p.PactMagicSlots,
+		HitDiceRemaining: p.HitDiceRemaining,
+		FeatureUses:      p.FeatureUses,
+		Features:         p.Features,
+		Proficiencies:    p.Proficiencies,
+		Gold:             p.Gold,
+		AttunementSlots:  p.AttunementSlots,
+		Languages:        p.Languages,
+		Inventory:        p.Inventory,
+		CharacterData:    p.CharacterData,
+		DdbUrl:           p.DdbUrl,
+		Homebrew:         p.Homebrew,
+	}
 }
 
 func classHitDie(className string) string {
@@ -213,6 +268,18 @@ func characterToParseResult(c *refdata.Character) *ParsedCharacter {
 	}
 
 	pc.Languages = c.Languages
+
+	if c.Features.Valid && len(c.Features.RawMessage) > 0 {
+		_ = json.Unmarshal(c.Features.RawMessage, &pc.Features)
+	}
+	if c.CharacterData.Valid && len(c.CharacterData.RawMessage) > 0 {
+		var charData map[string]json.RawMessage
+		if err := json.Unmarshal(c.CharacterData.RawMessage, &charData); err == nil {
+			if spellsRaw, ok := charData["spells"]; ok {
+				_ = json.Unmarshal(spellsRaw, &pc.Spells)
+			}
+		}
+	}
 
 	return pc
 }
