@@ -218,11 +218,11 @@ func (h *ImportHandler) handlePlaceholderImport(interaction *discordgo.Interacti
 type CreateCharacterHandler struct {
 	registrationBase
 	charCreator CharacterCreator
-	tokenFunc   func(campaignID uuid.UUID, discordUserID string) string
+	tokenFunc   func(campaignID uuid.UUID, discordUserID string) (string, error)
 }
 
 // NewCreateCharacterHandler creates a new CreateCharacterHandler.
-func NewCreateCharacterHandler(session Session, regService RegistrationService, campaignProv CampaignProvider, charCreator CharacterCreator, dmQueueFunc func(string) string, dmUserFunc func(string) string, tokenFunc func(uuid.UUID, string) string) *CreateCharacterHandler {
+func NewCreateCharacterHandler(session Session, regService RegistrationService, campaignProv CampaignProvider, charCreator CharacterCreator, dmQueueFunc func(string) string, dmUserFunc func(string) string, tokenFunc func(uuid.UUID, string) (string, error)) *CreateCharacterHandler {
 	return &CreateCharacterHandler{
 		registrationBase: registrationBase{
 			session:      session,
@@ -259,7 +259,11 @@ func (h *CreateCharacterHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	token := h.tokenFunc(campaign.ID, userID)
+	token, err := h.tokenFunc(campaign.ID, userID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Error generating portal link: %s", err))
+		return
+	}
 	portalURL := fmt.Sprintf("https://portal.dndnd.app/create?token=%s", token)
 
 	respondEphemeral(h.session, interaction,
@@ -322,8 +326,8 @@ func interactionUserID(interaction *discordgo.Interaction) string {
 }
 
 // GeneratePortalToken generates a stub token for the character builder portal.
-func GeneratePortalToken(campaignID uuid.UUID, discordUserID string) string {
-	return fmt.Sprintf("%s-%s-%d", campaignID.String()[:8], discordUserID, time.Now().Unix())
+func GeneratePortalToken(campaignID uuid.UUID, discordUserID string) (string, error) {
+	return fmt.Sprintf("%s-%s-%d", campaignID.String()[:8], discordUserID, time.Now().Unix()), nil
 }
 
 // formatRelativeTime formats a duration as a human-readable relative time.

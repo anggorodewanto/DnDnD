@@ -121,7 +121,7 @@ type RegistrationDeps struct {
 	CharCreator  CharacterCreator
 	DMQueueFunc  func(guildID string) string
 	DMUserFunc   func(guildID string) string
-	TokenFunc    func(campaignID uuid.UUID, discordUserID string) string
+	TokenFunc    func(campaignID uuid.UUID, discordUserID string) (string, error)
 	NameResolver CharacterNameResolver
 }
 

@@ -121,6 +121,7 @@ var MutableTables = []string{
 	"loot_pools",
 	"shop_items",
 	"shops",
+	"portal_tokens",
 }
 
 // ReferenceTables are seeded with ON CONFLICT DO NOTHING and preserved across tests.

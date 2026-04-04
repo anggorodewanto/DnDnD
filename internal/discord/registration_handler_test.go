@@ -345,7 +345,7 @@ func TestCreateCharacterHandler_CreatesRecordAndReturnsPortalLink(t *testing.T) 
 		}, nil
 	}
 
-	tokenFunc := func(_ uuid.UUID, _ string) string { return "test-token-123" }
+	tokenFunc := func(_ uuid.UUID, _ string) (string, error) { return "test-token-123", nil }
 
 	handler := NewCreateCharacterHandler(mock, regService, newMockCampaignProvider(), charCreator, staticDMQueueFunc("dm-queue-chan-1"), staticDMUserFunc("dm-user-1"), tokenFunc)
 	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
@@ -549,7 +549,10 @@ func TestTruncateURL(t *testing.T) {
 
 func TestGeneratePortalToken_Format(t *testing.T) {
 	campID := testCampaignID()
-	token := GeneratePortalToken(campID, "player-1")
+	token, err := GeneratePortalToken(campID, "player-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if !strings.HasPrefix(token, campID.String()[:8]) {
 		t.Errorf("token should start with campaign ID prefix, got: %s", token)
 	}
@@ -802,7 +805,7 @@ func TestCreateCharacterHandler_DMQueueNotSent_WhenChannelIDEmpty(t *testing.T) 
 		return &refdata.PlayerCharacter{ID: testPCID(), Status: "pending"}, nil
 	}
 
-	handler := NewCreateCharacterHandler(mock, regService, newMockCampaignProvider(), charCreator, staticDMQueueFunc(""), staticDMUserFunc(""), func(_ uuid.UUID, _ string) string { return "token" })
+	handler := NewCreateCharacterHandler(mock, regService, newMockCampaignProvider(), charCreator, staticDMQueueFunc(""), staticDMUserFunc(""), func(_ uuid.UUID, _ string) (string, error) { return "token", nil })
 	interaction := makeInteraction("create-character", "player-1", "guild-1")
 	handler.Handle(interaction)
 
