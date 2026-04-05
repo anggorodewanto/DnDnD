@@ -97,6 +97,15 @@ export function removeCondition(conditions, condition) {
 }
 
 /**
+ * Returns the opacity for a combatant token on the DM map.
+ * Invisible combatants are rendered with reduced opacity.
+ */
+export function tokenOpacity(combatant) {
+  if (combatant.is_visible === false) return 0.4;
+  return 1.0;
+}
+
+/**
  * Convert a column letter (A-Z, AA, etc.) to a 0-based index.
  */
 export function colToIndex(col) {

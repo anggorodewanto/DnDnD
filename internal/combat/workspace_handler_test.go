@@ -27,6 +27,7 @@ type mockWorkspaceStore struct {
 	updateCombatantHPFn           func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error)
 	updateCombatantConditionsFn   func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
 	getActiveTurnByEncounterIDFn  func(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
+	getCombatantByIDFn            func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 }
 
 func (m *mockWorkspaceStore) ListEncountersByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error) {
@@ -49,6 +50,9 @@ func (m *mockWorkspaceStore) UpdateCombatantConditions(ctx context.Context, arg 
 }
 func (m *mockWorkspaceStore) GetActiveTurnByEncounterID(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error) {
 	return m.getActiveTurnByEncounterIDFn(ctx, encounterID)
+}
+func (m *mockWorkspaceStore) GetCombatantByID(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+	return m.getCombatantByIDFn(ctx, id)
 }
 
 // --- TDD Cycle 10: GET /api/combat/workspace returns active encounters ---
@@ -249,6 +253,9 @@ func TestWorkspaceHandler_UpdateCombatantConditions_Success(t *testing.T) {
 	combatantID := uuid.New()
 
 	store := &mockWorkspaceStore{
+		getCombatantByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: combatantID, ExhaustionLevel: 0}, nil
+		},
 		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
 			assert.Equal(t, combatantID, arg.ID)
 			return refdata.Combatant{
@@ -407,11 +414,79 @@ func TestWorkspaceHandler_UpdateCombatantConditions_InvalidCombatantID(t *testin
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// --- TDD Cycle 21: UpdateCombatantConditions preserves exhaustion level ---
+
+func TestWorkspaceHandler_UpdateCombatantConditions_PreservesExhaustionLevel(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := &mockWorkspaceStore{
+		getCombatantByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			assert.Equal(t, combatantID, id)
+			return refdata.Combatant{
+				ID:              combatantID,
+				ExhaustionLevel: 3,
+				Conditions:      json.RawMessage(`[]`),
+			}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+			assert.Equal(t, combatantID, arg.ID)
+			assert.Equal(t, int32(3), arg.ExhaustionLevel, "exhaustion level must be preserved from existing combatant")
+			return refdata.Combatant{
+				ID:              combatantID,
+				Conditions:      json.RawMessage(`["Blinded"]`),
+				ExhaustionLevel: 3,
+			}, nil
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"conditions":["Blinded"]}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/conditions", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]interface{}
+	err := json.NewDecoder(rec.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.Equal(t, float64(3), resp["exhaustion_level"])
+}
+
+func TestWorkspaceHandler_UpdateCombatantConditions_GetCombatantError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := &mockWorkspaceStore{
+		getCombatantByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{}, errors.New("not found")
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"conditions":["Blinded"]}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/conditions", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
 func TestWorkspaceHandler_UpdateCombatantConditions_StoreError(t *testing.T) {
 	encounterID := uuid.New()
 	combatantID := uuid.New()
 
 	store := &mockWorkspaceStore{
+		getCombatantByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: combatantID, ExhaustionLevel: 0}, nil
+		},
 		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
 			return refdata.Combatant{}, errors.New("db error")
 		},

@@ -8,6 +8,7 @@
     addCondition,
     removeCondition,
     colToIndex,
+    tokenOpacity,
   } from './lib/combat.js';
   import {
     terrainByGid,
@@ -172,7 +173,8 @@
     if (!activeEncounter?.combatants) return;
 
     for (const comb of activeEncounter.combatants) {
-      if (!comb.is_visible && !comb.is_npc) continue;
+      const opacity = tokenOpacity(comb);
+      ctx.globalAlpha = opacity;
 
       const col = colToIndex(comb.position_col);
       const row = comb.position_row;
@@ -240,6 +242,8 @@
         ctx.lineTo(cx - d, cy + d);
         ctx.stroke();
       }
+
+      ctx.globalAlpha = 1.0;
     }
   }
 

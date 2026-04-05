@@ -21,6 +21,7 @@ type WorkspaceStore interface {
 	ListEncounterZonesByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.EncounterZone, error)
 	UpdateCombatantHP(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error)
 	UpdateCombatantConditions(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
+	GetCombatantByID(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 	GetActiveTurnByEncounterID(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
 }
 
@@ -284,6 +285,12 @@ func (h *WorkspaceHandler) UpdateCombatantConditions(w http.ResponseWriter, r *h
 		return
 	}
 
+	existing, err := h.store.GetCombatantByID(r.Context(), combatantID)
+	if err != nil {
+		http.Error(w, "failed to fetch combatant", http.StatusInternalServerError)
+		return
+	}
+
 	conditionsJSON, err := json.Marshal(req.Conditions)
 	if err != nil {
 		http.Error(w, "failed to serialize conditions", http.StatusInternalServerError)
@@ -293,7 +300,7 @@ func (h *WorkspaceHandler) UpdateCombatantConditions(w http.ResponseWriter, r *h
 	c, err := h.store.UpdateCombatantConditions(r.Context(), refdata.UpdateCombatantConditionsParams{
 		ID:              combatantID,
 		Conditions:      conditionsJSON,
-		ExhaustionLevel: 0, // Preserve current; we only update conditions here
+		ExhaustionLevel: existing.ExhaustionLevel,
 	})
 	if err != nil {
 		http.Error(w, "failed to update conditions", http.StatusInternalServerError)

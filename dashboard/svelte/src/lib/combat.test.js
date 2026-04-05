@@ -7,6 +7,7 @@ import {
   addCondition,
   removeCondition,
   colToIndex,
+  tokenOpacity,
 } from './combat.js';
 
 // TDD Cycle 1: applyDamage respects temp HP
@@ -154,7 +155,22 @@ describe('colToIndex', () => {
   });
 });
 
-// TDD Cycle 6: STANDARD_CONDITIONS
+// TDD Cycle 6: tokenOpacity
+describe('tokenOpacity', () => {
+  it('returns 1.0 for visible combatants', () => {
+    expect(tokenOpacity({ is_visible: true })).toBe(1.0);
+  });
+
+  it('returns 0.4 for invisible combatants', () => {
+    expect(tokenOpacity({ is_visible: false })).toBe(0.4);
+  });
+
+  it('returns 1.0 when is_visible is undefined', () => {
+    expect(tokenOpacity({})).toBe(1.0);
+  });
+});
+
+// TDD Cycle 7: STANDARD_CONDITIONS
 describe('STANDARD_CONDITIONS', () => {
   it('contains 14 standard 5e conditions', () => {
     expect(STANDARD_CONDITIONS).toHaveLength(14);
