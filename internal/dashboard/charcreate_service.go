@@ -50,6 +50,9 @@ func (svc *DMCharCreateService) CreateCharacter(ctx context.Context, campaignID 
 		SpeedFt:       stats.SpeedFt,
 		ProfBonus:     stats.ProficiencyBonus,
 		Saves:         stats.SaveProficiencies,
+		Equipment:     sub.Equipment,
+		Spells:        sub.Spells,
+		Languages:     sub.Languages,
 	}
 
 	charID, err := svc.store.CreateCharacterRecord(ctx, charParams)

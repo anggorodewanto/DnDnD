@@ -51,6 +51,11 @@ func TestCharCreateHandler_ServeCreatePage_ReturnsHTML(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Header().Get("Content-Type"), "text/html")
 	assert.Contains(t, rec.Body.String(), "Create Character")
+	// Verify new wizard steps exist
+	assert.Contains(t, rec.Body.String(), "4. Equipment")
+	assert.Contains(t, rec.Body.String(), "5. Spells")
+	assert.Contains(t, rec.Body.String(), "6. Features")
+	assert.Contains(t, rec.Body.String(), "7. Review")
 }
 
 func TestCharCreateHandler_HandleCreate_RequiresAuth(t *testing.T) {
@@ -109,6 +114,43 @@ func TestCharCreateHandler_HandleCreate_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "char-123", resp["character_id"])
 	assert.Equal(t, "pc-456", resp["player_character_id"])
+}
+
+func TestCharCreateHandler_HandleCreate_WithEquipmentAndSpells(t *testing.T) {
+	mockSvc := &mockDMCharCreateService{
+		result: portal.CreateCharacterResult{
+			CharacterID:       "char-full",
+			PlayerCharacterID: "pc-full",
+		},
+	}
+	h := NewCharCreateHandler(nil, mockSvc, nil)
+
+	sub := dmCreateRequest{
+		CampaignID: "campaign-1",
+		DMCharacterSubmission: DMCharacterSubmission{
+			Name: "Elara",
+			Race: "Elf",
+			Classes: []character.ClassEntry{
+				{Class: "Wizard", Level: 1},
+			},
+			AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 12, CHA: 10},
+			Equipment:     []string{"quarterstaff"},
+			Spells:        []string{"fire-bolt", "shield"},
+			Languages:     []string{"Common", "Elvish"},
+		},
+	}
+	body, _ := json.Marshal(sub)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters", bytes.NewBuffer(body))
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleCreate(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
+	assert.True(t, mockSvc.called)
+	assert.Equal(t, []string{"quarterstaff"}, mockSvc.lastSub.Equipment)
+	assert.Equal(t, []string{"fire-bolt", "shield"}, mockSvc.lastSub.Spells)
+	assert.Equal(t, []string{"Common", "Elvish"}, mockSvc.lastSub.Languages)
 }
 
 func TestCharCreateHandler_HandleCreate_ValidationError(t *testing.T) {
@@ -217,6 +259,32 @@ func TestCharCreateHandler_HandlePreview_ReturnsDerivedStats(t *testing.T) {
 	assert.Equal(t, 5, stats.TotalLevel)
 }
 
+func TestCharCreateHandler_HandlePreview_IncludesSpellSlots(t *testing.T) {
+	h := NewCharCreateHandler(nil, nil, nil)
+
+	sub := DMCharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "Wizard", Level: 3},
+		},
+		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 16, WIS: 10, CHA: 10},
+	}
+	body, _ := json.Marshal(sub)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters/preview", bytes.NewBuffer(body))
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandlePreview(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var stats DMDerivedStats
+	err := json.NewDecoder(rec.Body).Decode(&stats)
+	require.NoError(t, err)
+	assert.NotNil(t, stats.SpellSlots)
+	assert.Equal(t, 4, stats.SpellSlots[1])
+	assert.Equal(t, 2, stats.SpellSlots[2])
+}
+
 func TestCharCreateHandler_HandleListRefRaces_RequiresAuth(t *testing.T) {
 	h := NewCharCreateHandler(nil, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/races", nil)
@@ -272,10 +340,14 @@ func TestCharCreateHandler_HandleListRefClasses_Success(t *testing.T) {
 
 // mockRefDataForCreate implements RefDataForCreate for testing.
 type mockRefDataForCreate struct {
-	races    []portal.RaceInfo
-	classes  []portal.ClassInfo
-	raceErr  error
-	classErr error
+	races        []portal.RaceInfo
+	classes      []portal.ClassInfo
+	equipment    []portal.EquipmentItem
+	spells       []portal.SpellInfo
+	raceErr      error
+	classErr     error
+	equipmentErr error
+	spellsErr    error
 }
 
 func (m *mockRefDataForCreate) ListRaces(ctx context.Context) ([]portal.RaceInfo, error) {
@@ -284,6 +356,14 @@ func (m *mockRefDataForCreate) ListRaces(ctx context.Context) ([]portal.RaceInfo
 
 func (m *mockRefDataForCreate) ListClasses(ctx context.Context) ([]portal.ClassInfo, error) {
 	return m.classes, m.classErr
+}
+
+func (m *mockRefDataForCreate) ListEquipment(ctx context.Context) ([]portal.EquipmentItem, error) {
+	return m.equipment, m.equipmentErr
+}
+
+func (m *mockRefDataForCreate) ListSpellsByClass(ctx context.Context, class string) ([]portal.SpellInfo, error) {
+	return m.spells, m.spellsErr
 }
 
 func TestCharCreateHandler_RegisterRoutes_CreatePageEndpoint(t *testing.T) {
@@ -416,6 +496,207 @@ func TestCharCreateHandler_HandleListRefClasses_Error(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	h.HandleListRefClasses(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestCharCreateHandler_HandleListRefEquipment_Success(t *testing.T) {
+	mockRef := &mockRefDataForCreate{
+		equipment: []portal.EquipmentItem{
+			{ID: "longsword", Name: "Longsword", Category: "weapon"},
+			{ID: "chain-mail", Name: "Chain Mail", Category: "armor"},
+		},
+	}
+	h := NewCharCreateHandler(nil, nil, mockRef)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/equipment", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefEquipment(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var items []portal.EquipmentItem
+	err := json.NewDecoder(rec.Body).Decode(&items)
+	require.NoError(t, err)
+	assert.Len(t, items, 2)
+}
+
+func TestCharCreateHandler_HandleListRefEquipment_RequiresAuth(t *testing.T) {
+	h := NewCharCreateHandler(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/equipment", nil)
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefEquipment(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestCharCreateHandler_HandleListRefEquipment_NilRefData(t *testing.T) {
+	h := NewCharCreateHandler(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/equipment", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefEquipment(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "[]")
+}
+
+func TestCharCreateHandler_HandleListRefEquipment_Error(t *testing.T) {
+	mockRef := &mockRefDataForCreate{
+		equipmentErr: errors.New("db error"),
+	}
+	h := NewCharCreateHandler(nil, nil, mockRef)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/equipment", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefEquipment(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestCharCreateHandler_HandleListRefSpells_Success(t *testing.T) {
+	mockRef := &mockRefDataForCreate{
+		spells: []portal.SpellInfo{
+			{ID: "fire-bolt", Name: "Fire Bolt", Level: 0, Classes: []string{"Wizard"}},
+			{ID: "shield", Name: "Shield", Level: 1, Classes: []string{"Wizard"}},
+		},
+	}
+	h := NewCharCreateHandler(nil, nil, mockRef)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/spells?class=Wizard", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefSpells(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var spells []portal.SpellInfo
+	err := json.NewDecoder(rec.Body).Decode(&spells)
+	require.NoError(t, err)
+	assert.Len(t, spells, 2)
+}
+
+func TestCharCreateHandler_HandleListRefSpells_RequiresAuth(t *testing.T) {
+	h := NewCharCreateHandler(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/spells?class=Wizard", nil)
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefSpells(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestCharCreateHandler_HandleListRefSpells_MissingClassParam(t *testing.T) {
+	h := NewCharCreateHandler(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/spells", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefSpells(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestCharCreateHandler_HandleListRefSpells_NilRefData(t *testing.T) {
+	h := NewCharCreateHandler(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/spells?class=Wizard", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefSpells(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "[]")
+}
+
+func TestCharCreateHandler_RegisterRoutes_EquipmentEndpoint(t *testing.T) {
+	hub := NewHub()
+	go hub.Run()
+	t.Cleanup(hub.Stop)
+
+	mockRef := &mockRefDataForCreate{
+		equipment: []portal.EquipmentItem{
+			{ID: "longsword", Name: "Longsword", Category: "weapon"},
+		},
+	}
+	h := NewHandler(nil, hub)
+	ch := NewCharCreateHandler(nil, nil, mockRef)
+	r := chi.NewRouter()
+	RegisterRoutes(r, h, mockAuthMiddleware)
+	ch.RegisterCharCreateRoutes(r.With(mockAuthMiddleware))
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/equipment", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestCharCreateHandler_RegisterRoutes_SpellsEndpoint(t *testing.T) {
+	hub := NewHub()
+	go hub.Run()
+	t.Cleanup(hub.Stop)
+
+	mockRef := &mockRefDataForCreate{
+		spells: []portal.SpellInfo{
+			{ID: "fire-bolt", Name: "Fire Bolt", Level: 0, Classes: []string{"Wizard"}},
+		},
+	}
+	h := NewHandler(nil, hub)
+	ch := NewCharCreateHandler(nil, nil, mockRef)
+	r := chi.NewRouter()
+	RegisterRoutes(r, h, mockAuthMiddleware)
+	ch.RegisterCharCreateRoutes(r.With(mockAuthMiddleware))
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/spells?class=Wizard", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestCharCreateHandler_HandleListRefEquipment_NullResponse(t *testing.T) {
+	mockRef := &mockRefDataForCreate{
+		equipment: nil,
+	}
+	h := NewCharCreateHandler(nil, nil, mockRef)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/equipment", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefEquipment(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "[]")
+}
+
+func TestCharCreateHandler_HandleListRefSpells_NullResponse(t *testing.T) {
+	mockRef := &mockRefDataForCreate{
+		spells: nil,
+	}
+	h := NewCharCreateHandler(nil, nil, mockRef)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/spells?class=Wizard", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefSpells(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "[]")
+}
+
+func TestCharCreateHandler_HandleListRefSpells_Error(t *testing.T) {
+	mockRef := &mockRefDataForCreate{
+		spellsErr: errors.New("db error"),
+	}
+	h := NewCharCreateHandler(nil, nil, mockRef)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/spells?class=Wizard", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefSpells(rec, req)
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }

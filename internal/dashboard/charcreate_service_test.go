@@ -119,6 +119,37 @@ func TestDMCharCreateService_CreateCharacter_PCStoreError(t *testing.T) {
 	assert.Contains(t, err.Error(), "creating player character")
 }
 
+func TestDMCharCreateService_CreateCharacter_PassesEquipmentSpellsLanguages(t *testing.T) {
+	store := &mockCharCreateStore{
+		charID: "char-eq",
+		pcID:   "pc-eq",
+	}
+	svc := NewDMCharCreateService(store)
+
+	sub := DMCharacterSubmission{
+		Name: "Elara",
+		Race: "Elf",
+		Classes: []character.ClassEntry{
+			{Class: "Wizard", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 12, CHA: 10},
+		Equipment:     []string{"quarterstaff", "dagger"},
+		Spells:        []string{"fire-bolt", "mage-hand", "shield", "magic-missile"},
+		Languages:     []string{"Common", "Elvish"},
+	}
+
+	result, err := svc.CreateCharacter(context.Background(), "campaign-1", sub)
+	require.NoError(t, err)
+	assert.Equal(t, "char-eq", result.CharacterID)
+
+	// Verify equipment is passed through
+	assert.Equal(t, []string{"quarterstaff", "dagger"}, store.lastCharParams.Equipment)
+	// Verify spells are passed through
+	assert.Equal(t, []string{"fire-bolt", "mage-hand", "shield", "magic-missile"}, store.lastCharParams.Spells)
+	// Verify languages are passed through
+	assert.Equal(t, []string{"Common", "Elvish"}, store.lastCharParams.Languages)
+}
+
 func TestDMCharCreateService_CreateCharacter_Multiclass(t *testing.T) {
 	store := &mockCharCreateStore{
 		charID: "char-mc",

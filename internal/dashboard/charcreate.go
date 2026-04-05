@@ -15,6 +15,9 @@ type DMCharacterSubmission struct {
 	Background    string                 `json:"background"`
 	Classes       []character.ClassEntry `json:"classes"`
 	AbilityScores character.AbilityScores `json:"ability_scores"`
+	Equipment     []string               `json:"equipment,omitempty"`
+	Spells        []string               `json:"spells,omitempty"`
+	Languages     []string               `json:"languages,omitempty"`
 }
 
 // ValidateDMSubmission returns a list of validation error messages.
@@ -77,6 +80,7 @@ type DMDerivedStats struct {
 	Saves             map[string]int `json:"saves"`
 	Skills            map[string]int `json:"skills"`
 	HitDiceRemaining  map[string]int `json:"hit_dice_remaining"`
+	SpellSlots        map[int]int    `json:"spell_slots,omitempty"`
 }
 
 // DeriveDMStats calculates derived stats from a DM character submission.
@@ -118,6 +122,10 @@ func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
 		hitDiceRemaining[c.Class] = c.Level
 	}
 
+	// Calculate spell slots
+	spellcastingMap := classSpellcastingMap(sub.Classes)
+	spellSlots := character.CalculateSpellSlots(sub.Classes, spellcastingMap)
+
 	return DMDerivedStats{
 		HPMax:             hp,
 		AC:                ac,
@@ -128,7 +136,46 @@ func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
 		Saves:             saves,
 		Skills:            skills,
 		HitDiceRemaining:  hitDiceRemaining,
+		SpellSlots:        spellSlots,
 	}
+}
+
+// CollectFeatures gathers features from racial traits, class features, and subclass features
+// up to each class's current level. Racial traits appear first, then class features in order.
+func CollectFeatures(
+	classes []character.ClassEntry,
+	classFeatures map[string]map[string][]character.Feature,
+	subclassFeatures map[string]map[string]map[string][]character.Feature,
+	racialTraits []character.Feature,
+) []character.Feature {
+	var result []character.Feature
+
+	// Racial traits first
+	result = append(result, racialTraits...)
+
+	for _, c := range classes {
+		cf := classFeatures[c.Class] // nil map is safe to read from
+
+		for lvl := 1; lvl <= c.Level; lvl++ {
+			key := fmt.Sprintf("%d", lvl)
+			result = append(result, cf[key]...)
+
+			if c.Subclass == "" || subclassFeatures == nil {
+				continue
+			}
+			scMap, ok := subclassFeatures[c.Class]
+			if !ok {
+				continue
+			}
+			scFeats, ok := scMap[c.Subclass]
+			if !ok {
+				continue
+			}
+			result = append(result, scFeats[key]...)
+		}
+	}
+
+	return result
 }
 
 // raceSpeed returns the base walking speed in feet for a race name.
@@ -179,6 +226,51 @@ func classSkillProficiencies(classes []character.ClassEntry) []string {
 		return []string{"arcana", "investigation"}
 	default:
 		return nil
+	}
+}
+
+// classSpellcastingMap returns the spellcasting data for each class in the character's class list.
+func classSpellcastingMap(classes []character.ClassEntry) map[string]character.ClassSpellcasting {
+	m := make(map[string]character.ClassSpellcasting)
+	for _, c := range classes {
+		sc := classSpellcasting(c.Class)
+		if sc.SlotProgression != "none" {
+			m[c.Class] = sc
+		}
+	}
+	return m
+}
+
+// classSpellcasting returns the spellcasting data for a given class name.
+func classSpellcasting(className string) character.ClassSpellcasting {
+	switch strings.ToLower(className) {
+	case "bard", "cleric", "druid", "sorcerer", "wizard":
+		abilities := map[string]string{
+			"bard": "cha", "cleric": "wis", "druid": "wis",
+			"sorcerer": "cha", "wizard": "int",
+		}
+		return character.ClassSpellcasting{
+			SpellAbility:    abilities[strings.ToLower(className)],
+			SlotProgression: "full",
+		}
+	case "paladin", "ranger":
+		abilities := map[string]string{"paladin": "cha", "ranger": "wis"}
+		return character.ClassSpellcasting{
+			SpellAbility:    abilities[strings.ToLower(className)],
+			SlotProgression: "half",
+		}
+	case "eldritch knight", "arcane trickster":
+		return character.ClassSpellcasting{
+			SpellAbility:    "int",
+			SlotProgression: "third",
+		}
+	case "warlock":
+		return character.ClassSpellcasting{
+			SpellAbility:    "cha",
+			SlotProgression: "pact",
+		}
+	default:
+		return character.ClassSpellcasting{SlotProgression: "none"}
 	}
 }
 
