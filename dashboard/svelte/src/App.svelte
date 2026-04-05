@@ -6,6 +6,7 @@
   import TurnBuilder from './TurnBuilder.svelte';
   import ShopList from './ShopList.svelte';
   import ShopBuilder from './ShopBuilder.svelte';
+  import CombatManager from './CombatManager.svelte';
 
   let currentView = $state('list');
   let editingMapId = $state(null);
@@ -20,6 +21,7 @@
   // Determine initial view from URL hash
   function getInitialView() {
     const hash = window.location.hash;
+    if (hash === '#combat') return 'combat';
     if (hash === '#encounters') return 'encounter-list';
     if (hash === '#encounter-new') return 'encounter-editor';
     if (hash.startsWith('#turn-builder')) return 'turn-builder';
@@ -100,11 +102,17 @@
     currentView = 'shop-list';
     editingShopId = null;
   }
+
+  function onShowCombat() {
+    currentView = 'combat';
+  }
 </script>
 
 <main>
   <header>
-    {#if currentView === 'list' || currentView === 'editor'}
+    {#if currentView === 'combat'}
+      <h1>Combat Manager</h1>
+    {:else if currentView === 'list' || currentView === 'editor'}
       <h1>Map Editor</h1>
     {:else if currentView === 'shop-list' || currentView === 'shop-editor'}
       <h1>Shops & Merchants</h1>
@@ -113,6 +121,7 @@
     {/if}
 
     <nav class="view-nav">
+      <button class:active={currentView === 'combat'} onclick={onShowCombat}>Combat</button>
       <button class:active={currentView === 'list' || currentView === 'editor'} onclick={onShowMaps}>Maps</button>
       <button class:active={currentView === 'encounter-list' || currentView === 'encounter-editor'} onclick={onShowEncounters}>Encounters</button>
       <button class:active={currentView === 'turn-builder'} onclick={() => currentView = 'turn-builder'}>Turn Builder</button>
@@ -130,7 +139,9 @@
     {/if}
   </header>
 
-  {#if currentView === 'list'}
+  {#if currentView === 'combat'}
+    <CombatManager {campaignId} />
+  {:else if currentView === 'list'}
     <MapList {campaignId} oncreate={onCreateNew} onedit={onEditMap} />
   {:else if currentView === 'editor'}
     <MapEditor {campaignId} mapId={editingMapId} onback={onBack} />

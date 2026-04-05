@@ -416,3 +416,47 @@ export async function postShopToDiscord(campaignId, shopId) {
   });
   return res.json();
 }
+
+// --- Combat Workspace API ---
+
+/**
+ * Get combat workspace data for a campaign (active encounters, combatants, maps, zones).
+ * @param {string} campaignId - Campaign UUID.
+ * @returns {Promise<object>} { encounters: [...] }
+ */
+export async function getCombatWorkspace(campaignId) {
+  const res = await apiFetch(`${COMBAT_BASE}/workspace?campaign_id=${campaignId}`);
+  return res.json();
+}
+
+/**
+ * Update a combatant's HP.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} combatantId - Combatant UUID.
+ * @param {object} data - { hp_current, temp_hp, is_alive }
+ * @returns {Promise<object>} Updated combatant.
+ */
+export async function updateCombatantHP(encounterId, combatantId, data) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/combatants/${combatantId}/hp`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+/**
+ * Update a combatant's conditions.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} combatantId - Combatant UUID.
+ * @param {string[]} conditions - Array of condition names.
+ * @returns {Promise<object>} Updated combatant.
+ */
+export async function updateCombatantConditions(encounterId, combatantId, conditions) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/combatants/${combatantId}/conditions`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conditions }),
+  });
+  return res.json();
+}

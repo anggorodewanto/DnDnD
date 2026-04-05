@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { uploadAsset, getEnemyTurnPlan, executeEnemyTurn } from './api.js';
+import {
+  uploadAsset, getEnemyTurnPlan, executeEnemyTurn,
+  getCombatWorkspace, updateCombatantHP, updateCombatantConditions,
+} from './api.js';
 
 describe('uploadAsset', () => {
   beforeEach(() => {
@@ -97,5 +100,73 @@ describe('executeEnemyTurn', () => {
     expect(url).toBe('/api/combat/encounter-uuid/enemy-turn');
     expect(options.method).toBe('POST');
     expect(JSON.parse(options.body)).toEqual(plan);
+  });
+});
+
+// TDD Cycle 7: getCombatWorkspace
+describe('getCombatWorkspace', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('fetches combat workspace for a campaign', async () => {
+    const mockData = { encounters: [] };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockData),
+    });
+
+    const result = await getCombatWorkspace('campaign-uuid');
+    expect(result).toEqual(mockData);
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/combat/workspace?campaign_id=campaign-uuid',
+      undefined,
+    );
+  });
+});
+
+// TDD Cycle 8: updateCombatantHP
+describe('updateCombatantHP', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends PATCH to update combatant HP', async () => {
+    const mockResult = { id: 'comb-1', hp_current: 15, temp_hp: 0 };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResult),
+    });
+
+    const result = await updateCombatantHP('enc-1', 'comb-1', { hp_current: 15, temp_hp: 0, is_alive: true });
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/combatants/comb-1/hp');
+    expect(options.method).toBe('PATCH');
+    expect(JSON.parse(options.body)).toEqual({ hp_current: 15, temp_hp: 0, is_alive: true });
+  });
+});
+
+// TDD Cycle 9: updateCombatantConditions
+describe('updateCombatantConditions', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends PATCH to update combatant conditions', async () => {
+    const mockResult = { id: 'comb-1', conditions: ['Blinded'] };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResult),
+    });
+
+    const result = await updateCombatantConditions('enc-1', 'comb-1', ['Blinded']);
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/combatants/comb-1/conditions');
+    expect(options.method).toBe('PATCH');
+    expect(JSON.parse(options.body)).toEqual({ conditions: ['Blinded'] });
   });
 });
