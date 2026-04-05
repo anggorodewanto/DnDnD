@@ -131,8 +131,14 @@ func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
 	}
 
 	// Calculate spell slots
-	spellcastingMap := classSpellcastingMap(sub.Classes)
-	spellSlots := character.CalculateSpellSlots(sub.Classes, spellcastingMap)
+	spellSlots := character.CalculateSpellSlots(sub.Classes, classSpellcastingMap(sub.Classes))
+
+	maxSpellLevel := 0
+	for lvl := range spellSlots {
+		if lvl > maxSpellLevel {
+			maxSpellLevel = lvl
+		}
+	}
 
 	return DMDerivedStats{
 		HPMax:             hp,
@@ -145,7 +151,7 @@ func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
 		Skills:            skills,
 		HitDiceRemaining:  hitDiceRemaining,
 		SpellSlots:        spellSlots,
-		MaxSpellLevel:     MaxSpellLevelForClasses(sub.Classes),
+		MaxSpellLevel:     maxSpellLevel,
 	}
 }
 
@@ -241,11 +247,7 @@ func classSkillProficiencies(classes []character.ClassEntry) []string {
 // MaxSpellLevelForClasses returns the highest spell slot level available to the character.
 // Returns 0 if the character has no spellcasting.
 func MaxSpellLevelForClasses(classes []character.ClassEntry) int {
-	scMap := classSpellcastingMap(classes)
-	slots := character.CalculateSpellSlots(classes, scMap)
-	if len(slots) == 0 {
-		return 0
-	}
+	slots := character.CalculateSpellSlots(classes, classSpellcastingMap(classes))
 	maxLvl := 0
 	for lvl := range slots {
 		if lvl > maxLvl {
@@ -270,31 +272,24 @@ func classSpellcastingMap(classes []character.ClassEntry) map[string]character.C
 // classSpellcasting returns the spellcasting data for a given class name.
 func classSpellcasting(className string) character.ClassSpellcasting {
 	switch strings.ToLower(className) {
-	case "bard", "cleric", "druid", "sorcerer", "wizard":
-		abilities := map[string]string{
-			"bard": "cha", "cleric": "wis", "druid": "wis",
-			"sorcerer": "cha", "wizard": "int",
-		}
-		return character.ClassSpellcasting{
-			SpellAbility:    abilities[strings.ToLower(className)],
-			SlotProgression: "full",
-		}
-	case "paladin", "ranger":
-		abilities := map[string]string{"paladin": "cha", "ranger": "wis"}
-		return character.ClassSpellcasting{
-			SpellAbility:    abilities[strings.ToLower(className)],
-			SlotProgression: "half",
-		}
+	case "bard":
+		return character.ClassSpellcasting{SpellAbility: "cha", SlotProgression: "full"}
+	case "cleric":
+		return character.ClassSpellcasting{SpellAbility: "wis", SlotProgression: "full"}
+	case "druid":
+		return character.ClassSpellcasting{SpellAbility: "wis", SlotProgression: "full"}
+	case "sorcerer":
+		return character.ClassSpellcasting{SpellAbility: "cha", SlotProgression: "full"}
+	case "wizard":
+		return character.ClassSpellcasting{SpellAbility: "int", SlotProgression: "full"}
+	case "paladin":
+		return character.ClassSpellcasting{SpellAbility: "cha", SlotProgression: "half"}
+	case "ranger":
+		return character.ClassSpellcasting{SpellAbility: "wis", SlotProgression: "half"}
 	case "eldritch knight", "arcane trickster":
-		return character.ClassSpellcasting{
-			SpellAbility:    "int",
-			SlotProgression: "third",
-		}
+		return character.ClassSpellcasting{SpellAbility: "int", SlotProgression: "third"}
 	case "warlock":
-		return character.ClassSpellcasting{
-			SpellAbility:    "cha",
-			SlotProgression: "pact",
-		}
+		return character.ClassSpellcasting{SpellAbility: "cha", SlotProgression: "pact"}
 	default:
 		return character.ClassSpellcasting{SlotProgression: "none"}
 	}

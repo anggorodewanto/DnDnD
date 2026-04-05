@@ -559,7 +559,7 @@
   - Depends on: Phase 15, Phase 7
   - Done when: DM can create character through ability scores step, derived stats preview correct, character saved as pre-approved.
 
-- [ ] **Phase 93b: DM Manual Character Creation — Equipment, Spells & Features (Dashboard)**
+- [x] **Phase 93b: DM Manual Character Creation — Equipment, Spells & Features (Dashboard)**
   - Scope: Dashboard character creation wizard second half: equipment selection (from class/background defaults + manual add), spell selection (for casters, filtered by class/level), features auto-populated from SRD class data by level. Class/subclass/feat interactions mechanically applied. Final review and save.
   - Depends on: Phase 93a
   - Done when: DM can complete full character creation with equipment, spells, and auto-populated features; all interactions correct.
