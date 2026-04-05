@@ -13,7 +13,6 @@
   import {
     terrainByGid,
     lightingByGid,
-    getElevationData,
     getWalls,
     getLightingData,
   } from './lib/mapdata.js';
@@ -315,22 +314,20 @@
     }
   }
 
+  function currentConditions() {
+    return Array.isArray(selectedCombatant?.conditions) ? selectedCombatant.conditions : [];
+  }
+
+  async function saveConditions(newConditions) {
+    await updateCombatantConditions(activeEncounter.id, selectedCombatant.id, newConditions);
+    await loadWorkspace();
+  }
+
   async function handleAddCondition() {
     if (!selectedCombatant || !conditionToAdd) return;
-
-    const currentConditions = Array.isArray(selectedCombatant.conditions)
-      ? selectedCombatant.conditions
-      : [];
-    const newConditions = addCondition(currentConditions, conditionToAdd);
-
     try {
-      await updateCombatantConditions(
-        activeEncounter.id,
-        selectedCombatant.id,
-        newConditions,
-      );
+      await saveConditions(addCondition(currentConditions(), conditionToAdd));
       conditionToAdd = '';
-      await loadWorkspace();
     } catch (e) {
       error = e.message;
     }
@@ -338,19 +335,8 @@
 
   async function handleRemoveCondition(condition) {
     if (!selectedCombatant) return;
-
-    const currentConditions = Array.isArray(selectedCombatant.conditions)
-      ? selectedCombatant.conditions
-      : [];
-    const newConditions = removeCondition(currentConditions, condition);
-
     try {
-      await updateCombatantConditions(
-        activeEncounter.id,
-        selectedCombatant.id,
-        newConditions,
-      );
-      await loadWorkspace();
+      await saveConditions(removeCondition(currentConditions(), condition));
     } catch (e) {
       error = e.message;
     }
@@ -471,7 +457,7 @@
           <div class="conditions-section">
             <h4>Conditions</h4>
             <div class="condition-list" data-testid="condition-list">
-              {#each (Array.isArray(selectedCombatant.conditions) ? selectedCombatant.conditions : []) as cond}
+              {#each currentConditions() as cond}
                 <span class="condition-tag">
                   {cond}
                   <button

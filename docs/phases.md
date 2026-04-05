@@ -564,7 +564,7 @@
   - Depends on: Phase 93a
   - Done when: DM can complete full character creation with equipment, spells, and auto-populated features; all interactions correct.
 
-- [ ] **Phase 94a: DM Dashboard — Combat Manager: Map & Token Display**
+- [x] **Phase 94a: DM Dashboard — Combat Manager: Map & Token Display**
   - Scope: Combat Workspace left panel (~60%): map + token rendering from map JSON (separate from server-side PNG — client-side Svelte rendering). Click token -> HP & Condition Tracker panel (apply damage, healing, add/remove conditions). Multi-encounter tabs with badges for pending #dm-queue items. Encounter Overview bar (round, active turn, combatant count).
   - Depends on: Phase 15, Phase 26a
   - Done when: DM can view map with tokens rendered from JSON, click tokens to modify HP/conditions, switch between encounter tabs.
