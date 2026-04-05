@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/portal"
 )
 
@@ -14,14 +15,36 @@ type CharCreateStore interface {
 	CreatePlayerCharacterRecord(ctx context.Context, p portal.CreatePlayerCharacterParams) (string, error)
 }
 
+// FeatureProvider supplies class/subclass/racial feature data for character creation.
+type FeatureProvider interface {
+	ClassFeatures() map[string]map[string][]character.Feature
+	SubclassFeatures() map[string]map[string]map[string][]character.Feature
+	RacialTraits(race string) []character.Feature
+}
+
+// DMCharCreateServiceOption configures optional features of DMCharCreateService.
+type DMCharCreateServiceOption func(*DMCharCreateService)
+
+// WithFeatureProvider adds a feature provider to the service.
+func WithFeatureProvider(fp FeatureProvider) DMCharCreateServiceOption {
+	return func(svc *DMCharCreateService) {
+		svc.featureProvider = fp
+	}
+}
+
 // DMCharCreateService handles DM character creation.
 type DMCharCreateService struct {
-	store CharCreateStore
+	store           CharCreateStore
+	featureProvider FeatureProvider
 }
 
 // NewDMCharCreateService creates a new DMCharCreateService.
-func NewDMCharCreateService(store CharCreateStore) *DMCharCreateService {
-	return &DMCharCreateService{store: store}
+func NewDMCharCreateService(store CharCreateStore, opts ...DMCharCreateServiceOption) *DMCharCreateService {
+	svc := &DMCharCreateService{store: store}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // CreateCharacter validates the submission, calculates derived stats,
@@ -33,6 +56,17 @@ func (svc *DMCharCreateService) CreateCharacter(ctx context.Context, campaignID 
 	}
 
 	stats := DeriveDMStats(sub)
+
+	// Collect features from provider if available
+	var features []character.Feature
+	if svc.featureProvider != nil {
+		features = CollectFeatures(
+			sub.Classes,
+			svc.featureProvider.ClassFeatures(),
+			svc.featureProvider.SubclassFeatures(),
+			svc.featureProvider.RacialTraits(sub.Race),
+		)
+	}
 
 	primaryClass := sub.Classes[0].Class
 	primarySubclass := sub.Classes[0].Subclass
@@ -50,9 +84,12 @@ func (svc *DMCharCreateService) CreateCharacter(ctx context.Context, campaignID 
 		SpeedFt:       stats.SpeedFt,
 		ProfBonus:     stats.ProficiencyBonus,
 		Saves:         stats.SaveProficiencies,
-		Equipment:     sub.Equipment,
-		Spells:        sub.Spells,
-		Languages:     sub.Languages,
+		Equipment:      sub.Equipment,
+		Spells:         sub.Spells,
+		Languages:      sub.Languages,
+		Features:       features,
+		EquippedWeapon: sub.EquippedWeapon,
+		WornArmor:      sub.WornArmor,
 	}
 
 	charID, err := svc.store.CreateCharacterRecord(ctx, charParams)

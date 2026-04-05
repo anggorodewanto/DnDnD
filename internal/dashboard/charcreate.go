@@ -15,9 +15,11 @@ type DMCharacterSubmission struct {
 	Background    string                 `json:"background"`
 	Classes       []character.ClassEntry `json:"classes"`
 	AbilityScores character.AbilityScores `json:"ability_scores"`
-	Equipment     []string               `json:"equipment,omitempty"`
-	Spells        []string               `json:"spells,omitempty"`
-	Languages     []string               `json:"languages,omitempty"`
+	Equipment      []string               `json:"equipment,omitempty"`
+	Spells         []string               `json:"spells,omitempty"`
+	Languages      []string               `json:"languages,omitempty"`
+	EquippedWeapon string                 `json:"equipped_weapon,omitempty"`
+	WornArmor      string                 `json:"worn_armor,omitempty"`
 }
 
 // ValidateDMSubmission returns a list of validation error messages.
@@ -71,16 +73,18 @@ func ValidateDMSubmission(s DMCharacterSubmission) []string {
 
 // DMDerivedStats holds the derived statistics for a DM-created character.
 type DMDerivedStats struct {
-	HPMax             int            `json:"hp_max"`
-	AC                int            `json:"ac"`
-	SpeedFt           int            `json:"speed_ft"`
-	TotalLevel        int            `json:"total_level"`
-	ProficiencyBonus  int            `json:"proficiency_bonus"`
-	SaveProficiencies []string       `json:"save_proficiencies"`
-	Saves             map[string]int `json:"saves"`
-	Skills            map[string]int `json:"skills"`
-	HitDiceRemaining  map[string]int `json:"hit_dice_remaining"`
-	SpellSlots        map[int]int    `json:"spell_slots,omitempty"`
+	HPMax             int                 `json:"hp_max"`
+	AC                int                 `json:"ac"`
+	SpeedFt           int                 `json:"speed_ft"`
+	TotalLevel        int                 `json:"total_level"`
+	ProficiencyBonus  int                 `json:"proficiency_bonus"`
+	SaveProficiencies []string            `json:"save_proficiencies"`
+	Saves             map[string]int      `json:"saves"`
+	Skills            map[string]int      `json:"skills"`
+	HitDiceRemaining  map[string]int      `json:"hit_dice_remaining"`
+	SpellSlots        map[int]int         `json:"spell_slots,omitempty"`
+	MaxSpellLevel     int                 `json:"max_spell_level"`
+	Features          []character.Feature `json:"features,omitempty"`
 }
 
 // DeriveDMStats calculates derived stats from a DM character submission.
@@ -95,7 +99,11 @@ func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
 	}
 
 	hp := character.CalculateHP(sub.Classes, hitDice, sub.AbilityScores)
-	ac := character.CalculateAC(sub.AbilityScores, nil, false, "")
+
+	// Determine armor and shield for AC calculation
+	armor := lookupArmorInfo(sub.WornArmor)
+	hasShield := hasEquipmentItem(sub.Equipment, "shield")
+	ac := character.CalculateAC(sub.AbilityScores, armor, hasShield, "")
 
 	// Save proficiencies from primary class
 	saveProficiencies := classSaveProficiencies(sub.Classes)
@@ -137,6 +145,7 @@ func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
 		Skills:            skills,
 		HitDiceRemaining:  hitDiceRemaining,
 		SpellSlots:        spellSlots,
+		MaxSpellLevel:     MaxSpellLevelForClasses(sub.Classes),
 	}
 }
 
@@ -229,6 +238,23 @@ func classSkillProficiencies(classes []character.ClassEntry) []string {
 	}
 }
 
+// MaxSpellLevelForClasses returns the highest spell slot level available to the character.
+// Returns 0 if the character has no spellcasting.
+func MaxSpellLevelForClasses(classes []character.ClassEntry) int {
+	scMap := classSpellcastingMap(classes)
+	slots := character.CalculateSpellSlots(classes, scMap)
+	if len(slots) == 0 {
+		return 0
+	}
+	maxLvl := 0
+	for lvl := range slots {
+		if lvl > maxLvl {
+			maxLvl = lvl
+		}
+	}
+	return maxLvl
+}
+
 // classSpellcastingMap returns the spellcasting data for each class in the character's class list.
 func classSpellcastingMap(classes []character.ClassEntry) map[string]character.ClassSpellcasting {
 	m := make(map[string]character.ClassSpellcasting)
@@ -272,6 +298,44 @@ func classSpellcasting(className string) character.ClassSpellcasting {
 	default:
 		return character.ClassSpellcasting{SlotProgression: "none"}
 	}
+}
+
+// armorTable maps armor IDs to their ArmorInfo for AC calculation.
+var armorTable = map[string]character.ArmorInfo{
+	"padded":          {ACBase: 11, DexBonus: true},
+	"leather":         {ACBase: 11, DexBonus: true},
+	"studded-leather": {ACBase: 12, DexBonus: true},
+	"hide":            {ACBase: 12, DexBonus: true, DexMax: 2},
+	"chain-shirt":     {ACBase: 13, DexBonus: true, DexMax: 2},
+	"scale-mail":      {ACBase: 14, DexBonus: true, DexMax: 2},
+	"breastplate":     {ACBase: 14, DexBonus: true, DexMax: 2},
+	"half-plate":      {ACBase: 15, DexBonus: true, DexMax: 2},
+	"ring-mail":       {ACBase: 14},
+	"chain-mail":      {ACBase: 16},
+	"splint":          {ACBase: 17},
+	"plate":           {ACBase: 18},
+}
+
+// lookupArmorInfo returns the ArmorInfo for an armor ID, or nil if not found/empty.
+func lookupArmorInfo(armorID string) *character.ArmorInfo {
+	if armorID == "" {
+		return nil
+	}
+	info, ok := armorTable[strings.ToLower(armorID)]
+	if !ok {
+		return nil
+	}
+	return &info
+}
+
+// hasEquipmentItem returns true if the equipment list contains the given item ID.
+func hasEquipmentItem(equipment []string, itemID string) bool {
+	for _, e := range equipment {
+		if strings.EqualFold(e, itemID) {
+			return true
+		}
+	}
+	return false
 }
 
 // classSaveProficiencies returns save proficiencies for the primary (first) class.

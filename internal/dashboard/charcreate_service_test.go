@@ -31,6 +31,28 @@ func (m *mockCharCreateStore) CreatePlayerCharacterRecord(ctx context.Context, p
 	return m.pcID, m.createPCErr
 }
 
+// mockFeatureProvider implements FeatureProvider for testing.
+type mockFeatureProvider struct {
+	classFeatures    map[string]map[string][]character.Feature
+	subclassFeatures map[string]map[string]map[string][]character.Feature
+	racialTraits     map[string][]character.Feature
+}
+
+func (m *mockFeatureProvider) ClassFeatures() map[string]map[string][]character.Feature {
+	return m.classFeatures
+}
+
+func (m *mockFeatureProvider) SubclassFeatures() map[string]map[string]map[string][]character.Feature {
+	return m.subclassFeatures
+}
+
+func (m *mockFeatureProvider) RacialTraits(race string) []character.Feature {
+	if m.racialTraits == nil {
+		return nil
+	}
+	return m.racialTraits[race]
+}
+
 func TestDMCharCreateService_CreateCharacter_Success(t *testing.T) {
 	store := &mockCharCreateStore{
 		charID: "char-123",
@@ -148,6 +170,96 @@ func TestDMCharCreateService_CreateCharacter_PassesEquipmentSpellsLanguages(t *t
 	assert.Equal(t, []string{"fire-bolt", "mage-hand", "shield", "magic-missile"}, store.lastCharParams.Spells)
 	// Verify languages are passed through
 	assert.Equal(t, []string{"Common", "Elvish"}, store.lastCharParams.Languages)
+}
+
+func TestDMCharCreateService_CreateCharacter_PassesFeatures(t *testing.T) {
+	store := &mockCharCreateStore{
+		charID: "char-feat",
+		pcID:   "pc-feat",
+	}
+	featureProvider := &mockFeatureProvider{
+		classFeatures: map[string]map[string][]character.Feature{
+			"Barbarian": {
+				"1": {
+					{Name: "Rage", Source: "Barbarian", Level: 1, Description: "Enter rage"},
+					{Name: "Unarmored Defense", Source: "Barbarian", Level: 1, Description: "AC formula"},
+				},
+			},
+		},
+	}
+	svc := NewDMCharCreateService(store, WithFeatureProvider(featureProvider))
+
+	sub := DMCharacterSubmission{
+		Name: "Grog",
+		Race: "Half-Orc",
+		Classes: []character.ClassEntry{
+			{Class: "Barbarian", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 8, WIS: 10, CHA: 10},
+	}
+
+	result, err := svc.CreateCharacter(context.Background(), "campaign-1", sub)
+	require.NoError(t, err)
+	assert.Equal(t, "char-feat", result.CharacterID)
+
+	// Features should be populated
+	require.NotEmpty(t, store.lastCharParams.Features)
+	assert.Equal(t, "Rage", store.lastCharParams.Features[0].Name)
+	assert.Equal(t, "Unarmored Defense", store.lastCharParams.Features[1].Name)
+}
+
+func TestDMCharCreateService_CreateCharacter_NoFeatureProvider(t *testing.T) {
+	store := &mockCharCreateStore{
+		charID: "char-nofeat",
+		pcID:   "pc-nofeat",
+	}
+	// No feature provider — features should be empty but no error
+	svc := NewDMCharCreateService(store)
+
+	sub := DMCharacterSubmission{
+		Name: "Test",
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+	}
+
+	result, err := svc.CreateCharacter(context.Background(), "campaign-1", sub)
+	require.NoError(t, err)
+	assert.Equal(t, "char-nofeat", result.CharacterID)
+	assert.Empty(t, store.lastCharParams.Features)
+}
+
+func TestDMCharCreateService_CreateCharacter_PassesEquippedWeaponAndArmor(t *testing.T) {
+	store := &mockCharCreateStore{
+		charID: "char-equip",
+		pcID:   "pc-equip",
+	}
+	svc := NewDMCharCreateService(store)
+
+	sub := DMCharacterSubmission{
+		Name: "Knight",
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores:  character.AbilityScores{STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		Equipment:       []string{"longsword", "chain-mail", "shield"},
+		EquippedWeapon:  "longsword",
+		WornArmor:       "chain-mail",
+	}
+
+	result, err := svc.CreateCharacter(context.Background(), "campaign-1", sub)
+	require.NoError(t, err)
+	assert.Equal(t, "char-equip", result.CharacterID)
+
+	// Equipped weapon and worn armor should be in params
+	assert.Equal(t, "longsword", store.lastCharParams.EquippedWeapon)
+	assert.Equal(t, "chain-mail", store.lastCharParams.WornArmor)
+
+	// AC should reflect armor: chain-mail = 16, + shield = 18
+	assert.Equal(t, 18, store.lastCharParams.AC)
 }
 
 func TestDMCharCreateService_CreateCharacter_Multiclass(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/ab/dndnd/internal/auth"
@@ -29,10 +30,16 @@ type RefDataForCreate interface {
 
 // CharCreateHandler serves the DM character creation page and API.
 type CharCreateHandler struct {
-	logger  *slog.Logger
-	svc     CharCreateServicer
-	refData RefDataForCreate
-	tmpl    *template.Template
+	logger          *slog.Logger
+	svc             CharCreateServicer
+	refData         RefDataForCreate
+	tmpl            *template.Template
+	featureProvider FeatureProvider
+}
+
+// SetFeatureProvider sets the feature provider for preview/features endpoints.
+func (h *CharCreateHandler) SetFeatureProvider(fp FeatureProvider) {
+	h.featureProvider = fp
 }
 
 // NewCharCreateHandler creates a new CharCreateHandler.
@@ -58,6 +65,7 @@ func (h *CharCreateHandler) RegisterCharCreateRoutes(r chi.Router) {
 		r.Get("/ref/races", h.HandleListRefRaces)
 		r.Get("/ref/classes", h.HandleListRefClasses)
 		r.Get("/ref/equipment", h.HandleListRefEquipment)
+		r.Get("/ref/starting-equipment", h.HandleListRefStartingEquipment)
 		r.Get("/ref/spells", h.HandleListRefSpells)
 	})
 }
@@ -139,6 +147,14 @@ func (h *CharCreateHandler) HandlePreview(w http.ResponseWriter, r *http.Request
 	}
 
 	stats := DeriveDMStats(sub)
+	if h.featureProvider != nil {
+		stats.Features = CollectFeatures(
+			sub.Classes,
+			h.featureProvider.ClassFeatures(),
+			h.featureProvider.SubclassFeatures(),
+			h.featureProvider.RacialTraits(sub.Race),
+		)
+	}
 	writeJSONResponse(w, http.StatusOK, stats)
 }
 
@@ -217,6 +233,26 @@ func (h *CharCreateHandler) HandleListRefEquipment(w http.ResponseWriter, r *htt
 	writeJSONResponse(w, http.StatusOK, equipment)
 }
 
+// HandleListRefStartingEquipment returns starting equipment packs for a class.
+func (h *CharCreateHandler) HandleListRefStartingEquipment(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAuthHelper(r); !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	class := r.URL.Query().Get("class")
+	if class == "" {
+		http.Error(w, "class parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	packs := portal.StartingEquipmentPacks(class)
+	if packs == nil {
+		packs = []portal.EquipmentPack{}
+	}
+	writeJSONResponse(w, http.StatusOK, packs)
+}
+
 // HandleListRefSpells returns spells filtered by class as JSON.
 func (h *CharCreateHandler) HandleListRefSpells(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requireAuthHelper(r); !ok {
@@ -245,7 +281,28 @@ func (h *CharCreateHandler) HandleListRefSpells(w http.ResponseWriter, r *http.R
 	if spells == nil {
 		spells = []portal.SpellInfo{}
 	}
+
+	// Filter by max_level if provided
+	if maxLevelStr := r.URL.Query().Get("max_level"); maxLevelStr != "" {
+		maxLevel, err := strconv.Atoi(maxLevelStr)
+		if err == nil {
+			spells = filterSpellsByMaxLevel(spells, maxLevel)
+		}
+	}
+
 	writeJSONResponse(w, http.StatusOK, spells)
+}
+
+// filterSpellsByMaxLevel returns only spells at or below the given spell level.
+// Cantrips (level 0) are always included.
+func filterSpellsByMaxLevel(spells []portal.SpellInfo, maxLevel int) []portal.SpellInfo {
+	filtered := make([]portal.SpellInfo, 0, len(spells))
+	for _, sp := range spells {
+		if sp.Level <= maxLevel {
+			filtered = append(filtered, sp)
+		}
+	}
+	return filtered
 }
 
 // requireAuthHelper extracts the discord user ID from the request context.
@@ -377,12 +434,21 @@ const charCreatePageTemplate = `<!DOCTYPE html>
             </div>
         </div>
         <div id="step-4" class="section">
+            <button class="btn btn-secondary" onclick="loadStartingEquipment()" style="margin-bottom:1rem">Load Starting Equipment for Class</button>
             <div class="form-group">
                 <label for="equip-select">Add Equipment</label>
                 <select id="equip-select"><option value="">Select item...</option></select>
                 <button class="btn btn-secondary" onclick="addEquipment()" style="margin-top:0.5rem">+ Add</button>
             </div>
             <div id="equipment-list" class="item-list"></div>
+            <div class="form-group" style="margin-top:1rem">
+                <label for="worn-armor-select">Worn Armor</label>
+                <select id="worn-armor-select"><option value="">None</option></select>
+            </div>
+            <div class="form-group">
+                <label for="equipped-weapon-select">Equipped Weapon</label>
+                <select id="equipped-weapon-select"><option value="">None</option></select>
+            </div>
             <div class="actions">
                 <button class="btn btn-secondary" onclick="goToStep(3)">Back</button>
                 <button class="btn btn-primary" onclick="goToStep(5)">Next: Spells</button>
@@ -428,6 +494,7 @@ var selectedEquipment = [];
 var selectedSpells = [];
 var allEquipment = [];
 var allSpellsCache = {};
+var cachedPreview = null;
 
 (function() {
     var abilities = ['STR','DEX','CON','INT','WIS','CHA'];
@@ -515,19 +582,70 @@ function renderEquipmentList() {
         tag.innerHTML = name + ' <span class="remove" onclick="removeEquipment(\'' + id + '\')">&times;</span>';
         container.appendChild(tag);
     });
+    updateEquipSelects();
+}
+
+function updateEquipSelects() {
+    var armorSel = document.getElementById('worn-armor-select');
+    var weaponSel = document.getElementById('equipped-weapon-select');
+    var oldArmor = armorSel.value;
+    var oldWeapon = weaponSel.value;
+    armorSel.innerHTML = '<option value="">None</option>';
+    weaponSel.innerHTML = '<option value="">None</option>';
+    selectedEquipment.forEach(function(id) {
+        var item = allEquipment.find(function(e){ return e.id === id; });
+        var name = item ? item.name : id;
+        var cat = item ? item.category : '';
+        if (cat === 'armor' || id === 'shield') {
+            var o = document.createElement('option'); o.value = id; o.textContent = name; armorSel.appendChild(o);
+        }
+        if (cat === 'weapon') {
+            var o = document.createElement('option'); o.value = id; o.textContent = name; weaponSel.appendChild(o);
+        }
+    });
+    armorSel.value = oldArmor;
+    weaponSel.value = oldWeapon;
+}
+
+function loadStartingEquipment() {
+    var entries = document.querySelectorAll('.class-entry');
+    var cls = '';
+    if (entries.length > 0) cls = entries[0].querySelector('.class-select').value;
+    if (!cls) { alert('Select a class first.'); return; }
+    fetch('/dashboard/api/characters/ref/starting-equipment?class=' + encodeURIComponent(cls))
+        .then(function(r){return r.json()})
+        .then(function(packs) {
+            if (!packs || packs.length === 0) return;
+            var pack = packs[0];
+            (pack.guaranteed || []).forEach(function(item) {
+                var id = item.split(':')[0];
+                if (selectedEquipment.indexOf(id) < 0) selectedEquipment.push(id);
+            });
+            (pack.choices || []).forEach(function(choice) {
+                if (choice.options && choice.options.length > 0) {
+                    var id = choice.options[0].split(':')[0].split(',')[0];
+                    if (selectedEquipment.indexOf(id) < 0) selectedEquipment.push(id);
+                }
+            });
+            renderEquipmentList();
+        });
 }
 
 function loadSpells(className) {
     if (!className) return;
-    if (allSpellsCache[className]) {
-        populateSpellSelect(allSpellsCache[className]);
+    var maxLevel = cachedPreview ? cachedPreview.max_spell_level : 0;
+    var url = '/dashboard/api/characters/ref/spells?class=' + encodeURIComponent(className);
+    if (maxLevel > 0) url += '&max_level=' + maxLevel;
+    var cacheKey = className + '_' + maxLevel;
+    if (allSpellsCache[cacheKey]) {
+        populateSpellSelect(allSpellsCache[cacheKey]);
         return;
     }
-    fetch('/dashboard/api/characters/ref/spells?class=' + encodeURIComponent(className))
+    fetch(url)
         .then(function(r){return r.json()})
         .then(function(spells){
-            allSpellsCache[className] = spells || [];
-            populateSpellSelect(allSpellsCache[className]);
+            allSpellsCache[cacheKey] = spells || [];
+            populateSpellSelect(allSpellsCache[cacheKey]);
         });
 }
 
@@ -595,22 +713,30 @@ function goToStep(n) {
 
 function renderFeatures() {
     var container = document.getElementById('features-list');
-    container.innerHTML = '<p style="color:#999">Loading features from class data...</p>';
-    // Features are displayed as informational — auto-populated from reference data on the server side at save time.
-    // For the preview, show class/subclass names and levels.
-    var entries = document.querySelectorAll('.class-entry');
-    var html = '';
-    entries.forEach(function(e) {
-        var cls = e.querySelector('.class-select').value;
-        var sub = e.querySelector('.subclass-select').value;
-        var lvl = parseInt(e.querySelector('.level-input').value) || 1;
-        if (cls) {
-            html += '<div class="feature-card"><div class="feat-name">' + cls + ' (Level ' + lvl + ')' + (sub ? ' - ' + sub : '') + '</div>';
-            html += '<div class="feat-desc">Class and subclass features up to level ' + lvl + ' will be auto-populated on save.</div></div>';
-        }
-    });
-    if (!html) html = '<p style="color:#999">No classes selected.</p>';
-    container.innerHTML = html;
+    container.innerHTML = '<p style="color:#999">Loading features...</p>';
+    var data = gatherData();
+    fetch('/dashboard/api/characters/preview', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
+        .then(function(r){return r.json()})
+        .then(function(stats) {
+            cachedPreview = stats;
+            var features = stats.features || [];
+            if (features.length === 0) {
+                container.innerHTML = '<p style="color:#999">No features available for current class selection.</p>';
+                return;
+            }
+            var html = '';
+            features.forEach(function(f) {
+                html += '<div class="feature-card">';
+                html += '<div class="feat-name">' + f.name + '</div>';
+                html += '<div class="feat-source">' + f.source + ' (Level ' + f.level + ')</div>';
+                html += '<div class="feat-desc">' + (f.description || '') + '</div>';
+                html += '</div>';
+            });
+            container.innerHTML = html;
+        })
+        .catch(function() {
+            container.innerHTML = '<p style="color:#999">Could not load features.</p>';
+        });
 }
 
 function renderReview() {
@@ -623,6 +749,8 @@ function renderReview() {
     data.classes.forEach(function(c,i){ if(i>0) html+=' / '; html += c.class + ' ' + c.level + (c.subclass ? ' (' + c.subclass + ')' : ''); });
     html += '</p>';
     html += '<p><strong>Equipment:</strong> ' + (selectedEquipment.length > 0 ? selectedEquipment.join(', ') : '(none)') + '</p>';
+    if (data.worn_armor) html += '<p><strong>Worn Armor:</strong> ' + data.worn_armor + '</p>';
+    if (data.equipped_weapon) html += '<p><strong>Equipped Weapon:</strong> ' + data.equipped_weapon + '</p>';
     html += '<p><strong>Spells:</strong> ' + (selectedSpells.length > 0 ? selectedSpells.join(', ') : '(none)') + '</p>';
     document.getElementById('review-summary').innerHTML = html;
 }
@@ -650,7 +778,9 @@ function gatherData() {
             cha: parseInt(document.getElementById('score-cha').value) || 10,
         },
         equipment: selectedEquipment,
-        spells: selectedSpells
+        spells: selectedSpells,
+        equipped_weapon: document.getElementById('equipped-weapon-select').value,
+        worn_armor: document.getElementById('worn-armor-select').value
     };
 }
 
@@ -659,6 +789,7 @@ function computePreview() {
     fetch('/dashboard/api/characters/preview', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
         .then(function(r){return r.json()})
         .then(function(stats){
+            cachedPreview = stats;
             var panel = document.getElementById('preview-panel');
             panel.style.display = '';
             var html = stat('HP', stats.hp_max) + stat('AC', stats.ac) +
@@ -685,7 +816,7 @@ function stat(label, value) {
 
 function submitCharacter() {
     var data = gatherData();
-    var payload = {campaign_id: new URLSearchParams(location.search).get('campaign_id') || '', name: data.name, race: data.race, background: data.background, classes: data.classes, ability_scores: data.ability_scores, equipment: data.equipment, spells: data.spells};
+    var payload = {campaign_id: new URLSearchParams(location.search).get('campaign_id') || '', name: data.name, race: data.race, background: data.background, classes: data.classes, ability_scores: data.ability_scores, equipment: data.equipment, spells: data.spells, equipped_weapon: data.equipped_weapon, worn_armor: data.worn_armor};
     fetch('/dashboard/api/characters', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
         .then(function(r){
             if (!r.ok) return r.text().then(function(t){throw new Error(t)});

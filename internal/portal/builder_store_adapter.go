@@ -41,9 +41,24 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 	})
 
 	var inventoryMsg pqtype.NullRawMessage
-	if items := EquipmentToInventory(p.Equipment); len(items) > 0 {
+	if items := EquipmentToInventoryWithEquipped(p.Equipment, p.EquippedWeapon, p.WornArmor); len(items) > 0 {
 		invJSON, _ := json.Marshal(items)
 		inventoryMsg = pqtype.NullRawMessage{RawMessage: invJSON, Valid: true}
+	}
+
+	var equippedMainHand sql.NullString
+	if p.EquippedWeapon != "" {
+		equippedMainHand = sql.NullString{String: p.EquippedWeapon, Valid: true}
+	}
+	var equippedArmor sql.NullString
+	if p.WornArmor != "" {
+		equippedArmor = sql.NullString{String: p.WornArmor, Valid: true}
+	}
+
+	var featuresMsg pqtype.NullRawMessage
+	if len(p.Features) > 0 {
+		featJSON, _ := json.Marshal(p.Features)
+		featuresMsg = pqtype.NullRawMessage{RawMessage: featJSON, Valid: true}
 	}
 
 	var charDataMsg pqtype.NullRawMessage
@@ -71,7 +86,10 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		Ac:               int32(p.AC),
 		SpeedFt:          int32(p.SpeedFt),
 		ProficiencyBonus: int32(p.ProfBonus),
+		EquippedMainHand: equippedMainHand,
+		EquippedArmor:    equippedArmor,
 		HitDiceRemaining: hitDiceJSON,
+		Features:         featuresMsg,
 		Proficiencies:    pqtype.NullRawMessage{RawMessage: profJSON, Valid: true},
 		Languages:        p.Languages,
 		Inventory:        inventoryMsg,
@@ -150,17 +168,36 @@ func itemType(id string) string {
 
 // EquipmentToInventory converts equipment ID strings to InventoryItem structs.
 func EquipmentToInventory(equipment []string) []character.InventoryItem {
+	return EquipmentToInventoryWithEquipped(equipment, "", "")
+}
+
+// EquipmentToInventoryWithEquipped converts equipment IDs to InventoryItems,
+// marking the equipped weapon and worn armor items.
+func EquipmentToInventoryWithEquipped(equipment []string, equippedWeapon, wornArmor string) []character.InventoryItem {
 	if len(equipment) == 0 {
 		return nil
 	}
 	items := make([]character.InventoryItem, len(equipment))
 	for i, id := range equipment {
-		items[i] = character.InventoryItem{
+		item := character.InventoryItem{
 			ItemID:   id,
 			Name:     id,
 			Quantity: 1,
 			Type:     itemType(id),
 		}
+		if equippedWeapon != "" && strings.EqualFold(id, equippedWeapon) {
+			item.Equipped = true
+			item.EquipSlot = "main_hand"
+		}
+		if wornArmor != "" && strings.EqualFold(id, wornArmor) {
+			item.Equipped = true
+			item.EquipSlot = "armor"
+		}
+		if strings.EqualFold(id, "shield") {
+			item.Equipped = true
+			item.EquipSlot = "off_hand"
+		}
+		items[i] = item
 	}
 	return items
 }

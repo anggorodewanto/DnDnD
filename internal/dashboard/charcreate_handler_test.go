@@ -687,6 +687,147 @@ func TestCharCreateHandler_HandleListRefSpells_NullResponse(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "[]")
 }
 
+func TestCharCreateHandler_HandlePreview_IncludesFeatures(t *testing.T) {
+	featureProvider := &mockFeatureProvider{
+		classFeatures: map[string]map[string][]character.Feature{
+			"Fighter": {
+				"1": {{Name: "Fighting Style", Source: "Fighter", Level: 1, Description: "Choose style"}},
+				"2": {{Name: "Action Surge", Source: "Fighter", Level: 2, Description: "Extra action"}},
+			},
+		},
+	}
+	h := NewCharCreateHandler(nil, nil, nil)
+	h.SetFeatureProvider(featureProvider)
+
+	sub := DMCharacterSubmission{
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 2},
+		},
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10},
+	}
+	body, _ := json.Marshal(sub)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters/preview", bytes.NewBuffer(body))
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandlePreview(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var result map[string]json.RawMessage
+	err := json.NewDecoder(rec.Body).Decode(&result)
+	require.NoError(t, err)
+
+	// Features should be in the preview response
+	featuresRaw, ok := result["features"]
+	require.True(t, ok, "preview should include features")
+
+	var features []character.Feature
+	err = json.Unmarshal(featuresRaw, &features)
+	require.NoError(t, err)
+	assert.Len(t, features, 2)
+	assert.Equal(t, "Fighting Style", features[0].Name)
+	assert.Equal(t, "Action Surge", features[1].Name)
+}
+
+func TestCharCreateHandler_HandlePreview_NoFeatureProvider(t *testing.T) {
+	h := NewCharCreateHandler(nil, nil, nil)
+
+	sub := DMCharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+	}
+	body, _ := json.Marshal(sub)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters/preview", bytes.NewBuffer(body))
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandlePreview(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestCharCreateHandler_HandleListRefStartingEquipment_Success(t *testing.T) {
+	h := NewCharCreateHandler(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/starting-equipment?class=Fighter", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefStartingEquipment(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var packs []portal.EquipmentPack
+	err := json.NewDecoder(rec.Body).Decode(&packs)
+	require.NoError(t, err)
+	assert.NotEmpty(t, packs)
+}
+
+func TestCharCreateHandler_HandleListRefStartingEquipment_MissingClass(t *testing.T) {
+	h := NewCharCreateHandler(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/starting-equipment", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefStartingEquipment(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestCharCreateHandler_HandleListRefStartingEquipment_UnknownClass(t *testing.T) {
+	h := NewCharCreateHandler(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/starting-equipment?class=Unknown", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefStartingEquipment(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "[]")
+}
+
+func TestCharCreateHandler_HandleListRefSpells_FiltersByMaxLevel(t *testing.T) {
+	mockRef := &mockRefDataForCreate{
+		spells: []portal.SpellInfo{
+			{ID: "fire-bolt", Name: "Fire Bolt", Level: 0, Classes: []string{"Wizard"}},
+			{ID: "magic-missile", Name: "Magic Missile", Level: 1, Classes: []string{"Wizard"}},
+			{ID: "fireball", Name: "Fireball", Level: 3, Classes: []string{"Wizard"}},
+			{ID: "shield", Name: "Shield", Level: 1, Classes: []string{"Wizard"}},
+			{ID: "scorching-ray", Name: "Scorching Ray", Level: 2, Classes: []string{"Wizard"}},
+		},
+	}
+	h := NewCharCreateHandler(nil, nil, mockRef)
+
+	// Request spells with max_level=1 (cantrips + 1st level only)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/spells?class=Wizard&max_level=1", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefSpells(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var spells []portal.SpellInfo
+	err := json.NewDecoder(rec.Body).Decode(&spells)
+	require.NoError(t, err)
+	// Should only return cantrips (level 0) and 1st level spells
+	assert.Len(t, spells, 3) // fire-bolt(0), magic-missile(1), shield(1)
+	for _, sp := range spells {
+		assert.LessOrEqual(t, sp.Level, 1)
+	}
+}
+
+func TestCharCreateHandler_HandleListRefStartingEquipment_RequiresAuth(t *testing.T) {
+	h := NewCharCreateHandler(nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ref/starting-equipment?class=Fighter", nil)
+	rec := httptest.NewRecorder()
+
+	h.HandleListRefStartingEquipment(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
 func TestCharCreateHandler_HandleListRefSpells_Error(t *testing.T) {
 	mockRef := &mockRefDataForCreate{
 		spellsErr: errors.New("db error"),

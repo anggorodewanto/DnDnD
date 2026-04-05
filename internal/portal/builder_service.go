@@ -64,9 +64,12 @@ type CreateCharacterParams struct {
 	ProfBonus     int
 	Skills        []string
 	Saves         []string
-	Equipment     []string
-	Spells        []string
-	Languages     []string
+	Equipment      []string
+	Spells         []string
+	Languages      []string
+	Features       []character.Feature
+	EquippedWeapon string
+	WornArmor      string
 }
 
 // CreatePlayerCharacterParams holds params for the player_characters record.

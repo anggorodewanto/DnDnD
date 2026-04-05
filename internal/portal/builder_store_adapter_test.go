@@ -70,6 +70,38 @@ func TestBuilderStoreAdapter_EquipmentToInventory_Empty(t *testing.T) {
 	assert.Empty(t, items)
 }
 
+func TestBuilderStoreAdapter_EquipmentToInventoryWithEquipped(t *testing.T) {
+	items := portal.EquipmentToInventoryWithEquipped(
+		[]string{"longsword", "chain-mail", "shield"},
+		"longsword", "chain-mail",
+	)
+	require.Len(t, items, 3)
+
+	// longsword: equipped as main_hand
+	assert.Equal(t, "longsword", items[0].ItemID)
+	assert.True(t, items[0].Equipped)
+	assert.Equal(t, "main_hand", items[0].EquipSlot)
+
+	// chain-mail: equipped as armor
+	assert.Equal(t, "chain-mail", items[1].ItemID)
+	assert.True(t, items[1].Equipped)
+	assert.Equal(t, "armor", items[1].EquipSlot)
+
+	// shield: auto-equipped as off_hand
+	assert.Equal(t, "shield", items[2].ItemID)
+	assert.True(t, items[2].Equipped)
+	assert.Equal(t, "off_hand", items[2].EquipSlot)
+}
+
+func TestBuilderStoreAdapter_EquipmentToInventoryWithEquipped_NoEquipped(t *testing.T) {
+	items := portal.EquipmentToInventoryWithEquipped(
+		[]string{"longsword", "potion-of-healing"}, "", "",
+	)
+	require.Len(t, items, 2)
+	assert.False(t, items[0].Equipped)
+	assert.False(t, items[1].Equipped)
+}
+
 func TestBuilderStoreAdapter_EquipmentToInventory_UnknownItems(t *testing.T) {
 	items := portal.EquipmentToInventory([]string{"magic-wand", "potion-of-healing"})
 	assert.Len(t, items, 2)
@@ -133,6 +165,106 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_NoSpells(t *testing.T) {
 
 	// character_data should not be set when there are no spells
 	assert.False(t, creator.capturedParams.CharacterData.Valid, "CharacterData should not be set without spells")
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsFeatures(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	features := []character.Feature{
+		{Name: "Rage", Source: "Barbarian", Level: 1, Description: "Enter rage"},
+		{Name: "Unarmored Defense", Source: "Barbarian", Level: 1, Description: "AC formula"},
+	}
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Grog",
+		Race:          "Half-Orc",
+		Class:         "Barbarian",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 8, WIS: 10, CHA: 10},
+		HPMax:         14,
+		AC:            14,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Features:      features,
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	// Features JSONB should be set
+	require.True(t, creator.capturedParams.Features.Valid, "Features should be valid when provided")
+
+	var storedFeatures []character.Feature
+	err = json.Unmarshal(creator.capturedParams.Features.RawMessage, &storedFeatures)
+	require.NoError(t, err)
+	assert.Len(t, storedFeatures, 2)
+	assert.Equal(t, "Rage", storedFeatures[0].Name)
+	assert.Equal(t, "Unarmored Defense", storedFeatures[1].Name)
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsEquipped(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:     uuid.New().String(),
+		Name:           "Knight",
+		Race:           "Human",
+		Class:          "Fighter",
+		AbilityScores:  character.AbilityScores{STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		HPMax:          12,
+		AC:             18,
+		SpeedFt:        30,
+		ProfBonus:      2,
+		Equipment:      []string{"longsword", "chain-mail", "shield"},
+		EquippedWeapon: "longsword",
+		WornArmor:      "chain-mail",
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	// EquippedMainHand should be set
+	assert.True(t, creator.capturedParams.EquippedMainHand.Valid)
+	assert.Equal(t, "longsword", creator.capturedParams.EquippedMainHand.String)
+
+	// EquippedArmor should be set
+	assert.True(t, creator.capturedParams.EquippedArmor.Valid)
+	assert.Equal(t, "chain-mail", creator.capturedParams.EquippedArmor.String)
+
+	// Inventory should have equipped items
+	require.True(t, creator.capturedParams.Inventory.Valid)
+	var items []character.InventoryItem
+	err = json.Unmarshal(creator.capturedParams.Inventory.RawMessage, &items)
+	require.NoError(t, err)
+	assert.Len(t, items, 3)
+
+	// longsword should be equipped
+	assert.True(t, items[0].Equipped)
+	assert.Equal(t, "main_hand", items[0].EquipSlot)
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_NoFeatures(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Fighter",
+		Race:          "Human",
+		Class:         "Fighter",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		HPMax:         12,
+		AC:            16,
+		SpeedFt:       30,
+		ProfBonus:     2,
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	assert.False(t, creator.capturedParams.Features.Valid, "Features should not be set when empty")
 }
 
 func TestDeriveCharacterSpeed_Default(t *testing.T) {

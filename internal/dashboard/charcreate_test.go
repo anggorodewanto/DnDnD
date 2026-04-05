@@ -579,6 +579,124 @@ func TestClassSpellcasting_ArcaneTrickster(t *testing.T) {
 	assert.Equal(t, "int", sc.SpellAbility)
 }
 
+func TestDeriveDMStats_WornArmorAffectsAC(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10,
+		},
+		WornArmor: "chain-mail",
+	}
+	stats := DeriveDMStats(sub)
+	// Chain mail: AC 16, no DEX bonus
+	assert.Equal(t, 16, stats.AC)
+}
+
+func TestDeriveDMStats_WornArmorWithShieldAffectsAC(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10,
+		},
+		WornArmor:       "chain-mail",
+		EquippedWeapon:  "longsword",
+	}
+	stats := DeriveDMStats(sub)
+	// Chain mail: AC 16, no shield
+	assert.Equal(t, 16, stats.AC)
+}
+
+func TestDeriveDMStats_LeatherArmorWithDex(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Rogue", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 10, DEX: 16, CON: 12, INT: 10, WIS: 10, CHA: 10,
+		},
+		WornArmor: "leather",
+	}
+	stats := DeriveDMStats(sub)
+	// Leather: AC 11 + DEX(+3) = 14
+	assert.Equal(t, 14, stats.AC)
+}
+
+func TestDeriveDMStats_ShieldInEquipmentAddsAC(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10,
+		},
+		WornArmor: "chain-mail",
+		Equipment: []string{"chain-mail", "shield", "longsword"},
+	}
+	stats := DeriveDMStats(sub)
+	// Chain mail 16 + shield 2 = 18
+	assert.Equal(t, 18, stats.AC)
+}
+
+func TestDMCharacterSubmission_EquippedWeaponWornArmor_JSON(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Name: "Test",
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores:  character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		EquippedWeapon: "longsword",
+		WornArmor:      "chain-mail",
+	}
+	data, err := json.Marshal(sub)
+	require.NoError(t, err)
+	var decoded DMCharacterSubmission
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.Equal(t, "longsword", decoded.EquippedWeapon)
+	assert.Equal(t, "chain-mail", decoded.WornArmor)
+}
+
+func TestLookupArmorInfo_KnownArmor(t *testing.T) {
+	tests := []struct {
+		id     string
+		acBase int
+	}{
+		{"chain-mail", 16},
+		{"leather", 11},
+		{"plate", 18},
+		{"studded-leather", 12},
+	}
+	for _, tc := range tests {
+		info := lookupArmorInfo(tc.id)
+		require.NotNil(t, info, "armor %s should exist", tc.id)
+		assert.Equal(t, tc.acBase, info.ACBase, "armor %s AC", tc.id)
+	}
+}
+
+func TestLookupArmorInfo_Empty(t *testing.T) {
+	assert.Nil(t, lookupArmorInfo(""))
+}
+
+func TestLookupArmorInfo_Unknown(t *testing.T) {
+	assert.Nil(t, lookupArmorInfo("magic-robe"))
+}
+
+func TestHasEquipmentItem(t *testing.T) {
+	eq := []string{"longsword", "shield", "chain-mail"}
+	assert.True(t, hasEquipmentItem(eq, "shield"))
+	assert.True(t, hasEquipmentItem(eq, "Shield"))
+	assert.False(t, hasEquipmentItem(eq, "dagger"))
+	assert.False(t, hasEquipmentItem(nil, "shield"))
+}
+
 func TestCollectFeatures_ClassNotInFeaturesMap(t *testing.T) {
 	classFeatures := map[string]map[string][]character.Feature{
 		"Wizard": {
@@ -590,6 +708,30 @@ func TestCollectFeatures_ClassNotInFeaturesMap(t *testing.T) {
 	}
 	features := CollectFeatures(classes, classFeatures, nil, nil)
 	assert.Empty(t, features)
+}
+
+func TestMaxSpellLevelForClasses_Wizard3(t *testing.T) {
+	classes := []character.ClassEntry{{Class: "Wizard", Level: 3}}
+	// Wizard level 3 = caster level 3 => has 2nd level slots => max spell level 2
+	assert.Equal(t, 2, MaxSpellLevelForClasses(classes))
+}
+
+func TestMaxSpellLevelForClasses_Fighter5(t *testing.T) {
+	classes := []character.ClassEntry{{Class: "Fighter", Level: 5}}
+	// Fighter is not a caster => max spell level 0 (cantrips only... actually 0 means no casting)
+	assert.Equal(t, 0, MaxSpellLevelForClasses(classes))
+}
+
+func TestMaxSpellLevelForClasses_Paladin4(t *testing.T) {
+	classes := []character.ClassEntry{{Class: "Paladin", Level: 4}}
+	// Paladin level 4 = half caster => caster level 2 => 1st level slots => max 1
+	assert.Equal(t, 1, MaxSpellLevelForClasses(classes))
+}
+
+func TestMaxSpellLevelForClasses_Wizard5(t *testing.T) {
+	classes := []character.ClassEntry{{Class: "Wizard", Level: 5}}
+	// Wizard level 5 = caster level 5 => has 3rd level slots => max 3
+	assert.Equal(t, 3, MaxSpellLevelForClasses(classes))
 }
 
 func TestDeriveDMStats_SkillModifiers_FighterProficiencies(t *testing.T) {
@@ -662,6 +804,28 @@ func TestDeriveDMStats_SkillModifiers_WithClassProficiency(t *testing.T) {
 	// Non-proficient skill: athletics (STR-based)
 	// STR mod(+0) = 0
 	assert.Equal(t, 0, stats.Skills["athletics"])
+}
+
+func TestDeriveDMStats_MaxSpellLevel_Wizard3(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "Wizard", Level: 3},
+		},
+		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 16, WIS: 10, CHA: 10},
+	}
+	stats := DeriveDMStats(sub)
+	assert.Equal(t, 2, stats.MaxSpellLevel)
+}
+
+func TestDeriveDMStats_MaxSpellLevel_Fighter5(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 5},
+		},
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 10, CON: 14, INT: 10, WIS: 10, CHA: 10},
+	}
+	stats := DeriveDMStats(sub)
+	assert.Equal(t, 0, stats.MaxSpellLevel)
 }
 
 func TestDeriveDMStats_SpellSlots_FullCasterWizard(t *testing.T) {
