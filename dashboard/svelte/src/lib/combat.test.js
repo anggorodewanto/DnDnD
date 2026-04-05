@@ -7,7 +7,11 @@ import {
   addCondition,
   removeCondition,
   colToIndex,
+  indexToCol,
   tokenOpacity,
+  gridDistance,
+  tilesInRange,
+  isWallBetween,
 } from './combat.js';
 
 // TDD Cycle 1: applyDamage respects temp HP
@@ -167,6 +171,100 @@ describe('tokenOpacity', () => {
 
   it('returns 1.0 when is_visible is undefined', () => {
     expect(tokenOpacity({})).toBe(1.0);
+  });
+});
+
+// TDD Cycle 8: gridDistance (Chebyshev * 5ft)
+describe('gridDistance', () => {
+  it('returns 0 for same tile', () => {
+    expect(gridDistance(0, 0, 0, 0)).toBe(0);
+  });
+
+  it('returns 5 for adjacent cardinal tile', () => {
+    expect(gridDistance(0, 0, 1, 0)).toBe(5);
+    expect(gridDistance(0, 0, 0, 1)).toBe(5);
+  });
+
+  it('returns 5 for adjacent diagonal tile (Chebyshev)', () => {
+    expect(gridDistance(0, 0, 1, 1)).toBe(5);
+  });
+
+  it('calculates longer distances', () => {
+    expect(gridDistance(0, 0, 3, 4)).toBe(20); // max(3,4) * 5
+  });
+
+  it('handles negative direction', () => {
+    expect(gridDistance(5, 5, 2, 3)).toBe(15); // max(3,2) * 5
+  });
+});
+
+// TDD Cycle 9: indexToCol (reverse of colToIndex)
+describe('indexToCol', () => {
+  it('converts 0 to A', () => {
+    expect(indexToCol(0)).toBe('A');
+  });
+
+  it('converts 25 to Z', () => {
+    expect(indexToCol(25)).toBe('Z');
+  });
+
+  it('converts 26 to AA', () => {
+    expect(indexToCol(26)).toBe('AA');
+  });
+
+  it('roundtrips with colToIndex', () => {
+    for (const col of ['A', 'B', 'Z', 'AA', 'AB']) {
+      expect(indexToCol(colToIndex(col))).toBe(col);
+    }
+  });
+});
+
+// TDD Cycle 10: tilesInRange
+describe('tilesInRange', () => {
+  it('returns tiles within Chebyshev distance', () => {
+    const tiles = tilesInRange(2, 2, 1, 5, 5);
+    expect(tiles).toContainEqual({ col: 1, row: 1 });
+    expect(tiles).toContainEqual({ col: 3, row: 3 });
+    expect(tiles).toHaveLength(8); // 3x3 - 1 (center)
+  });
+
+  it('clips to map bounds', () => {
+    const tiles = tilesInRange(0, 0, 1, 3, 3);
+    // Only 3 neighbors + not center
+    expect(tiles).toContainEqual({ col: 1, row: 0 });
+    expect(tiles).toContainEqual({ col: 0, row: 1 });
+    expect(tiles).toContainEqual({ col: 1, row: 1 });
+    expect(tiles).toHaveLength(3);
+  });
+
+  it('returns empty array for range 0', () => {
+    expect(tilesInRange(2, 2, 0, 5, 5)).toEqual([]);
+  });
+});
+
+// TDD Cycle 11: isWallBetween
+describe('isWallBetween', () => {
+  const tileSize = 48;
+
+  it('detects horizontal wall blocking vertical movement', () => {
+    // Horizontal wall at y=48 (between row 0 and row 1), x=0 to x=48
+    const walls = [{ x: 0, y: 48, width: 48, height: 0 }];
+    expect(isWallBetween(0, 0, 0, 1, walls, tileSize)).toBe(true);
+  });
+
+  it('detects vertical wall blocking horizontal movement', () => {
+    // Vertical wall at x=48 (between col 0 and col 1), y=0 to y=48
+    const walls = [{ x: 48, y: 0, width: 0, height: 48 }];
+    expect(isWallBetween(0, 0, 1, 0, walls, tileSize)).toBe(true);
+  });
+
+  it('returns false when no wall blocks the path', () => {
+    const walls = [{ x: 96, y: 0, width: 0, height: 48 }];
+    expect(isWallBetween(0, 0, 1, 0, walls, tileSize)).toBe(false);
+  });
+
+  it('returns false with no walls', () => {
+    expect(isWallBetween(0, 0, 1, 0, [], tileSize)).toBe(false);
   });
 });
 

@@ -20,14 +20,16 @@ import (
 
 // mockWorkspaceStore implements WorkspaceStore for tests.
 type mockWorkspaceStore struct {
-	listEncountersByCampaignIDFn  func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
-	listCombatantsByEncounterIDFn func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
-	getMapByIDFn                  func(ctx context.Context, id uuid.UUID) (refdata.Map, error)
+	listEncountersByCampaignIDFn      func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
+	listCombatantsByEncounterIDFn     func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
+	getMapByIDFn                      func(ctx context.Context, id uuid.UUID) (refdata.Map, error)
 	listEncounterZonesByEncounterIDFn func(ctx context.Context, encounterID uuid.UUID) ([]refdata.EncounterZone, error)
-	updateCombatantHPFn           func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error)
-	updateCombatantConditionsFn   func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
-	getActiveTurnByEncounterIDFn  func(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
-	getCombatantByIDFn            func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
+	updateCombatantHPFn               func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error)
+	updateCombatantConditionsFn       func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
+	getActiveTurnByEncounterIDFn      func(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
+	getCombatantByIDFn                func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
+	updateCombatantPositionFn         func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error)
+	deleteCombatantFn                 func(ctx context.Context, id uuid.UUID) error
 }
 
 func (m *mockWorkspaceStore) ListEncountersByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error) {
@@ -53,6 +55,12 @@ func (m *mockWorkspaceStore) GetActiveTurnByEncounterID(ctx context.Context, enc
 }
 func (m *mockWorkspaceStore) GetCombatantByID(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
 	return m.getCombatantByIDFn(ctx, id)
+}
+func (m *mockWorkspaceStore) UpdateCombatantPosition(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+	return m.updateCombatantPositionFn(ctx, arg)
+}
+func (m *mockWorkspaceStore) DeleteCombatant(ctx context.Context, id uuid.UUID) error {
+	return m.deleteCombatantFn(ctx, id)
 }
 
 // --- TDD Cycle 10: GET /api/combat/workspace returns active encounters ---
@@ -603,6 +611,205 @@ func TestWorkspaceHandler_GetWorkspace_ZoneError(t *testing.T) {
 	h.RegisterRoutes(r)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/combat/workspace?campaign_id="+campaignID.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// --- TDD Cycle 22: PATCH combatant position ---
+
+func TestWorkspaceHandler_UpdateCombatantPosition_Success(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := &mockWorkspaceStore{
+		getCombatantByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			assert.Equal(t, combatantID, id)
+			return refdata.Combatant{ID: combatantID, AltitudeFt: 0, PositionCol: "A", PositionRow: 1}, nil
+		},
+		updateCombatantPositionFn: func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+			assert.Equal(t, combatantID, arg.ID)
+			assert.Equal(t, "D", arg.PositionCol)
+			assert.Equal(t, int32(4), arg.PositionRow)
+			assert.Equal(t, int32(0), arg.AltitudeFt)
+			return refdata.Combatant{
+				ID:          combatantID,
+				PositionCol: "D",
+				PositionRow: 4,
+				Conditions:  json.RawMessage(`[]`),
+			}, nil
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"position_col":"D","position_row":4}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/position", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp workspaceCombatantResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "D", resp.PositionCol)
+	assert.Equal(t, int32(4), resp.PositionRow)
+}
+
+func TestWorkspaceHandler_UpdateCombatantPosition_InvalidJSON(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := &mockWorkspaceStore{}
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/position", strings.NewReader("not json"))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestWorkspaceHandler_UpdateCombatantPosition_MissingCol(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := &mockWorkspaceStore{}
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"position_col":"","position_row":4}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/position", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestWorkspaceHandler_UpdateCombatantPosition_InvalidCombatantID(t *testing.T) {
+	encounterID := uuid.New()
+
+	store := &mockWorkspaceStore{}
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"position_col":"D","position_row":4}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encounterID.String()+"/combatants/not-a-uuid/position", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestWorkspaceHandler_UpdateCombatantPosition_CombatantNotFound(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := &mockWorkspaceStore{
+		getCombatantByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{}, sql.ErrNoRows
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"position_col":"D","position_row":4}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/position", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestWorkspaceHandler_UpdateCombatantPosition_StoreError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := &mockWorkspaceStore{
+		getCombatantByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: combatantID, AltitudeFt: 0}, nil
+		},
+		updateCombatantPositionFn: func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+			return refdata.Combatant{}, errors.New("db error")
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	body := `{"position_col":"D","position_row":4}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/position", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// --- TDD Cycle 23: DELETE combatant ---
+
+func TestWorkspaceHandler_DeleteCombatant_Success(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := &mockWorkspaceStore{
+		deleteCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+			assert.Equal(t, combatantID, id)
+			return nil
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestWorkspaceHandler_DeleteCombatant_InvalidCombatantID(t *testing.T) {
+	encounterID := uuid.New()
+
+	store := &mockWorkspaceStore{}
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/combat/"+encounterID.String()+"/combatants/not-a-uuid", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestWorkspaceHandler_DeleteCombatant_StoreError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := &mockWorkspaceStore{
+		deleteCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+			return errors.New("db error")
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String(), nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 

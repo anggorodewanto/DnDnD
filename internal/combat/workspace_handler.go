@@ -23,6 +23,8 @@ type WorkspaceStore interface {
 	UpdateCombatantConditions(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
 	GetCombatantByID(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 	GetActiveTurnByEncounterID(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
+	UpdateCombatantPosition(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error)
+	DeleteCombatant(ctx context.Context, id uuid.UUID) error
 }
 
 // WorkspaceHandler serves combat workspace API endpoints.
@@ -41,6 +43,8 @@ func (h *WorkspaceHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/workspace", h.GetWorkspace)
 		r.Patch("/{encounterID}/combatants/{combatantID}/hp", h.UpdateCombatantHP)
 		r.Patch("/{encounterID}/combatants/{combatantID}/conditions", h.UpdateCombatantConditions)
+		r.Patch("/{encounterID}/combatants/{combatantID}/position", h.UpdateCombatantPosition)
+		r.Delete("/{encounterID}/combatants/{combatantID}", h.DeleteCombatant)
 	})
 }
 
@@ -108,6 +112,11 @@ type updateHPRequest struct {
 
 type updateConditionsRequest struct {
 	Conditions []string `json:"conditions"`
+}
+
+type updatePositionRequest struct {
+	PositionCol string `json:"position_col"`
+	PositionRow int32  `json:"position_row"`
 }
 
 // --- Handlers ---
@@ -308,6 +317,61 @@ func (h *WorkspaceHandler) UpdateCombatantConditions(w http.ResponseWriter, r *h
 	}
 
 	writeJSON(w, http.StatusOK, toWorkspaceCombatantResponse(c))
+}
+
+// UpdateCombatantPosition handles PATCH /api/combat/{encounterID}/combatants/{combatantID}/position.
+func (h *WorkspaceHandler) UpdateCombatantPosition(w http.ResponseWriter, r *http.Request) {
+	_, combatantID, err := parseWorkspaceRouteParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var req updatePositionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if req.PositionCol == "" {
+		http.Error(w, "position_col is required", http.StatusBadRequest)
+		return
+	}
+
+	existing, err := h.store.GetCombatantByID(r.Context(), combatantID)
+	if err != nil {
+		http.Error(w, "combatant not found", http.StatusNotFound)
+		return
+	}
+
+	c, err := h.store.UpdateCombatantPosition(r.Context(), refdata.UpdateCombatantPositionParams{
+		ID:          combatantID,
+		PositionCol: req.PositionCol,
+		PositionRow: req.PositionRow,
+		AltitudeFt:  existing.AltitudeFt,
+	})
+	if err != nil {
+		http.Error(w, "failed to update position", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toWorkspaceCombatantResponse(c))
+}
+
+// DeleteCombatant handles DELETE /api/combat/{encounterID}/combatants/{combatantID}.
+func (h *WorkspaceHandler) DeleteCombatant(w http.ResponseWriter, r *http.Request) {
+	_, combatantID, err := parseWorkspaceRouteParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.store.DeleteCombatant(r.Context(), combatantID); err != nil {
+		http.Error(w, "failed to delete combatant", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func parseWorkspaceRouteParams(r *http.Request) (uuid.UUID, uuid.UUID, error) {

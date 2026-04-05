@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   uploadAsset, getEnemyTurnPlan, executeEnemyTurn,
   getCombatWorkspace, updateCombatantHP, updateCombatantConditions,
+  updateCombatantPosition, removeCombatant,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -168,5 +169,48 @@ describe('updateCombatantConditions', () => {
     expect(url).toBe('/api/combat/enc-1/combatants/comb-1/conditions');
     expect(options.method).toBe('PATCH');
     expect(JSON.parse(options.body)).toEqual({ conditions: ['Blinded'] });
+  });
+});
+
+// TDD Cycle 12: updateCombatantPosition
+describe('updateCombatantPosition', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends PATCH to update combatant position', async () => {
+    const mockResult = { id: 'comb-1', position_col: 'D', position_row: 4 };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResult),
+    });
+
+    const result = await updateCombatantPosition('enc-1', 'comb-1', { position_col: 'D', position_row: 4 });
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/combatants/comb-1/position');
+    expect(options.method).toBe('PATCH');
+    expect(JSON.parse(options.body)).toEqual({ position_col: 'D', position_row: 4 });
+  });
+});
+
+// TDD Cycle 13: removeCombatant
+describe('removeCombatant', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends DELETE to remove combatant', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(''),
+    });
+
+    await removeCombatant('enc-1', 'comb-1');
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/combatants/comb-1');
+    expect(options.method).toBe('DELETE');
   });
 });

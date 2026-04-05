@@ -446,6 +446,34 @@ export async function updateCombatantHP(encounterId, combatantId, data) {
 }
 
 /**
+ * Update a combatant's position.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} combatantId - Combatant UUID.
+ * @param {object} data - { position_col, position_row }
+ * @returns {Promise<object>} Updated combatant.
+ */
+export async function updateCombatantPosition(encounterId, combatantId, data) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/combatants/${combatantId}/position`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+/**
+ * Remove a combatant from an encounter.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} combatantId - Combatant UUID.
+ * @returns {Promise<void>}
+ */
+export async function removeCombatant(encounterId, combatantId) {
+  await apiFetch(`${COMBAT_BASE}/${encounterId}/combatants/${combatantId}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
  * Update a combatant's conditions.
  * @param {string} encounterId - Encounter UUID.
  * @param {string} combatantId - Combatant UUID.

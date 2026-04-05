@@ -1,5 +1,5 @@
 <script>
-  import { getCombatWorkspace, updateCombatantHP, updateCombatantConditions } from './lib/api.js';
+  import { getCombatWorkspace, updateCombatantHP, updateCombatantConditions, updateCombatantPosition, removeCombatant } from './lib/api.js';
   import {
     applyDamage,
     applyHealing,
@@ -8,7 +8,11 @@
     addCondition,
     removeCondition,
     colToIndex,
+    indexToCol,
     tokenOpacity,
+    gridDistance,
+    tilesInRange,
+    isWallBetween,
   } from './lib/combat.js';
   import {
     terrainByGid,
@@ -41,6 +45,19 @@
   // Polling interval
   let pollTimer = $state(null);
 
+  // Drag-and-drop state
+  let dragging = $state(null); // { combatantId, startCol, startRow }
+  let dragCol = $state(null);
+  let dragRow = $state(null);
+
+  // Context menu state
+  let contextMenu = $state(null); // { x, y, combatantId }
+
+  // Distance measurement tool
+  let measureMode = $state(false);
+  let measureStart = $state(null); // { col, row }
+  let measureEnd = $state(null); // { col, row }
+
   $effect(() => {
     loadWorkspace();
     pollTimer = setInterval(loadWorkspace, 5000);
@@ -51,6 +68,14 @@
 
   // Redraw when data or selection changes
   $effect(() => {
+    // Track reactive deps
+    void selectedCombatantId;
+    void dragging;
+    void dragCol;
+    void dragRow;
+    void measureStart;
+    void measureEnd;
+    void measureMode;
     if (canvasEl && activeEncounter?.map) {
       drawMap();
     }
@@ -166,6 +191,21 @@
 
     // Draw tokens
     drawTokens(ctx, tiledMap, tileSize);
+
+    // Draw range circle for selected token
+    if (selectedCombatantId && !dragging) {
+      drawRangeCircle(ctx, tiledMap, tileSize);
+    }
+
+    // Draw drag overlay
+    if (dragging && dragCol !== null && dragRow !== null) {
+      drawDragOverlay(ctx, tiledMap, tileSize);
+    }
+
+    // Draw measurement line
+    if (measureStart && measureEnd) {
+      drawMeasureLine(ctx, tileSize);
+    }
   }
 
   function drawTokens(ctx, tiledMap, tileSize) {
@@ -246,14 +286,116 @@
     }
   }
 
-  function handleCanvasClick(e) {
-    if (!canvasEl || !activeEncounter?.map) return;
+  function drawRangeCircle(ctx, tiledMap, tileSize) {
+    const comb = selectedCombatant;
+    if (!comb) return;
+
+    // Movement range in tiles (speed / 5)
+    const speedFt = comb.speed_ft || 30;
+    const rangeTiles = Math.floor(speedFt / 5);
+    const col = colToIndex(comb.position_col);
+    const row = comb.position_row;
+    const walls = getWalls(tiledMap);
+
+    const tiles = tilesInRange(col, row, rangeTiles, tiledMap.width, tiledMap.height);
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = '#3b82f6';
+    for (const t of tiles) {
+      ctx.fillRect(t.col * tileSize, t.row * tileSize, tileSize, tileSize);
+    }
+    ctx.globalAlpha = 1.0;
+
+    // Draw range border
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 2;
+    for (const t of tiles) {
+      ctx.strokeRect(t.col * tileSize, t.row * tileSize, tileSize, tileSize);
+    }
+    ctx.globalAlpha = 1.0;
+  }
+
+  function drawDragOverlay(ctx, tiledMap, tileSize) {
+    const walls = getWalls(tiledMap);
+    const startCol = dragging.startCol;
+    const startRow = dragging.startRow;
+    const dist = gridDistance(startCol, startRow, dragCol, dragRow);
+
+    // Check if wall blocks the direct cardinal path
+    const blocked = isWallBetween(startCol, startRow, dragCol, dragRow, walls, tileSize);
+
+    // Draw path line
+    const startCx = startCol * tileSize + tileSize / 2;
+    const startCy = startRow * tileSize + tileSize / 2;
+    const endCx = dragCol * tileSize + tileSize / 2;
+    const endCy = dragRow * tileSize + tileSize / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(startCx, startCy);
+    ctx.lineTo(endCx, endCy);
+    ctx.strokeStyle = blocked ? '#ef4444' : '#22c55e';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Highlight target tile
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = blocked ? '#ef4444' : '#22c55e';
+    ctx.fillRect(dragCol * tileSize, dragRow * tileSize, tileSize, tileSize);
+    ctx.globalAlpha = 1.0;
+
+    // Distance text overlay
+    ctx.font = `bold ${Math.max(12, tileSize * 0.3)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3;
+    const label = `${dist}ft`;
+    const textX = endCx;
+    const textY = dragRow * tileSize - 4;
+    ctx.strokeText(label, textX, textY);
+    ctx.fillText(label, textX, textY);
+  }
+
+  function drawMeasureLine(ctx, tileSize) {
+    const startCx = measureStart.col * tileSize + tileSize / 2;
+    const startCy = measureStart.row * tileSize + tileSize / 2;
+    const endCx = measureEnd.col * tileSize + tileSize / 2;
+    const endCy = measureEnd.row * tileSize + tileSize / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(startCx, startCy);
+    ctx.lineTo(endCx, endCy);
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const dist = gridDistance(measureStart.col, measureStart.row, measureEnd.col, measureEnd.row);
+    const midX = (startCx + endCx) / 2;
+    const midY = (startCy + endCy) / 2;
+    ctx.font = `bold ${Math.max(12, tileSize * 0.3)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fbbf24';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3;
+    const label = `${dist}ft`;
+    ctx.strokeText(label, midX, midY);
+    ctx.fillText(label, midX, midY);
+  }
+
+  function getCanvasTile(e) {
+    if (!canvasEl || !activeEncounter?.map) return null;
 
     const tiledMap = typeof activeEncounter.map.tiled_json === 'string'
       ? JSON.parse(activeEncounter.map.tiled_json)
       : activeEncounter.map.tiled_json;
 
-    if (!tiledMap) return;
+    if (!tiledMap) return null;
 
     const tileSize = getTileSize(tiledMap);
     const rect = canvasEl.getBoundingClientRect();
@@ -261,13 +403,160 @@
     const scaleY = canvasEl.height / rect.height;
     const px = (e.clientX - rect.left) * scaleX;
     const py = (e.clientY - rect.top) * scaleY;
-    const clickCol = Math.floor(px / tileSize);
-    const clickRow = Math.floor(py / tileSize);
+    return {
+      col: Math.floor(px / tileSize),
+      row: Math.floor(py / tileSize),
+    };
+  }
+
+  function findCombatantAt(col, row) {
+    return activeEncounter?.combatants?.find(c => {
+      return colToIndex(c.position_col) === col && c.position_row === row;
+    }) || null;
+  }
+
+  function handleCanvasMouseDown(e) {
+    if (e.button !== 0) return; // left click only
+    if (contextMenu) {
+      contextMenu = null;
+      return;
+    }
+
+    const tile = getCanvasTile(e);
+    if (!tile) return;
+
+    if (measureMode) return; // handled by click
+
+    const comb = findCombatantAt(tile.col, tile.row);
+    if (comb) {
+      dragging = {
+        combatantId: comb.id,
+        startCol: tile.col,
+        startRow: tile.row,
+      };
+      dragCol = tile.col;
+      dragRow = tile.row;
+    }
+  }
+
+  function handleCanvasMouseMove(e) {
+    if (!dragging) return;
+    const tile = getCanvasTile(e);
+    if (!tile) return;
+
+    if (tile.col !== dragCol || tile.row !== dragRow) {
+      dragCol = tile.col;
+      dragRow = tile.row;
+    }
+  }
+
+  async function handleCanvasMouseUp(e) {
+    if (!dragging) return;
+
+    const startCol = dragging.startCol;
+    const startRow = dragging.startRow;
+    const combId = dragging.combatantId;
+
+    // Only update if actually moved
+    if (dragCol !== startCol || dragRow !== startRow) {
+      try {
+        await updateCombatantPosition(
+          activeEncounter.id,
+          combId,
+          { position_col: indexToCol(dragCol), position_row: dragRow },
+        );
+        await loadWorkspace();
+      } catch (err) {
+        error = err.message;
+      }
+    }
+
+    dragging = null;
+    dragCol = null;
+    dragRow = null;
+  }
+
+  function handleCanvasContextMenu(e) {
+    e.preventDefault();
+    const tile = getCanvasTile(e);
+    if (!tile) return;
+
+    const comb = findCombatantAt(tile.col, tile.row);
+    if (!comb) {
+      contextMenu = null;
+      return;
+    }
+
+    contextMenu = {
+      x: e.clientX,
+      y: e.clientY,
+      combatantId: comb.id,
+    };
+  }
+
+  function handleContextAction(action) {
+    if (!contextMenu) return;
+    const combId = contextMenu.combatantId;
+    selectedCombatantId = combId;
+    contextMenu = null;
+
+    if (action === 'damage') {
+      damageInput = 0;
+    } else if (action === 'heal') {
+      healInput = 0;
+    } else if (action === 'conditions') {
+      conditionToAdd = '';
+    } else if (action === 'remove') {
+      handleRemoveCombatant(combId);
+    }
+  }
+
+  async function handleRemoveCombatant(combId) {
+    try {
+      await removeCombatant(activeEncounter.id, combId);
+      if (selectedCombatantId === combId) {
+        selectedCombatantId = null;
+      }
+      await loadWorkspace();
+    } catch (err) {
+      error = err.message;
+    }
+  }
+
+  function toggleMeasureMode() {
+    measureMode = !measureMode;
+    measureStart = null;
+    measureEnd = null;
+    if (measureMode) {
+      selectedCombatantId = null;
+    }
+  }
+
+  function handleCanvasClick(e) {
+    if (contextMenu) {
+      contextMenu = null;
+      return;
+    }
+
+    const tile = getCanvasTile(e);
+    if (!tile) return;
+
+    // Measurement mode
+    if (measureMode) {
+      if (!measureStart) {
+        measureStart = tile;
+        measureEnd = null;
+      } else {
+        measureEnd = tile;
+      }
+      return;
+    }
+
+    // If we were dragging, don't re-select (mouseup handles it)
+    if (dragging) return;
 
     // Find combatant at clicked tile
-    const clicked = activeEncounter.combatants?.find(c => {
-      return colToIndex(c.position_col) === clickCol && c.position_row === clickRow;
-    });
+    const clicked = findCombatantAt(tile.col, tile.row);
 
     if (clicked) {
       selectedCombatantId = clicked.id;
@@ -276,8 +565,6 @@
     } else {
       selectedCombatantId = null;
     }
-
-    drawMap();
   }
 
   async function handleApplyDamage() {
@@ -381,11 +668,30 @@
     <div class="workspace-layout">
       <!-- Left panel: Map + Tokens -->
       <div class="map-panel" data-testid="map-panel">
+        <div class="map-toolbar">
+          <button
+            class="tool-btn"
+            class:active={measureMode}
+            onclick={toggleMeasureMode}
+            data-testid="measure-tool-btn"
+          >
+            {measureMode ? 'Exit Measure' : 'Measure Distance'}
+          </button>
+          {#if measureMode && measureStart && measureEnd}
+            <span class="measure-result" data-testid="measure-result">
+              {gridDistance(measureStart.col, measureStart.row, measureEnd.col, measureEnd.row)}ft
+            </span>
+          {/if}
+        </div>
         {#if activeEncounter.map}
           <canvas
             bind:this={canvasEl}
             class="combat-canvas"
             onclick={handleCanvasClick}
+            onmousedown={handleCanvasMouseDown}
+            onmousemove={handleCanvasMouseMove}
+            onmouseup={handleCanvasMouseUp}
+            oncontextmenu={handleCanvasContextMenu}
             data-testid="combat-canvas"
           ></canvas>
         {:else}
@@ -409,6 +715,20 @@
           </div>
         {/if}
       </div>
+
+      <!-- Context menu -->
+      {#if contextMenu}
+        <div
+          class="context-menu"
+          style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
+          data-testid="context-menu"
+        >
+          <button class="context-item" onclick={() => handleContextAction('damage')} data-testid="ctx-damage">Damage</button>
+          <button class="context-item" onclick={() => handleContextAction('heal')} data-testid="ctx-heal">Heal</button>
+          <button class="context-item" onclick={() => handleContextAction('conditions')} data-testid="ctx-conditions">Conditions</button>
+          <button class="context-item context-danger" onclick={() => handleContextAction('remove')} data-testid="ctx-remove">Remove from Encounter</button>
+        </div>
+      {/if}
 
       <!-- HP & Condition Tracker (shown when a token is selected) -->
       {#if selectedCombatant}
@@ -687,5 +1007,72 @@
 
   .error-msg {
     color: #ef4444;
+  }
+
+  .map-toolbar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .tool-btn {
+    padding: 0.3rem 0.8rem;
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+
+  .tool-btn:hover {
+    background: #e94560;
+    border-color: #e94560;
+  }
+
+  .tool-btn.active {
+    background: #fbbf24;
+    color: #1a1a2e;
+    border-color: #fbbf24;
+  }
+
+  .measure-result {
+    color: #fbbf24;
+    font-weight: bold;
+  }
+
+  .context-menu {
+    position: fixed;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    z-index: 100;
+    min-width: 160px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  }
+
+  .context-item {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 1rem;
+    background: none;
+    border: none;
+    color: #e0e0e0;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+
+  .context-item:hover {
+    background: #0f3460;
+  }
+
+  .context-danger {
+    color: #ef4444;
+  }
+
+  .context-danger:hover {
+    background: rgba(239, 68, 68, 0.2);
   }
 </style>

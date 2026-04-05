@@ -106,6 +106,21 @@ export function tokenOpacity(combatant) {
 }
 
 /**
+ * Calculate grid distance in feet using Chebyshev distance.
+ * Diagonals cost 5ft same as cardinal moves per spec.
+ * @param {number} col1 - Start column (0-based).
+ * @param {number} row1 - Start row (0-based).
+ * @param {number} col2 - End column (0-based).
+ * @param {number} row2 - End row (0-based).
+ * @returns {number} Distance in feet.
+ */
+export function gridDistance(col1, row1, col2, row2) {
+  const dc = Math.abs(col2 - col1);
+  const dr = Math.abs(row2 - row1);
+  return Math.max(dc, dr) * 5;
+}
+
+/**
  * Convert a column letter (A-Z, AA, etc.) to a 0-based index.
  */
 export function colToIndex(col) {
@@ -115,4 +130,84 @@ export function colToIndex(col) {
     result = result * 26 + (col.charCodeAt(i) - 64);
   }
   return result - 1;
+}
+
+/**
+ * Convert a 0-based column index to a column letter (A-Z, AA, etc.).
+ * Reverse of colToIndex.
+ */
+export function indexToCol(idx) {
+  let result = '';
+  let n = idx + 1;
+  while (n > 0) {
+    n--;
+    result = String.fromCharCode(65 + (n % 26)) + result;
+    n = Math.floor(n / 26);
+  }
+  return result;
+}
+
+/**
+ * Return all tiles within Chebyshev distance (range in tiles) of a center tile,
+ * excluding the center itself. Clips to map bounds.
+ * @param {number} centerCol - 0-based column.
+ * @param {number} centerRow - 0-based row.
+ * @param {number} rangeTiles - Range in tiles.
+ * @param {number} mapWidth - Map width in tiles.
+ * @param {number} mapHeight - Map height in tiles.
+ * @returns {{ col: number, row: number }[]}
+ */
+export function tilesInRange(centerCol, centerRow, rangeTiles, mapWidth, mapHeight) {
+  if (rangeTiles <= 0) return [];
+  const tiles = [];
+  const minCol = Math.max(0, centerCol - rangeTiles);
+  const maxCol = Math.min(mapWidth - 1, centerCol + rangeTiles);
+  const minRow = Math.max(0, centerRow - rangeTiles);
+  const maxRow = Math.min(mapHeight - 1, centerRow + rangeTiles);
+  for (let r = minRow; r <= maxRow; r++) {
+    for (let c = minCol; c <= maxCol; c++) {
+      if (c === centerCol && r === centerRow) continue;
+      tiles.push({ col: c, row: r });
+    }
+  }
+  return tiles;
+}
+
+/**
+ * Check if a wall blocks movement between two adjacent tiles.
+ * @param {number} col1 - Start column (0-based).
+ * @param {number} row1 - Start row (0-based).
+ * @param {number} col2 - End column (0-based).
+ * @param {number} row2 - End row (0-based).
+ * @param {object[]} walls - Wall objects from Tiled JSON ({ x, y, width, height }).
+ * @param {number} tileSize - Tile size in pixels.
+ * @returns {boolean}
+ */
+export function isWallBetween(col1, row1, col2, row2, walls, tileSize) {
+  for (const wall of walls) {
+    if (wall.width > 0 && wall.height === 0) {
+      // Horizontal wall: blocks vertical movement
+      const wallRow = wall.y / tileSize;
+      const wallColStart = wall.x / tileSize;
+      const wallColEnd = (wall.x + wall.width) / tileSize;
+      if (col1 === col2) {
+        const minRow = Math.min(row1, row2);
+        if (wallRow === minRow + 1 && col1 >= wallColStart && col1 < wallColEnd) {
+          return true;
+        }
+      }
+    } else if (wall.height > 0 && wall.width === 0) {
+      // Vertical wall: blocks horizontal movement
+      const wallCol = wall.x / tileSize;
+      const wallRowStart = wall.y / tileSize;
+      const wallRowEnd = (wall.y + wall.height) / tileSize;
+      if (row1 === row2) {
+        const minCol = Math.min(col1, col2);
+        if (wallCol === minCol + 1 && row1 >= wallRowStart && row1 < wallRowEnd) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }
