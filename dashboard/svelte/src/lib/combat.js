@@ -183,7 +183,106 @@ export function tilesInRange(centerCol, centerRow, rangeTiles, mapWidth, mapHeig
  * @param {number} tileSize - Tile size in pixels.
  * @returns {boolean}
  */
+/**
+ * A* pathfinding on the tile grid.
+ * Uses Chebyshev distance heuristic (diagonals cost 5ft same as cardinal).
+ * @param {number} startCol - Start column (0-based).
+ * @param {number} startRow - Start row (0-based).
+ * @param {number} endCol - End column (0-based).
+ * @param {number} endRow - End row (0-based).
+ * @param {object[]} walls - Wall objects from Tiled JSON.
+ * @param {number} width - Map width in tiles.
+ * @param {number} height - Map height in tiles.
+ * @param {number} tileSize - Tile size in pixels.
+ * @returns {{ path: {col: number, row: number}[], cost: number, found: boolean }}
+ */
+export function findPath(startCol, startRow, endCol, endRow, walls, width, height, tileSize) {
+  if (startCol === endCol && startRow === endRow) {
+    return { path: [{ col: startCol, row: startRow }], cost: 0, found: true };
+  }
+
+  const key = (c, r) => `${c},${r}`;
+  const directions = [
+    [-1, -1], [-1, 0], [-1, 1],
+    [0, -1],           [0, 1],
+    [1, -1],  [1, 0],  [1, 1],
+  ];
+
+  const gScore = new Map();
+  const fScore = new Map();
+  const cameFrom = new Map();
+  const startKey = key(startCol, startRow);
+
+  gScore.set(startKey, 0);
+  fScore.set(startKey, gridDistance(startCol, startRow, endCol, endRow));
+
+  // Simple priority queue using sorted array (fine for grid sizes in D&D)
+  const open = [{ col: startCol, row: startRow, f: fScore.get(startKey) }];
+  const closed = new Set();
+
+  while (open.length > 0) {
+    // Pick node with lowest f-score
+    open.sort((a, b) => a.f - b.f);
+    const current = open.shift();
+    const ck = key(current.col, current.row);
+
+    if (current.col === endCol && current.row === endRow) {
+      // Reconstruct path
+      const path = [{ col: endCol, row: endRow }];
+      let k = ck;
+      while (cameFrom.has(k)) {
+        k = cameFrom.get(k);
+        const [c, r] = k.split(',').map(Number);
+        path.unshift({ col: c, row: r });
+      }
+      return { path, cost: gScore.get(ck), found: true };
+    }
+
+    closed.add(ck);
+
+    for (const [dc, dr] of directions) {
+      const nc = current.col + dc;
+      const nr = current.row + dr;
+
+      if (nc < 0 || nc >= width || nr < 0 || nr >= height) continue;
+
+      const nk = key(nc, nr);
+      if (closed.has(nk)) continue;
+
+      // Check wall between current and neighbor
+      if (isWallBetween(current.col, current.row, nc, nr, walls, tileSize)) continue;
+
+      const tentativeG = gScore.get(ck) + 5; // All moves cost 5ft (Chebyshev)
+
+      if (tentativeG < (gScore.get(nk) ?? Infinity)) {
+        cameFrom.set(nk, ck);
+        gScore.set(nk, tentativeG);
+        const f = tentativeG + gridDistance(nc, nr, endCol, endRow);
+        fScore.set(nk, f);
+
+        if (!open.some(n => n.col === nc && n.row === nr)) {
+          open.push({ col: nc, row: nr, f });
+        }
+      }
+    }
+  }
+
+  return { path: [], cost: Infinity, found: false };
+}
+
 export function isWallBetween(col1, row1, col2, row2, walls, tileSize) {
+  const dc = col2 - col1;
+  const dr = row2 - row1;
+  const isDiagonal = dc !== 0 && dr !== 0;
+
+  if (isDiagonal) {
+    // For diagonal movement, block if either adjacent cardinal edge is walled.
+    // Check the horizontal edge (row boundary) and vertical edge (col boundary).
+    const hBlocked = isWallBetween(col1, row1, col1, row2, walls, tileSize);
+    const vBlocked = isWallBetween(col1, row1, col2, row1, walls, tileSize);
+    return hBlocked || vBlocked;
+  }
+
   for (const wall of walls) {
     if (wall.width > 0 && wall.height === 0) {
       // Horizontal wall: blocks vertical movement

@@ -12,6 +12,7 @@ import {
   gridDistance,
   tilesInRange,
   isWallBetween,
+  findPath,
 } from './combat.js';
 
 // TDD Cycle 1: applyDamage respects temp HP
@@ -265,6 +266,99 @@ describe('isWallBetween', () => {
 
   it('returns false with no walls', () => {
     expect(isWallBetween(0, 0, 1, 0, [], tileSize)).toBe(false);
+  });
+
+  it('detects horizontal wall blocking diagonal movement', () => {
+    // Horizontal wall at y=48 between row 0 and row 1, x=0..48
+    const walls = [{ x: 0, y: 48, width: 48, height: 0 }];
+    // Moving diagonally from (0,0) to (1,1) should be blocked because
+    // the L-shaped path goes through row boundary
+    expect(isWallBetween(0, 0, 1, 1, walls, tileSize)).toBe(true);
+  });
+
+  it('detects vertical wall blocking diagonal movement', () => {
+    // Vertical wall at x=48 between col 0 and col 1, y=0..48
+    const walls = [{ x: 48, y: 0, width: 0, height: 48 }];
+    // Moving diagonally from (0,0) to (1,1) should be blocked
+    expect(isWallBetween(0, 0, 1, 1, walls, tileSize)).toBe(true);
+  });
+
+  it('allows diagonal movement when no wall on either side', () => {
+    // Wall is at a different location
+    const walls = [{ x: 144, y: 0, width: 0, height: 48 }];
+    expect(isWallBetween(0, 0, 1, 1, walls, tileSize)).toBe(false);
+  });
+
+  it('blocks diagonal when both L-shaped paths are walled', () => {
+    // Both horizontal and vertical walls
+    const walls = [
+      { x: 0, y: 48, width: 48, height: 0 },
+      { x: 48, y: 0, width: 0, height: 48 },
+    ];
+    expect(isWallBetween(0, 0, 1, 1, walls, tileSize)).toBe(true);
+  });
+});
+
+// TDD Cycle 12: findPath (A* pathfinding)
+describe('findPath', () => {
+  const tileSize = 48;
+
+  it('finds direct path on open grid', () => {
+    const result = findPath(0, 0, 2, 0, [], 5, 5, tileSize);
+    expect(result.found).toBe(true);
+    expect(result.cost).toBe(10); // 2 tiles * 5ft
+    expect(result.path).toHaveLength(3); // start + 2 steps
+    expect(result.path[0]).toEqual({ col: 0, row: 0 });
+    expect(result.path[2]).toEqual({ col: 2, row: 0 });
+  });
+
+  it('finds diagonal path', () => {
+    const result = findPath(0, 0, 2, 2, [], 5, 5, tileSize);
+    expect(result.found).toBe(true);
+    expect(result.cost).toBe(10); // 2 diagonal steps * 5ft (Chebyshev)
+    expect(result.path[0]).toEqual({ col: 0, row: 0 });
+    expect(result.path[result.path.length - 1]).toEqual({ col: 2, row: 2 });
+  });
+
+  it('returns not found when blocked by walls', () => {
+    // Vertical wall at x=48 from y=0 to y=240 (full height), blocking col 0 from col 1
+    const walls = [{ x: 48, y: 0, width: 0, height: 240 }];
+    const result = findPath(0, 0, 2, 0, walls, 5, 5, tileSize);
+    expect(result.found).toBe(false);
+    expect(result.path).toEqual([]);
+    expect(result.cost).toBe(Infinity);
+  });
+
+  it('finds path around a wall', () => {
+    // Vertical wall at x=48, y=0..48 blocks only row 0
+    const walls = [{ x: 48, y: 0, width: 0, height: 48 }];
+    const result = findPath(0, 0, 2, 0, walls, 5, 5, tileSize);
+    expect(result.found).toBe(true);
+    // Must go around: (0,0) -> (0,1) -> (1,1) -> (2,0) or similar
+    expect(result.cost).toBeGreaterThan(10);
+    expect(result.path[result.path.length - 1]).toEqual({ col: 2, row: 0 });
+  });
+
+  it('returns trivial path for same tile', () => {
+    const result = findPath(3, 3, 3, 3, [], 5, 5, tileSize);
+    expect(result.found).toBe(true);
+    expect(result.cost).toBe(0);
+    expect(result.path).toEqual([{ col: 3, row: 3 }]);
+  });
+
+  it('respects map bounds', () => {
+    // 3x3 grid, try to go from (0,0) to (2,0) with wall blocking direct path
+    // Wall fully blocks the only row-0 path
+    const walls = [{ x: 48, y: 0, width: 0, height: 48 }];
+    const result = findPath(0, 0, 2, 0, walls, 3, 3, tileSize);
+    expect(result.found).toBe(true);
+    // Path should stay within 3x3 bounds
+    for (const step of result.path) {
+      expect(step.col).toBeGreaterThanOrEqual(0);
+      expect(step.col).toBeLessThan(3);
+      expect(step.row).toBeGreaterThanOrEqual(0);
+      expect(step.row).toBeLessThan(3);
+    }
   });
 });
 

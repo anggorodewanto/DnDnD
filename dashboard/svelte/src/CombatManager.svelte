@@ -13,6 +13,7 @@
     gridDistance,
     tilesInRange,
     isWallBetween,
+    findPath,
   } from './lib/combat.js';
   import {
     terrainByGid,
@@ -319,40 +320,67 @@
     const walls = getWalls(tiledMap);
     const startCol = dragging.startCol;
     const startRow = dragging.startRow;
-    const dist = gridDistance(startCol, startRow, dragCol, dragRow);
 
-    // Check if wall blocks the direct cardinal path
-    const blocked = isWallBetween(startCol, startRow, dragCol, dragRow, walls, tileSize);
+    // Use A* pathfinding for movement validation
+    const result = findPath(startCol, startRow, dragCol, dragRow, walls, tiledMap.width, tiledMap.height, tileSize);
+    const blocked = !result.found;
+    const dist = result.cost;
+    const color = blocked ? '#ef4444' : '#22c55e';
 
-    // Draw path line
-    const startCx = startCol * tileSize + tileSize / 2;
-    const startCy = startRow * tileSize + tileSize / 2;
-    const endCx = dragCol * tileSize + tileSize / 2;
-    const endCy = dragRow * tileSize + tileSize / 2;
+    // Draw path tiles
+    if (result.found && result.path.length > 1) {
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = color;
+      for (let i = 1; i < result.path.length - 1; i++) {
+        const step = result.path[i];
+        ctx.fillRect(step.col * tileSize, step.row * tileSize, tileSize, tileSize);
+      }
+      ctx.globalAlpha = 1.0;
 
-    ctx.beginPath();
-    ctx.moveTo(startCx, startCy);
-    ctx.lineTo(endCx, endCy);
-    ctx.strokeStyle = blocked ? '#ef4444' : '#22c55e';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 3]);
-    ctx.stroke();
-    ctx.setLineDash([]);
+      // Draw path line through waypoints
+      ctx.beginPath();
+      const first = result.path[0];
+      ctx.moveTo(first.col * tileSize + tileSize / 2, first.row * tileSize + tileSize / 2);
+      for (let i = 1; i < result.path.length; i++) {
+        const step = result.path[i];
+        ctx.lineTo(step.col * tileSize + tileSize / 2, step.row * tileSize + tileSize / 2);
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      // No path found: draw direct line in red
+      const startCx = startCol * tileSize + tileSize / 2;
+      const startCy = startRow * tileSize + tileSize / 2;
+      const endCx = dragCol * tileSize + tileSize / 2;
+      const endCy = dragRow * tileSize + tileSize / 2;
+      ctx.beginPath();
+      ctx.moveTo(startCx, startCy);
+      ctx.lineTo(endCx, endCy);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // Highlight target tile
     ctx.globalAlpha = 0.3;
-    ctx.fillStyle = blocked ? '#ef4444' : '#22c55e';
+    ctx.fillStyle = color;
     ctx.fillRect(dragCol * tileSize, dragRow * tileSize, tileSize, tileSize);
     ctx.globalAlpha = 1.0;
 
     // Distance text overlay
+    const endCx = dragCol * tileSize + tileSize / 2;
     ctx.font = `bold ${Math.max(12, tileSize * 0.3)}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 3;
-    const label = `${dist}ft`;
+    const label = blocked ? 'Blocked' : `${dist}ft`;
     const textX = endCx;
     const textY = dragRow * tileSize - 4;
     ctx.strokeText(label, textX, textY);
@@ -457,8 +485,25 @@
     const startRow = dragging.startRow;
     const combId = dragging.combatantId;
 
-    // Only update if actually moved
+    // Only update if actually moved and path is valid
     if (dragCol !== startCol || dragRow !== startRow) {
+      const tiledMap = typeof activeEncounter.map.tiled_json === 'string'
+        ? JSON.parse(activeEncounter.map.tiled_json)
+        : activeEncounter.map.tiled_json;
+      const walls = tiledMap ? getWalls(tiledMap) : [];
+      const width = tiledMap?.width || 20;
+      const height = tiledMap?.height || 15;
+      const tileSize = getTileSize(tiledMap);
+      const pathResult = findPath(startCol, startRow, dragCol, dragRow, walls, width, height, tileSize);
+
+      if (!pathResult.found) {
+        // Path blocked — cancel the move
+        dragging = null;
+        dragCol = null;
+        dragRow = null;
+        return;
+      }
+
       try {
         await updateCombatantPosition(
           activeEncounter.id,

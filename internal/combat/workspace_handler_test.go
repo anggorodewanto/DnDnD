@@ -30,6 +30,8 @@ type mockWorkspaceStore struct {
 	getCombatantByIDFn                func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 	updateCombatantPositionFn         func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error)
 	deleteCombatantFn                 func(ctx context.Context, id uuid.UUID) error
+	getCharacterFn                    func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	getCreatureFn                     func(ctx context.Context, id string) (refdata.Creature, error)
 }
 
 func (m *mockWorkspaceStore) ListEncountersByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error) {
@@ -62,8 +64,119 @@ func (m *mockWorkspaceStore) UpdateCombatantPosition(ctx context.Context, arg re
 func (m *mockWorkspaceStore) DeleteCombatant(ctx context.Context, id uuid.UUID) error {
 	return m.deleteCombatantFn(ctx, id)
 }
+func (m *mockWorkspaceStore) GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+	if m.getCharacterFn == nil {
+		return refdata.Character{}, sql.ErrNoRows
+	}
+	return m.getCharacterFn(ctx, id)
+}
+func (m *mockWorkspaceStore) GetCreature(ctx context.Context, id string) (refdata.Creature, error) {
+	if m.getCreatureFn == nil {
+		return refdata.Creature{}, sql.ErrNoRows
+	}
+	return m.getCreatureFn(ctx, id)
+}
+
+// --- TDD Cycle: parseCreatureWalkSpeed ---
+
+func TestParseCreatureWalkSpeed(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    json.RawMessage
+		expected int32
+	}{
+		{"walk speed present", json.RawMessage(`{"walk":30}`), 30},
+		{"fly only defaults to 30", json.RawMessage(`{"fly":60}`), 30},
+		{"walk 25", json.RawMessage(`{"walk":25,"fly":50}`), 25},
+		{"empty JSON", json.RawMessage(`{}`), 30},
+		{"nil input", nil, 30},
+		{"invalid JSON", json.RawMessage(`not json`), 30},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, parseCreatureWalkSpeed(tt.input))
+		})
+	}
+}
 
 // --- TDD Cycle 10: GET /api/combat/workspace returns active encounters ---
+
+func TestWorkspaceHandler_GetWorkspace_IncludesSpeedFt(t *testing.T) {
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	mapID := uuid.New()
+	pcCombatantID := uuid.New()
+	npcCombatantID := uuid.New()
+	charID := uuid.New()
+	turnID := uuid.New()
+
+	store := &mockWorkspaceStore{
+		listEncountersByCampaignIDFn: func(ctx context.Context, cid uuid.UUID) ([]refdata.Encounter, error) {
+			return []refdata.Encounter{
+				{
+					ID: encounterID, CampaignID: campaignID, Name: "Speed Test",
+					Status: "active", RoundNumber: 1,
+					MapID:         uuid.NullUUID{UUID: mapID, Valid: true},
+					CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+				},
+			}, nil
+		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{
+					ID: pcCombatantID, EncounterID: encounterID, ShortID: "PC1",
+					DisplayName: "Fighter", HpMax: 30, HpCurrent: 30, Ac: 18,
+					IsNpc: false, IsAlive: true, Conditions: json.RawMessage(`[]`),
+					CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+				},
+				{
+					ID: npcCombatantID, EncounterID: encounterID, ShortID: "GO1",
+					DisplayName: "Goblin", HpMax: 7, HpCurrent: 7, Ac: 15,
+					IsNpc: true, IsAlive: true, Conditions: json.RawMessage(`[]`),
+					CreatureRefID: sql.NullString{String: "goblin", Valid: true},
+				},
+			}, nil
+		},
+		getMapByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+			return refdata.Map{ID: mapID, WidthSquares: 20, HeightSquares: 15, TiledJson: json.RawMessage(`{}`)}, nil
+		},
+		listEncounterZonesByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.EncounterZone, error) {
+			return []refdata.EncounterZone{}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, CombatantID: pcCombatantID}, nil
+		},
+		getCharacterFn: func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+			assert.Equal(t, charID, id)
+			return refdata.Character{ID: charID, SpeedFt: 30}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			assert.Equal(t, "goblin", id)
+			return refdata.Creature{ID: "goblin", Speed: json.RawMessage(`{"walk":30}`)}, nil
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/workspace?campaign_id="+campaignID.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp workspaceResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	require.Len(t, resp.Encounters, 1)
+	require.Len(t, resp.Encounters[0].Combatants, 2)
+
+	// PC combatant should have speed_ft from character
+	assert.Equal(t, int32(30), resp.Encounters[0].Combatants[0].SpeedFt)
+	// NPC combatant should have speed_ft from creature walk speed
+	assert.Equal(t, int32(30), resp.Encounters[0].Combatants[1].SpeedFt)
+}
 
 func TestWorkspaceHandler_GetWorkspace_Success(t *testing.T) {
 	campaignID := uuid.New()

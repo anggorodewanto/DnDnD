@@ -25,6 +25,8 @@ type WorkspaceStore interface {
 	GetActiveTurnByEncounterID(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
 	UpdateCombatantPosition(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error)
 	DeleteCombatant(ctx context.Context, id uuid.UUID) error
+	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
 }
 
 // WorkspaceHandler serves combat workspace API endpoints.
@@ -82,6 +84,7 @@ type workspaceCombatantResponse struct {
 	Conditions      json.RawMessage `json:"conditions"`
 	ExhaustionLevel int32           `json:"exhaustion_level"`
 	InitiativeOrder int32           `json:"initiative_order"`
+	SpeedFt         int32           `json:"speed_ft"`
 }
 
 type workspaceMapResponse struct {
@@ -174,6 +177,7 @@ func (h *WorkspaceHandler) buildEncounterResponse(ctx context.Context, enc refda
 	combResp := make([]workspaceCombatantResponse, len(combatants))
 	for i, c := range combatants {
 		combResp[i] = toWorkspaceCombatantResponse(c)
+		combResp[i].SpeedFt = h.resolveSpeedFt(ctx, c)
 	}
 
 	var mapResp *workspaceMapResponse
@@ -229,6 +233,39 @@ func (h *WorkspaceHandler) buildEncounterResponse(ctx context.Context, enc refda
 		Zones:                 zoneResp,
 		ActiveTurnCombatantID: activeTurnCombatantID,
 	}, nil
+}
+
+// resolveSpeedFt looks up the speed for a combatant from its source (character or creature).
+// Falls back to 30 if lookup fails.
+func (h *WorkspaceHandler) resolveSpeedFt(ctx context.Context, c refdata.Combatant) int32 {
+	if c.CharacterID.Valid {
+		char, err := h.store.GetCharacter(ctx, c.CharacterID.UUID)
+		if err == nil {
+			return char.SpeedFt
+		}
+	}
+	if c.CreatureRefID.Valid {
+		creature, err := h.store.GetCreature(ctx, c.CreatureRefID.String)
+		if err == nil {
+			return parseCreatureWalkSpeed(creature.Speed)
+		}
+	}
+	return 30
+}
+
+// parseCreatureWalkSpeed extracts the walk speed from a creature speed JSON like {"walk":30,"fly":60}.
+func parseCreatureWalkSpeed(speedJSON json.RawMessage) int32 {
+	if len(speedJSON) == 0 {
+		return 30
+	}
+	var speeds map[string]int32
+	if err := json.Unmarshal(speedJSON, &speeds); err != nil {
+		return 30
+	}
+	if walk, ok := speeds["walk"]; ok {
+		return walk
+	}
+	return 30
 }
 
 func toWorkspaceCombatantResponse(c refdata.Combatant) workspaceCombatantResponse {
