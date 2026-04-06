@@ -2,7 +2,9 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,11 +13,32 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+// errBeginTxFake is the sentinel error returned by fakeTxBeginner.
+var errBeginTxFake = errors.New("fake BeginTx failure")
+
+// fakeTxBeginner is a TxBeginner whose BeginTx always fails.
+// Used to exercise the lock-acquire error branch of withTurnLock without a real DB.
+type fakeTxBeginner struct{}
+
+func (fakeTxBeginner) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
+	return nil, errBeginTxFake
+}
+
+// newDMDashboardRouterWithDB builds a router with the given store, poster, and TxBeginner.
+func newDMDashboardRouterWithDB(store Store, poster CombatLogPoster, db TxBeginner) http.Handler {
+	svc := NewService(store)
+	handler := NewDMDashboardHandlerWithDeps(svc, db, poster)
+	r := chi.NewRouter()
+	handler.RegisterRoutes(r)
+	return r
+}
 
 // fakeCombatLogPoster records PostCorrection calls.
 type fakeCombatLogPoster struct {
@@ -706,4 +729,482 @@ func TestUndoLastAction_UnknownActionType(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+}
+
+// --- Iteration 2: error-path coverage to push dm_dashboard_undo.go above 90% ---
+
+// errStore is a sentinel store error reused throughout the error-path tests.
+var errStoreFake = errors.New("fake store failure")
+
+// helper: build a turn-returning store with optional listLogs / extra setup.
+func turnOnlyStore(turnID, encounterID uuid.UUID) *mockStore {
+	return &mockStore{
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: encounterID}, nil
+		},
+	}
+}
+
+// --- withTurnLock: lock-acquire failure ---
+
+func TestWithTurnLock_LockAcquireError_UndoReturns500(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	logs := []refdata.ActionLog{{
+		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
+		ActionType: "damage", ActorID: uuid.New(),
+		BeforeState: json.RawMessage(`{"hp_current":10}`),
+	}}
+	store := turnOnlyStore(turnID, encounterID)
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		return logs, nil
+	}
+
+	r := newDMDashboardRouterWithDB(store, &fakeCombatLogPoster{}, fakeTxBeginner{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/undo-last-action", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestWithTurnLock_LockAcquireError_OverrideHPReturns500(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+
+	r := newDMDashboardRouterWithDB(store, &fakeCombatLogPoster{}, fakeTxBeginner{})
+	body := `{"hp_current":1,"temp_hp":0,"reason":"x"}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/combatant/"+combatantID.String()+"/hp", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestWithTurnLock_LockAcquireError_SpellSlotsReturns500(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+
+	r := newDMDashboardRouterWithDB(store, &fakeCombatLogPoster{}, fakeTxBeginner{})
+	body := `{"spell_slots":{"1":{"max":1,"used":0}},"reason":"x"}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/spell-slots", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// --- UndoLastAction: list action log failure ---
+
+func TestUndoLastAction_ListActionLogError(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		return nil, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/undo-last-action", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// --- applyUndo: malformed before_state JSON ---
+
+func TestUndoLastAction_MalformedBeforeState(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	logs := []refdata.ActionLog{{
+		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
+		ActionType: "damage", ActorID: uuid.New(),
+		BeforeState: json.RawMessage(`{not json`),
+	}}
+	store := turnOnlyStore(turnID, encounterID)
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		return logs, nil
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/undo-last-action", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// --- applyUndo: GetCombatant failure ---
+
+func TestUndoLastAction_GetCombatantError(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	logs := []refdata.ActionLog{{
+		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
+		ActionType: "damage", ActorID: uuid.New(),
+		BeforeState: json.RawMessage(`{"hp_current":10}`),
+	}}
+	store := turnOnlyStore(turnID, encounterID)
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		return logs, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/undo-last-action", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// --- dispatchUndo: UpdateCombatantHP failure ---
+
+func TestUndoLastAction_DispatchUpdateHPError(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	logs := []refdata.ActionLog{{
+		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
+		ActionType: "damage", ActorID: uuid.New(),
+		BeforeState: json.RawMessage(`{"hp_current":10}`),
+	}}
+	store := turnOnlyStore(turnID, encounterID)
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		return logs, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "x"}, nil
+	}
+	store.updateCombatantHPFn = func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/undo-last-action", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// --- dispatchUndo: UpdateCombatantPosition failure ---
+
+func TestUndoLastAction_DispatchUpdatePositionError(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	logs := []refdata.ActionLog{{
+		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
+		ActionType: "move", ActorID: uuid.New(),
+		BeforeState: json.RawMessage(`{"position_col":"A","position_row":1}`),
+	}}
+	store := turnOnlyStore(turnID, encounterID)
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		return logs, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "x"}, nil
+	}
+	store.updateCombatantPositionFn = func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/undo-last-action", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// --- dispatchUndo: UpdateCombatantConditions failure ---
+
+func TestUndoLastAction_DispatchUpdateConditionsError(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	logs := []refdata.ActionLog{{
+		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
+		ActionType: "condition_change", ActorID: uuid.New(),
+		BeforeState: json.RawMessage(`{"conditions":[{"condition":"prone"}]}`),
+	}}
+	store := turnOnlyStore(turnID, encounterID)
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		return logs, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "x"}, nil
+	}
+	store.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/undo-last-action", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// --- parseCombatantOverrideIDs: invalid encounter ID on combatant override route ---
+
+func TestOverrideCombatantHP_InvalidEncounterID(t *testing.T) {
+	r := newDMDashboardRouterWithPoster(&mockStore{}, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/not-uuid/override/combatant/"+uuid.New().String()+"/hp", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// --- OverrideCombatantHP: store error paths ---
+
+func TestOverrideCombatantHP_GetCombatantError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/combatant/"+combatantID.String()+"/hp", strings.NewReader(`{"hp_current":1,"temp_hp":0}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestOverrideCombatantHP_UpdateError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "x"}, nil
+	}
+	store.updateCombatantHPFn = func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/combatant/"+combatantID.String()+"/hp", strings.NewReader(`{"hp_current":1,"temp_hp":0}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// --- OverrideCombatantPosition: store error paths ---
+
+func TestOverrideCombatantPosition_GetCombatantError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/combatant/"+combatantID.String()+"/position", strings.NewReader(`{"position_col":"A","position_row":1,"altitude_ft":0}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestOverrideCombatantPosition_UpdateError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "x"}, nil
+	}
+	store.updateCombatantPositionFn = func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/combatant/"+combatantID.String()+"/position", strings.NewReader(`{"position_col":"A","position_row":1,"altitude_ft":0}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// --- OverrideCombatantConditions: store error paths + empty conditions branch ---
+
+func TestOverrideCombatantConditions_GetCombatantError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/combatant/"+combatantID.String()+"/conditions", strings.NewReader(`{"conditions":[]}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestOverrideCombatantConditions_UpdateError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "x"}, nil
+	}
+	store.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/combatant/"+combatantID.String()+"/conditions", strings.NewReader(`{"conditions":[{"condition":"blessed"}]}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// Empty conditions array path: when req.Conditions is empty/missing the handler
+// should default to `[]`. Verifies the conditions == 0 branch in OverrideCombatantConditions.
+func TestOverrideCombatantConditions_EmptyDefaultsToArray(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+
+	var passed json.RawMessage
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "x", Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		passed = arg.Conditions
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+	store.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		return refdata.ActionLog{}, nil
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	// Body without conditions field — req.Conditions will be empty.
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/combatant/"+combatantID.String()+"/conditions", strings.NewReader(`{"reason":"clear"}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "[]", string(passed))
+}
+
+// --- OverrideCombatantInitiative: store error paths ---
+
+func TestOverrideCombatantInitiative_GetCombatantError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/combatant/"+combatantID.String()+"/initiative", strings.NewReader(`{"initiative_roll":5,"initiative_order":1}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestOverrideCombatantInitiative_UpdateError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, DisplayName: "x"}, nil
+	}
+	store.updateCombatantInitiativeFn = func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/combatant/"+combatantID.String()+"/initiative", strings.NewReader(`{"initiative_roll":5,"initiative_order":1}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// --- OverrideCharacterSpellSlots: store error paths and SpellSlots.Valid branch ---
+
+func TestOverrideCharacterSpellSlots_GetCharacterError(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/spell-slots", strings.NewReader(`{"spell_slots":{"1":{"max":1,"used":0}}}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestOverrideCharacterSpellSlots_UpdateError(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: id, Name: "x"}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{}, errStoreFake
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/spell-slots", strings.NewReader(`{"spell_slots":{"1":{"max":1,"used":0}}}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// Covers the SpellSlots.Valid == true branch (existing happy-path test had an empty SpellSlots).
+func TestOverrideCharacterSpellSlots_PreservesPreviousSlotsAsBefore(t *testing.T) {
+	encounterID := uuid.New()
+	characterID := uuid.New()
+	turnID := uuid.New()
+	prev := json.RawMessage(`{"1":{"max":2,"used":1}}`)
+
+	var loggedBefore json.RawMessage
+	store := turnOnlyStore(turnID, encounterID)
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID: id, Name: "x",
+			SpellSlots: pqtype.NullRawMessage{Valid: true, RawMessage: prev},
+		}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		loggedBefore = arg.BeforeState
+		return refdata.ActionLog{}, nil
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/override/character/"+characterID.String()+"/spell-slots", strings.NewReader(`{"spell_slots":{"1":{"max":4,"used":0}}}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, string(prev), string(loggedBefore))
 }
