@@ -569,7 +569,7 @@
   - Depends on: Phase 15, Phase 26a
   - Done when: DM can view map with tokens rendered from JSON, click tokens to modify HP/conditions, switch between encounter tabs.
 
-- [ ] **Phase 94b: DM Dashboard — Combat Manager: Movement & Interaction**
+- [x] **Phase 94b: DM Dashboard — Combat Manager: Movement & Interaction**
   - Scope: Drag-and-drop token movement on grid with snap-to-tile. Auto-calculate distance on drag (shown as overlay). Range circles on token select. Movement validation against walls/obstacles. Distance measurement tool (click two points). Token context menu (damage, heal, conditions, remove from encounter).
   - Depends on: Phase 94a
   - Done when: DM can drag tokens with distance display, range circles shown, movement validated, distance measurement works.

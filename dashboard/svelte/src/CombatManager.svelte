@@ -12,7 +12,6 @@
     tokenOpacity,
     gridDistance,
     tilesInRange,
-    isWallBetween,
     findPath,
   } from './lib/combat.js';
   import {
@@ -102,6 +101,13 @@
     }
   }
 
+  function parseTiledMap(mapData) {
+    if (!mapData?.tiled_json) return null;
+    return typeof mapData.tiled_json === 'string'
+      ? JSON.parse(mapData.tiled_json)
+      : mapData.tiled_json;
+  }
+
   function getTileSize(tiledMap) {
     return tiledMap?.tilewidth || 48;
   }
@@ -109,11 +115,7 @@
   function drawMap() {
     if (!canvasEl || !activeEncounter?.map) return;
 
-    const mapData = activeEncounter.map;
-    const tiledMap = typeof mapData.tiled_json === 'string'
-      ? JSON.parse(mapData.tiled_json)
-      : mapData.tiled_json;
-
+    const tiledMap = parseTiledMap(activeEncounter.map);
     if (!tiledMap) return;
 
     const tileSize = getTileSize(tiledMap);
@@ -296,7 +298,6 @@
     const rangeTiles = Math.floor(speedFt / 5);
     const col = colToIndex(comb.position_col);
     const row = comb.position_row;
-    const walls = getWalls(tiledMap);
 
     const tiles = tilesInRange(col, row, rangeTiles, tiledMap.width, tiledMap.height);
     ctx.globalAlpha = 0.15;
@@ -419,10 +420,7 @@
   function getCanvasTile(e) {
     if (!canvasEl || !activeEncounter?.map) return null;
 
-    const tiledMap = typeof activeEncounter.map.tiled_json === 'string'
-      ? JSON.parse(activeEncounter.map.tiled_json)
-      : activeEncounter.map.tiled_json;
-
+    const tiledMap = parseTiledMap(activeEncounter.map);
     if (!tiledMap) return null;
 
     const tileSize = getTileSize(tiledMap);
@@ -487,9 +485,7 @@
 
     // Only update if actually moved and path is valid
     if (dragCol !== startCol || dragRow !== startRow) {
-      const tiledMap = typeof activeEncounter.map.tiled_json === 'string'
-        ? JSON.parse(activeEncounter.map.tiled_json)
-        : activeEncounter.map.tiled_json;
+      const tiledMap = parseTiledMap(activeEncounter.map);
       const walls = tiledMap ? getWalls(tiledMap) : [];
       const width = tiledMap?.width || 20;
       const height = tiledMap?.height || 15;

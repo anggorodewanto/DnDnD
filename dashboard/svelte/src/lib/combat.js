@@ -174,16 +174,6 @@ export function tilesInRange(centerCol, centerRow, rangeTiles, mapWidth, mapHeig
 }
 
 /**
- * Check if a wall blocks movement between two adjacent tiles.
- * @param {number} col1 - Start column (0-based).
- * @param {number} row1 - Start row (0-based).
- * @param {number} col2 - End column (0-based).
- * @param {number} row2 - End row (0-based).
- * @param {object[]} walls - Wall objects from Tiled JSON ({ x, y, width, height }).
- * @param {number} tileSize - Tile size in pixels.
- * @returns {boolean}
- */
-/**
  * A* pathfinding on the tile grid.
  * Uses Chebyshev distance heuristic (diagonals cost 5ft same as cardinal).
  * @param {number} startCol - Start column (0-based).
@@ -209,15 +199,14 @@ export function findPath(startCol, startRow, endCol, endRow, walls, width, heigh
   ];
 
   const gScore = new Map();
-  const fScore = new Map();
   const cameFrom = new Map();
   const startKey = key(startCol, startRow);
 
   gScore.set(startKey, 0);
-  fScore.set(startKey, gridDistance(startCol, startRow, endCol, endRow));
 
   // Simple priority queue using sorted array (fine for grid sizes in D&D)
-  const open = [{ col: startCol, row: startRow, f: fScore.get(startKey) }];
+  const startF = gridDistance(startCol, startRow, endCol, endRow);
+  const open = [{ col: startCol, row: startRow, f: startF }];
   const closed = new Set();
 
   while (open.length > 0) {
@@ -258,7 +247,6 @@ export function findPath(startCol, startRow, endCol, endRow, walls, width, heigh
         cameFrom.set(nk, ck);
         gScore.set(nk, tentativeG);
         const f = tentativeG + gridDistance(nc, nr, endCol, endRow);
-        fScore.set(nk, f);
 
         if (!open.some(n => n.col === nc && n.row === nr)) {
           open.push({ col: nc, row: nr, f });
@@ -270,6 +258,17 @@ export function findPath(startCol, startRow, endCol, endRow, walls, width, heigh
   return { path: [], cost: Infinity, found: false };
 }
 
+/**
+ * Check if a wall blocks movement between two adjacent tiles.
+ * For diagonal moves, blocks if either adjacent cardinal edge is walled.
+ * @param {number} col1 - Start column (0-based).
+ * @param {number} row1 - Start row (0-based).
+ * @param {number} col2 - End column (0-based).
+ * @param {number} row2 - End row (0-based).
+ * @param {object[]} walls - Wall objects from Tiled JSON ({ x, y, width, height }).
+ * @param {number} tileSize - Tile size in pixels.
+ * @returns {boolean}
+ */
 export function isWallBetween(col1, row1, col2, row2, walls, tileSize) {
   const dc = col2 - col1;
   const dr = row2 - row1;
