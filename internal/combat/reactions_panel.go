@@ -11,16 +11,22 @@ import (
 
 // ReactionPanelEntry is an enriched reaction declaration for the DM dashboard panel.
 type ReactionPanelEntry struct {
-	ID                     uuid.UUID `json:"id"`
-	EncounterID            uuid.UUID `json:"encounter_id"`
-	CombatantID            uuid.UUID `json:"combatant_id"`
-	CombatantDisplayName   string    `json:"combatant_display_name"`
-	CombatantShortID       string    `json:"combatant_short_id"`
-	Description            string    `json:"description"`
-	Status                 string    `json:"status"`
-	IsReadiedAction        bool      `json:"is_readied_action"`
-	ReactionUsedThisRound  bool      `json:"reaction_used_this_round"`
-	IsNpc                  bool      `json:"is_npc"`
+	ID                    uuid.UUID `json:"id"`
+	EncounterID           uuid.UUID `json:"encounter_id"`
+	CombatantID           uuid.UUID `json:"combatant_id"`
+	CombatantDisplayName  string    `json:"combatant_display_name"`
+	CombatantShortID      string    `json:"combatant_short_id"`
+	Description           string    `json:"description"`
+	Status                string    `json:"status"`
+	IsReadiedAction       bool      `json:"is_readied_action"`
+	ReactionUsedThisRound bool      `json:"reaction_used_this_round"`
+	IsNpc                 bool      `json:"is_npc"`
+}
+
+type combatantInfo struct {
+	DisplayName string
+	ShortID     string
+	IsNpc       bool
 }
 
 // ListReactionsForPanel returns all reaction declarations for an encounter,
@@ -40,41 +46,19 @@ func (s *Service) ListReactionsForPanel(ctx context.Context, encounterID uuid.UU
 		return nil, err
 	}
 
-	combatantMap := make(map[uuid.UUID]struct {
-		DisplayName string
-		ShortID     string
-		IsNpc       bool
-	}, len(combatants))
+	infoByID := make(map[uuid.UUID]combatantInfo, len(combatants))
 	for _, c := range combatants {
-		combatantMap[c.ID] = struct {
-			DisplayName string
-			ShortID     string
-			IsNpc       bool
-		}{DisplayName: c.DisplayName, ShortID: c.ShortID, IsNpc: c.IsNpc}
+		infoByID[c.ID] = combatantInfo{DisplayName: c.DisplayName, ShortID: c.ShortID, IsNpc: c.IsNpc}
 	}
 
-	// Build reaction-used-this-round map from current round turns
-	reactionUsedMap := make(map[uuid.UUID]bool)
-	activeTurn, err := s.store.GetActiveTurnByEncounterID(ctx, encounterID)
-	if err == nil {
-		turns, tErr := s.store.ListTurnsByEncounterAndRound(ctx, refdata.ListTurnsByEncounterAndRoundParams{
-			EncounterID: encounterID,
-			RoundNumber: activeTurn.RoundNumber,
-		})
-		if tErr == nil {
-			for _, t := range turns {
-				if t.ReactionUsed {
-					reactionUsedMap[t.CombatantID] = true
-				}
-			}
-		}
-	} else if err != sql.ErrNoRows {
+	reactionUsedMap, err := s.buildReactionUsedMap(ctx, encounterID)
+	if err != nil {
 		return nil, err
 	}
 
 	result := make([]ReactionPanelEntry, len(decls))
 	for i, d := range decls {
-		info := combatantMap[d.CombatantID]
+		info := infoByID[d.CombatantID]
 		result[i] = ReactionPanelEntry{
 			ID:                    d.ID,
 			EncounterID:           d.EncounterID,
@@ -90,4 +74,31 @@ func (s *Service) ListReactionsForPanel(ctx context.Context, encounterID uuid.UU
 	}
 
 	return result, nil
+}
+
+// buildReactionUsedMap returns a map of combatant IDs that have used their reaction this round.
+func (s *Service) buildReactionUsedMap(ctx context.Context, encounterID uuid.UUID) (map[uuid.UUID]bool, error) {
+	activeTurn, err := s.store.GetActiveTurnByEncounterID(ctx, encounterID)
+	if err == sql.ErrNoRows {
+		return map[uuid.UUID]bool{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	turns, err := s.store.ListTurnsByEncounterAndRound(ctx, refdata.ListTurnsByEncounterAndRoundParams{
+		EncounterID: encounterID,
+		RoundNumber: activeTurn.RoundNumber,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	used := make(map[uuid.UUID]bool, len(turns))
+	for _, t := range turns {
+		if t.ReactionUsed {
+			used[t.CombatantID] = true
+		}
+	}
+	return used, nil
 }

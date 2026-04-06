@@ -579,7 +579,7 @@
   - Depends on: Phase 94a
   - Done when: DM can view initiative order, end turns, resolve queue items with mechanical effects applied.
 
-- [ ] **Phase 96: DM Dashboard — Active Reactions Panel**
+- [x] **Phase 96: DM Dashboard — Active Reactions Panel**
   - Scope: Always-visible panel showing all active `/reaction` declarations grouped by combatant. Status: active/used/dormant. Highlight matching declarations during enemy turn resolution. Click to resolve or dismiss. Consumed reactions greyed until turn reset.
   - Depends on: Phase 70, Phase 94a
   - Done when: Panel shows all declarations, highlights during enemy turns, DM can resolve/dismiss, reaction status tracked.

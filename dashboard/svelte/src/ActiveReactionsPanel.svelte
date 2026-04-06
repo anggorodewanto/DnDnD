@@ -56,31 +56,17 @@
     }
   }
 
-  /**
-   * Compute effective display status:
-   * - "used" if status='used'
-   * - "cancelled" if status='cancelled'
-   * - "dormant" if status='active' but reaction already used this round
-   * - "active" if status='active' and reaction not used this round
-   */
   function effectiveStatus(reaction) {
     if (reaction.status !== 'active') return reaction.status;
     if (reaction.reaction_used_this_round) return 'dormant';
     return 'active';
   }
 
-  /**
-   * Whether to highlight this reaction during enemy turn resolution.
-   * Highlight active (non-dormant) reactions when an NPC is taking their turn.
-   */
   function shouldHighlight(reaction) {
     if (!activeTurnIsNpc) return false;
     return effectiveStatus(reaction) === 'active';
   }
 
-  /**
-   * Group reactions by combatant for display.
-   */
   let groupedReactions = $derived((() => {
     const groups = new Map();
     for (const r of reactions) {
@@ -117,24 +103,25 @@
         </div>
         <ul class="reaction-list">
           {#each group.reactions as reaction}
+            {@const status = effectiveStatus(reaction)}
             <li
               class="reaction-item"
-              class:used={effectiveStatus(reaction) === 'used'}
-              class:cancelled={effectiveStatus(reaction) === 'cancelled'}
-              class:dormant={effectiveStatus(reaction) === 'dormant'}
+              class:used={status === 'used'}
+              class:cancelled={status === 'cancelled'}
+              class:dormant={status === 'dormant'}
               class:highlighted={shouldHighlight(reaction)}
               data-testid="reaction-{reaction.id}"
             >
               <div class="reaction-info">
                 <span class="reaction-desc">{reaction.description}</span>
-                <span class="status-badge status-{effectiveStatus(reaction)}">
-                  {effectiveStatus(reaction)}
+                <span class="status-badge status-{status}">
+                  {status}
                 </span>
                 {#if reaction.is_readied_action}
                   <span class="readied-badge">Readied</span>
                 {/if}
               </div>
-              {#if effectiveStatus(reaction) === 'active'}
+              {#if status === 'active'}
                 <div class="reaction-actions">
                   <button
                     class="resolve-btn"
