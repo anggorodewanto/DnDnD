@@ -584,7 +584,7 @@
   - Depends on: Phase 70, Phase 94a
   - Done when: Panel shows all declarations, highlights during enemy turns, DM can resolve/dismiss, reaction status tracked.
 
-- [ ] **Phase 97a: DM Dashboard — Action Log Viewer**
+- [x] **Phase 97a: DM Dashboard — Action Log Viewer**
   - Scope: Action Log viewer panel: display action_log entries with filter by type/character/turn/round, sort chronologically, before/after state diff rendering for each entry. Expandable entries showing full detail.
   - Depends on: Phase 24, Phase 94a
   - Done when: Action log viewer renders entries, filters work correctly, diff view shows before/after state changes.

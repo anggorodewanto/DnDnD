@@ -3,7 +3,9 @@ package combat
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -187,42 +189,47 @@ func parseActionLogFilter(r *http.Request) (ActionLogFilter, error) {
 		ActionTypes: parseActionTypes(q["action_type"]),
 	}
 
-	if v := q.Get("actor_id"); v != "" {
-		id, err := uuid.Parse(v)
-		if err != nil {
-			return filter, errInvalidQuery("actor_id")
-		}
-		filter.ActorID = id
+	actorID, err := parseUUIDQuery(q, "actor_id")
+	if err != nil {
+		return filter, err
 	}
+	filter.ActorID = actorID
 
-	if v := q.Get("target_id"); v != "" {
-		id, err := uuid.Parse(v)
-		if err != nil {
-			return filter, errInvalidQuery("target_id")
-		}
-		filter.TargetID = id
+	targetID, err := parseUUIDQuery(q, "target_id")
+	if err != nil {
+		return filter, err
 	}
+	filter.TargetID = targetID
 
-	if v := q.Get("turn_id"); v != "" {
-		id, err := uuid.Parse(v)
-		if err != nil {
-			return filter, errInvalidQuery("turn_id")
-		}
-		filter.TurnID = id
+	turnID, err := parseUUIDQuery(q, "turn_id")
+	if err != nil {
+		return filter, err
 	}
+	filter.TurnID = turnID
 
 	if v := q.Get("round"); v != "" {
 		round, err := strconv.Atoi(v)
 		if err != nil {
-			return filter, errInvalidQuery("round")
+			return filter, fmt.Errorf("invalid round")
 		}
 		filter.Round = int32(round)
 	}
 
-	if q.Get("sort") == "asc" {
-		filter.SortAsc = true
-	}
+	filter.SortAsc = q.Get("sort") == "asc"
 	return filter, nil
+}
+
+// parseUUIDQuery returns the parsed UUID for the given query field, or uuid.Nil if absent.
+func parseUUIDQuery(q url.Values, field string) (uuid.UUID, error) {
+	v := q.Get(field)
+	if v == "" {
+		return uuid.Nil, nil
+	}
+	id, err := uuid.Parse(v)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("invalid %s", field)
+	}
+	return id, nil
 }
 
 // parseActionTypes flattens repeated + comma-separated action_type query values.
@@ -242,10 +249,4 @@ func parseActionTypes(values []string) []string {
 	}
 	return out
 }
-
-type queryParamError struct{ Field string }
-
-func (e queryParamError) Error() string { return "invalid " + e.Field }
-
-func errInvalidQuery(field string) error { return queryParamError{Field: field} }
 

@@ -18,7 +18,7 @@ export function diffStates(before, after) {
       out.push({ field: key, before: b[key], after: a[key] });
     }
   }
-  out.sort((x, y) => (x.field < y.field ? -1 : x.field > y.field ? 1 : 0));
+  out.sort((x, y) => x.field.localeCompare(y.field));
   return out;
 }
 
