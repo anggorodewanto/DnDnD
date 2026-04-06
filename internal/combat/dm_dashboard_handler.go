@@ -1,6 +1,7 @@
 package combat
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -10,14 +11,35 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// DMDashboardHandler serves DM Dashboard API endpoints for turn queue and action resolution.
-type DMDashboardHandler struct {
-	svc *Service
+// CombatLogPoster posts DM correction messages to the campaign's #combat-log Discord channel.
+// Implementations should NEVER edit/delete prior messages — corrections are appended.
+type CombatLogPoster interface {
+	PostCorrection(ctx context.Context, encounterID uuid.UUID, message string)
 }
 
-// NewDMDashboardHandler creates a new DMDashboardHandler.
+// DMDashboardHandler serves DM Dashboard API endpoints for turn queue and action resolution.
+//
+// db (TxBeginner) is optional; when non-nil, mutating endpoints acquire a per-turn
+// advisory lock via AcquireTurnLock before applying changes. Unit tests pass nil
+// to skip the lock; integration tests provide a real *sql.DB.
+//
+// poster (CombatLogPoster) is optional; when non-nil, manual corrections are posted
+// to the campaign's #combat-log Discord channel.
+type DMDashboardHandler struct {
+	svc    *Service
+	db     TxBeginner
+	poster CombatLogPoster
+}
+
+// NewDMDashboardHandler creates a DMDashboardHandler with no DB locking and no Discord poster.
 func NewDMDashboardHandler(svc *Service) *DMDashboardHandler {
 	return &DMDashboardHandler{svc: svc}
+}
+
+// NewDMDashboardHandlerWithDeps creates a DMDashboardHandler with optional DB locking
+// and a Discord combat-log poster for DM corrections.
+func NewDMDashboardHandlerWithDeps(svc *Service, db TxBeginner, poster CombatLogPoster) *DMDashboardHandler {
+	return &DMDashboardHandler{svc: svc, db: db, poster: poster}
 }
 
 // RegisterRoutes mounts DM dashboard API routes on the given Chi router.
@@ -27,6 +49,12 @@ func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/{encounterID}/pending-actions", h.ListPendingActions)
 		r.Post("/{encounterID}/pending-actions/{actionID}/resolve", h.ResolvePendingAction)
 		r.Get("/{encounterID}/action-log", h.ListActionLogViewer)
+		r.Post("/{encounterID}/undo-last-action", h.UndoLastAction)
+		r.Post("/{encounterID}/override/combatant/{combatantID}/hp", h.OverrideCombatantHP)
+		r.Post("/{encounterID}/override/combatant/{combatantID}/position", h.OverrideCombatantPosition)
+		r.Post("/{encounterID}/override/combatant/{combatantID}/conditions", h.OverrideCombatantConditions)
+		r.Post("/{encounterID}/override/combatant/{combatantID}/initiative", h.OverrideCombatantInitiative)
+		r.Post("/{encounterID}/override/character/{characterID}/spell-slots", h.OverrideCharacterSpellSlots)
 	})
 }
 

@@ -565,6 +565,98 @@ export async function cancelReaction(encounterId, reactionId) {
   return res.json();
 }
 
+// --- Undo & Manual Override API (Phase 97b) ---
+
+/**
+ * Undo the most recent mutation in the current turn.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} [reason] - Optional reason text shown in the Discord correction.
+ * @returns {Promise<object>} Status payload.
+ */
+export async function undoLastAction(encounterId, reason = '') {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/undo-last-action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  });
+  return res.json();
+}
+
+/**
+ * Manually override a combatant's HP.
+ * @param {string} encounterId
+ * @param {string} combatantId
+ * @param {{hp_current:number, temp_hp:number, reason?:string}} payload
+ */
+export async function overrideCombatantHP(encounterId, combatantId, payload) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/override/combatant/${combatantId}/hp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/**
+ * Manually override a combatant's position.
+ * @param {string} encounterId
+ * @param {string} combatantId
+ * @param {{position_col:string, position_row:number, altitude_ft?:number, reason?:string}} payload
+ */
+export async function overrideCombatantPosition(encounterId, combatantId, payload) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/override/combatant/${combatantId}/position`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ altitude_ft: 0, ...payload }),
+  });
+  return res.json();
+}
+
+/**
+ * Manually override a combatant's conditions.
+ * @param {string} encounterId
+ * @param {string} combatantId
+ * @param {{conditions:object[], reason?:string}} payload
+ */
+export async function overrideCombatantConditions(encounterId, combatantId, payload) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/override/combatant/${combatantId}/conditions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/**
+ * Manually override a combatant's initiative.
+ * @param {string} encounterId
+ * @param {string} combatantId
+ * @param {{initiative_roll:number, initiative_order:number, reason?:string}} payload
+ */
+export async function overrideCombatantInitiative(encounterId, combatantId, payload) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/override/combatant/${combatantId}/initiative`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/**
+ * Manually override a character's spell slots.
+ * @param {string} encounterId
+ * @param {string} characterId
+ * @param {{spell_slots:object, reason?:string}} payload
+ */
+export async function overrideCharacterSpellSlots(encounterId, characterId, payload) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/override/character/${characterId}/spell-slots`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 // --- Action Log Viewer API ---
 
 /**

@@ -1,5 +1,17 @@
 <script>
-  import { getCombatWorkspace, updateCombatantHP, updateCombatantConditions, updateCombatantPosition, removeCombatant } from './lib/api.js';
+  import {
+    getCombatWorkspace,
+    updateCombatantHP,
+    updateCombatantConditions,
+    updateCombatantPosition,
+    removeCombatant,
+    undoLastAction,
+    overrideCombatantHP as dmOverrideHP,
+    overrideCombatantPosition as dmOverridePosition,
+    overrideCombatantConditions as dmOverrideConditions,
+    overrideCombatantInitiative,
+    overrideCharacterSpellSlots,
+  } from './lib/api.js';
   import {
     applyDamage,
     applyHealing,
@@ -89,6 +101,115 @@
   let selectedCombatant = $derived(
     activeEncounter?.combatants?.find(c => c.id === selectedCombatantId) || null
   );
+
+  // --- DM Dashboard: Undo & Manual Override (Phase 97b) ---
+  let dmOverrideOpen = $state(false);
+  let dmOverrideReason = $state('');
+  let dmOverrideMessage = $state('');
+  let dmOverrideHpInput = $state(0);
+  let dmOverrideTempHpInput = $state(0);
+  let dmOverridePosCol = $state('');
+  let dmOverridePosRow = $state(0);
+  let dmOverrideAltitude = $state(0);
+  let dmOverrideConditionsText = $state('[]');
+  let dmOverrideInitiativeRoll = $state(0);
+  let dmOverrideInitiativeOrder = $state(0);
+  let dmOverrideSpellSlotsText = $state('{}');
+  let dmUndoReason = $state('');
+
+  async function handleUndoLastAction() {
+    if (!activeEncounter) return;
+    dmOverrideMessage = '';
+    try {
+      await undoLastAction(activeEncounter.id, dmUndoReason);
+      dmUndoReason = '';
+      dmOverrideMessage = 'Undone.';
+      await loadWorkspace();
+    } catch (e) {
+      dmOverrideMessage = 'Undo failed: ' + e.message;
+    }
+  }
+
+  async function handleOverrideHP() {
+    if (!activeEncounter || !selectedCombatant) return;
+    dmOverrideMessage = '';
+    try {
+      await dmOverrideHP(activeEncounter.id, selectedCombatant.id, {
+        hp_current: Number(dmOverrideHpInput),
+        temp_hp: Number(dmOverrideTempHpInput),
+        reason: dmOverrideReason,
+      });
+      dmOverrideMessage = 'HP override saved.';
+      await loadWorkspace();
+    } catch (e) {
+      dmOverrideMessage = 'Override failed: ' + e.message;
+    }
+  }
+
+  async function handleOverridePosition() {
+    if (!activeEncounter || !selectedCombatant) return;
+    dmOverrideMessage = '';
+    try {
+      await dmOverridePosition(activeEncounter.id, selectedCombatant.id, {
+        position_col: dmOverridePosCol,
+        position_row: Number(dmOverridePosRow),
+        altitude_ft: Number(dmOverrideAltitude),
+        reason: dmOverrideReason,
+      });
+      dmOverrideMessage = 'Position override saved.';
+      await loadWorkspace();
+    } catch (e) {
+      dmOverrideMessage = 'Override failed: ' + e.message;
+    }
+  }
+
+  async function handleOverrideConditions() {
+    if (!activeEncounter || !selectedCombatant) return;
+    dmOverrideMessage = '';
+    try {
+      const parsed = JSON.parse(dmOverrideConditionsText || '[]');
+      await dmOverrideConditions(activeEncounter.id, selectedCombatant.id, {
+        conditions: parsed,
+        reason: dmOverrideReason,
+      });
+      dmOverrideMessage = 'Conditions override saved.';
+      await loadWorkspace();
+    } catch (e) {
+      dmOverrideMessage = 'Override failed: ' + e.message;
+    }
+  }
+
+  async function handleOverrideInitiative() {
+    if (!activeEncounter || !selectedCombatant) return;
+    dmOverrideMessage = '';
+    try {
+      await overrideCombatantInitiative(activeEncounter.id, selectedCombatant.id, {
+        initiative_roll: Number(dmOverrideInitiativeRoll),
+        initiative_order: Number(dmOverrideInitiativeOrder),
+        reason: dmOverrideReason,
+      });
+      dmOverrideMessage = 'Initiative override saved.';
+      await loadWorkspace();
+    } catch (e) {
+      dmOverrideMessage = 'Override failed: ' + e.message;
+    }
+  }
+
+  async function handleOverrideSpellSlots() {
+    if (!activeEncounter || !selectedCombatant?.character_id) return;
+    dmOverrideMessage = '';
+    try {
+      const parsed = JSON.parse(dmOverrideSpellSlotsText || '{}');
+      await overrideCharacterSpellSlots(activeEncounter.id, selectedCombatant.character_id, {
+        spell_slots: parsed,
+        reason: dmOverrideReason,
+      });
+      dmOverrideMessage = 'Spell slots override saved.';
+      await loadWorkspace();
+    } catch (e) {
+      dmOverrideMessage = 'Override failed: ' + e.message;
+    }
+  }
 
   async function loadWorkspace() {
     try {
@@ -797,6 +918,82 @@
         />
 
         <ActionLogViewer encounterId={activeEncounter.id} />
+
+        <!-- DM Dashboard: Undo & Manual Overrides (Phase 97b) -->
+        <div class="dm-override-panel" data-testid="dm-override-panel">
+          <div class="dm-override-row">
+            <input
+              type="text"
+              placeholder="Undo reason (optional)"
+              bind:value={dmUndoReason}
+              data-testid="undo-reason-input"
+            />
+            <button onclick={handleUndoLastAction} data-testid="undo-last-action-btn">
+              Undo Last Action
+            </button>
+          </div>
+          <button
+            class="dm-override-toggle"
+            onclick={() => (dmOverrideOpen = !dmOverrideOpen)}
+            data-testid="dm-override-toggle"
+          >
+            {dmOverrideOpen ? '▼' : '▶'} Manual Override
+          </button>
+          {#if dmOverrideOpen}
+            <div class="dm-override-content" data-testid="dm-override-content">
+              {#if !selectedCombatant}
+                <p class="dm-override-hint">Select a combatant to enable manual overrides.</p>
+              {:else}
+                <p>Overriding: <strong>{selectedCombatant.display_name}</strong></p>
+                <textarea
+                  placeholder="Reason (required for clarity)"
+                  bind:value={dmOverrideReason}
+                  rows="2"
+                  data-testid="override-reason-input"
+                ></textarea>
+
+                <fieldset>
+                  <legend>HP</legend>
+                  <label>Current: <input type="number" bind:value={dmOverrideHpInput} data-testid="override-hp-current" /></label>
+                  <label>Temp: <input type="number" bind:value={dmOverrideTempHpInput} data-testid="override-hp-temp" /></label>
+                  <button onclick={handleOverrideHP} data-testid="override-hp-btn">Apply HP</button>
+                </fieldset>
+
+                <fieldset>
+                  <legend>Position</legend>
+                  <label>Col: <input type="text" bind:value={dmOverridePosCol} data-testid="override-pos-col" /></label>
+                  <label>Row: <input type="number" bind:value={dmOverridePosRow} data-testid="override-pos-row" /></label>
+                  <label>Altitude (ft): <input type="number" bind:value={dmOverrideAltitude} data-testid="override-pos-altitude" /></label>
+                  <button onclick={handleOverridePosition} data-testid="override-pos-btn">Apply Position</button>
+                </fieldset>
+
+                <fieldset>
+                  <legend>Conditions (JSON array)</legend>
+                  <textarea bind:value={dmOverrideConditionsText} rows="2" data-testid="override-conditions"></textarea>
+                  <button onclick={handleOverrideConditions} data-testid="override-conditions-btn">Apply Conditions</button>
+                </fieldset>
+
+                <fieldset>
+                  <legend>Initiative</legend>
+                  <label>Roll: <input type="number" bind:value={dmOverrideInitiativeRoll} data-testid="override-init-roll" /></label>
+                  <label>Order: <input type="number" bind:value={dmOverrideInitiativeOrder} data-testid="override-init-order" /></label>
+                  <button onclick={handleOverrideInitiative} data-testid="override-init-btn">Apply Initiative</button>
+                </fieldset>
+
+                {#if selectedCombatant.character_id}
+                  <fieldset>
+                    <legend>Spell Slots (JSON)</legend>
+                    <textarea bind:value={dmOverrideSpellSlotsText} rows="3" data-testid="override-spell-slots"></textarea>
+                    <button onclick={handleOverrideSpellSlots} data-testid="override-spell-slots-btn">Apply Spell Slots</button>
+                  </fieldset>
+                {/if}
+              {/if}
+              {#if dmOverrideMessage}
+                <p class="dm-override-message" data-testid="dm-override-message">{dmOverrideMessage}</p>
+              {/if}
+            </div>
+          {/if}
+        </div>
 
         <!-- HP & Condition Tracker (shown when a token is selected) -->
         {#if selectedCombatant}

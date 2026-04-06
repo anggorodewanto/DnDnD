@@ -5,6 +5,12 @@ import {
   updateCombatantPosition, removeCombatant,
   listReactionsPanel, resolveReaction, cancelReaction,
   listActionLog,
+  undoLastAction,
+  overrideCombatantHP as overrideCombatantHPDM,
+  overrideCombatantPosition as overrideCombatantPositionDM,
+  overrideCombatantConditions as overrideCombatantConditionsDM,
+  overrideCombatantInitiative,
+  overrideCharacterSpellSlots,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -338,5 +344,98 @@ describe('listActionLog', () => {
       text: () => Promise.resolve('bad request'),
     });
     await expect(listActionLog('enc-1')).rejects.toThrow('bad request');
+  });
+});
+
+// --- Undo & Manual Override (Phase 97b) ---
+
+describe('undoLastAction', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('POSTs reason in body', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'undone' }) });
+    const result = await undoLastAction('enc-1', 'missed resistance');
+    expect(result).toEqual({ status: 'undone' });
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/undo-last-action');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual({ reason: 'missed resistance' });
+  });
+
+  it('defaults reason to empty string', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    await undoLastAction('enc-1');
+    const [, options] = fetch.mock.calls[0];
+    expect(JSON.parse(options.body)).toEqual({ reason: '' });
+  });
+
+  it('throws on non-ok response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404, text: () => Promise.resolve('nothing to undo') });
+    await expect(undoLastAction('enc-1')).rejects.toThrow('nothing to undo');
+  });
+});
+
+describe('overrideCombatantHP (DM dashboard)', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('POSTs HP override payload', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+    await overrideCombatantHPDM('enc-1', 'comb-1', { hp_current: 7, temp_hp: 0, reason: 'fix' });
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/override/combatant/comb-1/hp');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual({ hp_current: 7, temp_hp: 0, reason: 'fix' });
+  });
+});
+
+describe('overrideCombatantPosition (DM dashboard)', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('POSTs position override payload with default altitude', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+    await overrideCombatantPositionDM('enc-1', 'comb-1', { position_col: 'C', position_row: 4, reason: 'wrong tile' });
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/override/combatant/comb-1/position');
+    const body = JSON.parse(options.body);
+    expect(body.position_col).toBe('C');
+    expect(body.position_row).toBe(4);
+    expect(body.altitude_ft).toBe(0);
+    expect(body.reason).toBe('wrong tile');
+  });
+});
+
+describe('overrideCombatantConditions (DM dashboard)', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('POSTs conditions override payload', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+    await overrideCombatantConditionsDM('enc-1', 'comb-1', { conditions: [{ condition: 'blessed' }], reason: 'forgot bless' });
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/override/combatant/comb-1/conditions');
+    expect(JSON.parse(options.body)).toEqual({ conditions: [{ condition: 'blessed' }], reason: 'forgot bless' });
+  });
+});
+
+describe('overrideCombatantInitiative', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('POSTs initiative override payload', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+    await overrideCombatantInitiative('enc-1', 'comb-1', { initiative_roll: 18, initiative_order: 1, reason: 'reroll' });
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/override/combatant/comb-1/initiative');
+    expect(JSON.parse(options.body)).toEqual({ initiative_roll: 18, initiative_order: 1, reason: 'reroll' });
+  });
+});
+
+describe('overrideCharacterSpellSlots', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('POSTs spell slot override payload', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+    await overrideCharacterSpellSlots('enc-1', 'char-1', { spell_slots: { '1': { max: 4, used: 1 } }, reason: 'fix' });
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/override/character/char-1/spell-slots');
+    expect(JSON.parse(options.body)).toEqual({ spell_slots: { '1': { max: 4, used: 1 } }, reason: 'fix' });
   });
 });
