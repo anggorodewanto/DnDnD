@@ -20,6 +20,8 @@
     getWalls,
     getLightingData,
   } from './lib/mapdata.js';
+  import TurnQueue from './TurnQueue.svelte';
+  import ActionResolver from './ActionResolver.svelte';
 
   let { campaignId } = $props();
 
@@ -771,78 +773,93 @@
         </div>
       {/if}
 
-      <!-- HP & Condition Tracker (shown when a token is selected) -->
-      {#if selectedCombatant}
-        <div class="tracker-panel" data-testid="tracker-panel">
-          <h3>{selectedCombatant.display_name} ({selectedCombatant.short_id})</h3>
+      <!-- Right panel: Turn Queue, Action Resolver, and Tracker -->
+      <div class="right-panel" data-testid="right-panel">
+        <TurnQueue
+          encounterId={activeEncounter.id}
+          activeTurnCombatantId={activeEncounter.active_turn_combatant_id}
+          onTurnAdvanced={loadWorkspace}
+        />
 
-          <div class="stat-row">
-            <span>HP: {selectedCombatant.hp_current} / {selectedCombatant.hp_max}</span>
-            {#if selectedCombatant.temp_hp > 0}
-              <span class="temp-hp">(+{selectedCombatant.temp_hp} temp)</span>
-            {/if}
-          </div>
-          <div class="stat-row">
-            <span>AC: {selectedCombatant.ac}</span>
-          </div>
+        <ActionResolver
+          encounterId={activeEncounter.id}
+          combatants={activeEncounter.combatants}
+          onResolved={loadWorkspace}
+        />
 
-          <!-- Damage -->
-          <div class="action-row">
-            <label>
-              Damage:
-              <input
-                type="number"
-                min="0"
-                bind:value={damageInput}
-                data-testid="damage-input"
-              />
-            </label>
-            <button onclick={handleApplyDamage} data-testid="apply-damage-btn">Apply Damage</button>
-          </div>
+        <!-- HP & Condition Tracker (shown when a token is selected) -->
+        {#if selectedCombatant}
+          <div class="tracker-panel" data-testid="tracker-panel">
+            <h3>{selectedCombatant.display_name} ({selectedCombatant.short_id})</h3>
 
-          <!-- Healing -->
-          <div class="action-row">
-            <label>
-              Healing:
-              <input
-                type="number"
-                min="0"
-                bind:value={healInput}
-                data-testid="heal-input"
-              />
-            </label>
-            <button onclick={handleApplyHealing} data-testid="apply-heal-btn">Apply Healing</button>
-          </div>
-
-          <!-- Conditions -->
-          <div class="conditions-section">
-            <h4>Conditions</h4>
-            <div class="condition-list" data-testid="condition-list">
-              {#each currentConditions() as cond}
-                <span class="condition-tag">
-                  {cond}
-                  <button
-                    class="remove-cond-btn"
-                    onclick={() => handleRemoveCondition(cond)}
-                    data-testid="remove-condition-{cond}"
-                  >x</button>
-                </span>
-              {/each}
+            <div class="stat-row">
+              <span>HP: {selectedCombatant.hp_current} / {selectedCombatant.hp_max}</span>
+              {#if selectedCombatant.temp_hp > 0}
+                <span class="temp-hp">(+{selectedCombatant.temp_hp} temp)</span>
+              {/if}
             </div>
+            <div class="stat-row">
+              <span>AC: {selectedCombatant.ac}</span>
+            </div>
+
+            <!-- Damage -->
             <div class="action-row">
-              <select bind:value={conditionToAdd} data-testid="condition-select">
-                <option value="">-- Select --</option>
-                {#each STANDARD_CONDITIONS as cond}
-                  <option value={cond}>{cond}</option>
-                {/each}
-              </select>
-              <button onclick={handleAddCondition} data-testid="add-condition-btn">Add Condition</button>
+              <label>
+                Damage:
+                <input
+                  type="number"
+                  min="0"
+                  bind:value={damageInput}
+                  data-testid="damage-input"
+                />
+              </label>
+              <button onclick={handleApplyDamage} data-testid="apply-damage-btn">Apply Damage</button>
             </div>
-          </div>
 
-          <button class="close-tracker-btn" onclick={() => selectedCombatantId = null}>Close</button>
-        </div>
-      {/if}
+            <!-- Healing -->
+            <div class="action-row">
+              <label>
+                Healing:
+                <input
+                  type="number"
+                  min="0"
+                  bind:value={healInput}
+                  data-testid="heal-input"
+                />
+              </label>
+              <button onclick={handleApplyHealing} data-testid="apply-heal-btn">Apply Healing</button>
+            </div>
+
+            <!-- Conditions -->
+            <div class="conditions-section">
+              <h4>Conditions</h4>
+              <div class="condition-list" data-testid="condition-list">
+                {#each currentConditions() as cond}
+                  <span class="condition-tag">
+                    {cond}
+                    <button
+                      class="remove-cond-btn"
+                      onclick={() => handleRemoveCondition(cond)}
+                      data-testid="remove-condition-{cond}"
+                    >x</button>
+                  </span>
+                {/each}
+              </div>
+              <div class="action-row">
+                <select bind:value={conditionToAdd} data-testid="condition-select">
+                  <option value="">-- Select --</option>
+                  {#each STANDARD_CONDITIONS as cond}
+                    <option value={cond}>{cond}</option>
+                  {/each}
+                </select>
+                <button onclick={handleAddCondition} data-testid="add-condition-btn">Add Condition</button>
+              </div>
+            </div>
+
+            <button class="close-tracker-btn" onclick={() => selectedCombatantId = null}>Close</button>
+          </div>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>
@@ -938,8 +955,16 @@
     background: rgba(233, 69, 96, 0.15);
   }
 
+  .right-panel {
+    flex: 0 0 38%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: calc(100vh - 150px);
+    overflow-y: auto;
+  }
+
   .tracker-panel {
-    flex: 0 0 35%;
     padding: 1rem;
     background: #16213e;
     border-radius: 4px;

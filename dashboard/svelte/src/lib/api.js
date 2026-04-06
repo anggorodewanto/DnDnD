@@ -474,6 +474,44 @@ export async function removeCombatant(encounterId, combatantId) {
 }
 
 /**
+ * Advance to the next turn in an encounter.
+ * @param {string} encounterId - Encounter UUID.
+ * @returns {Promise<object>} The new turn info.
+ */
+export async function advanceTurn(encounterId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/advance-turn`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
+/**
+ * Get pending actions for an encounter.
+ * @param {string} encounterId - Encounter UUID.
+ * @returns {Promise<object[]>} Array of pending actions.
+ */
+export async function getPendingActions(encounterId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/pending-actions`);
+  return res.json();
+}
+
+/**
+ * Resolve a pending action.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} actionId - Action UUID.
+ * @param {object} data - { outcome, effects }
+ * @returns {Promise<object>} Resolved action.
+ */
+export async function resolvePendingAction(encounterId, actionId, data) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/pending-actions/${actionId}/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+/**
  * Update a combatant's conditions.
  * @param {string} encounterId - Encounter UUID.
  * @param {string} combatantId - Combatant UUID.

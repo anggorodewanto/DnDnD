@@ -136,6 +136,7 @@ type Store interface {
 	CreatePendingAction(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error)
 	GetPendingAction(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error)
 	GetPendingActionByCombatant(ctx context.Context, combatantID uuid.UUID) (refdata.PendingAction, error)
+	ListPendingActionsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingAction, error)
 	UpdatePendingActionStatus(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error)
 	UpdatePendingActionDMQueueMessage(ctx context.Context, arg refdata.UpdatePendingActionDMQueueMessageParams) (refdata.PendingAction, error)
 	CancelAllPendingActionsByCombatant(ctx context.Context, arg refdata.CancelAllPendingActionsByCombatantParams) error

@@ -109,6 +109,43 @@ func (q *Queries) GetPendingActionByCombatant(ctx context.Context, combatantID u
 	return i, err
 }
 
+const listPendingActionsByEncounterID = `-- name: ListPendingActionsByEncounterID :many
+SELECT id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at FROM pending_actions WHERE encounter_id = $1 ORDER BY created_at ASC
+`
+
+func (q *Queries) ListPendingActionsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]PendingAction, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingActionsByEncounterID, encounterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PendingAction{}
+	for rows.Next() {
+		var i PendingAction
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncounterID,
+			&i.CombatantID,
+			&i.ActionText,
+			&i.DmQueueMessageID,
+			&i.DmQueueChannelID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updatePendingActionDMQueueMessage = `-- name: UpdatePendingActionDMQueueMessage :one
 UPDATE pending_actions
 SET dm_queue_message_id = $2, dm_queue_channel_id = $3, updated_at = now()

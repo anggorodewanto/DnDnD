@@ -83,6 +83,7 @@ type workspaceCombatantResponse struct {
 	IsVisible       bool            `json:"is_visible"`
 	Conditions      json.RawMessage `json:"conditions"`
 	ExhaustionLevel int32           `json:"exhaustion_level"`
+	InitiativeRoll  int32           `json:"initiative_roll"`
 	InitiativeOrder int32           `json:"initiative_order"`
 	SpeedFt         int32           `json:"speed_ft"`
 }
@@ -285,6 +286,7 @@ func toWorkspaceCombatantResponse(c refdata.Combatant) workspaceCombatantRespons
 		IsVisible:       c.IsVisible,
 		Conditions:      c.Conditions,
 		ExhaustionLevel: c.ExhaustionLevel,
+		InitiativeRoll:  c.InitiativeRoll,
 		InitiativeOrder: c.InitiativeOrder,
 	}
 }

@@ -98,6 +98,7 @@ type mockStore struct {
 	// Pending Actions
 	createPendingActionFn                  func(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error)
 	getPendingActionFn                     func(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error)
+	listPendingActionsByEncounterIDFn      func(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingAction, error)
 	cancelAllPendingActionsByCombatantFn   func(ctx context.Context, arg refdata.CancelAllPendingActionsByCombatantParams) error
 
 	// Pending Saves
@@ -456,6 +457,12 @@ func (m *mockStore) GetPendingActionByCombatant(ctx context.Context, combatantID
 		return m.getPendingActionByCombatantFn(ctx, combatantID)
 	}
 	return refdata.PendingAction{}, fmt.Errorf("no pending action")
+}
+func (m *mockStore) ListPendingActionsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingAction, error) {
+	if m.listPendingActionsByEncounterIDFn != nil {
+		return m.listPendingActionsByEncounterIDFn(ctx, encounterID)
+	}
+	return nil, nil
 }
 func (m *mockStore) UpdatePendingActionStatus(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
 	if m.updatePendingActionStatusFn != nil {

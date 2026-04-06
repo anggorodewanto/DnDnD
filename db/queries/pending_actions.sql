@@ -24,6 +24,9 @@ SET dm_queue_message_id = $2, dm_queue_channel_id = $3, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
+-- name: ListPendingActionsByEncounterID :many
+SELECT * FROM pending_actions WHERE encounter_id = $1 ORDER BY created_at ASC;
+
 -- name: CancelAllPendingActionsByCombatant :exec
 UPDATE pending_actions
 SET status = 'cancelled', updated_at = now()
