@@ -16,6 +16,7 @@ import (
 	"github.com/ab/dndnd/internal/gamemap"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/server"
+	"github.com/ab/dndnd/internal/statblocklibrary"
 )
 
 func main() {
@@ -80,6 +81,11 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		assetSvc := asset.NewService(queries, assetStore)
 		assetHandler := asset.NewHandler(assetSvc)
 		assetHandler.RegisterRoutes(router)
+
+		// Wire Stat Block Library API handler (Phase 98)
+		statBlockSvc := statblocklibrary.NewService(queries)
+		statBlockHandler := statblocklibrary.NewHandler(statBlockSvc)
+		statBlockHandler.RegisterRoutes(router)
 	}
 
 	srv := &http.Server{
