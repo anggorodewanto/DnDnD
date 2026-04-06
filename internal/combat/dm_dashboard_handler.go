@@ -26,6 +26,7 @@ func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{encounterID}/advance-turn", h.AdvanceTurn)
 		r.Get("/{encounterID}/pending-actions", h.ListPendingActions)
 		r.Post("/{encounterID}/pending-actions/{actionID}/resolve", h.ResolvePendingAction)
+		r.Get("/{encounterID}/action-log", h.ListActionLogViewer)
 	})
 }
 

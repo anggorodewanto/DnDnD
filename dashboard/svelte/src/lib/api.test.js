@@ -4,6 +4,7 @@ import {
   getCombatWorkspace, updateCombatantHP, updateCombatantConditions,
   updateCombatantPosition, removeCombatant,
   listReactionsPanel, resolveReaction, cancelReaction,
+  listActionLog,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -280,5 +281,62 @@ describe('cancelReaction', () => {
     const [url, options] = fetch.mock.calls[0];
     expect(url).toBe('/api/combat/enc-1/reactions/r-1/cancel');
     expect(options.method).toBe('POST');
+  });
+});
+
+// --- Action Log Viewer API ---
+
+describe('listActionLog', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('fetches action log with no filters', async () => {
+    const mock = [{ id: 'log-1', action_type: 'attack' }];
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(mock) });
+
+    const result = await listActionLog('enc-1');
+    expect(result).toEqual(mock);
+    expect(fetch).toHaveBeenCalledWith('/api/combat/enc-1/action-log', undefined);
+  });
+
+  it('fetches action log with filters', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) });
+
+    await listActionLog('enc-1', {
+      actionTypes: ['attack', 'dm_override'],
+      actorId: 'actor-1',
+      targetId: 'target-1',
+      round: 3,
+      turnId: 'turn-1',
+      sort: 'asc',
+    });
+
+    const [url] = fetch.mock.calls[0];
+    expect(url).toContain('/api/combat/enc-1/action-log?');
+    expect(url).toContain('action_type=attack%2Cdm_override');
+    expect(url).toContain('actor_id=actor-1');
+    expect(url).toContain('target_id=target-1');
+    expect(url).toContain('round=3');
+    expect(url).toContain('turn_id=turn-1');
+    expect(url).toContain('sort=asc');
+  });
+
+  it('omits empty filter fields', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) });
+
+    await listActionLog('enc-1', { actionTypes: [], actorId: '', round: 0 });
+
+    const [url] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/action-log');
+  });
+
+  it('throws on non-ok response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve('bad request'),
+    });
+    await expect(listActionLog('enc-1')).rejects.toThrow('bad request');
   });
 });

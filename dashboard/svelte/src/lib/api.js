@@ -564,3 +564,36 @@ export async function cancelReaction(encounterId, reactionId) {
   });
   return res.json();
 }
+
+// --- Action Log Viewer API ---
+
+/**
+ * List action log entries for an encounter with optional filters.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {object} [filters] - Optional filters.
+ * @param {string[]} [filters.actionTypes] - Action types to include.
+ * @param {string} [filters.actorId] - Actor combatant UUID.
+ * @param {string} [filters.targetId] - Target combatant UUID.
+ * @param {number} [filters.round] - Round number.
+ * @param {string} [filters.turnId] - Turn UUID.
+ * @param {'asc'|'desc'} [filters.sort] - Sort order (default desc, newest-first).
+ * @returns {Promise<object[]>} Array of action log viewer entries.
+ */
+export async function listActionLog(encounterId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.actionTypes && filters.actionTypes.length > 0) {
+    params.set('action_type', filters.actionTypes.join(','));
+  }
+  if (filters.actorId) params.set('actor_id', filters.actorId);
+  if (filters.targetId) params.set('target_id', filters.targetId);
+  if (filters.round) params.set('round', String(filters.round));
+  if (filters.turnId) params.set('turn_id', filters.turnId);
+  if (filters.sort) params.set('sort', filters.sort);
+
+  const qs = params.toString();
+  const url = qs
+    ? `${COMBAT_BASE}/${encounterId}/action-log?${qs}`
+    : `${COMBAT_BASE}/${encounterId}/action-log`;
+  const res = await apiFetch(url);
+  return res.json();
+}

@@ -23,6 +23,7 @@
   import TurnQueue from './TurnQueue.svelte';
   import ActionResolver from './ActionResolver.svelte';
   import ActiveReactionsPanel from './ActiveReactionsPanel.svelte';
+  import ActionLogViewer from './ActionLogViewer.svelte';
 
   let { campaignId } = $props();
 
@@ -794,6 +795,8 @@
           activeTurnIsNpc={activeEncounter.combatants?.find(c => c.id === activeEncounter.active_turn_combatant_id)?.is_npc || false}
           onReactionResolved={loadWorkspace}
         />
+
+        <ActionLogViewer encounterId={activeEncounter.id} />
 
         <!-- HP & Condition Tracker (shown when a token is selected) -->
         {#if selectedCombatant}
