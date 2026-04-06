@@ -594,7 +594,7 @@
   - Depends on: Phase 97a, Phase 27
   - Done when: DM can undo last action, manually override any value, corrections posted to Discord, overrides respect turn lock.
 
-- [ ] **Phase 98: DM Dashboard — Stat Block Library**
+- [x] **Phase 98: DM Dashboard — Stat Block Library**
   - Scope: Browseable library of all SRD creature stat blocks + homebrew. Search and filter. Reusable across encounters. Used in Encounter Builder for creature selection.
   - Depends on: Phase 6, Phase 15
   - Done when: DM can browse, search, and select stat blocks; homebrew entries visible alongside SRD.

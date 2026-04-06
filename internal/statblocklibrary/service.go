@@ -71,16 +71,15 @@ func (s *Service) ListStatBlocks(ctx context.Context, filter StatBlockFilter) ([
 		return nil, err
 	}
 
-	typeSet := toLowerSet(filter.Types)
-	sizeSet := toSet(filter.Sizes)
+	typeSet := buildSet(filter.Types, true)
+	sizeSet := buildSet(filter.Sizes, false)
 	searchLower := strings.ToLower(strings.TrimSpace(filter.Search))
 
 	filtered := make([]refdata.Creature, 0, len(all))
 	for _, c := range all {
-		if !matches(c, filter, typeSet, sizeSet, searchLower) {
-			continue
+		if matches(c, filter, typeSet, sizeSet, searchLower) {
+			filtered = append(filtered, c)
 		}
-		filtered = append(filtered, c)
 	}
 
 	sort.SliceStable(filtered, func(i, j int) bool {
@@ -98,7 +97,7 @@ func (s *Service) GetStatBlock(ctx context.Context, id string, campaignID uuid.U
 	if err != nil {
 		return refdata.Creature{}, err
 	}
-	if !isVisible(c, campaignID) {
+	if !homebrewVisibleTo(c, campaignID) {
 		return refdata.Creature{}, ErrNotFound
 	}
 	return c, nil
@@ -107,8 +106,8 @@ func (s *Service) GetStatBlock(ctx context.Context, id string, campaignID uuid.U
 // --- internal helpers ---
 
 // matches returns true if the creature satisfies all active filters.
-func matches(c refdata.Creature, f StatBlockFilter, typeSet map[string]struct{}, sizeSet map[string]struct{}, searchLower string) bool {
-	if !matchesVisibility(c, f) {
+func matches(c refdata.Creature, f StatBlockFilter, typeSet, sizeSet map[string]struct{}, searchLower string) bool {
+	if !visibleForSource(c, f) {
 		return false
 	}
 	if searchLower != "" && !strings.Contains(strings.ToLower(c.Name), searchLower) {
@@ -124,37 +123,35 @@ func matches(c refdata.Creature, f StatBlockFilter, typeSet map[string]struct{},
 			return false
 		}
 	}
-	if !matchesCR(c.Cr, f.CRMin, f.CRMax) {
-		return false
-	}
-	return true
+	return matchesCR(c.Cr, f.CRMin, f.CRMax)
 }
 
-// matchesVisibility checks both the source filter and campaign scoping for homebrew.
-func matchesVisibility(c refdata.Creature, f StatBlockFilter) bool {
-	isHomebrew := c.Homebrew.Valid && c.Homebrew.Bool
-	if isHomebrew {
-		return matchesHomebrew(c, f)
+// visibleForSource combines the source filter with campaign scoping for homebrew.
+func visibleForSource(c refdata.Creature, f StatBlockFilter) bool {
+	if isHomebrew(c) {
+		if f.Source == SourceSRD {
+			return false
+		}
+		return homebrewVisibleTo(c, f.CampaignID)
 	}
-	// SRD entry (campaign_id NULL / homebrew false): excluded only if source=homebrew.
-	if f.Source == SourceHomebrew {
-		return false
-	}
-	return true
+	// SRD entry: excluded only when caller explicitly asked for homebrew only.
+	return f.Source != SourceHomebrew
 }
 
-// matchesHomebrew returns true when a homebrew creature is visible per the filter.
-func matchesHomebrew(c refdata.Creature, f StatBlockFilter) bool {
-	if f.Source == SourceSRD {
+// homebrewVisibleTo returns true when a creature is visible to the given campaign.
+// SRD entries are always visible; homebrew entries require a matching, valid campaign.
+func homebrewVisibleTo(c refdata.Creature, campaignID uuid.UUID) bool {
+	if !isHomebrew(c) {
+		return true
+	}
+	if campaignID == uuid.Nil || !c.CampaignID.Valid {
 		return false
 	}
-	if f.CampaignID == uuid.Nil {
-		return false
-	}
-	if !c.CampaignID.Valid {
-		return false
-	}
-	return c.CampaignID.UUID == f.CampaignID
+	return c.CampaignID.UUID == campaignID
+}
+
+func isHomebrew(c refdata.Creature) bool {
+	return c.Homebrew.Valid && c.Homebrew.Bool
 }
 
 // matchesCR returns true if cr is inside [min, max] (either bound optional).
@@ -170,21 +167,6 @@ func matchesCR(crStr string, min, max *float64) bool {
 		return false
 	}
 	return true
-}
-
-// isVisible is the single-entry equivalent of matchesVisibility, used by GetStatBlock.
-func isVisible(c refdata.Creature, campaignID uuid.UUID) bool {
-	isHomebrew := c.Homebrew.Valid && c.Homebrew.Bool
-	if !isHomebrew {
-		return true
-	}
-	if campaignID == uuid.Nil {
-		return false
-	}
-	if !c.CampaignID.Valid {
-		return false
-	}
-	return c.CampaignID.UUID == campaignID
 }
 
 // parseCR converts a CR string like "1/4", "1", "17" to a float64.
@@ -209,8 +191,9 @@ func parseCR(s string) float64 {
 	return v
 }
 
-// toLowerSet builds a lowercase set from the given values.
-func toLowerSet(values []string) map[string]struct{} {
+// buildSet builds a set from the given values, optionally lowercasing keys.
+// Empty/whitespace entries are skipped; returns nil when the resulting set is empty.
+func buildSet(values []string, lower bool) map[string]struct{} {
 	if len(values) == 0 {
 		return nil
 	}
@@ -220,24 +203,8 @@ func toLowerSet(values []string) map[string]struct{} {
 		if t == "" {
 			continue
 		}
-		set[strings.ToLower(t)] = struct{}{}
-	}
-	if len(set) == 0 {
-		return nil
-	}
-	return set
-}
-
-// toSet builds a set from the given values preserving case.
-func toSet(values []string) map[string]struct{} {
-	if len(values) == 0 {
-		return nil
-	}
-	set := make(map[string]struct{}, len(values))
-	for _, v := range values {
-		t := strings.TrimSpace(v)
-		if t == "" {
-			continue
+		if lower {
+			t = strings.ToLower(t)
 		}
 		set[t] = struct{}{}
 	}

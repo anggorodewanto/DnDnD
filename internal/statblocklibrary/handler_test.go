@@ -1,7 +1,6 @@
 package statblocklibrary
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -255,6 +254,3 @@ func TestHandler_List_CommaSeparatedTypes(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp, 2)
 }
-
-// compile-time check
-var _ = context.Background

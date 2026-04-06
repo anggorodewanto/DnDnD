@@ -56,11 +56,11 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c, err := h.svc.GetStatBlock(r.Context(), id, campaignID)
+	if errors.Is(err, ErrNotFound) || errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "stat block not found", http.StatusNotFound)
+		return
+	}
 	if err != nil {
-		if errors.Is(err, ErrNotFound) || errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "stat block not found", http.StatusNotFound)
-			return
-		}
 		http.Error(w, "failed to get stat block", http.StatusInternalServerError)
 		return
 	}
@@ -81,19 +81,11 @@ func parseFilter(q url.Values) (StatBlockFilter, error) {
 	}
 	filter.CampaignID = campaignID
 
-	if v := q.Get("cr_min"); v != "" {
-		parsed, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			return filter, fmt.Errorf("invalid cr_min")
-		}
-		filter.CRMin = &parsed
+	if filter.CRMin, err = optionalFloat(q, "cr_min"); err != nil {
+		return filter, err
 	}
-	if v := q.Get("cr_max"); v != "" {
-		parsed, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			return filter, fmt.Errorf("invalid cr_max")
-		}
-		filter.CRMax = &parsed
+	if filter.CRMax, err = optionalFloat(q, "cr_max"); err != nil {
+		return filter, err
 	}
 
 	source, err := parseSource(q.Get("source"))
@@ -102,19 +94,11 @@ func parseFilter(q url.Values) (StatBlockFilter, error) {
 	}
 	filter.Source = source
 
-	if v := q.Get("limit"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil {
-			return filter, fmt.Errorf("invalid limit")
-		}
-		filter.Limit = parsed
+	if filter.Limit, err = optionalInt(q, "limit"); err != nil {
+		return filter, err
 	}
-	if v := q.Get("offset"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil {
-			return filter, fmt.Errorf("invalid offset")
-		}
-		filter.Offset = parsed
+	if filter.Offset, err = optionalInt(q, "offset"); err != nil {
+		return filter, err
 	}
 
 	return filter, nil
@@ -144,6 +128,32 @@ func parseSource(v string) (Source, error) {
 		return SourceHomebrew, nil
 	}
 	return SourceAny, fmt.Errorf("invalid source")
+}
+
+// optionalFloat parses a float64 query field, returning nil when unset.
+func optionalFloat(q url.Values, key string) (*float64, error) {
+	v := q.Get(key)
+	if v == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s", key)
+	}
+	return &parsed, nil
+}
+
+// optionalInt parses an int query field, returning 0 when unset.
+func optionalInt(q url.Values, key string) (int, error) {
+	v := q.Get(key)
+	if v == "" {
+		return 0, nil
+	}
+	parsed, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s", key)
+	}
+	return parsed, nil
 }
 
 // flattenMulti accepts both repeated ?type=a&type=b and comma-separated ?type=a,b forms.
