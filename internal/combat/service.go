@@ -121,6 +121,7 @@ type Store interface {
 	CreateReadiedActionDeclaration(ctx context.Context, arg refdata.CreateReadiedActionDeclarationParams) (refdata.ReactionDeclaration, error)
 	GetReactionDeclaration(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
 	ListActiveReactionDeclarationsByEncounter(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error)
+	ListReactionDeclarationsByEncounter(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error)
 	ListReactionDeclarationsByCombatant(ctx context.Context, arg refdata.ListReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
 	ListActiveReactionDeclarationsByCombatant(ctx context.Context, arg refdata.ListActiveReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
 	UpdateReactionDeclarationStatusUsed(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error)

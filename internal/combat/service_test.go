@@ -84,6 +84,7 @@ type mockStore struct {
 	createReadiedActionDeclarationFn           func(ctx context.Context, arg refdata.CreateReadiedActionDeclarationParams) (refdata.ReactionDeclaration, error)
 	getReactionDeclarationFn                   func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
 	listActiveReactionDeclarationsByEncounterFn func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error)
+	listReactionDeclarationsByEncounterFn       func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error)
 	listReactionDeclarationsByCombatantFn      func(ctx context.Context, arg refdata.ListReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
 	listActiveReactionDeclarationsByCombatantFn func(ctx context.Context, arg refdata.ListActiveReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
 	updateReactionDeclarationStatusUsedFn      func(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error)
@@ -389,6 +390,12 @@ func (m *mockStore) GetReactionDeclaration(ctx context.Context, id uuid.UUID) (r
 func (m *mockStore) ListActiveReactionDeclarationsByEncounter(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error) {
 	if m.listActiveReactionDeclarationsByEncounterFn != nil {
 		return m.listActiveReactionDeclarationsByEncounterFn(ctx, encounterID)
+	}
+	return []refdata.ReactionDeclaration{}, nil
+}
+func (m *mockStore) ListReactionDeclarationsByEncounter(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error) {
+	if m.listReactionDeclarationsByEncounterFn != nil {
+		return m.listReactionDeclarationsByEncounterFn(ctx, encounterID)
 	}
 	return []refdata.ReactionDeclaration{}, nil
 }

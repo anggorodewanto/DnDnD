@@ -36,6 +36,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		// Reaction declarations
 		r.Post("/{encounterID}/reactions", h.DeclareReaction)
 		r.Get("/{encounterID}/reactions", h.ListReactions)
+		r.Get("/{encounterID}/reactions/panel", h.ListReactionsPanel)
 		r.Post("/{encounterID}/reactions/{reactionID}/resolve", h.ResolveReaction)
 		r.Post("/{encounterID}/reactions/{reactionID}/cancel", h.CancelReaction)
 		r.Post("/{encounterID}/combatants/{combatantID}/reactions/cancel-all", h.CancelAllReactions)
@@ -402,6 +403,24 @@ func (h *Handler) ListReactions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, toReactionDeclarationResponses(decls))
+}
+
+// ListReactionsPanel handles GET /api/combat/{encounterID}/reactions/panel.
+// Returns enriched reaction data for the DM dashboard active reactions panel.
+func (h *Handler) ListReactionsPanel(w http.ResponseWriter, r *http.Request) {
+	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	entries, err := h.svc.ListReactionsForPanel(r.Context(), encounterID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, entries)
 }
 
 // ResolveReaction handles POST /api/combat/{encounterID}/reactions/{reactionID}/resolve.

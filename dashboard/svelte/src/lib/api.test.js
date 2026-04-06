@@ -3,6 +3,7 @@ import {
   uploadAsset, getEnemyTurnPlan, executeEnemyTurn,
   getCombatWorkspace, updateCombatantHP, updateCombatantConditions,
   updateCombatantPosition, removeCombatant,
+  listReactionsPanel, resolveReaction, cancelReaction,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -212,5 +213,72 @@ describe('removeCombatant', () => {
     const [url, options] = fetch.mock.calls[0];
     expect(url).toBe('/api/combat/enc-1/combatants/comb-1');
     expect(options.method).toBe('DELETE');
+  });
+});
+
+// --- Reactions Panel API ---
+
+describe('listReactionsPanel', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('fetches enriched reactions for the panel', async () => {
+    const mockData = [
+      { id: 'r-1', combatant_display_name: 'Aragorn', description: 'Shield', status: 'active' },
+    ];
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockData),
+    });
+
+    const result = await listReactionsPanel('enc-1');
+    expect(result).toEqual(mockData);
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/combat/enc-1/reactions/panel',
+      undefined,
+    );
+  });
+});
+
+describe('resolveReaction', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends POST to resolve a reaction', async () => {
+    const mockResult = { id: 'r-1', status: 'used' };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResult),
+    });
+
+    const result = await resolveReaction('enc-1', 'r-1');
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/reactions/r-1/resolve');
+    expect(options.method).toBe('POST');
+  });
+});
+
+describe('cancelReaction', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends POST to cancel a reaction', async () => {
+    const mockResult = { id: 'r-1', status: 'cancelled' };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResult),
+    });
+
+    const result = await cancelReaction('enc-1', 'r-1');
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/reactions/r-1/cancel');
+    expect(options.method).toBe('POST');
   });
 });

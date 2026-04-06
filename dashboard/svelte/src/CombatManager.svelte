@@ -22,6 +22,7 @@
   } from './lib/mapdata.js';
   import TurnQueue from './TurnQueue.svelte';
   import ActionResolver from './ActionResolver.svelte';
+  import ActiveReactionsPanel from './ActiveReactionsPanel.svelte';
 
   let { campaignId } = $props();
 
@@ -785,6 +786,13 @@
           encounterId={activeEncounter.id}
           combatants={activeEncounter.combatants}
           onResolved={loadWorkspace}
+        />
+
+        <ActiveReactionsPanel
+          encounterId={activeEncounter.id}
+          activeTurnCombatantId={activeEncounter.active_turn_combatant_id}
+          activeTurnIsNpc={activeEncounter.combatants?.find(c => c.id === activeEncounter.active_turn_combatant_id)?.is_npc || false}
+          onReactionResolved={loadWorkspace}
         />
 
         <!-- HP & Condition Tracker (shown when a token is selected) -->

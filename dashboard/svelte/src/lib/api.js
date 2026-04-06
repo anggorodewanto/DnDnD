@@ -526,3 +526,41 @@ export async function updateCombatantConditions(encounterId, combatantId, condit
   });
   return res.json();
 }
+
+// --- Reactions Panel API ---
+
+/**
+ * List all reaction declarations for an encounter, enriched with combatant info.
+ * @param {string} encounterId - Encounter UUID.
+ * @returns {Promise<object[]>} Array of enriched reaction panel entries.
+ */
+export async function listReactionsPanel(encounterId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/reactions/panel`);
+  return res.json();
+}
+
+/**
+ * Resolve (use) a reaction declaration.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} reactionId - Reaction UUID.
+ * @returns {Promise<object>} The resolved reaction.
+ */
+export async function resolveReaction(encounterId, reactionId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/reactions/${reactionId}/resolve`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
+/**
+ * Cancel (dismiss) a reaction declaration.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} reactionId - Reaction UUID.
+ * @returns {Promise<object>} The cancelled reaction.
+ */
+export async function cancelReaction(encounterId, reactionId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/reactions/${reactionId}/cancel`, {
+    method: 'POST',
+  });
+  return res.json();
+}
