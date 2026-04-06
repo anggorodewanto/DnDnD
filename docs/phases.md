@@ -589,7 +589,7 @@
   - Depends on: Phase 24, Phase 94a
   - Done when: Action log viewer renders entries, filters work correctly, diff view shows before/after state changes.
 
-- [ ] **Phase 97b: DM Dashboard — Undo & Manual Corrections**
+- [x] **Phase 97b: DM Dashboard — Undo & Manual Corrections**
   - Scope: Undo Last Action: revert most recent mutation from action_log before_state (current turn only). Manual State Override: edit HP, position, conditions, spell slots, initiative order directly. All overrides go through per-turn lock. Discord corrections posted to #combat-log (never edit/delete originals).
   - Depends on: Phase 97a, Phase 27
   - Done when: DM can undo last action, manually override any value, corrections posted to Discord, overrides respect turn lock.

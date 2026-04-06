@@ -48,6 +48,14 @@ func (h *DMDashboardHandler) postCorrection(ctx context.Context, encounterID uui
 	h.poster.PostCorrection(ctx, encounterID, message)
 }
 
+// correctionMsg formats a DM correction message with an optional parenthesized reason.
+func correctionMsg(base, reason string) string {
+	if reason == "" {
+		return base
+	}
+	return base + " (" + reason + ")"
+}
+
 // UndoLastAction handles POST /api/combat/{encounterID}/undo-last-action.
 // Reverts the most recent non-undo mutation in the current turn from its before_state.
 func (h *DMDashboardHandler) UndoLastAction(w http.ResponseWriter, r *http.Request) {
@@ -151,16 +159,14 @@ func (h *DMDashboardHandler) applyUndo(ctx context.Context, encounterID, turnID 
 		AfterState:  log.BeforeState,
 	})
 
-	msg := fmt.Sprintf("⚠️ **DM Correction:** %s — undo %s", combatant.DisplayName, log.ActionType)
-	if reason != "" {
-		msg += " (" + reason + ")"
-	}
-	h.postCorrection(ctx, encounterID, msg)
+	base := fmt.Sprintf("⚠️ **DM Correction:** %s — undo %s", combatant.DisplayName, log.ActionType)
+	h.postCorrection(ctx, encounterID, correctionMsg(base, reason))
 	return nil
 }
 
 // dispatchUndo applies the recognized field restorations. Returns whether any restoration was applied.
-func (h *DMDashboardHandler) dispatchUndo(ctx context.Context, c refdata.Combatant, bs undoBeforeState, actionType string) (bool, error) {
+// actionType is currently unused but reserved for future per-type logic.
+func (h *DMDashboardHandler) dispatchUndo(ctx context.Context, c refdata.Combatant, bs undoBeforeState, _ string) (bool, error) {
 	applied := false
 
 	if bs.HpCurrent != nil || bs.TempHp != nil || bs.IsAlive != nil {
@@ -214,7 +220,6 @@ func (h *DMDashboardHandler) dispatchUndo(ctx context.Context, c refdata.Combata
 		applied = true
 	}
 
-	_ = actionType // reserved for future per-type logic
 	return applied, nil
 }
 
@@ -352,11 +357,8 @@ func (h *DMDashboardHandler) OverrideCombatantHP(w http.ResponseWriter, r *http.
 			after, _ := snapshotCombatantState(updated)
 			h.logOverride(ctx, turnID, encounterID, combatantID, req.Reason, before, after)
 
-			msg := fmt.Sprintf("⚠️ **DM Correction:** %s HP adjusted to %d", c.DisplayName, req.HpCurrent)
-			if req.Reason != "" {
-				msg += " (" + req.Reason + ")"
-			}
-			h.postCorrection(ctx, encounterID, msg)
+			base := fmt.Sprintf("⚠️ **DM Correction:** %s HP adjusted to %d", c.DisplayName, req.HpCurrent)
+			h.postCorrection(ctx, encounterID, correctionMsg(base, req.Reason))
 			return nil
 		},
 	)
@@ -382,11 +384,8 @@ func (h *DMDashboardHandler) OverrideCombatantPosition(w http.ResponseWriter, r 
 			after, _ := snapshotCombatantState(updated)
 			h.logOverride(ctx, turnID, encounterID, combatantID, req.Reason, before, after)
 
-			msg := fmt.Sprintf("⚠️ **DM Correction:** %s position adjusted to %s%d", c.DisplayName, req.PositionCol, req.PositionRow)
-			if req.Reason != "" {
-				msg += " (" + req.Reason + ")"
-			}
-			h.postCorrection(ctx, encounterID, msg)
+			base := fmt.Sprintf("⚠️ **DM Correction:** %s position adjusted to %s%d", c.DisplayName, req.PositionCol, req.PositionRow)
+			h.postCorrection(ctx, encounterID, correctionMsg(base, req.Reason))
 			return nil
 		},
 	)
@@ -416,11 +415,8 @@ func (h *DMDashboardHandler) OverrideCombatantConditions(w http.ResponseWriter, 
 			after, _ := snapshotCombatantState(updated)
 			h.logOverride(ctx, turnID, encounterID, combatantID, req.Reason, before, after)
 
-			msg := fmt.Sprintf("⚠️ **DM Correction:** %s conditions adjusted", c.DisplayName)
-			if req.Reason != "" {
-				msg += " (" + req.Reason + ")"
-			}
-			h.postCorrection(ctx, encounterID, msg)
+			base := fmt.Sprintf("⚠️ **DM Correction:** %s conditions adjusted", c.DisplayName)
+			h.postCorrection(ctx, encounterID, correctionMsg(base, req.Reason))
 			return nil
 		},
 	)
@@ -451,11 +447,8 @@ func (h *DMDashboardHandler) OverrideCombatantInitiative(w http.ResponseWriter, 
 			})
 			h.logOverride(ctx, turnID, encounterID, combatantID, req.Reason, before, after)
 
-			msg := fmt.Sprintf("⚠️ **DM Correction:** %s initiative adjusted to %d", c.DisplayName, req.InitiativeRoll)
-			if req.Reason != "" {
-				msg += " (" + req.Reason + ")"
-			}
-			h.postCorrection(ctx, encounterID, msg)
+			base := fmt.Sprintf("⚠️ **DM Correction:** %s initiative adjusted to %d", c.DisplayName, req.InitiativeRoll)
+			h.postCorrection(ctx, encounterID, correctionMsg(base, req.Reason))
 			return nil
 		},
 	)
@@ -517,11 +510,8 @@ func (h *DMDashboardHandler) OverrideCharacterSpellSlots(w http.ResponseWriter, 
 			AfterState:  req.SpellSlots,
 		})
 
-		msg := fmt.Sprintf("⚠️ **DM Correction:** %s spell slots adjusted", char.Name)
-		if req.Reason != "" {
-			msg += " (" + req.Reason + ")"
-		}
-		h.postCorrection(r.Context(), encounterID, msg)
+		base := fmt.Sprintf("⚠️ **DM Correction:** %s spell slots adjusted", char.Name)
+		h.postCorrection(r.Context(), encounterID, correctionMsg(base, req.Reason))
 		return nil
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
