@@ -574,7 +574,7 @@
   - Depends on: Phase 94a
   - Done when: DM can drag tokens with distance display, range circles shown, movement validated, distance measurement works.
 
-- [ ] **Phase 95: DM Dashboard — Turn Queue & Action Resolver**
+- [x] **Phase 95: DM Dashboard — Turn Queue & Action Resolver**
   - Scope: Turn Queue: shows initiative order, current turn highlighted, "End Turn" button. Action Resolver: chronological list of #dm-queue items, expand inline for resolution controls (text field for outcome, buttons for damage/conditions/movement). Items marked resolved with outcome summary.
   - Depends on: Phase 94a
   - Done when: DM can view initiative order, end turns, resolve queue items with mechanical effects applied.

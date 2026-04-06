@@ -18,6 +18,16 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
+// newDMDashboardRouter creates a DMDashboardHandler with the given store and returns
+// a ready-to-use Chi router with all routes registered.
+func newDMDashboardRouter(store Store) http.Handler {
+	svc := NewService(store)
+	handler := NewDMDashboardHandler(svc)
+	r := chi.NewRouter()
+	handler.RegisterRoutes(r)
+	return r
+}
+
 // --- TDD Cycle 1: POST /api/combat/{encounterID}/advance-turn ---
 
 func TestAdvanceTurn_Success(t *testing.T) {
@@ -58,11 +68,7 @@ func TestAdvanceTurn_Success(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/advance-turn", nil)
 	w := httptest.NewRecorder()
@@ -78,11 +84,7 @@ func TestAdvanceTurn_Success(t *testing.T) {
 }
 
 func TestAdvanceTurn_InvalidEncounterID(t *testing.T) {
-	svc := NewService(&mockStore{})
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(&mockStore{})
 
 	req := httptest.NewRequest("POST", "/api/combat/not-a-uuid/advance-turn", nil)
 	w := httptest.NewRecorder()
@@ -114,11 +116,7 @@ func TestListPendingActions_Success(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/pending-actions", nil)
 	w := httptest.NewRecorder()
@@ -136,11 +134,7 @@ func TestListPendingActions_Success(t *testing.T) {
 }
 
 func TestListPendingActions_InvalidEncounterID(t *testing.T) {
-	svc := NewService(&mockStore{})
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(&mockStore{})
 
 	req := httptest.NewRequest("GET", "/api/combat/not-a-uuid/pending-actions", nil)
 	w := httptest.NewRecorder()
@@ -158,11 +152,7 @@ func TestListPendingActions_Empty(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/pending-actions", nil)
 	w := httptest.NewRecorder()
@@ -208,11 +198,7 @@ func TestResolvePendingAction_Success(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"Hits for 8 damage","effects":[]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -242,11 +228,7 @@ func TestResolvePendingAction_NotPending(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test"}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -271,11 +253,7 @@ func TestResolvePendingAction_WrongEncounter(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test"}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -288,11 +266,7 @@ func TestResolvePendingAction_WrongEncounter(t *testing.T) {
 func TestResolvePendingAction_InvalidActionID(t *testing.T) {
 	encounterID := uuid.New()
 
-	svc := NewService(&mockStore{})
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(&mockStore{})
 
 	body := `{"outcome":"test"}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/not-a-uuid/resolve", strings.NewReader(body))
@@ -306,11 +280,7 @@ func TestResolvePendingAction_InvalidBody(t *testing.T) {
 	encounterID := uuid.New()
 	actionID := uuid.New()
 
-	svc := NewService(&mockStore{})
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(&mockStore{})
 
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader("not json"))
 	w := httptest.NewRecorder()
@@ -362,11 +332,7 @@ func TestResolvePendingAction_WithDamageEffect(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"8 slashing damage","effects":[{"type":"damage","target_id":"` + targetID.String() + `","value":{"amount":8}}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -417,11 +383,7 @@ func TestResolvePendingAction_WithConditionAddEffect(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"Target is stunned","effects":[{"type":"condition_add","target_id":"` + targetID.String() + `","value":{"condition":"stunned"}}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -471,11 +433,7 @@ func TestResolvePendingAction_WithMoveEffect(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"Moved to C3","effects":[{"type":"move","target_id":"` + targetID.String() + `","value":{"col":"C","row":3}}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -547,8 +505,6 @@ func TestWorkspaceResponse_IncludesInitiativeRoll(t *testing.T) {
 	assert.Equal(t, int32(18), resp.Encounters[0].Combatants[0].InitiativeRoll)
 }
 
-// --- TDD Cycle 8: Resolve with condition_remove effect ---
-
 // --- TDD Cycle: AdvanceTurn error from service ---
 
 func TestAdvanceTurn_ServiceError(t *testing.T) {
@@ -560,11 +516,7 @@ func TestAdvanceTurn_ServiceError(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/advance-turn", nil)
 	w := httptest.NewRecorder()
@@ -584,11 +536,7 @@ func TestListPendingActions_StoreError(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	req := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/pending-actions", nil)
 	w := httptest.NewRecorder()
@@ -609,11 +557,7 @@ func TestResolvePendingAction_NotFound(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test"}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -639,11 +583,7 @@ func TestResolvePendingAction_InvalidEffectsJSON(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test","effects":"not-an-array"}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -669,11 +609,7 @@ func TestResolvePendingAction_InvalidTargetID(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test","effects":[{"type":"damage","target_id":"not-a-uuid","value":{"amount":5}}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -707,11 +643,7 @@ func TestResolvePendingAction_NoActiveTurn(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"Resolved without turn"}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -750,11 +682,7 @@ func TestResolvePendingAction_UnknownEffectType(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test","effects":[{"type":"unknown_type","target_id":"` + targetID.String() + `","value":{}}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -808,11 +736,7 @@ func TestResolvePendingAction_DamageAbsorbsTempHP(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	// 8 damage: 5 absorbed by temp HP, 3 from HP (20->17)
 	body := `{"outcome":"8 damage","effects":[{"type":"damage","target_id":"` + targetID.String() + `","value":{"amount":8}}]}`
@@ -828,11 +752,7 @@ func TestResolvePendingAction_DamageAbsorbsTempHP(t *testing.T) {
 // --- TDD Cycle: Resolve with invalid encounter ID in URL ---
 
 func TestResolvePendingAction_InvalidEncounterID(t *testing.T) {
-	svc := NewService(&mockStore{})
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(&mockStore{})
 
 	actionID := uuid.New()
 	body := `{"outcome":"test"}`
@@ -863,11 +783,7 @@ func TestResolvePendingAction_DamageEffectGetCombatantError(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test","effects":[{"type":"damage","target_id":"` + targetID.String() + `","value":{"amount":5}}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -897,11 +813,7 @@ func TestResolvePendingAction_ConditionAddGetCombatantError(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test","effects":[{"type":"condition_add","target_id":"` + targetID.String() + `","value":{"condition":"stunned"}}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -931,11 +843,7 @@ func TestResolvePendingAction_MoveEffectGetCombatantError(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test","effects":[{"type":"move","target_id":"` + targetID.String() + `","value":{"col":"B","row":3}}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -962,11 +870,7 @@ func TestResolvePendingAction_DamageEffectInvalidValue(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test","effects":[{"type":"damage","target_id":"` + targetID.String() + `","value":"not-json-obj"}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -993,11 +897,7 @@ func TestResolvePendingAction_ConditionAddInvalidValue(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test","effects":[{"type":"condition_add","target_id":"` + targetID.String() + `","value":"bad"}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -1024,11 +924,7 @@ func TestResolvePendingAction_MoveEffectInvalidValue(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test","effects":[{"type":"move","target_id":"` + targetID.String() + `","value":"bad"}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -1057,11 +953,7 @@ func TestResolvePendingAction_UpdateStatusError(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test"}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -1091,11 +983,7 @@ func TestResolvePendingAction_ConditionRemoveGetCombatantError(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test","effects":[{"type":"condition_remove","target_id":"` + targetID.String() + `","value":{"condition":"stunned"}}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -1122,11 +1010,7 @@ func TestResolvePendingAction_ConditionRemoveInvalidValue(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"test","effects":[{"type":"condition_remove","target_id":"` + targetID.String() + `","value":"bad"}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
@@ -1174,11 +1058,7 @@ func TestResolvePendingAction_WithConditionRemoveEffect(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	handler := NewDMDashboardHandler(svc)
-
-	r := chi.NewRouter()
-	handler.RegisterRoutes(r)
+	r := newDMDashboardRouter(store)
 
 	body := `{"outcome":"Stun removed","effects":[{"type":"condition_remove","target_id":"` + targetID.String() + `","value":{"condition":"stunned"}}]}`
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))

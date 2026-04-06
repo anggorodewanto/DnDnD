@@ -43,17 +43,17 @@
   function toggleExpand(actionId) {
     if (expandedActionId === actionId) {
       expandedActionId = null;
-    } else {
-      expandedActionId = actionId;
-      outcomeText = '';
-      pendingEffects = [];
-      effectType = 'damage';
-      effectTargetId = '';
-      effectDamageAmount = 0;
-      effectCondition = '';
-      effectMoveCol = '';
-      effectMoveRow = 0;
+      return;
     }
+    expandedActionId = actionId;
+    outcomeText = '';
+    pendingEffects = [];
+    effectType = 'damage';
+    effectTargetId = '';
+    effectDamageAmount = 0;
+    effectCondition = '';
+    effectMoveCol = '';
+    effectMoveRow = 0;
   }
 
   function addEffect() {

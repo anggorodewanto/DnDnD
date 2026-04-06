@@ -29,9 +29,14 @@ func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 	})
 }
 
+// parseEncounterID extracts and validates the encounterID URL parameter.
+func parseEncounterID(r *http.Request) (uuid.UUID, error) {
+	return uuid.Parse(chi.URLParam(r, "encounterID"))
+}
+
 // AdvanceTurn handles POST /api/combat/{encounterID}/advance-turn.
 func (h *DMDashboardHandler) AdvanceTurn(w http.ResponseWriter, r *http.Request) {
-	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	encounterID, err := parseEncounterID(r)
 	if err != nil {
 		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
 		return
@@ -81,7 +86,7 @@ type resolvePendingActionResponse struct {
 
 // ListPendingActions handles GET /api/combat/{encounterID}/pending-actions.
 func (h *DMDashboardHandler) ListPendingActions(w http.ResponseWriter, r *http.Request) {
-	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	encounterID, err := parseEncounterID(r)
 	if err != nil {
 		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
 		return
@@ -110,7 +115,7 @@ func (h *DMDashboardHandler) ListPendingActions(w http.ResponseWriter, r *http.R
 
 // ResolvePendingAction handles POST /api/combat/{encounterID}/pending-actions/{actionID}/resolve.
 func (h *DMDashboardHandler) ResolvePendingAction(w http.ResponseWriter, r *http.Request) {
-	encounterID, err := uuid.Parse(chi.URLParam(r, "encounterID"))
+	encounterID, err := parseEncounterID(r)
 	if err != nil {
 		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
 		return
@@ -152,7 +157,7 @@ func (h *DMDashboardHandler) ResolvePendingAction(w http.ResponseWriter, r *http
 		}
 
 		for _, eff := range effects {
-			if err := h.applyEffect(r, encounterID, eff); err != nil {
+			if err := h.applyEffect(r, eff); err != nil {
 				http.Error(w, "failed to apply effect: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -188,7 +193,7 @@ func (h *DMDashboardHandler) ResolvePendingAction(w http.ResponseWriter, r *http
 	})
 }
 
-func (h *DMDashboardHandler) applyEffect(r *http.Request, encounterID uuid.UUID, eff resolveEffect) error {
+func (h *DMDashboardHandler) applyEffect(r *http.Request, eff resolveEffect) error {
 	targetID, err := uuid.Parse(eff.TargetID)
 	if err != nil {
 		return err
@@ -198,9 +203,9 @@ func (h *DMDashboardHandler) applyEffect(r *http.Request, encounterID uuid.UUID,
 	case "damage":
 		return h.applyDamageEffect(r, targetID, eff.Value)
 	case "condition_add":
-		return h.applyConditionAddEffect(r, targetID, eff.Value)
+		return h.applyConditionEffect(r, targetID, eff.Value, addConditionAdapter)
 	case "condition_remove":
-		return h.applyConditionRemoveEffect(r, targetID, eff.Value)
+		return h.applyConditionEffect(r, targetID, eff.Value, removeConditionAdapter)
 	case "move":
 		return h.applyMoveEffect(r, targetID, eff.Value)
 	default:
@@ -244,33 +249,20 @@ func (h *DMDashboardHandler) applyDamageEffect(r *http.Request, targetID uuid.UU
 	return err
 }
 
-func (h *DMDashboardHandler) applyConditionAddEffect(r *http.Request, targetID uuid.UUID, value json.RawMessage) error {
-	var cond struct {
-		Condition string `json:"condition"`
-	}
-	if err := json.Unmarshal(value, &cond); err != nil {
-		return err
-	}
+// conditionModifier transforms existing conditions given a condition name.
+type conditionModifier func(json.RawMessage, string) (json.RawMessage, error)
 
-	c, err := h.svc.store.GetCombatant(r.Context(), targetID)
-	if err != nil {
-		return err
-	}
-
-	newConds, err := AddCondition(c.Conditions, CombatCondition{Condition: cond.Condition})
-	if err != nil {
-		return err
-	}
-
-	_, err = h.svc.store.UpdateCombatantConditions(r.Context(), refdata.UpdateCombatantConditionsParams{
-		ID:              targetID,
-		Conditions:      newConds,
-		ExhaustionLevel: c.ExhaustionLevel,
-	})
-	return err
+// addConditionAdapter adapts AddCondition to the conditionModifier signature.
+func addConditionAdapter(conditions json.RawMessage, name string) (json.RawMessage, error) {
+	return AddCondition(conditions, CombatCondition{Condition: name})
 }
 
-func (h *DMDashboardHandler) applyConditionRemoveEffect(r *http.Request, targetID uuid.UUID, value json.RawMessage) error {
+// removeConditionAdapter adapts RemoveCondition to the conditionModifier signature.
+func removeConditionAdapter(conditions json.RawMessage, name string) (json.RawMessage, error) {
+	return RemoveCondition(conditions, name)
+}
+
+func (h *DMDashboardHandler) applyConditionEffect(r *http.Request, targetID uuid.UUID, value json.RawMessage, modify conditionModifier) error {
 	var cond struct {
 		Condition string `json:"condition"`
 	}
@@ -283,7 +275,7 @@ func (h *DMDashboardHandler) applyConditionRemoveEffect(r *http.Request, targetI
 		return err
 	}
 
-	newConds, err := RemoveCondition(c.Conditions, cond.Condition)
+	newConds, err := modify(c.Conditions, cond.Condition)
 	if err != nil {
 		return err
 	}
