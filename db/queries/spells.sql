@@ -8,8 +8,8 @@ SELECT * FROM spells ORDER BY name;
 SELECT count(*) FROM spells;
 
 -- name: UpsertSpell :exec
-INSERT INTO spells (id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+INSERT INTO spells (id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, campaign_id, homebrew, source)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     level = EXCLUDED.level,
@@ -36,7 +36,13 @@ ON CONFLICT (id) DO UPDATE SET
     teleport = EXCLUDED.teleport,
     resolution_mode = EXCLUDED.resolution_mode,
     classes = EXCLUDED.classes,
+    campaign_id = EXCLUDED.campaign_id,
+    homebrew = EXCLUDED.homebrew,
+    source = EXCLUDED.source,
     updated_at = now();
+
+-- name: DeleteHomebrewSpell :execrows
+DELETE FROM spells WHERE id = $1 AND homebrew = true AND campaign_id = $2;
 
 -- name: ListSpellsByClass :many
 SELECT * FROM spells WHERE $1::text = ANY(classes) ORDER BY level, name;

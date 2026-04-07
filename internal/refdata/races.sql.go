@@ -7,8 +7,10 @@ package refdata
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/sqlc-dev/pqtype"
 )
@@ -24,8 +26,25 @@ func (q *Queries) CountRaces(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const deleteHomebrewRace = `-- name: DeleteHomebrewRace :execrows
+DELETE FROM races WHERE id = $1 AND homebrew = true AND campaign_id = $2
+`
+
+type DeleteHomebrewRaceParams struct {
+	ID         string        `json:"id"`
+	CampaignID uuid.NullUUID `json:"campaign_id"`
+}
+
+func (q *Queries) DeleteHomebrewRace(ctx context.Context, arg DeleteHomebrewRaceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteHomebrewRace, arg.ID, arg.CampaignID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getRace = `-- name: GetRace :one
-SELECT id, name, speed_ft, size, ability_bonuses, darkvision_ft, traits, languages, subraces, created_at, updated_at FROM races WHERE id = $1
+SELECT id, name, speed_ft, size, ability_bonuses, darkvision_ft, traits, languages, subraces, created_at, updated_at, campaign_id, homebrew, source FROM races WHERE id = $1
 `
 
 func (q *Queries) GetRace(ctx context.Context, id string) (Race, error) {
@@ -43,12 +62,15 @@ func (q *Queries) GetRace(ctx context.Context, id string) (Race, error) {
 		&i.Subraces,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CampaignID,
+		&i.Homebrew,
+		&i.Source,
 	)
 	return i, err
 }
 
 const listRaces = `-- name: ListRaces :many
-SELECT id, name, speed_ft, size, ability_bonuses, darkvision_ft, traits, languages, subraces, created_at, updated_at FROM races ORDER BY name
+SELECT id, name, speed_ft, size, ability_bonuses, darkvision_ft, traits, languages, subraces, created_at, updated_at, campaign_id, homebrew, source FROM races ORDER BY name
 `
 
 func (q *Queries) ListRaces(ctx context.Context) ([]Race, error) {
@@ -72,6 +94,9 @@ func (q *Queries) ListRaces(ctx context.Context) ([]Race, error) {
 			&i.Subraces,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CampaignID,
+			&i.Homebrew,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -87,8 +112,8 @@ func (q *Queries) ListRaces(ctx context.Context) ([]Race, error) {
 }
 
 const upsertRace = `-- name: UpsertRace :exec
-INSERT INTO races (id, name, speed_ft, size, ability_bonuses, darkvision_ft, traits, languages, subraces)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO races (id, name, speed_ft, size, ability_bonuses, darkvision_ft, traits, languages, subraces, campaign_id, homebrew, source)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     speed_ft = EXCLUDED.speed_ft,
@@ -98,6 +123,9 @@ ON CONFLICT (id) DO UPDATE SET
     traits = EXCLUDED.traits,
     languages = EXCLUDED.languages,
     subraces = EXCLUDED.subraces,
+    campaign_id = EXCLUDED.campaign_id,
+    homebrew = EXCLUDED.homebrew,
+    source = EXCLUDED.source,
     updated_at = now()
 `
 
@@ -111,6 +139,9 @@ type UpsertRaceParams struct {
 	Traits         json.RawMessage       `json:"traits"`
 	Languages      []string              `json:"languages"`
 	Subraces       pqtype.NullRawMessage `json:"subraces"`
+	CampaignID     uuid.NullUUID         `json:"campaign_id"`
+	Homebrew       sql.NullBool          `json:"homebrew"`
+	Source         sql.NullString        `json:"source"`
 }
 
 func (q *Queries) UpsertRace(ctx context.Context, arg UpsertRaceParams) error {
@@ -124,6 +155,9 @@ func (q *Queries) UpsertRace(ctx context.Context, arg UpsertRaceParams) error {
 		arg.Traits,
 		pq.Array(arg.Languages),
 		arg.Subraces,
+		arg.CampaignID,
+		arg.Homebrew,
+		arg.Source,
 	)
 	return err
 }

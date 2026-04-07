@@ -7,7 +7,9 @@ package refdata
 
 import (
 	"context"
+	"database/sql"
 
+	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -22,8 +24,25 @@ func (q *Queries) CountFeats(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const deleteHomebrewFeat = `-- name: DeleteHomebrewFeat :execrows
+DELETE FROM feats WHERE id = $1 AND homebrew = true AND campaign_id = $2
+`
+
+type DeleteHomebrewFeatParams struct {
+	ID         string        `json:"id"`
+	CampaignID uuid.NullUUID `json:"campaign_id"`
+}
+
+func (q *Queries) DeleteHomebrewFeat(ctx context.Context, arg DeleteHomebrewFeatParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteHomebrewFeat, arg.ID, arg.CampaignID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getFeat = `-- name: GetFeat :one
-SELECT id, name, description, prerequisites, asi_bonus, mechanical_effect, created_at, updated_at FROM feats WHERE id = $1
+SELECT id, name, description, prerequisites, asi_bonus, mechanical_effect, created_at, updated_at, campaign_id, homebrew, source FROM feats WHERE id = $1
 `
 
 func (q *Queries) GetFeat(ctx context.Context, id string) (Feat, error) {
@@ -38,12 +57,15 @@ func (q *Queries) GetFeat(ctx context.Context, id string) (Feat, error) {
 		&i.MechanicalEffect,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CampaignID,
+		&i.Homebrew,
+		&i.Source,
 	)
 	return i, err
 }
 
 const listFeats = `-- name: ListFeats :many
-SELECT id, name, description, prerequisites, asi_bonus, mechanical_effect, created_at, updated_at FROM feats ORDER BY name
+SELECT id, name, description, prerequisites, asi_bonus, mechanical_effect, created_at, updated_at, campaign_id, homebrew, source FROM feats ORDER BY name
 `
 
 func (q *Queries) ListFeats(ctx context.Context) ([]Feat, error) {
@@ -64,6 +86,9 @@ func (q *Queries) ListFeats(ctx context.Context) ([]Feat, error) {
 			&i.MechanicalEffect,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CampaignID,
+			&i.Homebrew,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -79,14 +104,17 @@ func (q *Queries) ListFeats(ctx context.Context) ([]Feat, error) {
 }
 
 const upsertFeat = `-- name: UpsertFeat :exec
-INSERT INTO feats (id, name, description, prerequisites, asi_bonus, mechanical_effect)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO feats (id, name, description, prerequisites, asi_bonus, mechanical_effect, campaign_id, homebrew, source)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     description = EXCLUDED.description,
     prerequisites = EXCLUDED.prerequisites,
     asi_bonus = EXCLUDED.asi_bonus,
     mechanical_effect = EXCLUDED.mechanical_effect,
+    campaign_id = EXCLUDED.campaign_id,
+    homebrew = EXCLUDED.homebrew,
+    source = EXCLUDED.source,
     updated_at = now()
 `
 
@@ -97,6 +125,9 @@ type UpsertFeatParams struct {
 	Prerequisites    pqtype.NullRawMessage `json:"prerequisites"`
 	AsiBonus         pqtype.NullRawMessage `json:"asi_bonus"`
 	MechanicalEffect pqtype.NullRawMessage `json:"mechanical_effect"`
+	CampaignID       uuid.NullUUID         `json:"campaign_id"`
+	Homebrew         sql.NullBool          `json:"homebrew"`
+	Source           sql.NullString        `json:"source"`
 }
 
 func (q *Queries) UpsertFeat(ctx context.Context, arg UpsertFeatParams) error {
@@ -107,6 +138,9 @@ func (q *Queries) UpsertFeat(ctx context.Context, arg UpsertFeatParams) error {
 		arg.Prerequisites,
 		arg.AsiBonus,
 		arg.MechanicalEffect,
+		arg.CampaignID,
+		arg.Homebrew,
+		arg.Source,
 	)
 	return err
 }

@@ -24,6 +24,23 @@ func (q *Queries) CountMagicItems(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const deleteHomebrewMagicItem = `-- name: DeleteHomebrewMagicItem :execrows
+DELETE FROM magic_items WHERE id = $1 AND homebrew = true AND campaign_id = $2
+`
+
+type DeleteHomebrewMagicItemParams struct {
+	ID         string        `json:"id"`
+	CampaignID uuid.NullUUID `json:"campaign_id"`
+}
+
+func (q *Queries) DeleteHomebrewMagicItem(ctx context.Context, arg DeleteHomebrewMagicItemParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteHomebrewMagicItem, arg.ID, arg.CampaignID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getMagicItem = `-- name: GetMagicItem :one
 SELECT id, campaign_id, name, base_item_type, base_item_id, rarity, requires_attunement, attunement_restriction, magic_bonus, passive_effects, active_abilities, charges, description, homebrew, source, created_at, updated_at FROM magic_items WHERE id = $1
 `

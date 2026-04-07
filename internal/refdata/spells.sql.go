@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/sqlc-dev/pqtype"
 )
@@ -24,8 +25,25 @@ func (q *Queries) CountSpells(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const deleteHomebrewSpell = `-- name: DeleteHomebrewSpell :execrows
+DELETE FROM spells WHERE id = $1 AND homebrew = true AND campaign_id = $2
+`
+
+type DeleteHomebrewSpellParams struct {
+	ID         string        `json:"id"`
+	CampaignID uuid.NullUUID `json:"campaign_id"`
+}
+
+func (q *Queries) DeleteHomebrewSpell(ctx context.Context, arg DeleteHomebrewSpellParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteHomebrewSpell, arg.ID, arg.CampaignID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getSpell = `-- name: GetSpell :one
-SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at FROM spells WHERE id = $1
+SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at, campaign_id, homebrew, source FROM spells WHERE id = $1
 `
 
 func (q *Queries) GetSpell(ctx context.Context, id string) (Spell, error) {
@@ -60,12 +78,15 @@ func (q *Queries) GetSpell(ctx context.Context, id string) (Spell, error) {
 		pq.Array(&i.Classes),
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CampaignID,
+		&i.Homebrew,
+		&i.Source,
 	)
 	return i, err
 }
 
 const getSpellsByIDs = `-- name: GetSpellsByIDs :many
-SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at FROM spells WHERE id = ANY($1::text[]) ORDER BY level, name
+SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at, campaign_id, homebrew, source FROM spells WHERE id = ANY($1::text[]) ORDER BY level, name
 `
 
 func (q *Queries) GetSpellsByIDs(ctx context.Context, dollar_1 []string) ([]Spell, error) {
@@ -106,6 +127,9 @@ func (q *Queries) GetSpellsByIDs(ctx context.Context, dollar_1 []string) ([]Spel
 			pq.Array(&i.Classes),
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CampaignID,
+			&i.Homebrew,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -121,7 +145,7 @@ func (q *Queries) GetSpellsByIDs(ctx context.Context, dollar_1 []string) ([]Spel
 }
 
 const listSpells = `-- name: ListSpells :many
-SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at FROM spells ORDER BY name
+SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at, campaign_id, homebrew, source FROM spells ORDER BY name
 `
 
 func (q *Queries) ListSpells(ctx context.Context) ([]Spell, error) {
@@ -162,6 +186,9 @@ func (q *Queries) ListSpells(ctx context.Context) ([]Spell, error) {
 			pq.Array(&i.Classes),
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CampaignID,
+			&i.Homebrew,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -177,7 +204,7 @@ func (q *Queries) ListSpells(ctx context.Context) ([]Spell, error) {
 }
 
 const listSpellsByClass = `-- name: ListSpellsByClass :many
-SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at FROM spells WHERE $1::text = ANY(classes) ORDER BY level, name
+SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at, campaign_id, homebrew, source FROM spells WHERE $1::text = ANY(classes) ORDER BY level, name
 `
 
 func (q *Queries) ListSpellsByClass(ctx context.Context, dollar_1 string) ([]Spell, error) {
@@ -218,6 +245,9 @@ func (q *Queries) ListSpellsByClass(ctx context.Context, dollar_1 string) ([]Spe
 			pq.Array(&i.Classes),
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CampaignID,
+			&i.Homebrew,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -233,7 +263,7 @@ func (q *Queries) ListSpellsByClass(ctx context.Context, dollar_1 string) ([]Spe
 }
 
 const listSpellsByLevel = `-- name: ListSpellsByLevel :many
-SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at FROM spells WHERE level = $1 ORDER BY name
+SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at, campaign_id, homebrew, source FROM spells WHERE level = $1 ORDER BY name
 `
 
 func (q *Queries) ListSpellsByLevel(ctx context.Context, level int32) ([]Spell, error) {
@@ -274,6 +304,9 @@ func (q *Queries) ListSpellsByLevel(ctx context.Context, level int32) ([]Spell, 
 			pq.Array(&i.Classes),
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CampaignID,
+			&i.Homebrew,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -289,7 +322,7 @@ func (q *Queries) ListSpellsByLevel(ctx context.Context, level int32) ([]Spell, 
 }
 
 const listSpellsByResolutionMode = `-- name: ListSpellsByResolutionMode :many
-SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at FROM spells WHERE resolution_mode = $1 ORDER BY level, name
+SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at, campaign_id, homebrew, source FROM spells WHERE resolution_mode = $1 ORDER BY level, name
 `
 
 func (q *Queries) ListSpellsByResolutionMode(ctx context.Context, resolutionMode string) ([]Spell, error) {
@@ -330,6 +363,9 @@ func (q *Queries) ListSpellsByResolutionMode(ctx context.Context, resolutionMode
 			pq.Array(&i.Classes),
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CampaignID,
+			&i.Homebrew,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -345,7 +381,7 @@ func (q *Queries) ListSpellsByResolutionMode(ctx context.Context, resolutionMode
 }
 
 const listSpellsBySchool = `-- name: ListSpellsBySchool :many
-SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at FROM spells WHERE school = $1 ORDER BY level, name
+SELECT id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, created_at, updated_at, campaign_id, homebrew, source FROM spells WHERE school = $1 ORDER BY level, name
 `
 
 func (q *Queries) ListSpellsBySchool(ctx context.Context, school string) ([]Spell, error) {
@@ -386,6 +422,9 @@ func (q *Queries) ListSpellsBySchool(ctx context.Context, school string) ([]Spel
 			pq.Array(&i.Classes),
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CampaignID,
+			&i.Homebrew,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -401,8 +440,8 @@ func (q *Queries) ListSpellsBySchool(ctx context.Context, school string) ([]Spel
 }
 
 const upsertSpell = `-- name: UpsertSpell :exec
-INSERT INTO spells (id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+INSERT INTO spells (id, name, level, school, casting_time, range_ft, range_type, components, material_description, material_cost_gp, material_consumed, duration, concentration, ritual, description, higher_levels, damage, healing, save_ability, save_effect, attack_type, area_of_effect, conditions_applied, teleport, resolution_mode, classes, campaign_id, homebrew, source)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     level = EXCLUDED.level,
@@ -429,6 +468,9 @@ ON CONFLICT (id) DO UPDATE SET
     teleport = EXCLUDED.teleport,
     resolution_mode = EXCLUDED.resolution_mode,
     classes = EXCLUDED.classes,
+    campaign_id = EXCLUDED.campaign_id,
+    homebrew = EXCLUDED.homebrew,
+    source = EXCLUDED.source,
     updated_at = now()
 `
 
@@ -459,6 +501,9 @@ type UpsertSpellParams struct {
 	Teleport            pqtype.NullRawMessage `json:"teleport"`
 	ResolutionMode      string                `json:"resolution_mode"`
 	Classes             []string              `json:"classes"`
+	CampaignID          uuid.NullUUID         `json:"campaign_id"`
+	Homebrew            sql.NullBool          `json:"homebrew"`
+	Source              sql.NullString        `json:"source"`
 }
 
 func (q *Queries) UpsertSpell(ctx context.Context, arg UpsertSpellParams) error {
@@ -489,6 +534,9 @@ func (q *Queries) UpsertSpell(ctx context.Context, arg UpsertSpellParams) error 
 		arg.Teleport,
 		arg.ResolutionMode,
 		pq.Array(arg.Classes),
+		arg.CampaignID,
+		arg.Homebrew,
+		arg.Source,
 	)
 	return err
 }

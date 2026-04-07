@@ -8,12 +8,18 @@ SELECT * FROM feats ORDER BY name;
 SELECT count(*) FROM feats;
 
 -- name: UpsertFeat :exec
-INSERT INTO feats (id, name, description, prerequisites, asi_bonus, mechanical_effect)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO feats (id, name, description, prerequisites, asi_bonus, mechanical_effect, campaign_id, homebrew, source)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     description = EXCLUDED.description,
     prerequisites = EXCLUDED.prerequisites,
     asi_bonus = EXCLUDED.asi_bonus,
     mechanical_effect = EXCLUDED.mechanical_effect,
+    campaign_id = EXCLUDED.campaign_id,
+    homebrew = EXCLUDED.homebrew,
+    source = EXCLUDED.source,
     updated_at = now();
+
+-- name: DeleteHomebrewFeat :execrows
+DELETE FROM feats WHERE id = $1 AND homebrew = true AND campaign_id = $2;

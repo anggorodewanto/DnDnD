@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 
@@ -23,8 +24,25 @@ func (q *Queries) CountWeapons(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const deleteHomebrewWeapon = `-- name: DeleteHomebrewWeapon :execrows
+DELETE FROM weapons WHERE id = $1 AND homebrew = true AND campaign_id = $2
+`
+
+type DeleteHomebrewWeaponParams struct {
+	ID         string        `json:"id"`
+	CampaignID uuid.NullUUID `json:"campaign_id"`
+}
+
+func (q *Queries) DeleteHomebrewWeapon(ctx context.Context, arg DeleteHomebrewWeaponParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteHomebrewWeapon, arg.ID, arg.CampaignID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getWeapon = `-- name: GetWeapon :one
-SELECT id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, created_at, updated_at FROM weapons WHERE id = $1
+SELECT id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, created_at, updated_at, campaign_id, homebrew, source FROM weapons WHERE id = $1
 `
 
 func (q *Queries) GetWeapon(ctx context.Context, id string) (Weapon, error) {
@@ -43,12 +61,15 @@ func (q *Queries) GetWeapon(ctx context.Context, id string) (Weapon, error) {
 		&i.WeaponType,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CampaignID,
+		&i.Homebrew,
+		&i.Source,
 	)
 	return i, err
 }
 
 const listWeapons = `-- name: ListWeapons :many
-SELECT id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, created_at, updated_at FROM weapons ORDER BY name
+SELECT id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, created_at, updated_at, campaign_id, homebrew, source FROM weapons ORDER BY name
 `
 
 func (q *Queries) ListWeapons(ctx context.Context) ([]Weapon, error) {
@@ -73,6 +94,9 @@ func (q *Queries) ListWeapons(ctx context.Context) ([]Weapon, error) {
 			&i.WeaponType,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CampaignID,
+			&i.Homebrew,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -88,8 +112,8 @@ func (q *Queries) ListWeapons(ctx context.Context) ([]Weapon, error) {
 }
 
 const upsertWeapon = `-- name: UpsertWeapon :exec
-INSERT INTO weapons (id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO weapons (id, name, damage, damage_type, weight_lb, properties, range_normal_ft, range_long_ft, versatile_damage, weapon_type, campaign_id, homebrew, source)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     damage = EXCLUDED.damage,
@@ -100,6 +124,9 @@ ON CONFLICT (id) DO UPDATE SET
     range_long_ft = EXCLUDED.range_long_ft,
     versatile_damage = EXCLUDED.versatile_damage,
     weapon_type = EXCLUDED.weapon_type,
+    campaign_id = EXCLUDED.campaign_id,
+    homebrew = EXCLUDED.homebrew,
+    source = EXCLUDED.source,
     updated_at = now()
 `
 
@@ -114,6 +141,9 @@ type UpsertWeaponParams struct {
 	RangeLongFt     sql.NullInt32   `json:"range_long_ft"`
 	VersatileDamage sql.NullString  `json:"versatile_damage"`
 	WeaponType      string          `json:"weapon_type"`
+	CampaignID      uuid.NullUUID   `json:"campaign_id"`
+	Homebrew        sql.NullBool    `json:"homebrew"`
+	Source          sql.NullString  `json:"source"`
 }
 
 func (q *Queries) UpsertWeapon(ctx context.Context, arg UpsertWeaponParams) error {
@@ -128,6 +158,9 @@ func (q *Queries) UpsertWeapon(ctx context.Context, arg UpsertWeaponParams) erro
 		arg.RangeLongFt,
 		arg.VersatileDamage,
 		arg.WeaponType,
+		arg.CampaignID,
+		arg.Homebrew,
+		arg.Source,
 	)
 	return err
 }

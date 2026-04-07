@@ -118,6 +118,9 @@ type Class struct {
 	MulticlassProficiencies pqtype.NullRawMessage `json:"multiclass_proficiencies"`
 	CreatedAt               time.Time             `json:"created_at"`
 	UpdatedAt               time.Time             `json:"updated_at"`
+	CampaignID              uuid.NullUUID         `json:"campaign_id"`
+	Homebrew                sql.NullBool          `json:"homebrew"`
+	Source                  sql.NullString        `json:"source"`
 }
 
 type Combatant struct {
@@ -253,6 +256,9 @@ type Feat struct {
 	MechanicalEffect pqtype.NullRawMessage `json:"mechanical_effect"`
 	CreatedAt        time.Time             `json:"created_at"`
 	UpdatedAt        time.Time             `json:"updated_at"`
+	CampaignID       uuid.NullUUID         `json:"campaign_id"`
+	Homebrew         sql.NullBool          `json:"homebrew"`
+	Source           sql.NullString        `json:"source"`
 }
 
 type LootPool struct {
@@ -378,6 +384,9 @@ type Race struct {
 	Subraces       pqtype.NullRawMessage `json:"subraces"`
 	CreatedAt      time.Time             `json:"created_at"`
 	UpdatedAt      time.Time             `json:"updated_at"`
+	CampaignID     uuid.NullUUID         `json:"campaign_id"`
+	Homebrew       sql.NullBool          `json:"homebrew"`
+	Source         sql.NullString        `json:"source"`
 }
 
 type ReactionDeclaration struct {
@@ -461,6 +470,9 @@ type Spell struct {
 	Classes             []string              `json:"classes"`
 	CreatedAt           time.Time             `json:"created_at"`
 	UpdatedAt           time.Time             `json:"updated_at"`
+	CampaignID          uuid.NullUUID         `json:"campaign_id"`
+	Homebrew            sql.NullBool          `json:"homebrew"`
+	Source              sql.NullString        `json:"source"`
 }
 
 type Turn struct {
@@ -505,4 +517,7 @@ type Weapon struct {
 	WeaponType      string          `json:"weapon_type"`
 	CreatedAt       time.Time       `json:"created_at"`
 	UpdatedAt       time.Time       `json:"updated_at"`
+	CampaignID      uuid.NullUUID   `json:"campaign_id"`
+	Homebrew        sql.NullBool    `json:"homebrew"`
+	Source          sql.NullString  `json:"source"`
 }

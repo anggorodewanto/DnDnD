@@ -37,6 +37,9 @@ ON CONFLICT (id) DO UPDATE SET
     source = EXCLUDED.source,
     updated_at = now();
 
+-- name: DeleteHomebrewCreature :execrows
+DELETE FROM creatures WHERE id = $1 AND homebrew = true AND campaign_id = $2;
+
 -- name: ListCreaturesByType :many
 SELECT * FROM creatures WHERE type = $1 ORDER BY name;
 

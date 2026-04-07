@@ -27,6 +27,9 @@ ON CONFLICT (id) DO UPDATE SET
     source = EXCLUDED.source,
     updated_at = now();
 
+-- name: DeleteHomebrewMagicItem :execrows
+DELETE FROM magic_items WHERE id = $1 AND homebrew = true AND campaign_id = $2;
+
 -- name: ListMagicItemsByRarity :many
 SELECT * FROM magic_items WHERE rarity = $1 ORDER BY name;
 

@@ -14,6 +14,7 @@ import (
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/encounter"
 	"github.com/ab/dndnd/internal/gamemap"
+	"github.com/ab/dndnd/internal/homebrew"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/server"
 	"github.com/ab/dndnd/internal/statblocklibrary"
@@ -86,6 +87,11 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		statBlockSvc := statblocklibrary.NewService(queries)
 		statBlockHandler := statblocklibrary.NewHandler(statBlockSvc)
 		statBlockHandler.RegisterRoutes(router)
+
+		// Wire Homebrew Content API handler (Phase 99)
+		homebrewSvc := homebrew.NewService(queries)
+		homebrewHandler := homebrew.NewHandler(homebrewSvc)
+		homebrewHandler.RegisterRoutes(router)
 	}
 
 	srv := &http.Server{

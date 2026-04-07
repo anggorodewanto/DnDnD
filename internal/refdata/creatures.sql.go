@@ -26,6 +26,23 @@ func (q *Queries) CountCreatures(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const deleteHomebrewCreature = `-- name: DeleteHomebrewCreature :execrows
+DELETE FROM creatures WHERE id = $1 AND homebrew = true AND campaign_id = $2
+`
+
+type DeleteHomebrewCreatureParams struct {
+	ID         string        `json:"id"`
+	CampaignID uuid.NullUUID `json:"campaign_id"`
+}
+
+func (q *Queries) DeleteHomebrewCreature(ctx context.Context, arg DeleteHomebrewCreatureParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteHomebrewCreature, arg.ID, arg.CampaignID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getCreature = `-- name: GetCreature :one
 SELECT id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source, created_at, updated_at FROM creatures WHERE id = $1
 `
