@@ -599,7 +599,7 @@
   - Depends on: Phase 6, Phase 15
   - Done when: DM can browse, search, and select stat blocks; homebrew entries visible alongside SRD.
 
-- [ ] **Phase 99: DM Dashboard — Homebrew Content**
+- [x] **Phase 99: DM Dashboard — Homebrew Content**
   - Scope: DM creates custom: monsters (full stat block editor), spells, weapons, items, races, class features. Campaign-scoped, stored with `homebrew=true`. Used alongside SRD data in all contexts.
   - Depends on: Phase 98
   - Done when: DM can create/edit homebrew entries for all reference types, entries appear in search/selection alongside SRD.
