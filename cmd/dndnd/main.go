@@ -14,7 +14,9 @@ import (
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/encounter"
 	"github.com/ab/dndnd/internal/gamemap"
+	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/homebrew"
+	"github.com/ab/dndnd/internal/narration"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/server"
 	"github.com/ab/dndnd/internal/statblocklibrary"
@@ -92,6 +94,19 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		homebrewSvc := homebrew.NewService(queries)
 		homebrewHandler := homebrew.NewHandler(homebrewSvc)
 		homebrewHandler.RegisterRoutes(router)
+
+		// Wire Narration API handler (Phase 100a). The narration poster is
+		// nil here because the Discord session is constructed in bot.go at
+		// runtime; main.go wiring is placeholder-only for now. When a
+		// discord.Session is available (see internal/discord/bot.go), the
+		// wiring should be updated to inject discord.NewNarrationPoster(session).
+		campaignSvc := campaign.NewService(queries, nil)
+		narrationStore := narration.NewDBStore(queries)
+		narrationAssets := narration.NewAssetAttachmentResolver(assetSvc)
+		narrationCampaigns := narration.NewCampaignResolverAdapter(campaignSvc)
+		narrationSvc := narration.NewService(narrationStore, nil, narrationAssets, narrationCampaigns)
+		narrationHandler := narration.NewHandler(narrationSvc)
+		narrationHandler.RegisterRoutes(router)
 	}
 
 	srv := &http.Server{

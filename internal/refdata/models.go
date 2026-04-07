@@ -323,6 +323,16 @@ type Map struct {
 	UpdatedAt         time.Time             `json:"updated_at"`
 }
 
+type NarrationPost struct {
+	ID                 uuid.UUID   `json:"id"`
+	CampaignID         uuid.UUID   `json:"campaign_id"`
+	AuthorUserID       string      `json:"author_user_id"`
+	Body               string      `json:"body"`
+	AttachmentAssetIds []uuid.UUID `json:"attachment_asset_ids"`
+	DiscordMessageIds  []string    `json:"discord_message_ids"`
+	PostedAt           time.Time   `json:"posted_at"`
+}
+
 type PendingAction struct {
 	ID               uuid.UUID `json:"id"`
 	EncounterID      uuid.UUID `json:"encounter_id"`

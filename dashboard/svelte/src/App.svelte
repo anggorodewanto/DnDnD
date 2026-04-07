@@ -7,6 +7,7 @@
   import ShopList from './ShopList.svelte';
   import ShopBuilder from './ShopBuilder.svelte';
   import CombatManager from './CombatManager.svelte';
+  import NarratePanel from './NarratePanel.svelte';
 
   let currentView = $state('list');
   let editingMapId = $state(null);
@@ -27,6 +28,7 @@
     if (hash.startsWith('#turn-builder')) return 'turn-builder';
     if (hash === '#shops') return 'shop-list';
     if (hash === '#shop-new') return 'shop-editor';
+    if (hash === '#narrate') return 'narrate';
     return 'list';
   }
 
@@ -106,6 +108,10 @@
   function onShowCombat() {
     currentView = 'combat';
   }
+
+  function onShowNarrate() {
+    currentView = 'narrate';
+  }
 </script>
 
 <main>
@@ -116,6 +122,8 @@
       <h1>Map Editor</h1>
     {:else if currentView === 'shop-list' || currentView === 'shop-editor'}
       <h1>Shops & Merchants</h1>
+    {:else if currentView === 'narrate'}
+      <h1>Narrate</h1>
     {:else}
       <h1>Encounter Builder</h1>
     {/if}
@@ -126,6 +134,7 @@
       <button class:active={currentView === 'encounter-list' || currentView === 'encounter-editor'} onclick={onShowEncounters}>Encounters</button>
       <button class:active={currentView === 'turn-builder'} onclick={() => currentView = 'turn-builder'}>Turn Builder</button>
       <button class:active={currentView === 'shop-list' || currentView === 'shop-editor'} onclick={onShowShops}>Shops</button>
+      <button class:active={currentView === 'narrate'} onclick={onShowNarrate}>Narrate</button>
     </nav>
 
     {#if currentView === 'editor'}
@@ -160,6 +169,8 @@
     <ShopList {campaignId} oncreate={onCreateShop} onedit={onEditShop} />
   {:else if currentView === 'shop-editor'}
     <ShopBuilder {campaignId} shopId={editingShopId} onback={onBackFromShop} />
+  {:else if currentView === 'narrate'}
+    <NarratePanel {campaignId} />
   {/if}
 </main>
 

@@ -657,6 +657,46 @@ export async function overrideCharacterSpellSlots(encounterId, characterId, payl
   return res.json();
 }
 
+// --- Narration API (Phase 100a) ---
+
+const NARRATION_BASE = '/api/narration';
+
+/**
+ * Render a narration preview on the server.
+ * @param {string} body
+ */
+export async function previewNarration(body) {
+  const res = await apiFetch(`${NARRATION_BASE}/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body }),
+  });
+  return res.json();
+}
+
+/**
+ * Post a narration to #the-story.
+ * @param {{campaign_id:string, author_user_id:string, body:string, attachment_asset_ids?:string[]}} payload
+ */
+export async function postNarration(payload) {
+  const res = await apiFetch(`${NARRATION_BASE}/post`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/**
+ * List recent narration posts for a campaign.
+ * @param {string} campaignId
+ * @param {number} [limit]
+ */
+export async function listNarrationHistory(campaignId, limit = 20) {
+  const res = await apiFetch(`${NARRATION_BASE}/history?campaign_id=${campaignId}&limit=${limit}`);
+  return res.json();
+}
+
 // --- Action Log Viewer API ---
 
 /**
