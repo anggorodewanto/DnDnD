@@ -604,7 +604,7 @@
   - Depends on: Phase 98
   - Done when: DM can create/edit homebrew entries for all reference types, entries appear in search/selection alongside SRD.
 
-- [ ] **Phase 100a: DM Dashboard — Narration Editor**
+- [x] **Phase 100a: DM Dashboard — Narration Editor**
   - Scope: Rich narration editor: Discord-flavored markdown preview, "read-aloud" boxed-text format, image attachments (stored in Asset Library). Preview panel. Post history. "Post to #the-story" button.
   - Depends on: Phase 15, Phase 20
   - Done when: DM can compose narration with markdown, attach images, preview, and post to #the-story.
