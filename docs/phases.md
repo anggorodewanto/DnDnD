@@ -609,7 +609,7 @@
   - Depends on: Phase 15, Phase 20
   - Done when: DM can compose narration with markdown, attach images, preview, and post to #the-story.
 
-- [ ] **Phase 100b: DM Dashboard — Narration Template System**
+- [x] **Phase 100b: DM Dashboard — Narration Template System**
   - Scope: Narration templates: save narrations as reusable templates with placeholder tokens (e.g., `{player_name}`, `{location}`), template categories. Template library: browse, search, edit, duplicate, delete. Apply template to narration editor with placeholder substitution.
   - Depends on: Phase 100a
   - Done when: DM can save/load/edit/delete templates, placeholders substituted on apply, template library searchable.
