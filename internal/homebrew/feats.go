@@ -2,6 +2,7 @@ package homebrew
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/google/uuid"
 
@@ -11,64 +12,35 @@ import (
 // CreateFeatParams describes the writable fields for a homebrew feat.
 type CreateFeatParams = refdata.UpsertFeatParams
 
+func (s *Service) featOps() typeOps[refdata.UpsertFeatParams, refdata.Feat] {
+	return typeOps[refdata.UpsertFeatParams, refdata.Feat]{
+		get:    s.store.GetFeat,
+		upsert: s.store.UpsertFeat,
+		deleteHomebrew: func(ctx context.Context, id string, campaignID uuid.UUID) (int64, error) {
+			return s.store.DeleteHomebrewFeat(ctx, refdata.DeleteHomebrewFeatParams{
+				ID:         id,
+				CampaignID: uuid.NullUUID{UUID: campaignID, Valid: true},
+			})
+		},
+		nameOf: func(p refdata.UpsertFeatParams) string { return p.Name },
+		setIdentity: func(p *refdata.UpsertFeatParams, id string, cid uuid.NullUUID, hb sql.NullBool, src sql.NullString) {
+			p.ID, p.CampaignID, p.Homebrew, p.Source = id, cid, hb, src
+		},
+		ownership: func(r refdata.Feat) (sql.NullBool, uuid.NullUUID) { return r.Homebrew, r.CampaignID },
+	}
+}
+
 // CreateHomebrewFeat creates a campaign-scoped homebrew feat.
 func (s *Service) CreateHomebrewFeat(ctx context.Context, campaignID uuid.UUID, params CreateFeatParams) (refdata.Feat, error) {
-	if err := s.requireCreate(campaignID, params.Name); err != nil {
-		return refdata.Feat{}, err
-	}
-	params.ID = s.idGen()
-	params.CampaignID, params.Homebrew, params.Source = s.homebrewCols(campaignID)
-	if err := s.store.UpsertFeat(ctx, params); err != nil {
-		return refdata.Feat{}, err
-	}
-	return s.fetchFeat(ctx, params.ID, campaignID)
+	return genericCreate(ctx, s, s.featOps(), campaignID, params)
 }
 
 // UpdateHomebrewFeat updates an existing homebrew feat.
 func (s *Service) UpdateHomebrewFeat(ctx context.Context, campaignID uuid.UUID, id string, params CreateFeatParams) (refdata.Feat, error) {
-	if err := s.requireUpdate(campaignID, id, params.Name); err != nil {
-		return refdata.Feat{}, err
-	}
-	existing, err := s.store.GetFeat(ctx, id)
-	if err != nil {
-		return refdata.Feat{}, translateGetErr(err)
-	}
-	if err := ownsRow(existing.Homebrew, existing.CampaignID, campaignID); err != nil {
-		return refdata.Feat{}, err
-	}
-	params.ID = id
-	params.CampaignID, params.Homebrew, params.Source = s.homebrewCols(campaignID)
-	if err := s.store.UpsertFeat(ctx, params); err != nil {
-		return refdata.Feat{}, err
-	}
-	return s.fetchFeat(ctx, id, campaignID)
+	return genericUpdate(ctx, s, s.featOps(), campaignID, id, params)
 }
 
 // DeleteHomebrewFeat deletes a homebrew feat.
 func (s *Service) DeleteHomebrewFeat(ctx context.Context, campaignID uuid.UUID, id string) error {
-	if err := s.requireDelete(campaignID, id); err != nil {
-		return err
-	}
-	rows, err := s.store.DeleteHomebrewFeat(ctx, refdata.DeleteHomebrewFeatParams{
-		ID:         id,
-		CampaignID: uuid.NullUUID{UUID: campaignID, Valid: true},
-	})
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-func (s *Service) fetchFeat(ctx context.Context, id string, campaignID uuid.UUID) (refdata.Feat, error) {
-	r, err := s.store.GetFeat(ctx, id)
-	if err != nil {
-		return refdata.Feat{}, translateGetErr(err)
-	}
-	if err := ownsRow(r.Homebrew, r.CampaignID, campaignID); err != nil {
-		return refdata.Feat{}, err
-	}
-	return r, nil
+	return genericDelete(ctx, s, s.featOps(), campaignID, id)
 }

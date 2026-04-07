@@ -1,6 +1,7 @@
 package homebrew
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,37 +24,121 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
+// serviceFuncs bundles the three Service methods (create/update/delete)
+// for a single refdata type so routes can be registered via a table.
+type serviceFuncs[P any, R any] struct {
+	create func(ctx context.Context, campaignID uuid.UUID, params P) (R, error)
+	update func(ctx context.Context, campaignID uuid.UUID, id string, params P) (R, error)
+	delete func(ctx context.Context, campaignID uuid.UUID, id string) error
+}
+
+// mount registers the create/update/delete routes for one homebrew type
+// under the given collection path.
+func mount[P any, R any](r chi.Router, path string, fns serviceFuncs[P, R]) {
+	r.Post(path, makeCreate(fns.create))
+	r.Put(path+"/{id}", makeUpdate(fns.update))
+	r.Delete(path+"/{id}", makeDelete(fns.delete))
+}
+
 // RegisterRoutes mounts homebrew routes on the given Chi router.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/homebrew", func(r chi.Router) {
-		r.Post("/creatures", h.CreateCreature)
-		r.Put("/creatures/{id}", h.UpdateCreature)
-		r.Delete("/creatures/{id}", h.DeleteCreature)
-
-		r.Post("/spells", h.CreateSpell)
-		r.Put("/spells/{id}", h.UpdateSpell)
-		r.Delete("/spells/{id}", h.DeleteSpell)
-
-		r.Post("/weapons", h.CreateWeapon)
-		r.Put("/weapons/{id}", h.UpdateWeapon)
-		r.Delete("/weapons/{id}", h.DeleteWeapon)
-
-		r.Post("/magic-items", h.CreateMagicItem)
-		r.Put("/magic-items/{id}", h.UpdateMagicItem)
-		r.Delete("/magic-items/{id}", h.DeleteMagicItem)
-
-		r.Post("/races", h.CreateRace)
-		r.Put("/races/{id}", h.UpdateRace)
-		r.Delete("/races/{id}", h.DeleteRace)
-
-		r.Post("/feats", h.CreateFeat)
-		r.Put("/feats/{id}", h.UpdateFeat)
-		r.Delete("/feats/{id}", h.DeleteFeat)
-
-		r.Post("/classes", h.CreateClass)
-		r.Put("/classes/{id}", h.UpdateClass)
-		r.Delete("/classes/{id}", h.DeleteClass)
+		mount(r, "/creatures", serviceFuncs[refdata.UpsertCreatureParams, refdata.Creature]{
+			create: h.svc.CreateHomebrewCreature,
+			update: h.svc.UpdateHomebrewCreature,
+			delete: h.svc.DeleteHomebrewCreature,
+		})
+		mount(r, "/spells", serviceFuncs[refdata.UpsertSpellParams, refdata.Spell]{
+			create: h.svc.CreateHomebrewSpell,
+			update: h.svc.UpdateHomebrewSpell,
+			delete: h.svc.DeleteHomebrewSpell,
+		})
+		mount(r, "/weapons", serviceFuncs[refdata.UpsertWeaponParams, refdata.Weapon]{
+			create: h.svc.CreateHomebrewWeapon,
+			update: h.svc.UpdateHomebrewWeapon,
+			delete: h.svc.DeleteHomebrewWeapon,
+		})
+		mount(r, "/magic-items", serviceFuncs[refdata.UpsertMagicItemParams, refdata.MagicItem]{
+			create: h.svc.CreateHomebrewMagicItem,
+			update: h.svc.UpdateHomebrewMagicItem,
+			delete: h.svc.DeleteHomebrewMagicItem,
+		})
+		mount(r, "/races", serviceFuncs[refdata.UpsertRaceParams, refdata.Race]{
+			create: h.svc.CreateHomebrewRace,
+			update: h.svc.UpdateHomebrewRace,
+			delete: h.svc.DeleteHomebrewRace,
+		})
+		mount(r, "/feats", serviceFuncs[refdata.UpsertFeatParams, refdata.Feat]{
+			create: h.svc.CreateHomebrewFeat,
+			update: h.svc.UpdateHomebrewFeat,
+			delete: h.svc.DeleteHomebrewFeat,
+		})
+		mount(r, "/classes", serviceFuncs[refdata.UpsertClassParams, refdata.Class]{
+			create: h.svc.CreateHomebrewClass,
+			update: h.svc.UpdateHomebrewClass,
+			delete: h.svc.DeleteHomebrewClass,
+		})
 	})
+}
+
+// makeCreate returns a POST handler that decodes a JSON body into P and
+// forwards to the given Service.Create method.
+func makeCreate[P any, R any](create func(ctx context.Context, campaignID uuid.UUID, params P) (R, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cid, ok := readCampaignOnly(w, r)
+		if !ok {
+			return
+		}
+		var body P
+		if err := decodeBody(r, &body); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		got, err := create(r.Context(), cid, body)
+		if err != nil {
+			translateServiceErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, got)
+	}
+}
+
+// makeUpdate returns a PUT handler that decodes a JSON body into P and
+// forwards to the given Service.Update method.
+func makeUpdate[P any, R any](update func(ctx context.Context, campaignID uuid.UUID, id string, params P) (R, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cid, id, ok := readCampaignAndID(w, r)
+		if !ok {
+			return
+		}
+		var body P
+		if err := decodeBody(r, &body); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		got, err := update(r.Context(), cid, id, body)
+		if err != nil {
+			translateServiceErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, got)
+	}
+}
+
+// makeDelete returns a DELETE handler that forwards to the given
+// Service.Delete method.
+func makeDelete(del func(ctx context.Context, campaignID uuid.UUID, id string) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cid, id, ok := readCampaignAndID(w, r)
+		if !ok {
+			return
+		}
+		if err := del(r.Context(), cid, id); err != nil {
+			translateServiceErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 // --- shared helpers ---
@@ -130,371 +215,4 @@ func readCampaignOnly(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) 
 		return uuid.Nil, false
 	}
 	return cid, true
-}
-
-// =============================================================================
-// CREATURES
-// =============================================================================
-
-// CreateCreature handles POST /api/homebrew/creatures.
-func (h *Handler) CreateCreature(w http.ResponseWriter, r *http.Request) {
-	cid, ok := readCampaignOnly(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertCreatureParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.CreateHomebrewCreature(r.Context(), cid, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, got)
-}
-
-// UpdateCreature handles PUT /api/homebrew/creatures/{id}.
-func (h *Handler) UpdateCreature(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertCreatureParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.UpdateHomebrewCreature(r.Context(), cid, id, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, got)
-}
-
-// DeleteCreature handles DELETE /api/homebrew/creatures/{id}.
-func (h *Handler) DeleteCreature(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	if err := h.svc.DeleteHomebrewCreature(r.Context(), cid, id); err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// =============================================================================
-// SPELLS
-// =============================================================================
-
-func (h *Handler) CreateSpell(w http.ResponseWriter, r *http.Request) {
-	cid, ok := readCampaignOnly(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertSpellParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.CreateHomebrewSpell(r.Context(), cid, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, got)
-}
-
-func (h *Handler) UpdateSpell(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertSpellParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.UpdateHomebrewSpell(r.Context(), cid, id, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, got)
-}
-
-func (h *Handler) DeleteSpell(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	if err := h.svc.DeleteHomebrewSpell(r.Context(), cid, id); err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// =============================================================================
-// WEAPONS
-// =============================================================================
-
-func (h *Handler) CreateWeapon(w http.ResponseWriter, r *http.Request) {
-	cid, ok := readCampaignOnly(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertWeaponParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.CreateHomebrewWeapon(r.Context(), cid, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, got)
-}
-
-func (h *Handler) UpdateWeapon(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertWeaponParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.UpdateHomebrewWeapon(r.Context(), cid, id, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, got)
-}
-
-func (h *Handler) DeleteWeapon(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	if err := h.svc.DeleteHomebrewWeapon(r.Context(), cid, id); err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// =============================================================================
-// MAGIC ITEMS
-// =============================================================================
-
-func (h *Handler) CreateMagicItem(w http.ResponseWriter, r *http.Request) {
-	cid, ok := readCampaignOnly(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertMagicItemParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.CreateHomebrewMagicItem(r.Context(), cid, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, got)
-}
-
-func (h *Handler) UpdateMagicItem(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertMagicItemParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.UpdateHomebrewMagicItem(r.Context(), cid, id, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, got)
-}
-
-func (h *Handler) DeleteMagicItem(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	if err := h.svc.DeleteHomebrewMagicItem(r.Context(), cid, id); err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// =============================================================================
-// RACES
-// =============================================================================
-
-func (h *Handler) CreateRace(w http.ResponseWriter, r *http.Request) {
-	cid, ok := readCampaignOnly(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertRaceParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.CreateHomebrewRace(r.Context(), cid, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, got)
-}
-
-func (h *Handler) UpdateRace(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertRaceParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.UpdateHomebrewRace(r.Context(), cid, id, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, got)
-}
-
-func (h *Handler) DeleteRace(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	if err := h.svc.DeleteHomebrewRace(r.Context(), cid, id); err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// =============================================================================
-// FEATS
-// =============================================================================
-
-func (h *Handler) CreateFeat(w http.ResponseWriter, r *http.Request) {
-	cid, ok := readCampaignOnly(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertFeatParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.CreateHomebrewFeat(r.Context(), cid, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, got)
-}
-
-func (h *Handler) UpdateFeat(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertFeatParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.UpdateHomebrewFeat(r.Context(), cid, id, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, got)
-}
-
-func (h *Handler) DeleteFeat(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	if err := h.svc.DeleteHomebrewFeat(r.Context(), cid, id); err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// =============================================================================
-// CLASSES
-// =============================================================================
-
-func (h *Handler) CreateClass(w http.ResponseWriter, r *http.Request) {
-	cid, ok := readCampaignOnly(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertClassParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.CreateHomebrewClass(r.Context(), cid, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, got)
-}
-
-func (h *Handler) UpdateClass(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	var body refdata.UpsertClassParams
-	if err := decodeBody(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	got, err := h.svc.UpdateHomebrewClass(r.Context(), cid, id, body)
-	if err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, got)
-}
-
-func (h *Handler) DeleteClass(w http.ResponseWriter, r *http.Request) {
-	cid, id, ok := readCampaignAndID(w, r)
-	if !ok {
-		return
-	}
-	if err := h.svc.DeleteHomebrewClass(r.Context(), cid, id); err != nil {
-		translateServiceErr(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }

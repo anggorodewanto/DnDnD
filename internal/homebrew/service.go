@@ -152,8 +152,8 @@ func (s *Service) homebrewCols(campaignID uuid.UUID) (uuid.NullUUID, sql.NullBoo
 		sql.NullString{String: s.source, Valid: true}
 }
 
-// ownsCreature returns nil if the creature exists, is homebrew, and is
-// owned by the given campaign; otherwise ErrNotFound.
+// ownsRow returns nil if the row is flagged homebrew and owned by the
+// given campaign; otherwise ErrNotFound.
 func ownsRow(homebrew sql.NullBool, owner uuid.NullUUID, campaignID uuid.UUID) error {
 	if !homebrew.Valid || !homebrew.Bool {
 		return ErrNotFound
