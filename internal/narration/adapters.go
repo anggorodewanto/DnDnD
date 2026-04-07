@@ -2,8 +2,6 @@ package narration
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 
 	"github.com/google/uuid"
 
@@ -31,12 +29,9 @@ func NewAssetAttachmentResolver(assets AssetLookup) *AssetAttachmentResolver {
 }
 
 // AttachmentURL returns the URL for an attachment asset, or ok=false if the
-// asset does not exist.
+// asset cannot be loaded (missing row or any other lookup error).
 func (r *AssetAttachmentResolver) AttachmentURL(assetID uuid.UUID) (string, bool) {
 	if _, err := r.assets.GetByID(context.Background(), assetID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", false
-		}
 		return "", false
 	}
 	return r.assets.URL(assetID), true

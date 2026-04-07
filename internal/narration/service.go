@@ -98,6 +98,9 @@ func NewService(store Store, poster Poster, assets AttachmentResolver, campaigns
 // failure before the Discord call completes successfully, no post row is
 // created.
 func (s *Service) Post(ctx context.Context, in PostInput) (Post, error) {
+	if s.poster == nil {
+		return Post{}, ErrPosterUnavailable
+	}
 	if err := validatePost(in); err != nil {
 		return Post{}, err
 	}
@@ -113,10 +116,6 @@ func (s *Service) Post(ctx context.Context, in PostInput) (Post, error) {
 	}
 
 	rendered := RenderDiscord(in.Body)
-
-	if s.poster == nil {
-		return Post{}, ErrPosterUnavailable
-	}
 	messageIDs, err := s.poster.PostToStory(guildID, rendered.Body, rendered.Embeds, urls)
 	if err != nil {
 		return Post{}, fmt.Errorf("posting to #the-story: %w", err)

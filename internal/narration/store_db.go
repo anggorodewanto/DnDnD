@@ -31,8 +31,8 @@ func (s *DBStore) InsertNarrationPost(ctx context.Context, p InsertPostParams) (
 		CampaignID:         p.CampaignID,
 		AuthorUserID:       p.AuthorUserID,
 		Body:               p.Body,
-		AttachmentAssetIds: nonNilUUIDs(p.AttachmentAssetIDs),
-		DiscordMessageIds:  nonNilStrings(p.DiscordMessageIDs),
+		AttachmentAssetIds: orEmpty(p.AttachmentAssetIDs),
+		DiscordMessageIds:  orEmpty(p.DiscordMessageIDs),
 	})
 	if err != nil {
 		return Post{}, err
@@ -63,25 +63,17 @@ func postFromRefdata(r refdata.NarrationPost) Post {
 		CampaignID:         r.CampaignID,
 		AuthorUserID:       r.AuthorUserID,
 		Body:               r.Body,
-		AttachmentAssetIDs: nonNilUUIDs(r.AttachmentAssetIds),
-		DiscordMessageIDs:  nonNilStrings(r.DiscordMessageIds),
+		AttachmentAssetIDs: orEmpty(r.AttachmentAssetIds),
+		DiscordMessageIDs:  orEmpty(r.DiscordMessageIds),
 		PostedAt:           r.PostedAt,
 	}
 }
 
-// nonNilUUIDs ensures nil slices become empty slices so JSON output is `[]`
+// orEmpty ensures nil slices become empty slices so JSON output is `[]`
 // rather than `null`, matching the repo's emit_empty_slices sqlc setting.
-func nonNilUUIDs(v []uuid.UUID) []uuid.UUID {
+func orEmpty[T any](v []T) []T {
 	if v == nil {
-		return []uuid.UUID{}
-	}
-	return v
-}
-
-// nonNilStrings mirrors nonNilUUIDs for string slices.
-func nonNilStrings(v []string) []string {
-	if v == nil {
-		return []string{}
+		return []T{}
 	}
 	return v
 }
