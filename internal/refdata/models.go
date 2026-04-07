@@ -333,6 +333,16 @@ type NarrationPost struct {
 	PostedAt           time.Time   `json:"posted_at"`
 }
 
+type NarrationTemplate struct {
+	ID         uuid.UUID `json:"id"`
+	CampaignID uuid.UUID `json:"campaign_id"`
+	Name       string    `json:"name"`
+	Category   string    `json:"category"`
+	Body       string    `json:"body"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
 type PendingAction struct {
 	ID               uuid.UUID `json:"id"`
 	EncounterID      uuid.UUID `json:"encounter_id"`

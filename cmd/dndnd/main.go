@@ -107,6 +107,12 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		narrationSvc := narration.NewService(narrationStore, nil, narrationAssets, narrationCampaigns)
 		narrationHandler := narration.NewHandler(narrationSvc)
 		narrationHandler.RegisterRoutes(router)
+
+		// Wire Narration Template API handler (Phase 100b).
+		narrationTemplateStore := narration.NewTemplateDBStore(queries)
+		narrationTemplateSvc := narration.NewTemplateService(narrationTemplateStore)
+		narrationTemplateHandler := narration.NewTemplateHandler(narrationTemplateSvc)
+		narrationTemplateHandler.RegisterRoutes(router)
 	}
 
 	srv := &http.Server{

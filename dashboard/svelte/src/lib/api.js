@@ -697,6 +697,67 @@ export async function listNarrationHistory(campaignId, limit = 20) {
   return res.json();
 }
 
+// --- Narration Templates API (Phase 100b) ---
+
+/**
+ * List narration templates for a campaign with optional filters.
+ * @param {string} campaignId
+ * @param {{category?: string, q?: string}} [filters]
+ */
+export async function listNarrationTemplates(campaignId, filters = {}) {
+  const params = new URLSearchParams({ campaign_id: campaignId });
+  if (filters.category) params.set('category', filters.category);
+  if (filters.q) params.set('q', filters.q);
+  const res = await apiFetch(`${NARRATION_BASE}/templates?${params}`);
+  return res.json();
+}
+
+/**
+ * Create a new narration template.
+ * @param {{campaign_id: string, name: string, category?: string, body: string}} payload
+ */
+export async function createNarrationTemplate(payload) {
+  const res = await apiFetch(`${NARRATION_BASE}/templates`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/**
+ * Update a narration template by id.
+ * @param {string} id
+ * @param {{name: string, category?: string, body: string}} payload
+ */
+export async function updateNarrationTemplate(id, payload) {
+  const res = await apiFetch(`${NARRATION_BASE}/templates/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/**
+ * Delete a narration template by id.
+ * @param {string} id
+ */
+export async function deleteNarrationTemplate(id) {
+  await apiFetch(`${NARRATION_BASE}/templates/${id}`, { method: 'DELETE' });
+}
+
+/**
+ * Duplicate a narration template by id.
+ * @param {string} id
+ */
+export async function duplicateNarrationTemplate(id) {
+  const res = await apiFetch(`${NARRATION_BASE}/templates/${id}/duplicate`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
 // --- Action Log Viewer API ---
 
 /**
