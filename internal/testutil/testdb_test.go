@@ -98,6 +98,105 @@ func TestSharedTestDB_PreservesReferenceTables(t *testing.T) {
 	}
 }
 
+func TestTruncateUserTables_PreservesSrdRefdataAndDeletesHomebrew(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	shared := NewSharedTestDB(dbfs.Migrations)
+	defer shared.Teardown()
+
+	db := shared.AcquireDB(t)
+
+	// Create a campaign so homebrew rows have a valid FK target.
+	var campaignID string
+	if err := db.QueryRow(
+		`INSERT INTO campaigns (guild_id, dm_user_id, name) VALUES ($1, $2, $3) RETURNING id`,
+		"guild-hb", "dm-hb", "HB Campaign",
+	).Scan(&campaignID); err != nil {
+		t.Fatalf("insert campaign failed: %v", err)
+	}
+
+	// Baseline SRD counts (seeded by migrations).
+	srdCount := func(table string) int {
+		var n int
+		q := "SELECT count(*) FROM " + table + " WHERE campaign_id IS NULL"
+		if err := db.QueryRow(q).Scan(&n); err != nil {
+			t.Fatalf("count %s failed: %v", table, err)
+		}
+		return n
+	}
+	spellSRDBefore := srdCount("spells")
+	featSRDBefore := srdCount("feats")
+	weaponSRDBefore := srdCount("weapons")
+
+	// Insert homebrew rows scoped to the campaign.
+	if _, err := db.Exec(
+		`INSERT INTO spells (id, name, level, school, casting_time, range_type, components, duration, description, classes, campaign_id, homebrew, source)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, 'homebrew')`,
+		"hb-spell-1", "HB Spell", 1, "evocation", "1 action", "ranged", []string{"V", "S"}, "Instantaneous", "desc", []string{"wizard"}, campaignID,
+	); err != nil {
+		t.Fatalf("insert homebrew spell failed: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO feats (id, name, description, campaign_id, homebrew, source)
+		 VALUES ($1, $2, $3, $4, true, 'homebrew')`,
+		"hb-feat-1", "HB Feat", "desc", campaignID,
+	); err != nil {
+		t.Fatalf("insert homebrew feat failed: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO weapons (id, name, damage, damage_type, weapon_type, campaign_id, homebrew, source)
+		 VALUES ($1, $2, $3, $4, $5, $6, true, 'homebrew')`,
+		"hb-weapon-1", "HB Sword", "1d8", "slashing", "simple_melee", campaignID,
+	); err != nil {
+		t.Fatalf("insert homebrew weapon failed: %v", err)
+	}
+
+	if err := TruncateUserTables(db); err != nil {
+		t.Fatalf("TruncateUserTables failed: %v", err)
+	}
+
+	// Campaign row should be gone.
+	var campaignCount int
+	if err := db.QueryRow(`SELECT count(*) FROM campaigns WHERE id = $1`, campaignID).Scan(&campaignCount); err != nil {
+		t.Fatalf("count campaigns failed: %v", err)
+	}
+	if campaignCount != 0 {
+		t.Fatalf("expected campaign deleted, got count %d", campaignCount)
+	}
+
+	// Homebrew rows should be gone.
+	homebrewCount := func(table, id string) int {
+		var n int
+		q := "SELECT count(*) FROM " + table + " WHERE id = $1"
+		if err := db.QueryRow(q, id).Scan(&n); err != nil {
+			t.Fatalf("count homebrew %s failed: %v", table, err)
+		}
+		return n
+	}
+	if got := homebrewCount("spells", "hb-spell-1"); got != 0 {
+		t.Errorf("expected homebrew spell deleted, got %d", got)
+	}
+	if got := homebrewCount("feats", "hb-feat-1"); got != 0 {
+		t.Errorf("expected homebrew feat deleted, got %d", got)
+	}
+	if got := homebrewCount("weapons", "hb-weapon-1"); got != 0 {
+		t.Errorf("expected homebrew weapon deleted, got %d", got)
+	}
+
+	// SRD rows should be preserved.
+	if got := srdCount("spells"); got != spellSRDBefore {
+		t.Errorf("expected SRD spells preserved (%d), got %d", spellSRDBefore, got)
+	}
+	if got := srdCount("feats"); got != featSRDBefore {
+		t.Errorf("expected SRD feats preserved (%d), got %d", featSRDBefore, got)
+	}
+	if got := srdCount("weapons"); got != weaponSRDBefore {
+		t.Errorf("expected SRD weapons preserved (%d), got %d", weaponSRDBefore, got)
+	}
+}
+
 func TestTruncateUserTables(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

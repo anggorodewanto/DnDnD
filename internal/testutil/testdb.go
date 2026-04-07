@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"io/fs"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -137,12 +136,64 @@ var ReferenceTables = []string{
 	"magic_items",
 }
 
-// TruncateUserTables truncates all mutable user-data tables using a single
-// TRUNCATE CASCADE statement for speed.
+// homebrewRefdataTables are reference tables that may contain campaign-scoped
+// homebrew rows. Those rows must be deleted between tests, but SRD rows
+// (campaign_id IS NULL) must be preserved.
+var homebrewRefdataTables = []string{
+	"creatures",
+	"magic_items",
+	"spells",
+	"weapons",
+	"races",
+	"feats",
+	"classes",
+}
+
+// orderedDeleteTables lists mutable user-data tables in dependency-safe
+// deletion order. Encounters is deleted before its children (turns,
+// combatants, action_log, etc.) because the encounters table has a
+// DEFERRABLE FK to turns(current_turn_id) that would otherwise be violated
+// mid-statement. The remaining child tables CASCADE from encounters, but
+// we still issue explicit DELETEs for them to keep behaviour deterministic.
+var orderedDeleteTables = []string{
+	"portal_tokens",
+	"shop_items",
+	"shops",
+	"loot_pool_items",
+	"loot_pools",
+	"pending_actions",
+	"pending_saves",
+	"reaction_declarations",
+	"encounter_zones",
+	"action_log",
+	"encounters",
+	"turns",
+	"combatants",
+	"encounter_templates",
+	"player_characters",
+	"characters",
+	"maps",
+	"assets",
+	"campaigns",
+	"sessions",
+}
+
+// TruncateUserTables removes all per-test mutable rows while preserving
+// seeded SRD reference data. It deletes campaign-scoped homebrew rows from
+// reference tables first (so the campaigns row they reference can be removed),
+// then deletes mutable tables in FK-dependency order.
 func TruncateUserTables(db *sql.DB) error {
-	stmt := "TRUNCATE " + strings.Join(MutableTables, ", ") + " CASCADE"
-	_, err := db.Exec(stmt)
-	return err
+	for _, table := range homebrewRefdataTables {
+		if _, err := db.Exec("DELETE FROM " + table + " WHERE campaign_id IS NOT NULL"); err != nil {
+			return fmt.Errorf("delete homebrew %s: %w", table, err)
+		}
+	}
+	for _, table := range orderedDeleteTables {
+		if _, err := db.Exec("DELETE FROM " + table); err != nil {
+			return fmt.Errorf("delete %s: %w", table, err)
+		}
+	}
+	return nil
 }
 
 // SharedTestDB manages a single PostgreSQL container shared across all tests

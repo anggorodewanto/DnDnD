@@ -1,26 +1,26 @@
 -- +goose Up
 ALTER TABLE spells
-    ADD COLUMN campaign_id UUID,
+    ADD COLUMN campaign_id UUID REFERENCES campaigns(id),
     ADD COLUMN homebrew BOOLEAN DEFAULT false,
     ADD COLUMN source TEXT DEFAULT 'srd';
 
 ALTER TABLE weapons
-    ADD COLUMN campaign_id UUID,
+    ADD COLUMN campaign_id UUID REFERENCES campaigns(id),
     ADD COLUMN homebrew BOOLEAN DEFAULT false,
     ADD COLUMN source TEXT DEFAULT 'srd';
 
 ALTER TABLE races
-    ADD COLUMN campaign_id UUID,
+    ADD COLUMN campaign_id UUID REFERENCES campaigns(id),
     ADD COLUMN homebrew BOOLEAN DEFAULT false,
     ADD COLUMN source TEXT DEFAULT 'srd';
 
 ALTER TABLE feats
-    ADD COLUMN campaign_id UUID,
+    ADD COLUMN campaign_id UUID REFERENCES campaigns(id),
     ADD COLUMN homebrew BOOLEAN DEFAULT false,
     ADD COLUMN source TEXT DEFAULT 'srd';
 
 ALTER TABLE classes
-    ADD COLUMN campaign_id UUID,
+    ADD COLUMN campaign_id UUID REFERENCES campaigns(id),
     ADD COLUMN homebrew BOOLEAN DEFAULT false,
     ADD COLUMN source TEXT DEFAULT 'srd';
 
