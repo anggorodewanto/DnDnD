@@ -70,13 +70,17 @@ func NewTemplateService(store TemplateStore) *TemplateService {
 
 // Create validates and persists a new template.
 func (s *TemplateService) Create(ctx context.Context, in CreateTemplateInput) (Template, error) {
-	if err := validateTemplate(in.CampaignID, in.Name, in.Body); err != nil {
+	if in.CampaignID == uuid.Nil {
+		return Template{}, fmt.Errorf("%w: campaign_id required", ErrInvalidInput)
+	}
+	name, category, err := validateNameBody(in.Name, in.Category, in.Body)
+	if err != nil {
 		return Template{}, err
 	}
 	return s.store.InsertNarrationTemplate(ctx, InsertTemplateParams{
 		CampaignID: in.CampaignID,
-		Name:       strings.TrimSpace(in.Name),
-		Category:   strings.TrimSpace(in.Category),
+		Name:       name,
+		Category:   category,
 		Body:       in.Body,
 	})
 }
@@ -98,16 +102,13 @@ func (s *TemplateService) List(ctx context.Context, filter TemplateFilter) ([]Te
 
 // Update validates and applies changes to an existing template.
 func (s *TemplateService) Update(ctx context.Context, id uuid.UUID, in UpdateTemplateInput) (Template, error) {
-	// CampaignID is fixed; only validate name/body.
-	if strings.TrimSpace(in.Name) == "" {
-		return Template{}, fmt.Errorf("%w: name required", ErrInvalidInput)
-	}
-	if strings.TrimSpace(in.Body) == "" {
-		return Template{}, fmt.Errorf("%w: body required", ErrInvalidInput)
+	name, category, err := validateNameBody(in.Name, in.Category, in.Body)
+	if err != nil {
+		return Template{}, err
 	}
 	return s.store.UpdateNarrationTemplate(ctx, id, UpdateTemplateParams{
-		Name:     strings.TrimSpace(in.Name),
-		Category: strings.TrimSpace(in.Category),
+		Name:     name,
+		Category: category,
 		Body:     in.Body,
 	})
 }
@@ -142,16 +143,15 @@ func (s *TemplateService) Apply(ctx context.Context, id uuid.UUID, values map[st
 	return SubstitutePlaceholders(tpl.Body, values), nil
 }
 
-// validateTemplate enforces required fields on Create.
-func validateTemplate(campaignID uuid.UUID, name, body string) error {
-	if campaignID == uuid.Nil {
-		return fmt.Errorf("%w: campaign_id required", ErrInvalidInput)
-	}
-	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("%w: name required", ErrInvalidInput)
+// validateNameBody trims and validates the name/category/body trio shared by
+// Create and Update. It returns the trimmed name and category on success.
+func validateNameBody(name, category, body string) (string, string, error) {
+	trimmedName := strings.TrimSpace(name)
+	if trimmedName == "" {
+		return "", "", fmt.Errorf("%w: name required", ErrInvalidInput)
 	}
 	if strings.TrimSpace(body) == "" {
-		return fmt.Errorf("%w: body required", ErrInvalidInput)
+		return "", "", fmt.Errorf("%w: body required", ErrInvalidInput)
 	}
-	return nil
+	return trimmedName, strings.TrimSpace(category), nil
 }

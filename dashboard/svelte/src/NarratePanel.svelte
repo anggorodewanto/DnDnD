@@ -32,6 +32,9 @@
   let applyPreview = $derived(
     applyingTemplate ? substitutePlaceholders(applyingTemplate.template.body, applyingTemplate.values) : ''
   );
+  let editingPlaceholders = $derived(
+    editingTemplate ? extractPlaceholders(editingTemplate.body) : []
+  );
 
   async function loadHistory() {
     try {
@@ -68,66 +71,48 @@
     editingTemplate = null;
   }
 
-  async function saveTemplate() {
+  // runTemplateOp wraps a template mutation with shared busy/error/reload
+  // bookkeeping so each action stays a single line of intent.
+  async function runTemplateOp(label, fn) {
     error = '';
+    busy = true;
+    try {
+      await fn();
+      await loadTemplates();
+    } catch (e) {
+      error = `${label} failed: ${e.message}`;
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function saveTemplate() {
     if (!editingTemplate?.name?.trim() || !editingTemplate?.body?.trim()) {
       error = 'template name and body required';
       return;
     }
-    try {
-      busy = true;
-      if (editingTemplate.id) {
-        await updateNarrationTemplate(editingTemplate.id, {
-          name: editingTemplate.name,
-          category: editingTemplate.category,
-          body: editingTemplate.body,
-        });
+    const { id, name, category, body } = editingTemplate;
+    await runTemplateOp('save template', async () => {
+      if (id) {
+        await updateNarrationTemplate(id, { name, category, body });
       } else {
-        await createNarrationTemplate({
-          campaign_id: campaignId,
-          name: editingTemplate.name,
-          category: editingTemplate.category,
-          body: editingTemplate.body,
-        });
+        await createNarrationTemplate({ campaign_id: campaignId, name, category, body });
       }
       editingTemplate = null;
-      await loadTemplates();
-    } catch (e) {
-      error = `save template failed: ${e.message}`;
-    } finally {
-      busy = false;
-    }
+    });
   }
 
   async function removeTemplate(id) {
     if (!confirm('Delete this template?')) return;
-    try {
-      busy = true;
-      await deleteNarrationTemplate(id);
-      await loadTemplates();
-    } catch (e) {
-      error = `delete failed: ${e.message}`;
-    } finally {
-      busy = false;
-    }
+    await runTemplateOp('delete', () => deleteNarrationTemplate(id));
   }
 
   async function duplicate(id) {
-    try {
-      busy = true;
-      await duplicateNarrationTemplate(id);
-      await loadTemplates();
-    } catch (e) {
-      error = `duplicate failed: ${e.message}`;
-    } finally {
-      busy = false;
-    }
+    await runTemplateOp('duplicate', () => duplicateNarrationTemplate(id));
   }
 
   function startApplyTemplate(tpl) {
-    const placeholders = extractPlaceholders(tpl.body);
-    const values = {};
-    for (const name of placeholders) values[name] = '';
+    const values = Object.fromEntries(extractPlaceholders(tpl.body).map((name) => [name, '']));
     applyingTemplate = { template: tpl, values };
   }
 
@@ -324,9 +309,9 @@
           placeholder="Template body. Use {'{player_name}'} for placeholders."
           bind:value={editingTemplate.body}
         ></textarea>
-        {#if extractPlaceholders(editingTemplate.body).length > 0}
+        {#if editingPlaceholders.length > 0}
           <div class="tpl-tokens">
-            Placeholders: {extractPlaceholders(editingTemplate.body).join(', ')}
+            Placeholders: {editingPlaceholders.join(', ')}
           </div>
         {/if}
         <div class="tpl-editor-actions">
