@@ -23,36 +23,14 @@ func NeedsFileAttachment(content string) bool {
 // Short messages (<=2000) are sent directly. Mid-range (2001-6000) are split at newlines.
 // Large messages (>6000) are uploaded as a .txt file with a summary line.
 func SendContent(s Session, channelID, content string) error {
-	if NeedsFileAttachment(content) {
-		return sendAsFile(s, channelID, content)
-	}
-
-	parts := SplitMessage(content)
-	for _, part := range parts {
-		if _, err := s.ChannelMessageSend(channelID, part); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func sendAsFile(s Session, channelID, content string) error {
-	_, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
-		Content: "See details below.",
-		Files: []*discordgo.File{
-			{
-				Name:   "details.txt",
-				Reader: strings.NewReader(content),
-			},
-		},
-	})
+	_, err := SendContentReturningIDs(s, channelID, content)
 	return err
 }
 
-// SendContentReturningIDs mirrors SendContent but returns the Discord
-// message IDs of the sent message(s). Callers that need to record the
-// resulting IDs (e.g. for a dashboard log) use this variant so the
-// message-splitting logic stays centralized.
+// SendContentReturningIDs sends content like SendContent and also returns the
+// Discord message IDs of the resulting message(s). Callers that need to record
+// the IDs (e.g. for a dashboard log) use this variant so the message-splitting
+// logic stays centralized.
 func SendContentReturningIDs(s Session, channelID, content string) ([]string, error) {
 	if NeedsFileAttachment(content) {
 		msg, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
