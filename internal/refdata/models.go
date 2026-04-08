@@ -201,6 +201,16 @@ type Creature struct {
 	UpdatedAt             time.Time             `json:"updated_at"`
 }
 
+type DmPlayerMessage struct {
+	ID                uuid.UUID `json:"id"`
+	CampaignID        uuid.UUID `json:"campaign_id"`
+	PlayerCharacterID uuid.UUID `json:"player_character_id"`
+	AuthorUserID      string    `json:"author_user_id"`
+	Body              string    `json:"body"`
+	DiscordMessageIds []string  `json:"discord_message_ids"`
+	SentAt            time.Time `json:"sent_at"`
+}
+
 type Encounter struct {
 	ID            uuid.UUID      `json:"id"`
 	CampaignID    uuid.UUID      `json:"campaign_id"`

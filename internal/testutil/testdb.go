@@ -123,6 +123,7 @@ var MutableTables = []string{
 	"portal_tokens",
 	"narration_posts",
 	"narration_templates",
+	"dm_player_messages",
 }
 
 // ReferenceTables are seeded with ON CONFLICT DO NOTHING and preserved across tests.
@@ -158,6 +159,7 @@ var homebrewRefdataTables = []string{
 // mid-statement. The remaining child tables CASCADE from encounters, but
 // we still issue explicit DELETEs for them to keep behaviour deterministic.
 var orderedDeleteTables = []string{
+	"dm_player_messages",
 	"portal_tokens",
 	"shop_items",
 	"shops",

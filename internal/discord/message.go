@@ -49,6 +49,39 @@ func sendAsFile(s Session, channelID, content string) error {
 	return err
 }
 
+// SendContentReturningIDs mirrors SendContent but returns the Discord
+// message IDs of the sent message(s). Callers that need to record the
+// resulting IDs (e.g. for a dashboard log) use this variant so the
+// message-splitting logic stays centralized.
+func SendContentReturningIDs(s Session, channelID, content string) ([]string, error) {
+	if NeedsFileAttachment(content) {
+		msg, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+			Content: "See details below.",
+			Files: []*discordgo.File{
+				{
+					Name:   "details.txt",
+					Reader: strings.NewReader(content),
+				},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return []string{msg.ID}, nil
+	}
+
+	parts := SplitMessage(content)
+	ids := make([]string, 0, len(parts))
+	for _, part := range parts {
+		msg, err := s.ChannelMessageSend(channelID, part)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, msg.ID)
+	}
+	return ids, nil
+}
+
 // SplitMessage splits content into chunks that fit within Discord's message size limits.
 // Content <= 2000 chars returns a single chunk.
 // Content 2001-6000 chars returns up to 3 chunks split at newline boundaries.

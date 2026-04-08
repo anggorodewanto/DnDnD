@@ -12,10 +12,12 @@ import (
 	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/asset"
 	"github.com/ab/dndnd/internal/campaign"
+	"github.com/ab/dndnd/internal/characteroverview"
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/encounter"
 	"github.com/ab/dndnd/internal/gamemap"
 	"github.com/ab/dndnd/internal/homebrew"
+	"github.com/ab/dndnd/internal/messageplayer"
 	"github.com/ab/dndnd/internal/narration"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/server"
@@ -113,6 +115,22 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		narrationTemplateSvc := narration.NewTemplateService(narrationTemplateStore)
 		narrationTemplateHandler := narration.NewTemplateHandler(narrationTemplateSvc)
 		narrationTemplateHandler.RegisterRoutes(router)
+
+		// Wire Character Overview API handler (Phase 101).
+		characterOverviewStore := characteroverview.NewDBStore(queries)
+		characterOverviewSvc := characteroverview.NewService(characterOverviewStore)
+		characterOverviewHandler := characteroverview.NewHandler(characterOverviewSvc)
+		characterOverviewHandler.RegisterRoutes(router)
+
+		// Wire Message Player API handler (Phase 101). The Messenger is nil
+		// here because the Discord session is constructed in bot.go at runtime;
+		// when a discord.Session is available the wiring should inject
+		// discord.NewDirectMessenger(session).
+		messagePlayerStore := messageplayer.NewDBStore(queries)
+		messagePlayerLookup := messageplayer.NewPlayerLookupAdapter(queries)
+		messagePlayerSvc := messageplayer.NewService(messagePlayerStore, messagePlayerLookup, nil)
+		messagePlayerHandler := messageplayer.NewHandler(messagePlayerSvc)
+		messagePlayerHandler.RegisterRoutes(router)
 	}
 
 	srv := &http.Server{
