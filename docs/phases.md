@@ -614,7 +614,7 @@
   - Depends on: Phase 100a
   - Done when: DM can save/load/edit/delete templates, placeholders substituted on apply, template library searchable.
 
-- [ ] **Phase 101: DM Dashboard — Character Overview & Message Player**
+- [x] **Phase 101: DM Dashboard — Character Overview & Message Player**
   - Scope: Read-only view of all player character sheets. Party Languages summary. Message Player: DM-initiated Discord DMs via bot, logged in dashboard per-player. Accessible from Character Overview or sidebar.
   - Depends on: Phase 15, Phase 7
   - Done when: DM can view all characters, see party languages, send private messages to players via bot.
