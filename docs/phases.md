@@ -629,7 +629,7 @@
   - Depends on: Phase 15, Phase 24
   - Done when: Dashboard receives live state updates, reconnects automatically, form inputs not clobbered, full snapshot on every push.
 
-- [ ] **Phase 104: Bot Crash Recovery**
+- [x] **Phase 104: Bot Crash Recovery**
   - Scope: Startup recovery sequence: connect PostgreSQL, scan for stale state (overdue turns with no escalation sent), connect Discord, re-register commands, resume timer polling. In-flight commands: PostgreSQL auto-rolls back uncommitted transactions. Turn timers derived from DB fields, not in-memory.
   - Depends on: Phase 76a
   - Done when: Bot restarts cleanly, stale turns processed in deadline order, no timer state lost.
