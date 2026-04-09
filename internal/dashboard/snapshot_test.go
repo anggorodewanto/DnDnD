@@ -21,11 +21,9 @@ type fakeSnapshotStore struct {
 	combErr    error
 	turn       refdata.Turn
 	turnErr    error
-	getEncCall int
 }
 
 func (f *fakeSnapshotStore) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
-	f.getEncCall++
 	return f.enc, f.encErr
 }
 

@@ -85,10 +85,8 @@ export function createWsClient(options) {
       scheduleReconnect();
     };
 
-    ws.onerror = () => {
-      // Let onclose drive reconnect; closing here keeps behaviour consistent
-      // with the browser which fires onclose after onerror anyway.
-    };
+    // No onerror handler: the browser fires onclose after onerror anyway,
+    // and onclose is what drives our reconnect logic.
   };
 
   connect();
@@ -100,11 +98,11 @@ export function createWsClient(options) {
         clearTimeoutFn(reconnectTimerId);
         reconnectTimerId = null;
       }
-      if (currentWs && !currentWs.closed) {
+      if (currentWs) {
         try {
           currentWs.close();
         } catch (_err) {
-          // ignore
+          // ignore — close() may throw if the socket is already closed
         }
       }
       emitStatus('closed');
