@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/google/uuid"
@@ -185,10 +186,19 @@ type Store interface {
 	ResetCombatantAutoResolveCount(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 }
 
+// EncounterPublisher fans out a fresh encounter snapshot over the dashboard
+// WebSocket hub whenever combat state changes. It is injected (optionally)
+// into Service so services can stay decoupled from the concrete
+// dashboard.Publisher and so tests can use a fake.
+type EncounterPublisher interface {
+	PublishEncounterSnapshot(ctx context.Context, encounterID uuid.UUID) error
+}
+
 // Service manages combat encounters and their entities.
 type Service struct {
 	store             Store
 	summonedResources *SummonedTurnResources
+	publisher         EncounterPublisher
 }
 
 // NewService creates a new combat Service.
@@ -196,6 +206,25 @@ func NewService(store Store) *Service {
 	return &Service{
 		store:             store,
 		summonedResources: NewSummonedTurnResources(),
+	}
+}
+
+// SetPublisher wires an EncounterPublisher onto the service. A nil publisher
+// is tolerated and disables fan-out. Publish errors are logged but never
+// surfaced to callers so that a dashboard hiccup cannot undo a committed DB
+// mutation.
+func (s *Service) SetPublisher(p EncounterPublisher) {
+	s.publisher = p
+}
+
+// publish fires the publisher with the given encounter ID, swallowing errors.
+// Callers invoke this AFTER a successful DB mutation.
+func (s *Service) publish(ctx context.Context, encounterID uuid.UUID) {
+	if s.publisher == nil {
+		return
+	}
+	if err := s.publisher.PublishEncounterSnapshot(ctx, encounterID); err != nil {
+		log.Printf("encounter snapshot publish failed for %s: %v", encounterID, err)
 	}
 }
 
@@ -250,10 +279,15 @@ func (s *Service) UpdateEncounterStatus(ctx context.Context, id uuid.UUID, statu
 		return refdata.Encounter{}, fmt.Errorf("invalid status %q: must be preparing, active, or completed", status)
 	}
 
-	return s.store.UpdateEncounterStatus(ctx, refdata.UpdateEncounterStatusParams{
+	enc, err := s.store.UpdateEncounterStatus(ctx, refdata.UpdateEncounterStatusParams{
 		ID:     id,
 		Status: status,
 	})
+	if err != nil {
+		return refdata.Encounter{}, err
+	}
+	s.publish(ctx, id)
+	return enc, nil
 }
 
 // DeleteEncounter deletes an encounter by its ID.
@@ -310,31 +344,46 @@ func (s *Service) ListCombatantsByEncounterID(ctx context.Context, encounterID u
 
 // UpdateCombatantHP updates a combatant's hit points.
 func (s *Service) UpdateCombatantHP(ctx context.Context, id uuid.UUID, hpCurrent, tempHP int32, isAlive bool) (refdata.Combatant, error) {
-	return s.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
+	c, err := s.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
 		ID:        id,
 		HpCurrent: hpCurrent,
 		TempHp:    tempHP,
 		IsAlive:   isAlive,
 	})
+	if err != nil {
+		return refdata.Combatant{}, err
+	}
+	s.publish(ctx, c.EncounterID)
+	return c, nil
 }
 
 // UpdateCombatantPosition updates a combatant's position.
 func (s *Service) UpdateCombatantPosition(ctx context.Context, id uuid.UUID, col string, row, altitude int32) (refdata.Combatant, error) {
-	return s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
+	c, err := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
 		ID:          id,
 		PositionCol: col,
 		PositionRow: row,
 		AltitudeFt:  altitude,
 	})
+	if err != nil {
+		return refdata.Combatant{}, err
+	}
+	s.publish(ctx, c.EncounterID)
+	return c, nil
 }
 
 // UpdateCombatantConditions updates a combatant's conditions and exhaustion.
 func (s *Service) UpdateCombatantConditions(ctx context.Context, id uuid.UUID, conditions json.RawMessage, exhaustion int32) (refdata.Combatant, error) {
-	return s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+	c, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
 		ID:              id,
 		Conditions:      conditions,
 		ExhaustionLevel: exhaustion,
 	})
+	if err != nil {
+		return refdata.Combatant{}, err
+	}
+	s.publish(ctx, c.EncounterID)
+	return c, nil
 }
 
 // DeleteCombatant deletes a combatant by its ID.
@@ -599,6 +648,9 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 
 	roundsElapsed := enc.RoundNumber
 	summary := fmt.Sprintf("%d rounds, %d casualties", roundsElapsed, casualties)
+
+	// Publish a final snapshot so dashboard subscribers see "completed".
+	s.publish(ctx, encounterID)
 
 	return EndCombatResult{
 		Encounter:         enc,

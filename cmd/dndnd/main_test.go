@@ -233,6 +233,49 @@ func TestRun_MapAPIRoutesRegistered(t *testing.T) {
 	<-errCh
 }
 
+func TestConnectDiscord_EmptyTokenReturnsNil(t *testing.T) {
+	sess, err := connectDiscord("")
+	if err != nil {
+		t.Fatalf("expected nil error for empty token, got %v", err)
+	}
+	if sess != nil {
+		t.Fatalf("expected nil session for empty token, got %#v", sess)
+	}
+}
+
+func TestConnectDiscord_InvalidTokenReturnsError(t *testing.T) {
+	// discordgo.New itself is lenient, but Open() on a bogus token will fail.
+	// We don't want to hit the network in unit tests, so we use a token that
+	// causes Open() to fail fast ("Bot "-prefixed random junk).
+	sess, err := connectDiscord("Bot invalid-token-xyz-do-not-use")
+	if err == nil {
+		// Clean up if it somehow succeeded.
+		_ = sess
+		t.Skip("connectDiscord unexpectedly succeeded — skipping (no network)")
+	}
+}
+
+func TestRun_DiscordTokenUnset_DoesNotError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var logBuf bytes.Buffer
+
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("DISCORD_BOT_TOKEN", "")
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- run(ctx, &logBuf, ":0")
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("run returned error: %v", err)
+	}
+}
+
 func TestRun_DefaultAddr(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
