@@ -103,6 +103,8 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		// discord.Session is available (see internal/discord/bot.go), the
 		// wiring should be updated to inject discord.NewNarrationPoster(session).
 		campaignSvc := campaign.NewService(queries, nil)
+		campaignHandler := campaign.NewHandler(campaignSvc)
+		campaignHandler.RegisterRoutes(router)
 		narrationStore := narration.NewDBStore(queries)
 		narrationAssets := narration.NewAssetAttachmentResolver(assetSvc)
 		narrationCampaigns := narration.NewCampaignResolverAdapter(campaignSvc)

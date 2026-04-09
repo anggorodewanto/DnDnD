@@ -8,7 +8,11 @@
   import ShopBuilder from './ShopBuilder.svelte';
   import CombatManager from './CombatManager.svelte';
   import NarratePanel from './NarratePanel.svelte';
+  import MobileShell from './MobileShell.svelte';
+  import MobileRedirect from './MobileRedirect.svelte';
+  import { isMobileViewport, isDesktopOnly } from './lib/layout.js';
 
+  let innerWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1920);
   let currentView = $state('list');
   let editingMapId = $state(null);
   let editingEncounterId = $state(null);
@@ -33,6 +37,25 @@
   }
 
   currentView = getInitialView();
+
+  // Track viewport width so we can swap to the mobile-lite shell (Phase 102).
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => {
+      innerWidth = window.innerWidth;
+    };
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  });
+
+  // Map the internal desktop `currentView` tokens to the spec's desktop-only
+  // feature ids used by the layout helpers.
+  function currentDesktopOnlyID() {
+    if (currentView === 'list' || currentView === 'editor') return 'map-editor';
+    if (currentView === 'encounter-list' || currentView === 'encounter-editor') return 'encounter-builder';
+    if (currentView === 'combat') return 'combat-workspace';
+    return null;
+  }
 
   function onCreateNew() {
     editingMapId = null;
@@ -114,6 +137,14 @@
   }
 </script>
 
+{#if isMobileViewport(innerWidth)}
+  {#if isDesktopOnly(currentDesktopOnlyID())}
+    <MobileRedirect view={currentDesktopOnlyID()} />
+    <MobileShell {campaignId} />
+  {:else}
+    <MobileShell {campaignId} />
+  {/if}
+{:else}
 <main>
   <header>
     {#if currentView === 'combat'}
@@ -173,6 +204,7 @@
     <NarratePanel {campaignId} />
   {/if}
 </main>
+{/if}
 
 <style>
   :global(body) {

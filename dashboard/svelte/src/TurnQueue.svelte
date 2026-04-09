@@ -1,7 +1,7 @@
 <script>
   import { getTurnQueue, advanceTurn } from './lib/api.js';
 
-  let { encounterId, activeTurnCombatantId, onTurnAdvanced } = $props();
+  let { encounterId, activeTurnCombatantId, onTurnAdvanced, readOnly = false } = $props();
 
   let entries = $state([]);
   let loading = $state(true);
@@ -72,14 +72,16 @@
       {/each}
     </ul>
 
-    <button
-      class="end-turn-btn"
-      onclick={handleEndTurn}
-      disabled={advancing}
-      data-testid="end-turn-btn"
-    >
-      {advancing ? 'Advancing...' : 'End Turn'}
-    </button>
+    {#if !readOnly}
+      <button
+        class="end-turn-btn"
+        onclick={handleEndTurn}
+        disabled={advancing}
+        data-testid="end-turn-btn"
+      >
+        {advancing ? 'Advancing...' : 'End Turn'}
+      </button>
+    {/if}
   {/if}
 </div>
 
