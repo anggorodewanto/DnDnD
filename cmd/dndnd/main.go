@@ -47,22 +47,6 @@ func buildDiscordSession(token string) (discord.Session, *discordgo.Session, err
 	return &discord.DiscordgoSession{S: dg}, dg, nil
 }
 
-// connectDiscord builds and immediately opens a Discord session. Kept as a
-// thin wrapper for tests that want the original combined behavior.
-func connectDiscord(token string) (discord.Session, error) {
-	sess, dg, err := buildDiscordSession(token)
-	if err != nil {
-		return nil, err
-	}
-	if dg == nil {
-		return nil, nil
-	}
-	if err := dg.Open(); err != nil {
-		return nil, fmt.Errorf("discord session open: %w", err)
-	}
-	return sess, nil
-}
-
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -220,7 +204,7 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		// publisher wired in.
 		snapshotBuilder := dashboard.NewSnapshotBuilder(queries, time.Now)
 		publisher := dashboard.NewPublisher(hub, snapshotBuilder)
-		combatStore := &mainCombatStoreAdapter{queries}
+		combatStore := &combatStoreAdapter{queries}
 		combatSvc := combat.NewService(combatStore)
 		combatSvc.SetPublisher(publisher)
 		combatHandler := combat.NewHandler(combatSvc, dice.NewRoller(nil))

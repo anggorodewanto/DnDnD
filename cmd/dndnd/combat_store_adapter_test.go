@@ -16,24 +16,21 @@ import (
 	"github.com/ab/dndnd/internal/testutil"
 )
 
-// TestMainCombatStoreAdapter_UpdateCharacterInventory exercises the
-// positional-arg bridge by round-tripping an inventory update through a real
+// TestCombatStoreAdapter_CharacterFieldBridges exercises the positional-arg
+// bridge by round-tripping inventory and gold updates through a real
 // testcontainers-backed database. This doubles as a smoke test that the
 // adapter correctly satisfies combat.Store.
-func TestMainCombatStoreAdapter_CharacterFieldBridges(t *testing.T) {
+func TestCombatStoreAdapter_CharacterFieldBridges(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
 
 	db := testutil.NewTestDB(t)
-	// Run the migrations.
 	queries := refdata.New(db)
 	ctx := context.Background()
 
-	// Migrate
 	require.NoError(t, database.MigrateUp(db, dbfs.Migrations))
 
-	// Seed a minimal character row.
 	campaignID := uuid.New()
 	_, err := db.Exec(`INSERT INTO campaigns (id, guild_id, dm_user_id, name, status) VALUES ($1, $2, $3, $4, $5)`,
 		campaignID, "g-adap", "dm", "Adapter Campaign", "active")
@@ -46,25 +43,16 @@ func TestMainCombatStoreAdapter_CharacterFieldBridges(t *testing.T) {
 		10, 10, 10, 30, 2, `[{"die":"d10","remaining":1}]`, `{Common}`, 100)
 	require.NoError(t, err)
 
-	adapter := &mainCombatStoreAdapter{queries}
+	adapter := &combatStoreAdapter{queries}
 
-	// UpdateCharacterInventory
 	inv := pqtype.NullRawMessage{RawMessage: json.RawMessage(`[{"id":"sword"}]`), Valid: true}
 	require.NoError(t, adapter.UpdateCharacterInventory(ctx, charID, inv))
-
-	// UpdateCharacterGold
 	require.NoError(t, adapter.UpdateCharacterGold(ctx, charID, 250))
 
-	// Verify gold and inventory persisted.
 	var gold int32
 	var invBytes []byte
 	err = db.QueryRow(`SELECT gold, inventory FROM characters WHERE id = $1`, charID).Scan(&gold, &invBytes)
 	require.NoError(t, err)
 	assert.Equal(t, int32(250), gold)
 	assert.JSONEq(t, `[{"id":"sword"}]`, string(invBytes))
-}
-
-func TestNoopNotifier_SendMessage(t *testing.T) {
-	n := noopNotifier{}
-	require.NoError(t, n.SendMessage("chan", "hello"))
 }

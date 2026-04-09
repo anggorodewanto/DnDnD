@@ -273,16 +273,6 @@ func TestRun_MapAPIRoutesRegistered(t *testing.T) {
 	<-errCh
 }
 
-func TestConnectDiscord_EmptyTokenReturnsNil(t *testing.T) {
-	sess, err := connectDiscord("")
-	if err != nil {
-		t.Fatalf("expected nil error for empty token, got %v", err)
-	}
-	if sess != nil {
-		t.Fatalf("expected nil session for empty token, got %#v", sess)
-	}
-}
-
 func TestBuildDiscordSession_EmptyTokenReturnsNil(t *testing.T) {
 	sess, dg, err := buildDiscordSession("")
 	if err != nil {
