@@ -624,7 +624,7 @@
   - Depends on: Phase 94a, Phase 95
   - Done when: Mobile view renders correctly, all mobile features functional, desktop-only features show redirect.
 
-- [ ] **Phase 103: WebSocket State Sync**
+- [x] **Phase 103: WebSocket State Sync**
   - Scope: Server-authoritative push-only WebSocket. Full state snapshot per encounter on every push. Client auto-reconnect with exponential backoff (1s-30s cap). Optimistic UI: read-only areas update immediately, active form inputs preserved with indicator. No delta/event-log protocol.
   - Depends on: Phase 15, Phase 24
   - Done when: Dashboard receives live state updates, reconnects automatically, form inputs not clobbered, full snapshot on every push.
