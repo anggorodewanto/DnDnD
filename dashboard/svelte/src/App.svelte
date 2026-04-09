@@ -140,10 +140,8 @@
 {#if isMobileViewport(innerWidth)}
   {#if isDesktopOnly(currentDesktopOnlyID())}
     <MobileRedirect view={currentDesktopOnlyID()} />
-    <MobileShell {campaignId} />
-  {:else}
-    <MobileShell {campaignId} />
   {/if}
+  <MobileShell {campaignId} />
 {:else}
 <main>
   <header>

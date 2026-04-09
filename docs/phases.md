@@ -619,7 +619,7 @@
   - Depends on: Phase 15, Phase 7
   - Done when: DM can view all characters, see party languages, send private messages to players via bot.
 
-- [ ] **Phase 102: DM Dashboard — Responsive Mobile-Lite View**
+- [x] **Phase 102: DM Dashboard — Responsive Mobile-Lite View**
   - Scope: Simplified mobile view (sidebar collapses to bottom tab bar). Mobile features: DM Queue, Initiative/Turn Queue (read-only), Narrate, Character Approval Queue, Message Player, Quick Actions (end turn, pause/resume). Desktop-only features show redirect message on mobile.
   - Depends on: Phase 94a, Phase 95
   - Done when: Mobile view renders correctly, all mobile features functional, desktop-only features show redirect.
