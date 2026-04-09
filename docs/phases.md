@@ -634,11 +634,13 @@
   - Depends on: Phase 76a
   - Done when: Bot restarts cleanly, stale turns processed in deadline order, no timer state lost.
   - Note: when wiring the Discord session in `cmd/dndnd/main.go`, also inject `discord.NewNarrationPoster(session)` into `narration.Service` (Phase 100a left it `nil`) and `discord.NewDirectMessenger(session)` into `messageplayer.Service` (Phase 101 left it `nil`). Both services currently return `ErrPosterUnavailable` / `ErrMessengerUnavailable` at runtime until this wiring lands.
+  - Note: also construct `dashboard.NewSnapshotBuilder(store, clock)` + `dashboard.NewPublisher(hub, builder)` in `cmd/dndnd/main.go` and inject the publisher into every service that commits encounter state mutations (turn flow, combat actions, HP/condition updates, etc.) so each calls `publisher.PublishEncounterSnapshot(ctx, encounterID)` after its DB transaction commits. Phase 103 shipped the publisher but left no service wired — without this, the dashboard WebSocket stays silent at runtime.
 
 - [ ] **Phase 105: Simultaneous Encounters**
   - Scope: Multiple active encounters sharing Discord channels. Encounter display name vs internal name (DM can set vague player-facing name). Message labeling with encounter name + round. Commands routed by combatant membership. Per-turn locks scoped per encounter. DM manages via tabbed Combat Workspace. Character limited to one active encounter.
   - Depends on: Phase 26a, Phase 94a
   - Done when: Two encounters run simultaneously with correct message labeling, independent turn orders, command routing, and DM tab switching.
+  - Note: this is the natural place to wire the Phase 103 WebSocket client into the Svelte shell. Import `createWsClient` from `dashboard/svelte/src/lib/wsClient.js` and `mergeSnapshot` from `dashboard/svelte/src/lib/optimisticMerge.js` in `App.svelte` / `CombatManager.svelte`: open one wsClient per active encounter tab with `encounter_id=<uuid>`, feed `onSnapshot` through `mergeSnapshot` into the encounter store tracking the DM's currently-focused form inputs as `dirtyFields`, and render the "HP updated to 3 by player action" indicator from `_pendingFromSnapshot`. Phase 103 shipped both modules fully unit-tested but left `App.svelte` unwired pending the tabbed Combat Workspace this phase introduces.
 
 - [ ] **Phase 106a: DM Notification System — Core Infrastructure & Initial Events (`#dm-queue`)**
   - Scope: `#dm-queue` structured message framework: player name, context summary, "Resolve ->" link to dashboard. DM-only channel visibility. Resolved items show checkmark + outcome. Initial event types: freeform actions (+ cancel), reaction declarations, rest requests, skill check narration, consumable without effect. Spec lines 2825-2870.
