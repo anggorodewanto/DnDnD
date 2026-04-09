@@ -193,6 +193,46 @@ func TestRun_WithDatabase(t *testing.T) {
 	}
 }
 
+func TestRun_CombatAPIRoutesRegistered(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	connStr := testutil.NewTestDBConnString(t)
+	t.Setenv("DATABASE_URL", connStr)
+
+	addr := getFreePort(t)
+	var logBuf bytes.Buffer
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- run(ctx, &logBuf, addr)
+	}()
+
+	waitForServer(t, addr)
+
+	// GET /api/combat/characters without campaign_id should return 400,
+	// NOT 404 — proving the combat handler is mounted on the router.
+	resp, err := http.Get(fmt.Sprintf("http://%s/api/combat/characters", addr))
+	if err != nil {
+		t.Fatalf("failed to reach /api/combat/characters: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		t.Fatal("/api/combat/characters returned 404; combat handler is not wired into the server")
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 from /api/combat/characters without campaign_id, got %d", resp.StatusCode)
+	}
+
+	cancel()
+	<-errCh
+}
+
 func TestRun_MapAPIRoutesRegistered(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -243,15 +283,30 @@ func TestConnectDiscord_EmptyTokenReturnsNil(t *testing.T) {
 	}
 }
 
-func TestConnectDiscord_InvalidTokenReturnsError(t *testing.T) {
-	// discordgo.New itself is lenient, but Open() on a bogus token will fail.
-	// We don't want to hit the network in unit tests, so we use a token that
-	// causes Open() to fail fast ("Bot "-prefixed random junk).
-	sess, err := connectDiscord("Bot invalid-token-xyz-do-not-use")
-	if err == nil {
-		// Clean up if it somehow succeeded.
-		_ = sess
-		t.Skip("connectDiscord unexpectedly succeeded — skipping (no network)")
+func TestBuildDiscordSession_EmptyTokenReturnsNil(t *testing.T) {
+	sess, dg, err := buildDiscordSession("")
+	if err != nil {
+		t.Fatalf("expected nil error for empty token, got %v", err)
+	}
+	if sess != nil || dg != nil {
+		t.Fatalf("expected (nil, nil) for empty token, got (%v, %v)", sess, dg)
+	}
+}
+
+func TestBuildDiscordSession_NonEmptyTokenReturnsSession(t *testing.T) {
+	// discordgo.New is lenient and does not hit the network, so we can
+	// deterministically assert that a non-empty token yields a constructed
+	// (but not yet opened) session pair. This replaces an earlier test that
+	// used t.Skip to paper over network-dependent Open() calls.
+	sess, dg, err := buildDiscordSession("Bot fake-token-for-unit-tests")
+	if err != nil {
+		t.Fatalf("unexpected error from buildDiscordSession: %v", err)
+	}
+	if sess == nil {
+		t.Fatal("expected non-nil Session wrapper")
+	}
+	if dg == nil {
+		t.Fatal("expected non-nil *discordgo.Session")
 	}
 }
 

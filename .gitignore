@@ -2,6 +2,6 @@ bin/
 *.out
 *.exe
 node_modules/
-dndnd
+/dndnd
 code-review-*.md
 dashboard/svelte/coverage/

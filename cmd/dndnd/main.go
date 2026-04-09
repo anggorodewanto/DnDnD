@@ -19,6 +19,7 @@ import (
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dashboard"
 	"github.com/ab/dndnd/internal/database"
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
 	"github.com/ab/dndnd/internal/encounter"
 	"github.com/ab/dndnd/internal/gamemap"
@@ -30,22 +31,36 @@ import (
 	"github.com/ab/dndnd/internal/statblocklibrary"
 )
 
-// connectDiscord opens a Discord session using the given bot token. An empty
-// token is treated as "Discord is optional for this deploy" and returns
-// (nil, nil). Any failure to construct or open the session is returned as an
-// error so run() can decide whether it is fatal.
-func connectDiscord(token string) (discord.Session, error) {
+// buildDiscordSession constructs (but does NOT open) a Discord session using
+// the given bot token. An empty token is treated as "Discord is optional for
+// this deploy" and returns (nil, nil, nil). The raw *discordgo.Session is
+// returned alongside the Session interface wrapper so run() can call Open()
+// and Close() on it directly after crash recovery completes.
+func buildDiscordSession(token string) (discord.Session, *discordgo.Session, error) {
 	if token == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
-		return nil, fmt.Errorf("discordgo.New: %w", err)
+		return nil, nil, fmt.Errorf("discordgo.New: %w", err)
+	}
+	return &discord.DiscordgoSession{S: dg}, dg, nil
+}
+
+// connectDiscord builds and immediately opens a Discord session. Kept as a
+// thin wrapper for tests that want the original combined behavior.
+func connectDiscord(token string) (discord.Session, error) {
+	sess, dg, err := buildDiscordSession(token)
+	if err != nil {
+		return nil, err
+	}
+	if dg == nil {
+		return nil, nil
 	}
 	if err := dg.Open(); err != nil {
 		return nil, fmt.Errorf("discord session open: %w", err)
 	}
-	return &discord.DiscordgoSession{S: dg}, nil
+	return sess, nil
 }
 
 func main() {
@@ -74,19 +89,22 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 
 	router, _ := server.NewRouter(logger)
 
-	// Phase 104: Connect Discord session up-front so the wiring below can
-	// inject it into narration.Service, messageplayer.Service, and the
-	// turn-timer notifier. Discord is optional — if DISCORD_BOT_TOKEN is
-	// unset, session stays nil and the dependent services fall back to
-	// their placeholder behavior (see narration/messageplayer for details).
+	// Phase 104: Construct (but do NOT open) the Discord session up-front so
+	// the wiring below can inject it into narration.Service,
+	// messageplayer.Service, and the turn-timer notifier. Discord is optional
+	// — if DISCORD_BOT_TOKEN is unset, session stays nil and the dependent
+	// services fall back to their placeholder behavior. Per spec lines
+	// 116-121, we must complete stale-state recovery BEFORE the bot starts
+	// receiving gateway events, so session.Open() is deferred until after
+	// the crash-recovery scan runs below.
 	discordToken := os.Getenv("DISCORD_BOT_TOKEN")
-	discordSession, err := connectDiscord(discordToken)
+	discordSession, rawDG, err := buildDiscordSession(discordToken)
 	if err != nil {
-		logger.Error("discord connection failed", "error", err)
+		logger.Error("discord session construction failed", "error", err)
 		return err
 	}
 	if discordSession != nil {
-		logger.Info("discord session connected")
+		logger.Info("discord session constructed (open deferred until after recovery)")
 	} else {
 		logger.Info("discord session skipped (DISCORD_BOT_TOKEN not set)")
 	}
@@ -98,7 +116,14 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 	go hub.Run()
 	defer hub.Stop()
 
-	// Optional database connection
+	// Optional database connection. Per spec lines 116-121, the correct
+	// startup order is:
+	//   1. Connect to PostgreSQL
+	//   2. Run migrations
+	//   3. Scan for stale state (TurnTimer.PollOnce)
+	//   4. Open Discord gateway (dg.Open)
+	//   5. Re-register slash commands for every guild
+	//   6. Start the periodic timer ticker
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL != "" {
 		db, err := database.Connect(databaseURL)
@@ -190,41 +215,50 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		// Phase 104: Dashboard publisher + combat service wiring.
 		// The publisher is injected into combat.Service so every HP /
 		// condition / status mutation fans a fresh snapshot out to
-		// WebSocket subscribers. combatSvc is constructed here even though
-		// its HTTP handlers are wired elsewhere; the critical piece is that
-		// the publisher is attached before any mutation can land.
+		// WebSocket subscribers. The publisher is attached BEFORE the
+		// combat handler is mounted so no mutation can land without the
+		// publisher wired in.
 		snapshotBuilder := dashboard.NewSnapshotBuilder(queries, time.Now)
 		publisher := dashboard.NewPublisher(hub, snapshotBuilder)
-		combatSvc := combat.NewService(&mainCombatStoreAdapter{queries})
+		combatStore := &mainCombatStoreAdapter{queries}
+		combatSvc := combat.NewService(combatStore)
 		combatSvc.SetPublisher(publisher)
-		_ = combatSvc // handler wiring tracked in Open Concerns
+		combatHandler := combat.NewHandler(combatSvc, dice.NewRoller(nil))
+		combatHandler.RegisterRoutes(router)
 
-		// Phase 104: Startup recovery — stale-turn scan + timer polling.
-		// The first PollOnce runs synchronously BEFORE the ticker starts so
-		// any overdue turns (nudge, warning, DM prompt, auto-resolve) are
-		// processed in deadline order before the HTTP server begins
-		// accepting new commands. Notifier is the Discord adapter when a
-		// session is available; otherwise a no-op notifier.
+		// Phase 104: Startup recovery per spec lines 116-121.
+		//
+		// Step 3 — Scan for stale state. PollOnce runs synchronously BEFORE
+		// the Discord gateway is opened so any overdue turns (nudge,
+		// warning, DM prompt, auto-resolve) are processed in deadline order
+		// while the bot is still "dark" — no new interactions can race with
+		// recovery. Notifier is the Discord adapter when a session is
+		// available; otherwise a no-op notifier.
 		var timerNotifier combat.Notifier
 		if discordSession != nil {
 			timerNotifier = discord.NewTurnTimerNotifier(discordSession)
 		} else {
 			timerNotifier = noopNotifier{}
 		}
-		timer := combat.NewTurnTimer(&mainCombatStoreAdapter{queries}, timerNotifier, 30*time.Second)
+		timer := combat.NewTurnTimer(combatStore, timerNotifier, 30*time.Second)
 		if err := timer.PollOnce(ctx); err != nil {
 			logger.Error("startup stale-turn scan failed", "error", err)
 		} else {
 			logger.Info("startup stale-turn scan complete")
 		}
-		timer.Start()
-		defer timer.Stop()
 
-		// Phase 104: Register Discord slash commands for every guild the
-		// session is currently in. We do this AFTER the stale scan and
-		// timer start so recovery completes before the bot begins handling
-		// new interactions.
-		if discordSession != nil {
+		// Step 4 — Open the Discord gateway. Only after recovery.
+		if rawDG != nil {
+			if err := rawDG.Open(); err != nil {
+				logger.Error("discord session open failed", "error", err)
+				return fmt.Errorf("discord session open: %w", err)
+			}
+			defer rawDG.Close()
+			logger.Info("discord session opened")
+
+			// Step 5 — Re-register slash commands for every guild the
+			// session is currently in. Per spec lines 178-181, the bot
+			// must always reconcile its command set on startup.
 			appID := os.Getenv("DISCORD_APPLICATION_ID")
 			bot := discord.NewBot(discordSession, appID, logger)
 			if state := discordSession.GetState(); state != nil {
@@ -237,6 +271,12 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 				}
 			}
 		}
+
+		// Step 6 — Start the periodic timer ticker. This runs LAST so that
+		// the ticker-driven poll loop cannot fire while we are still
+		// reconciling slash commands.
+		timer.Start()
+		defer timer.Stop()
 	}
 
 	srv := &http.Server{
