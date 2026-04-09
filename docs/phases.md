@@ -633,6 +633,7 @@
   - Scope: Startup recovery sequence: connect PostgreSQL, scan for stale state (overdue turns with no escalation sent), connect Discord, re-register commands, resume timer polling. In-flight commands: PostgreSQL auto-rolls back uncommitted transactions. Turn timers derived from DB fields, not in-memory.
   - Depends on: Phase 76a
   - Done when: Bot restarts cleanly, stale turns processed in deadline order, no timer state lost.
+  - Note: when wiring the Discord session in `cmd/dndnd/main.go`, also inject `discord.NewNarrationPoster(session)` into `narration.Service` (Phase 100a left it `nil`) and `discord.NewDirectMessenger(session)` into `messageplayer.Service` (Phase 101 left it `nil`). Both services currently return `ErrPosterUnavailable` / `ErrMessengerUnavailable` at runtime until this wiring lands.
 
 - [ ] **Phase 105: Simultaneous Encounters**
   - Scope: Multiple active encounters sharing Discord channels. Encounter display name vs internal name (DM can set vague player-facing name). Message labeling with encounter name + round. Commands routed by combatant membership. Per-turn locks scoped per encounter. DM manages via tabbed Combat Workspace. Character limited to one active encounter.
