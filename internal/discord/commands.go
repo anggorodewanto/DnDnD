@@ -279,6 +279,11 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Name:        "target",
 					Description: "Target creature ID (e.g. AR)",
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Name:        "dc",
+					Description: "Difficulty Class — used for trivial nat 1/nat 20 outcomes",
+				},
 			},
 		},
 		{

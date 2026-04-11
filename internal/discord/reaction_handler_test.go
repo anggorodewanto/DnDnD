@@ -126,6 +126,9 @@ func (c *cancelRecordingNotifier) Resolve(_ context.Context, _, _ string) error 
 func (c *cancelRecordingNotifier) ResolveWhisper(_ context.Context, _, _ string) error {
 	return nil
 }
+func (c *cancelRecordingNotifier) ResolveSkillCheckNarration(_ context.Context, _, _ string) error {
+	return nil
+}
 func (c *cancelRecordingNotifier) Get(string) (dmqueue.Item, bool) { return dmqueue.Item{}, false }
 func (c *cancelRecordingNotifier) ListPending() []dmqueue.Item     { return nil }
 

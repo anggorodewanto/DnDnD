@@ -27,6 +27,18 @@ const (
 // this to deliver a reply via Discord DM when resolving a whisper item.
 const WhisperTargetDiscordUserIDKey = "whisper_target_discord_user_id"
 
+// Phase 106d: ExtraMetadata keys for KindSkillCheckNarration items. The
+// /check handler stashes these so ResolveSkillCheckNarration can deliver a
+// follow-up message in the originating Discord channel mentioning the
+// invoking player along with the rolled total.
+const (
+	SkillCheckChannelIDKey       = "skill_check_channel_id"
+	SkillCheckPlayerDiscordIDKey = "skill_check_player_discord_id"
+	SkillCheckSkillLabelKey      = "skill_check_skill_label"
+	SkillCheckTotalKey           = "skill_check_total"
+	SkillCheckCharNameKey        = "skill_check_char_name"
+)
+
 // Event describes a structured dm-queue notification.
 //
 // PlayerName is the display name of the acting character/player.
@@ -104,6 +116,45 @@ func FormatCancelled(posted string) string {
 func FormatResolved(posted, outcome string) string {
 	body := stripResolveLink(posted)
 	return "✅ " + body + " — " + outcome
+}
+
+// FormatSkillCheckNarrationFollowup renders the non-ephemeral follow-up
+// message that surfaces a DM's skill check narration back into the
+// originating channel. The message mentions the invoking player by Discord
+// user ID, names the skill, includes the rolled total for log context, and
+// then quotes the narration text.
+//
+// Required ExtraMetadata: SkillCheckPlayerDiscordIDKey, SkillCheckSkillLabelKey,
+// SkillCheckTotalKey. Missing values are tolerated (the corresponding
+// segment is omitted) so the formatter never panics on partial events.
+func FormatSkillCheckNarrationFollowup(e Event, narration string) string {
+	userID := e.ExtraMetadata[SkillCheckPlayerDiscordIDKey]
+	skill := e.ExtraMetadata[SkillCheckSkillLabelKey]
+	total := e.ExtraMetadata[SkillCheckTotalKey]
+
+	var b strings.Builder
+	if userID != "" {
+		b.WriteString("<@")
+		b.WriteString(userID)
+		b.WriteString("> ")
+	}
+	if skill != "" {
+		b.WriteString("**")
+		b.WriteString(skill)
+		b.WriteString(" Check**")
+		if total != "" {
+			b.WriteString(" (rolled ")
+			b.WriteString(total)
+			b.WriteString(")")
+		}
+		b.WriteString("\n")
+	} else if total != "" {
+		b.WriteString("**Check** (rolled ")
+		b.WriteString(total)
+		b.WriteString(")\n")
+	}
+	b.WriteString(narration)
+	return b.String()
 }
 
 // stripResolveLink removes a trailing " — [Resolve →](...)" from a posted message.

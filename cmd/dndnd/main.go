@@ -289,6 +289,9 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		combatSvc.SetDMNotifier(dmQueueNotifier)
 		if discordSession != nil {
 			dmQueueNotifier.SetWhisperDeliverer(discord.NewDirectMessenger(discordSession))
+			// Phase 106d: deliver /check skill-check narrations as
+			// non-ephemeral follow-ups in the originating channel.
+			dmQueueNotifier.SetSkillCheckNarrationDeliverer(discord.NewSkillCheckNarrationDeliverer(discordSession))
 		}
 		dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, passthroughMiddleware)
 
@@ -374,6 +377,10 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			// Phase 106a: route /rest dm-queue posts through the notifier so
 			// rest requests are persisted and resolvable from the dashboard.
 			discordHandlerSet.rest.SetNotifier(dmQueueNotifier)
+			// Phase 106d: gate non-trivial /check rolls through #dm-queue.
+			if discordHandlerSet.check != nil {
+				discordHandlerSet.check.SetNotifier(dmQueueNotifier)
+			}
 			// Phase 106c: route /reaction declarations through the dm-queue
 			// notifier so each declaration is posted to #dm-queue and the
 			// player can cancel it before the trigger fires.

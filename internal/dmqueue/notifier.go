@@ -31,6 +31,18 @@ var ErrWhisperTargetMissing = errors.New("whisper item missing target discord us
 // WhisperReplyDeliverer has been wired onto the notifier.
 var ErrWhisperDelivererMissing = errors.New("whisper reply deliverer not wired")
 
+// ErrNotSkillCheckNarrationItem is returned by ResolveSkillCheckNarration
+// when the target item is not a KindSkillCheckNarration entry.
+var ErrNotSkillCheckNarrationItem = errors.New("dm-queue item is not a skill check narration")
+
+// ErrSkillCheckChannelMissing is returned by ResolveSkillCheckNarration
+// when the item has no skill_check_channel_id in its ExtraMetadata.
+var ErrSkillCheckChannelMissing = errors.New("skill check narration item missing channel id")
+
+// ErrSkillCheckNarrationDelivererMissing is returned by
+// ResolveSkillCheckNarration when no SkillCheckNarrationDeliverer is wired.
+var ErrSkillCheckNarrationDelivererMissing = errors.New("skill check narration deliverer not wired")
+
 // Item is a stored dm-queue entry.
 type Item struct {
 	ID         string
@@ -68,6 +80,12 @@ type Notifier interface {
 	// marks the item resolved with replyText as the outcome. Returns
 	// ErrNotWhisperItem for non-whisper kinds.
 	ResolveWhisper(ctx context.Context, itemID string, replyText string) error
+	// ResolveSkillCheckNarration delivers the DM's narration text as a
+	// non-ephemeral follow-up message in the channel where the player
+	// invoked /check (channel id stashed in ExtraMetadata) and then marks
+	// the item resolved with the narration as its outcome. Returns
+	// ErrNotSkillCheckNarrationItem for non-narration kinds.
+	ResolveSkillCheckNarration(ctx context.Context, itemID string, narration string) error
 	Get(itemID string) (Item, bool)
 	ListPending() []Item
 }
@@ -78,16 +96,26 @@ type WhisperReplyDeliverer interface {
 	SendDirectMessage(discordUserID, body string) ([]string, error)
 }
 
+// SkillCheckNarrationDeliverer delivers a non-ephemeral follow-up message
+// to a Discord channel — used by ResolveSkillCheckNarration so the DM's
+// narration text reaches the originating channel where /check was invoked.
+// A thin wrapper over Session.ChannelMessageSend in the discord package
+// satisfies this shape.
+type SkillCheckNarrationDeliverer interface {
+	DeliverSkillCheckNarration(channelID, body string) error
+}
+
 // DefaultNotifier is the standard Notifier implementation. It composes a
 // Store (in-memory or DB-backed) with a Sender, ChannelResolver, and
 // ResolvePathBuilder. Construct it with NewNotifier (in-memory default) or
 // NewNotifierWithStore (caller-provided Store, e.g. PgStore).
 type DefaultNotifier struct {
-	sender    Sender
-	resolver  ChannelResolver
-	pathBldr  ResolvePathBuilder
-	store     Store
-	deliverer WhisperReplyDeliverer
+	sender              Sender
+	resolver            ChannelResolver
+	pathBldr            ResolvePathBuilder
+	store               Store
+	deliverer           WhisperReplyDeliverer
+	narrationDeliverer  SkillCheckNarrationDeliverer
 }
 
 // SetWhisperDeliverer wires the DM-to-player deliverer used by
@@ -96,6 +124,13 @@ type DefaultNotifier struct {
 // leave it unset.
 func (n *DefaultNotifier) SetWhisperDeliverer(d WhisperReplyDeliverer) {
 	n.deliverer = d
+}
+
+// SetSkillCheckNarrationDeliverer wires the channel-follow-up deliverer
+// used by ResolveSkillCheckNarration. Passing nil disables narration
+// resolution; call sites that do not need /check gating may leave it unset.
+func (n *DefaultNotifier) SetSkillCheckNarrationDeliverer(d SkillCheckNarrationDeliverer) {
+	n.narrationDeliverer = d
 }
 
 // NewNotifier constructs a DefaultNotifier backed by an in-memory store.
@@ -237,6 +272,37 @@ func (n *DefaultNotifier) ResolveWhisper(ctx context.Context, itemID, replyText 
 		return fmt.Errorf("delivering whisper reply: %w", err)
 	}
 	return n.Resolve(ctx, itemID, replyText)
+}
+
+// ResolveSkillCheckNarration delivers the DM's narration to the originating
+// channel as a non-ephemeral follow-up that mentions the invoking player
+// alongside the rolled total, then marks the queue item resolved with the
+// narration as its outcome. The follow-up is delivered first: if delivery
+// fails the item stays pending so the DM can retry.
+func (n *DefaultNotifier) ResolveSkillCheckNarration(ctx context.Context, itemID, narration string) error {
+	item, ok, err := n.store.Get(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrItemNotFound
+	}
+	if item.Event.Kind != KindSkillCheckNarration {
+		return ErrNotSkillCheckNarrationItem
+	}
+	if n.narrationDeliverer == nil {
+		return ErrSkillCheckNarrationDelivererMissing
+	}
+	channelID := item.Event.ExtraMetadata[SkillCheckChannelIDKey]
+	if channelID == "" {
+		return ErrSkillCheckChannelMissing
+	}
+
+	body := FormatSkillCheckNarrationFollowup(item.Event, narration)
+	if err := n.narrationDeliverer.DeliverSkillCheckNarration(channelID, body); err != nil {
+		return fmt.Errorf("delivering skill check narration: %w", err)
+	}
+	return n.Resolve(ctx, itemID, narration)
 }
 
 // ListPending returns all items currently in pending status, in post order.

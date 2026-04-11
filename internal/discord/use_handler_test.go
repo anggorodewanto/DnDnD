@@ -282,6 +282,9 @@ func (r *recordingNotifier) Post(_ context.Context, e dmqueue.Event) (string, er
 func (r *recordingNotifier) Cancel(_ context.Context, _, _ string) error { return nil }
 func (r *recordingNotifier) Resolve(_ context.Context, _, _ string) error { return nil }
 func (r *recordingNotifier) ResolveWhisper(_ context.Context, _, _ string) error { return nil }
+func (r *recordingNotifier) ResolveSkillCheckNarration(_ context.Context, _, _ string) error {
+	return nil
+}
 func (r *recordingNotifier) Get(string) (dmqueue.Item, bool)              { return dmqueue.Item{}, false }
 func (r *recordingNotifier) ListPending() []dmqueue.Item                  { return nil }
 

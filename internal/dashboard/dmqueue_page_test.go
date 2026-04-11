@@ -18,20 +18,42 @@ import (
 
 // stubNotifier lets dashboard tests inspect and drive a Notifier without Discord.
 type stubNotifier struct {
-	items              map[string]dmqueue.Item
-	resolveErr         error
-	cancelErr          error
-	resolveWhisperErr  error
-	resolvedIDs        []string
-	cancelledIDs       []string
-	whisperReplies     map[string]string
+	items                       map[string]dmqueue.Item
+	resolveErr                  error
+	cancelErr                   error
+	resolveWhisperErr           error
+	resolveSkillCheckNarrErr    error
+	resolvedIDs                 []string
+	cancelledIDs                []string
+	whisperReplies              map[string]string
+	skillCheckNarrations        map[string]string
 }
 
 func newStubNotifier() *stubNotifier {
 	return &stubNotifier{
-		items:          map[string]dmqueue.Item{},
-		whisperReplies: map[string]string{},
+		items:                map[string]dmqueue.Item{},
+		whisperReplies:       map[string]string{},
+		skillCheckNarrations: map[string]string{},
 	}
+}
+
+func (s *stubNotifier) ResolveSkillCheckNarration(_ context.Context, id, narration string) error {
+	if s.resolveSkillCheckNarrErr != nil {
+		return s.resolveSkillCheckNarrErr
+	}
+	it, ok := s.items[id]
+	if !ok {
+		return dmqueue.ErrItemNotFound
+	}
+	if it.Event.Kind != dmqueue.KindSkillCheckNarration {
+		return dmqueue.ErrNotSkillCheckNarrationItem
+	}
+	it.Status = dmqueue.StatusResolved
+	it.Outcome = narration
+	s.items[id] = it
+	s.skillCheckNarrations[id] = narration
+	s.resolvedIDs = append(s.resolvedIDs, id)
+	return nil
 }
 
 func (s *stubNotifier) ResolveWhisper(_ context.Context, id, replyText string) error {
@@ -103,6 +125,7 @@ func newDMQueueTestRouter(n dmqueue.Notifier) chi.Router {
 	r.Get("/dashboard/queue/{itemID}", h.ServeItem)
 	r.Post("/dashboard/queue/{itemID}/resolve", h.HandleResolve)
 	r.Post("/dashboard/queue/{itemID}/reply", h.HandleWhisperReply)
+	r.Post("/dashboard/queue/{itemID}/narrate", h.HandleSkillCheckNarration)
 	return r
 }
 

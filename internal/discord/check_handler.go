@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -13,6 +14,7 @@ import (
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/check"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -50,7 +52,13 @@ type CheckHandler struct {
 	encounterProvider CheckEncounterProvider
 	combatantLookup  CheckCombatantLookup
 	rollLogger       dice.RollHistoryLogger
+	notifier         dmqueue.Notifier
 }
+
+// SetNotifier wires the dm-queue Notifier so non-trivial /check rolls are
+// gated through #dm-queue for DM narration. When nil (or unset), every
+// /check responds immediately with the numeric result and no queue post.
+func (h *CheckHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
 
 // NewCheckHandler creates a new CheckHandler.
 func NewCheckHandler(
@@ -80,7 +88,7 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
 
 	// Parse options
-	skill, adv, disadv := h.parseOptions(data.Options)
+	skill, adv, disadv, dc, hasDC := h.parseOptions(data.Options)
 	if skill == "" {
 		respondEphemeral(h.session, interaction, "Please specify a skill or ability (e.g. `/check perception`).")
 		return
@@ -133,26 +141,111 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	// Phase 106d: gate non-trivial outcomes through #dm-queue. AutoFail
+	// short-circuits to immediate ephemeral; otherwise apply the trivial
+	// outcome rule and post to the queue when gated.
+	if !result.AutoFail && h.shouldGate(result, dc, hasDC) {
+		if h.postSkillCheckNarration(ctx, interaction, char, result) {
+			respondEphemeral(h.session, interaction, "🎲 Check rolled — result sent to the DM for narration.")
+			h.logRollIfWanted(char, result)
+			return
+		}
+		// Fall through to immediate response if the queue post failed.
+	}
+
 	// Format and respond
 	msg := check.FormatSingleCheckResult(char.Name, result)
 	respondEphemeral(h.session, interaction, msg)
 
-	// Log to roll history
-	if h.rollLogger != nil && !result.AutoFail {
-		_ = h.rollLogger.LogRoll(dice.RollLogEntry{
-			DiceRolls:  []dice.GroupResult{{Die: 20, Count: 1, Results: result.D20Result.Rolls, Total: result.D20Result.Chosen}},
-			Total:      result.Total,
-			Expression: fmt.Sprintf("d20+%d", result.Modifier),
-			Roller:     char.Name,
-			Purpose:    fmt.Sprintf("%s check", result.Skill),
-			Breakdown:  result.D20Result.Breakdown,
-			Timestamp:  result.D20Result.Timestamp,
-		})
-	}
+	h.logRollIfWanted(char, result)
 }
 
-// parseOptions extracts skill, adv, disadv, and target from command options.
-func (h *CheckHandler) parseOptions(opts []*discordgo.ApplicationCommandInteractionDataOption) (skill string, adv, disadv bool) {
+// shouldGate decides whether to route the result through #dm-queue. The
+// rule (Phase 106d): always gate EXCEPT when the natural d20 roll is 20 and
+// the total meets/exceeds an explicit DC (trivial success), or when the
+// natural d20 roll is 1 with an explicit DC (trivial failure).
+func (h *CheckHandler) shouldGate(result check.SingleCheckResult, dc int, hasDC bool) bool {
+	if h.notifier == nil {
+		return false
+	}
+	if !hasDC {
+		return true
+	}
+	natural := naturalD20(result.D20Result)
+	if natural == 20 && result.Total >= dc {
+		return false
+	}
+	if natural == 1 {
+		return false
+	}
+	return true
+}
+
+// naturalD20 returns the chosen natural d20 face for the result, or 0 if
+// the result has no d20 rolls (defensive).
+func naturalD20(d20 dice.D20Result) int {
+	if len(d20.Rolls) == 0 {
+		return 0
+	}
+	return d20.Chosen
+}
+
+// postSkillCheckNarration posts a KindSkillCheckNarration event to the
+// dm-queue carrying the channel, player, skill label, and total in
+// ExtraMetadata so ResolveSkillCheckNarration can deliver a follow-up.
+// Returns true on a successful post.
+func (h *CheckHandler) postSkillCheckNarration(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, result check.SingleCheckResult) bool {
+	skillLabel := titleSkill(result.Skill)
+	summary := fmt.Sprintf("%s check (rolled %d)", skillLabel, result.Total)
+	itemID, err := h.notifier.Post(ctx, dmqueue.Event{
+		Kind:       dmqueue.KindSkillCheckNarration,
+		PlayerName: char.Name,
+		Summary:    summary,
+		GuildID:    interaction.GuildID,
+		ExtraMetadata: map[string]string{
+			dmqueue.SkillCheckChannelIDKey:       interaction.ChannelID,
+			dmqueue.SkillCheckPlayerDiscordIDKey: discordUserID(interaction),
+			dmqueue.SkillCheckSkillLabelKey:      skillLabel,
+			dmqueue.SkillCheckTotalKey:           strconv.Itoa(result.Total),
+			dmqueue.SkillCheckCharNameKey:        char.Name,
+		},
+	})
+	if err != nil {
+		return false
+	}
+	// itemID may be "" if no #dm-queue is configured for this guild — treat
+	// as "not gated" so the player still gets their result.
+	return itemID != ""
+}
+
+// titleSkill returns the display label for a skill key (e.g. "perception"
+// → "Perception"). Mirrors check.FormatSingleCheckResult's Title casing.
+func titleSkill(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// logRollIfWanted persists the d20 roll to the player's roll history when
+// a logger is wired and the result is not an auto-fail.
+func (h *CheckHandler) logRollIfWanted(char refdata.Character, result check.SingleCheckResult) {
+	if h.rollLogger == nil || result.AutoFail {
+		return
+	}
+	_ = h.rollLogger.LogRoll(dice.RollLogEntry{
+		DiceRolls:  []dice.GroupResult{{Die: 20, Count: 1, Results: result.D20Result.Rolls, Total: result.D20Result.Chosen}},
+		Total:      result.Total,
+		Expression: fmt.Sprintf("d20+%d", result.Modifier),
+		Roller:     char.Name,
+		Purpose:    fmt.Sprintf("%s check", result.Skill),
+		Breakdown:  result.D20Result.Breakdown,
+		Timestamp:  result.D20Result.Timestamp,
+	})
+}
+
+// parseOptions extracts skill, adv, disadv, dc, and hasDC from command options.
+func (h *CheckHandler) parseOptions(opts []*discordgo.ApplicationCommandInteractionDataOption) (skill string, adv, disadv bool, dc int, hasDC bool) {
 	for _, opt := range opts {
 		switch opt.Name {
 		case "skill":
@@ -161,6 +254,9 @@ func (h *CheckHandler) parseOptions(opts []*discordgo.ApplicationCommandInteract
 			adv = opt.BoolValue()
 		case "disadv":
 			disadv = opt.BoolValue()
+		case "dc":
+			dc = int(opt.IntValue())
+			hasDC = true
 		}
 	}
 	return

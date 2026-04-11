@@ -35,12 +35,13 @@ func NewDMQueueHandler(logger *slog.Logger, notifier dmqueue.Notifier) *DMQueueH
 }
 
 type dmqueueItemView struct {
-	Item        dmqueue.Item
-	KindLabel   string
-	IsPending   bool
-	IsResolved  bool
-	IsCancelled bool
-	IsWhisper   bool
+	Item                 dmqueue.Item
+	KindLabel            string
+	IsPending            bool
+	IsResolved           bool
+	IsCancelled          bool
+	IsWhisper            bool
+	IsSkillCheckNarration bool
 }
 
 // ServeItem renders GET /dashboard/queue/{itemID}.
@@ -58,12 +59,13 @@ func (h *DMQueueHandler) ServeItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view := dmqueueItemView{
-		Item:        item,
-		KindLabel:   kindLabelFor(item.Event.Kind),
-		IsPending:   item.Status == dmqueue.StatusPending,
-		IsResolved:  item.Status == dmqueue.StatusResolved,
-		IsCancelled: item.Status == dmqueue.StatusCancelled,
-		IsWhisper:   item.Event.Kind == dmqueue.KindPlayerWhisper,
+		Item:                  item,
+		KindLabel:             kindLabelFor(item.Event.Kind),
+		IsPending:             item.Status == dmqueue.StatusPending,
+		IsResolved:            item.Status == dmqueue.StatusResolved,
+		IsCancelled:           item.Status == dmqueue.StatusCancelled,
+		IsWhisper:             item.Event.Kind == dmqueue.KindPlayerWhisper,
+		IsSkillCheckNarration: item.Event.Kind == dmqueue.KindSkillCheckNarration,
 	}
 
 	var buf bytes.Buffer
@@ -97,6 +99,41 @@ func (h *DMQueueHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		}
 		h.logger.Error("dmqueue resolve", "error", err, "item_id", itemID)
 		http.Error(w, "resolve failed", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/dashboard/queue/"+itemID, http.StatusSeeOther)
+}
+
+// HandleSkillCheckNarration processes POST /dashboard/queue/{itemID}/narrate
+// for KindSkillCheckNarration items. The "narration" form field is delivered
+// to the originating Discord channel as a non-ephemeral follow-up via the
+// notifier's wired SkillCheckNarrationDeliverer, and the queue item is then
+// marked resolved with the narration text as its outcome.
+func (h *DMQueueHandler) HandleSkillCheckNarration(w http.ResponseWriter, r *http.Request) {
+	if !hasAuthUser(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	itemID := chi.URLParam(r, "itemID")
+	narration := r.FormValue("narration")
+
+	if err := h.notifier.ResolveSkillCheckNarration(r.Context(), itemID, narration); err != nil {
+		if errors.Is(err, dmqueue.ErrItemNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		if errors.Is(err, dmqueue.ErrNotSkillCheckNarrationItem) {
+			http.Error(w, "not a skill check narration item", http.StatusBadRequest)
+			return
+		}
+		h.logger.Error("dmqueue skill check narration", "error", err, "item_id", itemID)
+		http.Error(w, "narrate failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -200,6 +237,12 @@ a.back { display: inline-block; margin-top: 1rem; color: #a0a0c0; }
   <label for="reply">Reply (sent as Discord DM)</label>
   <input type="text" id="reply" name="reply" placeholder="e.g. You catch the merchant's gaze mid-pull…" required>
   <button type="submit">Send Reply</button>
+</form>
+{{else if .IsSkillCheckNarration}}
+<form method="post" action="/dashboard/queue/{{.Item.ID}}/narrate">
+  <label for="narration">Narration (posted to channel)</label>
+  <input type="text" id="narration" name="narration" placeholder="e.g. You spot the trap before stepping on it." required>
+  <button type="submit">Send Narration</button>
 </form>
 {{else}}
 <form method="post" action="/dashboard/queue/{{.Item.ID}}/resolve">
