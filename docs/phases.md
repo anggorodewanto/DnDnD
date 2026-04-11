@@ -669,7 +669,7 @@
   - Depends on: Phase 12, Phase 15
   - Done when: Framework posts structured messages for the in-scope event types, resolve links open dashboard, resolved items marked with checkmark, items persist across restart in `dm_queue_items`.
 
-- [ ] **Phase 106b: DM Notification System — Remaining Events & Whisper Replies**
+- [x] **Phase 106b: DM Notification System — Remaining Events & Whisper Replies**
   - Scope: Remaining event types: enemy turn ready, narrative teleport, player whispers. Whisper replies: DM replies from dashboard, delivered as Discord DMs to the player. Each whisper is standalone (no threaded view). Spec lines 2870-2905.
   - Depends on: Phase 106a
   - Done when: All remaining event types post correct structured messages, whisper replies delivered as DMs, all event types covered.
