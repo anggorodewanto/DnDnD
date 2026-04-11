@@ -654,6 +654,16 @@
   - Done when: Two encounters run simultaneously with correct message labeling, independent turn orders, command routing, and DM tab switching.
   - Note: this is the natural place to wire the Phase 103 WebSocket client into the Svelte shell. Import `createWsClient` from `dashboard/svelte/src/lib/wsClient.js` and `mergeSnapshot` from `dashboard/svelte/src/lib/optimisticMerge.js` in `App.svelte` / `CombatManager.svelte`: open one wsClient per active encounter tab with `encounter_id=<uuid>`, feed `onSnapshot` through `mergeSnapshot` into the encounter store tracking the DM's currently-focused form inputs as `dirtyFields`, and render the "HP updated to 3 by player action" indicator from `_pendingFromSnapshot`. Phase 103 shipped both modules fully unit-tested but left `App.svelte` unwired pending the tabbed Combat Workspace this phase introduces.
 
+- [ ] **Phase 105b: Discord Handler Wiring in `main.go`**
+  - Scope: Construct all Discord slash command handlers in `cmd/dndnd/main.go` so the Phase 105 per-user routing fires in production. Handlers to wire: `move`, `fly`, `distance`, `done`, `check`, `save`, `rest`, `summon`, `recap` (and any other handler with an `*EncounterProvider` dependency). Implement a concrete `ActiveEncounterForUser(guildID, discordUserID)` resolver backed by a Discord-user → character → `combat.Store.GetActiveEncounterIDByCharacterID` lookup, and inject it into every handler. Also wire `SetEncounterLookup` on `discord.DiscordEnemyTurnNotifier` so `NotifyEnemyTurnExecuted` actually populates the `⚔️ <display_name> — Round N` label in production (Phase 105 left this with an empty fallback when the lookup is nil).
+  - Depends on: Phase 105
+  - Done when: All renamed Discord handlers are constructed and registered in `main.go`, the enemy-turn notifier label populates at runtime (verified by integration test or manual smoke), and no Discord handler relies on a tests-only wiring path.
+
+- [ ] **Phase 105c: DM Display-Name Editor**
+  - Scope: DM-facing UI for editing `encounters.display_name`. Add `updateEncounterDisplayName(id, name)` helper to `dashboard/svelte/src/lib/api.js` calling the Phase 105 `PATCH /api/combat/{encounterID}/display-name` endpoint. Add an inline editor component in the Combat Workspace header (`CombatManager.svelte`) so the DM can change the player-facing name during combat. Surface the same editor in the Encounter Builder so the display name can be set before combat starts. Empty input clears to NULL (falls back to internal name).
+  - Depends on: Phase 105
+  - Done when: DM can edit display name from both Encounter Builder and Combat Workspace header, change is persisted via the PATCH endpoint, and updated label appears in subsequent Discord combat-channel messages.
+
 - [ ] **Phase 106a: DM Notification System — Core Infrastructure & Initial Events (`#dm-queue`)**
   - Scope: `#dm-queue` structured message framework: player name, context summary, "Resolve ->" link to dashboard. DM-only channel visibility. Resolved items show checkmark + outcome. Initial event types: freeform actions (+ cancel), reaction declarations, rest requests, skill check narration, consumable without effect. Spec lines 2825-2870.
   - Depends on: Phase 12, Phase 15
