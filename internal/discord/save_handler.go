@@ -89,7 +89,7 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	// Apply condition effects if in combat
-	if condInfo, ok := lookupCombatConditions(ctx, h.encounterProvider, h.combatantLookup, interaction.GuildID, char.ID); ok {
+	if condInfo, ok := lookupCombatConditions(ctx, h.encounterProvider, h.combatantLookup, interaction.GuildID, userID, char.ID); ok {
 		conds, _ := check.ParseConditions(condInfo.Conditions)
 		input.Conditions = conds
 		input.ExhaustionLevel = condInfo.ExhaustionLevel

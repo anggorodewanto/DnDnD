@@ -51,9 +51,10 @@ func (h *DistanceHandler) Handle(interaction *discordgo.Interaction) {
 		target2Str = data.Options[1].StringValue()
 	}
 
-	encounterID, err := h.encounterProvider.GetActiveEncounterID(ctx, interaction.GuildID)
+	// Phase 105: route to the invoker's own combat encounter.
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, discordUserID(interaction))
 	if err != nil {
-		respondEphemeral(h.session, interaction, "No active encounter in this server.")
+		respondEphemeral(h.session, interaction, "No active encounter for you in this server.")
 		return
 	}
 

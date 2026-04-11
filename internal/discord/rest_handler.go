@@ -81,15 +81,17 @@ func (h *RestHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// Check for active combat
+	userID := discordUserID(interaction)
+
+	// Check for active combat — Phase 105 routes via combatant membership
+	// so a player blocked from resting is specifically one who is still a
+	// combatant in an active encounter, not merely in a guild that has one.
 	if h.encounterProvider != nil {
-		if _, err := h.encounterProvider.GetActiveEncounterID(ctx, interaction.GuildID); err == nil {
+		if _, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, userID); err == nil {
 			respondEphemeral(h.session, interaction, "You cannot rest during active combat.")
 			return
 		}
 	}
-
-	userID := discordUserID(interaction)
 	char, err := h.characterLookup.GetCharacterByCampaignAndDiscord(ctx, campaign.ID, userID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Could not find your character. Use `/register` first.")

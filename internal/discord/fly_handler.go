@@ -47,10 +47,10 @@ func (h *FlyHandler) Handle(interaction *discordgo.Interaction) {
 
 	guildID := interaction.GuildID
 
-	// Get active encounter
-	encounterID, err := h.encounterProvider.GetActiveEncounterID(ctx, guildID)
+	// Phase 105: route to the invoker's own combat encounter.
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, guildID, discordUserID(interaction))
 	if err != nil {
-		respondEphemeral(h.session, interaction, "No active encounter in this server.")
+		respondEphemeral(h.session, interaction, "No active encounter for you in this server.")
 		return
 	}
 

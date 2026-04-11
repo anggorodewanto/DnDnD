@@ -28,7 +28,7 @@ type mockSummonEncounterProvider struct {
 	err         error
 }
 
-func (m *mockSummonEncounterProvider) GetActiveEncounterID(ctx context.Context, guildID string) (uuid.UUID, error) {
+func (m *mockSummonEncounterProvider) ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error) {
 	return m.encounterID, m.err
 }
 

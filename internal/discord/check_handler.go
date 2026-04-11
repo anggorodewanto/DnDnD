@@ -28,9 +28,12 @@ type CheckCampaignProvider interface {
 	GetCampaignByGuildID(ctx context.Context, guildID string) (refdata.Campaign, error)
 }
 
-// CheckEncounterProvider provides the active encounter for a guild.
+// CheckEncounterProvider resolves the active encounter that a given Discord
+// user is currently a combatant in. Phase 105: this replaces the previous
+// guild-scoped lookup so /check and /save inside simultaneous encounters
+// pick up conditions from the correct encounter.
 type CheckEncounterProvider interface {
-	GetActiveEncounterID(ctx context.Context, guildID string) (uuid.UUID, error)
+	ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
 }
 
 // CheckCombatantLookup provides combatant data for an encounter.
@@ -118,7 +121,7 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	// Apply condition effects if in combat
-	if condInfo, ok := lookupCombatConditions(ctx, h.encounterProvider, h.combatantLookup, interaction.GuildID, char.ID); ok {
+	if condInfo, ok := lookupCombatConditions(ctx, h.encounterProvider, h.combatantLookup, interaction.GuildID, userID, char.ID); ok {
 		conds, _ := check.ParseConditions(condInfo.Conditions)
 		input.Conditions = conds
 		input.ExhaustionLevel = condInfo.ExhaustionLevel
@@ -212,12 +215,14 @@ func rollModeFromFlags(adv, disadv bool) dice.RollMode {
 }
 
 // lookupCombatConditions checks if the character is in active combat and returns their conditions.
-func lookupCombatConditions(ctx context.Context, encounterProvider CheckEncounterProvider, combatantLookup CheckCombatantLookup, guildID string, charID uuid.UUID) (check.ConditionInfo, bool) {
+// Phase 105: routes via the invoker's combatant entry so conditions reflect the
+// encounter the player actually belongs to, not some arbitrary active encounter.
+func lookupCombatConditions(ctx context.Context, encounterProvider CheckEncounterProvider, combatantLookup CheckCombatantLookup, guildID, discordUserID string, charID uuid.UUID) (check.ConditionInfo, bool) {
 	if encounterProvider == nil || combatantLookup == nil {
 		return check.ConditionInfo{}, false
 	}
 
-	encounterID, err := encounterProvider.GetActiveEncounterID(ctx, guildID)
+	encounterID, err := encounterProvider.ActiveEncounterForUser(ctx, guildID, discordUserID)
 	if err != nil {
 		return check.ConditionInfo{}, false
 	}

@@ -36,10 +36,16 @@ func (m *mockCheckCampaignProvider) GetCampaignByGuildID(ctx context.Context, gu
 }
 
 type mockCheckEncounterProvider struct {
-	fn func(ctx context.Context, guildID string) (uuid.UUID, error)
+	// Phase 105: legacy guild-only func retained so existing tests keep
+	// working. New disambiguation tests can set fnUser instead.
+	fn     func(ctx context.Context, guildID string) (uuid.UUID, error)
+	fnUser func(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
 }
 
-func (m *mockCheckEncounterProvider) GetActiveEncounterID(ctx context.Context, guildID string) (uuid.UUID, error) {
+func (m *mockCheckEncounterProvider) ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error) {
+	if m.fnUser != nil {
+		return m.fnUser(ctx, guildID, discordUserID)
+	}
 	return m.fn(ctx, guildID)
 }
 

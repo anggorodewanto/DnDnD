@@ -34,9 +34,13 @@ type MoveTurnProvider interface {
 	UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
 }
 
-// MoveEncounterProvider resolves encounters for the current guild/channel context.
+// MoveEncounterProvider resolves the active encounter a given Discord user is
+// participating in (via their character's combatant entry). Phase 105 routes
+// commands to the encounter the invoker belongs to rather than picking an
+// arbitrary active encounter in the guild, so simultaneous encounters in a
+// single campaign are disambiguated per-player.
 type MoveEncounterProvider interface {
-	GetActiveEncounterID(ctx context.Context, guildID string) (uuid.UUID, error)
+	ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
 }
 
 // MoveHandler handles the /move slash command.
@@ -87,10 +91,12 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 
 	guildID := interaction.GuildID
 
-	// Get active encounter
-	encounterID, err := h.encounterProvider.GetActiveEncounterID(ctx, guildID)
+	// Phase 105: resolve the encounter via the invoking player's combatant
+	// entry rather than a guild-wide "active encounter" lookup, so two
+	// simultaneous encounters in the same campaign are disambiguated.
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, guildID, discordUserID(interaction))
 	if err != nil {
-		respondEphemeral(h.session, interaction, "No active encounter in this server.")
+		respondEphemeral(h.session, interaction, "No active encounter for you in this server.")
 		return
 	}
 

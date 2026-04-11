@@ -88,6 +88,7 @@ func setupFullDoneHandler(sess *mockMoveSession) (*DoneHandler, uuid.UUID, uuid.
 				ID:            encounterID,
 				CampaignID:    campaignID,
 				Status:        "active",
+				Name:          "Rooftop Ambush",
 				RoundNumber:   1,
 				CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
 			}, nil
@@ -822,6 +823,55 @@ func TestDoneHandler_PostsAutoSkipToCombatLog(t *testing.T) {
 	}
 	if !strings.Contains(autoSkipMessages[1], "Paralyzed Wizard") {
 		t.Errorf("expected second skip message about Paralyzed Wizard, got: %s", autoSkipMessages[1])
+	}
+}
+
+// --- Phase 105 iter 2: auto-skip messages include encounter label prefix ---
+
+func TestDoneHandler_AutoSkipMessagesIncludeEncounterLabel(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, nextCombatantID := setupFullDoneHandler(sess)
+
+	handler.turnAdvancer = &mockDoneTurnAdvancer{
+		advanceTurn: func(_ context.Context, _ uuid.UUID) (combat.TurnInfo, error) {
+			return combat.TurnInfo{
+				CombatantID: nextCombatantID,
+				RoundNumber: 3,
+				SkippedCombatants: []combat.SkippedInfo{
+					{DisplayName: "Stunned Fighter", ConditionName: "stunned"},
+				},
+			}, nil
+		},
+	}
+
+	var autoSkipMessages []string
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {},
+		notifyAutoSkip: func(s Session, channelID string, content string) {
+			autoSkipMessages = append(autoSkipMessages, content)
+		},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt", "combat-log": "chan-cl"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+
+	interaction := makeDoneInteraction()
+	handler.Handle(interaction)
+
+	if len(autoSkipMessages) != 1 {
+		t.Fatalf("expected 1 auto-skip message, got %d", len(autoSkipMessages))
+	}
+	want := "\u2694\ufe0f Rooftop Ambush \u2014 Round 3"
+	if !strings.Contains(autoSkipMessages[0], want) {
+		t.Errorf("expected auto-skip message to include label %q, got: %s", want, autoSkipMessages[0])
+	}
+	if !strings.Contains(autoSkipMessages[0], "Stunned Fighter") {
+		t.Errorf("expected auto-skip message to still mention combatant, got: %s", autoSkipMessages[0])
 	}
 }
 

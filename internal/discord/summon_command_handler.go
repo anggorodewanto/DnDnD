@@ -15,9 +15,12 @@ type SummonCommandService interface {
 	CommandCreature(ctx context.Context, input combat.CommandCreatureInput) (combat.CommandCreatureResult, error)
 }
 
-// SummonCommandEncounterProvider provides the active encounter for a guild.
+// SummonCommandEncounterProvider resolves the active encounter that the
+// invoking Discord user is currently participating in. Phase 105 routes the
+// /command to the encounter the player (summoner) belongs to, not an
+// arbitrary guild-wide active encounter.
 type SummonCommandEncounterProvider interface {
-	GetActiveEncounterID(ctx context.Context, guildID string) (uuid.UUID, error)
+	ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
 }
 
 // SummonCommandPlayerLookup resolves a Discord user to their combatant ID.
@@ -81,17 +84,14 @@ func (h *SummonCommandHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// Get active encounter
-	encounterID, err := h.encounterProvider.GetActiveEncounterID(ctx, interaction.GuildID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "No active encounter in this server.")
-		return
-	}
-
 	// Resolve calling player's combatant ID
-	userID := ""
-	if interaction.Member != nil && interaction.Member.User != nil {
-		userID = interaction.Member.User.ID
+	userID := discordUserID(interaction)
+
+	// Phase 105: route the /command to the encounter the summoner belongs to.
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, userID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "No active encounter for you in this server.")
+		return
 	}
 
 	summonerID, summonerName, err := h.playerLookup.GetCombatantIDByDiscordUser(ctx, encounterID, userID)

@@ -63,10 +63,17 @@ func (m *mockMoveTurnProvider) UpdateTurnActions(ctx context.Context, arg refdat
 }
 
 type mockMoveEncounterProvider struct {
-	getActiveEncounterID func(ctx context.Context, guildID string) (uuid.UUID, error)
+	// Phase 105: routed via the invoker's combatant entry. The mock retains a
+	// guild-only func for legacy tests and a new user-aware func for
+	// disambiguation tests; when the user-aware func is set it takes precedence.
+	getActiveEncounterID    func(ctx context.Context, guildID string) (uuid.UUID, error)
+	activeEncounterForUser  func(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
 }
 
-func (m *mockMoveEncounterProvider) GetActiveEncounterID(ctx context.Context, guildID string) (uuid.UUID, error) {
+func (m *mockMoveEncounterProvider) ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error) {
+	if m.activeEncounterForUser != nil {
+		return m.activeEncounterForUser(ctx, guildID, discordUserID)
+	}
 	return m.getActiveEncounterID(ctx, guildID)
 }
 

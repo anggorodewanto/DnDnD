@@ -73,10 +73,15 @@ func (m *mockRecapService) GetLastCompletedTurnByCombatant(ctx context.Context, 
 }
 
 type mockRecapEncounterProvider struct {
-	getActiveEncounterID func(ctx context.Context, guildID string) (uuid.UUID, error)
+	// Phase 105: legacy guild-only func + optional user-aware func.
+	getActiveEncounterID   func(ctx context.Context, guildID string) (uuid.UUID, error)
+	activeEncounterForUser func(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
 }
 
-func (m *mockRecapEncounterProvider) GetActiveEncounterID(ctx context.Context, guildID string) (uuid.UUID, error) {
+func (m *mockRecapEncounterProvider) ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error) {
+	if m.activeEncounterForUser != nil {
+		return m.activeEncounterForUser(ctx, guildID, discordUserID)
+	}
 	return m.getActiveEncounterID(ctx, guildID)
 }
 

@@ -19,9 +19,13 @@ type RecapService interface {
 	GetLastCompletedTurnByCombatant(ctx context.Context, encounterID, combatantID uuid.UUID) (refdata.Turn, error)
 }
 
-// RecapEncounterProvider provides the active encounter for a guild.
+// RecapEncounterProvider resolves the active encounter the invoking user is a
+// combatant in. Phase 105 ensures /recap in a guild with simultaneous
+// encounters picks the caller's encounter; if the caller is not in any
+// active encounter, the handler falls back to the most recent completed
+// encounter for the campaign.
 type RecapEncounterProvider interface {
-	GetActiveEncounterID(ctx context.Context, guildID string) (uuid.UUID, error)
+	ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
 }
 
 // RecapPlayerLookup resolves a Discord user to their combatant ID.
@@ -72,8 +76,9 @@ func (h *RecapHandler) Handle(interaction *discordgo.Interaction) {
 		}
 	}
 
-	// Find encounter: active first, then fall back to most recent completed
-	encounterID, encounter, err := h.findEncounter(ctx, interaction.GuildID)
+	// Find encounter: active (routed via invoking player's combatant) first,
+	// then fall back to most recent completed encounter for the campaign.
+	encounterID, encounter, err := h.findEncounter(ctx, interaction.GuildID, discordUserID(interaction))
 	if err != nil {
 		respondEphemeral(h.session, interaction, "No encounter found for recap.")
 		return
@@ -107,9 +112,10 @@ func (h *RecapHandler) Handle(interaction *discordgo.Interaction) {
 	respondEphemeral(h.session, interaction, msg)
 }
 
-// findEncounter tries to find an active encounter, then falls back to the most recent completed one.
-func (h *RecapHandler) findEncounter(ctx context.Context, guildID string) (uuid.UUID, refdata.Encounter, error) {
-	encounterID, err := h.encounterProvider.GetActiveEncounterID(ctx, guildID)
+// findEncounter tries to find an active encounter for the invoking user, then
+// falls back to the most recent completed encounter in the campaign.
+func (h *RecapHandler) findEncounter(ctx context.Context, guildID, discordUserID string) (uuid.UUID, refdata.Encounter, error) {
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, guildID, discordUserID)
 	if err == nil {
 		enc, encErr := h.svc.GetEncounter(ctx, encounterID)
 		if encErr == nil {

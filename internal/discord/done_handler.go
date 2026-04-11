@@ -154,10 +154,12 @@ func (h *DoneHandler) Handle(interaction *discordgo.Interaction) {
 	ctx := context.Background()
 	guildID := interaction.GuildID
 
-	// Get active encounter
-	encounterID, err := h.encounterProvider.GetActiveEncounterID(ctx, guildID)
+	// Phase 105: route the /done to the encounter the invoking player
+	// currently belongs to (via their combatant entry). The DM typically
+	// uses the dashboard instead; slash /done by a DM is best-effort only.
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, guildID, discordUserID(interaction))
 	if err != nil {
-		respondEphemeral(h.session, interaction, "No active encounter in this server.")
+		respondEphemeral(h.session, interaction, "No active encounter for you in this server.")
 		return
 	}
 
@@ -381,11 +383,21 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 		return
 	}
 
+	// Resolve encounter display name up front so shared-channel messages
+	// (auto-skip, turn-start, combat-map) can all be labeled with the
+	// Phase 105 prefix: "⚔️ <name> — Round N".
+	encounter, err := h.combatService.GetEncounter(ctx, encounterID)
+	if err != nil {
+		return
+	}
+	encounterName := combat.EncounterDisplayName(encounter)
+	label := combat.FormatEncounterLabel(encounterName, turnInfo.RoundNumber)
+
 	// Post auto-skip messages to #combat-log
 	if combatLogCh, ok := channelIDs["combat-log"]; ok && combatLogCh != "" {
 		for _, skipped := range turnInfo.SkippedCombatants {
 			msg := combat.FormatAutoSkipMessage(skipped.DisplayName, skipped.ConditionName)
-			h.turnNotifier.NotifyAutoSkip(h.session, combatLogCh, msg)
+			h.turnNotifier.NotifyAutoSkip(h.session, combatLogCh, label+"\n"+msg)
 		}
 	}
 
@@ -394,14 +406,6 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 	if !ok || yourTurnCh == "" {
 		return
 	}
-
-	// Get encounter for name/round info
-	encounter, err := h.combatService.GetEncounter(ctx, encounterID)
-	if err != nil {
-		return
-	}
-
-	encounterName := combat.EncounterDisplayName(encounter)
 
 	var impactSummary string
 	if h.impactSummaryProvider != nil {
@@ -420,17 +424,17 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 
 	// Regenerate and post combat map with the Phase 105 encounter label so
 	// simultaneous encounters sharing #combat-map are distinguishable.
-	label := combat.FormatEncounterLabel(encounterName, turnInfo.RoundNumber)
 	PostCombatMap(ctx, h.session, h.mapRegenerator, encounterID, channelIDs, label)
 }
 
 // PostCombatMap regenerates the combat map and posts it to #combat-map.
 // Best-effort: failures are silently ignored.
 //
-// Phase 105: if a non-empty label is supplied (e.g. "⚔️ Rooftop Ambush —
-// Round 3"), it is included as the message content so players in a shared
-// channel can tell which encounter the map belongs to.
-func PostCombatMap(ctx context.Context, session Session, mr MapRegenerator, encounterID uuid.UUID, channelIDs map[string]string, label ...string) {
+// Phase 105: the label (e.g. "⚔️ Rooftop Ambush — Round 3") is required
+// and included as the message content so players in a shared channel can
+// tell which simultaneous encounter the map belongs to. Pass "" when no
+// label is available (e.g. encounter lookup failed).
+func PostCombatMap(ctx context.Context, session Session, mr MapRegenerator, encounterID uuid.UUID, channelIDs map[string]string, label string) {
 	if mr == nil {
 		return
 	}
@@ -445,13 +449,8 @@ func PostCombatMap(ctx context.Context, session Session, mr MapRegenerator, enco
 		return
 	}
 
-	content := ""
-	if len(label) > 0 {
-		content = label[0]
-	}
-
 	_, _ = session.ChannelMessageSendComplex(combatMapCh, &discordgo.MessageSend{
-		Content: content,
+		Content: label,
 		Files: []*discordgo.File{{
 			Name:   "combat-map.png",
 			Reader: bytes.NewReader(pngData),
