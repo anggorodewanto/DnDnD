@@ -659,7 +659,7 @@
   - Depends on: Phase 105
   - Done when: All renamed Discord handlers are constructed and registered in `main.go`, the enemy-turn notifier label populates at runtime (verified by integration test or manual smoke), and no Discord handler relies on a tests-only wiring path.
 
-- [ ] **Phase 105c: DM Display-Name Editor**
+- [x] **Phase 105c: DM Display-Name Editor**
   - Scope: DM-facing UI for editing `encounters.display_name`. Add `updateEncounterDisplayName(id, name)` helper to `dashboard/svelte/src/lib/api.js` calling the Phase 105 `PATCH /api/combat/{encounterID}/display-name` endpoint. Add an inline editor component in the Combat Workspace header (`CombatManager.svelte`) so the DM can change the player-facing name during combat. Surface the same editor in the Encounter Builder so the display name can be set before combat starts. Empty input clears to NULL (falls back to internal name).
   - Depends on: Phase 105
   - Done when: DM can edit display name from both Encounter Builder and Combat Workspace header, change is persisted via the PATCH endpoint, and updated label appears in subsequent Discord combat-channel messages.
