@@ -64,7 +64,6 @@ func TestCommandDefinitions_ParameterHints(t *testing.T) {
 		{"command", "creature_id", discordgo.ApplicationCommandOptionString, true},
 		{"command", "action", discordgo.ApplicationCommandOptionString, true},
 		{"command", "target", discordgo.ApplicationCommandOptionString, false},
-		{"reaction", "description", discordgo.ApplicationCommandOptionString, true},
 		{"check", "skill", discordgo.ApplicationCommandOptionString, true},
 		{"check", "adv", discordgo.ApplicationCommandOptionBoolean, false},
 		{"check", "disadv", discordgo.ApplicationCommandOptionBoolean, false},
@@ -132,6 +131,56 @@ func TestCommandDefinitions_NoParamCommands(t *testing.T) {
 				t.Errorf("expected no options for %s, got %d", name, len(cmd.Options))
 			}
 		})
+	}
+}
+
+// TestCommandDefinitions_ReactionSubcommands verifies /reaction is a
+// subcommand group with declare/cancel/cancel-all. Phase 106c restructured
+// the command so the Discord handler can route declare vs cancel vs
+// cancel-all to the combat.Service reaction APIs.
+func TestCommandDefinitions_ReactionSubcommands(t *testing.T) {
+	cmdMap := commandMap()
+	cmd, ok := cmdMap["reaction"]
+	if !ok {
+		t.Fatal("/reaction command not found")
+	}
+
+	want := map[string]bool{"declare": false, "cancel": false, "cancel-all": false}
+	for _, opt := range cmd.Options {
+		if opt.Type != discordgo.ApplicationCommandOptionSubCommand {
+			t.Fatalf("expected subcommand type for %s, got %d", opt.Name, opt.Type)
+		}
+		if _, exists := want[opt.Name]; exists {
+			want[opt.Name] = true
+		}
+	}
+	for name, seen := range want {
+		if !seen {
+			t.Errorf("missing /reaction subcommand: %s", name)
+		}
+	}
+
+	// declare and cancel must carry a required "description" string option.
+	for _, opt := range cmd.Options {
+		if opt.Name != "declare" && opt.Name != "cancel" {
+			continue
+		}
+		var desc *discordgo.ApplicationCommandOption
+		for _, sub := range opt.Options {
+			if sub.Name == "description" {
+				desc = sub
+				break
+			}
+		}
+		if desc == nil {
+			t.Fatalf("%s subcommand missing description option", opt.Name)
+		}
+		if desc.Type != discordgo.ApplicationCommandOptionString {
+			t.Errorf("%s.description type = %d, want string", opt.Name, desc.Type)
+		}
+		if !desc.Required {
+			t.Errorf("%s.description should be required", opt.Name)
+		}
 	}
 }
 

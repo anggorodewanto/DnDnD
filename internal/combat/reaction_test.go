@@ -503,6 +503,106 @@ func TestListReactionsByCombatant_Success(t *testing.T) {
 
 // --- TDD Cycle 8: CleanupReactionsOnEncounterEnd ---
 
+// --- TDD Cycle: CanDeclareReaction pre-declare validation ---
+
+func TestCanDeclareReaction_Available(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+
+	store := defaultMockStore()
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), RoundNumber: 3, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{
+			{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 3, ReactionUsed: false},
+		}, nil
+	}
+
+	svc := NewService(store)
+	ok, err := svc.CanDeclareReaction(context.Background(), encounterID, combatantID)
+	require.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func TestCanDeclareReaction_AlreadyUsedThisRound(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+
+	store := defaultMockStore()
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), RoundNumber: 3, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{
+			{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 3, ReactionUsed: true},
+		}, nil
+	}
+
+	svc := NewService(store)
+	ok, err := svc.CanDeclareReaction(context.Background(), encounterID, combatantID)
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestCanDeclareReaction_NoTurnForCombatantAllowsDeclare(t *testing.T) {
+	// Combatant may not have a turn row yet (e.g. declaring from outside of
+	// their own turn). Without evidence of reaction_used=true, allow declare.
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), RoundNumber: 3, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), RoundNumber: 3, ReactionUsed: false},
+		}, nil
+	}
+
+	svc := NewService(store)
+	ok, err := svc.CanDeclareReaction(context.Background(), encounterID, combatantID)
+	require.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func TestCanDeclareReaction_NoActiveTurnAllowsDeclare(t *testing.T) {
+	// When no active turn exists (e.g. encounter between rounds), default to
+	// permitting the declaration — the resolve path is authoritative.
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{}, sql.ErrNoRows
+	}
+
+	svc := NewService(store)
+	ok, err := svc.CanDeclareReaction(context.Background(), encounterID, combatantID)
+	require.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func TestCanDeclareReaction_ListTurnsError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{RoundNumber: 1}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return nil, errors.New("boom")
+	}
+
+	svc := NewService(store)
+	_, err := svc.CanDeclareReaction(context.Background(), encounterID, combatantID)
+	require.Error(t, err)
+}
+
 func TestCleanupReactionsOnEncounterEnd_Success(t *testing.T) {
 	encounterID := uuid.New()
 

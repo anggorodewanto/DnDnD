@@ -46,6 +46,7 @@ type discordHandlers struct {
 	rest              *discord.RestHandler
 	summon            *discord.SummonCommandHandler
 	recap             *discord.RecapHandler
+	reaction          *discord.ReactionHandler
 	enemyTurnNotifier *discord.DiscordEnemyTurnNotifier
 }
 
@@ -120,6 +121,7 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		),
 		summon:            discord.NewSummonCommandHandler(deps.session, summonSvc),
 		recap:             discord.NewRecapHandler(deps.session, recapSvc, deps.resolver, newRecapPlayerLookupAdapter(combatantLookup)),
+		reaction:          discord.NewReactionHandler(deps.session, newReactionServiceAdapter(deps.combatService), deps.resolver, combatantLookup),
 		enemyTurnNotifier: discord.NewDiscordEnemyTurnNotifier(deps.session, deps.campaignSettings, deps.mapRegenerator),
 	}
 
@@ -145,6 +147,9 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	r.SetRestHandler(set.rest)
 	r.SetSummonCommandHandler(set.summon)
 	r.SetRecapHandler(set.recap)
+	if set.reaction != nil {
+		r.SetReactionHandler(set.reaction)
+	}
 }
 
 // --- Thin adapters bridging refdata.Queries / combat.Service to the handler
@@ -328,6 +333,18 @@ func (a *recapServiceAdapter) GetLastCompletedTurnByCombatant(ctx context.Contex
 		EncounterID: encounterID,
 		CombatantID: combatantID,
 	})
+}
+
+// newReactionServiceAdapter returns the combat.Service as a
+// discord.ReactionService, or nil if combatService is nil so the handler
+// constructor can short-circuit safely. combat.Service structurally
+// satisfies the interface (CanDeclareReaction, DeclareReaction,
+// CancelReactionByDescription, CancelAllReactions, ListReactionsByCombatant).
+func newReactionServiceAdapter(svc *combat.Service) discord.ReactionService {
+	if svc == nil {
+		return nil
+	}
+	return svc
 }
 
 // restCharUpdaterAdapter satisfies RestCharacterUpdater over *refdata.Queries.

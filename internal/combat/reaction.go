@@ -31,6 +31,38 @@ func (s *Service) DeclareReaction(ctx context.Context, encounterID, combatantID 
 	})
 }
 
+// CanDeclareReaction reports whether the given combatant has an unused
+// reaction in the current round. Returns true when no active turn exists
+// (e.g. between rounds) or when the combatant has no turn row yet this
+// round — the resolve path remains authoritative. A true result means
+// "declare is permitted"; false means the combatant has already used
+// their reaction this round and a new declaration should be rejected.
+func (s *Service) CanDeclareReaction(ctx context.Context, encounterID, combatantID uuid.UUID) (bool, error) {
+	activeTurn, err := s.store.GetActiveTurnByEncounterID(ctx, encounterID)
+	if err == sql.ErrNoRows {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("getting active turn: %w", err)
+	}
+
+	turns, err := s.store.ListTurnsByEncounterAndRound(ctx, refdata.ListTurnsByEncounterAndRoundParams{
+		EncounterID: encounterID,
+		RoundNumber: activeTurn.RoundNumber,
+	})
+	if err != nil {
+		return false, fmt.Errorf("listing turns for round: %w", err)
+	}
+
+	for _, t := range turns {
+		if t.CombatantID != combatantID {
+			continue
+		}
+		return !t.ReactionUsed, nil
+	}
+	return true, nil
+}
+
 // CancelReaction cancels a specific reaction declaration by ID.
 func (s *Service) CancelReaction(ctx context.Context, declarationID uuid.UUID) (refdata.ReactionDeclaration, error) {
 	decl, err := s.store.CancelReactionDeclaration(ctx, declarationID)

@@ -218,13 +218,38 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 		},
 		{
 			Name:        "reaction",
-			Description: "Declare a reaction for this round",
+			Description: "Declare, cancel, or clear reactions for this round",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "description",
-					Description: "Reaction description (e.g. Shield if I get hit)",
-					Required:    true,
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "declare",
+					Description: "Declare a reaction for this round",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "description",
+							Description: "Reaction description (e.g. Shield if I get hit)",
+							Required:    true,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "cancel",
+					Description: "Cancel a declared reaction by description substring",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "description",
+							Description: "Substring of the reaction description to cancel",
+							Required:    true,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "cancel-all",
+					Description: "Cancel all your active reactions this round",
 				},
 			},
 		},

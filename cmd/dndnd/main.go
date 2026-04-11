@@ -374,6 +374,12 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			// Phase 106a: route /rest dm-queue posts through the notifier so
 			// rest requests are persisted and resolvable from the dashboard.
 			discordHandlerSet.rest.SetNotifier(dmQueueNotifier)
+			// Phase 106c: route /reaction declarations through the dm-queue
+			// notifier so each declaration is posted to #dm-queue and the
+			// player can cancel it before the trigger fires.
+			if discordHandlerSet.reaction != nil {
+				discordHandlerSet.reaction.SetNotifier(dmQueueNotifier)
+			}
 			rawDG.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				cmdRouter.Handle(i.Interaction)
 			})
