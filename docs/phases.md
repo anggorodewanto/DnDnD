@@ -664,7 +664,7 @@
   - Depends on: Phase 105
   - Done when: DM can edit display name from both Encounter Builder and Combat Workspace header, change is persisted via the PATCH endpoint, and updated label appears in subsequent Discord combat-channel messages.
 
-- [ ] **Phase 106a: DM Notification System — Core Infrastructure & Initial Events (`#dm-queue`)**
+- [x] **Phase 106a: DM Notification System — Core Infrastructure & Initial Events (`#dm-queue`)**
   - Scope: `#dm-queue` structured message framework: player name, context summary, "Resolve ->" link to dashboard. DM-only channel visibility. Resolved items show checkmark + outcome. Initial event types: freeform actions (+ cancel), rest requests, consumable without effect. Reaction-declaration `/reaction` Discord handler wiring is deferred to Phase 106c; `/check` skill-check narration gating is deferred to Phase 106d. Persistence is via `dm_queue_items` PostgreSQL table. Spec lines 2825-2870.
   - Depends on: Phase 12, Phase 15
   - Done when: Framework posts structured messages for the in-scope event types, resolve links open dashboard, resolved items marked with checkmark, items persist across restart in `dm_queue_items`.
