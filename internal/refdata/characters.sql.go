@@ -262,6 +262,57 @@ func (q *Queries) GetCharacterCardMessageID(ctx context.Context, id uuid.UUID) (
 	return card_message_id, err
 }
 
+const getCharacterForLevelUp = `-- name: GetCharacterForLevelUp :one
+SELECT c.id, c.name, c.level, c.hp_max, c.hp_current, c.proficiency_bonus,
+       c.classes, c.ability_scores, c.spell_slots, c.pact_magic_slots,
+       c.features,
+       COALESCE(pc.discord_user_id, '') AS discord_user_id
+FROM characters c
+LEFT JOIN player_characters pc ON pc.character_id = c.id
+WHERE c.id = $1
+LIMIT 1
+`
+
+type GetCharacterForLevelUpRow struct {
+	ID               uuid.UUID             `json:"id"`
+	Name             string                `json:"name"`
+	Level            int32                 `json:"level"`
+	HpMax            int32                 `json:"hp_max"`
+	HpCurrent        int32                 `json:"hp_current"`
+	ProficiencyBonus int32                 `json:"proficiency_bonus"`
+	Classes          json.RawMessage       `json:"classes"`
+	AbilityScores    json.RawMessage       `json:"ability_scores"`
+	SpellSlots       pqtype.NullRawMessage `json:"spell_slots"`
+	PactMagicSlots   pqtype.NullRawMessage `json:"pact_magic_slots"`
+	Features         pqtype.NullRawMessage `json:"features"`
+	DiscordUserID    string                `json:"discord_user_id"`
+}
+
+// Loads the fields needed for a level-up operation joined with the
+// owning player_character's discord_user_id so the level-up notifier has
+// enough context to DM the player. When the character has no linked
+// player_character row (e.g. DM NPCs), discord_user_id comes back as an
+// empty string via COALESCE.
+func (q *Queries) GetCharacterForLevelUp(ctx context.Context, id uuid.UUID) (GetCharacterForLevelUpRow, error) {
+	row := q.db.QueryRowContext(ctx, getCharacterForLevelUp, id)
+	var i GetCharacterForLevelUpRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Level,
+		&i.HpMax,
+		&i.HpCurrent,
+		&i.ProficiencyBonus,
+		&i.Classes,
+		&i.AbilityScores,
+		&i.SpellSlots,
+		&i.PactMagicSlots,
+		&i.Features,
+		&i.DiscordUserID,
+	)
+	return i, err
+}
+
 const listCharactersByCampaign = `-- name: ListCharactersByCampaign :many
 SELECT id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, temp_hp, ac, ac_formula, speed_ft, proficiency_bonus, equipped_main_hand, equipped_off_hand, equipped_armor, spell_slots, pact_magic_slots, hit_dice_remaining, feature_uses, features, proficiencies, gold, attunement_slots, languages, inventory, character_data, ddb_url, homebrew, created_at, updated_at, card_message_id FROM characters WHERE campaign_id = $1 ORDER BY name
 `
@@ -473,6 +524,22 @@ func (q *Queries) UpdateCharacter(ctx context.Context, arg UpdateCharacterParams
 		&i.CardMessageID,
 	)
 	return i, err
+}
+
+const updateCharacterAbilityScores = `-- name: UpdateCharacterAbilityScores :exec
+UPDATE characters SET ability_scores = $2, updated_at = now()
+WHERE id = $1
+`
+
+type UpdateCharacterAbilityScoresParams struct {
+	ID            uuid.UUID       `json:"id"`
+	AbilityScores json.RawMessage `json:"ability_scores"`
+}
+
+// Used by ASI approval and feat ASI bonuses.
+func (q *Queries) UpdateCharacterAbilityScores(ctx context.Context, arg UpdateCharacterAbilityScoresParams) error {
+	_, err := q.db.ExecContext(ctx, updateCharacterAbilityScores, arg.ID, arg.AbilityScores)
+	return err
 }
 
 const updateCharacterAttunementAndInventory = `-- name: UpdateCharacterAttunementAndInventory :one
@@ -748,6 +815,22 @@ func (q *Queries) UpdateCharacterFeatureUses(ctx context.Context, arg UpdateChar
 		&i.CardMessageID,
 	)
 	return i, err
+}
+
+const updateCharacterFeaturesOnly = `-- name: UpdateCharacterFeaturesOnly :exec
+UPDATE characters SET features = $2, updated_at = now()
+WHERE id = $1
+`
+
+type UpdateCharacterFeaturesOnlyParams struct {
+	ID       uuid.UUID             `json:"id"`
+	Features pqtype.NullRawMessage `json:"features"`
+}
+
+// Used by feat application to append a feat to a character's features.
+func (q *Queries) UpdateCharacterFeaturesOnly(ctx context.Context, arg UpdateCharacterFeaturesOnlyParams) error {
+	_, err := q.db.ExecContext(ctx, updateCharacterFeaturesOnly, arg.ID, arg.Features)
+	return err
 }
 
 const updateCharacterFull = `-- name: UpdateCharacterFull :one
@@ -1096,6 +1179,49 @@ func (q *Queries) UpdateCharacterInventoryAndHP(ctx context.Context, arg UpdateC
 		&i.CardMessageID,
 	)
 	return i, err
+}
+
+const updateCharacterLevelUpStats = `-- name: UpdateCharacterLevelUpStats :exec
+UPDATE characters SET
+    level = $2,
+    hp_max = $3,
+    hp_current = $4,
+    proficiency_bonus = $5,
+    classes = $6,
+    spell_slots = $7,
+    pact_magic_slots = $8,
+    features = $9,
+    updated_at = now()
+WHERE id = $1
+`
+
+type UpdateCharacterLevelUpStatsParams struct {
+	ID               uuid.UUID             `json:"id"`
+	Level            int32                 `json:"level"`
+	HpMax            int32                 `json:"hp_max"`
+	HpCurrent        int32                 `json:"hp_current"`
+	ProficiencyBonus int32                 `json:"proficiency_bonus"`
+	Classes          json.RawMessage       `json:"classes"`
+	SpellSlots       pqtype.NullRawMessage `json:"spell_slots"`
+	PactMagicSlots   pqtype.NullRawMessage `json:"pact_magic_slots"`
+	Features         pqtype.NullRawMessage `json:"features"`
+}
+
+// Applies the stat changes produced by Service.ApplyLevelUp after the
+// calculator decides the new class/HP/proficiency/etc values.
+func (q *Queries) UpdateCharacterLevelUpStats(ctx context.Context, arg UpdateCharacterLevelUpStatsParams) error {
+	_, err := q.db.ExecContext(ctx, updateCharacterLevelUpStats,
+		arg.ID,
+		arg.Level,
+		arg.HpMax,
+		arg.HpCurrent,
+		arg.ProficiencyBonus,
+		arg.Classes,
+		arg.SpellSlots,
+		arg.PactMagicSlots,
+		arg.Features,
+	)
+	return err
 }
 
 const updateCharacterPactMagicSlots = `-- name: UpdateCharacterPactMagicSlots :one

@@ -233,6 +233,49 @@ func TestRun_CombatAPIRoutesRegistered(t *testing.T) {
 	<-errCh
 }
 
+// TestRun_LevelUpAPIRoutesRegistered proves Phase 104c wired
+// levelup.Handler onto the router. POSTing an empty body must return 400
+// (the handler's own validation error) rather than 404 (unrouted).
+func TestRun_LevelUpAPIRoutesRegistered(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	connStr := testutil.NewTestDBConnString(t)
+	t.Setenv("DATABASE_URL", connStr)
+
+	addr := getFreePort(t)
+	var logBuf bytes.Buffer
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- run(ctx, &logBuf, addr)
+	}()
+
+	waitForServer(t, addr)
+
+	// Empty body — handler rejects with 400. A 404 here would mean the
+	// route is not mounted.
+	resp, err := http.Post(fmt.Sprintf("http://%s/api/levelup/", addr), "application/json", bytes.NewReader([]byte(`{}`)))
+	if err != nil {
+		t.Fatalf("failed to reach /api/levelup/: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		t.Fatal("/api/levelup/ returned 404; levelup handler is not wired into the server")
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 from /api/levelup/ with empty body, got %d", resp.StatusCode)
+	}
+
+	cancel()
+	<-errCh
+}
+
 func TestRun_MapAPIRoutesRegistered(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

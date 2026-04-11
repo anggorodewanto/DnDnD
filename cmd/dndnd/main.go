@@ -29,6 +29,7 @@ import (
 	"github.com/ab/dndnd/internal/gamemap"
 	"github.com/ab/dndnd/internal/homebrew"
 	"github.com/ab/dndnd/internal/inventory"
+	"github.com/ab/dndnd/internal/levelup"
 	"github.com/ab/dndnd/internal/messageplayer"
 	"github.com/ab/dndnd/internal/narration"
 	"github.com/ab/dndnd/internal/refdata"
@@ -252,6 +253,24 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		inventoryAPIHandler := inventory.NewAPIHandler(queries)
 		inventoryAPIHandler.SetPublisher(publisher, encLookup)
 		dashboard.RegisterInventoryAPI(router, inventoryAPIHandler, passthroughMiddleware)
+
+		// Phase 104c: Level-up handler wiring. Mounts the DB-backed
+		// store/class adapters over refdata.Queries, a DM-only notifier
+		// (public announcements deferred) and the same publisher/lookup
+		// used by the combat and inventory services. Calling SetPublisher
+		// BEFORE RegisterRoutes guarantees no level-up mutation can land
+		// without fan-out to the dashboard snapshot stream.
+		levelUpCharStore := levelup.NewCharacterStoreAdapter(queries)
+		levelUpClassStore := levelup.NewClassStoreAdapter(queries)
+		var levelUpDM levelup.DirectMessenger
+		if discordSession != nil {
+			levelUpDM = discord.NewDirectMessenger(discordSession)
+		}
+		levelUpNotifier := levelup.NewNotifierAdapter(levelUpDM)
+		levelUpSvc := levelup.NewService(levelUpCharStore, levelUpClassStore, levelUpNotifier)
+		levelUpSvc.SetPublisher(publisher, encLookup)
+		levelUpHandler := levelup.NewHandler(levelUpSvc, hub)
+		levelUpHandler.RegisterRoutes(router)
 
 		// Phase 104: Startup recovery per spec lines 116-121.
 		//
