@@ -51,7 +51,7 @@ func ChannelStructure() []CategoryDef {
 			Name: "REFERENCE",
 			Channels: []ChannelDef{
 				{Name: "character-cards"},
-				{Name: "dm-queue"},
+				{Name: "dm-queue", PermissionFunc: dmQueuePerms},
 			},
 		},
 	}
@@ -82,6 +82,28 @@ func theStoryPerms(guildID, _, dmUserID string) []*discordgo.PermissionOverwrite
 // combatMapPerms returns overwrites making #combat-map bot-write-only.
 func combatMapPerms(guildID, botUserID, _ string) []*discordgo.PermissionOverwrite {
 	return exclusiveWritePerms(guildID, botUserID)
+}
+
+// dmQueuePerms returns overwrites making #dm-queue DM-only: @everyone is
+// denied ViewChannel, and only the DM (and the bot for posting) can see it.
+func dmQueuePerms(guildID, botUserID, dmUserID string) []*discordgo.PermissionOverwrite {
+	return []*discordgo.PermissionOverwrite{
+		{
+			ID:   guildID, // @everyone role ID == guild ID
+			Type: discordgo.PermissionOverwriteTypeRole,
+			Deny: discordgo.PermissionViewChannel | discordgo.PermissionReadMessageHistory,
+		},
+		{
+			ID:    dmUserID,
+			Type:  discordgo.PermissionOverwriteTypeMember,
+			Allow: discordgo.PermissionViewChannel | discordgo.PermissionReadMessageHistory | discordgo.PermissionSendMessages,
+		},
+		{
+			ID:    botUserID,
+			Type:  discordgo.PermissionOverwriteTypeMember,
+			Allow: discordgo.PermissionViewChannel | discordgo.PermissionReadMessageHistory | discordgo.PermissionSendMessages,
+		},
+	}
 }
 
 // SetupChannels creates the full category/channel structure for a guild.

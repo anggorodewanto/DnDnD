@@ -10,6 +10,7 @@ import (
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -34,6 +35,7 @@ type UseHandler struct {
 	invService      *inventory.Service
 	combatProv      UseCombatProvider
 	dmQueueFunc     func(guildID string) string
+	notifier        dmqueue.Notifier
 }
 
 // NewUseHandler creates a new UseHandler.
@@ -58,6 +60,13 @@ func NewUseHandler(
 // SetDMQueueFunc sets the function that resolves a guild ID to a #dm-queue channel ID.
 func (h *UseHandler) SetDMQueueFunc(fn func(guildID string) string) {
 	h.dmQueueFunc = fn
+}
+
+// SetNotifier wires the dm-queue Notifier. When set, consumable-without-effect
+// posts route through the unified dmqueue framework instead of the legacy
+// dmQueueFunc path.
+func (h *UseHandler) SetNotifier(n dmqueue.Notifier) {
+	h.notifier = n
 }
 
 // Handle processes the /use command interaction.
@@ -133,22 +142,46 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 		}
 	}
 
-	// Post to #dm-queue if item requires DM adjudication
-	if result.DMQueueRequired && h.dmQueueFunc != nil {
-		channelID := h.dmQueueFunc(interaction.GuildID)
-		if channelID != "" {
-			// Find the item name from original items
-			usedItemName := itemID
-			for _, it := range items {
-				if it.ItemID == itemID {
-					usedItemName = it.Name
-					break
-				}
+	// Post to #dm-queue if item requires DM adjudication.
+	if result.DMQueueRequired {
+		usedItemName := itemID
+		for _, it := range items {
+			if it.ItemID == itemID {
+				usedItemName = it.Name
+				break
 			}
-			dmMsg := fmt.Sprintf("🧪 **%s** used **%s** — needs DM adjudication.", char.Name, usedItemName)
-			_, _ = h.session.ChannelMessageSend(channelID, dmMsg)
 		}
+		h.postConsumableToDMQueue(ctx, interaction.GuildID, char.Name, usedItemName)
 	}
 
 	respondEphemeral(h.session, interaction, result.Message)
+}
+
+// postConsumableToDMQueue dispatches a consumable-without-effect notification
+// either through the dmqueue Notifier (preferred) or the legacy dmQueueFunc
+// fallback. Both paths produce content containing the player and item names.
+func (h *UseHandler) postConsumableToDMQueue(ctx context.Context, guildID, charName, itemName string) {
+	if h.notifier != nil {
+		_, _ = h.notifier.Post(ctx, dmqueue.Event{
+			Kind:       dmqueue.KindConsumable,
+			PlayerName: charName,
+			Summary:    fmt.Sprintf("uses %s", itemName),
+			GuildID:    guildID,
+		})
+		return
+	}
+	if h.dmQueueFunc == nil {
+		return
+	}
+	channelID := h.dmQueueFunc(guildID)
+	if channelID == "" {
+		return
+	}
+	event := dmqueue.Event{
+		Kind:        dmqueue.KindConsumable,
+		PlayerName:  charName,
+		Summary:     fmt.Sprintf("uses %s", itemName),
+		ResolvePath: "#", // legacy path has no dashboard item ID
+	}
+	_, _ = h.session.ChannelMessageSend(channelID, dmqueue.FormatEvent(event))
 }

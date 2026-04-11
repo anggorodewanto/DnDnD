@@ -199,6 +199,23 @@ func TestSetupChannels_CombatMapIsBotWriteOnly(t *testing.T) {
 	assertExclusiveWrite(t, overwrites, "bot-user-1", "combat-map")
 }
 
+func TestSetupChannels_DMQueueIsDMOnly(t *testing.T) {
+	overwrites := captureOverwrites(t, "dm-queue")
+	require.NotEmpty(t, overwrites, "expected permission overwrites on #dm-queue")
+
+	var everyoneDenyView, dmAllowView bool
+	for _, ow := range overwrites {
+		if ow.ID == "guild-1" && ow.Type == discordgo.PermissionOverwriteTypeRole && ow.Deny&discordgo.PermissionViewChannel != 0 {
+			everyoneDenyView = true
+		}
+		if ow.ID == "dm-user-1" && ow.Type == discordgo.PermissionOverwriteTypeMember && ow.Allow&discordgo.PermissionViewChannel != 0 {
+			dmAllowView = true
+		}
+	}
+	assert.True(t, everyoneDenyView, "@everyone should be denied ViewChannel in #dm-queue")
+	assert.True(t, dmAllowView, "DM should be allowed ViewChannel in #dm-queue")
+}
+
 func TestSetupChannels_InCharacterIsPlayerAndDMWritable(t *testing.T) {
 	overwrites := captureOverwrites(t, "in-character")
 

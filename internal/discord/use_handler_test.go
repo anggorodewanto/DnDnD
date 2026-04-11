@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -267,6 +268,59 @@ func TestUseHandler_DMQueuePost(t *testing.T) {
 	assert.Equal(t, "dm-queue-ch", sess.sentChannelID)
 	assert.Contains(t, sess.sentChannelMsg, "Ball Bearings")
 	assert.Contains(t, sess.sentChannelMsg, "Aria")
+}
+
+// recordingNotifier captures dmqueue.Event posts for test assertions.
+type recordingNotifier struct {
+	posted []dmqueue.Event
+}
+
+func (r *recordingNotifier) Post(_ context.Context, e dmqueue.Event) (string, error) {
+	r.posted = append(r.posted, e)
+	return "item-1", nil
+}
+func (r *recordingNotifier) Cancel(_ context.Context, _, _ string) error { return nil }
+func (r *recordingNotifier) Resolve(_ context.Context, _, _ string) error { return nil }
+func (r *recordingNotifier) Get(string) (dmqueue.Item, bool)              { return dmqueue.Item{}, false }
+func (r *recordingNotifier) ListPending() []dmqueue.Item                  { return nil }
+
+func TestUseHandler_PostsViaNotifier(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "ball-bearings", Name: "Ball Bearings", Quantity: 1, Type: "consumable"},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID: uuid.New(), CampaignID: campID, Name: "Aria",
+			Inventory: pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+		}},
+		&mockUseCharacterStore{},
+		nil,
+		nil,
+	)
+
+	rec := &recordingNotifier{}
+	handler.SetNotifier(rec)
+	// Even with a legacy DMQueueFunc set, the notifier path takes precedence.
+	handler.SetDMQueueFunc(func(guildID string) string { return "legacy-ch" })
+
+	interaction := makeUseInteraction("guild1", "user1", "ball-bearings")
+	handler.Handle(interaction)
+
+	require := assert.New(t)
+	require.Len(rec.posted, 1, "expected one notifier post")
+	ev := rec.posted[0]
+	require.Equal(dmqueue.KindConsumable, ev.Kind)
+	require.Equal("Aria", ev.PlayerName)
+	require.Contains(ev.Summary, "Ball Bearings")
+	require.Equal("guild1", ev.GuildID)
+	// Legacy channel path must NOT be invoked when notifier is set.
+	require.Empty(sess.sentChannelID, "legacy dmQueueFunc path should be bypassed")
 }
 
 func TestUseHandler_DMQueueItem(t *testing.T) {

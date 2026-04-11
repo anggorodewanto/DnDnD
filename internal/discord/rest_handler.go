@@ -14,6 +14,7 @@ import (
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/rest"
 )
@@ -38,6 +39,25 @@ type RestHandler struct {
 	charUpdater      RestCharacterUpdater
 	rollLogger       dice.RollHistoryLogger
 	dmQueueFunc      func(guildID string) string // reserved for future DM approval flow
+	notifier         dmqueue.Notifier
+}
+
+// SetNotifier wires the dm-queue Notifier. When set, /rest posts a rest
+// request notification to #dm-queue before running the rest flow.
+func (h *RestHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
+
+// postRestRequestToDMQueue posts a rest request notification via the Notifier.
+// No-op when no Notifier is wired.
+func (h *RestHandler) postRestRequestToDMQueue(ctx context.Context, guildID, charName, restType string) {
+	if h.notifier == nil {
+		return
+	}
+	_, _ = h.notifier.Post(ctx, dmqueue.Event{
+		Kind:       dmqueue.KindRestRequest,
+		PlayerName: charName,
+		Summary:    fmt.Sprintf("requests a %s rest", restType),
+		GuildID:    guildID,
+	})
 }
 
 // NewRestHandler creates a new RestHandler.
@@ -103,6 +123,9 @@ func (h *RestHandler) Handle(interaction *discordgo.Interaction) {
 		respondEphemeral(h.session, interaction, "Error reading character data.")
 		return
 	}
+
+	// Notify DM of the rest request via #dm-queue (no-op if no notifier wired).
+	h.postRestRequestToDMQueue(ctx, interaction.GuildID, char.Name, restType)
 
 	switch restType {
 	case "short":

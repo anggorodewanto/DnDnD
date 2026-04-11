@@ -12,6 +12,7 @@ import (
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -100,6 +101,34 @@ func setupRestHandler(sess *MockSession) *RestHandler {
 		logger,
 		nil, // dmQueueFunc
 	)
+}
+
+// TestRestHandler_PostsToDMQueueViaNotifier verifies that /rest posts a
+// rest-request notification to the dmqueue Notifier when one is wired.
+func TestRestHandler_PostsToDMQueueViaNotifier(t *testing.T) {
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(*discordgo.Interaction, *discordgo.InteractionResponse) error {
+		return nil
+	}
+
+	h := setupRestHandler(sess)
+	rec := &recordingNotifier{}
+	h.SetNotifier(rec)
+	h.Handle(makeRestInteraction("short"))
+
+	if len(rec.posted) != 1 {
+		t.Fatalf("expected 1 notifier post, got %d", len(rec.posted))
+	}
+	ev := rec.posted[0]
+	if ev.Kind != dmqueue.KindRestRequest {
+		t.Errorf("kind = %q want rest_request", ev.Kind)
+	}
+	if !strings.Contains(ev.Summary, "short") {
+		t.Errorf("summary missing 'short': %q", ev.Summary)
+	}
+	if ev.GuildID != "guild1" {
+		t.Errorf("guild = %q want guild1", ev.GuildID)
+	}
 }
 
 // --- TDD Cycle 21: Handler parses "short" and responds ---

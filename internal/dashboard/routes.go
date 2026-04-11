@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/inventory"
 )
 
@@ -26,6 +27,17 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(http.Handler) 
 		}
 		fileServer := http.FileServer(http.FS(assetsFS))
 		r.Get("/app/*", http.StripPrefix("/dashboard/app", fileServer).ServeHTTP)
+	})
+}
+
+// RegisterDMQueueRoutes mounts the dm-queue resolver pages.
+// Phase 106a: minimal viable — list pending items, view one, mark it resolved.
+func RegisterDMQueueRoutes(r chi.Router, logger *slog.Logger, notifier dmqueue.Notifier, authMiddleware func(http.Handler) http.Handler) {
+	h := NewDMQueueHandler(logger, notifier)
+	r.Route("/dashboard/queue", func(r chi.Router) {
+		r.Use(authMiddleware)
+		r.Get("/{itemID}", h.ServeItem)
+		r.Post("/{itemID}/resolve", h.HandleResolve)
 	})
 }
 
