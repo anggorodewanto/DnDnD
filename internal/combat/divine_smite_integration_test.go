@@ -53,7 +53,7 @@ func setupDivineSmiteFixture(t *testing.T, creatureRefID string, spellSlots map[
 	t.Helper()
 	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	ctx := context.Background()
 
 	campaignID := createTestCampaign(t, db)
@@ -502,7 +502,7 @@ func TestIntegration_DivineSmite_NoDivineSmiteFeature(t *testing.T) {
 	// Create a fixture manually with a fighter (no Divine Smite)
 	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	ctx := context.Background()
 
 	campaignID := createTestCampaign(t, db)

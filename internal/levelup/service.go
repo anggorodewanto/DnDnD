@@ -86,11 +86,26 @@ type Notifier interface {
 	SendASIDenied(ctx context.Context, discordUserID string, characterName string, reason string) error
 }
 
+// EncounterPublisher fans out a fresh encounter snapshot when a level-up
+// commits stats for a character who is currently in an active encounter.
+type EncounterPublisher interface {
+	PublishEncounterSnapshot(ctx context.Context, encounterID uuid.UUID) error
+}
+
+// EncounterLookup resolves the active encounter (if any) containing the
+// given character. Returns (encID, true, nil) when in combat;
+// (uuid.Nil, false, nil) otherwise.
+type EncounterLookup interface {
+	ActiveEncounterIDForCharacter(ctx context.Context, characterID uuid.UUID) (uuid.UUID, bool, error)
+}
+
 // Service orchestrates the level-up workflow.
 type Service struct {
 	charStore  CharacterStore
 	classStore ClassStore
 	notifier   Notifier
+	publisher  EncounterPublisher
+	lookup     EncounterLookup
 }
 
 // NewService creates a new level-up Service.
@@ -99,6 +114,35 @@ func NewService(charStore CharacterStore, classStore ClassStore, notifier Notifi
 		charStore:  charStore,
 		classStore: classStore,
 		notifier:   notifier,
+	}
+}
+
+// SetPublisher wires an EncounterPublisher and encounter lookup onto the
+// service. A nil publisher is tolerated and disables fan-out. Publish errors
+// are logged but never surfaced to callers.
+func (s *Service) SetPublisher(p EncounterPublisher, lookup EncounterLookup) {
+	s.publisher = p
+	s.lookup = lookup
+}
+
+// publishForCharacter fires the publisher with the character's active
+// encounter ID, swallowing errors. Callers invoke this AFTER a successful DB
+// mutation. Silently no-ops when the publisher is unset, the lookup is
+// unset, the character is not in combat, or lookup/publish fails.
+func (s *Service) publishForCharacter(ctx context.Context, charID uuid.UUID) {
+	if s.publisher == nil || s.lookup == nil {
+		return
+	}
+	encID, ok, err := s.lookup.ActiveEncounterIDForCharacter(ctx, charID)
+	if err != nil {
+		slog.Error("levelup: active encounter lookup failed", "error", err, "character_id", charID)
+		return
+	}
+	if !ok {
+		return
+	}
+	if err := s.publisher.PublishEncounterSnapshot(ctx, encID); err != nil {
+		slog.Error("levelup: encounter snapshot publish failed", "error", err, "encounter_id", encID)
 	}
 }
 
@@ -180,6 +224,7 @@ func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, class
 	if err := s.charStore.UpdateCharacterStats(ctx, characterID, update); err != nil {
 		return nil, fmt.Errorf("updating character: %w", err)
 	}
+	s.publishForCharacter(ctx, characterID)
 
 	// Determine if this level grants ASI
 	grantsASI := IsASILevel(classID, newClassLevel)
@@ -244,7 +289,11 @@ func (s *Service) ApproveASI(ctx context.Context, characterID uuid.UUID, choice 
 		return fmt.Errorf("marshaling scores: %w", err)
 	}
 
-	return s.charStore.UpdateAbilityScores(ctx, characterID, scoresJSON)
+	if err := s.charStore.UpdateAbilityScores(ctx, characterID, scoresJSON); err != nil {
+		return err
+	}
+	s.publishForCharacter(ctx, characterID)
+	return nil
 }
 
 // DenyASI denies a player's ASI choice and re-prompts them.
@@ -301,6 +350,7 @@ func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat Fea
 	if err := s.charStore.UpdateFeatures(ctx, characterID, featuresJSON); err != nil {
 		return fmt.Errorf("updating features: %w", err)
 	}
+	s.publishForCharacter(ctx, characterID)
 
 	// Apply ASI bonus from feat if present
 	if len(feat.ASIBonus) > 0 {
@@ -337,7 +387,11 @@ func (s *Service) applyFeatASI(ctx context.Context, char *StoredCharacter, asiBo
 		return fmt.Errorf("marshaling scores: %w", err)
 	}
 
-	return s.charStore.UpdateAbilityScores(ctx, char.ID, scoresJSON)
+	if err := s.charStore.UpdateAbilityScores(ctx, char.ID, scoresJSON); err != nil {
+		return err
+	}
+	s.publishForCharacter(ctx, char.ID)
+	return nil
 }
 
 // toInt converts a JSON number value to int.

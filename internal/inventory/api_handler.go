@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -12,6 +13,23 @@ import (
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+// EncounterPublisher fans out a fresh encounter snapshot over the dashboard
+// WebSocket hub whenever an inventory or gold mutation touches a character
+// currently in an active encounter. It is injected (optionally) into the
+// APIHandler so tests can use a fake and the package stays decoupled from
+// the concrete dashboard.Publisher.
+type EncounterPublisher interface {
+	PublishEncounterSnapshot(ctx context.Context, encounterID uuid.UUID) error
+}
+
+// EncounterLookup resolves the active encounter (if any) that currently
+// contains the given character. Returns (encID, true, nil) when the character
+// is a combatant in an active encounter; (uuid.Nil, false, nil) when not in
+// combat; or a non-nil error on store failure.
+type EncounterLookup interface {
+	ActiveEncounterIDForCharacter(ctx context.Context, characterID uuid.UUID) (uuid.UUID, bool, error)
+}
 
 // CharacterStore defines the database operations for inventory management.
 type CharacterStore interface {
@@ -24,8 +42,10 @@ type CharacterStore interface {
 
 // APIHandler handles DM inventory management HTTP endpoints.
 type APIHandler struct {
-	store        CharacterStore
-	combatLogFn  func(msg string)
+	store       CharacterStore
+	combatLogFn func(msg string)
+	publisher   EncounterPublisher
+	lookup      EncounterLookup
 }
 
 // NewAPIHandler creates a new APIHandler.
@@ -36,6 +56,34 @@ func NewAPIHandler(store CharacterStore) *APIHandler {
 // SetCombatLogFunc sets the callback for posting messages to #combat-log.
 func (h *APIHandler) SetCombatLogFunc(fn func(msg string)) {
 	h.combatLogFn = fn
+}
+
+// SetPublisher wires the optional dashboard publisher and encounter lookup.
+// A nil publisher is tolerated. Publish errors are logged but never surfaced
+// to callers so a dashboard hiccup cannot undo a committed DB mutation.
+func (h *APIHandler) SetPublisher(p EncounterPublisher, lookup EncounterLookup) {
+	h.publisher = p
+	h.lookup = lookup
+}
+
+// publishForCharacter looks up the character's active encounter (if any) and
+// fires the publisher. Silently no-ops when the character is not in combat,
+// when the publisher is unset, or when the lookup/publish fails.
+func (h *APIHandler) publishForCharacter(ctx context.Context, charID uuid.UUID) {
+	if h.publisher == nil || h.lookup == nil {
+		return
+	}
+	encID, ok, err := h.lookup.ActiveEncounterIDForCharacter(ctx, charID)
+	if err != nil {
+		log.Printf("inventory: active encounter lookup failed for %s: %v", charID, err)
+		return
+	}
+	if !ok {
+		return
+	}
+	if err := h.publisher.PublishEncounterSnapshot(ctx, encID); err != nil {
+		log.Printf("inventory: encounter snapshot publish failed for %s: %v", encID, err)
+	}
 }
 
 // logCombat posts a message to #combat-log if the callback is configured.
@@ -117,6 +165,7 @@ func (h *APIHandler) HandleIdentifyItem(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.publishForCharacter(r.Context(), charID)
 	h.logCombat(fmt.Sprintf("🔍 DM updated identification of **%s** for **%s** (identified: %v).", result.ItemName, char.Name, req.Identified))
 
 	w.Header().Set("Content-Type", "application/json")
@@ -157,6 +206,7 @@ func (h *APIHandler) HandleAddItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishForCharacter(r.Context(), charID)
 	h.logCombat(fmt.Sprintf("📦 DM added **%s** ×%d to **%s**'s inventory.", req.Item.Name, req.Item.Quantity, char.Name))
 
 	w.Header().Set("Content-Type", "application/json")
@@ -200,6 +250,7 @@ func (h *APIHandler) HandleRemoveItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishForCharacter(r.Context(), charID)
 	h.logCombat(fmt.Sprintf("📦 DM removed **%s** ×%d from **%s**'s inventory.", itemName, qty, char.Name))
 
 	w.Header().Set("Content-Type", "application/json")
@@ -278,6 +329,8 @@ func (h *APIHandler) HandleTransferItem(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.publishForCharacter(r.Context(), fromID)
+	h.publishForCharacter(r.Context(), toID)
 	h.logCombat(fmt.Sprintf("📦 DM transferred **%s** ×%d from **%s** to **%s**.", item.Name, qty, fromChar.Name, toChar.Name))
 
 	w.Header().Set("Content-Type", "application/json")
@@ -319,6 +372,7 @@ func (h *APIHandler) HandleSetGold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishForCharacter(r.Context(), charID)
 	h.logCombat(fmt.Sprintf("💰 DM set **%s**'s gold to **%d** gp (was %d gp).", char.Name, req.Gold, char.Gold))
 
 	w.Header().Set("Content-Type", "application/json")

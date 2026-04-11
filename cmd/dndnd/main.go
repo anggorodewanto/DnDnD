@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +11,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/bwmarrin/discordgo"
 
@@ -24,12 +28,41 @@ import (
 	"github.com/ab/dndnd/internal/encounter"
 	"github.com/ab/dndnd/internal/gamemap"
 	"github.com/ab/dndnd/internal/homebrew"
+	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/messageplayer"
 	"github.com/ab/dndnd/internal/narration"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/server"
 	"github.com/ab/dndnd/internal/statblocklibrary"
 )
+
+// encounterLookupAdapter resolves the active encounter (if any) containing
+// the given character by asking refdata.Queries. It satisfies the
+// inventory.EncounterLookup contract (and levelup.EncounterLookup, which is
+// structurally identical) so Phase 104b's publisher fan-out can skip
+// publishing whenever the mutation does not touch live combat state.
+type encounterLookupAdapter struct {
+	queries *refdata.Queries
+}
+
+func (a encounterLookupAdapter) ActiveEncounterIDForCharacter(ctx context.Context, characterID uuid.UUID) (uuid.UUID, bool, error) {
+	encID, err := a.queries.GetActiveEncounterIDByCharacterID(ctx, uuid.NullUUID{UUID: characterID, Valid: true})
+	if errors.Is(err, sql.ErrNoRows) {
+		// Expected whenever the character is not a combatant in an active
+		// encounter — treat as "not in combat" so callers silently skip.
+		return uuid.Nil, false, nil
+	}
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	return encID, true, nil
+}
+
+// passthroughMiddleware is a no-op HTTP middleware used by Phase 104b to
+// mount non-auth-gated API routes (the inventory DM API) consistent with
+// Phase 104's combat handler wiring, which also mounts without auth. Once
+// the global auth stack is wired in a future phase, this can be replaced.
+func passthroughMiddleware(next http.Handler) http.Handler { return next }
 
 // buildDiscordSession constructs (but does NOT open) a Discord session using
 // the given bot token. An empty token is treated as "Discord is optional for
@@ -204,11 +237,21 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		// publisher wired in.
 		snapshotBuilder := dashboard.NewSnapshotBuilder(queries, time.Now)
 		publisher := dashboard.NewPublisher(hub, snapshotBuilder)
-		combatStore := &combatStoreAdapter{queries}
+		combatStore := combat.NewStoreAdapter(queries)
 		combatSvc := combat.NewService(combatStore)
 		combatSvc.SetPublisher(publisher)
 		combatHandler := combat.NewHandler(combatSvc, dice.NewRoller(nil))
 		combatHandler.RegisterRoutes(router)
+
+		// Phase 104b: Publisher fan-out to non-combat services that can
+		// mutate an active encounter's combatant state mid-combat. The
+		// encounter lookup resolves "which active encounter (if any) is this
+		// character currently in?" so each service can skip publishing when
+		// the mutation doesn't touch live combat state.
+		encLookup := encounterLookupAdapter{queries: queries}
+		inventoryAPIHandler := inventory.NewAPIHandler(queries)
+		inventoryAPIHandler.SetPublisher(publisher, encLookup)
+		dashboard.RegisterInventoryAPI(router, inventoryAPIHandler, passthroughMiddleware)
 
 		// Phase 104: Startup recovery per spec lines 116-121.
 		//

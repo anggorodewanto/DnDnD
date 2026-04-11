@@ -31,3 +31,9 @@ LIMIT 1;
 SELECT c.* FROM campaigns c
 JOIN encounters e ON e.campaign_id = c.id
 WHERE e.id = $1;
+
+-- name: GetActiveEncounterIDByCharacterID :one
+SELECT e.id FROM encounters e
+JOIN combatants cb ON cb.encounter_id = e.id
+WHERE cb.character_id = $1 AND e.status = 'active'
+LIMIT 1;

@@ -30,7 +30,7 @@ func setupChannelDivinityFixture(t *testing.T, clericLevel int, featureUses int)
 	t.Helper()
 	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	ctx := context.Background()
 
 	// Create campaign and map
@@ -366,7 +366,7 @@ func TestIntegration_SacredWeapon(t *testing.T) {
 
 	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	ctx := context.Background()
 
 	campaignID := createTestCampaign(t, db)
@@ -466,7 +466,7 @@ func TestIntegration_VowOfEnmity(t *testing.T) {
 
 	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	ctx := context.Background()
 
 	campaignID := createTestCampaign(t, db)

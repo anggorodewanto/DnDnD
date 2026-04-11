@@ -56,7 +56,7 @@ func TestIntegration_ReactionDeclaration_CRUD(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	// Declare two reactions
 	decl1, err := svc.DeclareReaction(ctx, encounterID, combatantID, "Shield if I get hit")
@@ -102,7 +102,7 @@ func TestIntegration_ReactionDeclaration_CancelByDescription(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	_, err := svc.DeclareReaction(ctx, encounterID, combatantID, "Shield if I get hit")
 	require.NoError(t, err)
@@ -137,7 +137,7 @@ func TestIntegration_ReactionDeclaration_CancelAll(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	_, err := svc.DeclareReaction(ctx, encounterID, combatantID, "Shield if I get hit")
 	require.NoError(t, err)
@@ -162,7 +162,7 @@ func TestIntegration_ReactionDeclaration_Resolve(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	// Create a turn for the combatant
 	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
@@ -213,7 +213,7 @@ func TestIntegration_ReactionDeclaration_EncounterEndCleanup(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	// Declare reactions
 	_, err := svc.DeclareReaction(ctx, encounterID, combatantID, "Shield if I get hit")
@@ -246,7 +246,7 @@ func TestIntegration_ReactionDeclaration_MultipleCombatants(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatant1ID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	// Create second combatant
 	comb2, err := queries.CreateCombatant(ctx, refdata.CreateCombatantParams{

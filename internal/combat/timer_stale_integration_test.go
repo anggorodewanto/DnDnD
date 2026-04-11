@@ -126,7 +126,7 @@ func TestIntegration_TurnTimer_PollOnce_StaleTurnsProcessedInDeadlineOrder(t *te
 		now.Add(-20*time.Hour), now.Add(4*time.Hour), turnB.ID)
 	require.NoError(t, err)
 
-	store := &testStoreAdapter{queries}
+	store := combat.NewStoreAdapter(queries)
 	notifier := &recordingNotifier{}
 	timer := combat.NewTurnTimer(store, notifier, 30*time.Second)
 

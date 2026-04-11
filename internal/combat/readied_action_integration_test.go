@@ -21,7 +21,7 @@ func TestIntegration_ReadyAction_Success(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	// Create active turn
 	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
@@ -72,7 +72,7 @@ func TestIntegration_ReadyAction_WithSpell(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
 		EncounterID:         encounterID,
@@ -112,7 +112,7 @@ func TestIntegration_ExpireReadiedActions(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	// Create turn and ready an action
 	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
@@ -158,7 +158,7 @@ func TestIntegration_ExpireReadiedActions_WithSpell(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
 		EncounterID:         encounterID,
@@ -199,7 +199,7 @@ func TestIntegration_ReadiedAction_ResolvedByDM(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	// Create turn
 	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
@@ -250,7 +250,7 @@ func TestIntegration_ListReadiedActions(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	// Create turn
 	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
@@ -327,7 +327,7 @@ func TestIntegration_ReadyAction_ActionUsed(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	turn := refdata.Turn{
 		EncounterID:         encounterID,
@@ -358,7 +358,7 @@ func TestIntegration_StatusDisplayShowsReadiedActions(t *testing.T) {
 	db, queries := setupTestDB(t)
 	ctx := context.Background()
 	encounterID, combatantID := createTestEncounterAndCombatant(t, db, queries)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	turn, err := queries.CreateTurn(ctx, refdata.CreateTurnParams{
 		EncounterID:         encounterID,

@@ -34,7 +34,7 @@ func (p *recordingPoster) PostCorrection(ctx context.Context, encounterID uuid.U
 func newDMDashboardRouterForIntegration(t *testing.T, td turnLockTestData, poster combat.CombatLogPoster) http.Handler {
 	t.Helper()
 	queries := refdata.New(td.DB)
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	handler := combat.NewDMDashboardHandlerWithDeps(svc, td.DB, poster)
 	r := chi.NewRouter()
 	handler.RegisterRoutes(r)

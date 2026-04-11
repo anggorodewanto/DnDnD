@@ -38,7 +38,7 @@ func TestIntegration_SummonCreature(t *testing.T) {
 	createTestCreatureForSummon(t, db, "owl", "Owl", 11, 1)
 
 	// Create encounter and add PC combatant as summoner
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
 		CampaignID: campaignID,
 		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
@@ -103,7 +103,7 @@ func TestIntegration_CommandDismiss(t *testing.T) {
 	charID := createTestCharacter(t, db, campaignID)
 	createTestCreatureForSummon(t, db, "owl", "Owl", 11, 1)
 
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
 		CampaignID: campaignID,
 		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
@@ -150,7 +150,7 @@ func TestIntegration_SummonDeath(t *testing.T) {
 	charID := createTestCharacter(t, db, campaignID)
 	createTestCreatureForSummon(t, db, "owl", "Owl", 11, 1)
 
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
 		CampaignID: campaignID,
 		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
@@ -213,7 +213,7 @@ func TestIntegration_ConcentrationDismissal(t *testing.T) {
 		`[{"name":"Bite","to_hit":4,"damage":"2d4+2","damage_type":"piercing"}]`)
 	require.NoError(t, err)
 
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
 		CampaignID: campaignID,
 		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
@@ -264,7 +264,7 @@ func TestIntegration_CommandOwnershipValidation(t *testing.T) {
 	charID := createTestCharacter(t, db, campaignID)
 	createTestCreatureForSummon(t, db, "owl", "Owl", 11, 1)
 
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
 		CampaignID: campaignID,
 		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
@@ -326,7 +326,7 @@ func TestIntegration_CommandNotFound(t *testing.T) {
 	campaignID := createTestCampaign(t, db)
 	mapID := createTestMap(t, db, campaignID)
 
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
 		CampaignID: campaignID,
 		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
@@ -363,7 +363,7 @@ func TestIntegration_SummonMultiple(t *testing.T) {
 		`[{"name":"Bite","to_hit":4,"damage":"2d4+2","damage_type":"piercing"}]`)
 	require.NoError(t, err)
 
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
 		CampaignID: campaignID,
 		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
@@ -409,7 +409,7 @@ func TestIntegration_SummonedCreaturesExcludedFromInitiative(t *testing.T) {
 	charID := createTestCharacter(t, db, campaignID)
 	createTestCreatureForSummon(t, db, "owl", "Owl", 11, 1)
 
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
 		CampaignID: campaignID,
 		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
@@ -452,7 +452,7 @@ func TestIntegration_BreakConcentrationDismissesSummons(t *testing.T) {
 	charID := createTestCharacter(t, db, campaignID)
 	createTestCreatureForSummon(t, db, "owl", "Owl", 11, 1)
 
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
 		CampaignID: campaignID,
 		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},

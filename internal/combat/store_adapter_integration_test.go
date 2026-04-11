@@ -1,4 +1,4 @@
-package main
+package combat_test
 
 import (
 	"context"
@@ -11,16 +11,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	dbfs "github.com/ab/dndnd/db"
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/testutil"
 )
 
-// TestCombatStoreAdapter_CharacterFieldBridges exercises the positional-arg
-// bridge by round-tripping inventory and gold updates through a real
-// testcontainers-backed database. This doubles as a smoke test that the
-// adapter correctly satisfies combat.Store.
-func TestCombatStoreAdapter_CharacterFieldBridges(t *testing.T) {
+// TestStoreAdapter_CharacterFieldBridges exercises the positional-arg bridge
+// by round-tripping inventory and gold updates through a real
+// testcontainers-backed database. This doubles as a smoke test that
+// combat.NewStoreAdapter correctly satisfies combat.Store for both writes.
+func TestStoreAdapter_CharacterFieldBridges(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -43,7 +44,7 @@ func TestCombatStoreAdapter_CharacterFieldBridges(t *testing.T) {
 		10, 10, 10, 30, 2, `[{"die":"d10","remaining":1}]`, `{Common}`, 100)
 	require.NoError(t, err)
 
-	adapter := &combatStoreAdapter{queries}
+	adapter := combat.NewStoreAdapter(queries)
 
 	inv := pqtype.NullRawMessage{RawMessage: json.RawMessage(`[{"id":"sword"}]`), Valid: true}
 	require.NoError(t, adapter.UpdateCharacterInventory(ctx, charID, inv))

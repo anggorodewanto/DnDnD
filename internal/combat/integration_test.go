@@ -686,73 +686,6 @@ func TestIntegration_UpdateTurnActions(t *testing.T) {
 
 // --- Integration TDD Cycle 12: Condition auto-expiration round-trip ---
 
-// testStoreAdapter wraps refdata.Queries to satisfy the combat.Store interface.
-type testStoreAdapter struct {
-	*refdata.Queries
-}
-
-func (a *testStoreAdapter) UpdateCharacterInventory(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error {
-	return nil // stub for tests
-}
-
-func (a *testStoreAdapter) UpdateCombatantRage(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error) {
-	return a.Queries.UpdateCombatantRage(ctx, arg)
-}
-
-func (a *testStoreAdapter) UpdateCombatantWildShape(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error) {
-	return a.Queries.UpdateCombatantWildShape(ctx, arg)
-}
-
-func (a *testStoreAdapter) GetArmor(ctx context.Context, id string) (refdata.Armor, error) {
-	return a.Queries.GetArmor(ctx, id)
-}
-
-func (a *testStoreAdapter) UpdateCharacterFeatureUses(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
-	return a.Queries.UpdateCharacterFeatureUses(ctx, arg)
-}
-
-func (a *testStoreAdapter) UpdateCharacterSpellSlots(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
-	return a.Queries.UpdateCharacterSpellSlots(ctx, arg)
-}
-
-func (a *testStoreAdapter) UpdateCharacterPactMagicSlots(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error) {
-	return a.Queries.UpdateCharacterPactMagicSlots(ctx, arg)
-}
-
-func (a *testStoreAdapter) UpdateCharacterGold(ctx context.Context, id uuid.UUID, gold int32) error {
-	return nil // stub for tests
-}
-
-func (a *testStoreAdapter) UpdateCharacterEquipment(ctx context.Context, arg refdata.UpdateCharacterEquipmentParams) (refdata.Character, error) {
-	return a.Queries.UpdateCharacterEquipment(ctx, arg)
-}
-
-// Phase 76b stubs
-func (a *testStoreAdapter) ListTurnsTimedOut(ctx context.Context) ([]refdata.Turn, error) {
-	return []refdata.Turn{}, nil
-}
-func (a *testStoreAdapter) UpdateTurnDMDecisionSent(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
-	return refdata.Turn{ID: id}, nil
-}
-func (a *testStoreAdapter) ListTurnsNeedingDMAutoResolve(ctx context.Context) ([]refdata.Turn, error) {
-	return []refdata.Turn{}, nil
-}
-func (a *testStoreAdapter) UpdateTurnAutoResolved(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
-	return refdata.Turn{ID: id}, nil
-}
-func (a *testStoreAdapter) UpdateTurnWaitExtended(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
-	return refdata.Turn{ID: id}, nil
-}
-func (a *testStoreAdapter) ResetTurnNudgeAndWarning(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
-	return refdata.Turn{ID: id}, nil
-}
-func (a *testStoreAdapter) UpdateCombatantAutoResolveCount(ctx context.Context, arg refdata.UpdateCombatantAutoResolveCountParams) (refdata.Combatant, error) {
-	return refdata.Combatant{ID: arg.ID}, nil
-}
-func (a *testStoreAdapter) ResetCombatantAutoResolveCount(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
-	return refdata.Combatant{ID: id}, nil
-}
-
 func TestIntegration_ConditionAutoExpiration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -764,7 +697,7 @@ func TestIntegration_ConditionAutoExpiration(t *testing.T) {
 	charID := createTestCharacter(t, db, campaignID)
 	createTestCreature(t, db)
 
-	svc := combat.NewService(&testStoreAdapter{queries})
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
 
 	// Create encounter
 	enc, err := svc.CreateEncounter(ctx, combat.CreateEncounterInput{
@@ -959,7 +892,7 @@ func setupBardicInspirationFixture(t *testing.T) bardicInspirationFixture {
 
 	return bardicInspirationFixture{
 		queries:    queries,
-		svc:        combat.NewService(&testStoreAdapter{queries}),
+		svc:        combat.NewService(combat.NewStoreAdapter(queries)),
 		bardCharID: bardCharID,
 		bard:       bard,
 		target:     target,
