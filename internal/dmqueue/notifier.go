@@ -3,6 +3,7 @@ package dmqueue
 import (
 	"context"
 	"errors"
+	"fmt"
 )
 
 // Status of a dm-queue item.
@@ -16,6 +17,19 @@ const (
 
 // ErrItemNotFound is returned by Cancel/Resolve for unknown item IDs.
 var ErrItemNotFound = errors.New("dm-queue item not found")
+
+// ErrNotWhisperItem is returned by ResolveWhisper when the target item is
+// not a KindPlayerWhisper entry. Callers must use the regular Resolve path
+// for non-whisper kinds.
+var ErrNotWhisperItem = errors.New("dm-queue item is not a whisper")
+
+// ErrWhisperTargetMissing is returned by ResolveWhisper when the whisper
+// item has no whisper_target_discord_user_id in its ExtraMetadata.
+var ErrWhisperTargetMissing = errors.New("whisper item missing target discord user id")
+
+// ErrWhisperDelivererMissing is returned by ResolveWhisper when no
+// WhisperReplyDeliverer has been wired onto the notifier.
+var ErrWhisperDelivererMissing = errors.New("whisper reply deliverer not wired")
 
 // Item is a stored dm-queue entry.
 type Item struct {
@@ -49,8 +63,19 @@ type Notifier interface {
 	Post(ctx context.Context, e Event) (itemID string, err error)
 	Cancel(ctx context.Context, itemID string, reason string) error
 	Resolve(ctx context.Context, itemID string, outcome string) error
+	// ResolveWhisper delivers a DM reply to the whispering player's
+	// Discord user id (stashed in the item's ExtraMetadata) and then
+	// marks the item resolved with replyText as the outcome. Returns
+	// ErrNotWhisperItem for non-whisper kinds.
+	ResolveWhisper(ctx context.Context, itemID string, replyText string) error
 	Get(itemID string) (Item, bool)
 	ListPending() []Item
+}
+
+// WhisperReplyDeliverer delivers a DM reply text to a Discord user.
+// *discord.DirectMessenger satisfies this shape.
+type WhisperReplyDeliverer interface {
+	SendDirectMessage(discordUserID, body string) ([]string, error)
 }
 
 // DefaultNotifier is the standard Notifier implementation. It composes a
@@ -58,10 +83,19 @@ type Notifier interface {
 // ResolvePathBuilder. Construct it with NewNotifier (in-memory default) or
 // NewNotifierWithStore (caller-provided Store, e.g. PgStore).
 type DefaultNotifier struct {
-	sender   Sender
-	resolver ChannelResolver
-	pathBldr ResolvePathBuilder
-	store    Store
+	sender    Sender
+	resolver  ChannelResolver
+	pathBldr  ResolvePathBuilder
+	store     Store
+	deliverer WhisperReplyDeliverer
+}
+
+// SetWhisperDeliverer wires the DM-to-player deliverer used by
+// ResolveWhisper. Passing nil disables whisper resolution; call sites that
+// do not need whispers (e.g. unit tests, headless integration tests) may
+// leave it unset.
+func (n *DefaultNotifier) SetWhisperDeliverer(d WhisperReplyDeliverer) {
+	n.deliverer = d
 }
 
 // NewNotifier constructs a DefaultNotifier backed by an in-memory store.
@@ -145,6 +179,64 @@ func (n *DefaultNotifier) Get(itemID string) (Item, bool) {
 		return Item{}, false
 	}
 	return item, ok
+}
+
+// PostNarrativeTeleport posts a KindNarrativeTeleport event for the given
+// caster and spell. This is a framework helper the future /cast command
+// handler will invoke — until then it lets the dashboard render narrative
+// teleport items end-to-end with a fake sender.
+func (n *DefaultNotifier) PostNarrativeTeleport(ctx context.Context, caster, spellName, guildID, campaignID string) (string, error) {
+	return n.Post(ctx, Event{
+		Kind:       KindNarrativeTeleport,
+		PlayerName: caster,
+		Summary:    fmt.Sprintf("casts %s (narrative resolution)", spellName),
+		GuildID:    guildID,
+		CampaignID: campaignID,
+	})
+}
+
+// PostWhisper posts a KindPlayerWhisper event for a player's /whisper
+// message. The target player's Discord user ID is stashed in ExtraMetadata
+// so ResolveWhisper can deliver the DM reply later.
+func (n *DefaultNotifier) PostWhisper(ctx context.Context, player, message, discordUserID, guildID, campaignID string) (string, error) {
+	return n.Post(ctx, Event{
+		Kind:       KindPlayerWhisper,
+		PlayerName: player,
+		Summary:    message,
+		GuildID:    guildID,
+		CampaignID: campaignID,
+		ExtraMetadata: map[string]string{
+			WhisperTargetDiscordUserIDKey: discordUserID,
+		},
+	})
+}
+
+// ResolveWhisper delivers the DM's reply to the whispering player as a
+// Discord DM, then marks the queue item resolved with the reply text. The
+// DM is sent first: if delivery fails the item stays pending so the DM can
+// retry after fixing the underlying issue (bot offline, DMs closed, etc).
+func (n *DefaultNotifier) ResolveWhisper(ctx context.Context, itemID, replyText string) error {
+	item, ok, err := n.store.Get(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrItemNotFound
+	}
+	if item.Event.Kind != KindPlayerWhisper {
+		return ErrNotWhisperItem
+	}
+	if n.deliverer == nil {
+		return ErrWhisperDelivererMissing
+	}
+	targetUserID := item.Event.ExtraMetadata[WhisperTargetDiscordUserIDKey]
+	if targetUserID == "" {
+		return ErrWhisperTargetMissing
+	}
+	if _, err := n.deliverer.SendDirectMessage(targetUserID, replyText); err != nil {
+		return fmt.Errorf("delivering whisper reply: %w", err)
+	}
+	return n.Resolve(ctx, itemID, replyText)
 }
 
 // ListPending returns all items currently in pending status, in post order.

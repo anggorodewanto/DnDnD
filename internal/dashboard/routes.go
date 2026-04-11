@@ -38,6 +38,7 @@ func RegisterDMQueueRoutes(r chi.Router, logger *slog.Logger, notifier dmqueue.N
 		r.Use(authMiddleware)
 		r.Get("/{itemID}", h.ServeItem)
 		r.Post("/{itemID}/resolve", h.HandleResolve)
+		r.Post("/{itemID}/reply", h.HandleWhisperReply)
 	})
 }
 

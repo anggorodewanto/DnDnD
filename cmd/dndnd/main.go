@@ -287,6 +287,9 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			dmQueueStore,
 		)
 		combatSvc.SetDMNotifier(dmQueueNotifier)
+		if discordSession != nil {
+			dmQueueNotifier.SetWhisperDeliverer(discord.NewDirectMessenger(discordSession))
+		}
 		dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, passthroughMiddleware)
 
 		// Phase 104b: Publisher fan-out to non-combat services that can

@@ -14,6 +14,7 @@ import (
 
 	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -654,9 +655,36 @@ func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, r
 	}); err != nil {
 		return TurnInfo{}, fmt.Errorf("updating current turn: %w", err)
 	}
+
+	s.postEnemyTurnReady(ctx, encounterID, combatant)
+
 	return TurnInfo{
 		Turn:        turn,
 		CombatantID: combatant.ID,
 		RoundNumber: roundNumber,
 	}, nil
+}
+
+// postEnemyTurnReady dispatches a KindEnemyTurnReady notification through
+// the wired Notifier when the combatant is DM-controlled (IsNpc). Errors
+// are intentionally swallowed: a notifier hiccup must not undo the
+// successfully-persisted turn advance.
+func (s *Service) postEnemyTurnReady(ctx context.Context, encounterID uuid.UUID, combatant refdata.Combatant) {
+	if s.dmNotifier == nil {
+		return
+	}
+	if !combatant.IsNpc {
+		return
+	}
+	camp, err := s.store.GetCampaignByEncounterID(ctx, encounterID)
+	if err != nil {
+		return
+	}
+	_, _ = s.dmNotifier.Post(ctx, dmqueue.Event{
+		Kind:       dmqueue.KindEnemyTurnReady,
+		PlayerName: combatant.DisplayName,
+		Summary:    "is up",
+		GuildID:    camp.GuildID,
+		CampaignID: camp.ID.String(),
+	})
 }

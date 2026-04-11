@@ -58,6 +58,36 @@ func TestFormatEvent(t *testing.T) {
 			},
 			want: `🧪 **Item** — Aria uses Ball Bearings — [Resolve →](/dashboard/queue/i1)`,
 		},
+		{
+			name: "enemy turn ready",
+			event: Event{
+				Kind:        KindEnemyTurnReady,
+				PlayerName:  "Goblin G2",
+				Summary:     "is up",
+				ResolvePath: "/dashboard/queue/e1",
+			},
+			want: `⚔️ **Enemy Turn** — Goblin G2 is up — [Resolve →](/dashboard/queue/e1)`,
+		},
+		{
+			name: "narrative teleport",
+			event: Event{
+				Kind:        KindNarrativeTeleport,
+				PlayerName:  "Kael",
+				Summary:     "casts Teleport (narrative resolution)",
+				ResolvePath: "/dashboard/queue/t1",
+			},
+			want: `✨ **Spell** — Kael casts Teleport (narrative resolution) — [Resolve →](/dashboard/queue/t1)`,
+		},
+		{
+			name: "player whisper",
+			event: Event{
+				Kind:        KindPlayerWhisper,
+				PlayerName:  "Aria",
+				Summary:     `"I want to pickpocket the merchant"`,
+				ResolvePath: "/dashboard/queue/w1",
+			},
+			want: `🤫 **Whisper** — Aria: "I want to pickpocket the merchant" — [Resolve →](/dashboard/queue/w1)`,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

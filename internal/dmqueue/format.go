@@ -17,7 +17,15 @@ const (
 	KindRestRequest         EventKind = "rest_request"
 	KindSkillCheckNarration EventKind = "skill_check_narration"
 	KindConsumable          EventKind = "consumable"
+	KindEnemyTurnReady      EventKind = "enemy_turn_ready"
+	KindNarrativeTeleport   EventKind = "narrative_teleport"
+	KindPlayerWhisper       EventKind = "player_whisper"
 )
+
+// WhisperTargetDiscordUserIDKey is the ExtraMetadata key under which the
+// Discord user ID of a whisper's target is stashed. The DM dashboard reads
+// this to deliver a reply via Discord DM when resolving a whisper item.
+const WhisperTargetDiscordUserIDKey = "whisper_target_discord_user_id"
 
 // Event describes a structured dm-queue notification.
 //
@@ -51,6 +59,9 @@ var kindLabels = map[EventKind]kindLabel{
 	KindRestRequest:         {emoji: "🛏️", label: "Rest", useColon: false},
 	KindSkillCheckNarration: {emoji: "🎲", label: "Check", useColon: true},
 	KindConsumable:          {emoji: "🧪", label: "Item", useColon: false},
+	KindEnemyTurnReady:      {emoji: "⚔️", label: "Enemy Turn", useColon: false},
+	KindNarrativeTeleport:   {emoji: "✨", label: "Spell", useColon: false},
+	KindPlayerWhisper:       {emoji: "🤫", label: "Whisper", useColon: true},
 }
 
 var defaultLabel = kindLabel{emoji: "📨", label: "Notification", useColon: true}

@@ -18,15 +18,39 @@ import (
 
 // stubNotifier lets dashboard tests inspect and drive a Notifier without Discord.
 type stubNotifier struct {
-	items       map[string]dmqueue.Item
-	resolveErr  error
-	cancelErr   error
-	resolvedIDs []string
-	cancelledIDs []string
+	items              map[string]dmqueue.Item
+	resolveErr         error
+	cancelErr          error
+	resolveWhisperErr  error
+	resolvedIDs        []string
+	cancelledIDs       []string
+	whisperReplies     map[string]string
 }
 
 func newStubNotifier() *stubNotifier {
-	return &stubNotifier{items: map[string]dmqueue.Item{}}
+	return &stubNotifier{
+		items:          map[string]dmqueue.Item{},
+		whisperReplies: map[string]string{},
+	}
+}
+
+func (s *stubNotifier) ResolveWhisper(_ context.Context, id, replyText string) error {
+	if s.resolveWhisperErr != nil {
+		return s.resolveWhisperErr
+	}
+	it, ok := s.items[id]
+	if !ok {
+		return dmqueue.ErrItemNotFound
+	}
+	if it.Event.Kind != dmqueue.KindPlayerWhisper {
+		return dmqueue.ErrNotWhisperItem
+	}
+	it.Status = dmqueue.StatusResolved
+	it.Outcome = replyText
+	s.items[id] = it
+	s.whisperReplies[id] = replyText
+	s.resolvedIDs = append(s.resolvedIDs, id)
+	return nil
 }
 
 func (s *stubNotifier) Post(_ context.Context, _ dmqueue.Event) (string, error) {
@@ -78,6 +102,7 @@ func newDMQueueTestRouter(n dmqueue.Notifier) chi.Router {
 	h := NewDMQueueHandler(nil, n)
 	r.Get("/dashboard/queue/{itemID}", h.ServeItem)
 	r.Post("/dashboard/queue/{itemID}/resolve", h.HandleResolve)
+	r.Post("/dashboard/queue/{itemID}/reply", h.HandleWhisperReply)
 	return r
 }
 
@@ -199,6 +224,9 @@ func TestKindLabelFor_AllKinds(t *testing.T) {
 		{dmqueue.KindRestRequest, "Rest Request"},
 		{dmqueue.KindSkillCheckNarration, "Skill Check Narration"},
 		{dmqueue.KindConsumable, "Consumable Usage"},
+		{dmqueue.KindEnemyTurnReady, "Enemy Turn Ready"},
+		{dmqueue.KindNarrativeTeleport, "Narrative Teleport"},
+		{dmqueue.KindPlayerWhisper, "Player Whisper"},
 		{dmqueue.EventKind("mystery"), "Notification"},
 	}
 	for _, tc := range cases {
@@ -206,6 +234,121 @@ func TestKindLabelFor_AllKinds(t *testing.T) {
 			t.Errorf("kindLabelFor(%q) = %q want %q", tc.kind, got, tc.want)
 		}
 	}
+}
+
+func TestDMQueuePage_WhisperItemShowsReplyForm(t *testing.T) {
+	n := newStubNotifier()
+	n.items["w1"] = dmqueue.Item{
+		ID: "w1",
+		Event: dmqueue.Event{
+			Kind:       dmqueue.KindPlayerWhisper,
+			PlayerName: "Aria",
+			Summary:    `"pickpocket the merchant"`,
+			ExtraMetadata: map[string]string{
+				dmqueue.WhisperTargetDiscordUserIDKey: "user-42",
+			},
+		},
+		Status: dmqueue.StatusPending,
+	}
+
+	r := newDMQueueTestRouter(n)
+	req := requestWithUser(http.MethodGet, "/dashboard/queue/w1", "")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, `action="/dashboard/queue/w1/reply"`)
+	assert.Contains(t, body, `name="reply"`)
+	// The generic resolve form must not be rendered for whisper items.
+	assert.NotContains(t, body, `action="/dashboard/queue/w1/resolve"`)
+}
+
+func TestDMQueuePage_HandleWhisperReply_Success(t *testing.T) {
+	n := newStubNotifier()
+	n.items["w1"] = dmqueue.Item{
+		ID: "w1",
+		Event: dmqueue.Event{
+			Kind:       dmqueue.KindPlayerWhisper,
+			PlayerName: "Aria",
+			Summary:    `"x"`,
+			ExtraMetadata: map[string]string{dmqueue.WhisperTargetDiscordUserIDKey: "user-42"},
+		},
+		Status: dmqueue.StatusPending,
+	}
+	r := newDMQueueTestRouter(n)
+
+	form := url.Values{}
+	form.Set("reply", "You succeed.")
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/w1/reply", form.Encode())
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusSeeOther, rec.Code)
+	assert.Equal(t, "You succeed.", n.whisperReplies["w1"])
+	it, _ := n.Get("w1")
+	assert.Equal(t, dmqueue.StatusResolved, it.Status)
+	assert.Equal(t, "You succeed.", it.Outcome)
+}
+
+func TestDMQueuePage_HandleWhisperReply_RequiresAuth(t *testing.T) {
+	n := newStubNotifier()
+	r := newDMQueueTestRouter(n)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/queue/w1/reply", strings.NewReader("reply=hi"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestDMQueuePage_HandleWhisperReply_WrongKind(t *testing.T) {
+	n := newStubNotifier()
+	n.items["a1"] = dmqueue.Item{
+		ID:     "a1",
+		Event:  dmqueue.Event{Kind: dmqueue.KindFreeformAction, PlayerName: "Thorn", Summary: `"flip"`},
+		Status: dmqueue.StatusPending,
+	}
+	r := newDMQueueTestRouter(n)
+
+	form := url.Values{}
+	form.Set("reply", "nope")
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/a1/reply", form.Encode())
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestDMQueuePage_HandleWhisperReply_MissingDeliverer(t *testing.T) {
+	n := newStubNotifier()
+	n.items["w1"] = dmqueue.Item{
+		ID: "w1",
+		Event: dmqueue.Event{
+			Kind:       dmqueue.KindPlayerWhisper,
+			PlayerName: "Aria",
+			ExtraMetadata: map[string]string{dmqueue.WhisperTargetDiscordUserIDKey: "user-42"},
+		},
+		Status: dmqueue.StatusPending,
+	}
+	n.resolveWhisperErr = dmqueue.ErrWhisperDelivererMissing
+	r := newDMQueueTestRouter(n)
+
+	form := url.Values{}
+	form.Set("reply", "hi")
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/w1/reply", form.Encode())
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestDMQueuePage_HandleWhisperReply_UnknownItem(t *testing.T) {
+	n := newStubNotifier()
+	r := newDMQueueTestRouter(n)
+	form := url.Values{}
+	form.Set("reply", "hi")
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/missing/reply", form.Encode())
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
 func TestDMQueuePage_RendersResolvedItem(t *testing.T) {

@@ -40,6 +40,7 @@ type dmqueueItemView struct {
 	IsPending   bool
 	IsResolved  bool
 	IsCancelled bool
+	IsWhisper   bool
 }
 
 // ServeItem renders GET /dashboard/queue/{itemID}.
@@ -62,6 +63,7 @@ func (h *DMQueueHandler) ServeItem(w http.ResponseWriter, r *http.Request) {
 		IsPending:   item.Status == dmqueue.StatusPending,
 		IsResolved:  item.Status == dmqueue.StatusResolved,
 		IsCancelled: item.Status == dmqueue.StatusCancelled,
+		IsWhisper:   item.Event.Kind == dmqueue.KindPlayerWhisper,
 	}
 
 	var buf bytes.Buffer
@@ -101,6 +103,41 @@ func (h *DMQueueHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/dashboard/queue/"+itemID, http.StatusSeeOther)
 }
 
+// HandleWhisperReply processes POST /dashboard/queue/{itemID}/reply for
+// KindPlayerWhisper items. The "reply" form field is delivered to the
+// whispering player as a Discord DM via the notifier's wired
+// WhisperReplyDeliverer and the queue item is marked resolved with the
+// reply text as its outcome.
+func (h *DMQueueHandler) HandleWhisperReply(w http.ResponseWriter, r *http.Request) {
+	if !hasAuthUser(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	itemID := chi.URLParam(r, "itemID")
+	reply := r.FormValue("reply")
+
+	err := h.notifier.ResolveWhisper(r.Context(), itemID, reply)
+	if err == nil {
+		http.Redirect(w, r, "/dashboard/queue/"+itemID, http.StatusSeeOther)
+		return
+	}
+	if errors.Is(err, dmqueue.ErrItemNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if errors.Is(err, dmqueue.ErrNotWhisperItem) {
+		http.Error(w, "not a whisper item", http.StatusBadRequest)
+		return
+	}
+	h.logger.Error("dmqueue whisper reply", "error", err, "item_id", itemID)
+	http.Error(w, "reply failed", http.StatusInternalServerError)
+}
+
 // hasAuthUser reports whether the request carries an authenticated discord user ID.
 func hasAuthUser(r *http.Request) bool {
 	userID, ok := auth.DiscordUserIDFromContext(r.Context())
@@ -119,6 +156,12 @@ func kindLabelFor(k dmqueue.EventKind) string {
 		return "Skill Check Narration"
 	case dmqueue.KindConsumable:
 		return "Consumable Usage"
+	case dmqueue.KindEnemyTurnReady:
+		return "Enemy Turn Ready"
+	case dmqueue.KindNarrativeTeleport:
+		return "Narrative Teleport"
+	case dmqueue.KindPlayerWhisper:
+		return "Player Whisper"
 	default:
 		return "Notification"
 	}
@@ -152,11 +195,19 @@ a.back { display: inline-block; margin-top: 1rem; color: #a0a0c0; }
 <div class="meta">{{.Item.Event.PlayerName}}{{if .IsPending}} — <span class="status pending">Pending</span>{{end}}{{if .IsResolved}} — <span class="status resolved">Resolved</span>{{end}}{{if .IsCancelled}} — <span class="status cancelled">Cancelled</span>{{end}}</div>
 <div class="summary">{{.Item.Event.Summary}}</div>
 {{if .IsPending}}
+{{if .IsWhisper}}
+<form method="post" action="/dashboard/queue/{{.Item.ID}}/reply">
+  <label for="reply">Reply (sent as Discord DM)</label>
+  <input type="text" id="reply" name="reply" placeholder="e.g. You catch the merchant's gaze mid-pull…" required>
+  <button type="submit">Send Reply</button>
+</form>
+{{else}}
 <form method="post" action="/dashboard/queue/{{.Item.ID}}/resolve">
   <label for="outcome">Outcome summary</label>
   <input type="text" id="outcome" name="outcome" placeholder="e.g. table is flipped, enemies prone" required>
   <button type="submit">Resolve</button>
 </form>
+{{end}}
 {{end}}
 {{if .IsResolved}}<div class="outcome">Outcome: {{.Item.Outcome}}</div>{{end}}
 <a class="back" href="/dashboard">&larr; Back to Campaign Home</a>
