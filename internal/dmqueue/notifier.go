@@ -117,8 +117,7 @@ func (n *DefaultNotifier) Cancel(ctx context.Context, itemID, reason string) err
 	if _, err := n.store.MarkCancelled(ctx, itemID, reason); err != nil {
 		return err
 	}
-	content := FormatCancelled(item.PostedText)
-	return n.sender.Edit(item.ChannelID, item.MessageID, content)
+	return n.sender.Edit(item.ChannelID, item.MessageID, FormatCancelled(item.PostedText))
 }
 
 // Resolve marks a pending item as resolved and edits the Discord message
@@ -134,8 +133,7 @@ func (n *DefaultNotifier) Resolve(ctx context.Context, itemID, outcome string) e
 	if _, err := n.store.MarkResolved(ctx, itemID, outcome); err != nil {
 		return err
 	}
-	content := FormatResolved(item.PostedText, outcome)
-	return n.sender.Edit(item.ChannelID, item.MessageID, content)
+	return n.sender.Edit(item.ChannelID, item.MessageID, FormatResolved(item.PostedText, outcome))
 }
 
 // Get returns a copy of the item by ID. The store is consulted with a

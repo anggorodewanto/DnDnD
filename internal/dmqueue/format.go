@@ -28,20 +28,20 @@ const (
 // "requests a short rest") so the formatter can render naturally without
 // an extra colon.
 type Event struct {
-	Kind        EventKind
-	PlayerName  string
-	Summary     string
-	ResolvePath string // dashboard URL path, e.g. /dashboard/queue/{id}
-	GuildID     string
-	CampaignID  string
+	Kind          EventKind
+	PlayerName    string
+	Summary       string
+	ResolvePath   string // dashboard URL path, e.g. /dashboard/queue/{id}
+	GuildID       string
+	CampaignID    string
 	ExtraMetadata map[string]string
 }
 
 // kindLabel describes how each event kind renders its emoji + label and
 // whether the player name is followed by a colon (quoted summary) or a space.
 type kindLabel struct {
-	emoji   string
-	label   string
+	emoji    string
+	label    string
 	useColon bool // "Name: summary" vs "Name summary"
 }
 
@@ -77,7 +77,7 @@ func formatBody(e Event) string {
 
 // formatResolveLink renders the trailing dashboard link.
 func formatResolveLink(path string) string {
-	return fmt.Sprintf("[Resolve →](%s)", path)
+	return "[Resolve →](" + path + ")"
 }
 
 // FormatCancelled transforms a posted message into a cancelled edit:

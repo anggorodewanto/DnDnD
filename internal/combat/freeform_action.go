@@ -110,9 +110,6 @@ func (s *Service) postFreeformActionToDMQueue(ctx context.Context, cmd FreeformA
 // nullableUUIDFromString parses a UUID string into uuid.NullUUID. An empty
 // or invalid string yields a NULL value (Valid=false).
 func nullableUUIDFromString(s string) uuid.NullUUID {
-	if s == "" {
-		return uuid.NullUUID{}
-	}
 	id, err := uuid.Parse(s)
 	if err != nil {
 		return uuid.NullUUID{}

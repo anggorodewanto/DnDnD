@@ -138,15 +138,7 @@ func (p *PgStore) ListPending(ctx context.Context) ([]Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Item, 0, len(rows))
-	for _, r := range rows {
-		item, err := rowToItem(r)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, item)
-	}
-	return out, nil
+	return rowsToItems(rows)
 }
 
 // ListPendingForCampaign filters pending items to a single campaign. Not
@@ -156,6 +148,12 @@ func (p *PgStore) ListPendingForCampaign(ctx context.Context, campaignID uuid.UU
 	if err != nil {
 		return nil, err
 	}
+	return rowsToItems(rows)
+}
+
+// rowsToItems converts a slice of sqlc rows into dm-queue Items, propagating
+// any decode error from the first offending row.
+func rowsToItems(rows []refdata.DmQueueItem) ([]Item, error) {
 	out := make([]Item, 0, len(rows))
 	for _, r := range rows {
 		item, err := rowToItem(r)

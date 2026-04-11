@@ -35,10 +35,10 @@ func NewDMQueueHandler(logger *slog.Logger, notifier dmqueue.Notifier) *DMQueueH
 }
 
 type dmqueueItemView struct {
-	Item       dmqueue.Item
-	KindLabel  string
-	IsPending  bool
-	IsResolved bool
+	Item        dmqueue.Item
+	KindLabel   string
+	IsPending   bool
+	IsResolved  bool
 	IsCancelled bool
 }
 
