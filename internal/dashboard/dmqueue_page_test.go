@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -152,6 +153,59 @@ func TestDMQueuePage_ResolveMarksItemResolved(t *testing.T) {
 	it, _ := n.Get("abc")
 	assert.Equal(t, dmqueue.StatusResolved, it.Status)
 	assert.Equal(t, "table flipped", it.Outcome)
+}
+
+func TestDMQueuePage_ResolveUnknownItem(t *testing.T) {
+	n := newStubNotifier()
+	r := newDMQueueTestRouter(n)
+	form := url.Values{}
+	form.Set("outcome", "x")
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/missing/resolve", form.Encode())
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestDMQueuePage_ResolveRequiresAuth(t *testing.T) {
+	n := newStubNotifier()
+	r := newDMQueueTestRouter(n)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/queue/x/resolve", strings.NewReader("outcome=x"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestDMQueuePage_ResolveBackendError(t *testing.T) {
+	n := newStubNotifier()
+	n.items["x"] = dmqueue.Item{ID: "x", Status: dmqueue.StatusPending}
+	n.resolveErr = errors.New("boom")
+	r := newDMQueueTestRouter(n)
+	form := url.Values{}
+	form.Set("outcome", "x")
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/x/resolve", form.Encode())
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestKindLabelFor_AllKinds(t *testing.T) {
+	cases := []struct {
+		kind dmqueue.EventKind
+		want string
+	}{
+		{dmqueue.KindFreeformAction, "Freeform Action"},
+		{dmqueue.KindReactionDeclaration, "Reaction Declaration"},
+		{dmqueue.KindRestRequest, "Rest Request"},
+		{dmqueue.KindSkillCheckNarration, "Skill Check Narration"},
+		{dmqueue.KindConsumable, "Consumable Usage"},
+		{dmqueue.EventKind("mystery"), "Notification"},
+	}
+	for _, tc := range cases {
+		if got := kindLabelFor(tc.kind); got != tc.want {
+			t.Errorf("kindLabelFor(%q) = %q want %q", tc.kind, got, tc.want)
+		}
+	}
 }
 
 func TestDMQueuePage_RendersResolvedItem(t *testing.T) {
