@@ -648,7 +648,7 @@
   - Depends on: Phase 104b
   - Done when: `levelup.Handler` is routed and reachable in production, `levelup.Service` fires `PublishEncounterSnapshot` after every successful DB-committing mutation for a character currently in an active encounter, and integration tests cover the end-to-end path (handler → service → store → publisher).
 
-- [ ] **Phase 105: Simultaneous Encounters**
+- [x] **Phase 105: Simultaneous Encounters**
   - Scope: Multiple active encounters sharing Discord channels. Encounter display name vs internal name (DM can set vague player-facing name). Message labeling with encounter name + round. Commands routed by combatant membership. Per-turn locks scoped per encounter. DM manages via tabbed Combat Workspace. Character limited to one active encounter.
   - Depends on: Phase 26a, Phase 94a
   - Done when: Two encounters run simultaneously with correct message labeling, independent turn orders, command routing, and DM tab switching.
