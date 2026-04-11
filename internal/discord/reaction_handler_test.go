@@ -528,6 +528,97 @@ func TestReactionHandler_Declare_DescriptionOptionMissing(t *testing.T) {
 	assert.Contains(t, sess.lastResponse, "description")
 }
 
+// perUserLookup maps Discord user IDs to (combatantID, displayName) so a
+// single ReactionHandler can service multiple players in one test.
+type perUserLookup struct {
+	byUser map[string]struct {
+		combatantID uuid.UUID
+		displayName string
+	}
+}
+
+func (p *perUserLookup) GetCombatantIDByDiscordUser(_ context.Context, _ uuid.UUID, discordUserID string) (uuid.UUID, string, error) {
+	entry, ok := p.byUser[discordUserID]
+	if !ok {
+		return uuid.Nil, "", errors.New("not a combatant")
+	}
+	return entry.combatantID, entry.displayName, nil
+}
+
+// perCombatantService mimics combat.Service's per-combatant DeclareReaction
+// behavior by returning a caller-supplied declaration ID based on the
+// combatantID argument, so a single handler instance can persist two distinct
+// declarations for two players in one test.
+type perCombatantService struct {
+	fakeReactionService
+	nextDeclByCombatant map[uuid.UUID]refdata.ReactionDeclaration
+}
+
+func (p *perCombatantService) DeclareReaction(_ context.Context, encounterID, combatantID uuid.UUID, description string) (refdata.ReactionDeclaration, error) {
+	p.declareCalledWith.encounterID = encounterID
+	p.declareCalledWith.combatantID = combatantID
+	p.declareCalledWith.description = description
+	if decl, ok := p.nextDeclByCombatant[combatantID]; ok {
+		return decl, nil
+	}
+	return refdata.ReactionDeclaration{}, errors.New("no declaration seeded for combatant")
+}
+
+func TestReactionHandler_CancelAll_DoesNotTouchOtherCombatants(t *testing.T) {
+	enc := uuid.New()
+	combatantA := uuid.New()
+	combatantB := uuid.New()
+	declA := uuid.New()
+	declB := uuid.New()
+
+	svc := &perCombatantService{
+		fakeReactionService: fakeReactionService{canDeclare: true},
+		nextDeclByCombatant: map[uuid.UUID]refdata.ReactionDeclaration{
+			combatantA: {ID: declA, Description: "Shield A", Status: "active"},
+			combatantB: {ID: declB, Description: "Shield B", Status: "active"},
+		},
+	}
+
+	sess := &mockInventorySession{}
+	resolver := &fakeReactionEncounterResolver{encounterID: enc}
+	lookup := &perUserLookup{byUser: map[string]struct {
+		combatantID uuid.UUID
+		displayName string
+	}{
+		"userA": {combatantID: combatantA, displayName: "Aria"},
+		"userB": {combatantID: combatantB, displayName: "Bran"},
+	}}
+	h := NewReactionHandler(sess, svc, resolver, lookup)
+
+	rec := &cancelRecordingNotifier{}
+	h.SetNotifier(rec)
+
+	// Player A declares — handler stashes itemID_A.
+	rec.nextItemID = "item-A"
+	h.Handle(makeReactionInteraction("guild1", "userA", "declare", "Shield A"))
+
+	// Player B declares — handler stashes itemID_B.
+	rec.nextItemID = "item-B"
+	h.Handle(makeReactionInteraction("guild1", "userB", "declare", "Shield B"))
+
+	// Sanity: both stashed under their own declaration IDs.
+	require.Equal(t, "item-A", h.ItemIDForDeclaration(declA))
+	require.Equal(t, "item-B", h.ItemIDForDeclaration(declB))
+
+	// Player B runs /reaction cancel-all.
+	h.Handle(makeReactionInteraction("guild1", "userB", "cancel-all", ""))
+
+	// Only Player B's item should have been cancelled on the notifier.
+	require.Len(t, rec.cancelCalls, 1, "cancel-all must not leak across combatants")
+	assert.Equal(t, "item-B", rec.cancelCalls[0].itemID)
+
+	// Player A's stashed entry must still be present so a subsequent
+	// Player A /reaction cancel would still find it.
+	assert.Equal(t, "item-A", h.ItemIDForDeclaration(declA))
+	// Player B's entry is cleared.
+	assert.Empty(t, h.ItemIDForDeclaration(declB))
+}
+
 func TestReactionHandler_CancelDMQueueItem_NoNotifier(t *testing.T) {
 	enc := uuid.New()
 	combatantID := uuid.New()

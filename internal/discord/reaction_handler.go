@@ -56,7 +56,16 @@ type ReactionHandler struct {
 	notifier dmqueue.Notifier
 
 	mu      sync.Mutex
-	itemIDs map[uuid.UUID]string // declarationID → dm-queue itemID
+	itemIDs map[uuid.UUID]stashedItem // declarationID → stashed dm-queue item
+}
+
+// stashedItem records the dm-queue itemID for a declaration together with
+// the combatantID that owns it. The combatantID is used by handleCancelAll
+// to scope its sweep to the invoking player in single-process, multi-player
+// deployments where one ReactionHandler instance serves many combatants.
+type stashedItem struct {
+	combatantID uuid.UUID
+	itemID      string
 }
 
 // NewReactionHandler constructs a ReactionHandler. notifier is wired via
@@ -67,7 +76,7 @@ func NewReactionHandler(session Session, service ReactionService, resolver React
 		service:  service,
 		resolver: resolver,
 		lookup:   lookup,
-		itemIDs:  make(map[uuid.UUID]string),
+		itemIDs:  make(map[uuid.UUID]stashedItem),
 	}
 }
 
@@ -81,7 +90,7 @@ func (h *ReactionHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
 func (h *ReactionHandler) ItemIDForDeclaration(declID uuid.UUID) string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.itemIDs[declID]
+	return h.itemIDs[declID].itemID
 }
 
 // Handle routes the /reaction interaction to the matching subcommand.
@@ -134,7 +143,7 @@ func (h *ReactionHandler) handleDeclare(interaction *discordgo.Interaction, sub 
 		return
 	}
 
-	h.postReactionDeclaration(ctx, decl, displayName, interaction.GuildID)
+	h.postReactionDeclaration(ctx, decl, combatantID, displayName, interaction.GuildID)
 
 	respondEphemeral(h.session, interaction, fmt.Sprintf("⚡ Reaction declared: %s", decl.Description))
 }
@@ -142,7 +151,7 @@ func (h *ReactionHandler) handleDeclare(interaction *discordgo.Interaction, sub 
 // postReactionDeclaration posts the dm-queue event for a freshly-persisted
 // declaration and stashes the returned item ID for later Cancel lookup.
 // No-op when no Notifier is wired.
-func (h *ReactionHandler) postReactionDeclaration(ctx context.Context, decl refdata.ReactionDeclaration, playerName, guildID string) {
+func (h *ReactionHandler) postReactionDeclaration(ctx context.Context, decl refdata.ReactionDeclaration, combatantID uuid.UUID, playerName, guildID string) {
 	if h.notifier == nil {
 		return
 	}
@@ -159,7 +168,7 @@ func (h *ReactionHandler) postReactionDeclaration(ctx context.Context, decl refd
 		return
 	}
 	h.mu.Lock()
-	h.itemIDs[decl.ID] = itemID
+	h.itemIDs[decl.ID] = stashedItem{combatantID: combatantID, itemID: itemID}
 	h.mu.Unlock()
 }
 
@@ -202,17 +211,23 @@ func (h *ReactionHandler) handleCancelAll(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// Cancel every dm-queue item we stashed for this handler-lifetime.
+	// Cancel only the dm-queue items stashed for THIS combatant. In
+	// single-process multi-player deployments the handler's itemIDs map
+	// holds entries for every player, so an unscoped sweep would leak
+	// strikethrough edits onto other players' still-active declarations.
 	h.mu.Lock()
-	pending := make(map[uuid.UUID]string, len(h.itemIDs))
-	for k, v := range h.itemIDs {
-		pending[k] = v
+	pendingItemIDs := make([]string, 0)
+	for declID, stashed := range h.itemIDs {
+		if stashed.combatantID != combatantID {
+			continue
+		}
+		pendingItemIDs = append(pendingItemIDs, stashed.itemID)
+		delete(h.itemIDs, declID)
 	}
-	h.itemIDs = make(map[uuid.UUID]string)
 	h.mu.Unlock()
 
 	if h.notifier != nil {
-		for _, itemID := range pending {
+		for _, itemID := range pendingItemIDs {
 			_ = h.notifier.Cancel(ctx, itemID, "Cancelled by player")
 		}
 	}
@@ -225,15 +240,15 @@ func (h *ReactionHandler) handleCancelAll(interaction *discordgo.Interaction) {
 // later cancel-all does not double-cancel.
 func (h *ReactionHandler) cancelDMQueueItem(ctx context.Context, declID uuid.UUID, reason string) {
 	h.mu.Lock()
-	itemID, found := h.itemIDs[declID]
+	stashed, found := h.itemIDs[declID]
 	if found {
 		delete(h.itemIDs, declID)
 	}
 	h.mu.Unlock()
-	if !found || itemID == "" || h.notifier == nil {
+	if !found || stashed.itemID == "" || h.notifier == nil {
 		return
 	}
-	_ = h.notifier.Cancel(ctx, itemID, reason)
+	_ = h.notifier.Cancel(ctx, stashed.itemID, reason)
 }
 
 // resolveUserCombat resolves the invoking Discord user to (encounterID,
