@@ -155,6 +155,7 @@ func (h *ReactionHandler) postReactionDeclaration(ctx context.Context, decl refd
 	if h.notifier == nil {
 		return
 	}
+
 	itemID, err := h.notifier.Post(ctx, dmqueue.Event{
 		Kind:       dmqueue.KindReactionDeclaration,
 		PlayerName: playerName,
@@ -167,6 +168,7 @@ func (h *ReactionHandler) postReactionDeclaration(ctx context.Context, decl refd
 	if err != nil || itemID == "" {
 		return
 	}
+
 	h.mu.Lock()
 	h.itemIDs[decl.ID] = stashedItem{combatantID: combatantID, itemID: itemID}
 	h.mu.Unlock()
@@ -215,17 +217,7 @@ func (h *ReactionHandler) handleCancelAll(interaction *discordgo.Interaction) {
 	// single-process multi-player deployments the handler's itemIDs map
 	// holds entries for every player, so an unscoped sweep would leak
 	// strikethrough edits onto other players' still-active declarations.
-	h.mu.Lock()
-	pendingItemIDs := make([]string, 0)
-	for declID, stashed := range h.itemIDs {
-		if stashed.combatantID != combatantID {
-			continue
-		}
-		pendingItemIDs = append(pendingItemIDs, stashed.itemID)
-		delete(h.itemIDs, declID)
-	}
-	h.mu.Unlock()
-
+	pendingItemIDs := h.drainItemIDsFor(combatantID)
 	if h.notifier != nil {
 		for _, itemID := range pendingItemIDs {
 			_ = h.notifier.Cancel(ctx, itemID, "Cancelled by player")
@@ -236,19 +228,35 @@ func (h *ReactionHandler) handleCancelAll(interaction *discordgo.Interaction) {
 }
 
 // cancelDMQueueItem looks up the stashed item ID for a declaration and
-// issues Notifier.Cancel. The mapping entry is removed on success so a
-// later cancel-all does not double-cancel.
+// issues Notifier.Cancel. The mapping entry is removed so a later
+// cancel-all does not double-cancel.
 func (h *ReactionHandler) cancelDMQueueItem(ctx context.Context, declID uuid.UUID, reason string) {
 	h.mu.Lock()
 	stashed, found := h.itemIDs[declID]
-	if found {
-		delete(h.itemIDs, declID)
-	}
+	delete(h.itemIDs, declID)
 	h.mu.Unlock()
+
 	if !found || stashed.itemID == "" || h.notifier == nil {
 		return
 	}
 	_ = h.notifier.Cancel(ctx, stashed.itemID, reason)
+}
+
+// drainItemIDsFor removes and returns every stashed dm-queue item ID owned
+// by the given combatant. Used by /reaction cancel-all to scope the sweep.
+func (h *ReactionHandler) drainItemIDsFor(combatantID uuid.UUID) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	var itemIDs []string
+	for declID, stashed := range h.itemIDs {
+		if stashed.combatantID != combatantID {
+			continue
+		}
+		itemIDs = append(itemIDs, stashed.itemID)
+		delete(h.itemIDs, declID)
+	}
+	return itemIDs
 }
 
 // resolveUserCombat resolves the invoking Discord user to (encounterID,
