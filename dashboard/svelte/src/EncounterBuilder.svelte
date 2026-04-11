@@ -12,6 +12,7 @@
     getWalls,
   } from './lib/mapdata.js';
   import ItemPicker from './ItemPicker.svelte';
+  import DisplayNameEditor from './DisplayNameEditor.svelte';
 
   let { campaignId, encounterId = null, onback } = $props();
 
@@ -386,10 +387,16 @@
             <label>Internal Name (DM-only):</label>
             <input type="text" bind:value={encounterName} oninput={() => dirty = true} />
           </div>
+          <!-- Phase 105c — shared DisplayNameEditor. Persistence stays on
+               the builder's Save button (template PUT), so the commit handler
+               just updates local state and marks the form dirty. -->
           <div class="form-group">
-            <label>Display Name (player-facing, optional):</label>
-            <input type="text" bind:value={displayName} oninput={() => dirty = true}
-                   placeholder="Defaults to internal name" />
+            <DisplayNameEditor
+              value={displayName}
+              fallback={encounterName}
+              label="Display Name (player-facing, optional)"
+              onCommit={(v) => { displayName = v; dirty = true; }}
+            />
           </div>
           <div class="form-group">
             <label>Map:</label>

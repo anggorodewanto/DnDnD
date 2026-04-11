@@ -11,6 +11,7 @@ import {
   overrideCombatantConditions as overrideCombatantConditionsDM,
   overrideCombatantInitiative,
   overrideCharacterSpellSlots,
+  updateEncounterDisplayName,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -200,6 +201,54 @@ describe('updateCombatantPosition', () => {
     expect(url).toBe('/api/combat/enc-1/combatants/comb-1/position');
     expect(options.method).toBe('PATCH');
     expect(JSON.parse(options.body)).toEqual({ position_col: 'D', position_row: 4 });
+  });
+});
+
+// Phase 105c: updateEncounterDisplayName
+describe('updateEncounterDisplayName', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends PATCH with the new display name and returns parsed JSON', async () => {
+    const mockResult = { id: 'enc-1', name: 'Goblin Ambush', display_name: 'Forest Chase' };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResult),
+    });
+
+    const result = await updateEncounterDisplayName('enc-1', 'Forest Chase');
+    expect(result).toEqual(mockResult);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/enc-1/display-name');
+    expect(options.method).toBe('PATCH');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(options.body)).toEqual({ display_name: 'Forest Chase' });
+  });
+
+  it('passes empty string through unchanged so the backend clears the override', async () => {
+    const mockResult = { id: 'enc-1', name: 'Goblin Ambush', display_name: null };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResult),
+    });
+
+    const result = await updateEncounterDisplayName('enc-1', '');
+    expect(result).toEqual(mockResult);
+
+    const [, options] = fetch.mock.calls[0];
+    expect(JSON.parse(options.body)).toEqual({ display_name: '' });
+  });
+
+  it('throws on non-ok response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve('boom'),
+    });
+
+    await expect(updateEncounterDisplayName('enc-1', 'x')).rejects.toThrow('boom');
   });
 });
 

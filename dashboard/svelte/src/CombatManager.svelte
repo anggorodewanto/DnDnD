@@ -11,6 +11,7 @@
     overrideCombatantConditions as dmOverrideConditions,
     overrideCombatantInitiative,
     overrideCharacterSpellSlots,
+    updateEncounterDisplayName,
   } from './lib/api.js';
   import {
     applyDamage,
@@ -37,6 +38,7 @@
   import ActionResolver from './ActionResolver.svelte';
   import ActiveReactionsPanel from './ActiveReactionsPanel.svelte';
   import ActionLogViewer from './ActionLogViewer.svelte';
+  import DisplayNameEditor from './DisplayNameEditor.svelte';
 
   let { campaignId } = $props();
 
@@ -156,6 +158,21 @@
   let dmOverrideInitiativeOrder = $state(0);
   let dmOverrideSpellSlotsText = $state('{}');
   let dmUndoReason = $state('');
+
+  // Phase 105c — DM edits the player-facing display name for the active
+  // encounter. Persists via PATCH /api/combat/{id}/display-name, then patches
+  // local state so the header, tabs and overview refresh immediately without
+  // a full workspace reload. Empty string clears the override so the label
+  // falls back to the internal name.
+  async function handleDisplayNameCommit(newName) {
+    if (!activeEncounter) return;
+    const idx = activeEncounterIndex;
+    const updated = await updateEncounterDisplayName(activeEncounter.id, newName);
+    const nextDisplayName = updated?.display_name ?? (newName === '' ? null : newName);
+    const enc = encounters[idx];
+    if (!enc) return;
+    encounters[idx] = { ...enc, display_name: nextDisplayName };
+  }
 
   async function handleUndoLastAction() {
     if (!activeEncounter) return;
@@ -885,6 +902,20 @@
           {/if}
         </button>
       {/each}
+    </div>
+  {/if}
+
+  <!-- Phase 105c — Inline display-name editor for the active encounter.
+       Shown directly below the tabs so the DM can rename the player-facing
+       label without leaving combat. Commits via PATCH /api/combat/{id}/display-name. -->
+  {#if activeEncounter}
+    <div class="encounter-header" data-testid="encounter-header">
+      <DisplayNameEditor
+        value={activeEncounter.display_name || ''}
+        fallback={activeEncounter.name}
+        onCommit={handleDisplayNameCommit}
+        label="Player-facing Name"
+      />
     </div>
   {/if}
 

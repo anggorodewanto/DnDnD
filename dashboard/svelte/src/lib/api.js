@@ -430,6 +430,23 @@ export async function getCombatWorkspace(campaignId) {
 }
 
 /**
+ * Update the player-facing display name of an encounter.
+ * Passing an empty string clears the override so the label falls back
+ * to the encounter's internal name.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} name - New display name, or '' to clear.
+ * @returns {Promise<object>} Updated encounter response.
+ */
+export async function updateEncounterDisplayName(encounterId, name) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/display-name`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ display_name: name }),
+  });
+  return res.json();
+}
+
+/**
  * Update a combatant's HP.
  * @param {string} encounterId - Encounter UUID.
  * @param {string} combatantId - Combatant UUID.
