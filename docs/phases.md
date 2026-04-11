@@ -674,7 +674,7 @@
   - Depends on: Phase 106a
   - Done when: All remaining event types post correct structured messages, whisper replies delivered as DMs, all event types covered.
 
-- [ ] **Phase 106c: `/reaction` Discord Handler — Wire to DM Notification System**
+- [x] **Phase 106c: `/reaction` Discord Handler — Wire to DM Notification System**
   - Scope: Build the `/reaction declare` Discord slash-command handler so reaction declarations route through `dmqueue.Notifier.Post` with `KindReactionDeclaration`. Handler validates the player has an unused reaction this round, persists the declaration to `reaction_declarations`, and posts the structured `#dm-queue` message. Cancel path edits the message via `Notifier.Cancel` if the player rescinds before the trigger fires.
   - Depends on: Phase 106a, Phase 14
   - Done when: `/reaction declare` posts a structured `KindReactionDeclaration` message to `#dm-queue`, resolve link opens the dashboard item, cancel path edits the original message with strikethrough.
