@@ -11,18 +11,17 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// userEncounterResolver is the interface the Phase 105 handlers share for
-// resolving the active encounter a Discord user is currently a combatant in.
-// A single concrete implementation (discordUserEncounterResolver) satisfies
-// all per-handler provider interfaces structurally.
+// userEncounterResolver is the shared per-user encounter-lookup interface
+// injected into every Phase 105 slash-command handler. A single concrete
+// implementation (discordUserEncounterResolver) satisfies all per-handler
+// provider interfaces structurally.
 type userEncounterResolver interface {
 	ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
 }
 
 // discordHandlerDeps bundles the collaborators needed to construct every
-// Phase 105 slash-command handler in one place. Fields that are optional in
-// any given handler can be left nil — the constructors tolerate it and the
-// matching Set* wiring is applied later in run().
+// Phase 105 slash-command handler in one place. Optional fields may be nil —
+// constructors tolerate it and Set* wiring is applied later in run().
 type discordHandlerDeps struct {
 	session                  discord.Session
 	queries                  *refdata.Queries
@@ -51,15 +50,17 @@ type discordHandlers struct {
 }
 
 // buildDiscordHandlers constructs every Phase 105 handler with the shared
-// user-aware encounter resolver injected. Optional collaborators that depend
-// on adapters not yet wired in main.go (turn advancer, DM notifiers,
-// map regenerator, character lookups) are attached via Set* helpers or left
-// nil — each handler is defensive about nil.
+// user-aware encounter resolver injected. Optional collaborators (turn
+// advancer, DM notifiers, map regenerator, character lookups) are either
+// attached via Set* helpers or left nil — each handler is defensive about nil.
 //
 // The returned enemyTurnNotifier already has SetEncounterLookup called so
 // NotifyEnemyTurnExecuted produces the Phase 105 "⚔️ <display_name> — Round N"
 // label in production instead of an empty fallback.
 func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
+	// Keep the `if deps.queries != nil` guard: assigning a typed-nil
+	// *refdata.Queries into these interface variables would produce a
+	// non-nil interface holding a nil pointer, which handlers cannot detect.
 	var (
 		moveSvc     discord.MoveService
 		turnSvc     discord.MoveTurnProvider
@@ -67,10 +68,10 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		campaignSvc discord.CampaignProvider
 	)
 	if deps.queries != nil {
-		turnSvc = deps.queries
-		mapSvc = newMapProviderAdapter(deps.queries)
-		campaignSvc = deps.queries
 		moveSvc = newMoveServiceAdapter(deps.queries)
+		mapSvc = newMapProviderAdapter(deps.queries)
+		turnSvc = deps.queries
+		campaignSvc = deps.queries
 	}
 
 	characterLookup := newCharacterByDiscordAdapter(deps.queries)
@@ -117,22 +118,13 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			nil,
 			nil,
 		),
-		summon: discord.NewSummonCommandHandler(deps.session, summonSvc),
-		recap:  discord.NewRecapHandler(deps.session, recapSvc, deps.resolver, newRecapPlayerLookupAdapter(combatantLookup)),
-		enemyTurnNotifier: discord.NewDiscordEnemyTurnNotifier(
-			deps.session,
-			deps.campaignSettings,
-			deps.mapRegenerator,
-		),
+		summon:            discord.NewSummonCommandHandler(deps.session, summonSvc),
+		recap:             discord.NewRecapHandler(deps.session, recapSvc, deps.resolver, newRecapPlayerLookupAdapter(combatantLookup)),
+		enemyTurnNotifier: discord.NewDiscordEnemyTurnNotifier(deps.session, deps.campaignSettings, deps.mapRegenerator),
 	}
 
-	// Phase 105b: inject the per-user encounter provider into handlers that
-	// use setter-based wiring rather than constructor injection.
+	// Setter-based wiring for handlers that don't accept these via constructor.
 	handlers.summon.SetEncounterProvider(deps.resolver)
-
-	// Phase 105b: wire the encounter lookup so NotifyEnemyTurnExecuted
-	// produces the "⚔️ <display_name> — Round N" label in production instead
-	// of the empty fallback left by Phase 105.
 	if deps.enemyTurnEncounterLookup != nil {
 		handlers.enemyTurnNotifier.SetEncounterLookup(deps.enemyTurnEncounterLookup)
 	}
@@ -140,13 +132,28 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	return handlers
 }
 
-// --- Thin adapters bridging refdata.Queries / combat.Service to the handler
-// interfaces ---
+// attachPhase105Handlers registers every Phase 105 slash-command handler from
+// the given set on the router. Kept as a standalone helper so main.go doesn't
+// grow a long setter chain each time a new handler is wired.
+func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
+	r.SetMoveHandler(set.move)
+	r.SetFlyHandler(set.fly)
+	r.SetDistanceHandler(set.distance)
+	r.SetDoneHandler(set.done)
+	r.SetCheckHandler(set.check)
+	r.SetSaveHandler(set.save)
+	r.SetRestHandler(set.rest)
+	r.SetSummonCommandHandler(set.summon)
+	r.SetRecapHandler(set.recap)
+}
 
-// moveServiceAdapter satisfies discord.MoveService over *refdata.Queries.
-// The sqlc-generated UpdateCombatantPosition takes a params struct while the
-// handler interface takes positional args, so we unpack here. Same story for
-// UpdateCombatantConditions.
+// --- Thin adapters bridging refdata.Queries / combat.Service to the handler
+// interfaces. Each new* constructor returns nil when its backing queries /
+// service are nil so buildDiscordHandlers can skip typed-nil interface traps. ---
+
+// moveServiceAdapter satisfies discord.MoveService over *refdata.Queries,
+// unpacking the positional UpdateCombatantPosition signature into the
+// sqlc-generated params struct.
 type moveServiceAdapter struct {
 	queries *refdata.Queries
 }
@@ -183,9 +190,8 @@ func (a *moveServiceAdapter) UpdateCombatantConditions(ctx context.Context, arg 
 	return a.queries.UpdateCombatantConditions(ctx, arg)
 }
 
-// mapProviderAdapter satisfies discord.MoveMapProvider. refdata.Queries
-// doesn't expose a GetByID(uuid) map lookup directly; we delegate to
-// GetMap which returns a refdata.Map for a given ID.
+// mapProviderAdapter satisfies discord.MoveMapProvider. Refdata exposes the
+// lookup as GetMapByID; we rename it to the GetByID shape the interface wants.
 type mapProviderAdapter struct {
 	queries *refdata.Queries
 }
@@ -200,7 +206,6 @@ func newMapProviderAdapter(q *refdata.Queries) *mapProviderAdapter {
 func (a *mapProviderAdapter) GetByID(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
 	return a.queries.GetMapByID(ctx, id)
 }
-
 
 // characterByDiscordAdapter chains GetPlayerCharacterByDiscordUser with
 // GetCharacter so handlers can look up a character by (campaignID, discordUserID)
@@ -228,7 +233,9 @@ func (a *characterByDiscordAdapter) GetCharacterByCampaignAndDiscord(ctx context
 }
 
 // combatantByDiscordAdapter resolves a Discord user to their combatant in a
-// specific encounter by chaining the player_character and combatants tables.
+// specific encounter by chaining player_character and combatants, and also
+// satisfies CheckCombatantLookup via ListCombatantsByEncounterID. One struct
+// covers both /check and /summon lookups.
 type combatantByDiscordAdapter struct {
 	queries *refdata.Queries
 }
@@ -240,15 +247,12 @@ func newCombatantByDiscordAdapter(q *refdata.Queries) *combatantByDiscordAdapter
 	return &combatantByDiscordAdapter{queries: q}
 }
 
-// GetCombatantIDByDiscordUser returns (combatantID, displayName, error) for
-// the SummonCommandPlayerLookup contract.
-// ListCombatantsByEncounterID satisfies CheckCombatantLookup by delegating to
-// the underlying queries. We attach it to this adapter so the same struct
-// can cover both /check and /summon lookups in Phase 105b wiring.
 func (a *combatantByDiscordAdapter) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
 	return a.queries.ListCombatantsByEncounterID(ctx, encounterID)
 }
 
+// GetCombatantIDByDiscordUser returns (combatantID, displayName, error) for
+// the SummonCommandPlayerLookup contract.
 func (a *combatantByDiscordAdapter) GetCombatantIDByDiscordUser(ctx context.Context, encounterID uuid.UUID, discordUserID string) (uuid.UUID, string, error) {
 	enc, err := a.queries.GetEncounter(ctx, encounterID)
 	if err != nil {
@@ -293,9 +297,8 @@ func (a *recapPlayerLookupAdapter) GetCombatantIDByDiscordUser(ctx context.Conte
 }
 
 // recapServiceAdapter bridges refdata + combat.Service to the RecapService
-// interface. The sqlc-generated GetLastCompletedTurnByCombatant takes a
-// params struct, so we adapt to the positional (encounterID, combatantID)
-// signature the handler expects.
+// interface, unpacking the positional GetLastCompletedTurnByCombatant call
+// into the sqlc params struct.
 type recapServiceAdapter struct {
 	queries *refdata.Queries
 	combat  *combat.Service
@@ -327,8 +330,7 @@ func (a *recapServiceAdapter) GetLastCompletedTurnByCombatant(ctx context.Contex
 	})
 }
 
-// restCharUpdaterAdapter satisfies RestCharacterUpdater by delegating to
-// *refdata.Queries.UpdateCharacter.
+// restCharUpdaterAdapter satisfies RestCharacterUpdater over *refdata.Queries.
 type restCharUpdaterAdapter struct {
 	queries *refdata.Queries
 }
@@ -345,8 +347,8 @@ func (a *restCharUpdaterAdapter) UpdateCharacter(ctx context.Context, arg refdat
 }
 
 // checkCampaignProviderAdapter implements CheckCampaignProvider over
-// *refdata.Queries. Separate from CampaignProvider only so we can return nil
-// when queries is nil, preventing typed-nil interface traps in constructors.
+// *refdata.Queries. Separate from CampaignProvider only so the constructor
+// can return a nil *struct (not a typed-nil interface) when queries is nil.
 type checkCampaignProviderAdapter struct {
 	queries *refdata.Queries
 }
@@ -364,8 +366,7 @@ func (a *checkCampaignProviderAdapter) GetCampaignByGuildID(ctx context.Context,
 
 // sqlNoRowsLike returns a sentinel error for "combatant not found" lookups
 // that didn't hit a driver-level ErrNoRows but semantically represent a miss.
-// We construct a fresh error so callers can use errors.Is sparingly — the
-// handlers treat any error as "not in combat / not registered" anyway.
+// Handlers treat any error as "not in combat / not registered" anyway.
 func sqlNoRowsLike() error {
 	return &combatantNotFoundError{}
 }
