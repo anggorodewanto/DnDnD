@@ -233,15 +233,10 @@ func (h *WorkspaceHandler) buildEncounterResponse(ctx context.Context, enc refda
 		}
 	}
 
-	displayName := enc.Name
-	if enc.DisplayName.Valid && enc.DisplayName.String != "" {
-		displayName = enc.DisplayName.String
-	}
-
 	return workspaceEncounterResponse{
 		ID:                      enc.ID.String(),
 		Name:                    enc.Name,
-		DisplayName:             displayName,
+		DisplayName:             EncounterDisplayName(enc),
 		Status:                  enc.Status,
 		RoundNumber:             enc.RoundNumber,
 		Combatants:              combResp,

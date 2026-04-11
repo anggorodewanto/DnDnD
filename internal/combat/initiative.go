@@ -184,6 +184,12 @@ func FormatEncounterLabel(encounterDisplayName string, roundNumber int32) string
 	return fmt.Sprintf("\u2694\ufe0f %s \u2014 Round %d", encounterDisplayName, roundNumber)
 }
 
+// EncounterLabel is the convenience form of FormatEncounterLabel that pulls
+// display name and round number straight off a refdata.Encounter.
+func EncounterLabel(enc refdata.Encounter) string {
+	return FormatEncounterLabel(EncounterDisplayName(enc), enc.RoundNumber)
+}
+
 // formatCombatantLine formats a single combatant line: NPCs show name only, PCs show HP.
 func formatCombatantLine(c refdata.Combatant) string {
 	if c.IsNpc {

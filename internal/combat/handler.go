@@ -169,15 +169,11 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // toEncounterResponse converts a refdata.Encounter to its JSON response representation.
 func toEncounterResponse(enc refdata.Encounter) encounterResponse {
-	displayName := enc.Name
-	if enc.DisplayName.Valid && enc.DisplayName.String != "" {
-		displayName = enc.DisplayName.String
-	}
 	return encounterResponse{
 		ID:          enc.ID.String(),
 		CampaignID:  enc.CampaignID.String(),
 		Name:        enc.Name,
-		DisplayName: displayName,
+		DisplayName: EncounterDisplayName(enc),
 		Status:      enc.Status,
 		RoundNumber: enc.RoundNumber,
 	}

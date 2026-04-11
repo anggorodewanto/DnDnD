@@ -79,5 +79,5 @@ func (n *DiscordEnemyTurnNotifier) encounterLabel(ctx context.Context, encounter
 	if err != nil {
 		return ""
 	}
-	return combat.FormatEncounterLabel(combat.EncounterDisplayName(enc), enc.RoundNumber)
+	return combat.EncounterLabel(enc)
 }
