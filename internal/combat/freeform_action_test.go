@@ -11,8 +11,47 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+// fakeDMNotifier is a test double for dmqueue.Notifier capturing Post / Cancel
+// / Resolve invocations so the freeform-action service refactor can be
+// asserted without spinning up Discord or PostgreSQL.
+type fakeDMNotifier struct {
+	posts   []dmqueue.Event
+	cancels []string
+	resolves []string
+	postID  string
+	postErr error
+	cancelErr error
+}
+
+func (f *fakeDMNotifier) Post(_ context.Context, e dmqueue.Event) (string, error) {
+	f.posts = append(f.posts, e)
+	if f.postErr != nil {
+		return "", f.postErr
+	}
+	id := f.postID
+	if id == "" {
+		id = "fake-item-id"
+	}
+	return id, nil
+}
+
+func (f *fakeDMNotifier) Cancel(_ context.Context, itemID, _ string) error {
+	f.cancels = append(f.cancels, itemID)
+	return f.cancelErr
+}
+
+func (f *fakeDMNotifier) Resolve(_ context.Context, itemID, _ string) error {
+	f.resolves = append(f.resolves, itemID)
+	return nil
+}
+
+func (f *fakeDMNotifier) Get(string) (dmqueue.Item, bool)  { return dmqueue.Item{}, false }
+func (f *fakeDMNotifier) ListPending() []dmqueue.Item       { return nil }
+
 
 func TestFreeformAction_HappyPath(t *testing.T) {
 	_, combatantID, _, ms := makeStdTestSetup()
@@ -376,3 +415,97 @@ func TestCancelFreeformAction_DMQueueEditFormat(t *testing.T) {
 	// Exact format from spec
 	assert.Equal(t, `~~🎭 Action — Thorn: "flip the table"~~ Cancelled by player`, result.DMQueueEditMessage)
 }
+
+// --- Notifier integration (Phase 106a) ---
+
+func TestFreeformAction_DispatchesToNotifierWhenWired(t *testing.T) {
+	_, combatantID, _, ms := makeStdTestSetup()
+	encounterID := uuid.New()
+
+	combatant := makeNPCCombatant(combatantID, encounterID, "Thorn")
+	turn := makeBasicTurn()
+	turn.EncounterID = encounterID
+	turn.CombatantID = combatantID
+
+	var capturedParams refdata.CreatePendingActionParams
+	ms.createPendingActionFn = func(_ context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error) {
+		capturedParams = arg
+		return refdata.PendingAction{
+			ID:          uuid.New(),
+			EncounterID: arg.EncounterID,
+			CombatantID: arg.CombatantID,
+			ActionText:  arg.ActionText,
+			Status:      "pending",
+		}, nil
+	}
+
+	notifier := &fakeDMNotifier{postID: "11111111-2222-3333-4444-555555555555"}
+	svc := NewService(ms)
+	svc.SetDMNotifier(notifier)
+
+	result, err := svc.FreeformAction(context.Background(), FreeformActionCommand{
+		Combatant:  combatant,
+		Turn:       turn,
+		ActionText: "flip the table",
+		GuildID:    "g1",
+		CampaignID: uuid.New().String(),
+	})
+	require.NoError(t, err)
+
+	require.Len(t, notifier.posts, 1)
+	posted := notifier.posts[0]
+	assert.Equal(t, dmqueue.KindFreeformAction, posted.Kind)
+	assert.Equal(t, "Thorn", posted.PlayerName)
+	assert.Contains(t, posted.Summary, "flip the table")
+	assert.Equal(t, "g1", posted.GuildID)
+
+	// CreatePendingAction should be called with the dm_queue_item_id linked.
+	assert.True(t, capturedParams.DmQueueItemID.Valid, "expected dm_queue_item_id to be wired into pending_action")
+	assert.Equal(t, notifier.postID, capturedParams.DmQueueItemID.UUID.String())
+
+	// DMQueueMessage stays populated for the discord handler caller.
+	assert.Contains(t, result.DMQueueMessage, "Thorn")
+}
+
+func TestCancelFreeformAction_DispatchesCancelToNotifier(t *testing.T) {
+	_, combatantID, _, ms := makeStdTestSetup()
+	encounterID := uuid.New()
+	dmItemID := uuid.New()
+
+	combatant := makeNPCCombatant(combatantID, encounterID, "Thorn")
+	turn := makeBasicTurn()
+	turn.ActionUsed = true
+
+	ms.getPendingActionByCombatantFn = func(_ context.Context, cid uuid.UUID) (refdata.PendingAction, error) {
+		return refdata.PendingAction{
+			ID:            uuid.New(),
+			EncounterID:   encounterID,
+			CombatantID:   cid,
+			ActionText:    "flip the table",
+			Status:        "pending",
+			DmQueueItemID: uuid.NullUUID{UUID: dmItemID, Valid: true},
+		}, nil
+	}
+	ms.updatePendingActionStatusFn = func(_ context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
+		return refdata.PendingAction{
+			ID:         arg.ID,
+			Status:     arg.Status,
+			ActionText: "flip the table",
+		}, nil
+	}
+
+	notifier := &fakeDMNotifier{}
+	svc := NewService(ms)
+	svc.SetDMNotifier(notifier)
+
+	result, err := svc.CancelFreeformAction(context.Background(), CancelFreeformActionCommand{
+		Combatant: combatant,
+		Turn:      turn,
+	})
+	require.NoError(t, err)
+	require.Len(t, notifier.cancels, 1)
+	assert.Equal(t, dmItemID.String(), notifier.cancels[0])
+	// DMQueueEditMessage still produced for legacy callers.
+	assert.Contains(t, result.DMQueueEditMessage, "Cancelled by player")
+}
+

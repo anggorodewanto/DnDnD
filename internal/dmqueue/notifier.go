@@ -3,9 +3,6 @@ package dmqueue
 import (
 	"context"
 	"errors"
-	"sync"
-
-	"github.com/google/uuid"
 )
 
 // Status of a dm-queue item.
@@ -56,39 +53,43 @@ type Notifier interface {
 	ListPending() []Item
 }
 
-// DefaultNotifier is an in-memory Notifier implementation suitable for
-// single-process deployments. Persistence across restarts is out of
-// scope for Phase 106a; upgrade to a DB-backed store if/when needed.
+// DefaultNotifier is the standard Notifier implementation. It composes a
+// Store (in-memory or DB-backed) with a Sender, ChannelResolver, and
+// ResolvePathBuilder. Construct it with NewNotifier (in-memory default) or
+// NewNotifierWithStore (caller-provided Store, e.g. PgStore).
 type DefaultNotifier struct {
 	sender   Sender
 	resolver ChannelResolver
 	pathBldr ResolvePathBuilder
-
-	mu    sync.Mutex
-	items map[string]*Item
-	order []string
+	store    Store
 }
 
-// NewNotifier constructs a DefaultNotifier.
+// NewNotifier constructs a DefaultNotifier backed by an in-memory store.
+// Use NewNotifierWithStore for production where persistence is required.
 func NewNotifier(sender Sender, resolver ChannelResolver, pathBldr ResolvePathBuilder) *DefaultNotifier {
+	return NewNotifierWithStore(sender, resolver, pathBldr, NewMemoryStore())
+}
+
+// NewNotifierWithStore constructs a DefaultNotifier with the given Store.
+func NewNotifierWithStore(sender Sender, resolver ChannelResolver, pathBldr ResolvePathBuilder, store Store) *DefaultNotifier {
 	return &DefaultNotifier{
 		sender:   sender,
 		resolver: resolver,
 		pathBldr: pathBldr,
-		items:    make(map[string]*Item),
+		store:    store,
 	}
 }
 
 // Post formats an Event, sends it to the guild's #dm-queue, and persists
 // an Item record. If no channel is configured for the guild, returns
 // ("", nil) — treat as a silent no-op.
-func (n *DefaultNotifier) Post(_ context.Context, e Event) (string, error) {
+func (n *DefaultNotifier) Post(ctx context.Context, e Event) (string, error) {
 	channelID := n.resolver(e.GuildID)
 	if channelID == "" {
 		return "", nil
 	}
 
-	itemID := uuid.NewString()
+	itemID := NewItemID()
 	e.ResolvePath = n.pathBldr(itemID)
 	content := FormatEvent(e)
 
@@ -97,77 +98,62 @@ func (n *DefaultNotifier) Post(_ context.Context, e Event) (string, error) {
 		return "", err
 	}
 
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.items[itemID] = &Item{
-		ID:         itemID,
-		Event:      e,
-		ChannelID:  channelID,
-		MessageID:  msgID,
-		PostedText: content,
-		Status:     StatusPending,
+	if _, err := n.store.Insert(ctx, itemID, e, channelID, msgID, content); err != nil {
+		return "", err
 	}
-	n.order = append(n.order, itemID)
 	return itemID, nil
 }
 
 // Cancel marks a pending item as cancelled and edits the Discord message
 // with a strike-through "Cancelled by player" suffix.
-func (n *DefaultNotifier) Cancel(_ context.Context, itemID, _ string) error {
-	n.mu.Lock()
-	item, ok := n.items[itemID]
+func (n *DefaultNotifier) Cancel(ctx context.Context, itemID, reason string) error {
+	item, ok, err := n.store.Get(ctx, itemID)
+	if err != nil {
+		return err
+	}
 	if !ok {
-		n.mu.Unlock()
 		return ErrItemNotFound
 	}
+	if _, err := n.store.MarkCancelled(ctx, itemID, reason); err != nil {
+		return err
+	}
 	content := FormatCancelled(item.PostedText)
-	item.Status = StatusCancelled
-	channelID, msgID := item.ChannelID, item.MessageID
-	n.mu.Unlock()
-
-	return n.sender.Edit(channelID, msgID, content)
+	return n.sender.Edit(item.ChannelID, item.MessageID, content)
 }
 
 // Resolve marks a pending item as resolved and edits the Discord message
-// with a ✅ prefix and the outcome summary.
-func (n *DefaultNotifier) Resolve(_ context.Context, itemID, outcome string) error {
-	n.mu.Lock()
-	item, ok := n.items[itemID]
+// with a checkmark prefix and the outcome summary.
+func (n *DefaultNotifier) Resolve(ctx context.Context, itemID, outcome string) error {
+	item, ok, err := n.store.Get(ctx, itemID)
+	if err != nil {
+		return err
+	}
 	if !ok {
-		n.mu.Unlock()
 		return ErrItemNotFound
 	}
+	if _, err := n.store.MarkResolved(ctx, itemID, outcome); err != nil {
+		return err
+	}
 	content := FormatResolved(item.PostedText, outcome)
-	item.Status = StatusResolved
-	item.Outcome = outcome
-	channelID, msgID := item.ChannelID, item.MessageID
-	n.mu.Unlock()
-
-	return n.sender.Edit(channelID, msgID, content)
+	return n.sender.Edit(item.ChannelID, item.MessageID, content)
 }
 
-// Get returns a copy of the item by ID.
+// Get returns a copy of the item by ID. The store is consulted with a
+// background context; callers needing cancellation should use the store
+// directly.
 func (n *DefaultNotifier) Get(itemID string) (Item, bool) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	item, ok := n.items[itemID]
-	if !ok {
+	item, ok, err := n.store.Get(context.Background(), itemID)
+	if err != nil {
 		return Item{}, false
 	}
-	return *item, true
+	return item, ok
 }
 
 // ListPending returns all items currently in pending status, in post order.
 func (n *DefaultNotifier) ListPending() []Item {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	var out []Item
-	for _, id := range n.order {
-		item := n.items[id]
-		if item.Status != StatusPending {
-			continue
-		}
-		out = append(out, *item)
+	items, err := n.store.ListPending(context.Background())
+	if err != nil {
+		return nil
 	}
-	return out
+	return items
 }

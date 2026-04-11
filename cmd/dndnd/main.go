@@ -25,6 +25,7 @@ import (
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/encounter"
 	"github.com/ab/dndnd/internal/gamemap"
 	"github.com/ab/dndnd/internal/homebrew"
@@ -57,6 +58,26 @@ func (a encounterLookupAdapter) ActiveEncounterIDForCharacter(ctx context.Contex
 		return uuid.Nil, false, err
 	}
 	return encID, true, nil
+}
+
+// newDMQueueChannelResolver returns a closure that resolves a guild ID to
+// the channel ID of its #dm-queue text channel by scanning the live
+// discordgo session state. Phase 106a uses this to drive
+// dmqueue.Notifier.Post — guilds without a #dm-queue channel return "" and
+// notifier posts become silent no-ops.
+func newDMQueueChannelResolver(session discord.Session) func(string) string {
+	return func(guildID string) string {
+		channels, err := session.GuildChannels(guildID)
+		if err != nil {
+			return ""
+		}
+		for _, ch := range channels {
+			if ch.Name == "dm-queue" {
+				return ch.ID
+			}
+		}
+		return ""
+	}
 }
 
 // passthroughMiddleware is a no-op HTTP middleware used by Phase 104b to
@@ -244,6 +265,30 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		combatHandler := combat.NewHandler(combatSvc, dice.NewRoller(nil))
 		combatHandler.RegisterRoutes(router)
 
+		// Phase 106a: DM Notification System wiring. Construct a Notifier
+		// backed by the dm_queue_items PgStore and (when a Discord session is
+		// available) a SessionSender that posts directly via discordgo. The
+		// channel resolver looks up #dm-queue per guild from cached session
+		// state. The notifier is shared by combat freeform actions, the rest
+		// handler, and any future event producer. The dashboard resolver
+		// page is mounted regardless of Discord availability so DMs can still
+		// inspect persisted items in headless deploys.
+		dmQueueStore := dmqueue.NewPgStore(queries)
+		var dmQueueSender dmqueue.Sender
+		dmQueueChannel := func(string) string { return "" }
+		if discordSession != nil {
+			dmQueueSender = dmqueue.NewSessionSender(discordSession)
+			dmQueueChannel = newDMQueueChannelResolver(discordSession)
+		}
+		dmQueueNotifier := dmqueue.NewNotifierWithStore(
+			dmQueueSender,
+			dmQueueChannel,
+			func(itemID string) string { return "/dashboard/queue/" + itemID },
+			dmQueueStore,
+		)
+		combatSvc.SetDMNotifier(dmQueueNotifier)
+		dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, passthroughMiddleware)
+
 		// Phase 104b: Publisher fan-out to non-combat services that can
 		// mutate an active encounter's combatant state mid-combat. The
 		// encounter lookup resolves "which active encounter (if any) is this
@@ -323,6 +368,9 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			})
 			cmdRouter := discord.NewCommandRouter(bot, nil)
 			attachPhase105Handlers(cmdRouter, discordHandlerSet)
+			// Phase 106a: route /rest dm-queue posts through the notifier so
+			// rest requests are persisted and resolvable from the dashboard.
+			discordHandlerSet.rest.SetNotifier(dmQueueNotifier)
 			rawDG.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				cmdRouter.Handle(i.Interaction)
 			})

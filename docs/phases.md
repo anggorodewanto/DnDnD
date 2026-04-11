@@ -665,14 +665,24 @@
   - Done when: DM can edit display name from both Encounter Builder and Combat Workspace header, change is persisted via the PATCH endpoint, and updated label appears in subsequent Discord combat-channel messages.
 
 - [ ] **Phase 106a: DM Notification System — Core Infrastructure & Initial Events (`#dm-queue`)**
-  - Scope: `#dm-queue` structured message framework: player name, context summary, "Resolve ->" link to dashboard. DM-only channel visibility. Resolved items show checkmark + outcome. Initial event types: freeform actions (+ cancel), reaction declarations, rest requests, skill check narration, consumable without effect. Spec lines 2825-2870.
+  - Scope: `#dm-queue` structured message framework: player name, context summary, "Resolve ->" link to dashboard. DM-only channel visibility. Resolved items show checkmark + outcome. Initial event types: freeform actions (+ cancel), rest requests, consumable without effect. Reaction-declaration `/reaction` Discord handler wiring is deferred to Phase 106c; `/check` skill-check narration gating is deferred to Phase 106d. Persistence is via `dm_queue_items` PostgreSQL table. Spec lines 2825-2870.
   - Depends on: Phase 12, Phase 15
-  - Done when: Framework posts structured messages for initial event types, resolve links open dashboard, resolved items marked with checkmark.
+  - Done when: Framework posts structured messages for the in-scope event types, resolve links open dashboard, resolved items marked with checkmark, items persist across restart in `dm_queue_items`.
 
 - [ ] **Phase 106b: DM Notification System — Remaining Events & Whisper Replies**
   - Scope: Remaining event types: enemy turn ready, narrative teleport, player whispers. Whisper replies: DM replies from dashboard, delivered as Discord DMs to the player. Each whisper is standalone (no threaded view). Spec lines 2870-2905.
   - Depends on: Phase 106a
   - Done when: All remaining event types post correct structured messages, whisper replies delivered as DMs, all event types covered.
+
+- [ ] **Phase 106c: `/reaction` Discord Handler — Wire to DM Notification System**
+  - Scope: Build the `/reaction declare` Discord slash-command handler so reaction declarations route through `dmqueue.Notifier.Post` with `KindReactionDeclaration`. Handler validates the player has an unused reaction this round, persists the declaration to `reaction_declarations`, and posts the structured `#dm-queue` message. Cancel path edits the message via `Notifier.Cancel` if the player rescinds before the trigger fires.
+  - Depends on: Phase 106a, Phase 14
+  - Done when: `/reaction declare` posts a structured `KindReactionDeclaration` message to `#dm-queue`, resolve link opens the dashboard item, cancel path edits the original message with strikethrough.
+
+- [ ] **Phase 106d: `/check` Skill-Check Narration Gating**
+  - Scope: Refactor `/check` so DM-narration-required outcomes (per the campaign's narration policy) post a `KindSkillCheckNarration` event to `#dm-queue` instead of (or in addition to) the immediate result reveal. The DM resolves the item from the dashboard with their narration text, which is then surfaced back to the player as a follow-up message. Trivial / auto-resolve checks bypass the queue.
+  - Depends on: Phase 106a, Phase 15
+  - Done when: Gated `/check` rolls produce a `KindSkillCheckNarration` queue item, DM resolution from the dashboard delivers the narration to the player, ungated checks remain unaffected.
 
 - [ ] **Phase 107: `/help` Command System**
   - Scope: `/help` (general command list). `/help [command]` (detailed usage with examples, flags, tips). Class-specific help: `/help rogue`, `/help cleric`, `/help paladin`, `/help ki`, `/help metamagic`, `/help attack`, `/help action`. Context-specific tips (remaining attacks, available slots). All ephemeral. Spec lines 2907-2940.

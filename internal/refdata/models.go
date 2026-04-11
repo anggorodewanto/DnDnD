@@ -211,6 +211,23 @@ type DmPlayerMessage struct {
 	SentAt            time.Time `json:"sent_at"`
 }
 
+type DmQueueItem struct {
+	ID          uuid.UUID       `json:"id"`
+	CampaignID  uuid.UUID       `json:"campaign_id"`
+	GuildID     string          `json:"guild_id"`
+	ChannelID   string          `json:"channel_id"`
+	MessageID   string          `json:"message_id"`
+	Kind        string          `json:"kind"`
+	PlayerName  string          `json:"player_name"`
+	Summary     string          `json:"summary"`
+	ResolvePath string          `json:"resolve_path"`
+	Status      string          `json:"status"`
+	Outcome     string          `json:"outcome"`
+	Extra       json.RawMessage `json:"extra"`
+	CreatedAt   time.Time       `json:"created_at"`
+	ResolvedAt  sql.NullTime    `json:"resolved_at"`
+}
+
 type Encounter struct {
 	ID            uuid.UUID      `json:"id"`
 	CampaignID    uuid.UUID      `json:"campaign_id"`
@@ -354,15 +371,16 @@ type NarrationTemplate struct {
 }
 
 type PendingAction struct {
-	ID               uuid.UUID `json:"id"`
-	EncounterID      uuid.UUID `json:"encounter_id"`
-	CombatantID      uuid.UUID `json:"combatant_id"`
-	ActionText       string    `json:"action_text"`
-	DmQueueMessageID string    `json:"dm_queue_message_id"`
-	DmQueueChannelID string    `json:"dm_queue_channel_id"`
-	Status           string    `json:"status"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID               uuid.UUID     `json:"id"`
+	EncounterID      uuid.UUID     `json:"encounter_id"`
+	CombatantID      uuid.UUID     `json:"combatant_id"`
+	ActionText       string        `json:"action_text"`
+	DmQueueMessageID string        `json:"dm_queue_message_id"`
+	DmQueueChannelID string        `json:"dm_queue_channel_id"`
+	Status           string        `json:"status"`
+	CreatedAt        time.Time     `json:"created_at"`
+	UpdatedAt        time.Time     `json:"updated_at"`
+	DmQueueItemID    uuid.NullUUID `json:"dm_queue_item_id"`
 }
 
 type PendingSafe struct {

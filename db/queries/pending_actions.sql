@@ -1,6 +1,6 @@
 -- name: CreatePendingAction :one
-INSERT INTO pending_actions (encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status)
-VALUES ($1, $2, $3, $4, $5, 'pending')
+INSERT INTO pending_actions (encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, dm_queue_item_id, status)
+VALUES ($1, $2, $3, $4, $5, $6, 'pending')
 RETURNING *;
 
 -- name: GetPendingAction :one

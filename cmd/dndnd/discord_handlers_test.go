@@ -22,7 +22,8 @@ import (
 // buildDiscordHandlers wiring tests. It records the arguments of the calls
 // exercised by the enemy-turn-notifier smoke test and no-ops everything else.
 type testSession struct {
-	sendFunc func(channelID, content string) (*discordgo.Message, error)
+	sendFunc          func(channelID, content string) (*discordgo.Message, error)
+	guildChannelsFunc func(guildID string) ([]*discordgo.Channel, error)
 }
 
 func (t *testSession) UserChannelCreate(recipientID string) (*discordgo.Channel, error) {
@@ -44,7 +45,12 @@ func (t *testSession) ApplicationCommands(appID, guildID string) ([]*discordgo.A
 	return nil, nil
 }
 func (t *testSession) ApplicationCommandDelete(appID, guildID, cmdID string) error { return nil }
-func (t *testSession) GuildChannels(guildID string) ([]*discordgo.Channel, error)  { return nil, nil }
+func (t *testSession) GuildChannels(guildID string) ([]*discordgo.Channel, error) {
+	if t.guildChannelsFunc != nil {
+		return t.guildChannelsFunc(guildID)
+	}
+	return nil, nil
+}
 func (t *testSession) GuildChannelCreateComplex(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
 	return &discordgo.Channel{}, nil
 }

@@ -28,17 +28,18 @@ func (q *Queries) CancelAllPendingActionsByCombatant(ctx context.Context, arg Ca
 }
 
 const createPendingAction = `-- name: CreatePendingAction :one
-INSERT INTO pending_actions (encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status)
-VALUES ($1, $2, $3, $4, $5, 'pending')
-RETURNING id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at
+INSERT INTO pending_actions (encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, dm_queue_item_id, status)
+VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+RETURNING id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at, dm_queue_item_id
 `
 
 type CreatePendingActionParams struct {
-	EncounterID      uuid.UUID `json:"encounter_id"`
-	CombatantID      uuid.UUID `json:"combatant_id"`
-	ActionText       string    `json:"action_text"`
-	DmQueueMessageID string    `json:"dm_queue_message_id"`
-	DmQueueChannelID string    `json:"dm_queue_channel_id"`
+	EncounterID      uuid.UUID     `json:"encounter_id"`
+	CombatantID      uuid.UUID     `json:"combatant_id"`
+	ActionText       string        `json:"action_text"`
+	DmQueueMessageID string        `json:"dm_queue_message_id"`
+	DmQueueChannelID string        `json:"dm_queue_channel_id"`
+	DmQueueItemID    uuid.NullUUID `json:"dm_queue_item_id"`
 }
 
 func (q *Queries) CreatePendingAction(ctx context.Context, arg CreatePendingActionParams) (PendingAction, error) {
@@ -48,6 +49,7 @@ func (q *Queries) CreatePendingAction(ctx context.Context, arg CreatePendingActi
 		arg.ActionText,
 		arg.DmQueueMessageID,
 		arg.DmQueueChannelID,
+		arg.DmQueueItemID,
 	)
 	var i PendingAction
 	err := row.Scan(
@@ -60,12 +62,13 @@ func (q *Queries) CreatePendingAction(ctx context.Context, arg CreatePendingActi
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }
 
 const getPendingAction = `-- name: GetPendingAction :one
-SELECT id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at FROM pending_actions WHERE id = $1
+SELECT id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at, dm_queue_item_id FROM pending_actions WHERE id = $1
 `
 
 func (q *Queries) GetPendingAction(ctx context.Context, id uuid.UUID) (PendingAction, error) {
@@ -81,12 +84,13 @@ func (q *Queries) GetPendingAction(ctx context.Context, id uuid.UUID) (PendingAc
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }
 
 const getPendingActionByCombatant = `-- name: GetPendingActionByCombatant :one
-SELECT id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at FROM pending_actions
+SELECT id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at, dm_queue_item_id FROM pending_actions
 WHERE combatant_id = $1 AND status = 'pending'
 ORDER BY created_at DESC
 LIMIT 1
@@ -105,12 +109,13 @@ func (q *Queries) GetPendingActionByCombatant(ctx context.Context, combatantID u
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }
 
 const listPendingActionsByEncounterID = `-- name: ListPendingActionsByEncounterID :many
-SELECT id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at FROM pending_actions WHERE encounter_id = $1 ORDER BY created_at ASC
+SELECT id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at, dm_queue_item_id FROM pending_actions WHERE encounter_id = $1 ORDER BY created_at ASC
 `
 
 func (q *Queries) ListPendingActionsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]PendingAction, error) {
@@ -132,6 +137,7 @@ func (q *Queries) ListPendingActionsByEncounterID(ctx context.Context, encounter
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DmQueueItemID,
 		); err != nil {
 			return nil, err
 		}
@@ -150,7 +156,7 @@ const updatePendingActionDMQueueMessage = `-- name: UpdatePendingActionDMQueueMe
 UPDATE pending_actions
 SET dm_queue_message_id = $2, dm_queue_channel_id = $3, updated_at = now()
 WHERE id = $1
-RETURNING id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at
+RETURNING id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at, dm_queue_item_id
 `
 
 type UpdatePendingActionDMQueueMessageParams struct {
@@ -172,6 +178,7 @@ func (q *Queries) UpdatePendingActionDMQueueMessage(ctx context.Context, arg Upd
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }
@@ -180,7 +187,7 @@ const updatePendingActionStatus = `-- name: UpdatePendingActionStatus :one
 UPDATE pending_actions
 SET status = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at
+RETURNING id, encounter_id, combatant_id, action_text, dm_queue_message_id, dm_queue_channel_id, status, created_at, updated_at, dm_queue_item_id
 `
 
 type UpdatePendingActionStatusParams struct {
@@ -201,6 +208,7 @@ func (q *Queries) UpdatePendingActionStatus(ctx context.Context, arg UpdatePendi
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }

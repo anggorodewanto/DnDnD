@@ -13,6 +13,7 @@ import (
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -201,11 +202,20 @@ type EncounterPublisher interface {
 	PublishEncounterSnapshot(ctx context.Context, encounterID uuid.UUID) error
 }
 
+// DMNotifier is the minimal subset of dmqueue.Notifier the combat service
+// uses for posting freeform actions and cancelling them. Defined locally to
+// avoid an import-cycle hazard and to keep this file's surface narrow.
+type DMNotifier interface {
+	Post(ctx context.Context, e dmqueue.Event) (string, error)
+	Cancel(ctx context.Context, itemID, reason string) error
+}
+
 // Service manages combat encounters and their entities.
 type Service struct {
 	store             Store
 	summonedResources *SummonedTurnResources
 	publisher         EncounterPublisher
+	dmNotifier        DMNotifier
 }
 
 // NewService creates a new combat Service.
@@ -214,6 +224,14 @@ func NewService(store Store) *Service {
 		store:             store,
 		summonedResources: NewSummonedTurnResources(),
 	}
+}
+
+// SetDMNotifier wires the dm-queue notifier so freeform actions and cancels
+// route through the unified Phase 106a notification framework. A nil
+// notifier disables Notifier dispatch and the legacy DMQueueMessage /
+// DMQueueEditMessage strings stay the only output.
+func (s *Service) SetDMNotifier(n DMNotifier) {
+	s.dmNotifier = n
 }
 
 // SetPublisher wires an EncounterPublisher onto the service. A nil publisher

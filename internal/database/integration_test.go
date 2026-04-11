@@ -70,6 +70,8 @@ func TestIntegration_MigrateDown(t *testing.T) {
 
 	// Roll back migrations from most recent to oldest.
 	for _, name := range []string{
+		"add_dm_queue_item_id_to_pending_actions",
+		"create_dm_queue_items",
 		"dm_player_messages",
 		"narration_templates",
 		"narration_posts",
