@@ -291,6 +291,24 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			logger.Info("startup stale-turn scan complete")
 		}
 
+		// Phase 105b: Construct the per-user encounter resolver and every
+		// Phase 105 slash-command handler. The resolver walks
+		// guild -> campaign -> player_character -> character ->
+		// active encounter so /move, /fly, /distance, /done, /check, /save,
+		// /rest, /command (summon), and /recap are all routed to the
+		// invoker's own encounter when two simultaneous encounters share a
+		// channel. The notifier's encounter lookup is wired here too so
+		// NotifyEnemyTurnExecuted produces the "⚔️ <display_name> — Round N"
+		// label in production.
+		discordHandlerSet := buildDiscordHandlers(discordHandlerDeps{
+			session:                  discordSession,
+			queries:                  queries,
+			combatService:            combatSvc,
+			roller:                   dice.NewRoller(nil),
+			resolver:                 newDiscordUserEncounterResolver(queries),
+			enemyTurnEncounterLookup: combatSvc,
+		})
+
 		// Step 4 — Open the Discord gateway. Only after recovery.
 		if rawDG != nil {
 			if err := rawDG.Open(); err != nil {
@@ -305,6 +323,25 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			// must always reconcile its command set on startup.
 			appID := os.Getenv("DISCORD_APPLICATION_ID")
 			bot := discord.NewBot(discordSession, appID, logger)
+
+			// Phase 105b: construct the CommandRouter with every Phase 105
+			// handler attached, then register it as the discordgo
+			// InteractionCreate callback so slash commands and component
+			// callbacks flow through the per-user routing path in production.
+			cmdRouter := discord.NewCommandRouter(bot, nil)
+			cmdRouter.SetMoveHandler(discordHandlerSet.move)
+			cmdRouter.SetFlyHandler(discordHandlerSet.fly)
+			cmdRouter.SetDistanceHandler(discordHandlerSet.distance)
+			cmdRouter.SetDoneHandler(discordHandlerSet.done)
+			cmdRouter.SetCheckHandler(discordHandlerSet.check)
+			cmdRouter.SetSaveHandler(discordHandlerSet.save)
+			cmdRouter.SetRestHandler(discordHandlerSet.rest)
+			cmdRouter.SetSummonCommandHandler(discordHandlerSet.summon)
+			cmdRouter.SetRecapHandler(discordHandlerSet.recap)
+			rawDG.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+				cmdRouter.Handle(i.Interaction)
+			})
+
 			if state := discordSession.GetState(); state != nil {
 				guildIDs := make([]string, 0, len(state.Guilds))
 				for _, g := range state.Guilds {
@@ -315,6 +352,8 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 				}
 			}
 		}
+
+		_ = discordHandlerSet // unused when gateway is nil (Discord optional)
 
 		// Step 6 — Start the periodic timer ticker. This runs LAST so that
 		// the ticker-driven poll loop cannot fire while we are still
