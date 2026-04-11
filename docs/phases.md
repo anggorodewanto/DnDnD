@@ -684,6 +684,16 @@
   - Depends on: Phase 106a, Phase 15
   - Done when: Gated `/check` rolls produce a `KindSkillCheckNarration` queue item, DM resolution from the dashboard delivers the narration to the player, ungated checks remain unaffected.
 
+- [ ] **Phase 106e: `/use` Handler Runtime Wiring for DM Notification System**
+  - Scope: Construct `discord.UseHandler` in `cmd/dndnd/main.go` (mirroring the Phase 105b handler-set wiring pattern), register it with `cmdRouter`, and invoke `UseHandler.SetNotifier(...)` with the pg-backed `dmqueue.DefaultNotifier` already built in main. Phase 106a introduced `SetNotifier` on `UseHandler` and the consumable posting path, but `UseHandler` itself is still only constructed in unit tests, so `/use` consumables do not post to `#dm-queue` at runtime.
+  - Depends on: Phase 106a
+  - Done when: `/use` for a consumable-without-effect item posts a structured `KindConsumable` message to `#dm-queue` in a live environment, resolves from the dashboard, and the existing `UseHandler` test suite still passes.
+
+- [ ] **Phase 106f: DM-Queue Dashboard Auth Middleware**
+  - Scope: Replace the `passthroughMiddleware` currently protecting `RegisterDMQueueRoutes` (added in Phase 106a to match the inventory API mount) with the real DM-auth middleware once it lands. Ensure `ServeItem` and `HandleResolve` reject unauthenticated requests with 401/redirect per the rest of the dashboard.
+  - Depends on: Phase 106a, DM dashboard auth middleware (tracked separately)
+  - Done when: Unauthenticated requests to `/dashboard/queue/{id}` and its resolve POST are rejected, authenticated DM sessions work end-to-end, and `hasAuthUser` is no longer a no-op on this route.
+
 - [ ] **Phase 107: `/help` Command System**
   - Scope: `/help` (general command list). `/help [command]` (detailed usage with examples, flags, tips). Class-specific help: `/help rogue`, `/help cleric`, `/help paladin`, `/help ki`, `/help metamagic`, `/help attack`, `/help action`. Context-specific tips (remaining attacks, available slots). All ephemeral. Spec lines 2907-2940.
   - Depends on: Phase 13
