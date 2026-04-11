@@ -175,6 +175,15 @@ func EncounterDisplayName(encounter refdata.Encounter) string {
 	return encounter.Name
 }
 
+// FormatEncounterLabel produces the Phase 105 prefix line used at the top of
+// bot messages posted into shared combat channels, so players can tell which
+// simultaneous encounter the message belongs to.
+//
+// Example output: "\u2694\ufe0f Rooftop Ambush \u2014 Round 3"
+func FormatEncounterLabel(encounterDisplayName string, roundNumber int32) string {
+	return fmt.Sprintf("\u2694\ufe0f %s \u2014 Round %d", encounterDisplayName, roundNumber)
+}
+
 // formatCombatantLine formats a single combatant line: NPCs show name only, PCs show HP.
 func formatCombatantLine(c refdata.Combatant) string {
 	if c.IsNpc {

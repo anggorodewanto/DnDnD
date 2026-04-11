@@ -32,6 +32,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/characters", h.ListCharacters)
 		r.Post("/{encounterID}/end", h.EndCombat)
 		r.Get("/{encounterID}/hostiles-defeated", h.CheckHostilesDefeated)
+		r.Patch("/{encounterID}/display-name", h.UpdateEncounterDisplayName)
 
 		// Reaction declarations
 		r.Post("/{encounterID}/reactions", h.DeclareReaction)
@@ -86,6 +87,7 @@ type encounterResponse struct {
 	ID          string `json:"id"`
 	CampaignID  string `json:"campaign_id"`
 	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
 	Status      string `json:"status"`
 	RoundNumber int32  `json:"round_number"`
 }
@@ -167,10 +169,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // toEncounterResponse converts a refdata.Encounter to its JSON response representation.
 func toEncounterResponse(enc refdata.Encounter) encounterResponse {
+	displayName := enc.Name
+	if enc.DisplayName.Valid && enc.DisplayName.String != "" {
+		displayName = enc.DisplayName.String
+	}
 	return encounterResponse{
 		ID:          enc.ID.String(),
 		CampaignID:  enc.CampaignID.String(),
 		Name:        enc.Name,
+		DisplayName: displayName,
 		Status:      enc.Status,
 		RoundNumber: enc.RoundNumber,
 	}
@@ -290,6 +297,38 @@ func (h *Handler) ListCharacters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// updateDisplayNameRequest is the JSON body for PATCH /api/combat/{encounterID}/display-name.
+type updateDisplayNameRequest struct {
+	DisplayName string `json:"display_name"`
+}
+
+// UpdateEncounterDisplayName handles PATCH /api/combat/{encounterID}/display-name.
+// Phase 105: lets the DM set the player-facing encounter name at any time
+// during combat. An empty string clears the override so the internal name is
+// used in Discord messages.
+func (h *Handler) UpdateEncounterDisplayName(w http.ResponseWriter, r *http.Request) {
+	encounterIDStr := chi.URLParam(r, "encounterID")
+	encounterID, err := uuid.Parse(encounterIDStr)
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+
+	var req updateDisplayNameRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	enc, err := h.svc.UpdateEncounterDisplayName(r.Context(), encounterID, req.DisplayName)
+	if err != nil {
+		http.Error(w, "failed to update display name", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toEncounterResponse(enc))
 }
 
 // EndCombat handles POST /api/combat/{encounterID}/end.

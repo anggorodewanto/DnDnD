@@ -268,6 +268,75 @@ func TestWorkspaceHandler_GetWorkspace_Success(t *testing.T) {
 	assert.Equal(t, combatantID.String(), resp.Encounters[0].ActiveTurnCombatantID)
 }
 
+// --- Phase 105: workspace response exposes display_name and active_turn_combatant_name ---
+
+func TestWorkspaceHandler_GetWorkspace_IncludesDisplayNameAndTurnName(t *testing.T) {
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+
+	store := &mockWorkspaceStore{
+		listEncountersByCampaignIDFn: func(ctx context.Context, cid uuid.UUID) ([]refdata.Encounter, error) {
+			return []refdata.Encounter{
+				{
+					ID: encounterID, CampaignID: campaignID,
+					Name:          "Boss Fight",
+					DisplayName:   sql.NullString{String: "The Shadows Stir", Valid: true},
+					Status:        "active",
+					RoundNumber:   2,
+					CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+				},
+				{
+					ID: uuid.New(), CampaignID: campaignID,
+					Name:          "Rooftop Ambush",
+					Status:        "active",
+					RoundNumber:   1,
+					CurrentTurnID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+				},
+			}, nil
+		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{
+					ID: combatantID, EncounterID: eid,
+					ShortID: "AR", DisplayName: "Aragorn",
+					HpMax: 30, HpCurrent: 30, Ac: 18,
+					IsAlive: true, Conditions: json.RawMessage(`[]`),
+				},
+			}, nil
+		},
+		listEncounterZonesByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.EncounterZone, error) {
+			return []refdata.EncounterZone{}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, CombatantID: combatantID}, nil
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/workspace?campaign_id="+campaignID.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp workspaceResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Encounters, 2)
+
+	// First: display_name override wins, player-facing name is surfaced.
+	assert.Equal(t, "The Shadows Stir", resp.Encounters[0].DisplayName)
+	assert.Equal(t, "Aragorn", resp.Encounters[0].ActiveTurnCombatantName)
+
+	// Second: no override, DisplayName falls back to internal name so the
+	// DM always has something to render in the Encounter Overview bar.
+	assert.Equal(t, "Rooftop Ambush", resp.Encounters[1].DisplayName)
+}
+
 // --- TDD Cycle 11: GET /api/combat/workspace missing campaign_id ---
 
 func TestWorkspaceHandler_GetWorkspace_MissingCampaignID(t *testing.T) {

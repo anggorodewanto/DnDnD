@@ -806,6 +806,86 @@ func TestHandler_CancelReaction_ServiceError(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// --- Phase 105: PATCH /api/combat/{encounterID}/display-name ---
+
+func TestHandler_UpdateEncounterDisplayName_Success(t *testing.T) {
+	encID := uuid.New()
+	store := defaultMockStore()
+	var captured refdata.UpdateEncounterDisplayNameParams
+	store.updateEncounterDisplayNameFn = func(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {
+		captured = arg
+		return refdata.Encounter{ID: arg.ID, Name: "Boss Fight", DisplayName: arg.DisplayName}, nil
+	}
+	_, r := newTestCombatRouter(store)
+
+	body := map[string]string{"display_name": "The Shadows Stir"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encID.String()+"/display-name", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, encID, captured.ID)
+	assert.True(t, captured.DisplayName.Valid)
+	assert.Equal(t, "The Shadows Stir", captured.DisplayName.String)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "The Shadows Stir", resp["display_name"])
+}
+
+func TestHandler_UpdateEncounterDisplayName_EmptyClears(t *testing.T) {
+	encID := uuid.New()
+	store := defaultMockStore()
+	var captured refdata.UpdateEncounterDisplayNameParams
+	store.updateEncounterDisplayNameFn = func(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {
+		captured = arg
+		return refdata.Encounter{ID: arg.ID, Name: "Boss Fight"}, nil
+	}
+	_, r := newTestCombatRouter(store)
+
+	body := map[string]string{"display_name": ""}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+encID.String()+"/display-name", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.False(t, captured.DisplayName.Valid)
+}
+
+func TestHandler_UpdateEncounterDisplayName_InvalidID(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+	body := map[string]string{"display_name": "X"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/not-uuid/display-name", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_UpdateEncounterDisplayName_InvalidJSON(t *testing.T) {
+	_, r := newTestCombatRouter(defaultMockStore())
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+uuid.New().String()+"/display-name", bytes.NewReader([]byte("bogus")))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandler_UpdateEncounterDisplayName_ServiceError(t *testing.T) {
+	store := defaultMockStore()
+	store.updateEncounterDisplayNameFn = func(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {
+		return refdata.Encounter{}, errors.New("db down")
+	}
+	_, r := newTestCombatRouter(store)
+	body := map[string]string{"display_name": "X"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPatch, "/api/combat/"+uuid.New().String()+"/display-name", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
 func TestHandler_DeclareReaction_ServiceError(t *testing.T) {
 	store := defaultMockStore()
 	store.createReactionDeclarationFn = func(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error) {

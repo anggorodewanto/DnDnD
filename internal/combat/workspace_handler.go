@@ -57,14 +57,16 @@ type workspaceResponse struct {
 }
 
 type workspaceEncounterResponse struct {
-	ID                     string                       `json:"id"`
-	Name                   string                       `json:"name"`
-	Status                 string                       `json:"status"`
-	RoundNumber            int32                        `json:"round_number"`
-	Combatants             []workspaceCombatantResponse `json:"combatants"`
-	Map                    *workspaceMapResponse        `json:"map"`
-	Zones                  []workspaceZoneResponse      `json:"zones"`
-	ActiveTurnCombatantID  string                       `json:"active_turn_combatant_id"`
+	ID                      string                       `json:"id"`
+	Name                    string                       `json:"name"`
+	DisplayName             string                       `json:"display_name"`
+	Status                  string                       `json:"status"`
+	RoundNumber             int32                        `json:"round_number"`
+	Combatants              []workspaceCombatantResponse `json:"combatants"`
+	Map                     *workspaceMapResponse        `json:"map"`
+	Zones                   []workspaceZoneResponse      `json:"zones"`
+	ActiveTurnCombatantID   string                       `json:"active_turn_combatant_id"`
+	ActiveTurnCombatantName string                       `json:"active_turn_combatant_name"`
 }
 
 type workspaceCombatantResponse struct {
@@ -217,22 +219,36 @@ func (h *WorkspaceHandler) buildEncounterResponse(ctx context.Context, enc refda
 	}
 
 	activeTurnCombatantID := ""
+	activeTurnCombatantName := ""
 	if enc.CurrentTurnID.Valid {
 		turn, err := h.store.GetActiveTurnByEncounterID(ctx, enc.ID)
 		if err == nil {
 			activeTurnCombatantID = turn.CombatantID.String()
+			for _, c := range combatants {
+				if c.ID == turn.CombatantID {
+					activeTurnCombatantName = c.DisplayName
+					break
+				}
+			}
 		}
 	}
 
+	displayName := enc.Name
+	if enc.DisplayName.Valid && enc.DisplayName.String != "" {
+		displayName = enc.DisplayName.String
+	}
+
 	return workspaceEncounterResponse{
-		ID:                    enc.ID.String(),
-		Name:                  enc.Name,
-		Status:                enc.Status,
-		RoundNumber:           enc.RoundNumber,
-		Combatants:            combResp,
-		Map:                   mapResp,
-		Zones:                 zoneResp,
-		ActiveTurnCombatantID: activeTurnCombatantID,
+		ID:                      enc.ID.String(),
+		Name:                    enc.Name,
+		DisplayName:             displayName,
+		Status:                  enc.Status,
+		RoundNumber:             enc.RoundNumber,
+		Combatants:              combResp,
+		Map:                     mapResp,
+		Zones:                   zoneResp,
+		ActiveTurnCombatantID:   activeTurnCombatantID,
+		ActiveTurnCombatantName: activeTurnCombatantName,
 	}, nil
 }
 

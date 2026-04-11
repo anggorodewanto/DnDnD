@@ -19,6 +19,11 @@ import (
 // ErrEncounterNotActive is returned when EndCombat is called on a non-active encounter.
 var ErrEncounterNotActive = errors.New("encounter must be active to end combat")
 
+// ErrCharacterAlreadyInActiveEncounter is returned by AddCombatant when a
+// character is already a combatant in another active encounter. Phase 105
+// enforces the "one active encounter per character" rule at the service layer.
+var ErrCharacterAlreadyInActiveEncounter = errors.New("character is already a combatant in another active encounter")
+
 // Valid encounter statuses.
 var validStatuses = map[string]bool{
 	"preparing": true,
@@ -32,9 +37,11 @@ type Store interface {
 	CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error)
 	GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
 	ListEncountersByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
+	GetActiveEncounterIDByCharacterID(ctx context.Context, characterID uuid.NullUUID) (uuid.UUID, error)
 	UpdateEncounterStatus(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error)
 	UpdateEncounterCurrentTurn(ctx context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error)
 	UpdateEncounterRound(ctx context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error)
+	UpdateEncounterDisplayName(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error)
 	DeleteEncounter(ctx context.Context, id uuid.UUID) error
 
 	// Combatants
@@ -295,6 +302,22 @@ func (s *Service) DeleteEncounter(ctx context.Context, id uuid.UUID) error {
 	return s.store.DeleteEncounter(ctx, id)
 }
 
+// UpdateEncounterDisplayName sets the player-facing display name on an
+// encounter. An empty string clears the column to NULL so the internal name
+// is used instead. Phase 105 lets the DM swap vague names into the combat
+// channels at any time during combat.
+func (s *Service) UpdateEncounterDisplayName(ctx context.Context, id uuid.UUID, displayName string) (refdata.Encounter, error) {
+	enc, err := s.store.UpdateEncounterDisplayName(ctx, refdata.UpdateEncounterDisplayNameParams{
+		ID:          id,
+		DisplayName: nullString(displayName),
+	})
+	if err != nil {
+		return refdata.Encounter{}, err
+	}
+	s.publish(ctx, id)
+	return enc, nil
+}
+
 // AddCombatant creates a combatant in the given encounter from CombatantParams.
 func (s *Service) AddCombatant(ctx context.Context, encounterID uuid.UUID, params CombatantParams) (refdata.Combatant, error) {
 	charID := uuid.NullUUID{}
@@ -304,6 +327,18 @@ func (s *Service) AddCombatant(ctx context.Context, encounterID uuid.UUID, param
 			return refdata.Combatant{}, fmt.Errorf("parsing character_id: %w", err)
 		}
 		charID = uuid.NullUUID{UUID: parsed, Valid: true}
+
+		// Phase 105 — enforce the "one active encounter per character" rule.
+		// If the character is already a live combatant in another active
+		// encounter, refuse. A membership in the same target encounter is
+		// fine because the DB row will be re-created idempotently.
+		existingID, err := s.store.GetActiveEncounterIDByCharacterID(ctx, charID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return refdata.Combatant{}, fmt.Errorf("checking active encounters for character: %w", err)
+		}
+		if err == nil && existingID != uuid.Nil && existingID != encounterID {
+			return refdata.Combatant{}, ErrCharacterAlreadyInActiveEncounter
+		}
 	}
 
 	c, err := s.store.CreateCombatant(ctx, refdata.CreateCombatantParams{

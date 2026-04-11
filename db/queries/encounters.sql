@@ -18,6 +18,9 @@ UPDATE encounters SET current_turn_id = $2, updated_at = now() WHERE id = $1 RET
 -- name: UpdateEncounterRound :one
 UPDATE encounters SET round_number = $2, updated_at = now() WHERE id = $1 RETURNING *;
 
+-- name: UpdateEncounterDisplayName :one
+UPDATE encounters SET display_name = $2, updated_at = now() WHERE id = $1 RETURNING *;
+
 -- name: DeleteEncounter :exec
 DELETE FROM encounters WHERE id = $1;
 

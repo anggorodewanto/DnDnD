@@ -32,6 +32,7 @@
     getWalls,
     getLightingData,
   } from './lib/mapdata.js';
+  import { createEncounterTabsWs } from './lib/encounterTabsWs.js';
   import TurnQueue from './TurnQueue.svelte';
   import ActionResolver from './ActionResolver.svelte';
   import ActiveReactionsPanel from './ActiveReactionsPanel.svelte';
@@ -61,6 +62,26 @@
   // Polling interval
   let pollTimer = $state(null);
 
+  // Phase 105 — per-tab WebSocket state sync. One wsClient per active
+  // encounter, feeds snapshots through mergeSnapshot so the DM's in-progress
+  // form edits survive incoming player updates.
+  let tabsWs = null;
+  // Map of encounter_id -> pending snapshot fields ("HP updated to 3 by
+  // player action" indicators). Re-keyed via setState on ws callbacks.
+  let pendingByEncounter = $state({});
+  // Dirty form field tracking — the form handlers call markDirtyField /
+  // clearDirtyField as the DM enters/leaves inputs.
+  function markDirtyField(field) {
+    if (activeEncounter && tabsWs) {
+      tabsWs.markDirty(activeEncounter.id, field);
+    }
+  }
+  function clearDirtyField(field) {
+    if (activeEncounter && tabsWs) {
+      tabsWs.clearDirty(activeEncounter.id, field);
+    }
+  }
+
   // Drag-and-drop state
   let dragging = $state(null); // { combatantId, startCol, startRow }
   let dragCol = $state(null);
@@ -77,8 +98,27 @@
   $effect(() => {
     loadWorkspace();
     pollTimer = setInterval(loadWorkspace, 5000);
+
+    // Phase 105 — open one WebSocket per active encounter tab. The
+    // setEncounters call inside loadWorkspace keeps the sockets in
+    // sync with the current encounter list.
+    const proto = window.location?.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location?.host || 'localhost';
+    tabsWs = createEncounterTabsWs({ url: `${proto}//${host}/api/ws` });
+    const unsubscribe = tabsWs.subscribe((encID, state) => {
+      pendingByEncounter = {
+        ...pendingByEncounter,
+        [encID]: state._pendingFromSnapshot || {},
+      };
+    });
+
     return () => {
       if (pollTimer) clearInterval(pollTimer);
+      unsubscribe();
+      if (tabsWs) {
+        tabsWs.close();
+        tabsWs = null;
+      }
     };
   });
 
@@ -218,6 +258,17 @@
       if (activeEncounterIndex >= encounters.length && encounters.length > 0) {
         activeEncounterIndex = 0;
       }
+
+      // Phase 105 — sync the wsClient tabs to the current active-encounter
+      // set. Removed encounters close their socket; new ones open a fresh
+      // connection keyed on encounter_id.
+      if (tabsWs) {
+        tabsWs.setEncounters(encounters.map((e) => e.id));
+        for (const enc of encounters) {
+          tabsWs.updateState(enc.id, enc);
+        }
+      }
+
       error = null;
     } catch (e) {
       error = e.message;
@@ -797,29 +848,52 @@
 </script>
 
 <div class="combat-manager">
-  <!-- Encounter Overview Bar -->
+  <!-- Encounter Overview Bar — Phase 105: one line per active encounter so
+       the DM has cross-encounter awareness without switching tabs. -->
   <div class="encounter-overview" data-testid="encounter-overview">
-    {#if activeEncounter}
-      <span class="overview-item">Round {activeEncounter.round_number}</span>
-      <span class="overview-item">{activeEncounter.combatants?.length || 0} combatants</span>
-      <span class="overview-item">Status: {activeEncounter.status}</span>
+    {#if encounters.length > 0}
+      {#each encounters as enc (enc.id)}
+        <div class="overview-row" data-testid="overview-row-{enc.id}">
+          <span class="overview-item overview-name">{enc.display_name || enc.name}</span>
+          <span class="overview-item">Round {enc.round_number}</span>
+          <span class="overview-item">Turn: {enc.active_turn_combatant_name || '—'}</span>
+          <span class="overview-item">{enc.combatants?.length || 0} combatants</span>
+          {#if enc.pending_queue_count > 0}
+            <span class="overview-item overview-badge">{enc.pending_queue_count} queued</span>
+          {/if}
+        </div>
+      {/each}
     {:else}
       <span class="overview-item">No active encounters</span>
     {/if}
   </div>
 
-  <!-- Encounter Tabs -->
+  <!-- Encounter Tabs — Phase 105: show player-facing display_name with
+       pending dm-queue badge. -->
   {#if encounters.length > 0}
     <div class="encounter-tabs" data-testid="encounter-tabs">
-      {#each encounters as enc, i}
+      {#each encounters as enc, i (enc.id)}
         <button
           class="tab-btn"
           class:active={i === activeEncounterIndex}
           onclick={() => { activeEncounterIndex = i; selectedCombatantId = null; }}
           data-testid="encounter-tab-{i}"
         >
-          {enc.name}
+          {enc.display_name || enc.name}
+          {#if enc.pending_queue_count > 0}
+            <span class="tab-badge" data-testid="tab-badge-{i}">{enc.pending_queue_count}</span>
+          {/if}
         </button>
+      {/each}
+    </div>
+  {/if}
+
+  <!-- Phase 105: "HP updated to N by player action" indicator fed by
+       wsClient snapshots through mergeSnapshot. -->
+  {#if activeEncounter && pendingByEncounter[activeEncounter.id] && Object.keys(pendingByEncounter[activeEncounter.id]).length > 0}
+    <div class="pending-banner" data-testid="pending-banner">
+      {#each Object.entries(pendingByEncounter[activeEncounter.id]) as [field, value]}
+        <span class="pending-item">{field} updated to {JSON.stringify(value)} by player action</span>
       {/each}
     </div>
   {/if}
@@ -1081,7 +1155,8 @@
 
   .encounter-overview {
     display: flex;
-    gap: 1.5rem;
+    flex-direction: column;
+    gap: 0.25rem;
     padding: 0.5rem 1rem;
     background: #16213e;
     border-radius: 4px;
@@ -1089,8 +1164,52 @@
     font-size: 0.9rem;
   }
 
+  .overview-row {
+    display: flex;
+    gap: 1.5rem;
+  }
+
   .overview-item {
     color: #a0aec0;
+  }
+
+  .overview-name {
+    color: #e0e0e0;
+    font-weight: 600;
+  }
+
+  .overview-badge {
+    background: #e53e3e;
+    color: white;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+  }
+
+  .tab-badge {
+    display: inline-block;
+    margin-left: 0.35rem;
+    background: #e53e3e;
+    color: white;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+  }
+
+  .pending-banner {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.35rem 0.75rem;
+    background: #2b2440;
+    border: 1px solid #6b46c1;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #d6bcfa;
+  }
+
+  .pending-item {
+    font-family: monospace;
   }
 
   .encounter-tabs {

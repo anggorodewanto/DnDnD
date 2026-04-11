@@ -418,13 +418,19 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 	)
 	h.turnNotifier.NotifyTurnStart(h.session, yourTurnCh, content)
 
-	// Regenerate and post combat map
-	PostCombatMap(ctx, h.session, h.mapRegenerator, encounterID, channelIDs)
+	// Regenerate and post combat map with the Phase 105 encounter label so
+	// simultaneous encounters sharing #combat-map are distinguishable.
+	label := combat.FormatEncounterLabel(encounterName, turnInfo.RoundNumber)
+	PostCombatMap(ctx, h.session, h.mapRegenerator, encounterID, channelIDs, label)
 }
 
 // PostCombatMap regenerates the combat map and posts it to #combat-map.
 // Best-effort: failures are silently ignored.
-func PostCombatMap(ctx context.Context, session Session, mr MapRegenerator, encounterID uuid.UUID, channelIDs map[string]string) {
+//
+// Phase 105: if a non-empty label is supplied (e.g. "⚔️ Rooftop Ambush —
+// Round 3"), it is included as the message content so players in a shared
+// channel can tell which encounter the map belongs to.
+func PostCombatMap(ctx context.Context, session Session, mr MapRegenerator, encounterID uuid.UUID, channelIDs map[string]string, label ...string) {
 	if mr == nil {
 		return
 	}
@@ -439,7 +445,13 @@ func PostCombatMap(ctx context.Context, session Session, mr MapRegenerator, enco
 		return
 	}
 
+	content := ""
+	if len(label) > 0 {
+		content = label[0]
+	}
+
 	_, _ = session.ChannelMessageSendComplex(combatMapCh, &discordgo.MessageSend{
+		Content: content,
 		Files: []*discordgo.File{{
 			Name:   "combat-map.png",
 			Reader: bytes.NewReader(pngData),

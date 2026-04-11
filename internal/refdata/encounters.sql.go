@@ -216,6 +216,34 @@ func (q *Queries) UpdateEncounterCurrentTurn(ctx context.Context, arg UpdateEnco
 	return i, err
 }
 
+const updateEncounterDisplayName = `-- name: UpdateEncounterDisplayName :one
+UPDATE encounters SET display_name = $2, updated_at = now() WHERE id = $1 RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at
+`
+
+type UpdateEncounterDisplayNameParams struct {
+	ID          uuid.UUID      `json:"id"`
+	DisplayName sql.NullString `json:"display_name"`
+}
+
+func (q *Queries) UpdateEncounterDisplayName(ctx context.Context, arg UpdateEncounterDisplayNameParams) (Encounter, error) {
+	row := q.db.QueryRowContext(ctx, updateEncounterDisplayName, arg.ID, arg.DisplayName)
+	var i Encounter
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.MapID,
+		&i.Name,
+		&i.DisplayName,
+		&i.TemplateID,
+		&i.Status,
+		&i.RoundNumber,
+		&i.CurrentTurnID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateEncounterRound = `-- name: UpdateEncounterRound :one
 UPDATE encounters SET round_number = $2, updated_at = now() WHERE id = $1 RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at
 `

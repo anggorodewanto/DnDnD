@@ -142,6 +142,26 @@ type mockStore struct {
 	// Recap
 	listActionLogWithRoundsFn          func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error)
 	getMostRecentCompletedEncounterFn  func(ctx context.Context, campaignID uuid.UUID) (refdata.Encounter, error)
+
+	// Phase 105 — Active encounter lookup for one-encounter-per-character check
+	getActiveEncounterIDByCharacterIDFn func(ctx context.Context, characterID uuid.NullUUID) (uuid.UUID, error)
+
+	// Phase 105 — Update encounter display_name
+	updateEncounterDisplayNameFn func(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error)
+}
+
+func (m *mockStore) UpdateEncounterDisplayName(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {
+	if m.updateEncounterDisplayNameFn != nil {
+		return m.updateEncounterDisplayNameFn(ctx, arg)
+	}
+	return refdata.Encounter{ID: arg.ID, DisplayName: arg.DisplayName}, nil
+}
+
+func (m *mockStore) GetActiveEncounterIDByCharacterID(ctx context.Context, characterID uuid.NullUUID) (uuid.UUID, error) {
+	if m.getActiveEncounterIDByCharacterIDFn != nil {
+		return m.getActiveEncounterIDByCharacterIDFn(ctx, characterID)
+	}
+	return uuid.Nil, sql.ErrNoRows
 }
 
 func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
@@ -2222,5 +2242,119 @@ func TestEndCombat_ReturnsErrEncounterNotActive(t *testing.T) {
 	_, err := svc.EndCombat(context.Background(), uuid.New())
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrEncounterNotActive)
+}
+
+// --- Phase 105: Character one-active-encounter constraint ---
+
+// A character that is already an active combatant in another encounter must
+// not be addable to a second encounter. Phase 105 spec: "A character can only
+// be a combatant in one active encounter at a time."
+func TestService_AddCombatant_RejectsCharacterAlreadyInActiveEncounter(t *testing.T) {
+	charID := uuid.New()
+	existingEncounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getActiveEncounterIDByCharacterIDFn = func(ctx context.Context, id uuid.NullUUID) (uuid.UUID, error) {
+		if id.Valid && id.UUID == charID {
+			return existingEncounterID, nil
+		}
+		return uuid.Nil, sql.ErrNoRows
+	}
+
+	svc := NewService(store)
+	_, err := svc.AddCombatant(context.Background(), uuid.New(), CombatantParams{
+		CharacterID: charID.String(),
+		ShortID:     "AR",
+		DisplayName: "Aragorn",
+		HPMax:       45,
+		HPCurrent:   45,
+		AC:          18,
+		IsAlive:     true,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrCharacterAlreadyInActiveEncounter)
+}
+
+// When the character is already a combatant in the SAME encounter (e.g. a
+// re-add during template creation) or has no active encounter, the check must
+// not fire. We assert the "no active encounter" path — sql.ErrNoRows — here.
+func TestService_AddCombatant_AllowsCharacterNotInAnyActiveEncounter(t *testing.T) {
+	store := defaultMockStore()
+	calls := 0
+	store.getActiveEncounterIDByCharacterIDFn = func(ctx context.Context, id uuid.NullUUID) (uuid.UUID, error) {
+		calls++
+		return uuid.Nil, sql.ErrNoRows
+	}
+	svc := NewService(store)
+	_, err := svc.AddCombatant(context.Background(), uuid.New(), CombatantParams{
+		CharacterID: uuid.New().String(),
+		ShortID:     "AR",
+		DisplayName: "Aragorn",
+		HPMax:       45,
+		HPCurrent:   45,
+		AC:          18,
+		IsAlive:     true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, calls, "expected active-encounter lookup to run exactly once")
+}
+
+// --- Phase 105: UpdateEncounterDisplayName ---
+
+func TestService_UpdateEncounterDisplayName_SetsValue(t *testing.T) {
+	store := defaultMockStore()
+	var captured refdata.UpdateEncounterDisplayNameParams
+	store.updateEncounterDisplayNameFn = func(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {
+		captured = arg
+		return refdata.Encounter{ID: arg.ID, Name: "Boss Fight", DisplayName: arg.DisplayName}, nil
+	}
+	svc := NewService(store)
+
+	id := uuid.New()
+	enc, err := svc.UpdateEncounterDisplayName(context.Background(), id, "The Shadows Stir")
+	require.NoError(t, err)
+	assert.True(t, captured.DisplayName.Valid)
+	assert.Equal(t, "The Shadows Stir", captured.DisplayName.String)
+	assert.True(t, enc.DisplayName.Valid)
+	assert.Equal(t, "The Shadows Stir", enc.DisplayName.String)
+}
+
+// An empty string clears the display_name to NULL so the internal name is
+// shown again (the spec says display_name defaults to internal name when
+// unset — i.e. NULL in the DB).
+func TestService_UpdateEncounterDisplayName_EmptyClearsToNull(t *testing.T) {
+	store := defaultMockStore()
+	var captured refdata.UpdateEncounterDisplayNameParams
+	store.updateEncounterDisplayNameFn = func(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {
+		captured = arg
+		return refdata.Encounter{ID: arg.ID, Name: "Boss Fight"}, nil
+	}
+	svc := NewService(store)
+
+	_, err := svc.UpdateEncounterDisplayName(context.Background(), uuid.New(), "")
+	require.NoError(t, err)
+	assert.False(t, captured.DisplayName.Valid, "empty string should store NULL")
+}
+
+// When AddCombatant is called without a character_id (NPC/creature), the
+// one-encounter check must not fire at all.
+func TestService_AddCombatant_SkipsActiveEncounterCheckForNPCs(t *testing.T) {
+	store := defaultMockStore()
+	store.getActiveEncounterIDByCharacterIDFn = func(ctx context.Context, id uuid.NullUUID) (uuid.UUID, error) {
+		t.Fatalf("active-encounter lookup should not be called for NPCs")
+		return uuid.Nil, nil
+	}
+	svc := NewService(store)
+	_, err := svc.AddCombatant(context.Background(), uuid.New(), CombatantParams{
+		CreatureRefID: "goblin",
+		ShortID:       "G1",
+		DisplayName:   "Goblin 1",
+		HPMax:         7,
+		HPCurrent:     7,
+		AC:            15,
+		IsNPC:         true,
+		IsAlive:       true,
+	})
+	require.NoError(t, err)
 }
 

@@ -152,6 +152,19 @@ func TestRemoveSurprisedCondition(t *testing.T) {
 	assert.Contains(t, string(result), "poisoned")
 }
 
+// --- Phase 105: FormatEncounterLabel ---
+
+func TestFormatEncounterLabel_MatchesSpecExample(t *testing.T) {
+	got := FormatEncounterLabel("Rooftop Ambush", 3)
+	// Spec example (lines 1690-1718): "\u2694\ufe0f Rooftop Ambush \u2014 Round 3"
+	assert.Equal(t, "\u2694\ufe0f Rooftop Ambush \u2014 Round 3", got)
+}
+
+func TestFormatEncounterLabel_HandlesAnyName(t *testing.T) {
+	got := FormatEncounterLabel("Basement Escape", 1)
+	assert.Equal(t, "\u2694\ufe0f Basement Escape \u2014 Round 1", got)
+}
+
 // --- TDD Cycle 5: FormatInitiativeTracker ---
 
 func TestFormatInitiativeTracker_Basic(t *testing.T) {
