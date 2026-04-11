@@ -110,12 +110,12 @@ type SkillCheckNarrationDeliverer interface {
 // ResolvePathBuilder. Construct it with NewNotifier (in-memory default) or
 // NewNotifierWithStore (caller-provided Store, e.g. PgStore).
 type DefaultNotifier struct {
-	sender              Sender
-	resolver            ChannelResolver
-	pathBldr            ResolvePathBuilder
-	store               Store
-	deliverer           WhisperReplyDeliverer
-	narrationDeliverer  SkillCheckNarrationDeliverer
+	sender             Sender
+	resolver           ChannelResolver
+	pathBldr           ResolvePathBuilder
+	store              Store
+	deliverer          WhisperReplyDeliverer
+	narrationDeliverer SkillCheckNarrationDeliverer
 }
 
 // SetWhisperDeliverer wires the DM-to-player deliverer used by

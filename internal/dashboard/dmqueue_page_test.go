@@ -18,15 +18,15 @@ import (
 
 // stubNotifier lets dashboard tests inspect and drive a Notifier without Discord.
 type stubNotifier struct {
-	items                       map[string]dmqueue.Item
-	resolveErr                  error
-	cancelErr                   error
-	resolveWhisperErr           error
-	resolveSkillCheckNarrErr    error
-	resolvedIDs                 []string
-	cancelledIDs                []string
-	whisperReplies              map[string]string
-	skillCheckNarrations        map[string]string
+	items                    map[string]dmqueue.Item
+	resolveErr               error
+	cancelErr                error
+	resolveWhisperErr        error
+	resolveSkillCheckNarrErr error
+	resolvedIDs              []string
+	cancelledIDs             []string
+	whisperReplies           map[string]string
+	skillCheckNarrations     map[string]string
 }
 
 func newStubNotifier() *stubNotifier {
@@ -292,9 +292,9 @@ func TestDMQueuePage_HandleWhisperReply_Success(t *testing.T) {
 	n.items["w1"] = dmqueue.Item{
 		ID: "w1",
 		Event: dmqueue.Event{
-			Kind:       dmqueue.KindPlayerWhisper,
-			PlayerName: "Aria",
-			Summary:    `"x"`,
+			Kind:          dmqueue.KindPlayerWhisper,
+			PlayerName:    "Aria",
+			Summary:       `"x"`,
 			ExtraMetadata: map[string]string{dmqueue.WhisperTargetDiscordUserIDKey: "user-42"},
 		},
 		Status: dmqueue.StatusPending,
@@ -346,8 +346,8 @@ func TestDMQueuePage_HandleWhisperReply_MissingDeliverer(t *testing.T) {
 	n.items["w1"] = dmqueue.Item{
 		ID: "w1",
 		Event: dmqueue.Event{
-			Kind:       dmqueue.KindPlayerWhisper,
-			PlayerName: "Aria",
+			Kind:          dmqueue.KindPlayerWhisper,
+			PlayerName:    "Aria",
 			ExtraMetadata: map[string]string{dmqueue.WhisperTargetDiscordUserIDKey: "user-42"},
 		},
 		Status: dmqueue.StatusPending,
@@ -377,9 +377,9 @@ func TestDMQueuePage_HandleWhisperReply_UnknownItem(t *testing.T) {
 func TestDMQueuePage_RendersResolvedItem(t *testing.T) {
 	n := newStubNotifier()
 	n.items["xyz"] = dmqueue.Item{
-		ID:     "xyz",
-		Event:  dmqueue.Event{Kind: dmqueue.KindSkillCheckNarration, PlayerName: "Aria", Summary: "Athletics 18"},
-		Status: dmqueue.StatusResolved,
+		ID:      "xyz",
+		Event:   dmqueue.Event{Kind: dmqueue.KindSkillCheckNarration, PlayerName: "Aria", Summary: "Athletics 18"},
+		Status:  dmqueue.StatusResolved,
 		Outcome: "climbs cliff",
 	}
 	r := newDMQueueTestRouter(n)

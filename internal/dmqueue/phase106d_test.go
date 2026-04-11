@@ -36,10 +36,10 @@ func TestResolveSkillCheckNarration_DeliversFollowupAndResolves(t *testing.T) {
 		GuildID:    "g1",
 		CampaignID: "camp-1",
 		ExtraMetadata: map[string]string{
-			SkillCheckChannelIDKey:        "chan-77",
-			SkillCheckPlayerDiscordIDKey:  "user-42",
-			SkillCheckSkillLabelKey:       "Perception",
-			SkillCheckTotalKey:            "17",
+			SkillCheckChannelIDKey:       "chan-77",
+			SkillCheckPlayerDiscordIDKey: "user-42",
+			SkillCheckSkillLabelKey:      "Perception",
+			SkillCheckTotalKey:           "17",
 		},
 	})
 	if err != nil {

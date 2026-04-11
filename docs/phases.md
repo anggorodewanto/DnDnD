@@ -679,7 +679,7 @@
   - Depends on: Phase 106a, Phase 14
   - Done when: `/reaction declare` posts a structured `KindReactionDeclaration` message to `#dm-queue`, resolve link opens the dashboard item, cancel path edits the original message with strikethrough.
 
-- [ ] **Phase 106d: `/check` Skill-Check Narration Gating**
+- [x] **Phase 106d: `/check` Skill-Check Narration Gating**
   - Scope: Refactor `/check` so DM-narration-required outcomes (per the campaign's narration policy) post a `KindSkillCheckNarration` event to `#dm-queue` instead of (or in addition to) the immediate result reveal. The DM resolves the item from the dashboard with their narration text, which is then surfaced back to the player as a follow-up message. Trivial / auto-resolve checks bypass the queue.
   - Depends on: Phase 106a, Phase 15
   - Done when: Gated `/check` rolls produce a `KindSkillCheckNarration` queue item, DM resolution from the dashboard delivers the narration to the player, ungated checks remain unaffected.

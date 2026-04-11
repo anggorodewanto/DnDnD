@@ -35,12 +35,12 @@ func NewDMQueueHandler(logger *slog.Logger, notifier dmqueue.Notifier) *DMQueueH
 }
 
 type dmqueueItemView struct {
-	Item                 dmqueue.Item
-	KindLabel            string
-	IsPending            bool
-	IsResolved           bool
-	IsCancelled          bool
-	IsWhisper            bool
+	Item                  dmqueue.Item
+	KindLabel             string
+	IsPending             bool
+	IsResolved            bool
+	IsCancelled           bool
+	IsWhisper             bool
 	IsSkillCheckNarration bool
 }
 
@@ -80,29 +80,12 @@ func (h *DMQueueHandler) ServeItem(w http.ResponseWriter, r *http.Request) {
 
 // HandleResolve processes POST /dashboard/queue/{itemID}/resolve with an "outcome" form field.
 func (h *DMQueueHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
-	if !hasAuthUser(r) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	itemID, ok := h.parseFormPost(w, r)
+	if !ok {
 		return
 	}
-
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	itemID := chi.URLParam(r, "itemID")
-	outcome := r.FormValue("outcome")
-
-	if err := h.notifier.Resolve(r.Context(), itemID, outcome); err != nil {
-		if errors.Is(err, dmqueue.ErrItemNotFound) {
-			http.NotFound(w, r)
-			return
-		}
-		h.logger.Error("dmqueue resolve", "error", err, "item_id", itemID)
-		http.Error(w, "resolve failed", http.StatusInternalServerError)
-		return
-	}
-
-	http.Redirect(w, r, "/dashboard/queue/"+itemID, http.StatusSeeOther)
+	err := h.notifier.Resolve(r.Context(), itemID, r.FormValue("outcome"))
+	h.respondAfterResolve(w, r, itemID, err, "dmqueue resolve", "resolve failed", nil)
 }
 
 // HandleSkillCheckNarration processes POST /dashboard/queue/{itemID}/narrate
@@ -111,33 +94,14 @@ func (h *DMQueueHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 // notifier's wired SkillCheckNarrationDeliverer, and the queue item is then
 // marked resolved with the narration text as its outcome.
 func (h *DMQueueHandler) HandleSkillCheckNarration(w http.ResponseWriter, r *http.Request) {
-	if !hasAuthUser(r) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	itemID, ok := h.parseFormPost(w, r)
+	if !ok {
 		return
 	}
-
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	itemID := chi.URLParam(r, "itemID")
-	narration := r.FormValue("narration")
-
-	if err := h.notifier.ResolveSkillCheckNarration(r.Context(), itemID, narration); err != nil {
-		if errors.Is(err, dmqueue.ErrItemNotFound) {
-			http.NotFound(w, r)
-			return
-		}
-		if errors.Is(err, dmqueue.ErrNotSkillCheckNarrationItem) {
-			http.Error(w, "not a skill check narration item", http.StatusBadRequest)
-			return
-		}
-		h.logger.Error("dmqueue skill check narration", "error", err, "item_id", itemID)
-		http.Error(w, "narrate failed", http.StatusInternalServerError)
-		return
-	}
-
-	http.Redirect(w, r, "/dashboard/queue/"+itemID, http.StatusSeeOther)
+	err := h.notifier.ResolveSkillCheckNarration(r.Context(), itemID, r.FormValue("narration"))
+	h.respondAfterResolve(w, r, itemID, err, "dmqueue skill check narration", "narrate failed", map[error]string{
+		dmqueue.ErrNotSkillCheckNarrationItem: "not a skill check narration item",
+	})
 }
 
 // HandleWhisperReply processes POST /dashboard/queue/{itemID}/reply for
@@ -146,33 +110,51 @@ func (h *DMQueueHandler) HandleSkillCheckNarration(w http.ResponseWriter, r *htt
 // WhisperReplyDeliverer and the queue item is marked resolved with the
 // reply text as its outcome.
 func (h *DMQueueHandler) HandleWhisperReply(w http.ResponseWriter, r *http.Request) {
+	itemID, ok := h.parseFormPost(w, r)
+	if !ok {
+		return
+	}
+	err := h.notifier.ResolveWhisper(r.Context(), itemID, r.FormValue("reply"))
+	h.respondAfterResolve(w, r, itemID, err, "dmqueue whisper reply", "reply failed", map[error]string{
+		dmqueue.ErrNotWhisperItem: "not a whisper item",
+	})
+}
+
+// parseFormPost performs the auth check and form parsing common to every
+// resolver POST handler. On failure it writes the appropriate response and
+// returns ok=false. On success it returns the {itemID} URL parameter.
+func (h *DMQueueHandler) parseFormPost(w http.ResponseWriter, r *http.Request) (string, bool) {
 	if !hasAuthUser(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return "", false
 	}
-
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
+		return "", false
+	}
+	return chi.URLParam(r, "itemID"), true
+}
+
+// respondAfterResolve maps a notifier-resolve error to the appropriate HTTP
+// response, redirecting to the item page on success. badRequestErrs maps
+// kind-mismatch sentinel errors to their 400 Bad Request body.
+func (h *DMQueueHandler) respondAfterResolve(w http.ResponseWriter, r *http.Request, itemID string, err error, logTag, failMsg string, badRequestErrs map[error]string) {
+	if err == nil {
+		http.Redirect(w, r, "/dashboard/queue/"+itemID, http.StatusSeeOther)
 		return
 	}
-	itemID := chi.URLParam(r, "itemID")
-	reply := r.FormValue("reply")
-
-	if err := h.notifier.ResolveWhisper(r.Context(), itemID, reply); err != nil {
-		if errors.Is(err, dmqueue.ErrItemNotFound) {
-			http.NotFound(w, r)
-			return
-		}
-		if errors.Is(err, dmqueue.ErrNotWhisperItem) {
-			http.Error(w, "not a whisper item", http.StatusBadRequest)
-			return
-		}
-		h.logger.Error("dmqueue whisper reply", "error", err, "item_id", itemID)
-		http.Error(w, "reply failed", http.StatusInternalServerError)
+	if errors.Is(err, dmqueue.ErrItemNotFound) {
+		http.NotFound(w, r)
 		return
 	}
-
-	http.Redirect(w, r, "/dashboard/queue/"+itemID, http.StatusSeeOther)
+	for sentinel, msg := range badRequestErrs {
+		if errors.Is(err, sentinel) {
+			http.Error(w, msg, http.StatusBadRequest)
+			return
+		}
+	}
+	h.logger.Error(logTag, "error", err, "item_id", itemID)
+	http.Error(w, failMsg, http.StatusInternalServerError)
 }
 
 // hasAuthUser reports whether the request carries an authenticated discord user ID.

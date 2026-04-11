@@ -48,11 +48,11 @@ type CheckHandler struct {
 	session           Session
 	checkService      *check.Service
 	campaignProvider  CheckCampaignProvider
-	characterLookup  CheckCharacterLookup
+	characterLookup   CheckCharacterLookup
 	encounterProvider CheckEncounterProvider
-	combatantLookup  CheckCombatantLookup
-	rollLogger       dice.RollHistoryLogger
-	notifier         dmqueue.Notifier
+	combatantLookup   CheckCombatantLookup
+	rollLogger        dice.RollHistoryLogger
+	notifier          dmqueue.Notifier
 }
 
 // SetNotifier wires the dm-queue Notifier so non-trivial /check rolls are
@@ -74,10 +74,10 @@ func NewCheckHandler(
 		session:           session,
 		checkService:      check.NewService(roller),
 		campaignProvider:  campaignProvider,
-		characterLookup:  characterLookup,
+		characterLookup:   characterLookup,
 		encounterProvider: encounterProvider,
-		combatantLookup:  combatantLookup,
-		rollLogger:       rollLogger,
+		combatantLookup:   combatantLookup,
+		rollLogger:        rollLogger,
 	}
 }
 
