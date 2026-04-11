@@ -254,23 +254,21 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		inventoryAPIHandler.SetPublisher(publisher, encLookup)
 		dashboard.RegisterInventoryAPI(router, inventoryAPIHandler, passthroughMiddleware)
 
-		// Phase 104c: Level-up handler wiring. Mounts the DB-backed
-		// store/class adapters over refdata.Queries, a DM-only notifier
-		// (public announcements deferred) and the same publisher/lookup
-		// used by the combat and inventory services. Calling SetPublisher
-		// BEFORE RegisterRoutes guarantees no level-up mutation can land
-		// without fan-out to the dashboard snapshot stream.
-		levelUpCharStore := levelup.NewCharacterStoreAdapter(queries)
-		levelUpClassStore := levelup.NewClassStoreAdapter(queries)
+		// Phase 104c: Level-up handler. DB-backed store/class adapters plus
+		// a DM-only notifier (public announcements deferred) share the
+		// publisher/lookup used by combat and inventory. SetPublisher runs
+		// before RegisterRoutes so no mutation can land without fan-out.
 		var levelUpDM levelup.DirectMessenger
 		if discordSession != nil {
 			levelUpDM = discord.NewDirectMessenger(discordSession)
 		}
-		levelUpNotifier := levelup.NewNotifierAdapter(levelUpDM)
-		levelUpSvc := levelup.NewService(levelUpCharStore, levelUpClassStore, levelUpNotifier)
+		levelUpSvc := levelup.NewService(
+			levelup.NewCharacterStoreAdapter(queries),
+			levelup.NewClassStoreAdapter(queries),
+			levelup.NewNotifierAdapter(levelUpDM),
+		)
 		levelUpSvc.SetPublisher(publisher, encLookup)
-		levelUpHandler := levelup.NewHandler(levelUpSvc, hub)
-		levelUpHandler.RegisterRoutes(router)
+		levelup.NewHandler(levelUpSvc, hub).RegisterRoutes(router)
 
 		// Phase 104: Startup recovery per spec lines 116-121.
 		//

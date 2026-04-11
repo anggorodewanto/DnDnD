@@ -13,24 +13,20 @@ type DirectMessenger interface {
 }
 
 // notifierAdapter bridges a DM-capable messenger onto the Notifier contract.
-// Public level-up announcements are deferred (they require a guild/channel
-// resolution path that is not wired up yet) — SendPublicLevelUp is a
-// no-op until a follow-up phase plumbs the public channel through.
+// A nil messenger (or empty discord user id) makes every method a silent
+// no-op so main.go can wire the adapter even when DISCORD_BOT_TOKEN is unset.
 type notifierAdapter struct {
 	messenger DirectMessenger
 }
 
 // NewNotifierAdapter returns a Notifier backed by the given DM messenger.
-// A nil messenger is tolerated so main.go can wire a functional adapter
-// even when DISCORD_BOT_TOKEN is unset (every method becomes a no-op).
 func NewNotifierAdapter(m DirectMessenger) Notifier {
 	return &notifierAdapter{messenger: m}
 }
 
-// SendPublicLevelUp is a deliberate no-op: Phase 104c does not yet wire a
-// public-channel poster for level-up announcements. A follow-up phase can
-// resolve the campaign's story channel and route the formatted message
-// through narration.Poster.
+// SendPublicLevelUp is deliberately a no-op: public-channel posting is
+// deferred to a follow-up phase that resolves the campaign's story channel
+// and routes through narration.Poster.
 func (a *notifierAdapter) SendPublicLevelUp(_ context.Context, _ string, _ int) error {
 	return nil
 }

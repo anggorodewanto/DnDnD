@@ -643,7 +643,7 @@
   - Done when: Each in-scope service has a `SetPublisher` hook with TDD coverage (nil tolerant, publish-error swallowed, no-publish on validation/store error), `cmd/dndnd/main.go` injects the real publisher into each, and `cmd/dndnd/combat_store_adapter.go` is either deleted or replaced by a single shared adapter.
   - Note: combat HTTP routes were mounted in Phase 104 iteration 2 — services covered here may need their handlers similarly mounted on the router if they aren't already, so the publisher hook actually fires in production.
 
-- [ ] **Phase 104c: Mount `levelup.Handler` with DB Store Adapter**
+- [x] **Phase 104c: Mount `levelup.Handler` with DB Store Adapter**
   - Scope: Phase 104b added `SetPublisher` wiring to `levelup.Service` with TDD coverage, but `levelup.Handler` is still unmounted in `cmd/dndnd/main.go`, so the publisher hook never fires in production. Build a DB-backed `levelup.CharacterStore` adapter over `*refdata.Queries` covering `GetCharacterForLevelUp`, `UpdateCharacterStats`, `UpdateAbilityScores`, `UpdateFeatures`, and a matching `ClassStore` over class reference data. Wire a real `levelup.Notifier` (likely via `discord.NewDirectMessenger` or the DM dashboard). Construct `levelup.Service` in `main.go`, call `SetPublisher(publisher)` with the dashboard publisher already built in Phase 104, and mount `levelup.Handler` on the router.
   - Depends on: Phase 104b
   - Done when: `levelup.Handler` is routed and reachable in production, `levelup.Service` fires `PublishEncounterSnapshot` after every successful DB-committing mutation for a character currently in an active encounter, and integration tests cover the end-to-end path (handler → service → store → publisher).
