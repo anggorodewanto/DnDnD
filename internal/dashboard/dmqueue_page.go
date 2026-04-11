@@ -121,21 +121,21 @@ func (h *DMQueueHandler) HandleWhisperReply(w http.ResponseWriter, r *http.Reque
 	itemID := chi.URLParam(r, "itemID")
 	reply := r.FormValue("reply")
 
-	err := h.notifier.ResolveWhisper(r.Context(), itemID, reply)
-	if err == nil {
-		http.Redirect(w, r, "/dashboard/queue/"+itemID, http.StatusSeeOther)
+	if err := h.notifier.ResolveWhisper(r.Context(), itemID, reply); err != nil {
+		if errors.Is(err, dmqueue.ErrItemNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		if errors.Is(err, dmqueue.ErrNotWhisperItem) {
+			http.Error(w, "not a whisper item", http.StatusBadRequest)
+			return
+		}
+		h.logger.Error("dmqueue whisper reply", "error", err, "item_id", itemID)
+		http.Error(w, "reply failed", http.StatusInternalServerError)
 		return
 	}
-	if errors.Is(err, dmqueue.ErrItemNotFound) {
-		http.NotFound(w, r)
-		return
-	}
-	if errors.Is(err, dmqueue.ErrNotWhisperItem) {
-		http.Error(w, "not a whisper item", http.StatusBadRequest)
-		return
-	}
-	h.logger.Error("dmqueue whisper reply", "error", err, "item_id", itemID)
-	http.Error(w, "reply failed", http.StatusInternalServerError)
+
+	http.Redirect(w, r, "/dashboard/queue/"+itemID, http.StatusSeeOther)
 }
 
 // hasAuthUser reports whether the request carries an authenticated discord user ID.

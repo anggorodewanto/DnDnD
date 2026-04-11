@@ -3,6 +3,7 @@ package combat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -130,7 +131,7 @@ func TestAdvanceTurn_NPC_CampaignLookupErrorSwallowed(t *testing.T) {
 
 	store := advanceTurnStoreForKind(combatantID, "Goblin", true)
 	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
-		return refdata.Campaign{}, errFake("no campaign")
+		return refdata.Campaign{}, errors.New("no campaign")
 	}
 
 	notifier := &fakeDMNotifier{}
@@ -141,10 +142,6 @@ func TestAdvanceTurn_NPC_CampaignLookupErrorSwallowed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, notifier.posts, "no notifier post when campaign lookup fails")
 }
-
-type errFake string
-
-func (e errFake) Error() string { return string(e) }
 
 func TestAdvanceTurn_NoNotifierWiredStillWorks(t *testing.T) {
 	ctx := context.Background()

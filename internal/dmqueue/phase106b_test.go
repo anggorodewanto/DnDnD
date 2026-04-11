@@ -9,9 +9,8 @@ import (
 
 // fakeDeliverer captures SendDirectMessage calls.
 type fakeDeliverer struct {
-	calls    []delivererCall
-	sendErr  error
-	returnID []string
+	calls   []delivererCall
+	sendErr error
 }
 
 type delivererCall struct {
@@ -24,10 +23,7 @@ func (f *fakeDeliverer) SendDirectMessage(userID, body string) ([]string, error)
 	if f.sendErr != nil {
 		return nil, f.sendErr
 	}
-	if f.returnID == nil {
-		return []string{"dm-msg-1"}, nil
-	}
-	return f.returnID, nil
+	return []string{"dm-msg-1"}, nil
 }
 
 func TestPostNarrativeTeleport_PostsFormattedEvent(t *testing.T) {
