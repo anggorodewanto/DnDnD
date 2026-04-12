@@ -689,7 +689,7 @@
   - Depends on: Phase 106a
   - Done when: `/use` for a consumable-without-effect item posts a structured `KindConsumable` message to `#dm-queue` in a live environment, resolves from the dashboard, and the existing `UseHandler` test suite still passes.
 
-- [ ] **Phase 106f: DM-Queue Dashboard Auth Middleware**
+- [x] **Phase 106f: DM-Queue Dashboard Auth Middleware**
   - Scope: Replace the `passthroughMiddleware` currently protecting `RegisterDMQueueRoutes` (added in Phase 106a to match the inventory API mount) with the real DM-auth middleware once it lands. Ensure `ServeItem` and `HandleResolve` reject unauthenticated requests with 401/redirect per the rest of the dashboard.
   - Depends on: Phase 106a, DM dashboard auth middleware (tracked separately)
   - Done when: Unauthenticated requests to `/dashboard/queue/{id}` and its resolve POST are rejected, authenticated DM sessions work end-to-end, and `hasAuthUser` is no longer a no-op on this route.
