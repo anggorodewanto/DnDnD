@@ -699,7 +699,7 @@
   - Depends on: Phase 13
   - Done when: `/help` returns command list, per-command help shows full usage with examples, class-specific help renders correctly.
 
-- [ ] **Phase 108: `/status` Command**
+- [x] **Phase 108: `/status` Command**
   - Scope: `/status` (ephemeral): active conditions with remaining duration, concentration spell, temp HP, exhaustion level, active reaction declarations, Bardic Inspiration (if held), readied actions, ki points (Monk), sorcery points (Sorcerer), rage state (Barbarian), wild shape state (Druid).
   - Depends on: Phase 39, Phase 70
   - Done when: `/status` shows all active state for the character, formatted per spec.

@@ -44,11 +44,9 @@ type Info struct {
 // FormatStatus renders an Info into a Discord-friendly status message.
 // Sections with no data are omitted entirely.
 func FormatStatus(info Info) string {
-	var header string
+	header := fmt.Sprintf("**Status — %s**", info.CharacterName)
 	if info.ShortID != "" {
 		header = fmt.Sprintf("**Status — %s (%s)**", info.CharacterName, info.ShortID)
-	} else {
-		header = fmt.Sprintf("**Status — %s**", info.CharacterName)
 	}
 
 	var sections []string
@@ -110,19 +108,11 @@ func FormatStatus(info Info) string {
 	}
 
 	if len(info.Reactions) > 0 {
-		var quoted []string
-		for _, r := range info.Reactions {
-			quoted = append(quoted, fmt.Sprintf("%q", r))
-		}
-		sections = append(sections, "**Reaction Declarations:** "+strings.Join(quoted, ", "))
+		sections = append(sections, "**Reaction Declarations:** "+quotedList(info.Reactions))
 	}
 
 	if len(info.ReadiedActions) > 0 {
-		var quoted []string
-		for _, r := range info.ReadiedActions {
-			quoted = append(quoted, fmt.Sprintf("%q", r))
-		}
-		sections = append(sections, "**Readied Actions:** "+strings.Join(quoted, ", "))
+		sections = append(sections, "**Readied Actions:** "+quotedList(info.ReadiedActions))
 	}
 
 	if len(sections) == 0 {
@@ -130,4 +120,13 @@ func FormatStatus(info Info) string {
 	}
 
 	return header + "\n\n" + strings.Join(sections, "\n")
+}
+
+// quotedList formats a slice of strings as a comma-separated list of quoted values.
+func quotedList(items []string) string {
+	quoted := make([]string, len(items))
+	for i, s := range items {
+		quoted[i] = fmt.Sprintf("%q", s)
+	}
+	return strings.Join(quoted, ", ")
 }

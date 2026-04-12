@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -565,20 +566,7 @@ func TestClassLevelFrom_NotFound(t *testing.T) {
 
 func assertContains(t *testing.T, got, want string) {
 	t.Helper()
-	if !containsSubstr(got, want) {
+	if !strings.Contains(got, want) {
 		t.Errorf("got %q, want to contain %q", got, want)
 	}
-}
-
-func containsSubstr(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || findSubstr(s, sub))
-}
-
-func findSubstr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -276,24 +277,9 @@ func classLevelFrom(classes []classEntry, name string) int {
 	return 0
 }
 
-// equalFoldASCII is a simple ASCII case-insensitive comparison.
+// equalFoldASCII is a case-insensitive string comparison.
 func equalFoldASCII(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		ca, cb := a[i], b[i]
-		if ca >= 'A' && ca <= 'Z' {
-			ca += 'a' - 'A'
-		}
-		if cb >= 'A' && cb <= 'Z' {
-			cb += 'a' - 'A'
-		}
-		if ca != cb {
-			return false
-		}
-	}
-	return true
+	return strings.EqualFold(a, b)
 }
 
 // titleCase capitalises the first letter of a string.
@@ -301,9 +287,5 @@ func titleCase(s string) string {
 	if s == "" {
 		return s
 	}
-	b := []byte(s)
-	if b[0] >= 'a' && b[0] <= 'z' {
-		b[0] -= 'a' - 'A'
-	}
-	return string(b)
+	return strings.ToUpper(s[:1]) + s[1:]
 }
