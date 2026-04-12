@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,11 +14,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/oauth2"
 
 	"github.com/bwmarrin/discordgo"
 
 	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/asset"
+	"github.com/ab/dndnd/internal/auth"
 	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/characteroverview"
 	"github.com/ab/dndnd/internal/combat"
@@ -80,11 +83,31 @@ func newDMQueueChannelResolver(session discord.Session) func(string) string {
 	}
 }
 
-// passthroughMiddleware is a no-op HTTP middleware used by Phase 104b to
-// mount non-auth-gated API routes (the inventory DM API) consistent with
-// Phase 104's combat handler wiring, which also mounts without auth. Once
-// the global auth stack is wired in a future phase, this can be replaced.
+// passthroughMiddleware is a no-op HTTP middleware used as a fallback when
+// Discord OAuth2 env vars are not configured (local dev without OAuth).
 func passthroughMiddleware(next http.Handler) http.Handler { return next }
+
+// buildAuthMiddleware returns a real auth.SessionMiddleware when
+// DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET are set. Otherwise it falls
+// back to passthroughMiddleware with a warning log for local dev.
+func buildAuthMiddleware(db *sql.DB, logger *slog.Logger) func(http.Handler) http.Handler {
+	clientID := os.Getenv("DISCORD_CLIENT_ID")
+	clientSecret := os.Getenv("DISCORD_CLIENT_SECRET")
+	if clientID == "" || clientSecret == "" {
+		logger.Warn("DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET not set; dashboard auth disabled (passthrough)")
+		return passthroughMiddleware
+	}
+
+	sessionStore := auth.NewSessionStore(db)
+	oauthCfg := &oauth2.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Endpoint: oauth2.Endpoint{
+			TokenURL: "https://discord.com/api/oauth2/token",
+		},
+	}
+	return auth.SessionMiddleware(sessionStore, oauthCfg, logger)
+}
 
 // buildDiscordSession constructs (but does NOT open) a Discord session using
 // the given bot token. An empty token is treated as "Discord is optional for
@@ -293,7 +316,12 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			// non-ephemeral follow-ups in the originating channel.
 			dmQueueNotifier.SetSkillCheckNarrationDeliverer(discord.NewSkillCheckNarrationDeliverer(discordSession))
 		}
-		dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, passthroughMiddleware)
+
+		// Phase 106f: Build real auth middleware when Discord OAuth2 env
+		// vars are available; otherwise fall back to passthrough for local
+		// dev without OAuth.
+		authMw := buildAuthMiddleware(db, logger)
+		dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, authMw)
 
 		// Phase 104b: Publisher fan-out to non-combat services that can
 		// mutate an active encounter's combatant state mid-combat. The
@@ -303,7 +331,7 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		encLookup := encounterLookupAdapter{queries: queries}
 		inventoryAPIHandler := inventory.NewAPIHandler(queries)
 		inventoryAPIHandler.SetPublisher(publisher, encLookup)
-		dashboard.RegisterInventoryAPI(router, inventoryAPIHandler, passthroughMiddleware)
+		dashboard.RegisterInventoryAPI(router, inventoryAPIHandler, authMw)
 
 		// Phase 104c: Level-up handler. DB-backed store/class adapters plus
 		// a DM-only notifier (public announcements deferred) share the
