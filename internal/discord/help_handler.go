@@ -16,15 +16,7 @@ func NewHelpHandler(session Session) *HelpHandler {
 
 // Handle processes the /help interaction.
 func (h *HelpHandler) Handle(interaction *discordgo.Interaction) {
-	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
-
-	var topic string
-	for _, opt := range data.Options {
-		if opt.Name == "topic" {
-			topic = opt.StringValue()
-			break
-		}
-	}
+	topic := optionString(interaction, "topic")
 
 	if topic == "" {
 		respondEphemeral(h.session, interaction, generalHelp)

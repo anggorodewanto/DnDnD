@@ -7,118 +7,76 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-func TestHelpHandler_NoArgs_ReturnsGeneralHelp(t *testing.T) {
+// runHelpCommand invokes the help handler with the given topic (empty for no topic)
+// and returns the response content and flags.
+func runHelpCommand(topic string) (content string, flags discordgo.MessageFlags) {
 	mock := newTestMock()
-	var respondedContent string
-	var respondedFlags discordgo.MessageFlags
-	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		respondedContent = resp.Data.Content
-		respondedFlags = resp.Data.Flags
+	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		content = resp.Data.Content
+		flags = resp.Data.Flags
 		return nil
 	}
 
+	var opts []*discordgo.ApplicationCommandInteractionDataOption
+	if topic != "" {
+		opts = []*discordgo.ApplicationCommandInteractionDataOption{
+			{Name: "topic", Type: discordgo.ApplicationCommandOptionString, Value: topic},
+		}
+	}
+
 	handler := NewHelpHandler(mock)
-	interaction := &discordgo.Interaction{
+	handler.Handle(&discordgo.Interaction{
 		Type: discordgo.InteractionApplicationCommand,
 		Data: discordgo.ApplicationCommandInteractionData{
 			Name:    "help",
-			Options: []*discordgo.ApplicationCommandInteractionDataOption{},
+			Options: opts,
 		},
-	}
-	handler.Handle(interaction)
+	})
+	return content, flags
+}
 
-	if respondedFlags != discordgo.MessageFlagsEphemeral {
-		t.Errorf("expected ephemeral flag %d, got %d", discordgo.MessageFlagsEphemeral, respondedFlags)
+func TestHelpHandler_NoArgs_ReturnsGeneralHelp(t *testing.T) {
+	content, flags := runHelpCommand("")
+
+	if flags != discordgo.MessageFlagsEphemeral {
+		t.Errorf("expected ephemeral flag %d, got %d", discordgo.MessageFlagsEphemeral, flags)
 	}
 
-	// Should contain category headers
 	for _, category := range []string{"Movement", "Combat", "Checks & Saves", "Communication", "Status & Inventory", "Character Management", "Utility"} {
-		if !strings.Contains(respondedContent, category) {
+		if !strings.Contains(content, category) {
 			t.Errorf("expected general help to contain category %q", category)
 		}
 	}
 
-	// Should contain some command names
-	if !strings.Contains(respondedContent, "/move") {
+	if !strings.Contains(content, "/move") {
 		t.Error("expected general help to contain /move")
 	}
-	if !strings.Contains(respondedContent, "/attack") {
+	if !strings.Contains(content, "/attack") {
 		t.Error("expected general help to contain /attack")
 	}
 }
 
 func TestHelpHandler_AttackTopic_ReturnsAttackHelp(t *testing.T) {
-	mock := newTestMock()
-	var respondedContent string
-	var respondedFlags discordgo.MessageFlags
-	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		respondedContent = resp.Data.Content
-		respondedFlags = resp.Data.Flags
-		return nil
+	content, flags := runHelpCommand("attack")
+
+	if flags != discordgo.MessageFlagsEphemeral {
+		t.Errorf("expected ephemeral flag, got %d", flags)
 	}
 
-	handler := NewHelpHandler(mock)
-	interaction := &discordgo.Interaction{
-		Type: discordgo.InteractionApplicationCommand,
-		Data: discordgo.ApplicationCommandInteractionData{
-			Name: "help",
-			Options: []*discordgo.ApplicationCommandInteractionDataOption{
-				{
-					Name:  "topic",
-					Type:  discordgo.ApplicationCommandOptionString,
-					Value: "attack",
-				},
-			},
-		},
-	}
-	handler.Handle(interaction)
-
-	if respondedFlags != discordgo.MessageFlagsEphemeral {
-		t.Errorf("expected ephemeral flag, got %d", respondedFlags)
-	}
-
-	if !strings.Contains(respondedContent, "/attack — Attack a Target") {
-		t.Error("expected attack help to contain title")
-	}
-	if !strings.Contains(respondedContent, "--gwm") {
-		t.Error("expected attack help to contain --gwm flag")
-	}
-	if !strings.Contains(respondedContent, "Extra Attack") {
-		t.Error("expected attack help to contain Extra Attack section")
-	}
-	if !strings.Contains(respondedContent, "Divine Smite prompt") {
-		t.Error("expected attack help to contain Divine Smite tip")
+	for _, want := range []string{"/attack — Attack a Target", "--gwm", "Extra Attack", "Divine Smite prompt"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected attack help to contain %q", want)
+		}
 	}
 }
 
 func TestHelpHandler_UnknownTopic_ReturnsError(t *testing.T) {
-	mock := newTestMock()
-	var respondedContent string
-	mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		respondedContent = resp.Data.Content
-		return nil
-	}
+	content, _ := runHelpCommand("nonexistent")
 
-	handler := NewHelpHandler(mock)
-	interaction := &discordgo.Interaction{
-		Type: discordgo.InteractionApplicationCommand,
-		Data: discordgo.ApplicationCommandInteractionData{
-			Name: "help",
-			Options: []*discordgo.ApplicationCommandInteractionDataOption{
-				{
-					Name:  "topic",
-					Type:  discordgo.ApplicationCommandOptionString,
-					Value: "nonexistent",
-				},
-			},
-		},
-	}
-	handler.Handle(interaction)
-
-	if !strings.Contains(respondedContent, "Unknown help topic") {
+	if !strings.Contains(content, "Unknown help topic") {
 		t.Error("expected unknown topic error message")
 	}
-	if !strings.Contains(respondedContent, "nonexistent") {
+	if !strings.Contains(content, "nonexistent") {
 		t.Error("expected error to include the topic name")
 	}
 }
@@ -135,33 +93,12 @@ func TestHelpHandler_AllSpecTopics_ReturnContent(t *testing.T) {
 
 	for _, topic := range topics {
 		t.Run(topic, func(t *testing.T) {
-			mock := newTestMock()
-			var respondedContent string
-			mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-				respondedContent = resp.Data.Content
-				return nil
-			}
+			content, _ := runHelpCommand(topic)
 
-			handler := NewHelpHandler(mock)
-			interaction := &discordgo.Interaction{
-				Type: discordgo.InteractionApplicationCommand,
-				Data: discordgo.ApplicationCommandInteractionData{
-					Name: "help",
-					Options: []*discordgo.ApplicationCommandInteractionDataOption{
-						{
-							Name:  "topic",
-							Type:  discordgo.ApplicationCommandOptionString,
-							Value: topic,
-						},
-					},
-				},
-			}
-			handler.Handle(interaction)
-
-			if respondedContent == "" {
+			if content == "" {
 				t.Errorf("topic %q returned empty content", topic)
 			}
-			if strings.Contains(respondedContent, "Unknown help topic") {
+			if strings.Contains(content, "Unknown help topic") {
 				t.Errorf("topic %q was not recognized", topic)
 			}
 		})
@@ -247,31 +184,10 @@ func TestHelpHandler_SpecTopics_MatchExactContent(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.topic, func(t *testing.T) {
-			mock := newTestMock()
-			var respondedContent string
-			mock.InteractionRespondFunc = func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-				respondedContent = resp.Data.Content
-				return nil
-			}
-
-			handler := NewHelpHandler(mock)
-			interaction := &discordgo.Interaction{
-				Type: discordgo.InteractionApplicationCommand,
-				Data: discordgo.ApplicationCommandInteractionData{
-					Name: "help",
-					Options: []*discordgo.ApplicationCommandInteractionDataOption{
-						{
-							Name:  "topic",
-							Type:  discordgo.ApplicationCommandOptionString,
-							Value: tc.topic,
-						},
-					},
-				},
-			}
-			handler.Handle(interaction)
+			content, _ := runHelpCommand(tc.topic)
 
 			for _, s := range tc.contains {
-				if !strings.Contains(respondedContent, s) {
+				if !strings.Contains(content, s) {
 					t.Errorf("topic %q: expected to contain %q", tc.topic, s)
 				}
 			}

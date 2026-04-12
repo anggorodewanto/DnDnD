@@ -694,7 +694,7 @@
   - Depends on: Phase 106a, DM dashboard auth middleware (tracked separately)
   - Done when: Unauthenticated requests to `/dashboard/queue/{id}` and its resolve POST are rejected, authenticated DM sessions work end-to-end, and `hasAuthUser` is no longer a no-op on this route.
 
-- [ ] **Phase 107: `/help` Command System**
+- [x] **Phase 107: `/help` Command System**
   - Scope: `/help` (general command list). `/help [command]` (detailed usage with examples, flags, tips). Class-specific help: `/help rogue`, `/help cleric`, `/help paladin`, `/help ki`, `/help metamagic`, `/help attack`, `/help action`. Context-specific tips (remaining attacks, available slots). All ephemeral. Spec lines 2907-2940.
   - Depends on: Phase 13
   - Done when: `/help` returns command list, per-command help shows full usage with examples, class-specific help renders correctly.
