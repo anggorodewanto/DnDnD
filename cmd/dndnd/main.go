@@ -387,6 +387,12 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			if discordHandlerSet.reaction != nil {
 				discordHandlerSet.reaction.SetNotifier(dmQueueNotifier)
 			}
+			// Phase 106e: route /use consumable posts through the dm-queue
+			// notifier so consumable usage is persisted and resolvable from
+			// the dashboard.
+			if discordHandlerSet.use != nil {
+				discordHandlerSet.use.SetNotifier(dmQueueNotifier)
+			}
 			rawDG.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				cmdRouter.Handle(i.Interaction)
 			})

@@ -47,6 +47,7 @@ type discordHandlers struct {
 	summon            *discord.SummonCommandHandler
 	recap             *discord.RecapHandler
 	reaction          *discord.ReactionHandler
+	use               *discord.UseHandler
 	enemyTurnNotifier *discord.DiscordEnemyTurnNotifier
 }
 
@@ -86,6 +87,11 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		summonSvc = deps.combatService
 	}
 
+	var useStore discord.UseCharacterStore
+	if deps.queries != nil {
+		useStore = deps.queries
+	}
+
 	handlers := discordHandlers{
 		move:     discord.NewMoveHandler(deps.session, moveSvc, mapSvc, turnSvc, deps.resolver, campaignSvc),
 		fly:      discord.NewFlyHandler(deps.session, moveSvc, turnSvc, deps.resolver),
@@ -122,6 +128,7 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		summon:            discord.NewSummonCommandHandler(deps.session, summonSvc),
 		recap:             discord.NewRecapHandler(deps.session, recapSvc, deps.resolver, newRecapPlayerLookupAdapter(combatantLookup)),
 		reaction:          discord.NewReactionHandler(deps.session, newReactionServiceAdapter(deps.combatService), deps.resolver, combatantLookup),
+		use:               discord.NewUseHandler(deps.session, checkCampProv, characterLookup, useStore, nil, nil),
 		enemyTurnNotifier: discord.NewDiscordEnemyTurnNotifier(deps.session, deps.campaignSettings, deps.mapRegenerator),
 	}
 
@@ -147,6 +154,9 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	r.SetRestHandler(set.rest)
 	r.SetSummonCommandHandler(set.summon)
 	r.SetRecapHandler(set.recap)
+	if set.use != nil {
+		r.SetUseHandler(set.use)
+	}
 	if set.reaction != nil {
 		r.SetReactionHandler(set.reaction)
 	}

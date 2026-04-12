@@ -14,6 +14,7 @@ import (
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/discord"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/testutil"
 )
@@ -24,6 +25,7 @@ import (
 type testSession struct {
 	sendFunc          func(channelID, content string) (*discordgo.Message, error)
 	guildChannelsFunc func(guildID string) ([]*discordgo.Channel, error)
+	respondFunc       func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error
 }
 
 func (t *testSession) UserChannelCreate(recipientID string) (*discordgo.Channel, error) {
@@ -55,6 +57,9 @@ func (t *testSession) GuildChannelCreateComplex(guildID string, data discordgo.G
 	return &discordgo.Channel{}, nil
 }
 func (t *testSession) InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+	if t.respondFunc != nil {
+		return t.respondFunc(interaction, resp)
+	}
 	return nil
 }
 func (t *testSession) InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error) {
@@ -89,6 +94,7 @@ func TestBuildDiscordHandlers_ConstructsAllPhase105Handlers(t *testing.T) {
 	require.NotNil(t, result.rest, "rest handler must be constructed")
 	require.NotNil(t, result.summon, "summon command handler must be constructed")
 	require.NotNil(t, result.recap, "recap handler must be constructed")
+	require.NotNil(t, result.use, "use handler must be constructed")
 }
 
 // TestBuildDiscordHandlers_EnemyTurnNotifierHasEncounterLookup ensures the
@@ -134,6 +140,67 @@ func TestBuildDiscordHandlers_EnemyTurnNotifierHasEncounterLookup(t *testing.T) 
 	if !strings.Contains(sentContent, "Round 7") {
 		t.Errorf("expected combat log to include round number, got %q", sentContent)
 	}
+}
+
+// TestAttachPhase105Handlers_RegistersUseHandler verifies that the use handler
+// is wired into the command router so /use commands route correctly at runtime.
+func TestAttachPhase105Handlers_RegistersUseHandler(t *testing.T) {
+	session := &testSession{}
+	deps := discordHandlerDeps{
+		session:       session,
+		roller:        dice.NewRoller(nil),
+		resolver:      &stubUserEncounterResolver{},
+		combatService: combat.NewService(nil),
+	}
+	set := buildDiscordHandlers(deps)
+	require.NotNil(t, set.use, "use handler must be constructed")
+
+	// Build a router and attach handlers. If SetUseHandler is not called
+	// in attachPhase105Handlers, sending a /use interaction will produce an
+	// "unknown command" response instead of invoking the UseHandler.
+	bot := discord.NewBot(session, "app-id", nil)
+	router := discord.NewCommandRouter(bot, nil)
+	attachPhase105Handlers(router, set)
+
+	// Simulate a /use interaction. The handler will fail gracefully (no
+	// guild / campaign) but the important assertion is that it does NOT
+	// respond with "Unknown command".
+	var responses []string
+	session.respondFunc = func(i *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		if resp.Data != nil {
+			responses = append(responses, resp.Data.Content)
+		}
+		return nil
+	}
+	router.Handle(&discordgo.Interaction{
+		Type: discordgo.InteractionApplicationCommand,
+		Data: discordgo.ApplicationCommandInteractionData{Name: "use"},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "test-user"}},
+	})
+	require.NotEmpty(t, responses, "use handler must respond (not silently ignored)")
+	for _, r := range responses {
+		assert.NotContains(t, r, "not yet implemented", "use handler must replace the stub in the router")
+	}
+}
+
+// TestBuildDiscordHandlers_UseHandlerAcceptsNotifier ensures the use handler
+// constructed by buildDiscordHandlers can have SetNotifier called on it without
+// panicking, mirroring the main.go wiring where dmQueueNotifier is injected.
+func TestBuildDiscordHandlers_UseHandlerAcceptsNotifier(t *testing.T) {
+	session := &testSession{}
+	deps := discordHandlerDeps{
+		session:       session,
+		roller:        dice.NewRoller(nil),
+		resolver:      &stubUserEncounterResolver{},
+		combatService: combat.NewService(nil),
+	}
+	set := buildDiscordHandlers(deps)
+	require.NotNil(t, set.use)
+
+	// SetNotifier must not panic with a nil notifier (defensive wiring).
+	assert.NotPanics(t, func() {
+		set.use.SetNotifier(nil)
+	})
 }
 
 type stubUserEncounterResolver struct{}
@@ -192,5 +259,6 @@ func TestBuildDiscordHandlers_Integration(t *testing.T) {
 	assert.NotNil(t, result.rest)
 	assert.NotNil(t, result.summon)
 	assert.NotNil(t, result.recap)
+	assert.NotNil(t, result.use)
 	assert.NotNil(t, result.enemyTurnNotifier)
 }
