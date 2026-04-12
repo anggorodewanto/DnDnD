@@ -130,6 +130,12 @@ func (r *CommandRouter) SetHelpHandler(h *HelpHandler) {
 	r.handlers["help"] = h
 }
 
+// SetStatusHandler registers the StatusHandler for the /status command,
+// replacing the stub installed by NewCommandRouter.
+func (r *CommandRouter) SetStatusHandler(h *StatusHandler) {
+	r.handlers["status"] = h
+}
+
 // RegistrationDeps holds the optional dependencies for registration command handlers.
 // When nil, the router uses plain stub handlers for registration commands.
 type RegistrationDeps struct {

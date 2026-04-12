@@ -48,6 +48,7 @@ type discordHandlers struct {
 	recap             *discord.RecapHandler
 	reaction          *discord.ReactionHandler
 	use               *discord.UseHandler
+	status            *discord.StatusHandler
 	enemyTurnNotifier *discord.DiscordEnemyTurnNotifier
 }
 
@@ -129,6 +130,15 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		recap:             discord.NewRecapHandler(deps.session, recapSvc, deps.resolver, newRecapPlayerLookupAdapter(combatantLookup)),
 		reaction:          discord.NewReactionHandler(deps.session, newReactionServiceAdapter(deps.combatService), deps.resolver, combatantLookup),
 		use:               discord.NewUseHandler(deps.session, checkCampProv, characterLookup, useStore, nil, nil),
+		status: discord.NewStatusHandler(
+			deps.session,
+			checkCampProv,
+			characterLookup,
+			deps.resolver,
+			combatantLookup,
+			newConcentrationLookupAdapter(deps.queries),
+			newReactionLookupAdapter(deps.queries),
+		),
 		enemyTurnNotifier: discord.NewDiscordEnemyTurnNotifier(deps.session, deps.campaignSettings, deps.mapRegenerator),
 	}
 
@@ -156,6 +166,7 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	r.SetRecapHandler(set.recap)
 	r.SetUseHandler(set.use)
 	r.SetReactionHandler(set.reaction)
+	r.SetStatusHandler(set.status)
 }
 
 // --- Thin adapters bridging refdata.Queries / combat.Service to the handler
@@ -385,6 +396,38 @@ func newCheckCampaignProviderAdapter(q *refdata.Queries) *checkCampaignProviderA
 
 func (a *checkCampaignProviderAdapter) GetCampaignByGuildID(ctx context.Context, guildID string) (refdata.Campaign, error) {
 	return a.queries.GetCampaignByGuildID(ctx, guildID)
+}
+
+// concentrationLookupAdapter satisfies discord.StatusConcentrationLookup over *refdata.Queries.
+type concentrationLookupAdapter struct {
+	queries *refdata.Queries
+}
+
+func newConcentrationLookupAdapter(q *refdata.Queries) *concentrationLookupAdapter {
+	if q == nil {
+		return nil
+	}
+	return &concentrationLookupAdapter{queries: q}
+}
+
+func (a *concentrationLookupAdapter) ListConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) ([]refdata.EncounterZone, error) {
+	return a.queries.ListConcentrationZonesByCombatant(ctx, sourceCombatantID)
+}
+
+// reactionLookupAdapter satisfies discord.StatusReactionLookup over *refdata.Queries.
+type reactionLookupAdapter struct {
+	queries *refdata.Queries
+}
+
+func newReactionLookupAdapter(q *refdata.Queries) *reactionLookupAdapter {
+	if q == nil {
+		return nil
+	}
+	return &reactionLookupAdapter{queries: q}
+}
+
+func (a *reactionLookupAdapter) ListActiveReactionDeclarationsByCombatant(ctx context.Context, arg refdata.ListActiveReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error) {
+	return a.queries.ListActiveReactionDeclarationsByCombatant(ctx, arg)
 }
 
 // sqlNoRowsLike returns a sentinel error for "combatant not found" lookups
