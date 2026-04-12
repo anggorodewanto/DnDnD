@@ -378,21 +378,15 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			// rest requests are persisted and resolvable from the dashboard.
 			discordHandlerSet.rest.SetNotifier(dmQueueNotifier)
 			// Phase 106d: gate non-trivial /check rolls through #dm-queue.
-			if discordHandlerSet.check != nil {
-				discordHandlerSet.check.SetNotifier(dmQueueNotifier)
-			}
+			discordHandlerSet.check.SetNotifier(dmQueueNotifier)
 			// Phase 106c: route /reaction declarations through the dm-queue
 			// notifier so each declaration is posted to #dm-queue and the
 			// player can cancel it before the trigger fires.
-			if discordHandlerSet.reaction != nil {
-				discordHandlerSet.reaction.SetNotifier(dmQueueNotifier)
-			}
+			discordHandlerSet.reaction.SetNotifier(dmQueueNotifier)
 			// Phase 106e: route /use consumable posts through the dm-queue
 			// notifier so consumable usage is persisted and resolvable from
 			// the dashboard.
-			if discordHandlerSet.use != nil {
-				discordHandlerSet.use.SetNotifier(dmQueueNotifier)
-			}
+			discordHandlerSet.use.SetNotifier(dmQueueNotifier)
 			rawDG.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				cmdRouter.Handle(i.Interaction)
 			})

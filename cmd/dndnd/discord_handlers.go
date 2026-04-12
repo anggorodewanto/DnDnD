@@ -154,12 +154,8 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	r.SetRestHandler(set.rest)
 	r.SetSummonCommandHandler(set.summon)
 	r.SetRecapHandler(set.recap)
-	if set.use != nil {
-		r.SetUseHandler(set.use)
-	}
-	if set.reaction != nil {
-		r.SetReactionHandler(set.reaction)
-	}
+	r.SetUseHandler(set.use)
+	r.SetReactionHandler(set.reaction)
 }
 
 // --- Thin adapters bridging refdata.Queries / combat.Service to the handler
