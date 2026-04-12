@@ -503,6 +503,13 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 		{
 			Name:        "help",
 			Description: "Show a full command list",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "topic",
+					Description: "Command or class to get help on (e.g. attack, rogue, ki)",
+				},
+			},
 		},
 		{
 			Name:                     "setup",
