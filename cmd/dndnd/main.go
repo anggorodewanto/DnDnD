@@ -415,6 +415,9 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			// notifier so consumable usage is persisted and resolvable from
 			// the dashboard.
 			discordHandlerSet.use.SetNotifier(dmQueueNotifier)
+			// Phase 109: route /whisper messages through the dm-queue
+			// notifier so whispers are posted to #dm-queue for DM resolution.
+			discordHandlerSet.whisper.SetNotifier(dmQueueNotifier)
 			rawDG.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				cmdRouter.Handle(i.Interaction)
 			})

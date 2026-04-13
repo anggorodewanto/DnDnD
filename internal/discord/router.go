@@ -130,6 +130,12 @@ func (r *CommandRouter) SetHelpHandler(h *HelpHandler) {
 	r.handlers["help"] = h
 }
 
+// SetWhisperHandler registers the WhisperHandler for the /whisper command,
+// replacing the stub installed by NewCommandRouter.
+func (r *CommandRouter) SetWhisperHandler(h *WhisperHandler) {
+	r.handlers["whisper"] = h
+}
+
 // SetStatusHandler registers the StatusHandler for the /status command,
 // replacing the stub installed by NewCommandRouter.
 func (r *CommandRouter) SetStatusHandler(h *StatusHandler) {

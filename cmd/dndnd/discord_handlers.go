@@ -49,6 +49,7 @@ type discordHandlers struct {
 	reaction          *discord.ReactionHandler
 	use               *discord.UseHandler
 	status            *discord.StatusHandler
+	whisper           *discord.WhisperHandler
 	enemyTurnNotifier *discord.DiscordEnemyTurnNotifier
 }
 
@@ -139,6 +140,7 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			newConcentrationLookupAdapter(deps.queries),
 			newReactionLookupAdapter(deps.queries),
 		),
+		whisper:           discord.NewWhisperHandler(deps.session, checkCampProv, characterLookup),
 		enemyTurnNotifier: discord.NewDiscordEnemyTurnNotifier(deps.session, deps.campaignSettings, deps.mapRegenerator),
 	}
 
@@ -167,6 +169,7 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	r.SetUseHandler(set.use)
 	r.SetReactionHandler(set.reaction)
 	r.SetStatusHandler(set.status)
+	r.SetWhisperHandler(set.whisper)
 }
 
 // --- Thin adapters bridging refdata.Queries / combat.Service to the handler

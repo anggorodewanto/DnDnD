@@ -95,6 +95,7 @@ func TestBuildDiscordHandlers_ConstructsAllPhase105Handlers(t *testing.T) {
 	require.NotNil(t, result.summon, "summon command handler must be constructed")
 	require.NotNil(t, result.recap, "recap handler must be constructed")
 	require.NotNil(t, result.use, "use handler must be constructed")
+	require.NotNil(t, result.whisper, "whisper handler must be constructed")
 }
 
 // TestBuildDiscordHandlers_EnemyTurnNotifierHasEncounterLookup ensures the
@@ -200,6 +201,24 @@ func TestBuildDiscordHandlers_UseHandlerAcceptsNotifier(t *testing.T) {
 	// SetNotifier must not panic with a nil notifier (defensive wiring).
 	assert.NotPanics(t, func() {
 		set.use.SetNotifier(nil)
+	})
+}
+
+// TestBuildDiscordHandlers_WhisperHandlerAcceptsNotifier verifies that the
+// whisper handler's SetNotifier can be called without panicking.
+func TestBuildDiscordHandlers_WhisperHandlerAcceptsNotifier(t *testing.T) {
+	session := &testSession{}
+	deps := discordHandlerDeps{
+		session:       session,
+		roller:        dice.NewRoller(nil),
+		resolver:      &stubUserEncounterResolver{},
+		combatService: combat.NewService(nil),
+	}
+	set := buildDiscordHandlers(deps)
+	require.NotNil(t, set.whisper)
+
+	assert.NotPanics(t, func() {
+		set.whisper.SetNotifier(nil)
 	})
 }
 
