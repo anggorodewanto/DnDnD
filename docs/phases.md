@@ -704,7 +704,7 @@
   - Depends on: Phase 39, Phase 70
   - Done when: `/status` shows all active state for the character, formatted per spec.
 
-- [ ] **Phase 109: `/whisper` Command**
+- [x] **Phase 109: `/whisper` Command**
   - Scope: `/whisper [message]`: ephemeral to player, posted to #dm-queue as "Whisper" event. DM resolves from dashboard, reply sent as Discord DM. Each whisper is standalone (no threaded view).
   - Depends on: Phase 106a
   - Done when: Whisper posts to #dm-queue, DM can reply, reply delivered as DM, standalone queue items.

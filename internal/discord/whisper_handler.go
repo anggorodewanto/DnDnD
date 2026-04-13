@@ -58,14 +58,7 @@ func (h *WhisperHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
-	var message string
-	for _, opt := range data.Options {
-		if opt.Name == "message" {
-			message = opt.StringValue()
-		}
-	}
-
+	message := optionString(interaction, "message")
 	userID := discordUserID(interaction)
 	char, err := h.characterLookup.GetCharacterByCampaignAndDiscord(ctx, campaign.ID, userID)
 	if err != nil {
