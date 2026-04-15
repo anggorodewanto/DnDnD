@@ -67,6 +67,13 @@ func (h *MoveHandler) SetCharacterLookup(lookup MoveCharacterLookup) {
 	h.characterLookup = lookup
 }
 
+// HasCharacterLookup reports whether a non-nil MoveCharacterLookup has been
+// wired on this handler. Used by production-wiring tests to detect the
+// Phase 110 first-PC bug (nil characterLookup falls back to pcs[0]).
+func (h *MoveHandler) HasCharacterLookup() bool {
+	return h.characterLookup != nil
+}
+
 // NewMoveHandler creates a new MoveHandler.
 func NewMoveHandler(
 	session Session,

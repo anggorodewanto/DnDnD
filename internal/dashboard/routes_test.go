@@ -133,6 +133,52 @@ func TestRegisterExplorationRoutes_StartEndpointMounted(t *testing.T) {
 	assert.True(t, h.startCalled, "POST /dashboard/exploration/start should hit HandleStart")
 }
 
+// TestRegisterExplorationRoutes_TransitionEndpointMounted verifies Phase 110 it3:
+// the /dashboard/exploration/transition-to-combat POST route is registered
+// via RegisterExplorationRoutes — the production mount path — and reaches the
+// handler when invoked with auth.
+func TestRegisterExplorationRoutes_TransitionEndpointMounted(t *testing.T) {
+	r := chi.NewRouter()
+	auth := func(next http.Handler) http.Handler { return next }
+	h := &stubExplorationHandler{}
+	RegisterExplorationRoutes(r, h, auth)
+
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/exploration/transition-to-combat", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.NotEqual(t, http.StatusNotFound, rec.Code,
+		"POST /dashboard/exploration/transition-to-combat must be mounted")
+	assert.True(t, h.transitionCalled, "HandleTransitionToCombat should be invoked")
+}
+
+// TestRegisterExplorationRoutes_TransitionRouteAuthWrapped verifies the
+// transition-to-combat route is wrapped by authMiddleware so it cannot be
+// reached without authentication.
+func TestRegisterExplorationRoutes_TransitionRouteAuthWrapped(t *testing.T) {
+	r := chi.NewRouter()
+	authCalled := false
+	auth := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			authCalled = true
+			// Simulate unauthenticated: short-circuit with 401.
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+	}
+	h := &stubExplorationHandler{}
+	RegisterExplorationRoutes(r, h, auth)
+
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/exploration/transition-to-combat", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.True(t, authCalled, "auth middleware must wrap the transition route")
+	assert.Equal(t, http.StatusUnauthorized, rec.Code,
+		"request without auth should be rejected before reaching handler")
+	assert.False(t, h.transitionCalled,
+		"handler must NOT be called when auth middleware rejects the request")
+}
+
 // TestSidebarNav_IncludesExploration verifies the DM dashboard sidebar links
 // to the exploration page (clarification Q4a: reachable from DM dashboard).
 func TestSidebarNav_IncludesExploration(t *testing.T) {
@@ -147,8 +193,9 @@ func TestSidebarNav_IncludesExploration(t *testing.T) {
 }
 
 type stubExplorationHandler struct {
-	pageCalled  bool
-	startCalled bool
+	pageCalled       bool
+	startCalled      bool
+	transitionCalled bool
 }
 
 func (s *stubExplorationHandler) ServePage(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +204,10 @@ func (s *stubExplorationHandler) ServePage(w http.ResponseWriter, r *http.Reques
 }
 func (s *stubExplorationHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	s.startCalled = true
+	w.WriteHeader(http.StatusOK)
+}
+func (s *stubExplorationHandler) HandleTransitionToCombat(w http.ResponseWriter, r *http.Request) {
+	s.transitionCalled = true
 	w.WriteHeader(http.StatusOK)
 }
 

@@ -204,6 +204,30 @@ func TestBuildDiscordHandlers_UseHandlerAcceptsNotifier(t *testing.T) {
 	})
 }
 
+// TestBuildDiscordHandlers_MoveHandlerHasCharacterLookup verifies Phase 110 it3:
+// the production wiring in buildDiscordHandlers attaches a non-nil
+// MoveCharacterLookup on the MoveHandler so resolveExplorationMover can
+// disambiguate which PC combatant to move by the invoking Discord user,
+// rather than falling back to pcs[0].
+func TestBuildDiscordHandlers_MoveHandlerHasCharacterLookup(t *testing.T) {
+	session := &testSession{}
+	db := testutil.NewTestDB(t)
+	require.NoError(t, database.MigrateUp(db, dbfs.Migrations))
+	queries := refdata.New(db)
+
+	deps := discordHandlerDeps{
+		session:       session,
+		queries:       queries,
+		combatService: combat.NewService(combat.NewStoreAdapter(queries)),
+		roller:        dice.NewRoller(nil),
+		resolver:      &stubUserEncounterResolver{},
+	}
+	set := buildDiscordHandlers(deps)
+	require.NotNil(t, set.move)
+	assert.True(t, set.move.HasCharacterLookup(),
+		"move handler must have a non-nil MoveCharacterLookup wired in production")
+}
+
 // TestBuildDiscordHandlers_WhisperHandlerAcceptsNotifier verifies that the
 // whisper handler's SetNotifier can be called without panicking.
 func TestBuildDiscordHandlers_WhisperHandlerAcceptsNotifier(t *testing.T) {

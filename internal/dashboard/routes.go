@@ -49,6 +49,7 @@ func RegisterDMQueueRoutes(r chi.Router, logger *slog.Logger, notifier dmqueue.N
 type ExplorationHandler interface {
 	ServePage(w http.ResponseWriter, r *http.Request)
 	HandleStart(w http.ResponseWriter, r *http.Request)
+	HandleTransitionToCombat(w http.ResponseWriter, r *http.Request)
 }
 
 // RegisterExplorationRoutes mounts the Phase 110 exploration dashboard pages
@@ -59,6 +60,7 @@ func RegisterExplorationRoutes(r chi.Router, h ExplorationHandler, authMiddlewar
 		r.Use(authMiddleware)
 		r.Get("/dashboard/exploration", h.ServePage)
 		r.Post("/dashboard/exploration/start", h.HandleStart)
+		r.Post("/dashboard/exploration/transition-to-combat", h.HandleTransitionToCombat)
 	})
 }
 

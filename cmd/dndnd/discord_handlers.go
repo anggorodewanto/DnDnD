@@ -146,6 +146,12 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 
 	// Setter-based wiring for handlers that don't accept these via constructor.
 	handlers.summon.SetEncounterProvider(deps.resolver)
+	// Phase 110 it3: wire the character lookup so exploration /move can
+	// disambiguate which PC combatant belongs to the invoking Discord user
+	// (resolveExplorationMover falls back to pcs[0] when this is nil).
+	if characterLookup != nil {
+		handlers.move.SetCharacterLookup(characterLookup)
+	}
 	if deps.enemyTurnEncounterLookup != nil {
 		handlers.enemyTurnNotifier.SetEncounterLookup(deps.enemyTurnEncounterLookup)
 	}
