@@ -709,7 +709,7 @@
   - Depends on: Phase 106a
   - Done when: Whisper posts to #dm-queue, DM can reply, reply delivered as DM, standalone queue items.
 
-- [ ] **Phase 110: Exploration Mode (Map-Based & Theater-of-Mind)**
+- [x] **Phase 110: Exploration Mode (Map-Based & Theater-of-Mind)**
   - Scope: Map-based exploration: DM loads map without encounter/initiative. Players use `/move`, `/check` without turn order or action economy (wiring `/action` freeform in exploration is deferred — see Phase 110a). All players act freely. Walls enforced via pathfinding, but no speed limit on movement. If combat breaks out, DM starts encounter on current map; exploration PC positions carry over to `StartCombat.CharacterPositions` and DM may override per-combatant. Theater-of-mind: DM narrates in #the-story, players respond in #in-character, checks as needed.
   - Design decisions (user-resolved during Phase 110 planning, 2026-04-15):
     - State storage: reuse `encounters` table with a new `mode` column (`'combat'` vs `'exploration'`). Combat transition = mode flip + initiative roll, preserving `ActiveEncounterForUser`/`GetEncounter`/map linkage semantics.
