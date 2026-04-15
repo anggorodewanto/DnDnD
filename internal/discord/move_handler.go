@@ -319,15 +319,9 @@ func (h *MoveHandler) handleExplorationMove(ctx context.Context, interaction *di
 		return
 	}
 
-	// Find the mover's combatant entry by matching the invoking Discord user
-	// to a PC combatant. The simplest resolution for Phase 110: the caller
-	// participates in this encounter (already verified by ActiveEncounterForUser
-	// earlier), so look up their combatant via the campaign provider. For the
-	// MVP we find the mover by listing combatants and picking the PC that
-	// owns the current slash invocation — but since exploration has no current
-	// turn, we cannot use CurrentTurnID. Instead we match on the invoking
-	// user's character via the campaign adapter when available. If no adapter
-	// is configured, we fall back to the only PC combatant present.
+	// Exploration has no CurrentTurnID, so resolveExplorationMover matches
+	// the invoking Discord user's character against alive PC combatants
+	// (falling back to the sole PC when lookup isn't wired).
 	allCombatants, err := h.combatService.ListCombatantsByEncounterID(ctx, encounter.ID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Failed to list combatants.")
@@ -340,7 +334,7 @@ func (h *MoveHandler) handleExplorationMove(ctx context.Context, interaction *di
 		return
 	}
 
-	startCol, startRow, err := renderer.ParseCoordinate(mover.PositionCol + fmt.Sprintf("%d", mover.PositionRow))
+	startCol, startRow, err := renderer.ParseCoordinate(fmt.Sprintf("%s%d", mover.PositionCol, mover.PositionRow))
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Invalid current position.")
 		return
@@ -505,7 +499,7 @@ func buildOccupants(all []refdata.Combatant, mover refdata.Combatant) []pathfind
 			Col:          col,
 			Row:          row,
 			IsAlly:       c.IsNpc == mover.IsNpc, // ally if same faction
-			SizeCategory: pathfinding.SizeMedium,  // default; would look up creature size
+			SizeCategory: pathfinding.SizeMedium, // default; would look up creature size
 			AltitudeFt:   int(c.AltitudeFt),
 		})
 	}
@@ -816,5 +810,3 @@ func ParseProneMoveData(customID string, prefix string) (turnID, combatantID uui
 	}
 	return turnID, combatantID, destCol, destRow, maxSpeed, nil
 }
-
-

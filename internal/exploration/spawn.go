@@ -30,15 +30,15 @@ type SpawnZone struct {
 
 // tiledForSpawn is a minimal Tiled structure for spawn_zones extraction.
 type tiledForSpawn struct {
-	TileWidth  int              `json:"tilewidth"`
-	TileHeight int              `json:"tileheight"`
-	Layers     []tiledSpawnLyr  `json:"layers"`
+	TileWidth  int             `json:"tilewidth"`
+	TileHeight int             `json:"tileheight"`
+	Layers     []tiledSpawnLyr `json:"layers"`
 }
 
 type tiledSpawnLyr struct {
-	Name    string            `json:"name"`
-	Type    string            `json:"type"`
-	Objects []tiledSpawnObj   `json:"objects"`
+	Name    string          `json:"name"`
+	Type    string          `json:"type"`
+	Objects []tiledSpawnObj `json:"objects"`
 }
 
 type tiledSpawnObj struct {

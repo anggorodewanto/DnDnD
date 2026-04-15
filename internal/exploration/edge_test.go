@@ -269,7 +269,7 @@ func TestDashboardHandler_StartPost_ServiceError(t *testing.T) {
 	mapID := uuid.New()
 	campID := uuid.New()
 	store.maps[mapID] = refdata.Map{
-		ID: mapID,
+		ID:        mapID,
 		TiledJson: json.RawMessage(`{"width":5,"height":5,"tilewidth":48,"tileheight":48,"layers":[]}`),
 	}
 	charID := uuid.New()

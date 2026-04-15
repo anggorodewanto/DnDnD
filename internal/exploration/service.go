@@ -82,7 +82,7 @@ func (s *Service) StartExploration(ctx context.Context, input StartInput) (Start
 		return StartResult{}, err
 	}
 
-	displayName := sql.NullString{}
+	var displayName sql.NullString
 	if input.DisplayName != "" {
 		displayName = sql.NullString{String: input.DisplayName, Valid: true}
 	}
@@ -99,7 +99,7 @@ func (s *Service) StartExploration(ctx context.Context, input StartInput) (Start
 
 	out := StartResult{
 		Encounter: enc,
-		PCs:       map[uuid.UUID]combat.Position{},
+		PCs:       make(map[uuid.UUID]combat.Position, len(input.CharacterIDs)),
 	}
 
 	for _, charID := range input.CharacterIDs {
@@ -135,21 +135,21 @@ func (s *Service) createCombatantFromParams(ctx context.Context, encID uuid.UUID
 		}
 	}
 	return s.store.CreateCombatant(ctx, refdata.CreateCombatantParams{
-		EncounterID:  encID,
-		CharacterID:  charID,
-		ShortID:      p.ShortID,
-		DisplayName:  p.DisplayName,
-		HpMax:        p.HPMax,
-		HpCurrent:    p.HPCurrent,
-		TempHp:       p.TempHP,
-		Ac:           p.AC,
-		PositionCol:  p.PositionCol,
-		PositionRow:  p.PositionRow,
-		Conditions:   json.RawMessage(`[]`),
-		IsAlive:      p.IsAlive,
-		IsVisible:    p.IsVisible,
-		IsNpc:        p.IsNPC,
-		DeathSaves:   nullRaw(p.DeathSaves),
+		EncounterID: encID,
+		CharacterID: charID,
+		ShortID:     p.ShortID,
+		DisplayName: p.DisplayName,
+		HpMax:       p.HPMax,
+		HpCurrent:   p.HPCurrent,
+		TempHp:      p.TempHP,
+		Ac:          p.AC,
+		PositionCol: p.PositionCol,
+		PositionRow: p.PositionRow,
+		Conditions:  json.RawMessage(`[]`),
+		IsAlive:     p.IsAlive,
+		IsVisible:   p.IsVisible,
+		IsNpc:       p.IsNPC,
+		DeathSaves:  nullRaw(p.DeathSaves),
 	})
 }
 

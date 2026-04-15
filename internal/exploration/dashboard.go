@@ -21,13 +21,13 @@ type MapLister interface {
 }
 
 // DashboardHandler serves the Phase 110 exploration dashboard page (Q4a).
-// GET  /dashboard/exploration?campaign_id=<id> lists maps and lets the DM
-//      pick one to start exploration.
-// POST /dashboard/exploration/start kicks off a new exploration encounter.
+//   - GET  /dashboard/exploration?campaign_id=<id> lists maps and lets the DM
+//     pick one to start exploration.
+//   - POST /dashboard/exploration/start kicks off a new exploration encounter.
 type DashboardHandler struct {
-	svc    *Service
-	maps   MapLister
-	tmpl   *template.Template
+	svc  *Service
+	maps MapLister
+	tmpl *template.Template
 }
 
 // NewDashboardHandler constructs a DashboardHandler.
@@ -196,13 +196,12 @@ func (h *DashboardHandler) HandleTransitionToCombat(w http.ResponseWriter, r *ht
 	}
 	merged := ApplyPositionOverrides(base, overrides)
 
-	out := map[string]any{"positions": map[string]map[string]any{}}
-	posMap := out["positions"].(map[string]map[string]any)
+	posMap := make(map[string]map[string]any, len(merged))
 	for k, v := range merged {
 		posMap[k.String()] = map[string]any{"col": v.Col, "row": v.Row}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(out)
+	_ = json.NewEncoder(w).Encode(map[string]any{"positions": posMap})
 }
 
 // dashboardTemplate is a minimal HTML page: a table of maps with a

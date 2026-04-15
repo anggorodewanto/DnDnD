@@ -77,11 +77,11 @@ func (t *testSession) GetState() *discordgo.State { return nil }
 func TestBuildDiscordHandlers_ConstructsAllPhase105Handlers(t *testing.T) {
 	session := &testSession{}
 	deps := discordHandlerDeps{
-		session:        session,
-		queries:        nil, // not invoked in constructor path
-		combatService:  combat.NewService(nil),
-		roller:         dice.NewRoller(nil),
-		resolver:       &stubUserEncounterResolver{},
+		session:       session,
+		queries:       nil, // not invoked in constructor path
+		combatService: combat.NewService(nil),
+		roller:        dice.NewRoller(nil),
+		resolver:      &stubUserEncounterResolver{},
 	}
 	result := buildDiscordHandlers(deps)
 
@@ -174,8 +174,8 @@ func TestAttachPhase105Handlers_RegistersUseHandler(t *testing.T) {
 		return nil
 	}
 	router.Handle(&discordgo.Interaction{
-		Type: discordgo.InteractionApplicationCommand,
-		Data: discordgo.ApplicationCommandInteractionData{Name: "use"},
+		Type:   discordgo.InteractionApplicationCommand,
+		Data:   discordgo.ApplicationCommandInteractionData{Name: "use"},
 		Member: &discordgo.Member{User: &discordgo.User{ID: "test-user"}},
 	})
 	require.NotEmpty(t, responses, "use handler must respond (not silently ignored)")

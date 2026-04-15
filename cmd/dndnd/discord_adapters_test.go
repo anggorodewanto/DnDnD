@@ -17,13 +17,13 @@ import (
 // discordUserEncounterResolver so we can unit test the guild->character->
 // encounter chain without spinning up Postgres.
 type fakeResolverQueries struct {
-	campaignsByGuild    map[string]refdata.Campaign
-	campaignErr         error
-	playerByCampUser    map[string]refdata.PlayerCharacter
-	playerErr           error
-	activeEncByChar     map[uuid.UUID]uuid.UUID
-	activeEncErr        error
-	activeEncNotFound   bool
+	campaignsByGuild  map[string]refdata.Campaign
+	campaignErr       error
+	playerByCampUser  map[string]refdata.PlayerCharacter
+	playerErr         error
+	activeEncByChar   map[uuid.UUID]uuid.UUID
+	activeEncErr      error
+	activeEncNotFound bool
 }
 
 func (f *fakeResolverQueries) GetCampaignByGuildID(ctx context.Context, guildID string) (refdata.Campaign, error) {

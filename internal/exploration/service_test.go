@@ -108,19 +108,19 @@ func (f *fakeStore) GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Cha
 func (f *fakeStore) CreateCombatant(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
 	f.addCombatantCalls++
 	cb := refdata.Combatant{
-		ID:           uuid.New(),
-		EncounterID:  arg.EncounterID,
-		CharacterID:  arg.CharacterID,
-		ShortID:      arg.ShortID,
-		DisplayName:  arg.DisplayName,
-		PositionCol:  arg.PositionCol,
-		PositionRow:  arg.PositionRow,
-		HpMax:        arg.HpMax,
-		HpCurrent:    arg.HpCurrent,
-		Ac:           arg.Ac,
-		IsAlive:      true,
-		IsVisible:    true,
-		Conditions:   []byte(`[]`),
+		ID:          uuid.New(),
+		EncounterID: arg.EncounterID,
+		CharacterID: arg.CharacterID,
+		ShortID:     arg.ShortID,
+		DisplayName: arg.DisplayName,
+		PositionCol: arg.PositionCol,
+		PositionRow: arg.PositionRow,
+		HpMax:       arg.HpMax,
+		HpCurrent:   arg.HpCurrent,
+		Ac:          arg.Ac,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  []byte(`[]`),
 	}
 	f.combatants[arg.EncounterID] = append(f.combatants[arg.EncounterID], cb)
 	return cb, nil
@@ -249,7 +249,7 @@ func TestStartExploration_MapWithoutPlayerZoneStillSucceedsIfNoPCs(t *testing.T)
 	store := newFakeStore()
 	mapID := uuid.New()
 	store.maps[mapID] = refdata.Map{
-		ID: mapID,
+		ID:        mapID,
 		TiledJson: json.RawMessage(`{"width":5,"height":5,"tilewidth":48,"tileheight":48,"layers":[]}`),
 	}
 	svc := exploration.NewService(store)
@@ -269,7 +269,7 @@ func TestStartExploration_MapWithoutPlayerZoneFailsIfPCsProvided(t *testing.T) {
 	store := newFakeStore()
 	mapID := uuid.New()
 	store.maps[mapID] = refdata.Map{
-		ID: mapID,
+		ID:        mapID,
 		TiledJson: json.RawMessage(`{"width":5,"height":5,"tilewidth":48,"tileheight":48,"layers":[]}`),
 	}
 	charA := uuid.New()
