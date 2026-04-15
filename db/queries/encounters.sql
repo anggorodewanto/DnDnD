@@ -3,6 +3,14 @@ INSERT INTO encounters (campaign_id, map_id, name, display_name, template_id, st
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
+-- name: CreateExplorationEncounter :one
+INSERT INTO encounters (campaign_id, map_id, name, display_name, status, round_number, mode)
+VALUES ($1, $2, $3, $4, 'active', 0, 'exploration')
+RETURNING *;
+
+-- name: UpdateEncounterMode :one
+UPDATE encounters SET mode = $2, updated_at = now() WHERE id = $1 RETURNING *;
+
 -- name: GetEncounter :one
 SELECT * FROM encounters WHERE id = $1;
 

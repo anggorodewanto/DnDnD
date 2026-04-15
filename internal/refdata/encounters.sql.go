@@ -15,7 +15,7 @@ import (
 const createEncounter = `-- name: CreateEncounter :one
 INSERT INTO encounters (campaign_id, map_id, name, display_name, template_id, status, round_number)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at
+RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at, mode
 `
 
 type CreateEncounterParams struct {
@@ -51,6 +51,45 @@ func (q *Queries) CreateEncounter(ctx context.Context, arg CreateEncounterParams
 		&i.CurrentTurnID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Mode,
+	)
+	return i, err
+}
+
+const createExplorationEncounter = `-- name: CreateExplorationEncounter :one
+INSERT INTO encounters (campaign_id, map_id, name, display_name, status, round_number, mode)
+VALUES ($1, $2, $3, $4, 'active', 0, 'exploration')
+RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at, mode
+`
+
+type CreateExplorationEncounterParams struct {
+	CampaignID  uuid.UUID      `json:"campaign_id"`
+	MapID       uuid.NullUUID  `json:"map_id"`
+	Name        string         `json:"name"`
+	DisplayName sql.NullString `json:"display_name"`
+}
+
+func (q *Queries) CreateExplorationEncounter(ctx context.Context, arg CreateExplorationEncounterParams) (Encounter, error) {
+	row := q.db.QueryRowContext(ctx, createExplorationEncounter,
+		arg.CampaignID,
+		arg.MapID,
+		arg.Name,
+		arg.DisplayName,
+	)
+	var i Encounter
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.MapID,
+		&i.Name,
+		&i.DisplayName,
+		&i.TemplateID,
+		&i.Status,
+		&i.RoundNumber,
+		&i.CurrentTurnID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Mode,
 	)
 	return i, err
 }
@@ -101,7 +140,7 @@ func (q *Queries) GetCampaignByEncounterID(ctx context.Context, id uuid.UUID) (C
 }
 
 const getEncounter = `-- name: GetEncounter :one
-SELECT id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at FROM encounters WHERE id = $1
+SELECT id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at, mode FROM encounters WHERE id = $1
 `
 
 func (q *Queries) GetEncounter(ctx context.Context, id uuid.UUID) (Encounter, error) {
@@ -119,12 +158,13 @@ func (q *Queries) GetEncounter(ctx context.Context, id uuid.UUID) (Encounter, er
 		&i.CurrentTurnID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Mode,
 	)
 	return i, err
 }
 
 const getMostRecentCompletedEncounter = `-- name: GetMostRecentCompletedEncounter :one
-SELECT id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at FROM encounters
+SELECT id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at, mode FROM encounters
 WHERE campaign_id = $1 AND status = 'completed'
 ORDER BY updated_at DESC
 LIMIT 1
@@ -145,12 +185,13 @@ func (q *Queries) GetMostRecentCompletedEncounter(ctx context.Context, campaignI
 		&i.CurrentTurnID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Mode,
 	)
 	return i, err
 }
 
 const listEncountersByCampaignID = `-- name: ListEncountersByCampaignID :many
-SELECT id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at FROM encounters WHERE campaign_id = $1 ORDER BY created_at DESC
+SELECT id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at, mode FROM encounters WHERE campaign_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListEncountersByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]Encounter, error) {
@@ -174,6 +215,7 @@ func (q *Queries) ListEncountersByCampaignID(ctx context.Context, campaignID uui
 			&i.CurrentTurnID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Mode,
 		); err != nil {
 			return nil, err
 		}
@@ -189,7 +231,7 @@ func (q *Queries) ListEncountersByCampaignID(ctx context.Context, campaignID uui
 }
 
 const updateEncounterCurrentTurn = `-- name: UpdateEncounterCurrentTurn :one
-UPDATE encounters SET current_turn_id = $2, updated_at = now() WHERE id = $1 RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at
+UPDATE encounters SET current_turn_id = $2, updated_at = now() WHERE id = $1 RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at, mode
 `
 
 type UpdateEncounterCurrentTurnParams struct {
@@ -212,12 +254,13 @@ func (q *Queries) UpdateEncounterCurrentTurn(ctx context.Context, arg UpdateEnco
 		&i.CurrentTurnID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Mode,
 	)
 	return i, err
 }
 
 const updateEncounterDisplayName = `-- name: UpdateEncounterDisplayName :one
-UPDATE encounters SET display_name = $2, updated_at = now() WHERE id = $1 RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at
+UPDATE encounters SET display_name = $2, updated_at = now() WHERE id = $1 RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at, mode
 `
 
 type UpdateEncounterDisplayNameParams struct {
@@ -240,12 +283,42 @@ func (q *Queries) UpdateEncounterDisplayName(ctx context.Context, arg UpdateEnco
 		&i.CurrentTurnID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Mode,
+	)
+	return i, err
+}
+
+const updateEncounterMode = `-- name: UpdateEncounterMode :one
+UPDATE encounters SET mode = $2, updated_at = now() WHERE id = $1 RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at, mode
+`
+
+type UpdateEncounterModeParams struct {
+	ID   uuid.UUID `json:"id"`
+	Mode string    `json:"mode"`
+}
+
+func (q *Queries) UpdateEncounterMode(ctx context.Context, arg UpdateEncounterModeParams) (Encounter, error) {
+	row := q.db.QueryRowContext(ctx, updateEncounterMode, arg.ID, arg.Mode)
+	var i Encounter
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.MapID,
+		&i.Name,
+		&i.DisplayName,
+		&i.TemplateID,
+		&i.Status,
+		&i.RoundNumber,
+		&i.CurrentTurnID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Mode,
 	)
 	return i, err
 }
 
 const updateEncounterRound = `-- name: UpdateEncounterRound :one
-UPDATE encounters SET round_number = $2, updated_at = now() WHERE id = $1 RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at
+UPDATE encounters SET round_number = $2, updated_at = now() WHERE id = $1 RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at, mode
 `
 
 type UpdateEncounterRoundParams struct {
@@ -268,12 +341,13 @@ func (q *Queries) UpdateEncounterRound(ctx context.Context, arg UpdateEncounterR
 		&i.CurrentTurnID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Mode,
 	)
 	return i, err
 }
 
 const updateEncounterStatus = `-- name: UpdateEncounterStatus :one
-UPDATE encounters SET status = $2, updated_at = now() WHERE id = $1 RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at
+UPDATE encounters SET status = $2, updated_at = now() WHERE id = $1 RETURNING id, campaign_id, map_id, name, display_name, template_id, status, round_number, current_turn_id, created_at, updated_at, mode
 `
 
 type UpdateEncounterStatusParams struct {
@@ -296,6 +370,7 @@ func (q *Queries) UpdateEncounterStatus(ctx context.Context, arg UpdateEncounter
 		&i.CurrentTurnID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Mode,
 	)
 	return i, err
 }

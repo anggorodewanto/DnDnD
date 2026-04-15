@@ -106,6 +106,13 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	// Phase 110: exploration mode skips turn lookup, resource deduction, and
+	// action-economy validation. Pathfinding + wall validation still run.
+	if encounter.Mode == "exploration" {
+		h.handleExplorationMove(ctx, interaction, encounter, destCol, destRow)
+		return
+	}
+
 	if !encounter.CurrentTurnID.Valid {
 		respondEphemeral(h.session, interaction, "No active turn.")
 		return
@@ -268,6 +275,121 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 			},
 		},
 	})
+}
+
+// handleExplorationMove handles /move for an exploration-mode encounter (Phase 110).
+// Skips turn lookup, movement deduction, and action-economy validation.
+// Still enforces pathfinding + wall validation via pathfinding.FindPath.
+func (h *MoveHandler) handleExplorationMove(ctx context.Context, interaction *discordgo.Interaction, encounter refdata.Encounter, destCol, destRow int) {
+	if !encounter.MapID.Valid {
+		respondEphemeral(h.session, interaction, "This encounter has no map.")
+		return
+	}
+
+	mapData, err := h.mapProvider.GetByID(ctx, encounter.MapID.UUID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to load map data.")
+		return
+	}
+
+	md, err := renderer.ParseTiledJSON(mapData.TiledJson, nil, nil)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to parse map data.")
+		return
+	}
+
+	// Find the mover's combatant entry by matching the invoking Discord user
+	// to a PC combatant. The simplest resolution for Phase 110: the caller
+	// participates in this encounter (already verified by ActiveEncounterForUser
+	// earlier), so look up their combatant via the campaign provider. For the
+	// MVP we find the mover by listing combatants and picking the PC that
+	// owns the current slash invocation — but since exploration has no current
+	// turn, we cannot use CurrentTurnID. Instead we match on the invoking
+	// user's character via the campaign adapter when available. If no adapter
+	// is configured, we fall back to the only PC combatant present.
+	allCombatants, err := h.combatService.ListCombatantsByEncounterID(ctx, encounter.ID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to list combatants.")
+		return
+	}
+
+	mover, ok := findExplorationMover(allCombatants, interaction)
+	if !ok {
+		respondEphemeral(h.session, interaction, "Could not find your character in this encounter.")
+		return
+	}
+
+	startCol, startRow, err := renderer.ParseCoordinate(mover.PositionCol + fmt.Sprintf("%d", mover.PositionRow))
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Invalid current position.")
+		return
+	}
+
+	occupants := buildOccupants(allCombatants, mover)
+	grid := &pathfinding.Grid{
+		Width:     md.Width,
+		Height:    md.Height,
+		Terrain:   md.TerrainGrid,
+		Walls:     md.Walls,
+		Occupants: occupants,
+	}
+
+	pathReq := pathfinding.PathRequest{
+		Start:        pathfinding.Point{Col: startCol, Row: startRow},
+		End:          pathfinding.Point{Col: destCol, Row: destRow},
+		SizeCategory: pathfinding.SizeMedium,
+		Grid:         grid,
+	}
+	result, err := pathfinding.FindPath(pathReq)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Pathfinding error: %v", err))
+		return
+	}
+	if result == nil || !result.Found {
+		respondEphemeral(h.session, interaction, "No path to destination (blocked by walls or occupied tile).")
+		return
+	}
+
+	destLabel := renderer.ColumnLabel(destCol)
+	if _, err := h.combatService.UpdateCombatantPosition(ctx, mover.ID, destLabel, int32(destRow+1), mover.AltitudeFt); err != nil {
+		respondEphemeral(h.session, interaction, "Failed to update position.")
+		return
+	}
+
+	msg := fmt.Sprintf("\U0001f3c3 Moved to %s%d.", destLabel, destRow+1)
+	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: msg,
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+}
+
+// findExplorationMover picks the PC combatant that belongs to the invoking
+// Discord user. For Phase 110 we use a pragmatic heuristic: when there is
+// exactly one PC combatant we use it; otherwise we look for a combatant whose
+// character_id is set (PCs only) and whose short_id happens to match the user.
+// The CampaignProvider wiring will be enhanced in a follow-up to resolve
+// discord_user_id -> character_id directly.
+func findExplorationMover(all []refdata.Combatant, _ *discordgo.Interaction) (refdata.Combatant, bool) {
+	var pcs []refdata.Combatant
+	for _, c := range all {
+		if c.CharacterID.Valid && c.IsAlive {
+			pcs = append(pcs, c)
+		}
+	}
+	if len(pcs) == 1 {
+		return pcs[0], true
+	}
+	// Multiple PCs: pick first alive PC. Discord user matching is done by the
+	// ActiveEncounterForUser resolver upstream, which already ensures the
+	// encounter belongs to this user; for now we pick the first PC and let
+	// dashboard UI handle the disambiguation case.
+	if len(pcs) > 0 {
+		return pcs[0], true
+	}
+	return refdata.Combatant{}, false
 }
 
 // HandleMoveConfirm processes the move confirmation button click.

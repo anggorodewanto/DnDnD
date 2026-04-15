@@ -240,6 +240,7 @@ type Encounter struct {
 	CurrentTurnID uuid.NullUUID  `json:"current_turn_id"`
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`
+	Mode          string         `json:"mode"`
 }
 
 type EncounterTemplate struct {

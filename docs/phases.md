@@ -710,9 +710,20 @@
   - Done when: Whisper posts to #dm-queue, DM can reply, reply delivered as DM, standalone queue items.
 
 - [ ] **Phase 110: Exploration Mode (Map-Based & Theater-of-Mind)**
-  - Scope: Map-based exploration: DM loads map without encounter/initiative. Players use `/move`, `/check`, `/action` without turn order or action economy. All players act freely. Walls enforced via pathfinding, but no speed limit on movement. If combat breaks out, DM starts encounter on current map. Theater-of-mind: DM narrates in #the-story, players respond in #in-character, checks as needed.
+  - Scope: Map-based exploration: DM loads map without encounter/initiative. Players use `/move`, `/check` without turn order or action economy (wiring `/action` freeform in exploration is deferred — see Phase 110a). All players act freely. Walls enforced via pathfinding, but no speed limit on movement. If combat breaks out, DM starts encounter on current map; exploration PC positions carry over to `StartCombat.CharacterPositions` and DM may override per-combatant. Theater-of-mind: DM narrates in #the-story, players respond in #in-character, checks as needed.
+  - Design decisions (user-resolved during Phase 110 planning, 2026-04-15):
+    - State storage: reuse `encounters` table with a new `mode` column (`'combat'` vs `'exploration'`). Combat transition = mode flip + initiative roll, preserving `ActiveEncounterForUser`/`GetEncounter`/map linkage semantics.
+    - PC placement: auto-populate from Phase 21c spawn zones on the map's tiled_json at exploration start.
+    - Combat carryover: positions carry over from exploration with DM override allowed.
+    - Dashboard: full HTML page with map selector and (override) placement UI.
+    - `/move` strategy: early-branch inside existing `MoveHandler.Handle` based on exploration-vs-combat mode.
   - Depends on: Phase 30, Phase 81
   - Done when: Exploration mode works without initiative, commands function without turn tracking, wall validation enforced but movement unlimited, transition to combat preserves map state.
+
+- [ ] **Phase 110a: `/action` Freeform — Discord Wiring (Combat + Exploration)**
+  - Scope: Wire `/action [freeform text]` in the Discord router (currently a `StatusAwareStubHandler`). Combat path calls the existing `internal/combat/freeform_action.go` business logic (requires `cmd.Turn`). Exploration path routes freeform text to `#dm-queue` without turn/resource deduction (since exploration has no action economy). `/action cancel` behavior preserved in both modes per Phase 73.
+  - Depends on: Phase 73 (freeform action logic + dm-queue), Phase 110 (exploration mode for turn-less path)
+  - Done when: `/action <text>` posts to `#dm-queue` in both modes, combat path deducts action resource, exploration path does not; `/action cancel` withdraws pending action in both modes.
 
 - [ ] **Phase 111: Open5e Integration (Extended Content)**
   - Scope: Fetch from Open5e API (monsters, spells). On-demand fetch + local cache. DM enables/disables third-party sources per campaign (settings JSONB). Merged with SRD data in queries.
