@@ -43,6 +43,25 @@ func RegisterDMQueueRoutes(r chi.Router, logger *slog.Logger, notifier dmqueue.N
 	})
 }
 
+// ExplorationHandler is the narrow surface of the exploration dashboard
+// handler consumed by RegisterExplorationRoutes. Keeping the dependency a
+// pair of http.Handler methods avoids a circular import on exploration.
+type ExplorationHandler interface {
+	ServePage(w http.ResponseWriter, r *http.Request)
+	HandleStart(w http.ResponseWriter, r *http.Request)
+}
+
+// RegisterExplorationRoutes mounts the Phase 110 exploration dashboard pages
+// (Q4a: reachable from DM dashboard) behind authMiddleware so they are not
+// publicly reachable.
+func RegisterExplorationRoutes(r chi.Router, h ExplorationHandler, authMiddleware func(http.Handler) http.Handler) {
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware)
+		r.Get("/dashboard/exploration", h.ServePage)
+		r.Post("/dashboard/exploration/start", h.HandleStart)
+	})
+}
+
 // RegisterInventoryAPI mounts the DM inventory management API endpoints.
 func RegisterInventoryAPI(r chi.Router, invHandler *inventory.APIHandler, authMiddleware func(http.Handler) http.Handler) {
 	r.Route("/api/inventory", func(r chi.Router) {

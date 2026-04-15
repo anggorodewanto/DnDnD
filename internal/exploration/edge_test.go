@@ -183,7 +183,10 @@ func TestDashboardHandler_InvalidCampaignUUID(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	resp, _ := http.Get(srv.URL + "/dashboard/exploration?campaign_id=not-a-uuid")
+	resp, err := http.Get(srv.URL + "/dashboard/exploration?campaign_id=not-a-uuid")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
@@ -202,7 +205,10 @@ func TestDashboardHandler_StartPost_InvalidCampaignID(t *testing.T) {
 	form := url.Values{}
 	form.Set("campaign_id", "bad")
 	form.Set("map_id", uuid.New().String())
-	resp, _ := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
+	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
@@ -221,7 +227,10 @@ func TestDashboardHandler_StartPost_InvalidMapID(t *testing.T) {
 	form := url.Values{}
 	form.Set("campaign_id", uuid.New().String())
 	form.Set("map_id", "bad")
-	resp, _ := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
+	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
@@ -244,7 +253,10 @@ func TestDashboardHandler_StartPost_InvalidCharacterID(t *testing.T) {
 	form.Set("campaign_id", campID.String())
 	form.Set("map_id", mapID.String())
 	form.Add("character_ids", "not-a-uuid")
-	resp, _ := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
+	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)

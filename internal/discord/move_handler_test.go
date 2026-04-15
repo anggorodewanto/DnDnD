@@ -77,6 +77,22 @@ func (m *mockMoveEncounterProvider) ActiveEncounterForUser(ctx context.Context, 
 	return m.getActiveEncounterID(ctx, guildID)
 }
 
+type mockMoveCampaignProvider struct {
+	getCampaign func(ctx context.Context, guildID string) (refdata.Campaign, error)
+}
+
+func (m *mockMoveCampaignProvider) GetCampaignByGuildID(ctx context.Context, guildID string) (refdata.Campaign, error) {
+	return m.getCampaign(ctx, guildID)
+}
+
+type mockMoveCharacterLookup struct {
+	getChar func(ctx context.Context, campaignID uuid.UUID, discordUserID string) (refdata.Character, error)
+}
+
+func (m *mockMoveCharacterLookup) GetCharacterByCampaignAndDiscord(ctx context.Context, campaignID uuid.UUID, discordUserID string) (refdata.Character, error) {
+	return m.getChar(ctx, campaignID, discordUserID)
+}
+
 type mockMoveSession struct {
 	lastResponse *discordgo.InteractionResponse
 }

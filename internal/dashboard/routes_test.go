@@ -95,6 +95,71 @@ func TestRegisterInventoryAPI_IdentifyEndpoint(t *testing.T) {
 	assert.NotEqual(t, http.StatusMethodNotAllowed, rec.Code)
 }
 
+// TestRegisterExplorationRoutes_AppliesAuthMiddleware verifies Phase 110 it2:
+// exploration dashboard routes are wrapped with authMiddleware (no public
+// access) and return a non-404 when auth is provided.
+func TestRegisterExplorationRoutes_AppliesAuthMiddleware(t *testing.T) {
+	r := chi.NewRouter()
+	authCalled := false
+	auth := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			authCalled = true
+			next.ServeHTTP(w, req)
+		})
+	}
+	h := &stubExplorationHandler{}
+	RegisterExplorationRoutes(r, h, auth)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/exploration?campaign_id=abc", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.True(t, authCalled, "auth middleware must wrap exploration routes")
+	assert.NotEqual(t, http.StatusNotFound, rec.Code)
+	assert.True(t, h.pageCalled, "GET /dashboard/exploration should hit ServePage")
+}
+
+func TestRegisterExplorationRoutes_StartEndpointMounted(t *testing.T) {
+	r := chi.NewRouter()
+	auth := func(next http.Handler) http.Handler { return next }
+	h := &stubExplorationHandler{}
+	RegisterExplorationRoutes(r, h, auth)
+
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/exploration/start", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.NotEqual(t, http.StatusNotFound, rec.Code)
+	assert.True(t, h.startCalled, "POST /dashboard/exploration/start should hit HandleStart")
+}
+
+// TestSidebarNav_IncludesExploration verifies the DM dashboard sidebar links
+// to the exploration page (clarification Q4a: reachable from DM dashboard).
+func TestSidebarNav_IncludesExploration(t *testing.T) {
+	found := false
+	for _, n := range SidebarNav {
+		if n.Path == "/dashboard/exploration" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "SidebarNav should include /dashboard/exploration")
+}
+
+type stubExplorationHandler struct {
+	pageCalled  bool
+	startCalled bool
+}
+
+func (s *stubExplorationHandler) ServePage(w http.ResponseWriter, r *http.Request) {
+	s.pageCalled = true
+	w.WriteHeader(http.StatusOK)
+}
+func (s *stubExplorationHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
+	s.startCalled = true
+	w.WriteHeader(http.StatusOK)
+}
+
 func TestSvelteAppStub_ContainsMountPoint(t *testing.T) {
 	r := setupRoutesTest(t)
 

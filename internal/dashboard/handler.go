@@ -24,6 +24,7 @@ var SidebarNav = []NavEntry{
 	{Label: "Stat Block Library", Icon: "📊", Path: "/dashboard/statblocks"},
 	{Label: "Asset Library", Icon: "🖼️", Path: "/dashboard/assets"},
 	{Label: "Map Editor", Icon: "🗺️", Path: "/dashboard/map"},
+	{Label: "Exploration", Icon: "🧭", Path: "/dashboard/exploration"},
 	{Label: "Character Overview", Icon: "👤", Path: "/dashboard/characters"},
 	{Label: "Create Character", Icon: "➕", Path: "/dashboard/characters/new"},
 }

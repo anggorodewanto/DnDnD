@@ -30,6 +30,7 @@ import (
 	"github.com/ab/dndnd/internal/discord"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/encounter"
+	"github.com/ab/dndnd/internal/exploration"
 	"github.com/ab/dndnd/internal/gamemap"
 	"github.com/ab/dndnd/internal/homebrew"
 	"github.com/ab/dndnd/internal/inventory"
@@ -322,6 +323,13 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		// dev without OAuth.
 		authMw := buildAuthMiddleware(db, logger)
 		dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, authMw)
+
+		// Phase 110: exploration dashboard (Q4a). Mount behind authMw so the
+		// page is only reachable to authenticated DMs. Queries directly
+		// satisfy exploration.Store and exploration.MapLister.
+		explorationSvc := exploration.NewService(queries)
+		explorationHandler := exploration.NewDashboardHandler(explorationSvc, queries)
+		dashboard.RegisterExplorationRoutes(router, explorationHandler, authMw)
 
 		// Phase 104b: Publisher fan-out to non-combat services that can
 		// mutate an active encounter's combatant state mid-combat. The

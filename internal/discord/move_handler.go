@@ -43,6 +43,13 @@ type MoveEncounterProvider interface {
 	ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
 }
 
+// MoveCharacterLookup resolves a Discord user to their character within a campaign.
+// Used by exploration /move to disambiguate which PC combatant to move when
+// multiple PCs share an exploration encounter (Phase 110 it2).
+type MoveCharacterLookup interface {
+	GetCharacterByCampaignAndDiscord(ctx context.Context, campaignID uuid.UUID, discordUserID string) (refdata.Character, error)
+}
+
 // MoveHandler handles the /move slash command.
 type MoveHandler struct {
 	session           Session
@@ -51,6 +58,13 @@ type MoveHandler struct {
 	turnProvider      MoveTurnProvider
 	encounterProvider MoveEncounterProvider
 	campaignProv      CampaignProvider
+	characterLookup   MoveCharacterLookup
+}
+
+// SetCharacterLookup wires the character lookup used by exploration /move to
+// resolve the invoking Discord user's PC combatant.
+func (h *MoveHandler) SetCharacterLookup(lookup MoveCharacterLookup) {
+	h.characterLookup = lookup
 }
 
 // NewMoveHandler creates a new MoveHandler.
@@ -313,7 +327,7 @@ func (h *MoveHandler) handleExplorationMove(ctx context.Context, interaction *di
 		return
 	}
 
-	mover, ok := findExplorationMover(allCombatants, interaction)
+	mover, ok := h.resolveExplorationMover(ctx, allCombatants, interaction)
 	if !ok {
 		respondEphemeral(h.session, interaction, "Could not find your character in this encounter.")
 		return
@@ -366,28 +380,43 @@ func (h *MoveHandler) handleExplorationMove(ctx context.Context, interaction *di
 	})
 }
 
-// findExplorationMover picks the PC combatant that belongs to the invoking
-// Discord user. For Phase 110 we use a pragmatic heuristic: when there is
-// exactly one PC combatant we use it; otherwise we look for a combatant whose
-// character_id is set (PCs only) and whose short_id happens to match the user.
-// The CampaignProvider wiring will be enhanced in a follow-up to resolve
-// discord_user_id -> character_id directly.
-func findExplorationMover(all []refdata.Combatant, _ *discordgo.Interaction) (refdata.Combatant, bool) {
+// resolveExplorationMover picks the PC combatant that belongs to the invoking
+// Discord user. Resolution:
+//
+//  1. Collect alive PC combatants (character_id IS NOT NULL).
+//  2. If exactly one, return it (no ambiguity).
+//  3. Otherwise look up the invoker's character via campaignProv +
+//     characterLookup and match combatant.CharacterID.UUID == char.ID.
+//  4. If lookup is unwired or fails, fall back to the first PC so single-PC
+//     deployments stay functional.
+func (h *MoveHandler) resolveExplorationMover(ctx context.Context, all []refdata.Combatant, interaction *discordgo.Interaction) (refdata.Combatant, bool) {
 	var pcs []refdata.Combatant
 	for _, c := range all {
 		if c.CharacterID.Valid && c.IsAlive {
 			pcs = append(pcs, c)
 		}
 	}
+	if len(pcs) == 0 {
+		return refdata.Combatant{}, false
+	}
 	if len(pcs) == 1 {
 		return pcs[0], true
 	}
-	// Multiple PCs: pick first alive PC. Discord user matching is done by the
-	// ActiveEncounterForUser resolver upstream, which already ensures the
-	// encounter belongs to this user; for now we pick the first PC and let
-	// dashboard UI handle the disambiguation case.
-	if len(pcs) > 0 {
+	if h.campaignProv == nil || h.characterLookup == nil {
 		return pcs[0], true
+	}
+	campaign, err := h.campaignProv.GetCampaignByGuildID(ctx, interaction.GuildID)
+	if err != nil {
+		return pcs[0], true
+	}
+	char, err := h.characterLookup.GetCharacterByCampaignAndDiscord(ctx, campaign.ID, discordUserID(interaction))
+	if err != nil {
+		return pcs[0], true
+	}
+	for _, c := range pcs {
+		if c.CharacterID.UUID == char.ID {
+			return c, true
+		}
 	}
 	return refdata.Combatant{}, false
 }

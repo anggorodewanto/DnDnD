@@ -10,6 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -41,6 +43,7 @@ func NewDashboardHandler(svc *Service, maps MapLister) *DashboardHandler {
 func (h *DashboardHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/dashboard/exploration", h.ServePage)
 	r.Post("/dashboard/exploration/start", h.HandleStart)
+	r.Post("/dashboard/exploration/transition-to-combat", h.HandleTransitionToCombat)
 }
 
 type dashboardView struct {
@@ -135,6 +138,73 @@ func (h *DashboardHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleTransitionToCombat captures the current exploration encounter's PC
+// positions and applies any per-PC override_<characterID>=<coord> form fields
+// supplied by the DM (Phase 110 Q3/Q4 clarification). Returns JSON:
+//
+//	{"positions": {"<character_id>": {"col": "D", "row": 5}, ...}}
+//
+// The merged map is what a combat-transition flow would feed into
+// StartCombatInput.CharacterPositions.
+func (h *DashboardHandler) HandleTransitionToCombat(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	encIDStr := r.Form.Get("encounter_id")
+	if encIDStr == "" {
+		http.Error(w, "encounter_id is required", http.StatusBadRequest)
+		return
+	}
+	encID, err := uuid.Parse(encIDStr)
+	if err != nil {
+		http.Error(w, "invalid encounter_id", http.StatusBadRequest)
+		return
+	}
+
+	// Parse overrides: any form field starting with "override_" and whose
+	// suffix parses as a UUID is treated as a character override.
+	overrides := map[uuid.UUID]combat.Position{}
+	for key, vals := range r.Form {
+		if !strings.HasPrefix(key, "override_") || len(vals) == 0 {
+			continue
+		}
+		coord := strings.TrimSpace(vals[0])
+		if coord == "" {
+			continue
+		}
+		charID, err := uuid.Parse(strings.TrimPrefix(key, "override_"))
+		if err != nil {
+			http.Error(w, "invalid override character id "+key, http.StatusBadRequest)
+			return
+		}
+		col, row, err := renderer.ParseCoordinate(coord)
+		if err != nil {
+			http.Error(w, "invalid override coordinate "+coord, http.StatusBadRequest)
+			return
+		}
+		overrides[charID] = combat.Position{
+			Col: renderer.ColumnLabel(col),
+			Row: int32(row + 1),
+		}
+	}
+
+	base, err := h.svc.CapturePositions(r.Context(), encID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	merged := ApplyPositionOverrides(base, overrides)
+
+	out := map[string]any{"positions": map[string]map[string]any{}}
+	posMap := out["positions"].(map[string]map[string]any)
+	for k, v := range merged {
+		posMap[k.String()] = map[string]any{"col": v.Col, "row": v.Row}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
 // dashboardTemplate is a minimal HTML page: a table of maps with a
 // "Start Exploration" button per map, submitting a POST.
 const dashboardTemplate = `<!DOCTYPE html>
@@ -171,5 +241,20 @@ const dashboardTemplate = `<!DOCTYPE html>
 {{else}}
 <p>No maps found for this campaign. Create one first.</p>
 {{end}}
+
+<h2>Transition to Combat</h2>
+<p>When a combat encounter begins, PC positions carry over from exploration.
+The DM may override any per-PC position by supplying an
+<code>override_&lt;character_id&gt;</code> field with a coordinate (e.g. <code>D5</code>).</p>
+<form method="POST" action="/dashboard/exploration/transition-to-combat">
+  <label>Encounter ID: <input type="text" name="encounter_id" required></label>
+  <br>
+  <label>Override character_id: <input type="text" name="override_char_id_placeholder" disabled placeholder="override_<character_id>"></label>
+  <label>Coord: <input type="text" name="override_coord_placeholder" disabled placeholder="D5"></label>
+  <br>
+  <small>Add <code>override_&lt;uuid&gt;=&lt;coord&gt;</code> fields via JS or a client tool to apply per-PC overrides. Omit overrides to carry over captured positions as-is.</small>
+  <br>
+  <button type="submit">Capture Positions &amp; Apply Overrides</button>
+</form>
 </body></html>
 `
