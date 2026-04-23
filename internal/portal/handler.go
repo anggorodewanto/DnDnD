@@ -234,8 +234,8 @@ const createTemplate = `<!DOCTYPE html>
             <input type="hidden" id="campaign-id" value="{{.CampaignID}}">
         </div>
     </div>
-    <script type="module" crossorigin src="/portal/app/assets/index-BpYdq-OB.js"></script>
-    <link rel="stylesheet" crossorigin href="/portal/app/assets/index-DsBqYogc.css">
+    <script type="module" crossorigin src="/portal/app/assets/index-GlbG7cuy.js"></script>
+    <link rel="stylesheet" crossorigin href="/portal/app/assets/index-DwHZaRQb.css">
 </body>
 </html>`
 

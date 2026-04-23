@@ -4,9 +4,18 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/ab/dndnd/internal/open5e"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 )
+
+// Open5eCampaignLookup resolves the enabled Open5e document slugs for a
+// campaign. Matches open5e.CampaignSourceLookup / statblocklibrary's
+// CampaignLookup so a single CampaignSourceLookup instance can be shared.
+type Open5eCampaignLookup interface {
+	EnabledOpen5eSources(campaignID uuid.UUID) []string
+}
 
 // RefDataQuerier is the subset of refdata.Queries methods needed by the portal.
 type RefDataQuerier interface {
@@ -19,12 +28,26 @@ type RefDataQuerier interface {
 
 // RefDataAdapter adapts refdata.Queries to the portal RefDataStore interface.
 type RefDataAdapter struct {
-	q RefDataQuerier
+	q      RefDataQuerier
+	lookup Open5eCampaignLookup
 }
 
-// NewRefDataAdapter creates a new RefDataAdapter.
+// NewRefDataAdapter creates a new RefDataAdapter with no Open5e campaign
+// lookup wired in. The adapter will strip all open5e:* rows from spell
+// lists (safe default for deploys that haven't enabled Open5e).
 func NewRefDataAdapter(q RefDataQuerier) *RefDataAdapter {
 	return &RefDataAdapter{q: q}
+}
+
+// NewRefDataAdapterWithOpen5eLookup creates a RefDataAdapter that gates
+// Open5e spells per campaign via the given lookup. When a request carries
+// a valid campaign_id the adapter resolves that campaign's enabled
+// document slugs and passes them to open5e.FilterSpellsByOpen5eSources.
+// When the id is empty/invalid the adapter falls back to the safe
+// default (hide all open5e:* rows) so cached third-party content never
+// leaks into campaigns that have not opted in.
+func NewRefDataAdapterWithOpen5eLookup(q RefDataQuerier, lookup Open5eCampaignLookup) *RefDataAdapter {
+	return &RefDataAdapter{q: q, lookup: lookup}
 }
 
 // ListRaces converts refdata races to portal RaceInfo.
@@ -74,12 +97,17 @@ func (a *RefDataAdapter) ListClasses(ctx context.Context) ([]ClassInfo, error) {
 	return result, nil
 }
 
-// ListSpellsByClass converts refdata spells to portal SpellInfo.
-func (a *RefDataAdapter) ListSpellsByClass(ctx context.Context, class string) ([]SpellInfo, error) {
+// ListSpellsByClass converts refdata spells to portal SpellInfo, applying
+// Open5e per-campaign gating. Rows whose source starts with "open5e:" are
+// kept only when their document slug is enabled on the campaign; SRD and
+// homebrew rows are always included.
+func (a *RefDataAdapter) ListSpellsByClass(ctx context.Context, class, campaignID string) ([]SpellInfo, error) {
 	spells, err := a.q.ListSpellsByClass(ctx, class)
 	if err != nil {
 		return nil, err
 	}
+	enabled := a.resolveEnabledOpen5eSources(campaignID)
+	spells = open5e.FilterSpellsByOpen5eSources(spells, enabled)
 	result := make([]SpellInfo, len(spells))
 	for i, s := range spells {
 		result[i] = SpellInfo{
@@ -94,6 +122,21 @@ func (a *RefDataAdapter) ListSpellsByClass(ctx context.Context, class string) ([
 		}
 	}
 	return result, nil
+}
+
+// resolveEnabledOpen5eSources returns the campaign's enabled Open5e
+// document slugs or nil when no lookup is wired or the id is empty /
+// unparseable. Returning nil strips all open5e:* rows, which is the safe
+// default for requests with no campaign context.
+func (a *RefDataAdapter) resolveEnabledOpen5eSources(campaignID string) []string {
+	if a.lookup == nil || campaignID == "" {
+		return nil
+	}
+	id, err := uuid.Parse(campaignID)
+	if err != nil {
+		return nil
+	}
+	return a.lookup.EnabledOpen5eSources(id)
 }
 
 // ListEquipment returns all weapons and armor combined as EquipmentItems.

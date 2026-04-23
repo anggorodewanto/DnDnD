@@ -73,7 +73,7 @@
 
   async function loadSpells(cls) {
     try {
-      spells = await listSpells(cls);
+      spells = await listSpells(cls, campaignId);
     } catch (e) {
       spells = [];
     }

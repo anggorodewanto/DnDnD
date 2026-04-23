@@ -39,6 +39,16 @@ describe('API client', () => {
     expect(fetch).toHaveBeenCalledWith('/portal/api/spells?class=wizard', undefined);
   });
 
+  it('listSpells includes campaign_id when provided', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+
+    await listSpells('wizard', 'camp-123');
+    expect(fetch).toHaveBeenCalledWith('/portal/api/spells?class=wizard&campaign_id=camp-123', undefined);
+  });
+
   it('submitCharacter posts to /portal/api/characters', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

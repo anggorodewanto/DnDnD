@@ -24,10 +24,10 @@ func (h *Handler) RegisterLegendaryRoutes(r chi.Router) {
 
 // legendaryActionPlanResponse is the JSON response for a legendary action plan.
 type legendaryActionPlanResponse struct {
-	CreatureName     string                        `json:"creature_name"`
-	CombatantID      string                        `json:"combatant_id"`
-	BudgetTotal      int                           `json:"budget_total"`
-	BudgetRemaining  int                           `json:"budget_remaining"`
+	CreatureName     string                          `json:"creature_name"`
+	CombatantID      string                          `json:"combatant_id"`
+	BudgetTotal      int                             `json:"budget_total"`
+	BudgetRemaining  int                             `json:"budget_remaining"`
 	AvailableActions []legendaryActionOptionResponse `json:"available_actions"`
 }
 
@@ -191,7 +191,7 @@ func (h *Handler) ExecuteLegendaryAction(w http.ResponseWriter, r *http.Request)
 
 // lairActionPlanResponse is the JSON response for a lair action plan.
 type lairActionPlanResponse struct {
-	CreatureName     string              `json:"creature_name"`
+	CreatureName     string               `json:"creature_name"`
 	AvailableActions []lairActionResponse `json:"available_actions"`
 	DisabledActions  []lairActionResponse `json:"disabled_actions"`
 }
@@ -345,8 +345,15 @@ func (h *Handler) findLairCreature(ctx context.Context, encounterID uuid.UUID) (
 	return nil, nil, fmt.Errorf("no creature with lair actions found in encounter")
 }
 
-// parseCreatureAbilitiesFromCreature extracts abilities from a Creature struct.
+// parseCreatureAbilitiesFromCreature extracts abilities from a Creature
+// struct. For open5e:* rows the abilities column holds Open5e prose
+// (shape [{name, desc}]) and the attacks column likewise holds prose —
+// both are decoded via the Open5e-tolerant path so the DM sees the
+// verbatim descriptions instead of silently-zeroed structured entries.
 func parseCreatureAbilitiesFromCreature(creature refdata.Creature) []CreatureAbilityEntry {
+	if isOpen5eSource(creature.Source) {
+		return parseOpen5eCreatureAbilities(creature)
+	}
 	if !creature.Abilities.Valid {
 		return nil
 	}
@@ -419,4 +426,3 @@ func (h *Handler) GetTurnQueue(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, resp)
 }
-

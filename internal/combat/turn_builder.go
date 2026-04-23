@@ -27,16 +27,16 @@ const (
 
 // TurnPlan is the multi-step plan for an NPC/enemy turn.
 type TurnPlan struct {
-	CombatantID uuid.UUID              `json:"combatant_id"`
-	DisplayName string                 `json:"display_name"`
-	Steps       []TurnStep             `json:"steps"`
+	CombatantID uuid.UUID                     `json:"combatant_id"`
+	DisplayName string                        `json:"display_name"`
+	Steps       []TurnStep                    `json:"steps"`
 	Reactions   []refdata.ReactionDeclaration `json:"reactions,omitempty"`
 }
 
 // TurnStep represents one step in a turn plan.
 type TurnStep struct {
-	Type      string       `json:"type"`
-	Suggested bool         `json:"suggested"`
+	Type      string        `json:"type"`
+	Suggested bool          `json:"suggested"`
 	Movement  *MovementStep `json:"movement,omitempty"`
 	Attack    *AttackStep   `json:"attack,omitempty"`
 	Ability   *AbilityStep  `json:"ability,omitempty"`
@@ -51,14 +51,14 @@ type MovementStep struct {
 
 // AttackStep holds attack plan data.
 type AttackStep struct {
-	WeaponName  string           `json:"weapon_name"`
-	ToHit       int              `json:"to_hit"`
-	DamageDice  string           `json:"damage_dice"`
-	DamageType  string           `json:"damage_type"`
-	ReachFt     int              `json:"reach_ft"`
-	TargetID    uuid.UUID        `json:"target_id"`
-	TargetName  string           `json:"target_name"`
-	RollResult  *AttackRollResult `json:"roll_result,omitempty"`
+	WeaponName string            `json:"weapon_name"`
+	ToHit      int               `json:"to_hit"`
+	DamageDice string            `json:"damage_dice"`
+	DamageType string            `json:"damage_type"`
+	ReachFt    int               `json:"reach_ft"`
+	TargetID   uuid.UUID         `json:"target_id"`
+	TargetName string            `json:"target_name"`
+	RollResult *AttackRollResult `json:"roll_result,omitempty"`
 }
 
 // AttackRollResult holds the results of an attack roll.
@@ -103,16 +103,12 @@ func BuildTurnPlan(input BuildTurnPlanInput) (*TurnPlan, error) {
 		Reactions:   input.Reactions,
 	}
 
-	attacks, err := ParseCreatureAttacks(input.Creature.Attacks)
+	attacks, err := ParseCreatureAttacksWithSource(input.Creature.Attacks, input.Creature.Source)
 	if err != nil {
 		return nil, fmt.Errorf("parsing creature attacks: %w", err)
 	}
 
-	var abilitiesRaw json.RawMessage
-	if input.Creature.Abilities.Valid {
-		abilitiesRaw = input.Creature.Abilities.RawMessage
-	}
-	abilities := parseCreatureAbilities(abilitiesRaw)
+	abilities := parseCreatureAbilitiesFromCreature(input.Creature)
 	hasMultiattack := hasMultiattackAbility(abilities)
 
 	// Find nearest hostile (PC) target
@@ -405,6 +401,50 @@ func parseCreatureAbilities(abilities json.RawMessage) []CreatureAbilityEntry {
 		return nil
 	}
 	return entries
+}
+
+// open5eProseEntry matches the [{"name":"X","desc":"Y"}] shape Open5e
+// returns for both actions and special_abilities. We map `desc` onto
+// CreatureAbilityEntry.Description so the turn builder's downstream
+// "bonus action" / "multiattack" heuristics keep working on the prose.
+type open5eProseEntry struct {
+	Name string `json:"name"`
+	Desc string `json:"desc"`
+}
+
+// parseOpen5eCreatureAbilities decodes Open5e-cached creature abilities
+// AND actions into a single abilities list. Open5e's `actions` column
+// cannot be parsed as structured attacks (see
+// ParseCreatureAttacksWithSource), so we surface the action prose as
+// abilities instead — that way the DM sees the full verbatim text and
+// the planner simply emits no structured attack steps for Open5e NPCs.
+func parseOpen5eCreatureAbilities(creature refdata.Creature) []CreatureAbilityEntry {
+	out := make([]CreatureAbilityEntry, 0)
+	out = appendOpen5eProse(out, creature.Attacks)
+	if creature.Abilities.Valid {
+		out = appendOpen5eProse(out, creature.Abilities.RawMessage)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func appendOpen5eProse(dst []CreatureAbilityEntry, raw json.RawMessage) []CreatureAbilityEntry {
+	if len(raw) == 0 {
+		return dst
+	}
+	var entries []open5eProseEntry
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return dst
+	}
+	for _, e := range entries {
+		if strings.TrimSpace(e.Name) == "" && strings.TrimSpace(e.Desc) == "" {
+			continue
+		}
+		dst = append(dst, CreatureAbilityEntry{Name: e.Name, Description: e.Desc})
+	}
+	return dst
 }
 
 // hasMultiattackAbility checks if the creature has a Multiattack ability.

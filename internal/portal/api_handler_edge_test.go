@@ -24,7 +24,7 @@ func (e *errorRefDataStore) ListRaces(_ context.Context) ([]portal.RaceInfo, err
 func (e *errorRefDataStore) ListClasses(_ context.Context) ([]portal.ClassInfo, error) {
 	return nil, errors.New("db error")
 }
-func (e *errorRefDataStore) ListSpellsByClass(_ context.Context, _ string) ([]portal.SpellInfo, error) {
+func (e *errorRefDataStore) ListSpellsByClass(_ context.Context, _, _ string) ([]portal.SpellInfo, error) {
 	return nil, errors.New("db error")
 }
 func (e *errorRefDataStore) ListEquipment(_ context.Context) ([]portal.EquipmentItem, error) {

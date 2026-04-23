@@ -32,12 +32,19 @@ export async function listClasses() {
 }
 
 /**
- * List spells filtered by class.
+ * List spells filtered by class. The optional campaignId scopes Open5e
+ * extended content to the campaign's enabled sources — omitting it (or
+ * passing an empty string) hides all Open5e rows as a safe default.
  * @param {string} className
+ * @param {string} [campaignId]
  * @returns {Promise<object[]>}
  */
-export async function listSpells(className) {
-  const res = await apiFetch(`${API_BASE}/spells?class=${encodeURIComponent(className)}`);
+export async function listSpells(className, campaignId) {
+  let url = `${API_BASE}/spells?class=${encodeURIComponent(className)}`;
+  if (campaignId) {
+    url += `&campaign_id=${encodeURIComponent(campaignId)}`;
+  }
+  const res = await apiFetch(url);
   return res.json();
 }
 

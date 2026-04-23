@@ -100,7 +100,7 @@ func TestRefDataAdapter_ListClasses_Error(t *testing.T) {
 func TestRefDataAdapter_ListSpellsByClass_Error(t *testing.T) {
 	mq := &errorQueries{}
 	adapter := portal.NewRefDataAdapter(mq)
-	_, err := adapter.ListSpellsByClass(context.Background(), "wizard")
+	_, err := adapter.ListSpellsByClass(context.Background(), "wizard", "")
 	assert.Error(t, err)
 }
 
@@ -175,7 +175,7 @@ func TestRefDataAdapter_ListSpellsByClass(t *testing.T) {
 	}
 	adapter := portal.NewRefDataAdapter(mq)
 
-	spells, err := adapter.ListSpellsByClass(context.Background(), "wizard")
+	spells, err := adapter.ListSpellsByClass(context.Background(), "wizard", "")
 	require.NoError(t, err)
 	assert.Len(t, spells, 1)
 	assert.Equal(t, "Fire Bolt", spells[0].Name)

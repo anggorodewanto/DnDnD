@@ -63,10 +63,15 @@ type SpellInfo struct {
 }
 
 // RefDataStore provides reference data for the API handler.
+//
+// ListSpellsByClass receives the campaign id so the store can apply
+// per-campaign gating (Open5e sources). An empty campaignID means "no
+// campaign context" and the store applies the safe default (hide all
+// non-SRD / non-homebrew rows).
 type RefDataStore interface {
 	ListRaces(ctx context.Context) ([]RaceInfo, error)
 	ListClasses(ctx context.Context) ([]ClassInfo, error)
-	ListSpellsByClass(ctx context.Context, class string) ([]SpellInfo, error)
+	ListSpellsByClass(ctx context.Context, class, campaignID string) ([]SpellInfo, error)
 	ListEquipment(ctx context.Context) ([]EquipmentItem, error)
 }
 
@@ -119,7 +124,8 @@ func (h *APIHandler) ListSpells(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	spells, err := h.refData.ListSpellsByClass(r.Context(), class)
+	campaignID := r.URL.Query().Get("campaign_id")
+	spells, err := h.refData.ListSpellsByClass(r.Context(), class, campaignID)
 	if err != nil {
 		h.logger.Error("listing spells", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -161,8 +167,8 @@ func (h *APIHandler) GetStartingEquipment(w http.ResponseWriter, r *http.Request
 
 // submitRequest is the JSON body for character submission.
 type submitRequest struct {
-	Token      string         `json:"token"`
-	CampaignID string         `json:"campaign_id"`
+	Token      string `json:"token"`
+	CampaignID string `json:"campaign_id"`
 	CharacterSubmission
 }
 

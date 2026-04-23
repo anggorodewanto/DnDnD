@@ -1,9 +1,11 @@
 package combat
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -11,6 +13,19 @@ import (
 	"github.com/ab/dndnd/internal/pathfinding"
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+// open5eSourcePrefix matches the SourcePrefix in internal/open5e. Creatures
+// cached from Open5e store prose payloads for actions/abilities (shape
+// [{"name":"X","desc":"Y"}]) rather than DnDnD's structured attack array,
+// so the combat turn builder has to branch on this prefix before
+// unmarshalling.
+const open5eSourcePrefix = "open5e:"
+
+// isOpen5eSource reports whether the given refdata creature Source column
+// value identifies a row cached from Open5e.
+func isOpen5eSource(src sql.NullString) bool {
+	return src.Valid && strings.HasPrefix(src.String, open5eSourcePrefix)
+}
 
 // OATrigger records a detected opportunity attack trigger.
 type OATrigger struct {
@@ -194,4 +209,16 @@ func ParseCreatureAttacks(attacksJSON json.RawMessage) ([]CreatureAttackEntry, e
 		return nil, fmt.Errorf("parsing creature attacks: %w", err)
 	}
 	return attacks, nil
+}
+
+// ParseCreatureAttacksWithSource parses a creature's Attacks JSONB into
+// a slice of CreatureAttackEntry. For rows whose source begins with
+// "open5e:" the attacks column holds Open5e prose (shape [{name, desc}])
+// that has no mechanical to_hit/damage fields, so we return no structured
+// attacks — callers should surface the prose as abilities instead.
+func ParseCreatureAttacksWithSource(attacksJSON json.RawMessage, source sql.NullString) ([]CreatureAttackEntry, error) {
+	if isOpen5eSource(source) {
+		return nil, nil
+	}
+	return ParseCreatureAttacks(attacksJSON)
 }

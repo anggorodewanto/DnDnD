@@ -31,7 +31,7 @@ func (m *mockRefDataStore) ListClasses(_ context.Context) ([]portal.ClassInfo, e
 	return m.classes, nil
 }
 
-func (m *mockRefDataStore) ListSpellsByClass(_ context.Context, class string) ([]portal.SpellInfo, error) {
+func (m *mockRefDataStore) ListSpellsByClass(_ context.Context, class, _ string) ([]portal.SpellInfo, error) {
 	var result []portal.SpellInfo
 	for _, s := range m.spells {
 		for _, c := range s.Classes {

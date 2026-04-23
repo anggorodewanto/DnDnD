@@ -725,7 +725,7 @@
   - Depends on: Phase 73 (freeform action logic + dm-queue), Phase 110 (exploration mode for turn-less path)
   - Done when: `/action <text>` posts to `#dm-queue` in both modes, combat path deducts action resource, exploration path does not; `/action cancel` withdraws pending action in both modes.
 
-- [x] **Phase 111: Open5e Integration (Extended Content)**
+- [ ] **Phase 111: Open5e Integration (Extended Content)**
   - Scope: Fetch from Open5e API (monsters, spells). On-demand fetch + local cache. DM enables/disables third-party sources per campaign (settings JSONB). Merged with SRD data in queries.
   - Depends on: Phase 6, Phase 5, Phase 11
   - Done when: DM can enable Open5e sources, creatures/spells fetched and cached, appear in stat block library and spell lists.
