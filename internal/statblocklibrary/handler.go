@@ -14,14 +14,31 @@ import (
 	"github.com/google/uuid"
 )
 
-// Handler exposes the Stat Block Library HTTP API.
-type Handler struct {
-	svc *Service
+// CampaignLookup resolves the enabled Open5e document slugs for a given
+// campaign. Used by the handler so List/Get requests that carry a
+// campaign_id can apply the campaign's per-source visibility rules
+// without the service having to know about the campaign package.
+type CampaignLookup interface {
+	EnabledOpen5eSources(campaignID uuid.UUID) []string
 }
 
-// NewHandler constructs a Handler wrapping the given service.
+// Handler exposes the Stat Block Library HTTP API.
+type Handler struct {
+	svc    *Service
+	lookup CampaignLookup
+}
+
+// NewHandler constructs a Handler with no campaign-lookup plumbing; all
+// requests behave as if the caller had zero Open5e sources enabled.
 func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
+}
+
+// NewHandlerWithCampaignLookup constructs a Handler that consults the
+// given CampaignLookup to translate a campaign_id on the request into
+// the caller's enabled Open5e document slugs.
+func NewHandlerWithCampaignLookup(svc *Service, lookup CampaignLookup) *Handler {
+	return &Handler{svc: svc, lookup: lookup}
 }
 
 // RegisterRoutes mounts stat block library routes on the given Chi router.
@@ -39,6 +56,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	filter.EnabledOpen5eSources = h.resolveOpen5eSources(filter.CampaignID)
 	entries, err := h.svc.ListStatBlocks(r.Context(), filter)
 	if err != nil {
 		http.Error(w, "failed to list stat blocks", http.StatusInternalServerError)
@@ -55,7 +73,8 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	c, err := h.svc.GetStatBlock(r.Context(), id, campaignID)
+	enabled := h.resolveOpen5eSources(campaignID)
+	c, err := h.svc.GetStatBlockWithSources(r.Context(), id, campaignID, enabled)
 	if errors.Is(err, ErrNotFound) || errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "stat block not found", http.StatusNotFound)
 		return
@@ -65,6 +84,15 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, c)
+}
+
+// resolveOpen5eSources returns the campaign's enabled Open5e document slugs
+// or nil when no campaign lookup is wired or the campaign id is zero.
+func (h *Handler) resolveOpen5eSources(campaignID uuid.UUID) []string {
+	if h.lookup == nil || campaignID == uuid.Nil {
+		return nil
+	}
+	return h.lookup.EnabledOpen5eSources(campaignID)
 }
 
 // parseFilter extracts StatBlockFilter fields from the query string.

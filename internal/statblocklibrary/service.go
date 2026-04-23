@@ -42,8 +42,13 @@ type StatBlockFilter struct {
 	CRMax      *float64  // inclusive maximum CR
 	Source     Source    // SRD, homebrew, or any
 	CampaignID uuid.UUID // campaign scoping for homebrew; zero = no campaign (hides all homebrew)
-	Limit      int       // 0 = no limit
-	Offset     int
+	// EnabledOpen5eSources is the set of Open5e document slugs enabled
+	// on this campaign (e.g. "tome-of-beasts"). Rows with source
+	// "open5e:<slug>" are visible only when their slug appears in this
+	// list. Empty list = all Open5e rows hidden.
+	EnabledOpen5eSources []string
+	Limit                int // 0 = no limit
+	Offset               int
 }
 
 // Store is the minimal subset of refdata the service needs; defined as an
@@ -91,13 +96,24 @@ func (s *Service) ListStatBlocks(ctx context.Context, filter StatBlockFilter) ([
 
 // GetStatBlock fetches a single creature, enforcing campaign scoping for homebrew.
 // SRD entries (campaign_id NULL) are always visible. Homebrew entries are only
-// visible to their owning campaign.
+// visible to their owning campaign. Open5e rows are always hidden — callers
+// that can surface Open5e rows must use GetStatBlockWithSources.
 func (s *Service) GetStatBlock(ctx context.Context, id string, campaignID uuid.UUID) (refdata.Creature, error) {
+	return s.GetStatBlockWithSources(ctx, id, campaignID, nil)
+}
+
+// GetStatBlockWithSources is like GetStatBlock but additionally honors the
+// campaign's enabled Open5e document slugs; rows with source "open5e:<slug>"
+// are visible only when their slug appears in enabledOpen5e.
+func (s *Service) GetStatBlockWithSources(ctx context.Context, id string, campaignID uuid.UUID, enabledOpen5e []string) (refdata.Creature, error) {
 	c, err := s.store.GetCreature(ctx, id)
 	if err != nil {
 		return refdata.Creature{}, err
 	}
 	if !homebrewVisibleTo(c, campaignID) {
+		return refdata.Creature{}, ErrNotFound
+	}
+	if !open5eVisible(c, enabledOpen5e) {
 		return refdata.Creature{}, ErrNotFound
 	}
 	return c, nil
@@ -126,7 +142,8 @@ func matches(c refdata.Creature, f StatBlockFilter, typeSet, sizeSet map[string]
 	return matchesCR(c.Cr, f.CRMin, f.CRMax)
 }
 
-// visibleForSource combines the source filter with campaign scoping for homebrew.
+// visibleForSource combines the source filter with campaign scoping for
+// homebrew and Open5e source attribution.
 func visibleForSource(c refdata.Creature, f StatBlockFilter) bool {
 	if isHomebrew(c) {
 		if f.Source == SourceSRD {
@@ -134,8 +151,39 @@ func visibleForSource(c refdata.Creature, f StatBlockFilter) bool {
 		}
 		return homebrewVisibleTo(c, f.CampaignID)
 	}
+	if isOpen5e(c) {
+		// Open5e rows are a distinct source from SRD and homebrew: they
+		// are only visible when the caller does not explicitly limit to
+		// srd/homebrew AND the row's document slug is enabled on the
+		// campaign.
+		if f.Source == SourceHomebrew || f.Source == SourceSRD {
+			return false
+		}
+		return open5eVisible(c, f.EnabledOpen5eSources)
+	}
 	// SRD entry: excluded only when caller explicitly asked for homebrew only.
 	return f.Source != SourceHomebrew
+}
+
+// isOpen5e returns true for rows sourced from Open5e (source = "open5e:<slug>").
+func isOpen5e(c refdata.Creature) bool {
+	return c.Source.Valid && strings.HasPrefix(c.Source.String, "open5e:")
+}
+
+// open5eVisible reports whether the given creature (assumed Open5e) is
+// visible under the campaign's enabled Open5e document slug list. Non-
+// Open5e rows always pass.
+func open5eVisible(c refdata.Creature, enabled []string) bool {
+	if !isOpen5e(c) {
+		return true
+	}
+	slug := strings.TrimPrefix(c.Source.String, "open5e:")
+	for _, s := range enabled {
+		if s == slug {
+			return true
+		}
+	}
+	return false
 }
 
 // homebrewVisibleTo returns true when a creature is visible to the given campaign.

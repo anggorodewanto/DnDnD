@@ -37,6 +37,7 @@ import (
 	"github.com/ab/dndnd/internal/levelup"
 	"github.com/ab/dndnd/internal/messageplayer"
 	"github.com/ab/dndnd/internal/narration"
+	"github.com/ab/dndnd/internal/open5e"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/server"
 	"github.com/ab/dndnd/internal/statblocklibrary"
@@ -223,10 +224,23 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		assetHandler := asset.NewHandler(assetSvc)
 		assetHandler.RegisterRoutes(router)
 
-		// Wire Stat Block Library API handler (Phase 98)
+		// Wire Stat Block Library API handler (Phase 98).
+		// Phase 111: inject an Open5e campaign-lookup so the library
+		// applies per-campaign open5e_sources gating when a campaign_id
+		// accompanies the request.
 		statBlockSvc := statblocklibrary.NewService(queries)
-		statBlockHandler := statblocklibrary.NewHandler(statBlockSvc)
+		open5eCampaignLookup := open5e.NewCampaignSourceLookup(queries)
+		statBlockHandler := statblocklibrary.NewHandlerWithCampaignLookup(statBlockSvc, open5eCampaignLookup)
 		statBlockHandler.RegisterRoutes(router)
+
+		// Phase 111: Open5e extended-content integration. Live search
+		// proxy + on-demand cache into creatures/spells tables. Sources
+		// are gated per campaign via the statblocklibrary filter above.
+		open5eClient := open5e.NewClient("", nil)
+		open5eCache := open5e.NewCache(queries)
+		open5eSvc := open5e.NewService(open5eClient, open5eCache)
+		open5eHandler := open5e.NewHandler(open5eSvc)
+		open5eHandler.RegisterRoutes(router)
 
 		// Wire Homebrew Content API handler (Phase 99)
 		homebrewSvc := homebrew.NewService(queries)

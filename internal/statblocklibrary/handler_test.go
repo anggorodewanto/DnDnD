@@ -239,6 +239,94 @@ func TestHandler_List_SourceHomebrew(t *testing.T) {
 	assert.Equal(t, "HB", resp[0].Name)
 }
 
+// --- Open5e source plumbing via CampaignLookup ---
+
+type fakeCampaignLookup struct {
+	sourcesByID map[string][]string
+}
+
+func (f *fakeCampaignLookup) EnabledOpen5eSources(campaignID uuid.UUID) []string {
+	return f.sourcesByID[campaignID.String()]
+}
+
+func newTestRouterWithLookup(store Store, lookup CampaignLookup) chi.Router {
+	svc := NewService(store)
+	h := NewHandlerWithCampaignLookup(svc, lookup)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+	return r
+}
+
+func TestHandler_List_Open5eFilteredByCampaignSources(t *testing.T) {
+	campaign := uuid.New()
+	lookup := &fakeCampaignLookup{sourcesByID: map[string][]string{
+		campaign.String(): {"tome-of-beasts"},
+	}}
+	store := &fakeStore{creatures: []refdata.Creature{
+		mkCreature("goblin", "Goblin", "humanoid", "Small", "1/4"),
+		mkOpen5eCreature("open5e_bearfolk", "Bearfolk", "humanoid", "Medium", "1", "tome-of-beasts"),
+		mkOpen5eCreature("open5e_drake", "Drake", "dragon", "Large", "5", "creature-codex"),
+	}}
+	r := newTestRouterWithLookup(store, lookup)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/statblocks?campaign_id="+campaign.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp []refdata.Creature
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	names := make([]string, len(resp))
+	for i, c := range resp {
+		names[i] = c.Name
+	}
+	assert.ElementsMatch(t, []string{"Bearfolk", "Goblin"}, names)
+}
+
+func TestHandler_List_NoCampaignLookupUsed_Open5eHiddenByDefault(t *testing.T) {
+	store := &fakeStore{creatures: []refdata.Creature{
+		mkCreature("goblin", "Goblin", "humanoid", "Small", "1/4"),
+		mkOpen5eCreature("open5e_bearfolk", "Bearfolk", "humanoid", "Medium", "1", "tome-of-beasts"),
+	}}
+	r := newTestRouter(store) // no lookup
+	req := httptest.NewRequest(http.MethodGet, "/api/statblocks", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	var resp []refdata.Creature
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp, 1)
+	assert.Equal(t, "Goblin", resp[0].Name)
+}
+
+func TestHandler_Get_Open5eFilteredByCampaignSources(t *testing.T) {
+	campaign := uuid.New()
+	lookup := &fakeCampaignLookup{sourcesByID: map[string][]string{
+		campaign.String(): {"tome-of-beasts"},
+	}}
+	store := &fakeStore{creatures: []refdata.Creature{
+		mkOpen5eCreature("open5e_bearfolk", "Bearfolk", "humanoid", "Medium", "1", "tome-of-beasts"),
+	}}
+	r := newTestRouterWithLookup(store, lookup)
+	req := httptest.NewRequest(http.MethodGet, "/api/statblocks/open5e_bearfolk?campaign_id="+campaign.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestHandler_Get_Open5eForbiddenWhenCampaignSourceNotEnabled(t *testing.T) {
+	campaign := uuid.New()
+	lookup := &fakeCampaignLookup{sourcesByID: map[string][]string{
+		campaign.String(): {"deep-magic"},
+	}}
+	store := &fakeStore{creatures: []refdata.Creature{
+		mkOpen5eCreature("open5e_bearfolk", "Bearfolk", "humanoid", "Medium", "1", "tome-of-beasts"),
+	}}
+	r := newTestRouterWithLookup(store, lookup)
+	req := httptest.NewRequest(http.MethodGet, "/api/statblocks/open5e_bearfolk?campaign_id="+campaign.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
 func TestHandler_List_CommaSeparatedTypes(t *testing.T) {
 	store := &fakeStore{creatures: []refdata.Creature{
 		mkCreature("a", "A", "beast", "Tiny", "0"),

@@ -477,6 +477,94 @@ func TestService_GetStatBlock_HomebrewWithNullCampaignBlocked(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
+// --- Open5e source gating ---
+
+func mkOpen5eCreature(id, name, typ, size, cr, docSlug string) refdata.Creature {
+	c := mkCreature(id, name, typ, size, cr)
+	c.Homebrew = sql.NullBool{Bool: false, Valid: true}
+	c.Source = sql.NullString{String: "open5e:" + docSlug, Valid: true}
+	return c
+}
+
+func TestService_ListStatBlocks_Open5eHiddenWhenSourceNotEnabled(t *testing.T) {
+	store := &fakeStore{creatures: []refdata.Creature{
+		mkCreature("goblin", "Goblin", "humanoid", "Small", "1/4"),
+		mkOpen5eCreature("open5e_bearfolk", "Bearfolk", "humanoid", "Medium", "1", "tome-of-beasts"),
+	}}
+	svc := NewService(store)
+	entries, err := svc.ListStatBlocks(context.Background(), StatBlockFilter{})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "Goblin", entries[0].Name)
+}
+
+func TestService_ListStatBlocks_Open5eVisibleWhenSourceEnabled(t *testing.T) {
+	store := &fakeStore{creatures: []refdata.Creature{
+		mkCreature("goblin", "Goblin", "humanoid", "Small", "1/4"),
+		mkOpen5eCreature("open5e_bearfolk", "Bearfolk", "humanoid", "Medium", "1", "tome-of-beasts"),
+		mkOpen5eCreature("open5e_dragonkin", "Dragonkin", "humanoid", "Medium", "3", "creature-codex"),
+	}}
+	svc := NewService(store)
+	entries, err := svc.ListStatBlocks(context.Background(), StatBlockFilter{
+		EnabledOpen5eSources: []string{"tome-of-beasts"},
+	})
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	names := []string{entries[0].Name, entries[1].Name}
+	assert.ElementsMatch(t, []string{"Bearfolk", "Goblin"}, names)
+}
+
+func TestService_ListStatBlocks_Open5eMultipleEnabled(t *testing.T) {
+	store := &fakeStore{creatures: []refdata.Creature{
+		mkOpen5eCreature("a", "AAA", "humanoid", "Medium", "1", "tome-of-beasts"),
+		mkOpen5eCreature("b", "BBB", "humanoid", "Medium", "3", "creature-codex"),
+		mkOpen5eCreature("c", "CCC", "humanoid", "Medium", "5", "deep-magic"),
+	}}
+	svc := NewService(store)
+	entries, err := svc.ListStatBlocks(context.Background(), StatBlockFilter{
+		EnabledOpen5eSources: []string{"tome-of-beasts", "creature-codex"},
+	})
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+}
+
+func TestService_ListStatBlocks_Open5eSourceFilterSRDOnlyStillExcludesOpen5e(t *testing.T) {
+	store := &fakeStore{creatures: []refdata.Creature{
+		mkCreature("goblin", "Goblin", "humanoid", "Small", "1/4"),
+		mkOpen5eCreature("open5e_bearfolk", "Bearfolk", "humanoid", "Medium", "1", "tome-of-beasts"),
+	}}
+	svc := NewService(store)
+	entries, err := svc.ListStatBlocks(context.Background(), StatBlockFilter{
+		Source:               SourceSRD,
+		EnabledOpen5eSources: []string{"tome-of-beasts"},
+	})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "Goblin", entries[0].Name)
+}
+
+func TestService_GetStatBlock_Open5eHiddenWhenSourceNotEnabled(t *testing.T) {
+	store := &fakeStore{creatures: []refdata.Creature{
+		mkOpen5eCreature("open5e_bearfolk", "Bearfolk", "humanoid", "Medium", "1", "tome-of-beasts"),
+	}}
+	svc := NewService(store)
+	_, err := svc.GetStatBlock(context.Background(), "open5e_bearfolk", uuid.Nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_GetStatBlockWithSources_Open5eVisible(t *testing.T) {
+	store := &fakeStore{creatures: []refdata.Creature{
+		mkOpen5eCreature("open5e_bearfolk", "Bearfolk", "humanoid", "Medium", "1", "tome-of-beasts"),
+	}}
+	svc := NewService(store)
+	got, err := svc.GetStatBlockWithSources(
+		context.Background(), "open5e_bearfolk", uuid.Nil, []string{"tome-of-beasts"},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "Bearfolk", got.Name)
+}
+
 // --- parseCR helper tested directly for edge cases ---
 
 func TestParseCR(t *testing.T) {
