@@ -198,19 +198,7 @@ func (h *ActionHandler) performCombatCancel(
 		Combatant: combatant,
 		Turn:      turn,
 	})
-	if errors.Is(err, combat.ErrNoPendingAction) {
-		respondEphemeral(h.session, interaction, "❌ No pending action to cancel.")
-		return
-	}
-	if errors.Is(err, combat.ErrActionAlreadyResolved) {
-		respondEphemeral(h.session, interaction, "❌ That action has already been resolved — use `/undo` to request a correction instead.")
-		return
-	}
-	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to cancel action: %v", err))
-		return
-	}
-	respondEphemeral(h.session, interaction, fmt.Sprintf("✅ Pending action cancelled: *%s*", result.PendingAction.ActionText))
+	h.respondCancelResult(interaction, result, err)
 }
 
 // combatantBelongsToUser returns true when the invoking Discord user's
@@ -262,7 +250,7 @@ func (h *ActionHandler) handleExploration(
 		EncounterID:   encounter.ID,
 		CombatantID:   combatant.ID,
 		ActionText:    actionText,
-		DmQueueItemID: explorationNullableUUIDFromString(itemID),
+		DmQueueItemID: nullableUUIDFromStr(itemID),
 	}); err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to record action: %v", err))
 		return
@@ -279,19 +267,27 @@ func (h *ActionHandler) performExplorationCancel(
 	combatant refdata.Combatant,
 ) {
 	result, err := h.combatService.CancelExplorationFreeformAction(ctx, combatant.ID)
-	if errors.Is(err, combat.ErrNoPendingAction) {
+	h.respondCancelResult(interaction, result, err)
+}
+
+// respondCancelResult translates a CancelFreeformAction* outcome into the
+// spec-mandated ephemeral reply. Shared between the combat and exploration
+// cancel paths since they use identical error sentinels and success wording.
+func (h *ActionHandler) respondCancelResult(
+	interaction *discordgo.Interaction,
+	result combat.CancelFreeformActionResult,
+	err error,
+) {
+	switch {
+	case errors.Is(err, combat.ErrNoPendingAction):
 		respondEphemeral(h.session, interaction, "❌ No pending action to cancel.")
-		return
-	}
-	if errors.Is(err, combat.ErrActionAlreadyResolved) {
+	case errors.Is(err, combat.ErrActionAlreadyResolved):
 		respondEphemeral(h.session, interaction, "❌ That action has already been resolved — use `/undo` to request a correction instead.")
-		return
-	}
-	if err != nil {
+	case err != nil:
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to cancel action: %v", err))
-		return
+	default:
+		respondEphemeral(h.session, interaction, fmt.Sprintf("✅ Pending action cancelled: *%s*", result.PendingAction.ActionText))
 	}
-	respondEphemeral(h.session, interaction, fmt.Sprintf("✅ Pending action cancelled: *%s*", result.PendingAction.ActionText))
 }
 
 // postExplorationDMQueue posts the freeform-action event through the wired
@@ -318,53 +314,29 @@ func (h *ActionHandler) postExplorationDMQueue(
 	return itemID
 }
 
-// resolveExplorationCombatant mirrors move_handler.resolveExplorationMover:
-// pick the alive PC combatant whose character belongs to the invoker. Falls
-// back to the sole PC when only one exists so single-PC deployments stay
-// functional even without the campaign/character lookup wired.
+// resolveExplorationCombatant picks the alive PC combatant whose character
+// belongs to the invoker. Delegates to resolveExplorationPC so the logic is
+// shared with move_handler.resolveExplorationMover.
 func (h *ActionHandler) resolveExplorationCombatant(ctx context.Context, guildID, userID string, encounterID uuid.UUID) (refdata.Combatant, bool) {
 	all, err := h.combatService.ListCombatantsByEncounterID(ctx, encounterID)
 	if err != nil {
 		return refdata.Combatant{}, false
 	}
-	var pcs []refdata.Combatant
-	for _, c := range all {
-		if c.CharacterID.Valid && c.IsAlive {
-			pcs = append(pcs, c)
-		}
+	var getCampaign func(ctx context.Context, guildID string) (refdata.Campaign, error)
+	if h.campaignProvider != nil {
+		getCampaign = h.campaignProvider.GetCampaignByGuildID
 	}
-	if len(pcs) == 0 {
-		return refdata.Combatant{}, false
+	var getCharacter func(ctx context.Context, campaignID uuid.UUID, discordUserID string) (refdata.Character, error)
+	if h.characterLookup != nil {
+		getCharacter = h.characterLookup.GetCharacterByCampaignAndDiscord
 	}
-	if len(pcs) == 1 {
-		return pcs[0], true
-	}
-	if h.campaignProvider == nil || h.characterLookup == nil {
-		return pcs[0], true
-	}
-	campaign, err := h.campaignProvider.GetCampaignByGuildID(ctx, guildID)
-	if err != nil {
-		return pcs[0], true
-	}
-	char, err := h.characterLookup.GetCharacterByCampaignAndDiscord(ctx, campaign.ID, userID)
-	if err != nil {
-		return pcs[0], true
-	}
-	for _, c := range pcs {
-		if c.CharacterID.UUID == char.ID {
-			return c, true
-		}
-	}
-	return refdata.Combatant{}, false
+	return resolveExplorationPC(ctx, all, guildID, userID, getCampaign, getCharacter)
 }
 
-// explorationNullableUUIDFromString parses an ID string into uuid.NullUUID.
-// An empty or unparseable string yields a NULL value so the pending_actions
-// row still persists even when the notifier wasn't wired.
-func explorationNullableUUIDFromString(s string) uuid.NullUUID {
-	if s == "" {
-		return uuid.NullUUID{}
-	}
+// nullableUUIDFromStr parses an ID string into uuid.NullUUID. An empty or
+// unparseable string yields a NULL value so the pending_actions row still
+// persists even when the notifier wasn't wired or returned nothing.
+func nullableUUIDFromStr(s string) uuid.NullUUID {
 	id, err := uuid.Parse(s)
 	if err != nil {
 		return uuid.NullUUID{}

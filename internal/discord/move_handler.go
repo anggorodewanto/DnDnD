@@ -382,44 +382,17 @@ func (h *MoveHandler) handleExplorationMove(ctx context.Context, interaction *di
 }
 
 // resolveExplorationMover picks the PC combatant that belongs to the invoking
-// Discord user. Resolution:
-//
-//  1. Collect alive PC combatants (character_id IS NOT NULL).
-//  2. If exactly one, return it (no ambiguity).
-//  3. Otherwise look up the invoker's character via campaignProv +
-//     characterLookup and match combatant.CharacterID.UUID == char.ID.
-//  4. If lookup is unwired or fails, fall back to the first PC so single-PC
-//     deployments stay functional.
+// Discord user. Delegates to the shared resolveExplorationPC helper.
 func (h *MoveHandler) resolveExplorationMover(ctx context.Context, all []refdata.Combatant, interaction *discordgo.Interaction) (refdata.Combatant, bool) {
-	var pcs []refdata.Combatant
-	for _, c := range all {
-		if c.CharacterID.Valid && c.IsAlive {
-			pcs = append(pcs, c)
-		}
+	var getCampaign func(ctx context.Context, guildID string) (refdata.Campaign, error)
+	if h.campaignProv != nil {
+		getCampaign = h.campaignProv.GetCampaignByGuildID
 	}
-	if len(pcs) == 0 {
-		return refdata.Combatant{}, false
+	var getCharacter func(ctx context.Context, campaignID uuid.UUID, discordUserID string) (refdata.Character, error)
+	if h.characterLookup != nil {
+		getCharacter = h.characterLookup.GetCharacterByCampaignAndDiscord
 	}
-	if len(pcs) == 1 {
-		return pcs[0], true
-	}
-	if h.campaignProv == nil || h.characterLookup == nil {
-		return pcs[0], true
-	}
-	campaign, err := h.campaignProv.GetCampaignByGuildID(ctx, interaction.GuildID)
-	if err != nil {
-		return pcs[0], true
-	}
-	char, err := h.characterLookup.GetCharacterByCampaignAndDiscord(ctx, campaign.ID, discordUserID(interaction))
-	if err != nil {
-		return pcs[0], true
-	}
-	for _, c := range pcs {
-		if c.CharacterID.UUID == char.ID {
-			return c, true
-		}
-	}
-	return refdata.Combatant{}, false
+	return resolveExplorationPC(ctx, all, interaction.GuildID, discordUserID(interaction), getCampaign, getCharacter)
 }
 
 // HandleMoveConfirm processes the move confirmation button click.

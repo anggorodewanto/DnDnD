@@ -153,19 +153,9 @@ func (s *Service) CancelFreeformAction(ctx context.Context, cmd CancelFreeformAc
 		return CancelFreeformActionResult{}, fmt.Errorf("refunding action: %w", err)
 	}
 
-	updatedAction, err := s.store.UpdatePendingActionStatus(ctx, refdata.UpdatePendingActionStatusParams{
-		ID:     pendingAction.ID,
-		Status: "cancelled",
-	})
+	updatedAction, err := s.markPendingActionCancelled(ctx, pendingAction)
 	if err != nil {
-		return CancelFreeformActionResult{}, fmt.Errorf("updating pending action status: %w", err)
-	}
-
-	if s.dmNotifier != nil && pendingAction.DmQueueItemID.Valid {
-		// Best-effort: a notifier failure must not undo the DB state we just
-		// committed. Errors are swallowed (callers can still surface them via
-		// the legacy edit string fallback if needed).
-		_ = s.dmNotifier.Cancel(ctx, pendingAction.DmQueueItemID.UUID.String(), "Cancelled by player")
+		return CancelFreeformActionResult{}, err
 	}
 
 	dmEditMsg := fmt.Sprintf("~~🎭 Action — %s: \"%s\"~~ Cancelled by player",
@@ -179,6 +169,24 @@ func (s *Service) CancelFreeformAction(ctx context.Context, cmd CancelFreeformAc
 		CombatLog:          combatLog,
 		DMQueueEditMessage: dmEditMsg,
 	}, nil
+}
+
+// markPendingActionCancelled flips the pending_actions row to "cancelled" and
+// forwards a best-effort Cancel to the wired DMNotifier (if any) so the
+// #dm-queue message gets the "Cancelled by player" overlay. A notifier hiccup
+// after the DB commit is swallowed — the row is already persisted.
+func (s *Service) markPendingActionCancelled(ctx context.Context, pendingAction refdata.PendingAction) (refdata.PendingAction, error) {
+	updated, err := s.store.UpdatePendingActionStatus(ctx, refdata.UpdatePendingActionStatusParams{
+		ID:     pendingAction.ID,
+		Status: "cancelled",
+	})
+	if err != nil {
+		return refdata.PendingAction{}, fmt.Errorf("updating pending action status: %w", err)
+	}
+	if s.dmNotifier != nil && pendingAction.DmQueueItemID.Valid {
+		_ = s.dmNotifier.Cancel(ctx, pendingAction.DmQueueItemID.UUID.String(), "Cancelled by player")
+	}
+	return updated, nil
 }
 
 // CancelExplorationFreeformAction handles /action cancel for an
@@ -205,18 +213,9 @@ func (s *Service) CancelExplorationFreeformAction(ctx context.Context, combatant
 		return CancelFreeformActionResult{}, ErrActionAlreadyResolved
 	}
 
-	updatedAction, err := s.store.UpdatePendingActionStatus(ctx, refdata.UpdatePendingActionStatusParams{
-		ID:     pendingAction.ID,
-		Status: "cancelled",
-	})
+	updatedAction, err := s.markPendingActionCancelled(ctx, pendingAction)
 	if err != nil {
-		return CancelFreeformActionResult{}, fmt.Errorf("updating pending action status: %w", err)
-	}
-
-	if s.dmNotifier != nil && pendingAction.DmQueueItemID.Valid {
-		// Best-effort: a notifier hiccup must not undo the DB state we
-		// just committed.
-		_ = s.dmNotifier.Cancel(ctx, pendingAction.DmQueueItemID.UUID.String(), "Cancelled by player")
+		return CancelFreeformActionResult{}, err
 	}
 
 	dmEditMsg := fmt.Sprintf("~~🎭 Action — %s~~ Cancelled by player",
