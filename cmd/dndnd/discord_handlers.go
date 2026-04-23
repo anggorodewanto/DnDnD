@@ -50,6 +50,7 @@ type discordHandlers struct {
 	use               *discord.UseHandler
 	status            *discord.StatusHandler
 	whisper           *discord.WhisperHandler
+	action            *discord.ActionHandler
 	enemyTurnNotifier *discord.DiscordEnemyTurnNotifier
 }
 
@@ -140,7 +141,16 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			newConcentrationLookupAdapter(deps.queries),
 			newReactionLookupAdapter(deps.queries),
 		),
-		whisper:           discord.NewWhisperHandler(deps.session, checkCampProv, characterLookup),
+		whisper: discord.NewWhisperHandler(deps.session, checkCampProv, characterLookup),
+		action: discord.NewActionHandler(
+			deps.session,
+			deps.resolver,
+			newActionCombatServiceAdapter(deps.combatService),
+			turnSvc,
+			checkCampProv,
+			characterLookup,
+			newActionPendingStoreAdapter(deps.queries),
+		),
 		enemyTurnNotifier: discord.NewDiscordEnemyTurnNotifier(deps.session, deps.campaignSettings, deps.mapRegenerator),
 	}
 
@@ -176,6 +186,7 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	r.SetReactionHandler(set.reaction)
 	r.SetStatusHandler(set.status)
 	r.SetWhisperHandler(set.whisper)
+	r.SetActionHandler(set.action)
 }
 
 // --- Thin adapters bridging refdata.Queries / combat.Service to the handler
@@ -449,3 +460,60 @@ func sqlNoRowsLike() error {
 type combatantNotFoundError struct{}
 
 func (e *combatantNotFoundError) Error() string { return "combatant not found for discord user" }
+
+// actionCombatServiceAdapter exposes the narrow slice of *combat.Service that
+// the /action handler needs (freeform post/cancel + a small set of lookups).
+// Returning a dedicated adapter avoids a typed-nil interface trap when the
+// combat service is absent in test deploys.
+type actionCombatServiceAdapter struct {
+	svc *combat.Service
+}
+
+func newActionCombatServiceAdapter(svc *combat.Service) discord.ActionCombatService {
+	if svc == nil {
+		return nil
+	}
+	return &actionCombatServiceAdapter{svc: svc}
+}
+
+func (a *actionCombatServiceAdapter) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+	return a.svc.GetEncounter(ctx, id)
+}
+
+func (a *actionCombatServiceAdapter) GetCombatant(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+	return a.svc.GetCombatant(ctx, id)
+}
+
+func (a *actionCombatServiceAdapter) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
+	return a.svc.ListCombatantsByEncounterID(ctx, encounterID)
+}
+
+func (a *actionCombatServiceAdapter) FreeformAction(ctx context.Context, cmd combat.FreeformActionCommand) (combat.FreeformActionResult, error) {
+	return a.svc.FreeformAction(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) CancelFreeformAction(ctx context.Context, cmd combat.CancelFreeformActionCommand) (combat.CancelFreeformActionResult, error) {
+	return a.svc.CancelFreeformAction(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) CancelExplorationFreeformAction(ctx context.Context, combatantID uuid.UUID) (combat.CancelFreeformActionResult, error) {
+	return a.svc.CancelExplorationFreeformAction(ctx, combatantID)
+}
+
+// actionPendingStoreAdapter satisfies discord.ActionPendingStore over
+// *refdata.Queries. Used by the exploration /action path, which must persist
+// a pending_actions row without going through combat.Service (no Turn).
+type actionPendingStoreAdapter struct {
+	queries *refdata.Queries
+}
+
+func newActionPendingStoreAdapter(q *refdata.Queries) discord.ActionPendingStore {
+	if q == nil {
+		return nil
+	}
+	return &actionPendingStoreAdapter{queries: q}
+}
+
+func (a *actionPendingStoreAdapter) CreatePendingAction(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error) {
+	return a.queries.CreatePendingAction(ctx, arg)
+}

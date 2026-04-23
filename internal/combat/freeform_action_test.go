@@ -19,11 +19,11 @@ import (
 // / Resolve invocations so the freeform-action service refactor can be
 // asserted without spinning up Discord or PostgreSQL.
 type fakeDMNotifier struct {
-	posts   []dmqueue.Event
-	cancels []string
-	resolves []string
-	postID  string
-	postErr error
+	posts     []dmqueue.Event
+	cancels   []string
+	resolves  []string
+	postID    string
+	postErr   error
 	cancelErr error
 }
 
@@ -49,9 +49,8 @@ func (f *fakeDMNotifier) Resolve(_ context.Context, itemID, _ string) error {
 	return nil
 }
 
-func (f *fakeDMNotifier) Get(string) (dmqueue.Item, bool)  { return dmqueue.Item{}, false }
-func (f *fakeDMNotifier) ListPending() []dmqueue.Item       { return nil }
-
+func (f *fakeDMNotifier) Get(string) (dmqueue.Item, bool) { return dmqueue.Item{}, false }
+func (f *fakeDMNotifier) ListPending() []dmqueue.Item     { return nil }
 
 func TestFreeformAction_HappyPath(t *testing.T) {
 	_, combatantID, _, ms := makeStdTestSetup()
@@ -467,6 +466,155 @@ func TestFreeformAction_DispatchesToNotifierWhenWired(t *testing.T) {
 	assert.Contains(t, result.DMQueueMessage, "Thorn")
 }
 
+// --- Exploration freeform cancel (Phase 110a) ---
+//
+// Exploration has no Turn / action economy, so the combat cancel path (which
+// refunds an action resource) is not reusable. CancelExplorationFreeformAction
+// mirrors the sentinel errors and edits #dm-queue when a notifier is wired.
+
+func TestCancelExplorationFreeformAction_HappyPath(t *testing.T) {
+	_, combatantID, _, ms := makeStdTestSetup()
+	encounterID := uuid.New()
+	pendingActionID := uuid.New()
+
+	ms.getPendingActionByCombatantFn = func(_ context.Context, cid uuid.UUID) (refdata.PendingAction, error) {
+		return refdata.PendingAction{
+			ID:          pendingActionID,
+			EncounterID: encounterID,
+			CombatantID: cid,
+			ActionText:  "search the bookshelf",
+			Status:      "pending",
+		}, nil
+	}
+	ms.updatePendingActionStatusFn = func(_ context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
+		return refdata.PendingAction{
+			ID:          arg.ID,
+			EncounterID: encounterID,
+			CombatantID: combatantID,
+			ActionText:  "search the bookshelf",
+			Status:      arg.Status,
+		}, nil
+	}
+
+	svc := NewService(ms)
+	result, err := svc.CancelExplorationFreeformAction(context.Background(), combatantID)
+
+	require.NoError(t, err)
+	assert.Equal(t, "cancelled", result.PendingAction.Status)
+	assert.Equal(t, "search the bookshelf", result.PendingAction.ActionText)
+}
+
+func TestCancelExplorationFreeformAction_NoPendingAction(t *testing.T) {
+	_, combatantID, _, ms := makeStdTestSetup()
+
+	// default mock returns error for GetPendingActionByCombatant
+
+	svc := NewService(ms)
+	_, err := svc.CancelExplorationFreeformAction(context.Background(), combatantID)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrNoPendingAction))
+}
+
+func TestCancelExplorationFreeformAction_AlreadyResolved(t *testing.T) {
+	_, combatantID, _, ms := makeStdTestSetup()
+	encounterID := uuid.New()
+
+	ms.getPendingActionByCombatantFn = func(_ context.Context, cid uuid.UUID) (refdata.PendingAction, error) {
+		return refdata.PendingAction{
+			ID:          uuid.New(),
+			EncounterID: encounterID,
+			CombatantID: cid,
+			ActionText:  "search the bookshelf",
+			Status:      "resolved",
+		}, nil
+	}
+
+	svc := NewService(ms)
+	_, err := svc.CancelExplorationFreeformAction(context.Background(), combatantID)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrActionAlreadyResolved))
+}
+
+func TestCancelExplorationFreeformAction_UpdateStatusFails(t *testing.T) {
+	_, combatantID, _, ms := makeStdTestSetup()
+
+	ms.getPendingActionByCombatantFn = func(_ context.Context, cid uuid.UUID) (refdata.PendingAction, error) {
+		return refdata.PendingAction{
+			ID:          uuid.New(),
+			CombatantID: cid,
+			ActionText:  "search the bookshelf",
+			Status:      "pending",
+		}, nil
+	}
+	ms.updatePendingActionStatusFn = func(_ context.Context, _ refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
+		return refdata.PendingAction{}, fmt.Errorf("db error")
+	}
+
+	svc := NewService(ms)
+	_, err := svc.CancelExplorationFreeformAction(context.Background(), combatantID)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "updating pending action status")
+}
+
+func TestCancelExplorationFreeformAction_DispatchesCancelToNotifier(t *testing.T) {
+	_, combatantID, _, ms := makeStdTestSetup()
+	encounterID := uuid.New()
+	dmItemID := uuid.New()
+
+	ms.getPendingActionByCombatantFn = func(_ context.Context, cid uuid.UUID) (refdata.PendingAction, error) {
+		return refdata.PendingAction{
+			ID:            uuid.New(),
+			EncounterID:   encounterID,
+			CombatantID:   cid,
+			ActionText:    "search the bookshelf",
+			Status:        "pending",
+			DmQueueItemID: uuid.NullUUID{UUID: dmItemID, Valid: true},
+		}, nil
+	}
+	ms.updatePendingActionStatusFn = func(_ context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
+		return refdata.PendingAction{ID: arg.ID, Status: arg.Status, ActionText: "search the bookshelf"}, nil
+	}
+
+	notifier := &fakeDMNotifier{}
+	svc := NewService(ms)
+	svc.SetDMNotifier(notifier)
+
+	_, err := svc.CancelExplorationFreeformAction(context.Background(), combatantID)
+	require.NoError(t, err)
+	require.Len(t, notifier.cancels, 1)
+	assert.Equal(t, dmItemID.String(), notifier.cancels[0])
+}
+
+func TestCancelExplorationFreeformAction_DoesNotRefundTurnResource(t *testing.T) {
+	_, combatantID, _, ms := makeStdTestSetup()
+
+	ms.getPendingActionByCombatantFn = func(_ context.Context, cid uuid.UUID) (refdata.PendingAction, error) {
+		return refdata.PendingAction{
+			ID:          uuid.New(),
+			CombatantID: cid,
+			ActionText:  "search the bookshelf",
+			Status:      "pending",
+		}, nil
+	}
+	ms.updatePendingActionStatusFn = func(_ context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
+		return refdata.PendingAction{ID: arg.ID, Status: arg.Status, ActionText: "search the bookshelf"}, nil
+	}
+
+	var updateTurnCalled bool
+	ms.updateTurnActionsFn = func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		updateTurnCalled = true
+		return refdata.Turn{}, nil
+	}
+
+	svc := NewService(ms)
+	_, err := svc.CancelExplorationFreeformAction(context.Background(), combatantID)
+	require.NoError(t, err)
+	assert.False(t, updateTurnCalled, "exploration cancel must not touch turn actions (no turn exists)")
+}
+
 func TestCancelFreeformAction_DispatchesCancelToNotifier(t *testing.T) {
 	_, combatantID, _, ms := makeStdTestSetup()
 	encounterID := uuid.New()
@@ -508,4 +656,3 @@ func TestCancelFreeformAction_DispatchesCancelToNotifier(t *testing.T) {
 	// DMQueueEditMessage still produced for legacy callers.
 	assert.Contains(t, result.DMQueueEditMessage, "Cancelled by player")
 }
-

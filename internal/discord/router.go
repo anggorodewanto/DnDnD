@@ -136,6 +136,12 @@ func (r *CommandRouter) SetWhisperHandler(h *WhisperHandler) {
 	r.handlers["whisper"] = h
 }
 
+// SetActionHandler registers the ActionHandler for the /action command,
+// replacing the status-aware stub installed by NewCommandRouter.
+func (r *CommandRouter) SetActionHandler(h *ActionHandler) {
+	r.handlers["action"] = h
+}
+
 // SetStatusHandler registers the StatusHandler for the /status command,
 // replacing the stub installed by NewCommandRouter.
 func (r *CommandRouter) SetStatusHandler(h *StatusHandler) {

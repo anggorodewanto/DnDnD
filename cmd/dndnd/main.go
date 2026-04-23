@@ -426,6 +426,11 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			// Phase 109: route /whisper messages through the dm-queue
 			// notifier so whispers are posted to #dm-queue for DM resolution.
 			discordHandlerSet.whisper.SetNotifier(dmQueueNotifier)
+			// Phase 110a: route /action freeform posts and exploration
+			// cancels through the dm-queue notifier so every freeform
+			// action (combat or exploration) lands in #dm-queue and the
+			// player can cancel it before the DM resolves.
+			discordHandlerSet.action.SetNotifier(dmQueueNotifier)
 			rawDG.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				cmdRouter.Handle(i.Interaction)
 			})

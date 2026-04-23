@@ -180,3 +180,53 @@ func (s *Service) CancelFreeformAction(ctx context.Context, cmd CancelFreeformAc
 		DMQueueEditMessage: dmEditMsg,
 	}, nil
 }
+
+// CancelExplorationFreeformAction handles /action cancel for an
+// exploration-mode encounter (Phase 110a). Exploration has no Turn and no
+// action economy, so the combat-mode cancel (which refunds an action
+// resource) is not reusable. This variant:
+//
+//  1. Looks up the combatant's pending freeform action.
+//  2. Returns ErrNoPendingAction / ErrActionAlreadyResolved symmetrically
+//     with CancelFreeformAction so the Discord handler can surface the
+//     same user-facing messages.
+//  3. Marks the pending_actions row cancelled.
+//  4. If a DMNotifier is wired and the row carries a dm_queue_item_id, the
+//     Cancel call is forwarded so the original #dm-queue message is edited
+//     with the strike-through "Cancelled by player" overlay. Notifier
+//     errors are best-effort; the DB state has already been committed.
+func (s *Service) CancelExplorationFreeformAction(ctx context.Context, combatantID uuid.UUID) (CancelFreeformActionResult, error) {
+	pendingAction, err := s.store.GetPendingActionByCombatant(ctx, combatantID)
+	if err != nil {
+		return CancelFreeformActionResult{}, ErrNoPendingAction
+	}
+
+	if pendingAction.Status == "resolved" {
+		return CancelFreeformActionResult{}, ErrActionAlreadyResolved
+	}
+
+	updatedAction, err := s.store.UpdatePendingActionStatus(ctx, refdata.UpdatePendingActionStatusParams{
+		ID:     pendingAction.ID,
+		Status: "cancelled",
+	})
+	if err != nil {
+		return CancelFreeformActionResult{}, fmt.Errorf("updating pending action status: %w", err)
+	}
+
+	if s.dmNotifier != nil && pendingAction.DmQueueItemID.Valid {
+		// Best-effort: a notifier hiccup must not undo the DB state we
+		// just committed.
+		_ = s.dmNotifier.Cancel(ctx, pendingAction.DmQueueItemID.UUID.String(), "Cancelled by player")
+	}
+
+	dmEditMsg := fmt.Sprintf("~~🎭 Action — %s~~ Cancelled by player",
+		pendingAction.ActionText)
+	combatLog := fmt.Sprintf("🎭 cancelled freeform action: \"%s\"",
+		pendingAction.ActionText)
+
+	return CancelFreeformActionResult{
+		PendingAction:      updatedAction,
+		CombatLog:          combatLog,
+		DMQueueEditMessage: dmEditMsg,
+	}, nil
+}
