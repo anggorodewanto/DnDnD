@@ -720,7 +720,7 @@
   - Depends on: Phase 30, Phase 81
   - Done when: Exploration mode works without initiative, commands function without turn tracking, wall validation enforced but movement unlimited, transition to combat preserves map state.
 
-- [ ] **Phase 110a: `/action` Freeform — Discord Wiring (Combat + Exploration)**
+- [x] **Phase 110a: `/action` Freeform — Discord Wiring (Combat + Exploration)**
   - Scope: Wire `/action [freeform text]` in the Discord router (currently a `StatusAwareStubHandler`). Combat path calls the existing `internal/combat/freeform_action.go` business logic (requires `cmd.Turn`). Exploration path routes freeform text to `#dm-queue` without turn/resource deduction (since exploration has no action economy). `/action cancel` behavior preserved in both modes per Phase 73.
   - Depends on: Phase 73 (freeform action logic + dm-queue), Phase 110 (exploration mode for turn-less path)
   - Done when: `/action <text>` posts to `#dm-queue` in both modes, combat path deducts action resource, exploration path does not; `/action cancel` withdraws pending action in both modes.
