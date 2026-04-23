@@ -419,17 +419,21 @@ type open5eProseEntry struct {
 // abilities instead — that way the DM sees the full verbatim text and
 // the planner simply emits no structured attack steps for Open5e NPCs.
 func parseOpen5eCreatureAbilities(creature refdata.Creature) []CreatureAbilityEntry {
-	out := make([]CreatureAbilityEntry, 0)
-	out = appendOpen5eProse(out, creature.Attacks)
+	var abilitiesRaw json.RawMessage
 	if creature.Abilities.Valid {
-		out = appendOpen5eProse(out, creature.Abilities.RawMessage)
+		abilitiesRaw = creature.Abilities.RawMessage
 	}
+	out := appendOpen5eProse(nil, creature.Attacks)
+	out = appendOpen5eProse(out, abilitiesRaw)
 	if len(out) == 0 {
 		return nil
 	}
 	return out
 }
 
+// appendOpen5eProse appends decoded {name, desc} entries from the Open5e
+// prose payload raw to dst. Empty/malformed payloads and blank entries
+// are silently skipped.
 func appendOpen5eProse(dst []CreatureAbilityEntry, raw json.RawMessage) []CreatureAbilityEntry {
 	if len(raw) == 0 {
 		return dst

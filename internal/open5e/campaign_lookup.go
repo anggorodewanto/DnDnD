@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -49,18 +48,12 @@ func (l *CampaignSourceLookup) EnabledOpen5eSources(campaignID uuid.UUID) []stri
 		l.logger.Warn("open5e: failed to load campaign for source lookup", "campaign_id", campaignID, "error", err)
 		return nil
 	}
-	return parseOpen5eSources(c.Settings, campaignID, l.logger)
-}
-
-// parseOpen5eSources decodes the settings JSONB field. Returns nil for
-// null/empty settings.
-func parseOpen5eSources(settings pqtype.NullRawMessage, campaignID uuid.UUID, logger *slog.Logger) []string {
-	if !settings.Valid || len(settings.RawMessage) == 0 {
+	if !c.Settings.Valid || len(c.Settings.RawMessage) == 0 {
 		return nil
 	}
 	var s settingsShape
-	if err := json.Unmarshal(settings.RawMessage, &s); err != nil {
-		logger.Warn("open5e: malformed campaign settings", "campaign_id", campaignID, "error", err)
+	if err := json.Unmarshal(c.Settings.RawMessage, &s); err != nil {
+		l.logger.Warn("open5e: malformed campaign settings", "campaign_id", campaignID, "error", err)
 		return nil
 	}
 	return s.Open5eSources

@@ -19,10 +19,11 @@ func IsOpen5eSource(source string) bool {
 // DocumentSlug extracts the Open5e document slug from a source attribution
 // string, or "" when the source is not from Open5e.
 func DocumentSlug(source string) string {
-	if !IsOpen5eSource(source) {
+	slug, ok := strings.CutPrefix(source, SourcePrefix)
+	if !ok {
 		return ""
 	}
-	return strings.TrimPrefix(source, SourcePrefix)
+	return slug
 }
 
 // FilterSpellsByOpen5eSources returns the subset of spells visible under

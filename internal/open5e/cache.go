@@ -227,24 +227,18 @@ func (c *Cache) spellToParams(id string, s Spell) refdata.UpsertSpellParams {
 
 // parseComponents splits "V, S, M" into ["V","S","M"], uppercasing each.
 func parseComponents(s string) []string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return []string{}
-	}
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		t := strings.ToUpper(strings.TrimSpace(p))
-		if t == "" {
-			continue
-		}
-		out = append(out, t)
-	}
-	return out
+	return splitCommaList(s, strings.ToUpper)
 }
 
 // parseClasses splits "Sorcerer, Wizard" into ["sorcerer","wizard"].
 func parseClasses(s string) []string {
+	return splitCommaList(s, strings.ToLower)
+}
+
+// splitCommaList splits a comma-separated Open5e string ("V, S, M" or
+// "Sorcerer, Wizard") into a trimmed, non-empty slice, applying normalize
+// (strings.ToUpper / strings.ToLower) to each element.
+func splitCommaList(s string, normalize func(string) string) []string {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return []string{}
@@ -252,7 +246,7 @@ func parseClasses(s string) []string {
 	parts := strings.Split(s, ",")
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
-		t := strings.ToLower(strings.TrimSpace(p))
+		t := normalize(strings.TrimSpace(p))
 		if t == "" {
 			continue
 		}
