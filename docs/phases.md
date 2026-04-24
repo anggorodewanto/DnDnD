@@ -740,7 +740,7 @@
   - Depends on: Phase 39, Phase 57
   - Done when: Integration tests verify invisible mechanics, breaking conditions, Greater vs standard, interaction with stealth.
 
-- [ ] **Phase 114: Surprise**
+- [x] **Phase 114: Surprise**
   - Scope: DM marks combatants as surprised during encounter setup. Surprised condition (1 round, auto-skip, no Dodge). Remove surprised at end of skipped turn (reactions available after). Interaction with initiative (surprised still roll, position matters for reaction timing). Combat log output. Spec lines 1175-1200.
   - Depends on: Phase 25, Phase 39
   - Done when: Integration tests verify surprise skip, condition removal timing, reaction availability after turn ends.
