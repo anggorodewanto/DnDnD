@@ -730,7 +730,7 @@
   - Depends on: Phase 6, Phase 5, Phase 11
   - Done when: DM can enable Open5e sources, creatures/spells fetched and cached, appear in stat block library and spell lists.
 
-- [ ] **Phase 112: Error Handling & Observability**
+- [x] **Phase 112: Error Handling & Observability**
   - Scope: Player error messages: friendly ephemeral "something went wrong" on internal errors. DM dashboard error notification badge (24h count), error log panel (timestamp, command, player, error summary). Errors stored in action_log with type='error'. Structured logging with contextual fields. Health endpoint subsystem checks.
   - Depends on: Phase 1, Phase 15
   - Done when: Players see friendly errors, DM sees error count badge, error log panel works, health endpoint reports degraded state.

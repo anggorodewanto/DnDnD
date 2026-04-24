@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -126,41 +127,25 @@ func MountErrorsRoutes(r chi.Router, dash *Handler, reader errorlog.Reader, cloc
 }
 
 // navWithErrorBadge returns a copy of SidebarNav with "(N)" appended to the
-// Errors entry's label so every page shows the same 24h count.
+// Errors entry's label so every page shows the same 24h count. Counts above
+// 999 truncate to "999+" to keep the sidebar badge narrow.
 func navWithErrorBadge(count int) []NavEntry {
 	out := make([]NavEntry, len(SidebarNav))
 	copy(out, SidebarNav)
+	if count <= 0 {
+		return out
+	}
+	badge := strconv.Itoa(count)
+	if count > 999 {
+		badge = "999+"
+	}
 	for i := range out {
-		if out[i].Path != "/dashboard/errors" {
-			continue
+		if out[i].Path == "/dashboard/errors" {
+			out[i].Label = out[i].Label + " (" + badge + ")"
+			break
 		}
-		if count > 0 {
-			out[i].Label = out[i].Label + " (" + formatErrorCount(count) + ")"
-		}
-		break
 	}
 	return out
-}
-
-// formatErrorCount renders small non-negative ints without importing
-// strconv here (keeps the helper self-contained and cheap).
-func formatErrorCount(n int) string {
-	if n <= 0 {
-		return "0"
-	}
-	// Small ints only; >999 truncates to 999+ for the sidebar badge.
-	if n > 999 {
-		return "999+"
-	}
-	// Inline base-10 formatting (ASCII digits).
-	var buf [4]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
 }
 
 // errorLogAdapter bridges the dashboard Handler's badge rendering to the

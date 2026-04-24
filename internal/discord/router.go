@@ -272,33 +272,24 @@ func (r *CommandRouter) commandNameFor(interaction *discordgo.Interaction) strin
 	if interaction == nil {
 		return ""
 	}
-	if interaction.Type == discordgo.InteractionApplicationCommand {
-		if data, ok := interaction.Data.(discordgo.ApplicationCommandInteractionData); ok {
-			return data.Name
-		}
-	}
-	if interaction.Type == discordgo.InteractionMessageComponent {
-		if data, ok := interaction.Data.(discordgo.MessageComponentInteractionData); ok {
-			return componentCommandName(data.CustomID)
-		}
+	switch data := interaction.Data.(type) {
+	case discordgo.ApplicationCommandInteractionData:
+		return data.Name
+	case discordgo.MessageComponentInteractionData:
+		return componentCommandName(data.CustomID)
 	}
 	return ""
 }
 
 // componentCommandName derives a coarse command-name from a customID by
-// taking the prefix before the first colon (so "move_confirm:…" -> "move").
-// Only used for error logging, not routing.
+// taking the prefix before the first colon and trimming any "_suffix" so
+// panel groupings line up with the slash-command the user actually typed
+// (e.g. "move_confirm:…" -> "move"). Only used for error logging, not routing.
 func componentCommandName(customID string) string {
 	if customID == "" {
 		return "component"
 	}
-	idx := strings.IndexByte(customID, ':')
-	if idx < 0 {
-		return customID
-	}
-	head := customID[:idx]
-	// Normalise "move_confirm" -> "move" so panel groupings line up with
-	// the slash-command the user actually typed.
+	head, _, _ := strings.Cut(customID, ":")
 	if under := strings.IndexByte(head, '_'); under > 0 {
 		head = head[:under]
 	}
@@ -313,7 +304,6 @@ func (r *CommandRouter) recoverInteraction(interaction *discordgo.Interaction, c
 	if rec == nil {
 		return
 	}
-	stack := debug.Stack()
 	userID := discordUserID(interaction)
 	err := fmt.Errorf("%v", rec)
 	if r.bot != nil && r.bot.logger != nil {
@@ -321,17 +311,18 @@ func (r *CommandRouter) recoverInteraction(interaction *discordgo.Interaction, c
 			"command", command,
 			"user_id", userID,
 			"error", err,
-			"stack", string(stack),
+			"stack", string(debug.Stack()),
 		)
 	}
 	respondEphemeral(r.bot.session, interaction, friendlyErrorMessage)
-	if r.recorder != nil {
-		_ = r.recorder.Record(context.Background(), errorlog.Entry{
-			Command: command,
-			UserID:  userID,
-			Summary: errorlog.BuildSummary(command, userID, err),
-		})
+	if r.recorder == nil {
+		return
 	}
+	_ = r.recorder.Record(context.Background(), errorlog.Entry{
+		Command: command,
+		UserID:  userID,
+		Summary: errorlog.BuildSummary(command, userID, err),
+	})
 }
 
 // handleComponent routes message component interactions (button clicks) to the appropriate handler.

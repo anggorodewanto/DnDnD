@@ -3,6 +3,7 @@ package errorlog
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 )
 
@@ -76,36 +77,31 @@ func (p *PgStore) ListRecent(ctx context.Context, limit int) ([]Entry, error) {
 // buildInsertErrorQuery returns the INSERT SQL and its bound args for a
 // single error Entry. Columns unused by errors (turn_id, encounter_id,
 // actor_id, target_id, dice_rolls) are omitted so the DB defaults / NULL
-// apply. command + user_id ride in description-adjacent columns so the panel
-// can reconstruct "on /cmd by @user" without a schema extension:
+// apply. command + user_id ride in before_state so the panel can reconstruct
+// "on /cmd by @user" without a schema extension:
 //   - description  → entry.Summary
 //   - before_state → {"command": ..., "user_id": ...} JSONB (phase-112 tag)
 //   - after_state  → {} (NOT NULL default)
-func buildInsertErrorQuery(entry Entry) (string, []interface{}) {
-	// before_state carries command + user_id so the panel can reconstruct
-	// "on /cmd by @user" without a schema extension; user_id lands in
-	// $5::text purely so tests can assert it surfaces as a bound arg, then
-	// is coerced back into the JSONB via the row_to_json trick. Keeping it
-	// in the args list means a Record() smoke test can verify the user
-	// identity reached the driver without peeking into the JSONB literal.
+func buildInsertErrorQuery(entry Entry) (string, []any) {
 	q := `INSERT INTO action_log (action_type, description, before_state, after_state)
 VALUES ($1, $2, $3::jsonb, $4::jsonb)`
-	before := `{"command":` + jsonQuote(entry.Command) + `,"user_id":` + jsonQuote(entry.UserID) + `}`
-	args := []interface{}{"error", entry.Summary, before, "{}"}
-	_ = entry.CreatedAt // allow DB default
-	return q, args
+	before, _ := json.Marshal(map[string]string{
+		"command": entry.Command,
+		"user_id": entry.UserID,
+	})
+	return q, []any{"error", entry.Summary, string(before), "{}"}
 }
 
 // buildCountSinceQuery returns the COUNT SQL for errors since the given time.
-func buildCountSinceQuery(since time.Time) (string, []interface{}) {
+func buildCountSinceQuery(since time.Time) (string, []any) {
 	return `SELECT COUNT(*) FROM action_log WHERE action_type = 'error' AND created_at >= $1`,
-		[]interface{}{since}
+		[]any{since}
 }
 
 // buildListRecentQuery returns the SELECT SQL for the most-recent errors.
 // Columns: command (before_state->>command), user_id (before_state->>user_id),
 // summary (description), created_at.
-func buildListRecentQuery(limit int) (string, []interface{}) {
+func buildListRecentQuery(limit int) (string, []any) {
 	q := `SELECT
     COALESCE(before_state->>'command', '') AS command,
     COALESCE(before_state->>'user_id', '') AS user_id,
@@ -115,36 +111,5 @@ FROM action_log
 WHERE action_type = 'error'
 ORDER BY created_at DESC
 LIMIT $1`
-	return q, []interface{}{limit}
-}
-
-// jsonQuote returns a JSON-escaped double-quoted string for inclusion in a
-// JSONB literal. Only ASCII control escaping is needed for the fields we
-// persist (command names, Discord user IDs, error messages), so a full
-// encoding/json detour would be overkill.
-func jsonQuote(s string) string {
-	out := make([]byte, 0, len(s)+2)
-	out = append(out, '"')
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch c {
-		case '"', '\\':
-			out = append(out, '\\', c)
-		case '\n':
-			out = append(out, '\\', 'n')
-		case '\r':
-			out = append(out, '\\', 'r')
-		case '\t':
-			out = append(out, '\\', 't')
-		default:
-			if c < 0x20 {
-				const hex = "0123456789abcdef"
-				out = append(out, '\\', 'u', '0', '0', hex[c>>4], hex[c&0xf])
-			} else {
-				out = append(out, c)
-			}
-		}
-	}
-	out = append(out, '"')
-	return string(out)
+	return q, []any{limit}
 }
