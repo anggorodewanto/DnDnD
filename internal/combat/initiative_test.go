@@ -958,6 +958,49 @@ func TestService_AdvanceTurn_FirstTurn(t *testing.T) {
 	assert.False(t, turnInfo.Skipped)
 }
 
+// Phase 114: skipping a surprised combatant should report them back through
+// TurnInfo.SkippedCombatants so the Discord done-handler can post a combat-log
+// line like "⏭️ Goblin #2 is surprised — turn skipped".
+func TestService_AdvanceTurn_SurprisedPopulatesSkippedCombatants(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	surprisedID := uuid.New()
+	normalID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: surprisedID, InitiativeOrder: 1, DisplayName: "Goblin #2", Conditions: json.RawMessage(`[{"condition":"surprised","duration_rounds":1,"started_round":0}]`), IsAlive: true},
+			{ID: normalID, InitiativeOrder: 2, DisplayName: "Hero", Conditions: json.RawMessage(`[]`), IsAlive: true},
+		}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+	store.skipTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: id, Status: "skipped"}, nil
+	}
+	store.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(store)
+	turnInfo, err := svc.AdvanceTurn(ctx, encounterID)
+	require.NoError(t, err)
+
+	require.Len(t, turnInfo.SkippedCombatants, 1, "surprised skip must show up in SkippedCombatants")
+	assert.Equal(t, "Goblin #2", turnInfo.SkippedCombatants[0].DisplayName)
+	assert.Equal(t, "surprised", turnInfo.SkippedCombatants[0].ConditionName)
+	assert.Equal(t, surprisedID, turnInfo.SkippedCombatants[0].CombatantID)
+	assert.Equal(t, normalID, turnInfo.CombatantID)
+}
+
 func TestService_AdvanceTurn_SkipsSurprisedInRound1(t *testing.T) {
 	ctx := context.Background()
 	encounterID := uuid.New()

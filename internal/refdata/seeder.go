@@ -11,7 +11,7 @@ const (
 	// SRD reference data counts.
 	WeaponCount    = 37
 	ArmorCount     = 13
-	ConditionCount = 15
+	ConditionCount = 16
 	ClassCount     = 12
 	RaceCount      = 9
 	FeatCount      = 41
@@ -316,6 +316,16 @@ func seedConditions(ctx context.Context, q *Queries) error {
 				{EffectType: "auto_fail_saving_throw", Target: "strength"},
 				{EffectType: "auto_fail_saving_throw", Target: "dexterity"},
 				{EffectType: "grant_advantage", Target: "attack_rolls_against"},
+			}),
+		},
+		{
+			ID: "surprised", Name: "Surprised",
+			Description: "A surprised creature can't move, take actions, take bonus actions, or take reactions during round 1 of combat. The surprised condition is removed at the end of that creature's first turn, after which it may use reactions normally.",
+			MechanicalEffects: mustJSON([]MechanicalEffect{
+				{EffectType: "cant_move"},
+				{EffectType: "cant_take_actions"},
+				{EffectType: "cant_take_bonus_actions"},
+				{EffectType: "cant_take_reactions"},
 			}),
 		},
 		{

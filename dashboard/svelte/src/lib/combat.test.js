@@ -13,6 +13,7 @@ import {
   tilesInRange,
   isWallBetween,
   findPath,
+  collectSurprisedShortIDs,
 } from './combat.js';
 
 // TDD Cycle 1: applyDamage respects temp HP
@@ -368,5 +369,40 @@ describe('STANDARD_CONDITIONS', () => {
     expect(STANDARD_CONDITIONS).toHaveLength(14);
     expect(STANDARD_CONDITIONS).toContain('Blinded');
     expect(STANDARD_CONDITIONS).toContain('Unconscious');
+  });
+});
+
+// Phase 114 — collectSurprisedShortIDs pulls short IDs out of the encounter
+// builder's local `creatures` array, using a surprised toggle map keyed by
+// index. The helper is shared between the Svelte UI and tests so the
+// toggle-to-payload mapping can be verified without mounting the component.
+describe('collectSurprisedShortIDs', () => {
+  it('returns short IDs for creatures whose surprised flag is true', () => {
+    const creatures = [
+      { short_id: 'GB1', display_name: 'Goblin 1' },
+      { short_id: 'GB2', display_name: 'Goblin 2' },
+      { short_id: 'OR1', display_name: 'Orc 1' },
+    ];
+    const surprised = { 0: false, 1: true, 2: true };
+    expect(collectSurprisedShortIDs(creatures, surprised)).toEqual(['GB2', 'OR1']);
+  });
+
+  it('returns empty array when nothing is surprised', () => {
+    const creatures = [{ short_id: 'GB1' }, { short_id: 'GB2' }];
+    expect(collectSurprisedShortIDs(creatures, {})).toEqual([]);
+  });
+
+  it('ignores creatures without a short_id', () => {
+    const creatures = [
+      { short_id: 'GB1' },
+      { display_name: 'no short id' },
+    ];
+    expect(collectSurprisedShortIDs(creatures, { 0: true, 1: true })).toEqual(['GB1']);
+  });
+
+  it('handles null/undefined inputs defensively', () => {
+    expect(collectSurprisedShortIDs(null, null)).toEqual([]);
+    expect(collectSurprisedShortIDs(undefined, { 0: true })).toEqual([]);
+    expect(collectSurprisedShortIDs([{ short_id: 'A' }], null)).toEqual([]);
   });
 });

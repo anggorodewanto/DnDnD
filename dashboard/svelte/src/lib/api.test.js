@@ -12,6 +12,7 @@ import {
   overrideCombatantInitiative,
   overrideCharacterSpellSlots,
   updateEncounterDisplayName,
+  startCombat,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -486,5 +487,75 @@ describe('overrideCharacterSpellSlots', () => {
     const [url, options] = fetch.mock.calls[0];
     expect(url).toBe('/api/combat/enc-1/override/character/char-1/spell-slots');
     expect(JSON.parse(options.body)).toEqual({ spell_slots: { '1': { max: 4, used: 1 } }, reason: 'fix' });
+  });
+});
+
+// Phase 114 — startCombat posts to /api/combat/start with the shape the Go
+// handler expects (template_id, character_ids, character_positions,
+// surprised_combatant_short_ids). The DM flips the surprise toggle per
+// combatant in the encounter builder before clicking Start.
+describe('startCombat', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it('POSTs template + surprised short IDs to /api/combat/start', async () => {
+    const mockResponse = {
+      encounter: { id: 'enc-1', round_number: 1 },
+      combatants: [],
+      initiative_tracker: '...',
+      first_turn: { turn_id: 't-1', combatant_id: 'c-1', round_number: 1 },
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    });
+
+    const result = await startCombat({
+      template_id: 'tmpl-uuid',
+      character_ids: ['char-1', 'char-2'],
+      character_positions: { 'char-1': { col: 'A', row: 1 }, 'char-2': { col: 'B', row: 2 } },
+      surprised_combatant_short_ids: ['GB2', 'OR1'],
+    });
+
+    expect(result).toEqual(mockResponse);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/combat/start');
+    expect(options.method).toBe('POST');
+    expect(options.headers['Content-Type']).toBe('application/json');
+
+    const body = JSON.parse(options.body);
+    expect(body.template_id).toBe('tmpl-uuid');
+    expect(body.character_ids).toEqual(['char-1', 'char-2']);
+    expect(body.character_positions).toEqual({
+      'char-1': { col: 'A', row: 1 },
+      'char-2': { col: 'B', row: 2 },
+    });
+    expect(body.surprised_combatant_short_ids).toEqual(['GB2', 'OR1']);
+  });
+
+  it('omits surprised_combatant_short_ids when none selected', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+    await startCombat({
+      template_id: 'tmpl-1',
+      character_ids: [],
+      character_positions: {},
+    });
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    // Either the field is absent or empty — both are OK per the Go request type
+    // (`omitempty`). Assert it's not an accidentally-stringified value.
+    if ('surprised_combatant_short_ids' in body) {
+      expect(body.surprised_combatant_short_ids).toEqual([]);
+    }
+  });
+
+  it('throws on non-ok response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve('invalid template_id'),
+    });
+    await expect(startCombat({ template_id: 'bad' })).rejects.toThrow('invalid template_id');
   });
 });

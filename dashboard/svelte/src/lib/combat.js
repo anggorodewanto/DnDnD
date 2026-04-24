@@ -309,3 +309,31 @@ export function isWallBetween(col1, row1, col2, row2, walls, tileSize) {
   }
   return false;
 }
+
+/**
+ * Phase 114 — collect `short_id` values from an encounter-builder `creatures`
+ * array for which the DM has toggled the surprised flag on. Returns a plain
+ * array suitable for the `surprised_combatant_short_ids` field on the
+ * /api/combat/start request.
+ *
+ * @param {Array<{short_id?:string}>|null|undefined} creatures
+ * @param {Object<number,boolean>|null|undefined} surprisedByIndex
+ *   Map from array index to surprise toggle state.
+ * @returns {string[]}
+ */
+export function collectSurprisedShortIDs(creatures, surprisedByIndex) {
+  if (!Array.isArray(creatures) || creatures.length === 0) {
+    return [];
+  }
+  if (!surprisedByIndex || typeof surprisedByIndex !== 'object') {
+    return [];
+  }
+  const out = [];
+  for (let i = 0; i < creatures.length; i++) {
+    if (!surprisedByIndex[i]) continue;
+    const shortID = creatures[i]?.short_id;
+    if (!shortID) continue;
+    out.push(shortID);
+  }
+  return out;
+}

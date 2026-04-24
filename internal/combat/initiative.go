@@ -460,6 +460,14 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 			if err := s.skipSurprisedTurn(ctx, encounterID, roundNumber, candidate); err != nil {
 				return TurnInfo{}, err
 			}
+			// Phase 114 — surface the surprise skip via SkippedCombatants so
+			// the Discord done-handler can post the combat-log narration
+			// ("⏭️ <name> is surprised — turn skipped").
+			skippedCombatants = append(skippedCombatants, SkippedInfo{
+				CombatantID:   candidate.ID,
+				DisplayName:   candidate.DisplayName,
+				ConditionName: "surprised",
+			})
 			continue
 		}
 		allSurprised = false

@@ -6,7 +6,9 @@
     listMaps,
     getMap,
     listCreatures,
+    startCombat,
   } from './lib/api.js';
+  import { collectSurprisedShortIDs } from './lib/combat.js';
   import {
     terrainByGid,
     getWalls,
@@ -55,6 +57,14 @@
 
   // Short ID counter per creature type
   let shortIdCounters = $state({});
+
+  // Phase 114 — per-creature surprised toggle, keyed by index into `creatures`.
+  // Reset whenever the encounter is reloaded.
+  let surprisedByIndex = $state({});
+  // Start-combat flow state.
+  let startingCombat = $state(false);
+  let startCombatError = $state(null);
+  let startCombatMsg = $state('');
 
   // Load existing encounter
   $effect(() => {
@@ -338,6 +348,42 @@
     draggingCreature = creature;
   }
 
+  // Phase 114 — Start combat from the prepared template. Passes the list of
+  // short IDs the DM flagged as surprised so the backend can mark them in
+  // round 1. PC selection/positions aren't managed by this builder yet — the
+  // backend treats missing character_ids as "no PCs" and will still roll
+  // initiative for the creatures on the template.
+  async function handleStartCombat() {
+    if (!savedEncounterId) {
+      startCombatError = 'Save the encounter first before starting combat.';
+      return;
+    }
+    startingCombat = true;
+    startCombatError = null;
+    startCombatMsg = '';
+    try {
+      const payload = {
+        template_id: savedEncounterId,
+        character_ids: [],
+        character_positions: {},
+      };
+      const surprisedShortIDs = collectSurprisedShortIDs(creatures, surprisedByIndex);
+      if (surprisedShortIDs.length > 0) {
+        payload.surprised_combatant_short_ids = surprisedShortIDs;
+      }
+      const result = await startCombat(payload);
+      const surprisedCount = surprisedShortIDs.length;
+      const suffix = surprisedCount === 0
+        ? ''
+        : ` with ${surprisedCount} surprised combatant${surprisedCount === 1 ? '' : 's'}`;
+      startCombatMsg = `Combat started${suffix}. Encounter: ${result?.encounter?.id ?? savedEncounterId}`;
+    } catch (e) {
+      startCombatError = e.message;
+    } finally {
+      startingCombat = false;
+    }
+  }
+
   async function saveEncounter() {
     saving = true;
     error = null;
@@ -441,6 +487,12 @@
               <input type="number" class="qty-input" min="1"
                      value={creature.quantity}
                      oninput={(e) => updateCreatureQuantity(idx, parseInt(e.target.value) || 1)} />
+              <label class="surprised-label" title="Surprised in round 1">
+                <input type="checkbox"
+                       checked={!!surprisedByIndex[idx]}
+                       onchange={(e) => (surprisedByIndex = { ...surprisedByIndex, [idx]: e.target.checked })} />
+                Surprised
+              </label>
               <span class="placement-status">
                 {creature.position_col != null ? `(${creature.position_col},${creature.position_row})` : 'Not placed'}
               </span>
@@ -472,8 +524,17 @@
           <button class="save-btn" onclick={saveEncounter} disabled={saving || !dirty}>
             {saving ? 'Saving...' : 'Save'}
           </button>
+          <button class="start-btn"
+                  onclick={handleStartCombat}
+                  disabled={startingCombat || !savedEncounterId || dirty}
+                  title={!savedEncounterId ? 'Save the encounter first' : dirty ? 'Save pending changes first' : ''}>
+            {startingCombat ? 'Starting...' : 'Start Combat'}
+          </button>
           {#if statusMsg}
             <span class="status">{statusMsg}</span>
+          {/if}
+          {#if startCombatMsg}
+            <span class="status">{startCombatMsg}</span>
           {/if}
           {#if dirty}
             <span class="dirty-indicator">*unsaved</span>
@@ -483,6 +544,9 @@
 
         {#if error}
           <p class="error">{error}</p>
+        {/if}
+        {#if startCombatError}
+          <p class="error">{startCombatError}</p>
         {/if}
 
         {#if loadedMap}
@@ -695,6 +759,32 @@
   .save-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed !important;
+  }
+
+  .start-btn {
+    background: #e94560 !important;
+    border-color: #e94560 !important;
+    color: white !important;
+  }
+
+  .start-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+  }
+
+  .surprised-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    color: #ffc107;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .surprised-label input[type="checkbox"] {
+    accent-color: #ffc107;
+    margin: 0;
   }
 
   .back-btn {

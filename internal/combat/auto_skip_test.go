@@ -38,3 +38,19 @@ func TestGetIncapacitatingConditionName_None(t *testing.T) {
 	name := GetIncapacitatingConditionName(conds)
 	assert.Equal(t, "", name)
 }
+
+// Phase 114: surprised-skip message follows the spec exactly:
+// "⏭️ Goblin #2 is surprised — turn skipped" (single space after the emoji,
+// long dash between phrase and 'turn skipped'). The incapacitated message keeps
+// its current "auto-skipped (condition — can't take actions)" shape.
+func TestFormatAutoSkipMessage_Surprised(t *testing.T) {
+	msg := FormatAutoSkipMessage("Goblin #2", "surprised")
+	assert.Equal(t, "⏭️ Goblin #2 is surprised — turn skipped", msg)
+}
+
+func TestFormatAutoSkipMessage_StunnedUnchanged(t *testing.T) {
+	// Regression guard: switching the surprised branch must NOT change the
+	// incapacitated text the rest of the codebase already relies on.
+	msg := FormatAutoSkipMessage("Aria", "stunned")
+	assert.Equal(t, "⏭️  Aria's turn is auto-skipped (stunned — can't take actions)", msg)
+}

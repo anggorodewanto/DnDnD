@@ -186,6 +186,30 @@ export async function listCreatures() {
 const COMBAT_BASE = '/api/combat';
 
 /**
+ * Start combat for a prepared encounter template. Mirrors the Go
+ * `startCombatRequest` shape in internal/combat/handler.go.
+ *
+ * @param {object} payload
+ * @param {string} payload.template_id - Encounter template UUID.
+ * @param {string[]} [payload.character_ids] - PC UUIDs joining combat.
+ * @param {Object<string,{col:string,row:number}>} [payload.character_positions]
+ *   - Optional map of character UUID to starting position.
+ * @param {string[]} [payload.surprised_combatant_short_ids] - Short IDs
+ *   (e.g. "GB2") of combatants the DM is flagging as surprised for round 1.
+ *   Phase 114.
+ * @returns {Promise<object>} The start-combat response: encounter, combatants,
+ *   initiative_tracker, first_turn.
+ */
+export async function startCombat(payload) {
+  const res = await apiFetch(`${COMBAT_BASE}/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/**
  * Get a suggested turn plan for an NPC combatant.
  * @param {string} encounterId - Encounter UUID.
  * @param {string} combatantId - Combatant UUID.

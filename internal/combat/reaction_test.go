@@ -3,6 +3,7 @@ package combat
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -601,6 +602,136 @@ func TestCanDeclareReaction_ListTurnsError(t *testing.T) {
 	svc := NewService(store)
 	_, err := svc.CanDeclareReaction(context.Background(), encounterID, combatantID)
 	require.Error(t, err)
+}
+
+// --- Phase 114: CanDeclareReaction must refuse surprised combatants ---
+// While the surprised condition is active (round 1, before the creature's
+// own turn ticks over), D&D 5e says the creature can't take reactions.
+// CanDeclareReaction should surface that as false.
+
+func TestCanDeclareReaction_SurprisedCombatantRejected(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), RoundNumber: 1, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:         id,
+			Conditions: json.RawMessage(`[{"condition":"surprised","duration_rounds":1,"started_round":0}]`),
+		}, nil
+	}
+
+	svc := NewService(store)
+	ok, err := svc.CanDeclareReaction(context.Background(), encounterID, combatantID)
+	require.NoError(t, err)
+	assert.False(t, ok, "surprised combatant must not be able to declare a reaction")
+}
+
+func TestCanDeclareReaction_NotSurprisedAllows(t *testing.T) {
+	// Sanity check: even once we wire the surprised lookup, non-surprised
+	// combatants with no turn row yet should still be allowed.
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), RoundNumber: 1, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(store)
+	ok, err := svc.CanDeclareReaction(context.Background(), encounterID, combatantID)
+	require.NoError(t, err)
+	assert.True(t, ok)
+}
+
+// Phase 114 — surfacing DB errors from the surprise check.
+func TestCanDeclareReaction_GetCombatantError(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errors.New("db boom")
+	}
+
+	svc := NewService(store)
+	_, err := svc.CanDeclareReaction(context.Background(), encounterID, combatantID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting combatant for surprise check")
+}
+
+func TestCanDeclareReaction_CombatantNoRowsAllows(t *testing.T) {
+	// sql.ErrNoRows from GetCombatant should be treated as not-surprised so
+	// the caller sees the normal "turn-row absent → permitted" fall-through.
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, sql.ErrNoRows
+	}
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{}, sql.ErrNoRows
+	}
+
+	svc := NewService(store)
+	ok, err := svc.CanDeclareReaction(context.Background(), encounterID, combatantID)
+	require.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func TestDeclareReaction_GetCombatantError(t *testing.T) {
+	store := defaultMockStore()
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{}, errors.New("db boom")
+	}
+	// Ensure CreateReactionDeclaration is never reached.
+	store.createReactionDeclarationFn = func(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error) {
+		t.Fatalf("should not reach create when surprise check fails")
+		return refdata.ReactionDeclaration{}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.DeclareReaction(context.Background(), uuid.New(), uuid.New(), "Shield")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting combatant for surprise check")
+}
+
+// ErrReactionSurprised exposed as a sentinel for the handler to detect.
+func TestDeclareReaction_SurprisedReturnsSentinel(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:         id,
+			Conditions: json.RawMessage(`[{"condition":"surprised","duration_rounds":1,"started_round":0}]`),
+		}, nil
+	}
+	// If anything reaches createReactionDeclarationFn, fail loudly — the guard
+	// should stop before the create call.
+	store.createReactionDeclarationFn = func(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error) {
+		t.Fatalf("should not reach create when combatant is surprised")
+		return refdata.ReactionDeclaration{}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.DeclareReaction(context.Background(), encounterID, combatantID, "Shield")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrReactionSurprised)
 }
 
 func TestCleanupReactionsOnEncounterEnd_Success(t *testing.T) {

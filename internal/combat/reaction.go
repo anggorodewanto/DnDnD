@@ -17,11 +17,25 @@ var ErrReactionNotActive = fmt.Errorf("reaction declaration is not active")
 // ErrReactionAlreadyUsed is returned when a combatant tries to use a reaction but already used one this round.
 var ErrReactionAlreadyUsed = fmt.Errorf("reaction already used this round")
 
+// ErrReactionSurprised is returned when a combatant tries to declare or use a
+// reaction while the surprised condition is still applied. D&D 5e: a surprised
+// creature can't take reactions until the end of their first turn, at which
+// point the condition is removed (see skipSurprisedTurn in initiative.go).
+var ErrReactionSurprised = fmt.Errorf("combatant is surprised and can't take reactions")
+
 // DeclareReaction creates a new reaction declaration for a combatant in an encounter.
 func (s *Service) DeclareReaction(ctx context.Context, encounterID, combatantID uuid.UUID, description string) (refdata.ReactionDeclaration, error) {
 	description = strings.TrimSpace(description)
 	if description == "" {
 		return refdata.ReactionDeclaration{}, fmt.Errorf("description must not be empty")
+	}
+
+	surprised, err := s.combatantIsSurprised(ctx, combatantID)
+	if err != nil {
+		return refdata.ReactionDeclaration{}, err
+	}
+	if surprised {
+		return refdata.ReactionDeclaration{}, ErrReactionSurprised
 	}
 
 	return s.store.CreateReactionDeclaration(ctx, refdata.CreateReactionDeclarationParams{
@@ -31,6 +45,22 @@ func (s *Service) DeclareReaction(ctx context.Context, encounterID, combatantID 
 	})
 }
 
+// combatantIsSurprised fetches the combatant and reports whether the
+// "surprised" condition is present on them. A missing row is treated as
+// not-surprised (false) to avoid blocking reactions on stale IDs — the
+// CreateReactionDeclaration call below will still fail cleanly if the
+// combatant truly doesn't exist.
+func (s *Service) combatantIsSurprised(ctx context.Context, combatantID uuid.UUID) (bool, error) {
+	c, err := s.store.GetCombatant(ctx, combatantID)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("getting combatant for surprise check: %w", err)
+	}
+	return IsSurprised(c.Conditions), nil
+}
+
 // CanDeclareReaction reports whether the given combatant has an unused
 // reaction in the current round. Returns true when no active turn exists
 // (e.g. between rounds) or when the combatant has no turn row yet this
@@ -38,6 +68,14 @@ func (s *Service) DeclareReaction(ctx context.Context, encounterID, combatantID 
 // "declare is permitted"; false means the combatant has already used
 // their reaction this round and a new declaration should be rejected.
 func (s *Service) CanDeclareReaction(ctx context.Context, encounterID, combatantID uuid.UUID) (bool, error) {
+	surprised, err := s.combatantIsSurprised(ctx, combatantID)
+	if err != nil {
+		return false, err
+	}
+	if surprised {
+		return false, nil
+	}
+
 	activeTurn, err := s.store.GetActiveTurnByEncounterID(ctx, encounterID)
 	if err == sql.ErrNoRows {
 		return true, nil
