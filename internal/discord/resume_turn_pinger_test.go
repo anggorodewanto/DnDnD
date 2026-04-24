@@ -18,17 +18,13 @@ import (
 
 // fakeResumeCombatService implements the subset of combat queries the pinger needs.
 type fakeResumeCombatService struct {
-	listFn       func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
-	getEncFn     func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
-	getTurnFn    func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
-	getCombFn    func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
+	listFn    func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
+	getTurnFn func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	getCombFn func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 }
 
 func (f *fakeResumeCombatService) ListEncountersByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error) {
 	return f.listFn(ctx, campaignID)
-}
-func (f *fakeResumeCombatService) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
-	return f.getEncFn(ctx, id)
 }
 func (f *fakeResumeCombatService) GetTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
 	return f.getTurnFn(ctx, id)
@@ -84,16 +80,6 @@ func TestResumeTurnPinger_RePingsCurrentTurnPlayer(t *testing.T) {
 					RoundNumber:   3,
 					CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
 				},
-			}, nil
-		},
-		getEncFn: func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
-			return refdata.Encounter{
-				ID:            encounterID,
-				CampaignID:    campaignID,
-				Status:        "active",
-				Name:          "Rooftop Ambush",
-				RoundNumber:   3,
-				CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
 			}, nil
 		},
 		getTurnFn: func(_ context.Context, id uuid.UUID) (refdata.Turn, error) {

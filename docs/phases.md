@@ -745,7 +745,7 @@
   - Depends on: Phase 25, Phase 39
   - Done when: Integration tests verify surprise skip, condition removal timing, reaction availability after turn ends.
 
-- [ ] **Phase 115: Campaign Pause**
+- [x] **Phase 115: Campaign Pause**
   - Scope: DM sets campaign to `paused` from dashboard. Announcement in #the-story. Commands remain functional. Timers continue. Resume: announcement + re-ping current turn player.
   - Depends on: Phase 11
   - Done when: Pause posts announcement to #the-story, resume posts announcement to #the-story and re-pings the current turn player, commands not blocked during pause, timers unaffected.

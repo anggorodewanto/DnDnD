@@ -36,7 +36,7 @@ func NewNarrationPoster(session Session) *NarrationPoster {
 // error is returned and the IDs collected so far are NOT returned, so that
 // the caller can treat the post as failed and skip recording it.
 func (p *NarrationPoster) PostToStory(guildID, body string, embeds []narration.DiscordEmbed, attachmentURLs []string) ([]string, error) {
-	channelID, err := p.resolveStoryChannel(guildID)
+	channelID, err := resolveStoryChannel(p.session, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +67,9 @@ func (p *NarrationPoster) PostToStory(guildID, body string, embeds []narration.D
 }
 
 // resolveStoryChannel returns the channel ID for #the-story in the given guild.
-func (p *NarrationPoster) resolveStoryChannel(guildID string) (string, error) {
-	channels, err := p.session.GuildChannels(guildID)
+// Shared by NarrationPoster and CampaignAnnouncer.
+func resolveStoryChannel(session Session, guildID string) (string, error) {
+	channels, err := session.GuildChannels(guildID)
 	if err != nil {
 		return "", fmt.Errorf("fetching guild channels: %w", err)
 	}

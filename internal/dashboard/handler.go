@@ -272,29 +272,19 @@ const dashboardTemplate = `<!DOCTYPE html>
     if (!btn) return;
     btn.addEventListener('click', function() {
         var id = btn.getAttribute('data-campaign-id');
-        if (!id) {
-            console.warn('btn-pause: no data-campaign-id; cannot toggle');
-            return;
-        }
+        if (!id) return;
         var status = btn.getAttribute('data-campaign-status') || 'active';
         var action = status === 'paused' ? 'resume' : 'pause';
+        var nextStatus = action === 'pause' ? 'paused' : 'active';
         btn.disabled = true;
         fetch('/api/campaigns/' + id + '/' + action, { method: 'POST' })
             .then(function(resp) {
                 if (!resp.ok) throw new Error('Request failed: ' + resp.status);
-                return resp.json();
+                btn.setAttribute('data-campaign-status', nextStatus);
+                btn.textContent = nextStatus === 'paused' ? 'Resume Campaign' : 'Pause Campaign';
             })
-            .then(function(data) {
-                var newStatus = (data && data.status) || (action === 'pause' ? 'paused' : 'active');
-                btn.setAttribute('data-campaign-status', newStatus);
-                btn.textContent = newStatus === 'paused' ? 'Resume Campaign' : 'Pause Campaign';
-            })
-            .catch(function(err) {
-                console.error('Pause/Resume failed', err);
-            })
-            .finally(function() {
-                btn.disabled = false;
-            });
+            .catch(function(err) { console.error('Pause/Resume failed', err); })
+            .finally(function() { btn.disabled = false; });
     });
 })();
     </script>

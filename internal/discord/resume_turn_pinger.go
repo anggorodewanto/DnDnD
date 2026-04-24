@@ -56,8 +56,20 @@ func (p *ResumeTurnPinger) RePingCurrentTurn(ctx context.Context, c refdata.Camp
 		return
 	}
 
-	enc, ok := p.findActiveEncounterWithTurn(ctx, c.ID)
-	if !ok {
+	encounters, err := p.combat.ListEncountersByCampaignID(ctx, c.ID)
+	if err != nil {
+		return
+	}
+	var enc refdata.Encounter
+	found := false
+	for _, e := range encounters {
+		if e.Status == "active" && e.CurrentTurnID.Valid {
+			enc = e
+			found = true
+			break
+		}
+	}
+	if !found {
 		return
 	}
 
@@ -79,34 +91,9 @@ func (p *ResumeTurnPinger) RePingCurrentTurn(ctx context.Context, c refdata.Camp
 		return
 	}
 
-	content := buildResumeTurnContent(enc, turn, comb, pc.DiscordUserID)
+	prompt := combat.FormatTurnStartPrompt(combat.EncounterDisplayName(enc), enc.RoundNumber, comb.DisplayName, turn, &comb)
+	content := fmt.Sprintf("<@%s> — the campaign has resumed. It's still your turn.\n%s", pc.DiscordUserID, prompt)
 	_, _ = p.session.ChannelMessageSend(channelID, content)
-}
-
-// findActiveEncounterWithTurn returns the first encounter in a campaign that
-// is status=active and has a CurrentTurnID set.
-func (p *ResumeTurnPinger) findActiveEncounterWithTurn(ctx context.Context, campaignID uuid.UUID) (refdata.Encounter, bool) {
-	encounters, err := p.combat.ListEncountersByCampaignID(ctx, campaignID)
-	if err != nil {
-		return refdata.Encounter{}, false
-	}
-	for _, e := range encounters {
-		if e.Status == "active" && e.CurrentTurnID.Valid {
-			return e, true
-		}
-	}
-	return refdata.Encounter{}, false
-}
-
-// buildResumeTurnContent composes the turn-start prompt and prefixes it with
-// a Discord @mention of the owning player's user id so they get a ping on the
-// resume. Uses the existing FormatTurnStartPrompt formatter for parity with
-// a normal turn-start notification.
-func buildResumeTurnContent(enc refdata.Encounter, turn refdata.Turn, comb refdata.Combatant, discordUserID string) string {
-	name := combat.EncounterDisplayName(enc)
-	prompt := combat.FormatTurnStartPrompt(name, enc.RoundNumber, comb.DisplayName, turn, &comb)
-	mention := fmt.Sprintf("<@%s>", discordUserID)
-	return mention + " — the campaign has resumed. It's still your turn.\n" + prompt
 }
 
 // yourTurnChannel extracts the "your-turn" channel id from a campaign's
