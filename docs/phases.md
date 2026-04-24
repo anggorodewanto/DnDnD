@@ -750,7 +750,7 @@
   - Depends on: Phase 11
   - Done when: Pause posts announcement to #the-story, resume posts announcement to #the-story and re-pings the current turn player, commands not blocked during pause, timers unaffected.
 
-- [ ] **Phase 116: Tiled Import (Map Import)**
+- [x] **Phase 116: Tiled Import (Map Import)**
   - Scope: Import .tmj files. Three-tier validation: hard rejection (infinite maps, non-orthogonal, too large), supported (tile layers, object layers, custom properties), skipped with warnings (animations, image layers, parallax, group layers flattened, etc.). Import summary shows stripped features.
   - Depends on: Phase 19
   - Done when: Valid Tiled maps import successfully, rejected maps show clear errors, skipped features listed in summary.
