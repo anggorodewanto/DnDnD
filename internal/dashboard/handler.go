@@ -5,8 +5,10 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/ab/dndnd/internal/auth"
+	"github.com/ab/dndnd/internal/errorlog"
 )
 
 // NavEntry represents a sidebar navigation entry.
@@ -27,6 +29,9 @@ var SidebarNav = []NavEntry{
 	{Label: "Exploration", Icon: "🧭", Path: "/dashboard/exploration"},
 	{Label: "Character Overview", Icon: "👤", Path: "/dashboard/characters"},
 	{Label: "Create Character", Icon: "➕", Path: "/dashboard/characters/new"},
+	// Phase 112: error notification badge + panel. The label is rewritten
+	// in-flight to "Errors (N)" by navWithErrorBadge when N > 0.
+	{Label: "Errors", Icon: "⚠️", Path: "/dashboard/errors"},
 }
 
 // CampaignHomeData holds the data for the Campaign Home view.
@@ -40,9 +45,23 @@ type CampaignHomeData struct {
 
 // Handler serves the DM dashboard pages.
 type Handler struct {
-	logger *slog.Logger
-	tmpl   *template.Template
-	hub    *Hub
+	logger   *slog.Logger
+	tmpl     *template.Template
+	hub      *Hub
+	errorLog *errorLogAdapter
+}
+
+// SetErrorReader wires the 24h error count into the Campaign Home sidebar
+// badge. Pass nil reader to disable (default when Phase 112 isn't wired).
+func (h *Handler) SetErrorReader(reader errorlog.Reader, clock func() time.Time) {
+	if reader == nil {
+		h.errorLog = nil
+		return
+	}
+	if clock == nil {
+		clock = time.Now
+	}
+	h.errorLog = &errorLogAdapter{reader: reader, clock: clock}
 }
 
 // NewHandler creates a new dashboard Handler with an optional Hub for WebSocket support.
@@ -66,8 +85,12 @@ func (h *Handler) ServeDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	errorCount := 0
+	if h.errorLog != nil {
+		errorCount = h.errorLog.count(r.Context())
+	}
 	data := CampaignHomeData{
-		Nav:              SidebarNav,
+		Nav:              navWithErrorBadge(errorCount),
 		DMQueueCount:     0,
 		PendingApprovals: 0,
 		ActiveEncounters: []string{},

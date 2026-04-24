@@ -30,6 +30,7 @@ import (
 	"github.com/ab/dndnd/internal/discord"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/encounter"
+	"github.com/ab/dndnd/internal/errorlog"
 	"github.com/ab/dndnd/internal/exploration"
 	"github.com/ab/dndnd/internal/gamemap"
 	"github.com/ab/dndnd/internal/homebrew"
@@ -151,7 +152,12 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 	debug := os.Getenv("DEBUG") == "true"
 	logger := server.NewLogger(logOutput, debug)
 
-	router, _ := server.NewRouter(logger)
+	router, health := server.NewRouter(logger)
+
+	// Phase 112: error recorder + reader. Starts as an in-memory store so
+	// panic recovery always has somewhere to land; upgraded to a PgStore
+	// backed by action_log once DATABASE_URL is configured below.
+	var errorStore errorlog.Store = errorlog.NewMemoryStore(nil)
 
 	// Phase 104: Construct (but do NOT open) the Discord session up-front so
 	// the wiring below can inject it into narration.Service,
@@ -202,6 +208,17 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			return err
 		}
 		logger.Info("database connected and migrated")
+
+		// Phase 112: upgrade the error store to a PgStore backed by the
+		// action_log table (now with nullable turn/encounter/actor columns
+		// per migration 20260424120001). The PgStore both records errors
+		// into action_log and drives the dashboard badge + panel.
+		if pg := errorlog.NewPgStore(db); pg != nil {
+			errorStore = pg
+		}
+
+		// Phase 112: wire the DB ping into the health endpoint.
+		health.Register("db", server.NewDBChecker(db))
 
 		// Wire map API handler
 		queries := refdata.New(db)
@@ -338,6 +355,13 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		authMw := buildAuthMiddleware(db, logger)
 		dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, authMw)
 
+		// Phase 112: DM dashboard errors panel. Mount the /dashboard/errors
+		// page behind authMw and (when a top-level Handler is present, via
+		// MountDashboard in future phases) wire the sidebar 24h badge off
+		// the same errorlog.Reader.
+		dashHandler := dashboard.MountDashboard(router, logger, hub, authMw)
+		dashboard.MountErrorsRoutes(router, dashHandler, errorStore, time.Now, authMw)
+
 		// Phase 110: exploration dashboard (Q4a). Mount behind authMw so the
 		// page is only reachable to authenticated DMs. Queries directly
 		// satisfy exploration.Store and exploration.MapLister.
@@ -401,6 +425,12 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			defer rawDG.Close()
 			logger.Info("discord session opened")
 
+			// Phase 112: wire the Discord gateway into the health endpoint.
+			// DataReady is toggled by discordgo on every Ready / Resumed
+			// event and is the gateway-level liveness signal discordgo
+			// itself publishes.
+			health.Register("discord", server.NewDiscordChecker(func() bool { return rawDG.DataReady }))
+
 			// Step 5 — Re-register slash commands for every guild the
 			// session is currently in. Per spec lines 178-181, the bot
 			// must always reconcile its command set on startup.
@@ -423,6 +453,10 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 				enemyTurnEncounterLookup: combatSvc,
 			})
 			cmdRouter := discord.NewCommandRouter(bot, nil)
+			// Phase 112: wire panic recovery + error recorder so any handler
+			// panic is caught, converted into a friendly ephemeral, logged at
+			// ERROR level, and recorded for the DM dashboard badge / panel.
+			cmdRouter.SetErrorRecorder(errorStore)
 			attachPhase105Handlers(cmdRouter, discordHandlerSet)
 			// Phase 106a: route /rest dm-queue posts through the notifier so
 			// rest requests are persisted and resolvable from the dashboard.

@@ -1,12 +1,22 @@
 package discord
 
 import (
+	"context"
 	"fmt"
+	"runtime/debug"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
+
+	"github.com/ab/dndnd/internal/errorlog"
 )
+
+// friendlyErrorMessage is the ephemeral shown to players when panic recovery
+// or a handler-level error intercepts an internal failure. Spec lines 2963-
+// 2969: "on any internal error (DB timeout, panic, Discord API failure),
+// reply with friendly ephemeral… Never swallowed silently."
+const friendlyErrorMessage = "⚠️ Something went wrong processing your command. Try again or contact your DM."
 
 // CommandHandler handles a slash command interaction.
 type CommandHandler interface {
@@ -23,6 +33,17 @@ type CommandRouter struct {
 	restHandler *RestHandler
 	lootHandler *LootHandler
 	asiHandler  *ASIHandler
+	// recorder persists panics and other surfaced errors for the DM
+	// dashboard badge / error panel. nil == log-only (still safe).
+	recorder errorlog.Recorder
+}
+
+// SetErrorRecorder wires an errorlog.Recorder so panics surfaced inside
+// Handle are persisted for the DM dashboard. When nil (the default) panics
+// are recovered and the friendly ephemeral still goes out, but no entry is
+// stored.
+func (r *CommandRouter) SetErrorRecorder(rec errorlog.Recorder) {
+	r.recorder = rec
 }
 
 // SetMoveHandler registers the MoveHandler for button callback routing.
@@ -216,8 +237,15 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 	return r
 }
 
-// Handle dispatches an interaction to the correct command handler.
+// Handle dispatches an interaction to the correct command handler. A
+// deferred recover() catches any panic from a downstream handler and
+// converts it into (1) a friendly ephemeral reply to the player, (2) a
+// structured ERROR slog line with stack trace, and (3) an errorlog entry
+// for the DM dashboard badge / panel. Spec lines 2963-2972.
 func (r *CommandRouter) Handle(interaction *discordgo.Interaction) {
+	command := r.commandNameFor(interaction)
+	defer r.recoverInteraction(interaction, command)
+
 	if interaction.Type == discordgo.InteractionMessageComponent {
 		r.handleComponent(interaction)
 		return
@@ -235,6 +263,75 @@ func (r *CommandRouter) Handle(interaction *discordgo.Interaction) {
 	}
 
 	handler.Handle(interaction)
+}
+
+// commandNameFor best-effort extracts the slash-command name from an
+// interaction. Used by recoverInteraction to tag the error entry; returns
+// "" when the interaction carries neither command data nor component data.
+func (r *CommandRouter) commandNameFor(interaction *discordgo.Interaction) string {
+	if interaction == nil {
+		return ""
+	}
+	if interaction.Type == discordgo.InteractionApplicationCommand {
+		if data, ok := interaction.Data.(discordgo.ApplicationCommandInteractionData); ok {
+			return data.Name
+		}
+	}
+	if interaction.Type == discordgo.InteractionMessageComponent {
+		if data, ok := interaction.Data.(discordgo.MessageComponentInteractionData); ok {
+			return componentCommandName(data.CustomID)
+		}
+	}
+	return ""
+}
+
+// componentCommandName derives a coarse command-name from a customID by
+// taking the prefix before the first colon (so "move_confirm:…" -> "move").
+// Only used for error logging, not routing.
+func componentCommandName(customID string) string {
+	if customID == "" {
+		return "component"
+	}
+	idx := strings.IndexByte(customID, ':')
+	if idx < 0 {
+		return customID
+	}
+	head := customID[:idx]
+	// Normalise "move_confirm" -> "move" so panel groupings line up with
+	// the slash-command the user actually typed.
+	if under := strings.IndexByte(head, '_'); under > 0 {
+		head = head[:under]
+	}
+	return head
+}
+
+// recoverInteraction is the deferred body for Handle. It recovers from any
+// panic inside downstream dispatch, replies to the interaction with the
+// friendly ephemeral, logs an ERROR slog line, and records the event.
+func (r *CommandRouter) recoverInteraction(interaction *discordgo.Interaction, command string) {
+	rec := recover()
+	if rec == nil {
+		return
+	}
+	stack := debug.Stack()
+	userID := discordUserID(interaction)
+	err := fmt.Errorf("%v", rec)
+	if r.bot != nil && r.bot.logger != nil {
+		r.bot.logger.Error("discord handler panic",
+			"command", command,
+			"user_id", userID,
+			"error", err,
+			"stack", string(stack),
+		)
+	}
+	respondEphemeral(r.bot.session, interaction, friendlyErrorMessage)
+	if r.recorder != nil {
+		_ = r.recorder.Record(context.Background(), errorlog.Entry{
+			Command: command,
+			UserID:  userID,
+			Summary: errorlog.BuildSummary(command, userID, err),
+		})
+	}
 }
 
 // handleComponent routes message component interactions (button clicks) to the appropriate handler.
