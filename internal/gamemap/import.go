@@ -53,7 +53,7 @@ type ImportResult struct {
 // rules return a typed error; soft-rejection rules strip the offending
 // feature and append to the Skipped list.
 func ImportTiledJSON(raw json.RawMessage) (ImportResult, error) {
-	var doc map[string]interface{}
+	var doc map[string]any
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return ImportResult{}, fmt.Errorf("%w: %v", ErrInvalidTiledJSON, err)
 	}
@@ -62,14 +62,11 @@ func ImportTiledJSON(raw json.RawMessage) (ImportResult, error) {
 		return ImportResult{}, err
 	}
 
-	width := intField(doc, "width")
-	height := intField(doc, "height")
-
 	skipped := newSkippedTracker()
-	if layers, ok := doc["layers"].([]interface{}); ok {
+	if layers, ok := doc["layers"].([]any); ok {
 		doc["layers"] = sanitizeLayers(layers, skipped)
 	}
-	if tilesets, ok := doc["tilesets"].([]interface{}); ok {
+	if tilesets, ok := doc["tilesets"].([]any); ok {
 		doc["tilesets"] = sanitizeTilesets(tilesets, skipped)
 	}
 
@@ -80,25 +77,22 @@ func ImportTiledJSON(raw json.RawMessage) (ImportResult, error) {
 
 	return ImportResult{
 		TiledJSON: cleaned,
-		Width:     width,
-		Height:    height,
+		Width:     intField(doc, "width"),
+		Height:    intField(doc, "height"),
 		Skipped:   skipped.list(),
 	}, nil
 }
 
 // checkHardRejections returns a typed sentinel error when the doc has a
 // feature the system cannot support.
-func checkHardRejections(doc map[string]interface{}) error {
-	if infinite, ok := doc["infinite"].(bool); ok && infinite {
+func checkHardRejections(doc map[string]any) error {
+	if infinite, _ := doc["infinite"].(bool); infinite {
 		return ErrInfiniteMap
 	}
-
 	if orient, _ := doc["orientation"].(string); orient != "" && orient != "orthogonal" {
 		return fmt.Errorf("%w: got %q", ErrNonOrthogonal, orient)
 	}
-
-	width := intField(doc, "width")
-	height := intField(doc, "height")
+	width, height := intField(doc, "width"), intField(doc, "height")
 	if width < 1 || height < 1 {
 		return fmt.Errorf("%w: got %dx%d", ErrInvalidDimensions, width, height)
 	}
@@ -110,38 +104,34 @@ func checkHardRejections(doc map[string]interface{}) error {
 
 // sanitizeLayers walks the layer tree, flattening groups and stripping
 // unsupported layer kinds and unsupported per-layer fields.
-func sanitizeLayers(layers []interface{}, skipped *skippedTracker) []interface{} {
-	cleaned := make([]interface{}, 0, len(layers))
+func sanitizeLayers(layers []any, skipped *skippedTracker) []any {
+	cleaned := make([]any, 0, len(layers))
 	for _, raw := range layers {
-		layer, ok := raw.(map[string]interface{})
+		layer, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
 		layerType, _ := layer["type"].(string)
-
-		if layerType == "group" {
+		switch layerType {
+		case "group":
 			skipped.add(SkippedGroupLayer, "flattened into root layer list")
-			children, _ := layer["layers"].([]interface{})
+			children, _ := layer["layers"].([]any)
 			cleaned = append(cleaned, sanitizeLayers(children, skipped)...)
-			continue
-		}
-
-		if layerType == "imagelayer" {
+		case "imagelayer":
 			skipped.add(SkippedImageLayer, "")
-			continue
+		default:
+			stripParallax(layer, skipped)
+			if layerType == "objectgroup" {
+				layer["objects"] = sanitizeObjects(layer["objects"], skipped)
+			}
+			cleaned = append(cleaned, layer)
 		}
-
-		stripParallax(layer, skipped)
-		if layerType == "objectgroup" {
-			layer["objects"] = sanitizeObjects(layer["objects"], skipped)
-		}
-		cleaned = append(cleaned, layer)
 	}
 	return cleaned
 }
 
 // stripParallax removes parallax fields from a layer and records the skip.
-func stripParallax(layer map[string]interface{}, skipped *skippedTracker) {
+func stripParallax(layer map[string]any, skipped *skippedTracker) {
 	_, hasX := layer["parallaxx"]
 	_, hasY := layer["parallaxy"]
 	if !hasX && !hasY {
@@ -153,14 +143,14 @@ func stripParallax(layer map[string]interface{}, skipped *skippedTracker) {
 }
 
 // sanitizeObjects drops text and point objects from an objectgroup's object list.
-func sanitizeObjects(raw interface{}, skipped *skippedTracker) []interface{} {
-	objs, ok := raw.([]interface{})
+func sanitizeObjects(raw any, skipped *skippedTracker) []any {
+	objs, ok := raw.([]any)
 	if !ok {
-		return []interface{}{}
+		return []any{}
 	}
-	cleaned := make([]interface{}, 0, len(objs))
+	cleaned := make([]any, 0, len(objs))
 	for _, o := range objs {
-		obj, ok := o.(map[string]interface{})
+		obj, ok := o.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -168,7 +158,7 @@ func sanitizeObjects(raw interface{}, skipped *skippedTracker) []interface{} {
 			skipped.add(SkippedTextObject, "")
 			continue
 		}
-		if pt, isPoint := obj["point"].(bool); isPoint && pt {
+		if pt, _ := obj["point"].(bool); pt {
 			skipped.add(SkippedPointObject, "")
 			continue
 		}
@@ -178,9 +168,9 @@ func sanitizeObjects(raw interface{}, skipped *skippedTracker) []interface{} {
 }
 
 // sanitizeTilesets removes wang sets and per-tile animations from each tileset.
-func sanitizeTilesets(tilesets []interface{}, skipped *skippedTracker) []interface{} {
+func sanitizeTilesets(tilesets []any, skipped *skippedTracker) []any {
 	for _, raw := range tilesets {
-		ts, ok := raw.(map[string]interface{})
+		ts, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -188,12 +178,12 @@ func sanitizeTilesets(tilesets []interface{}, skipped *skippedTracker) []interfa
 			delete(ts, "wangsets")
 			skipped.add(SkippedWangSet, "")
 		}
-		tiles, ok := ts["tiles"].([]interface{})
+		tiles, ok := ts["tiles"].([]any)
 		if !ok {
 			continue
 		}
 		for _, t := range tiles {
-			tile, ok := t.(map[string]interface{})
+			tile, ok := t.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -208,11 +198,8 @@ func sanitizeTilesets(tilesets []interface{}, skipped *skippedTracker) []interfa
 
 // intField extracts an integer-valued field from a parsed JSON map. JSON
 // numbers come through as float64.
-func intField(doc map[string]interface{}, key string) int {
-	v, ok := doc[key].(float64)
-	if !ok {
-		return 0
-	}
+func intField(doc map[string]any, key string) int {
+	v, _ := doc[key].(float64)
 	return int(v)
 }
 
@@ -234,9 +221,7 @@ func (s *skippedTracker) add(feature SkippedFeatureType, detail string) {
 	s.items = append(s.items, SkippedFeature{Feature: feature, Detail: detail})
 }
 
-func (s *skippedTracker) list() []SkippedFeature {
-	return s.items
-}
+func (s *skippedTracker) list() []SkippedFeature { return s.items }
 
 // ImportMapInput holds parameters for importing a Tiled map.
 type ImportMapInput struct {

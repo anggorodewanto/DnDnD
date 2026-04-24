@@ -22,7 +22,7 @@ func TestHandler_ImportMap_Success(t *testing.T) {
 	store := successStore(campaignID)
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "Imported Map",
 		"tmj":         json.RawMessage(validTmj(15, 12)),
@@ -61,7 +61,7 @@ func TestHandler_ImportMap_ReturnsSkippedFeatures(t *testing.T) {
 			{"type":"imagelayer","name":"bg","image":"bg.png"}
 		]
 	}`)
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "Has Image",
 		"tmj":         tmj,
@@ -108,7 +108,7 @@ func TestHandler_ImportMap_HardRejection(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			body := map[string]interface{}{
+			body := map[string]any{
 				"campaign_id": campaignID.String(),
 				"name":        "X",
 				"tmj":         json.RawMessage(tc.tmj),
@@ -137,7 +137,7 @@ func TestHandler_ImportMap_InvalidBody(t *testing.T) {
 
 func TestHandler_ImportMap_InvalidCampaignID(t *testing.T) {
 	_, r := newTestRouter(&mockStore{})
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": "not-a-uuid",
 		"name":        "X",
 		"tmj":         json.RawMessage(validTmj(10, 10)),
@@ -152,7 +152,7 @@ func TestHandler_ImportMap_InvalidCampaignID(t *testing.T) {
 func TestHandler_ImportMap_MissingTmj(t *testing.T) {
 	campaignID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "X",
 	}
@@ -167,7 +167,7 @@ func TestHandler_ImportMap_MissingTmj(t *testing.T) {
 func TestHandler_ImportMap_InvalidBackgroundImageID(t *testing.T) {
 	campaignID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id":         campaignID.String(),
 		"name":                "X",
 		"tmj":                 json.RawMessage(validTmj(10, 10)),
@@ -191,7 +191,7 @@ func TestHandler_ImportMap_StoreError(t *testing.T) {
 		},
 	}
 	_, r := newTestRouter(store)
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "X",
 		"tmj":         json.RawMessage(validTmj(10, 10)),
@@ -208,7 +208,7 @@ func TestHandler_ImportMap_StoreError(t *testing.T) {
 func TestHandler_ImportMap_EmptyName(t *testing.T) {
 	campaignID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "",
 		"tmj":         json.RawMessage(validTmj(10, 10)),
@@ -225,7 +225,7 @@ func TestHandler_ImportMap_InvalidTmjPayload(t *testing.T) {
 	campaignID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
 	// Outer body parses, but `tmj` is a valid JSON value the importer can't accept (a string, not a map).
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "X",
 		"tmj":         json.RawMessage(`"not a tmj"`),
@@ -257,7 +257,7 @@ func TestHandler_ImportMap_WithBackgroundImageID(t *testing.T) {
 		},
 	}
 	_, r := newTestRouter(store)
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id":         campaignID.String(),
 		"name":                "X",
 		"tmj":                 json.RawMessage(validTmj(10, 10)),

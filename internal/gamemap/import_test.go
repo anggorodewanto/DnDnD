@@ -144,12 +144,12 @@ func TestImportTiledJSON_StripTileAnimations(t *testing.T) {
 	assert.True(t, hasSkipped(result.Skipped, SkippedTileAnimation), "expected animation in skipped list, got %v", result.Skipped)
 
 	// Assert the animation was actually removed from the JSON
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(result.TiledJSON, &parsed))
-	tilesets := parsed["tilesets"].([]interface{})
-	tiles := tilesets[0].(map[string]interface{})["tiles"].([]interface{})
+	tilesets := parsed["tilesets"].([]any)
+	tiles := tilesets[0].(map[string]any)["tiles"].([]any)
 	for _, tile := range tiles {
-		_, has := tile.(map[string]interface{})["animation"]
+		_, has := tile.(map[string]any)["animation"]
 		assert.False(t, has, "animation should be stripped")
 	}
 }
@@ -170,11 +170,11 @@ func TestImportTiledJSON_StripImageLayers(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, hasSkipped(result.Skipped, SkippedImageLayer))
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(result.TiledJSON, &parsed))
-	layers := parsed["layers"].([]interface{})
+	layers := parsed["layers"].([]any)
 	for _, l := range layers {
-		assert.NotEqual(t, "imagelayer", l.(map[string]interface{})["type"])
+		assert.NotEqual(t, "imagelayer", l.(map[string]any)["type"])
 	}
 	assert.Len(t, layers, 1)
 }
@@ -194,9 +194,9 @@ func TestImportTiledJSON_StripParallax(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, hasSkipped(result.Skipped, SkippedParallax))
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(result.TiledJSON, &parsed))
-	layer := parsed["layers"].([]interface{})[0].(map[string]interface{})
+	layer := parsed["layers"].([]any)[0].(map[string]any)
 	_, hasX := layer["parallaxx"]
 	_, hasY := layer["parallaxy"]
 	assert.False(t, hasX)
@@ -222,13 +222,13 @@ func TestImportTiledJSON_FlattenGroupLayers(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, hasSkipped(result.Skipped, SkippedGroupLayer))
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(result.TiledJSON, &parsed))
-	layers := parsed["layers"].([]interface{})
+	layers := parsed["layers"].([]any)
 	// terrain + walls + decor = 3, no group remaining
 	assert.Len(t, layers, 3)
 	for _, l := range layers {
-		assert.NotEqual(t, "group", l.(map[string]interface{})["type"])
+		assert.NotEqual(t, "group", l.(map[string]any)["type"])
 	}
 }
 
@@ -253,11 +253,11 @@ func TestImportTiledJSON_StripUnsupportedObjects(t *testing.T) {
 	assert.True(t, hasSkipped(result.Skipped, SkippedTextObject))
 	assert.True(t, hasSkipped(result.Skipped, SkippedPointObject))
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(result.TiledJSON, &parsed))
-	layers := parsed["layers"].([]interface{})
-	walls := layers[1].(map[string]interface{})
-	objects := walls["objects"].([]interface{})
+	layers := parsed["layers"].([]any)
+	walls := layers[1].(map[string]any)
+	objects := walls["objects"].([]any)
 	assert.Len(t, objects, 1, "only the wall object should remain")
 }
 
@@ -279,9 +279,9 @@ func TestImportTiledJSON_StripWangSets(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, hasSkipped(result.Skipped, SkippedWangSet))
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(result.TiledJSON, &parsed))
-	ts := parsed["tilesets"].([]interface{})[0].(map[string]interface{})
+	ts := parsed["tilesets"].([]any)[0].(map[string]any)
 	_, has := ts["wangsets"]
 	assert.False(t, has)
 }
@@ -428,9 +428,9 @@ func TestImportTiledJSON_TolerateMalformedShapes(t *testing.T) {
 	result, err := ImportTiledJSON(raw)
 	require.NoError(t, err)
 	// Only the well-formed objectgroup, the kept child of group, and the keep tilelayer survive.
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(result.TiledJSON, &parsed))
-	layers := parsed["layers"].([]interface{})
+	layers := parsed["layers"].([]any)
 	// Real objectgroup + flattened tilelayer = 2
 	assert.Len(t, layers, 2)
 }
