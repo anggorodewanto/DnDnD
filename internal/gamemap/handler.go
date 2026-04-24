@@ -26,6 +26,7 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/maps", func(r chi.Router) {
 		r.Post("/", h.CreateMap)
+		r.Post("/import", h.ImportMap)
 		r.Get("/", h.ListMaps)
 		r.Get("/{id}", h.GetMap)
 		r.Put("/{id}", h.UpdateMap)
