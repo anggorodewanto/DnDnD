@@ -342,11 +342,11 @@ type SkippedInfo struct {
 
 // TurnInfo holds information about the current turn after advancing.
 type TurnInfo struct {
-	Turn               refdata.Turn
-	CombatantID        uuid.UUID
-	RoundNumber        int32
-	Skipped            bool
-	SkippedCombatants  []SkippedInfo
+	Turn              refdata.Turn
+	CombatantID       uuid.UUID
+	RoundNumber       int32
+	Skipped           bool
+	SkippedCombatants []SkippedInfo
 }
 
 // MarkSurprised adds the surprised condition to a combatant.
@@ -457,17 +457,11 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 		conds, _ := parseConditions(candidate.Conditions)
 
 		if roundNumber == 1 && hasCondition(conds, "surprised") {
-			if err := s.skipSurprisedTurn(ctx, encounterID, roundNumber, candidate); err != nil {
+			skipped, err := s.skipSurprisedTurn(ctx, encounterID, roundNumber, candidate)
+			if err != nil {
 				return TurnInfo{}, err
 			}
-			// Phase 114 — surface the surprise skip via SkippedCombatants so
-			// the Discord done-handler can post the combat-log narration
-			// ("⏭️ <name> is surprised — turn skipped").
-			skippedCombatants = append(skippedCombatants, SkippedInfo{
-				CombatantID:   candidate.ID,
-				DisplayName:   candidate.DisplayName,
-				ConditionName: "surprised",
-			})
+			skippedCombatants = append(skippedCombatants, skipped)
 			continue
 		}
 		allSurprised = false
@@ -549,23 +543,30 @@ func (s *Service) findFirstActiveCombatant(ctx context.Context, encounterID uuid
 	return TurnInfo{}, errors.New("no alive combatants")
 }
 
-// skipSurprisedTurn skips a surprised combatant's turn and removes the surprised condition.
-func (s *Service) skipSurprisedTurn(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant) error {
+// skipSurprisedTurn skips a surprised combatant's turn, removes the surprised
+// condition, and returns a SkippedInfo so the caller can surface the skip via
+// TurnInfo.SkippedCombatants (used by the done-handler to post the combat-log
+// line "⏭️ <name> is surprised — turn skipped").
+func (s *Service) skipSurprisedTurn(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatant refdata.Combatant) (SkippedInfo, error) {
 	if err := s.skipCombatantTurn(ctx, encounterID, roundNumber, combatant, "surprised"); err != nil {
-		return err
+		return SkippedInfo{}, err
 	}
 	newConds, err := RemoveSurprisedCondition(combatant.Conditions)
 	if err != nil {
-		return fmt.Errorf("removing surprised condition: %w", err)
+		return SkippedInfo{}, fmt.Errorf("removing surprised condition: %w", err)
 	}
 	if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
 		ID:              combatant.ID,
 		Conditions:      newConds,
 		ExhaustionLevel: combatant.ExhaustionLevel,
 	}); err != nil {
-		return fmt.Errorf("updating conditions after surprise skip: %w", err)
+		return SkippedInfo{}, fmt.Errorf("updating conditions after surprise skip: %w", err)
 	}
-	return nil
+	return SkippedInfo{
+		CombatantID:   combatant.ID,
+		DisplayName:   combatant.DisplayName,
+		ConditionName: "surprised",
+	}, nil
 }
 
 // skipCombatantTurn creates and immediately skips a turn for the given reason.
