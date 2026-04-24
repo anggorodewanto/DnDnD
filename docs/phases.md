@@ -760,6 +760,21 @@
   - Depends on: Phase 2
   - Done when: Test infrastructure in place, CI green, coverage report generated, fixture helpers available.
 
+- [ ] **Phase 118: Error Log Schema Follow-up**
+  - Scope: Evaluate the Phase 112 decision to overload `action_log.before_state` JSONB with `command` / `user_id` metadata for rows where `action_type='error'`. Decide between (a) keeping the JSONB approach, (b) promoting `command` and `user_id` to first-class nullable columns on `action_log` with a backfill migration, or (c) splitting errors into a dedicated `error_log` table. Drive the decision with real production data: query volumes, filter patterns used by the DM dashboard, and whether non-combat error rows are distorting existing `action_log` queries (undo, combat-log, roll-history). Remove the `NOT NULL` drop from `turn_id`/`encounter_id`/`actor_id` if errors move off this table.
+  - Depends on: Phase 112
+  - Done when: Schema decision documented in the spec, migration applied if needed, `errorlog.PgStore` + dashboard panel updated to match, existing `action_log` consumers verified unaffected.
+
+- [ ] **Phase 119: End-to-End Test Harness**
+  - Scope: Stand up a black-box E2E harness that exercises the full stack (HTTP + Discord + Postgres + dashboard) without a real Discord gateway. Components: (1) a `discordgo.Session` fake that records outbound messages/edits/ephemerals and injects inbound interactions on demand, (2) a testcontainers Postgres fixture seeded with SRD data + a canned campaign/map/characters, (3) a goroutine-safe test harness that boots the real `cmd/dndnd` binary in-process wired to the fakes, (4) a scenario DSL (Go-level helpers) that runs flows like "register → approve → start encounter → /move → /attack → /done" and asserts on Discord output + DB state + dashboard snapshots, (5) one reference scenario per major mode (registration, combat, exploration, rest, loot). Runs in CI under a dedicated `make e2e` target.
+  - Depends on: Phase 2, Phase 9a, Phase 15, Phase 117
+  - Done when: `make e2e` boots the server + Postgres, runs at least five reference scenarios green, records a deterministic transcript of Discord interactions per scenario, and fails loudly when message text or DB state drifts.
+
+- [ ] **Phase 120: Interactive Playtest Harness (Human DM + AI Player)**
+  - Scope: A guided playtest mode where a human DM and an AI agent acting as a player drive the bot through a real campaign together. Components: (1) a setup script / doc (`docs/playtest-quickstart.md`) that walks the DM through creating a minimal campaign — Discord server setup, bot invite, `/setup`, character approval, encounter build, map, go-live, (2) a "player agent" CLI (`cmd/playtest-player/`) that logs into Discord as a bot or webhook, observes `#the-story` / `#combat-log` / DMs, and issues commands (`/move`, `/attack`, `/cast`, `/action`, etc.) on prompt from the human operator — think REPL wrapping the bot's command surface, (3) a transcript recorder that captures both sides of the session to a replay file consumable by Phase 119's E2E harness, (4) a "playtest checklist" doc listing happy-path + known edge-case scenarios to run through (combat round with OA, spell with save, exploration-to-combat transition, death save, rest, loot claim). The goal is a repeatable, low-friction session where Claude drives the player role, the human DMs, and bugs/UX issues surface live.
+  - Depends on: Phase 9a, Phase 11, Phase 15, Phase 25, Phase 110, Phase 119
+  - Done when: Quickstart doc gets a fresh user from empty repo to a running campaign in under 30 minutes; the player-agent CLI can issue every player-facing slash command against a live Discord server; transcripts replay cleanly through the Phase 119 harness.
+
 ## Coverage Map
 
 | Spec Section | Covered by Phase(s) |
