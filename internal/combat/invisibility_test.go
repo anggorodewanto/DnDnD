@@ -554,9 +554,9 @@ func TestValidateSeeTarget_AllowsSelfRadius(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// --- Cycle 11: applyInvisibilityBreakOnCast error path ---
+// --- Cycle 11: breakInvisibilityAndPersist error path ---
 
-func TestApplyInvisibilityBreakOnCast_DBError(t *testing.T) {
+func TestBreakInvisibilityAndPersist_DBError(t *testing.T) {
 	ctx := context.Background()
 	store := defaultMockStore()
 	store.updateCombatantConditionsFn = func(_ context.Context, _ refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
@@ -570,7 +570,7 @@ func TestApplyInvisibilityBreakOnCast_DBError(t *testing.T) {
 			{Condition: "invisible", SourceSpell: "invisibility"},
 		}),
 	}
-	_, err := svc.applyInvisibilityBreakOnCast(ctx, caster)
+	_, err := svc.breakInvisibilityAndPersist(ctx, caster)
 	require.Error(t, err)
 }
 

@@ -652,7 +652,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 
 	// 18. Break standard Invisibility on the caster (Greater persists).
-	broken, err := s.applyInvisibilityBreakOnCast(ctx, caster)
+	broken, err := s.breakInvisibilityAndPersist(ctx, caster)
 	if err != nil {
 		return CastResult{}, err
 	}
@@ -680,26 +680,6 @@ func (s *Service) applyInvisibilityConditionFromCast(ctx context.Context, spell 
 		return "", fmt.Errorf("applying invisible condition: %w", err)
 	}
 	return recipientID.String(), nil
-}
-
-// applyInvisibilityBreakOnCast removes a non-Greater Invisibility condition
-// from the caster after a spell cast. Returns true if a condition was removed.
-func (s *Service) applyInvisibilityBreakOnCast(ctx context.Context, caster refdata.Combatant) (bool, error) {
-	updatedConds, broken, err := BreakInvisibilityOnAction(caster.Conditions)
-	if err != nil {
-		return false, fmt.Errorf("checking invisibility break: %w", err)
-	}
-	if !broken {
-		return false, nil
-	}
-	if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
-		ID:              caster.ID,
-		Conditions:      updatedConds,
-		ExhaustionLevel: caster.ExhaustionLevel,
-	}); err != nil {
-		return false, fmt.Errorf("breaking invisibility: %w", err)
-	}
-	return true, nil
 }
 
 // SlotDeduction holds the outcome of deducting a spell slot.

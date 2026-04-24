@@ -757,20 +757,11 @@ func (s *Service) resolveAndPersistAttack(ctx context.Context, input AttackInput
 	}
 
 	// Break standard Invisibility (not Greater) on attack per 5e rules.
-	updatedConds, broken, err := BreakInvisibilityOnAction(attacker.Conditions)
+	broken, err := s.breakInvisibilityAndPersist(ctx, attacker)
 	if err != nil {
-		return AttackResult{}, fmt.Errorf("checking invisibility break: %w", err)
+		return AttackResult{}, err
 	}
-	if broken {
-		if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
-			ID:              attacker.ID,
-			Conditions:      updatedConds,
-			ExhaustionLevel: attacker.ExhaustionLevel,
-		}); err != nil {
-			return AttackResult{}, fmt.Errorf("breaking invisibility: %w", err)
-		}
-		result.InvisibilityBroken = true
-	}
+	result.InvisibilityBroken = broken
 
 	result.RemainingTurn = &updatedTurn
 	return result, nil

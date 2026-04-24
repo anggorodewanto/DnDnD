@@ -1,6 +1,7 @@
 package combat
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -46,28 +47,36 @@ func BreakInvisibilityOnAction(conditions json.RawMessage) (json.RawMessage, boo
 // single-target, non-AoE, non-self spells cannot target creatures with the
 // invisible condition. Returns a user-facing error when blocked.
 func ValidateSeeTarget(spell refdata.Spell, target refdata.Combatant) error {
-	if !targetIsInvisible(target.Conditions) {
+	if !HasCondition(target.Conditions, "invisible") {
 		return nil
 	}
-	if spellIsAreaOfEffect(spell) {
-		return nil
-	}
-	if spellIsSelfTargeted(spell) {
+	isAoE := spell.AreaOfEffect.Valid && len(spell.AreaOfEffect.RawMessage) > 0
+	isSelf := spell.RangeType == "self" || spell.RangeType == "self (radius)"
+	if isAoE || isSelf {
 		return nil
 	}
 	return fmt.Errorf("⚠️ You can't target %s — they are invisible and you can't see them.", target.DisplayName)
 }
 
-func targetIsInvisible(conditions json.RawMessage) bool {
-	return HasCondition(conditions, "invisible")
-}
-
-func spellIsAreaOfEffect(spell refdata.Spell) bool {
-	return spell.AreaOfEffect.Valid && len(spell.AreaOfEffect.RawMessage) > 0
-}
-
-func spellIsSelfTargeted(spell refdata.Spell) bool {
-	return spell.RangeType == "self" || spell.RangeType == "self (radius)"
+// breakInvisibilityAndPersist removes a non-Greater Invisibility condition
+// from the given combatant and persists the updated conditions. Returns true
+// if a condition was actually removed. Shared between attack and cast paths.
+func (s *Service) breakInvisibilityAndPersist(ctx context.Context, c refdata.Combatant) (bool, error) {
+	updatedConds, broken, err := BreakInvisibilityOnAction(c.Conditions)
+	if err != nil {
+		return false, fmt.Errorf("checking invisibility break: %w", err)
+	}
+	if !broken {
+		return false, nil
+	}
+	if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+		ID:              c.ID,
+		Conditions:      updatedConds,
+		ExhaustionLevel: c.ExhaustionLevel,
+	}); err != nil {
+		return false, fmt.Errorf("breaking invisibility: %w", err)
+	}
+	return true, nil
 }
 
 // invisibilitySpellFixture builds a minimal test fixture for the Invisibility
