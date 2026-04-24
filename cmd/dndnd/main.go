@@ -66,6 +66,45 @@ func (a encounterLookupAdapter) ActiveEncounterIDForCharacter(ctx context.Contex
 	return encID, true, nil
 }
 
+// resumePlayerLookupAdapter bridges refdata.Queries to the
+// discord.ResumePlayerLookup contract so the Phase 115 resume re-pinger can
+// @mention the current-turn player by their Discord user id.
+type resumePlayerLookupAdapter struct {
+	queries *refdata.Queries
+}
+
+func (a resumePlayerLookupAdapter) GetPlayerCharacterByCharacter(ctx context.Context, campaignID, characterID uuid.UUID) (refdata.PlayerCharacter, error) {
+	return a.queries.GetPlayerCharacterByCharacter(ctx, refdata.GetPlayerCharacterByCharacterParams{
+		CampaignID:  campaignID,
+		CharacterID: characterID,
+	})
+}
+
+// dashboardCampaignLookup resolves the DM's first active/paused campaign by
+// discord user id so the Pause/Resume button can carry a data-campaign-id and
+// show the correct label. Returns ("","",nil) when no campaign exists; errors
+// propagate so the caller can log + degrade.
+type dashboardCampaignLookup struct {
+	queries *refdata.Queries
+}
+
+func (l dashboardCampaignLookup) LookupActiveCampaign(ctx context.Context, dmUserID string) (string, string, error) {
+	campaigns, err := l.queries.ListCampaigns(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	for _, c := range campaigns {
+		if c.DmUserID != dmUserID {
+			continue
+		}
+		if c.Status == "archived" {
+			continue
+		}
+		return c.ID.String(), c.Status, nil
+	}
+	return "", "", nil
+}
+
 // newDMQueueChannelResolver returns a closure that resolves a guild ID to
 // the channel ID of its #dm-queue text channel by scanning the live
 // discordgo session state. Phase 106a uses this to drive
@@ -272,7 +311,15 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		if discordSession != nil {
 			narrationPoster = discord.NewNarrationPoster(discordSession)
 		}
-		campaignSvc := campaign.NewService(queries, nil)
+		// Phase 115: inject the Discord-backed campaign announcer so
+		// pause/resume post to #the-story; falls back to nil when the bot
+		// is offline (messages are then silently skipped per service
+		// "best-effort" contract).
+		var campaignAnnouncer campaign.Announcer
+		if discordSession != nil {
+			campaignAnnouncer = discord.NewCampaignAnnouncer(discordSession)
+		}
+		campaignSvc := campaign.NewService(queries, campaignAnnouncer)
 		campaignHandler := campaign.NewHandler(campaignSvc)
 		campaignHandler.RegisterRoutes(router)
 		narrationStore := narration.NewDBStore(queries)
@@ -320,6 +367,16 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		combatHandler := combat.NewHandler(combatSvc, dice.NewRoller(nil))
 		combatHandler.RegisterRoutes(router)
 
+		// Phase 115: wire the resume-time turn re-pinger so /api/campaigns/:id/resume
+		// automatically @mentions the current-turn player in #your-turn when
+		// the paused campaign had mid-combat state. No-op without a Discord
+		// session (unit tests cover the per-branch decisions).
+		if discordSession != nil {
+			playerLookup := resumePlayerLookupAdapter{queries: queries}
+			resumePinger := discord.NewResumeTurnPinger(discordSession, combatSvc, playerLookup)
+			campaignSvc.SetTurnPinger(resumePinger)
+		}
+
 		// Phase 106a: DM Notification System wiring. Construct a Notifier
 		// backed by the dm_queue_items PgStore and (when a Discord session is
 		// available) a SessionSender that posts directly via discordgo. The
@@ -361,6 +418,10 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		// the same errorlog.Reader.
 		dashHandler := dashboard.MountDashboard(router, logger, hub, authMw)
 		dashboard.MountErrorsRoutes(router, dashHandler, errorStore, time.Now, authMw)
+
+		// Phase 115: drive the Pause/Resume button label + data-campaign-id
+		// off the DM's current campaign.
+		dashHandler.SetCampaignLookup(dashboardCampaignLookup{queries: queries})
 
 		// Phase 110: exploration dashboard (Q4a). Mount behind authMw so the
 		// page is only reachable to authenticated DMs. Queries directly

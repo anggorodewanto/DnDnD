@@ -128,6 +128,60 @@ func TestIntegration_PauseResumeCampaign(t *testing.T) {
 	assert.Equal(t, campaign.StatusActive, resumed.Status)
 }
 
+// integrationAnnouncer captures AnnounceToStory calls during integration tests.
+type integrationAnnouncer struct {
+	calls []struct{ guildID, message string }
+}
+
+func (a *integrationAnnouncer) AnnounceToStory(guildID, message string) error {
+	a.calls = append(a.calls, struct{ guildID, message string }{guildID, message})
+	return nil
+}
+
+// integrationTurnPinger captures RePingCurrentTurn invocations.
+type integrationTurnPinger struct {
+	calls []refdata.Campaign
+}
+
+func (p *integrationTurnPinger) RePingCurrentTurn(_ context.Context, c refdata.Campaign) {
+	p.calls = append(p.calls, c)
+}
+
+// TestIntegration_PauseResumeCampaign_Phase115 verifies that Phase 115's
+// spec-exact announcements are dispatched and the turn re-pinger is invoked
+// on resume (mid-combat detection is unit-tested separately in the discord
+// package — here we only assert the service wiring fires).
+func TestIntegration_PauseResumeCampaign_Phase115(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := setupTestDB(t)
+	queries := refdata.New(db)
+	ann := &integrationAnnouncer{}
+	pinger := &integrationTurnPinger{}
+	svc := campaign.NewService(queries, ann)
+	svc.SetTurnPinger(pinger)
+	ctx := context.Background()
+
+	c, err := svc.CreateCampaign(ctx, "guild-phase115", "dm-1", "Phase 115 Pause Test", nil)
+	require.NoError(t, err)
+
+	_, err = svc.PauseCampaign(ctx, c.ID)
+	require.NoError(t, err)
+	require.Len(t, ann.calls, 1)
+	assert.Equal(t, "guild-phase115", ann.calls[0].guildID)
+	assert.Equal(t, "⏸️ **Campaign paused by DM.** The story will continue when the DM resumes the campaign.", ann.calls[0].message)
+	assert.Len(t, pinger.calls, 0, "pause must not trigger turn re-ping")
+
+	_, err = svc.ResumeCampaign(ctx, c.ID)
+	require.NoError(t, err)
+	require.Len(t, ann.calls, 2)
+	assert.Equal(t, "▶️ **Campaign resumed!**", ann.calls[1].message)
+	require.Len(t, pinger.calls, 1, "resume must trigger turn re-ping exactly once")
+	assert.Equal(t, c.ID, pinger.calls[0].ID)
+}
+
 func TestIntegration_ArchiveCampaign(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

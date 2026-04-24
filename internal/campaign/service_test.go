@@ -401,6 +401,154 @@ func TestListCampaigns_Success(t *testing.T) {
 	assert.Len(t, campaigns, 2)
 }
 
+// Phase 115 spec message — exact strings from docs/dnd-async-discord-spec.md
+// §Campaign Pause (lines 2910-2923). Must include emojis and full text.
+const (
+	expectedPauseMessage  = "⏸️ **Campaign paused by DM.** The story will continue when the DM resumes the campaign."
+	expectedResumeMessage = "▶️ **Campaign resumed!**"
+)
+
+func TestPauseCampaign_MessageMatchesSpec(t *testing.T) {
+	id := uuid.New()
+	var captured string
+	announcer := &mockAnnouncer{
+		announceFunc: func(guildID, message string) error {
+			captured = message
+			return nil
+		},
+	}
+	store := &mockStore{
+		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
+		},
+		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
+		},
+	}
+	svc := NewService(store, announcer)
+	_, err := svc.PauseCampaign(context.Background(), id)
+	require.NoError(t, err)
+	assert.Equal(t, expectedPauseMessage, captured)
+}
+
+func TestResumeCampaign_MessageMatchesSpec(t *testing.T) {
+	id := uuid.New()
+	var captured string
+	announcer := &mockAnnouncer{
+		announceFunc: func(guildID, message string) error {
+			captured = message
+			return nil
+		},
+	}
+	store := &mockStore{
+		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
+		},
+		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
+		},
+	}
+	svc := NewService(store, announcer)
+	_, err := svc.ResumeCampaign(context.Background(), id)
+	require.NoError(t, err)
+	assert.Equal(t, expectedResumeMessage, captured)
+}
+
+// mockTurnPinger captures RePingCurrentTurn invocations for Phase 115 tests.
+type mockTurnPinger struct {
+	pingFn func(ctx context.Context, c refdata.Campaign)
+	calls  int
+}
+
+func (m *mockTurnPinger) RePingCurrentTurn(ctx context.Context, c refdata.Campaign) {
+	m.calls++
+	if m.pingFn != nil {
+		m.pingFn(ctx, c)
+	}
+}
+
+func TestResumeCampaign_RePingsCurrentTurnPlayer_WhenMidCombat(t *testing.T) {
+	id := uuid.New()
+	announcer := &mockAnnouncer{}
+	store := &mockStore{
+		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
+		},
+		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
+		},
+	}
+	var seen refdata.Campaign
+	pinger := &mockTurnPinger{
+		pingFn: func(_ context.Context, c refdata.Campaign) {
+			seen = c
+		},
+	}
+	svc := NewService(store, announcer)
+	svc.SetTurnPinger(pinger)
+
+	c, err := svc.ResumeCampaign(context.Background(), id)
+	require.NoError(t, err)
+	assert.Equal(t, StatusActive, c.Status)
+	assert.Equal(t, 1, pinger.calls, "TurnPinger should be called exactly once on resume")
+	assert.Equal(t, id, seen.ID)
+	assert.Equal(t, "guild-1", seen.GuildID)
+}
+
+func TestPauseCampaign_DoesNotTriggerTurnPinger(t *testing.T) {
+	id := uuid.New()
+	store := &mockStore{
+		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
+		},
+		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
+		},
+	}
+	pinger := &mockTurnPinger{}
+	svc := NewService(store, nil)
+	svc.SetTurnPinger(pinger)
+
+	_, err := svc.PauseCampaign(context.Background(), id)
+	require.NoError(t, err)
+	assert.Equal(t, 0, pinger.calls, "Pause must not trigger turn re-ping")
+}
+
+func TestResumeCampaign_NilTurnPinger_Succeeds(t *testing.T) {
+	id := uuid.New()
+	store := &mockStore{
+		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
+		},
+		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusActive}, nil
+		},
+	}
+	svc := NewService(store, nil) // no pinger
+	c, err := svc.ResumeCampaign(context.Background(), id)
+	require.NoError(t, err)
+	assert.Equal(t, StatusActive, c.Status)
+}
+
+func TestResumeCampaign_UpdateError_SkipsTurnPinger(t *testing.T) {
+	id := uuid.New()
+	store := &mockStore{
+		getCampaignByIDFn: func(ctx context.Context, cid uuid.UUID) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: id, GuildID: "guild-1", Status: StatusPaused}, nil
+		},
+		updateCampaignStatusFn: func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error) {
+			return refdata.Campaign{}, errors.New("db error")
+		},
+	}
+	pinger := &mockTurnPinger{}
+	svc := NewService(store, nil)
+	svc.SetTurnPinger(pinger)
+
+	_, err := svc.ResumeCampaign(context.Background(), id)
+	require.Error(t, err)
+	assert.Equal(t, 0, pinger.calls, "failed resume must not trigger turn re-ping")
+}
+
 func TestPauseCampaign_AnnounceError_StillPauses(t *testing.T) {
 	id := uuid.New()
 	announcer := &mockAnnouncer{

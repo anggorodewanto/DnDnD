@@ -298,6 +298,13 @@ func (s *Service) ListEncountersByCampaignID(ctx context.Context, campaignID uui
 	return s.store.ListEncountersByCampaignID(ctx, campaignID)
 }
 
+// GetTurn retrieves a turn by its ID.
+// Phase 115: exposed on Service so the resume turn re-pinger can reconstruct
+// the active turn without needing direct store access.
+func (s *Service) GetTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	return s.store.GetTurn(ctx, id)
+}
+
 // UpdateEncounterStatus changes the status of an encounter.
 func (s *Service) UpdateEncounterStatus(ctx context.Context, id uuid.UUID, status string) (refdata.Encounter, error) {
 	if !validStatuses[status] {

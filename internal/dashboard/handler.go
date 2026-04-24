@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"bytes"
+	"context"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,16 @@ import (
 	"github.com/ab/dndnd/internal/auth"
 	"github.com/ab/dndnd/internal/errorlog"
 )
+
+// CampaignLookup returns the (id, status) of the campaign the DM is currently
+// operating on. Phase 115 uses this to drive the Pause/Resume button state in
+// the dashboard shell. Implementations typically key on the DM's discord user
+// id resolved from the request context. Either return id=="" with no error
+// when the DM has no active campaign, or propagate errors if the backing
+// store is unreachable — the handler will silently degrade in that case.
+type CampaignLookup interface {
+	LookupActiveCampaign(ctx context.Context, dmUserID string) (id, status string, err error)
+}
 
 // NavEntry represents a sidebar navigation entry.
 type NavEntry struct {
@@ -36,11 +47,26 @@ var SidebarNav = []NavEntry{
 
 // CampaignHomeData holds the data for the Campaign Home view.
 type CampaignHomeData struct {
-	Nav                []NavEntry
-	DMQueueCount       int
-	PendingApprovals   int
-	ActiveEncounters   []string
-	SavedEncounters    []string
+	Nav              []NavEntry
+	DMQueueCount     int
+	PendingApprovals int
+	ActiveEncounters []string
+	SavedEncounters  []string
+	// Phase 115: drive the Pause/Resume button label + data-campaign-id.
+	// CampaignID is empty when no CampaignLookup is wired or the DM has no
+	// active campaign; in that case the button renders disabled-looking
+	// with no endpoint attached.
+	CampaignID     string
+	CampaignStatus string
+}
+
+// PauseButtonLabel returns the correct label for the dashboard Pause/Resume
+// toggle based on the current campaign status.
+func (d CampaignHomeData) PauseButtonLabel() string {
+	if d.CampaignStatus == "paused" {
+		return "Resume Campaign"
+	}
+	return "Pause Campaign"
 }
 
 // Handler serves the DM dashboard pages.
@@ -49,6 +75,16 @@ type Handler struct {
 	tmpl     *template.Template
 	hub      *Hub
 	errorLog *errorLogAdapter
+	// Phase 115: optional campaign lookup so the Pause/Resume button can
+	// render with the right label and endpoint target.
+	campaignLookup CampaignLookup
+}
+
+// SetCampaignLookup wires a CampaignLookup so the Pause/Resume button can
+// reflect current state. Pass nil to disable (button still renders but is
+// inert). Safe to call at any time before the handler starts serving.
+func (h *Handler) SetCampaignLookup(lookup CampaignLookup) {
+	h.campaignLookup = lookup
 }
 
 // SetErrorReader wires the 24h error count into the Campaign Home sidebar
@@ -77,6 +113,22 @@ func NewHandler(logger *slog.Logger, hub *Hub) *Handler {
 	}
 }
 
+// lookupCampaign is a best-effort wrapper around the configured CampaignLookup
+// that tolerates nil lookup and errors by returning empty strings.
+func (h *Handler) lookupCampaign(ctx context.Context, dmUserID string) (string, string) {
+	if h.campaignLookup == nil {
+		return "", ""
+	}
+	id, status, err := h.campaignLookup.LookupActiveCampaign(ctx, dmUserID)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("dashboard campaign lookup failed", "error", err)
+		}
+		return "", ""
+	}
+	return id, status
+}
+
 // ServeDashboard serves the dashboard shell with Campaign Home as the default view.
 func (h *Handler) ServeDashboard(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.DiscordUserIDFromContext(r.Context())
@@ -89,12 +141,17 @@ func (h *Handler) ServeDashboard(w http.ResponseWriter, r *http.Request) {
 	if h.errorLog != nil {
 		errorCount = h.errorLog.count(r.Context())
 	}
+
+	campaignID, campaignStatus := h.lookupCampaign(r.Context(), userID)
+
 	data := CampaignHomeData{
 		Nav:              navWithErrorBadge(errorCount),
 		DMQueueCount:     0,
 		PendingApprovals: 0,
 		ActiveEncounters: []string{},
 		SavedEncounters:  []string{},
+		CampaignID:       campaignID,
+		CampaignStatus:   campaignStatus,
 	}
 
 	var buf bytes.Buffer
@@ -171,7 +228,7 @@ const dashboardTemplate = `<!DOCTYPE html>
         <div class="quick-actions">
             <button id="btn-new-encounter">New Encounter</button>
             <button id="btn-narrate">Narrate</button>
-            <button id="btn-pause">Pause Campaign</button>
+            <button id="btn-pause" data-campaign-id="{{.CampaignID}}" data-campaign-status="{{.CampaignStatus}}">{{.PauseButtonLabel}}</button>
         </div>
     </div>
     <script>
@@ -205,6 +262,40 @@ const dashboardTemplate = `<!DOCTYPE html>
     }
 
     connect();
+})();
+
+// Phase 115: Pause/Resume button toggle. Calls /api/campaigns/{id}/pause or
+// /resume based on current data-campaign-status, then flips the label and
+// attribute in-place so the next click does the opposite.
+(function() {
+    var btn = document.getElementById('btn-pause');
+    if (!btn) return;
+    btn.addEventListener('click', function() {
+        var id = btn.getAttribute('data-campaign-id');
+        if (!id) {
+            console.warn('btn-pause: no data-campaign-id; cannot toggle');
+            return;
+        }
+        var status = btn.getAttribute('data-campaign-status') || 'active';
+        var action = status === 'paused' ? 'resume' : 'pause';
+        btn.disabled = true;
+        fetch('/api/campaigns/' + id + '/' + action, { method: 'POST' })
+            .then(function(resp) {
+                if (!resp.ok) throw new Error('Request failed: ' + resp.status);
+                return resp.json();
+            })
+            .then(function(data) {
+                var newStatus = (data && data.status) || (action === 'pause' ? 'paused' : 'active');
+                btn.setAttribute('data-campaign-status', newStatus);
+                btn.textContent = newStatus === 'paused' ? 'Resume Campaign' : 'Pause Campaign';
+            })
+            .catch(function(err) {
+                console.error('Pause/Resume failed', err);
+            })
+            .finally(function() {
+                btn.disabled = false;
+            });
+    });
 })();
     </script>
 </body>

@@ -51,15 +51,30 @@ type Announcer interface {
 	AnnounceToStory(guildID, message string) error
 }
 
+// TurnPinger re-notifies the current-turn player in #your-turn when a
+// campaign resumes mid-combat (Phase 115). The implementation (kept in the
+// discord package) resolves the active encounter, its current turn, and the
+// owning player, then posts via the standard turn-start formatter.
+type TurnPinger interface {
+	RePingCurrentTurn(ctx context.Context, c refdata.Campaign)
+}
+
 // Service manages campaign CRUD and status transitions.
 type Service struct {
-	store     Store
-	announcer Announcer
+	store      Store
+	announcer  Announcer
+	turnPinger TurnPinger
 }
 
 // NewService creates a new campaign Service.
 func NewService(store Store, announcer Announcer) *Service {
 	return &Service{store: store, announcer: announcer}
+}
+
+// SetTurnPinger attaches the resume-time turn re-pinger. Optional: when nil,
+// resume still succeeds but skips the ping (matches spec: ping only mid-combat).
+func (s *Service) SetTurnPinger(tp TurnPinger) {
+	s.turnPinger = tp
 }
 
 // CreateCampaign validates input and creates a new campaign.
@@ -106,14 +121,31 @@ func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (refdata.Campaign, 
 	return s.store.GetCampaignByID(ctx, id)
 }
 
+// Phase 115 announcement strings. Copy comes verbatim from
+// docs/dnd-async-discord-spec.md §Campaign Pause (lines 2910-2923).
+const (
+	pauseAnnouncement  = "⏸️ **Campaign paused by DM.** The story will continue when the DM resumes the campaign."
+	resumeAnnouncement = "▶️ **Campaign resumed!**"
+)
+
 // PauseCampaign transitions a campaign from active to paused and announces to Discord.
 func (s *Service) PauseCampaign(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
-	return s.transitionStatus(ctx, id, StatusPaused, "The campaign has been **paused**. See you soon, adventurers!")
+	return s.transitionStatus(ctx, id, StatusPaused, pauseAnnouncement)
 }
 
-// ResumeCampaign transitions a campaign from paused to active and announces to Discord.
+// ResumeCampaign transitions a campaign from paused to active, announces to
+// Discord, and re-pings the current-turn player if mid-combat. Turn re-ping
+// is best-effort: any missing dependency or runtime error inside the pinger
+// is silently ignored so resume remains the source of truth.
 func (s *Service) ResumeCampaign(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
-	return s.transitionStatus(ctx, id, StatusActive, "The campaign has been **resumed**! The adventure continues!")
+	updated, err := s.transitionStatus(ctx, id, StatusActive, resumeAnnouncement)
+	if err != nil {
+		return refdata.Campaign{}, err
+	}
+	if s.turnPinger != nil {
+		s.turnPinger.RePingCurrentTurn(ctx, updated)
+	}
+	return updated, nil
 }
 
 // ArchiveCampaign transitions a campaign to archived status.
