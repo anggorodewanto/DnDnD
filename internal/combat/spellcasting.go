@@ -171,6 +171,9 @@ type CastResult struct {
 	IsSubtle              bool   // true if V/S components removed (bypasses Counterspell/Silence)
 	TwinTargetName        string // display name of the second target for Twinned Spell
 	TwinTargetID          string // ID of the second target for Twinned Spell
+	InvisibilityBroken    bool   // true if standard Invisibility was broken by casting
+	InvisibilityApplied   bool   // true if this cast applied the invisible condition to a target
+	InvisibilityTargetID  string // combatant that received the invisible condition (if any)
 }
 
 // FormatCastLog produces the combat log output for a spell cast.
@@ -270,6 +273,18 @@ func FormatCastLog(result CastResult) string {
 	}
 	if result.TwinTargetName != "" {
 		fmt.Fprintf(&b, "\u2728 Twinned Spell: also targets %s\n", result.TwinTargetName)
+	}
+
+	// Invisibility effects
+	if result.InvisibilityApplied {
+		recipient := result.TargetName
+		if recipient == "" {
+			recipient = result.CasterName
+		}
+		fmt.Fprintf(&b, "\U0001f441\ufe0f %s becomes invisible.\n", recipient)
+	}
+	if result.InvisibilityBroken {
+		fmt.Fprintf(&b, "\U0001f441\ufe0f Invisibility ends \u2014 %s is visible again.\n", result.CasterName)
 	}
 
 	// DM required
@@ -478,6 +493,13 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		if err := ValidateSpellRange(spell, distFt); err != nil {
 			return CastResult{}, err
 		}
+
+		// See-the-target validation: a single-target spell against an invisible
+		// target is blocked unless the spell is AoE. Self-targeted spells
+		// bypass this because the caster always knows their own position.
+		if err := ValidateSeeTarget(spell, target); err != nil {
+			return CastResult{}, err
+		}
 	}
 
 	// 8. Determine spellcasting ability
@@ -619,7 +641,65 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		result.SorceryPointsRemaining = newPoints
 	}
 
+	// 17. Apply invisibility condition when casting Invisibility / Greater Invisibility.
+	if spell.ID == InvisibilitySpellID || spell.ID == GreaterInvisibilitySpellID {
+		recipient, err := s.applyInvisibilityConditionFromCast(ctx, spell, caster, cmd.TargetID)
+		if err != nil {
+			return CastResult{}, err
+		}
+		result.InvisibilityApplied = true
+		result.InvisibilityTargetID = recipient
+	}
+
+	// 18. Break standard Invisibility on the caster (Greater persists).
+	broken, err := s.applyInvisibilityBreakOnCast(ctx, caster)
+	if err != nil {
+		return CastResult{}, err
+	}
+	result.InvisibilityBroken = broken
+
 	return result, nil
+}
+
+// applyInvisibilityConditionFromCast adds an "invisible" condition to the spell's
+// target (or caster when no explicit target). Returns the combatant ID that
+// received the condition as a string.
+func (s *Service) applyInvisibilityConditionFromCast(ctx context.Context, spell refdata.Spell, caster refdata.Combatant, targetID uuid.UUID) (string, error) {
+	recipientID := targetID
+	if recipientID == uuid.Nil {
+		recipientID = caster.ID
+	}
+	cond := CombatCondition{
+		Condition:         "invisible",
+		SourceCombatantID: caster.ID.String(),
+		SourceSpell:       spell.ID,
+		// DurationRounds=0 -> indefinite; concentration tracks the spell, and
+		// concentration loss / duration end remove the condition separately.
+	}
+	if _, _, err := s.ApplyCondition(ctx, recipientID, cond); err != nil {
+		return "", fmt.Errorf("applying invisible condition: %w", err)
+	}
+	return recipientID.String(), nil
+}
+
+// applyInvisibilityBreakOnCast removes a non-Greater Invisibility condition
+// from the caster after a spell cast. Returns true if a condition was removed.
+func (s *Service) applyInvisibilityBreakOnCast(ctx context.Context, caster refdata.Combatant) (bool, error) {
+	updatedConds, broken, err := BreakInvisibilityOnAction(caster.Conditions)
+	if err != nil {
+		return false, fmt.Errorf("checking invisibility break: %w", err)
+	}
+	if !broken {
+		return false, nil
+	}
+	if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+		ID:              caster.ID,
+		Conditions:      updatedConds,
+		ExhaustionLevel: caster.ExhaustionLevel,
+	}); err != nil {
+		return false, fmt.Errorf("breaking invisibility: %w", err)
+	}
+	return true, nil
 }
 
 // SlotDeduction holds the outcome of deducting a spell slot.

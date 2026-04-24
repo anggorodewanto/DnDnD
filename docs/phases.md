@@ -735,7 +735,7 @@
   - Depends on: Phase 1, Phase 15
   - Done when: Players see friendly errors, DM sees error count badge, error log panel works, health endpoint reports degraded state.
 
-- [ ] **Phase 113: Invisible Condition**
+- [x] **Phase 113: Invisible Condition**
   - Scope: Invisible condition (from spells like Invisibility, Greater Invisibility). Advantage on own attacks, disadvantage on attacks against. Blocks "see the target" spells. AoE still affects. Distinction from is_visible (stealth). Interaction: invisible but not hidden (enemies know square). Both active simultaneously. Breaking Invisibility on attack/cast (non-Greater only, auto-remove from source tracking). Greater Invisibility persists. Spec lines 1565-1600.
   - Depends on: Phase 39, Phase 57
   - Done when: Integration tests verify invisible mechanics, breaking conditions, Greater vs standard, interaction with stealth.

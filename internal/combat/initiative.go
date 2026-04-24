@@ -84,6 +84,10 @@ type CombatCondition struct {
 	StartedRound      int    `json:"started_round"`
 	SourceCombatantID string `json:"source_combatant_id,omitempty"`
 	ExpiresOn         string `json:"expires_on,omitempty"`
+	// SourceSpell identifies the spell that applied this condition (spell ID, e.g.
+	// "invisibility" or "greater-invisibility"). Used to break condition on
+	// attack/cast for spells like standard Invisibility.
+	SourceSpell string `json:"source_spell,omitempty"`
 }
 
 // SurprisedCondition returns the standard surprised condition struct.

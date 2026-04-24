@@ -358,6 +358,7 @@ type AttackResult struct {
 	Sharpshooter        bool
 	Reckless            bool
 	AttackerRevealed    bool // True if a hidden attacker was revealed by this attack
+	InvisibilityBroken  bool // True if standard Invisibility condition was broken by this attack
 }
 
 // OffhandAttackCommand holds the service-level inputs for an off-hand attack (bonus action).
@@ -724,6 +725,10 @@ func FormatAttackLog(result AttackResult) string {
 		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (%s)", result.DamageTotal, result.DamageType, diceLabel)
 	}
 
+	if result.InvisibilityBroken {
+		fmt.Fprintf(&b, "\n    \u2192 \U0001f441\ufe0f Invisibility ends \u2014 %s is visible again.", result.AttackerName)
+	}
+
 	return b.String()
 }
 
@@ -749,6 +754,22 @@ func (s *Service) resolveAndPersistAttack(ctx context.Context, input AttackInput
 			return AttackResult{}, fmt.Errorf("revealing attacker: %w", err)
 		}
 		result.AttackerRevealed = true
+	}
+
+	// Break standard Invisibility (not Greater) on attack per 5e rules.
+	updatedConds, broken, err := BreakInvisibilityOnAction(attacker.Conditions)
+	if err != nil {
+		return AttackResult{}, fmt.Errorf("checking invisibility break: %w", err)
+	}
+	if broken {
+		if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+			ID:              attacker.ID,
+			Conditions:      updatedConds,
+			ExhaustionLevel: attacker.ExhaustionLevel,
+		}); err != nil {
+			return AttackResult{}, fmt.Errorf("breaking invisibility: %w", err)
+		}
+		result.InvisibilityBroken = true
 	}
 
 	result.RemainingTurn = &updatedTurn
