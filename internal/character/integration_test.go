@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 )
@@ -15,18 +16,8 @@ func setupTestDB(t *testing.T) (*sql.DB, *refdata.Queries, uuid.UUID) {
 	t.Helper()
 	db := sharedDB.AcquireDB(t)
 	queries := refdata.New(db)
-	ctx := context.Background()
-
-	// Create a campaign for FK
-	var campaignID uuid.UUID
-	err := db.QueryRowContext(ctx,
-		`INSERT INTO campaigns (guild_id, dm_user_id, name) VALUES ($1, $2, $3) RETURNING id`,
-		"test-guild", "test-dm", "Test Campaign",
-	).Scan(&campaignID)
-	if err != nil {
-		t.Fatalf("failed to create campaign: %v", err)
-	}
-	return db, queries, campaignID
+	camp := testutil.NewTestCampaign(t, queries, "test-guild")
+	return db, queries, camp.ID
 }
 
 func mustJSON(t *testing.T, v interface{}) json.RawMessage {
@@ -232,24 +223,7 @@ func TestIntegration_CharacterListByCampaign(t *testing.T) {
 
 	// Create two characters
 	for _, name := range []string{"Zara", "Alice"} {
-		_, err := queries.CreateCharacter(ctx, refdata.CreateCharacterParams{
-			CampaignID:       campaignID,
-			Name:             name,
-			Race:             "human",
-			Classes:          mustJSON(t, []map[string]interface{}{{"class": "fighter", "level": 1}}),
-			Level:            1,
-			AbilityScores:    mustJSON(t, map[string]int{"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10}),
-			HpMax:            10,
-			HpCurrent:        10,
-			Ac:               10,
-			SpeedFt:          30,
-			ProficiencyBonus: 2,
-			HitDiceRemaining: mustJSON(t, map[string]int{"d10": 1}),
-			Languages:        []string{"Common"},
-		})
-		if err != nil {
-			t.Fatalf("CreateCharacter %s failed: %v", name, err)
-		}
+		testutil.NewTestCharacter(t, queries, campaignID, name, 1)
 	}
 
 	chars, err := queries.ListCharactersByCampaign(ctx, campaignID)
@@ -276,26 +250,9 @@ func TestIntegration_CharacterDelete(t *testing.T) {
 	_, queries, campaignID := setupTestDB(t)
 	ctx := context.Background()
 
-	created, err := queries.CreateCharacter(ctx, refdata.CreateCharacterParams{
-		CampaignID:       campaignID,
-		Name:             "Doomed",
-		Race:             "elf",
-		Classes:          mustJSON(t, []map[string]interface{}{{"class": "rogue", "level": 1}}),
-		Level:            1,
-		AbilityScores:    mustJSON(t, map[string]int{"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10}),
-		HpMax:            8,
-		HpCurrent:        8,
-		Ac:               11,
-		SpeedFt:          30,
-		ProficiencyBonus: 2,
-		HitDiceRemaining: mustJSON(t, map[string]int{"d8": 1}),
-		Languages:        []string{"Common", "Elvish"},
-	})
-	if err != nil {
-		t.Fatalf("CreateCharacter failed: %v", err)
-	}
+	created := testutil.NewTestCharacter(t, queries, campaignID, "Doomed", 1)
 
-	err = queries.DeleteCharacter(ctx, created.ID)
+	err := queries.DeleteCharacter(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("DeleteCharacter failed: %v", err)
 	}

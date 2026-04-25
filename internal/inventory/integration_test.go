@@ -17,6 +17,7 @@ import (
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/testutil"
 )
 
 func setupTestDB(t *testing.T) (*sql.DB, *refdata.Queries) {
@@ -27,36 +28,23 @@ func setupTestDB(t *testing.T) (*sql.DB, *refdata.Queries) {
 
 func createTestCampaign(t *testing.T, q *refdata.Queries) refdata.Campaign {
 	t.Helper()
-	camp, err := q.CreateCampaign(context.Background(), refdata.CreateCampaignParams{
-		GuildID:  "guild-inv-test",
-		DmUserID: "dm-1",
-		Name:     "Test Campaign",
-		Settings: pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true},
-	})
-	require.NoError(t, err)
-	return camp
+	return testutil.NewTestCampaign(t, q, "guild-inv-test")
 }
 
 func createTestCharacter(t *testing.T, q *refdata.Queries, campID uuid.UUID, name string, gold int32, items []character.InventoryItem) refdata.Character {
 	t.Helper()
+	char := testutil.NewTestCharacter(t, q, campID, name, 5)
+	// Inventory tests assert on HpCurrent=30 and need custom inventory + gold; shared helper does not take these.
 	invJSON, _ := json.Marshal(items)
-	char, err := q.CreateCharacter(context.Background(), refdata.CreateCharacterParams{
-		CampaignID:     campID,
-		Name:           name,
-		Race:           "human",
-		Classes:        json.RawMessage(`[{"class":"fighter","level":5}]`),
-		Level:          5,
-		AbilityScores:  json.RawMessage(`{"str":16,"dex":14,"con":14,"int":10,"wis":12,"cha":8}`),
-		HpMax:          44,
-		HpCurrent:      30,
-		TempHp:         0,
-		Ac:             18,
-		SpeedFt:        30,
-		ProficiencyBonus: 3,
-		HitDiceRemaining: json.RawMessage(`{"d10":5}`),
-		Gold:           gold,
-		Inventory:      pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
-		Languages:      []string{"common"},
+	char, err := q.UpdateCharacterInventoryAndHP(context.Background(), refdata.UpdateCharacterInventoryAndHPParams{
+		ID:        char.ID,
+		Inventory: pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
+		HpCurrent: 30,
+	})
+	require.NoError(t, err)
+	char, err = q.UpdateCharacterGold(context.Background(), refdata.UpdateCharacterGoldParams{
+		ID:   char.ID,
+		Gold: gold,
 	})
 	require.NoError(t, err)
 	return char

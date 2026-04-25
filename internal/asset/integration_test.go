@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/testutil"
 )
 
 func TestAssetCRUD_Integration(t *testing.T) {
@@ -22,12 +23,7 @@ func TestAssetCRUD_Integration(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a campaign first (FK dependency)
-	campaign, err := queries.CreateCampaign(ctx, refdata.CreateCampaignParams{
-		GuildID:  "guild-test",
-		DmUserID: "dm-test",
-		Name:     "Test Campaign",
-	})
-	require.NoError(t, err)
+	campaign := testutil.NewTestCampaign(t, queries, "guild-test")
 
 	// Create an asset
 	asset, err := queries.CreateAsset(ctx, refdata.CreateAssetParams{
@@ -74,12 +70,7 @@ func TestAssetFK_BackgroundImage_Integration(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a campaign
-	campaign, err := queries.CreateCampaign(ctx, refdata.CreateCampaignParams{
-		GuildID:  "guild-fk",
-		DmUserID: "dm-fk",
-		Name:     "FK Test Campaign",
-	})
-	require.NoError(t, err)
+	campaign := testutil.NewTestCampaign(t, queries, "guild-fk")
 
 	// Create an asset
 	asset, err := queries.CreateAsset(ctx, refdata.CreateAssetParams{
@@ -92,20 +83,21 @@ func TestAssetFK_BackgroundImage_Integration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Create a map referencing the asset as background_image_id
-	m, err := queries.CreateMap(ctx, refdata.CreateMapParams{
-		CampaignID:        campaign.ID,
-		Name:              "Test Map",
-		WidthSquares:      10,
-		HeightSquares:     10,
-		TiledJson:         []byte(`{"version": 1}`),
+	// Create a map then attach the asset as background_image_id (shared helper does not take BackgroundImageID).
+	m := testutil.NewTestMap(t, queries, campaign.ID)
+	m, err = queries.UpdateMap(ctx, refdata.UpdateMapParams{
+		ID:                m.ID,
+		Name:              m.Name,
+		WidthSquares:      m.WidthSquares,
+		HeightSquares:     m.HeightSquares,
+		TiledJson:         m.TiledJson,
 		BackgroundImageID: uuid.NullUUID{UUID: asset.ID, Valid: true},
 	})
 	require.NoError(t, err)
 	assert.True(t, m.BackgroundImageID.Valid)
 	assert.Equal(t, asset.ID, m.BackgroundImageID.UUID)
 
-	// Creating a map with a bogus background_image_id should fail (FK constraint)
+	// Creating a map with a bogus background_image_id should fail (FK constraint at creation time, so inline CreateMap is required).
 	_, err = queries.CreateMap(ctx, refdata.CreateMapParams{
 		CampaignID:        campaign.ID,
 		Name:              "Bad Map",

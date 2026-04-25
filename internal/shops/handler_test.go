@@ -16,6 +16,7 @@ import (
 
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/shops"
+	"github.com/ab/dndnd/internal/testutil"
 )
 
 func chiCtx(r *http.Request, params map[string]string) *http.Request {
@@ -747,11 +748,10 @@ func TestAPI_PostToDiscord_NullSettings(t *testing.T) {
 	}
 
 	_, q := setupTestDB(t)
-	// Create campaign with null settings
-	camp, err := q.CreateCampaign(context.Background(), refdata.CreateCampaignParams{
-		GuildID:  "guild-null-settings-" + uuid.New().String()[:8],
-		DmUserID: "dm-1",
-		Name:     "Null Settings Campaign",
+	// Create campaign with null settings — getTheStoryChannelID null-settings branch.
+	camp := testutil.NewTestCampaign(t, q, "guild-null-settings")
+	camp, err := q.UpdateCampaignSettings(context.Background(), refdata.UpdateCampaignSettingsParams{
+		ID:       camp.ID,
 		Settings: pqtype.NullRawMessage{Valid: false},
 	})
 	require.NoError(t, err)
@@ -783,11 +783,10 @@ func TestAPI_PostToDiscord_NoChannelConfigured(t *testing.T) {
 	}
 
 	_, q := setupTestDB(t)
-	// Create campaign with no channel_ids
-	camp, err := q.CreateCampaign(context.Background(), refdata.CreateCampaignParams{
-		GuildID:  "guild-no-chan-" + uuid.New().String()[:8],
-		DmUserID: "dm-1",
-		Name:     "No Channels Campaign",
+	// Create campaign with no channel_ids — getTheStoryChannelID missing-channel branch.
+	camp := testutil.NewTestCampaign(t, q, "guild-no-chan")
+	camp, err := q.UpdateCampaignSettings(context.Background(), refdata.UpdateCampaignSettingsParams{
+		ID:       camp.ID,
 		Settings: pqtype.NullRawMessage{RawMessage: []byte(`{"channel_ids":{}}`), Valid: true},
 	})
 	require.NoError(t, err)

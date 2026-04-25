@@ -14,6 +14,7 @@ import (
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/loot"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/testutil"
 )
 
 func setupTestDB(t *testing.T) (*sql.DB, *refdata.Queries) {
@@ -24,68 +25,50 @@ func setupTestDB(t *testing.T) (*sql.DB, *refdata.Queries) {
 
 func createCampaign(t *testing.T, q *refdata.Queries) refdata.Campaign {
 	t.Helper()
-	camp, err := q.CreateCampaign(context.Background(), refdata.CreateCampaignParams{
-		GuildID:  "guild-loot-test",
-		DmUserID: "dm-1",
-		Name:     "Loot Test Campaign",
-		Settings: pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true},
-	})
-	require.NoError(t, err)
-	return camp
+	return testutil.NewTestCampaign(t, q, "guild-loot-test")
 }
 
 func createEncounter(t *testing.T, q *refdata.Queries, campID uuid.UUID, status string) refdata.Encounter {
 	t.Helper()
-	enc, err := q.CreateEncounter(context.Background(), refdata.CreateEncounterParams{
-		CampaignID:  campID,
-		Name:        "Test Encounter",
-		Status:      status,
-		RoundNumber: 3,
+	enc := testutil.NewTestEncounter(t, q, campID)
+	// Loot flows require non-default status (e.g. "completed", "active") — shared helper defaults to "preparing".
+	updated, err := q.UpdateEncounterStatus(context.Background(), refdata.UpdateEncounterStatusParams{
+		ID:     enc.ID,
+		Status: status,
 	})
 	require.NoError(t, err)
-	return enc
+	return updated
 }
 
 func createCharWithInventory(t *testing.T, q *refdata.Queries, campID uuid.UUID, name string, gold int32, items []character.InventoryItem) refdata.Character {
 	t.Helper()
+	char := testutil.NewTestCharacter(t, q, campID, name, 5)
+	// Loot tests need inventory + gold; shared helper does not take these.
 	invJSON, _ := json.Marshal(items)
-	char, err := q.CreateCharacter(context.Background(), refdata.CreateCharacterParams{
-		CampaignID:       campID,
-		Name:             name,
-		Race:             "human",
-		Classes:          json.RawMessage(`[{"class":"fighter","level":5}]`),
-		Level:            5,
-		AbilityScores:    json.RawMessage(`{"str":16,"dex":14,"con":14,"int":10,"wis":12,"cha":8}`),
-		HpMax:            44,
-		HpCurrent:        30,
-		TempHp:           0,
-		Ac:               18,
-		SpeedFt:          30,
-		ProficiencyBonus: 3,
-		HitDiceRemaining: json.RawMessage(`{"d10":5}`),
-		Gold:             gold,
-		Inventory:        pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
-		Languages:        []string{"common"},
+	updated, err := q.UpdateCharacterInventoryAndGold(context.Background(), refdata.UpdateCharacterInventoryAndGoldParams{
+		ID:        char.ID,
+		Inventory: pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
+		Gold:      gold,
 	})
 	require.NoError(t, err)
-	return char
+	return updated
 }
 
 func createCombatant(t *testing.T, q *refdata.Queries, encID uuid.UUID, charID uuid.NullUUID, creatureRef sql.NullString, name string, isNPC bool, isAlive bool) refdata.Combatant {
 	t.Helper()
 	c, err := q.CreateCombatant(context.Background(), refdata.CreateCombatantParams{
-		EncounterID: encID,
-		CharacterID: charID,
+		EncounterID:   encID,
+		CharacterID:   charID,
 		CreatureRefID: creatureRef,
-		ShortID:     name[:2],
-		DisplayName: name,
-		HpMax:       20,
-		HpCurrent:   0,
-		Ac:          14,
-		Conditions:  json.RawMessage(`[]`),
-		IsVisible:   true,
-		IsAlive:     isAlive,
-		IsNpc:       isNPC,
+		ShortID:       name[:2],
+		DisplayName:   name,
+		HpMax:         20,
+		HpCurrent:     0,
+		Ac:            14,
+		Conditions:    json.RawMessage(`[]`),
+		IsVisible:     true,
+		IsAlive:       isAlive,
+		IsNpc:         isNPC,
 	})
 	require.NoError(t, err)
 	return c
@@ -93,15 +76,7 @@ func createCombatant(t *testing.T, q *refdata.Queries, encID uuid.UUID, charID u
 
 func createPlayerCharacter(t *testing.T, q *refdata.Queries, campID, charID uuid.UUID, discordUserID string) refdata.PlayerCharacter {
 	t.Helper()
-	pc, err := q.CreatePlayerCharacter(context.Background(), refdata.CreatePlayerCharacterParams{
-		CampaignID:    campID,
-		CharacterID:   charID,
-		DiscordUserID: discordUserID,
-		Status:        "approved",
-		CreatedVia:    "import",
-	})
-	require.NoError(t, err)
-	return pc
+	return testutil.NewTestPlayerCharacter(t, q, campID, charID, discordUserID)
 }
 
 func TestCreateLootPool_NotFoundEncounter(t *testing.T) {

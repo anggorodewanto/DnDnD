@@ -12,6 +12,7 @@ import (
 
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/shops"
+	"github.com/ab/dndnd/internal/testutil"
 )
 
 func setupTestDB(t *testing.T) (*sql.DB, *refdata.Queries) {
@@ -22,14 +23,14 @@ func setupTestDB(t *testing.T) (*sql.DB, *refdata.Queries) {
 
 func createCampaign(t *testing.T, q *refdata.Queries) refdata.Campaign {
 	t.Helper()
-	camp, err := q.CreateCampaign(context.Background(), refdata.CreateCampaignParams{
-		GuildID:  "guild-shop-test-" + uuid.New().String()[:8],
-		DmUserID: "dm-1",
-		Name:     "Shop Test Campaign",
+	camp := testutil.NewTestCampaign(t, q, "guild-shops-svc")
+	// Handler tests posting to Discord need a channel_ids.the-story setting.
+	updated, err := q.UpdateCampaignSettings(context.Background(), refdata.UpdateCampaignSettingsParams{
+		ID:       camp.ID,
 		Settings: pqtype.NullRawMessage{RawMessage: []byte(`{"channel_ids":{"the-story":"chan-story"}}`), Valid: true},
 	})
 	require.NoError(t, err)
-	return camp
+	return updated
 }
 
 // --- TDD Cycle 1: CreateShop validation ---
