@@ -75,14 +75,9 @@ type dropConcentrationResponse struct {
 // Voluntary concentration drop initiated from the DM dashboard. Returns 409
 // when the combatant is not currently concentrating.
 func (h *DMDashboardHandler) DropConcentration(w http.ResponseWriter, r *http.Request) {
-	encounterID, err := parseEncounterID(r)
+	encounterID, combatantID, err := parseCombatantOverrideIDs(r)
 	if err != nil {
-		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
-		return
-	}
-	combatantID, err := uuid.Parse(chi.URLParam(r, "combatantID"))
-	if err != nil {
-		http.Error(w, "invalid combatant ID", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

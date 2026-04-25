@@ -171,41 +171,30 @@ func (s *Service) ApplyCondition(ctx context.Context, combatantID uuid.UUID, con
 	// Phase 118: incapacitating conditions auto-break concentration on the
 	// affected combatant (no save). Apply this hook after the condition has
 	// been persisted so the cleanup logic sees the up-to-date row.
-	if incapacitatingConditions[condition.Condition] {
-		if extra, brkErr := s.maybeAutoBreakConcentration(ctx, updated, fmt.Sprintf("incapacitated — %s", condition.Condition)); brkErr != nil {
-			return updated, msgs, brkErr
-		} else if len(extra) > 0 {
-			msgs = append(msgs, extra...)
-		}
+	if !incapacitatingConditions[condition.Condition] {
+		return updated, msgs, nil
 	}
-
+	extra, err := s.maybeAutoBreakConcentration(ctx, updated, fmt.Sprintf("incapacitated — %s", condition.Condition))
+	if err != nil {
+		return updated, msgs, err
+	}
+	msgs = append(msgs, extra...)
 	return updated, msgs, nil
 }
 
 // maybeAutoBreakConcentration looks up the target's concentration spell from
 // the authoritative columns and, if present, fires BreakConcentrationFully
-// with the supplied reason. Returns any combat log messages that should be
-// surfaced (the consolidated 💨 line and the legacy 🔮 helper line). Used by
-// the incapacitation hook in ApplyCondition and any future trigger that
-// observes a target rather than driving a /cast through the spellcasting flow.
+// with the supplied reason. Returns the consolidated 💨 line as a single-
+// element slice (or nil when nothing was broken). Used by the incapacitation
+// hook in ApplyCondition and any future trigger that observes a target
+// rather than driving a /cast through the spellcasting flow.
 func (s *Service) maybeAutoBreakConcentration(ctx context.Context, target refdata.Combatant, reason string) ([]string, error) {
-	row, err := s.store.GetCombatantConcentration(ctx, target.ID)
-	if err != nil {
-		return nil, fmt.Errorf("looking up concentration for auto-break: %w", err)
-	}
-	if !row.ConcentrationSpellID.Valid || !row.ConcentrationSpellName.Valid {
-		return nil, nil
-	}
-	cleanup, err := s.BreakConcentrationFully(ctx, BreakConcentrationFullyInput{
-		EncounterID: target.EncounterID,
-		CasterID:    target.ID,
-		CasterName:  target.DisplayName,
-		SpellID:     row.ConcentrationSpellID.String,
-		SpellName:   row.ConcentrationSpellName.String,
-		Reason:      reason,
-	})
+	cleanup, err := s.breakStoredConcentration(ctx, target, reason)
 	if err != nil {
 		return nil, err
+	}
+	if cleanup == nil {
+		return nil, nil
 	}
 	return []string{cleanup.ConsolidatedMessage}, nil
 }

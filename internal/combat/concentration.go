@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -364,22 +365,27 @@ func (s *Service) ResolveConcentrationSave(ctx context.Context, ps refdata.Pendi
 	if err != nil {
 		return nil, fmt.Errorf("getting combatant for concentration save resolution: %w", err)
 	}
-	row, err := s.store.GetCombatantConcentration(ctx, ps.CombatantID)
+	return s.breakStoredConcentration(ctx, target, "failed CON save")
+}
+
+// breakStoredConcentration looks up the combatant's authoritative concentration
+// spell and, if present, fires BreakConcentrationFully. Returns nil when the
+// row's columns are NULL (e.g. a parallel auto-break already cleared them).
+func (s *Service) breakStoredConcentration(ctx context.Context, target refdata.Combatant, reason string) (*BreakConcentrationFullyResult, error) {
+	row, err := s.store.GetCombatantConcentration(ctx, target.ID)
 	if err != nil {
-		return nil, fmt.Errorf("looking up concentration on save resolution: %w", err)
+		return nil, fmt.Errorf("looking up concentration: %w", err)
 	}
 	if !row.ConcentrationSpellID.Valid || !row.ConcentrationSpellName.Valid {
-		// Caster is no longer concentrating (e.g. a parallel auto-break already
-		// ran); the save outcome is moot.
 		return nil, nil
 	}
 	cleanup, err := s.BreakConcentrationFully(ctx, BreakConcentrationFullyInput{
-		EncounterID: ps.EncounterID,
-		CasterID:    ps.CombatantID,
+		EncounterID: target.EncounterID,
+		CasterID:    target.ID,
 		CasterName:  target.DisplayName,
 		SpellID:     row.ConcentrationSpellID.String,
 		SpellName:   row.ConcentrationSpellName.String,
-		Reason:      "failed CON save",
+		Reason:      reason,
 	})
 	if err != nil {
 		return nil, err
@@ -475,6 +481,42 @@ func (s *Service) BreakConcentrationFully(ctx context.Context, in BreakConcentra
 // targets.". This is the ONLY line emitted from the cleanup path.
 func FormatConcentrationCleanupLog(casterName, spellName, reason string, n int) string {
 	return fmt.Sprintf("💨 %s lost concentration on %s (%s) — effects ended on %d targets.", casterName, spellName, reason, n)
+}
+
+// applyConcentrationOnCast runs the Phase 118 concentration housekeeping that
+// is identical between Cast and CastAoE: when the new spell replaces an
+// existing concentration, fire BreakConcentrationFully on the dropped spell;
+// when the new spell itself concentrates, persist its ID/name to the
+// authoritative columns. Returns the cleanup result (zero value when nothing
+// was dropped) so the caller can surface the consolidated 💨 line.
+func (s *Service) applyConcentrationOnCast(ctx context.Context, caster refdata.Combatant, spell refdata.Spell, concentration ConcentrationResult) (BreakConcentrationFullyResult, error) {
+	var cleanup BreakConcentrationFullyResult
+	if concentration.DroppedPrevious {
+		previousID := s.lookupCasterConcentrationID(ctx, caster.ID)
+		c, err := s.BreakConcentrationFully(ctx, BreakConcentrationFullyInput{
+			EncounterID: caster.EncounterID,
+			CasterID:    caster.ID,
+			CasterName:  caster.DisplayName,
+			SpellID:     previousID,
+			SpellName:   concentration.PreviousSpell,
+			Reason:      fmt.Sprintf("cast new concentration spell: %s", concentration.NewConcentration),
+		})
+		if err != nil {
+			return BreakConcentrationFullyResult{}, fmt.Errorf("cleaning up previous concentration: %w", err)
+		}
+		cleanup = c
+	}
+
+	if spell.Concentration.Valid && spell.Concentration.Bool {
+		if err := s.store.SetCombatantConcentration(ctx, refdata.SetCombatantConcentrationParams{
+			ID:                     caster.ID,
+			ConcentrationSpellID:   sql.NullString{String: spell.ID, Valid: true},
+			ConcentrationSpellName: sql.NullString{String: spell.Name, Valid: true},
+		}); err != nil {
+			return cleanup, fmt.Errorf("persisting new concentration: %w", err)
+		}
+	}
+	return cleanup, nil
 }
 
 // FormatConcentrationBreakLog produces the combat log message for concentration loss.
