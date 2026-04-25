@@ -755,7 +755,7 @@
   - Depends on: Phase 19
   - Done when: Valid Tiled maps import successfully, rejected maps show clear errors, skipped features listed in summary.
 
-- [ ] **Phase 117: Testing Infrastructure & Coverage**
+- [x] **Phase 117: Testing Infrastructure & Coverage**
   - Scope: Three-tier test pyramid setup: unit tests (pure logic, table-driven), integration tests (testcontainers PostgreSQL, command pipelines, multi-step flows), Discord interaction tests (mock session, channel routing, message formatting, rate-limit batching, message splitting). Test fixtures (seeded campaigns, characters, encounters). Target 90% coverage. CI pipeline running full seed + tests.
   - Depends on: Phase 2
   - Done when: Test infrastructure in place, CI green, coverage report generated, fixture helpers available.
