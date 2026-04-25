@@ -192,6 +192,11 @@ type Store interface {
 	ResetTurnNudgeAndWarning(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
 	UpdateCombatantAutoResolveCount(ctx context.Context, arg refdata.UpdateCombatantAutoResolveCountParams) (refdata.Combatant, error)
 	ResetCombatantAutoResolveCount(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
+
+	// Phase 118 — Concentration Cleanup Integration.
+	SetCombatantConcentration(ctx context.Context, arg refdata.SetCombatantConcentrationParams) error
+	ClearCombatantConcentration(ctx context.Context, id uuid.UUID) error
+	GetCombatantConcentration(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error)
 }
 
 // EncounterPublisher fans out a fresh encounter snapshot over the dashboard

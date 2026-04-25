@@ -83,3 +83,20 @@ UPDATE combatants SET consecutive_auto_resolves = $2, is_absent = $3, updated_at
 
 -- name: ResetCombatantAutoResolveCount :one
 UPDATE combatants SET consecutive_auto_resolves = 0, is_absent = false, updated_at = now() WHERE id = $1 RETURNING *;
+
+-- name: SetCombatantConcentration :exec
+UPDATE combatants
+SET concentration_spell_id   = $2,
+    concentration_spell_name = $3,
+    updated_at = now()
+WHERE id = $1;
+
+-- name: ClearCombatantConcentration :exec
+UPDATE combatants
+SET concentration_spell_id   = NULL,
+    concentration_spell_name = NULL,
+    updated_at = now()
+WHERE id = $1;
+
+-- name: GetCombatantConcentration :one
+SELECT concentration_spell_id, concentration_spell_name FROM combatants WHERE id = $1;

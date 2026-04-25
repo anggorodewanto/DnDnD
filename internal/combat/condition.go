@@ -166,8 +166,48 @@ func (s *Service) ApplyCondition(ctx context.Context, combatantID uuid.UUID, con
 		return refdata.Combatant{}, nil, fmt.Errorf("updating conditions: %w", err)
 	}
 
-	msg := formatConditionApplied(condition, c.DisplayName)
-	return updated, []string{msg}, nil
+	msgs := []string{formatConditionApplied(condition, c.DisplayName)}
+
+	// Phase 118: incapacitating conditions auto-break concentration on the
+	// affected combatant (no save). Apply this hook after the condition has
+	// been persisted so the cleanup logic sees the up-to-date row.
+	if incapacitatingConditions[condition.Condition] {
+		if extra, brkErr := s.maybeAutoBreakConcentration(ctx, updated, fmt.Sprintf("incapacitated — %s", condition.Condition)); brkErr != nil {
+			return updated, msgs, brkErr
+		} else if len(extra) > 0 {
+			msgs = append(msgs, extra...)
+		}
+	}
+
+	return updated, msgs, nil
+}
+
+// maybeAutoBreakConcentration looks up the target's concentration spell from
+// the authoritative columns and, if present, fires BreakConcentrationFully
+// with the supplied reason. Returns any combat log messages that should be
+// surfaced (the consolidated 💨 line and the legacy 🔮 helper line). Used by
+// the incapacitation hook in ApplyCondition and any future trigger that
+// observes a target rather than driving a /cast through the spellcasting flow.
+func (s *Service) maybeAutoBreakConcentration(ctx context.Context, target refdata.Combatant, reason string) ([]string, error) {
+	row, err := s.store.GetCombatantConcentration(ctx, target.ID)
+	if err != nil {
+		return nil, fmt.Errorf("looking up concentration for auto-break: %w", err)
+	}
+	if !row.ConcentrationSpellID.Valid || !row.ConcentrationSpellName.Valid {
+		return nil, nil
+	}
+	cleanup, err := s.BreakConcentrationFully(ctx, BreakConcentrationFullyInput{
+		EncounterID: target.EncounterID,
+		CasterID:    target.ID,
+		CasterName:  target.DisplayName,
+		SpellID:     row.ConcentrationSpellID.String,
+		SpellName:   row.ConcentrationSpellName.String,
+		Reason:      reason,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return []string{cleanup.ConsolidatedMessage}, nil
 }
 
 // ApplyConditionWithLog applies a condition and persists the log message to action_log.

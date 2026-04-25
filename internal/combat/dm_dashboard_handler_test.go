@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -1067,4 +1068,91 @@ func TestResolvePendingAction_WithConditionRemoveEffect(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.NotContains(t, string(updatedConditions), "stunned")
+}
+
+// --- Phase 118 TDD Cycle 15: Voluntary concentration drop endpoint ---
+
+func TestDropConcentration_Success(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	var (
+		clearCalled   bool
+		zoneCleanCalled bool
+	)
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:          combatantID,
+				EncounterID: encounterID,
+				DisplayName: "Aria",
+			}, nil
+		},
+		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+			return refdata.GetCombatantConcentrationRow{
+				ConcentrationSpellID:   sql.NullString{String: "bless", Valid: true},
+				ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+			}, nil
+		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, nil
+		},
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+			zoneCleanCalled = true
+			return nil
+		},
+		clearCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) error {
+			clearCalled = true
+			return nil
+		},
+	}
+
+	r := newDMDashboardRouter(store)
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/concentration/drop", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, clearCalled)
+	assert.True(t, zoneCleanCalled)
+	var resp map[string]any
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	msg, _ := resp["consolidated_message"].(string)
+	assert.Contains(t, msg, "💨")
+	assert.Contains(t, msg, "Bless")
+}
+
+func TestDropConcentration_NotConcentrating(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: id, EncounterID: encounterID, DisplayName: "Aria"}, nil
+		},
+		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+			return refdata.GetCombatantConcentrationRow{}, nil
+		},
+	}
+	r := newDMDashboardRouter(store)
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String()+"/concentration/drop", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusConflict, w.Code, "dropping when not concentrating should fail")
+}
+
+func TestDropConcentration_InvalidIDs(t *testing.T) {
+	store := &mockStore{}
+	r := newDMDashboardRouter(store)
+
+	// invalid encounter
+	req := httptest.NewRequest("POST", "/api/combat/not-a-uuid/combatants/"+uuid.New().String()+"/concentration/drop", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// invalid combatant
+	req = httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/combatants/not-a-uuid/concentration/drop", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

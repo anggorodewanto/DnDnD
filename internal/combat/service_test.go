@@ -148,6 +148,32 @@ type mockStore struct {
 
 	// Phase 105 — Update encounter display_name
 	updateEncounterDisplayNameFn func(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error)
+
+	// Phase 118 — Concentration Cleanup Integration
+	setCombatantConcentrationFn   func(ctx context.Context, arg refdata.SetCombatantConcentrationParams) error
+	clearCombatantConcentrationFn func(ctx context.Context, id uuid.UUID) error
+	getCombatantConcentrationFn   func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error)
+}
+
+func (m *mockStore) SetCombatantConcentration(ctx context.Context, arg refdata.SetCombatantConcentrationParams) error {
+	if m.setCombatantConcentrationFn != nil {
+		return m.setCombatantConcentrationFn(ctx, arg)
+	}
+	return nil
+}
+
+func (m *mockStore) ClearCombatantConcentration(ctx context.Context, id uuid.UUID) error {
+	if m.clearCombatantConcentrationFn != nil {
+		return m.clearCombatantConcentrationFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockStore) GetCombatantConcentration(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+	if m.getCombatantConcentrationFn != nil {
+		return m.getCombatantConcentrationFn(ctx, id)
+	}
+	return refdata.GetCombatantConcentrationRow{}, nil
 }
 
 func (m *mockStore) UpdateEncounterDisplayName(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {

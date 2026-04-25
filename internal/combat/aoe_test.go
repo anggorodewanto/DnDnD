@@ -888,6 +888,94 @@ func TestCastAoE_Concentration(t *testing.T) {
 	assert.Equal(t, "Entangle", result.Concentration.NewConcentration)
 }
 
+// TDD Cycle 12 (Phase 118): CastAoE persists concentration AND fires
+// BreakConcentrationFully on the previously-concentrated spell.
+func TestCastAoE_PersistsConcentrationAndCleansUpPrevious(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "E"
+	caster.PositionRow = 5
+
+	entangle := refdata.Spell{
+		ID: "entangle", Name: "Entangle", Level: 1,
+		CastingTime: "1 action", RangeType: "ranged",
+		RangeFt:     sql.NullInt32{Int32: 90, Valid: true},
+		SaveAbility: sql.NullString{String: "str", Valid: true},
+		SaveEffect:  sql.NullString{String: "no_effect", Valid: true},
+		AreaOfEffect: pqtype.NullRawMessage{
+			RawMessage: json.RawMessage(`{"shape":"square","side_ft":20}`),
+			Valid:      true,
+		},
+		ResolutionMode: "auto",
+		Concentration:  sql.NullBool{Bool: true, Valid: true},
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return entangle, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return caster, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	store.getCombatantConcentrationFn = func(_ context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+		return refdata.GetCombatantConcentrationRow{
+			ConcentrationSpellID:   sql.NullString{String: "bless", Valid: true},
+			ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+		}, nil
+	}
+
+	var (
+		setConcArg          refdata.SetCombatantConcentrationParams
+		setConcCalled       bool
+		zoneCleanupCombatID uuid.UUID
+	)
+	store.setCombatantConcentrationFn = func(_ context.Context, arg refdata.SetCombatantConcentrationParams) error {
+		setConcArg = arg
+		setConcCalled = true
+		return nil
+	}
+	store.deleteConcentrationZonesByCombatantFn = func(_ context.Context, id uuid.UUID) error {
+		zoneCleanupCombatID = id
+		return nil
+	}
+
+	svc := NewService(store)
+	cmd := AoECastCommand{
+		SpellID:              "entangle",
+		CasterID:             caster.ID,
+		EncounterID:          uuid.New(),
+		TargetCol:            "H",
+		TargetRow:            8,
+		Turn:                 refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		CurrentConcentration: "Bless",
+	}
+
+	result, err := svc.CastAoE(context.Background(), cmd)
+	require.NoError(t, err)
+	assert.True(t, result.Concentration.DroppedPrevious)
+	assert.Equal(t, caster.ID, zoneCleanupCombatID)
+	require.True(t, setConcCalled)
+	assert.Equal(t, "entangle", setConcArg.ConcentrationSpellID.String)
+	assert.Equal(t, "Entangle", setConcArg.ConcentrationSpellName.String)
+	// Consolidated 💨 line on the result.
+	assert.Contains(t, result.ConcentrationCleanup.ConsolidatedMessage, "Bless")
+	assert.Contains(t, result.ConcentrationCleanup.ConsolidatedMessage, "💨")
+}
+
 // Edge case: ConeAffectedTiles with same caster and target position
 func TestConeAffectedTiles_SamePosition(t *testing.T) {
 	tiles := ConeAffectedTiles(5, 5, 5, 5, 15)

@@ -55,6 +55,75 @@ func (h *DMDashboardHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{encounterID}/override/combatant/{combatantID}/conditions", h.OverrideCombatantConditions)
 		r.Post("/{encounterID}/override/combatant/{combatantID}/initiative", h.OverrideCombatantInitiative)
 		r.Post("/{encounterID}/override/character/{characterID}/spell-slots", h.OverrideCharacterSpellSlots)
+
+		// Phase 118: voluntary concentration drop.
+		r.Post("/{encounterID}/combatants/{combatantID}/concentration/drop", h.DropConcentration)
+	})
+}
+
+// dropConcentrationResponse is the JSON payload returned by DropConcentration.
+type dropConcentrationResponse struct {
+	Broken              bool   `json:"broken"`
+	SpellName           string `json:"spell_name"`
+	ConditionsRemoved   int    `json:"conditions_removed"`
+	SummonsDismissed    int    `json:"summons_dismissed"`
+	ConsolidatedMessage string `json:"consolidated_message"`
+}
+
+// DropConcentration handles
+// POST /api/combat/{encounterID}/combatants/{combatantID}/concentration/drop.
+// Voluntary concentration drop initiated from the DM dashboard. Returns 409
+// when the combatant is not currently concentrating.
+func (h *DMDashboardHandler) DropConcentration(w http.ResponseWriter, r *http.Request) {
+	encounterID, err := parseEncounterID(r)
+	if err != nil {
+		http.Error(w, "invalid encounter ID", http.StatusBadRequest)
+		return
+	}
+	combatantID, err := uuid.Parse(chi.URLParam(r, "combatantID"))
+	if err != nil {
+		http.Error(w, "invalid combatant ID", http.StatusBadRequest)
+		return
+	}
+
+	combatant, err := h.svc.store.GetCombatant(r.Context(), combatantID)
+	if err != nil {
+		http.Error(w, "combatant not found", http.StatusNotFound)
+		return
+	}
+	row, err := h.svc.store.GetCombatantConcentration(r.Context(), combatantID)
+	if err != nil {
+		http.Error(w, "lookup concentration: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !row.ConcentrationSpellID.Valid || !row.ConcentrationSpellName.Valid {
+		http.Error(w, "combatant is not concentrating", http.StatusConflict)
+		return
+	}
+
+	cleanup, err := h.svc.BreakConcentrationFully(r.Context(), BreakConcentrationFullyInput{
+		EncounterID: encounterID,
+		CasterID:    combatantID,
+		CasterName:  combatant.DisplayName,
+		SpellID:     row.ConcentrationSpellID.String,
+		SpellName:   row.ConcentrationSpellName.String,
+		Reason:      "voluntary drop",
+	})
+	if err != nil {
+		http.Error(w, "break concentration: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if h.poster != nil {
+		h.poster.PostCorrection(r.Context(), encounterID, cleanup.ConsolidatedMessage)
+	}
+
+	writeJSON(w, http.StatusOK, dropConcentrationResponse{
+		Broken:              cleanup.Broken,
+		SpellName:           cleanup.SpellName,
+		ConditionsRemoved:   cleanup.ConditionsRemoved,
+		SummonsDismissed:    cleanup.SummonsDismissed,
+		ConsolidatedMessage: cleanup.ConsolidatedMessage,
 	})
 }
 

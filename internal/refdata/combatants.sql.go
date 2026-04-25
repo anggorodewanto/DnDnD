@@ -907,3 +907,53 @@ func (q *Queries) UpdateCombatantWildShape(ctx context.Context, arg UpdateCombat
 	)
 	return i, err
 }
+
+const setCombatantConcentration = `-- name: SetCombatantConcentration :exec
+UPDATE combatants
+SET concentration_spell_id   = $2,
+    concentration_spell_name = $3,
+    updated_at = now()
+WHERE id = $1
+`
+
+// SetCombatantConcentrationParams holds the input for SetCombatantConcentration.
+type SetCombatantConcentrationParams struct {
+	ID                     uuid.UUID      `json:"id"`
+	ConcentrationSpellID   sql.NullString `json:"concentration_spell_id"`
+	ConcentrationSpellName sql.NullString `json:"concentration_spell_name"`
+}
+
+func (q *Queries) SetCombatantConcentration(ctx context.Context, arg SetCombatantConcentrationParams) error {
+	_, err := q.db.ExecContext(ctx, setCombatantConcentration, arg.ID, arg.ConcentrationSpellID, arg.ConcentrationSpellName)
+	return err
+}
+
+const clearCombatantConcentration = `-- name: ClearCombatantConcentration :exec
+UPDATE combatants
+SET concentration_spell_id   = NULL,
+    concentration_spell_name = NULL,
+    updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) ClearCombatantConcentration(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, clearCombatantConcentration, id)
+	return err
+}
+
+const getCombatantConcentration = `-- name: GetCombatantConcentration :one
+SELECT concentration_spell_id, concentration_spell_name FROM combatants WHERE id = $1
+`
+
+// GetCombatantConcentrationRow holds the result row for GetCombatantConcentration.
+type GetCombatantConcentrationRow struct {
+	ConcentrationSpellID   sql.NullString `json:"concentration_spell_id"`
+	ConcentrationSpellName sql.NullString `json:"concentration_spell_name"`
+}
+
+func (q *Queries) GetCombatantConcentration(ctx context.Context, id uuid.UUID) (GetCombatantConcentrationRow, error) {
+	row := q.db.QueryRowContext(ctx, getCombatantConcentration, id)
+	var i GetCombatantConcentrationRow
+	err := row.Scan(&i.ConcentrationSpellID, &i.ConcentrationSpellName)
+	return i, err
+}

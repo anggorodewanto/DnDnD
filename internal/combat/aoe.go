@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -252,6 +253,10 @@ type AoECastResult struct {
 	SlotsRemaining int
 	OriginCol      int
 	OriginRow      int
+	// Phase 118: when this cast replaced an existing concentration spell, the
+	// dropped spell's effects were cleaned up across the encounter. The
+	// result is surfaced here so the handler can post the consolidated 💨 line.
+	ConcentrationCleanup BreakConcentrationFullyResult
 }
 
 // FormatAoECastLog produces the combat log output for an AoE spell cast.
@@ -434,6 +439,40 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	// 13. Resolve concentration
 	concentration := ResolveConcentration(cmd.CurrentConcentration, spell)
 
+	// 13a. Phase 118: clean up the previously concentrated spell when this cast
+	// replaces it. The cleanup helper looks up the authoritative spell ID from
+	// the caster's concentration columns so spell-sourced conditions are
+	// stripped (not just zones).
+	var cleanupResult BreakConcentrationFullyResult
+	if concentration.DroppedPrevious {
+		previousID, _ := s.lookupCasterConcentrationID(ctx, caster.ID)
+		c, cerr := s.BreakConcentrationFully(ctx, BreakConcentrationFullyInput{
+			EncounterID: caster.EncounterID,
+			CasterID:    caster.ID,
+			CasterName:  caster.DisplayName,
+			SpellID:     previousID,
+			SpellName:   concentration.PreviousSpell,
+			Reason:      fmt.Sprintf("cast new concentration spell: %s", concentration.NewConcentration),
+		})
+		if cerr != nil {
+			return AoECastResult{}, fmt.Errorf("cleaning up previous concentration: %w", cerr)
+		}
+		cleanupResult = c
+	}
+
+	// 13b. Phase 118: persist the new concentration spell. ResolveConcentration
+	// only flips the new field when the spell actually concentrates, but we
+	// double-check here so the column is only written for concentration spells.
+	if spell.Concentration.Valid && spell.Concentration.Bool {
+		if perr := s.store.SetCombatantConcentration(ctx, refdata.SetCombatantConcentrationParams{
+			ID:                     caster.ID,
+			ConcentrationSpellID:   sql.NullString{String: spell.ID, Valid: true},
+			ConcentrationSpellName: sql.NullString{String: spell.Name, Valid: true},
+		}); perr != nil {
+			return AoECastResult{}, fmt.Errorf("persisting new concentration: %w", perr)
+		}
+	}
+
 	// 14. Use action/bonus action resource
 	turn := cmd.Turn
 	turn, err = UseResource(turn, resource)
@@ -458,19 +497,20 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	}
 
 	return AoECastResult{
-		CasterName:     caster.DisplayName,
-		SpellName:      spell.Name,
-		SpellLevel:     spellLevel,
-		IsBonusAction:  isBonusAction,
-		SaveDC:         saveDC,
-		SaveAbility:    saveAbility,
-		AffectedNames:  affectedNames,
-		PendingSaves:   pendingSaves,
-		Concentration:  concentration,
-		SlotUsed:       deduction.SlotUsed,
-		SlotsRemaining: deduction.SlotsRemaining,
-		OriginCol:      originCol,
-		OriginRow:      originRow,
+		CasterName:           caster.DisplayName,
+		SpellName:            spell.Name,
+		SpellLevel:           spellLevel,
+		IsBonusAction:        isBonusAction,
+		SaveDC:               saveDC,
+		SaveAbility:          saveAbility,
+		AffectedNames:        affectedNames,
+		PendingSaves:         pendingSaves,
+		Concentration:        concentration,
+		SlotUsed:             deduction.SlotUsed,
+		SlotsRemaining:       deduction.SlotsRemaining,
+		OriginCol:            originCol,
+		OriginRow:            originRow,
+		ConcentrationCleanup: cleanupResult,
 	}, nil
 }
 

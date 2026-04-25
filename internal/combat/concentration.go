@@ -138,6 +138,53 @@ func BreakConcentration(casterName, spellName, reason string, cleanup Concentrat
 	}
 }
 
+// RemoveSpellSourcedConditions strips every condition whose
+// (SourceCombatantID, SourceSpell) matches (casterID, spellID) from every
+// combatant in the encounter and persists the changes. Returns the total
+// number of conditions removed across all combatants. This generalizes the
+// per-combatant Phase 113 invisibility break to cover any concentration spell
+// that applies a condition (Hold Person, Hex, Bless, Bane, Web, etc.).
+func (s *Service) RemoveSpellSourcedConditions(ctx context.Context, encounterID, casterID uuid.UUID, spellID string) (int, error) {
+	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return 0, fmt.Errorf("listing combatants for spell-sourced cleanup: %w", err)
+	}
+
+	casterIDStr := casterID.String()
+	totalRemoved := 0
+	for _, c := range combatants {
+		conds, perr := parseConditions(c.Conditions)
+		if perr != nil {
+			return totalRemoved, fmt.Errorf("parsing conditions for %s: %w", c.DisplayName, perr)
+		}
+		filtered := make([]CombatCondition, 0, len(conds))
+		removed := 0
+		for _, cond := range conds {
+			if cond.SourceCombatantID == casterIDStr && cond.SourceSpell == spellID {
+				removed++
+				continue
+			}
+			filtered = append(filtered, cond)
+		}
+		if removed == 0 {
+			continue
+		}
+		updated, merr := json.Marshal(filtered)
+		if merr != nil {
+			return totalRemoved, fmt.Errorf("marshalling conditions for %s: %w", c.DisplayName, merr)
+		}
+		if _, uerr := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+			ID:              c.ID,
+			Conditions:      updated,
+			ExhaustionLevel: c.ExhaustionLevel,
+		}); uerr != nil {
+			return totalRemoved, fmt.Errorf("updating conditions for %s: %w", c.DisplayName, uerr)
+		}
+		totalRemoved += removed
+	}
+	return totalRemoved, nil
+}
+
 // BreakConcentrationAndDismissSummons breaks concentration, invokes cleanup, and also
 // dismisses all summoned creatures belonging to the caster. Returns the break result
 // and the number of dismissed summons.
@@ -150,6 +197,171 @@ func (s *Service) BreakConcentrationAndDismissSummons(ctx context.Context, encou
 	}
 
 	return result, dismissed, nil
+}
+
+// ConcentrationSaveSource is the canonical pending_saves.source value used for
+// damage-induced CON saves on concentrating combatants.
+const ConcentrationSaveSource = "concentration"
+
+// MaybeCreateConcentrationSaveOnDamage checks whether the combatant is
+// concentrating and, if so, enqueues a pending CON save with DC =
+// max(10, damage/2) and source = "concentration". Returns the created
+// pending-save row (or nil when no save is needed). Damage paths
+// (`attack.go`, `aoe.go`, `dm_dashboard_handler.go`, ...) call this after
+// applying damage so the existing pending-save resolution flow can later
+// trigger BreakConcentrationFully on failure.
+func (s *Service) MaybeCreateConcentrationSaveOnDamage(ctx context.Context, encounterID, combatantID uuid.UUID, damage int) (*refdata.PendingSafe, error) {
+	if damage <= 0 {
+		return nil, nil
+	}
+	row, err := s.store.GetCombatantConcentration(ctx, combatantID)
+	if err != nil {
+		return nil, fmt.Errorf("looking up concentration: %w", err)
+	}
+	if !row.ConcentrationSpellName.Valid || row.ConcentrationSpellName.String == "" {
+		return nil, nil
+	}
+	check := CheckConcentrationOnDamage(row.ConcentrationSpellName.String, damage)
+	if !check.NeedsSave {
+		return nil, nil
+	}
+	created, err := s.store.CreatePendingSave(ctx, refdata.CreatePendingSaveParams{
+		EncounterID: encounterID,
+		CombatantID: combatantID,
+		Ability:     "con",
+		Dc:          int32(check.DC),
+		Source:      ConcentrationSaveSource,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating concentration save: %w", err)
+	}
+	return &created, nil
+}
+
+// ResolveConcentrationSave inspects a freshly-resolved pending save row and,
+// when it represents a failed concentration save (`source =
+// "concentration"`, `success = false`), fires the full concentration break
+// pipeline. Returns the cleanup result (or nil for non-concentration sources
+// or successful saves). The pending-save resolver invokes this after
+// persisting the save's outcome.
+func (s *Service) ResolveConcentrationSave(ctx context.Context, ps refdata.PendingSafe) (*BreakConcentrationFullyResult, error) {
+	if ps.Source != ConcentrationSaveSource {
+		return nil, nil
+	}
+	if !ps.Success.Valid || ps.Success.Bool {
+		return nil, nil
+	}
+	target, err := s.store.GetCombatant(ctx, ps.CombatantID)
+	if err != nil {
+		return nil, fmt.Errorf("getting combatant for concentration save resolution: %w", err)
+	}
+	row, err := s.store.GetCombatantConcentration(ctx, ps.CombatantID)
+	if err != nil {
+		return nil, fmt.Errorf("looking up concentration on save resolution: %w", err)
+	}
+	if !row.ConcentrationSpellID.Valid || !row.ConcentrationSpellName.Valid {
+		// Caster is no longer concentrating (e.g. a parallel auto-break already
+		// ran); the save outcome is moot.
+		return nil, nil
+	}
+	cleanup, err := s.BreakConcentrationFully(ctx, BreakConcentrationFullyInput{
+		EncounterID: ps.EncounterID,
+		CasterID:    ps.CombatantID,
+		CasterName:  target.DisplayName,
+		SpellID:     row.ConcentrationSpellID.String,
+		SpellName:   row.ConcentrationSpellName.String,
+		Reason:      "failed CON save",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &cleanup, nil
+}
+
+// BreakConcentrationFullyInput holds the parameters required to fully tear
+// down a concentration spell's lingering effects.
+type BreakConcentrationFullyInput struct {
+	EncounterID uuid.UUID
+	CasterID    uuid.UUID
+	CasterName  string
+	SpellID     string // e.g. "invisibility", "bless"; used for spell-sourced condition lookup
+	SpellName   string // human-readable name for log lines
+	Reason      string // e.g. "failed CON save", "stunned", "silence", "voluntary drop"
+}
+
+// BreakConcentrationFullyResult is the outcome of a concentration break,
+// including counts of side-effect cleanups and combat log lines.
+type BreakConcentrationFullyResult struct {
+	Broken              bool
+	SpellName           string
+	Reason              string
+	ConditionsRemoved   int    // total spell-sourced conditions stripped across all combatants
+	SummonsDismissed    int    // count of summoned creatures removed
+	ZonesRemoved        bool   // whether the zone-cleanup query was issued (count not reported by the store)
+	PerSourceMessage    string // legacy 🔮 helper output (FormatConcentrationBreakLog)
+	ConsolidatedMessage string // new 💨 line: "<Caster> lost concentration on <Spell> — effects ended on N targets."
+}
+
+// BreakConcentrationFully orchestrates the complete concentration break
+// pipeline used by every Phase 118 trigger point (damage CON-save failure,
+// incapacitation, Silence entry, replacing a concentration spell, voluntary
+// drop). It strips spell-sourced conditions across the encounter, removes
+// concentration-tagged zones, dismisses summons, clears the caster's
+// concentration columns, and returns both legacy and consolidated combat log
+// lines so the caller can choose what to surface.
+//
+// The "N targets" in the consolidated line is defined as
+// (conditions removed) + (summons dismissed). Zone removal is signalled via
+// `ZonesRemoved` because the underlying SQL is :exec and does not return a
+// row count; counting them precisely would require a separate query.
+func (s *Service) BreakConcentrationFully(ctx context.Context, in BreakConcentrationFullyInput) (BreakConcentrationFullyResult, error) {
+	result := BreakConcentrationFullyResult{
+		Broken:    true,
+		SpellName: in.SpellName,
+		Reason:    in.Reason,
+	}
+
+	// 1. Strip spell-sourced conditions from every combatant in the encounter.
+	if in.SpellID != "" {
+		n, err := s.RemoveSpellSourcedConditions(ctx, in.EncounterID, in.CasterID, in.SpellID)
+		if err != nil {
+			return result, fmt.Errorf("removing spell-sourced conditions: %w", err)
+		}
+		result.ConditionsRemoved = n
+	}
+
+	// 2. Delete concentration-tagged zones (Silence, Web, Hunger of Hadar, ...).
+	if err := s.store.DeleteConcentrationZonesByCombatant(ctx, in.CasterID); err != nil {
+		return result, fmt.Errorf("deleting concentration zones: %w", err)
+	}
+	result.ZonesRemoved = true
+
+	// 3. Dismiss any concentration-linked summons.
+	dismissed, err := s.DismissSummonsByConcentration(ctx, in.EncounterID, in.CasterID)
+	if err != nil {
+		return result, fmt.Errorf("dismissing summons: %w", err)
+	}
+	result.SummonsDismissed = dismissed
+
+	// 4. Clear the caster's concentration columns. Best-effort: the rows may
+	// already have been NULL (e.g. tests not exercising the columns); errors
+	// must still surface to the caller.
+	if err := s.store.ClearCombatantConcentration(ctx, in.CasterID); err != nil {
+		return result, fmt.Errorf("clearing concentration: %w", err)
+	}
+
+	// 5. Compose log lines.
+	result.PerSourceMessage = FormatConcentrationBreakLog(in.CasterName, in.SpellName, in.Reason)
+	result.ConsolidatedMessage = FormatConcentrationCleanupLog(in.CasterName, in.SpellName, result.ConditionsRemoved+result.SummonsDismissed)
+
+	return result, nil
+}
+
+// FormatConcentrationCleanupLog produces the consolidated 💨 line spec'd by
+// Phase 118 for the cleanup path: "💨 <Caster> lost concentration on <Spell>
+// — effects ended on N targets.".
+func FormatConcentrationCleanupLog(casterName, spellName string, n int) string {
+	return fmt.Sprintf("💨 %s lost concentration on %s — effects ended on %d targets.", casterName, spellName, n)
 }
 
 // FormatConcentrationBreakLog produces the combat log message for concentration loss.

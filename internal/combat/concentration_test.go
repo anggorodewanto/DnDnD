@@ -2,8 +2,11 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -437,6 +440,479 @@ func TestIntegration_SpellEffectCleanupOnBreak(t *testing.T) {
 	// Break via silence
 	BreakConcentration("Aria", "Fog Cloud", "silence", cleanup)
 	assert.Equal(t, []string{"Bless", "Fog Cloud"}, cleanedSpells)
+}
+
+// TDD Cycle 9: RemoveSpellSourcedConditions strips conditions whose
+// (source_combatant_id, source_spell) match across every combatant in an
+// encounter and persists the updates. Generalizes the per-combatant
+// breakInvisibilityAndPersist helper from Phase 113.
+func TestRemoveSpellSourcedConditions(t *testing.T) {
+	encounterID := uuid.New()
+	casterID := uuid.New()
+	otherCasterID := uuid.New()
+	target1ID := uuid.New()
+	target2ID := uuid.New()
+	target3ID := uuid.New()
+
+	c1Conds, _ := json.Marshal([]CombatCondition{
+		{Condition: "invisible", SourceCombatantID: casterID.String(), SourceSpell: "invisibility"},
+	})
+	// Target 2 has TWO matching conditions; both should be stripped.
+	c2Conds, _ := json.Marshal([]CombatCondition{
+		{Condition: "invisible", SourceCombatantID: casterID.String(), SourceSpell: "invisibility"},
+		{Condition: "blessed", SourceCombatantID: casterID.String(), SourceSpell: "invisibility"},
+	})
+	// Target 3 has unrelated conditions that must be preserved.
+	c3Conds, _ := json.Marshal([]CombatCondition{
+		{Condition: "invisible", SourceCombatantID: otherCasterID.String(), SourceSpell: "invisibility"},
+		{Condition: "charmed", SourceCombatantID: casterID.String(), SourceSpell: "charm-person"},
+	})
+
+	updates := make(map[uuid.UUID]json.RawMessage)
+	ms := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			assert.Equal(t, encounterID, encID)
+			return []refdata.Combatant{
+				{ID: target1ID, EncounterID: encounterID, Conditions: c1Conds},
+				{ID: target2ID, EncounterID: encounterID, Conditions: c2Conds},
+				{ID: target3ID, EncounterID: encounterID, Conditions: c3Conds},
+			}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+			updates[arg.ID] = arg.Conditions
+			return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, Conditions: arg.Conditions}, nil
+		},
+	}
+
+	svc := NewService(ms)
+	n, err := svc.RemoveSpellSourcedConditions(context.Background(), encounterID, casterID, "invisibility")
+	require.NoError(t, err)
+	// 1 (target1) + 2 (target2) = 3 conditions removed.
+	assert.Equal(t, 3, n)
+
+	// target1 had its sole condition stripped → empty array
+	require.Contains(t, updates, target1ID)
+	var c1Out []CombatCondition
+	require.NoError(t, json.Unmarshal(updates[target1ID], &c1Out))
+	assert.Empty(t, c1Out)
+
+	// target2 had both conditions stripped → empty array
+	require.Contains(t, updates, target2ID)
+	var c2Out []CombatCondition
+	require.NoError(t, json.Unmarshal(updates[target2ID], &c2Out))
+	assert.Empty(t, c2Out)
+
+	// target3 was not updated (no matches)
+	assert.NotContains(t, updates, target3ID)
+}
+
+func TestRemoveSpellSourcedConditions_NoMatches(t *testing.T) {
+	encounterID := uuid.New()
+	casterID := uuid.New()
+	combatantID := uuid.New()
+
+	conds, _ := json.Marshal([]CombatCondition{
+		{Condition: "invisible", SourceCombatantID: uuid.New().String(), SourceSpell: "invisibility"},
+	})
+
+	called := false
+	ms := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{{ID: combatantID, EncounterID: encounterID, Conditions: conds}}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+			called = true
+			return refdata.Combatant{ID: arg.ID}, nil
+		},
+	}
+	svc := NewService(ms)
+	n, err := svc.RemoveSpellSourcedConditions(context.Background(), encounterID, casterID, "invisibility")
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+	assert.False(t, called, "no update should be issued when nothing matched")
+}
+
+func TestRemoveSpellSourcedConditions_ListError(t *testing.T) {
+	ms := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, errors.New("boom")
+		},
+	}
+	svc := NewService(ms)
+	_, err := svc.RemoveSpellSourcedConditions(context.Background(), uuid.New(), uuid.New(), "x")
+	require.Error(t, err)
+}
+
+// TDD Cycle 13 (Phase 118): MaybeCreateConcentrationSaveOnDamage creates a
+// pending CON save row when a concentrating combatant takes damage.
+func TestMaybeCreateConcentrationSaveOnDamage(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	var captured refdata.CreatePendingSaveParams
+	called := false
+	ms := &mockStore{
+		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+			return refdata.GetCombatantConcentrationRow{
+				ConcentrationSpellID:   sql.NullString{String: "bless", Valid: true},
+				ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+			}, nil
+		},
+		createPendingSaveFn: func(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+			captured = arg
+			called = true
+			return refdata.PendingSafe{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, Source: arg.Source}, nil
+		},
+	}
+	svc := NewService(ms)
+	ps, err := svc.MaybeCreateConcentrationSaveOnDamage(context.Background(), encounterID, combatantID, 30)
+	require.NoError(t, err)
+	require.True(t, called)
+	require.NotNil(t, ps)
+	assert.Equal(t, encounterID, captured.EncounterID)
+	assert.Equal(t, combatantID, captured.CombatantID)
+	assert.Equal(t, "con", captured.Ability)
+	// damage 30 → DC max(10, 15) = 15
+	assert.Equal(t, int32(15), captured.Dc)
+	assert.Equal(t, "concentration", captured.Source)
+}
+
+func TestMaybeCreateConcentrationSaveOnDamage_NotConcentrating(t *testing.T) {
+	called := false
+	ms := &mockStore{
+		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+			return refdata.GetCombatantConcentrationRow{}, nil
+		},
+		createPendingSaveFn: func(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+			called = true
+			return refdata.PendingSafe{}, nil
+		},
+	}
+	svc := NewService(ms)
+	ps, err := svc.MaybeCreateConcentrationSaveOnDamage(context.Background(), uuid.New(), uuid.New(), 30)
+	require.NoError(t, err)
+	assert.Nil(t, ps)
+	assert.False(t, called)
+}
+
+func TestMaybeCreateConcentrationSaveOnDamage_NoDamage(t *testing.T) {
+	called := false
+	ms := &mockStore{
+		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+			return refdata.GetCombatantConcentrationRow{
+				ConcentrationSpellID:   sql.NullString{String: "bless", Valid: true},
+				ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+			}, nil
+		},
+		createPendingSaveFn: func(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+			called = true
+			return refdata.PendingSafe{}, nil
+		},
+	}
+	svc := NewService(ms)
+	ps, err := svc.MaybeCreateConcentrationSaveOnDamage(context.Background(), uuid.New(), uuid.New(), 0)
+	require.NoError(t, err)
+	assert.Nil(t, ps)
+	assert.False(t, called)
+}
+
+// TDD Cycle 14 (Phase 118): ResolveConcentrationSave fires
+// BreakConcentrationFully when the resolved save failed.
+func TestResolveConcentrationSave_FailureTriggersBreak(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	var (
+		zoneCleanupCalled bool
+		clearCalled       bool
+	)
+	ms := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: id, EncounterID: encounterID, DisplayName: "Aria"}, nil
+		},
+		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+			return refdata.GetCombatantConcentrationRow{
+				ConcentrationSpellID:   sql.NullString{String: "bless", Valid: true},
+				ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+			}, nil
+		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, nil
+		},
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+			zoneCleanupCalled = true
+			return nil
+		},
+		clearCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) error {
+			clearCalled = true
+			return nil
+		},
+	}
+	svc := NewService(ms)
+	result, err := svc.ResolveConcentrationSave(context.Background(), refdata.PendingSafe{
+		ID:          uuid.New(),
+		EncounterID: encounterID,
+		CombatantID: combatantID,
+		Source:      "concentration",
+		Success:     sql.NullBool{Bool: false, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Broken)
+	assert.True(t, zoneCleanupCalled)
+	assert.True(t, clearCalled)
+	assert.Contains(t, result.ConsolidatedMessage, "Bless")
+}
+
+func TestResolveConcentrationSave_SuccessIsNoop(t *testing.T) {
+	zoneCleanupCalled := false
+	ms := &mockStore{
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+			zoneCleanupCalled = true
+			return nil
+		},
+	}
+	svc := NewService(ms)
+	result, err := svc.ResolveConcentrationSave(context.Background(), refdata.PendingSafe{
+		Source:  "concentration",
+		Success: sql.NullBool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	assert.Nil(t, result)
+	assert.False(t, zoneCleanupCalled)
+}
+
+func TestResolveConcentrationSave_WrongSourceIsNoop(t *testing.T) {
+	zoneCleanupCalled := false
+	ms := &mockStore{
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+			zoneCleanupCalled = true
+			return nil
+		},
+	}
+	svc := NewService(ms)
+	result, err := svc.ResolveConcentrationSave(context.Background(), refdata.PendingSafe{
+		Source:  "spell",
+		Success: sql.NullBool{Bool: false, Valid: true},
+	})
+	require.NoError(t, err)
+	assert.Nil(t, result)
+	assert.False(t, zoneCleanupCalled)
+}
+
+// TDD Cycle 11 (Phase 118): ApplyCondition triggers concentration auto-break
+// when an incapacitating condition is applied to a concentrating target.
+func TestApplyCondition_AutoBreaksConcentration_OnIncapacitation(t *testing.T) {
+	encounterID := uuid.New()
+	targetID := uuid.New()
+
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Aria",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	var (
+		zonesDeletedForCombatant uuid.UUID
+		clearedConcCombatant     uuid.UUID
+		setConditionsCalled      bool
+	)
+	ms := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return target, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+			setConditionsCalled = true
+			return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, Conditions: arg.Conditions, DisplayName: target.DisplayName}, nil
+		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{}, nil
+		},
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+			zonesDeletedForCombatant = id
+			return nil
+		},
+		clearCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) error {
+			clearedConcCombatant = id
+			return nil
+		},
+		// Simulate the target was concentrating on Bless.
+		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+			return refdata.GetCombatantConcentrationRow{
+				ConcentrationSpellID:   sql.NullString{String: "bless", Valid: true},
+				ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+			}, nil
+		},
+	}
+
+	svc := NewService(ms)
+	updated, msgs, err := svc.ApplyCondition(context.Background(), targetID, CombatCondition{Condition: "stunned"})
+	require.NoError(t, err)
+	assert.True(t, setConditionsCalled)
+	assert.NotEmpty(t, updated.ID)
+
+	// Concentration cleanup ran for the target.
+	assert.Equal(t, targetID, zonesDeletedForCombatant, "auto-break must delete concentration zones for the target")
+	assert.Equal(t, targetID, clearedConcCombatant, "auto-break must clear the concentration columns")
+
+	// At least one of the messages mentions the consolidated cleanup.
+	var foundCleanup bool
+	for _, m := range msgs {
+		if strings.Contains(m, "💨") && strings.Contains(m, "Bless") {
+			foundCleanup = true
+			break
+		}
+	}
+	assert.True(t, foundCleanup, "expected a 💨 cleanup line in messages, got %v", msgs)
+}
+
+// TDD Cycle 12 (Phase 118): non-incapacitating condition does NOT trigger break.
+func TestApplyCondition_NonIncapacitatingDoesNotBreakConcentration(t *testing.T) {
+	encounterID := uuid.New()
+	targetID := uuid.New()
+
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Aria",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	zoneCleanupCalled := false
+	ms := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return target, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, Conditions: arg.Conditions, DisplayName: target.DisplayName}, nil
+		},
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+			zoneCleanupCalled = true
+			return nil
+		},
+		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+			return refdata.GetCombatantConcentrationRow{
+				ConcentrationSpellID:   sql.NullString{String: "bless", Valid: true},
+				ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+			}, nil
+		},
+	}
+
+	svc := NewService(ms)
+	_, _, err := svc.ApplyCondition(context.Background(), targetID, CombatCondition{Condition: "frightened"})
+	require.NoError(t, err)
+	assert.False(t, zoneCleanupCalled, "non-incapacitating condition must not trigger concentration cleanup")
+}
+
+// TDD Cycle 10: BreakConcentrationFully orchestrates the full concentration
+// break pipeline: strip spell-sourced conditions across the encounter,
+// delete concentration zones, dismiss summons, clear the caster's
+// concentration columns, and emit a consolidated combat log line.
+func TestBreakConcentrationFully(t *testing.T) {
+	encounterID := uuid.New()
+	casterID := uuid.New()
+	target1ID := uuid.New()
+	target2ID := uuid.New()
+	wolf1ID := uuid.New()
+
+	c1Conds, _ := json.Marshal([]CombatCondition{
+		{Condition: "invisible", SourceCombatantID: casterID.String(), SourceSpell: "invisibility"},
+	})
+	c2Conds, _ := json.Marshal([]CombatCondition{
+		{Condition: "invisible", SourceCombatantID: casterID.String(), SourceSpell: "invisibility"},
+	})
+
+	var (
+		clearedCasterID         uuid.UUID
+		zonesDeletedForCombatID uuid.UUID
+		deletedCombatantIDs     []uuid.UUID
+		conditionUpdates        = make(map[uuid.UUID]json.RawMessage)
+	)
+	ms := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: target1ID, EncounterID: encounterID, Conditions: c1Conds, DisplayName: "Goblin 1"},
+				{ID: target2ID, EncounterID: encounterID, Conditions: c2Conds, DisplayName: "Goblin 2"},
+				{ID: wolf1ID, EncounterID: encounterID, Conditions: json.RawMessage(`[]`), SummonerID: uuid.NullUUID{UUID: casterID, Valid: true}, ShortID: "WF1"},
+			}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+			conditionUpdates[arg.ID] = arg.Conditions
+			return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, Conditions: arg.Conditions}, nil
+		},
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, combID uuid.UUID) error {
+			zonesDeletedForCombatID = combID
+			return nil
+		},
+		deleteCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+			deletedCombatantIDs = append(deletedCombatantIDs, id)
+			return nil
+		},
+		clearCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) error {
+			clearedCasterID = id
+			return nil
+		},
+	}
+
+	svc := NewService(ms)
+	result, err := svc.BreakConcentrationFully(context.Background(), BreakConcentrationFullyInput{
+		EncounterID: encounterID,
+		CasterID:    casterID,
+		CasterName:  "Aria",
+		SpellID:     "invisibility",
+		SpellName:   "Invisibility",
+		Reason:      "failed CON save",
+	})
+	require.NoError(t, err)
+
+	assert.True(t, result.Broken)
+	assert.Equal(t, 2, result.ConditionsRemoved, "two combatants had spell-sourced invisibility")
+	assert.Equal(t, 1, result.SummonsDismissed)
+	assert.Equal(t, casterID, zonesDeletedForCombatID)
+	assert.Equal(t, casterID, clearedCasterID)
+	assert.Contains(t, deletedCombatantIDs, wolf1ID)
+
+	// Consolidated 💨 log line replaces the per-source 🔮 line.
+	assert.Equal(t, "💨 Aria lost concentration on Invisibility — effects ended on 3 targets.", result.ConsolidatedMessage)
+
+	// Existing per-source 🔮 line is still produced for callers that want it.
+	assert.Contains(t, result.PerSourceMessage, "Aria")
+	assert.Contains(t, result.PerSourceMessage, "Invisibility")
+	assert.Contains(t, result.PerSourceMessage, "failed CON save")
+
+	// Conditions on both targets were cleared.
+	require.Contains(t, conditionUpdates, target1ID)
+	require.Contains(t, conditionUpdates, target2ID)
+}
+
+func TestBreakConcentrationFully_ZeroEffects(t *testing.T) {
+	// Caster broke concentration but had no spell-sourced conditions or summons.
+	// The consolidated log line should still emit with N=0.
+	encounterID := uuid.New()
+	casterID := uuid.New()
+
+	ms := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return nil, nil
+		},
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, combID uuid.UUID) error { return nil },
+		clearCombatantConcentrationFn:         func(ctx context.Context, id uuid.UUID) error { return nil },
+	}
+	svc := NewService(ms)
+	result, err := svc.BreakConcentrationFully(context.Background(), BreakConcentrationFullyInput{
+		EncounterID: encounterID,
+		CasterID:    casterID,
+		CasterName:  "Aria",
+		SpellID:     "bless",
+		SpellName:   "Bless",
+		Reason:      "voluntary drop",
+	})
+	require.NoError(t, err)
+	assert.True(t, result.Broken)
+	assert.Equal(t, 0, result.ConditionsRemoved)
+	assert.Equal(t, 0, result.SummonsDismissed)
+	assert.Equal(t, "💨 Aria lost concentration on Bless — effects ended on 0 targets.", result.ConsolidatedMessage)
 }
 
 func TestBreakConcentrationAndDismissSummons(t *testing.T) {

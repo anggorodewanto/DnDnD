@@ -855,6 +855,102 @@ func TestCast_ConcentrationDropsOld(t *testing.T) {
 	assert.Equal(t, "Hold Person", result.Concentration.NewConcentration)
 }
 
+// TDD Cycle 11 (Phase 118): Cast wires new concentration into authoritative
+// storage AND fires BreakConcentrationFully for the previous spell.
+func TestCast_PersistsConcentrationAndCleansUpPrevious(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeHoldPerson(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	// Pre-existing concentration on Bless (passed in by caller — Phase 118 will
+	// also support reading it from the new column, but this test focuses on the
+	// cleanup wiring).
+	store.getCombatantConcentrationFn = func(_ context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+		return refdata.GetCombatantConcentrationRow{
+			ConcentrationSpellID:   sql.NullString{String: "bless", Valid: true},
+			ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+		}, nil
+	}
+
+	var (
+		setConcArg            refdata.SetCombatantConcentrationParams
+		setConcCalled         bool
+		clearConcCalled       bool
+		zoneCleanupCombatID   uuid.UUID
+		zoneCleanupCalled     bool
+	)
+	store.setCombatantConcentrationFn = func(_ context.Context, arg refdata.SetCombatantConcentrationParams) error {
+		setConcArg = arg
+		setConcCalled = true
+		return nil
+	}
+	store.clearCombatantConcentrationFn = func(_ context.Context, id uuid.UUID) error {
+		clearConcCalled = true
+		return nil
+	}
+	store.deleteConcentrationZonesByCombatantFn = func(_ context.Context, id uuid.UUID) error {
+		zoneCleanupCombatID = id
+		zoneCleanupCalled = true
+		return nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:              "hold-person",
+		CasterID:             caster.ID,
+		TargetID:             target.ID,
+		Turn:                 refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		CurrentConcentration: "Bless",
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.True(t, result.Concentration.DroppedPrevious)
+	assert.Equal(t, "Bless", result.Concentration.PreviousSpell)
+
+	// Cleanup callbacks fired for the dropped Bless.
+	assert.True(t, zoneCleanupCalled, "cleanup should delete concentration zones for the dropped spell")
+	assert.Equal(t, caster.ID, zoneCleanupCombatID)
+
+	// New spell persisted to authoritative store.
+	require.True(t, setConcCalled, "Cast should persist the new concentration spell")
+	assert.Equal(t, caster.ID, setConcArg.ID)
+	assert.True(t, setConcArg.ConcentrationSpellID.Valid)
+	assert.Equal(t, "hold-person", setConcArg.ConcentrationSpellID.String)
+	assert.True(t, setConcArg.ConcentrationSpellName.Valid)
+	assert.Equal(t, "Hold Person", setConcArg.ConcentrationSpellName.String)
+
+	// Cleanup intentionally clears the column then the new spell sets it again
+	// — both are fine. The acceptance criterion is the final state, which is
+	// the new spell row.
+	_ = clearConcCalled
+
+	// Consolidated 💨 line surfaced on the result.
+	assert.Contains(t, result.ConcentrationCleanup.ConsolidatedMessage, "Bless")
+	assert.Contains(t, result.ConcentrationCleanup.ConsolidatedMessage, "💨")
+}
+
 // TDD Cycle 18: Cast with save-based spell populates save DC
 func TestCast_SaveDC(t *testing.T) {
 	charID := uuid.New()

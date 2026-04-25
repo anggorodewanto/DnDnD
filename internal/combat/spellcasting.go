@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -174,6 +175,10 @@ type CastResult struct {
 	InvisibilityBroken    bool   // true if standard Invisibility was broken by casting
 	InvisibilityApplied   bool   // true if this cast applied the invisible condition to a target
 	InvisibilityTargetID  string // combatant that received the invisible condition (if any)
+	// Phase 118: when this cast replaced an existing concentration spell, the
+	// dropped spell's effects were cleaned up server-side. The full result is
+	// surfaced here so the handler can post the consolidated 💨 log line.
+	ConcentrationCleanup BreakConcentrationFullyResult
 }
 
 // FormatCastLog produces the combat log output for a spell cast.
@@ -564,6 +569,41 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	// 10. Resolve concentration
 	result.Concentration = ResolveConcentration(cmd.CurrentConcentration, spell)
 
+	// 10a. Phase 118: clean up the dropped spell's effects across the encounter
+	// when this cast replaces an existing concentration. We use the spell ID
+	// looked up from the existing concentration columns so spell-sourced
+	// conditions (Hold Person/paralyzed, Web/restrained, Bless, ...) get
+	// stripped, not just the human-readable name.
+	if result.Concentration.DroppedPrevious {
+		previousID, _ := s.lookupCasterConcentrationID(ctx, caster.ID)
+		cleanup, cerr := s.BreakConcentrationFully(ctx, BreakConcentrationFullyInput{
+			EncounterID: caster.EncounterID,
+			CasterID:    caster.ID,
+			CasterName:  caster.DisplayName,
+			SpellID:     previousID,
+			SpellName:   result.Concentration.PreviousSpell,
+			Reason:      fmt.Sprintf("cast new concentration spell: %s", result.Concentration.NewConcentration),
+		})
+		if cerr != nil {
+			return CastResult{}, fmt.Errorf("cleaning up previous concentration: %w", cerr)
+		}
+		result.ConcentrationCleanup = cleanup
+	}
+
+	// 10b. Phase 118: persist the new concentration spell to the authoritative
+	// columns so damage/incapacitation/silence handlers can find it without
+	// scanning zones. ResolveConcentration only sets NewConcentration when the
+	// spell actually requires concentration.
+	if spell.Concentration.Valid && spell.Concentration.Bool {
+		if perr := s.store.SetCombatantConcentration(ctx, refdata.SetCombatantConcentrationParams{
+			ID:                     caster.ID,
+			ConcentrationSpellID:   sql.NullString{String: spell.ID, Valid: true},
+			ConcentrationSpellName: sql.NullString{String: spell.Name, Valid: true},
+		}); perr != nil {
+			return CastResult{}, fmt.Errorf("persisting new concentration: %w", perr)
+		}
+	}
+
 	// 11. Save DC for save-based spells
 	if hasSavingThrow(spell) {
 		result.SaveDC = SpellSaveDC(int(char.ProficiencyBonus), spellAbilityScore)
@@ -659,6 +699,23 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	result.InvisibilityBroken = broken
 
 	return result, nil
+}
+
+// lookupCasterConcentrationID reads the authoritative concentration spell ID
+// from the combatants row. Returns "" when the caster is not concentrating
+// or the column is unset (e.g. concentration was tracked via the legacy
+// `cmd.CurrentConcentration` string only). Errors are swallowed so the
+// downstream cleanup path can still emit a best-effort log line based on the
+// human-readable spell name.
+func (s *Service) lookupCasterConcentrationID(ctx context.Context, casterID uuid.UUID) (string, error) {
+	row, err := s.store.GetCombatantConcentration(ctx, casterID)
+	if err != nil {
+		return "", err
+	}
+	if !row.ConcentrationSpellID.Valid {
+		return "", nil
+	}
+	return row.ConcentrationSpellID.String, nil
 }
 
 // applyInvisibilityConditionFromCast adds an "invisible" condition to the spell's
