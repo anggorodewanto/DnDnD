@@ -224,6 +224,47 @@ func TestTruncateUserTables(t *testing.T) {
 	}
 }
 
+func TestTruncateUserTables_ErrorOnClosedDB(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := NewMigratedTestDB(t, dbfs.Migrations)
+	db.Close()
+
+	if err := TruncateUserTables(db); err == nil {
+		t.Fatal("expected error on closed DB, got nil")
+	}
+}
+
+func TestSharedTestDB_ReusesContainerOnRepeatedAcquire(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	shared := NewSharedTestDB(dbfs.Migrations)
+	defer shared.Teardown()
+
+	db1 := shared.AcquireDB(t)
+	db2 := shared.AcquireDB(t)
+	if db1 != db2 {
+		t.Fatal("expected the same *sql.DB across AcquireDB calls")
+	}
+}
+
+func TestSharedTestDB_TeardownIsIdempotent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	shared := NewSharedTestDB(dbfs.Migrations)
+	_ = shared.AcquireDB(t)
+
+	// Two calls must not panic; the second is a no-op.
+	shared.Teardown()
+	shared.Teardown()
+}
+
 func TestTruncationListMatchesSchema(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

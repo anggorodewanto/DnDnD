@@ -250,6 +250,16 @@ func TestCalculateAC_WithShield(t *testing.T) {
 	}
 }
 
+func TestCalculateAC_MagicBonus(t *testing.T) {
+	// Plate (AC 18) + Cloak of Protection (+1) + Ring of Protection (+1)
+	scores := AbilityScores{DEX: 10}
+	armor := &ArmorInfo{ACBase: 18, DexBonus: false}
+	got := CalculateAC(scores, armor, false, "", 1, 1)
+	if got != 20 {
+		t.Errorf("CalculateAC with magic bonuses = %d, want 20", got)
+	}
+}
+
 func TestCalculateAC_UnarmoredDefense_Monk(t *testing.T) {
 	// Monk: 10 + DEX + WIS, no armor
 	scores := AbilityScores{DEX: 16, WIS: 14}

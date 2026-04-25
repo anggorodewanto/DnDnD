@@ -1,0 +1,140 @@
+# Testing Strategy
+
+DnDnD follows a three-tier test pyramid. Each tier has a distinct purpose, a
+canonical exemplar in the repository, and a coverage expectation. This file
+is the source of truth for "how do we test this?" — when in doubt, follow
+the closest exemplar listed below.
+
+## Tiers
+
+### 1. Unit tests (the wide base)
+
+- **Purpose**: Verify pure logic in isolation: dice math, modifier
+  calculations, formatting helpers, parsers.
+- **Style**: Table-driven, no I/O, no goroutines, sub-millisecond runtime.
+- **Where**: Co-located with the code (`stats_test.go`, `modifiers_test.go`).
+- **Exemplars**:
+  - `internal/character/stats_test.go` — table-driven AC/HP math with
+    multiple armor variants.
+  - `internal/character/modifiers_test.go` — pure ability-modifier logic.
+  - `internal/dice/d20_test.go` — `CombineRollModes`, advantage/disadvantage.
+
+### 2. Integration tests (the middle tier)
+
+- **Purpose**: Verify command pipelines and multi-step flows that touch the
+  database. Each test gets a clean PostgreSQL container via `testcontainers`.
+- **Style**: One test → one realistic flow. Use shared-DB-per-package fixtures
+  (`testutil.NewSharedTestDB`) and per-test data isolation
+  (`testutil.TruncateUserTables`).
+- **Where**: `*_integration_test.go` files inside the package being tested.
+- **Exemplars**:
+  - `internal/levelup/integration_test.go` — full level-up flow against a
+    seeded DB.
+  - `internal/registration/integration_test.go` — character registration
+    through to approval.
+  - `internal/errorlog/pgstore_integration_test.go` — store interactions
+    against a real PostgreSQL backend.
+
+### 3. Discord interaction tests (the narrow top)
+
+- **Purpose**: Verify channel routing, message formatting, rate-limit
+  batching, and message splitting. The harness uses fake Discord services
+  (recording outbound messages) rather than a unified `discordgo.Session`
+  mock — that mock is deferred to Phase 120 (E2E harness).
+- **Style**: Each handler is exercised against an in-memory fake recorder
+  that captures `ChannelMessageSend` / `InteractionRespond` payloads. Tests
+  assert on the recorded payloads.
+- **Where**: `*_test.go` files in packages under `internal/discord/` and
+  the `cmd/dndnd` discord adapters.
+- **Exemplars**:
+  - `internal/discord/router_test.go` — slash-command routing with a fake
+    interaction.
+  - `internal/discord/loot_handler_test.go` — formatted embeds & button
+    components on loot reveal.
+  - `cmd/dndnd/discord_handlers_test.go` — adapter wiring to combat /
+    encounter services.
+
+## Fixture helpers
+
+Reusable test fixtures live in `internal/testutil/fixtures.go` and are
+exported so any test package can call them. The helpers are:
+
+| Helper                       | What it creates                                                        |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| `NewTestCampaign`            | A campaign with a unique guild_id suffix (parallel-safe).              |
+| `NewTestCharacter`           | A level-N fighter with sane default stats.                             |
+| `NewTestPlayerCharacter`     | A `player_characters` row linking a character to a Discord user.       |
+| `NewTestEncounter`           | A `preparing` encounter with no map.                                   |
+| `NewTestCombatant`           | A combatant in a given encounter, linked to a character.               |
+| `NewTestMap`                 | A 20x20 empty map for combat / exploration.                            |
+
+The shared-container helpers in `internal/testutil/testdb.go`:
+
+- `NewTestDB(t)` — one container per test. Slow; prefer `SharedTestDB`.
+- `NewSharedTestDB(migrations).AcquireDB(t)` — one container per package,
+  reused across tests via `TruncateUserTables`.
+- `TruncateUserTables(db)` — wipes all mutable tables and campaign-scoped
+  homebrew rows while preserving the SRD seed.
+
+A package using the shared container looks like this:
+
+```go
+// testmain_test.go
+var sharedDB = testutil.NewSharedTestDB(dbfs.Migrations)
+
+func TestMain(m *testing.M) {
+    code := m.Run()
+    sharedDB.Teardown()
+    os.Exit(code)
+}
+```
+
+Tests then call `sharedDB.AcquireDB(t)` and `testutil.NewTestCampaign(t, q,
+"guild-prefix")`. See `internal/levelup/testmain_test.go` and
+`internal/levelup/fixtures_test.go` for the reference pattern.
+
+## Coverage targets
+
+- **Overall (post-exclusion)**: ≥ 90 %
+- **Per-package**: ≥ 85 %
+
+Both thresholds are enforced in CI by `scripts/coverage_check`. To run the
+check locally:
+
+```bash
+make cover-check
+```
+
+The check filters out files that are structurally untestable. The current
+exclusions and rationale:
+
+| Path                                 | Reason                                                           |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| `internal/refdata/*.sql.go`          | Generated by sqlc. Tested transitively by every consumer.        |
+| `cmd/dndnd/main.go`                  | `main()` wiring; impractical to unit-test.                       |
+| `cmd/dndnd/discord_handlers.go`      | Thin adapter delegations to `*combat.Service` etc.               |
+| `cmd/dndnd/discord_adapters.go`      | Thin `discordgo.Session` adapters (no logic, just delegates).    |
+| `cmd/dndnd/notifier.go`              | Wire-up between concrete services and adapters.                  |
+| `internal/discord/adapter.go`        | Pure pass-through to `discordgo.Session` methods.                |
+| `scripts/coverage_check/main.go`     | CI tool; covered by its own `scripts/coverage_check_test.go`.    |
+| `internal/testutil/*.go`             | Test scaffolding (containers, fixtures). The remaining uncovered branches are `t.Fatalf` paths inside helpers — only reachable on container/DB failure, no production signal. |
+
+Adding a new exclusion requires updating both `Makefile` (`COVER_EXCLUDE`)
+and `.github/workflows/test.yml`.
+
+## CI pipeline
+
+`.github/workflows/test.yml` runs on every push to `main` and every pull
+request. The pipeline:
+
+1. Sets up Go (matrix-pinned).
+2. Runs `go mod download && go mod verify`.
+3. Builds the production binary (`make build`).
+4. Runs `go vet ./...`.
+5. Runs `make cover` (full test suite with coverage profile).
+6. Runs `scripts/coverage_check` to enforce thresholds.
+7. Generates the HTML coverage report.
+8. Uploads `coverage.out` and `coverage.html` as a workflow artifact.
+
+Docker is preinstalled on `ubuntu-latest` runners; testcontainers picks it
+up automatically.

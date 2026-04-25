@@ -1,0 +1,67 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs on the same branch when a new commit is pushed.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: build & test (Go ${{ matrix.go-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ["1.25.x"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Verify go.mod is tidy
+        run: |
+          go mod download
+          go mod verify
+
+      - name: Build
+        run: make build
+
+      - name: Vet
+        run: go vet ./...
+
+      # Docker is pre-installed on ubuntu-latest runners and the testcontainers
+      # library auto-detects it. No separate setup step is needed.
+      - name: Run tests with coverage
+        run: make cover
+
+      - name: Enforce coverage thresholds
+        run: |
+          go run ./scripts/coverage_check \
+            -profile coverage.out \
+            -min-overall 90 \
+            -min-per-package 85 \
+            -exclude '(internal/refdata/.*\.sql\.go|cmd/dndnd/main\.go|cmd/dndnd/discord_handlers\.go|cmd/dndnd/discord_adapters\.go|cmd/dndnd/notifier\.go|internal/discord/adapter\.go|scripts/coverage_check/main\.go|internal/testutil/.*\.go)'
+
+      - name: Generate HTML coverage report
+        if: always()
+        run: go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.go-version }}
+          path: |
+            coverage.out
+            coverage.html
+          retention-days: 14

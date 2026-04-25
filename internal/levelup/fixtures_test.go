@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/testutil"
 )
 
 // setupLevelUpTestDB acquires the shared testcontainer Postgres DB and
@@ -22,23 +23,16 @@ func setupLevelUpTestDB(t *testing.T) (*sql.DB, *refdata.Queries) {
 	return db, refdata.New(db)
 }
 
-// createLevelUpCampaign creates a throwaway campaign with a unique guild id
-// so parallel-capable tests cannot collide on the campaign (guild_id,
-// dm_user_id) uniqueness.
+// createLevelUpCampaign delegates to the shared fixture helper.
 func createLevelUpCampaign(t *testing.T, q *refdata.Queries, guildID string) refdata.Campaign {
 	t.Helper()
-	camp, err := q.CreateCampaign(context.Background(), refdata.CreateCampaignParams{
-		GuildID:  guildID + "-" + uuid.NewString(),
-		DmUserID: "dm-" + uuid.NewString(),
-		Name:     "LevelUp Test Campaign",
-		Settings: pqtype.NullRawMessage{RawMessage: []byte(`{}`), Valid: true},
-	})
-	require.NoError(t, err)
-	return camp
+	return testutil.NewTestCampaign(t, q, guildID)
 }
 
-// createLevelUpCharacter creates a level-5 fighter with canned stats — the
-// defaults match Phase 104c adapter tests so they can assert on known values.
+// createLevelUpCharacter creates a level-5 fighter. Defaults match the
+// Phase 104c adapter tests — AC 18 and HP 44 — so the existing assertions
+// stay green. We can't use NewTestCharacter directly because its defaults
+// (AC 16, HP scaled by level*8 = 50) differ.
 func createLevelUpCharacter(t *testing.T, q *refdata.Queries, campID uuid.UUID, name string) refdata.Character {
 	t.Helper()
 	classes := json.RawMessage(`[{"class":"fighter","level":5}]`)
@@ -63,18 +57,10 @@ func createLevelUpCharacter(t *testing.T, q *refdata.Queries, campID uuid.UUID, 
 	return char
 }
 
-// createLevelUpPlayerCharacter links a character to a Discord user so the
-// store adapter can surface the discord_user_id via the level-up query.
+// createLevelUpPlayerCharacter delegates to the shared fixture helper.
 func createLevelUpPlayerCharacter(t *testing.T, q *refdata.Queries, campID, charID uuid.UUID, discordUserID string) {
 	t.Helper()
-	_, err := q.CreatePlayerCharacter(context.Background(), refdata.CreatePlayerCharacterParams{
-		CampaignID:    campID,
-		CharacterID:   charID,
-		DiscordUserID: discordUserID,
-		Status:        "approved",
-		CreatedVia:    "register",
-	})
-	require.NoError(t, err)
+	testutil.NewTestPlayerCharacter(t, q, campID, charID, discordUserID)
 }
 
 // seedLevelUpClasses upserts the minimum class rows the class-store adapter
