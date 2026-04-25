@@ -119,8 +119,9 @@ exclusions and rationale:
 | `scripts/coverage_check/main.go`     | CI tool; covered by its own `scripts/coverage_check_test.go`.    |
 | `internal/testutil/*.go`             | Test scaffolding (containers, fixtures). The remaining uncovered branches are `t.Fatalf` paths inside helpers — only reachable on container/DB failure, no production signal. |
 
-Adding a new exclusion requires updating both `Makefile` (`COVER_EXCLUDE`)
-and `.github/workflows/test.yml`.
+Adding a new exclusion requires updating `Makefile` (`COVER_EXCLUDE`). The
+GitHub Actions workflow invokes `make cover-check`, so the regex lives in
+exactly one place.
 
 ## CI pipeline
 
@@ -131,10 +132,10 @@ request. The pipeline:
 2. Runs `go mod download && go mod verify`.
 3. Builds the production binary (`make build`).
 4. Runs `go vet ./...`.
-5. Runs `make cover` (full test suite with coverage profile).
-6. Runs `scripts/coverage_check` to enforce thresholds.
-7. Generates the HTML coverage report.
-8. Uploads `coverage.out` and `coverage.html` as a workflow artifact.
+5. Runs `make cover-check` (full test suite with coverage profile, then
+   `scripts/coverage_check` enforcing both the overall and per-package floors).
+6. Generates the HTML coverage report.
+7. Uploads `coverage.out` and `coverage.html` as a workflow artifact.
 
 Docker is preinstalled on `ubuntu-latest` runners; testcontainers picks it
 up automatically.

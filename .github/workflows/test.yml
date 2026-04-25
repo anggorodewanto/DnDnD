@@ -41,16 +41,10 @@ jobs:
 
       # Docker is pre-installed on ubuntu-latest runners and the testcontainers
       # library auto-detects it. No separate setup step is needed.
-      - name: Run tests with coverage
-        run: make cover
-
-      - name: Enforce coverage thresholds
-        run: |
-          go run ./scripts/coverage_check \
-            -profile coverage.out \
-            -min-overall 90 \
-            -min-per-package 85 \
-            -exclude '(internal/refdata/.*\.sql\.go|cmd/dndnd/main\.go|cmd/dndnd/discord_handlers\.go|cmd/dndnd/discord_adapters\.go|cmd/dndnd/notifier\.go|internal/discord/adapter\.go|scripts/coverage_check/main\.go|internal/testutil/.*\.go)'
+      # `make cover-check` chains `cover` and the threshold check; this avoids
+      # duplicating the exclusion regex between Makefile and workflow.
+      - name: Run tests and enforce coverage thresholds
+        run: make cover-check
 
       - name: Generate HTML coverage report
         if: always()

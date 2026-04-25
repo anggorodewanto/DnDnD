@@ -11,6 +11,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"sort"
@@ -25,7 +26,7 @@ func main() {
 	}
 }
 
-func run(args []string, out *os.File) error {
+func run(args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("coverage_check", flag.ContinueOnError)
 	profile := fs.String("profile", "coverage.out", "path to Go coverage profile")
 	minOverall := fs.Float64("min-overall", 90, "minimum overall coverage percent")
