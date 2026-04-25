@@ -412,7 +412,7 @@ type BreakConcentrationFullyResult struct {
 	Reason              string
 	ConditionsRemoved   int    // total spell-sourced conditions stripped across all combatants
 	SummonsDismissed    int    // count of summoned creatures removed
-	ZonesRemoved        int    // count of concentration zones deleted (rows affected by DeleteConcentrationZonesByCombatant)
+	ZonesRemoved        int    // count of concentration-tagged zones deleted
 	ConsolidatedMessage string // 💨 line: "<Caster> lost concentration on <Spell> — effects ended on N targets."
 }
 
@@ -424,9 +424,7 @@ type BreakConcentrationFullyResult struct {
 // concentration columns, and returns the consolidated 💨 combat log line.
 //
 // The "N targets" in the consolidated line is
-// (conditions removed) + (summons dismissed) + (zones removed); the zone
-// rowcount comes from the :execrows DeleteConcentrationZonesByCombatant
-// query.
+// (conditions removed) + (summons dismissed) + (zones removed).
 func (s *Service) BreakConcentrationFully(ctx context.Context, in BreakConcentrationFullyInput) (BreakConcentrationFullyResult, error) {
 	result := BreakConcentrationFullyResult{
 		Broken:    true,
@@ -466,11 +464,9 @@ func (s *Service) BreakConcentrationFully(ctx context.Context, in BreakConcentra
 
 	// 5. Compose the single consolidated cleanup log line. The cleanup path
 	// emits ONLY the 💨 line with the trigger reason in parentheses; the
-	// legacy 🔮 helper output is no longer surfaced here.
-	// `FormatConcentrationBreakLog` remains available for non-cleanup callers
-	// (e.g. a future "save succeeded — concentration held" message). N counts
-	// every cleanup side effect: conditions removed across the encounter,
-	// summons dismissed, and concentration zones deleted.
+	// legacy 🔮 helper output (FormatConcentrationBreakLog) is reserved for
+	// non-cleanup callers (e.g. a future "save succeeded — concentration
+	// held" message).
 	result.ConsolidatedMessage = FormatConcentrationCleanupLog(in.CasterName, in.SpellName, in.Reason, result.ConditionsRemoved+result.SummonsDismissed+result.ZonesRemoved)
 
 	return result, nil
