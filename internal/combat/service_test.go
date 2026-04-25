@@ -73,7 +73,7 @@ type mockStore struct {
 	listConcentrationZonesByCombatantFn     func(ctx context.Context, sourceCombatantID uuid.UUID) ([]refdata.EncounterZone, error)
 	deleteEncounterZoneFn                   func(ctx context.Context, id uuid.UUID) error
 	deleteEncounterZonesByEncounterIDFn     func(ctx context.Context, encounterID uuid.UUID) error
-	deleteConcentrationZonesByCombatantFn   func(ctx context.Context, sourceCombatantID uuid.UUID) error
+	deleteConcentrationZonesByCombatantFn   func(ctx context.Context, sourceCombatantID uuid.UUID) (int64, error)
 	deleteExpiredZonesFn                    func(ctx context.Context, arg refdata.DeleteExpiredZonesParams) error
 	updateEncounterZoneOriginFn             func(ctx context.Context, arg refdata.UpdateEncounterZoneOriginParams) (refdata.EncounterZone, error)
 	updateEncounterZoneTriggeredThisRoundFn func(ctx context.Context, arg refdata.UpdateEncounterZoneTriggeredThisRoundParams) (refdata.EncounterZone, error)
@@ -385,11 +385,11 @@ func (m *mockStore) DeleteEncounterZonesByEncounterID(ctx context.Context, encou
 	}
 	return nil
 }
-func (m *mockStore) DeleteConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) error {
+func (m *mockStore) DeleteConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) (int64, error) {
 	if m.deleteConcentrationZonesByCombatantFn != nil {
 		return m.deleteConcentrationZonesByCombatantFn(ctx, sourceCombatantID)
 	}
-	return nil
+	return 0, nil
 }
 func (m *mockStore) DeleteExpiredZones(ctx context.Context, arg refdata.DeleteExpiredZonesParams) error {
 	if m.deleteExpiredZonesFn != nil {

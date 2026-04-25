@@ -948,9 +948,9 @@ func TestCastAoE_PersistsConcentrationAndCleansUpPrevious(t *testing.T) {
 		setConcCalled = true
 		return nil
 	}
-	store.deleteConcentrationZonesByCombatantFn = func(_ context.Context, id uuid.UUID) error {
+	store.deleteConcentrationZonesByCombatantFn = func(_ context.Context, id uuid.UUID) (int64, error) {
 		zoneCleanupCombatID = id
-		return nil
+		return 0, nil
 	}
 
 	svc := NewService(store)

@@ -91,21 +91,23 @@ func TestDeleteZone(t *testing.T) {
 }
 
 // TDD Cycle 3: CleanupConcentrationZones deletes concentration zones for a combatant
+// and returns the rowcount of deleted zones (Phase 118b — :execrows).
 func TestCleanupConcentrationZones(t *testing.T) {
 	combatantID := uuid.New()
 	cleaned := false
 
 	ms := defaultMockStore()
-	ms.deleteConcentrationZonesByCombatantFn = func(ctx context.Context, id uuid.UUID) error {
+	ms.deleteConcentrationZonesByCombatantFn = func(ctx context.Context, id uuid.UUID) (int64, error) {
 		assert.Equal(t, combatantID, id)
 		cleaned = true
-		return nil
+		return 2, nil
 	}
 
 	svc := NewService(ms)
-	err := svc.CleanupConcentrationZones(context.Background(), combatantID)
+	n, err := svc.CleanupConcentrationZones(context.Background(), combatantID)
 	require.NoError(t, err)
 	assert.True(t, cleaned)
+	assert.Equal(t, int64(2), n)
 }
 
 // TDD Cycle 4: CleanupExpiredZones deletes expired zones

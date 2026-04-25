@@ -2,6 +2,7 @@ package combat_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -134,4 +135,78 @@ func TestIntegration_UndoLastAction_UsesTurnLock(t *testing.T) {
 	assert.Len(t, poster.calls, 1)
 	assert.Contains(t, poster.calls[0], "DM Correction")
 	assert.Contains(t, poster.calls[0], "Aragorn")
+}
+
+// TestIntegration_OverridePosition_IntoSilenceZone_BreaksConcentration is the
+// Phase 118b done-when (1) integration test: a DM forward correction that moves
+// a concentrating caster (V/S spell) into an existing Silence zone must trigger
+// the silence-zone concentration-break hook, just like a player-initiated move
+// does. Before Phase 118b, OverrideCombatantPosition wrote directly to the
+// store and bypassed the hook in Service.UpdateCombatantPosition.
+func TestIntegration_OverridePosition_IntoSilenceZone_BreaksConcentration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	td := setupTurnLockTest(t)
+	queries := refdata.New(td.DB)
+	ctx := context.Background()
+
+	// Insert a minimal Hold Person spell with V/S components so the
+	// silence-zone check has component metadata to read.
+	_, err := td.DB.Exec(`INSERT INTO spells (id, name, school, level, casting_time, range_type, components, duration, description, classes)
+		VALUES ('hold-person', 'Hold Person', 'enchantment', 2, '1 action', 'ranged', '{V,S,M}', '1 minute', '', '{wizard}')
+		ON CONFLICT (id) DO NOTHING`)
+	require.NoError(t, err)
+
+	// Caster (Aragorn @ A,1) is concentrating on Hold Person.
+	_, err = td.DB.Exec(`UPDATE combatants SET concentration_spell_id='hold-person', concentration_spell_name='Hold Person' WHERE id=$1`,
+		td.CombatantID)
+	require.NoError(t, err)
+
+	// Drop a Silence zone over tile B,1 (the override target tile).
+	_, err = queries.CreateEncounterZone(ctx, refdata.CreateEncounterZoneParams{
+		EncounterID:           td.EncounterID,
+		SourceCombatantID:     td.CombatantID,
+		SourceSpell:           "silence",
+		Shape:                 "square",
+		OriginCol:             "B",
+		OriginRow:             1,
+		Dimensions:            json.RawMessage(`{"side_ft":5}`),
+		AnchorMode:            "fixed",
+		ZoneType:              "silence",
+		OverlayColor:          "#888888",
+		RequiresConcentration: false,
+	})
+	require.NoError(t, err)
+
+	poster := &recordingPoster{}
+	r := newDMDashboardRouterForIntegration(t, td, poster)
+
+	// DM forward correction: move Aragorn from A,1 to B,1 (into the silence zone).
+	body := `{"position_col":"B","position_row":1,"altitude_ft":0,"reason":"misplaced token"}`
+	req := httptest.NewRequest("POST",
+		"/api/combat/"+td.EncounterID.String()+"/override/combatant/"+td.CombatantID.String()+"/position",
+		strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Position updated.
+	c, err := queries.GetCombatant(ctx, td.CombatantID)
+	require.NoError(t, err)
+	assert.Equal(t, "B", c.PositionCol)
+	assert.Equal(t, int32(1), c.PositionRow)
+
+	// Phase 118b: concentration must have been broken by the silence-zone
+	// hook firing through Service.UpdateCombatantPosition. Read the columns
+	// directly from the DB since refdata.Combatant doesn't surface them.
+	var spellID, spellName sql.NullString
+	require.NoError(t, td.DB.QueryRow(
+		`SELECT concentration_spell_id, concentration_spell_name FROM combatants WHERE id=$1`,
+		td.CombatantID,
+	).Scan(&spellID, &spellName))
+	assert.False(t, spellID.Valid, "DM-overridden move into silence must clear concentration_spell_id")
+	assert.False(t, spellName.Valid, "DM-overridden move into silence must clear concentration_spell_name")
 }

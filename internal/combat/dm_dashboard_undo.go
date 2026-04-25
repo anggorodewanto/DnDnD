@@ -383,6 +383,11 @@ func (h *DMDashboardHandler) OverrideCombatantHP(w http.ResponseWriter, r *http.
 }
 
 // OverrideCombatantPosition handles POST .../override/combatant/{combatantID}/position.
+//
+// Phase 118b: routes through Service.UpdateCombatantPosition so that
+// DM-overridden moves trigger the silence-zone concentration-break hook
+// (`Service.CheckSilenceBreaksConcentration`), matching the behaviour of
+// player-initiated moves.
 func (h *DMDashboardHandler) OverrideCombatantPosition(w http.ResponseWriter, r *http.Request) {
 	var req overridePositionRequest
 	h.runOverride(w, r,
@@ -393,9 +398,7 @@ func (h *DMDashboardHandler) OverrideCombatantPosition(w http.ResponseWriter, r 
 				return err
 			}
 			before, _ := snapshotCombatantState(c)
-			updated, err := h.svc.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
-				ID: combatantID, PositionCol: req.PositionCol, PositionRow: req.PositionRow, AltitudeFt: req.AltitudeFt,
-			})
+			updated, err := h.svc.UpdateCombatantPosition(ctx, combatantID, req.PositionCol, req.PositionRow, req.AltitudeFt)
 			if err != nil {
 				return err
 			}

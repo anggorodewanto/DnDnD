@@ -25,7 +25,7 @@ DELETE FROM encounter_zones WHERE id = $1;
 -- name: DeleteEncounterZonesByEncounterID :exec
 DELETE FROM encounter_zones WHERE encounter_id = $1;
 
--- name: DeleteConcentrationZonesByCombatant :exec
+-- name: DeleteConcentrationZonesByCombatant :execrows
 DELETE FROM encounter_zones
 WHERE source_combatant_id = $1 AND requires_concentration = true;
 

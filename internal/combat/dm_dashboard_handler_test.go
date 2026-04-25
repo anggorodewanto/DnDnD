@@ -1097,9 +1097,9 @@ func TestDropConcentration_Success(t *testing.T) {
 		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
 			return nil, nil
 		},
-		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) (int64, error) {
 			zoneCleanCalled = true
-			return nil
+			return 0, nil
 		},
 		clearCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) error {
 			clearCalled = true

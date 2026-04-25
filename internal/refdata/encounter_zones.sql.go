@@ -87,14 +87,17 @@ func (q *Queries) CreateEncounterZone(ctx context.Context, arg CreateEncounterZo
 	return i, err
 }
 
-const deleteConcentrationZonesByCombatant = `-- name: DeleteConcentrationZonesByCombatant :exec
+const deleteConcentrationZonesByCombatant = `-- name: DeleteConcentrationZonesByCombatant :execrows
 DELETE FROM encounter_zones
 WHERE source_combatant_id = $1 AND requires_concentration = true
 `
 
-func (q *Queries) DeleteConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteConcentrationZonesByCombatant, sourceCombatantID)
-	return err
+func (q *Queries) DeleteConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteConcentrationZonesByCombatant, sourceCombatantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deleteEncounterZone = `-- name: DeleteEncounterZone :exec

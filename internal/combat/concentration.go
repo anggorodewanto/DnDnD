@@ -412,9 +412,8 @@ type BreakConcentrationFullyResult struct {
 	Reason              string
 	ConditionsRemoved   int    // total spell-sourced conditions stripped across all combatants
 	SummonsDismissed    int    // count of summoned creatures removed
-	ZonesRemoved        bool   // whether the zone-cleanup query was issued (count not reported by the store)
-	PerSourceMessage    string // legacy 🔮 helper output (FormatConcentrationBreakLog)
-	ConsolidatedMessage string // new 💨 line: "<Caster> lost concentration on <Spell> — effects ended on N targets."
+	ZonesRemoved        int    // count of concentration zones deleted (rows affected by DeleteConcentrationZonesByCombatant)
+	ConsolidatedMessage string // 💨 line: "<Caster> lost concentration on <Spell> — effects ended on N targets."
 }
 
 // BreakConcentrationFully orchestrates the complete concentration break
@@ -422,13 +421,12 @@ type BreakConcentrationFullyResult struct {
 // incapacitation, Silence entry, replacing a concentration spell, voluntary
 // drop). It strips spell-sourced conditions across the encounter, removes
 // concentration-tagged zones, dismisses summons, clears the caster's
-// concentration columns, and returns both legacy and consolidated combat log
-// lines so the caller can choose what to surface.
+// concentration columns, and returns the consolidated 💨 combat log line.
 //
-// The "N targets" in the consolidated line is defined as
-// (conditions removed) + (summons dismissed). Zone removal is signalled via
-// `ZonesRemoved` because the underlying SQL is :exec and does not return a
-// row count; counting them precisely would require a separate query.
+// The "N targets" in the consolidated line is
+// (conditions removed) + (summons dismissed) + (zones removed); the zone
+// rowcount comes from the :execrows DeleteConcentrationZonesByCombatant
+// query.
 func (s *Service) BreakConcentrationFully(ctx context.Context, in BreakConcentrationFullyInput) (BreakConcentrationFullyResult, error) {
 	result := BreakConcentrationFullyResult{
 		Broken:    true,
@@ -446,10 +444,11 @@ func (s *Service) BreakConcentrationFully(ctx context.Context, in BreakConcentra
 	}
 
 	// 2. Delete concentration-tagged zones (Silence, Web, Hunger of Hadar, ...).
-	if err := s.store.DeleteConcentrationZonesByCombatant(ctx, in.CasterID); err != nil {
+	zonesRemoved, err := s.store.DeleteConcentrationZonesByCombatant(ctx, in.CasterID)
+	if err != nil {
 		return result, fmt.Errorf("deleting concentration zones: %w", err)
 	}
-	result.ZonesRemoved = true
+	result.ZonesRemoved = int(zonesRemoved)
 
 	// 3. Dismiss any concentration-linked summons.
 	dismissed, err := s.DismissSummonsByConcentration(ctx, in.EncounterID, in.CasterID)
@@ -465,13 +464,14 @@ func (s *Service) BreakConcentrationFully(ctx context.Context, in BreakConcentra
 		return result, fmt.Errorf("clearing concentration: %w", err)
 	}
 
-	// 5. Compose the single consolidated cleanup log line. Per the iter-2
-	// user clarification, the cleanup path emits ONLY the 💨 line with the
-	// trigger reason in parentheses; the legacy 🔮 helper output is no
-	// longer surfaced here. `FormatConcentrationBreakLog` remains available
-	// for non-cleanup callers (e.g. a future "save succeeded — concentration
-	// held" message).
-	result.ConsolidatedMessage = FormatConcentrationCleanupLog(in.CasterName, in.SpellName, in.Reason, result.ConditionsRemoved+result.SummonsDismissed)
+	// 5. Compose the single consolidated cleanup log line. The cleanup path
+	// emits ONLY the 💨 line with the trigger reason in parentheses; the
+	// legacy 🔮 helper output is no longer surfaced here.
+	// `FormatConcentrationBreakLog` remains available for non-cleanup callers
+	// (e.g. a future "save succeeded — concentration held" message). N counts
+	// every cleanup side effect: conditions removed across the encounter,
+	// summons dismissed, and concentration zones deleted.
+	result.ConsolidatedMessage = FormatConcentrationCleanupLog(in.CasterName, in.SpellName, in.Reason, result.ConditionsRemoved+result.SummonsDismissed+result.ZonesRemoved)
 
 	return result, nil
 }

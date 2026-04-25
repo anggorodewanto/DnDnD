@@ -639,9 +639,9 @@ func TestResolveConcentrationSave_FailureTriggersBreak(t *testing.T) {
 		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
 			return nil, nil
 		},
-		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) (int64, error) {
 			zoneCleanupCalled = true
-			return nil
+			return 0, nil
 		},
 		clearCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) error {
 			clearCalled = true
@@ -667,9 +667,9 @@ func TestResolveConcentrationSave_FailureTriggersBreak(t *testing.T) {
 func TestResolveConcentrationSave_SuccessIsNoop(t *testing.T) {
 	zoneCleanupCalled := false
 	ms := &mockStore{
-		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) (int64, error) {
 			zoneCleanupCalled = true
-			return nil
+			return 0, nil
 		},
 	}
 	svc := NewService(ms)
@@ -685,9 +685,9 @@ func TestResolveConcentrationSave_SuccessIsNoop(t *testing.T) {
 func TestResolveConcentrationSave_WrongSourceIsNoop(t *testing.T) {
 	zoneCleanupCalled := false
 	ms := &mockStore{
-		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) (int64, error) {
 			zoneCleanupCalled = true
-			return nil
+			return 0, nil
 		},
 	}
 	svc := NewService(ms)
@@ -729,9 +729,9 @@ func TestApplyCondition_AutoBreaksConcentration_OnIncapacitation(t *testing.T) {
 		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
 			return []refdata.Combatant{}, nil
 		},
-		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) (int64, error) {
 			zonesDeletedForCombatant = id
-			return nil
+			return 0, nil
 		},
 		clearCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) error {
 			clearedConcCombatant = id
@@ -787,9 +787,9 @@ func TestApplyCondition_NonIncapacitatingDoesNotBreakConcentration(t *testing.T)
 		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
 			return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, Conditions: arg.Conditions, DisplayName: target.DisplayName}, nil
 		},
-		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) (int64, error) {
 			zoneCleanupCalled = true
-			return nil
+			return 0, nil
 		},
 		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
 			return refdata.GetCombatantConcentrationRow{
@@ -894,9 +894,9 @@ func TestBreakConcentrationFully(t *testing.T) {
 			conditionUpdates[arg.ID] = arg.Conditions
 			return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, Conditions: arg.Conditions}, nil
 		},
-		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, combID uuid.UUID) error {
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, combID uuid.UUID) (int64, error) {
 			zonesDeletedForCombatID = combID
-			return nil
+			return 0, nil
 		},
 		deleteCombatantFn: func(ctx context.Context, id uuid.UUID) error {
 			deletedCombatantIDs = append(deletedCombatantIDs, id)
@@ -922,6 +922,7 @@ func TestBreakConcentrationFully(t *testing.T) {
 	assert.True(t, result.Broken)
 	assert.Equal(t, 2, result.ConditionsRemoved, "two combatants had spell-sourced invisibility")
 	assert.Equal(t, 1, result.SummonsDismissed)
+	assert.Equal(t, 0, result.ZonesRemoved)
 	assert.Equal(t, casterID, zonesDeletedForCombatID)
 	assert.Equal(t, casterID, clearedCasterID)
 	assert.Contains(t, deletedCombatantIDs, wolf1ID)
@@ -932,13 +933,59 @@ func TestBreakConcentrationFully(t *testing.T) {
 		"💨 Aria lost concentration on Invisibility (failed CON save) — effects ended on 3 targets.",
 		result.ConsolidatedMessage,
 	)
-	// Per-iter-2 user clarification: legacy 🔮 line is no longer emitted
-	// from BreakConcentrationFully.
-	assert.Empty(t, result.PerSourceMessage)
 
 	// Conditions on both targets were cleared.
 	require.Contains(t, conditionUpdates, target1ID)
 	require.Contains(t, conditionUpdates, target2ID)
+}
+
+// TDD Cycle 16 (Phase 118b): when the zone-cleanup query removes >0 rows,
+// the consolidated N counter must include them alongside conditions+summons.
+func TestBreakConcentrationFully_IncludesZonesInN(t *testing.T) {
+	encounterID := uuid.New()
+	casterID := uuid.New()
+	target1ID := uuid.New()
+
+	c1Conds, _ := json.Marshal([]CombatCondition{
+		{Condition: "restrained", SourceCombatantID: casterID.String(), SourceSpell: "web"},
+	})
+
+	ms := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: target1ID, EncounterID: encounterID, Conditions: c1Conds, DisplayName: "Goblin 1"},
+			}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, Conditions: arg.Conditions}, nil
+		},
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, combID uuid.UUID) (int64, error) {
+			return 2, nil
+		},
+		clearCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) error { return nil },
+	}
+
+	svc := NewService(ms)
+	result, err := svc.BreakConcentrationFully(context.Background(), BreakConcentrationFullyInput{
+		EncounterID: encounterID,
+		CasterID:    casterID,
+		CasterName:  "Aria",
+		SpellID:     "web",
+		SpellName:   "Web",
+		Reason:      "failed CON save",
+	})
+	require.NoError(t, err)
+
+	assert.True(t, result.Broken)
+	assert.Equal(t, 1, result.ConditionsRemoved)
+	assert.Equal(t, 0, result.SummonsDismissed)
+	assert.Equal(t, 2, result.ZonesRemoved, "Phase 118b: zone rowcount surfaces in the result")
+
+	// N = 1 condition + 0 summons + 2 zones = 3
+	assert.Equal(t,
+		"💨 Aria lost concentration on Web (failed CON save) — effects ended on 3 targets.",
+		result.ConsolidatedMessage,
+	)
 }
 
 func TestBreakConcentrationFully_ZeroEffects(t *testing.T) {
@@ -951,7 +998,7 @@ func TestBreakConcentrationFully_ZeroEffects(t *testing.T) {
 		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
 			return nil, nil
 		},
-		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, combID uuid.UUID) error { return nil },
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, combID uuid.UUID) (int64, error) { return 0, nil },
 		clearCombatantConcentrationFn:         func(ctx context.Context, id uuid.UUID) error { return nil },
 	}
 	svc := NewService(ms)
@@ -967,6 +1014,7 @@ func TestBreakConcentrationFully_ZeroEffects(t *testing.T) {
 	assert.True(t, result.Broken)
 	assert.Equal(t, 0, result.ConditionsRemoved)
 	assert.Equal(t, 0, result.SummonsDismissed)
+	assert.Equal(t, 0, result.ZonesRemoved)
 	assert.Equal(t,
 		"💨 Aria lost concentration on Bless (voluntary drop) — effects ended on 0 targets.",
 		result.ConsolidatedMessage,
@@ -1191,9 +1239,9 @@ func TestCheckSilenceBreaksConcentration_BreaksWhenInside(t *testing.T) {
 		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
 			return nil, nil
 		},
-		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) (int64, error) {
 			zoneDeleteCalled = true
-			return nil
+			return 0, nil
 		},
 		clearCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) error {
 			clearCalled = true
@@ -1355,7 +1403,7 @@ func TestCreateZone_SilenceFiresHookForConcentratorsInside(t *testing.T) {
 				Dimensions: json.RawMessage(`{"side_ft":20}`),
 			}}, nil
 		},
-		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error { return nil },
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) (int64, error) { return 0, nil },
 		clearCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) error {
 			clearedIDs[id] = true
 			return nil
@@ -1418,7 +1466,7 @@ func TestUpdateCombatantPosition_FiresSilenceHook(t *testing.T) {
 		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
 			return nil, nil
 		},
-		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) error { return nil },
+		deleteConcentrationZonesByCombatantFn: func(ctx context.Context, id uuid.UUID) (int64, error) { return 0, nil },
 		clearCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) error {
 			clearCalled = true
 			return nil

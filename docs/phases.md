@@ -760,7 +760,7 @@
   - Depends on: Phase 2
   - Done when: Test infrastructure in place, CI green, coverage report generated, fixture helpers available.
 
-- [ ] **Phase 118b: Concentration Cleanup Polish (Phase 118 Follow-up)**
+- [x] **Phase 118b: Concentration Cleanup Polish (Phase 118 Follow-up)**
   - Scope: Address non-blocking review items left from Phase 118. (1) Route `OverrideCombatantPosition` (DM forward correction in `internal/combat/dm_dashboard_undo.go`) through `Service.UpdateCombatantPosition` so DM-overridden moves trigger the silence-zone concentration check. (2) Remove `BreakConcentrationFullyResult.PerSourceMessage` (always empty since iter-2 user clarification) and any callers / test assertions referencing it. (3) Make the consolidated `💨` line's N counter include zones removed: switch `db/queries/encounter_zones.sql` `DeleteConcentrationZonesByCombatant` from `:exec` to `:execrows`, surface the integer in `BreakConcentrationFullyResult` (replace the bool `ZonesRemoved`), and include it in the N count in `FormatConcentrationCleanupLog`. Update tests accordingly.
   - Depends on: Phase 118
   - Done when: DM-overridden moves into a silence zone break a concentrating caster (integration test); `PerSourceMessage` removed cleanly with no dead references; `make cover-check` green; the consolidated log line's N reflects conditions + summons + zones; existing Phase 118 integration tests still pass.

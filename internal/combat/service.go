@@ -119,7 +119,7 @@ type Store interface {
 	ListConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) ([]refdata.EncounterZone, error)
 	DeleteEncounterZone(ctx context.Context, id uuid.UUID) error
 	DeleteEncounterZonesByEncounterID(ctx context.Context, encounterID uuid.UUID) error
-	DeleteConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) error
+	DeleteConcentrationZonesByCombatant(ctx context.Context, sourceCombatantID uuid.UUID) (int64, error)
 	DeleteExpiredZones(ctx context.Context, arg refdata.DeleteExpiredZonesParams) error
 	UpdateEncounterZoneOrigin(ctx context.Context, arg refdata.UpdateEncounterZoneOriginParams) (refdata.EncounterZone, error)
 	UpdateEncounterZoneTriggeredThisRound(ctx context.Context, arg refdata.UpdateEncounterZoneTriggeredThisRoundParams) (refdata.EncounterZone, error)

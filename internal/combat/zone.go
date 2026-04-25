@@ -175,8 +175,9 @@ func (s *Service) DeleteZone(ctx context.Context, zoneID uuid.UUID) error {
 	return s.store.DeleteEncounterZone(ctx, zoneID)
 }
 
-// CleanupConcentrationZones deletes all concentration zones for a combatant.
-func (s *Service) CleanupConcentrationZones(ctx context.Context, combatantID uuid.UUID) error {
+// CleanupConcentrationZones deletes all concentration zones for a combatant
+// and returns the number of rows deleted.
+func (s *Service) CleanupConcentrationZones(ctx context.Context, combatantID uuid.UUID) (int64, error) {
 	return s.store.DeleteConcentrationZonesByCombatant(ctx, combatantID)
 }
 
