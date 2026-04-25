@@ -218,12 +218,20 @@ func (t *TurnTimer) AutoResolveTurn(ctx context.Context, turnID uuid.UUID, rolle
 		}
 		roll := rollResult.Total
 		success := roll >= int(ps.Dc)
-		if _, err := t.store.UpdatePendingSaveResult(ctx, refdata.UpdatePendingSaveResultParams{
+		resolved, err := t.store.UpdatePendingSaveResult(ctx, refdata.UpdatePendingSaveResultParams{
 			ID:         ps.ID,
 			RollResult: sql.NullInt32{Int32: int32(roll), Valid: true},
 			Success:    sql.NullBool{Bool: success, Valid: true},
-		}); err != nil {
+		})
+		if err != nil {
 			return nil, fmt.Errorf("updating pending save result: %w", err)
+		}
+		// Phase 118: hand resolved concentration save rows to the registered
+		// resolver so the cleanup pipeline runs on failures.
+		if t.concentrationResolver != nil && resolved.Source == ConcentrationSaveSource {
+			if rerr := t.concentrationResolver(ctx, resolved); rerr != nil {
+				return nil, fmt.Errorf("resolving concentration save: %w", rerr)
+			}
 		}
 		outcome := "FAIL"
 		if success {

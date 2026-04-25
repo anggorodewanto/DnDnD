@@ -445,7 +445,7 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	// stripped (not just zones).
 	var cleanupResult BreakConcentrationFullyResult
 	if concentration.DroppedPrevious {
-		previousID, _ := s.lookupCasterConcentrationID(ctx, caster.ID)
+		previousID := s.lookupCasterConcentrationID(ctx, caster.ID)
 		c, cerr := s.BreakConcentrationFully(ctx, BreakConcentrationFullyInput{
 			EncounterID: caster.EncounterID,
 			CasterID:    caster.ID,
@@ -568,21 +568,20 @@ func (s *Service) ResolveAoESaves(ctx context.Context, input AoEDamageInput, rol
 			damage = 0 // special case: DM resolution needed
 		}
 
-		// 4. Apply damage to HP
+		// 4. Apply damage to HP via centralized helper which also enqueues
+		// concentration saves and applies unconscious-at-0-HP per Phase 118.
+		// PCs at 0 HP go unconscious + dying (still alive); NPCs die outright.
 		hpBefore := int(combatant.HpCurrent)
 		newHP := int(combatant.HpCurrent) - damage
 		if newHP < 0 {
 			newHP = 0
 		}
 		isAlive := newHP > 0
+		if newHP == 0 && !combatant.IsNpc {
+			isAlive = true
+		}
 
-		_, err = s.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
-			ID:        combatant.ID,
-			HpCurrent: int32(newHP),
-			TempHp:    combatant.TempHp,
-			IsAlive:   isAlive,
-		})
-		if err != nil {
+		if _, err := s.applyDamageHP(ctx, combatant.EncounterID, combatant.ID, combatant.HpCurrent, int32(newHP), combatant.TempHp, isAlive); err != nil {
 			return AoEDamageResult{}, fmt.Errorf("updating HP for %s: %w", combatant.DisplayName, err)
 		}
 

@@ -142,7 +142,32 @@ func (s *Service) CreateZone(ctx context.Context, input CreateZoneInput) (ZoneIn
 		return ZoneInfo{}, fmt.Errorf("creating encounter zone: %w", err)
 	}
 
+	// Phase 118: Silence zones break concentration for any concentrating
+	// caster (V/S spell) standing in the new zone's footprint at creation
+	// time. Movement-based entry is handled separately in
+	// Service.UpdateCombatantPosition.
+	if input.ZoneType == "silence" {
+		if err := s.breakSilenceCaughtConcentrators(ctx, input.EncounterID); err != nil {
+			return ZoneInfo{}, fmt.Errorf("processing silence-zone concentration breaks: %w", err)
+		}
+	}
+
 	return zoneInfoFromModel(zone), nil
+}
+
+// breakSilenceCaughtConcentrators iterates every combatant in the encounter
+// and runs CheckSilenceBreaksConcentration. Used by the zone-creation hook.
+func (s *Service) breakSilenceCaughtConcentrators(ctx context.Context, encounterID uuid.UUID) error {
+	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return fmt.Errorf("listing combatants: %w", err)
+	}
+	for _, c := range combatants {
+		if _, err := s.CheckSilenceBreaksConcentration(ctx, c.ID); err != nil {
+			return fmt.Errorf("silence check for %s: %w", c.DisplayName, err)
+		}
+	}
+	return nil
 }
 
 // DeleteZone removes a zone by ID (DM manual removal).

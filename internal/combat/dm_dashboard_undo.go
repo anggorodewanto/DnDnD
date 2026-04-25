@@ -182,10 +182,20 @@ func (h *DMDashboardHandler) dispatchUndo(ctx context.Context, c refdata.Combata
 		if bs.IsAlive != nil {
 			isAlive = *bs.IsAlive
 		}
-		if _, err := h.svc.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
-			ID: c.ID, HpCurrent: hpCurrent, TempHp: tempHp, IsAlive: isAlive,
-		}); err != nil {
-			return false, fmt.Errorf("restoring HP: %w", err)
+		// Phase 118: an undo that decreases HP (e.g. undoing a heal) is a
+		// damage event; route through applyDamageHP so concentration save
+		// + unconscious hooks fire. Pure restore-to-higher (undoing a
+		// damage) skips the hooks.
+		if hpCurrent < c.HpCurrent {
+			if _, err := h.svc.applyDamageHP(ctx, c.EncounterID, c.ID, c.HpCurrent, hpCurrent, tempHp, isAlive); err != nil {
+				return false, fmt.Errorf("restoring HP: %w", err)
+			}
+		} else {
+			if _, err := h.svc.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
+				ID: c.ID, HpCurrent: hpCurrent, TempHp: tempHp, IsAlive: isAlive,
+			}); err != nil {
+				return false, fmt.Errorf("restoring HP: %w", err)
+			}
 		}
 		applied = true
 	}
@@ -348,9 +358,17 @@ func (h *DMDashboardHandler) OverrideCombatantHP(w http.ResponseWriter, r *http.
 			}
 			before, _ := snapshotCombatantState(c)
 			isAlive := req.HpCurrent > 0
-			updated, err := h.svc.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
-				ID: combatantID, HpCurrent: req.HpCurrent, TempHp: req.TempHp, IsAlive: isAlive,
-			})
+			// Phase 118: when the override decreases HP, route through
+			// applyDamageHP so concentration save / unconscious hooks fire.
+			// For non-decrease (heal / restore) use the raw store call.
+			var updated refdata.Combatant
+			if req.HpCurrent < c.HpCurrent {
+				updated, err = h.svc.applyDamageHP(ctx, encounterID, combatantID, c.HpCurrent, req.HpCurrent, req.TempHp, isAlive)
+			} else {
+				updated, err = h.svc.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
+					ID: combatantID, HpCurrent: req.HpCurrent, TempHp: req.TempHp, IsAlive: isAlive,
+				})
+			}
 			if err != nil {
 				return err
 			}

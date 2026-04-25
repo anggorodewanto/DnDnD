@@ -471,6 +471,12 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			timerNotifier = noopNotifier{}
 		}
 		timer := combat.NewTurnTimer(combatStore, timerNotifier, 30*time.Second)
+		// Phase 118: wire the concentration save resolver so failed CON
+		// saves rolled by AutoResolveTurn fire the cleanup pipeline.
+		timer.SetConcentrationResolver(func(ctx context.Context, ps refdata.PendingSafe) error {
+			_, err := combatSvc.ResolveConcentrationSave(ctx, ps)
+			return err
+		})
 		if err := timer.PollOnce(ctx); err != nil {
 			logger.Error("startup stale-turn scan failed", "error", err)
 		} else {

@@ -263,13 +263,10 @@ func (s *Service) TurnUndead(ctx context.Context, cmd TurnUndeadCommand, roller 
 			// Check Destroy Undead
 			creatureCR := ParseCR(creature.Cr)
 			if destroyActive && creatureCR <= destroyCR {
-				// Destroy the undead
+				// Destroy the undead. Drives through applyDamageHP so the
+				// Phase 118 hooks fire (concentration save, unconscious-at-0).
 				tr.Destroyed = true
-				if _, err := s.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
-					ID:        c.ID,
-					HpCurrent: 0,
-					IsAlive:   false,
-				}); err != nil {
+				if _, err := s.applyDamageHP(ctx, c.EncounterID, c.ID, c.HpCurrent, 0, c.TempHp, false); err != nil {
 					return TurnUndeadResult{}, fmt.Errorf("destroying undead %s: %w", c.DisplayName, err)
 				}
 				logParts = append(logParts, fmt.Sprintf("✝️ %s (CR %s) is destroyed by Turn Undead!", c.DisplayName, creature.Cr))

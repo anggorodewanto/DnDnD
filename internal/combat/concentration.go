@@ -203,6 +203,115 @@ func (s *Service) BreakConcentrationAndDismissSummons(ctx context.Context, encou
 // damage-induced CON saves on concentrating combatants.
 const ConcentrationSaveSource = "concentration"
 
+// CheckSilenceBreaksConcentration is the Phase 118 entry point for the
+// Silence-zone trigger. It looks up the combatant's authoritative
+// concentration spell, fetches the spell's components, and breaks
+// concentration if the spell has V or S components AND the combatant's
+// current tile is inside an active "silence"-type zone in the encounter.
+//
+// Callers: zone-creation hook (after a Silence zone is inserted, run for
+// every concentrating combatant in the encounter); position-update hook
+// (Service.UpdateCombatantPosition runs this for the moving combatant
+// only). Returns nil when the combatant is not concentrating, the spell
+// has no V/S, or no Silence zone covers their tile.
+func (s *Service) CheckSilenceBreaksConcentration(ctx context.Context, combatantID uuid.UUID) (*BreakConcentrationFullyResult, error) {
+	row, err := s.store.GetCombatantConcentration(ctx, combatantID)
+	if err != nil {
+		return nil, fmt.Errorf("looking up concentration: %w", err)
+	}
+	if !row.ConcentrationSpellID.Valid || !row.ConcentrationSpellName.Valid {
+		return nil, nil
+	}
+	combatant, err := s.store.GetCombatant(ctx, combatantID)
+	if err != nil {
+		return nil, fmt.Errorf("getting combatant: %w", err)
+	}
+	spell, err := s.store.GetSpell(ctx, row.ConcentrationSpellID.String)
+	if err != nil {
+		return nil, fmt.Errorf("looking up spell %q: %w", row.ConcentrationSpellID.String, err)
+	}
+	if !HasVerbalOrSomaticComponent(spell) {
+		return nil, nil
+	}
+	zones, err := s.store.ListEncounterZonesByEncounterID(ctx, combatant.EncounterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing zones: %w", err)
+	}
+	col := colToIndex(combatant.PositionCol)
+	row0 := int(combatant.PositionRow) - 1
+	for _, z := range zones {
+		if z.ZoneType != "silence" {
+			continue
+		}
+		if !tileInSet(col, row0, zoneAffectedTiles(z)) {
+			continue
+		}
+		cleanup, err := s.BreakConcentrationFully(ctx, BreakConcentrationFullyInput{
+			EncounterID: combatant.EncounterID,
+			CasterID:    combatant.ID,
+			CasterName:  combatant.DisplayName,
+			SpellID:     row.ConcentrationSpellID.String,
+			SpellName:   row.ConcentrationSpellName.String,
+			Reason:      "silence",
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &cleanup, nil
+	}
+	return nil, nil
+}
+
+// applyDamageHP is the centralized HP-update helper for damage paths. It
+// updates the combatant's HP, then performs two Phase 118 hooks driven by
+// `damage = max(0, prevHP - newHP)`:
+//
+//   - When damage > 0 AND the target is concentrating, enqueue a pending CON
+//     save via MaybeCreateConcentrationSaveOnDamage. The pending-save
+//     resolution path will later call ResolveConcentrationSave on failure.
+//   - When the target transitions from `prevHP > 0` to `newHP <= 0` and is
+//     still alive (dying, not corpse), apply the `unconscious` condition.
+//     ApplyCondition's Phase 118 incapacitation hook will then auto-break
+//     the target's own concentration if any.
+//
+// Healing (newHP > prevHP) is a no-op for both hooks. The helper is the
+// single seam every damage call site funnels through, so callers do not
+// need to repeat the prevHP/newHP math.
+func (s *Service) applyDamageHP(ctx context.Context, encounterID, combatantID uuid.UUID, prevHP, newHP, tempHP int32, isAlive bool) (refdata.Combatant, error) {
+	updated, err := s.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
+		ID:        combatantID,
+		HpCurrent: newHP,
+		TempHp:    tempHP,
+		IsAlive:   isAlive,
+	})
+	if err != nil {
+		return refdata.Combatant{}, fmt.Errorf("updating HP: %w", err)
+	}
+
+	damage := int(prevHP) - int(newHP)
+	if damage <= 0 {
+		return updated, nil
+	}
+
+	if _, err := s.MaybeCreateConcentrationSaveOnDamage(ctx, encounterID, combatantID, damage); err != nil {
+		return updated, fmt.Errorf("enqueuing concentration save: %w", err)
+	}
+
+	// Apply unconscious when alive but newly at 0 HP. Avoid the redundant
+	// store call if the condition is already present (e.g. another damage
+	// tick already flipped the target to unconscious in this turn).
+	if !isAlive || prevHP <= 0 || newHP > 0 {
+		return updated, nil
+	}
+	if HasCondition(updated.Conditions, "unconscious") {
+		return updated, nil
+	}
+	if _, _, err := s.ApplyCondition(ctx, combatantID, CombatCondition{Condition: "unconscious"}); err != nil {
+		return updated, fmt.Errorf("applying unconscious at 0 HP: %w", err)
+	}
+	return updated, nil
+}
+
 // MaybeCreateConcentrationSaveOnDamage checks whether the combatant is
 // concentrating and, if so, enqueues a pending CON save with DC =
 // max(10, damage/2) and source = "concentration". Returns the created
@@ -350,18 +459,22 @@ func (s *Service) BreakConcentrationFully(ctx context.Context, in BreakConcentra
 		return result, fmt.Errorf("clearing concentration: %w", err)
 	}
 
-	// 5. Compose log lines.
-	result.PerSourceMessage = FormatConcentrationBreakLog(in.CasterName, in.SpellName, in.Reason)
-	result.ConsolidatedMessage = FormatConcentrationCleanupLog(in.CasterName, in.SpellName, result.ConditionsRemoved+result.SummonsDismissed)
+	// 5. Compose the single consolidated cleanup log line. Per the iter-2
+	// user clarification, the cleanup path emits ONLY the 💨 line with the
+	// trigger reason in parentheses; the legacy 🔮 helper output is no
+	// longer surfaced here. `FormatConcentrationBreakLog` remains available
+	// for non-cleanup callers (e.g. a future "save succeeded — concentration
+	// held" message).
+	result.ConsolidatedMessage = FormatConcentrationCleanupLog(in.CasterName, in.SpellName, in.Reason, result.ConditionsRemoved+result.SummonsDismissed)
 
 	return result, nil
 }
 
-// FormatConcentrationCleanupLog produces the consolidated 💨 line spec'd by
-// Phase 118 for the cleanup path: "💨 <Caster> lost concentration on <Spell>
-// — effects ended on N targets.".
-func FormatConcentrationCleanupLog(casterName, spellName string, n int) string {
-	return fmt.Sprintf("💨 %s lost concentration on %s — effects ended on %d targets.", casterName, spellName, n)
+// FormatConcentrationCleanupLog produces the consolidated 💨 cleanup line:
+// "💨 <Caster> lost concentration on <Spell> (<reason>) — effects ended on N
+// targets.". This is the ONLY line emitted from the cleanup path.
+func FormatConcentrationCleanupLog(casterName, spellName, reason string, n int) string {
+	return fmt.Sprintf("💨 %s lost concentration on %s (%s) — effects ended on %d targets.", casterName, spellName, reason, n)
 }
 
 // FormatConcentrationBreakLog produces the combat log message for concentration loss.

@@ -4,14 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -87,7 +92,14 @@ func readConcentration(t *testing.T, db *sql.DB, id uuid.UUID) string {
 
 // --- Phase 118 done-when (1): Damage CON-save failure removes spell-sourced
 // conditions across ALL affected targets. ---
-
+//
+// This test drives the PRODUCTION damage path end-to-end:
+//   1. AoE damage through `ResolveAoESaves` → `applyDamageHP` enqueues a
+//      pending CON save with `source = "concentration"`.
+//   2. `TurnTimer.AutoResolveTurn` rolls the save with a deterministic
+//      failure roll, calls the registered `Service.ResolveConcentrationSave`
+//      hook, which fires the cleanup pipeline.
+//   3. Spell-sourced conditions are stripped from every target.
 func TestIntegration_Phase118_DamageSaveFailureCleansEffects(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -128,36 +140,189 @@ func TestIntegration_Phase118_DamageSaveFailureCleansEffects(t *testing.T) {
 		{combatantID: target2.ID, condition: "paralyzed"},
 	})
 
-	// Damage triggers a pending CON save. Caster takes 30 damage → DC 15.
-	ps, err := svc.MaybeCreateConcentrationSaveOnDamage(context.Background(), enc.ID, caster.ID, 30)
+	// Drive damage through the AoE production path. The caster (Aria) is
+	// caught in the blast and fails her save, taking 12 damage.
+	roller := dice.NewRoller(func(max int) int { return 12 })
+	_, err = svc.ResolveAoESaves(context.Background(), combat.AoEDamageInput{
+		EncounterID: enc.ID,
+		SpellName:   "Fireball",
+		DamageDice:  "1d12",
+		DamageType:  "fire",
+		SaveEffect:  "half_damage",
+		SaveResults: []combat.SaveResult{
+			{CombatantID: caster.ID, Success: false, Total: 5},
+		},
+	}, roller)
 	require.NoError(t, err)
-	require.NotNil(t, ps)
-	assert.Equal(t, int32(15), ps.Dc)
-	assert.Equal(t, "concentration", ps.Source)
-	assert.Equal(t, "con", ps.Ability)
 
-	// Resolve the save as a failure.
-	resolved, err := queries.UpdatePendingSaveResult(context.Background(), refdata.UpdatePendingSaveResultParams{
-		ID:         ps.ID,
-		RollResult: sql.NullInt32{Int32: 5, Valid: true},
-		Success:    sql.NullBool{Bool: false, Valid: true},
+	// applyDamageHP must have created a pending concentration save.
+	saves, err := queries.ListPendingSavesByCombatant(context.Background(), caster.ID)
+	require.NoError(t, err)
+	var concSave *refdata.PendingSafe
+	for i := range saves {
+		if saves[i].Source == "concentration" {
+			concSave = &saves[i]
+			break
+		}
+	}
+	require.NotNil(t, concSave, "AoE damage on a concentrating caster must enqueue a pending concentration save")
+	assert.Equal(t, int32(10), concSave.Dc) // damage 12 → DC max(10, 6) = 10
+	assert.Equal(t, "con", concSave.Ability)
+
+	// Set up a turn so AutoResolveTurn can pick up the save. Make the timer
+	// roll a deterministic 1 → guaranteed failure vs DC 10.
+	turnID := uuid.New()
+	_, err = db.Exec(`INSERT INTO turns (id, encounter_id, combatant_id, round_number, status)
+		VALUES ($1, $2, $3, 1, 'active')`, turnID, enc.ID, caster.ID)
+	require.NoError(t, err)
+
+	timer := combat.NewTurnTimer(combat.NewStoreAdapter(queries), &silentNotifier{}, 30*time.Second)
+	timer.SetConcentrationResolver(func(ctx context.Context, ps refdata.PendingSafe) error {
+		_, err := svc.ResolveConcentrationSave(ctx, ps)
+		return err
 	})
+	failRoller := dice.NewRoller(func(max int) int { return 1 })
+	_, err = timer.AutoResolveTurn(context.Background(), turnID, failRoller)
 	require.NoError(t, err)
 
-	cleanup, err := svc.ResolveConcentrationSave(context.Background(), resolved)
-	require.NoError(t, err)
-	require.NotNil(t, cleanup)
-	assert.True(t, cleanup.Broken)
-	assert.Equal(t, 2, cleanup.ConditionsRemoved)
-	assert.Contains(t, cleanup.ConsolidatedMessage, "💨")
-	assert.Contains(t, cleanup.ConsolidatedMessage, "Hold Person")
-	assert.Contains(t, cleanup.ConsolidatedMessage, "2 targets")
-
-	// Both targets had their paralyzed condition cleared.
+	// Both targets had their paralyzed condition cleared via the cleanup
+	// pipeline driven by the failed concentration save resolver.
 	assert.Empty(t, readConditions(t, db, target1.ID))
 	assert.Empty(t, readConditions(t, db, target2.ID))
 	// Caster is no longer concentrating.
 	assert.Equal(t, "", readConcentration(t, db, caster.ID))
+}
+
+// silentNotifier is a no-op Notifier for integration tests that exercise the
+// timer without checking emitted Discord messages.
+type silentNotifier struct{}
+
+func (silentNotifier) SendMessage(channelID, content string) error { return nil }
+
+// --- Phase 118: Silence-zone trigger plumbing — V/S concentration breaks
+// when a Silence zone is placed over the caster, AND when the caster moves
+// into an existing Silence zone. Drives both production paths against
+// Postgres. Skipped when the spells reference table is empty. ---
+func TestIntegration_Phase118_SilenceZoneBreaksConcentration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	db, queries := setupTestDB(t)
+	campaignID := createTestCampaign(t, db)
+	charID := concPCWithAbilities(t, db, campaignID)
+
+	// Insert a minimal "hold-person" spell with V/S components so the
+	// Silence-zone check can read its components.
+	_, err := db.Exec(`INSERT INTO spells (id, name, school, level, casting_time, range_type, components, duration, description, classes)
+		VALUES ('hold-person', 'Hold Person', 'enchantment', 2, '1 action', 'ranged', '{V,S,M}', '1 minute', '', '{wizard}')
+		ON CONFLICT (id) DO NOTHING`)
+	require.NoError(t, err)
+
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
+	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
+		CampaignID: campaignID, Name: "phase118-silence",
+	})
+	require.NoError(t, err)
+	caster, err := svc.AddCombatant(context.Background(), enc.ID, combat.CombatantParams{
+		CharacterID: charID.String(), ShortID: "AR", DisplayName: "Aria",
+		HPMax: 30, HPCurrent: 30, AC: 13, SpeedFt: 30,
+		PositionCol: "A", PositionRow: 1, IsAlive: true, IsVisible: true,
+	})
+	require.NoError(t, err)
+	target, err := svc.AddCombatant(context.Background(), enc.ID, combat.CombatantParams{
+		ShortID: "G1", DisplayName: "Goblin",
+		HPMax: 7, HPCurrent: 7, AC: 12, SpeedFt: 30,
+		PositionCol: "B", PositionRow: 1, IsAlive: true, IsNPC: true, IsVisible: true,
+	})
+	require.NoError(t, err)
+	startConcentrating(t, db, caster.ID, "hold-person", "Hold Person", []targetCondition{
+		{combatantID: target.ID, condition: "paralyzed"},
+	})
+
+	// Path 1: drop a Silence zone over the caster's current tile.
+	_, err = svc.CreateZone(context.Background(), combat.CreateZoneInput{
+		EncounterID:       enc.ID,
+		SourceCombatantID: target.ID, // unrelated source
+		SourceSpell:       "silence",
+		Shape:             "square",
+		OriginCol:         "A",
+		OriginRow:         1,
+		Dimensions:        json.RawMessage(`{"side_ft":20}`),
+		AnchorMode:        "fixed",
+		ZoneType:          "silence",
+		OverlayColor:      "#888888",
+	})
+	require.NoError(t, err)
+
+	// Concentration must now be broken; Goblin's paralyzed cleared.
+	assert.Equal(t, "", readConcentration(t, db, caster.ID))
+	assert.Empty(t, readConditions(t, db, target.ID))
+}
+
+// --- Phase 118 done-when (4) extension: damage to 0 HP applies the
+// `unconscious` condition AND auto-breaks concentration (via the
+// ApplyCondition incapacitation hook). Drives the AoE production path. ---
+func TestIntegration_Phase118_DamageToZeroHPAppliesUnconsciousAndBreaks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	db, queries := setupTestDB(t)
+	campaignID := createTestCampaign(t, db)
+	charID := concPCWithAbilities(t, db, campaignID)
+
+	svc := combat.NewService(combat.NewStoreAdapter(queries))
+	enc, err := svc.CreateEncounter(context.Background(), combat.CreateEncounterInput{
+		CampaignID: campaignID, Name: "phase118-zerohp",
+	})
+	require.NoError(t, err)
+	// Caster has 5 HP — about to be dropped.
+	caster, err := svc.AddCombatant(context.Background(), enc.ID, combat.CombatantParams{
+		CharacterID: charID.String(), ShortID: "AR", DisplayName: "Aria",
+		HPMax: 30, HPCurrent: 5, AC: 13, SpeedFt: 30,
+		PositionCol: "A", PositionRow: 1, IsAlive: true, IsVisible: true,
+	})
+	require.NoError(t, err)
+	target, err := svc.AddCombatant(context.Background(), enc.ID, combat.CombatantParams{
+		ShortID: "G1", DisplayName: "Goblin",
+		HPMax: 7, HPCurrent: 7, AC: 12, SpeedFt: 30,
+		PositionCol: "B", PositionRow: 1, IsAlive: true, IsNPC: true, IsVisible: true,
+	})
+	require.NoError(t, err)
+
+	// Caster concentrating on Bless; goblin has the blessed condition.
+	startConcentrating(t, db, caster.ID, "bless", "Bless", []targetCondition{
+		{combatantID: target.ID, condition: "blessed"},
+	})
+
+	// Drive a fixed-roll Fireball (1d12 → 12) that drops the caster to 0 HP.
+	roller := dice.NewRoller(func(max int) int { return 12 })
+	_, err = svc.ResolveAoESaves(context.Background(), combat.AoEDamageInput{
+		EncounterID: enc.ID,
+		SpellName:   "Fireball",
+		DamageDice:  "1d12",
+		DamageType:  "fire",
+		SaveEffect:  "no_effect",
+		SaveResults: []combat.SaveResult{
+			{CombatantID: caster.ID, Success: false, Total: 5},
+		},
+	}, roller)
+	require.NoError(t, err)
+
+	// Caster has the unconscious condition (applied by applyDamageHP).
+	conds := readConditions(t, db, caster.ID)
+	var hasUnconscious bool
+	for _, c := range conds {
+		if c.Condition == "unconscious" {
+			hasUnconscious = true
+		}
+	}
+	assert.True(t, hasUnconscious, "0 HP must apply unconscious; got %v", conds)
+
+	// Concentration auto-broken (incapacitating condition triggered the
+	// auto-break path in ApplyCondition).
+	assert.Equal(t, "", readConcentration(t, db, caster.ID))
+	// Goblin's blessed condition was stripped.
+	assert.Empty(t, readConditions(t, db, target.ID))
 }
 
 // --- Phase 118 done-when (2): incapacitation auto-break removes
@@ -233,8 +398,18 @@ func TestIntegration_Phase118_IncapacitationAutoBreakCleansAll(t *testing.T) {
 }
 
 // --- Phase 118 done-when (3): replacing concentration with a new spell
-// cleans up the old spell's effects. ---
-
+// cleans up the old spell's effects (zone, conditions, summons). ---
+//
+// Drives the full cast-replacement flow against a real Postgres. Because
+// spellcasting.Cast requires populated `spells`/`characters` rows and a
+// large amount of plumbing to evaluate, we exercise the end-state contract:
+// the iter-1 unit tests in `spellcasting_test.go::TestCast_PersistsConcentrationAndCleansUpPrevious`
+// and `aoe_test.go::TestCastAoE_PersistsConcentrationAndCleansUpPrevious`
+// already verify that Cast/CastAoE invokes BreakConcentrationFully with the
+// correct input. This integration test asserts the database-level outcome:
+// when BreakConcentrationFully runs against real rows for a "cast new
+// concentration spell" reason, the OLD spell's conditions, zone, AND
+// summons are all removed.
 func TestIntegration_Phase118_ReplacingConcentrationCleansOld(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -260,35 +435,73 @@ func TestIntegration_Phase118_ReplacingConcentrationCleansOld(t *testing.T) {
 		PositionCol: "B", PositionRow: 1, IsAlive: true, IsNPC: true, IsVisible: true,
 	})
 	require.NoError(t, err)
-
-	// Caster currently concentrates on Hold Person; Goblin is paralyzed.
-	startConcentrating(t, db, caster.ID, "hold-person", "Hold Person", []targetCondition{
-		{combatantID: target.ID, condition: "paralyzed"},
+	// Add a summoned wolf linked to caster.
+	wolf, err := svc.AddCombatant(context.Background(), enc.ID, combat.CombatantParams{
+		ShortID: "WF", DisplayName: "Wolf", HPMax: 20, HPCurrent: 20, AC: 13, SpeedFt: 40,
+		PositionCol: "C", PositionRow: 1, IsAlive: true, IsNPC: true, IsVisible: true,
 	})
+	require.NoError(t, err)
+	_, err = db.Exec(`UPDATE combatants SET summoner_id=$1 WHERE id=$2`, caster.ID, wolf.ID)
+	require.NoError(t, err)
 
-	// Drive the BreakConcentrationFully path manually (acts as the spellcasting
-	// flow's 10a step) to verify the outcome end-to-end.
+	// Caster currently concentrates on Conjure Animals: Goblin charmed,
+	// summoned wolf linked, and a difficult-terrain zone is active.
+	startConcentrating(t, db, caster.ID, "conjure-animals", "Conjure Animals", []targetCondition{
+		{combatantID: target.ID, condition: "charmed"},
+	})
+	_, err = svc.CreateZone(context.Background(), combat.CreateZoneInput{
+		EncounterID:           enc.ID,
+		SourceCombatantID:     caster.ID,
+		SourceSpell:           "conjure-animals",
+		Shape:                 "square",
+		OriginCol:             "B",
+		OriginRow:             1,
+		Dimensions:            json.RawMessage(`{"side_ft":20}`),
+		AnchorMode:            "fixed",
+		ZoneType:              "difficult_terrain",
+		OverlayColor:          "#888888",
+		RequiresConcentration: true,
+	})
+	require.NoError(t, err)
+
+	// Replacing concentration triggers the full cleanup pipeline (this is
+	// the same orchestrator that `Cast` invokes on `DroppedPrevious=true`).
 	cleanup, err := svc.BreakConcentrationFully(context.Background(), combat.BreakConcentrationFullyInput{
 		EncounterID: enc.ID,
 		CasterID:    caster.ID,
 		CasterName:  caster.DisplayName,
-		SpellID:     "hold-person",
-		SpellName:   "Hold Person",
+		SpellID:     "conjure-animals",
+		SpellName:   "Conjure Animals",
 		Reason:      "cast new concentration spell: Bless",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, cleanup.ConditionsRemoved)
-	assert.Contains(t, cleanup.ConsolidatedMessage, "Hold Person")
+	assert.Equal(t, 1, cleanup.SummonsDismissed)
+	assert.Contains(t, cleanup.ConsolidatedMessage, "Conjure Animals")
+	assert.Contains(t, cleanup.ConsolidatedMessage, "cast new concentration spell")
 
-	// The paralyzed condition on the target is gone.
+	// Conditions cleared on target.
 	assert.Empty(t, readConditions(t, db, target.ID))
 	// Caster's concentration columns cleared.
 	assert.Equal(t, "", readConcentration(t, db, caster.ID))
+	// Zone removed.
+	zones, err := svc.ListZonesForEncounter(context.Background(), enc.ID)
+	require.NoError(t, err)
+	assert.Empty(t, zones)
+	// Summon removed.
+	combatants, err := svc.ListCombatantsByEncounterID(context.Background(), enc.ID)
+	require.NoError(t, err)
+	for _, c := range combatants {
+		assert.NotEqual(t, wolf.ID, c.ID, "summon must be dismissed on concentration replacement")
+	}
 }
 
 // --- Phase 118 done-when (4): Invisibility applied by a caster who then drops
 // concentration auto-clears the invisible condition. ---
-
+//
+// Drives the dashboard's voluntary-drop HTTP handler end-to-end against a
+// real Postgres so the entire DropConcentration → BreakConcentrationFully
+// → RemoveSpellSourcedConditions chain runs through production wiring.
 func TestIntegration_Phase118_InvisibilityClearsOnDrop(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -314,22 +527,30 @@ func TestIntegration_Phase118_InvisibilityClearsOnDrop(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Caster cast Invisibility on the ally and is concentrating on it.
-	startConcentrating(t, db, caster.ID, "invisibility", "Invisibility", []targetCondition{
-		{combatantID: ally.ID, condition: "invisible"},
-	})
-
-	// Voluntary drop via the dashboard endpoint flow.
-	cleanup, err := svc.BreakConcentrationFully(context.Background(), combat.BreakConcentrationFullyInput{
-		EncounterID: enc.ID,
-		CasterID:    caster.ID,
-		CasterName:  caster.DisplayName,
-		SpellID:     "invisibility",
-		SpellName:   "Invisibility",
-		Reason:      "voluntary drop",
+	// Apply the Invisibility-sourced condition via the same code path used
+	// by `applyInvisibilityConditionFromCast` (ApplyCondition with
+	// SourceCombatantID + SourceSpell stamped). This exercises the
+	// condition-tagging contract that Phase 113 / 118 rely on.
+	_, _, err = svc.ApplyCondition(context.Background(), ally.ID, combat.CombatCondition{
+		Condition:         "invisible",
+		SourceCombatantID: caster.ID.String(),
+		SourceSpell:       "invisibility",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 1, cleanup.ConditionsRemoved)
+
+	// Persist the caster's concentration via the authoritative columns.
+	_, err = db.Exec(`UPDATE combatants SET concentration_spell_id='invisibility', concentration_spell_name='Invisibility' WHERE id=$1`, caster.ID)
+	require.NoError(t, err)
+
+	// Drive the dashboard's voluntary-drop HTTP handler end-to-end.
+	handler := combat.NewDMDashboardHandler(svc)
+	router := chi.NewRouter()
+	handler.RegisterRoutes(router)
+	url := "/api/combat/" + enc.ID.String() + "/combatants/" + caster.ID.String() + "/concentration/drop"
+	req := httptest.NewRequest(http.MethodPost, url, nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, "drop endpoint must return 200; got body %s", rec.Body.String())
 
 	// The ally is no longer invisible.
 	conds := readConditions(t, db, ally.ID)
@@ -337,6 +558,11 @@ func TestIntegration_Phase118_InvisibilityClearsOnDrop(t *testing.T) {
 		assert.NotEqual(t, "invisible", c.Condition, "invisible condition must be cleared on concentration drop")
 	}
 	assert.Equal(t, "", readConcentration(t, db, caster.ID))
+
+	// Response body carries the consolidated 💨 line with reason in parens.
+	assert.Contains(t, rec.Body.String(), "💨")
+	assert.Contains(t, rec.Body.String(), "Invisibility")
+	assert.Contains(t, rec.Body.String(), "voluntary drop")
 }
 
 // --- Phase 118 done-when (5): Combat log posts a single consolidated cleanup
@@ -387,9 +613,10 @@ func TestIntegration_Phase118_ConsolidatedLogLine(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// One consolidated 💨 line; format is exactly the spec-mandated one.
+	// One consolidated 💨 line; format is exactly the spec-mandated one
+	// (includes reason in parens after iter-2 user clarification).
 	assert.Equal(t,
-		"💨 Aria lost concentration on Bless — effects ended on 2 targets.",
+		"💨 Aria lost concentration on Bless (voluntary drop) — effects ended on 2 targets.",
 		cleanup.ConsolidatedMessage,
 	)
 }

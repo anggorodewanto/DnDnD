@@ -338,12 +338,9 @@ func (h *DMDashboardHandler) applyDamageEffect(r *http.Request, targetID uuid.UU
 	}
 	isAlive := hpCurrent > 0
 
-	_, err = h.svc.store.UpdateCombatantHP(r.Context(), refdata.UpdateCombatantHPParams{
-		ID:        targetID,
-		HpCurrent: hpCurrent,
-		TempHp:    tempHP,
-		IsAlive:   isAlive,
-	})
+	// Drive through the centralized helper so Phase 118 hooks fire
+	// (concentration save on damage, unconscious at 0 HP).
+	_, err = h.svc.applyDamageHP(r.Context(), c.EncounterID, targetID, c.HpCurrent, hpCurrent, tempHP, isAlive)
 	return err
 }
 

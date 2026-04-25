@@ -17,12 +17,20 @@ type Notifier interface {
 	SendMessage(channelID, content string) error
 }
 
+// ConcentrationResolverFn fires after a pending CON save with
+// `source = "concentration"` is resolved (success OR failure). The hook
+// inspects the row and triggers the cleanup pipeline only on failure.
+// Wiring is optional: tests for unrelated AutoResolve behavior set no
+// resolver and the hook is skipped.
+type ConcentrationResolverFn func(ctx context.Context, ps refdata.PendingSafe) error
+
 // TurnTimer polls for turn timeouts and sends nudge/warning messages.
 type TurnTimer struct {
-	store    Store
-	notifier Notifier
-	interval time.Duration
-	stopCh   chan struct{}
+	store                  Store
+	notifier               Notifier
+	interval               time.Duration
+	stopCh                 chan struct{}
+	concentrationResolver  ConcentrationResolverFn
 }
 
 // NewTurnTimer creates a new TurnTimer.
@@ -33,6 +41,13 @@ func NewTurnTimer(store Store, notifier Notifier, interval time.Duration) *TurnT
 		interval: interval,
 		stopCh:   make(chan struct{}),
 	}
+}
+
+// SetConcentrationResolver wires the Phase 118 concentration save resolver.
+// Production code passes Service.ResolveConcentrationSave; tests pass a
+// stub. Calling with nil disables the hook.
+func (t *TurnTimer) SetConcentrationResolver(fn ConcentrationResolverFn) {
+	t.concentrationResolver = fn
 }
 
 // Start launches the polling goroutine.

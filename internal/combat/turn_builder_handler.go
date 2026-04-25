@@ -276,7 +276,8 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 		}
 	}
 
-	// Apply accumulated damage
+	// Apply accumulated damage via the centralized Phase 118 helper, which
+	// also enqueues concentration saves and applies unconscious-at-0-HP.
 	for targetID, totalDmg := range damageApplied {
 		target, err := s.store.GetCombatant(ctx, targetID)
 		if err != nil {
@@ -287,12 +288,7 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 			newHP = 0
 		}
 		isAlive := newHP > 0
-		if _, err := s.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
-			ID:        targetID,
-			HpCurrent: newHP,
-			TempHp:    target.TempHp,
-			IsAlive:   isAlive,
-		}); err != nil {
+		if _, err := s.applyDamageHP(ctx, target.EncounterID, targetID, target.HpCurrent, newHP, target.TempHp, isAlive); err != nil {
 			return nil, fmt.Errorf("applying damage to %s: %w", targetID, err)
 		}
 	}

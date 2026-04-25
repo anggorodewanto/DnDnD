@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -575,7 +576,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	// conditions (Hold Person/paralyzed, Web/restrained, Bless, ...) get
 	// stripped, not just the human-readable name.
 	if result.Concentration.DroppedPrevious {
-		previousID, _ := s.lookupCasterConcentrationID(ctx, caster.ID)
+		previousID := s.lookupCasterConcentrationID(ctx, caster.ID)
 		cleanup, cerr := s.BreakConcentrationFully(ctx, BreakConcentrationFullyInput{
 			EncounterID: caster.EncounterID,
 			CasterID:    caster.ID,
@@ -704,18 +705,24 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 // lookupCasterConcentrationID reads the authoritative concentration spell ID
 // from the combatants row. Returns "" when the caster is not concentrating
 // or the column is unset (e.g. concentration was tracked via the legacy
-// `cmd.CurrentConcentration` string only). Errors are swallowed so the
-// downstream cleanup path can still emit a best-effort log line based on the
-// human-readable spell name.
-func (s *Service) lookupCasterConcentrationID(ctx context.Context, casterID uuid.UUID) (string, error) {
+// `cmd.CurrentConcentration` string only). Lookup errors are logged via
+// slog and a "" sentinel is returned so the downstream cleanup path can
+// still emit a best-effort log line based on the human-readable spell name;
+// callers that need stricter error handling should call the underlying
+// store directly.
+func (s *Service) lookupCasterConcentrationID(ctx context.Context, casterID uuid.UUID) string {
 	row, err := s.store.GetCombatantConcentration(ctx, casterID)
 	if err != nil {
-		return "", err
+		slog.WarnContext(ctx, "concentration lookup failed",
+			"caster_id", casterID,
+			"error", err,
+		)
+		return ""
 	}
 	if !row.ConcentrationSpellID.Valid {
-		return "", nil
+		return ""
 	}
-	return row.ConcentrationSpellID.String, nil
+	return row.ConcentrationSpellID.String
 }
 
 // applyInvisibilityConditionFromCast adds an "invisible" condition to the spell's

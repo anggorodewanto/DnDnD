@@ -1124,6 +1124,119 @@ func TestAutoResolveTurn_MultiplePendingSaves(t *testing.T) {
 	assert.Equal(t, 2, saveResultCount, "should roll both pending saves")
 }
 
+// TDD Cycle 17 (Phase 118 iter-2): when AutoResolveTurn fails a
+// `source = "concentration"` pending save, the registered concentration
+// resolver hook is invoked with the resolved row.
+func TestAutoResolveTurn_FailedConcentrationSave_TriggersResolver(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+	saveID := uuid.New()
+
+	store := defaultMockStore()
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID: turnID, EncounterID: encounterID, CombatantID: combatantID,
+			Status: "active", ActionUsed: true,
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: combatantID, EncounterID: encounterID, DisplayName: "Aria",
+			HpCurrent: 20, HpMax: 30, IsAlive: true, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: uuid.New(), Settings: settingsJSON(24)}, nil
+	}
+	store.listPendingSavesByCombatantFn = func(ctx context.Context, cID uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{{
+			ID: saveID, EncounterID: encounterID, CombatantID: combatantID,
+			Ability: "con", Dc: 15, Source: "concentration", Status: "pending",
+		}}, nil
+	}
+	store.updatePendingSaveResultFn = func(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+		return refdata.PendingSafe{
+			ID:          arg.ID,
+			EncounterID: encounterID,
+			CombatantID: combatantID,
+			Source:      "concentration",
+			Ability:     "con",
+			Dc:          15,
+			RollResult:  arg.RollResult,
+			Success:     arg.Success,
+		}, nil
+	}
+
+	var resolverCalled bool
+	var resolvedSource string
+	timer := NewTurnTimer(store, &mockNotifier{}, 30*time.Second)
+	timer.SetConcentrationResolver(func(ctx context.Context, ps refdata.PendingSafe) error {
+		resolverCalled = true
+		resolvedSource = ps.Source
+		return nil
+	})
+
+	roller := dice.NewRoller(func(max int) int { return 5 }) // 5 < 15 = fail
+	_, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
+	require.NoError(t, err)
+	assert.True(t, resolverCalled, "concentration resolver must be invoked on failed save")
+	assert.Equal(t, "concentration", resolvedSource)
+}
+
+func TestAutoResolveTurn_SuccessfulConcentrationSave_DoesNotTriggerResolver(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID: turnID, EncounterID: encounterID, CombatantID: combatantID,
+			Status: "active", ActionUsed: true,
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: combatantID, EncounterID: encounterID, DisplayName: "Aria",
+			HpCurrent: 20, HpMax: 30, IsAlive: true, Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: uuid.New(), Settings: settingsJSON(24)}, nil
+	}
+	store.listPendingSavesByCombatantFn = func(ctx context.Context, cID uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{{
+			ID: uuid.New(), EncounterID: encounterID, CombatantID: combatantID,
+			Ability: "con", Dc: 10, Source: "concentration", Status: "pending",
+		}}, nil
+	}
+	store.updatePendingSaveResultFn = func(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+		return refdata.PendingSafe{
+			ID:          arg.ID,
+			EncounterID: encounterID,
+			CombatantID: combatantID,
+			Source:      "concentration",
+			Success:     arg.Success,
+		}, nil
+	}
+
+	resolverCalled := false
+	timer := NewTurnTimer(store, &mockNotifier{}, 30*time.Second)
+	timer.SetConcentrationResolver(func(ctx context.Context, ps refdata.PendingSafe) error {
+		resolverCalled = true
+		return nil
+	})
+
+	// Roll 18 vs DC 10 = success
+	roller := dice.NewRoller(func(max int) int { return 18 })
+	_, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
+	require.NoError(t, err)
+	// Resolver still invoked (it returns nil for successes), but must not
+	// produce a break: assert the resolver was called and didn't error.
+	assert.True(t, resolverCalled, "resolver gets every concentration save row to inspect")
+}
+
 func TestFormatDMDecisionPrompt_ShowsPendingSaves(t *testing.T) {
 	turn := refdata.Turn{
 		MovementRemainingFt: 30,

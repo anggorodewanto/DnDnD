@@ -433,6 +433,11 @@ func (s *Service) UpdateCombatantPosition(ctx context.Context, id uuid.UUID, col
 	if err != nil {
 		return refdata.Combatant{}, err
 	}
+	// Phase 118: if the moving combatant is a concentrating caster with a
+	// V/S spell and the new tile is inside a Silence zone, break.
+	if _, serr := s.CheckSilenceBreaksConcentration(ctx, id); serr != nil {
+		return refdata.Combatant{}, fmt.Errorf("silence check on move: %w", serr)
+	}
 	s.publish(ctx, c.EncounterID)
 	return c, nil
 }
