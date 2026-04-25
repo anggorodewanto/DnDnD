@@ -11,6 +11,11 @@ concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Opt into Node.js 24 for JavaScript actions ahead of the 2026-06-02 default.
+  # Silences the Node 20 deprecation warning on actions/checkout, setup-go, upload-artifact.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   test:
     name: build & test (Go ${{ matrix.go-version }})
