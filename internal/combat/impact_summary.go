@@ -28,8 +28,8 @@ func (s *Service) GetImpactSummary(ctx context.Context, encounterID uuid.UUID, c
 	}
 
 	logs, err := s.store.ListActionLogSinceTurn(ctx, refdata.ListActionLogSinceTurnParams{
-		EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
-		TargetID:    uuid.NullUUID{UUID: combatantID, Valid: true},
+		EncounterID: nullableUUID(encounterID),
+		TargetID:    nullableUUID(combatantID),
 		CreatedAt:   lastTurn.CompletedAt.Time,
 	})
 	if err != nil {

@@ -74,7 +74,7 @@ func (h *DMDashboardHandler) UndoLastAction(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	logs, err := h.svc.store.ListActionLogByTurnID(r.Context(), uuid.NullUUID{UUID: turn.ID, Valid: true})
+	logs, err := h.svc.store.ListActionLogByTurnID(r.Context(), nullableUUID(turn.ID))
 	if err != nil {
 		http.Error(w, "failed to list action log", http.StatusInternalServerError)
 		return

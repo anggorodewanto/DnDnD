@@ -48,7 +48,7 @@ type ActionLogViewerEntry struct {
 
 // ListActionLogForViewer returns filtered+sorted enriched action log entries for an encounter.
 func (s *Service) ListActionLogForViewer(ctx context.Context, encounterID uuid.UUID, filter ActionLogFilter) ([]ActionLogViewerEntry, error) {
-	rows, err := s.store.ListActionLogWithRounds(ctx, uuid.NullUUID{UUID: encounterID, Valid: true})
+	rows, err := s.store.ListActionLogWithRounds(ctx, nullableUUID(encounterID))
 	if err != nil {
 		return nil, err
 	}
