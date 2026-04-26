@@ -737,6 +737,51 @@ func TestUndoLastAction_UnknownActionType(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 }
 
+// --- applyUndo: invalid ActorID (NULL) returns 422 without calling GetCombatant ---
+//
+// Covers the early-return at dm_dashboard_undo.go:133 — an action_log row whose
+// ActorID is a NULL uuid.NullUUID has no combatant to restore against, so
+// applyUndo wraps errUnknownActionType and the HTTP handler maps that to 422.
+// The test also asserts GetCombatant was never called.
+func TestUndoLastAction_InvalidActorID(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+
+	logs := []refdata.ActionLog{
+		{
+			ID:          uuid.New(),
+			TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+			ActionType:  "damage",
+			ActorID:     uuid.NullUUID{Valid: false}, // NULL actor — the branch under test
+			BeforeState: json.RawMessage(`{"hp_current":10}`),
+		},
+	}
+
+	getCombatantCalled := false
+	store := &mockStore{
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: encounterID}, nil
+		},
+		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
+			return logs, nil
+		},
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			getCombatantCalled = true
+			return refdata.Combatant{}, nil
+		},
+	}
+
+	r := newDMDashboardRouterWithPoster(store, &fakeCombatLogPoster{})
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/undo-last-action", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	assert.Contains(t, w.Body.String(), "undo target has no actor")
+	assert.False(t, getCombatantCalled, "GetCombatant must not be called when ActorID is invalid")
+}
+
 // --- Iteration 2: error-path coverage to push dm_dashboard_undo.go above 90% ---
 
 // errStore is a sentinel store error reused throughout the error-path tests.
