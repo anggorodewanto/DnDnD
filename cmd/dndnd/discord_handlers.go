@@ -358,7 +358,9 @@ func (a *recapServiceAdapter) GetEncounter(ctx context.Context, id uuid.UUID) (r
 }
 
 func (a *recapServiceAdapter) ListActionLogWithRounds(ctx context.Context, encounterID uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
-	return a.queries.ListActionLogWithRounds(ctx, encounterID)
+	// Phase 118c: action_log.encounter_id is nullable at the sqlc layer.
+	// Recap callers always have a real encounter UUID, so wrap as Valid.
+	return a.queries.ListActionLogWithRounds(ctx, uuid.NullUUID{UUID: encounterID, Valid: true})
 }
 
 func (a *recapServiceAdapter) GetMostRecentCompletedEncounter(ctx context.Context, campaignID uuid.UUID) (refdata.Encounter, error) {

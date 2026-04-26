@@ -107,7 +107,7 @@ func TestUndoLastAction_NoActionsThisTurn(t *testing.T) {
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{ID: turnID, EncounterID: encounterID}, nil
 		},
-		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 			return nil, nil
 		},
 	}
@@ -133,10 +133,10 @@ func TestUndoLastAction_RestoresHP(t *testing.T) {
 	logs := []refdata.ActionLog{
 		{
 			ID:          uuid.New(),
-			TurnID:      turnID,
-			EncounterID: encounterID,
+			TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
 			ActionType:  "damage",
-			ActorID:     actorID,
+			ActorID:     uuid.NullUUID{UUID: actorID, Valid: true},
 			BeforeState: beforeState,
 		},
 	}
@@ -149,7 +149,7 @@ func TestUndoLastAction_RestoresHP(t *testing.T) {
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{ID: turnID, EncounterID: encounterID}, nil
 		},
-		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 			return logs, nil
 		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
@@ -179,7 +179,7 @@ func TestUndoLastAction_RestoresHP(t *testing.T) {
 
 	require.Len(t, createdLogs, 1)
 	assert.Equal(t, "dm_override_undo", createdLogs[0].ActionType)
-	assert.Equal(t, actorID, createdLogs[0].ActorID)
+	assert.Equal(t, uuid.NullUUID{UUID: actorID, Valid: true}, createdLogs[0].ActorID)
 
 	calls := poster.Calls()
 	require.Len(t, calls, 1)
@@ -202,19 +202,19 @@ func TestUndoLastAction_SkipsPreviousUndoEntries(t *testing.T) {
 		// older damage action
 		{
 			ID:          uuid.New(),
-			TurnID:      turnID,
-			EncounterID: encounterID,
+			TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
 			ActionType:  "damage",
-			ActorID:     actorID,
+			ActorID:     uuid.NullUUID{UUID: actorID, Valid: true},
 			BeforeState: beforeState,
 		},
 		// most recent is itself a previous undo
 		{
 			ID:          uuid.New(),
-			TurnID:      turnID,
-			EncounterID: encounterID,
+			TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
 			ActionType:  "dm_override_undo",
-			ActorID:     actorID,
+			ActorID:     uuid.NullUUID{UUID: actorID, Valid: true},
 			BeforeState: json.RawMessage(`{}`),
 		},
 	}
@@ -224,7 +224,7 @@ func TestUndoLastAction_SkipsPreviousUndoEntries(t *testing.T) {
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{ID: turnID, EncounterID: encounterID}, nil
 		},
-		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 			return logs, nil
 		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
@@ -262,10 +262,10 @@ func TestUndoLastAction_RestoresPosition(t *testing.T) {
 	logs := []refdata.ActionLog{
 		{
 			ID:          uuid.New(),
-			TurnID:      turnID,
-			EncounterID: encounterID,
+			TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
 			ActionType:  "move",
-			ActorID:     actorID,
+			ActorID:     uuid.NullUUID{UUID: actorID, Valid: true},
 			BeforeState: beforeState,
 		},
 	}
@@ -276,7 +276,7 @@ func TestUndoLastAction_RestoresPosition(t *testing.T) {
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{ID: turnID, EncounterID: encounterID}, nil
 		},
-		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 			return logs, nil
 		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
@@ -316,10 +316,10 @@ func TestUndoLastAction_RestoresConditions(t *testing.T) {
 	logs := []refdata.ActionLog{
 		{
 			ID:          uuid.New(),
-			TurnID:      turnID,
-			EncounterID: encounterID,
+			TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
 			ActionType:  "condition_change",
-			ActorID:     actorID,
+			ActorID:     uuid.NullUUID{UUID: actorID, Valid: true},
 			BeforeState: beforeState,
 		},
 	}
@@ -329,7 +329,7 @@ func TestUndoLastAction_RestoresConditions(t *testing.T) {
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{ID: turnID, EncounterID: encounterID}, nil
 		},
-		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 			return logs, nil
 		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
@@ -662,8 +662,11 @@ func TestUndoLastAction_NoPosterAndNoLockSucceeds(t *testing.T) {
 	turnID := uuid.New()
 	actorID := uuid.New()
 	logs := []refdata.ActionLog{{
-		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
-		ActionType: "damage", ActorID: actorID,
+		ID:          uuid.New(),
+		TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+		EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+		ActionType:  "damage",
+		ActorID:     uuid.NullUUID{UUID: actorID, Valid: true},
 		BeforeState: json.RawMessage(`{"hp_current":10}`),
 	}}
 
@@ -671,7 +674,7 @@ func TestUndoLastAction_NoPosterAndNoLockSucceeds(t *testing.T) {
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{ID: turnID}, nil
 		},
-		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 			return logs, nil
 		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
@@ -704,8 +707,11 @@ func TestUndoLastAction_UnknownActionType(t *testing.T) {
 
 	logs := []refdata.ActionLog{
 		{
-			ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
-			ActionType: "weird_unknown_type", ActorID: actorID,
+			ID:          uuid.New(),
+			TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+			ActionType:  "weird_unknown_type",
+			ActorID:     uuid.NullUUID{UUID: actorID, Valid: true},
 			BeforeState: json.RawMessage(`{}`),
 		},
 	}
@@ -714,7 +720,7 @@ func TestUndoLastAction_UnknownActionType(t *testing.T) {
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{ID: turnID, EncounterID: encounterID}, nil
 		},
-		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+		listActionLogByTurnIDFn: func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 			return logs, nil
 		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
@@ -751,12 +757,15 @@ func TestWithTurnLock_LockAcquireError_UndoReturns500(t *testing.T) {
 	encounterID := uuid.New()
 	turnID := uuid.New()
 	logs := []refdata.ActionLog{{
-		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
-		ActionType: "damage", ActorID: uuid.New(),
+		ID:          uuid.New(),
+		TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+		EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+		ActionType:  "damage",
+		ActorID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		BeforeState: json.RawMessage(`{"hp_current":10}`),
 	}}
 	store := turnOnlyStore(turnID, encounterID)
-	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 		return logs, nil
 	}
 
@@ -804,7 +813,7 @@ func TestUndoLastAction_ListActionLogError(t *testing.T) {
 	encounterID := uuid.New()
 	turnID := uuid.New()
 	store := turnOnlyStore(turnID, encounterID)
-	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 		return nil, errStoreFake
 	}
 
@@ -822,12 +831,15 @@ func TestUndoLastAction_MalformedBeforeState(t *testing.T) {
 	encounterID := uuid.New()
 	turnID := uuid.New()
 	logs := []refdata.ActionLog{{
-		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
-		ActionType: "damage", ActorID: uuid.New(),
+		ID:          uuid.New(),
+		TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+		EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+		ActionType:  "damage",
+		ActorID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		BeforeState: json.RawMessage(`{not json`),
 	}}
 	store := turnOnlyStore(turnID, encounterID)
-	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 		return logs, nil
 	}
 
@@ -845,12 +857,15 @@ func TestUndoLastAction_GetCombatantError(t *testing.T) {
 	encounterID := uuid.New()
 	turnID := uuid.New()
 	logs := []refdata.ActionLog{{
-		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
-		ActionType: "damage", ActorID: uuid.New(),
+		ID:          uuid.New(),
+		TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+		EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+		ActionType:  "damage",
+		ActorID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		BeforeState: json.RawMessage(`{"hp_current":10}`),
 	}}
 	store := turnOnlyStore(turnID, encounterID)
-	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 		return logs, nil
 	}
 	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
@@ -871,12 +886,15 @@ func TestUndoLastAction_DispatchUpdateHPError(t *testing.T) {
 	encounterID := uuid.New()
 	turnID := uuid.New()
 	logs := []refdata.ActionLog{{
-		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
-		ActionType: "damage", ActorID: uuid.New(),
+		ID:          uuid.New(),
+		TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+		EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+		ActionType:  "damage",
+		ActorID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		BeforeState: json.RawMessage(`{"hp_current":10}`),
 	}}
 	store := turnOnlyStore(turnID, encounterID)
-	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 		return logs, nil
 	}
 	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
@@ -900,12 +918,15 @@ func TestUndoLastAction_DispatchUpdatePositionError(t *testing.T) {
 	encounterID := uuid.New()
 	turnID := uuid.New()
 	logs := []refdata.ActionLog{{
-		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
-		ActionType: "move", ActorID: uuid.New(),
+		ID:          uuid.New(),
+		TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+		EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+		ActionType:  "move",
+		ActorID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		BeforeState: json.RawMessage(`{"position_col":"A","position_row":1}`),
 	}}
 	store := turnOnlyStore(turnID, encounterID)
-	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 		return logs, nil
 	}
 	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
@@ -929,12 +950,15 @@ func TestUndoLastAction_DispatchUpdateConditionsError(t *testing.T) {
 	encounterID := uuid.New()
 	turnID := uuid.New()
 	logs := []refdata.ActionLog{{
-		ID: uuid.New(), TurnID: turnID, EncounterID: encounterID,
-		ActionType: "condition_change", ActorID: uuid.New(),
+		ID:          uuid.New(),
+		TurnID:      uuid.NullUUID{UUID: turnID, Valid: true},
+		EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+		ActionType:  "condition_change",
+		ActorID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		BeforeState: json.RawMessage(`{"conditions":[{"condition":"prone"}]}`),
 	}}
 	store := turnOnlyStore(turnID, encounterID)
-	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.UUID) ([]refdata.ActionLog, error) {
+	store.listActionLogByTurnIDFn = func(ctx context.Context, tid uuid.NullUUID) ([]refdata.ActionLog, error) {
 		return logs, nil
 	}
 	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {

@@ -15,10 +15,10 @@ import (
 
 type ActionLog struct {
 	ID          uuid.UUID             `json:"id"`
-	TurnID      uuid.UUID             `json:"turn_id"`
-	EncounterID uuid.UUID             `json:"encounter_id"`
+	TurnID      uuid.NullUUID         `json:"turn_id"`
+	EncounterID uuid.NullUUID         `json:"encounter_id"`
 	ActionType  string                `json:"action_type"`
-	ActorID     uuid.UUID             `json:"actor_id"`
+	ActorID     uuid.NullUUID         `json:"actor_id"`
 	TargetID    uuid.NullUUID         `json:"target_id"`
 	Description sql.NullString        `json:"description"`
 	BeforeState json.RawMessage       `json:"before_state"`
@@ -160,6 +160,8 @@ type Combatant struct {
 	BardicInspirationGrantedAt sql.NullTime          `json:"bardic_inspiration_granted_at"`
 	ConsecutiveAutoResolves    int32                 `json:"consecutive_auto_resolves"`
 	IsAbsent                   bool                  `json:"is_absent"`
+	ConcentrationSpellID       sql.NullString        `json:"concentration_spell_id"`
+	ConcentrationSpellName     sql.NullString        `json:"concentration_spell_name"`
 }
 
 type ConditionsRef struct {

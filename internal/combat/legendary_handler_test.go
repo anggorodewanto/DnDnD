@@ -186,7 +186,7 @@ func TestExecuteLegendaryAction_Success(t *testing.T) {
 		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
 			actionLogged = true
 			assert.Equal(t, "legendary_action", arg.ActionType)
-			assert.Equal(t, npcID, arg.ActorID)
+			assert.Equal(t, uuid.NullUUID{UUID: npcID, Valid: true}, arg.ActorID)
 			return refdata.ActionLog{ID: uuid.New()}, nil
 		},
 	}

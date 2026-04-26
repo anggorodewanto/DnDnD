@@ -65,10 +65,13 @@ type Store interface {
 	GetActiveTurnByEncounterID(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
 	CompleteTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
 
-	// Action Log
+	// Action Log. Phase 118c: turn_id/encounter_id were widened to nullable
+	// in Phase 112 so error rows can be inserted without a parent. The Store
+	// interface mirrors the regenerated sqlc signatures (uuid.NullUUID), and
+	// Service wrappers wrap/unwrap at the boundary.
 	CreateActionLog(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error)
-	ListActionLogByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.ActionLog, error)
-	ListActionLogByTurnID(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error)
+	ListActionLogByEncounterID(ctx context.Context, encounterID uuid.NullUUID) ([]refdata.ActionLog, error)
+	ListActionLogByTurnID(ctx context.Context, turnID uuid.NullUUID) ([]refdata.ActionLog, error)
 
 	// Initiative
 	UpdateCombatantInitiative(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error)
@@ -163,8 +166,9 @@ type Store interface {
 	GetLastCompletedTurnByCombatant(ctx context.Context, arg refdata.GetLastCompletedTurnByCombatantParams) (refdata.Turn, error)
 	ListActionLogSinceTurn(ctx context.Context, arg refdata.ListActionLogSinceTurnParams) ([]refdata.ActionLog, error)
 
-	// Recap
-	ListActionLogWithRounds(ctx context.Context, encounterID uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error)
+	// Recap. Phase 118c: encounter_id is uuid.NullUUID at the sqlc layer
+	// (mirrors action_log column nullability).
+	ListActionLogWithRounds(ctx context.Context, encounterID uuid.NullUUID) ([]refdata.ListActionLogWithRoundsRow, error)
 	GetMostRecentCompletedEncounter(ctx context.Context, campaignID uuid.UUID) (refdata.Encounter, error)
 
 	// Player Characters
@@ -527,16 +531,21 @@ type CreateActionLogInput struct {
 }
 
 // CreateActionLog validates input and creates an action log entry.
+//
+// Phase 118c: action_log.{turn_id,encounter_id,actor_id} are nullable since
+// Phase 112 added error rows. Callers still hand in uuid.UUID for ergonomics
+// and we wrap here. uuid.Nil → invalid NullUUID so error rows can omit those
+// pointers without inventing fake parents; non-zero → Valid NullUUID.
 func (s *Service) CreateActionLog(ctx context.Context, input CreateActionLogInput) (refdata.ActionLog, error) {
 	if input.ActionType == "" {
 		return refdata.ActionLog{}, errors.New("action_type must not be empty")
 	}
 
 	return s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
-		TurnID:      input.TurnID,
-		EncounterID: input.EncounterID,
+		TurnID:      nullableUUID(input.TurnID),
+		EncounterID: nullableUUID(input.EncounterID),
 		ActionType:  input.ActionType,
-		ActorID:     input.ActorID,
+		ActorID:     nullableUUID(input.ActorID),
 		TargetID:    input.TargetID,
 		Description: nullString(input.Description),
 		BeforeState: input.BeforeState,
@@ -545,14 +554,27 @@ func (s *Service) CreateActionLog(ctx context.Context, input CreateActionLogInpu
 	})
 }
 
+// nullableUUID maps a zero UUID to an invalid NullUUID and any other value to
+// a Valid NullUUID. Used for action_log columns that are nullable post-Phase 112.
+func nullableUUID(id uuid.UUID) uuid.NullUUID {
+	if id == uuid.Nil {
+		return uuid.NullUUID{}
+	}
+	return uuid.NullUUID{UUID: id, Valid: true}
+}
+
 // ListActionLogByEncounterID lists all action log entries for an encounter.
+// Phase 118c: callers still pass uuid.UUID; the sqlc column is nullable so
+// we wrap before delegating.
 func (s *Service) ListActionLogByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.ActionLog, error) {
-	return s.store.ListActionLogByEncounterID(ctx, encounterID)
+	return s.store.ListActionLogByEncounterID(ctx, nullableUUID(encounterID))
 }
 
 // ListActionLogByTurnID lists all action log entries for a turn.
+// Phase 118c: callers still pass uuid.UUID; the sqlc column is nullable so
+// we wrap before delegating.
 func (s *Service) ListActionLogByTurnID(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error) {
-	return s.store.ListActionLogByTurnID(ctx, turnID)
+	return s.store.ListActionLogByTurnID(ctx, nullableUUID(turnID))
 }
 
 // ShortIDFromName generates a short ID from a character name (first 2 letters uppercase).

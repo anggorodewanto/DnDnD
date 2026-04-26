@@ -307,10 +307,10 @@ func (h *Handler) logActionAndNotify(ctx context.Context, encounterID, actorID u
 	turn, err := h.svc.store.GetActiveTurnByEncounterID(ctx, encounterID)
 	if err == nil {
 		h.svc.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
-			TurnID:      turn.ID,
-			EncounterID: encounterID,
+			TurnID:      nullableUUID(turn.ID),
+			EncounterID: nullableUUID(encounterID),
 			ActionType:  actionType,
-			ActorID:     actorID,
+			ActorID:     nullableUUID(actorID),
 			Description: nullString(combatLog),
 		})
 	}

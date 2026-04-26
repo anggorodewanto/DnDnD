@@ -11,8 +11,10 @@ import (
 )
 
 // ListActionLogWithRounds retrieves all action log entries for an encounter with round info.
+// Phase 118c: callers still pass uuid.UUID; we wrap to uuid.NullUUID at the
+// store boundary to match the regenerated sqlc signature.
 func (s *Service) ListActionLogWithRounds(ctx context.Context, encounterID uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
-	return s.store.ListActionLogWithRounds(ctx, encounterID)
+	return s.store.ListActionLogWithRounds(ctx, nullableUUID(encounterID))
 }
 
 // GetMostRecentCompletedEncounter finds the most recently completed encounter for a campaign.

@@ -48,7 +48,7 @@ type ActionLogViewerEntry struct {
 
 // ListActionLogForViewer returns filtered+sorted enriched action log entries for an encounter.
 func (s *Service) ListActionLogForViewer(ctx context.Context, encounterID uuid.UUID, filter ActionLogFilter) ([]ActionLogViewerEntry, error) {
-	rows, err := s.store.ListActionLogWithRounds(ctx, encounterID)
+	rows, err := s.store.ListActionLogWithRounds(ctx, uuid.NullUUID{UUID: encounterID, Valid: true})
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +109,10 @@ func matchesFilter(row refdata.ListActionLogWithRoundsRow, f ActionLogFilter, ty
 			return false
 		}
 	}
-	if f.ActorID != uuid.Nil && row.ActorID != f.ActorID {
-		return false
+	if f.ActorID != uuid.Nil {
+		if !row.ActorID.Valid || row.ActorID.UUID != f.ActorID {
+			return false
+		}
 	}
 	if f.TargetID != uuid.Nil {
 		if !row.TargetID.Valid || row.TargetID.UUID != f.TargetID {
@@ -120,21 +122,28 @@ func matchesFilter(row refdata.ListActionLogWithRoundsRow, f ActionLogFilter, ty
 	if f.Round != 0 && row.RoundNumber != f.Round {
 		return false
 	}
-	if f.TurnID != uuid.Nil && row.TurnID != f.TurnID {
-		return false
+	if f.TurnID != uuid.Nil {
+		if !row.TurnID.Valid || row.TurnID.UUID != f.TurnID {
+			return false
+		}
 	}
 	return true
 }
 
 // enrichActionLogRow converts a row into a viewer entry with combatant display info.
+// Phase 118c: turn_id/encounter_id/actor_id are nullable on action_log so error
+// rows can be inserted without a parent. We surface them as zero UUIDs in the
+// viewer entry — JSON consumers already tolerate uuid.Nil and the viewer
+// renders error rows separately.
 func enrichActionLogRow(row refdata.ListActionLogWithRoundsRow, infoByID map[uuid.UUID]combatantInfo) ActionLogViewerEntry {
-	actorInfo := infoByID[row.ActorID]
+	actorID := row.ActorID.UUID // zero if invalid
+	actorInfo := infoByID[actorID]
 	entry := ActionLogViewerEntry{
 		ID:               row.ID,
-		TurnID:           row.TurnID,
-		EncounterID:      row.EncounterID,
+		TurnID:           row.TurnID.UUID,
+		EncounterID:      row.EncounterID.UUID,
 		ActionType:       row.ActionType,
-		ActorID:          row.ActorID,
+		ActorID:          actorID,
 		ActorDisplayName: actorInfo.DisplayName,
 		ActorShortID:     actorInfo.ShortID,
 		BeforeState:      row.BeforeState,

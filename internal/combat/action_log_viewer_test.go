@@ -20,10 +20,10 @@ import (
 func mkLogRow(id uuid.UUID, actionType string, actorID uuid.UUID, round int32, createdAt time.Time) refdata.ListActionLogWithRoundsRow {
 	return refdata.ListActionLogWithRoundsRow{
 		ID:          id,
-		TurnID:      uuid.New(),
-		EncounterID: uuid.New(),
+		TurnID:      uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		EncounterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		ActionType:  actionType,
-		ActorID:     actorID,
+		ActorID:     uuid.NullUUID{UUID: actorID, Valid: true},
 		BeforeState: json.RawMessage(`{}`),
 		AfterState:  json.RawMessage(`{}`),
 		RoundNumber: round,
@@ -45,8 +45,8 @@ func TestService_ListActionLogForViewer_DefaultNewestFirst(t *testing.T) {
 	t3 := time.Date(2026, 1, 1, 10, 2, 0, 0, time.UTC)
 
 	store := defaultMockStore()
-	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
-		assert.Equal(t, encounterID, eid)
+	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.NullUUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+		assert.Equal(t, uuid.NullUUID{UUID: encounterID, Valid: true}, eid)
 		return []refdata.ListActionLogWithRoundsRow{
 			mkLogRow(id1, "attack", actorA, 1, t1),
 			mkLogRow(id2, "damage", actorB, 1, t2),
@@ -92,32 +92,37 @@ func TestService_ListActionLogForViewer_Filters(t *testing.T) {
 	t3 := time.Date(2026, 1, 1, 10, 2, 0, 0, time.UTC)
 	t4 := time.Date(2026, 1, 1, 10, 3, 0, 0, time.UTC)
 
+	encNU := uuid.NullUUID{UUID: encounterID, Valid: true}
+	turnXNU := uuid.NullUUID{UUID: turnX, Valid: true}
+	turnYNU := uuid.NullUUID{UUID: turnY, Valid: true}
+	actorANU := uuid.NullUUID{UUID: actorA, Valid: true}
+	actorBNU := uuid.NullUUID{UUID: actorB, Valid: true}
 	rows := []refdata.ListActionLogWithRoundsRow{
 		{
-			ID: id1, TurnID: turnX, EncounterID: encounterID,
-			ActionType: "attack", ActorID: actorA,
+			ID: id1, TurnID: turnXNU, EncounterID: encNU,
+			ActionType: "attack", ActorID: actorANU,
 			TargetID:    uuid.NullUUID{UUID: targetA, Valid: true},
 			BeforeState: json.RawMessage(`{"hp":10}`),
 			AfterState:  json.RawMessage(`{"hp":5}`),
 			RoundNumber: 1, CreatedAt: t1,
 		},
 		{
-			ID: id2, TurnID: turnX, EncounterID: encounterID,
-			ActionType: "damage", ActorID: actorB,
+			ID: id2, TurnID: turnXNU, EncounterID: encNU,
+			ActionType: "damage", ActorID: actorBNU,
 			BeforeState: json.RawMessage(`{}`),
 			AfterState:  json.RawMessage(`{}`),
 			RoundNumber: 1, CreatedAt: t2,
 		},
 		{
-			ID: id3, TurnID: turnY, EncounterID: encounterID,
-			ActionType: "cast", ActorID: actorA,
+			ID: id3, TurnID: turnYNU, EncounterID: encNU,
+			ActionType: "cast", ActorID: actorANU,
 			BeforeState: json.RawMessage(`{}`),
 			AfterState:  json.RawMessage(`{}`),
 			RoundNumber: 2, CreatedAt: t3,
 		},
 		{
-			ID: id4, TurnID: turnY, EncounterID: encounterID,
-			ActionType: "dm_override", ActorID: actorB,
+			ID: id4, TurnID: turnYNU, EncounterID: encNU,
+			ActionType: "dm_override", ActorID: actorBNU,
 			TargetID:    uuid.NullUUID{UUID: targetA, Valid: true},
 			BeforeState: json.RawMessage(`{}`),
 			AfterState:  json.RawMessage(`{}`),
@@ -126,7 +131,7 @@ func TestService_ListActionLogForViewer_Filters(t *testing.T) {
 	}
 
 	store := defaultMockStore()
-	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.NullUUID) ([]refdata.ListActionLogWithRoundsRow, error) {
 		return rows, nil
 	}
 	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
@@ -203,11 +208,14 @@ func TestService_ListActionLogForViewer_DescriptionAndDice(t *testing.T) {
 	actorA := uuid.New()
 
 	store := defaultMockStore()
-	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.NullUUID) ([]refdata.ListActionLogWithRoundsRow, error) {
 		return []refdata.ListActionLogWithRoundsRow{
 			{
-				ID: uuid.New(), TurnID: uuid.New(), EncounterID: encounterID,
-				ActionType: "attack", ActorID: actorA,
+				ID:          uuid.New(),
+				TurnID:      uuid.NullUUID{UUID: uuid.New(), Valid: true},
+				EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+				ActionType:  "attack",
+				ActorID:     uuid.NullUUID{UUID: actorA, Valid: true},
 				Description: sql.NullString{String: "hits orc for 7", Valid: true},
 				BeforeState: json.RawMessage(`{"hp":10}`),
 				AfterState:  json.RawMessage(`{"hp":3}`),
@@ -236,7 +244,7 @@ func TestService_ListActionLogForViewer_StoreErrors(t *testing.T) {
 
 	t.Run("list action log error", func(t *testing.T) {
 		store := defaultMockStore()
-		store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+		store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.NullUUID) ([]refdata.ListActionLogWithRoundsRow, error) {
 			return nil, assert.AnError
 		}
 		svc := NewService(store)
@@ -246,7 +254,7 @@ func TestService_ListActionLogForViewer_StoreErrors(t *testing.T) {
 
 	t.Run("list combatants error", func(t *testing.T) {
 		store := defaultMockStore()
-		store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+		store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.NullUUID) ([]refdata.ListActionLogWithRoundsRow, error) {
 			return []refdata.ListActionLogWithRoundsRow{}, nil
 		}
 		store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {

@@ -36,13 +36,13 @@ func TestBuildImpactSummary_MultipleLogs(t *testing.T) {
 	logs := []refdata.ActionLog{
 		{
 			ActionType:  "damage",
-			ActorID:     actorID,
+			ActorID:     uuid.NullUUID{UUID: actorID, Valid: true},
 			Description: sql.NullString{String: "You took 8 dmg from Goblin #2", Valid: true},
 			CreatedAt:   time.Now(),
 		},
 		{
 			ActionType:  "condition_applied",
-			ActorID:     actorID,
+			ActorID:     uuid.NullUUID{UUID: actorID, Valid: true},
 			Description: sql.NullString{String: "Orc Shaman cast Hold Person on you", Valid: true},
 			CreatedAt:   time.Now().Add(time.Second),
 		},

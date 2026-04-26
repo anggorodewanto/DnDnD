@@ -768,8 +768,8 @@ func TestProcessTurnStart_PersistsToActionLog(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
 	require.Len(t, loggedEntries, 1)
-	assert.Equal(t, encounterID, loggedEntries[0].EncounterID)
-	assert.Equal(t, turnID, loggedEntries[0].TurnID)
+	assert.Equal(t, uuid.NullUUID{UUID: encounterID, Valid: true}, loggedEntries[0].EncounterID)
+	assert.Equal(t, uuid.NullUUID{UUID: turnID, Valid: true}, loggedEntries[0].TurnID)
 	assert.Equal(t, "condition_expired", loggedEntries[0].ActionType)
 	assert.Contains(t, loggedEntries[0].Description.String, "frightened")
 }
@@ -848,8 +848,8 @@ func TestApplyConditionWithLog_PersistsToActionLog(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.Len(t, loggedEntries, 1)
 	assert.Equal(t, "condition_applied", loggedEntries[0].ActionType)
-	assert.Equal(t, encounterID, loggedEntries[0].EncounterID)
-	assert.Equal(t, turnID, loggedEntries[0].TurnID)
+	assert.Equal(t, uuid.NullUUID{UUID: encounterID, Valid: true}, loggedEntries[0].EncounterID)
+	assert.Equal(t, uuid.NullUUID{UUID: turnID, Valid: true}, loggedEntries[0].TurnID)
 }
 
 // --- TDD Cycle 17: RemoveConditionFromCombatant persists to action_log ---

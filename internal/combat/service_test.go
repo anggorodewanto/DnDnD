@@ -40,8 +40,8 @@ type mockStore struct {
 	getActiveTurnByEncounterIDFn  func(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
 	completeTurnFn                func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
 	createActionLogFn             func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error)
-	listActionLogByEncounterIDFn  func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ActionLog, error)
-	listActionLogByTurnIDFn       func(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error)
+	listActionLogByEncounterIDFn  func(ctx context.Context, encounterID uuid.NullUUID) ([]refdata.ActionLog, error)
+	listActionLogByTurnIDFn       func(ctx context.Context, turnID uuid.NullUUID) ([]refdata.ActionLog, error)
 	getEncounterTemplateFn            func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error)
 	getCreatureFn                     func(ctx context.Context, id string) (refdata.Creature, error)
 	updateCombatantInitiativeFn       func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error)
@@ -140,7 +140,7 @@ type mockStore struct {
 	getPlayerCharacterByCharacterFn   func(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
 
 	// Recap
-	listActionLogWithRoundsFn          func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error)
+	listActionLogWithRoundsFn          func(ctx context.Context, encounterID uuid.NullUUID) ([]refdata.ListActionLogWithRoundsRow, error)
 	getMostRecentCompletedEncounterFn  func(ctx context.Context, campaignID uuid.UUID) (refdata.Encounter, error)
 
 	// Phase 105 — Active encounter lookup for one-encounter-per-character check
@@ -253,10 +253,10 @@ func (m *mockStore) CompleteTurn(ctx context.Context, id uuid.UUID) (refdata.Tur
 func (m *mockStore) CreateActionLog(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
 	return m.createActionLogFn(ctx, arg)
 }
-func (m *mockStore) ListActionLogByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.ActionLog, error) {
+func (m *mockStore) ListActionLogByEncounterID(ctx context.Context, encounterID uuid.NullUUID) ([]refdata.ActionLog, error) {
 	return m.listActionLogByEncounterIDFn(ctx, encounterID)
 }
-func (m *mockStore) ListActionLogByTurnID(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error) {
+func (m *mockStore) ListActionLogByTurnID(ctx context.Context, turnID uuid.NullUUID) ([]refdata.ActionLog, error) {
 	return m.listActionLogByTurnIDFn(ctx, turnID)
 }
 func (m *mockStore) GetEncounterTemplate(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
@@ -696,7 +696,7 @@ func (m *mockStore) GetPlayerCharacterByCharacter(ctx context.Context, arg refda
 	return refdata.PlayerCharacter{}, fmt.Errorf("not found")
 }
 
-func (m *mockStore) ListActionLogWithRounds(ctx context.Context, encounterID uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+func (m *mockStore) ListActionLogWithRounds(ctx context.Context, encounterID uuid.NullUUID) ([]refdata.ListActionLogWithRoundsRow, error) {
 	if m.listActionLogWithRoundsFn != nil {
 		return m.listActionLogWithRoundsFn(ctx, encounterID)
 	}
@@ -789,10 +789,10 @@ func defaultMockStore() *mockStore {
 		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
 			return refdata.ActionLog{ID: uuid.New(), EncounterID: arg.EncounterID}, nil
 		},
-		listActionLogByEncounterIDFn: func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ActionLog, error) {
+		listActionLogByEncounterIDFn: func(ctx context.Context, encounterID uuid.NullUUID) ([]refdata.ActionLog, error) {
 			return []refdata.ActionLog{}, nil
 		},
-		listActionLogByTurnIDFn: func(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error) {
+		listActionLogByTurnIDFn: func(ctx context.Context, turnID uuid.NullUUID) ([]refdata.ActionLog, error) {
 			return []refdata.ActionLog{}, nil
 		},
 		getEncounterTemplateFn: func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
@@ -1212,6 +1212,58 @@ func TestService_CreateActionLog_EmptyActionType(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "action_type must not be empty")
+}
+
+// Phase 118c: action_log.{turn_id,encounter_id,actor_id} are nullable in
+// the schema (since Phase 112 added error rows). Service.CreateActionLog
+// keeps a friendly uuid.UUID input and wraps it for the store: a non-zero
+// UUID becomes a Valid NullUUID, while uuid.Nil flows through as an
+// invalid NullUUID so error rows can be inserted without a fake parent.
+func TestService_CreateActionLog_WrapsValidUUIDsAsValidNullUUID(t *testing.T) {
+	store := defaultMockStore()
+	var captured refdata.CreateActionLogParams
+	turnID := uuid.New()
+	encID := uuid.New()
+	actorID := uuid.New()
+	store.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		captured = arg
+		return refdata.ActionLog{ID: uuid.New()}, nil
+	}
+	svc := NewService(store)
+	_, err := svc.CreateActionLog(context.Background(), CreateActionLogInput{
+		TurnID:      turnID,
+		EncounterID: encID,
+		ActionType:  "attack",
+		ActorID:     actorID,
+		BeforeState: json.RawMessage(`{}`),
+		AfterState:  json.RawMessage(`{}`),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uuid.NullUUID{UUID: turnID, Valid: true}, captured.TurnID)
+	assert.Equal(t, uuid.NullUUID{UUID: encID, Valid: true}, captured.EncounterID)
+	assert.Equal(t, uuid.NullUUID{UUID: actorID, Valid: true}, captured.ActorID)
+}
+
+func TestService_CreateActionLog_WrapsZeroUUIDAsInvalidNullUUID(t *testing.T) {
+	store := defaultMockStore()
+	var captured refdata.CreateActionLogParams
+	store.createActionLogFn = func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+		captured = arg
+		return refdata.ActionLog{ID: uuid.New()}, nil
+	}
+	svc := NewService(store)
+	_, err := svc.CreateActionLog(context.Background(), CreateActionLogInput{
+		TurnID:      uuid.Nil,
+		EncounterID: uuid.Nil,
+		ActionType:  "error",
+		ActorID:     uuid.Nil,
+		BeforeState: json.RawMessage(`{}`),
+		AfterState:  json.RawMessage(`{}`),
+	})
+	require.NoError(t, err)
+	assert.False(t, captured.TurnID.Valid, "uuid.Nil TurnID should map to invalid NullUUID")
+	assert.False(t, captured.EncounterID.Valid, "uuid.Nil EncounterID should map to invalid NullUUID")
+	assert.False(t, captured.ActorID.Valid, "uuid.Nil ActorID should map to invalid NullUUID")
 }
 
 // --- TDD Cycle 23: UpdateCombatantPosition ---
