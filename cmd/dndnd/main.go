@@ -195,7 +195,7 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 
 	// Phase 112: error recorder + reader. Starts as an in-memory store so
 	// panic recovery always has somewhere to land; upgraded to a PgStore
-	// backed by action_log once DATABASE_URL is configured below.
+	// backed by error_log once DATABASE_URL is configured below.
 	var errorStore errorlog.Store = errorlog.NewMemoryStore(nil)
 
 	// Phase 104: Construct (but do NOT open) the Discord session up-front so
@@ -248,10 +248,9 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 		}
 		logger.Info("database connected and migrated")
 
-		// Phase 112: upgrade the error store to a PgStore backed by the
-		// action_log table (now with nullable turn/encounter/actor columns
-		// per migration 20260424120001). The PgStore both records errors
-		// into action_log and drives the dashboard badge + panel.
+		// Phase 119: upgrade the error store to a PgStore backed by the
+		// dedicated error_log table. The PgStore both records errors and
+		// drives the dashboard badge + panel.
 		if pg := errorlog.NewPgStore(db); pg != nil {
 			errorStore = pg
 		}
