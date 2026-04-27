@@ -22,10 +22,10 @@ RETURNING id, turn_id, encounter_id, action_type, actor_id, target_id, descripti
 `
 
 type CreateActionLogParams struct {
-	TurnID      uuid.NullUUID         `json:"turn_id"`
-	EncounterID uuid.NullUUID         `json:"encounter_id"`
+	TurnID      uuid.UUID             `json:"turn_id"`
+	EncounterID uuid.UUID             `json:"encounter_id"`
 	ActionType  string                `json:"action_type"`
-	ActorID     uuid.NullUUID         `json:"actor_id"`
+	ActorID     uuid.UUID             `json:"actor_id"`
 	TargetID    uuid.NullUUID         `json:"target_id"`
 	Description sql.NullString        `json:"description"`
 	BeforeState json.RawMessage       `json:"before_state"`
@@ -66,7 +66,7 @@ const listActionLogByEncounterID = `-- name: ListActionLogByEncounterID :many
 SELECT id, turn_id, encounter_id, action_type, actor_id, target_id, description, before_state, after_state, dice_rolls, created_at FROM action_log WHERE encounter_id = $1 ORDER BY created_at ASC
 `
 
-func (q *Queries) ListActionLogByEncounterID(ctx context.Context, encounterID uuid.NullUUID) ([]ActionLog, error) {
+func (q *Queries) ListActionLogByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]ActionLog, error) {
 	rows, err := q.db.QueryContext(ctx, listActionLogByEncounterID, encounterID)
 	if err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ const listActionLogByTurnID = `-- name: ListActionLogByTurnID :many
 SELECT id, turn_id, encounter_id, action_type, actor_id, target_id, description, before_state, after_state, dice_rolls, created_at FROM action_log WHERE turn_id = $1 ORDER BY created_at ASC
 `
 
-func (q *Queries) ListActionLogByTurnID(ctx context.Context, turnID uuid.NullUUID) ([]ActionLog, error) {
+func (q *Queries) ListActionLogByTurnID(ctx context.Context, turnID uuid.UUID) ([]ActionLog, error) {
 	rows, err := q.db.QueryContext(ctx, listActionLogByTurnID, turnID)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ ORDER BY created_at ASC
 `
 
 type ListActionLogSinceTurnParams struct {
-	EncounterID uuid.NullUUID `json:"encounter_id"`
+	EncounterID uuid.UUID     `json:"encounter_id"`
 	TargetID    uuid.NullUUID `json:"target_id"`
 	CreatedAt   time.Time     `json:"created_at"`
 }
@@ -201,10 +201,10 @@ ORDER BY t.round_number ASC, al.created_at ASC
 
 type ListActionLogWithRoundsRow struct {
 	ID              uuid.UUID             `json:"id"`
-	TurnID          uuid.NullUUID         `json:"turn_id"`
-	EncounterID     uuid.NullUUID         `json:"encounter_id"`
+	TurnID          uuid.UUID             `json:"turn_id"`
+	EncounterID     uuid.UUID             `json:"encounter_id"`
 	ActionType      string                `json:"action_type"`
-	ActorID         uuid.NullUUID         `json:"actor_id"`
+	ActorID         uuid.UUID             `json:"actor_id"`
 	TargetID        uuid.NullUUID         `json:"target_id"`
 	Description     sql.NullString        `json:"description"`
 	BeforeState     json.RawMessage       `json:"before_state"`
@@ -215,7 +215,7 @@ type ListActionLogWithRoundsRow struct {
 	TurnCombatantID uuid.UUID             `json:"turn_combatant_id"`
 }
 
-func (q *Queries) ListActionLogWithRounds(ctx context.Context, encounterID uuid.NullUUID) ([]ListActionLogWithRoundsRow, error) {
+func (q *Queries) ListActionLogWithRounds(ctx context.Context, encounterID uuid.UUID) ([]ListActionLogWithRoundsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listActionLogWithRounds, encounterID)
 	if err != nil {
 		return nil, err

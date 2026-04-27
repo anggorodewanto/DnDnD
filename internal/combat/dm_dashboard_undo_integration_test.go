@@ -70,7 +70,7 @@ func TestIntegration_OverrideHP_UsesTurnLock(t *testing.T) {
 	assert.Equal(t, int32(5), c.TempHp)
 
 	// Verify action_log row created
-	logs, err := queries.ListActionLogByTurnID(context.Background(), uuid.NullUUID{UUID: td.TurnID, Valid: true})
+	logs, err := queries.ListActionLogByTurnID(context.Background(), td.TurnID)
 	require.NoError(t, err)
 	require.Len(t, logs, 1)
 	assert.Equal(t, "dm_override", logs[0].ActionType)
@@ -100,10 +100,10 @@ func TestIntegration_UndoLastAction_UsesTurnLock(t *testing.T) {
 
 	beforeState := json.RawMessage(`{"hp_current":45,"temp_hp":0,"is_alive":true}`)
 	_, err = queries.CreateActionLog(ctx, refdata.CreateActionLogParams{
-		TurnID:      uuid.NullUUID{UUID: td.TurnID, Valid: true},
-		EncounterID: uuid.NullUUID{UUID: td.EncounterID, Valid: true},
+		TurnID:      td.TurnID,
+		EncounterID: td.EncounterID,
 		ActionType:  "damage",
-		ActorID:     uuid.NullUUID{UUID: td.CombatantID, Valid: true},
+		ActorID:     td.CombatantID,
 		BeforeState: beforeState,
 		AfterState:  json.RawMessage(`{"hp_current":20}`),
 	})
@@ -126,7 +126,7 @@ func TestIntegration_UndoLastAction_UsesTurnLock(t *testing.T) {
 	assert.Equal(t, int32(45), c.HpCurrent)
 
 	// Verify dm_override_undo log row exists
-	logs, err := queries.ListActionLogByTurnID(ctx, uuid.NullUUID{UUID: td.TurnID, Valid: true})
+	logs, err := queries.ListActionLogByTurnID(ctx, td.TurnID)
 	require.NoError(t, err)
 	require.Len(t, logs, 2)
 	assert.Equal(t, "dm_override_undo", logs[1].ActionType)

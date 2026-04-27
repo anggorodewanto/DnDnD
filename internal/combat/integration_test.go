@@ -400,10 +400,10 @@ func TestIntegration_ActionLogCRUD(t *testing.T) {
 
 	// Create action log
 	logEntry, err := queries.CreateActionLog(ctx, refdata.CreateActionLogParams{
-		TurnID:      uuid.NullUUID{UUID: turn.ID, Valid: true},
-		EncounterID: uuid.NullUUID{UUID: enc.ID, Valid: true},
+		TurnID:      turn.ID,
+		EncounterID: enc.ID,
 		ActionType:  "attack",
-		ActorID:     uuid.NullUUID{UUID: c.ID, Valid: true},
+		ActorID:     c.ID,
 		BeforeState: json.RawMessage(`{"hp":7}`),
 		AfterState:  json.RawMessage(`{"hp":3}`),
 		DiceRolls:   pqtype.NullRawMessage{RawMessage: json.RawMessage(`[{"type":"d20","result":15}]`), Valid: true},
@@ -412,12 +412,12 @@ func TestIntegration_ActionLogCRUD(t *testing.T) {
 	assert.Equal(t, "attack", logEntry.ActionType)
 
 	// List by encounter
-	logs, err := queries.ListActionLogByEncounterID(ctx, uuid.NullUUID{UUID: enc.ID, Valid: true})
+	logs, err := queries.ListActionLogByEncounterID(ctx, enc.ID)
 	require.NoError(t, err)
 	assert.Len(t, logs, 1)
 
 	// List by turn
-	logs, err = queries.ListActionLogByTurnID(ctx, uuid.NullUUID{UUID: turn.ID, Valid: true})
+	logs, err = queries.ListActionLogByTurnID(ctx, turn.ID)
 	require.NoError(t, err)
 	assert.Len(t, logs, 1)
 }
@@ -518,10 +518,10 @@ func TestIntegration_CascadeDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = queries.CreateActionLog(ctx, refdata.CreateActionLogParams{
-		TurnID:      uuid.NullUUID{UUID: turn.ID, Valid: true},
-		EncounterID: uuid.NullUUID{UUID: enc.ID, Valid: true},
+		TurnID:      turn.ID,
+		EncounterID: enc.ID,
 		ActionType:  "move",
-		ActorID:     uuid.NullUUID{UUID: c.ID, Valid: true},
+		ActorID:     c.ID,
 		BeforeState: json.RawMessage(`{}`),
 		AfterState:  json.RawMessage(`{}`),
 	})
@@ -794,7 +794,7 @@ func TestIntegration_ConditionAutoExpiration(t *testing.T) {
 	assert.False(t, combat.HasCondition(fetched.Conditions, "frightened"))
 
 	// Verify action_log was persisted
-	logs, err := queries.ListActionLogByTurnID(ctx, uuid.NullUUID{UUID: turn.ID, Valid: true})
+	logs, err := queries.ListActionLogByTurnID(ctx, turn.ID)
 	require.NoError(t, err)
 	require.Len(t, logs, 1)
 	assert.Equal(t, "condition_expired", logs[0].ActionType)

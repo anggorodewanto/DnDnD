@@ -12,8 +12,9 @@ import (
 )
 
 // TestPgStore_RoundTrip exercises the full PgStore read/write path through a
-// real PostgreSQL container. Phase 112 migration 20260424120001 drops the
-// NOT NULL constraints so errors with no encounter context can be stored.
+// real PostgreSQL container. Phase 119 migration 20260427120001 creates the
+// dedicated error_log table; system-context errors set user_id NULL via the
+// INSERT's NULLIF, and ListRecent COALESCEs back to "".
 func TestPgStore_RoundTrip(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -96,7 +97,7 @@ func TestPgStore_OldEntriesExcludedFromCount(t *testing.T) {
 	}
 
 	// Backdate that row so CountSince(now-24h) excludes it.
-	if _, err := db.Exec(`UPDATE action_log SET created_at = now() - interval '48 hours' WHERE action_type = 'error'`); err != nil {
+	if _, err := db.Exec(`UPDATE error_log SET created_at = now() - interval '48 hours'`); err != nil {
 		t.Fatalf("backdate: %v", err)
 	}
 

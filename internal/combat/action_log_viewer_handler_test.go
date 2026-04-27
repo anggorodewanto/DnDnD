@@ -15,14 +15,9 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// nu is a tiny helper that wraps a uuid.UUID as a Valid uuid.NullUUID. It
-// keeps the test row construction readable now that action_log columns are
-// nullable post-Phase 118c.
-func nu(id uuid.UUID) uuid.NullUUID { return uuid.NullUUID{UUID: id, Valid: true} }
-
 func buildActionLogStore(rows []refdata.ListActionLogWithRoundsRow, combatants []refdata.Combatant) *mockStore {
 	store := defaultMockStore()
-	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.NullUUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
 		return rows, nil
 	}
 	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
@@ -41,15 +36,15 @@ func TestHandler_ListActionLogViewer_Success(t *testing.T) {
 
 	rows := []refdata.ListActionLogWithRoundsRow{
 		{
-			ID: uuid.New(), TurnID: nu(uuid.New()), EncounterID: nu(encounterID),
-			ActionType: "attack", ActorID: nu(actorA),
+			ID: uuid.New(), TurnID: uuid.New(), EncounterID: encounterID,
+			ActionType: "attack", ActorID: actorA,
 			BeforeState: json.RawMessage(`{}`),
 			AfterState:  json.RawMessage(`{}`),
 			RoundNumber: 1, CreatedAt: t1,
 		},
 		{
-			ID: uuid.New(), TurnID: nu(uuid.New()), EncounterID: nu(encounterID),
-			ActionType: "dm_override", ActorID: nu(actorA),
+			ID: uuid.New(), TurnID: uuid.New(), EncounterID: encounterID,
+			ActionType: "dm_override", ActorID: actorA,
 			BeforeState: json.RawMessage(`{}`),
 			AfterState:  json.RawMessage(`{}`),
 			RoundNumber: 2, CreatedAt: t2,
@@ -89,9 +84,9 @@ func TestHandler_ListActionLogViewer_FilterByType(t *testing.T) {
 	encounterID := uuid.New()
 	actorA := uuid.New()
 	rows := []refdata.ListActionLogWithRoundsRow{
-		{ID: uuid.New(), ActionType: "attack", ActorID: nu(actorA), BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now()},
-		{ID: uuid.New(), ActionType: "dm_override", ActorID: nu(actorA), BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now().Add(time.Second)},
-		{ID: uuid.New(), ActionType: "cast", ActorID: nu(actorA), BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now().Add(2 * time.Second)},
+		{ID: uuid.New(), ActionType: "attack", ActorID: actorA, BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now()},
+		{ID: uuid.New(), ActionType: "dm_override", ActorID: actorA, BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now().Add(time.Second)},
+		{ID: uuid.New(), ActionType: "cast", ActorID: actorA, BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now().Add(2 * time.Second)},
 	}
 	store := buildActionLogStore(rows, []refdata.Combatant{{ID: actorA, ShortID: "AR", DisplayName: "Aragorn"}})
 	r := newDMDashboardRouter(store)
@@ -122,8 +117,8 @@ func TestHandler_ListActionLogViewer_FilterByActorRoundTurnSort(t *testing.T) {
 	t1 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	t2 := time.Date(2026, 1, 1, 10, 1, 0, 0, time.UTC)
 	rows := []refdata.ListActionLogWithRoundsRow{
-		{ID: uuid.New(), TurnID: nu(turnX), ActionType: "attack", ActorID: nu(actorA), BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: t1},
-		{ID: uuid.New(), TurnID: nu(uuid.New()), ActionType: "attack", ActorID: nu(actorB), BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 2, CreatedAt: t2},
+		{ID: uuid.New(), TurnID: turnX, ActionType: "attack", ActorID: actorA, BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: t1},
+		{ID: uuid.New(), TurnID: uuid.New(), ActionType: "attack", ActorID: actorB, BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 2, CreatedAt: t2},
 	}
 	store := buildActionLogStore(rows, []refdata.Combatant{
 		{ID: actorA, DisplayName: "A"}, {ID: actorB, DisplayName: "B"},
@@ -178,8 +173,8 @@ func TestHandler_ListActionLogViewer_FilterByTarget(t *testing.T) {
 	actorA := uuid.New()
 	targetA := uuid.New()
 	rows := []refdata.ListActionLogWithRoundsRow{
-		{ID: uuid.New(), ActionType: "attack", ActorID: nu(actorA), TargetID: uuid.NullUUID{UUID: targetA, Valid: true}, BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now()},
-		{ID: uuid.New(), ActionType: "cast", ActorID: nu(actorA), BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now().Add(time.Second)},
+		{ID: uuid.New(), ActionType: "attack", ActorID: actorA, TargetID: uuid.NullUUID{UUID: targetA, Valid: true}, BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now()},
+		{ID: uuid.New(), ActionType: "cast", ActorID: actorA, BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now().Add(time.Second)},
 	}
 	store := buildActionLogStore(rows, []refdata.Combatant{
 		{ID: actorA, DisplayName: "A"}, {ID: targetA, DisplayName: "T"},
@@ -230,7 +225,7 @@ func TestHandler_ListActionLogViewer_EmptyCommaActionType(t *testing.T) {
 	encounterID := uuid.New()
 	actorA := uuid.New()
 	rows := []refdata.ListActionLogWithRoundsRow{
-		{ID: uuid.New(), ActionType: "attack", ActorID: nu(actorA), BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now()},
+		{ID: uuid.New(), ActionType: "attack", ActorID: actorA, BeforeState: json.RawMessage(`{}`), AfterState: json.RawMessage(`{}`), RoundNumber: 1, CreatedAt: time.Now()},
 	}
 	store := buildActionLogStore(rows, []refdata.Combatant{{ID: actorA, DisplayName: "A"}})
 	r := newDMDashboardRouter(store)
@@ -248,7 +243,7 @@ func TestHandler_ListActionLogViewer_EmptyCommaActionType(t *testing.T) {
 func TestHandler_ListActionLogViewer_ServiceError(t *testing.T) {
 	encounterID := uuid.New()
 	store := defaultMockStore()
-	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.NullUUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+	store.listActionLogWithRoundsFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
 		return nil, assert.AnError
 	}
 	r := newDMDashboardRouter(store)

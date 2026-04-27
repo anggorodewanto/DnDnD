@@ -50,8 +50,8 @@ type Store interface {
 
 // MemoryStore is a thread-safe in-memory Store used by tests and by deploys
 // without a configured error_log backend. It keeps every recorded entry in
-// memory; production deploys should wrap or swap with PgStore once the
-// action_log migration lands.
+// memory; production deploys should wrap or swap with PgStore which writes
+// to the dedicated error_log table (Phase 119).
 type MemoryStore struct {
 	mu      sync.Mutex
 	clock   func() time.Time

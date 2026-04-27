@@ -775,9 +775,10 @@
   - Depends on: Phase 61, Phase 71, Phase 80, Phase 113
   - Done when: Integration tests verify (1) damage save failure removes spell-sourced conditions across all affected targets, (2) incapacitation auto-break removes spell-sourced conditions and zones, (3) replacing concentration with a new spell cleans up the old spell's effects, (4) Invisibility applied by a caster who then drops concentration auto-clears the invisible condition on the target, (5) combat log posts a single consolidated cleanup line.
 
-- [ ] **Phase 119: Error Log Schema Follow-up**
+- [x] **Phase 119: Error Log Schema Follow-up**
   - Scope: Evaluate the Phase 112 decision to overload `action_log.before_state` JSONB with `command` / `user_id` metadata for rows where `action_type='error'`. Decide between (a) keeping the JSONB approach, (b) promoting `command` and `user_id` to first-class nullable columns on `action_log` with a backfill migration, or (c) splitting errors into a dedicated `error_log` table. Drive the decision with real production data: query volumes, filter patterns used by the DM dashboard, and whether non-combat error rows are distorting existing `action_log` queries (undo, combat-log, roll-history). Remove the `NOT NULL` drop from `turn_id`/`encounter_id`/`actor_id` if errors move off this table.
   - Depends on: Phase 112
+  - Decision (Phase 119): **Option (c) — dedicated `error_log` table.** Pre-production rewrite: deleted `20260424120001_action_log_allow_error_nulls.sql`, added `20260427120001_create_error_log.sql`, restored `action_log.{turn_id,encounter_id,actor_id}` to NOT NULL, regenerated sqlc, removed the `nullableUUID` wrapper helper, and rewrote `errorlog.PgStore` to target the new table.
   - Done when: Schema decision documented in the spec, migration applied if needed, `errorlog.PgStore` + dashboard panel updated to match, existing `action_log` consumers verified unaffected.
 
 - [ ] **Phase 120: End-to-End Test Harness**
@@ -879,7 +880,8 @@
 | Campaign Pause | Phase 115 |
 | Tech Stack | Phase 1, 2, 9a, 15, 22 |
 | Deployment Target | Phase 1 |
-| Monitoring & Observability | Phase 112 |
+| Monitoring & Observability | Phase 112, 119 |
+| Data Model > Error Log | Phase 119 |
 | Testing Strategy | Phase 117 |
 | Data Model > Campaign & Player Tables | Phase 2, 7, 8 |
 | Data Model > Encounter & Combat Tables | Phase 24 |

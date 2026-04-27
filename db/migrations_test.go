@@ -5,23 +5,29 @@ import (
 	"testing"
 )
 
-// TestPhase112Migration_ActionLogAllowsErrorNulls asserts the Phase 112
-// migration makes turn_id, encounter_id, and actor_id nullable on action_log
-// so errors recorded outside of combat (e.g. /register, /import, dashboard
-// requests) can be stored with action_type='error' per the spec.
-func TestPhase112Migration_ActionLogAllowsErrorNulls(t *testing.T) {
-	const name = "20260424120001_action_log_allow_error_nulls.sql"
+// TestPhase119Migration_CreatesErrorLog asserts the Phase 119 migration creates
+// the dedicated error_log table (split from action_log per the spec) with the
+// expected columns and a created_at index for the dashboard's recent-errors
+// panel.
+func TestPhase119Migration_CreatesErrorLog(t *testing.T) {
+	const name = "20260427120001_create_error_log.sql"
 	b, err := Migrations.ReadFile("migrations/" + name)
 	if err != nil {
 		t.Fatalf("reading %s: %v", name, err)
 	}
 	body := string(b)
 	required := []string{
-		"ALTER TABLE action_log ALTER COLUMN turn_id DROP NOT NULL",
-		"ALTER TABLE action_log ALTER COLUMN encounter_id DROP NOT NULL",
-		"ALTER TABLE action_log ALTER COLUMN actor_id DROP NOT NULL",
 		"-- +goose Up",
 		"-- +goose Down",
+		"CREATE TABLE error_log",
+		"command       TEXT NOT NULL",
+		"user_id       TEXT",
+		"summary       TEXT NOT NULL",
+		"error_detail  JSONB",
+		"created_at    TIMESTAMPTZ NOT NULL DEFAULT now()",
+		"CREATE INDEX error_log_created_at_idx ON error_log (created_at DESC)",
+		"DROP INDEX IF EXISTS error_log_created_at_idx",
+		"DROP TABLE IF EXISTS error_log",
 	}
 	for _, want := range required {
 		if !strings.Contains(body, want) {
@@ -30,25 +36,12 @@ func TestPhase112Migration_ActionLogAllowsErrorNulls(t *testing.T) {
 	}
 }
 
-// TestPhase112Migration_DownRestoresNotNull asserts the down migration
-// restores the NOT NULL constraints (after clearing error rows) so the
-// migration is reversible.
-func TestPhase112Migration_DownRestoresNotNull(t *testing.T) {
+// TestPhase119_ActionLogRelaxationGone asserts the Phase 112 NOT NULL
+// relaxation migration is no longer present — Phase 119 keeps action_log
+// combat-only and rewrites pre-production migration history.
+func TestPhase119_ActionLogRelaxationGone(t *testing.T) {
 	const name = "20260424120001_action_log_allow_error_nulls.sql"
-	b, err := Migrations.ReadFile("migrations/" + name)
-	if err != nil {
-		t.Fatalf("reading %s: %v", name, err)
-	}
-	body := string(b)
-	required := []string{
-		"DELETE FROM action_log WHERE action_type = 'error'",
-		"ALTER TABLE action_log ALTER COLUMN turn_id SET NOT NULL",
-		"ALTER TABLE action_log ALTER COLUMN encounter_id SET NOT NULL",
-		"ALTER TABLE action_log ALTER COLUMN actor_id SET NOT NULL",
-	}
-	for _, want := range required {
-		if !strings.Contains(body, want) {
-			t.Errorf("migration %s missing down clause %q", name, want)
-		}
+	if _, err := Migrations.ReadFile("migrations/" + name); err == nil {
+		t.Fatalf("migration %s should have been deleted in Phase 119 (errors moved to error_log)", name)
 	}
 }

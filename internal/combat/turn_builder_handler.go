@@ -297,10 +297,10 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 	combatLog := FormatCombatLog(plan)
 	plan.DisplayName = combatant.DisplayName
 	if _, err := s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
-		TurnID:      nullableUUID(turn.ID),
-		EncounterID: nullableUUID(encounterID),
+		TurnID:      turn.ID,
+		EncounterID: encounterID,
 		ActionType:  "enemy_turn",
-		ActorID:     nullableUUID(combatant.ID),
+		ActorID:     combatant.ID,
 		Description: nullString(combatLog),
 	}); err != nil {
 		return nil, fmt.Errorf("creating action log: %w", err)

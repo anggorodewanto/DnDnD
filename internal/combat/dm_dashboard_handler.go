@@ -271,10 +271,10 @@ func (h *DMDashboardHandler) ResolvePendingAction(w http.ResponseWriter, r *http
 	turn, turnErr := h.svc.store.GetActiveTurnByEncounterID(r.Context(), encounterID)
 	if turnErr == nil {
 		h.svc.store.CreateActionLog(r.Context(), refdata.CreateActionLogParams{
-			TurnID:      nullableUUID(turn.ID),
-			EncounterID: nullableUUID(encounterID),
+			TurnID:      turn.ID,
+			EncounterID: encounterID,
 			ActionType:  "resolve_pending_action",
-			ActorID:     nullableUUID(action.CombatantID),
+			ActorID:     action.CombatantID,
 			Description: nullString(req.Outcome),
 		})
 	}

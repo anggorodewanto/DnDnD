@@ -278,10 +278,10 @@ func (s *Service) ProcessTurnEndWithLog(ctx context.Context, encounterID uuid.UU
 func (s *Service) logConditionMessages(ctx context.Context, msgs []string, actionType string, actorID uuid.UUID, encounterID uuid.UUID, turnID uuid.UUID) error {
 	for _, msg := range msgs {
 		if _, err := s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
-			TurnID:      nullableUUID(turnID),
-			EncounterID: nullableUUID(encounterID),
+			TurnID:      turnID,
+			EncounterID: encounterID,
 			ActionType:  actionType,
-			ActorID:     nullableUUID(actorID),
+			ActorID:     actorID,
 			Description: nullString(msg),
 			BeforeState: json.RawMessage(`{}`),
 			AfterState:  json.RawMessage(`{}`),
@@ -353,10 +353,10 @@ func (s *Service) processExpiredConditions(ctx context.Context, encounterID uuid
 			// Persist to action_log if turnID is available
 			if turnID != nil {
 				if _, err := s.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
-					TurnID:      nullableUUID(*turnID),
-					EncounterID: nullableUUID(encounterID),
+					TurnID:      *turnID,
+					EncounterID: encounterID,
 					ActionType:  "condition_expired",
-					ActorID:     nullableUUID(c.ID),
+					ActorID:     c.ID,
 					Description: nullString(msg),
 					BeforeState: json.RawMessage(`{}`),
 					AfterState:  json.RawMessage(`{}`),

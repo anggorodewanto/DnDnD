@@ -74,7 +74,7 @@ func (h *DMDashboardHandler) UndoLastAction(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	logs, err := h.svc.store.ListActionLogByTurnID(r.Context(), nullableUUID(turn.ID))
+	logs, err := h.svc.store.ListActionLogByTurnID(r.Context(), turn.ID)
 	if err != nil {
 		http.Error(w, "failed to list action log", http.StatusInternalServerError)
 		return
@@ -130,10 +130,10 @@ func (h *DMDashboardHandler) applyUndo(ctx context.Context, encounterID, turnID 
 		return fmt.Errorf("parsing before_state: %w", err)
 	}
 
-	if !log.ActorID.Valid {
+	if log.ActorID == uuid.Nil {
 		return fmt.Errorf("undo target has no actor: %w", errUnknownActionType)
 	}
-	combatant, err := h.svc.store.GetCombatant(ctx, log.ActorID.UUID)
+	combatant, err := h.svc.store.GetCombatant(ctx, log.ActorID)
 	if err != nil {
 		return fmt.Errorf("getting actor: %w", err)
 	}
@@ -153,8 +153,8 @@ func (h *DMDashboardHandler) applyUndo(ctx context.Context, encounterID, turnID 
 
 	// Log the undo
 	_, _ = h.svc.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
-		TurnID:      nullableUUID(turnID),
-		EncounterID: nullableUUID(encounterID),
+		TurnID:      turnID,
+		EncounterID: encounterID,
 		ActionType:  "dm_override_undo",
 		ActorID:     log.ActorID,
 		Description: nullString(reason),
@@ -339,10 +339,10 @@ func (h *DMDashboardHandler) runOverride(
 // logOverride writes a dm_override entry to the action log.
 func (h *DMDashboardHandler) logOverride(ctx context.Context, turnID, encounterID, actorID uuid.UUID, reason string, before, after json.RawMessage) {
 	_, _ = h.svc.store.CreateActionLog(ctx, refdata.CreateActionLogParams{
-		TurnID:      nullableUUID(turnID),
-		EncounterID: nullableUUID(encounterID),
+		TurnID:      turnID,
+		EncounterID: encounterID,
 		ActionType:  "dm_override",
-		ActorID:     nullableUUID(actorID),
+		ActorID:     actorID,
 		Description: nullString(reason),
 		BeforeState: before,
 		AfterState:  after,
@@ -524,10 +524,10 @@ func (h *DMDashboardHandler) OverrideCharacterSpellSlots(w http.ResponseWriter, 
 		// override is a character-level mutation, so we attribute the audit row
 		// to the active turn's combatant.
 		_, _ = h.svc.store.CreateActionLog(r.Context(), refdata.CreateActionLogParams{
-			TurnID:      nullableUUID(turn.ID),
-			EncounterID: nullableUUID(encounterID),
+			TurnID:      turn.ID,
+			EncounterID: encounterID,
 			ActionType:  "dm_override",
-			ActorID:     nullableUUID(turn.CombatantID),
+			ActorID:     turn.CombatantID,
 			Description: nullString(req.Reason),
 			BeforeState: before,
 			AfterState:  req.SpellSlots,

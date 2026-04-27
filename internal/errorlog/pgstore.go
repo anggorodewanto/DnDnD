@@ -3,15 +3,14 @@ package errorlog
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"time"
 )
 
-// PgStore persists error entries into the shared action_log table using
-// action_type='error'. Phase 112 migration 20260424120001 drops the NOT NULL
-// constraints on turn_id, encounter_id, and actor_id so errors originating
-// outside of combat (e.g. /register, dashboard requests, PNG rendering) can
-// be stored alongside the combat log.
+// PgStore persists error entries into the dedicated error_log table. Phase 119
+// migration 20260427120001 splits errors out of action_log, replacing the
+// Phase 112 JSONB-overload approach with first-class columns (command,
+// user_id, summary, error_detail, created_at). This keeps action_log
+// combat-only and lets error queries skip the action_type='error' filter.
 type PgStore struct {
 	db *sql.DB
 }
@@ -25,7 +24,7 @@ func NewPgStore(db *sql.DB) *PgStore {
 	return &PgStore{db: db}
 }
 
-// Record inserts a new error row into action_log. If CreatedAt is zero, the
+// Record inserts a new error row into error_log. If CreatedAt is zero, the
 // DB default (now()) applies because we omit the column from the INSERT.
 func (p *PgStore) Record(ctx context.Context, entry Entry) error {
 	q, args := buildInsertErrorQuery(entry)
@@ -33,8 +32,7 @@ func (p *PgStore) Record(ctx context.Context, entry Entry) error {
 	return err
 }
 
-// CountSince returns the number of action_log rows with action_type='error'
-// created at or after since.
+// CountSince returns the number of error_log rows created at or after since.
 func (p *PgStore) CountSince(ctx context.Context, since time.Time) (int, error) {
 	q, args := buildCountSinceQuery(since)
 	var count int
@@ -56,18 +54,18 @@ func (p *PgStore) ListRecent(ctx context.Context, limit int) ([]Entry, error) {
 	out := make([]Entry, 0, limit)
 	for rows.Next() {
 		var (
-			command sql.NullString
-			userID  sql.NullString
-			summary sql.NullString
+			command string
+			userID  string
+			summary string
 			created time.Time
 		)
 		if err := rows.Scan(&command, &userID, &summary, &created); err != nil {
 			return nil, err
 		}
 		out = append(out, Entry{
-			Command:   command.String,
-			UserID:    userID.String,
-			Summary:   summary.String,
+			Command:   command,
+			UserID:    userID,
+			Summary:   summary,
 			CreatedAt: created,
 		})
 	}
@@ -75,40 +73,25 @@ func (p *PgStore) ListRecent(ctx context.Context, limit int) ([]Entry, error) {
 }
 
 // buildInsertErrorQuery returns the INSERT SQL and its bound args for a
-// single error Entry. Columns unused by errors (turn_id, encounter_id,
-// actor_id, target_id, dice_rolls) are omitted so the DB defaults / NULL
-// apply. command + user_id ride in before_state so the panel can reconstruct
-// "on /cmd by @user" without a schema extension:
-//   - description  → entry.Summary
-//   - before_state → {"command": ..., "user_id": ...} JSONB (phase-112 tag)
-//   - after_state  → {} (NOT NULL default)
+// single error Entry. user_id is stored as NULL when empty so the column's
+// "nullable: system-context errors have no user" semantics hold.
 func buildInsertErrorQuery(entry Entry) (string, []any) {
-	q := `INSERT INTO action_log (action_type, description, before_state, after_state)
-VALUES ($1, $2, $3::jsonb, $4::jsonb)`
-	before, _ := json.Marshal(map[string]string{
-		"command": entry.Command,
-		"user_id": entry.UserID,
-	})
-	return q, []any{"error", entry.Summary, string(before), "{}"}
+	q := `INSERT INTO error_log (command, user_id, summary)
+VALUES ($1, NULLIF($2, ''), $3)`
+	return q, []any{entry.Command, entry.UserID, entry.Summary}
 }
 
 // buildCountSinceQuery returns the COUNT SQL for errors since the given time.
 func buildCountSinceQuery(since time.Time) (string, []any) {
-	return `SELECT COUNT(*) FROM action_log WHERE action_type = 'error' AND created_at >= $1`,
+	return `SELECT COUNT(*) FROM error_log WHERE created_at >= $1`,
 		[]any{since}
 }
 
 // buildListRecentQuery returns the SELECT SQL for the most-recent errors.
-// Columns: command (before_state->>command), user_id (before_state->>user_id),
-// summary (description), created_at.
+// user_id is COALESCEd to '' so the Go side can scan into a plain string.
 func buildListRecentQuery(limit int) (string, []any) {
-	q := `SELECT
-    COALESCE(before_state->>'command', '') AS command,
-    COALESCE(before_state->>'user_id', '') AS user_id,
-    COALESCE(description, '') AS summary,
-    created_at
-FROM action_log
-WHERE action_type = 'error'
+	q := `SELECT command, COALESCE(user_id, '') AS user_id, summary, created_at
+FROM error_log
 ORDER BY created_at DESC
 LIMIT $1`
 	return q, []any{limit}

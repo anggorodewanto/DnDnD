@@ -15,10 +15,10 @@ import (
 
 type ActionLog struct {
 	ID          uuid.UUID             `json:"id"`
-	TurnID      uuid.NullUUID         `json:"turn_id"`
-	EncounterID uuid.NullUUID         `json:"encounter_id"`
+	TurnID      uuid.UUID             `json:"turn_id"`
+	EncounterID uuid.UUID             `json:"encounter_id"`
 	ActionType  string                `json:"action_type"`
-	ActorID     uuid.NullUUID         `json:"actor_id"`
+	ActorID     uuid.UUID             `json:"actor_id"`
 	TargetID    uuid.NullUUID         `json:"target_id"`
 	Description sql.NullString        `json:"description"`
 	BeforeState json.RawMessage       `json:"before_state"`
@@ -275,6 +275,15 @@ type EncounterZone struct {
 	ZoneTriggers          pqtype.NullRawMessage `json:"zone_triggers"`
 	TriggeredThisRound    pqtype.NullRawMessage `json:"triggered_this_round"`
 	CreatedAt             time.Time             `json:"created_at"`
+}
+
+type ErrorLog struct {
+	ID          uuid.UUID             `json:"id"`
+	Command     string                `json:"command"`
+	UserID      sql.NullString        `json:"user_id"`
+	Summary     string                `json:"summary"`
+	ErrorDetail pqtype.NullRawMessage `json:"error_detail"`
+	CreatedAt   time.Time             `json:"created_at"`
 }
 
 type Feat struct {

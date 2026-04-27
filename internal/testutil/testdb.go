@@ -125,6 +125,7 @@ var MutableTables = []string{
 	"narration_templates",
 	"dm_player_messages",
 	"dm_queue_items",
+	"error_log",
 }
 
 // ReferenceTables are seeded with ON CONFLICT DO NOTHING and preserved across tests.
@@ -172,6 +173,7 @@ var orderedDeleteTables = []string{
 	"reaction_declarations",
 	"encounter_zones",
 	"action_log",
+	"error_log",
 	"encounters",
 	"turns",
 	"combatants",

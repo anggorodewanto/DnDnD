@@ -17,7 +17,7 @@ func TestService_ListActionLogWithRounds(t *testing.T) {
 		{RoundNumber: 1, Description: sql.NullString{String: "test", Valid: true}},
 	}
 	ms := defaultMockStore()
-	ms.listActionLogWithRoundsFn = func(_ context.Context, _ uuid.NullUUID) ([]refdata.ListActionLogWithRoundsRow, error) {
+	ms.listActionLogWithRoundsFn = func(_ context.Context, _ uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error) {
 		return expectedLogs, nil
 	}
 	svc := NewService(ms)

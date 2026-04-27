@@ -2967,7 +2967,7 @@ The application deploys to **[fly.io](https://fly.io)** as a single Machine:
 **Error surfacing — two audiences:**
 
 - **Players:** on any internal error (DB timeout, unexpected panic, Discord API failure), the bot replies with a friendly ephemeral message: "⚠️ Something went wrong processing your command. Try again or contact your DM." The error is never swallowed silently — the player always knows something failed.
-- **DM dashboard:** the dashboard displays an **error notification badge** showing the count of recent errors (last 24 hours). Clicking it opens a simple error log panel listing recent failures with timestamp, command, player, and error summary (e.g., "DB timeout on /cast by @player", "PNG generation failed for encounter X"). Errors are stored in the `action_log` table with `action_type = 'error'`. This gives the DM proactive visibility into bot health without checking external tools.
+- **DM dashboard:** the dashboard displays an **error notification badge** showing the count of recent errors (last 24 hours). Clicking it opens a simple error log panel listing recent failures with timestamp, command, player, and error summary (e.g., "DB timeout on /cast by @player", "PNG generation failed for encounter X"). Errors are stored in the dedicated `error_log` table (see Data Model). This gives the DM proactive visibility into bot health without checking external tools.
 
 **Panic recovery:** all command handlers and goroutines are wrapped in a recovery middleware that catches panics, logs the full stack trace at `ERROR` level, and returns a user-facing error message rather than crashing the process.
 
@@ -3172,6 +3172,26 @@ action_log
   dice_rolls      JSONB                  -- [{die, count, results[], modifier, total, purpose}]
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
+
+### Error Log
+
+Errors recorded by the bot (panic recovery, /command failures, dashboard
+handlers, PNG rendering) live in a dedicated table so `action_log` remains
+combat-only. The DM dashboard's error badge and panel read from this table
+(see "Error surfacing — two audiences" in Monitoring & Observability).
+
+```sql
+error_log
+  id              UUID PK
+  command         TEXT NOT NULL          -- slash-command name or short route id (e.g. "cast", "dashboard.errors")
+  user_id         TEXT                   -- nullable: system-context errors (PNG render, background goroutine) have no user
+  summary         TEXT NOT NULL          -- human-readable summary suitable for the DM panel
+  error_detail    JSONB                  -- optional structured detail (full error msg / stack / fields)
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+`error_log_created_at_idx` on `(created_at DESC)` keeps the recent-errors
+panel cheap to query.
 
 ### Reaction Declarations
 
