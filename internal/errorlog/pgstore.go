@@ -24,8 +24,9 @@ func NewPgStore(db *sql.DB) *PgStore {
 	return &PgStore{db: db}
 }
 
-// Record inserts a new error row into error_log. If CreatedAt is zero, the
-// DB default (now()) applies because we omit the column from the INSERT.
+// Record inserts a new error row into error_log. CreatedAt on entry is
+// ignored — the column is omitted from the INSERT and the DB default (now())
+// fills it in.
 func (p *PgStore) Record(ctx context.Context, entry Entry) error {
 	q, args := buildInsertErrorQuery(entry)
 	_, err := p.db.ExecContext(ctx, q, args...)

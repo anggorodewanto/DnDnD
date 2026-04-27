@@ -16,7 +16,6 @@ import (
 // Entry is a single recorded error. CreatedAt is filled in by the store on
 // Record — callers pass an otherwise-complete Entry.
 type Entry struct {
-	// CreatedAt is populated by Record.
 	CreatedAt time.Time
 	// Command is the slash-command name (e.g. "cast") or a short route
 	// identifier for non-command paths (e.g. "dashboard.errors").
