@@ -1,0 +1,2 @@
+{"ts":"2026-05-03T12:00:00Z","dir":"dispatch","channel_id":"sample-cmd","author":"playtest-player","command":"/recap"}
+{"ts":"2026-05-03T12:00:01Z","dir":"observed","channel_id":"sample-cmd","author":"DnDnD","content":"No encounter found for recap."}

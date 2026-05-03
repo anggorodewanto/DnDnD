@@ -1,4 +1,4 @@
-.PHONY: build test cover cover-check cover-html run docker-build clean e2e
+.PHONY: build test cover cover-check cover-html run docker-build clean e2e playtest-replay
 
 # Excludes sqlc-generated query files, the cmd/dndnd main wiring, the thin
 # discordgo *Adapter delegations, and the coverage_check tool itself —
@@ -46,3 +46,10 @@ clean:
 # build-tag-gated, so they cannot land in coverage.out unless invoked here.
 e2e:
 	go test -tags e2e ./cmd/dndnd/ -run TestE2E_ -count=1 -v
+
+# Phase 121.3: replay a transcript captured by cmd/playtest-player
+# through the Phase 120 harness. Override TRANSCRIPT to point at a
+# specific JSONL file; the default is the checked-in sample.
+TRANSCRIPT ?= $(CURDIR)/internal/playtest/testdata/sample.jsonl
+playtest-replay:
+	PLAYTEST_TRANSCRIPT=$(TRANSCRIPT) go test -tags e2e ./cmd/dndnd/ -run TestE2E_ReplayFromFile -count=1 -v
