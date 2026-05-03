@@ -781,7 +781,7 @@
   - Decision (Phase 119): **Option (c) — dedicated `error_log` table.** Pre-production rewrite: deleted `20260424120001_action_log_allow_error_nulls.sql`, added `20260427120001_create_error_log.sql`, restored `action_log.{turn_id,encounter_id,actor_id}` to NOT NULL, regenerated sqlc, removed the `nullableUUID` wrapper helper, and rewrote `errorlog.PgStore` to target the new table.
   - Done when: Schema decision documented in the spec, migration applied if needed, `errorlog.PgStore` + dashboard panel updated to match, existing `action_log` consumers verified unaffected.
 
-- [ ] **Phase 120: End-to-End Test Harness**
+- [x] **Phase 120: End-to-End Test Harness**
   - Scope: Stand up a black-box E2E harness that exercises the full stack (HTTP + Discord + Postgres + dashboard) without a real Discord gateway. Components: (1) a `discordgo.Session` fake that records outbound messages/edits/ephemerals and injects inbound interactions on demand, (2) a testcontainers Postgres fixture seeded with SRD data + a canned campaign/map/characters, (3) a goroutine-safe test harness that boots the real `cmd/dndnd` binary in-process wired to the fakes, (4) a scenario DSL (Go-level helpers) that runs flows like "register → approve → start encounter → /move → /attack → /done" and asserts on Discord output + DB state + dashboard snapshots, (5) one reference scenario per major mode (registration, combat, exploration, rest, loot). Runs in CI under a dedicated `make e2e` target.
   - Depends on: Phase 2, Phase 9a, Phase 15, Phase 117
   - Done when: `make e2e` boots the server + Postgres, runs at least five reference scenarios green, records a deterministic transcript of Discord interactions per scenario, and fails loudly when message text or DB state drifts.
