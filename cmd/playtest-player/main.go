@@ -87,7 +87,7 @@ func parseFlags(args []string, getenv func(string) string) (*config, error) {
 
 	var channels []string
 	if *channelList != "" {
-		for _, c := range strings.Split(*channelList, ",") {
+		for c := range strings.SplitSeq(*channelList, ",") {
 			if c = strings.TrimSpace(c); c != "" {
 				channels = append(channels, c)
 			}

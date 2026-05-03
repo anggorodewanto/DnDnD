@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -31,9 +30,8 @@ import (
 // PlayerCommand seam. The player ID is fixed at construction time so a
 // transcript can be re-targeted at a different player without rewriting.
 type harnessDispatcher struct {
-	h         *e2eHarness
-	playerID  string
-	lastIntID string
+	h        *e2eHarness
+	playerID string
 }
 
 func (d *harnessDispatcher) Dispatch(cmd playtest.ParsedCommand) error {
@@ -41,36 +39,32 @@ func (d *harnessDispatcher) Dispatch(cmd playtest.ParsedCommand) error {
 	for k, v := range cmd.NamedArgs {
 		opts = append(opts, stringOpt(k, v))
 	}
-	d.lastIntID = d.h.PlayerCommand(d.playerID, cmd.Name, opts...)
+	d.h.PlayerCommand(d.playerID, cmd.Name, opts...)
 	return nil
 }
 
-// harnessObserver consumes the harness's transcript in order. A cursor
-// marks the next un-consumed entry so each Wait returns the next
-// outbound message rather than re-matching earlier ones.
+// harnessObserver consumes the harness's transcript in order. cursor
+// marks the next un-consumed entry; Replay calls Wait sequentially so
+// no synchronization is needed.
 type harnessObserver struct {
-	mu     sync.Mutex
 	fake   *discordfake.Fake
 	cursor int
 }
 
 func (o *harnessObserver) Wait(timeout time.Duration) (string, error) {
-	o.mu.Lock()
-	cursor := o.cursor
-	o.mu.Unlock()
+	// WaitFor scans from the start each call; count matches until we
+	// hit the cursor target so each Wait returns the next un-consumed
+	// entry rather than re-matching the first one.
+	target := o.cursor
 	idx := -1
-	entry, err := o.fake.WaitFor(func(e discordfake.Entry) bool {
-		// WaitFor scans from the start each call; track the index by
-		// counting matches against the cursor target.
+	entry, err := o.fake.WaitFor(func(discordfake.Entry) bool {
 		idx++
-		return idx == cursor
+		return idx == target
 	}, timeout)
 	if err != nil {
 		return "", err
 	}
-	o.mu.Lock()
-	o.cursor = cursor + 1
-	o.mu.Unlock()
+	o.cursor++
 	return entry.Content, nil
 }
 

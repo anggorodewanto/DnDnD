@@ -12,6 +12,7 @@ package playtest
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -73,19 +74,13 @@ func NewCommandTable(defs []*discordgo.ApplicationCommand) *CommandTable {
 }
 
 // Names returns the registered command names in stable (alphabetical)
-// order. Used by the REPL for the available-commands list and tab
-// completion.
+// order. Used by the REPL for the available-commands list.
 func (t *CommandTable) Names() []string {
 	out := make([]string, 0, len(t.byName))
 	for name := range t.byName {
 		out = append(out, name)
 	}
-	// stable sort without importing sort; small N, insertion sort is fine.
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j-1] > out[j]; j-- {
-			out[j-1], out[j] = out[j], out[j-1]
-		}
-	}
+	slices.Sort(out)
 	return out
 }
 
@@ -179,11 +174,7 @@ func Format(cmd ParsedCommand) string {
 	for k := range cmd.NamedArgs {
 		keys = append(keys, k)
 	}
-	for i := 1; i < len(keys); i++ {
-		for j := i; j > 0 && keys[j-1] > keys[j]; j-- {
-			keys[j-1], keys[j] = keys[j], keys[j-1]
-		}
-	}
+	slices.Sort(keys)
 	for _, k := range keys {
 		b.WriteString(" ")
 		b.WriteString(k)
