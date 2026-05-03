@@ -76,15 +76,14 @@ var ErrWaitTimeout = errors.New("discordfake: WaitFor timed out before any entry
 // every outbound call and letting tests inject inbound interactions through
 // SetInteractionHandler + InjectInteraction.
 type Fake struct {
-	mu             sync.Mutex
-	cond           *sync.Cond
-	transcript     []Entry
-	guildChannels  map[string][]*discordgo.Channel
-	dmChannels     map[string]*discordgo.Channel
-	state          *discordgo.State
-	handler        func(*discordgo.Interaction)
-	clock          func() time.Time
-	dmAutoIncr     int
+	mu            sync.Mutex
+	cond          *sync.Cond
+	transcript    []Entry
+	guildChannels map[string][]*discordgo.Channel
+	dmChannels    map[string]*discordgo.Channel
+	state         *discordgo.State
+	handler       func(*discordgo.Interaction)
+	clock         func() time.Time
 }
 
 // New constructs an empty Fake. Tests are expected to seed any guild channels
@@ -209,18 +208,16 @@ func (f *Fake) appendEntry(e Entry) {
 // recorded as KindDirectMessage to make DM flows easy to assert on.
 func (f *Fake) UserChannelCreate(recipientID string) (*discordgo.Channel, error) {
 	f.mu.Lock()
+	defer f.mu.Unlock()
 	if ch, ok := f.dmChannels[recipientID]; ok {
-		f.mu.Unlock()
 		return ch, nil
 	}
-	f.dmAutoIncr++
 	ch := &discordgo.Channel{
-		ID:            "dm-" + recipientID,
-		Type:          discordgo.ChannelTypeDM,
-		Recipients:    []*discordgo.User{{ID: recipientID}},
+		ID:         "dm-" + recipientID,
+		Type:       discordgo.ChannelTypeDM,
+		Recipients: []*discordgo.User{{ID: recipientID}},
 	}
 	f.dmChannels[recipientID] = ch
-	f.mu.Unlock()
 	return ch, nil
 }
 

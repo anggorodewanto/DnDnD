@@ -19,9 +19,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -42,16 +40,13 @@ import (
 // across scenarios in a single test run via TestMain.
 type e2eHarness struct {
 	t          *testing.T
-	addr       string
 	db         *sql.DB
 	queries    *refdata.Queries
 	fake       *discordfake.Fake
-	router     *discord.CommandRouter
 	cancel     context.CancelFunc
 	doneCh     chan error
 	logBuf     *syncBuffer
 	guildID    string
-	dmUserID   string
 	campaignID uuid.UUID
 }
 
@@ -93,38 +88,32 @@ func startE2EHarness(t *testing.T) *e2eHarness {
 	t.Setenv("DATABASE_URL", connStr)
 	t.Setenv("DISCORD_BOT_TOKEN", "")
 
-	addr := getFreeAddr(t)
+	addr := getFreePort(t)
 
 	logBuf := &syncBuffer{}
 	fake := discordfake.New()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	doneCh := make(chan error, 1)
-
-	routerCh := make(chan *discord.CommandRouter, 1)
+	routerReady := make(chan struct{})
 
 	go func() {
-		err := runWithOptions(ctx, logBuf, addr,
+		doneCh <- runWithOptions(ctx, logBuf, addr,
 			withDiscordSession(fake),
 			withCommandRouterReady(func(r *discord.CommandRouter) {
 				// Hook the router into the fake so InjectInteraction calls
 				// hit the production handler chain.
 				fake.SetInteractionHandler(r.Handle)
-				select {
-				case routerCh <- r:
-				default:
-				}
+				close(routerReady)
 			}),
 		)
-		doneCh <- err
 	}()
 
 	// Wait for HTTP server to come up so we know wiring finished.
 	waitForHTTP(t, addr)
 
-	var router *discord.CommandRouter
 	select {
-	case router = <-routerCh:
+	case <-routerReady:
 	case <-time.After(5 * time.Second):
 		cancel()
 		<-doneCh
@@ -134,15 +123,11 @@ func startE2EHarness(t *testing.T) *e2eHarness {
 	// queries is the same *refdata.Queries the bot is using internally.
 	// Constructed against the side-channel connection so seeding helpers
 	// share the same schema view.
-	queries := refdata.New(db)
-
 	return &e2eHarness{
 		t:       t,
-		addr:    addr,
 		db:      db,
-		queries: queries,
+		queries: refdata.New(db),
 		fake:    fake,
-		router:  router,
 		cancel:  cancel,
 		doneCh:  doneCh,
 		logBuf:  logBuf,
@@ -166,7 +151,6 @@ func (h *e2eHarness) SeedCampaign(name string) refdata.Campaign {
 	h.t.Helper()
 	camp := testutil.NewTestCampaign(h.t, h.queries, "g")
 	h.guildID = camp.GuildID
-	h.dmUserID = camp.DmUserID
 	h.campaignID = camp.ID
 	// Register a #the-story channel so any narration/announcer paths that
 	// look it up find it.
@@ -445,21 +429,6 @@ func isUUID(s string) bool {
 
 func isHex(b byte) bool {
 	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
-}
-
-// getFreeAddr asks the OS for a free TCP port and returns "127.0.0.1:port".
-func getFreeAddr(t *testing.T) string {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("get free port: %v", err)
-	}
-	defer l.Close()
-	host, port, _ := net.SplitHostPort(l.Addr().String())
-	if _, err := strconv.Atoi(port); err != nil {
-		t.Fatalf("invalid port from listener: %v", err)
-	}
-	return net.JoinHostPort(host, port)
 }
 
 // waitForHTTP polls /health until it answers 200 or 5s passes.

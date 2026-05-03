@@ -105,11 +105,11 @@ func TestFake_TranscriptIsGoroutineSafe(t *testing.T) {
 	const perWriter = 25
 
 	var wg sync.WaitGroup
-	for i := 0; i < writers; i++ {
+	for range writers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < perWriter; j++ {
+			for range perWriter {
 				_, _ = f.ChannelMessageSend("chan", "msg")
 			}
 		}()

@@ -218,19 +218,15 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 
 // runWithOptions is the option-aware variant of run. Production callers go
 // through run(); the e2e harness reaches in here to substitute a fake Discord
-// session and capture the constructed CommandRouter.
+// session (cfg.session) and capture the constructed CommandRouter
+// (cfg.onRouterReady). All other behaviour matches run() so existing callers
+// and tests see the same wiring.
 func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts ...runOption) error {
-	cfg := runConfig{}
+	var cfg runConfig
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return runImpl(ctx, logOutput, addr, cfg)
-}
 
-// runImpl is the renamed body of the original run() with two seam points
-// added (cfg.session and cfg.onRouterReady). All other behaviour is
-// unchanged so existing callers and tests see the same wiring.
-func runImpl(ctx context.Context, logOutput io.Writer, addr string, cfg runConfig) error {
 	if addr == "" {
 		addr = os.Getenv("ADDR")
 	}
