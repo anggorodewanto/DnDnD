@@ -3,5 +3,6 @@ bin/
 *.exe
 node_modules/
 /dndnd
+/playtest-player
 code-review-*.md
 dashboard/svelte/coverage/

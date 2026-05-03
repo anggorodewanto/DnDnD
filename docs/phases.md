@@ -795,6 +795,34 @@
   - Scope: A guided playtest mode where a human DM and an AI agent acting as a player drive the bot through a real campaign together. Components: (1) a setup script / doc (`docs/playtest-quickstart.md`) that walks the DM through creating a minimal campaign — Discord server setup, bot invite, `/setup`, character approval, encounter build, map, go-live, (2) a "player agent" CLI (`cmd/playtest-player/`) that logs into Discord as a bot or webhook, observes `#the-story` / `#combat-log` / DMs, and issues commands (`/move`, `/attack`, `/cast`, `/action`, etc.) on prompt from the human operator — think REPL wrapping the bot's command surface, (3) a transcript recorder that captures both sides of the session to a replay file consumable by Phase 120's E2E harness, (4) a "playtest checklist" doc listing happy-path + known edge-case scenarios to run through (combat round with OA, spell with save, exploration-to-combat transition, death save, rest, loot claim). The goal is a repeatable, low-friction session where Claude drives the player role, the human DMs, and bugs/UX issues surface live.
   - Depends on: Phase 9a, Phase 11, Phase 15, Phase 25, Phase 110, Phase 120
   - Done when: Quickstart doc gets a fresh user from empty repo to a running campaign in under 30 minutes; the player-agent CLI can issue every player-facing slash command against a live Discord server; transcripts replay cleanly through the Phase 120 harness.
+  - Iterations:
+    - [ ] **121.1 — Quickstart Doc (`docs/playtest-quickstart.md`)**
+      - Write empty-repo → live campaign walkthrough: prerequisites (Go, Postgres, Discord dev account), env/`.env` setup, `make migrate` + `make seed`, `cmd/dndnd` boot, Discord application + bot creation, OAuth invite URL with required scopes/perms (from Phase 9a), `/setup` in test server, dashboard login + character approval (Phase 14/15), encounter build via dashboard (Phase 25), map upload (Phase 110), go-live.
+      - Self-test: a contributor unfamiliar with the repo follows the doc on a clean machine and reaches a live `/move`-ready encounter in under 30 minutes; record the timing in the doc.
+      - Capture every snag hit during self-test as a doc fix or a follow-up phase entry.
+      - Done when: doc merged, self-test timing recorded, all snags either fixed in-doc or filed as follow-ups.
+    - [ ] **121.2 — Player-Agent CLI Skeleton (`cmd/playtest-player/`)**
+      - Stand up a Go binary that reads `DISCORD_BOT_TOKEN` + `GUILD_ID` + `CHANNEL_IDS` from env, opens a `discordgo` session as a second bot user, and tails `#the-story` / `#combat-log` / its DM channel to stdout with timestamps + author tags.
+      - REPL loop: read a line from stdin, parse as `/command arg1 arg2 …`, dispatch via `discordgo` `InteractionCreate` (application command) against the configured guild. Support tab-completion of registered command names by querying `ApplicationCommands` at startup.
+      - Cover the player-facing surface: `/register`, `/import`, `/create-character`, `/move`, `/attack`, `/cast`, `/action`, `/distance`, `/loot`, `/inventory`, `/give`, `/status`, `/done`, `/save`, `/recap`. Reject unknown commands with the available-commands list.
+      - Tests: unit-test the parser + command-table loader against a fake `discordgo` session; smoke-test against a real Discord dev server is manual (not CI).
+      - Done when: binary builds via `make`, unit tests cover parser/dispatch ≥85%, manual smoke test issues every player-facing command on a live dev server and the bot responds.
+    - [ ] **121.3 — Transcript Recorder + Replay Bridge**
+      - Add a recorder mode to `cmd/playtest-player/` (`--record path/to/transcript.json`) that appends every observed inbound message and every issued outbound command (with timestamp, channel, author, payload) to a JSON-lines file.
+      - Add a loader in `internal/e2e` (Phase 120 harness) that reads a transcript file and replays the outbound commands through the harness's `InjectInteraction` while asserting that the harness's recorded outbound messages match the transcript's inbound messages line-for-line (modulo a normalizer for timestamps/IDs).
+      - Add `make playtest-replay TRANSCRIPT=path` target.
+      - Tests: round-trip — record a synthesized session against the e2e harness's fake session, replay it through the harness, assert green; mutate one expected message and assert the replay fails loudly.
+      - Done when: round-trip + drift test green in CI, `make playtest-replay` runs a checked-in sample transcript clean.
+    - [ ] **121.4 — Playtest Checklist Doc (`docs/playtest-checklist.md`)**
+      - Enumerate scenarios to run live each session: combat round with opportunity attack, spell with saving throw (DC vs. ability), exploration → initiative transition, death save sequence (fail → fail → succeed), short rest, long rest, loot claim, item give between players, attune/unattune, equip/unequip, dashboard-side encounter edit during live combat.
+      - For each scenario: pre-conditions (campaign state to seed), exact slash-command sequence the player agent issues, exact DM actions, expected `#the-story` / `#combat-log` lines, expected DB state deltas, expected dashboard state.
+      - Cross-link each scenario to the Phase 120 transcript file produced by 121.3 once it has been recorded.
+      - Done when: checklist doc merged, every scenario has at least one recorded transcript under `internal/e2e/transcripts/playtest/`, and `make playtest-replay` runs them all green.
+    - [ ] **121.5 — Simplify + Polish**
+      - Run `/simplify` over `cmd/playtest-player/` and the `internal/e2e` replay bridge; collapse duplicated parsing/normalization, drop dead fields.
+      - Verify quickstart doc still produces a working campaign in <30 minutes (re-time on a clean checkout).
+      - Update `README.md` with a one-paragraph pointer to the quickstart + checklist + replay flow.
+      - Done when: `make cover-check` green, no dead code flagged, README pointer landed.
 
 ## Coverage Map
 
