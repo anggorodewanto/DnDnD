@@ -46,14 +46,18 @@ func (r *CommandRouter) SetErrorRecorder(rec errorlog.Recorder) {
 	r.recorder = rec
 }
 
-// SetMoveHandler registers the MoveHandler for button callback routing.
+// SetMoveHandler registers the MoveHandler for both /move slash commands and
+// the move_confirm / move_cancel / prone button callback routing.
 func (r *CommandRouter) SetMoveHandler(h *MoveHandler) {
 	r.moveHandler = h
+	r.handlers["move"] = h
 }
 
-// SetFlyHandler registers the FlyHandler for button callback routing.
+// SetFlyHandler registers the FlyHandler for both /fly slash commands and
+// the fly_confirm / fly_cancel button callback routing.
 func (r *CommandRouter) SetFlyHandler(h *FlyHandler) {
 	r.flyHandler = h
+	r.handlers["fly"] = h
 }
 
 // SetDoneHandler registers the DoneHandler for button callback routing.

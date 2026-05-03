@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,6 +32,7 @@ import (
 	"github.com/ab/dndnd/internal/database"
 	"github.com/ab/dndnd/internal/discord"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/registration"
 	"github.com/ab/dndnd/internal/testutil"
 	"github.com/ab/dndnd/internal/testutil/discordfake"
 )
@@ -45,7 +47,6 @@ type e2eHarness struct {
 	fake       *discordfake.Fake
 	cancel     context.CancelFunc
 	doneCh     chan error
-	logBuf     *syncBuffer
 	guildID    string
 	campaignID uuid.UUID
 }
@@ -130,7 +131,6 @@ func startE2EHarness(t *testing.T) *e2eHarness {
 		fake:    fake,
 		cancel:  cancel,
 		doneCh:  doneCh,
-		logBuf:  logBuf,
 	}
 }
 
@@ -167,6 +167,112 @@ func (h *e2eHarness) SeedApprovedPlayer(discordUserID, charName string) (refdata
 	char := testutil.NewTestCharacter(h.t, h.queries, h.campaignID, charName, 3)
 	pc := testutil.NewTestPlayerCharacter(h.t, h.queries, h.campaignID, char.ID, discordUserID)
 	return char, pc
+}
+
+// SeedCharacterOnly creates a DM-curated character with no player_character
+// row. /register can then claim it by name. Used by the registration scenario
+// to drive the real fuzzy-match flow.
+func (h *e2eHarness) SeedCharacterOnly(charName string) refdata.Character {
+	h.t.Helper()
+	return testutil.NewTestCharacter(h.t, h.queries, h.campaignID, charName, 3)
+}
+
+// SeedDMApproval bypasses the dashboard and approves a pending player
+// character via registration.Service.Approve directly. Per Phase 120a
+// clarification (1) the welcome-DM is not asserted; the harness's job is to
+// flip status to "approved" and return the updated row so the scenario can
+// re-read it.
+func (h *e2eHarness) SeedDMApproval(playerCharID uuid.UUID) refdata.PlayerCharacter {
+	h.t.Helper()
+	svc := registration.NewService(h.queries)
+	pc, err := svc.Approve(context.Background(), playerCharID)
+	if err != nil {
+		h.t.Fatalf("SeedDMApproval(%s): %v", playerCharID, err)
+	}
+	return *pc
+}
+
+// SeedMap inserts a 10x10 Tiled map with one short wall on the campaign and
+// returns the persisted row. The Tiled JSON is the minimum shape that
+// renderer.ParseTiledJSON accepts with a "terrain" tilelayer + a "walls"
+// objectgroup so the production /move pathfinder can build a Grid.
+func (h *e2eHarness) SeedMap() refdata.Map {
+	h.t.Helper()
+	const w, hght = 10, 10
+	terrain := make([]int, w*hght)
+	tiledJSON, err := json.Marshal(map[string]any{
+		"version":      "1.10",
+		"tiledversion": "1.10.0",
+		"type":         "map",
+		"orientation":  "orthogonal",
+		"width":        w,
+		"height":       hght,
+		"tilewidth":    48,
+		"tileheight":   48,
+		"layers": []map[string]any{
+			{
+				"name":   "terrain",
+				"type":   "tilelayer",
+				"width":  w,
+				"height": hght,
+				"data":   terrain,
+			},
+			{
+				"name": "walls",
+				"type": "objectgroup",
+				"objects": []map[string]any{
+					{
+						"x":      48.0 * 5,
+						"y":      48.0 * 5,
+						"width":  48.0,
+						"height": 0.0,
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		h.t.Fatalf("SeedMap: marshal tiled json: %v", err)
+	}
+	mp, err := h.queries.CreateMap(context.Background(), refdata.CreateMapParams{
+		CampaignID:    h.campaignID,
+		Name:          "Test Map",
+		WidthSquares:  int32(w),
+		HeightSquares: int32(hght),
+		TiledJson:     tiledJSON,
+	})
+	if err != nil {
+		h.t.Fatalf("SeedMap: CreateMap: %v", err)
+	}
+	return mp
+}
+
+// AttachMapToEncounter wires an existing map to an encounter so the /move
+// handler's mapProvider lookup succeeds. The migrations leave map_id
+// nullable, so the harness uses raw SQL instead of a sqlc-named UPDATE.
+func (h *e2eHarness) AttachMapToEncounter(encounterID, mapID uuid.UUID) {
+	h.t.Helper()
+	if _, err := h.db.Exec("UPDATE encounters SET map_id=$1 WHERE id=$2", mapID, encounterID); err != nil {
+		h.t.Fatalf("AttachMapToEncounter: %v", err)
+	}
+}
+
+// SeedCompletedEncounter creates an encounter directly in status='completed'
+// so the loot service's "must be completed" precondition is satisfied. The
+// encounter has no combatants — production /loot consults the pool, not the
+// combatant list.
+func (h *e2eHarness) SeedCompletedEncounter() refdata.Encounter {
+	h.t.Helper()
+	enc, err := h.queries.CreateEncounter(context.Background(), refdata.CreateEncounterParams{
+		CampaignID:  h.campaignID,
+		Name:        "Completed Encounter",
+		Status:      "completed",
+		RoundNumber: 0,
+	})
+	if err != nil {
+		h.t.Fatalf("SeedCompletedEncounter: CreateEncounter: %v", err)
+	}
+	return enc
 }
 
 // SeedEncounterShell creates a "preparing" encounter with no current turn.
@@ -306,25 +412,6 @@ func (h *e2eHarness) AssertEphemeralContains(interactionID string, substrs ...st
 		if !strings.Contains(entry.Content, sub) {
 			h.t.Fatalf("expected response to contain %q; got %q\nFull transcript:\n%s", sub, entry.Content, h.RenderTranscript())
 		}
-	}
-	return entry
-}
-
-// AssertChannelMessageContains fails the test unless at least one
-// non-ephemeral channel message in the transcript matches.
-func (h *e2eHarness) AssertChannelMessageContains(channelID string, substr string) discordfake.Entry {
-	h.t.Helper()
-	entry, err := h.fake.WaitFor(func(e discordfake.Entry) bool {
-		if e.Kind != discordfake.KindChannelMessage {
-			return false
-		}
-		if channelID != "" && e.ChannelID != channelID {
-			return false
-		}
-		return strings.Contains(e.Content, substr)
-	}, 5*time.Second)
-	if err != nil {
-		h.t.Fatalf("AssertChannelMessageContains(%q,%q): %v\nFull transcript:\n%s", channelID, substr, err, h.RenderTranscript())
 	}
 	return entry
 }

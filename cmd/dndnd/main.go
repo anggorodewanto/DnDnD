@@ -36,10 +36,12 @@ import (
 	"github.com/ab/dndnd/internal/homebrew"
 	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/levelup"
+	"github.com/ab/dndnd/internal/loot"
 	"github.com/ab/dndnd/internal/messageplayer"
 	"github.com/ab/dndnd/internal/narration"
 	"github.com/ab/dndnd/internal/open5e"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/registration"
 	"github.com/ab/dndnd/internal/server"
 	"github.com/ab/dndnd/internal/statblocklibrary"
 )
@@ -570,12 +572,16 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			appID := os.Getenv("DISCORD_APPLICATION_ID")
 			bot := discord.NewBot(discordSession, appID, logger)
 
+			// Phase 120a: shared loot service drives both the /loot handler
+			// and the dashboard loot endpoints in future phases.
+			lootSvc := loot.NewService(queries)
+
 			// Phase 105b: Construct every Phase 105 slash-command handler
 			// with the per-user encounter resolver injected, wire them into
 			// a CommandRouter, and register the router as the discordgo
 			// InteractionCreate callback so /move, /fly, /distance, /done,
-			// /check, /save, /rest, /command (summon), and /recap all route
-			// to the invoker's own encounter when two simultaneous
+			// /check, /save, /rest, /command (summon), /loot and /recap all
+			// route to the invoker's own encounter when two simultaneous
 			// encounters share a channel.
 			discordHandlerSet := buildDiscordHandlers(discordHandlerDeps{
 				session:                  discordSession,
@@ -584,8 +590,47 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				roller:                   dice.NewRoller(nil),
 				resolver:                 newDiscordUserEncounterResolver(queries),
 				enemyTurnEncounterLookup: combatSvc,
+				lootService:              lootSvc,
 			})
-			cmdRouter := discord.NewCommandRouter(bot, nil)
+
+			// Phase 120a: wire RegistrationDeps so /register submits land in
+			// the database (status=pending) and downstream stub commands
+			// become status-aware. The router otherwise falls through to a
+			// "not yet implemented" stub for /register.
+			//
+			// TokenFunc is a placeholder that returns a fixed token: the
+			// portal-token issuer is a Phase 14 follow-up. Without it the
+			// router panics during construction (see internal/discord/
+			// registration_handler_test.go:932 for the canonical pattern).
+			regSvc := registration.NewService(queries)
+			regDeps := &discord.RegistrationDeps{
+				RegService:   regSvc,
+				CampaignProv: queries,
+				CharCreator:  regSvc,
+				DMQueueFunc:  newDMQueueChannelResolver(discordSession),
+				DMUserFunc: func(guildID string) string {
+					camp, err := queries.GetCampaignByGuildID(context.Background(), guildID)
+					if err != nil {
+						return ""
+					}
+					return camp.DmUserID
+				},
+				// TODO(Phase 14): replace with the real portal-token issuer
+				// once the dashboard portal lands. The current stub is
+				// acceptable for production because /create-character is
+				// the only consumer and is itself behind that follow-up.
+				TokenFunc: func(_ uuid.UUID, _ string) (string, error) {
+					return "e2e-token", nil
+				},
+				NameResolver: func(ctx context.Context, characterID uuid.UUID) (string, error) {
+					char, err := queries.GetCharacter(ctx, characterID)
+					if err != nil {
+						return "", err
+					}
+					return char.Name, nil
+				},
+			}
+			cmdRouter := discord.NewCommandRouter(bot, nil, regDeps)
 			// Phase 112: wire panic recovery + error recorder so any handler
 			// panic is caught, converted into a friendly ephemeral, logged at
 			// ERROR level, and recorded for the DM dashboard badge / panel.

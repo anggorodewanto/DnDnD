@@ -8,6 +8,7 @@ import (
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
+	"github.com/ab/dndnd/internal/loot"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -31,6 +32,7 @@ type discordHandlerDeps struct {
 	campaignSettings         discord.CampaignSettingsProvider
 	enemyTurnEncounterLookup discord.EnemyTurnEncounterLookup
 	mapRegenerator           discord.MapRegenerator
+	lootService              *loot.Service
 }
 
 // discordHandlers holds the constructed slash-command handlers so main.go can
@@ -51,6 +53,7 @@ type discordHandlers struct {
 	status            *discord.StatusHandler
 	whisper           *discord.WhisperHandler
 	action            *discord.ActionHandler
+	loot              *discord.LootHandler
 	enemyTurnNotifier *discord.DiscordEnemyTurnNotifier
 }
 
@@ -154,6 +157,21 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		enemyTurnNotifier: discord.NewDiscordEnemyTurnNotifier(deps.session, deps.campaignSettings, deps.mapRegenerator),
 	}
 
+	// Phase 120a: wire /loot. Requires the loot service plus a
+	// LootEncounterProvider — *refdata.Queries already exposes
+	// GetMostRecentCompletedEncounter so it satisfies the interface
+	// structurally. Skip when either dependency is nil so handler
+	// construction is safe in test deploys.
+	if deps.lootService != nil && deps.queries != nil && checkCampProv != nil && characterLookup != nil {
+		handlers.loot = discord.NewLootHandler(
+			deps.session,
+			checkCampProv,
+			characterLookup,
+			deps.queries,
+			deps.lootService,
+		)
+	}
+
 	// Setter-based wiring for handlers that don't accept these via constructor.
 	handlers.summon.SetEncounterProvider(deps.resolver)
 	// Phase 110 it3: wire the character lookup so exploration /move can
@@ -187,6 +205,9 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	r.SetStatusHandler(set.status)
 	r.SetWhisperHandler(set.whisper)
 	r.SetActionHandler(set.action)
+	if set.loot != nil {
+		r.SetLootHandler(set.loot)
+	}
 }
 
 // --- Thin adapters bridging refdata.Queries / combat.Service to the handler
