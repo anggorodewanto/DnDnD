@@ -1,4 +1,4 @@
-.PHONY: build test cover cover-check cover-html run docker-build clean
+.PHONY: build test cover cover-check cover-html run docker-build clean e2e
 
 # Excludes sqlc-generated query files, the cmd/dndnd main wiring, the thin
 # discordgo *Adapter delegations, and the coverage_check tool itself —
@@ -37,3 +37,11 @@ docker-build:
 
 clean:
 	rm -rf bin/ coverage.out coverage.html
+
+# Phase 120: end-to-end test target. Runs only the scenario tests built
+# under the `e2e` build tag, against a freshly-spun testcontainers Postgres.
+# Kept off the default `make test` / `make cover-check` path so the existing
+# 90%/85% coverage baseline stays at its current figure: every e2e file is
+# build-tag-gated, so they cannot land in coverage.out unless invoked here.
+e2e:
+	go test -tags e2e ./cmd/dndnd/ -run TestE2E_ -count=1 -v

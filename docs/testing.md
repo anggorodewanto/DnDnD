@@ -40,7 +40,8 @@ the closest exemplar listed below.
 - **Purpose**: Verify channel routing, message formatting, rate-limit
   batching, and message splitting. The harness uses fake Discord services
   (recording outbound messages) rather than a unified `discordgo.Session`
-  mock — that mock is deferred to Phase 120 (E2E harness).
+  mock — that mock now also exists at `internal/testutil/discordfake` and
+  powers the Phase 120 E2E harness (see "End-to-end (Phase 120)" below).
 - **Style**: Each handler is exercised against an in-memory fake recorder
   that captures `ChannelMessageSend` / `InteractionRespond` payloads. Tests
   assert on the recorded payloads.
@@ -53,6 +54,40 @@ the closest exemplar listed below.
     components on loot reveal.
   - `cmd/dndnd/discord_handlers_test.go` — adapter wiring to combat /
     encounter services.
+
+### 4. End-to-end (Phase 120)
+
+- **Purpose**: Black-box verification that a full bot stack — HTTP server,
+  CommandRouter, real Postgres, dashboard, every Phase 105 handler — speaks
+  the player-facing protocol correctly. E2E tests boot the production
+  `runWithOptions(...)` against a `discordfake.Fake` session and a fresh
+  testcontainers Postgres, then drive scenarios by injecting interactions
+  and asserting on the recorded transcript + DB state.
+- **Style**: One test per scenario, shaped like a screenplay:
+  `SeedCampaign → SeedApprovedPlayer → PlayerCommand → AssertEphemeralContains`.
+  The harness exposes `RenderTranscript()` for golden-string assertions
+  (UUIDs and per-guild channel suffixes are redacted into `<UUID-N>` /
+  `<GUILD>` placeholders so output is stable across runs).
+- **Where**: `cmd/dndnd/e2e_*_test.go`, gated by the `e2e` build tag so
+  they do not run in the default `go test ./...` or `make cover-check`
+  paths. The harness fake lives in `internal/testutil/discordfake`.
+- **How to run**:
+
+  ```bash
+  make e2e
+  ```
+
+- **Adding a new scenario**: drop a `TestE2E_<Name>(t *testing.T)` function
+  into `cmd/dndnd/e2e_scenarios_test.go` (or a sibling file with the
+  `e2e` build tag), call `startE2EHarness(t)`, seed the campaign + any
+  characters / encounters you need via the harness helpers, drive the bot
+  with `h.PlayerCommand(...)`, and assert on `h.WaitForInteractionResponse`
+  / `h.AssertEphemeralContains` / `h.RenderTranscript`.
+- **Why a build tag?** The e2e package boots the full server per scenario
+  (~2s each), which is too slow for the default `make test` loop and would
+  also pollute the per-package coverage profile (e2e exercises every wired
+  handler at once). Keeping it under a tag preserves the existing 90/85
+  coverage baseline and lets developers opt into a slow, holistic check.
 
 ## Fixture helpers
 

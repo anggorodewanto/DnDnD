@@ -176,11 +176,61 @@ func main() {
 	}
 }
 
+// runConfig collects optional knobs that the e2e harness uses to substitute a
+// fake Discord session and observe the constructed CommandRouter. Production
+// startup leaves every field nil and run() falls back to env-derived defaults.
+type runConfig struct {
+	// session, when non-nil, replaces the discordgo session that run() would
+	// otherwise build from DISCORD_BOT_TOKEN. The associated rawDG is kept nil
+	// so run() does not try to Open() / Close() / register a real handler.
+	session discord.Session
+	// onRouterReady, when non-nil, is invoked exactly once after the
+	// CommandRouter has been fully wired with every Phase 105 handler. The
+	// e2e harness uses it to capture router.Handle and re-deliver injected
+	// interactions through the fake session.
+	onRouterReady func(*discord.CommandRouter)
+}
+
+// runOption mutates a runConfig. Defined as a function-typed option to keep
+// the seam open for future flags (custom roller, custom clock, etc.).
+type runOption func(*runConfig)
+
+// withDiscordSession wires an externally-supplied discord.Session into run()
+// in place of the env-derived one. Used by the Phase 120 e2e harness.
+func withDiscordSession(s discord.Session) runOption {
+	return func(c *runConfig) { c.session = s }
+}
+
+// withCommandRouterReady installs a callback that fires once the Phase 105
+// CommandRouter is fully wired. The e2e harness uses it to capture
+// router.Handle so the fake session can deliver injected interactions.
+func withCommandRouterReady(cb func(*discord.CommandRouter)) runOption {
+	return func(c *runConfig) { c.onRouterReady = cb }
+}
+
 // run starts the HTTP server and blocks until the context is cancelled.
 // It returns nil on clean shutdown or an error if the server fails.
 // Pass an empty addr to use the ADDR env var (defaulting to ":8080").
 // If DATABASE_URL is set, it connects to PostgreSQL and runs migrations.
 func run(ctx context.Context, logOutput io.Writer, addr string) error {
+	return runWithOptions(ctx, logOutput, addr)
+}
+
+// runWithOptions is the option-aware variant of run. Production callers go
+// through run(); the e2e harness reaches in here to substitute a fake Discord
+// session and capture the constructed CommandRouter.
+func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts ...runOption) error {
+	cfg := runConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return runImpl(ctx, logOutput, addr, cfg)
+}
+
+// runImpl is the renamed body of the original run() with two seam points
+// added (cfg.session and cfg.onRouterReady). All other behaviour is
+// unchanged so existing callers and tests see the same wiring.
+func runImpl(ctx context.Context, logOutput io.Writer, addr string, cfg runConfig) error {
 	if addr == "" {
 		addr = os.Getenv("ADDR")
 	}
@@ -207,10 +257,23 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 	// receiving gateway events, so session.Open() is deferred until after
 	// the crash-recovery scan runs below.
 	discordToken := os.Getenv("DISCORD_BOT_TOKEN")
-	discordSession, rawDG, err := buildDiscordSession(discordToken)
-	if err != nil {
-		logger.Error("discord session construction failed", "error", err)
-		return err
+	var (
+		discordSession discord.Session
+		rawDG          *discordgo.Session
+		err            error
+	)
+	if cfg.session != nil {
+		// Phase 120 e2e harness: an externally-supplied session bypasses
+		// discordgo entirely. rawDG stays nil so the gateway open/close
+		// path below is skipped, but every other wiring runs as in production.
+		discordSession = cfg.session
+		logger.Info("discord session injected (e2e harness)")
+	} else {
+		discordSession, rawDG, err = buildDiscordSession(discordToken)
+		if err != nil {
+			logger.Error("discord session construction failed", "error", err)
+			return err
+		}
 	}
 	if discordSession != nil {
 		logger.Info("discord session constructed (open deferred until after recovery)")
@@ -482,7 +545,10 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			logger.Info("startup stale-turn scan complete")
 		}
 
-		// Step 4 — Open the Discord gateway. Only after recovery.
+		// Step 4 — Open the Discord gateway. Only after recovery. The fake
+		// session injected by the e2e harness leaves rawDG nil so this
+		// block is skipped while still letting the slash-command router
+		// wiring below run unchanged.
 		if rawDG != nil {
 			if err := rawDG.Open(); err != nil {
 				logger.Error("discord session open failed", "error", err)
@@ -496,10 +562,15 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			// event and is the gateway-level liveness signal discordgo
 			// itself publishes.
 			health.Register("discord", server.NewDiscordChecker(func() bool { return rawDG.DataReady }))
+		}
 
-			// Step 5 — Re-register slash commands for every guild the
-			// session is currently in. Per spec lines 178-181, the bot
-			// must always reconcile its command set on startup.
+		// Step 5 — Re-register slash commands for every guild the
+		// session is currently in. Per spec lines 178-181, the bot
+		// must always reconcile its command set on startup. The same
+		// CommandRouter wiring runs whether the session is the real
+		// discordgo bot or the Phase 120 e2e fake; only the AddHandler /
+		// RegisterAllGuilds gateway hooks are skipped for the fake.
+		if discordSession != nil {
 			appID := os.Getenv("DISCORD_APPLICATION_ID")
 			bot := discord.NewBot(discordSession, appID, logger)
 
@@ -545,18 +616,27 @@ func run(ctx context.Context, logOutput io.Writer, addr string) error {
 			// action (combat or exploration) lands in #dm-queue and the
 			// player can cancel it before the DM resolves.
 			discordHandlerSet.action.SetNotifier(dmQueueNotifier)
-			rawDG.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-				cmdRouter.Handle(i.Interaction)
-			})
+			if rawDG != nil {
+				rawDG.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+					cmdRouter.Handle(i.Interaction)
+				})
 
-			if state := discordSession.GetState(); state != nil {
-				guildIDs := make([]string, 0, len(state.Guilds))
-				for _, g := range state.Guilds {
-					guildIDs = append(guildIDs, g.ID)
+				if state := discordSession.GetState(); state != nil {
+					guildIDs := make([]string, 0, len(state.Guilds))
+					for _, g := range state.Guilds {
+						guildIDs = append(guildIDs, g.ID)
+					}
+					if errs := bot.RegisterAllGuilds(guildIDs); len(errs) > 0 {
+						logger.Warn("some guild command registrations failed", "count", len(errs))
+					}
 				}
-				if errs := bot.RegisterAllGuilds(guildIDs); len(errs) > 0 {
-					logger.Warn("some guild command registrations failed", "count", len(errs))
-				}
+			}
+
+			// Phase 120 seam: hand the constructed router to the e2e harness
+			// (or any other test caller) so it can deliver injected
+			// interactions through cmdRouter.Handle. No-op in production.
+			if cfg.onRouterReady != nil {
+				cfg.onRouterReady(cmdRouter)
 			}
 		}
 
