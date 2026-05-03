@@ -22,7 +22,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -51,26 +50,6 @@ type e2eHarness struct {
 	campaignID uuid.UUID
 }
 
-// syncBuffer is a tiny goroutine-safe wrapper around bytes.Buffer so the
-// run() goroutine can write logs concurrently with test reads.
-type syncBuffer struct {
-	mu  sync.Mutex
-	buf []byte
-}
-
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.buf = append(b.buf, p...)
-	return len(p), nil
-}
-
-func (b *syncBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return string(b.buf)
-}
-
 // startE2EHarness constructs and boots a fresh harness. Callers must defer
 // h.Stop(). Failure is reported via t.Fatalf.
 func startE2EHarness(t *testing.T) *e2eHarness {
@@ -91,7 +70,6 @@ func startE2EHarness(t *testing.T) *e2eHarness {
 
 	addr := getFreePort(t)
 
-	logBuf := &syncBuffer{}
 	fake := discordfake.New()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -99,7 +77,7 @@ func startE2EHarness(t *testing.T) *e2eHarness {
 	routerReady := make(chan struct{})
 
 	go func() {
-		doneCh <- runWithOptions(ctx, logBuf, addr,
+		doneCh <- runWithOptions(ctx, io.Discard, addr,
 			withDiscordSession(fake),
 			withCommandRouterReady(func(r *discord.CommandRouter) {
 				// Hook the router into the fake so InjectInteraction calls

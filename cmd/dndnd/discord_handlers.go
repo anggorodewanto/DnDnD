@@ -161,8 +161,10 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	// LootEncounterProvider — *refdata.Queries already exposes
 	// GetMostRecentCompletedEncounter so it satisfies the interface
 	// structurally. Skip when either dependency is nil so handler
-	// construction is safe in test deploys.
-	if deps.lootService != nil && deps.queries != nil && checkCampProv != nil && characterLookup != nil {
+	// construction is safe in test deploys. checkCampProv and
+	// characterLookup are derived from deps.queries above, so the
+	// queries check covers them too.
+	if deps.lootService != nil && deps.queries != nil {
 		handlers.loot = discord.NewLootHandler(
 			deps.session,
 			checkCampProv,
