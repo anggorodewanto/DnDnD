@@ -59,12 +59,21 @@ type MoveHandler struct {
 	encounterProvider MoveEncounterProvider
 	campaignProv      CampaignProvider
 	characterLookup   MoveCharacterLookup
+	turnGate          TurnGate
 }
 
 // SetCharacterLookup wires the character lookup used by exploration /move to
 // resolve the invoking Discord user's PC combatant.
 func (h *MoveHandler) SetCharacterLookup(lookup MoveCharacterLookup) {
 	h.characterLookup = lookup
+}
+
+// SetTurnGate wires the Phase 27 turn-ownership / advisory-lock gate.
+// A nil gate disables the check (preserves backwards-compatibility for
+// handlers constructed before Phase 27 wiring rolled out and for unit tests
+// that don't care about ownership). Production wiring always supplies one.
+func (h *MoveHandler) SetTurnGate(g TurnGate) {
+	h.turnGate = g
 }
 
 // HasCharacterLookup reports whether a non-nil MoveCharacterLookup has been
@@ -139,6 +148,18 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	// Phase 27 turn-ownership + advisory-lock gate. /move is NOT exempt
+	// (combat.IsExemptCommand("move") == false), so two concurrent /move
+	// invocations on the same active turn must serialize through
+	// pg_advisory_xact_lock and a wrong-owner invocation must be rejected
+	// before any turn / combatant lookup runs.
+	if h.turnGate != nil {
+		if _, gateErr := h.turnGate.AcquireAndRelease(ctx, encounterID, discordUserID(interaction)); gateErr != nil {
+			respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+			return
+		}
+	}
+
 	// Get turn and combatant
 	turn, err := h.turnProvider.GetTurn(ctx, encounter.CurrentTurnID.UUID)
 	if err != nil {
@@ -151,8 +172,6 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 		respondEphemeral(h.session, interaction, "Failed to get combatant data.")
 		return
 	}
-
-	// TODO: turn ownership validation will be wired when full turn lock is available
 
 	// Get map data
 	if !encounter.MapID.Valid {

@@ -411,6 +411,10 @@ func TestIsExemptCommand(t *testing.T) {
 	assert.True(t, combat.IsExemptCommand("check"))
 	assert.True(t, combat.IsExemptCommand("save"))
 	assert.True(t, combat.IsExemptCommand("rest"))
+	// /distance is read-only (no DB writes, no resource deduction). Treating
+	// it as exempt lets the distance handler skip the advisory lock so a
+	// peer measuring range cannot block the active player's /move.
+	assert.True(t, combat.IsExemptCommand("distance"))
 	assert.False(t, combat.IsExemptCommand("attack"))
 	assert.False(t, combat.IsExemptCommand("move"))
 	assert.False(t, combat.IsExemptCommand("cast"))

@@ -16,6 +16,13 @@ type FlyHandler struct {
 	combatService     MoveService
 	turnProvider      MoveTurnProvider
 	encounterProvider MoveEncounterProvider
+	turnGate          TurnGate
+}
+
+// SetTurnGate wires the Phase 27 turn-ownership / advisory-lock gate.
+// A nil gate disables the check; production wiring always supplies one.
+func (h *FlyHandler) SetTurnGate(g TurnGate) {
+	h.turnGate = g
 }
 
 // NewFlyHandler creates a new FlyHandler.
@@ -63,6 +70,16 @@ func (h *FlyHandler) Handle(interaction *discordgo.Interaction) {
 	if !encounter.CurrentTurnID.Valid {
 		respondEphemeral(h.session, interaction, "No active turn.")
 		return
+	}
+
+	// Phase 27 turn-ownership + advisory-lock gate. /fly mutates altitude
+	// and burns movement; a non-owner must be rejected and concurrent
+	// /fly invocations on the same turn must serialize.
+	if h.turnGate != nil {
+		if _, gateErr := h.turnGate.AcquireAndRelease(ctx, encounterID, discordUserID(interaction)); gateErr != nil {
+			respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+			return
+		}
 	}
 
 	// Get turn and combatant

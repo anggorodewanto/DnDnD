@@ -26,6 +26,7 @@ type userEncounterResolver interface {
 type discordHandlerDeps struct {
 	session                  discord.Session
 	queries                  *refdata.Queries
+	db                       combat.TxBeginner // Phase 27 turn-gate; nil disables /move /fly ownership checks
 	combatService            *combat.Service
 	roller                   *dice.Roller
 	resolver                 userEncounterResolver
@@ -184,6 +185,21 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	}
 	if deps.enemyTurnEncounterLookup != nil {
 		handlers.enemyTurnNotifier.SetEncounterLookup(deps.enemyTurnEncounterLookup)
+	}
+
+	// Phase 27 turn-gate: wire the advisory-lock + ownership-validation
+	// gate into the state-mutating /move and /fly handlers. /distance is
+	// intentionally skipped (combat.IsExemptCommand("distance") is true);
+	// SetTurnGate on the distance handler is a no-op stored field today.
+	// Both deps.db and deps.queries must be present — nil-safe so test
+	// deploys without a database can still construct handlers.
+	if deps.db != nil && deps.queries != nil {
+		gate := newTurnGateAdapter(deps.db, deps.queries)
+		handlers.move.SetTurnGate(gate)
+		handlers.fly.SetTurnGate(gate)
+		// /distance is exempt; setter is wired anyway so the production
+		// graph is symmetric with /move and /fly.
+		handlers.distance.SetTurnGate(gate)
 	}
 
 	return handlers
@@ -539,4 +555,34 @@ func newActionPendingStoreAdapter(q *refdata.Queries) discord.ActionPendingStore
 
 func (a *actionPendingStoreAdapter) CreatePendingAction(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error) {
 	return a.queries.CreatePendingAction(ctx, arg)
+}
+
+// turnGateAdapter satisfies discord.TurnGate by delegating to
+// combat.AcquireTurnLockWithValidation. After validation succeeds we commit
+// the held tx immediately to release the advisory lock — this is intentional:
+// today's /move and /fly handlers do their persistence outside the lock-held
+// tx, so the gate's job is to fire the wrong-owner check (and serialize peers
+// at the validation point). A future patch can extend the adapter to thread
+// the tx through the persistence layer for true serialized writes.
+type turnGateAdapter struct {
+	db      combat.TxBeginner
+	queries *refdata.Queries
+}
+
+func newTurnGateAdapter(db combat.TxBeginner, queries *refdata.Queries) *turnGateAdapter {
+	return &turnGateAdapter{db: db, queries: queries}
+}
+
+// AcquireAndRelease validates ownership, acquires the per-turn advisory
+// lock, and commits the tx so the lock releases. Errors propagate verbatim
+// so the discord handler can branch on combat.ErrNotYourTurn / ErrLockTimeout.
+func (a *turnGateAdapter) AcquireAndRelease(ctx context.Context, encounterID uuid.UUID, discordUserID string) (combat.TurnOwnerInfo, error) {
+	tx, info, err := combat.AcquireTurnLockWithValidation(ctx, a.db, a.queries, encounterID, discordUserID)
+	if err != nil {
+		return combat.TurnOwnerInfo{}, err
+	}
+	if commitErr := tx.Commit(); commitErr != nil {
+		return combat.TurnOwnerInfo{}, commitErr
+	}
+	return info, nil
 }

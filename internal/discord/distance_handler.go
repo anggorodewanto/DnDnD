@@ -18,6 +18,16 @@ type DistanceHandler struct {
 	combatService     MoveService
 	turnProvider      MoveTurnProvider
 	encounterProvider MoveEncounterProvider
+	turnGate          TurnGate
+}
+
+// SetTurnGate wires the Phase 27 turn-ownership / advisory-lock gate.
+// /distance is exempt per combat.IsExemptCommand("distance"), so the gate
+// is intentionally never invoked — this setter exists only to keep the
+// production-wiring path symmetric with /move and /fly. A future change
+// that makes /distance state-mutating would simply call gate.AcquireAndRelease.
+func (h *DistanceHandler) SetTurnGate(g TurnGate) {
+	h.turnGate = g
 }
 
 // NewDistanceHandler creates a new DistanceHandler.
@@ -36,8 +46,25 @@ func NewDistanceHandler(
 }
 
 // Handle processes the /distance command interaction.
+//
+// Phase 27 contract: /distance is read-only (no DB writes, no resource
+// deduction) and combat.IsExemptCommand("distance") returns true. The
+// handler therefore intentionally skips the per-turn advisory lock so a
+// peer measuring range cannot block the active player's /move. We assert
+// the exemption at the top so a future regression that flips the exempt
+// list will surface as a panic in tests instead of silently letting
+// /distance acquire the lock.
 func (h *DistanceHandler) Handle(interaction *discordgo.Interaction) {
 	ctx := context.Background()
+
+	if !combat.IsExemptCommand("distance") {
+		// Defensive: combat.IsExemptCommand("distance") is true today; if a
+		// future change removes "distance" from the exempt set, /distance
+		// must take the lock like /move and /fly do (gate call would go
+		// here). Today this branch is unreachable.
+		respondEphemeral(h.session, interaction, "Distance command misconfigured: missing turn exemption.")
+		return
+	}
 
 	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
 	if len(data.Options) == 0 {

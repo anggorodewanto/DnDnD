@@ -694,6 +694,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			discordHandlerSet := buildDiscordHandlers(discordHandlerDeps{
 				session:                  discordSession,
 				queries:                  queries,
+				db:                       db, // Phase 27 turn-gate (combat.TxBeginner)
 				combatService:            combatSvc,
 				roller:                   dice.NewRoller(nil),
 				resolver:                 newDiscordUserEncounterResolver(queries),
@@ -738,7 +739,11 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 					return char.Name, nil
 				},
 			}
-			cmdRouter := discord.NewCommandRouter(bot, nil, regDeps)
+			// Phase 12: wire the /setup handler so the DM can create the
+			// SYSTEM/NARRATION/COMBAT/REFERENCE channel structure for their
+			// guild. Without this, /setup falls through to "Unknown command".
+			setupHandler := discord.NewSetupHandler(bot, newSetupCampaignLookup(queries))
+			cmdRouter := discord.NewCommandRouter(bot, setupHandler, regDeps)
 			// Phase 112: wire panic recovery + error recorder so any handler
 			// panic is caught, converted into a friendly ephemeral, logged at
 			// ERROR level, and recorded for the DM dashboard badge / panel.

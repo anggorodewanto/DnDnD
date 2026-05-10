@@ -263,10 +263,18 @@ func (s *Service) TurnUndead(ctx context.Context, cmd TurnUndeadCommand, roller 
 			// Check Destroy Undead
 			creatureCR := ParseCR(creature.Cr)
 			if destroyActive && creatureCR <= destroyCR {
-				// Destroy the undead. Drives through applyDamageHP so the
-				// Phase 118 hooks fire (concentration save, unconscious-at-0).
+				// Destroy the undead. Routed through ApplyDamage with
+				// Override=true so the Phase 118 hooks (concentration
+				// save, unconscious-at-0) still fire, while skipping
+				// R/I/V — Destroy Undead is an outright destruction
+				// effect and ignores damage-type modifiers.
 				tr.Destroyed = true
-				if _, err := s.applyDamageHP(ctx, c.EncounterID, c.ID, c.HpCurrent, 0, c.TempHp, false); err != nil {
+				if _, err := s.ApplyDamage(ctx, ApplyDamageInput{
+					EncounterID: c.EncounterID,
+					Target:      c,
+					RawDamage:   int(c.HpCurrent),
+					Override:    true,
+				}); err != nil {
 					return TurnUndeadResult{}, fmt.Errorf("destroying undead %s: %w", c.DisplayName, err)
 				}
 				logParts = append(logParts, fmt.Sprintf("✝️ %s (CR %s) is destroyed by Turn Undead!", c.DisplayName, creature.Cr))

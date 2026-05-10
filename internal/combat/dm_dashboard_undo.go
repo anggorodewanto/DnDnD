@@ -186,11 +186,25 @@ func (h *DMDashboardHandler) dispatchUndo(ctx context.Context, c refdata.Combata
 			isAlive = *bs.IsAlive
 		}
 		// Phase 118: an undo that decreases HP (e.g. undoing a heal) is a
-		// damage event; route through applyDamageHP so concentration save
-		// + unconscious hooks fire. Pure restore-to-higher (undoing a
-		// damage) skips the hooks.
+		// damage event; route through ApplyDamage (Override=true) so
+		// concentration save + unconscious hooks fire while skipping
+		// R/I/V and temp-HP absorption — undo asserts an exact prior HP
+		// state. Pure restore-to-higher (undoing damage) skips the hooks.
 		if hpCurrent < c.HpCurrent {
-			if _, err := h.svc.applyDamageHP(ctx, c.EncounterID, c.ID, c.HpCurrent, hpCurrent, tempHp, isAlive); err != nil {
+			if _, err := h.svc.ApplyDamage(ctx, ApplyDamageInput{
+				EncounterID: c.EncounterID,
+				Target:      c,
+				RawDamage:   int(c.HpCurrent - hpCurrent),
+				Override:    true,
+			}); err != nil {
+				return false, fmt.Errorf("restoring HP: %w", err)
+			}
+			// ApplyDamage wrote HP+isAlive but not the explicit tempHp the
+			// undo wants to restore. Issue a follow-up store call so the
+			// snapshot's tempHp / isAlive are honored exactly.
+			if _, err := h.svc.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
+				ID: c.ID, HpCurrent: hpCurrent, TempHp: tempHp, IsAlive: isAlive,
+			}); err != nil {
 				return false, fmt.Errorf("restoring HP: %w", err)
 			}
 		} else {
@@ -362,11 +376,26 @@ func (h *DMDashboardHandler) OverrideCombatantHP(w http.ResponseWriter, r *http.
 			before, _ := snapshotCombatantState(c)
 			isAlive := req.HpCurrent > 0
 			// Phase 118: when the override decreases HP, route through
-			// applyDamageHP so concentration save / unconscious hooks fire.
-			// For non-decrease (heal / restore) use the raw store call.
+			// ApplyDamage (Override=true) so concentration save / unconscious
+			// hooks fire. R/I/V and temp HP are skipped — DM is asserting
+			// an exact target HP. For non-decrease (heal / restore) use
+			// the raw store call.
 			var updated refdata.Combatant
 			if req.HpCurrent < c.HpCurrent {
-				updated, err = h.svc.applyDamageHP(ctx, encounterID, combatantID, c.HpCurrent, req.HpCurrent, req.TempHp, isAlive)
+				if _, err = h.svc.ApplyDamage(ctx, ApplyDamageInput{
+					EncounterID: encounterID,
+					Target:      c,
+					RawDamage:   int(c.HpCurrent - req.HpCurrent),
+					Override:    true,
+				}); err != nil {
+					return err
+				}
+				// ApplyDamage updated HP+isAlive but not the override's
+				// requested tempHp. Issue a follow-up store call so the
+				// requested HP / temp HP / isAlive are honored exactly.
+				updated, err = h.svc.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
+					ID: combatantID, HpCurrent: req.HpCurrent, TempHp: req.TempHp, IsAlive: isAlive,
+				})
 			} else {
 				updated, err = h.svc.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
 					ID: combatantID, HpCurrent: req.HpCurrent, TempHp: req.TempHp, IsAlive: isAlive,

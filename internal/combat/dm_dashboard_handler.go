@@ -319,23 +319,16 @@ func (h *DMDashboardHandler) applyDamageEffect(r *http.Request, targetID uuid.UU
 		return err
 	}
 
-	// Apply damage: temp HP absorbs first
-	remaining := dmg.Amount
-	tempHP := c.TempHp
-	if tempHP > 0 {
-		absorbed := min(tempHP, remaining)
-		tempHP -= absorbed
-		remaining -= absorbed
-	}
-	hpCurrent := c.HpCurrent - remaining
-	if hpCurrent < 0 {
-		hpCurrent = 0
-	}
-	isAlive := hpCurrent > 0
-
-	// Drive through the centralized helper so Phase 118 hooks fire
-	// (concentration save on damage, unconscious at 0 HP).
-	_, err = h.svc.applyDamageHP(r.Context(), c.EncounterID, targetID, c.HpCurrent, hpCurrent, tempHP, isAlive)
+	// Route through ApplyDamage so Phase 42 (R/I/V, temp HP, exhaustion
+	// HP-halving / level-6 death) and Phase 118 hooks (concentration save,
+	// unconscious-at-0) both fire. The DM-dashboard pending-action effect
+	// has no damage-type field, so an untyped amount is passed; R/I/V
+	// resolution will treat it as untyped (no resistance/immunity matches).
+	_, err = h.svc.ApplyDamage(r.Context(), ApplyDamageInput{
+		EncounterID: c.EncounterID,
+		Target:      c,
+		RawDamage:   int(dmg.Amount),
+	})
 	return err
 }
 

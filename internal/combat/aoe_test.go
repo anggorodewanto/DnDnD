@@ -2114,3 +2114,79 @@ func TestResolveAoESaves_HalfDamageRoundsDown(t *testing.T) {
 	assert.Equal(t, 3, result.Targets[0].DamageDealt)
 	assert.Equal(t, 47, result.Targets[0].HPAfter) // 50-3=47
 }
+
+// crit-03: ResolveAoESaves must route through ApplyDamage so the target's
+// resistance / immunity / vulnerability and temp HP apply before the HP write.
+
+func TestResolveAoESaves_NPCResistanceHalvesAoEDamage(t *testing.T) {
+	goblinID := uuid.New()
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: goblinID, DisplayName: "Fire-Goblin", HpMax: 30, HpCurrent: 30,
+			IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+			CreatureRefID: sql.NullString{String: "fire-goblin", Valid: true},
+		}, nil
+	}
+	store.getCreatureFn = func(_ context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "fire-goblin", DamageResistances: []string{"fire"}}, nil
+	}
+	var capturedHP refdata.UpdateCombatantHPParams
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		capturedHP = arg
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	// 8d6 each rolling 4 = 32 fire damage; resistance halves to 16.
+	roller := dice.NewRoller(func(max int) int { return 4 })
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		EncounterID: uuid.New(),
+		SpellName:   "Fireball",
+		DamageDice:  "8d6",
+		DamageType:  "fire",
+		SaveEffect:  "half_damage",
+		SaveResults: []SaveResult{{CombatantID: goblinID, Success: false}},
+	}
+	result, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.NoError(t, err)
+	require.Len(t, result.Targets, 1)
+	assert.Equal(t, 16, result.Targets[0].DamageDealt, "resistance halves 32 -> 16")
+	assert.Equal(t, 14, result.Targets[0].HPAfter)    // 30 - 16
+	assert.Equal(t, int32(14), capturedHP.HpCurrent)
+	assert.True(t, capturedHP.IsAlive)
+}
+
+func TestResolveAoESaves_NPCImmunityZeroesAoEDamage(t *testing.T) {
+	skeletonID := uuid.New()
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: skeletonID, DisplayName: "Skeleton", HpMax: 13, HpCurrent: 13,
+			IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+			CreatureRefID: sql.NullString{String: "skeleton", Valid: true},
+		}, nil
+	}
+	store.getCreatureFn = func(_ context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "skeleton", DamageImmunities: []string{"poison"}}, nil
+	}
+	var capturedHP refdata.UpdateCombatantHPParams
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		capturedHP = arg
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	// 4d4 each rolling 4 = 16 poison damage; immunity zeroes it.
+	roller := dice.NewRoller(func(max int) int { return 4 })
+	svc := NewService(store)
+	input := AoEDamageInput{
+		DamageDice: "4d4", DamageType: "poison", SaveEffect: "half_damage",
+		SaveResults: []SaveResult{{CombatantID: skeletonID, Success: false}},
+	}
+	result, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.Targets[0].DamageDealt)
+	assert.Equal(t, 13, result.Targets[0].HPAfter)
+	assert.Equal(t, int32(13), capturedHP.HpCurrent, "immunity must keep HP unchanged")
+}

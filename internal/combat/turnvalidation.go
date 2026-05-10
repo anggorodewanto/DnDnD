@@ -157,11 +157,16 @@ func AcquireTurnLockWithValidation(ctx context.Context, db TxBeginner, queries T
 	return tx, info, nil
 }
 
-// IsExemptCommand returns true if the command type is exempt from turn validation
-// and lock acquisition (/reaction, /check, /save, /rest).
+// IsExemptCommand returns true if the command type is exempt from advisory
+// turn-lock acquisition. The exempt set is the spec's read-only / off-turn
+// commands: /reaction (declared during another's turn), /check, /save, /rest,
+// and /distance (purely informational — no DB writes). Exempt commands MAY
+// still call ValidateTurnOwnership softly to gate by encounter membership,
+// but they SHOULD NOT take the per-turn advisory lock so the active player
+// is not blocked from moving while a peer is just measuring range.
 func IsExemptCommand(commandType string) bool {
 	switch commandType {
-	case "reaction", "check", "save", "rest":
+	case "reaction", "check", "save", "rest", "distance":
 		return true
 	default:
 		return false

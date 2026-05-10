@@ -538,20 +538,18 @@ func (s *Service) ResolveAoESaves(ctx context.Context, input AoEDamageInput, rol
 			damage = 0 // special case: DM resolution needed
 		}
 
-		// 4. Apply damage to HP via centralized helper which also enqueues
-		// concentration saves and applies unconscious-at-0-HP per Phase 118.
-		// PCs at 0 HP go unconscious + dying (still alive); NPCs die outright.
+		// 4. Route through ApplyDamage so Phase 42 (R/I/V, temp HP,
+		// exhaustion HP-halving / level-6 death) applies before the
+		// underlying applyDamageHP write. ApplyDamage in turn fires the
+		// Phase 118 concentration save / unconscious-at-0-HP hooks.
 		hpBefore := int(combatant.HpCurrent)
-		newHP := int(combatant.HpCurrent) - damage
-		if newHP < 0 {
-			newHP = 0
-		}
-		isAlive := newHP > 0
-		if newHP == 0 && !combatant.IsNpc {
-			isAlive = true
-		}
-
-		if _, err := s.applyDamageHP(ctx, combatant.EncounterID, combatant.ID, combatant.HpCurrent, int32(newHP), combatant.TempHp, isAlive); err != nil {
+		dmgRes, err := s.ApplyDamage(ctx, ApplyDamageInput{
+			EncounterID: combatant.EncounterID,
+			Target:      combatant,
+			RawDamage:   damage,
+			DamageType:  input.DamageType,
+		})
+		if err != nil {
 			return AoEDamageResult{}, fmt.Errorf("updating HP for %s: %w", combatant.DisplayName, err)
 		}
 
@@ -561,11 +559,11 @@ func (s *Service) ResolveAoESaves(ctx context.Context, input AoEDamageInput, rol
 			SaveSuccess: sr.Success,
 			SaveTotal:   sr.Total,
 			CoverBonus:  sr.CoverBonus,
-			DamageDealt: damage,
+			DamageDealt: dmgRes.FinalDamage,
 			HPBefore:    hpBefore,
-			HPAfter:     newHP,
+			HPAfter:     int(dmgRes.NewHP),
 		})
-		totalDamage += damage
+		totalDamage += dmgRes.FinalDamage
 	}
 
 	return AoEDamageResult{

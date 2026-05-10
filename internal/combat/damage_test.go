@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -552,5 +553,399 @@ func TestApplyCondition_PCNoCreatureRefAppliesNormally(t *testing.T) {
 	assert.Len(t, msgs, 1)
 	assert.Contains(t, msgs[0], "stunned")
 	assert.Contains(t, msgs[0], "applied")
+}
+
+// --- crit-03: Service.ApplyDamage wrapper integration tests ---
+
+// applyDamageMockStore returns a mockStore wired for ApplyDamage tests.
+// Captures applied HP / temp HP / isAlive on the combatant update path.
+func applyDamageMockStore() (*mockStore, *refdata.UpdateCombatantHPParams) {
+	captured := &refdata.UpdateCombatantHPParams{}
+	ms := defaultMockStore()
+	ms.updateCombatantHPFn = func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		*captured = arg
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, TempHp: arg.TempHp, IsAlive: arg.IsAlive, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	return ms, captured
+}
+
+func TestApplyDamage_NPCResistanceHalvesIncomingDamage(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "fire-elemental", DamageResistances: []string{"slashing"}}, nil
+	}
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: combatantID, EncounterID: encounterID,
+		HpMax: 30, HpCurrent: 30, TempHp: 0, IsAlive: true, IsNpc: true,
+		CreatureRefID: sql.NullString{String: "fire-elemental", Valid: true},
+		Conditions:    json.RawMessage(`[]`),
+	}
+
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 10, DamageType: "slashing",
+	})
+	assert.NoError(t, err)
+	// 10 / 2 = 5 final damage
+	assert.Equal(t, 5, res.FinalDamage)
+	assert.Contains(t, res.Reason, "resistance")
+	assert.Equal(t, int32(25), captured.HpCurrent)
+	assert.True(t, captured.IsAlive)
+}
+
+func TestApplyDamage_NPCImmunityZeroes(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "skeleton", DamageImmunities: []string{"poison"}}, nil
+	}
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 20, HpCurrent: 20, IsAlive: true, IsNpc: true,
+		CreatureRefID: sql.NullString{String: "skeleton", Valid: true},
+		Conditions:    json.RawMessage(`[]`),
+	}
+
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 50, DamageType: "poison",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 0, res.FinalDamage)
+	assert.Contains(t, res.Reason, "immune")
+	assert.Equal(t, int32(20), captured.HpCurrent, "immune NPC must take 0 damage")
+}
+
+func TestApplyDamage_NPCVulnerabilityDoubles(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "troll", DamageVulnerabilities: []string{"fire"}}, nil
+	}
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 50, HpCurrent: 50, IsAlive: true, IsNpc: true,
+		CreatureRefID: sql.NullString{String: "troll", Valid: true},
+		Conditions:    json.RawMessage(`[]`),
+	}
+
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 8, DamageType: "fire",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 16, res.FinalDamage)
+	assert.Equal(t, int32(34), captured.HpCurrent)
+}
+
+func TestApplyDamage_TempHPAbsorbsBeforeCurrent(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 30, HpCurrent: 30, TempHp: 12, IsAlive: true, IsNpc: false,
+		Conditions: json.RawMessage(`[]`),
+	}
+
+	// 7 damage entirely soaked by 12 temp HP -> hp_current unchanged, temp -> 5
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 7, DamageType: "slashing",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 7, res.AbsorbedTemp)
+	assert.Equal(t, 0, res.FinalDamage)
+	assert.Equal(t, int32(30), captured.HpCurrent)
+	assert.Equal(t, int32(5), captured.TempHp)
+}
+
+func TestApplyDamage_TempHPPartialSpillsIntoHP(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 30, HpCurrent: 30, TempHp: 5, IsAlive: true, IsNpc: false,
+		Conditions: json.RawMessage(`[]`),
+	}
+
+	// 10 damage: 5 absorbed by temp -> 5 spills into HP
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 10, DamageType: "slashing",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 5, res.AbsorbedTemp)
+	assert.Equal(t, 5, res.FinalDamage)
+	assert.Equal(t, int32(25), captured.HpCurrent)
+	assert.Equal(t, int32(0), captured.TempHp)
+}
+
+func TestApplyDamage_ResistanceAppliedBeforeTempHP(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "bear", DamageResistances: []string{"slashing"}}, nil
+	}
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 30, HpCurrent: 30, TempHp: 4, IsAlive: true, IsNpc: true,
+		CreatureRefID: sql.NullString{String: "bear", Valid: true},
+		Conditions:    json.RawMessage(`[]`),
+	}
+	// 20 raw -> resistance halves to 10 -> 4 absorbed by temp -> 6 to HP
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 20, DamageType: "slashing",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 4, res.AbsorbedTemp)
+	assert.Equal(t, 6, res.FinalDamage)
+	assert.Equal(t, int32(24), captured.HpCurrent)
+	assert.Equal(t, int32(0), captured.TempHp)
+}
+
+func TestApplyDamage_ExhaustionLevel4HalvesMaxHP(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	svc := NewService(ms)
+	// Exhaustion 4: effective max HP is halved (40/2 = 20). Current HP is 35
+	// (above the new effective max), so it must be capped to 20 before damage.
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 40, HpCurrent: 35, IsAlive: true, IsNpc: false,
+		ExhaustionLevel: 4,
+		Conditions:      json.RawMessage(`[]`),
+	}
+
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 5, DamageType: "slashing",
+	})
+	assert.NoError(t, err)
+	// Effective HP = min(35, 20) = 20 -> 20 - 5 = 15.
+	assert.Equal(t, int32(15), captured.HpCurrent)
+	assert.Equal(t, 5, res.FinalDamage)
+}
+
+func TestApplyDamage_ExhaustionLevel6KillsImmediately(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 40, HpCurrent: 40, IsAlive: true, IsNpc: false,
+		ExhaustionLevel: 6,
+		Conditions:      json.RawMessage(`[]`),
+	}
+
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 1, DamageType: "slashing",
+	})
+	assert.NoError(t, err)
+	assert.True(t, res.Killed)
+	assert.Equal(t, int32(0), captured.HpCurrent)
+	assert.False(t, captured.IsAlive)
+}
+
+func TestApplyDamage_PCAtZeroStaysAliveDying(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 10, HpCurrent: 5, IsAlive: true, IsNpc: false,
+		Conditions: json.RawMessage(`[]`),
+	}
+
+	_, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 100, DamageType: "fire",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, int32(0), captured.HpCurrent)
+	assert.True(t, captured.IsAlive, "PCs at 0 HP go dying, not dead")
+}
+
+func TestApplyDamage_NPCDiesAtZero(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 10, HpCurrent: 5, IsAlive: true, IsNpc: true,
+		Conditions: json.RawMessage(`[]`),
+	}
+
+	_, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 100, DamageType: "fire",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, int32(0), captured.HpCurrent)
+	assert.False(t, captured.IsAlive, "NPCs at 0 HP die")
+}
+
+func TestApplyDamage_OverrideSkipsRIVAndTempHP(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	// Even though the creature has resistance to slashing, Override=true must
+	// honor the raw damage value end-to-end.
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "x", DamageResistances: []string{"slashing"}}, nil
+	}
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 30, HpCurrent: 30, TempHp: 10, IsAlive: true, IsNpc: true,
+		CreatureRefID: sql.NullString{String: "x", Valid: true},
+		Conditions:    json.RawMessage(`[]`),
+	}
+
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 8, DamageType: "slashing",
+		Override: true,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 8, res.FinalDamage, "override must not halve")
+	assert.Equal(t, 0, res.AbsorbedTemp, "override must not consume temp HP")
+	assert.Equal(t, int32(22), captured.HpCurrent)
+	assert.Equal(t, int32(10), captured.TempHp, "temp HP untouched in override")
+}
+
+func TestApplyDamage_PCNoCreatureRefHasNoRIV(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	// PCs have no creature_ref_id -> no R/I/V lookup. getCreature must NOT be
+	// invoked. Wire it to fail loudly to verify.
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		t.Fatalf("getCreature must not be called for PC; called with %s", id)
+		return refdata.Creature{}, nil
+	}
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 30, HpCurrent: 30, IsAlive: true, IsNpc: false,
+		Conditions: json.RawMessage(`[]`),
+	}
+
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 7, DamageType: "fire",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 7, res.FinalDamage)
+	assert.Equal(t, int32(23), captured.HpCurrent)
+}
+
+func TestApplyDamage_PetrifiedConditionGrantsResistance(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	svc := NewService(ms)
+	conds := json.RawMessage(`[{"condition":"petrified"}]`)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 30, HpCurrent: 30, IsAlive: true, IsNpc: false,
+		Conditions: conds,
+	}
+
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 10, DamageType: "fire",
+	})
+	assert.NoError(t, err)
+	// petrified -> resistance to all damage -> 10/2 = 5
+	assert.Equal(t, 5, res.FinalDamage)
+	assert.Equal(t, int32(25), captured.HpCurrent)
+}
+
+func TestApplyDamage_NegativeDamageRejected(t *testing.T) {
+	svc := NewService(defaultMockStore())
+	_, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		Target:    refdata.Combatant{Conditions: json.RawMessage(`[]`)},
+		RawDamage: -1,
+	})
+	assert.Error(t, err)
+}
+
+func TestApplyDamage_InvalidConditionsJSONErrors(t *testing.T) {
+	svc := NewService(defaultMockStore())
+	_, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		Target:    refdata.Combatant{Conditions: json.RawMessage(`not-json`), HpMax: 10, HpCurrent: 10},
+		RawDamage: 1,
+	})
+	assert.Error(t, err)
+}
+
+func TestApplyDamage_NPCCreatureLookupErrorPropagates(t *testing.T) {
+	encounterID := uuid.New()
+	ms, _ := applyDamageMockStore()
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{}, fmt.Errorf("transient db error")
+	}
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 30, HpCurrent: 30, IsAlive: true, IsNpc: true,
+		CreatureRefID: sql.NullString{String: "x", Valid: true},
+		Conditions:    json.RawMessage(`[]`),
+	}
+
+	_, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 5, DamageType: "fire",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "transient db error")
+}
+
+func TestApplyDamage_NPCMissingCreatureRowSkipsRIV(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{}, sql.ErrNoRows
+	}
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 20, HpCurrent: 20, IsAlive: true, IsNpc: true,
+		CreatureRefID: sql.NullString{String: "homebrew-missing", Valid: true},
+		Conditions:    json.RawMessage(`[]`),
+	}
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 7, DamageType: "fire",
+	})
+	assert.NoError(t, err)
+	// No R/I/V → 7 damage straight through
+	assert.Equal(t, 7, res.FinalDamage)
+	assert.Equal(t, int32(13), captured.HpCurrent)
+}
+
+// TestApplyDamage_FiresConcentrationSave verifies the wrapper still funnels
+// through applyDamageHP which enqueues a concentration save when the target
+// is concentrating and damage > 0.
+func TestApplyDamage_FiresConcentrationSave(t *testing.T) {
+	encounterID := uuid.New()
+	ms, _ := applyDamageMockStore()
+	saveCreated := false
+	var capturedSave refdata.CreatePendingSaveParams
+	ms.getCombatantConcentrationFn = func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+		return refdata.GetCombatantConcentrationRow{
+			ConcentrationSpellID:   sql.NullString{String: "bless", Valid: true},
+			ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+		}, nil
+	}
+	ms.createPendingSaveFn = func(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+		saveCreated = true
+		capturedSave = arg
+		return refdata.PendingSafe{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID}, nil
+	}
+	svc := NewService(ms)
+	target := refdata.Combatant{
+		ID: uuid.New(), EncounterID: encounterID,
+		HpMax: 30, HpCurrent: 30, IsAlive: true, IsNpc: false,
+		Conditions: json.RawMessage(`[]`),
+	}
+	_, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 8, DamageType: "fire",
+	})
+	assert.NoError(t, err)
+	assert.True(t, saveCreated, "concentration save must be enqueued")
+	assert.Equal(t, "concentration", capturedSave.Source)
 }
 

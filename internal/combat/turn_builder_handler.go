@@ -232,6 +232,16 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 	}
 
 	damageApplied := make(map[uuid.UUID]int32)
+	// Per-attack damage queue. We apply damage per-hit (rather than
+	// aggregating to a totals map) so that ApplyDamage can resolve R/I/V
+	// against the actual damage type of each strike. Aggregation across
+	// mixed types would silently drop the type info.
+	type pendingHit struct {
+		targetID   uuid.UUID
+		amount     int32
+		damageType string
+	}
+	var hits []pendingHit
 
 	// Process each step
 	for i := range plan.Steps {
@@ -265,10 +275,14 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 				result := RollAttack(*step.Attack, int(target.Ac), roller)
 				step.Attack.RollResult = &result
 			}
-			// Apply damage if hit
+			// Queue damage if hit, preserving per-attack damage type so the
+			// ApplyDamage R/I/V resolution can match correctly.
 			if step.Attack.RollResult != nil && step.Attack.RollResult.Hit {
-				dmg := int32(step.Attack.RollResult.DamageTotal)
-				damageApplied[step.Attack.TargetID] += dmg
+				hits = append(hits, pendingHit{
+					targetID:   step.Attack.TargetID,
+					amount:     int32(step.Attack.RollResult.DamageTotal),
+					damageType: step.Attack.DamageType,
+				})
 			}
 
 		case StepTypeAbility:
@@ -276,21 +290,25 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 		}
 	}
 
-	// Apply accumulated damage via the centralized Phase 118 helper, which
-	// also enqueues concentration saves and applies unconscious-at-0-HP.
-	for targetID, totalDmg := range damageApplied {
-		target, err := s.store.GetCombatant(ctx, targetID)
+	// Apply each hit through the ApplyDamage wrapper so Phase 42 (R/I/V,
+	// temp HP, exhaustion HP-halving / level-6 death) and Phase 118
+	// (concentration save, unconscious-at-0-HP) both fire per strike. The
+	// returned summary aggregates the post-R/I/V damage per target.
+	for _, hit := range hits {
+		target, err := s.store.GetCombatant(ctx, hit.targetID)
 		if err != nil {
 			continue
 		}
-		newHP := target.HpCurrent - totalDmg
-		if newHP < 0 {
-			newHP = 0
+		dmgRes, err := s.ApplyDamage(ctx, ApplyDamageInput{
+			EncounterID: target.EncounterID,
+			Target:      target,
+			RawDamage:   int(hit.amount),
+			DamageType:  hit.damageType,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("applying damage to %s: %w", hit.targetID, err)
 		}
-		isAlive := newHP > 0
-		if _, err := s.applyDamageHP(ctx, target.EncounterID, targetID, target.HpCurrent, newHP, target.TempHp, isAlive); err != nil {
-			return nil, fmt.Errorf("applying damage to %s: %w", targetID, err)
-		}
+		damageApplied[hit.targetID] += int32(dmgRes.FinalDamage)
 	}
 
 	// Create action log

@@ -329,6 +329,12 @@ type AttackInput struct {
 	AttackerObscurement ObscurementLevel // Effective obscurement for attacker
 	TargetObscurement   ObscurementLevel // Effective obscurement for target
 	Features            []FeatureDefinition // Feature Effect System definitions (magic items, etc.)
+	IsRaging            bool            // Attacker is currently raging (Phase 46)
+	WearingArmor        bool            // Attacker is wearing armor (Defense fighting style)
+	OneHandedMeleeOnly  bool            // Wielding a one-handed melee weapon with no off-hand weapon (Dueling)
+	AllyWithinFt        int             // Distance to nearest ally relative to target (Pack Tactics, Sneak Attack)
+	AbilityUsed         string          // "str" or "dex" — which ability mod was chosen for this attack
+	UsedThisTurn        map[string]bool // Per-turn feature usage tracking (Sneak Attack OncePerTurn)
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -452,18 +458,6 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		dmgMod = *input.OverrideDmgMod
 	}
 
-	// Apply Feature Effect System bonuses (magic items, etc.)
-	if len(input.Features) > 0 {
-		attackCtx := BuildAttackEffectContext(AttackEffectInput{
-			Weapon: input.Weapon,
-		})
-		atkResult := ProcessEffects(input.Features, TriggerOnAttackRoll, attackCtx)
-		atkMod += atkResult.FlatModifier
-
-		dmgResult := ProcessEffects(input.Features, TriggerOnDamageRoll, attackCtx)
-		dmgMod += dmgResult.FlatModifier
-	}
-
 	// GWM / Sharpshooter: -5 to hit, +10 to damage
 	gwmSharpshooterBonus := 0
 	if input.GWM || input.Sharpshooter {
@@ -486,7 +480,9 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		Reckless:     input.Reckless,
 	}
 
-	// Detect advantage/disadvantage
+	// Detect advantage/disadvantage BEFORE the Feature Effect System runs so
+	// effects with HasAdvantage / AdvantageOrAllyWithin filters (Sneak Attack,
+	// Pack Tactics) can read the resolved roll mode.
 	advInput := AdvantageInput{
 		AttackerConditions:  input.AttackerConditions,
 		TargetConditions:    input.TargetConditions,
@@ -512,6 +508,29 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	result.AdvantageReasons = advReasons
 	result.DisadvantageReasons = disadvReasons
 
+	// Apply Feature Effect System bonuses (class features, fighting styles,
+	// magic items). Only post-cancellation Advantage counts as "has advantage"
+	// for FES purposes — cancelled adv+disadv = normal roll.
+	var fesDamageDice []string
+	if len(input.Features) > 0 {
+		attackCtx := BuildAttackEffectContext(AttackEffectInput{
+			Weapon:             input.Weapon,
+			HasAdvantage:       rollMode == dice.Advantage,
+			AllyWithinFt:       input.AllyWithinFt,
+			WearingArmor:       input.WearingArmor,
+			OneHandedMeleeOnly: input.OneHandedMeleeOnly,
+			IsRaging:           input.IsRaging,
+			AbilityUsed:        input.AbilityUsed,
+			UsedThisTurn:       input.UsedThisTurn,
+		})
+		atkResult := ProcessEffects(input.Features, TriggerOnAttackRoll, attackCtx)
+		atkMod += atkResult.FlatModifier
+
+		dmgResult := ProcessEffects(input.Features, TriggerOnDamageRoll, attackCtx)
+		dmgMod += dmgResult.FlatModifier
+		fesDamageDice = dmgResult.ExtraDice
+	}
+
 	// Auto-crit: skip attack roll, auto-hit and auto-crit
 	if input.AutoCrit {
 		result.Hit = true
@@ -519,7 +538,8 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		result.AutoCrit = true
 		result.AutoCritReason = input.AutoCritReason
 		dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, true, input.TwoHanded, roller, input.MonkLevel)
-		result.DamageTotal = dmg + gwmSharpshooterBonus
+		extra := rollFESExtraDice(fesDamageDice, true, roller)
+		result.DamageTotal = dmg + gwmSharpshooterBonus + extra
 		result.DamageDice = damageDice
 		result.DamageRoll = dmgRoll
 		return result, nil
@@ -548,11 +568,28 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 
 	// Roll damage
 	dmg, damageDice, dmgRoll := resolveWeaponDamage(input.Weapon, dmgMod, result.CriticalHit, input.TwoHanded, roller, input.MonkLevel)
-	result.DamageTotal = dmg + gwmSharpshooterBonus
+	extra := rollFESExtraDice(fesDamageDice, result.CriticalHit, roller)
+	result.DamageTotal = dmg + gwmSharpshooterBonus + extra
 	result.DamageDice = damageDice
 	result.DamageRoll = dmgRoll
 
 	return result, nil
+}
+
+// rollFESExtraDice rolls each dice expression collected from the Feature
+// Effect System (Sneak Attack, smite-style on-hit dice, etc.) and returns
+// the summed total. On a critical hit each dice group's count is doubled
+// (per Roller.RollDamage). Empty input returns 0.
+func rollFESExtraDice(exprs []string, critical bool, roller *dice.Roller) int {
+	total := 0
+	for _, expr := range exprs {
+		r, err := roller.RollDamage(expr, critical)
+		if err != nil {
+			continue
+		}
+		total += r.Total
+	}
+	return total
 }
 
 // resolveInLongRange determines if the attack is in long range, handling
@@ -865,6 +902,14 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	input.AttackerObscurement = attackerObs
 	input.TargetObscurement = targetObs
 
+	// Wire Feature Effect System: builds class/fighting-style features and
+	// populates EffectContext flags (IsRaging, AllyWithinFt, AbilityUsed,
+	// WearingArmor, OneHandedMeleeOnly) so Sneak Attack, Rage damage,
+	// Pack Tactics, etc. actually fire end-to-end.
+	if err := s.populateAttackFES(ctx, &input, cmd, char, weapon, scores); err != nil {
+		return AttackResult{}, err
+	}
+
 	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 }
 
@@ -874,6 +919,7 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	scores := AbilityScores{Str: 10, Dex: 10}
 	profBonus := 2
 	hasTavernBrawler := false
+	var charPtr *refdata.Character
 
 	if cmd.Attacker.CharacterID.Valid {
 		char, err := s.store.GetCharacter(ctx, cmd.Attacker.CharacterID.UUID)
@@ -887,6 +933,7 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 		scores = s
 		profBonus = int(char.ProficiencyBonus)
 		hasTavernBrawler = HasFeat(char.Features, "tavern-brawler")
+		charPtr = &char
 	}
 
 	updatedTurn, err := UseAttack(cmd.Turn)
@@ -911,6 +958,11 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	}
 	input.AttackerObscurement = attackerObs
 	input.TargetObscurement = targetObs
+
+	// Wire FES so Rage damage / Pack Tactics still apply to improvised hits.
+	if err := s.populateAttackFES(ctx, &input, cmd, charPtr, weapon, scores); err != nil {
+		return AttackResult{}, err
+	}
 
 	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 }
@@ -1101,4 +1153,115 @@ func colToIndex(col string) int {
 	}
 	c := strings.ToUpper(col)[0]
 	return int(c - 'A')
+}
+
+// attackAbilityUsed mirrors abilityModForWeapon's selection logic and reports
+// the human-readable ability label ("str" or "dex") that was used for the
+// attack roll. Used to populate EffectContext.AbilityUsed so FES filters
+// like Rage's `ability_used: str` actually evaluate correctly.
+func attackAbilityUsed(scores AbilityScores, weapon refdata.Weapon, monkLevel int) string {
+	strMod := AbilityModifier(scores.Str)
+	dexMod := AbilityModifier(scores.Dex)
+
+	if HasProperty(weapon, "finesse") {
+		if dexMod > strMod {
+			return "dex"
+		}
+		return "str"
+	}
+	if monkLevel > 0 && IsMonkWeapon(weapon) {
+		if dexMod > strMod {
+			return "dex"
+		}
+		return "str"
+	}
+	if IsRangedWeapon(weapon) {
+		return "dex"
+	}
+	return "str"
+}
+
+// noAllyWithinFt is the sentinel returned by nearestAllyDistanceFt when no
+// living non-attacker ally was found in the encounter. Chosen far above any
+// reachable feature filter (Pack Tactics / Sneak Attack: 5ft).
+const noAllyWithinFt = 1_000_000
+
+// nearestAllyDistanceFt returns the chebyshev grid distance (in feet) from
+// the nearest living ally of `attacker` to the `target`. Allies are
+// combatants in the same encounter on the same side (PC vs NPC) other than
+// the attacker themselves. Dead combatants are excluded. Returns
+// noAllyWithinFt when no eligible ally exists.
+//
+// Distance uses Chebyshev (max(|dr|,|dc|)) × 5ft to match /move pathfinding
+// (internal/pathfinding/pathfinding.go heuristic) and the OA reach check —
+// diagonals count as 5ft, not 5*sqrt(2)ft. Z-axis is ignored: the FES filters
+// that consume this value ("ally within Xft") are 2D adjacency checks.
+func nearestAllyDistanceFt(attacker, target refdata.Combatant, all []refdata.Combatant) int {
+	best := noAllyWithinFt
+	tCol := colToIndex(target.PositionCol)
+	tRow := int(target.PositionRow) - 1
+	for _, c := range all {
+		if c.ID == attacker.ID || c.ID == target.ID {
+			continue
+		}
+		if !c.IsAlive {
+			continue
+		}
+		if c.IsNpc != attacker.IsNpc {
+			continue
+		}
+		dc := colToIndex(c.PositionCol) - tCol
+		dr := (int(c.PositionRow) - 1) - tRow
+		if dc < 0 {
+			dc = -dc
+		}
+		if dr < 0 {
+			dr = -dr
+		}
+		d := dc
+		if dr > dc {
+			d = dr
+		}
+		d *= 5
+		if d < best {
+			best = d
+		}
+	}
+	return best
+}
+
+// populateAttackFES enriches an AttackInput with the Feature Effect System
+// fields the chunk-4 review called out (Features list + EffectContext flags).
+// `char` may be nil for NPC attackers — in that case only combatant-derived
+// fields (IsRaging, ally distance) are populated and Features stays empty.
+func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd AttackCommand, char *refdata.Character, weapon refdata.Weapon, scores AbilityScores) error {
+	input.IsRaging = cmd.Attacker.IsRaging
+	input.AbilityUsed = attackAbilityUsed(scores, weapon, input.MonkLevel)
+	input.OneHandedMeleeOnly = !IsRangedWeapon(weapon) &&
+		!HasProperty(weapon, "two-handed") &&
+		!input.TwoHanded &&
+		!input.OffHandOccupied
+
+	allCombatants, err := s.store.ListCombatantsByEncounterID(ctx, cmd.Attacker.EncounterID)
+	if err != nil {
+		return fmt.Errorf("listing combatants for ally distance: %w", err)
+	}
+	input.AllyWithinFt = nearestAllyDistanceFt(cmd.Attacker, cmd.Target, allCombatants)
+
+	if char == nil {
+		return nil
+	}
+
+	input.WearingArmor = char.EquippedArmor.Valid && char.EquippedArmor.String != ""
+
+	var classes []CharacterClass
+	if len(char.Classes) > 0 {
+		_ = json.Unmarshal(char.Classes, &classes)
+	}
+	var feats []CharacterFeature
+	if char.Features.Valid && len(char.Features.RawMessage) > 0 {
+		_ = json.Unmarshal(char.Features.RawMessage, &feats)
+	}
+	input.Features = BuildFeatureDefinitions(classes, feats)
+	return nil
 }
