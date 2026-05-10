@@ -26,6 +26,11 @@ type SaveHandler struct {
 	rollLogger        dice.RollHistoryLogger
 }
 
+// HasRollLogger reports whether a non-nil dice.RollHistoryLogger has been
+// wired on this handler. Used by production-wiring tests to detect the
+// Phase 18 silent-no-op.
+func (h *SaveHandler) HasRollLogger() bool { return h.rollLogger != nil }
+
 // NewSaveHandler creates a new SaveHandler.
 func NewSaveHandler(
 	session Session,

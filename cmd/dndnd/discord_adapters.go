@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/campaign"
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/portal"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -162,6 +165,321 @@ func (a *playerNotifierAdapter) NotifyRejection(_ context.Context, discordUserID
 	return nil
 }
 
+// rollHistoryChannelResolver returns the #roll-history channel ID that a
+// given dice.RollLogEntry should post to. Returns ("", nil) when no channel
+// can be resolved (best-effort: the adapter then silently no-ops). Errors
+// are bubbled up only for true failures (DB unreachable etc.) — the adapter
+// also swallows them so dice rolls aren't blocked on logging.
+type rollHistoryChannelResolver func(ctx context.Context, entry dice.RollLogEntry) (string, error)
+
+// rollHistoryLoggerAdapter implements dice.RollHistoryLogger for production
+// by posting each RollLogEntry to the `roll-history` channel resolved by
+// the supplied resolver. Best-effort: missing channel id, missing campaign,
+// send failures are all silently swallowed so dice rolls never fail because
+// their audit log can't reach Discord.
+//
+// Phase 18 done-when wiring: bridges dice.RollLogEntry → ChannelMessageSend
+// for every /check, /save, /rest call. Replaces the long-standing nil
+// rollLogger args in cmd/dndnd/discord_handlers.go (high-09).
+type rollHistoryLoggerAdapter struct {
+	session  discord.Session
+	resolver rollHistoryChannelResolver
+}
+
+// newRollHistoryLoggerAdapter constructs the adapter. When csp is non-nil
+// and encounterID is non-Nil, the adapter resolves the channel via the
+// per-encounter CampaignSettingsProvider chain — this matches the chunk2
+// recommendation. Production wiring uses the channel-resolver-by-roller
+// variant constructed by newRollHistoryLoggerAdapterByRoller below so the
+// Roller (character name) on each entry drives the per-campaign lookup.
+func newRollHistoryLoggerAdapter(s discord.Session, csp discord.CampaignSettingsProvider, encounterID uuid.UUID) *rollHistoryLoggerAdapter {
+	resolver := func(ctx context.Context, _ dice.RollLogEntry) (string, error) {
+		if csp == nil {
+			return "", nil
+		}
+		channelIDs, err := csp.GetChannelIDs(ctx, encounterID)
+		if err != nil {
+			return "", err
+		}
+		return channelIDs["roll-history"], nil
+	}
+	return rollHistoryLoggerAdapterFromResolver(s, resolver)
+}
+
+// rollHistoryLoggerAdapterFromResolver is the lower-level constructor used
+// when the channel resolution depends on the entry itself (e.g. roller
+// name -> active campaign).
+func rollHistoryLoggerAdapterFromResolver(s discord.Session, resolver rollHistoryChannelResolver) *rollHistoryLoggerAdapter {
+	return &rollHistoryLoggerAdapter{session: s, resolver: resolver}
+}
+
+// newRollHistoryLoggerByRoller constructs the production adapter that
+// resolves the roll-history channel by walking the roller's character name
+// to the campaign their PC belongs to. queries is *refdata.Queries; nil
+// queries makes the adapter a no-op (test-only mode).
+func newRollHistoryLoggerByRoller(s discord.Session, q *refdata.Queries) *rollHistoryLoggerAdapter {
+	if s == nil {
+		return nil
+	}
+	resolver := func(ctx context.Context, entry dice.RollLogEntry) (string, error) {
+		if q == nil || entry.Roller == "" {
+			return "", nil
+		}
+		campaign, err := lookupCampaignByCharacterName(ctx, q, entry.Roller)
+		if err != nil {
+			return "", err
+		}
+		if !campaign.Settings.Valid {
+			return "", nil
+		}
+		var settings campaignSettingsForRollHistory
+		if err := json.Unmarshal(campaign.Settings.RawMessage, &settings); err != nil {
+			return "", err
+		}
+		return settings.ChannelIDs["roll-history"], nil
+	}
+	return rollHistoryLoggerAdapterFromResolver(s, resolver)
+}
+
+// campaignSettingsForRollHistory mirrors the channel_ids field of the
+// campaign settings JSONB without pulling in the full campaign.Settings
+// type (which would make this file depend on internal/campaign for one
+// field).
+type campaignSettingsForRollHistory struct {
+	ChannelIDs map[string]string `json:"channel_ids"`
+}
+
+// lookupCampaignByCharacterName scans player_characters for one whose
+// associated character matches the given name. Returns the first match;
+// when no match is found, returns ("", nil) so the adapter no-ops cleanly.
+func lookupCampaignByCharacterName(ctx context.Context, q *refdata.Queries, name string) (refdata.Campaign, error) {
+	campaigns, err := q.ListCampaigns(ctx)
+	if err != nil {
+		return refdata.Campaign{}, err
+	}
+	for _, c := range campaigns {
+		chars, err := q.ListCharactersByCampaign(ctx, c.ID)
+		if err != nil {
+			continue
+		}
+		for _, ch := range chars {
+			if ch.Name == name {
+				return c, nil
+			}
+		}
+	}
+	return refdata.Campaign{}, nil
+}
+
+// LogRoll formats the entry and posts it to the resolved roll-history
+// channel. Errors are returned only when caller-visible logic would care;
+// channel-resolution problems are treated as no-ops.
+func (a *rollHistoryLoggerAdapter) LogRoll(entry dice.RollLogEntry) error {
+	if a == nil || a.session == nil || a.resolver == nil {
+		return nil
+	}
+	ctx := context.Background()
+	channelID, err := a.resolver(ctx, entry)
+	if err != nil {
+		return nil
+	}
+	if channelID == "" {
+		return nil
+	}
+	_, _ = a.session.ChannelMessageSend(channelID, formatRollLogEntry(entry))
+	return nil
+}
+
+// formatRollLogEntry produces a one-line summary of a roll suitable for
+// #roll-history. The format prioritises the player + purpose so DMs can
+// scan quickly without parsing dice expressions.
+func formatRollLogEntry(e dice.RollLogEntry) string {
+	parts := []string{}
+	if e.Roller != "" {
+		parts = append(parts, e.Roller)
+	}
+	if e.Purpose != "" {
+		parts = append(parts, "— "+e.Purpose)
+	}
+	if e.Expression != "" {
+		parts = append(parts, fmt.Sprintf("`%s`", e.Expression))
+	}
+	if e.Total != 0 || e.Breakdown != "" {
+		breakdown := e.Breakdown
+		if breakdown == "" {
+			breakdown = fmt.Sprintf("%d", e.Total)
+		}
+		parts = append(parts, "= "+breakdown)
+	}
+	if len(parts) == 0 {
+		return "(empty roll)"
+	}
+	out := parts[0]
+	for _, p := range parts[1:] {
+		out += " " + p
+	}
+	return out
+}
+
+// mapRegeneratorQueries is the narrow subset of refdata.Queries that the
+// production map-regenerator needs. Declaring it as an interface keeps the
+// adapter unit-testable without a live Postgres instance.
+type mapRegeneratorQueries interface {
+	GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
+	GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error)
+	ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
+}
+
+// mapRegeneratorAdapter implements discord.MapRegenerator by parsing the
+// encounter's Tiled map JSON, projecting the live combatant positions onto
+// the renderer's Combatant slice, and asking renderer.RenderMap for PNG
+// bytes. Returns an error only when the encounter has no associated map or
+// the renderer fails — empty-combatant maps still render.
+//
+// Phase 22 done-when wiring: produces PNGs for #combat-map. Production was
+// silent because main.go never set discordHandlerDeps.mapRegenerator (high-10).
+type mapRegeneratorAdapter struct {
+	queries mapRegeneratorQueries
+}
+
+func newMapRegeneratorAdapter(q mapRegeneratorQueries) *mapRegeneratorAdapter {
+	if q == nil {
+		return nil
+	}
+	return &mapRegeneratorAdapter{queries: q}
+}
+
+// RegenerateMap loads the encounter, its map, and its combatants, then
+// renders a fresh PNG. Combatant positions are translated from the
+// "letter+row" string form to the renderer's 0-indexed col/row.
+func (a *mapRegeneratorAdapter) RegenerateMap(ctx context.Context, encounterID uuid.UUID) ([]byte, error) {
+	enc, err := a.queries.GetEncounter(ctx, encounterID)
+	if err != nil {
+		return nil, fmt.Errorf("get encounter %s: %w", encounterID, err)
+	}
+	if !enc.MapID.Valid {
+		return nil, fmt.Errorf("encounter %s has no map", encounterID)
+	}
+	m, err := a.queries.GetMapByID(ctx, enc.MapID.UUID)
+	if err != nil {
+		return nil, fmt.Errorf("get map %s: %w", enc.MapID.UUID, err)
+	}
+	combatants, err := a.queries.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return nil, fmt.Errorf("list combatants for %s: %w", encounterID, err)
+	}
+	renderCombatants := combatantsToRendererForm(combatants)
+	md, err := renderer.ParseTiledJSON(m.TiledJson, renderCombatants, nil)
+	if err != nil {
+		return nil, fmt.Errorf("parse tiled json: %w", err)
+	}
+	return renderer.RenderMap(md)
+}
+
+// combatantsToRendererForm projects refdata.Combatant rows into the slimmer
+// renderer.Combatant form. Combatants with unparseable coordinates are
+// skipped so the renderer doesn't paint at (-1,-1).
+func combatantsToRendererForm(in []refdata.Combatant) []renderer.Combatant {
+	out := make([]renderer.Combatant, 0, len(in))
+	for _, c := range in {
+		col, row, err := renderer.ParseCoordinate(fmt.Sprintf("%s%d", c.PositionCol, c.PositionRow))
+		if err != nil {
+			continue
+		}
+		out = append(out, renderer.Combatant{
+			ShortID:     c.ShortID,
+			DisplayName: c.DisplayName,
+			Col:         col,
+			Row:         row,
+			AltitudeFt:  int(c.AltitudeFt),
+			HPMax:       int(c.HpMax),
+			HPCurrent:   int(c.HpCurrent),
+			IsPlayer:    !c.IsNpc,
+		})
+	}
+	return out
+}
+
+// queueingSession wraps a discord.Session and routes ChannelMessageSend
+// through a discord.MessageQueue so production sends pick up the per-channel
+// FIFO + 429 retry/backoff that Phase 9b implements but production never
+// instantiated (high-14). All other Session methods (interaction
+// responses, guild lookups, channel message edits, the complex-send variant
+// used by #combat-map PNG attachments) pass through to the inner session
+// untouched — those have separate rate limits and don't need queue
+// serialization for the playtest checklist.
+type queueingSession struct {
+	inner discord.Session
+	queue *discord.MessageQueue
+}
+
+// newQueueingSession constructs the wrapper. When queue is nil the wrapper
+// degrades to a transparent passthrough so test deploys without the queue
+// keep working.
+func newQueueingSession(inner discord.Session, queue *discord.MessageQueue) *queueingSession {
+	return &queueingSession{inner: inner, queue: queue}
+}
+
+func (q *queueingSession) UserChannelCreate(recipientID string) (*discordgo.Channel, error) {
+	return q.inner.UserChannelCreate(recipientID)
+}
+
+// ChannelMessageSend delegates through the MessageQueue. The queue does not
+// surface the *discordgo.Message return value (its API only signals errors),
+// so we synthesize a placeholder message echoing the channel + content.
+// Callers in this codebase consistently discard the message return value
+// (`_, _ = sess.ChannelMessageSend(...)` is the common pattern in
+// internal/discord/*.go), so the placeholder doesn't break callers.
+func (q *queueingSession) ChannelMessageSend(channelID, content string) (*discordgo.Message, error) {
+	if q.queue == nil {
+		return q.inner.ChannelMessageSend(channelID, content)
+	}
+	if err := q.queue.Send(channelID, content); err != nil {
+		return nil, err
+	}
+	return &discordgo.Message{ChannelID: channelID, Content: content}, nil
+}
+
+func (q *queueingSession) ChannelMessageSendComplex(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error) {
+	return q.inner.ChannelMessageSendComplex(channelID, data)
+}
+
+func (q *queueingSession) ApplicationCommandBulkOverwrite(appID, guildID string, cmds []*discordgo.ApplicationCommand) ([]*discordgo.ApplicationCommand, error) {
+	return q.inner.ApplicationCommandBulkOverwrite(appID, guildID, cmds)
+}
+
+func (q *queueingSession) ApplicationCommands(appID, guildID string) ([]*discordgo.ApplicationCommand, error) {
+	return q.inner.ApplicationCommands(appID, guildID)
+}
+
+func (q *queueingSession) ApplicationCommandDelete(appID, guildID, cmdID string) error {
+	return q.inner.ApplicationCommandDelete(appID, guildID, cmdID)
+}
+
+func (q *queueingSession) GuildChannels(guildID string) ([]*discordgo.Channel, error) {
+	return q.inner.GuildChannels(guildID)
+}
+
+func (q *queueingSession) GuildChannelCreateComplex(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
+	return q.inner.GuildChannelCreateComplex(guildID, data)
+}
+
+func (q *queueingSession) InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+	return q.inner.InteractionRespond(interaction, resp)
+}
+
+func (q *queueingSession) InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error) {
+	return q.inner.InteractionResponseEdit(interaction, newresp)
+}
+
+func (q *queueingSession) ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error) {
+	return q.inner.ChannelMessageEdit(channelID, messageID, content)
+}
+
+func (q *queueingSession) GetState() *discordgo.State {
+	return q.inner.GetState()
+}
+
 // SaveChannelIDs merges channelIDs into the campaign settings JSONB and
 // persists via UpdateCampaignSettings. Existing settings (turn timeout,
 // diagonal rule, open5e sources, etc.) are preserved.
@@ -192,4 +510,29 @@ func (l *setupCampaignLookup) SaveChannelIDs(guildID string, channelIDs map[stri
 		return fmt.Errorf("updating campaign settings: %w", err)
 	}
 	return nil
+}
+
+// buildPortalAPIAndSheetHandlers constructs the portal HTTP handlers that
+// the production wiring needs to attach via WithAPI / WithCharacterSheet.
+// The token service (when non-nil) is threaded into the BuilderStoreAdapter
+// so submitted characters get a portal-token issued for them. A nil tokenSvc
+// is acceptable for tests and matches the existing main.go pattern at
+// cmd/dndnd/main.go:571.
+//
+// Phase 91b/91c/92 wiring (high-17): /portal/api/* and /portal/character/{id}
+// were never registered in production because main.go only passed WithOAuth.
+// This helper is the single source of truth for both handlers so the wiring
+// stays in sync.
+func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.TokenService) (*portal.APIHandler, *portal.CharacterSheetHandler) {
+	if queries == nil {
+		return nil, nil
+	}
+	refDataAdapter := portal.NewRefDataAdapter(queries)
+	builderStore := portal.NewBuilderStoreAdapter(queries, tokenSvc)
+	builderSvc := portal.NewBuilderService(builderStore)
+	apiHandler := portal.NewAPIHandler(nil, refDataAdapter, builderSvc)
+	sheetStore := portal.NewCharacterSheetStoreAdapter(queries)
+	sheetSvc := portal.NewCharacterSheetService(sheetStore)
+	sheetHandler := portal.NewCharacterSheetHandler(nil, sheetSvc)
+	return apiHandler, sheetHandler
 }

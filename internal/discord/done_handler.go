@@ -34,6 +34,15 @@ type DefaultCampaignSettingsProvider struct {
 	getCampaign func(ctx context.Context, encounterID uuid.UUID) (refdata.Campaign, error)
 }
 
+// NewDefaultCampaignSettingsProvider builds a DefaultCampaignSettingsProvider
+// that walks encounter -> campaign via the supplied lookup. Used by the
+// production wiring in cmd/dndnd/main.go to drive the channel-id lookup
+// for /done's #combat-map / #combat-log / #your-turn posts (Phase 22) and
+// the rollHistoryLogger adapter (Phase 18).
+func NewDefaultCampaignSettingsProvider(getCampaign func(ctx context.Context, encounterID uuid.UUID) (refdata.Campaign, error)) *DefaultCampaignSettingsProvider {
+	return &DefaultCampaignSettingsProvider{getCampaign: getCampaign}
+}
+
 // GetChannelIDs returns the channel_ids map from the campaign associated with the encounter.
 func (p *DefaultCampaignSettingsProvider) GetChannelIDs(ctx context.Context, encounterID uuid.UUID) (map[string]string, error) {
 	camp, err := p.getCampaign(ctx, encounterID)
@@ -148,6 +157,11 @@ func (h *DoneHandler) SetImpactSummaryProvider(isp ImpactSummaryProvider) {
 func (h *DoneHandler) SetMapRegenerator(mr MapRegenerator) {
 	h.mapRegenerator = mr
 }
+
+// HasMapRegenerator reports whether a non-nil MapRegenerator has been wired
+// on this handler. Used by production-wiring tests to detect the Phase 22
+// silent-no-op (#combat-map gets no PNG when nil).
+func (h *DoneHandler) HasMapRegenerator() bool { return h.mapRegenerator != nil }
 
 // Handle processes the /done command interaction.
 func (h *DoneHandler) Handle(interaction *discordgo.Interaction) {

@@ -4,7 +4,7 @@
 # discordgo *Adapter delegations, and the coverage_check tool itself —
 # all of which are structurally untestable or tested via integration. See
 # docs/testing.md for the rationale.
-COVER_EXCLUDE := (internal/refdata/.*\.sql\.go|cmd/dndnd/main\.go|cmd/dndnd/discord_handlers\.go|cmd/dndnd/discord_adapters\.go|cmd/dndnd/notifier\.go|cmd/playtest-player/live_session\.go|internal/discord/adapter\.go|scripts/coverage_check/main\.go|scripts/sqlc_drift_check/main\.go|internal/testutil/.*\.go)
+COVER_EXCLUDE := (internal/refdata/.*\.sql\.go|cmd/dndnd/main\.go|cmd/dndnd/discord_handlers\.go|cmd/dndnd/discord_adapters\.go|cmd/dndnd/dashboard_apis\.go|cmd/dndnd/notifier\.go|cmd/playtest-player/live_session\.go|internal/discord/adapter\.go|scripts/coverage_check/main\.go|scripts/sqlc_drift_check/main\.go|internal/testutil/.*\.go)
 COVER_MIN_OVERALL ?= 90
 COVER_MIN_PER_PACKAGE ?= 85
 

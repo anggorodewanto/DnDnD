@@ -60,6 +60,11 @@ type CheckHandler struct {
 // /check responds immediately with the numeric result and no queue post.
 func (h *CheckHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
 
+// HasRollLogger reports whether a non-nil dice.RollHistoryLogger has been
+// wired on this handler. Used by production-wiring tests to detect the
+// Phase 18 silent-no-op (nil rollLogger means no #roll-history posts).
+func (h *CheckHandler) HasRollLogger() bool { return h.rollLogger != nil }
+
 // NewCheckHandler creates a new CheckHandler.
 func NewCheckHandler(
 	session Session,

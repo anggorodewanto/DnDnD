@@ -60,6 +60,11 @@ func (h *RestHandler) postRestRequestToDMQueue(ctx context.Context, guildID, cha
 	})
 }
 
+// HasRollLogger reports whether a non-nil dice.RollHistoryLogger has been
+// wired on this handler. Used by production-wiring tests to detect the
+// Phase 18 silent-no-op.
+func (h *RestHandler) HasRollLogger() bool { return h.rollLogger != nil }
+
 // NewRestHandler creates a new RestHandler.
 func NewRestHandler(
 	session Session,

@@ -45,6 +45,7 @@ import (
 	"github.com/ab/dndnd/internal/portal"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/registration"
+	"github.com/ab/dndnd/internal/rest"
 	"github.com/ab/dndnd/internal/server"
 	"github.com/ab/dndnd/internal/statblocklibrary"
 )
@@ -336,6 +337,18 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		logger.Info("discord session skipped (DISCORD_BOT_TOKEN not set)")
 	}
 
+	// Phase 9b wiring (high-14): wrap the live discord session in a
+	// MessageQueue-backed adapter so every ChannelMessageSend flows through
+	// per-channel FIFO + 429 retry/backoff. Without this wrapper production
+	// outbound traffic bypasses the queue and a single rate-limited channel
+	// can starve unrelated channels. The queue is stopped during shutdown.
+	var messageQueue *discord.MessageQueue
+	if discordSession != nil {
+		messageQueue = discord.NewMessageQueue(discordSession)
+		defer messageQueue.Stop()
+		discordSession = newQueueingSession(discordSession, messageQueue)
+	}
+
 	// Phase 104: Construct the dashboard hub up-front so the publisher can
 	// be wired into combat.Service inside the DB block below. The hub has
 	// its own goroutine; Stop() is called during shutdown.
@@ -603,6 +616,18 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		if authBundle.oauthSvc != nil {
 			portalOpts = append(portalOpts, portal.WithOAuth(authBundle.oauthSvc))
 		}
+		// Phase 91b/91c/92 wiring (high-17): without WithAPI the Svelte
+		// builder's POST /portal/api/characters returns 404; without
+		// WithCharacterSheet the /character Discord embed link points to a
+		// 404. buildPortalAPIAndSheetHandlers is the single source of truth
+		// so both endpoints stay in sync with portalTokenSvc.
+		portalAPIHandler, portalSheetHandler := buildPortalAPIAndSheetHandlers(queries, portalTokenSvc)
+		if portalAPIHandler != nil {
+			portalOpts = append(portalOpts, portal.WithAPI(portalAPIHandler))
+		}
+		if portalSheetHandler != nil {
+			portalOpts = append(portalOpts, portal.WithCharacterSheet(portalSheetHandler))
+		}
 		portal.RegisterRoutes(router, portalHandler, authMw, portalOpts...)
 
 		// Phase 104b: Publisher fan-out to non-combat services that can
@@ -614,6 +639,45 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		inventoryAPIHandler := inventory.NewAPIHandler(queries)
 		inventoryAPIHandler.SetPublisher(publisher, encLookup)
 		dashboard.RegisterInventoryAPI(router, inventoryAPIHandler, authMw)
+
+		// Phase 83b/85/86/87 wiring (high-13): mount the loot pool, item
+		// picker, shops, and party-rest dashboard endpoints. Without this
+		// the Svelte UIs (`ItemPicker.svelte`, `ShopBuilder.svelte`, the
+		// loot-pool widgets) call URLs that 404. Each handler is built
+		// from the shared *refdata.Queries; the party-rest handler also
+		// needs Discord-side adapters for player DMs and #roll-history
+		// posts so we construct it inline.
+		var partyRestHandler *rest.PartyRestHandler
+		var partyDM playerDirectMessenger
+		if discordSession != nil {
+			partyDM = discord.NewDirectMessenger(discordSession)
+		}
+		partyLister := newPartyCharacterListerAdapter(queries)
+		partyUpdater := newPartyCharacterUpdaterAdapter(queries)
+		partyEncounterChecker := newPartyEncounterCheckerAdapter(queries)
+		var partyNotifier rest.PartyPlayerNotifier = noopPartyPlayerNotifier{}
+		if a := newPartyPlayerNotifierAdapter(partyDM); a != nil {
+			partyNotifier = a
+		}
+		var partyPoster rest.PartySummaryPoster = noopPartySummaryPoster{}
+		if a := newPartySummaryPosterAdapter(discordSession, queries); a != nil {
+			partyPoster = a
+		}
+		if partyLister != nil && partyUpdater != nil && partyEncounterChecker != nil {
+			partyRestHandler = rest.NewPartyRestHandler(
+				rest.NewService(dice.NewRoller(nil)),
+				partyLister,
+				partyUpdater,
+				partyEncounterChecker,
+				partyNotifier,
+				partyPoster,
+			)
+		}
+		mountDashboardAPIs(router, dashboardAPIDeps{
+			authMiddleware:   authMw,
+			queries:          queries,
+			partyRestHandler: partyRestHandler,
+		})
 
 		// Phase 104c: Level-up handler. DB-backed store/class adapters plus
 		// a DM-only notifier (public announcements deferred) share the
@@ -691,6 +755,27 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// and the dashboard loot endpoints in future phases.
 			lootSvc := loot.NewService(queries)
 
+			// Phase 22 wiring (high-10): the campaign-settings provider
+			// resolves encounter-id -> channel_ids map by walking the
+			// `encounters -> campaigns` join. /done relies on this to find
+			// #combat-map, #combat-log, and #your-turn for shared-channel
+			// labels. The same lookup is reused by the rollHistoryLogger
+			// adapter so #roll-history posts hit the right channel per
+			// encounter.
+			campaignSettingsProvider := discord.NewDefaultCampaignSettingsProvider(
+				func(ctx context.Context, encounterID uuid.UUID) (refdata.Campaign, error) {
+					return queries.GetCampaignByEncounterID(ctx, encounterID)
+				},
+			)
+
+			// Phase 22 wiring (high-10): the production map regenerator.
+			// done_handler.PostCombatMap and enemy_turn_notifier both
+			// consume this to render PNGs into #combat-map. Without this
+			// wiring the field on discordHandlerDeps stayed nil and
+			// Phase 22's "PNG generated from map JSON + combatant
+			// positions" never reached production.
+			mapRegen := newMapRegeneratorAdapter(queries)
+
 			// Phase 105b: Construct every Phase 105 slash-command handler
 			// with the per-user encounter resolver injected, wire them into
 			// a CommandRouter, and register the router as the discordgo
@@ -705,8 +790,16 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				combatService:            combatSvc,
 				roller:                   dice.NewRoller(nil),
 				resolver:                 newDiscordUserEncounterResolver(queries),
+				campaignSettings:         campaignSettingsProvider,
 				enemyTurnEncounterLookup: combatSvc,
-				lootService:              lootSvc,
+				mapRegenerator:           mapRegen,
+				// Phase 18 wiring (high-09): the rollHistoryLogger uses
+				// the entry's Roller (character name) to resolve the
+				// owning campaign and post to that campaign's
+				// #roll-history channel. /check, /save, /rest all
+				// populate Roller before calling LogRoll.
+				rollHistoryLogger: newRollHistoryLoggerByRoller(discordSession, queries),
+				lootService:       lootSvc,
 				// crit-01c: plumb optional collaborators for /help, /inventory,
 				// /equip, /give, /attune, /unattune, /character, ASI components,
 				// /undo, /retire. Each handler is nil-safe; missing deps mean the

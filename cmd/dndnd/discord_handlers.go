@@ -39,6 +39,7 @@ type discordHandlerDeps struct {
 	campaignSettings         discord.CampaignSettingsProvider
 	enemyTurnEncounterLookup discord.EnemyTurnEncounterLookup
 	mapRegenerator           discord.MapRegenerator
+	rollHistoryLogger        dice.RollHistoryLogger
 	lootService              *loot.Service
 	// crit-01c: optional collaborators for the inventory + ASI + character
 	// + undo + retire wiring. Each field is nil-safe in buildDiscordHandlers.
@@ -140,7 +141,7 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			characterLookup,
 			deps.resolver,
 			combatantLookup,
-			nil, // rollLogger: no production adapter yet (tests only).
+			deps.rollHistoryLogger,
 		),
 		save: discord.NewSaveHandler(
 			deps.session,
@@ -149,7 +150,7 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			characterLookup,
 			deps.resolver,
 			combatantLookup,
-			nil,
+			deps.rollHistoryLogger,
 		),
 		rest: discord.NewRestHandler(
 			deps.session,
@@ -158,8 +159,8 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			characterLookup,
 			deps.resolver,
 			restCharUpdater,
-			nil,
-			nil,
+			deps.rollHistoryLogger,
+			deps.dmQueueFunc,
 		),
 		summon:   discord.NewSummonCommandHandler(deps.session, summonSvc),
 		recap:    discord.NewRecapHandler(deps.session, recapSvc, deps.resolver, newRecapPlayerLookupAdapter(combatantLookup)),
@@ -214,6 +215,17 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	}
 	if deps.enemyTurnEncounterLookup != nil {
 		handlers.enemyTurnNotifier.SetEncounterLookup(deps.enemyTurnEncounterLookup)
+	}
+
+	// Phase 22 wiring (high-10): plumb the map regenerator + campaign-settings
+	// provider into the /done handler so PostCombatMap actually fires PNGs to
+	// #combat-map. PostCombatMap silently no-ops when either is nil; both
+	// must be set in production for the channel to receive any image.
+	if deps.mapRegenerator != nil {
+		handlers.done.SetMapRegenerator(deps.mapRegenerator)
+	}
+	if deps.campaignSettings != nil {
+		handlers.done.SetCampaignSettingsProvider(deps.campaignSettings)
 	}
 
 	// Phase 27 turn-gate: wire the advisory-lock + ownership-validation
