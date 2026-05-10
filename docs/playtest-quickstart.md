@@ -61,7 +61,8 @@ data (classes, races, spells, creatures, magic items) is seeded the same way.
 2. **Bot tab → Reset Token** → copy the token. This is `DISCORD_BOT_TOKEN`.
 3. **Bot tab → Privileged Gateway Intents** → enable **Server Members
    Intent** and **Message Content Intent**.
-4. **OAuth2 tab → Redirects** → add `http://localhost:8080/auth/callback`.
+4. **OAuth2 tab → Redirects** → add
+   `http://localhost:8080/portal/auth/callback`.
 5. **OAuth2 tab → Client ID / Client Secret** → copy both. These are
    `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`.
 6. **General Information → Application ID** → copy. This is
@@ -69,12 +70,12 @@ data (classes, races, spells, creatures, magic items) is seeded the same way.
 7. Build the invite URL by replacing `<APP_ID>`:
 
    ```
-   https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot+applications.commands&permissions=274877990928
+   https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot+applications.commands&permissions=2416036880
    ```
 
-   The `permissions=274877990928` bitfield grants the minimum the bot needs:
+   The `permissions=2416036880` bitfield grants the minimum the bot needs:
    `View Channels`, `Send Messages`, `Manage Channels` (required by
-   `/setup` — see `internal/discord/commands.go:9`), `Manage Roles`,
+   `/setup` — see `internal/discord/commands.go`), `Manage Roles`,
    `Embed Links`, `Attach Files`, `Read Message History`, `Use Slash
    Commands`. Tighten or loosen later as you wish; this is a sane playtest
    default.
@@ -120,20 +121,28 @@ The bot creates the campaign channel structure (`#the-story`, `#combat-log`,
 `#dm-private`, etc.). This requires `Manage Channels` on the bot — the invite
 URL above already grants it.
 
-Then, as a player on the server:
+Then, as the DM, create the character record. Open
+http://localhost:8080/dashboard/characters/new in a browser and fill in
+name (e.g. `Aria`), class, race, and background. Save.
+
+Now, as a player on the server, claim the character:
 
 ```
-/register name:Aria class:fighter race:human background:soldier
+/register name:Aria
 ```
 
-The bot DMs the player a "registration submitted" confirmation and posts an
-approval request to `#dm-private`.
+`/register` only takes `name` — it links the invoking Discord user to a
+character the DM has already created. (`/create-character` is the
+alternative path that opens the web character builder, but that flow needs
+a public portal URL — out of scope for a localhost playtest.) The bot
+posts an approval request to `#dm-private` and the player gets an
+ephemeral "pending DM approval" confirmation.
 
 ## 6. Approve the character on the dashboard (≈ 3 min)
 
 1. Open http://localhost:8080 in a browser.
 2. Click **Login with Discord** → authorize. Discord redirects back to
-   `/auth/callback` and you land on the campaign list.
+   `/portal/auth/callback` and you land on the campaign list.
 3. Pick the campaign, find the pending registration, click **Approve**.
 4. The bot DMs the player the welcome message and the player can now run
    `/character`, `/inventory`, etc.
