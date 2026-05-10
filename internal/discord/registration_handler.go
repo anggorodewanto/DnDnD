@@ -178,13 +178,17 @@ func (h *ImportHandler) handleDDBImport(interaction *discordgo.Interaction, camp
 		return
 	}
 
-	// Build ephemeral preview response
+	// Build ephemeral preview response. For re-syncs the diff is shown to the
+	// DM but the character row is NOT mutated until the DM explicitly approves
+	// (Phase 90 spec: "system diffs and shows DM what changed before
+	// applying"). The pending update lives in ddbimport.Service's pending map
+	// keyed by importResult.PendingImportID.
 	var msg string
 	if importResult.IsResync {
 		if len(importResult.Changes) == 0 {
 			msg = fmt.Sprintf("Re-import of **%s** — no changes detected.\n\n%s", importResult.Character.Name, importResult.Preview)
 		} else {
-			msg = fmt.Sprintf("Re-import of **%s** — changes detected and pending DM approval.\n\n%s", importResult.Character.Name, importResult.Preview)
+			msg = fmt.Sprintf("Re-import of **%s** — changes detected and pending DM review (no changes applied yet).\n\n%s", importResult.Character.Name, importResult.Preview)
 		}
 	} else {
 		msg = fmt.Sprintf("Import of **%s** submitted for DM approval.\n\n%s", importResult.Character.Name, importResult.Preview)

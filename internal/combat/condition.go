@@ -168,6 +168,11 @@ func (s *Service) ApplyCondition(ctx context.Context, combatantID uuid.UUID, con
 
 	msgs := []string{formatConditionApplied(condition, c.DisplayName)}
 
+	// Phase 17: refresh the persistent character card so the new condition
+	// (and any exhaustion-level change carried in the same row update) is
+	// immediately visible. NPC combatants are silently skipped.
+	s.notifyCardUpdate(ctx, updated)
+
 	// Phase 118: incapacitating conditions auto-break concentration on the
 	// affected combatant (no save). Apply this hook after the condition has
 	// been persisted so the cleanup logic sees the up-to-date row.

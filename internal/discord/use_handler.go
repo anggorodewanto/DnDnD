@@ -104,6 +104,13 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	// Magic items with charges short-circuit to the active-ability path.
+	// Consumables fall through to UseConsumable below.
+	if itemHasActiveCharges(items, itemID) {
+		h.handleMagicItemCharge(ctx, interaction, char, items, itemID)
+		return
+	}
+
 	result, err := h.invService.UseConsumable(inventory.UseInput{
 		Items:     items,
 		ItemID:    itemID,
@@ -152,6 +159,62 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 			}
 		}
 		h.postConsumableToDMQueue(ctx, interaction.GuildID, char.Name, usedItemName)
+	}
+
+	respondEphemeral(h.session, interaction, result.Message)
+}
+
+// itemHasActiveCharges reports whether the inventory item with itemID is a
+// magic item with non-zero MaxCharges (i.e. an active-ability target).
+func itemHasActiveCharges(items []character.InventoryItem, itemID string) bool {
+	for _, it := range items {
+		if it.ItemID != itemID {
+			continue
+		}
+		return it.IsMagic && it.MaxCharges > 0
+	}
+	return false
+}
+
+// handleMagicItemCharge consumes one charge from the named magic item and
+// persists the updated inventory. It enforces attunement and charge-balance
+// rules via inventory.UseCharges. The default amount is 1 charge.
+func (h *UseHandler) handleMagicItemCharge(
+	ctx context.Context,
+	interaction *discordgo.Interaction,
+	char refdata.Character,
+	items []character.InventoryItem,
+	itemID string,
+) {
+	attunement, err := character.ParseAttunementSlots(char.AttunementSlots.RawMessage, char.AttunementSlots.Valid)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to read attunement data. Please contact the DM.")
+		return
+	}
+
+	result, err := inventory.UseCharges(inventory.UseChargesInput{
+		Items:      items,
+		Attunement: attunement,
+		ItemID:     itemID,
+		Amount:     1,
+	})
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot use item: %v", err))
+		return
+	}
+
+	invJSON, err := character.MarshalInventory(result.UpdatedItems)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+		return
+	}
+
+	if _, err := h.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
+		ID:        char.ID,
+		Inventory: pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
+	}); err != nil {
+		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
+		return
 	}
 
 	respondEphemeral(h.session, interaction, result.Message)

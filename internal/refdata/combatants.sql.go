@@ -212,6 +212,59 @@ func (q *Queries) GetCombatant(ctx context.Context, id uuid.UUID) (Combatant, er
 	return i, err
 }
 
+const getActiveCombatantByCharacterID = `-- name: GetActiveCombatantByCharacterID :one
+SELECT cb.id, cb.encounter_id, cb.character_id, cb.creature_ref_id, cb.short_id, cb.display_name, cb.initiative_roll, cb.initiative_order, cb.position_col, cb.position_row, cb.altitude_ft, cb.hp_max, cb.hp_current, cb.temp_hp, cb.ac, cb.conditions, cb.exhaustion_level, cb.death_saves, cb.is_visible, cb.is_alive, cb.is_npc, cb.is_raging, cb.rage_rounds_remaining, cb.rage_attacked_this_round, cb.rage_took_damage_this_round, cb.is_wild_shaped, cb.wild_shape_creature_ref, cb.wild_shape_original, cb.summoner_id, cb.created_at, cb.updated_at, cb.bardic_inspiration_die, cb.bardic_inspiration_source, cb.bardic_inspiration_granted_at, cb.consecutive_auto_resolves, cb.is_absent, cb.concentration_spell_id, cb.concentration_spell_name FROM combatants cb
+JOIN encounters e ON cb.encounter_id = e.id
+WHERE cb.character_id = $1 AND e.status = 'active'
+LIMIT 1
+`
+
+func (q *Queries) GetActiveCombatantByCharacterID(ctx context.Context, characterID uuid.NullUUID) (Combatant, error) {
+	row := q.db.QueryRowContext(ctx, getActiveCombatantByCharacterID, characterID)
+	var i Combatant
+	err := row.Scan(
+		&i.ID,
+		&i.EncounterID,
+		&i.CharacterID,
+		&i.CreatureRefID,
+		&i.ShortID,
+		&i.DisplayName,
+		&i.InitiativeRoll,
+		&i.InitiativeOrder,
+		&i.PositionCol,
+		&i.PositionRow,
+		&i.AltitudeFt,
+		&i.HpMax,
+		&i.HpCurrent,
+		&i.TempHp,
+		&i.Ac,
+		&i.Conditions,
+		&i.ExhaustionLevel,
+		&i.DeathSaves,
+		&i.IsVisible,
+		&i.IsAlive,
+		&i.IsNpc,
+		&i.IsRaging,
+		&i.RageRoundsRemaining,
+		&i.RageAttackedThisRound,
+		&i.RageTookDamageThisRound,
+		&i.IsWildShaped,
+		&i.WildShapeCreatureRef,
+		&i.WildShapeOriginal,
+		&i.SummonerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BardicInspirationDie,
+		&i.BardicInspirationSource,
+		&i.BardicInspirationGrantedAt,
+		&i.ConsecutiveAutoResolves,
+		&i.IsAbsent,
+		&i.ConcentrationSpellID,
+		&i.ConcentrationSpellName,
+	)
+	return i, err
+}
+
 const getCombatantConcentration = `-- name: GetCombatantConcentration :one
 SELECT concentration_spell_id, concentration_spell_name FROM combatants WHERE id = $1
 `

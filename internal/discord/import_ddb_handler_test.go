@@ -121,6 +121,10 @@ func TestImportHandler_DDB_Resync(t *testing.T) {
 	if !strings.Contains(rc.Content, "changes detected") {
 		t.Errorf("expected changes mention, got: %s", rc.Content)
 	}
+	// Phase 90 fix: message must explicitly say nothing has been applied yet.
+	if !strings.Contains(rc.Content, "no changes applied yet") {
+		t.Errorf("expected 'no changes applied yet' (DB not mutated until DM approves), got: %s", rc.Content)
+	}
 }
 
 func TestImportHandler_DDB_ResyncNoChanges(t *testing.T) {

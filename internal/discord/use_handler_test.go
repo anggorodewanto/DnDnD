@@ -327,6 +327,83 @@ func TestUseHandler_PostsViaNotifier(t *testing.T) {
 	require.Empty(sess.sentChannelID, "legacy dmQueueFunc path should be bypassed")
 }
 
+func TestUseHandler_MagicItem_UsesCharge(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: "magic_item", IsMagic: true, RequiresAttunement: true, Charges: 5, MaxCharges: 7},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	attunement := []character.AttunementSlot{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs"},
+	}
+	attunementJSON, _ := json.Marshal(attunement)
+
+	store := &mockUseCharacterStore{char: refdata.Character{ID: charID}}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:              charID,
+			CampaignID:      campID,
+			Name:            "Aria",
+			Inventory:       pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+			AttunementSlots: pqtype.NullRawMessage{RawMessage: attunementJSON, Valid: true},
+		}},
+		store,
+		nil,
+		nil,
+	)
+
+	interaction := makeUseInteraction("guild1", "user1", "wand-of-fireballs")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Wand of Fireballs")
+	assert.Contains(t, sess.lastResponse, "charge")
+
+	var updatedItems []character.InventoryItem
+	_ = json.Unmarshal(store.updatedInventory, &updatedItems)
+	assert.Len(t, updatedItems, 1)
+	if len(updatedItems) > 0 {
+		assert.Equal(t, 4, updatedItems[0].Charges, "expected 1 charge consumed (5 -> 4)")
+	}
+}
+
+func TestUseHandler_MagicItem_UnattunedRejected(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: "magic_item", IsMagic: true, RequiresAttunement: true, Charges: 5, MaxCharges: 7},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	store := &mockUseCharacterStore{char: refdata.Character{ID: charID}}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:         charID,
+			CampaignID: campID,
+			Name:       "Aria",
+			Inventory:  pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+			// No attunement slots set.
+		}},
+		store,
+		nil,
+		nil,
+	)
+
+	interaction := makeUseInteraction("guild1", "user1", "wand-of-fireballs")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "attunement")
+}
+
 func TestUseHandler_DMQueueItem(t *testing.T) {
 	sess := &mockInventorySession{}
 	campID := uuid.New()

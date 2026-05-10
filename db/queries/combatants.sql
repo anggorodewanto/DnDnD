@@ -100,3 +100,9 @@ WHERE id = $1;
 
 -- name: GetCombatantConcentration :one
 SELECT concentration_spell_id, concentration_spell_name FROM combatants WHERE id = $1;
+
+-- name: GetActiveCombatantByCharacterID :one
+SELECT cb.* FROM combatants cb
+JOIN encounters e ON cb.encounter_id = e.id
+WHERE cb.character_id = $1 AND e.status = 'active'
+LIMIT 1;

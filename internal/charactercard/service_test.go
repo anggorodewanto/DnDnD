@@ -72,6 +72,14 @@ type mockStore struct {
 
 	characters    []refdata.Character
 	charactersErr error
+
+	// activeCombatant is returned by GetActiveCombatantByCharacterID. The
+	// default zero value plus activeCombatantErr=sql.ErrNoRows mirrors the
+	// "not in active combat" production path so existing tests keep
+	// rendering the pre-deferred-fields-wired card layout.
+	activeCombatant     refdata.Combatant
+	activeCombatantErr  error
+	activeCombatantSeen uuid.NullUUID
 }
 
 func (m *mockStore) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -93,6 +101,14 @@ func (m *mockStore) SetCharacterCardMessageID(_ context.Context, arg refdata.Set
 
 func (m *mockStore) ListCharactersByCampaign(_ context.Context, campaignID uuid.UUID) ([]refdata.Character, error) {
 	return m.characters, m.charactersErr
+}
+
+func (m *mockStore) GetActiveCombatantByCharacterID(_ context.Context, characterID uuid.NullUUID) (refdata.Combatant, error) {
+	m.activeCombatantSeen = characterID
+	if m.activeCombatantErr != nil {
+		return refdata.Combatant{}, m.activeCombatantErr
+	}
+	return m.activeCombatant, nil
 }
 
 // --- Tests ---
@@ -584,6 +600,139 @@ func TestService_UpdateCard_GenerateShortIDError(t *testing.T) {
 	err := svc.UpdateCard(context.Background(), uuid.New())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "listing characters")
+}
+
+// --- Phase 17 deferred fields wired (high-08) ---
+
+func TestService_PostCharacterCard_PopulatesConditionsFromCombatant(t *testing.T) {
+	char := newTestCharacter()
+	store := &mockStore{
+		character: char,
+		campaign:  newTestCampaign(),
+		activeCombatant: refdata.Combatant{
+			ID:              uuid.New(),
+			EncounterID:     uuid.New(),
+			CharacterID:     uuid.NullUUID{UUID: char.ID, Valid: true},
+			Conditions:      json.RawMessage(`[{"condition":"poisoned","duration_rounds":3,"started_round":1},{"condition":"prone","duration_rounds":0}]`),
+			ExhaustionLevel: 0,
+		},
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.PostCharacterCard(context.Background(), char.ID, "Aria", "player1")
+	require.NoError(t, err)
+
+	assert.Contains(t, session.sentContent, "poisoned (3 rounds remaining)")
+	assert.Contains(t, session.sentContent, "prone")
+	// Conditions line must NOT be the placeholder
+	assert.NotContains(t, session.sentContent, "Conditions: —")
+	// Lookup parameter receives the character's UUID wrapped in NullUUID.Valid
+	assert.True(t, store.activeCombatantSeen.Valid)
+	assert.Equal(t, char.ID, store.activeCombatantSeen.UUID)
+}
+
+func TestService_PostCharacterCard_PopulatesConcentrationFromCombatant(t *testing.T) {
+	char := newTestCharacter()
+	store := &mockStore{
+		character: char,
+		campaign:  newTestCampaign(),
+		activeCombatant: refdata.Combatant{
+			ID:                     uuid.New(),
+			EncounterID:            uuid.New(),
+			CharacterID:            uuid.NullUUID{UUID: char.ID, Valid: true},
+			Conditions:             json.RawMessage(`[]`),
+			ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+		},
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.PostCharacterCard(context.Background(), char.ID, "Aria", "player1")
+	require.NoError(t, err)
+
+	assert.Contains(t, session.sentContent, "Concentration: Bless")
+}
+
+func TestService_PostCharacterCard_PopulatesExhaustionFromCombatant(t *testing.T) {
+	char := newTestCharacter()
+	store := &mockStore{
+		character: char,
+		campaign:  newTestCampaign(),
+		activeCombatant: refdata.Combatant{
+			ID:              uuid.New(),
+			EncounterID:     uuid.New(),
+			CharacterID:     uuid.NullUUID{UUID: char.ID, Valid: true},
+			Conditions:      json.RawMessage(`[]`),
+			ExhaustionLevel: 4,
+		},
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.PostCharacterCard(context.Background(), char.ID, "Aria", "player1")
+	require.NoError(t, err)
+
+	assert.Contains(t, session.sentContent, "Exhaustion: 4")
+}
+
+func TestService_PostCharacterCard_NoActiveCombatant_LeavesDeferredFieldsEmpty(t *testing.T) {
+	// When the character is not in any active encounter, GetActiveCombatant…
+	// returns sql.ErrNoRows and the card renders the canonical "—" defaults.
+	char := newTestCharacter()
+	store := &mockStore{
+		character:          char,
+		campaign:           newTestCampaign(),
+		activeCombatantErr: sql.ErrNoRows,
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.PostCharacterCard(context.Background(), char.ID, "Aria", "player1")
+	require.NoError(t, err)
+
+	assert.Contains(t, session.sentContent, "Conditions: —")
+	assert.Contains(t, session.sentContent, "Concentration: —")
+	assert.NotContains(t, session.sentContent, "Exhaustion:")
+}
+
+func TestService_PostCharacterCard_CombatantLookupError_LeavesDeferredFieldsEmpty(t *testing.T) {
+	// A non-NoRows lookup error must not break card rendering — it logs and
+	// falls back to character-only state (matches the existing "silent
+	// best-effort" pattern used for OnCharacterUpdated).
+	char := newTestCharacter()
+	store := &mockStore{
+		character:          char,
+		campaign:           newTestCampaign(),
+		activeCombatantErr: errors.New("db down"),
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.PostCharacterCard(context.Background(), char.ID, "Aria", "player1")
+	require.NoError(t, err)
+
+	assert.Contains(t, session.sentContent, "Conditions: —")
+}
+
+func TestService_BuildConditionInfos_DropsExhaustionEntry(t *testing.T) {
+	// "exhaustion" condition (when stored as a named entry in the JSONB
+	// array) is rendered via the dedicated Exhaustion line and must NOT
+	// appear in the Conditions list to avoid double-render.
+	raw := json.RawMessage(`[{"condition":"exhaustion","duration_rounds":0},{"condition":"frightened","duration_rounds":2}]`)
+	got := buildConditionInfos(raw, 3)
+	require.Len(t, got, 1)
+	assert.Equal(t, "frightened", got[0].Name)
+	assert.Equal(t, 2, got[0].RemainingRounds)
+}
+
+func TestService_BuildConditionInfos_EmptyAndInvalid(t *testing.T) {
+	assert.Nil(t, buildConditionInfos(nil, 0))
+	assert.Nil(t, buildConditionInfos(json.RawMessage{}, 0))
+	assert.Nil(t, buildConditionInfos(json.RawMessage(`[]`), 0))
+	assert.Nil(t, buildConditionInfos(json.RawMessage(`{not-json`), 0))
+	// Only-exhaustion-entry collapses to nil so the formatter shows "—".
+	assert.Nil(t, buildConditionInfos(json.RawMessage(`[{"condition":"exhaustion"}]`), 5))
 }
 
 func TestService_OnCharacterUpdated_CallsUpdateCard(t *testing.T) {

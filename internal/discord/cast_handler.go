@@ -2,15 +2,20 @@ package discord
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
+	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -37,9 +42,25 @@ type CastEncounterProvider interface {
 	GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error)
 }
 
+// CastInventoryAdapter is the per-character lookup + persistence surface used
+// by the /cast identify and /cast detect-magic short-circuit paths. These
+// spells operate on the caster's inventory rather than going through the
+// combat pipeline, so they need direct character access. The adapter is
+// optional: if unset, /cast identify and /cast detect-magic fall through to
+// the regular pipeline (which will fail because they have no combat target).
+type CastInventoryAdapter interface {
+	GetCharacterByGuildAndDiscord(ctx context.Context, guildID, discordUserID string) (refdata.Character, error)
+	UpdateCharacterInventory(ctx context.Context, arg refdata.UpdateCharacterInventoryParams) (refdata.Character, error)
+	UpdateCharacterSpellSlots(ctx context.Context, charID uuid.UUID, slots pqtype.NullRawMessage) error
+}
+
 // CastHandler handles the /cast slash command. Dispatches to either the
 // single-target Cast service method or the AoE CastAoE method based on
 // whether the resolved spell has area_of_effect data set.
+//
+// /cast identify and /cast detect-magic short-circuit BEFORE the combat
+// pipeline (these spells are inventory-side, not combat-side); see
+// dispatchInventorySpell.
 //
 // Out of scope (separate tasks): zone auto-creation (med-26), Silence
 // rejection at cast time (med-25), Counterspell prompt (med-29), interactive
@@ -52,6 +73,13 @@ type CastHandler struct {
 	roller            *dice.Roller
 	channelIDProvider CampaignSettingsProvider
 	turnGate          TurnGate
+	inventoryAdapter  CastInventoryAdapter
+}
+
+// SetInventoryAdapter wires the inventory-side adapter used by the
+// /cast identify and /cast detect-magic short-circuit paths.
+func (h *CastHandler) SetInventoryAdapter(a CastInventoryAdapter) {
+	h.inventoryAdapter = a
 }
 
 // NewCastHandler constructs a /cast handler.
@@ -91,6 +119,15 @@ func (h *CastHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 	targetStr := strings.TrimSpace(optionString(interaction, "target"))
+
+	// Inventory-side spell short-circuit: identify and detect-magic operate on
+	// the caster's inventory rather than combatants, so they bypass the entire
+	// encounter/turn pipeline. Falls through to the regular path if no
+	// inventory adapter is wired.
+	if h.inventoryAdapter != nil && (spellID == "identify" || spellID == "detect-magic") {
+		h.dispatchInventorySpell(ctx, interaction, spellID, targetStr)
+		return
+	}
 
 	userID := discordUserID(interaction)
 	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, userID)
@@ -323,4 +360,207 @@ func indexToCol(idx int) string {
 		return ""
 	}
 	return string(rune('A' + idx))
+}
+
+// dispatchInventorySpell handles the /cast identify and /cast detect-magic
+// short-circuit. Both spells operate on the caster's inventory rather than
+// engaging the combat pipeline.
+func (h *CastHandler) dispatchInventorySpell(ctx context.Context, interaction *discordgo.Interaction, spellID, targetStr string) {
+	userID := discordUserID(interaction)
+	char, err := h.inventoryAdapter.GetCharacterByGuildAndDiscord(ctx, interaction.GuildID, userID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Could not find your character. Use `/register` first.")
+		return
+	}
+
+	items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to read inventory. Please contact the DM.")
+		return
+	}
+
+	if spellID == "detect-magic" {
+		h.dispatchDetectMagic(interaction, items)
+		return
+	}
+	h.dispatchIdentify(ctx, interaction, char, items, targetStr)
+}
+
+// dispatchDetectMagic lists the magic items in the caster's inventory.
+// Detect Magic is a ritual; we do not consume a spell slot here.
+func (h *CastHandler) dispatchDetectMagic(interaction *discordgo.Interaction, items []character.InventoryItem) {
+	magic := inventory.DetectMagicItems(items)
+	if len(magic) == 0 {
+		respondEphemeral(h.session, interaction, "✨ Detect Magic: you sense no magical auras nearby.")
+		return
+	}
+	var b strings.Builder
+	b.WriteString("✨ **Detect Magic** — you sense the following magical auras:\n")
+	for _, it := range magic {
+		fmt.Fprintf(&b, "> • %s", it.Name)
+		if it.Rarity != "" {
+			fmt.Fprintf(&b, " [%s]", it.Rarity)
+		}
+		b.WriteString("\n")
+	}
+	respondEphemeral(h.session, interaction, b.String())
+}
+
+// dispatchIdentify casts the Identify spell on a target item. Requires the
+// caster to know the spell and have an available 1st-level slot (or invoke
+// it as a ritual via `/cast spell:identify target:<item> ritual:true`).
+func (h *CastHandler) dispatchIdentify(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, items []character.InventoryItem, targetStr string) {
+	if targetStr == "" {
+		respondEphemeral(h.session, interaction, "Identify requires a target item (e.g. `/cast spell:identify target:mystery-ring`).")
+		return
+	}
+
+	knowsIdentify := characterKnowsSpell(char, "identify")
+	slots := parseSpellSlotsForCast(char)
+	slotLevel := optionInt(interaction, "level")
+	if slotLevel == 0 {
+		slotLevel = 1
+	}
+	isRitual := optionBool(interaction, "ritual")
+
+	result, err := inventory.CastIdentify(inventory.CastIdentifyInput{
+		Items:      items,
+		ItemID:     targetStr,
+		KnowsSpell: knowsIdentify,
+		SpellSlots: slots,
+		SlotLevel:  slotLevel,
+		IsRitual:   isRitual,
+	})
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot cast Identify: %v", err))
+		return
+	}
+
+	if err := h.persistIdentify(ctx, char, result, slotLevel, isRitual); err != nil {
+		respondEphemeral(h.session, interaction, "Failed to save identify result. Please try again.")
+		return
+	}
+
+	respondEphemeral(h.session, interaction, result.Message)
+}
+
+// persistIdentify writes the updated inventory and (when not a ritual) the
+// reduced spell-slot count.
+func (h *CastHandler) persistIdentify(
+	ctx context.Context,
+	char refdata.Character,
+	result inventory.CastIdentifyResult,
+	slotLevel int,
+	isRitual bool,
+) error {
+	invJSON, err := character.MarshalInventory(result.UpdatedItems)
+	if err != nil {
+		return fmt.Errorf("marshal inventory: %w", err)
+	}
+	if _, err := h.inventoryAdapter.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
+		ID:        char.ID,
+		Inventory: pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("update inventory: %w", err)
+	}
+	if isRitual {
+		return nil
+	}
+	updatedSlots := decrementSlot(parseSpellSlotsRaw(char), slotLevel)
+	slotJSON, err := json.Marshal(updatedSlots)
+	if err != nil {
+		return fmt.Errorf("marshal slots: %w", err)
+	}
+	return h.inventoryAdapter.UpdateCharacterSpellSlots(ctx, char.ID, pqtype.NullRawMessage{RawMessage: slotJSON, Valid: true})
+}
+
+// characterKnowsSpell inspects character_data.spells_known and
+// character_data.spells_prepared to determine whether the caster knows the
+// named spell. Returns false when character_data is missing or unreadable so
+// the inventory.CastIdentify call surfaces the canonical error.
+func characterKnowsSpell(char refdata.Character, spellID string) bool {
+	if !char.CharacterData.Valid {
+		return false
+	}
+	var data map[string]any
+	if err := json.Unmarshal(char.CharacterData.RawMessage, &data); err != nil {
+		return false
+	}
+	for _, key := range []string{"spells_known", "spells_prepared", "spells"} {
+		if matchesSpellList(data[key], spellID) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesSpellList reports whether a JSON-decoded slice of spell ids/objects
+// contains the named spell. Accepts a slice of strings or a slice of objects
+// each with an "id" or "spell_id" key.
+func matchesSpellList(raw any, spellID string) bool {
+	list, ok := raw.([]any)
+	if !ok {
+		return false
+	}
+	for _, entry := range list {
+		switch v := entry.(type) {
+		case string:
+			if v == spellID {
+				return true
+			}
+		case map[string]any:
+			if id, ok := v["id"].(string); ok && id == spellID {
+				return true
+			}
+			if id, ok := v["spell_id"].(string); ok && id == spellID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// parseSpellSlotsForCast returns the caster's slot pool keyed by integer level
+// (1, 2, 3, ...) so it can be handed to inventory.CastIdentify.
+func parseSpellSlotsForCast(char refdata.Character) map[int]int {
+	out := map[int]int{}
+	for level, slot := range parseSpellSlotsRaw(char) {
+		lvl := 0
+		if _, err := fmt.Sscanf(level, "%d", &lvl); err != nil || lvl == 0 {
+			continue
+		}
+		out[lvl] = slot.Current
+	}
+	return out
+}
+
+// parseSpellSlotsRaw decodes char.SpellSlots into the canonical map form.
+func parseSpellSlotsRaw(char refdata.Character) map[string]character.SlotInfo {
+	out := map[string]character.SlotInfo{}
+	if !char.SpellSlots.Valid || len(char.SpellSlots.RawMessage) == 0 {
+		return out
+	}
+	_ = json.Unmarshal(char.SpellSlots.RawMessage, &out)
+	return out
+}
+
+// decrementSlot returns a new copy of slots with one slot consumed at the
+// given level. Slot levels in the JSON are stored as decimal strings ("1").
+// Floors at 0.
+func decrementSlot(slots map[string]character.SlotInfo, level int) map[string]character.SlotInfo {
+	out := make(map[string]character.SlotInfo, len(slots))
+	keys := make([]string, 0, len(slots))
+	for k := range slots {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	key := fmt.Sprintf("%d", level)
+	for _, k := range keys {
+		v := slots[k]
+		if k == key && v.Current > 0 {
+			v.Current--
+		}
+		out[k] = v
+	}
+	return out
 }

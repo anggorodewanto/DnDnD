@@ -171,6 +171,9 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 		if err != nil {
 			return ApplyDamageResult{}, fmt.Errorf("ApplyDamage exhaustion-6 kill: %w", err)
 		}
+		// Phase 17: refresh the card on the exhaustion-6 kill path too so
+		// the HP-to-zero transition is visible immediately.
+		s.notifyCardUpdate(ctx, updated)
 		return ApplyDamageResult{
 			Updated:     updated,
 			FinalDamage: int(target.HpCurrent),
@@ -223,6 +226,11 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 	if err != nil {
 		return ApplyDamageResult{}, fmt.Errorf("ApplyDamage persisting HP: %w", err)
 	}
+
+	// Phase 17: refresh the persistent character card so HP / temp-HP /
+	// alive flag stay in sync with combat. Silent no-op for NPCs and when
+	// no card updater is wired (e.g. tests, bot offline).
+	s.notifyCardUpdate(ctx, updated)
 
 	return ApplyDamageResult{
 		Updated:      updated,

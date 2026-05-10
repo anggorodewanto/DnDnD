@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
@@ -26,23 +29,79 @@ type ImportResult struct {
 	Preview   string
 	IsResync  bool
 	Changes   []string // non-empty for re-sync
+
+	// PendingImportID is non-nil when Import has staged a re-sync update that
+	// requires DM approval. The DM-side approver passes this id to
+	// Service.ApproveImport (or Service.DiscardImport on reject). For new
+	// imports and no-change re-syncs the id is uuid.Nil because there is
+	// nothing waiting for approval.
+	PendingImportID uuid.UUID
+}
+
+// ErrPendingImportNotFound is returned by ApproveImport when the requested
+// import id is unknown, has already been consumed, or has expired.
+var ErrPendingImportNotFound = errors.New("pending import not found or expired")
+
+// pendingImportTTL is how long a staged re-sync stays in the in-memory map
+// before ApproveImport refuses to apply it. 24h matches the
+// portal-token TTL and gives a DM a full day to review on Discord.
+const pendingImportTTL = 24 * time.Hour
+
+// pendingImport is an internal record holding the UpdateCharacterFull params
+// for a staged re-sync.
+type pendingImport struct {
+	params  refdata.UpdateCharacterFullParams
+	created time.Time
 }
 
 // Service orchestrates the DDB import flow.
+//
+// Re-syncs of an existing DDB character are not applied to the DB inside
+// Import: they are staged in an in-memory map keyed by a freshly-minted
+// import id (returned in ImportResult.PendingImportID). The caller is
+// expected to surface that id to the DM (#dm-queue) and only call
+// ApproveImport once the DM has explicitly approved the change. Pending
+// entries time out after pendingImportTTL.
+//
+// Trade-off (recorded for follow-up): the pending map is in-process memory.
+// Bot restarts drop staged imports; the player can simply re-run /import to
+// regenerate the diff. A pending_imports DB table would be required only if
+// per-restart durability becomes a real requirement.
 type Service struct {
 	client Client
 	store  CharacterStore
+	now    func() time.Time
+
+	mu      sync.Mutex
+	pending map[uuid.UUID]pendingImport
 }
 
-// NewService creates a new import service.
+// NewService creates a new import service backed by the system clock.
 func NewService(client Client, store CharacterStore) *Service {
+	return NewServiceWithClock(client, store, time.Now)
+}
+
+// NewServiceWithClock creates a Service with an injectable clock. Tests use
+// this to fast-forward past pendingImportTTL.
+func NewServiceWithClock(client Client, store CharacterStore, now func() time.Time) *Service {
+	if now == nil {
+		now = time.Now
+	}
 	return &Service{
-		client: client,
-		store:  store,
+		client:  client,
+		store:   store,
+		now:     now,
+		pending: make(map[uuid.UUID]pendingImport),
 	}
 }
 
-// Import performs the full import flow: parse URL -> fetch -> parse JSON -> validate -> create/update.
+// Import performs the full import flow:
+//   - parse URL → fetch → parse JSON → validate → build params
+//   - on a fresh import: create the character row immediately (no DM gate;
+//     a brand-new row is harmless to "preview").
+//   - on a re-sync of an existing DDB character: stage the
+//     UpdateCharacterFullParams in memory and return a PendingImportID. The
+//     DB row is NOT mutated until ApproveImport is called.
 func (s *Service) Import(ctx context.Context, campaignID uuid.UUID, ddbURL string) (*ImportResult, error) {
 	charID, err := ParseCharacterURL(ddbURL)
 	if err != nil {
@@ -74,35 +133,77 @@ func (s *Service) Import(ctx context.Context, campaignID uuid.UUID, ddbURL strin
 		Warnings: warnings,
 	}
 
-	// Check for existing character (re-sync)
 	existing, getErr := s.store.GetCharacterByDdbURL(ctx, refdata.GetCharacterByDdbURLParams{
 		CampaignID: campaignID,
 		DdbUrl:     sql.NullString{String: ddbURL, Valid: true},
 	})
-	if getErr == nil {
-		// Re-sync: diff and update
-		result.IsResync = true
-		oldParsed := characterToParseResult(&existing)
-		result.Changes = GenerateDiff(oldParsed, parsed)
-
-		updateParams := buildUpdateParams(existing.ID, params)
-		updated, updateErr := s.store.UpdateCharacterFull(ctx, updateParams)
-		if updateErr != nil {
-			return nil, fmt.Errorf("updating character: %w", updateErr)
-		}
-		result.Character = updated
-	} else {
-		// New import
+	if getErr != nil {
+		// Fresh import — create the row now.
 		char, createErr := s.store.CreateCharacter(ctx, params)
 		if createErr != nil {
 			return nil, fmt.Errorf("creating character: %w", createErr)
 		}
 		result.Character = char
+		result.Preview = FormatPreviewWithWarnings(parsed, warnings)
+		return result, nil
 	}
 
+	// Re-sync — diff in-memory; DO NOT mutate the DB.
+	result.IsResync = true
+	result.Character = existing
+	oldParsed := characterToParseResult(&existing)
+	result.Changes = GenerateDiff(oldParsed, parsed)
 	result.Preview = FormatPreviewWithWarnings(parsed, warnings)
 
+	if len(result.Changes) == 0 {
+		// Nothing to apply — no pending entry needed.
+		return result, nil
+	}
+
+	updateParams := buildUpdateParams(existing.ID, params)
+	importID := uuid.New()
+	s.mu.Lock()
+	s.pending[importID] = pendingImport{
+		params:  updateParams,
+		created: s.now(),
+	}
+	s.mu.Unlock()
+	result.PendingImportID = importID
+
 	return result, nil
+}
+
+// ApproveImport applies a previously-staged re-sync. It is the only path that
+// calls UpdateCharacterFull for re-syncs. On success the pending entry is
+// consumed (a second Approve with the same id returns ErrPendingImportNotFound).
+func (s *Service) ApproveImport(ctx context.Context, importID uuid.UUID) (refdata.Character, error) {
+	s.mu.Lock()
+	entry, ok := s.pending[importID]
+	if !ok {
+		s.mu.Unlock()
+		return refdata.Character{}, ErrPendingImportNotFound
+	}
+	if s.now().Sub(entry.created) > pendingImportTTL {
+		delete(s.pending, importID)
+		s.mu.Unlock()
+		return refdata.Character{}, ErrPendingImportNotFound
+	}
+	delete(s.pending, importID)
+	s.mu.Unlock()
+
+	updated, err := s.store.UpdateCharacterFull(ctx, entry.params)
+	if err != nil {
+		return refdata.Character{}, fmt.Errorf("updating character: %w", err)
+	}
+	return updated, nil
+}
+
+// DiscardImport removes a staged re-sync without applying it. Intended for
+// use when the DM rejects the diff. Unknown ids are silently ignored.
+func (s *Service) DiscardImport(importID uuid.UUID) {
+	s.mu.Lock()
+	delete(s.pending, importID)
+	s.mu.Unlock()
 }
 
 func marshalField(name string, v interface{}) ([]byte, error) {

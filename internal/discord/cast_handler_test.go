@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
@@ -438,6 +440,109 @@ func TestCastHandler_RitualFlag(t *testing.T) {
 	}
 	if !svc.castCalls[0].IsRitual {
 		t.Errorf("expected IsRitual=true")
+	}
+}
+
+// --- /cast identify and /cast detect-magic short-circuit tests ---
+
+// mockCastInventoryAdapter is a test double for CastInventoryAdapter.
+type mockCastInventoryAdapter struct {
+	char            refdata.Character
+	charErr         error
+	updateInvCalls  []refdata.UpdateCharacterInventoryParams
+	updateSlotCalls []updateSpellSlotsCall
+	updateInvErr    error
+	updateSlotErr   error
+}
+
+type updateSpellSlotsCall struct {
+	CharID uuid.UUID
+	Slots  pqtype.NullRawMessage
+}
+
+func (m *mockCastInventoryAdapter) GetCharacterByGuildAndDiscord(_ context.Context, _, _ string) (refdata.Character, error) {
+	return m.char, m.charErr
+}
+
+func (m *mockCastInventoryAdapter) UpdateCharacterInventory(_ context.Context, arg refdata.UpdateCharacterInventoryParams) (refdata.Character, error) {
+	m.updateInvCalls = append(m.updateInvCalls, arg)
+	return m.char, m.updateInvErr
+}
+
+func (m *mockCastInventoryAdapter) UpdateCharacterSpellSlots(_ context.Context, charID uuid.UUID, slots pqtype.NullRawMessage) error {
+	m.updateSlotCalls = append(m.updateSlotCalls, updateSpellSlotsCall{CharID: charID, Slots: slots})
+	return m.updateSlotErr
+}
+
+func makeIdentifyTestCharacter(charID uuid.UUID, items []byte, slots []byte) refdata.Character {
+	// CharacterData stores spells_known via a "spells" key.
+	// Provide a minimal shape that the identify path can introspect.
+	const charData = `{"spells_known":["identify"],"spells_prepared":["identify"]}`
+	return refdata.Character{
+		ID:            charID,
+		Name:          "Aria",
+		Inventory:     pqtype.NullRawMessage{RawMessage: items, Valid: true},
+		SpellSlots:    pqtype.NullRawMessage{RawMessage: slots, Valid: true},
+		CharacterData: pqtype.NullRawMessage{RawMessage: []byte(charData), Valid: true},
+	}
+}
+
+func TestCastHandler_IdentifyShortCircuits(t *testing.T) {
+	h, sess, svc, _ := setupCastHandler()
+
+	charID := uuid.New()
+	unidentified := false
+	items, _ := json.Marshal([]character.InventoryItem{
+		{ItemID: "mystery-ring", Name: "Ring of Mystery", Quantity: 1, Type: "magic_item", IsMagic: true, Identified: &unidentified},
+	})
+	slots, _ := json.Marshal(map[string]character.SlotInfo{"1": {Current: 2, Max: 2}})
+
+	adapter := &mockCastInventoryAdapter{char: makeIdentifyTestCharacter(charID, items, slots)}
+	h.SetInventoryAdapter(adapter)
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":  "identify",
+		"target": "mystery-ring",
+		"level":  1,
+	}))
+
+	if len(svc.castCalls) != 0 {
+		t.Errorf("expected /cast identify to short-circuit (no Cast call), got %d Cast calls", len(svc.castCalls))
+	}
+	if len(adapter.updateInvCalls) != 1 {
+		t.Fatalf("expected 1 inventory update, got %d", len(adapter.updateInvCalls))
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Identify") && !strings.Contains(sess.lastResponse.Data.Content, "Ring of Mystery") {
+		t.Errorf("expected identify confirmation, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+func TestCastHandler_DetectMagicShortCircuits(t *testing.T) {
+	h, sess, svc, _ := setupCastHandler()
+
+	charID := uuid.New()
+	items, _ := json.Marshal([]character.InventoryItem{
+		{ItemID: "ring", Name: "Ring of Protection", Quantity: 1, Type: "magic_item", IsMagic: true},
+		{ItemID: "longsword", Name: "Longsword", Quantity: 1, Type: "weapon"},
+	})
+	slots, _ := json.Marshal(map[string]character.SlotInfo{"1": {Current: 2, Max: 2}})
+
+	adapter := &mockCastInventoryAdapter{char: makeIdentifyTestCharacter(charID, items, slots)}
+	h.SetInventoryAdapter(adapter)
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell": "detect-magic",
+	}))
+
+	if len(svc.castCalls) != 0 || len(svc.aoeCalls) != 0 {
+		t.Errorf("expected /cast detect-magic to short-circuit; got %d cast / %d aoe calls", len(svc.castCalls), len(svc.aoeCalls))
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Ring of Protection") {
+		t.Errorf("expected detect-magic to list magic items, got %q", content)
+	}
+	if strings.Contains(content, "Longsword") {
+		t.Errorf("detect-magic should not list non-magic items, got %q", content)
 	}
 }
 

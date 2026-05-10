@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -28,6 +29,11 @@ type Store interface {
 	GetCharacterCardMessageID(ctx context.Context, id uuid.UUID) (sql.NullString, error)
 	SetCharacterCardMessageID(ctx context.Context, arg refdata.SetCharacterCardMessageIDParams) error
 	ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
+	// GetActiveCombatantByCharacterID returns the combatant row for the given
+	// character in any active encounter. Returns sql.ErrNoRows when the
+	// character is not in any active encounter (treated as "no combat-side
+	// state to merge").
+	GetActiveCombatantByCharacterID(ctx context.Context, characterID uuid.NullUUID) (refdata.Combatant, error)
 }
 
 // Service implements CharacterCardPoster and handles card updates.
@@ -57,7 +63,7 @@ func (s *Service) PostCharacterCard(ctx context.Context, characterID uuid.UUID, 
 		return err
 	}
 
-	data := buildCardData(char, shortID, false)
+	data := s.buildCardData(ctx, char, shortID, false)
 	content := FormatCard(data)
 
 	msg, err := s.discord.ChannelMessageSend(channelID, content)
@@ -106,7 +112,7 @@ func (s *Service) editCard(ctx context.Context, characterID uuid.UUID, retired b
 		return err
 	}
 
-	data := buildCardData(char, shortID, retired)
+	data := s.buildCardData(ctx, char, shortID, retired)
 	content := FormatCard(data)
 
 	_, err = s.discord.ChannelMessageEdit(channelID, msgID.String, content)
@@ -200,7 +206,13 @@ func getCharacterCardsChannelID(campaign refdata.Campaign) (string, error) {
 	return channelID, nil
 }
 
-func buildCardData(char refdata.Character, shortID string, retired bool) CardData {
+// buildCardData assembles the rendering payload for a character card. When
+// the character has an active combatant row (i.e. is currently in an active
+// encounter), the combatant's Conditions, ConcentrationSpellName, and
+// ExhaustionLevel are merged in so the persistent #character-cards message
+// reflects live combat state. Outside of combat these fields default to
+// empty / zero, matching the pre-Phase 17-deferred-fields-wired behavior.
+func (s *Service) buildCardData(ctx context.Context, char refdata.Character, shortID string, retired bool) CardData {
 	var classes []character.ClassEntry
 	_ = json.Unmarshal(char.Classes, &classes)
 
@@ -213,6 +225,8 @@ func buildCardData(char refdata.Character, shortID string, retired bool) CardDat
 	}
 
 	spellCount, preparedCount := extractSpellCounts(char)
+
+	conditions, concentration, exhaustion := s.fetchCombatantState(ctx, char.ID)
 
 	return CardData{
 		Name:             char.Name,
@@ -231,10 +245,72 @@ func buildCardData(char refdata.Character, shortID string, retired bool) CardDat
 		SpellSlots:       spellSlots,
 		SpellCount:       spellCount,
 		PreparedCount:    preparedCount,
+		Conditions:       conditions,
+		Concentration:    concentration,
+		Exhaustion:       exhaustion,
 		Gold:             int(char.Gold),
 		Languages:        char.Languages,
 		Retired:          retired,
 	}
+}
+
+// fetchCombatantState pulls Conditions / Concentration / Exhaustion from the
+// character's active combatant row (if any). Outside of combat, returns the
+// neutral (nil, "", 0) tuple so the formatter renders the canonical "—" /
+// no-line defaults. Lookup errors and missing-row cases are silent — the
+// card always falls back to character-only state, matching the pre-wiring
+// behavior.
+func (s *Service) fetchCombatantState(ctx context.Context, characterID uuid.UUID) ([]ConditionInfo, string, int) {
+	combatant, err := s.store.GetActiveCombatantByCharacterID(ctx, uuid.NullUUID{UUID: characterID, Valid: true})
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			s.logger.Warn("character card: combat-side state lookup failed", "character_id", characterID, "error", err)
+		}
+		return nil, "", 0
+	}
+	conditions := buildConditionInfos(combatant.Conditions, int(combatant.ExhaustionLevel))
+	concentration := ""
+	if combatant.ConcentrationSpellName.Valid {
+		concentration = combatant.ConcentrationSpellName.String
+	}
+	return conditions, concentration, int(combatant.ExhaustionLevel)
+}
+
+// buildConditionInfos converts the combatant's conditions JSONB into the
+// renderer's ConditionInfo slice, dropping the standalone "exhaustion" entry
+// (it is rendered as its own line via Exhaustion) while preserving every
+// other named condition along with its remaining-rounds count.
+func buildConditionInfos(raw json.RawMessage, exhaustionLevel int) []ConditionInfo {
+	if len(raw) == 0 {
+		return nil
+	}
+	var conds []struct {
+		Condition      string `json:"condition"`
+		DurationRounds int    `json:"duration_rounds"`
+		StartedRound   int    `json:"started_round"`
+	}
+	if err := json.Unmarshal(raw, &conds); err != nil {
+		return nil
+	}
+	if len(conds) == 0 {
+		return nil
+	}
+	infos := make([]ConditionInfo, 0, len(conds))
+	for _, c := range conds {
+		// "exhaustion" is rendered via the dedicated Exhaustion line; skip
+		// it here so it does not duplicate.
+		if c.Condition == "exhaustion" {
+			continue
+		}
+		infos = append(infos, ConditionInfo{
+			Name:            c.Condition,
+			RemainingRounds: c.DurationRounds,
+		})
+	}
+	if len(infos) == 0 {
+		return nil
+	}
+	return infos
 }
 
 // extractSpellCounts counts spells and prepared spells from character_data.

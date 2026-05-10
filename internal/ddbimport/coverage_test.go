@@ -423,7 +423,11 @@ func TestService_Import_CreateError(t *testing.T) {
 	}
 }
 
-func TestService_Import_UpdateError(t *testing.T) {
+// TestService_ApproveImport_UpdateError covers the case where the underlying
+// UpdateCharacterFull fails during DM approval. (Pre-Phase-90 fix this lived
+// in TestService_Import_UpdateError because Import itself called Update;
+// post-fix the only path that touches UpdateCharacterFull is ApproveImport.)
+func TestService_ApproveImport_UpdateError(t *testing.T) {
 	campaignID := uuid.New()
 	existingID := uuid.New()
 	ddbURL := "https://www.dndbeyond.com/characters/12345"
@@ -442,9 +446,15 @@ func TestService_Import_UpdateError(t *testing.T) {
 		},
 	}
 	svc := NewService(client, store)
-	_, err := svc.Import(context.Background(), campaignID, ddbURL)
-	if err == nil {
-		t.Fatal("expected error for update failure")
+	result, err := svc.Import(context.Background(), campaignID, ddbURL)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if result.PendingImportID == uuid.Nil {
+		t.Fatal("expected PendingImportID for re-sync with changes")
+	}
+	if _, err := svc.ApproveImport(context.Background(), result.PendingImportID); err == nil {
+		t.Fatal("expected ApproveImport to surface UpdateCharacterFull error")
 	}
 }
 

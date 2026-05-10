@@ -162,6 +162,14 @@ type LongRestInput struct {
 	PactMagicSlots     *character.PactMagicSlots
 	DeathSaveSuccesses int
 	DeathSaveFailures  int
+
+	// Phase 88b dawn recharge: when both Inventory and RechargeInfo are
+	// non-empty, the rest service rolls recharge dice for every magic
+	// item with charges, capped at MaxCharges. Items with DestroyOnZero
+	// = true that ran out roll d20 — on 1 they are destroyed. The
+	// recharged inventory replaces the input slice in the result.
+	Inventory    []character.InventoryItem
+	RechargeInfo map[string]inventory.RechargeInfo
 }
 
 // LongRestResult holds the results of a long rest.
@@ -177,6 +185,10 @@ type LongRestResult struct {
 	PactSlotsRestored     bool
 	DeathSavesReset       bool
 	PreparedCasterReminder bool
+
+	// Dawn recharge outputs (populated when input carries Inventory + RechargeInfo).
+	UpdatedInventory []character.InventoryItem
+	RechargedItems   []inventory.RechargedItem
 }
 
 // preparedCasterClasses are classes that prepare spells and should be reminded.
@@ -263,6 +275,21 @@ func (s *Service) LongRest(input LongRestInput) LongRestResult {
 		if preparedCasterClasses[c.Class] {
 			result.PreparedCasterReminder = true
 			break
+		}
+	}
+
+	// Phase 88b: dawn recharge for magic items with charges.
+	if len(input.Inventory) > 0 && len(input.RechargeInfo) > 0 {
+		// Reuse a fresh inventory service per call — DawnRecharge is
+		// stateless (only consults its random source). Wiring a shared
+		// inventory.Service into rest.Service is a separate refactor.
+		dawnRes, err := inventory.NewService(nil).DawnRecharge(inventory.DawnRechargeInput{
+			Items:        input.Inventory,
+			RechargeInfo: input.RechargeInfo,
+		})
+		if err == nil {
+			result.UpdatedInventory = dawnRes.UpdatedItems
+			result.RechargedItems = dawnRes.Recharged
 		}
 	}
 

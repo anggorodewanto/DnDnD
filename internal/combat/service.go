@@ -218,12 +218,26 @@ type DMNotifier interface {
 	Cancel(ctx context.Context, itemID, reason string) error
 }
 
+// CardUpdater is the minimal callback the combat service fires after a
+// successful HP / condition / concentration mutation so the persistent
+// #character-cards message stays in sync with live combat state. Defined
+// locally to avoid an import-cycle hazard with charactercard.
+//
+// charactercard.Service.OnCharacterUpdated satisfies this interface and is
+// the production binding wired in cmd/dndnd/main.go. Errors are intentionally
+// swallowed by the call site (see Service.notifyCardUpdate); a card-edit
+// failure must never undo the underlying combat mutation.
+type CardUpdater interface {
+	OnCharacterUpdated(ctx context.Context, characterID uuid.UUID) error
+}
+
 // Service manages combat encounters and their entities.
 type Service struct {
 	store             Store
 	summonedResources *SummonedTurnResources
 	publisher         EncounterPublisher
 	dmNotifier        DMNotifier
+	cardUpdater       CardUpdater
 }
 
 // NewService creates a new combat Service.
@@ -248,6 +262,48 @@ func (s *Service) SetDMNotifier(n DMNotifier) {
 // mutation.
 func (s *Service) SetPublisher(p EncounterPublisher) {
 	s.publisher = p
+}
+
+// SetCardUpdater wires the character-card auto-update callback (Phase 17).
+// A nil updater is tolerated and disables fan-out. Card-edit errors are
+// logged but never surfaced to callers so that a Discord hiccup cannot undo
+// a committed combat mutation.
+func (s *Service) SetCardUpdater(u CardUpdater) {
+	s.cardUpdater = u
+}
+
+// notifyCardUpdate fires the OnCharacterUpdated hook for the given combatant
+// when (a) the updater is wired AND (b) the combatant is a player character
+// (i.e. carries a non-NULL character_id). NPC / creature combatants have no
+// character card to refresh and are silently skipped. Errors are swallowed
+// — a stale card is preferable to surfacing a Discord-side failure as a
+// combat-mutation rollback.
+func (s *Service) notifyCardUpdate(ctx context.Context, c refdata.Combatant) {
+	if s.cardUpdater == nil {
+		return
+	}
+	if !c.CharacterID.Valid {
+		return
+	}
+	if err := s.cardUpdater.OnCharacterUpdated(ctx, c.CharacterID.UUID); err != nil {
+		log.Printf("character card auto-update failed for %s: %v", c.CharacterID.UUID, err)
+	}
+}
+
+// notifyCardUpdateByCharacterID fires the OnCharacterUpdated hook directly
+// when the caller already holds the character UUID (e.g. equip / level-up
+// paths that operate on characters rather than combatants). Mirrors
+// notifyCardUpdate's silent-on-error contract.
+func (s *Service) notifyCardUpdateByCharacterID(ctx context.Context, characterID uuid.UUID) {
+	if s.cardUpdater == nil {
+		return
+	}
+	if characterID == uuid.Nil {
+		return
+	}
+	if err := s.cardUpdater.OnCharacterUpdated(ctx, characterID); err != nil {
+		log.Printf("character card auto-update failed for %s: %v", characterID, err)
+	}
 }
 
 // publish fires the publisher with the given encounter ID, swallowing errors.

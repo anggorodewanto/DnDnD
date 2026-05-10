@@ -596,7 +596,12 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		approvalStore := dashboard.NewDBApprovalStore(queries)
 		var cardPoster dashboard.CharacterCardPoster
 		if discordSession != nil {
-			cardPoster = charactercard.NewService(discordSession, queries, logger)
+			cardSvc := charactercard.NewService(discordSession, queries, logger)
+			cardPoster = cardSvc
+			// Phase 17 Cards: combat mutations (HP, conditions,
+			// concentration, exhaustion) re-render the card via the
+			// new CardUpdater hook.
+			combatSvc.SetCardUpdater(cardSvc)
 		}
 		var approvalNotifier dashboard.PlayerNotifier
 		if discordSession != nil {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
@@ -247,7 +248,11 @@ func TestService_Import_WithWarnings(t *testing.T) {
 	}
 }
 
-func TestService_Import_Resync(t *testing.T) {
+// TestService_Import_ResyncStagesNotMutates is the regression test for the
+// chunk-7 Phase-90 finding: re-sync must NOT call UpdateCharacterFull until
+// the DM explicitly approves. Import returns a pending import id; the DB is
+// untouched.
+func TestService_Import_ResyncStagesNotMutates(t *testing.T) {
 	campaignID := uuid.New()
 	existingID := uuid.New()
 	ddbURL := "https://www.dndbeyond.com/characters/12345"
@@ -261,7 +266,13 @@ func TestService_Import_Resync(t *testing.T) {
 	scores, _ := json.Marshal(character.AbilityScores{STR: 14, DEX: 14, CON: 15, INT: 10, WIS: 12, CHA: 8})
 	classes, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 2}})
 
+	updateCalls := 0
+	createCalls := 0
 	store := &mockCharStore{
+		CreateFunc: func(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error) {
+			createCalls++
+			return refdata.Character{}, nil
+		},
 		GetByDdbURLFunc: func(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error) {
 			return refdata.Character{
 				ID:            existingID,
@@ -279,9 +290,7 @@ func TestService_Import_Resync(t *testing.T) {
 			}, nil
 		},
 		UpdateFunc: func(ctx context.Context, params refdata.UpdateCharacterFullParams) (refdata.Character, error) {
-			if params.ID != existingID {
-				t.Errorf("update called with wrong ID: %s", params.ID)
-			}
+			updateCalls++
 			return refdata.Character{ID: existingID, Name: params.Name}, nil
 		},
 	}
@@ -297,8 +306,184 @@ func TestService_Import_Resync(t *testing.T) {
 	if len(result.Changes) == 0 {
 		t.Error("expected changes in re-sync diff")
 	}
+	if updateCalls != 0 {
+		t.Errorf("UpdateCharacterFull must NOT be called before approval; called %d times", updateCalls)
+	}
+	if createCalls != 0 {
+		t.Errorf("CreateCharacter must NOT be called on re-sync; called %d times", createCalls)
+	}
+	if result.PendingImportID == uuid.Nil {
+		t.Error("re-sync with changes must return a non-nil PendingImportID")
+	}
 	if result.Character.ID != existingID {
-		t.Errorf("should update existing character, got ID %s", result.Character.ID)
+		t.Errorf("Character should reflect existing record (no DB write yet); got ID %s, want %s", result.Character.ID, existingID)
+	}
+}
+
+func TestService_ApproveImport_Success(t *testing.T) {
+	campaignID := uuid.New()
+	existingID := uuid.New()
+	ddbURL := "https://www.dndbeyond.com/characters/12345"
+
+	client := &mockClient{
+		FetchFunc: func(ctx context.Context, id string) ([]byte, error) { return minimalDDBJSON(), nil },
+	}
+
+	scores, _ := json.Marshal(character.AbilityScores{STR: 14, DEX: 14, CON: 15, INT: 10, WIS: 12, CHA: 8})
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 2}})
+
+	updateCalls := 0
+	store := &mockCharStore{
+		GetByDdbURLFunc: func(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error) {
+			return refdata.Character{
+				ID: existingID, CampaignID: campaignID, Name: "Old Name", Race: "Human",
+				Level: 2, AbilityScores: scores, Classes: classes,
+				DdbUrl: sql.NullString{String: ddbURL, Valid: true},
+			}, nil
+		},
+		UpdateFunc: func(ctx context.Context, params refdata.UpdateCharacterFullParams) (refdata.Character, error) {
+			updateCalls++
+			if params.ID != existingID {
+				t.Errorf("update called with wrong ID: %s", params.ID)
+			}
+			return refdata.Character{ID: existingID, Name: params.Name}, nil
+		},
+	}
+
+	svc := NewService(client, store)
+	result, err := svc.Import(context.Background(), campaignID, ddbURL)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if updateCalls != 0 {
+		t.Fatalf("update must not run before Approve; got %d", updateCalls)
+	}
+
+	approved, err := svc.ApproveImport(context.Background(), result.PendingImportID)
+	if err != nil {
+		t.Fatalf("ApproveImport: %v", err)
+	}
+	if updateCalls != 1 {
+		t.Errorf("UpdateCharacterFull should be called exactly once; got %d", updateCalls)
+	}
+	if approved.ID != existingID {
+		t.Errorf("approved.ID = %s, want %s", approved.ID, existingID)
+	}
+}
+
+func TestService_ApproveImport_NotFound(t *testing.T) {
+	svc := NewService(&mockClient{}, &mockCharStore{})
+	_, err := svc.ApproveImport(context.Background(), uuid.New())
+	if err != ErrPendingImportNotFound {
+		t.Errorf("got %v, want ErrPendingImportNotFound", err)
+	}
+}
+
+func TestService_ApproveImport_AlreadyApproved(t *testing.T) {
+	campaignID := uuid.New()
+	existingID := uuid.New()
+	ddbURL := "https://www.dndbeyond.com/characters/12345"
+
+	client := &mockClient{
+		FetchFunc: func(ctx context.Context, id string) ([]byte, error) { return minimalDDBJSON(), nil },
+	}
+	scores, _ := json.Marshal(character.AbilityScores{STR: 14, DEX: 14, CON: 15, INT: 10, WIS: 12, CHA: 8})
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 2}})
+
+	store := &mockCharStore{
+		GetByDdbURLFunc: func(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error) {
+			return refdata.Character{
+				ID: existingID, CampaignID: campaignID, Name: "Old Name", Race: "Human",
+				AbilityScores: scores, Classes: classes,
+				DdbUrl: sql.NullString{String: ddbURL, Valid: true},
+			}, nil
+		},
+		UpdateFunc: func(ctx context.Context, params refdata.UpdateCharacterFullParams) (refdata.Character, error) {
+			return refdata.Character{ID: existingID, Name: params.Name}, nil
+		},
+	}
+
+	svc := NewService(client, store)
+	result, err := svc.Import(context.Background(), campaignID, ddbURL)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if _, err := svc.ApproveImport(context.Background(), result.PendingImportID); err != nil {
+		t.Fatalf("first ApproveImport: %v", err)
+	}
+	_, err = svc.ApproveImport(context.Background(), result.PendingImportID)
+	if err != ErrPendingImportNotFound {
+		t.Errorf("second ApproveImport: got %v, want ErrPendingImportNotFound (consumed)", err)
+	}
+}
+
+func TestService_ApproveImport_Expired(t *testing.T) {
+	campaignID := uuid.New()
+	existingID := uuid.New()
+	ddbURL := "https://www.dndbeyond.com/characters/12345"
+
+	client := &mockClient{
+		FetchFunc: func(ctx context.Context, id string) ([]byte, error) { return minimalDDBJSON(), nil },
+	}
+	scores, _ := json.Marshal(character.AbilityScores{STR: 14, DEX: 14, CON: 15, INT: 10, WIS: 12, CHA: 8})
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 2}})
+
+	store := &mockCharStore{
+		GetByDdbURLFunc: func(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error) {
+			return refdata.Character{
+				ID: existingID, CampaignID: campaignID, Name: "Old Name", Race: "Human",
+				AbilityScores: scores, Classes: classes,
+				DdbUrl: sql.NullString{String: ddbURL, Valid: true},
+			}, nil
+		},
+	}
+
+	// Inject a clock so we can fast-forward past the TTL.
+	now := time.Now()
+	svc := NewServiceWithClock(client, store, func() time.Time { return now })
+	result, err := svc.Import(context.Background(), campaignID, ddbURL)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+
+	// Advance past the TTL.
+	now = now.Add(pendingImportTTL + time.Second)
+
+	_, err = svc.ApproveImport(context.Background(), result.PendingImportID)
+	if err != ErrPendingImportNotFound {
+		t.Errorf("expired entry: got %v, want ErrPendingImportNotFound", err)
+	}
+}
+
+func TestService_DiscardImport(t *testing.T) {
+	campaignID := uuid.New()
+	existingID := uuid.New()
+	ddbURL := "https://www.dndbeyond.com/characters/12345"
+
+	client := &mockClient{
+		FetchFunc: func(ctx context.Context, id string) ([]byte, error) { return minimalDDBJSON(), nil },
+	}
+	scores, _ := json.Marshal(character.AbilityScores{STR: 14, DEX: 14, CON: 15, INT: 10, WIS: 12, CHA: 8})
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 2}})
+
+	store := &mockCharStore{
+		GetByDdbURLFunc: func(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error) {
+			return refdata.Character{
+				ID: existingID, CampaignID: campaignID, Name: "Old Name", Race: "Human",
+				AbilityScores: scores, Classes: classes,
+				DdbUrl: sql.NullString{String: ddbURL, Valid: true},
+			}, nil
+		},
+	}
+
+	svc := NewService(client, store)
+	result, err := svc.Import(context.Background(), campaignID, ddbURL)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	svc.DiscardImport(result.PendingImportID)
+	if _, err := svc.ApproveImport(context.Background(), result.PendingImportID); err != ErrPendingImportNotFound {
+		t.Errorf("after Discard: got %v, want ErrPendingImportNotFound", err)
 	}
 }
 
@@ -350,6 +535,9 @@ func TestService_Import_ResyncNoChanges(t *testing.T) {
 	}
 	if len(result.Changes) != 0 {
 		t.Errorf("expected no changes, got %v", result.Changes)
+	}
+	if result.PendingImportID != uuid.Nil {
+		t.Errorf("no-change re-sync must not stash a pending import; got %s", result.PendingImportID)
 	}
 }
 
