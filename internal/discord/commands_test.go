@@ -116,7 +116,7 @@ func TestCommandDefinitions_ParameterHints(t *testing.T) {
 func TestCommandDefinitions_NoParamCommands(t *testing.T) {
 	noParamCmds := []string{
 		"done", "deathsave", "status", "inventory", "loot",
-		"prepare", "create-character", "character",
+		"create-character", "character",
 	}
 
 	cmdMap := commandMap()

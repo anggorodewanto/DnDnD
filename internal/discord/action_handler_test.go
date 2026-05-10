@@ -37,6 +37,9 @@ type fakeActionCombatService struct {
 	cancelExplCalledWith uuid.UUID
 	cancelExplResult     combat.CancelFreeformActionResult
 	cancelExplErr        error
+	readyCalledWith      combat.ReadyActionCommand
+	readyResult          combat.ReadyActionResult
+	readyErr             error
 }
 
 func (f *fakeActionCombatService) GetEncounter(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
@@ -72,6 +75,11 @@ func (f *fakeActionCombatService) CancelFreeformAction(_ context.Context, cmd co
 func (f *fakeActionCombatService) CancelExplorationFreeformAction(_ context.Context, combatantID uuid.UUID) (combat.CancelFreeformActionResult, error) {
 	f.cancelExplCalledWith = combatantID
 	return f.cancelExplResult, f.cancelExplErr
+}
+
+func (f *fakeActionCombatService) ReadyAction(_ context.Context, cmd combat.ReadyActionCommand) (combat.ReadyActionResult, error) {
+	f.readyCalledWith = cmd
+	return f.readyResult, f.readyErr
 }
 
 type fakeActionTurnProvider struct {
@@ -1602,4 +1610,214 @@ func contains(haystack, needle string) bool {
 		}
 	}
 	return false
+}
+
+// --- /action ready subcommand ---
+
+func TestActionHandler_Ready_CallsReadyAction(t *testing.T) {
+	sess := &MockSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	campID := uuid.New()
+
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Thorn",
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsAlive:     true,
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
+	encounter := refdata.Encounter{
+		ID:            encounterID,
+		CampaignID:    campID,
+		Mode:          "combat",
+		CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+	}
+
+	svc := &fakeActionCombatService{
+		encounters:  map[uuid.UUID]refdata.Encounter{encounterID: encounter},
+		combatants:  map[uuid.UUID]refdata.Combatant{combatantID: combatant},
+		byEncounter: map[uuid.UUID][]refdata.Combatant{encounterID: {combatant}},
+		readyResult: combat.ReadyActionResult{
+			CombatLog: "⏳ Thorn readies an action: \"shoot if a goblin opens the door\"",
+		},
+	}
+	turnProv := &fakeActionTurnProvider{turns: map[uuid.UUID]refdata.Turn{turnID: turn}}
+
+	h := NewActionHandler(
+		sess,
+		&fakeActionEncounterResolver{encounterID: encounterID},
+		svc,
+		turnProv,
+		&fakeActionCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&fakeActionCharacterLookup{char: refdata.Character{ID: charID}},
+		&fakeActionPendingStore{},
+	)
+
+	resp := runActionHandler(t, h, makeActionInteraction("g1", "u1", "ready", "shoot if a goblin opens the door"))
+
+	if svc.readyCalledWith.Description != "shoot if a goblin opens the door" {
+		t.Errorf("Description = %q want %q", svc.readyCalledWith.Description, "shoot if a goblin opens the door")
+	}
+	if svc.readyCalledWith.Combatant.ID != combatantID {
+		t.Errorf("Combatant.ID = %v want %v", svc.readyCalledWith.Combatant.ID, combatantID)
+	}
+	if svc.readyCalledWith.Turn.ID != turnID {
+		t.Errorf("Turn.ID = %v want %v", svc.readyCalledWith.Turn.ID, turnID)
+	}
+	if !contains(resp, "readies an action") {
+		t.Errorf("response %q should mention readies an action", resp)
+	}
+}
+
+func TestActionHandler_Ready_RequiresDescription(t *testing.T) {
+	sess := &MockSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	campID := uuid.New()
+
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Thorn",
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsAlive:     true,
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
+	encounter := refdata.Encounter{
+		ID:            encounterID,
+		CampaignID:    campID,
+		Mode:          "combat",
+		CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+	}
+
+	svc := &fakeActionCombatService{
+		encounters:  map[uuid.UUID]refdata.Encounter{encounterID: encounter},
+		combatants:  map[uuid.UUID]refdata.Combatant{combatantID: combatant},
+		byEncounter: map[uuid.UUID][]refdata.Combatant{encounterID: {combatant}},
+	}
+	turnProv := &fakeActionTurnProvider{turns: map[uuid.UUID]refdata.Turn{turnID: turn}}
+
+	h := NewActionHandler(
+		sess,
+		&fakeActionEncounterResolver{encounterID: encounterID},
+		svc,
+		turnProv,
+		&fakeActionCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&fakeActionCharacterLookup{char: refdata.Character{ID: charID}},
+		&fakeActionPendingStore{},
+	)
+
+	resp := runActionHandler(t, h, makeActionInteraction("g1", "u1", "ready", ""))
+
+	if svc.readyCalledWith.Description != "" {
+		t.Error("ReadyAction must not be called with empty description")
+	}
+	if !contains(resp, "describe") {
+		t.Errorf("expected description prompt, got %q", resp)
+	}
+}
+
+func TestActionHandler_Ready_RejectsNonOwner(t *testing.T) {
+	sess := &MockSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	otherCharID := uuid.New()
+	invokerCharID := uuid.New()
+	campID := uuid.New()
+
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Thorn",
+		CharacterID: uuid.NullUUID{UUID: otherCharID, Valid: true},
+		IsAlive:     true,
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
+	encounter := refdata.Encounter{
+		ID:            encounterID,
+		CampaignID:    campID,
+		Mode:          "combat",
+		CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+	}
+
+	svc := &fakeActionCombatService{
+		encounters:  map[uuid.UUID]refdata.Encounter{encounterID: encounter},
+		combatants:  map[uuid.UUID]refdata.Combatant{combatantID: combatant},
+		byEncounter: map[uuid.UUID][]refdata.Combatant{encounterID: {combatant}},
+	}
+	turnProv := &fakeActionTurnProvider{turns: map[uuid.UUID]refdata.Turn{turnID: turn}}
+
+	h := NewActionHandler(
+		sess,
+		&fakeActionEncounterResolver{encounterID: encounterID},
+		svc,
+		turnProv,
+		&fakeActionCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&fakeActionCharacterLookup{char: refdata.Character{ID: invokerCharID}},
+		&fakeActionPendingStore{},
+	)
+
+	resp := runActionHandler(t, h, makeActionInteraction("g1", "u1", "ready", "shoot anyone"))
+
+	if svc.readyCalledWith.Description != "" {
+		t.Error("ReadyAction must not be called when invoker is not the owner")
+	}
+	if resp != "It's not your turn." {
+		t.Errorf("response = %q", resp)
+	}
+}
+
+func TestActionHandler_Ready_ServiceError(t *testing.T) {
+	sess := &MockSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	campID := uuid.New()
+
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Thorn",
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsAlive:     true,
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
+	encounter := refdata.Encounter{
+		ID:            encounterID,
+		CampaignID:    campID,
+		Mode:          "combat",
+		CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+	}
+
+	svc := &fakeActionCombatService{
+		encounters:  map[uuid.UUID]refdata.Encounter{encounterID: encounter},
+		combatants:  map[uuid.UUID]refdata.Combatant{combatantID: combatant},
+		byEncounter: map[uuid.UUID][]refdata.Combatant{encounterID: {combatant}},
+		readyErr:    errors.New("action already used"),
+	}
+	turnProv := &fakeActionTurnProvider{turns: map[uuid.UUID]refdata.Turn{turnID: turn}}
+
+	h := NewActionHandler(
+		sess,
+		&fakeActionEncounterResolver{encounterID: encounterID},
+		svc,
+		turnProv,
+		&fakeActionCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&fakeActionCharacterLookup{char: refdata.Character{ID: charID}},
+		&fakeActionPendingStore{},
+	)
+
+	resp := runActionHandler(t, h, makeActionInteraction("g1", "u1", "ready", "shoot anyone"))
+
+	if !contains(resp, "action already used") {
+		t.Errorf("expected service error in response, got %q", resp)
+	}
 }

@@ -203,6 +203,18 @@ func (r *CommandRouter) SetDeathSaveHandler(h *DeathSaveHandler) {
 	r.handlers["deathsave"] = h
 }
 
+// SetCastHandler registers the CastHandler for the /cast command,
+// replacing the status-aware stub installed by NewCommandRouter.
+func (r *CommandRouter) SetCastHandler(h *CastHandler) {
+	r.handlers["cast"] = h
+}
+
+// SetPrepareHandler registers the PrepareHandler for the /prepare command,
+// replacing the status-aware stub installed by NewCommandRouter.
+func (r *CommandRouter) SetPrepareHandler(h *PrepareHandler) {
+	r.handlers["prepare"] = h
+}
+
 // RegistrationDeps holds the optional dependencies for registration command handlers.
 // When nil, the router uses plain stub handlers for registration commands.
 type RegistrationDeps struct {

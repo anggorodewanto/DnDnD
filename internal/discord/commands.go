@@ -150,6 +150,11 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Name:        "spell-slot",
 					Description: "Force using a regular spell slot instead of pact magic slot (multiclass warlocks)",
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "ritual",
+					Description: "Cast as a ritual (no slot consumed; out of combat only)",
+				},
 			},
 		},
 		{
@@ -456,6 +461,23 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 		{
 			Name:        "prepare",
 			Description: "Prepare your spell list for the day",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "spells",
+					Description: "Comma-separated spell IDs to prepare (omit to preview)",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "class",
+					Description: "Class to prepare for (multiclass; defaults to first prepared caster class)",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "subclass",
+					Description: "Subclass override (defaults to character's subclass)",
+				},
+			},
 		},
 		{
 			Name:        "retire",

@@ -60,6 +60,8 @@ type discordHandlers struct {
 	shove             *discord.ShoveHandler
 	interact          *discord.InteractHandler
 	deathsave         *discord.DeathSaveHandler
+	cast              *discord.CastHandler
+	prepare           *discord.PrepareHandler
 	enemyTurnNotifier *discord.DiscordEnemyTurnNotifier
 }
 
@@ -244,12 +246,27 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 		characterLookup,
 	)
 
+	// crit-01b: wire /cast and /prepare. Both share the combatLookup adapter
+	// for the encounter/turn/combatant lookups; /cast also needs spell + map
+	// catalog access via the dedicated castLookupAdapter. /prepare runs out
+	// of combat too, so it tolerates a missing active encounter.
+	castLookup := newCastLookupAdapter(deps.combatService, deps.queries, deps.resolver)
+	handlers.cast = discord.NewCastHandler(deps.session, deps.combatService, castLookup, deps.roller)
+	handlers.prepare = discord.NewPrepareHandler(
+		deps.session,
+		deps.combatService,
+		newPrepareEncounterProviderAdapter(deps.combatService, deps.resolver),
+		checkCampProv,
+		characterLookup,
+	)
+
 	if deps.campaignSettings != nil {
 		handlers.attack.SetChannelIDProvider(deps.campaignSettings)
 		handlers.bonus.SetChannelIDProvider(deps.campaignSettings)
 		handlers.shove.SetChannelIDProvider(deps.campaignSettings)
 		handlers.interact.SetChannelIDProvider(deps.campaignSettings)
 		handlers.deathsave.SetChannelIDProvider(deps.campaignSettings)
+		handlers.cast.SetChannelIDProvider(deps.campaignSettings)
 	}
 
 	if deps.db != nil {
@@ -258,8 +275,12 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 		handlers.bonus.SetTurnGate(gate)
 		handlers.shove.SetTurnGate(gate)
 		handlers.interact.SetTurnGate(gate)
+		handlers.cast.SetTurnGate(gate)
 		// /deathsave is intentionally NOT gated: a dying PC rolls off-
 		// turn, so the per-turn ownership check would always fail.
+		// /prepare is intentionally NOT gated: it runs between sessions,
+		// outside any turn — the handler itself rejects when the active
+		// encounter is in `status="active"`.
 	}
 }
 
@@ -298,6 +319,12 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	}
 	if set.deathsave != nil {
 		r.SetDeathSaveHandler(set.deathsave)
+	}
+	if set.cast != nil {
+		r.SetCastHandler(set.cast)
+	}
+	if set.prepare != nil {
+		r.SetPrepareHandler(set.prepare)
 	}
 }
 
@@ -612,6 +639,10 @@ func (a *actionCombatServiceAdapter) CancelExplorationFreeformAction(ctx context
 	return a.svc.CancelExplorationFreeformAction(ctx, combatantID)
 }
 
+func (a *actionCombatServiceAdapter) ReadyAction(ctx context.Context, cmd combat.ReadyActionCommand) (combat.ReadyActionResult, error) {
+	return a.svc.ReadyAction(ctx, cmd)
+}
+
 // actionPendingStoreAdapter satisfies discord.ActionPendingStore over
 // *refdata.Queries. Used by the exploration /action path, which must persist
 // a pending_actions row without going through combat.Service (no Turn).
@@ -700,4 +731,80 @@ func (a *turnGateAdapter) AcquireAndRelease(ctx context.Context, encounterID uui
 		return combat.TurnOwnerInfo{}, commitErr
 	}
 	return info, nil
+}
+
+// castLookupAdapter satisfies discord.CastEncounterProvider over
+// (combat.Service + refdata.Queries + resolver). /cast needs the union of
+// the combat-action lookup surface plus GetSpell + GetMapByID, so a
+// dedicated adapter is the simplest fit; combatActionLookupAdapter does
+// not expose those.
+type castLookupAdapter struct {
+	combat   *combat.Service
+	queries  *refdata.Queries
+	resolver userEncounterResolver
+}
+
+func newCastLookupAdapter(svc *combat.Service, q *refdata.Queries, resolver userEncounterResolver) *castLookupAdapter {
+	if svc == nil || q == nil {
+		return nil
+	}
+	return &castLookupAdapter{combat: svc, queries: q, resolver: resolver}
+}
+
+func (a *castLookupAdapter) ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error) {
+	if a.resolver == nil {
+		return uuid.Nil, sqlNoRowsLike()
+	}
+	return a.resolver.ActiveEncounterForUser(ctx, guildID, discordUserID)
+}
+
+func (a *castLookupAdapter) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+	return a.combat.GetEncounter(ctx, id)
+}
+
+func (a *castLookupAdapter) GetCombatant(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+	return a.combat.GetCombatant(ctx, id)
+}
+
+func (a *castLookupAdapter) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
+	return a.combat.ListCombatantsByEncounterID(ctx, encounterID)
+}
+
+func (a *castLookupAdapter) GetTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	return a.queries.GetTurn(ctx, id)
+}
+
+func (a *castLookupAdapter) GetSpell(ctx context.Context, id string) (refdata.Spell, error) {
+	return a.queries.GetSpell(ctx, id)
+}
+
+func (a *castLookupAdapter) GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+	return a.queries.GetMapByID(ctx, id)
+}
+
+// prepareEncounterProviderAdapter satisfies discord.PrepareEncounterProvider
+// over (combat.Service + resolver). /prepare uses the encounter only to gate
+// out-of-combat — failure to resolve simply skips the gate (player may
+// /prepare between sessions).
+type prepareEncounterProviderAdapter struct {
+	combat   *combat.Service
+	resolver userEncounterResolver
+}
+
+func newPrepareEncounterProviderAdapter(svc *combat.Service, resolver userEncounterResolver) *prepareEncounterProviderAdapter {
+	if svc == nil {
+		return nil
+	}
+	return &prepareEncounterProviderAdapter{combat: svc, resolver: resolver}
+}
+
+func (a *prepareEncounterProviderAdapter) ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error) {
+	if a.resolver == nil {
+		return uuid.Nil, sqlNoRowsLike()
+	}
+	return a.resolver.ActiveEncounterForUser(ctx, guildID, discordUserID)
+}
+
+func (a *prepareEncounterProviderAdapter) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+	return a.combat.GetEncounter(ctx, id)
 }

@@ -28,6 +28,7 @@ type ActionCombatService interface {
 	FreeformAction(ctx context.Context, cmd combat.FreeformActionCommand) (combat.FreeformActionResult, error)
 	CancelFreeformAction(ctx context.Context, cmd combat.CancelFreeformActionCommand) (combat.CancelFreeformActionResult, error)
 	CancelExplorationFreeformAction(ctx context.Context, combatantID uuid.UUID) (combat.CancelFreeformActionResult, error)
+	ReadyAction(ctx context.Context, cmd combat.ReadyActionCommand) (combat.ReadyActionResult, error)
 }
 
 // ActionTurnProvider loads turn rows for the combat path.
@@ -107,6 +108,7 @@ func (h *ActionHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	isCancel := strings.EqualFold(rawAction, "cancel") && rawArgs == ""
+	isReady := strings.EqualFold(rawAction, "ready")
 
 	actionText := rawAction
 	if rawArgs != "" {
@@ -133,7 +135,7 @@ func (h *ActionHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	h.handleCombat(ctx, interaction, encounter, userID, actionText, isCancel)
+	h.handleCombat(ctx, interaction, encounter, userID, actionText, isCancel, isReady, rawArgs)
 }
 
 // handleCombat handles the combat-mode freeform post or cancel. Requires an
@@ -143,7 +145,8 @@ func (h *ActionHandler) handleCombat(
 	interaction *discordgo.Interaction,
 	encounter refdata.Encounter,
 	userID, actionText string,
-	isCancel bool,
+	isCancel, isReady bool,
+	rawArgs string,
 ) {
 	if !encounter.CurrentTurnID.Valid {
 		respondEphemeral(h.session, interaction, "No active turn.")
@@ -172,6 +175,11 @@ func (h *ActionHandler) handleCombat(
 		return
 	}
 
+	if isReady {
+		h.performReadyAction(ctx, interaction, combatant, turn, rawArgs)
+		return
+	}
+
 	result, err := h.combatService.FreeformAction(ctx, combat.FreeformActionCommand{
 		Combatant:  combatant,
 		Turn:       turn,
@@ -181,6 +189,35 @@ func (h *ActionHandler) handleCombat(
 	})
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to post action: %v", err))
+		return
+	}
+	respondEphemeral(h.session, interaction, result.CombatLog)
+}
+
+// performReadyAction dispatches /action ready into combat.Service.ReadyAction
+// and posts the resulting combat log line. The trigger description is taken
+// from rawArgs verbatim ("ready" itself was stripped before dispatch). Slot
+// deduction + concentration linkage are out of scope here (med-28); the
+// service builds a reaction declaration with is_readied_action=true so the
+// DM panel surfaces the readied trigger.
+func (h *ActionHandler) performReadyAction(
+	ctx context.Context,
+	interaction *discordgo.Interaction,
+	combatant refdata.Combatant,
+	turn refdata.Turn,
+	description string,
+) {
+	if strings.TrimSpace(description) == "" {
+		respondEphemeral(h.session, interaction, "Please describe the readied action (e.g. `/action ready args:shoot anyone who opens the door`).")
+		return
+	}
+	result, err := h.combatService.ReadyAction(ctx, combat.ReadyActionCommand{
+		Combatant:   combatant,
+		Turn:        turn,
+		Description: description,
+	})
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Ready action failed: %v", err))
 		return
 	}
 	respondEphemeral(h.session, interaction, result.CombatLog)

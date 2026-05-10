@@ -204,6 +204,23 @@ func (s *Service) BreakConcentrationAndDismissSummons(ctx context.Context, encou
 // damage-induced CON saves on concentrating combatants.
 const ConcentrationSaveSource = "concentration"
 
+// GetCasterConcentrationName returns the human-readable name of the spell the
+// given combatant is currently concentrating on, or "" if not concentrating
+// (or if the row's columns are NULL). Used by /cast to populate the
+// CastCommand.CurrentConcentration string before invoking Cast/CastAoE so
+// the service can detect concentration replacement and clean up the prior
+// spell.
+func (s *Service) GetCasterConcentrationName(ctx context.Context, casterID uuid.UUID) (string, error) {
+	row, err := s.store.GetCombatantConcentration(ctx, casterID)
+	if err != nil {
+		return "", fmt.Errorf("looking up concentration: %w", err)
+	}
+	if !row.ConcentrationSpellName.Valid {
+		return "", nil
+	}
+	return row.ConcentrationSpellName.String, nil
+}
+
 // CheckSilenceBreaksConcentration is the Phase 118 entry point for the
 // Silence-zone trigger. It looks up the combatant's authoritative
 // concentration spell, fetches the spell's components, and breaks
