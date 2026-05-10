@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -833,6 +834,15 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return AttackResult{}, fmt.Errorf("Reckless Attack requires Barbarian class")
 	}
 
+	// Phase 38: Reckless is declared on the FIRST attack of the action
+	// per RAW (the bonus then carries through subsequent attacks of the
+	// same turn). Reject the flag on a non-first attack to surface the
+	// constraint to the player; the carry-through effect is implicit
+	// because the FES + advantage path stays in effect for the turn.
+	if cmd.Reckless && cmd.Turn.ActionUsed {
+		return AttackResult{}, fmt.Errorf("Reckless Attack must be declared on the first attack of the turn")
+	}
+
 	// Loading weapons: limit to 1 attack per action
 	hasCrossbowExpert := false
 	hasTavernBrawler := false
@@ -910,7 +920,30 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return AttackResult{}, err
 	}
 
-	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
+	result, err := s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
+	if err != nil {
+		return result, err
+	}
+
+	// Phase 37 thrown weapon: the weapon leaves the attacker's hand. Clear
+	// EquippedMainHand so subsequent attacks/bonus actions can't keep
+	// hitting with a thrown javelin. Inventory retains the item so the
+	// player can re-equip from a stack on their next turn.
+	if cmd.Thrown && char != nil && char.EquippedMainHand.Valid && char.EquippedMainHand.String != "" {
+		if _, equipErr := s.store.UpdateCharacterEquipment(ctx, refdata.UpdateCharacterEquipmentParams{
+			ID:               char.ID,
+			EquippedMainHand: sql.NullString{},
+			EquippedOffHand:  char.EquippedOffHand,
+			EquippedArmor:    char.EquippedArmor,
+			Ac:               char.Ac,
+		}); equipErr != nil {
+			// Silently swallow — the attack already landed; a follow-up
+			// /equip will recover. Do not break the combat log.
+			_ = equipErr
+		}
+	}
+
+	return result, nil
 }
 
 // attackImprovised handles improvised weapon attacks at the service level.

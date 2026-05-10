@@ -418,7 +418,15 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// Wire asset API handler
 		assetDataDir := os.Getenv("ASSET_DATA_DIR")
 		if assetDataDir == "" {
-			assetDataDir = "data/assets"
+			// When deployed on Fly, the fly.toml volume mount is /data
+			// (see [mounts] block). Default to /data/assets there so
+			// uploaded assets survive machine restarts. Locally we fall
+			// back to a relative ./data/assets directory.
+			if os.Getenv("FLY_APP_NAME") != "" {
+				assetDataDir = "/data/assets"
+			} else {
+				assetDataDir = "data/assets"
+			}
 		}
 		assetStore := asset.NewLocalStore(assetDataDir)
 		assetSvc := asset.NewService(queries, assetStore)

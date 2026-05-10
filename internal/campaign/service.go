@@ -20,11 +20,10 @@ const (
 
 // Settings represents the JSONB campaign settings.
 type Settings struct {
-	TurnTimeoutHours  int               `json:"turn_timeout_hours"`
-	DiagonalRule      string            `json:"diagonal_rule"`
-	Open5eSources     []string          `json:"open5e_sources,omitempty"`
-	ChannelIDs        map[string]string `json:"channel_ids,omitempty"`
-	PotionBonusAction bool              `json:"potion_bonus_action,omitempty"`
+	TurnTimeoutHours int               `json:"turn_timeout_hours"`
+	DiagonalRule     string            `json:"diagonal_rule"`
+	Open5eSources    []string          `json:"open5e_sources,omitempty"`
+	ChannelIDs       map[string]string `json:"channel_ids,omitempty"`
 }
 
 // DefaultSettings returns campaign settings with sensible defaults.

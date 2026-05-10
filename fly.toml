@@ -20,6 +20,8 @@ primary_region = "ord"
 
 # Persistent volume for asset storage (maps, tokens, tilesets, narration).
 # Create with: fly volumes create dndnd_data --region ord --size 1
+# cmd/dndnd/main.go auto-defaults ASSET_DATA_DIR=/data/assets when
+# FLY_APP_NAME is set, so no env override is required in production.
 [mounts]
   source = "dndnd_data"
   destination = "/data"
