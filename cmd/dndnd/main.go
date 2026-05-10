@@ -707,6 +707,14 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				resolver:                 newDiscordUserEncounterResolver(queries),
 				enemyTurnEncounterLookup: combatSvc,
 				lootService:              lootSvc,
+				// crit-01c: plumb optional collaborators for /help, /inventory,
+				// /equip, /give, /attune, /unattune, /character, ASI components,
+				// /undo, /retire. Each handler is nil-safe; missing deps mean the
+				// router falls back to the status-aware stub.
+				levelUpService: levelUpSvc,
+				dmQueueFunc:    dmQueueChannel,
+				notifier:       dmQueueNotifier,
+				portalBaseURL:  os.Getenv("BASE_URL"),
 			})
 
 			// Phase 120a: wire RegistrationDeps so /register submits land in

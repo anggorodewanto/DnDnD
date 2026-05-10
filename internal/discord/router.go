@@ -215,6 +215,18 @@ func (r *CommandRouter) SetPrepareHandler(h *PrepareHandler) {
 	r.handlers["prepare"] = h
 }
 
+// SetUndoHandler registers the UndoHandler for the /undo command,
+// replacing the status-aware stub installed by NewCommandRouter.
+func (r *CommandRouter) SetUndoHandler(h *UndoHandler) {
+	r.handlers["undo"] = h
+}
+
+// SetRetireHandler registers the RetireHandler for the /retire command,
+// replacing the status-aware stub installed by NewCommandRouter.
+func (r *CommandRouter) SetRetireHandler(h *RetireHandler) {
+	r.handlers["retire"] = h
+}
+
 // RegistrationDeps holds the optional dependencies for registration command handlers.
 // When nil, the router uses plain stub handlers for registration commands.
 type RegistrationDeps struct {

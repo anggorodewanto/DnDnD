@@ -20,6 +20,14 @@ const (
 	KindEnemyTurnReady      EventKind = "enemy_turn_ready"
 	KindNarrativeTeleport   EventKind = "narrative_teleport"
 	KindPlayerWhisper       EventKind = "player_whisper"
+	// KindUndoRequest is a player-initiated request for the DM to undo
+	// their last action. The dashboard's Phase 97b undo flow performs the
+	// actual rollback; this event simply surfaces the request in #dm-queue.
+	KindUndoRequest EventKind = "undo_request"
+	// KindRetireRequest is a player-initiated request to retire their
+	// character. The dashboard's approval handler calls registration.
+	// Service.Retire when the DM accepts; this event surfaces the request.
+	KindRetireRequest EventKind = "retire_request"
 )
 
 // WhisperTargetDiscordUserIDKey is the ExtraMetadata key under which the
@@ -74,6 +82,8 @@ var kindLabels = map[EventKind]kindLabel{
 	KindEnemyTurnReady:      {emoji: "⚔️", label: "Enemy Turn", useColon: false},
 	KindNarrativeTeleport:   {emoji: "✨", label: "Spell", useColon: false},
 	KindPlayerWhisper:       {emoji: "🤫", label: "Whisper", useColon: true},
+	KindUndoRequest:         {emoji: "⏪", label: "Undo Request", useColon: false},
+	KindRetireRequest:       {emoji: "🪦", label: "Retire Request", useColon: false},
 }
 
 var defaultLabel = kindLabel{emoji: "📨", label: "Notification", useColon: true}

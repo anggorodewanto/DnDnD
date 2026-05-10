@@ -2,12 +2,18 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
+	"github.com/ab/dndnd/internal/dmqueue"
+	"github.com/ab/dndnd/internal/levelup"
 	"github.com/ab/dndnd/internal/loot"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -34,6 +40,12 @@ type discordHandlerDeps struct {
 	enemyTurnEncounterLookup discord.EnemyTurnEncounterLookup
 	mapRegenerator           discord.MapRegenerator
 	lootService              *loot.Service
+	// crit-01c: optional collaborators for the inventory + ASI + character
+	// + undo + retire wiring. Each field is nil-safe in buildDiscordHandlers.
+	levelUpService *levelup.Service
+	dmQueueFunc    func(guildID string) string
+	notifier       dmqueue.Notifier
+	portalBaseURL  string
 }
 
 // discordHandlers holds the constructed slash-command handlers so main.go can
@@ -62,6 +74,16 @@ type discordHandlers struct {
 	deathsave         *discord.DeathSaveHandler
 	cast              *discord.CastHandler
 	prepare           *discord.PrepareHandler
+	help              *discord.HelpHandler
+	inventory         *discord.InventoryHandler
+	equip             *discord.EquipHandler
+	give              *discord.GiveHandler
+	attune            *discord.AttuneHandler
+	unattune          *discord.UnattuneHandler
+	character         *discord.CharacterHandler
+	asi               *discord.ASIHandler
+	undo              *discord.UndoHandler
+	retire            *discord.RetireHandler
 	enemyTurnNotifier *discord.DiscordEnemyTurnNotifier
 }
 
@@ -216,7 +238,66 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	// and the router falls back to the status-aware stub.
 	attachCombatActionHandlers(&handlers, deps)
 
+	// crit-01c: wire /help, /inventory, /equip, /give, /attune,
+	// /unattune, /character, ASI components, /undo, /retire. /help has
+	// no DB dependency so it's wired unconditionally; the rest are
+	// guarded on their respective collaborators being non-nil.
+	attachInventoryAndCharacterHandlers(&handlers, deps, characterLookup, checkCampProv, combatantLookup)
+
 	return handlers
+}
+
+// attachInventoryAndCharacterHandlers builds /help, /inventory, /equip,
+// /give, /attune, /unattune, /character, ASI components, /undo, and /retire
+// when the necessary collaborators are available. /help is dependency-free
+// so it always succeeds; the rest are guarded on deps.queries.
+func attachInventoryAndCharacterHandlers(
+	handlers *discordHandlers,
+	deps discordHandlerDeps,
+	characterLookup *characterByDiscordAdapter,
+	checkCampProv *checkCampaignProviderAdapter,
+	combatantLookup *combatantByDiscordAdapter,
+) {
+	if deps.session == nil {
+		return
+	}
+
+	handlers.help = discord.NewHelpHandler(deps.session)
+
+	if deps.queries == nil {
+		return
+	}
+
+	handlers.inventory = discord.NewInventoryHandler(deps.session, checkCampProv, characterLookup)
+	handlers.equip = discord.NewEquipHandler(deps.session, checkCampProv, characterLookup, deps.queries)
+	handlers.attune = discord.NewAttuneHandler(deps.session, checkCampProv, characterLookup, deps.queries)
+	handlers.unattune = discord.NewUnattuneHandler(deps.session, checkCampProv, characterLookup, deps.queries)
+	handlers.give = discord.NewGiveHandler(
+		deps.session,
+		checkCampProv,
+		characterLookup,
+		newGiveTargetResolverAdapter(deps.queries),
+		deps.queries,
+		nil, // GiveCombatProvider is currently unused by the handler.
+	)
+	handlers.character = discord.NewCharacterHandler(deps.session, deps.queries, deps.queries, deps.portalBaseURL)
+
+	if deps.levelUpService != nil {
+		handlers.asi = discord.NewASIHandler(deps.session, newASIServiceAdapter(deps.levelUpService, deps.queries), deps.dmQueueFunc)
+	}
+
+	// /retire shares the campaign + character lookups with inventory.
+	handlers.retire = discord.NewRetireHandler(deps.session, checkCampProv, characterLookup, deps.notifier)
+
+	// /undo needs the encounter resolver, the combatant lookup, and the
+	// action_log reader. All of them are nil-safe in the handler.
+	handlers.undo = discord.NewUndoHandler(
+		deps.session,
+		deps.resolver,
+		combatantLookup,
+		deps.queries,
+		deps.notifier,
+	)
 }
 
 // attachCombatActionHandlers builds the /attack, /bonus, /shove,
@@ -325,6 +406,36 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	}
 	if set.prepare != nil {
 		r.SetPrepareHandler(set.prepare)
+	}
+	if set.help != nil {
+		r.SetHelpHandler(set.help)
+	}
+	if set.inventory != nil {
+		r.SetInventoryHandler(set.inventory)
+	}
+	if set.equip != nil {
+		r.SetEquipHandler(set.equip)
+	}
+	if set.give != nil {
+		r.SetGiveHandler(set.give)
+	}
+	if set.attune != nil {
+		r.SetAttuneHandler(set.attune)
+	}
+	if set.unattune != nil {
+		r.SetUnattuneHandler(set.unattune)
+	}
+	if set.character != nil {
+		r.SetCharacterHandler(set.character)
+	}
+	if set.asi != nil {
+		r.SetASIHandler(set.asi)
+	}
+	if set.undo != nil {
+		r.SetUndoHandler(set.undo)
+	}
+	if set.retire != nil {
+		r.SetRetireHandler(set.retire)
 	}
 }
 
@@ -807,4 +918,93 @@ func (a *prepareEncounterProviderAdapter) ActiveEncounterForUser(ctx context.Con
 
 func (a *prepareEncounterProviderAdapter) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
 	return a.combat.GetEncounter(ctx, id)
+}
+
+// giveTargetResolverAdapter satisfies discord.GiveTargetResolver by trying a
+// UUID parse first (direct character ID lookup), then falling back to a
+// case-insensitive name match against ListCharactersByCampaign. Returns the
+// first match; when no character matches, returns sqlNoRowsLike().
+type giveTargetResolverAdapter struct {
+	queries *refdata.Queries
+}
+
+func newGiveTargetResolverAdapter(q *refdata.Queries) *giveTargetResolverAdapter {
+	if q == nil {
+		return nil
+	}
+	return &giveTargetResolverAdapter{queries: q}
+}
+
+func (a *giveTargetResolverAdapter) ResolveTarget(ctx context.Context, campaignID uuid.UUID, nameOrID string) (refdata.Character, error) {
+	if id, err := uuid.Parse(nameOrID); err == nil {
+		char, err := a.queries.GetCharacter(ctx, id)
+		if err == nil && char.CampaignID == campaignID {
+			return char, nil
+		}
+	}
+	chars, err := a.queries.ListCharactersByCampaign(ctx, campaignID)
+	if err != nil {
+		return refdata.Character{}, err
+	}
+	needle := strings.ToLower(nameOrID)
+	for _, c := range chars {
+		if strings.ToLower(c.Name) == needle {
+			return c, nil
+		}
+	}
+	return refdata.Character{}, sqlNoRowsLike()
+}
+
+// asiServiceAdapter bridges *levelup.Service onto the discord.ASIService
+// contract, translating between discord.ASIChoiceData (the handler's wire
+// format) and levelup.ASIChoice (the service's domain type), and assembling
+// an ASICharacterData snapshot from the levelup CharacterStore + queries.
+type asiServiceAdapter struct {
+	svc     *levelup.Service
+	queries *refdata.Queries
+}
+
+func newASIServiceAdapter(svc *levelup.Service, q *refdata.Queries) discord.ASIService {
+	if svc == nil || q == nil {
+		return nil
+	}
+	return &asiServiceAdapter{svc: svc, queries: q}
+}
+
+func (a *asiServiceAdapter) ApproveASI(ctx context.Context, charID uuid.UUID, choice discord.ASIChoiceData) error {
+	return a.svc.ApproveASI(ctx, charID, levelup.ASIChoice{
+		Type:     levelup.ASIType(choice.Type),
+		Ability:  choice.Ability,
+		Ability2: choice.Ability2,
+		FeatID:   choice.FeatID,
+	})
+}
+
+func (a *asiServiceAdapter) DenyASI(ctx context.Context, charID uuid.UUID, reason string) error {
+	return a.svc.DenyASI(ctx, charID, reason)
+}
+
+func (a *asiServiceAdapter) GetCharacterForASI(ctx context.Context, charID uuid.UUID) (*discord.ASICharacterData, error) {
+	row, err := a.queries.GetCharacterForLevelUp(ctx, charID)
+	if err != nil {
+		return nil, err
+	}
+	var scores character.AbilityScores
+	if err := json.Unmarshal(row.AbilityScores, &scores); err != nil {
+		return nil, fmt.Errorf("parsing ability scores: %w", err)
+	}
+	classInfo := ""
+	if len(row.Classes) > 0 {
+		var entries []character.ClassEntry
+		if err := json.Unmarshal(row.Classes, &entries); err == nil {
+			classInfo = character.FormatClassSummary(entries)
+		}
+	}
+	return &discord.ASICharacterData{
+		ID:            row.ID,
+		Name:          row.Name,
+		DiscordUserID: row.DiscordUserID,
+		Scores:        scores,
+		ClassInfo:     classInfo,
+	}, nil
 }

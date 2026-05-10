@@ -267,6 +267,99 @@ func TestBuildDiscordHandlers_WhisperHandlerAcceptsNotifier(t *testing.T) {
 	})
 }
 
+// TestBuildDiscordHandlers_HelpAlwaysConstructed verifies that /help is
+// dependency-free — it must be constructed even when queries / combat are nil.
+func TestBuildDiscordHandlers_HelpAlwaysConstructed(t *testing.T) {
+	session := &testSession{}
+	deps := discordHandlerDeps{
+		session: session,
+	}
+	set := buildDiscordHandlers(deps)
+	require.NotNil(t, set.help, "help handler must be constructed without any DB deps")
+	require.Nil(t, set.inventory, "inventory handler should be nil without queries")
+}
+
+// TestBuildDiscordHandlers_InventoryFamilyConstructedWithQueries verifies the
+// crit-01c inventory + character family is wired when queries is present, so
+// /inventory, /equip, /give, /attune, /unattune, /character, /undo, /retire
+// all stop being stubs in production.
+func TestBuildDiscordHandlers_InventoryFamilyConstructedWithQueries(t *testing.T) {
+	session := &testSession{}
+	db := testutil.NewTestDB(t)
+	require.NoError(t, database.MigrateUp(db, dbfs.Migrations))
+	queries := refdata.New(db)
+
+	deps := discordHandlerDeps{
+		session:       session,
+		queries:       queries,
+		combatService: combat.NewService(combat.NewStoreAdapter(queries)),
+		roller:        dice.NewRoller(nil),
+		resolver:      &stubUserEncounterResolver{},
+		dmQueueFunc:   func(string) string { return "" },
+		notifier:      nil, // not required for construction
+	}
+	set := buildDiscordHandlers(deps)
+
+	require.NotNil(t, set.help, "help handler must be constructed")
+	require.NotNil(t, set.inventory, "inventory handler must be constructed when queries present")
+	require.NotNil(t, set.equip, "equip handler must be constructed when queries present")
+	require.NotNil(t, set.give, "give handler must be constructed when queries present")
+	require.NotNil(t, set.attune, "attune handler must be constructed when queries present")
+	require.NotNil(t, set.unattune, "unattune handler must be constructed when queries present")
+	require.NotNil(t, set.character, "character handler must be constructed when queries present")
+	require.NotNil(t, set.undo, "undo handler must be constructed when queries present")
+	require.NotNil(t, set.retire, "retire handler must be constructed when queries present")
+	require.Nil(t, set.asi, "asi handler should be nil without levelup service")
+}
+
+// TestAttachPhase105Handlers_RegistersInventoryFamilyHandlers verifies that
+// /help, /inventory, /equip, /give, /attune, /unattune, /character, /undo,
+// /retire all route to their real handlers (not the "not yet implemented"
+// stub) after attachPhase105Handlers runs.
+func TestAttachPhase105Handlers_RegistersInventoryFamilyHandlers(t *testing.T) {
+	session := &testSession{}
+	db := testutil.NewTestDB(t)
+	require.NoError(t, database.MigrateUp(db, dbfs.Migrations))
+	queries := refdata.New(db)
+
+	deps := discordHandlerDeps{
+		session:       session,
+		queries:       queries,
+		combatService: combat.NewService(combat.NewStoreAdapter(queries)),
+		roller:        dice.NewRoller(nil),
+		resolver:      &stubUserEncounterResolver{},
+		dmQueueFunc:   func(string) string { return "" },
+	}
+	set := buildDiscordHandlers(deps)
+
+	bot := discord.NewBot(session, "app-id", nil)
+	router := discord.NewCommandRouter(bot, nil)
+	attachPhase105Handlers(router, set)
+
+	commands := []string{"help", "inventory", "equip", "give", "attune", "unattune", "character", "undo", "retire"}
+	for _, cmd := range commands {
+		t.Run(cmd, func(t *testing.T) {
+			var responses []string
+			session.respondFunc = func(i *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+				if resp.Data != nil {
+					responses = append(responses, resp.Data.Content)
+				}
+				return nil
+			}
+			router.Handle(&discordgo.Interaction{
+				Type:   discordgo.InteractionApplicationCommand,
+				Data:   discordgo.ApplicationCommandInteractionData{Name: cmd},
+				Member: &discordgo.Member{User: &discordgo.User{ID: "test-user"}},
+			})
+			require.NotEmpty(t, responses, "%s handler must respond (not silently ignored)", cmd)
+			for _, r := range responses {
+				assert.NotContains(t, r, "not yet implemented", "%s handler must replace the stub in the router", cmd)
+				assert.NotContains(t, r, "Unknown command", "%s handler must be wired into the router", cmd)
+			}
+		})
+	}
+}
+
 type stubUserEncounterResolver struct{}
 
 func (s *stubUserEncounterResolver) ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error) {
