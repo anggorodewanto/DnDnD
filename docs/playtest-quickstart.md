@@ -142,8 +142,9 @@ approval request to `#dm-private`.
 
 From the dashboard:
 
-1. **Maps → Upload** a Tiled `.tmj` map. (A 10×10 sample lives in
-   `internal/e2etest/testdata/`; copy one out if you don't have your own.)
+1. **Maps → Upload** a Tiled `.tmj` map. A 10×10 sample lives at
+   [`docs/testdata/sample.tmj`](testdata/sample.tmj) — upload it directly
+   if you don't have your own.
 2. **Encounters → New** → pick the map → drag the player and one or two SRD
    monsters onto the grid.
 3. **Go Live** → the bot rolls initiative and posts the turn order to
