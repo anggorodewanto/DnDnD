@@ -37,8 +37,10 @@ cd dndnd
 make build
 ```
 
-`make build` produces `bin/dndnd`. If it fails, fix the build before going any
-further — none of the rest of this doc will work otherwise.
+`make build` produces both `bin/dndnd` (the bot + dashboard) and
+`bin/playtest-player` (the player-side REPL used in step 8). If it fails, fix
+the build before going any further — none of the rest of this doc will work
+otherwise.
 
 ## 2. Database (≈ 3 min)
 
@@ -105,9 +107,9 @@ http server listening addr=:8080
 ```
 
 If `DISCORD_*` env vars are missing, the dashboard falls back to a passthrough
-auth middleware (see `cmd/dndnd/main.go:130`) and the bot logs `discord
-session skipped` — that mode is fine for poking at the dashboard but not for
-a real playtest.
+auth middleware (see the `buildAuth` fallback path in
+`cmd/dndnd/main.go`) and the bot logs `discord session skipped` — that mode
+is fine for poking at the dashboard but not for a real playtest.
 
 ## 5. Bootstrap the campaign in Discord (≈ 5 min)
 
@@ -179,9 +181,15 @@ bot to the same server. Then:
 
 ```sh
 DISCORD_BOT_TOKEN=<player-bot-token> \
+DISCORD_APPLICATION_ID=<dndnd-bot-app-id> \
 GUILD_ID=<your-server-id> \
 ./bin/playtest-player
 ```
+
+`DISCORD_APPLICATION_ID` is the **dndnd bot's** app ID (from step 3.6),
+**not** the player bot's. The player-agent loads that app's registered slash
+commands as its validation table — point it at the wrong app and you'll get
+zero commands and a silent fall-back to the in-process default set.
 
 See [`docs/playtest-checklist.md`](playtest-checklist.md) (Phase 121.4) for
 the scenarios to run.

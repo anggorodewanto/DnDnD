@@ -17,21 +17,23 @@ import (
 
 // mockApprovalStore implements ApprovalStore for testing.
 type mockApprovalStore struct {
-	entries       []ApprovalEntry
-	detail        *ApprovalDetail
-	listErr       error
-	detailErr     error
-	approveErr    error
-	requestErr    error
-	rejectErr     error
-	approvedID    uuid.UUID
-	requestedID   uuid.UUID
-	requestedFB   string
-	rejectedID    uuid.UUID
-	rejectedFB    string
+	entries           []ApprovalEntry
+	detail            *ApprovalDetail
+	listErr           error
+	detailErr         error
+	approveErr        error
+	requestErr        error
+	rejectErr         error
+	approvedID        uuid.UUID
+	requestedID       uuid.UUID
+	requestedFB       string
+	rejectedID        uuid.UUID
+	rejectedFB        string
+	listedCampaignID  uuid.UUID
 }
 
-func (m *mockApprovalStore) ListPendingApprovals(_ context.Context, _ uuid.UUID) ([]ApprovalEntry, error) {
+func (m *mockApprovalStore) ListPendingApprovals(_ context.Context, campaignID uuid.UUID) ([]ApprovalEntry, error) {
+	m.listedCampaignID = campaignID
 	return m.entries, m.listErr
 }
 
@@ -348,6 +350,85 @@ func TestRejectCharacter_MissingFeedback(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestListApprovals_UsesCampaignLookup(t *testing.T) {
+	dynamicCampaign := uuid.MustParse("00000000-0000-0000-0000-0000000000aa")
+	staticCampaign := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	store := &mockApprovalStore{entries: []ApprovalEntry{}}
+	hub := NewHub()
+	go hub.Run()
+	defer hub.Stop()
+	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, staticCampaign, nil)
+
+	lookup := &stubCampaignLookup{id: dynamicCampaign.String(), status: "active"}
+	ah.SetCampaignLookup(lookup)
+
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(contextWithUser(r.Context(), "dm-user"))
+			next.ServeHTTP(w, r)
+		})
+	})
+	ah.RegisterApprovalRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/approvals", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "dm-user", lookup.seen)
+	assert.Equal(t, dynamicCampaign, store.listedCampaignID, "lookup result should override the static campaignID")
+}
+
+func TestListApprovals_LookupError(t *testing.T) {
+	store := &mockApprovalStore{}
+	hub := NewHub()
+	go hub.Run()
+	defer hub.Stop()
+	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, uuid.New(), nil)
+	ah.SetCampaignLookup(&stubCampaignLookup{err: fmt.Errorf("no active campaign for DM")})
+
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(contextWithUser(r.Context(), "dm-user"))
+			next.ServeHTTP(w, r)
+		})
+	})
+	ah.RegisterApprovalRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/approvals", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestListApprovals_LookupReturnsEmpty(t *testing.T) {
+	store := &mockApprovalStore{}
+	hub := NewHub()
+	go hub.Run()
+	defer hub.Stop()
+	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, uuid.New(), nil)
+	ah.SetCampaignLookup(&stubCampaignLookup{}) // empty id, no error
+
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(contextWithUser(r.Context(), "dm-user"))
+			next.ServeHTTP(w, r)
+		})
+	})
+	ah.RegisterApprovalRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/approvals", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, uuid.Nil, store.listedCampaignID, "empty lookup result should query with uuid.Nil, not error")
 }
 
 func TestApprovalEndpoints_RequireAuth(t *testing.T) {

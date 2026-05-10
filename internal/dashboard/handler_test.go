@@ -93,9 +93,11 @@ type stubCampaignLookup struct {
 	id     string
 	status string
 	err    error
+	seen   string
 }
 
-func (s *stubCampaignLookup) LookupActiveCampaign(_ context.Context, _ string) (string, string, error) {
+func (s *stubCampaignLookup) LookupActiveCampaign(_ context.Context, dmUserID string) (string, string, error) {
+	s.seen = dmUserID
 	return s.id, s.status, s.err
 }
 

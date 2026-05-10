@@ -51,7 +51,7 @@ func TestBuildAuthMiddleware_FallsBackWithoutEnvVars(t *testing.T) {
 			var logBuf bytes.Buffer
 			logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-			mw := buildAuthMiddleware(nil, logger)
+			mw := buildAuth(nil, logger).middleware
 
 			called := false
 			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +77,7 @@ func TestBuildAuthMiddleware_RejectsWithoutCookie(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	mw := buildAuthMiddleware(nil, logger)
+	mw := buildAuth(nil, logger).middleware
 
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

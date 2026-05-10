@@ -91,10 +91,10 @@ make playtest-replay TRANSCRIPT=internal/playtest/testdata/transcripts/<name>.js
 - **Status:** pending
 - **Pre-conditions:** Player character at 0 HP from previous combat
   hit; player's turn.
-- **Commands:** `/save death` three times across consecutive turns
+- **Commands:** `/deathsave` three times across consecutive turns
   (rolls below 10 force failures; rolls 20 are crits and auto-revive).
 - **Expect:**
-  - Each `/save death` prints "(roll) — failure" or "success" in the
+  - Each `/deathsave` prints "(roll) — failure" or "success" in the
     player's DM and `#combat-log`.
   - `combatants.death_save_failures` increments; on third fail, the
     combatant's `status` flips to `dead` and the bot announces it in
@@ -161,17 +161,19 @@ make playtest-replay TRANSCRIPT=internal/playtest/testdata/transcripts/<name>.js
   - Unattune removes it; bonuses revert.
   - Attempting to attune a 4th item rejects with a clear error.
 
-## 10. Equip / unequip
+## 10. Equip swap
 
 - **Status:** pending
 - **Pre-conditions:** Player owns at least one weapon and one armor
   set in inventory.
-- **Commands:** `/equip item:longsword`, `/equip item:chain-mail`,
-  `/unequip item:longsword`.
+- **Commands:** `/equip item:longsword`, `/equip item:chain-mail`, then
+  `/equip item:dagger` to swap weapons.
 - **Expect:**
   - Equipping armor recomputes AC.
   - Equipping a weapon makes it the default for `/attack` (no `weapon:` arg required).
-  - Unequipping a two-handed weapon frees the off-hand slot.
+  - Re-equipping a different weapon frees the prior main-hand slot. (No
+    `/unequip` command exists today — slot release is implicit on the next
+    `/equip`. Track an explicit unequip as a follow-up if scenarios need it.)
 
 ## 11. Dashboard-side encounter edit during live combat
 

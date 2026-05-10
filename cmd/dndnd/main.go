@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/endpoints"
 
 	"github.com/bwmarrin/discordgo"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/ab/dndnd/internal/asset"
 	"github.com/ab/dndnd/internal/auth"
 	"github.com/ab/dndnd/internal/campaign"
+	"github.com/ab/dndnd/internal/charactercard"
 	"github.com/ab/dndnd/internal/characteroverview"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dashboard"
@@ -40,6 +42,7 @@ import (
 	"github.com/ab/dndnd/internal/messageplayer"
 	"github.com/ab/dndnd/internal/narration"
 	"github.com/ab/dndnd/internal/open5e"
+	"github.com/ab/dndnd/internal/portal"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/registration"
 	"github.com/ab/dndnd/internal/server"
@@ -107,6 +110,29 @@ func (l dashboardCampaignLookup) LookupActiveCampaign(ctx context.Context, dmUse
 	return "", "", nil
 }
 
+// charCreateRefData adapts portal.RefDataAdapter to the narrower
+// dashboard.RefDataForCreate interface (which omits the per-campaign Open5e
+// gating that the portal flow exposes via an extra campaignID arg).
+type charCreateRefData struct {
+	a *portal.RefDataAdapter
+}
+
+func (c charCreateRefData) ListRaces(ctx context.Context) ([]portal.RaceInfo, error) {
+	return c.a.ListRaces(ctx)
+}
+
+func (c charCreateRefData) ListClasses(ctx context.Context) ([]portal.ClassInfo, error) {
+	return c.a.ListClasses(ctx)
+}
+
+func (c charCreateRefData) ListEquipment(ctx context.Context) ([]portal.EquipmentItem, error) {
+	return c.a.ListEquipment(ctx)
+}
+
+func (c charCreateRefData) ListSpellsByClass(ctx context.Context, class string) ([]portal.SpellInfo, error) {
+	return c.a.ListSpellsByClass(ctx, class, "")
+}
+
 // newDMQueueChannelResolver returns a closure that resolves a guild ID to
 // the channel ID of its #dm-queue text channel by scanning the live
 // discordgo session state. Phase 106a uses this to drive
@@ -131,26 +157,57 @@ func newDMQueueChannelResolver(session discord.Session) func(string) string {
 // Discord OAuth2 env vars are not configured (local dev without OAuth).
 func passthroughMiddleware(next http.Handler) http.Handler { return next }
 
-// buildAuthMiddleware returns a real auth.SessionMiddleware when
-// DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET are set. Otherwise it falls
-// back to passthroughMiddleware with a warning log for local dev.
-func buildAuthMiddleware(db *sql.DB, logger *slog.Logger) func(http.Handler) http.Handler {
+// authBundle bundles the session middleware and the OAuth2 service so the
+// caller can both protect dashboard routes and mount the
+// /portal/auth/{login,callback,logout} endpoints from a single construction.
+// oauthSvc is nil when DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET are unset
+// (local dev without OAuth) — middleware then falls back to passthrough.
+type authBundle struct {
+	middleware func(http.Handler) http.Handler
+	oauthSvc   *auth.OAuthService
+}
+
+// buildAuth wires the session middleware and (when OAuth env vars are
+// present) the *auth.OAuthService that backs /portal/auth/*. The redirect URL
+// defaults to BASE_URL + /portal/auth/callback (BASE_URL itself defaults to
+// http://localhost:8080) so a localhost playtest works without extra config.
+// Override OAUTH_REDIRECT_URL directly if a reverse proxy fronts the bot.
+func buildAuth(db *sql.DB, logger *slog.Logger) authBundle {
 	clientID := os.Getenv("DISCORD_CLIENT_ID")
 	clientSecret := os.Getenv("DISCORD_CLIENT_SECRET")
 	if clientID == "" || clientSecret == "" {
 		logger.Warn("DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET not set; dashboard auth disabled (passthrough)")
-		return passthroughMiddleware
+		return authBundle{middleware: passthroughMiddleware}
+	}
+
+	redirectURL := os.Getenv("OAUTH_REDIRECT_URL")
+	if redirectURL == "" {
+		baseURL := os.Getenv("BASE_URL")
+		if baseURL == "" {
+			baseURL = "http://localhost:8080"
+		}
+		redirectURL = baseURL + "/portal/auth/callback"
 	}
 
 	sessionStore := auth.NewSessionStore(db)
 	oauthCfg := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
-		Endpoint: oauth2.Endpoint{
-			TokenURL: "https://discord.com/api/oauth2/token",
-		},
+		RedirectURL:  redirectURL,
+		Scopes:       []string{"identify"},
+		Endpoint:     endpoints.Discord,
 	}
-	return auth.SessionMiddleware(sessionStore, oauthCfg, logger)
+
+	// secure=false locally so the session cookie works over plain HTTP.
+	// Production should front the bot with TLS (BASE_URL=https://…) and set
+	// COOKIE_SECURE=true.
+	secure := os.Getenv("COOKIE_SECURE") == "true"
+	userFetcher := &auth.DiscordUserInfoFetcher{}
+	oauthSvc := auth.NewOAuthService(oauthCfg, sessionStore, userFetcher, logger, secure)
+	return authBundle{
+		middleware: auth.SessionMiddleware(sessionStore, oauthCfg, logger),
+		oauthSvc:   oauthSvc,
+	}
 }
 
 // buildDiscordSession constructs (but does NOT open) a Discord session using
@@ -308,6 +365,21 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			return err
 		}
 		logger.Info("database connected and migrated")
+
+		// Seed SRD reference data (idempotent upserts) so the dashboard
+		// character-create form, slash-command spell pickers, and stat-block
+		// library have data to work with on a fresh database. ~900 row
+		// upserts; set SKIP_SRD_SEED=true once the DB is known-seeded to
+		// shave a second or two off boot.
+		if os.Getenv("SKIP_SRD_SEED") == "true" {
+			logger.Info("SRD reference data seed skipped (SKIP_SRD_SEED=true)")
+		} else {
+			if err := refdata.SeedAll(ctx, db); err != nil {
+				logger.Error("SRD reference data seed failed", "error", err)
+				return err
+			}
+			logger.Info("SRD reference data seeded")
+		}
 
 		// Phase 119: upgrade the error store to a PgStore backed by the
 		// dedicated error_log table. The PgStore both records errors and
@@ -468,8 +540,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 
 		// Phase 106f: Build real auth middleware when Discord OAuth2 env
 		// vars are available; otherwise fall back to passthrough for local
-		// dev without OAuth.
-		authMw := buildAuthMiddleware(db, logger)
+		// dev without OAuth. The bundle also exposes the OAuthService for
+		// /portal/auth/* mounting below; oauthSvc is nil in passthrough mode.
+		authBundle := buildAuth(db, logger)
+		authMw := authBundle.middleware
 		dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, authMw)
 
 		// Phase 112: DM dashboard errors panel. Mount the /dashboard/errors
@@ -489,6 +563,40 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		explorationSvc := exploration.NewService(queries)
 		explorationHandler := exploration.NewDashboardHandler(explorationSvc, queries)
 		dashboard.RegisterExplorationRoutes(router, explorationHandler, authMw)
+
+		// Phase 121: DM character-create form. charCreateRefData drops the
+		// per-campaign Open5e gating arg because the DM-side form is
+		// campaign-agnostic at construction time.
+		charCreateRefAdapter := portal.NewRefDataAdapter(queries)
+		charCreateStore := portal.NewBuilderStoreAdapter(queries, nil)
+		charCreateSvc := dashboard.NewDMCharCreateService(charCreateStore)
+		charCreateHandler := dashboard.NewCharCreateHandler(logger, charCreateSvc, charCreateRefData{a: charCreateRefAdapter})
+		charCreateHandler.RegisterCharCreateRoutes(router.With(authMw))
+
+		// Phase 121: character approval queue. SetCampaignLookup reuses the
+		// same lookup the Pause/Resume button uses, so the handler serves
+		// every DM from a single instance. cardPoster is nil when the bot
+		// is offline (#character-cards posts then become silent no-ops).
+		// PlayerNotifier stays nil — Discord DMs on approve/reject are a
+		// follow-up.
+		approvalStore := dashboard.NewDBApprovalStore(queries)
+		var cardPoster dashboard.CharacterCardPoster
+		if discordSession != nil {
+			cardPoster = charactercard.NewService(discordSession, queries, logger)
+		}
+		approvalHandler := dashboard.NewApprovalHandler(logger, approvalStore, nil, hub, uuid.Nil, cardPoster)
+		approvalHandler.SetCampaignLookup(dashboardCampaignLookup{queries: queries})
+		approvalHandler.RegisterApprovalRoutes(router.With(authMw))
+
+		// Phase 121: portal routes. nil TokenValidator: /portal/create (the
+		// player-side character builder) needs a portal-token issuer that is
+		// itself a Phase 14 follow-up.
+		portalHandler := portal.NewHandler(logger, nil)
+		var portalOpts []portal.RouteOption
+		if authBundle.oauthSvc != nil {
+			portalOpts = append(portalOpts, portal.WithOAuth(authBundle.oauthSvc))
+		}
+		portal.RegisterRoutes(router, portalHandler, authMw, portalOpts...)
 
 		// Phase 104b: Publisher fan-out to non-combat services that can
 		// mutate an active encounter's combatant state mid-combat. The

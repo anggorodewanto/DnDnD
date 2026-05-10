@@ -13,14 +13,20 @@ import (
 )
 
 // ApprovalHandler serves the character approval queue API endpoints and page.
+//
+// The handler resolves the campaign for ListPendingApprovals from one of two
+// sources, in order: a CampaignLookup wired via SetCampaignLookup (per-request,
+// keyed by the authenticated DM's discord user id) or the construction-time
+// campaignID. Production wires a lookup; tests usually pass a fixed campaignID.
 type ApprovalHandler struct {
-	logger       *slog.Logger
-	store        ApprovalStore
-	notifier     PlayerNotifier
-	cardPoster   CharacterCardPoster
-	hub          *Hub
-	campaignID   uuid.UUID
-	approvalTmpl *template.Template
+	logger         *slog.Logger
+	store          ApprovalStore
+	notifier       PlayerNotifier
+	cardPoster     CharacterCardPoster
+	hub            *Hub
+	campaignID     uuid.UUID
+	campaignLookup CampaignLookup
+	approvalTmpl   *template.Template
 }
 
 // NewApprovalHandler creates a new ApprovalHandler.
@@ -137,14 +143,53 @@ func (ah *ApprovalHandler) parseFeedbackRequest(w http.ResponseWriter, r *http.R
 	return d, req.Feedback, true
 }
 
+// SetCampaignLookup installs a per-request campaign lookup. When set, the
+// lookup result replaces the construction-time campaignID for
+// ListPendingApprovals so one handler instance can serve every DM. Reuses
+// the same CampaignLookup interface as dashboard.Handler.
+func (ah *ApprovalHandler) SetCampaignLookup(lookup CampaignLookup) {
+	ah.campaignLookup = lookup
+}
+
+// resolveCampaign returns the campaign id ListPendingApprovals should query.
+// On lookup error it logs and writes a 500; callers must check ok.
+func (ah *ApprovalHandler) resolveCampaign(w http.ResponseWriter, r *http.Request, dmUserID string) (uuid.UUID, bool) {
+	if ah.campaignLookup == nil {
+		return ah.campaignID, true
+	}
+	idStr, _, err := ah.campaignLookup.LookupActiveCampaign(r.Context(), dmUserID)
+	if err != nil {
+		ah.logger.Error("failed to resolve campaign for DM", "error", err, "discord_user_id", dmUserID)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return uuid.Nil, false
+	}
+	if idStr == "" {
+		// No active campaign yet (e.g. pre-/setup) — empty list, not error.
+		return uuid.Nil, true
+	}
+	parsed, err := uuid.Parse(idStr)
+	if err != nil {
+		ah.logger.Error("campaign lookup returned invalid uuid", "error", err, "id", idStr)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return uuid.Nil, false
+	}
+	return parsed, true
+}
+
 // ListApprovals returns all pending approvals as JSON.
 func (ah *ApprovalHandler) ListApprovals(w http.ResponseWriter, r *http.Request) {
-	if _, ok := ah.requireAuth(r); !ok {
+	userID, ok := ah.requireAuth(r)
+	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	entries, err := ah.store.ListPendingApprovals(r.Context(), ah.campaignID)
+	campaignID, ok := ah.resolveCampaign(w, r, userID)
+	if !ok {
+		return
+	}
+
+	entries, err := ah.store.ListPendingApprovals(r.Context(), campaignID)
 	if err != nil {
 		ah.logger.Error("failed to list pending approvals", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
