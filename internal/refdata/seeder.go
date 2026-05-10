@@ -172,6 +172,11 @@ type MechanicalEffect struct {
 	Value       string `json:"value,omitempty"`
 }
 
+// seedConditions seeds 16 conditions: the 15 SRD conditions plus "surprised"
+// (Phase 114). The spec's published condition glossary lists 15; "surprised"
+// is added because Phase 114's auto-skip pipeline treats it as a condition
+// for symmetry (see internal/combat/auto_skip.go). Removing it here would
+// break the auto-skip path on round-1 surprised combatants.
 func seedConditions(ctx context.Context, q *Queries) error {
 	conditions := []UpsertConditionParams{
 		{

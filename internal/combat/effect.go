@@ -377,9 +377,13 @@ func ProcessEffects(features []FeatureDefinition, trigger TriggerPoint, ctx Effe
 			result.ReactionTriggers = append(result.ReactionTriggers, re.FeatureName)
 
 		case EffectAura:
+			// Reserved API: collected for future Aura-of-Protection /
+			// Bless surfacing. No production consumer today.
 			result.AuraEffects = append(result.AuraEffects, re)
 
 		case EffectDMResolution:
+			// Reserved API: collected for future "DM clarifies" flow.
+			// No production consumer today.
 			result.DMResolutions = append(result.DMResolutions, re)
 		}
 	}

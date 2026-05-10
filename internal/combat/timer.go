@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,6 +31,7 @@ type TurnTimer struct {
 	notifier               Notifier
 	interval               time.Duration
 	stopCh                 chan struct{}
+	stopOnce               sync.Once
 	concentrationResolver  ConcentrationResolverFn
 }
 
@@ -55,9 +57,9 @@ func (t *TurnTimer) Start() {
 	go t.run()
 }
 
-// Stop signals the polling goroutine to stop.
+// Stop signals the polling goroutine to stop. Safe to call multiple times.
 func (t *TurnTimer) Stop() {
-	close(t.stopCh)
+	t.stopOnce.Do(func() { close(t.stopCh) })
 }
 
 func (t *TurnTimer) run() {

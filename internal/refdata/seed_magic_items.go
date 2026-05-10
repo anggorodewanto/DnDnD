@@ -12,6 +12,11 @@ func seedMagicItems(ctx context.Context, q *Queries) error {
 func srdMagicItems() []mi {
 	return []mi{
 		// ── Weapons (+1/+2/+3) ──────────────────────────────────────
+		// These are generic enhancement TEMPLATES. The spec mentions
+		// "+1 Longsword" / "+1 Greatsword" etc. as named items, but in
+		// practice every named +N weapon is the base weapon ID joined
+		// with one of these enhancement templates at the inventory
+		// layer, keeping the SRD seed compact.
 		{ID: "weapon-plus-1", Name: "Weapon +1", BaseItemType: optStr("weapon"), Rarity: "uncommon", MagicBonus: optInt(1),
 			PassiveEffects: optJSON([]map[string]any{{"type": "modify_attack", "modifier": 1}, {"type": "modify_damage", "modifier": 1}}),
 			Description:    "You have a +1 bonus to attack and damage rolls made with this magic weapon."},
