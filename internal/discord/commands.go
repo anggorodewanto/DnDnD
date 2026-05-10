@@ -60,8 +60,33 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "sharpshooter",
+					Description: "Use Sharpshooter (-5/+10, ranged)",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "reckless",
+					Description: "Use Reckless Attack (Barbarian)",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
 					Name:        "twohanded",
-					Description: "Use two-handed grip",
+					Description: "Use two-handed grip (versatile)",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "offhand",
+					Description: "Bonus-action off-hand attack (TWF)",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "thrown",
+					Description: "Throw a melee weapon with the thrown property",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "improvised",
+					Description: "Improvised weapon (1d4 bludgeoning)",
 				},
 			},
 		},
@@ -163,13 +188,18 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 		},
 		{
 			Name:        "shove",
-			Description: "Shove a target creature",
+			Description: "Shove a target creature (push, prone, or grapple)",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "target",
 					Description: "Target creature ID (e.g. OS)",
 					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "mode",
+					Description: "Shove mode: push (default), prone, or grapple",
 				},
 			},
 		},

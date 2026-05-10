@@ -173,6 +173,36 @@ func (r *CommandRouter) SetStatusHandler(h *StatusHandler) {
 	r.handlers["status"] = h
 }
 
+// SetAttackHandler registers the AttackHandler for the /attack command,
+// replacing the status-aware stub installed by NewCommandRouter.
+func (r *CommandRouter) SetAttackHandler(h *AttackHandler) {
+	r.handlers["attack"] = h
+}
+
+// SetBonusHandler registers the BonusHandler for the /bonus command,
+// replacing the status-aware stub installed by NewCommandRouter.
+func (r *CommandRouter) SetBonusHandler(h *BonusHandler) {
+	r.handlers["bonus"] = h
+}
+
+// SetShoveHandler registers the ShoveHandler for the /shove command,
+// replacing the status-aware stub installed by NewCommandRouter.
+func (r *CommandRouter) SetShoveHandler(h *ShoveHandler) {
+	r.handlers["shove"] = h
+}
+
+// SetInteractHandler registers the InteractHandler for the /interact command,
+// replacing the status-aware stub installed by NewCommandRouter.
+func (r *CommandRouter) SetInteractHandler(h *InteractHandler) {
+	r.handlers["interact"] = h
+}
+
+// SetDeathSaveHandler registers the DeathSaveHandler for the /deathsave command,
+// replacing the status-aware stub installed by NewCommandRouter.
+func (r *CommandRouter) SetDeathSaveHandler(h *DeathSaveHandler) {
+	r.handlers["deathsave"] = h
+}
+
 // RegistrationDeps holds the optional dependencies for registration command handlers.
 // When nil, the router uses plain stub handlers for registration commands.
 type RegistrationDeps struct {

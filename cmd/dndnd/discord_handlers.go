@@ -55,6 +55,11 @@ type discordHandlers struct {
 	whisper           *discord.WhisperHandler
 	action            *discord.ActionHandler
 	loot              *discord.LootHandler
+	attack            *discord.AttackHandler
+	bonus             *discord.BonusHandler
+	shove             *discord.ShoveHandler
+	interact          *discord.InteractHandler
+	deathsave         *discord.DeathSaveHandler
 	enemyTurnNotifier *discord.DiscordEnemyTurnNotifier
 }
 
@@ -202,7 +207,60 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		handlers.distance.SetTurnGate(gate)
 	}
 
+	// crit-01a: wire the combat-action family of slash commands. Each
+	// handler structurally relies on *combat.Service for the action
+	// dispatch and *refdata.Queries for the lookup adapter. When either
+	// is absent (test deploys without a database) the handlers stay nil
+	// and the router falls back to the status-aware stub.
+	attachCombatActionHandlers(&handlers, deps)
+
 	return handlers
+}
+
+// attachCombatActionHandlers builds the /attack, /bonus, /shove,
+// /interact, and /deathsave handlers when the necessary collaborators
+// are available, and wires the turn-gate + channel-id provider into each.
+func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDeps) {
+	if deps.session == nil || deps.queries == nil || deps.combatService == nil || deps.roller == nil {
+		return
+	}
+
+	combatLookup := newCombatActionLookupAdapter(deps.combatService, deps.queries, deps.resolver)
+	checkCampProv := newCheckCampaignProviderAdapter(deps.queries)
+	characterLookup := newCharacterByDiscordAdapter(deps.queries)
+	combatantLookup := newCombatantByDiscordAdapter(deps.queries)
+
+	handlers.attack = discord.NewAttackHandler(deps.session, deps.combatService, combatLookup, deps.roller)
+	handlers.bonus = discord.NewBonusHandler(deps.session, deps.combatService, combatLookup, deps.roller)
+	handlers.shove = discord.NewShoveHandler(deps.session, deps.combatService, combatLookup, deps.roller)
+	handlers.interact = discord.NewInteractHandler(deps.session, combatLookup, deps.queries)
+	handlers.deathsave = discord.NewDeathSaveHandler(
+		deps.session,
+		deps.roller,
+		deps.resolver,
+		combatantLookup,
+		deps.queries,
+		checkCampProv,
+		characterLookup,
+	)
+
+	if deps.campaignSettings != nil {
+		handlers.attack.SetChannelIDProvider(deps.campaignSettings)
+		handlers.bonus.SetChannelIDProvider(deps.campaignSettings)
+		handlers.shove.SetChannelIDProvider(deps.campaignSettings)
+		handlers.interact.SetChannelIDProvider(deps.campaignSettings)
+		handlers.deathsave.SetChannelIDProvider(deps.campaignSettings)
+	}
+
+	if deps.db != nil {
+		gate := newTurnGateAdapter(deps.db, deps.queries)
+		handlers.attack.SetTurnGate(gate)
+		handlers.bonus.SetTurnGate(gate)
+		handlers.shove.SetTurnGate(gate)
+		handlers.interact.SetTurnGate(gate)
+		// /deathsave is intentionally NOT gated: a dying PC rolls off-
+		// turn, so the per-turn ownership check would always fail.
+	}
 }
 
 // attachPhase105Handlers registers every Phase 105 slash-command handler from
@@ -225,6 +283,21 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	r.SetActionHandler(set.action)
 	if set.loot != nil {
 		r.SetLootHandler(set.loot)
+	}
+	if set.attack != nil {
+		r.SetAttackHandler(set.attack)
+	}
+	if set.bonus != nil {
+		r.SetBonusHandler(set.bonus)
+	}
+	if set.shove != nil {
+		r.SetShoveHandler(set.shove)
+	}
+	if set.interact != nil {
+		r.SetInteractHandler(set.interact)
+	}
+	if set.deathsave != nil {
+		r.SetDeathSaveHandler(set.deathsave)
 	}
 }
 
@@ -555,6 +628,48 @@ func newActionPendingStoreAdapter(q *refdata.Queries) discord.ActionPendingStore
 
 func (a *actionPendingStoreAdapter) CreatePendingAction(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error) {
 	return a.queries.CreatePendingAction(ctx, arg)
+}
+
+// combatActionLookupAdapter satisfies the AttackEncounterProvider /
+// BonusEncounterProvider / ShoveEncounterProvider / InteractEncounterProvider
+// interfaces with a single struct, since they all need the same five lookups
+// (resolve encounter for user + GetEncounter + GetCombatant + List combatants
+// + GetTurn). Per-user resolution is delegated to the shared resolver so we
+// don't duplicate the player_character -> combatant chain.
+type combatActionLookupAdapter struct {
+	combat   *combat.Service
+	queries  *refdata.Queries
+	resolver userEncounterResolver
+}
+
+func newCombatActionLookupAdapter(svc *combat.Service, q *refdata.Queries, resolver userEncounterResolver) *combatActionLookupAdapter {
+	if svc == nil || q == nil {
+		return nil
+	}
+	return &combatActionLookupAdapter{combat: svc, queries: q, resolver: resolver}
+}
+
+func (a *combatActionLookupAdapter) ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error) {
+	if a.resolver == nil {
+		return uuid.Nil, sqlNoRowsLike()
+	}
+	return a.resolver.ActiveEncounterForUser(ctx, guildID, discordUserID)
+}
+
+func (a *combatActionLookupAdapter) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+	return a.combat.GetEncounter(ctx, id)
+}
+
+func (a *combatActionLookupAdapter) GetCombatant(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+	return a.combat.GetCombatant(ctx, id)
+}
+
+func (a *combatActionLookupAdapter) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
+	return a.combat.ListCombatantsByEncounterID(ctx, encounterID)
+}
+
+func (a *combatActionLookupAdapter) GetTurn(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+	return a.queries.GetTurn(ctx, id)
 }
 
 // turnGateAdapter satisfies discord.TurnGate by delegating to

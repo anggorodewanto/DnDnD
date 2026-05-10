@@ -98,6 +98,27 @@ func TestBuildDiscordHandlers_ConstructsAllPhase105Handlers(t *testing.T) {
 	require.NotNil(t, result.whisper, "whisper handler must be constructed")
 }
 
+// TestAttachCombatActionHandlers_NoQueriesSkipped verifies that the
+// combat-action handlers (/attack /bonus /shove /interact /deathsave)
+// are intentionally left nil when queries / combatService are absent,
+// so test deploys without a database don't crash on Set*Handler.
+func TestAttachCombatActionHandlers_NoQueriesSkipped(t *testing.T) {
+	session := &testSession{}
+	deps := discordHandlerDeps{
+		session:       session,
+		queries:       nil,
+		combatService: combat.NewService(nil),
+		roller:        dice.NewRoller(nil),
+		resolver:      &stubUserEncounterResolver{},
+	}
+	result := buildDiscordHandlers(deps)
+	require.Nil(t, result.attack, "attack handler should be nil without queries")
+	require.Nil(t, result.bonus, "bonus handler should be nil without queries")
+	require.Nil(t, result.shove, "shove handler should be nil without queries")
+	require.Nil(t, result.interact, "interact handler should be nil without queries")
+	require.Nil(t, result.deathsave, "deathsave handler should be nil without queries")
+}
+
 // TestBuildDiscordHandlers_EnemyTurnNotifierHasEncounterLookup ensures the
 // Phase 105b wiring sets SetEncounterLookup on the DiscordEnemyTurnNotifier so
 // combat log messages posted to shared channels get the "⚔️ <name> — Round N"
