@@ -4,14 +4,38 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/discord"
+	"github.com/ab/dndnd/internal/portal"
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+// portalTokenCreateCharacterPurpose is the purpose tag stored alongside every
+// portal token minted by the /create-character flow. Persisted in
+// portal_tokens.purpose so future audits / cleanup can tell at a glance which
+// flow issued the token.
+const portalTokenCreateCharacterPurpose = "create_character"
+
+// portalTokenCreateCharacterTTL is the validity window for /create-character
+// portal links per Phase 91a spec ("one-time link, 24 h expiry").
+const portalTokenCreateCharacterTTL = 24 * time.Hour
+
+// newPortalTokenIssuer returns a function shaped like discord.RegistrationDeps
+// .TokenFunc that mints a portal token via the supplied TokenService. The
+// returned closure captures the application context so each call participates
+// in graceful shutdown without forcing the registration handler to thread one
+// through. Replaces the legacy "e2e-token" placeholder (Phase 14 follow-up)
+// per crit-06.
+func newPortalTokenIssuer(ctx context.Context, svc *portal.TokenService) func(campaignID uuid.UUID, discordUserID string) (string, error) {
+	return func(campaignID uuid.UUID, discordUserID string) (string, error) {
+		return svc.CreateToken(ctx, campaignID, discordUserID, portalTokenCreateCharacterPurpose, portalTokenCreateCharacterTTL)
+	}
+}
 
 // resolverQueries is the subset of refdata.Queries used by
 // discordUserEncounterResolver. Declaring it as an interface keeps the
@@ -88,6 +112,54 @@ func (l *setupCampaignLookup) GetCampaignForSetup(guildID string) (discord.Setup
 		return discord.SetupCampaignInfo{}, fmt.Errorf("campaign lookup for guild %q: %w", guildID, err)
 	}
 	return discord.SetupCampaignInfo{DMUserID: c.DmUserID}, nil
+}
+
+// playerDirectMessenger is the subset of discord.DirectMessenger that
+// playerNotifierAdapter depends on. Declaring it as an interface keeps the
+// adapter unit-testable without a live Discord session.
+type playerDirectMessenger interface {
+	SendDirectMessage(discordUserID, body string) ([]string, error)
+}
+
+// playerNotifierAdapter implements dashboard.PlayerNotifier by sending
+// Discord DMs through the bot's existing DirectMessenger. Wired into
+// dashboard.NewApprovalHandler so approve / changes-requested / reject all
+// notify the player out-of-band per Phase 16 done-when (spec lines 41 + 53).
+type playerNotifierAdapter struct {
+	dm playerDirectMessenger
+}
+
+func newPlayerNotifierAdapter(dm playerDirectMessenger) *playerNotifierAdapter {
+	return &playerNotifierAdapter{dm: dm}
+}
+
+// NotifyApproval pings the player that their character was approved.
+func (a *playerNotifierAdapter) NotifyApproval(_ context.Context, discordUserID, characterName string) error {
+	body := fmt.Sprintf("✅ **%s** has been approved! You can now play.", characterName)
+	if _, err := a.dm.SendDirectMessage(discordUserID, body); err != nil {
+		return fmt.Errorf("notifying approval to %s: %w", discordUserID, err)
+	}
+	return nil
+}
+
+// NotifyChangesRequested pings the player that the DM requested changes,
+// including the DM's feedback verbatim.
+func (a *playerNotifierAdapter) NotifyChangesRequested(_ context.Context, discordUserID, characterName, feedback string) error {
+	body := fmt.Sprintf("📝 **%s** needs changes before approval.\n\n**DM feedback:** %s", characterName, feedback)
+	if _, err := a.dm.SendDirectMessage(discordUserID, body); err != nil {
+		return fmt.Errorf("notifying changes-requested to %s: %w", discordUserID, err)
+	}
+	return nil
+}
+
+// NotifyRejection pings the player that their character was rejected,
+// including the DM's reason verbatim.
+func (a *playerNotifierAdapter) NotifyRejection(_ context.Context, discordUserID, characterName, feedback string) error {
+	body := fmt.Sprintf("❌ **%s** was rejected.\n\n**DM feedback:** %s", characterName, feedback)
+	if _, err := a.dm.SendDirectMessage(discordUserID, body); err != nil {
+		return fmt.Errorf("notifying rejection to %s: %w", discordUserID, err)
+	}
+	return nil
 }
 
 // SaveChannelIDs merges channelIDs into the campaign settings JSONB and

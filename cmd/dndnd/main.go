@@ -577,21 +577,28 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// same lookup the Pause/Resume button uses, so the handler serves
 		// every DM from a single instance. cardPoster is nil when the bot
 		// is offline (#character-cards posts then become silent no-ops).
-		// PlayerNotifier stays nil — Discord DMs on approve/reject are a
-		// follow-up.
+		// PlayerNotifier wraps the existing direct-messenger when a Discord
+		// session is available; otherwise it stays nil and the handler
+		// silently skips the player DM (matches the cardPoster pattern).
 		approvalStore := dashboard.NewDBApprovalStore(queries)
 		var cardPoster dashboard.CharacterCardPoster
 		if discordSession != nil {
 			cardPoster = charactercard.NewService(discordSession, queries, logger)
 		}
-		approvalHandler := dashboard.NewApprovalHandler(logger, approvalStore, nil, hub, uuid.Nil, cardPoster)
+		var approvalNotifier dashboard.PlayerNotifier
+		if discordSession != nil {
+			approvalNotifier = newPlayerNotifierAdapter(discord.NewDirectMessenger(discordSession))
+		}
+		approvalHandler := dashboard.NewApprovalHandler(logger, approvalStore, approvalNotifier, hub, uuid.Nil, cardPoster)
 		approvalHandler.SetCampaignLookup(dashboardCampaignLookup{queries: queries})
 		approvalHandler.RegisterApprovalRoutes(router.With(authMw))
 
-		// Phase 121: portal routes. nil TokenValidator: /portal/create (the
-		// player-side character builder) needs a portal-token issuer that is
-		// itself a Phase 14 follow-up.
-		portalHandler := portal.NewHandler(logger, nil)
+		// Phase 91a: portal routes. The TokenService both issues
+		// /create-character links (via newPortalTokenIssuer below) and
+		// validates the token on /portal/create — sharing one TokenService
+		// instance keeps the issue / redeem cycle on the same store.
+		portalTokenSvc := portal.NewTokenService(portal.NewTokenStore(db))
+		portalHandler := portal.NewHandler(logger, portalTokenSvc)
 		var portalOpts []portal.RouteOption
 		if authBundle.oauthSvc != nil {
 			portalOpts = append(portalOpts, portal.WithOAuth(authBundle.oauthSvc))
@@ -724,13 +731,13 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 					}
 					return camp.DmUserID
 				},
-				// TODO(Phase 14): replace with the real portal-token issuer
-				// once the dashboard portal lands. The current stub is
-				// acceptable for production because /create-character is
-				// the only consumer and is itself behind that follow-up.
-				TokenFunc: func(_ uuid.UUID, _ string) (string, error) {
-					return "e2e-token", nil
-				},
+				// Phase 91a: mint real one-time portal tokens via the
+				// shared TokenService. The same service instance is the
+				// validator on portal.NewHandler so issue / redeem stays
+				// on a single store. The closure captures the
+				// application context so token persistence honours
+				// graceful shutdown.
+				TokenFunc: newPortalTokenIssuer(ctx, portalTokenSvc),
 				NameResolver: func(ctx context.Context, characterID uuid.UUID) (string, error) {
 					char, err := queries.GetCharacter(ctx, characterID)
 					if err != nil {

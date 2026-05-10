@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/campaign"
+	"github.com/ab/dndnd/internal/dashboard"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -291,4 +292,95 @@ func TestSetupCampaignLookup_SaveChannelIDs_PropagatesUpdateError(t *testing.T) 
 
 	err := lookup.SaveChannelIDs("guild-1", map[string]string{"foo": "bar"})
 	require.ErrorIs(t, err, boom)
+}
+
+// fakePlayerDM mocks playerDirectMessenger so playerNotifierAdapter can be
+// unit tested without a live Discord session. Records every send so the
+// tests can assert on the body verbatim.
+type fakePlayerDM struct {
+	calls []fakePlayerDMCall
+	err   error
+}
+
+type fakePlayerDMCall struct {
+	UserID string
+	Body   string
+}
+
+func (f *fakePlayerDM) SendDirectMessage(discordUserID, body string) ([]string, error) {
+	f.calls = append(f.calls, fakePlayerDMCall{UserID: discordUserID, Body: body})
+	if f.err != nil {
+		return nil, f.err
+	}
+	return []string{"msg-1"}, nil
+}
+
+func TestPlayerNotifierAdapter_NotifyApproval_SendsDMWithCharacterName(t *testing.T) {
+	dm := &fakePlayerDM{}
+	a := newPlayerNotifierAdapter(dm)
+
+	err := a.NotifyApproval(context.Background(), "user-7", "Tordek")
+	require.NoError(t, err)
+	require.Len(t, dm.calls, 1)
+	assert.Equal(t, "user-7", dm.calls[0].UserID)
+	assert.Contains(t, dm.calls[0].Body, "Tordek")
+	assert.Contains(t, dm.calls[0].Body, "approved")
+}
+
+func TestPlayerNotifierAdapter_NotifyChangesRequested_IncludesFeedback(t *testing.T) {
+	dm := &fakePlayerDM{}
+	a := newPlayerNotifierAdapter(dm)
+
+	err := a.NotifyChangesRequested(context.Background(), "user-7", "Tordek", "please pick a subclass")
+	require.NoError(t, err)
+	require.Len(t, dm.calls, 1)
+	assert.Equal(t, "user-7", dm.calls[0].UserID)
+	assert.Contains(t, dm.calls[0].Body, "Tordek")
+	assert.Contains(t, dm.calls[0].Body, "please pick a subclass")
+}
+
+func TestPlayerNotifierAdapter_NotifyRejection_IncludesFeedback(t *testing.T) {
+	dm := &fakePlayerDM{}
+	a := newPlayerNotifierAdapter(dm)
+
+	err := a.NotifyRejection(context.Background(), "user-7", "Tordek", "no homebrew classes")
+	require.NoError(t, err)
+	require.Len(t, dm.calls, 1)
+	assert.Equal(t, "user-7", dm.calls[0].UserID)
+	assert.Contains(t, dm.calls[0].Body, "Tordek")
+	assert.Contains(t, dm.calls[0].Body, "no homebrew classes")
+}
+
+func TestPlayerNotifierAdapter_NotifyApproval_PropagatesDMError(t *testing.T) {
+	boom := errors.New("dm channel closed")
+	dm := &fakePlayerDM{err: boom}
+	a := newPlayerNotifierAdapter(dm)
+
+	err := a.NotifyApproval(context.Background(), "user-7", "Tordek")
+	require.ErrorIs(t, err, boom)
+}
+
+func TestPlayerNotifierAdapter_NotifyChangesRequested_PropagatesDMError(t *testing.T) {
+	boom := errors.New("dm channel closed")
+	dm := &fakePlayerDM{err: boom}
+	a := newPlayerNotifierAdapter(dm)
+
+	err := a.NotifyChangesRequested(context.Background(), "user-7", "Tordek", "feedback")
+	require.ErrorIs(t, err, boom)
+}
+
+func TestPlayerNotifierAdapter_NotifyRejection_PropagatesDMError(t *testing.T) {
+	boom := errors.New("dm channel closed")
+	dm := &fakePlayerDM{err: boom}
+	a := newPlayerNotifierAdapter(dm)
+
+	err := a.NotifyRejection(context.Background(), "user-7", "Tordek", "feedback")
+	require.ErrorIs(t, err, boom)
+}
+
+// TestPlayerNotifierAdapter_SatisfiesPlayerNotifier locks in the contract that
+// playerNotifierAdapter implements dashboard.PlayerNotifier so a future
+// signature change to the interface fails this test before reaching main.go.
+func TestPlayerNotifierAdapter_SatisfiesPlayerNotifier(t *testing.T) {
+	var _ dashboard.PlayerNotifier = (*playerNotifierAdapter)(nil)
 }
