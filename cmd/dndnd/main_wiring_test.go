@@ -14,6 +14,7 @@ import (
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -154,6 +155,47 @@ type recordingMapRegenerator struct {
 
 func (r *recordingMapRegenerator) RegenerateMap(_ context.Context, _ uuid.UUID) ([]byte, error) {
 	return r.png, nil
+}
+
+// TestMapRegeneratorAdapter_ExploredHistory_UnionsAcrossRenders verifies the
+// med-27 / Phase 68 explored-history wiring: a tile that was Visible on the
+// previous render is upgraded from Unexplored to Explored on the next render
+// even when the vision source has moved away.
+func TestMapRegeneratorAdapter_ExploredHistory_UnionsAcrossRenders(t *testing.T) {
+	a := &mapRegeneratorAdapter{exploredCells: map[uuid.UUID]map[int]bool{}}
+	encID := uuid.New()
+
+	// First render: tile (0) is Visible, (1) is Unexplored.
+	first := &renderer.FogOfWar{
+		Width:  2,
+		Height: 1,
+		States: []renderer.VisibilityState{renderer.Visible, renderer.Unexplored},
+	}
+	a.recordVisibleTiles(encID, first)
+
+	// Second render: same map, but vision source moved so tile (0) is now
+	// Unexplored. After applyExploredHistory, (0) should be Explored.
+	second := &renderer.FogOfWar{
+		Width:  2,
+		Height: 1,
+		States: []renderer.VisibilityState{renderer.Unexplored, renderer.Visible},
+	}
+	a.applyExploredHistory(encID, second)
+	require.Equal(t, renderer.Explored, second.States[0], "previously-visible tile must render as Explored")
+	require.Equal(t, renderer.Visible, second.States[1], "currently-visible tile must remain Visible")
+
+	// Third render: union widens. (0) Explored stays in history; (1) is
+	// now Visible and gets recorded so a fourth render dimming both
+	// would surface both as Explored.
+	a.recordVisibleTiles(encID, second)
+	third := &renderer.FogOfWar{
+		Width:  2,
+		Height: 1,
+		States: []renderer.VisibilityState{renderer.Unexplored, renderer.Unexplored},
+	}
+	a.applyExploredHistory(encID, third)
+	require.Equal(t, renderer.Explored, third.States[0])
+	require.Equal(t, renderer.Explored, third.States[1])
 }
 
 // TestMapRegeneratorAdapter_RendersAndDebouncesViaQueue covers the production

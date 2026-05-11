@@ -508,6 +508,42 @@ func TestDetectOpportunityAttacks_HostileInvalidPosition(t *testing.T) {
 	assert.Empty(t, triggers)
 }
 
+// med-24: PC reach-weapon override gives a hostile PC 10ft reach so a
+// glaive-wielding fighter triggers OAs from 10ft away.
+func TestDetectOpportunityAttacksWithReach_PCReachWeaponOverride(t *testing.T) {
+	// Mover at C2 (NPC), hostile PC at A2 with 10ft reach. The mover
+	// starts 2 squares (10ft) away — within reach — and walks east to
+	// E2, leaving reach.
+	mover := makeCombatant("Goblin", "C", 2, true)
+	hostile := makeCombatant("PaladinSpear", "A", 2, false)
+
+	turn := refdata.Turn{HasDisengaged: false}
+	hostileTurn := refdata.Turn{ReactionUsed: false}
+
+	path := []pathfinding.Point{
+		{Col: 2, Row: 1}, // C2 (start, dist 2 from A2 = 10ft, in reach)
+		{Col: 3, Row: 1}, // D2 (dist 3 = 15ft, out of reach)
+		{Col: 4, Row: 1}, // E2
+	}
+
+	pcReach := map[uuid.UUID]int{hostile.ID: 10}
+	triggers := DetectOpportunityAttacksWithReach(
+		mover, path, []refdata.Combatant{mover, hostile}, turn,
+		map[uuid.UUID]refdata.Turn{hostile.ID: hostileTurn}, nil, pcReach,
+	)
+	if assert.Len(t, triggers, 1) {
+		assert.Equal(t, hostile.ID, triggers[0].HostileID)
+	}
+
+	// Without the reach override, the same path triggers no OA because
+	// 5ft (1 square) reach means the mover started outside reach.
+	noReachTriggers := DetectOpportunityAttacksWithReach(
+		mover, path, []refdata.Combatant{mover, hostile}, turn,
+		map[uuid.UUID]refdata.Turn{hostile.ID: hostileTurn}, nil, nil,
+	)
+	assert.Empty(t, noReachTriggers, "without reach override the start tile is outside reach")
+}
+
 func TestResolveHostileReach_NPCNotInMap(t *testing.T) {
 	hostile := makeCombatant("Unknown", "A", 1, true)
 	hostile.CreatureRefID.Valid = true

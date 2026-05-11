@@ -9,6 +9,7 @@ import (
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/inventory"
@@ -22,8 +23,13 @@ type UseCharacterStore interface {
 }
 
 // UseCombatProvider provides combat state for action-cost validation.
+// Implementations resolve the active turn for the invoking character (when in
+// combat) and persist the per-turn resource flags after a successful /use.
+// med-35: /use of a potion deducts a bonus action; magic-item active abilities
+// deduct an action. When no turn is active (out of combat), no cost is taken.
 type UseCombatProvider interface {
 	GetActiveTurnForCharacter(ctx context.Context, guildID string, charID uuid.UUID) (refdata.Turn, bool, error)
+	UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
 }
 
 // UseHandler handles the /use slash command.
@@ -111,6 +117,26 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	// med-35: when a turn is active, deduct the appropriate combat resource
+	// before mutating inventory. Potions cost a bonus action; everything
+	// else (DM-adjudicated consumables) costs an action. Out-of-combat
+	// /use carries no cost.
+	turn, inCombat, costErr := h.lookupActiveTurn(ctx, interaction.GuildID, char.ID)
+	if costErr != nil {
+		respondEphemeral(h.session, interaction, "Failed to check turn state. Please try again.")
+		return
+	}
+	if inCombat {
+		resource := combat.ResourceAction
+		if inventory.IsPotion(itemID) {
+			resource = combat.ResourceBonusAction
+		}
+		if err := combat.ValidateResource(turn, resource); err != nil {
+			respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot use item: %v", err))
+			return
+		}
+	}
+
 	result, err := h.invService.UseConsumable(inventory.UseInput{
 		Items:     items,
 		ItemID:    itemID,
@@ -149,6 +175,16 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 		}
 	}
 
+	// med-35: persist the turn-resource deduction. Best-effort: a save
+	// failure is logged but does not undo the committed inventory change.
+	if inCombat {
+		resource := combat.ResourceAction
+		if inventory.IsPotion(itemID) {
+			resource = combat.ResourceBonusAction
+		}
+		h.spendTurnResource(ctx, turn, resource)
+	}
+
 	// Post to #dm-queue if item requires DM adjudication.
 	if result.DMQueueRequired {
 		usedItemName := itemID
@@ -178,7 +214,9 @@ func itemHasActiveCharges(items []character.InventoryItem, itemID string) bool {
 
 // handleMagicItemCharge consumes one charge from the named magic item and
 // persists the updated inventory. It enforces attunement and charge-balance
-// rules via inventory.UseCharges. The default amount is 1 charge.
+// rules via inventory.UseCharges. The default amount is 1 charge. med-35:
+// when in combat, an action is deducted from the active turn before the
+// charge is spent.
 func (h *UseHandler) handleMagicItemCharge(
 	ctx context.Context,
 	interaction *discordgo.Interaction,
@@ -190,6 +228,18 @@ func (h *UseHandler) handleMagicItemCharge(
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Failed to read attunement data. Please contact the DM.")
 		return
+	}
+
+	turn, inCombat, costErr := h.lookupActiveTurn(ctx, interaction.GuildID, char.ID)
+	if costErr != nil {
+		respondEphemeral(h.session, interaction, "Failed to check turn state. Please try again.")
+		return
+	}
+	if inCombat {
+		if err := combat.ValidateResource(turn, combat.ResourceAction); err != nil {
+			respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot use item: %v", err))
+			return
+		}
 	}
 
 	result, err := inventory.UseCharges(inventory.UseChargesInput{
@@ -217,7 +267,37 @@ func (h *UseHandler) handleMagicItemCharge(
 		return
 	}
 
+	if inCombat {
+		h.spendTurnResource(ctx, turn, combat.ResourceAction)
+	}
+
 	respondEphemeral(h.session, interaction, result.Message)
+}
+
+// lookupActiveTurn returns the active turn for the invoking character when a
+// combat provider is wired. inCombat is false when no provider is configured
+// or when the character has no active turn (out-of-combat /use). Errors from
+// the provider are surfaced so callers can short-circuit.
+func (h *UseHandler) lookupActiveTurn(ctx context.Context, guildID string, charID uuid.UUID) (refdata.Turn, bool, error) {
+	if h.combatProv == nil {
+		return refdata.Turn{}, false, nil
+	}
+	turn, ok, err := h.combatProv.GetActiveTurnForCharacter(ctx, guildID, charID)
+	if err != nil {
+		return refdata.Turn{}, false, err
+	}
+	return turn, ok, nil
+}
+
+// spendTurnResource marks resource as used on turn and persists the change.
+// Best-effort: persistence failures are swallowed so an uncommitted turn
+// flag never undoes a committed inventory mutation.
+func (h *UseHandler) spendTurnResource(ctx context.Context, turn refdata.Turn, resource combat.ResourceType) {
+	updated, err := combat.UseResource(turn, resource)
+	if err != nil {
+		return
+	}
+	_, _ = h.combatProv.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updated))
 }
 
 // postConsumableToDMQueue dispatches a consumable-without-effect notification

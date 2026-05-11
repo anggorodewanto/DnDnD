@@ -237,3 +237,153 @@ func TestGiveHandler_PersistError(t *testing.T) {
 
 	assert.Contains(t, sess.lastResponse, "Failed to save")
 }
+
+// mockGiveTurnProvider implements GiveTurnProvider for med-35 tests.
+type mockGiveTurnProvider struct {
+	turn      refdata.Turn
+	inCombat  bool
+	lookupErr error
+	updates   []refdata.UpdateTurnActionsParams
+}
+
+func (m *mockGiveTurnProvider) GetActiveTurnForCharacter(_ context.Context, _ string, _ uuid.UUID) (refdata.Turn, bool, error) {
+	if m.lookupErr != nil {
+		return refdata.Turn{}, false, m.lookupErr
+	}
+	return m.turn, m.inCombat, nil
+}
+
+func (m *mockGiveTurnProvider) UpdateTurnActions(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+	m.updates = append(m.updates, arg)
+	return refdata.Turn{ID: arg.ID, FreeInteractUsed: arg.FreeInteractUsed}, nil
+}
+
+func TestGiveHandler_InCombat_DeductsFreeInteraction(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+	turnID := uuid.New()
+
+	giverItems := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 2, Type: "consumable"},
+	}
+	giverItemsJSON, _ := json.Marshal(giverItems)
+	receiverItemsJSON, _ := json.Marshal([]character.InventoryItem{})
+
+	store := &mockGiveCharacterStore{}
+	turnProv := &mockGiveTurnProvider{turn: refdata.Turn{ID: turnID, FreeInteractUsed: false}, inCombat: true}
+
+	handler := NewGiveHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:         giverID,
+			CampaignID: campID,
+			Name:       "Aria",
+			Inventory:  pqtype.NullRawMessage{RawMessage: giverItemsJSON, Valid: true},
+		}},
+		&mockGiveTargetResolver{chars: map[string]refdata.Character{
+			"GK": {
+				ID:         receiverID,
+				CampaignID: campID,
+				Name:       "Gorak",
+				Inventory:  pqtype.NullRawMessage{RawMessage: receiverItemsJSON, Valid: true},
+			},
+		}},
+		store,
+		nil,
+	)
+	handler.SetTurnProvider(turnProv)
+
+	interaction := makeGiveInteraction("guild1", "user1", "healing-potion", "GK")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Healing Potion")
+	if assert.Len(t, turnProv.updates, 1, "expected one turn update") {
+		assert.True(t, turnProv.updates[0].FreeInteractUsed, "/give in combat should consume the free interaction")
+	}
+	assert.Len(t, store.updates, 2, "both inventories should still update")
+}
+
+func TestGiveHandler_InCombat_FreeInteractionAlreadySpent_Rejected(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+	turnID := uuid.New()
+
+	giverItems := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 2, Type: "consumable"},
+	}
+	giverItemsJSON, _ := json.Marshal(giverItems)
+
+	store := &mockGiveCharacterStore{}
+	turnProv := &mockGiveTurnProvider{turn: refdata.Turn{ID: turnID, FreeInteractUsed: true}, inCombat: true}
+
+	handler := NewGiveHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:         giverID,
+			CampaignID: campID,
+			Name:       "Aria",
+			Inventory:  pqtype.NullRawMessage{RawMessage: giverItemsJSON, Valid: true},
+		}},
+		&mockGiveTargetResolver{chars: map[string]refdata.Character{
+			"GK": {ID: receiverID, CampaignID: campID, Name: "Gorak"},
+		}},
+		store,
+		nil,
+	)
+	handler.SetTurnProvider(turnProv)
+
+	interaction := makeGiveInteraction("guild1", "user1", "healing-potion", "GK")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Cannot give item")
+	assert.Empty(t, store.updates, "rejection must not transfer items")
+	assert.Empty(t, turnProv.updates, "rejection must not persist a turn update")
+}
+
+func TestGiveHandler_OutOfCombat_NoCost(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+
+	giverItems := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 2, Type: "consumable"},
+	}
+	giverItemsJSON, _ := json.Marshal(giverItems)
+	receiverItemsJSON, _ := json.Marshal([]character.InventoryItem{})
+
+	store := &mockGiveCharacterStore{}
+	turnProv := &mockGiveTurnProvider{inCombat: false}
+
+	handler := NewGiveHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:         giverID,
+			CampaignID: campID,
+			Name:       "Aria",
+			Inventory:  pqtype.NullRawMessage{RawMessage: giverItemsJSON, Valid: true},
+		}},
+		&mockGiveTargetResolver{chars: map[string]refdata.Character{
+			"GK": {
+				ID:         receiverID,
+				CampaignID: campID,
+				Name:       "Gorak",
+				Inventory:  pqtype.NullRawMessage{RawMessage: receiverItemsJSON, Valid: true},
+			},
+		}},
+		store,
+		nil,
+	)
+	handler.SetTurnProvider(turnProv)
+
+	interaction := makeGiveInteraction("guild1", "user1", "healing-potion", "GK")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Healing Potion")
+	assert.Empty(t, turnProv.updates, "out-of-combat /give must not deduct any resource")
+	assert.Len(t, store.updates, 2)
+}

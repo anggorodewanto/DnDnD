@@ -433,3 +433,222 @@ func TestUseHandler_DMQueueItem(t *testing.T) {
 
 	assert.Contains(t, sess.lastResponse, "DM")
 }
+
+// mockUseCombatProvider implements UseCombatProvider for med-35 tests.
+type mockUseCombatProvider struct {
+	turn       refdata.Turn
+	inCombat   bool
+	lookupErr  error
+	updates    []refdata.UpdateTurnActionsParams
+	updateErr  error
+}
+
+func (m *mockUseCombatProvider) GetActiveTurnForCharacter(_ context.Context, _ string, _ uuid.UUID) (refdata.Turn, bool, error) {
+	if m.lookupErr != nil {
+		return refdata.Turn{}, false, m.lookupErr
+	}
+	return m.turn, m.inCombat, nil
+}
+
+func (m *mockUseCombatProvider) UpdateTurnActions(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+	m.updates = append(m.updates, arg)
+	if m.updateErr != nil {
+		return refdata.Turn{}, m.updateErr
+	}
+	return refdata.Turn{ID: arg.ID, BonusActionUsed: arg.BonusActionUsed, ActionUsed: arg.ActionUsed, FreeInteractUsed: arg.FreeInteractUsed}, nil
+}
+
+func TestUseHandler_PotionInCombat_DeductsBonusAction(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+	turnID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 2, Type: "consumable"},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	store := &mockUseCharacterStore{char: refdata.Character{ID: charID}}
+	combatProv := &mockUseCombatProvider{turn: refdata.Turn{ID: turnID, BonusActionUsed: false}, inCombat: true}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:         charID,
+			CampaignID: campID,
+			Name:       "Aria",
+			HpCurrent:  10,
+			HpMax:      30,
+			Inventory:  pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+		}},
+		store,
+		func(max int) int { return 3 },
+		combatProv,
+	)
+
+	interaction := makeUseInteraction("guild1", "user1", "healing-potion")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Healing Potion")
+	if assert.Len(t, combatProv.updates, 1, "expected one turn update") {
+		assert.True(t, combatProv.updates[0].BonusActionUsed, "potion should consume the bonus action")
+		assert.False(t, combatProv.updates[0].ActionUsed, "potion should not consume the action")
+	}
+}
+
+func TestUseHandler_PotionInCombat_BonusActionAlreadySpent_Rejected(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+	turnID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 2, Type: "consumable"},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	store := &mockUseCharacterStore{char: refdata.Character{ID: charID}}
+	combatProv := &mockUseCombatProvider{turn: refdata.Turn{ID: turnID, BonusActionUsed: true}, inCombat: true}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:         charID,
+			CampaignID: campID,
+			Name:       "Aria",
+			HpCurrent:  10,
+			HpMax:      30,
+			Inventory:  pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+		}},
+		store,
+		func(max int) int { return 3 },
+		combatProv,
+	)
+
+	interaction := makeUseInteraction("guild1", "user1", "healing-potion")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Cannot use item")
+	assert.Empty(t, store.updatedInventory, "rejection must not mutate inventory")
+	assert.Empty(t, combatProv.updates, "rejection must not persist a turn update")
+}
+
+func TestUseHandler_PotionOutOfCombat_NoCost(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 2, Type: "consumable"},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	store := &mockUseCharacterStore{char: refdata.Character{ID: charID}}
+	// inCombat false: out-of-combat /use takes no resource cost.
+	combatProv := &mockUseCombatProvider{inCombat: false}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:         charID,
+			CampaignID: campID,
+			Name:       "Aria",
+			HpCurrent:  10,
+			HpMax:      30,
+			Inventory:  pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+		}},
+		store,
+		func(max int) int { return 3 },
+		combatProv,
+	)
+
+	interaction := makeUseInteraction("guild1", "user1", "healing-potion")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Healing Potion")
+	assert.Empty(t, combatProv.updates, "out-of-combat /use must not deduct any resource")
+}
+
+func TestUseHandler_MagicItem_InCombat_DeductsAction(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+	turnID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: "magic_item", IsMagic: true, RequiresAttunement: true, Charges: 5, MaxCharges: 7},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	attunement := []character.AttunementSlot{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs"},
+	}
+	attunementJSON, _ := json.Marshal(attunement)
+
+	store := &mockUseCharacterStore{char: refdata.Character{ID: charID}}
+	combatProv := &mockUseCombatProvider{turn: refdata.Turn{ID: turnID, ActionUsed: false}, inCombat: true}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:              charID,
+			CampaignID:      campID,
+			Name:            "Aria",
+			Inventory:       pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+			AttunementSlots: pqtype.NullRawMessage{RawMessage: attunementJSON, Valid: true},
+		}},
+		store,
+		nil,
+		combatProv,
+	)
+
+	interaction := makeUseInteraction("guild1", "user1", "wand-of-fireballs")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Wand of Fireballs")
+	if assert.Len(t, combatProv.updates, 1, "expected one turn update for action cost") {
+		assert.True(t, combatProv.updates[0].ActionUsed, "magic-item active ability should consume the action")
+	}
+}
+
+func TestUseHandler_MagicItem_InCombat_ActionAlreadySpent_Rejected(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+	turnID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: "magic_item", IsMagic: true, RequiresAttunement: true, Charges: 5, MaxCharges: 7},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	attunement := []character.AttunementSlot{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs"},
+	}
+	attunementJSON, _ := json.Marshal(attunement)
+
+	store := &mockUseCharacterStore{char: refdata.Character{ID: charID}}
+	combatProv := &mockUseCombatProvider{turn: refdata.Turn{ID: turnID, ActionUsed: true}, inCombat: true}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:              charID,
+			CampaignID:      campID,
+			Name:            "Aria",
+			Inventory:       pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+			AttunementSlots: pqtype.NullRawMessage{RawMessage: attunementJSON, Valid: true},
+		}},
+		store,
+		nil,
+		combatProv,
+	)
+
+	interaction := makeUseInteraction("guild1", "user1", "wand-of-fireballs")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Cannot use item")
+	assert.Empty(t, store.updatedInventory, "rejection must not mutate inventory")
+	assert.Empty(t, combatProv.updates, "rejection must not persist a turn update")
+}

@@ -105,6 +105,14 @@ var autoResolveItems = map[string]string{
 	"greater-healing-potion": "4d4+4",
 }
 
+// IsPotion reports whether the given item ID is a potion (auto-resolvable
+// healing consumable). Used by callers (e.g. /use combat-cost wiring) to
+// decide whether to deduct a bonus action vs an action.
+func IsPotion(itemID string) bool {
+	_, ok := autoResolveItems[itemID]
+	return ok
+}
+
 // UseConsumable consumes an item and applies its effect if auto-resolvable.
 func (s *Service) UseConsumable(input UseInput) (UseResult, error) {
 	idx := findItemIndex(input.Items, input.ItemID)

@@ -60,6 +60,37 @@ type MoveSizeSpeedLookup interface {
 	LookupSizeAndSpeed(ctx context.Context, combatant refdata.Combatant) (sizeCategory int, speedFt int, err error)
 }
 
+// MoveOATurnsLookup returns the per-combatant turn map for an encounter so the
+// OA detector can read each hostile's `reaction_used` flag. Implementations
+// typically wrap a single `ListTurnsByEncounter`-style query. nil-safe: when
+// unset, OA detection skips reaction-used filtering and assumes every hostile
+// has a reaction available.
+type MoveOATurnsLookup interface {
+	ListTurnsByEncounter(ctx context.Context, encounterID uuid.UUID) (map[uuid.UUID]refdata.Turn, error)
+}
+
+// MoveOACreatureLookup resolves an NPC creature's parsed attacks (for reach
+// in feet). Keyed by `creature_ref_id`. nil-safe: unset means every NPC reach
+// defaults to 5ft.
+type MoveOACreatureLookup interface {
+	GetCreatureAttacks(ctx context.Context, creatureRefID string) ([]combat.CreatureAttackEntry, error)
+}
+
+// MoveOAPCWeaponReach resolves the equipped melee weapon's reach for a PC
+// hostile (10 if the weapon has the "reach" property, 5 otherwise, 0 when
+// no equipped melee weapon). nil-safe: unset means every PC reach defaults
+// to 5ft.
+type MoveOAPCWeaponReach interface {
+	LookupPCReach(ctx context.Context, characterID uuid.UUID) (int, error)
+}
+
+// MoveChannelIDProvider resolves the per-encounter Discord channel IDs (e.g.
+// "your-turn", "combat-log"). med-24 routes OA prompts to "your-turn".
+// nil-safe: when unset, no OA prompts are posted.
+type MoveChannelIDProvider interface {
+	GetChannelIDs(ctx context.Context, encounterID uuid.UUID) (map[string]string, error)
+}
+
 // MoveHandler handles the /move slash command.
 type MoveHandler struct {
 	session           Session
@@ -74,6 +105,12 @@ type MoveHandler struct {
 	// historical Medium / 30 ft defaults so unit tests built before the
 	// lookup landed keep working.
 	sizeSpeedLookup MoveSizeSpeedLookup
+	// med-24 / Phase 55: optional OA fan-out wiring. All four are
+	// independently nil-safe — unset means no OA prompts are posted.
+	oaTurns     MoveOATurnsLookup
+	oaCreatures MoveOACreatureLookup
+	oaPCReach   MoveOAPCWeaponReach
+	oaChannels  MoveChannelIDProvider
 }
 
 // SetCharacterLookup wires the character lookup used by exploration /move to
@@ -96,6 +133,23 @@ func (h *MoveHandler) SetTurnGate(g TurnGate) {
 // unit tests).
 func (h *MoveHandler) SetSizeSpeedLookup(lookup MoveSizeSpeedLookup) {
 	h.sizeSpeedLookup = lookup
+}
+
+// SetOpportunityAttackHooks wires the four collaborators needed to fire
+// opportunity-attack prompts when /move exits a hostile's reach (med-24 /
+// Phase 55). All four arguments may be nil — when any one is unset the
+// detection runs with degraded data (e.g. no creature reach, no reaction
+// filtering) and prompts are suppressed when channels is nil.
+func (h *MoveHandler) SetOpportunityAttackHooks(
+	turns MoveOATurnsLookup,
+	creatures MoveOACreatureLookup,
+	pcReach MoveOAPCWeaponReach,
+	channels MoveChannelIDProvider,
+) {
+	h.oaTurns = turns
+	h.oaCreatures = creatures
+	h.oaPCReach = pcReach
+	h.oaChannels = channels
 }
 
 // resolveSizeAndSpeed returns (sizeCategory, walkSpeedFt) for the combatant.
@@ -493,6 +547,13 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 		return
 	}
 
+	// med-24 / Phase 55: fire opportunity-attack prompts after the move
+	// commits. Best-effort: any failure is silent so a flaky channel post
+	// can never break the move flow.
+	if getErr == nil {
+		h.fireOpportunityAttacks(ctx, combatant, updatedTurn, destCol, destRow)
+	}
+
 	remaining := combat.FormatRemainingResources(updatedTurn, nil)
 	msg := fmt.Sprintf("\U0001f3c3 Moved to %s%d. %s", destLabel, destRow+1, remaining)
 
@@ -503,6 +564,164 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 			Components: []discordgo.MessageComponent{}, // remove buttons
 		},
 	})
+}
+
+// fireOpportunityAttacks runs combat.DetectOpportunityAttacks against the
+// just-confirmed move and posts each prompt to the encounter's #your-turn
+// channel. Best-effort throughout: any failure aborts silently so OA wiring
+// can never block /move from completing.
+func (h *MoveHandler) fireOpportunityAttacks(ctx context.Context, mover refdata.Combatant, moverTurn refdata.Turn, destCol, destRow int) {
+	if h.oaChannels == nil {
+		return
+	}
+
+	startCol, startRow, err := renderer.ParseCoordinate(mover.PositionCol + fmt.Sprintf("%d", mover.PositionRow))
+	if err != nil {
+		return
+	}
+
+	allCombatants, err := h.combatService.ListCombatantsByEncounterID(ctx, moverTurn.EncounterID)
+	if err != nil {
+		return
+	}
+
+	path := h.buildOAPath(ctx, mover, moverTurn, startCol, startRow, destCol, destRow, allCombatants)
+	if len(path) < 2 {
+		return
+	}
+
+	hostileTurns := h.lookupHostileTurns(ctx, moverTurn.EncounterID)
+	creatureAttacks := h.lookupCreatureAttacks(ctx, allCombatants, mover)
+	pcReach := h.lookupPCReach(ctx, allCombatants, mover)
+
+	triggers := combat.DetectOpportunityAttacksWithReach(
+		mover, path, allCombatants, moverTurn, hostileTurns, creatureAttacks, pcReach,
+	)
+	if len(triggers) == 0 {
+		return
+	}
+
+	channelIDs, err := h.oaChannels.GetChannelIDs(ctx, moverTurn.EncounterID)
+	if err != nil {
+		return
+	}
+	yourTurnCh, ok := channelIDs["your-turn"]
+	if !ok || yourTurnCh == "" {
+		return
+	}
+
+	for _, trigger := range triggers {
+		_, _ = h.session.ChannelMessageSend(yourTurnCh, combat.FormatOAPrompt(trigger))
+	}
+}
+
+// buildOAPath re-runs pathfinding for the just-confirmed move so OA detection
+// can walk the same path. Falls back to a 2-point start→dest segment when
+// pathfinding fails (still detects OAs from hostiles adjacent to the start
+// tile in most layouts).
+func (h *MoveHandler) buildOAPath(ctx context.Context, mover refdata.Combatant, moverTurn refdata.Turn, startCol, startRow, destCol, destRow int, allCombatants []refdata.Combatant) []pathfinding.Point {
+	fallback := []pathfinding.Point{
+		{Col: startCol, Row: startRow},
+		{Col: destCol, Row: destRow},
+	}
+
+	encounter, err := h.combatService.GetEncounter(ctx, moverTurn.EncounterID)
+	if err != nil || !encounter.MapID.Valid {
+		return fallback
+	}
+	mapData, err := h.mapProvider.GetByID(ctx, encounter.MapID.UUID)
+	if err != nil {
+		return fallback
+	}
+	md, err := renderer.ParseTiledJSON(mapData.TiledJson, nil, nil)
+	if err != nil {
+		return fallback
+	}
+
+	grid := &pathfinding.Grid{
+		Width:     md.Width,
+		Height:    md.Height,
+		Terrain:   md.TerrainGrid,
+		Walls:     md.Walls,
+		Occupants: buildOccupants(allCombatants, mover),
+	}
+	sizeCategory, _ := h.resolveSizeAndSpeed(ctx, mover)
+	pathReq := pathfinding.PathRequest{
+		Start:        pathfinding.Point{Col: startCol, Row: startRow},
+		End:          pathfinding.Point{Col: destCol, Row: destRow},
+		SizeCategory: sizeCategory,
+		Grid:         grid,
+	}
+	result, err := pathfinding.FindPath(pathReq)
+	if err != nil || result == nil || len(result.Path) < 2 {
+		return fallback
+	}
+	return result.Path
+}
+
+// lookupHostileTurns fans out to the wired turn lookup. Returns an empty map
+// (not nil) on any failure so DetectOpportunityAttacks's reaction-used filter
+// degrades gracefully (every hostile assumed reaction-available).
+func (h *MoveHandler) lookupHostileTurns(ctx context.Context, encounterID uuid.UUID) map[uuid.UUID]refdata.Turn {
+	if h.oaTurns == nil {
+		return map[uuid.UUID]refdata.Turn{}
+	}
+	turns, err := h.oaTurns.ListTurnsByEncounter(ctx, encounterID)
+	if err != nil || turns == nil {
+		return map[uuid.UUID]refdata.Turn{}
+	}
+	return turns
+}
+
+// lookupCreatureAttacks fans out per unique NPC creature_ref_id in the
+// encounter so DetectOpportunityAttacks can resolve each NPC's max reach. Any
+// per-creature failure is skipped (creature defaults to 5ft reach).
+func (h *MoveHandler) lookupCreatureAttacks(ctx context.Context, all []refdata.Combatant, mover refdata.Combatant) map[string][]combat.CreatureAttackEntry {
+	if h.oaCreatures == nil {
+		return nil
+	}
+	out := make(map[string][]combat.CreatureAttackEntry)
+	seen := make(map[string]bool)
+	for _, c := range all {
+		if c.ID == mover.ID || !c.IsAlive || !c.IsNpc || !c.CreatureRefID.Valid {
+			continue
+		}
+		if seen[c.CreatureRefID.String] {
+			continue
+		}
+		seen[c.CreatureRefID.String] = true
+		attacks, err := h.oaCreatures.GetCreatureAttacks(ctx, c.CreatureRefID.String)
+		if err != nil {
+			continue
+		}
+		out[c.CreatureRefID.String] = attacks
+	}
+	return out
+}
+
+// lookupPCReach fans out per hostile PC in the encounter so DetectOpportunityAttacks
+// can honor reach-weapon equipment. Skips NPCs and PCs without a wired lookup.
+func (h *MoveHandler) lookupPCReach(ctx context.Context, all []refdata.Combatant, mover refdata.Combatant) map[uuid.UUID]int {
+	if h.oaPCReach == nil {
+		return nil
+	}
+	out := make(map[uuid.UUID]int)
+	for _, c := range all {
+		if c.ID == mover.ID || !c.IsAlive || c.IsNpc || !c.CharacterID.Valid {
+			continue
+		}
+		// Same-faction combatants are skipped by DetectOpportunityAttacks
+		// itself; we still skip here to avoid a wasted DB hit.
+		if c.IsNpc == mover.IsNpc {
+			continue
+		}
+		reach, err := h.oaPCReach.LookupPCReach(ctx, c.CharacterID.UUID)
+		if err != nil || reach <= 0 {
+			continue
+		}
+		out[c.ID] = reach
+	}
+	return out
 }
 
 // HandleMoveCancel processes the move cancel button click.

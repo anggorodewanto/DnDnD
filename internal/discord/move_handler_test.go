@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -97,6 +98,12 @@ func (m *mockMoveCharacterLookup) GetCharacterByCampaignAndDiscord(ctx context.C
 
 type mockMoveSession struct {
 	lastResponse *discordgo.InteractionResponse
+	channelSends []moveSessionChannelSend
+}
+
+type moveSessionChannelSend struct {
+	ChannelID string
+	Content   string
 }
 
 func (m *mockMoveSession) InteractionRespond(i *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
@@ -107,7 +114,8 @@ func (m *mockMoveSession) InteractionResponseEdit(*discordgo.Interaction, *disco
 	return nil, nil
 }
 func (m *mockMoveSession) UserChannelCreate(string) (*discordgo.Channel, error) { return nil, nil }
-func (m *mockMoveSession) ChannelMessageSend(string, string) (*discordgo.Message, error) {
+func (m *mockMoveSession) ChannelMessageSend(channelID, content string) (*discordgo.Message, error) {
+	m.channelSends = append(m.channelSends, moveSessionChannelSend{ChannelID: channelID, Content: content})
 	return nil, nil
 }
 func (m *mockMoveSession) ChannelMessageSendComplex(string, *discordgo.MessageSend) (*discordgo.Message, error) {
@@ -1652,4 +1660,164 @@ func TestMoveHandler_Prone_NoLookup_FallsBackToDefaults(t *testing.T) {
 	}
 	require.NotEmpty(t, standID)
 	assert.True(t, strings.HasSuffix(standID, ":30"), "no-lookup fallback should be 30, got %s", standID)
+}
+
+// med-24 helpers + tests.
+
+type moveOATurnsStub struct {
+	turns map[uuid.UUID]refdata.Turn
+}
+
+func (m *moveOATurnsStub) ListTurnsByEncounter(_ context.Context, _ uuid.UUID) (map[uuid.UUID]refdata.Turn, error) {
+	return m.turns, nil
+}
+
+type moveOACreatureStub struct {
+	attacks map[string][]combat.CreatureAttackEntry
+}
+
+func (m *moveOACreatureStub) GetCreatureAttacks(_ context.Context, refID string) ([]combat.CreatureAttackEntry, error) {
+	return m.attacks[refID], nil
+}
+
+type moveOAPCReachStub struct {
+	reachByCharacter map[uuid.UUID]int
+}
+
+func (m *moveOAPCReachStub) LookupPCReach(_ context.Context, charID uuid.UUID) (int, error) {
+	return m.reachByCharacter[charID], nil
+}
+
+type moveOAChannelStub struct {
+	channels map[string]string
+	err      error
+}
+
+func (m *moveOAChannelStub) GetChannelIDs(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.channels, nil
+}
+
+func TestMoveHandler_HandleMoveConfirm_OAFiresToYourTurnChannel(t *testing.T) {
+	// Mover (PC) starts at C2 (col=2,row=1) adjacent to a hostile NPC at B2
+	// (col=1,row=1). Confirming a move to E2 leaves the NPC's 5ft reach.
+	sess := &mockMoveSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	moverID := uuid.New()
+	hostileID := uuid.New()
+
+	mover := refdata.Combatant{
+		ID: moverID, PositionCol: "C", PositionRow: 2, IsAlive: true, IsNpc: false,
+		DisplayName: "Aria",
+	}
+	hostile := refdata.Combatant{
+		ID: hostileID, PositionCol: "B", PositionRow: 2, IsAlive: true, IsNpc: true,
+		DisplayName: "Goblin",
+	}
+
+	mapID := uuid.New()
+	combatSvc := &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{ID: encounterID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}}, nil
+		},
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+			return mover, nil
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{mover, hostile}, nil
+		},
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
+	}
+	mapProv := &mockMoveMapProvider{
+		getByID: func(_ context.Context, _ uuid.UUID) (refdata.Map, error) {
+			return refdata.Map{ID: mapID, WidthSquares: 5, HeightSquares: 5, TiledJson: tiledJSON5x5()}, nil
+		},
+	}
+	turnProv := &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: moverID, MovementRemainingFt: 30}, nil
+		},
+		updateTurnActions: func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{}, nil
+		},
+	}
+	encProv := &mockMoveEncounterProvider{
+		activeEncounterForUser: func(_ context.Context, _, _ string) (uuid.UUID, error) { return encounterID, nil },
+	}
+
+	handler := NewMoveHandler(sess, combatSvc, mapProv, turnProv, encProv, nil)
+	channels := &moveOAChannelStub{channels: map[string]string{"your-turn": "your-turn-ch"}}
+	handler.SetOpportunityAttackHooks(
+		&moveOATurnsStub{turns: map[uuid.UUID]refdata.Turn{hostileID: {ReactionUsed: false}}},
+		&moveOACreatureStub{attacks: map[string][]combat.CreatureAttackEntry{}},
+		&moveOAPCReachStub{},
+		channels,
+	)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	// Move from C2 (col=2,row=1) to E2 (col=4,row=1) — leaves B2 reach.
+	handler.HandleMoveConfirm(interaction, turnID, moverID, 4, 1, 10)
+
+	if assert.Len(t, sess.channelSends, 1, "expected one OA prompt posted") {
+		assert.Equal(t, "your-turn-ch", sess.channelSends[0].ChannelID)
+		// FormatOAPrompt uses the mover's name (TargetName) in the
+		// message body. Verify the exit-label coordinate too — the
+		// mover left from C2 just before the OA fired.
+		assert.Contains(t, sess.channelSends[0].Content, "Aria")
+		assert.Contains(t, sess.channelSends[0].Content, "C2")
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirm_OASilentWhenChannelsUnset(t *testing.T) {
+	// With no channels provider wired, OA detection still runs but no
+	// prompt is posted — verifies the nil-safe fallback.
+	sess := &mockMoveSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	moverID := uuid.New()
+
+	combatSvc := &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{ID: encounterID}, nil
+		},
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: moverID, PositionCol: "C", PositionRow: 2, IsAlive: true, IsNpc: false}, nil
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
+	}
+	turnProv := &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: moverID, MovementRemainingFt: 30}, nil
+		},
+		updateTurnActions: func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{}, nil
+		},
+	}
+	encProv := &mockMoveEncounterProvider{
+		activeEncounterForUser: func(_ context.Context, _, _ string) (uuid.UUID, error) { return encounterID, nil },
+	}
+
+	handler := NewMoveHandler(sess, combatSvc, nil, turnProv, encProv, nil)
+	// No SetOpportunityAttackHooks call: oaChannels stays nil.
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirm(interaction, turnID, moverID, 4, 1, 10)
+
+	assert.Empty(t, sess.channelSends, "no OA prompt should fire without a channels provider")
 }

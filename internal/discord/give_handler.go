@@ -9,6 +9,7 @@ import (
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -28,6 +29,15 @@ type GiveCombatProvider interface {
 	GetCombatantsForGuild(ctx context.Context, guildID string) ([]refdata.Combatant, bool, error)
 }
 
+// GiveTurnProvider resolves the active turn for the invoking character and
+// persists the per-turn resource flags after a successful /give. med-35:
+// /give in combat costs the per-turn free object interaction. When no turn
+// is active (out of combat), no cost is taken.
+type GiveTurnProvider interface {
+	GetActiveTurnForCharacter(ctx context.Context, guildID string, charID uuid.UUID) (refdata.Turn, bool, error)
+	UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
+}
+
 // GiveHandler handles the /give slash command.
 type GiveHandler struct {
 	session         Session
@@ -36,6 +46,7 @@ type GiveHandler struct {
 	targetResolver  GiveTargetResolver
 	store           GiveCharacterStore
 	combatProv      GiveCombatProvider
+	turnProv        GiveTurnProvider
 }
 
 // NewGiveHandler creates a new GiveHandler.
@@ -55,6 +66,13 @@ func NewGiveHandler(
 		store:           store,
 		combatProv:      combatProv,
 	}
+}
+
+// SetTurnProvider wires the optional turn provider for combat-time
+// /give cost validation (med-35: free object interaction). When unset,
+// /give never deducts a turn resource.
+func (h *GiveHandler) SetTurnProvider(p GiveTurnProvider) {
+	h.turnProv = p
 }
 
 // Handle processes the /give command interaction.
@@ -89,6 +107,21 @@ func (h *GiveHandler) Handle(interaction *discordgo.Interaction) {
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Failed to read inventory. Please contact the DM.")
 		return
+	}
+
+	// med-35: when in combat, deduct the free object interaction. Reject
+	// up front when the resource is already spent. Out-of-combat /give
+	// carries no cost.
+	turn, inCombat, costErr := h.lookupActiveTurn(ctx, interaction.GuildID, giver.ID)
+	if costErr != nil {
+		respondEphemeral(h.session, interaction, "Failed to check turn state. Please try again.")
+		return
+	}
+	if inCombat {
+		if err := combat.ValidateResource(turn, combat.ResourceFreeInteract); err != nil {
+			respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot give item: %v", err))
+			return
+		}
 	}
 
 	// Resolve target
@@ -137,5 +170,35 @@ func (h *GiveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	// med-35: persist the free-interaction deduction. Best-effort: a
+	// save failure does not undo the committed inventory transfer.
+	if inCombat {
+		h.spendFreeInteract(ctx, turn)
+	}
+
 	respondEphemeral(h.session, interaction, result.Message)
+}
+
+// lookupActiveTurn resolves the active turn for the invoking character when a
+// turn provider is wired. Returns inCombat=false when no provider is set or
+// no active turn exists (out-of-combat /give).
+func (h *GiveHandler) lookupActiveTurn(ctx context.Context, guildID string, charID uuid.UUID) (refdata.Turn, bool, error) {
+	if h.turnProv == nil {
+		return refdata.Turn{}, false, nil
+	}
+	turn, ok, err := h.turnProv.GetActiveTurnForCharacter(ctx, guildID, charID)
+	if err != nil {
+		return refdata.Turn{}, false, err
+	}
+	return turn, ok, nil
+}
+
+// spendFreeInteract marks the free-interaction resource as used and persists
+// the change. Best-effort: failures are swallowed.
+func (h *GiveHandler) spendFreeInteract(ctx context.Context, turn refdata.Turn) {
+	updated, err := combat.UseResource(turn, combat.ResourceFreeInteract)
+	if err != nil {
+		return
+	}
+	_, _ = h.turnProv.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updated))
 }

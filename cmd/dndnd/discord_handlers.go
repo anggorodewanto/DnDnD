@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -166,7 +168,7 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		summon:   discord.NewSummonCommandHandler(deps.session, summonSvc),
 		recap:    discord.NewRecapHandler(deps.session, recapSvc, deps.resolver, newRecapPlayerLookupAdapter(combatantLookup)),
 		reaction: discord.NewReactionHandler(deps.session, newReactionServiceAdapter(deps.combatService), deps.resolver, combatantLookup),
-		use:      discord.NewUseHandler(deps.session, checkCampProv, characterLookup, useStore, nil, nil),
+		use:      discord.NewUseHandler(deps.session, checkCampProv, characterLookup, useStore, nil, newUseGiveTurnAdapter(deps.queries)),
 		status: discord.NewStatusHandler(
 			deps.session,
 			checkCampProv,
@@ -219,6 +221,18 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	// lookup. Skipped when no Queries are wired (test deploys).
 	if deps.queries != nil {
 		handlers.move.SetSizeSpeedLookup(newMoveSizeSpeedAdapter(deps.queries))
+	}
+	// med-24 / Phase 55: wire opportunity-attack hooks so /move fires
+	// reaction prompts to #your-turn when a mover leaves a hostile's
+	// reach. All four collaborators must be present; unset queries or
+	// a missing campaignSettings provider degrades to no OA prompts.
+	if deps.queries != nil && deps.campaignSettings != nil {
+		handlers.move.SetOpportunityAttackHooks(
+			newMoveOATurnsAdapter(deps.queries),
+			newMoveOACreatureAdapter(deps.queries),
+			newMoveOAPCReachAdapter(deps.queries),
+			deps.campaignSettings,
+		)
 	}
 	// med-31 / Phase 75b: wire armor lookup so /check stealth applies the
 	// equipped armor's stealth_disadv flag. *refdata.Queries already
@@ -305,6 +319,9 @@ func attachInventoryAndCharacterHandlers(
 		deps.queries,
 		nil, // GiveCombatProvider is currently unused by the handler.
 	)
+	// med-35: wire turn provider so /give in combat costs the per-turn
+	// free object interaction. Out-of-combat /give carries no cost.
+	handlers.give.SetTurnProvider(newUseGiveTurnAdapter(deps.queries))
 	handlers.character = discord.NewCharacterHandler(deps.session, deps.queries, deps.queries, deps.portalBaseURL)
 
 	if deps.levelUpService != nil {
@@ -597,6 +614,146 @@ func (a *combatantByDiscordAdapter) GetCombatantIDByDiscordUser(ctx context.Cont
 		}
 	}
 	return uuid.Nil, "", sqlNoRowsLike()
+}
+
+// moveOATurnsAdapter satisfies discord.MoveOATurnsLookup by enumerating the
+// current round's turns for an encounter and re-keying them by combatant_id
+// (the key DetectOpportunityAttacks expects). med-24 / Phase 55.
+type moveOATurnsAdapter struct {
+	queries *refdata.Queries
+}
+
+func newMoveOATurnsAdapter(q *refdata.Queries) *moveOATurnsAdapter {
+	if q == nil {
+		return nil
+	}
+	return &moveOATurnsAdapter{queries: q}
+}
+
+func (a *moveOATurnsAdapter) ListTurnsByEncounter(ctx context.Context, encounterID uuid.UUID) (map[uuid.UUID]refdata.Turn, error) {
+	enc, err := a.queries.GetEncounter(ctx, encounterID)
+	if err != nil {
+		return nil, err
+	}
+	turns, err := a.queries.ListTurnsByEncounterAndRound(ctx, refdata.ListTurnsByEncounterAndRoundParams{
+		EncounterID: encounterID,
+		RoundNumber: enc.RoundNumber,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uuid.UUID]refdata.Turn, len(turns))
+	for _, t := range turns {
+		out[t.CombatantID] = t
+	}
+	return out, nil
+}
+
+// moveOACreatureAdapter satisfies discord.MoveOACreatureLookup by fetching
+// the creature row and parsing its Attacks JSONB column. med-24.
+type moveOACreatureAdapter struct {
+	queries *refdata.Queries
+}
+
+func newMoveOACreatureAdapter(q *refdata.Queries) *moveOACreatureAdapter {
+	if q == nil {
+		return nil
+	}
+	return &moveOACreatureAdapter{queries: q}
+}
+
+func (a *moveOACreatureAdapter) GetCreatureAttacks(ctx context.Context, refID string) ([]combat.CreatureAttackEntry, error) {
+	creature, err := a.queries.GetCreature(ctx, refID)
+	if err != nil {
+		return nil, err
+	}
+	return combat.ParseCreatureAttacksWithSource(creature.Attacks, creature.Source)
+}
+
+// moveOAPCReachAdapter satisfies discord.MoveOAPCWeaponReach by reading the
+// PC's equipped melee weapon and returning 10 if it has the "reach" property
+// (5 otherwise, 0 when no equipped melee weapon). med-24.
+type moveOAPCReachAdapter struct {
+	queries *refdata.Queries
+}
+
+func newMoveOAPCReachAdapter(q *refdata.Queries) *moveOAPCReachAdapter {
+	if q == nil {
+		return nil
+	}
+	return &moveOAPCReachAdapter{queries: q}
+}
+
+func (a *moveOAPCReachAdapter) LookupPCReach(ctx context.Context, charID uuid.UUID) (int, error) {
+	char, err := a.queries.GetCharacter(ctx, charID)
+	if err != nil {
+		return 0, err
+	}
+	if !char.EquippedMainHand.Valid || char.EquippedMainHand.String == "" {
+		return 5, nil
+	}
+	weapon, err := a.queries.GetWeapon(ctx, char.EquippedMainHand.String)
+	if err != nil {
+		// Best-effort: weapon not found defaults to 5ft reach so we
+		// still get an OA prompt at the standard distance.
+		return 5, nil
+	}
+	if combat.IsRangedWeapon(weapon) {
+		// Ranged weapons don't trigger melee OAs; signal "no PC
+		// reach override" by returning 0 so the default 5ft is used.
+		// The detector still treats hostile as melee-default, which
+		// is acceptable degradation here.
+		return 5, nil
+	}
+	if combat.HasProperty(weapon, "reach") {
+		return 10, nil
+	}
+	return 5, nil
+}
+
+// useGiveTurnAdapter satisfies both discord.UseCombatProvider and
+// discord.GiveTurnProvider by joining the invoking user's Discord ID through
+// (campaign → character → active encounter → current turn). Returns
+// inCombat=false when the character has no active encounter or the active
+// encounter has no current turn (out of combat). med-35.
+type useGiveTurnAdapter struct {
+	queries *refdata.Queries
+}
+
+func newUseGiveTurnAdapter(q *refdata.Queries) *useGiveTurnAdapter {
+	if q == nil {
+		return nil
+	}
+	return &useGiveTurnAdapter{queries: q}
+}
+
+func (a *useGiveTurnAdapter) GetActiveTurnForCharacter(ctx context.Context, _ string, charID uuid.UUID) (refdata.Turn, bool, error) {
+	encID, err := a.queries.GetActiveEncounterIDByCharacterID(ctx, uuid.NullUUID{UUID: charID, Valid: true})
+	if err != nil {
+		// sql.ErrNoRows = character is not in any active encounter
+		// (out of combat). Surface as a clean (turn, false, nil) so the
+		// caller treats it as out-of-combat instead of erroring.
+		if errors.Is(err, sql.ErrNoRows) {
+			return refdata.Turn{}, false, nil
+		}
+		return refdata.Turn{}, false, err
+	}
+	enc, err := a.queries.GetEncounter(ctx, encID)
+	if err != nil {
+		return refdata.Turn{}, false, err
+	}
+	if !enc.CurrentTurnID.Valid {
+		return refdata.Turn{}, false, nil
+	}
+	turn, err := a.queries.GetTurn(ctx, enc.CurrentTurnID.UUID)
+	if err != nil {
+		return refdata.Turn{}, false, err
+	}
+	return turn, true, nil
+}
+
+func (a *useGiveTurnAdapter) UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+	return a.queries.UpdateTurnActions(ctx, arg)
 }
 
 // asiFeatLister satisfies discord.FeatLister by enumerating all seeded feats

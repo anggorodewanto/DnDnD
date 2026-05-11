@@ -380,20 +380,34 @@ type mapRegeneratorQueries interface {
 //
 // Phase 22 done-when wiring: produces PNGs for #combat-map. Production was
 // silent because main.go never set discordHandlerDeps.mapRegenerator (high-10).
+//
+// med-27 / Phase 68: keeps an in-memory per-encounter "explored cells" map
+// so previously-visible tiles render with the dim Explored overlay even
+// after the vision source has moved away. The map is best-effort and resets
+// on process restart — durable persistence is a follow-up phase.
 type mapRegeneratorAdapter struct {
 	queries mapRegeneratorQueries
+
+	exploredMu    sync.Mutex
+	exploredCells map[uuid.UUID]map[int]bool // encounterID → set of (row*width+col) tile indexes
 }
 
 func newMapRegeneratorAdapter(q mapRegeneratorQueries) *mapRegeneratorAdapter {
 	if q == nil {
 		return nil
 	}
-	return &mapRegeneratorAdapter{queries: q}
+	return &mapRegeneratorAdapter{
+		queries:       q,
+		exploredCells: make(map[uuid.UUID]map[int]bool),
+	}
 }
 
 // RegenerateMap loads the encounter, its map, and its combatants, then
 // renders a fresh PNG. Combatant positions are translated from the
-// "letter+row" string form to the renderer's 0-indexed col/row.
+// "letter+row" string form to the renderer's 0-indexed col/row. After
+// rendering, currently-visible tiles are unioned into the per-encounter
+// explored set so the next render shows them as dim Explored when the
+// vision source is no longer covering them (med-27 / Phase 68).
 func (a *mapRegeneratorAdapter) RegenerateMap(ctx context.Context, encounterID uuid.UUID) ([]byte, error) {
 	enc, err := a.queries.GetEncounter(ctx, encounterID)
 	if err != nil {
@@ -415,7 +429,72 @@ func (a *mapRegeneratorAdapter) RegenerateMap(ctx context.Context, encounterID u
 	if err != nil {
 		return nil, fmt.Errorf("parse tiled json: %w", err)
 	}
-	return renderer.RenderMap(md)
+
+	// med-27: pre-compute the FoW (so we can layer the explored history
+	// on top before the renderer paints) only when there are vision or
+	// light sources to compute against. Otherwise the renderer's
+	// auto-compute path stays in charge and explored history is a no-op.
+	if len(md.VisionSources) > 0 || len(md.LightSources) > 0 {
+		md.FogOfWar = renderer.ComputeVisibilityWithLights(md.VisionSources, md.LightSources, md.Walls, md.Width, md.Height)
+		a.applyExploredHistory(encounterID, md.FogOfWar)
+	}
+
+	png, err := renderer.RenderMap(md)
+	if err != nil {
+		return nil, err
+	}
+
+	// Union the currently-visible tiles into the persistent explored set
+	// so the next render carries them as Explored when no longer Visible.
+	if md.FogOfWar != nil {
+		a.recordVisibleTiles(encounterID, md.FogOfWar)
+	}
+
+	return png, nil
+}
+
+// applyExploredHistory upgrades any tile previously seen but not currently
+// Visible from Unexplored to Explored. Visible tiles are left alone so the
+// renderer paints them at full brightness.
+func (a *mapRegeneratorAdapter) applyExploredHistory(encounterID uuid.UUID, fow *renderer.FogOfWar) {
+	if fow == nil {
+		return
+	}
+	a.exploredMu.Lock()
+	defer a.exploredMu.Unlock()
+	seen := a.exploredCells[encounterID]
+	if len(seen) == 0 {
+		return
+	}
+	for idx := range seen {
+		if idx < 0 || idx >= len(fow.States) {
+			continue
+		}
+		if fow.States[idx] == renderer.Unexplored {
+			fow.States[idx] = renderer.Explored
+		}
+	}
+}
+
+// recordVisibleTiles unions the FoW's Visible cells into the per-encounter
+// explored set so subsequent renders treat them as Explored when no longer
+// in vision.
+func (a *mapRegeneratorAdapter) recordVisibleTiles(encounterID uuid.UUID, fow *renderer.FogOfWar) {
+	if fow == nil {
+		return
+	}
+	a.exploredMu.Lock()
+	defer a.exploredMu.Unlock()
+	seen, ok := a.exploredCells[encounterID]
+	if !ok {
+		seen = make(map[int]bool)
+		a.exploredCells[encounterID] = seen
+	}
+	for idx, state := range fow.States {
+		if state == renderer.Visible {
+			seen[idx] = true
+		}
+	}
 }
 
 // combatantsToRendererForm projects refdata.Combatant rows into the slimmer

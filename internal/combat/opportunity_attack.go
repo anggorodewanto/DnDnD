@@ -68,6 +68,23 @@ func DetectOpportunityAttacks(
 	hostileTurns map[uuid.UUID]refdata.Turn,
 	creatureAttacks map[string][]CreatureAttackEntry,
 ) []OATrigger {
+	return DetectOpportunityAttacksWithReach(mover, path, allCombatants, moverTurn, hostileTurns, creatureAttacks, nil)
+}
+
+// DetectOpportunityAttacksWithReach is the same as DetectOpportunityAttacks but
+// accepts a per-hostile-id reach override (in feet). Used by /move (med-24) so
+// PC hostiles holding reach weapons (glaive, halberd, lance, pike, whip) get
+// 10ft reach instead of the default 5ft. NPC reach still flows through
+// creatureAttacks as before; an explicit override in pcReachByID always wins.
+func DetectOpportunityAttacksWithReach(
+	mover refdata.Combatant,
+	path []pathfinding.Point,
+	allCombatants []refdata.Combatant,
+	moverTurn refdata.Turn,
+	hostileTurns map[uuid.UUID]refdata.Turn,
+	creatureAttacks map[string][]CreatureAttackEntry,
+	pcReachByID map[uuid.UUID]int,
+) []OATrigger {
 	if moverTurn.HasDisengaged {
 		return nil
 	}
@@ -94,6 +111,9 @@ func DetectOpportunityAttacks(
 		}
 
 		reachFt := resolveHostileReach(hostile, creatureAttacks)
+		if override, ok := pcReachByID[hostile.ID]; ok && override > 0 {
+			reachFt = override
+		}
 		reachSquares := reachFt / 5
 
 		// Get hostile position in 0-indexed
