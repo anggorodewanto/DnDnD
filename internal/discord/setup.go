@@ -168,11 +168,21 @@ func SetupChannels(s Session, guildID, botUserID, dmUserID string) (map[string]s
 // SetupCampaignInfo holds the campaign info needed by the setup handler.
 type SetupCampaignInfo struct {
 	DMUserID string
+	// AutoCreated is true when the lookup had to create the campaign row
+	// because none existed for this guild yet (med-41 / Phase 11 wiring).
+	// The setup handler uses this purely to vary the success message.
+	AutoCreated bool
 }
 
 // CampaignLookup provides campaign data for the setup handler.
+//
+// Implementations MUST auto-create the campaign row when no row exists for
+// the guild yet (med-41 / Phase 11): the invoker of /setup is taken to be
+// the DM and a row with default settings is inserted. This closes the
+// "no campaign found for this server" dead-end the playtest quickstart used
+// to hit before any encounter could be built.
 type CampaignLookup interface {
-	GetCampaignForSetup(guildID string) (SetupCampaignInfo, error)
+	GetCampaignForSetup(guildID, invokerUserID string) (SetupCampaignInfo, error)
 	SaveChannelIDs(guildID string, channelIDs map[string]string) error
 }
 
@@ -191,14 +201,15 @@ func NewSetupHandler(bot *Bot, campaignLookup CampaignLookup) *SetupHandler {
 func (h *SetupHandler) Handle(interaction *discordgo.Interaction) {
 	s := h.bot.session
 	guildID := interaction.GuildID
+	invokerUserID := setupInvokerUserID(interaction)
 
 	_ = s.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	})
 
-	info, err := h.campaignLookup.GetCampaignForSetup(guildID)
+	info, err := h.campaignLookup.GetCampaignForSetup(guildID, invokerUserID)
 	if err != nil {
-		h.editResponse(interaction, "Error: no campaign found for this server. Create a campaign first.")
+		h.editResponse(interaction, fmt.Sprintf("Error resolving campaign: %s", err))
 		return
 	}
 
@@ -214,7 +225,24 @@ func (h *SetupHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	h.editResponse(interaction, fmt.Sprintf("Channel structure created successfully! %d channels set up.", len(channelIDs)))
+	prefix := "Channel structure created successfully!"
+	if info.AutoCreated {
+		prefix = "Campaign created and channel structure set up!"
+	}
+	h.editResponse(interaction, fmt.Sprintf("%s %d channels set up.", prefix, len(channelIDs)))
+}
+
+// setupInvokerUserID extracts the Discord user ID of the user who invoked
+// /setup. Returns "" when neither Member.User nor User is populated (only
+// happens in unit tests with a hand-rolled Interaction).
+func setupInvokerUserID(interaction *discordgo.Interaction) string {
+	if interaction.Member != nil && interaction.Member.User != nil {
+		return interaction.Member.User.ID
+	}
+	if interaction.User != nil {
+		return interaction.User.ID
+	}
+	return ""
 }
 
 // editResponse is a convenience wrapper for editing a deferred interaction response.

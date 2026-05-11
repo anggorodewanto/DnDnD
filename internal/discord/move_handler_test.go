@@ -9,6 +9,8 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -1553,4 +1555,101 @@ func TestMoveHandler_OutOfBounds(t *testing.T) {
 	if !strings.Contains(content, "out of bounds") {
 		t.Errorf("expected out of bounds message, got: %s", content)
 	}
+}
+
+// --- med-21 / Phase 30: size + speed lookup ---
+
+type stubSizeSpeedLookup struct {
+	size  int
+	speed int
+	err   error
+	calls int
+}
+
+func (s *stubSizeSpeedLookup) LookupSizeAndSpeed(_ context.Context, _ refdata.Combatant) (int, int, error) {
+	s.calls++
+	return s.size, s.speed, s.err
+}
+
+// med-21: when the prone-stand path fires, the buttons must encode the
+// combatant's actual walk speed (not the historical 30 ft default).
+func TestMoveHandler_Prone_UsesWiredSpeedAndSize(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _ := setupProneMoveHandler(sess)
+	handler.SetSizeSpeedLookup(&stubSizeSpeedLookup{
+		size:  3, // SizeLarge
+		speed: 25,
+	})
+
+	interaction := makeMoveInteraction("D1")
+	handler.Handle(interaction)
+
+	require.NotNil(t, sess.lastResponse, "expected response")
+	components := sess.lastResponse.Data.Components
+	require.NotEmpty(t, components, "expected buttons")
+
+	// The Stand & Move + Crawl button custom IDs encode the resolved speed
+	// (25) instead of the historical 30 ft default.
+	row, ok := components[0].(discordgo.ActionsRow)
+	require.True(t, ok)
+	var standID string
+	for _, c := range row.Components {
+		btn, ok := c.(discordgo.Button)
+		if !ok {
+			continue
+		}
+		if btn.Label == "Stand & Move" {
+			standID = btn.CustomID
+		}
+	}
+	require.NotEmpty(t, standID, "Stand & Move button missing")
+	assert.True(t, strings.HasSuffix(standID, ":25"), "stand-id should end with :25, got %s", standID)
+}
+
+func TestMoveHandler_Prone_LookupError_FallsBackToDefaults(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _ := setupProneMoveHandler(sess)
+	handler.SetSizeSpeedLookup(&stubSizeSpeedLookup{err: errors.New("boom")})
+
+	interaction := makeMoveInteraction("D1")
+	handler.Handle(interaction)
+
+	require.NotNil(t, sess.lastResponse, "expected response")
+	row := sess.lastResponse.Data.Components[0].(discordgo.ActionsRow)
+	var standID string
+	for _, c := range row.Components {
+		btn, ok := c.(discordgo.Button)
+		if !ok {
+			continue
+		}
+		if btn.Label == "Stand & Move" {
+			standID = btn.CustomID
+		}
+	}
+	require.NotEmpty(t, standID)
+	assert.True(t, strings.HasSuffix(standID, ":30"), "fallback speed 30 expected, got %s", standID)
+}
+
+func TestMoveHandler_Prone_NoLookup_FallsBackToDefaults(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _ := setupProneMoveHandler(sess)
+	// Deliberately no SetSizeSpeedLookup call.
+
+	interaction := makeMoveInteraction("D1")
+	handler.Handle(interaction)
+
+	require.NotNil(t, sess.lastResponse, "expected response")
+	row := sess.lastResponse.Data.Components[0].(discordgo.ActionsRow)
+	var standID string
+	for _, c := range row.Components {
+		btn, ok := c.(discordgo.Button)
+		if !ok {
+			continue
+		}
+		if btn.Label == "Stand & Move" {
+			standID = btn.CustomID
+		}
+	}
+	require.NotEmpty(t, standID)
+	assert.True(t, strings.HasSuffix(standID, ":30"), "no-lookup fallback should be 30, got %s", standID)
 }

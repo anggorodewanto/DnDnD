@@ -231,13 +231,37 @@ type CardUpdater interface {
 	OnCharacterUpdated(ctx context.Context, characterID uuid.UUID) error
 }
 
+// TurnStartNotifier is the minimal callback combat.Service fires when a
+// new active turn is established by StartCombat (med-20 / Phase 26a).
+// Without it, the very first PC's turn would not get a #your-turn ping
+// until they complete it via /done. Production wiring in cmd/dndnd
+// posts FormatTurnStartPrompt to the combatant's #your-turn channel.
+type TurnStartNotifier interface {
+	NotifyFirstTurn(ctx context.Context, encounterID uuid.UUID, turnInfo TurnInfo)
+}
+
+// InitiativeTrackerNotifier is the minimal callback combat.Service fires
+// to keep #initiative-tracker in sync with the live encounter (med-18 /
+// Phase 25). PostTracker creates the persistent tracker message after
+// RollInitiative; UpdateTracker edits it after every AdvanceTurn;
+// PostCompletedTracker posts the final summary after EndCombat. All three
+// are no-ops in headless / test deploys (nil notifier or notifier-side
+// errors must never roll back the underlying combat mutation).
+type InitiativeTrackerNotifier interface {
+	PostTracker(ctx context.Context, encounterID uuid.UUID, content string)
+	UpdateTracker(ctx context.Context, encounterID uuid.UUID, content string)
+	PostCompletedTracker(ctx context.Context, encounterID uuid.UUID, content string)
+}
+
 // Service manages combat encounters and their entities.
 type Service struct {
-	store             Store
-	summonedResources *SummonedTurnResources
-	publisher         EncounterPublisher
-	dmNotifier        DMNotifier
-	cardUpdater       CardUpdater
+	store                     Store
+	summonedResources         *SummonedTurnResources
+	publisher                 EncounterPublisher
+	dmNotifier                DMNotifier
+	cardUpdater               CardUpdater
+	turnStartNotifier         TurnStartNotifier
+	initiativeTrackerNotifier InitiativeTrackerNotifier
 }
 
 // NewService creates a new combat Service.
@@ -270,6 +294,20 @@ func (s *Service) SetPublisher(p EncounterPublisher) {
 // a committed combat mutation.
 func (s *Service) SetCardUpdater(u CardUpdater) {
 	s.cardUpdater = u
+}
+
+// SetTurnStartNotifier wires the first-turn ping callback (med-20 / Phase
+// 26a). A nil notifier is tolerated and disables the fan-out so legacy
+// tests / dashboard-only deploys keep working.
+func (s *Service) SetTurnStartNotifier(n TurnStartNotifier) {
+	s.turnStartNotifier = n
+}
+
+// SetInitiativeTrackerNotifier wires the #initiative-tracker auto-post +
+// auto-update callbacks (med-18 / Phase 25). A nil notifier disables the
+// fan-out (legacy tests / dashboard-only deploys keep working).
+func (s *Service) SetInitiativeTrackerNotifier(n InitiativeTrackerNotifier) {
+	s.initiativeTrackerNotifier = n
 }
 
 // notifyCardUpdate fires the OnCharacterUpdated hook for the given combatant
@@ -674,10 +712,27 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 		return StartCombatResult{}, fmt.Errorf("re-fetching encounter: %w", err)
 	}
 
+	// med-20 / Phase 26a: ping the first combatant so they don't sit in
+	// silence until someone runs /done. Best-effort: a nil notifier or a
+	// notifier-side error must never roll back the encounter creation
+	// (the encounter is already persisted at this point).
+	if s.turnStartNotifier != nil {
+		s.turnStartNotifier.NotifyFirstTurn(ctx, enc.ID, turnInfo)
+	}
+
+	tracker := FormatInitiativeTracker(enc, sortedCombatants, turnInfo.CombatantID)
+
+	// med-18 / Phase 25: post the persistent #initiative-tracker message
+	// once the first turn has been advanced to. The notifier persists the
+	// returned message ID so subsequent AdvanceTurn calls can edit it.
+	if s.initiativeTrackerNotifier != nil {
+		s.initiativeTrackerNotifier.PostTracker(ctx, enc.ID, tracker)
+	}
+
 	return StartCombatResult{
 		Encounter:         enc,
 		Combatants:        sortedCombatants,
-		InitiativeTracker: FormatInitiativeTracker(enc, sortedCombatants, turnInfo.CombatantID),
+		InitiativeTracker: tracker,
 		FirstTurn:         turnInfo,
 	}, nil
 }
@@ -754,6 +809,40 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 		return EndCombatResult{}, fmt.Errorf("listing combatants: %w", err)
 	}
 
+	// med-19 / Phase 26b: end concentration on any lingering spells before
+	// we tear down the encounter. Iterate on the pre-cleanup snapshot so
+	// concentration columns are still authoritative. Failures are non-fatal:
+	// log via best-effort (the surrounding tx isn't critical to combat
+	// completion) — but a downstream error here should still bubble up so
+	// callers see the cleanup hiccup.
+	for _, c := range combatants {
+		if !c.ConcentrationSpellID.Valid || !c.ConcentrationSpellName.Valid {
+			continue
+		}
+		if _, err := s.BreakConcentrationFully(ctx, BreakConcentrationFullyInput{
+			EncounterID: encounterID,
+			CasterID:    c.ID,
+			CasterName:  c.DisplayName,
+			SpellID:     c.ConcentrationSpellID.String,
+			SpellName:   c.ConcentrationSpellName.String,
+			Reason:      "combat ended",
+		}); err != nil {
+			return EndCombatResult{}, fmt.Errorf("ending concentration for %s: %w", c.DisplayName, err)
+		}
+	}
+
+	// med-19 / Phase 26b: pause all combat timers so any pending CON-save
+	// timers / turn timeouts don't fire after the encounter is over. This
+	// is the timer counterpart to clearing combat-only conditions below.
+	if err := s.PauseCombatTimers(ctx, encounterID); err != nil {
+		return EndCombatResult{}, fmt.Errorf("pausing combat timers: %w", err)
+	}
+
+	// NOTE: med-19 also calls for RecoverAmmunition to add back half of
+	// each PC's spent arrows/bolts. That requires a per-encounter spent
+	// counter (new column on combatants or turns) — deferred as a separate
+	// schema migration. The helper exists at attack.go:212 ready to call.
+
 	casualties := 0
 	cleaned := make([]refdata.Combatant, len(combatants))
 	for i, c := range combatants {
@@ -785,13 +874,22 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 	// Publish a final snapshot so dashboard subscribers see "completed".
 	s.publish(ctx, encounterID)
 
+	completedTracker := FormatCompletedInitiativeTracker(enc, cleaned)
+
+	// med-18 / Phase 25: post the final completed tracker once. Best-effort:
+	// a notifier-side error is silently swallowed so a Discord hiccup
+	// cannot undo a successfully-ended combat.
+	if s.initiativeTrackerNotifier != nil {
+		s.initiativeTrackerNotifier.PostCompletedTracker(ctx, encounterID, completedTracker)
+	}
+
 	return EndCombatResult{
 		Encounter:         enc,
 		Combatants:        cleaned,
 		Summary:           summary,
 		Casualties:        casualties,
 		RoundsElapsed:     roundsElapsed,
-		InitiativeTracker: FormatCompletedInitiativeTracker(enc, cleaned),
+		InitiativeTracker: completedTracker,
 	}, nil
 }
 

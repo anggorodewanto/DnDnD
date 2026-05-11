@@ -388,13 +388,13 @@ func setupMockResponder(mock *MockSession) *string {
 }
 
 type mockCampaignLookup struct {
-	getCampaignFunc    func(guildID string) (SetupCampaignInfo, error)
+	getCampaignFunc    func(guildID, invokerUserID string) (SetupCampaignInfo, error)
 	updateSettingsFunc func(guildID string, channelIDs map[string]string) error
 }
 
-func (m *mockCampaignLookup) GetCampaignForSetup(guildID string) (SetupCampaignInfo, error) {
+func (m *mockCampaignLookup) GetCampaignForSetup(guildID, invokerUserID string) (SetupCampaignInfo, error) {
 	if m.getCampaignFunc != nil {
-		return m.getCampaignFunc(guildID)
+		return m.getCampaignFunc(guildID, invokerUserID)
 	}
 	return SetupCampaignInfo{DMUserID: "dm-user-1"}, nil
 }
@@ -460,7 +460,7 @@ func TestHandleSetupCommand_NoCampaign(t *testing.T) {
 	editContent := setupMockResponder(mock)
 
 	campaignLookup := &mockCampaignLookup{
-		getCampaignFunc: func(guildID string) (SetupCampaignInfo, error) {
+		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
 			return SetupCampaignInfo{}, fmt.Errorf("no campaign found")
 		},
 	}
@@ -470,6 +470,44 @@ func TestHandleSetupCommand_NoCampaign(t *testing.T) {
 	handler.Handle(&discordgo.Interaction{GuildID: "guild-1"})
 
 	assert.Contains(t, *editContent, "no campaign")
+}
+
+// med-41: when the lookup auto-creates the campaign, the success message
+// should make that explicit so the DM can tell whether they hit a fresh
+// guild vs. an already-set-up one.
+func TestHandleSetupCommand_AutoCreatedCampaign(t *testing.T) {
+	mock := newTestMock()
+	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
+		return nil, nil
+	}
+	channelIDCounter := 0
+	mock.GuildChannelCreateComplexFunc = func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
+		channelIDCounter++
+		return &discordgo.Channel{
+			ID:   fmt.Sprintf("chan-%d", channelIDCounter),
+			Name: data.Name,
+			Type: data.Type,
+		}, nil
+	}
+	editContent := setupMockResponder(mock)
+
+	gotInvoker := ""
+	campaignLookup := &mockCampaignLookup{
+		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
+			gotInvoker = invokerUserID
+			return SetupCampaignInfo{DMUserID: invokerUserID, AutoCreated: true}, nil
+		},
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	handler := NewSetupHandler(bot, campaignLookup)
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "dm-99"}},
+	})
+
+	assert.Equal(t, "dm-99", gotInvoker, "invoker user id should propagate to lookup")
+	assert.Contains(t, *editContent, "Campaign created")
 }
 
 func TestHandleSetupCommand_SetupError(t *testing.T) {

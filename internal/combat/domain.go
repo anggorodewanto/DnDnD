@@ -53,7 +53,7 @@ func CombatantFromCreature(creature refdata.Creature, shortID, displayName, posC
 		HPMax:         creature.HpAverage,
 		HPCurrent:     creature.HpAverage,
 		AC:            creature.Ac,
-		SpeedFt:       parseWalkSpeed(creature.Speed),
+		SpeedFt:       ParseWalkSpeed(creature.Speed),
 		PositionCol:   posCol,
 		PositionRow:   posRow,
 		IsNPC:         true,
@@ -127,9 +127,9 @@ func ParseTemplateCreatures(raw json.RawMessage) ([]TemplateCreature, error) {
 	return creatures, nil
 }
 
-// parseWalkSpeed extracts the walk speed from a creature's speed JSON.
+// ParseWalkSpeed extracts the walk speed from a creature's speed JSON.
 // Returns 30 as default if not found or unparseable.
-func parseWalkSpeed(speedJSON json.RawMessage) int32 {
+func ParseWalkSpeed(speedJSON json.RawMessage) int32 {
 	var speeds map[string]int32
 	if err := json.Unmarshal(speedJSON, &speeds); err != nil {
 		return 30

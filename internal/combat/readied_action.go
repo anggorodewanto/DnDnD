@@ -29,6 +29,12 @@ type ReadyActionResult struct {
 
 // ReadyAction handles the /action ready command.
 // Costs an action. Creates a readied action (reaction declaration with is_readied_action=true).
+//
+// med-28 / Phase 71: when the readied action carries a SpellName + non-zero
+// SpellSlotLevel, the matching spell slot is expended at ready-time and
+// concentration on the readied spell is established. Both per spec line
+// 1103: "spell slot is expended when readying; caster must hold
+// concentration on the readied spell until trigger fires".
 func (s *Service) ReadyAction(ctx context.Context, cmd ReadyActionCommand) (ReadyActionResult, error) {
 	description := strings.TrimSpace(cmd.Description)
 	if description == "" {
@@ -54,6 +60,20 @@ func (s *Service) ReadyAction(ctx context.Context, cmd ReadyActionCommand) (Read
 		spellSlotLevel = sql.NullInt32{Int32: int32(cmd.SpellSlotLevel), Valid: true}
 	}
 
+	// med-28: deduct the spell slot AND set concentration before creating
+	// the declaration so a slot deduction error doesn't leave a phantom
+	// readied action with no slot expended. Only fires for PCs (NPCs
+	// readying spells aren't supported via this path) and only when a
+	// real (non-zero) slot level is supplied.
+	if cmd.SpellName != "" && cmd.SpellSlotLevel > 0 && cmd.Combatant.CharacterID.Valid {
+		if err := s.expendReadiedSpellSlot(ctx, cmd); err != nil {
+			return ReadyActionResult{}, err
+		}
+		if err := s.setReadiedSpellConcentration(ctx, cmd); err != nil {
+			return ReadyActionResult{}, err
+		}
+	}
+
 	decl, err := s.store.CreateReadiedActionDeclaration(ctx, refdata.CreateReadiedActionDeclarationParams{
 		EncounterID:    cmd.Combatant.EncounterID,
 		CombatantID:    cmd.Combatant.ID,
@@ -76,6 +96,48 @@ func (s *Service) ReadyAction(ctx context.Context, cmd ReadyActionCommand) (Read
 		Declaration: decl,
 		CombatLog:   log,
 	}, nil
+}
+
+// expendReadiedSpellSlot deducts the spell slot used to ready the spell.
+// Prefers a Pact Magic slot when the character has one matching the level,
+// otherwise consumes a regular spell slot. (med-28)
+func (s *Service) expendReadiedSpellSlot(ctx context.Context, cmd ReadyActionCommand) error {
+	char, err := s.store.GetCharacter(ctx, cmd.Combatant.CharacterID.UUID)
+	if err != nil {
+		return fmt.Errorf("loading character for readied spell slot: %w", err)
+	}
+	pact, _ := parsePactMagicSlots(char.PactMagicSlots.RawMessage)
+	if pact.Current > 0 && cmd.SpellSlotLevel <= pact.SlotLevel {
+		if _, err := s.deductAndPersistPactSlot(ctx, char.ID, pact); err != nil {
+			return fmt.Errorf("deducting pact slot for readied spell: %w", err)
+		}
+		return nil
+	}
+	slots, err := parseIntKeyedSlots(char.SpellSlots.RawMessage)
+	if err != nil {
+		return fmt.Errorf("parsing spell slots: %w", err)
+	}
+	if _, err := s.deductAndPersistSlot(ctx, char.ID, slots, cmd.SpellSlotLevel); err != nil {
+		return fmt.Errorf("deducting spell slot for readied spell: %w", err)
+	}
+	return nil
+}
+
+// setReadiedSpellConcentration writes the readied spell into the caster's
+// concentration columns so the combatant is treated as concentrating until
+// the trigger fires (or the readied action is cancelled / expired). The
+// SpellID is empty because ReadyActionCommand only carries SpellName today
+// \u2014 the cleanup paths key off SpellName, so this is sufficient for the
+// pending CON-save / Silence-break pipelines. (med-28)
+func (s *Service) setReadiedSpellConcentration(ctx context.Context, cmd ReadyActionCommand) error {
+	if err := s.store.SetCombatantConcentration(ctx, refdata.SetCombatantConcentrationParams{
+		ID:                     cmd.Combatant.ID,
+		ConcentrationSpellID:   sql.NullString{},
+		ConcentrationSpellName: sql.NullString{String: cmd.SpellName, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("setting concentration on readied spell: %w", err)
+	}
+	return nil
 }
 
 // ExpireReadiedActions checks for active readied actions belonging to the

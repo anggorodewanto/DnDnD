@@ -15,6 +15,7 @@ import (
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/levelup"
 	"github.com/ab/dndnd/internal/loot"
+	"github.com/ab/dndnd/internal/pathfinding"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -212,6 +213,12 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	// (resolveExplorationMover falls back to pcs[0] when this is nil).
 	if characterLookup != nil {
 		handlers.move.SetCharacterLookup(characterLookup)
+	}
+	// med-21 / Phase 30: replace hardcoded Medium / 30 ft defaults in the
+	// /move prone-stand path with a real character/creature size+speed
+	// lookup. Skipped when no Queries are wired (test deploys).
+	if deps.queries != nil {
+		handlers.move.SetSizeSpeedLookup(newMoveSizeSpeedAdapter(deps.queries))
 	}
 	if deps.enemyTurnEncounterLookup != nil {
 		handlers.enemyTurnNotifier.SetEncounterLookup(deps.enemyTurnEncounterLookup)
@@ -579,6 +586,49 @@ func (a *combatantByDiscordAdapter) GetCombatantIDByDiscordUser(ctx context.Cont
 		}
 	}
 	return uuid.Nil, "", sqlNoRowsLike()
+}
+
+// moveSizeSpeedAdapter satisfies discord.MoveSizeSpeedLookup by joining
+// the combatant to either a Character (PCs) or a Creature (NPCs) and
+// extracting the size category + walk speed. PCs default to size Medium
+// because the characters table doesn't carry a size column today; NPCs
+// use Creature.Size and parse Creature.Speed JSON via combat.ParseWalkSpeed.
+// med-21 / Phase 30 wires this so /move stops hardcoding Medium / 30 ft.
+type moveSizeSpeedAdapter struct {
+	queries *refdata.Queries
+}
+
+func newMoveSizeSpeedAdapter(q *refdata.Queries) *moveSizeSpeedAdapter {
+	if q == nil {
+		return nil
+	}
+	return &moveSizeSpeedAdapter{queries: q}
+}
+
+func (a *moveSizeSpeedAdapter) LookupSizeAndSpeed(ctx context.Context, combatant refdata.Combatant) (int, int, error) {
+	// PCs: Character.SpeedFt is authoritative; size defaults to Medium
+	// (the characters table has no size column yet — this is a
+	// known follow-up gap; see chunk2 cross-cutting risks).
+	if combatant.CharacterID.Valid {
+		char, err := a.queries.GetCharacter(ctx, combatant.CharacterID.UUID)
+		if err != nil {
+			return pathfinding.SizeMedium, 30, err
+		}
+		return pathfinding.SizeMedium, int(char.SpeedFt), nil
+	}
+	// NPCs: Creature.Size + parsed walk speed.
+	if combatant.CreatureRefID.Valid {
+		creature, err := a.queries.GetCreature(ctx, combatant.CreatureRefID.String)
+		if err != nil {
+			return pathfinding.SizeMedium, 30, err
+		}
+		size := pathfinding.ParseSizeCategory(creature.Size)
+		speed := combat.ParseWalkSpeed(creature.Speed)
+		return size, int(speed), nil
+	}
+	// Unknown combatant kind — return defaults rather than erroring so
+	// /move keeps functioning.
+	return pathfinding.SizeMedium, 30, nil
 }
 
 // recapPlayerLookupAdapter wraps combatantByDiscordAdapter to satisfy the

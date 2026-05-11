@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/dmqueue"
@@ -132,12 +133,38 @@ func (h *RestHandler) Handle(interaction *discordgo.Interaction) {
 	// Notify DM of the rest request via #dm-queue (no-op if no notifier wired).
 	h.postRestRequestToDMQueue(ctx, interaction.GuildID, char.Name, restType)
 
+	// med-34 / Phase 83a: gate behind the auto_approve_rest campaign
+	// setting. When the DM has explicitly turned off auto-approval, we
+	// only post the request to #dm-queue (above) and tell the player to
+	// wait — the rest applies once the DM resolves the queue entry.
+	if !restAutoApproved(campaign) {
+		respondEphemeral(h.session, interaction, fmt.Sprintf(
+			"⏳ %s rest request sent to the DM. Your rest will apply once they approve it.",
+			strings.Title(restType),
+		))
+		return
+	}
+
 	switch restType {
 	case "short":
 		h.handleShortRest(ctx, interaction, char, charData)
 	case "long":
 		h.handleLongRest(ctx, interaction, char, charData)
 	}
+}
+
+// restAutoApproved decodes the campaign's auto_approve_rest setting,
+// defaulting to true (the historical behaviour) when the column is null
+// or the field is absent. (med-34)
+func restAutoApproved(c refdata.Campaign) bool {
+	if !c.Settings.Valid {
+		return true
+	}
+	var s campaign.Settings
+	if err := json.Unmarshal(c.Settings.RawMessage, &s); err != nil {
+		return true
+	}
+	return s.AutoApproveRestEnabled()
 }
 
 func (h *RestHandler) handleShortRest(_ context.Context, interaction *discordgo.Interaction, char refdata.Character, charData restCharacterData) {

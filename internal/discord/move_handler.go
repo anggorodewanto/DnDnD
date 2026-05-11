@@ -50,6 +50,16 @@ type MoveCharacterLookup interface {
 	GetCharacterByCampaignAndDiscord(ctx context.Context, campaignID uuid.UUID, discordUserID string) (refdata.Character, error)
 }
 
+// MoveSizeSpeedLookup resolves the creature size category and walk speed for
+// a combatant by joining through the character or creature ref id.
+// Implementations typically wrap refdata.Queries.GetCharacter / GetCreature
+// and parse Creature.Speed via the existing combat helper. med-21 / Phase 30:
+// replaces the hardcoded Medium / 30 ft defaults in the prone-stand path so
+// halflings (25 ft), tabaxi (40 ft), and Large creatures pathfind correctly.
+type MoveSizeSpeedLookup interface {
+	LookupSizeAndSpeed(ctx context.Context, combatant refdata.Combatant) (sizeCategory int, speedFt int, err error)
+}
+
 // MoveHandler handles the /move slash command.
 type MoveHandler struct {
 	session           Session
@@ -60,6 +70,10 @@ type MoveHandler struct {
 	campaignProv      CampaignProvider
 	characterLookup   MoveCharacterLookup
 	turnGate          TurnGate
+	// med-21 / Phase 30: optional size/speed lookup. Nil falls back to the
+	// historical Medium / 30 ft defaults so unit tests built before the
+	// lookup landed keep working.
+	sizeSpeedLookup MoveSizeSpeedLookup
 }
 
 // SetCharacterLookup wires the character lookup used by exploration /move to
@@ -74,6 +88,31 @@ func (h *MoveHandler) SetCharacterLookup(lookup MoveCharacterLookup) {
 // that don't care about ownership). Production wiring always supplies one.
 func (h *MoveHandler) SetTurnGate(g TurnGate) {
 	h.turnGate = g
+}
+
+// SetSizeSpeedLookup wires the med-21 size/speed resolver so /move stops
+// hardcoding Medium creature size and 30 ft walk speed in the prone-stand
+// path. Pass nil to fall back to the historical defaults (used by older
+// unit tests).
+func (h *MoveHandler) SetSizeSpeedLookup(lookup MoveSizeSpeedLookup) {
+	h.sizeSpeedLookup = lookup
+}
+
+// resolveSizeAndSpeed returns (sizeCategory, walkSpeedFt) for the combatant.
+// Falls back to (Medium, 30) when no lookup is wired or the lookup errors
+// out — pathfinding still works with the defaults.
+func (h *MoveHandler) resolveSizeAndSpeed(ctx context.Context, combatant refdata.Combatant) (int, int) {
+	if h.sizeSpeedLookup == nil {
+		return pathfinding.SizeMedium, 30
+	}
+	size, speed, err := h.sizeSpeedLookup.LookupSizeAndSpeed(ctx, combatant)
+	if err != nil {
+		return pathfinding.SizeMedium, 30
+	}
+	if speed <= 0 {
+		speed = 30
+	}
+	return size, speed
 }
 
 // HasCharacterLookup reports whether a non-nil MoveCharacterLookup has been
@@ -209,8 +248,10 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 		Occupants: occupants,
 	}
 
-	// TODO: look up creature size from CreatureRefID when available
-	sizeCategory := pathfinding.SizeMedium
+	// med-21: look up actual creature size + walk speed via the wired
+	// sizeSpeedLookup; fall back to Medium / 30 ft when no lookup is wired
+	// or the lookup errors out.
+	sizeCategory, maxSpeed := h.resolveSizeAndSpeed(ctx, combatant)
 
 	moveReq := combat.MoveRequest{
 		DestCol:      destCol,
@@ -224,9 +265,8 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 	// Check if combatant is prone and hasn't already stood this turn
 	isProne := combat.HasCondition(combatant.Conditions, "prone")
 	if isProne && !turn.HasStoodThisTurn {
-		// Show Stand & Move / Crawl choice prompt
-		// We use maxSpeed=30 as default; TODO: look up actual speed
-		maxSpeed := 30
+		// Show Stand & Move / Crawl choice prompt with the looked-up
+		// max walk speed encoded in the button custom IDs (med-21).
 		standID := fmt.Sprintf("prone_stand:%s:%s:%d:%d:%d",
 			turn.ID.String(), combatant.ID.String(), destCol, destRow, maxSpeed)
 		crawlID := fmt.Sprintf("prone_crawl:%s:%s:%d:%d:%d",

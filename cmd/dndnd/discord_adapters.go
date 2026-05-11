@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -11,6 +14,7 @@ import (
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/campaign"
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
@@ -92,6 +96,7 @@ func (r *discordUserEncounterResolver) ActiveEncounterForUser(ctx context.Contex
 type setupQueries interface {
 	GetCampaignByGuildID(ctx context.Context, guildID string) (refdata.Campaign, error)
 	UpdateCampaignSettings(ctx context.Context, arg refdata.UpdateCampaignSettingsParams) (refdata.Campaign, error)
+	CreateCampaign(ctx context.Context, arg refdata.CreateCampaignParams) (refdata.Campaign, error)
 }
 
 // setupCampaignLookup adapts refdata.Queries to discord.CampaignLookup so the
@@ -99,6 +104,12 @@ type setupQueries interface {
 // channel IDs it creates. Channel IDs are merged into the existing campaign
 // settings JSONB; default settings are seeded when the row's settings column
 // is null.
+//
+// med-41 / Phase 11: when no campaign row exists for the guild yet, the
+// lookup auto-creates one with default settings, taking the /setup invoker
+// to be the DM. This closes the "no campaign found for this server" dead
+// end the playtest quickstart used to hit before any encounter could be
+// built — the production code path that was missing per the chunk2 review.
 type setupCampaignLookup struct {
 	queries setupQueries
 }
@@ -107,14 +118,45 @@ func newSetupCampaignLookup(q setupQueries) *setupCampaignLookup {
 	return &setupCampaignLookup{queries: q}
 }
 
-// GetCampaignForSetup returns the campaign info /setup needs (currently just
-// the DM's Discord user id, used for permission overwrites on private channels).
-func (l *setupCampaignLookup) GetCampaignForSetup(guildID string) (discord.SetupCampaignInfo, error) {
-	c, err := l.queries.GetCampaignByGuildID(context.Background(), guildID)
-	if err != nil {
+// defaultAutoCreatedCampaignName builds a placeholder campaign name when /setup
+// auto-creates the row. The DM can rename via dashboard later. Using the guild
+// ID keeps the name unique even before guild metadata is plumbed through.
+func defaultAutoCreatedCampaignName(guildID string) string {
+	return fmt.Sprintf("Campaign for guild %s", guildID)
+}
+
+// GetCampaignForSetup returns the campaign info /setup needs (the DM's
+// Discord user id, used for permission overwrites on private channels).
+// When no row exists yet for the guild, the row is auto-created with the
+// invoking user as DM and default settings.
+func (l *setupCampaignLookup) GetCampaignForSetup(guildID, invokerUserID string) (discord.SetupCampaignInfo, error) {
+	ctx := context.Background()
+	c, err := l.queries.GetCampaignByGuildID(ctx, guildID)
+	if err == nil {
+		return discord.SetupCampaignInfo{DMUserID: c.DmUserID}, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
 		return discord.SetupCampaignInfo{}, fmt.Errorf("campaign lookup for guild %q: %w", guildID, err)
 	}
-	return discord.SetupCampaignInfo{DMUserID: c.DmUserID}, nil
+	if invokerUserID == "" {
+		return discord.SetupCampaignInfo{}, fmt.Errorf("auto-create campaign for guild %q: invoker user id is empty", guildID)
+	}
+
+	settings := campaign.DefaultSettings()
+	raw, err := json.Marshal(settings)
+	if err != nil {
+		return discord.SetupCampaignInfo{}, fmt.Errorf("encoding default settings for new campaign: %w", err)
+	}
+	created, err := l.queries.CreateCampaign(ctx, refdata.CreateCampaignParams{
+		GuildID:  guildID,
+		DmUserID: invokerUserID,
+		Name:     defaultAutoCreatedCampaignName(guildID),
+		Settings: pqtype.NullRawMessage{RawMessage: raw, Valid: true},
+	})
+	if err != nil {
+		return discord.SetupCampaignInfo{}, fmt.Errorf("auto-creating campaign for guild %q: %w", guildID, err)
+	}
+	return discord.SetupCampaignInfo{DMUserID: created.DmUserID, AutoCreated: true}, nil
 }
 
 // playerDirectMessenger is the subset of discord.DirectMessenger that
@@ -510,6 +552,128 @@ func (l *setupCampaignLookup) SaveChannelIDs(guildID string, channelIDs map[stri
 		return fmt.Errorf("updating campaign settings: %w", err)
 	}
 	return nil
+}
+
+// initiativeTrackerNotifier satisfies combat.InitiativeTrackerNotifier by
+// posting / editing a persistent #initiative-tracker message per encounter.
+// The mapping from encounter ID to Discord message ID lives in an
+// in-memory map for now (med-18 / Phase 25). A bot restart loses the map,
+// in which case the next AdvanceTurn falls back to PostTracker semantics
+// — a small follow-up migration could persist the message ID on the
+// encounters row to survive restarts.
+type initiativeTrackerNotifier struct {
+	session     discord.Session
+	csp         discord.CampaignSettingsProvider
+	mu          sync.Mutex
+	messageByID map[uuid.UUID]initiativeTrackerMsg
+}
+
+type initiativeTrackerMsg struct {
+	channelID string
+	messageID string
+}
+
+func newInitiativeTrackerNotifier(session discord.Session, csp discord.CampaignSettingsProvider) *initiativeTrackerNotifier {
+	if session == nil || csp == nil {
+		return nil
+	}
+	return &initiativeTrackerNotifier{
+		session:     session,
+		csp:         csp,
+		messageByID: map[uuid.UUID]initiativeTrackerMsg{},
+	}
+}
+
+func (n *initiativeTrackerNotifier) channel(ctx context.Context, encounterID uuid.UUID) string {
+	channelIDs, err := n.csp.GetChannelIDs(ctx, encounterID)
+	if err != nil {
+		return ""
+	}
+	return channelIDs["initiative-tracker"]
+}
+
+func (n *initiativeTrackerNotifier) PostTracker(ctx context.Context, encounterID uuid.UUID, content string) {
+	ch := n.channel(ctx, encounterID)
+	if ch == "" {
+		return
+	}
+	msg, err := n.session.ChannelMessageSend(ch, content)
+	if err != nil || msg == nil {
+		return
+	}
+	n.mu.Lock()
+	n.messageByID[encounterID] = initiativeTrackerMsg{channelID: ch, messageID: msg.ID}
+	n.mu.Unlock()
+}
+
+func (n *initiativeTrackerNotifier) UpdateTracker(ctx context.Context, encounterID uuid.UUID, content string) {
+	n.mu.Lock()
+	prev, ok := n.messageByID[encounterID]
+	n.mu.Unlock()
+	if !ok {
+		// No message recorded (probably restarted) — post a new one so the
+		// channel still receives the update.
+		n.PostTracker(ctx, encounterID, content)
+		return
+	}
+	if _, err := n.session.ChannelMessageEdit(prev.channelID, prev.messageID, content); err != nil {
+		return
+	}
+}
+
+func (n *initiativeTrackerNotifier) PostCompletedTracker(ctx context.Context, encounterID uuid.UUID, content string) {
+	ch := n.channel(ctx, encounterID)
+	if ch == "" {
+		return
+	}
+	_, _ = n.session.ChannelMessageSend(ch, content)
+	// Drop the live tracker mapping — combat is over, future updates would
+	// be misleading.
+	n.mu.Lock()
+	delete(n.messageByID, encounterID)
+	n.mu.Unlock()
+}
+
+// firstTurnPingNotifier satisfies combat.TurnStartNotifier by posting the
+// FormatTurnStartPrompt line to the active combatant's #your-turn channel
+// when StartCombat creates the first turn (med-20 / Phase 26a). Without
+// it, the very first PC waits in silence until someone runs /done.
+//
+// Best-effort: any missing dependency or Discord-side error is silently
+// swallowed so the notifier can never roll back the encounter creation
+// path. (StartCombat persists the encounter before it fires this hook.)
+type firstTurnPingNotifier struct {
+	session  discord.Session
+	csp      discord.CampaignSettingsProvider
+	queries  *refdata.Queries
+}
+
+func newFirstTurnPingNotifier(session discord.Session, csp discord.CampaignSettingsProvider, queries *refdata.Queries) *firstTurnPingNotifier {
+	if session == nil || csp == nil || queries == nil {
+		return nil
+	}
+	return &firstTurnPingNotifier{session: session, csp: csp, queries: queries}
+}
+
+func (n *firstTurnPingNotifier) NotifyFirstTurn(ctx context.Context, encounterID uuid.UUID, ti combat.TurnInfo) {
+	channelIDs, err := n.csp.GetChannelIDs(ctx, encounterID)
+	if err != nil {
+		return
+	}
+	yourTurnCh, ok := channelIDs["your-turn"]
+	if !ok || yourTurnCh == "" {
+		return
+	}
+	combatant, err := n.queries.GetCombatant(ctx, ti.CombatantID)
+	if err != nil {
+		return
+	}
+	enc, err := n.queries.GetEncounter(ctx, encounterID)
+	if err != nil {
+		return
+	}
+	content := combat.FormatTurnStartPrompt(enc.Name, ti.RoundNumber, combatant.DisplayName, ti.Turn, &combatant)
+	_, _ = n.session.ChannelMessageSend(yourTurnCh, content)
 }
 
 // buildPortalAPIAndSheetHandlers constructs the portal HTTP handlers that

@@ -686,3 +686,96 @@ func TestCheckHandler_NoOptions(t *testing.T) {
 		t.Fatal("expected a response for no options")
 	}
 }
+
+// --- med-32 / Phase 81: targeted contested check ---
+
+type stubOpponentResolver struct {
+	name      string
+	modifier  int
+	ok        bool
+	seenSkill string
+	seenID    string
+}
+
+func (s *stubOpponentResolver) ResolveContestedOpponent(_ context.Context, _ uuid.UUID, targetShortID, skill string) (string, int, bool) {
+	s.seenSkill = skill
+	s.seenID = targetShortID
+	return s.name, s.modifier, s.ok
+}
+
+func TestCheckHandler_Target_RoutesToContestedCheck(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	// Ensure the active-encounter resolver succeeds so the contested path
+	// engages.
+	encID := uuid.New()
+	h.encounterProvider = &mockCheckEncounterProvider{fnUser: func(_ context.Context, _, _ string) (uuid.UUID, error) {
+		return encID, nil
+	}}
+	resolver := &stubOpponentResolver{name: "Goblin Boss", modifier: 2, ok: true}
+	h.SetOpponentResolver(resolver)
+
+	h.Handle(makeCheckInteraction("athletics", false, false, "G1"))
+
+	if responded == "" {
+		t.Fatal("expected a contested-check response")
+	}
+	if !strings.Contains(responded, "Contested Athletics") {
+		t.Errorf("expected contested message, got: %s", responded)
+	}
+	if resolver.seenID != "G1" {
+		t.Errorf("opponent resolver should see target id G1, got %q", resolver.seenID)
+	}
+	if resolver.seenSkill != "athletics" {
+		t.Errorf("opponent resolver should see skill athletics, got %q", resolver.seenSkill)
+	}
+}
+
+func TestCheckHandler_Target_NoOpponentResolver_FallsBackToSingleCheck(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	// Deliberately no SetOpponentResolver — should NOT engage contested path.
+
+	h.Handle(makeCheckInteraction("perception", false, false, "G1"))
+
+	if strings.Contains(responded, "Contested") {
+		t.Errorf("expected single-check fallback, got contested: %s", responded)
+	}
+	if !strings.Contains(responded, "Aria") {
+		t.Errorf("expected single-check response with character name, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_Target_OpponentNotResolved_FallsBackToSingleCheck(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	encID := uuid.New()
+	h.encounterProvider = &mockCheckEncounterProvider{fnUser: func(_ context.Context, _, _ string) (uuid.UUID, error) {
+		return encID, nil
+	}}
+	h.SetOpponentResolver(&stubOpponentResolver{ok: false})
+
+	h.Handle(makeCheckInteraction("perception", false, false, "ZZ"))
+
+	if strings.Contains(responded, "Contested") {
+		t.Errorf("expected single-check fallback when opponent unresolved, got: %s", responded)
+	}
+}

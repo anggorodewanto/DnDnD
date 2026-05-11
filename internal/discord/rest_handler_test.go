@@ -1177,3 +1177,82 @@ func TestRestHandler_LongRest_PreparedCasterReminder(t *testing.T) {
 		t.Errorf("expected spell slots restored message, got: %s", responded)
 	}
 }
+
+// --- med-34 / Phase 83a: rest gated on DM approval via auto_approve_rest setting ---
+
+func TestRestHandler_AutoApproveRest_False_ShortCircuitsToWaiting(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	// Build a campaign whose settings explicitly disable auto-approval.
+	autoFalse := false
+	settings := struct {
+		TurnTimeoutHours int    `json:"turn_timeout_hours"`
+		DiagonalRule     string `json:"diagonal_rule"`
+		AutoApproveRest  *bool  `json:"auto_approve_rest"`
+	}{TurnTimeoutHours: 24, DiagonalRule: "standard", AutoApproveRest: &autoFalse}
+	raw, _ := json.Marshal(settings)
+
+	campaignID := uuid.New()
+	char := makeRestTestCharacter()
+	char.CampaignID = campaignID
+
+	roller := dice.NewRoller(func(max int) int { return 6 })
+	updaterCalls := 0
+	updater := &mockRestCharacterUpdater{
+		updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+			updaterCalls++
+			return refdata.Character{}, nil
+		},
+	}
+	h := NewRestHandler(
+		sess, roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{
+				ID:       campaignID,
+				Settings: pqtype.NullRawMessage{RawMessage: raw, Valid: true},
+			}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		updater, &mockCheckRollLogger{}, nil,
+	)
+	h.SetNotifier(&recordingNotifier{})
+	h.Handle(makeRestInteraction("short"))
+
+	if !strings.Contains(responded, "DM") {
+		t.Errorf("expected DM-approval message, got: %s", responded)
+	}
+	if !strings.Contains(strings.ToLower(responded), "approve") {
+		t.Errorf("expected approval-pending text, got: %s", responded)
+	}
+	if updaterCalls != 0 {
+		t.Errorf("rest must NOT apply when auto-approval is disabled (saw %d UpdateCharacter calls)", updaterCalls)
+	}
+}
+
+func TestRestHandler_AutoApproveRest_DefaultIsTrue(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	// No settings configured at all — should default to auto-approve and run
+	// the rest immediately (matches historical behaviour).
+	h := setupRestHandler(sess)
+	h.Handle(makeRestInteraction("short"))
+
+	if !strings.Contains(responded, "Short Rest") {
+		t.Errorf("expected the actual rest prompt when auto-approval defaults to on, got: %s", responded)
+	}
+}

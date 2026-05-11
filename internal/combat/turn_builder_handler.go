@@ -203,7 +203,7 @@ func (s *Service) GenerateEnemyTurnPlan(ctx context.Context, encounterID, combat
 		return nil, fmt.Errorf("listing reactions: %w", err)
 	}
 
-	speedFt := parseWalkSpeed(creature.Speed)
+	speedFt := ParseWalkSpeed(creature.Speed)
 
 	// Build a simple grid for pathfinding — use a 20x20 default if no map available
 	grid := buildDefaultGrid(20, 20, combatants, combatant.ID)

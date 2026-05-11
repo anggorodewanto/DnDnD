@@ -3,6 +3,7 @@ package combat
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -404,4 +405,96 @@ func TestListReadiedActions(t *testing.T) {
 	assert.Len(t, readied, 2)
 	assert.True(t, readied[0].IsReadiedAction)
 	assert.True(t, readied[1].IsReadiedAction)
+}
+
+// --- med-28 / Phase 71: ReadyAction deducts slot + sets concentration ---
+
+func TestReadyAction_WithSpell_DeductsSlot(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+
+	slotDeducted := false
+	concentrationSet := false
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, id uuid.UUID) (refdata.Character, error) {
+		assert.Equal(t, charID, id)
+		return char, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		slotDeducted = true
+		// The 2nd-level slot should drop from 3 to 2.
+		var slots map[string]SlotInfo
+		require.NoError(t, json.Unmarshal(arg.SpellSlots.RawMessage, &slots))
+		assert.Equal(t, 2, slots["2"].Current)
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.setCombatantConcentrationFn = func(_ context.Context, arg refdata.SetCombatantConcentrationParams) error {
+		concentrationSet = true
+		assert.Equal(t, combatantID, arg.ID)
+		assert.True(t, arg.ConcentrationSpellName.Valid)
+		assert.Equal(t, "Hold Person", arg.ConcentrationSpellName.String)
+		return nil
+	}
+	store.createReadiedActionDeclarationFn = func(_ context.Context, arg refdata.CreateReadiedActionDeclarationParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{
+			ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID,
+			Description: arg.Description, Status: "active", IsReadiedAction: true,
+			SpellName: arg.SpellName, SpellSlotLevel: arg.SpellSlotLevel,
+		}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ActionUsed: true}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.ReadyAction(context.Background(), ReadyActionCommand{
+		Combatant: refdata.Combatant{
+			ID:          combatantID,
+			EncounterID: encounterID,
+			DisplayName: "Gandalf",
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  []byte(`[]`),
+		},
+		Turn:           refdata.Turn{},
+		Description:    "Cast Hold Person if shaman moves",
+		SpellName:      "Hold Person",
+		SpellSlotLevel: 2,
+	})
+	require.NoError(t, err)
+	assert.True(t, slotDeducted, "spell slot must be deducted at ready time")
+	assert.True(t, concentrationSet, "concentration must be set on the readied spell")
+}
+
+// TestReadyAction_NonSpell_SkipsSlotAndConcentration verifies the non-spell
+// path doesn't try to deduct a slot or set concentration.
+func TestReadyAction_NonSpell_SkipsSlotAndConcentration(t *testing.T) {
+	store := defaultMockStore()
+	concentrationCalls := 0
+	slotCalls := 0
+	store.setCombatantConcentrationFn = func(_ context.Context, _ refdata.SetCombatantConcentrationParams) error {
+		concentrationCalls++
+		return nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		slotCalls++
+		return refdata.Character{ID: arg.ID}, nil
+	}
+	store.createReadiedActionDeclarationFn = func(_ context.Context, arg refdata.CreateReadiedActionDeclarationParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: uuid.New(), Status: "active", IsReadiedAction: true}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ActionUsed: true}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.ReadyAction(context.Background(), ReadyActionCommand{
+		Combatant:   refdata.Combatant{ID: uuid.New(), DisplayName: "Frodo", Conditions: []byte(`[]`)},
+		Turn:        refdata.Turn{},
+		Description: "swing my sword if the door opens",
+	})
+	require.NoError(t, err)
+	assert.Zero(t, slotCalls, "non-spell readied action must not deduct any slot")
+	assert.Zero(t, concentrationCalls, "non-spell readied action must not touch concentration")
 }

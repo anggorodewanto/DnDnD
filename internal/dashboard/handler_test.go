@@ -2,9 +2,12 @@ package dashboard
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/auth"
 	"github.com/stretchr/testify/assert"
@@ -182,3 +185,82 @@ var errLookupFailed = &lookupErr{msg: "lookup failed"}
 type lookupErr struct{ msg string }
 
 func (e *lookupErr) Error() string { return e.msg }
+
+// --- med-40 / Phase 15: Campaign Home live counts ---
+
+type stubApprovalsCounter struct {
+	count int
+	err   error
+	seen  uuid.UUID
+}
+
+func (s *stubApprovalsCounter) CountPendingApprovals(_ context.Context, campaignID uuid.UUID) (int, error) {
+	s.seen = campaignID
+	return s.count, s.err
+}
+
+type stubDMQueueCounter struct {
+	count int
+	err   error
+	seen  uuid.UUID
+}
+
+func (s *stubDMQueueCounter) CountPendingDMQueue(_ context.Context, campaignID uuid.UUID) (int, error) {
+	s.seen = campaignID
+	return s.count, s.err
+}
+
+func TestDashboardHandler_CampaignHome_RendersLiveCounts(t *testing.T) {
+	cid := "11111111-1111-1111-1111-111111111111"
+	h := NewHandler(nil, nil)
+	h.SetCampaignLookup(&stubCampaignLookup{id: cid, status: "active"})
+	approvals := &stubApprovalsCounter{count: 4}
+	dmQueue := &stubDMQueueCounter{count: 7}
+	h.SetCounters(approvals, dmQueue)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "user123"))
+	rec := httptest.NewRecorder()
+	h.ServeDashboard(rec, req)
+
+	body := rec.Body.String()
+	assert.Contains(t, body, ">7<", "DM queue count must render")
+	assert.Contains(t, body, ">4<", "pending approvals count must render")
+	assert.Equal(t, cid, approvals.seen.String(), "approvals counter receives the active campaign id")
+	assert.Equal(t, cid, dmQueue.seen.String(), "dm-queue counter receives the active campaign id")
+}
+
+func TestDashboardHandler_CampaignHome_CounterErrors_DegradeToZero(t *testing.T) {
+	cid := "11111111-1111-1111-1111-111111111111"
+	h := NewHandler(nil, nil)
+	h.SetCampaignLookup(&stubCampaignLookup{id: cid, status: "active"})
+	h.SetCounters(
+		&stubApprovalsCounter{err: errors.New("boom")},
+		&stubDMQueueCounter{err: errors.New("boom")},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "user123"))
+	rec := httptest.NewRecorder()
+	h.ServeDashboard(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code, "counter errors must not break the render")
+	body := rec.Body.String()
+	assert.Contains(t, body, ">0<", "counts fall back to 0 on error")
+}
+
+func TestDashboardHandler_CampaignHome_NoCampaign_KeepsZeroCounts(t *testing.T) {
+	h := NewHandler(nil, nil)
+	approvals := &stubApprovalsCounter{count: 99}
+	dmQueue := &stubDMQueueCounter{count: 99}
+	h.SetCounters(approvals, dmQueue)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "user123"))
+	rec := httptest.NewRecorder()
+	h.ServeDashboard(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, uuid.Nil, approvals.seen, "no lookup id => approvals counter never invoked")
+	assert.Equal(t, uuid.Nil, dmQueue.seen, "no lookup id => dm-queue counter never invoked")
+}

@@ -24,6 +24,20 @@ type Settings struct {
 	DiagonalRule     string            `json:"diagonal_rule"`
 	Open5eSources    []string          `json:"open5e_sources,omitempty"`
 	ChannelIDs       map[string]string `json:"channel_ids,omitempty"`
+	// AutoApproveRest gates the /rest command (med-34 / Phase 83a). When
+	// nil (default) or true, /rest applies its benefits immediately. When
+	// explicitly false, /rest only posts a request to #dm-queue and waits
+	// for the DM to resolve it before applying any benefits.
+	AutoApproveRest *bool `json:"auto_approve_rest,omitempty"`
+}
+
+// AutoApproveRestEnabled reports whether /rest should bypass DM approval.
+// Defaults to true (the historical behaviour) when the field is absent.
+func (s Settings) AutoApproveRestEnabled() bool {
+	if s.AutoApproveRest == nil {
+		return true
+	}
+	return *s.AutoApproveRest
 }
 
 // DefaultSettings returns campaign settings with sensible defaults.

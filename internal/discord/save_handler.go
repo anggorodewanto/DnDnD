@@ -10,6 +10,7 @@ import (
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/check"
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/save"
@@ -93,6 +94,18 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 		RollMode:        rollMode,
 	}
 
+	// med-33 / Phase 82: populate FeatureEffects + EffectCtx so Aura of
+	// Protection, Bless, magic-item save bonuses, etc. are layered onto
+	// the result instead of silently dropped (mirrors the FES population
+	// pattern in attack.go populateAttackFES). char.Classes / char.Features
+	// drive BuildFeatureDefinitions; an unmarshal error degrades to no
+	// feature effects rather than failing the whole roll.
+	input.FeatureEffects = buildSaveFeatureEffects(char)
+	input.EffectCtx = combat.EffectContext{
+		AbilityUsed: strings.ToLower(ability),
+		WearingArmor: char.EquippedArmor.Valid && char.EquippedArmor.String != "",
+	}
+
 	// Apply condition effects if in combat
 	if condInfo, ok := lookupCombatConditions(ctx, h.encounterProvider, h.combatantLookup, interaction.GuildID, userID, char.ID); ok {
 		conds, _ := check.ParseConditions(condInfo.Conditions)
@@ -142,6 +155,25 @@ func (h *SaveHandler) parseOptions(opts []*discordgo.ApplicationCommandInteracti
 type saveCharacterData struct {
 	Scores character.AbilityScores
 	Saves  []string
+}
+
+// buildSaveFeatureEffects collects FES feature definitions from the
+// character's classes + features columns (the same pair that drives attack
+// feature effects). Unmarshal errors degrade to a nil slice — better to
+// drop a feature bonus than to fail the whole save roll. (med-33)
+func buildSaveFeatureEffects(char refdata.Character) []combat.FeatureDefinition {
+	var classes []combat.CharacterClass
+	if len(char.Classes) > 0 {
+		_ = json.Unmarshal(char.Classes, &classes)
+	}
+	var feats []combat.CharacterFeature
+	if char.Features.Valid && len(char.Features.RawMessage) > 0 {
+		_ = json.Unmarshal(char.Features.RawMessage, &feats)
+	}
+	if len(classes) == 0 && len(feats) == 0 {
+		return nil
+	}
+	return combat.BuildFeatureDefinitions(classes, feats)
 }
 
 // parseSaveCharacterData extracts ability scores and save proficiencies from a character.

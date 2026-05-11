@@ -3016,3 +3016,116 @@ func TestFormatCastLog_RegularSlot(t *testing.T) {
 	assert.Contains(t, log, "1 remaining")
 	assert.NotContains(t, log, "pact slot")
 }
+
+// --- med-25 / Phase 61: Cast pre-validates Silence zone ---
+
+// makeBlessSpell returns a Bless spell with V/S components for silence-zone tests.
+func makeBlessSpell() refdata.Spell {
+	return refdata.Spell{
+		ID:             "bless",
+		Name:           "Bless",
+		Level:          1,
+		CastingTime:    "1 action",
+		RangeType:      "ranged",
+		RangeFt:        sql.NullInt32{Int32: 30, Valid: true},
+		Components:     []string{"V", "S", "M"},
+		Concentration:  sql.NullBool{Bool: true, Valid: true},
+		ResolutionMode: "auto",
+	}
+}
+
+// TestCast_RejectsInSilenceZone verifies that a caster standing in a Silence
+// zone cannot cast a spell with V or S components. Crucially, the slot must
+// NOT be deducted on rejection (med-25 / Phase 61).
+func TestCast_RejectsInSilenceZone(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID) // E5
+	target := makeSpellTarget()
+	turnID := uuid.New()
+
+	slotDeducted := false
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeBlessSpell(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	// A 100ft-side silence square at A1 covers the whole grid including E5.
+	store.listEncounterZonesByEncounterIDFn = func(_ context.Context, encID uuid.UUID) ([]refdata.EncounterZone, error) {
+		return []refdata.EncounterZone{{
+			ID: uuid.New(), EncounterID: encID, ZoneType: "silence",
+			OriginCol: "A", OriginRow: 1, Shape: "square",
+			Dimensions: json.RawMessage(`{"side_ft":100}`),
+		}}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		slotDeducted = true
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "bless",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: turnID, CombatantID: caster.ID},
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.Error(t, err, "Cast must reject V/S spells inside a Silence zone")
+	assert.Contains(t, err.Error(), "Silence")
+	assert.False(t, slotDeducted, "spell slot must NOT be deducted on silence rejection")
+}
+
+// TestCast_AllowsNonVerbalInSilence verifies that a spell with no V or S
+// components is unaffected by Silence (uses an M-only spell as a sentinel).
+func TestCast_AllowsNonVerbalInSilence(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	turnID := uuid.New()
+
+	store := defaultMockStore()
+	// Spell with material-only components (rare but legal): Silence does
+	// not block it.
+	matOnly := makeBlessSpell()
+	matOnly.Components = []string{"M"}
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return matOnly, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.listEncounterZonesByEncounterIDFn = func(_ context.Context, encID uuid.UUID) ([]refdata.EncounterZone, error) {
+		return []refdata.EncounterZone{{
+			ID: uuid.New(), EncounterID: encID, ZoneType: "silence",
+			OriginCol: "A", OriginRow: 1, Shape: "square",
+			Dimensions: json.RawMessage(`{"side_ft":100}`),
+		}}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed, ActionSpellCast: arg.ActionSpellCast}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "material-only",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: turnID, CombatantID: caster.ID},
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err, "M-only spell must succeed even inside Silence")
+}

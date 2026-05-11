@@ -43,6 +43,16 @@ type CheckCombatantLookup interface {
 	ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
 }
 
+// CheckOpponentResolver looks up the contested-check opposing roll modifier
+// for a target combatant identified by short ID. Returns (displayName,
+// modifier, true) on success or ("", 0, false) when the opponent or their
+// stats can't be resolved (the handler then falls back to a regular single
+// check). Implementations typically join through Character / Creature
+// ability scores for the same skill the initiator rolled. (med-32 / Phase 81)
+type CheckOpponentResolver interface {
+	ResolveContestedOpponent(ctx context.Context, encounterID uuid.UUID, targetShortID, skill string) (name string, modifier int, ok bool)
+}
+
 // CheckHandler handles the /check slash command.
 type CheckHandler struct {
 	session           Session
@@ -53,7 +63,16 @@ type CheckHandler struct {
 	combatantLookup   CheckCombatantLookup
 	rollLogger        dice.RollHistoryLogger
 	notifier          dmqueue.Notifier
+	// med-32 / Phase 81: opponent resolver wiring for contested checks
+	// triggered by the slash command's `target` option. Nil disables the
+	// contested path entirely (the handler then runs a regular single
+	// check, matching the historical behaviour).
+	opponentResolver CheckOpponentResolver
 }
+
+// SetOpponentResolver wires the contested-check opponent lookup. Pass nil
+// to keep the historical "ignore target" behaviour (med-32).
+func (h *CheckHandler) SetOpponentResolver(r CheckOpponentResolver) { h.opponentResolver = r }
 
 // SetNotifier wires the dm-queue Notifier so non-trivial /check rolls are
 // gated through #dm-queue for DM narration. When nil (or unset), every
@@ -93,7 +112,7 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
 
 	// Parse options
-	skill, adv, disadv, dc, hasDC := h.parseOptions(data.Options)
+	skill, adv, disadv, dc, hasDC, target := h.parseOptions(data.Options)
 	if skill == "" {
 		respondEphemeral(h.session, interaction, "Please specify a skill or ability (e.g. `/check perception`).")
 		return
@@ -140,6 +159,19 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 		input.ExhaustionLevel = condInfo.ExhaustionLevel
 	}
 
+	// med-32 / Phase 81: targeted contested check. When the player supplies
+	// a target short ID (e.g. /check athletics target:G1), look up the
+	// opposing combatant in the active encounter and run a contested check
+	// using check.Service.ContestedCheck. Falls back to a single check when
+	// the target cannot be resolved (no encounter / unknown short id).
+	if target != "" {
+		if h.handleContestedCheck(ctx, interaction, char, input, target) {
+			return
+		}
+		// Fall through to the regular SingleCheck path on lookup failure
+		// so the player still gets a numeric result.
+	}
+
 	result, err := h.checkService.SingleCheck(input)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Check failed: %v", err))
@@ -163,6 +195,72 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 	respondEphemeral(h.session, interaction, msg)
 
 	h.logRollIfWanted(char, result)
+}
+
+// handleContestedCheck attempts to resolve the contested-check path when
+// the player supplied a target short ID. Returns true when the contested
+// path was taken (initiator + opponent both rolled, response posted);
+// false when the path could not be taken and the caller should fall
+// through to the regular single check. (med-32 / Phase 81)
+func (h *CheckHandler) handleContestedCheck(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, input check.SingleCheckInput, target string) bool {
+	if h.opponentResolver == nil || h.encounterProvider == nil {
+		return false
+	}
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, discordUserID(interaction))
+	if err != nil {
+		return false
+	}
+	oppName, oppMod, ok := h.opponentResolver.ResolveContestedOpponent(ctx, encounterID, target, input.Skill)
+	if !ok {
+		return false
+	}
+
+	// Initiator modifier mirrors what SingleCheck would compute internally.
+	initiatorMod := character.SkillModifier(input.Scores, input.Skill, input.ProficientSkills, input.ExpertiseSkills, input.JackOfAllTrades, input.ProfBonus)
+
+	contested := h.checkService.ContestedCheck(check.ContestedCheckInput{
+		Initiator: check.ContestedParticipant{Name: char.Name, Modifier: initiatorMod, RollMode: input.RollMode},
+		Opponent:  check.ContestedParticipant{Name: oppName, Modifier: oppMod, RollMode: dice.Normal},
+	})
+
+	msg := formatContestedCheckResult(input.Skill, contested)
+	respondEphemeral(h.session, interaction, msg)
+
+	// Log the initiator's roll to roll history; opponent's roll is the DM's
+	// to log if they care. Mirrors logRollIfWanted semantics.
+	if h.rollLogger != nil {
+		_ = h.rollLogger.LogRoll(dice.RollLogEntry{
+			DiceRolls:  []dice.GroupResult{{Die: 20, Count: 1, Results: contested.InitiatorD20.Rolls, Total: contested.InitiatorD20.Chosen}},
+			Total:      contested.InitiatorTotal,
+			Expression: fmt.Sprintf("d20+%d", initiatorMod),
+			Roller:     char.Name,
+			Purpose:    fmt.Sprintf("contested %s vs %s", input.Skill, oppName),
+			Breakdown:  contested.InitiatorD20.Breakdown,
+			Timestamp:  contested.InitiatorD20.Timestamp,
+		})
+	}
+	return true
+}
+
+// formatContestedCheckResult renders a contested-check outcome as a single
+// Discord message. Tie outcomes call out the spec's tie-handling note.
+func formatContestedCheckResult(skill string, r check.ContestedCheckResult) string {
+	skillLabel := titleSkill(skill)
+	if r.Tie {
+		return fmt.Sprintf(
+			"🎲 **Contested %s** — Tie!\n• %s rolled %d\n• %s rolled %d\n_Tie: status quo holds._",
+			skillLabel,
+			r.InitiatorD20.Breakdown, r.InitiatorTotal,
+			r.OpponentD20.Breakdown, r.OpponentTotal,
+		)
+	}
+	return fmt.Sprintf(
+		"🎲 **Contested %s** — **%s wins**\n• Initiator rolled %d (%s)\n• Opponent rolled %d (%s)",
+		skillLabel,
+		r.Winner,
+		r.InitiatorTotal, r.InitiatorD20.Breakdown,
+		r.OpponentTotal, r.OpponentD20.Breakdown,
+	)
 }
 
 // shouldGate decides whether to route the result through #dm-queue. The
@@ -249,8 +347,9 @@ func (h *CheckHandler) logRollIfWanted(char refdata.Character, result check.Sing
 	})
 }
 
-// parseOptions extracts skill, adv, disadv, dc, and hasDC from command options.
-func (h *CheckHandler) parseOptions(opts []*discordgo.ApplicationCommandInteractionDataOption) (skill string, adv, disadv bool, dc int, hasDC bool) {
+// parseOptions extracts skill, adv, disadv, dc, hasDC, and target from
+// command options. (med-32: target was previously parsed but discarded.)
+func (h *CheckHandler) parseOptions(opts []*discordgo.ApplicationCommandInteractionDataOption) (skill string, adv, disadv bool, dc int, hasDC bool, target string) {
 	for _, opt := range opts {
 		switch opt.Name {
 		case "skill":
@@ -262,6 +361,8 @@ func (h *CheckHandler) parseOptions(opts []*discordgo.ApplicationCommandInteract
 		case "dc":
 			dc = int(opt.IntValue())
 			hasDC = true
+		case "target":
+			target = opt.StringValue()
 		}
 	}
 	return

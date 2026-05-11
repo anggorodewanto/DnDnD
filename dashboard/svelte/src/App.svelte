@@ -20,8 +20,27 @@
   let turnBuilderEncounterId = $state(null);
   let turnBuilderCombatantId = $state(null);
   let turnBuilderCombatantName = $state(null);
-  // For demo purposes, use a fixed campaign ID. In production this comes from session.
-  let campaignId = $state('00000000-0000-0000-0000-000000000001');
+  // med-39 / Phase 21a: campaign id is fetched from /api/me on boot so the
+  // Svelte panels operate against the authenticated DM's actual campaign
+  // instead of a hard-coded placeholder UUID. Falls back to '' (empty) when
+  // the user has no active campaign yet so panels can render an empty state.
+  let campaignId = $state('');
+
+  // Fetch the active campaign id on boot. Best-effort: any network /
+  // unauthenticated response leaves campaignId='' so the SPA still renders.
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    fetch('/api/me', { credentials: 'same-origin' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && typeof data.campaign_id === 'string' && data.campaign_id !== '') {
+          campaignId = data.campaign_id;
+        }
+      })
+      .catch(() => {
+        /* swallow: campaignId stays empty so panels can render an empty state */
+      });
+  });
 
   // Determine initial view from URL hash
   function getInitialView() {

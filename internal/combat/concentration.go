@@ -99,6 +99,27 @@ func ValidateSilenceZone(inSilence bool, spell refdata.Spell) error {
 	return nil
 }
 
+// combatantInSilenceZone returns true when the combatant's tile is inside
+// any Silence zone in their encounter. Used by Cast / CastAoE to pre-block
+// V/S spells before any slot is deducted (med-25 / Phase 61).
+func (s *Service) combatantInSilenceZone(ctx context.Context, c refdata.Combatant) (bool, error) {
+	zones, err := s.store.ListEncounterZonesByEncounterID(ctx, c.EncounterID)
+	if err != nil {
+		return false, fmt.Errorf("listing zones: %w", err)
+	}
+	col := colToIndex(c.PositionCol)
+	row := int(c.PositionRow) - 1
+	for _, z := range zones {
+		if z.ZoneType != "silence" {
+			continue
+		}
+		if tileInSet(col, row, zoneAffectedTiles(z)) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // CheckConcentrationInSilence checks if being in a silence zone breaks
 // concentration on a spell with V or S components.
 func CheckConcentrationInSilence(currentConcentration string, inSilence bool, spell refdata.Spell) ConcentrationBreakResult {

@@ -341,6 +341,17 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		return AoECastResult{}, fmt.Errorf("getting caster: %w", err)
 	}
 
+	// 4a. med-25 / Phase 61: pre-validate Silence zones for AoE casts too.
+	// Same rationale as Cast — slot must not be deducted if the cast is
+	// silenced.
+	inSilence, err := s.combatantInSilenceZone(ctx, caster)
+	if err != nil {
+		return AoECastResult{}, fmt.Errorf("checking silence zone: %w", err)
+	}
+	if err := ValidateSilenceZone(inSilence, spell); err != nil {
+		return AoECastResult{}, err
+	}
+
 	// 5. Look up character for spell slots and ability scores
 	if !caster.CharacterID.Valid {
 		return AoECastResult{}, errors.New("only player characters can cast spells via /cast")

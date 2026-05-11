@@ -670,12 +670,32 @@ func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, r
 	}
 
 	s.postEnemyTurnReady(ctx, encounterID, combatant)
+	s.refreshInitiativeTracker(ctx, encounterID, combatant.ID)
 
 	return TurnInfo{
 		Turn:        turn,
 		CombatantID: combatant.ID,
 		RoundNumber: roundNumber,
 	}, nil
+}
+
+// refreshInitiativeTracker fires the wired InitiativeTrackerNotifier so the
+// persistent #initiative-tracker message reflects the new active turn
+// (med-18 / Phase 25). Best-effort: nil notifier or list errors silently
+// no-op so a Discord-side hiccup never undoes a turn advance.
+func (s *Service) refreshInitiativeTracker(ctx context.Context, encounterID, currentCombatantID uuid.UUID) {
+	if s.initiativeTrackerNotifier == nil {
+		return
+	}
+	enc, err := s.store.GetEncounter(ctx, encounterID)
+	if err != nil {
+		return
+	}
+	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return
+	}
+	s.initiativeTrackerNotifier.UpdateTracker(ctx, encounterID, FormatInitiativeTracker(enc, combatants, currentCombatantID))
 }
 
 // postEnemyTurnReady dispatches a KindEnemyTurnReady notification through

@@ -8,9 +8,25 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/ab/dndnd/internal/auth"
 	"github.com/ab/dndnd/internal/errorlog"
 )
+
+// PendingApprovalsCounter returns the number of pending character approvals
+// for the given campaign. Implementations typically wrap ApprovalStore.
+// Errors are logged and the count degrades to 0 — Campaign Home must keep
+// rendering even when the underlying store is unreachable (med-40).
+type PendingApprovalsCounter interface {
+	CountPendingApprovals(ctx context.Context, campaignID uuid.UUID) (int, error)
+}
+
+// DMQueueCounter returns the number of pending DM queue items for the given
+// campaign. Same degrade-on-error contract as PendingApprovalsCounter.
+type DMQueueCounter interface {
+	CountPendingDMQueue(ctx context.Context, campaignID uuid.UUID) (int, error)
+}
 
 // CampaignLookup returns the (id, status) of the campaign the DM is currently
 // operating on. Phase 115 uses this to drive the Pause/Resume button state in
@@ -78,6 +94,11 @@ type Handler struct {
 	// Phase 115: optional campaign lookup so the Pause/Resume button can
 	// render with the right label and endpoint target.
 	campaignLookup CampaignLookup
+	// med-40 / Phase 15: optional counters for the live Campaign Home
+	// pending DM-queue / pending-approval cards. When unset both fall back
+	// to 0 (the original placeholder behaviour).
+	approvalsCounter PendingApprovalsCounter
+	dmQueueCounter   DMQueueCounter
 }
 
 // SetCampaignLookup wires a CampaignLookup so the Pause/Resume button can
@@ -85,6 +106,15 @@ type Handler struct {
 // inert). Safe to call at any time before the handler starts serving.
 func (h *Handler) SetCampaignLookup(lookup CampaignLookup) {
 	h.campaignLookup = lookup
+}
+
+// SetCounters wires the live Campaign Home pending-approval and
+// pending-DM-queue counts. Either or both may be nil; nil counters keep the
+// historical 0-placeholder behaviour. med-40 closes the gap that the cards
+// always read 0 even after Phase 16 shipped a real approval store.
+func (h *Handler) SetCounters(approvals PendingApprovalsCounter, dmQueue DMQueueCounter) {
+	h.approvalsCounter = approvals
+	h.dmQueueCounter = dmQueue
 }
 
 // SetErrorReader wires the 24h error count into the Campaign Home sidebar
@@ -111,6 +141,43 @@ func NewHandler(logger *slog.Logger, hub *Hub) *Handler {
 		tmpl:   tmpl,
 		hub:    hub,
 	}
+}
+
+// lookupCounts resolves the live Campaign Home counts. Best-effort: any
+// missing counter, missing/invalid campaign id, or backing-store error
+// degrades silently to 0 so the dashboard always renders. (med-40)
+func (h *Handler) lookupCounts(ctx context.Context, campaignID string) (approvals, dmQueue int) {
+	if campaignID == "" {
+		return 0, 0
+	}
+	cid, err := uuid.Parse(campaignID)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("dashboard counts: invalid campaign id", "id", campaignID, "error", err)
+		}
+		return 0, 0
+	}
+	if h.approvalsCounter != nil {
+		n, err := h.approvalsCounter.CountPendingApprovals(ctx, cid)
+		if err != nil {
+			if h.logger != nil {
+				h.logger.Warn("dashboard pending approvals count failed", "error", err)
+			}
+		} else {
+			approvals = n
+		}
+	}
+	if h.dmQueueCounter != nil {
+		n, err := h.dmQueueCounter.CountPendingDMQueue(ctx, cid)
+		if err != nil {
+			if h.logger != nil {
+				h.logger.Warn("dashboard dm-queue count failed", "error", err)
+			}
+		} else {
+			dmQueue = n
+		}
+	}
+	return approvals, dmQueue
 }
 
 // lookupCampaign is a best-effort wrapper around the configured CampaignLookup
@@ -143,11 +210,12 @@ func (h *Handler) ServeDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	campaignID, campaignStatus := h.lookupCampaign(r.Context(), userID)
+	approvals, dmQueue := h.lookupCounts(r.Context(), campaignID)
 
 	data := CampaignHomeData{
 		Nav:              navWithErrorBadge(errorCount),
-		DMQueueCount:     0,
-		PendingApprovals: 0,
+		DMQueueCount:     dmQueue,
+		PendingApprovals: approvals,
 		ActiveEncounters: []string{},
 		SavedEncounters:  []string{},
 		CampaignID:       campaignID,

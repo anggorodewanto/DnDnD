@@ -337,3 +337,53 @@ func TestSaveHandler_BadProficienciesJSON(t *testing.T) {
 		t.Errorf("expected Error for bad JSON, got: %s", responded)
 	}
 }
+
+// --- med-33 / Phase 82: FeatureEffects populated from char.Classes + char.Features ---
+
+func TestBuildSaveFeatureEffects_PopulatesFromCharacterFeatures(t *testing.T) {
+	classes, err := json.Marshal([]map[string]any{{"class": "Rogue", "level": 7}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	feats, err := json.Marshal([]map[string]any{
+		{"name": "Evasion", "mechanical_effect": "evasion"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	char := refdata.Character{
+		Classes:  classes,
+		Features: pqtype.NullRawMessage{RawMessage: feats, Valid: true},
+	}
+
+	defs := buildSaveFeatureEffects(char)
+
+	if len(defs) == 0 {
+		t.Fatalf("expected feature definitions to be populated, got 0")
+	}
+	found := false
+	for _, d := range defs {
+		if d.Name == "Evasion" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected Evasion in feature definitions, got: %+v", defs)
+	}
+}
+
+func TestBuildSaveFeatureEffects_EmptyClassesAndFeatures_ReturnsNil(t *testing.T) {
+	char := refdata.Character{}
+	if defs := buildSaveFeatureEffects(char); defs != nil {
+		t.Errorf("expected nil for empty classes/features, got %+v", defs)
+	}
+}
+
+func TestBuildSaveFeatureEffects_BadJSON_DegradesToNil(t *testing.T) {
+	char := refdata.Character{
+		Classes: []byte("not json"),
+	}
+	// Should degrade gracefully — no panic, no error, just no extra effects.
+	_ = buildSaveFeatureEffects(char)
+}

@@ -111,6 +111,35 @@ func (l dashboardCampaignLookup) LookupActiveCampaign(ctx context.Context, dmUse
 	return "", "", nil
 }
 
+// approvalsCounter adapts dashboard.ApprovalStore.ListPendingApprovals to
+// dashboard.PendingApprovalsCounter for the Campaign Home pending-approvals
+// card (med-40 / Phase 15).
+type approvalsCounter struct {
+	store dashboard.ApprovalStore
+}
+
+func (a approvalsCounter) CountPendingApprovals(ctx context.Context, campaignID uuid.UUID) (int, error) {
+	entries, err := a.store.ListPendingApprovals(ctx, campaignID)
+	if err != nil {
+		return 0, err
+	}
+	return len(entries), nil
+}
+
+// dmQueueCounter adapts dmqueue.PgStore.ListPendingForCampaign to
+// dashboard.DMQueueCounter for the Campaign Home dm-queue card (med-40).
+type dmQueueCounter struct {
+	store *dmqueue.PgStore
+}
+
+func (d dmQueueCounter) CountPendingDMQueue(ctx context.Context, campaignID uuid.UUID) (int, error) {
+	items, err := d.store.ListPendingForCampaign(ctx, campaignID)
+	if err != nil {
+		return 0, err
+	}
+	return len(items), nil
+}
+
 // charCreateRefData adapts portal.RefDataAdapter to the narrower
 // dashboard.RefDataForCreate interface (which omits the per-campaign Open5e
 // gating that the portal flow exposes via an extra campaignID arg).
@@ -578,6 +607,11 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// off the DM's current campaign.
 		dashHandler.SetCampaignLookup(dashboardCampaignLookup{queries: queries})
 
+		// med-39 / Phase 21a: GET /api/me returns the authenticated DM's
+		// active campaign id so the Svelte SPA can replace its hard-coded
+		// placeholder UUID with the real per-DM campaign id on boot.
+		dashboard.RegisterMeRoute(router, dashboard.NewMeHandler(logger, dashboardCampaignLookup{queries: queries}), authMw)
+
 		// Phase 110: exploration dashboard (Q4a). Mount behind authMw so the
 		// page is only reachable to authenticated DMs. Queries directly
 		// satisfy exploration.Store and exploration.MapLister.
@@ -602,6 +636,12 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// session is available; otherwise it stays nil and the handler
 		// silently skips the player DM (matches the cardPoster pattern).
 		approvalStore := dashboard.NewDBApprovalStore(queries)
+		// med-40 / Phase 15: Campaign Home cards now show live counts
+		// instead of the historical 0 placeholders.
+		dashHandler.SetCounters(
+			approvalsCounter{store: approvalStore},
+			dmQueueCounter{store: dmQueueStore},
+		)
 		var cardPoster dashboard.CharacterCardPoster
 		if discordSession != nil {
 			cardSvc := charactercard.NewService(discordSession, queries, logger)
@@ -780,6 +820,23 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 					return queries.GetCampaignByEncounterID(ctx, encounterID)
 				},
 			)
+
+			// med-20 / Phase 26a: post the first-combatant ping when
+			// StartCombat creates the first turn so players don't sit in
+			// silence until someone runs /done. Best-effort: a nil notifier
+			// is tolerated and the StartCombat flow degrades silently.
+			if firstTurnNotifier := newFirstTurnPingNotifier(discordSession, campaignSettingsProvider, queries); firstTurnNotifier != nil {
+				combatSvc.SetTurnStartNotifier(firstTurnNotifier)
+			}
+
+			// med-18 / Phase 25: post + auto-update the persistent
+			// #initiative-tracker message. The message ID lives in an
+			// in-memory map for now; bot restart causes the next update to
+			// post a fresh message (the user-visible behaviour stays correct,
+			// just no edit-in-place across restarts).
+			if trackerNotifier := newInitiativeTrackerNotifier(discordSession, campaignSettingsProvider); trackerNotifier != nil {
+				combatSvc.SetInitiativeTrackerNotifier(trackerNotifier)
+			}
 
 			// Phase 22 wiring (high-10): the production map regenerator.
 			// done_handler.PostCombatMap and enemy_turn_notifier both

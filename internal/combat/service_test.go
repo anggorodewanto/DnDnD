@@ -2412,3 +2412,353 @@ func TestService_AddCombatant_SkipsActiveEncounterCheckForNPCs(t *testing.T) {
 	require.NoError(t, err)
 }
 
+
+// --- med-19 / Phase 26b: EndCombat cleanup (concentration end + timer pause) ---
+
+// TestEndCombat_BreaksLingeringConcentration verifies that combatants holding
+// concentration on a spell when combat ends have BreakConcentrationFully
+// invoked: the concentration columns get cleared and concentration-tagged
+// zones get removed.
+func TestEndCombat_BreaksLingeringConcentration(t *testing.T) {
+	encounterID := uuid.New()
+	concentratorID := uuid.New()
+	clearCalls := 0
+	zoneDeleteCalls := 0
+	store := defaultMockStore()
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 3}, nil
+	}
+	store.updateEncounterStatusFn = func(_ context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed", RoundNumber: 3}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{{
+			ID: concentratorID, IsAlive: true, DisplayName: "Cleric", Conditions: json.RawMessage(`[]`),
+			ConcentrationSpellID:   sql.NullString{String: "bless", Valid: true},
+			ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+		}}, nil
+	}
+	store.clearCombatantConcentrationFn = func(_ context.Context, id uuid.UUID) error {
+		clearCalls++
+		assert.Equal(t, concentratorID, id)
+		return nil
+	}
+	store.deleteConcentrationZonesByCombatantFn = func(_ context.Context, id uuid.UUID) (int64, error) {
+		zoneDeleteCalls++
+		assert.Equal(t, concentratorID, id)
+		return 0, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.EndCombat(context.Background(), encounterID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, clearCalls, "concentration must be cleared on the concentrator")
+	assert.Equal(t, 1, zoneDeleteCalls, "concentration-tagged zones must be cleaned up")
+}
+
+// TestEndCombat_PausesCombatTimers verifies PauseCombatTimers fires so any
+// outstanding turn timeouts don't tick after combat ends.
+func TestEndCombat_PausesCombatTimers(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	clearTimeoutCalls := 0
+	store := defaultMockStore()
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1}, nil
+	}
+	store.updateEncounterStatusFn = func(_ context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed"}, nil
+	}
+	store.listActiveTurnsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Turn, error) {
+		return []refdata.Turn{{ID: turnID}}, nil
+	}
+	store.clearTurnTimeoutFn = func(_ context.Context, id uuid.UUID) (refdata.Turn, error) {
+		clearTimeoutCalls++
+		return refdata.Turn{ID: id}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return nil, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.EndCombat(context.Background(), encounterID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, clearTimeoutCalls, "active turn timeouts must be cleared by PauseCombatTimers")
+}
+
+// --- med-20 / Phase 26a: StartCombat fires first-turn ping ---
+
+type stubTurnStartNotifier struct {
+	calls []TurnInfo
+}
+
+func (s *stubTurnStartNotifier) NotifyFirstTurn(_ context.Context, _ uuid.UUID, ti TurnInfo) {
+	s.calls = append(s.calls, ti)
+}
+
+// TestService_StartCombat_FiresFirstTurnPing reuses the StartCombat_Success
+// fixture pattern but wires a stub notifier and asserts NotifyFirstTurn fires
+// exactly once with the first turn info.
+func TestService_StartCombat_FiresFirstTurnPing(t *testing.T) {
+	templateID := uuid.New()
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(_ context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID: templateID, CampaignID: campaignID,
+			MapID: uuid.NullUUID{UUID: mapID, Valid: true},
+			Name:  "Goblin Ambush",
+			Creatures: json.RawMessage(`[
+				{"creature_ref_id":"goblin","short_id":"G1","display_name":"Goblin","position_col":"A","position_row":1,"quantity":1}
+			]`),
+		}, nil
+	}
+	store.getCreatureFn = func(_ context.Context, _ string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID: "goblin", Name: "Goblin", Ac: 15, HpAverage: 7,
+			Speed:         json.RawMessage(`{"walk":30}`),
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`),
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID: charID, Name: "Aragorn", HpMax: 45, HpCurrent: 45, Ac: 18, SpeedFt: 30,
+			AbilityScores: json.RawMessage(`{"str":16,"dex":14,"con":14,"int":10,"wis":12,"cha":14}`),
+		}, nil
+	}
+	createdIDs := []uuid.UUID{}
+	store.createEncounterFn = func(_ context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: encounterID, CampaignID: campaignID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}, Name: arg.Name, Status: arg.Status, RoundNumber: arg.RoundNumber}, nil
+	}
+	store.createCombatantFn = func(_ context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		cID := uuid.New()
+		createdIDs = append(createdIDs, cID)
+		return refdata.Combatant{
+			ID: cID, EncounterID: arg.EncounterID, CharacterID: arg.CharacterID,
+			ShortID: arg.ShortID, DisplayName: arg.DisplayName, HpMax: arg.HpMax,
+			HpCurrent: arg.HpCurrent, Ac: arg.Ac, IsAlive: true, IsNpc: arg.IsNpc, IsVisible: true,
+			PositionCol: arg.PositionCol, PositionRow: arg.PositionRow,
+			Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: createdIDs[0], EncounterID: encounterID, DisplayName: "Goblin", ShortID: "G1", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
+			{ID: createdIDs[1], EncounterID: encounterID, DisplayName: "Aragorn", ShortID: "AR", IsAlive: true, IsNpc: false, HpMax: 45, HpCurrent: 45, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+		}, nil
+	}
+	store.updateCombatantInitiativeFn = func(_ context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, InitiativeRoll: arg.InitiativeRoll, InitiativeOrder: arg.InitiativeOrder, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.updateEncounterRoundFn = func(_ context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber, Name: "Goblin Ambush", Status: "active"}, nil
+	}
+	store.updateEncounterStatusFn = func(_ context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: arg.Status, Name: "Goblin Ambush", RoundNumber: 1}, nil
+	}
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Name: "Goblin Ambush", Status: "active", RoundNumber: 1}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(_ context.Context, _ refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	turnID := uuid.New()
+	store.createTurnFn = func(_ context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+	store.updateEncounterCurrentTurnFn = func(_ context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, CurrentTurnID: arg.CurrentTurnID, RoundNumber: 1, Name: "Goblin Ambush"}, nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 15 })
+	svc := NewService(store)
+	notifier := &stubTurnStartNotifier{}
+	svc.SetTurnStartNotifier(notifier)
+
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID:   templateID,
+		CharacterIDs: []uuid.UUID{charID},
+		CharacterPositions: map[uuid.UUID]Position{
+			charID: {Col: "D", Row: 5},
+		},
+	}, roller)
+	require.NoError(t, err)
+	require.Len(t, notifier.calls, 1, "first-turn ping must fire exactly once")
+	assert.Equal(t, turnID, notifier.calls[0].Turn.ID)
+}
+
+func TestService_StartCombat_NilTurnStartNotifier_NoOp(t *testing.T) {
+	// Reuse the existing successful path; the absence of SetTurnStartNotifier
+	// must not cause StartCombat to fail. The TestService_StartCombat_Success
+	// test already covers this implicitly; this case is an explicit nil
+	// notifier to lock the contract.
+	templateID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(_ context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{ID: id, Creatures: json.RawMessage(`[]`)}, nil
+	}
+	svc := NewService(store)
+	svc.SetTurnStartNotifier(nil)
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{TemplateID: templateID}, roller)
+	// May error on later steps (no PCs / no combatants) but must not panic
+	// because the notifier is nil — that's the contract this guards.
+	_ = err
+}
+
+// --- med-18 / Phase 25: initiative tracker auto-post + auto-update ---
+
+type stubInitiativeTrackerNotifier struct {
+	posts          []string
+	updates        []string
+	completedPosts []string
+}
+
+func (s *stubInitiativeTrackerNotifier) PostTracker(_ context.Context, _ uuid.UUID, content string) {
+	s.posts = append(s.posts, content)
+}
+func (s *stubInitiativeTrackerNotifier) UpdateTracker(_ context.Context, _ uuid.UUID, content string) {
+	s.updates = append(s.updates, content)
+}
+func (s *stubInitiativeTrackerNotifier) PostCompletedTracker(_ context.Context, _ uuid.UUID, content string) {
+	s.completedPosts = append(s.completedPosts, content)
+}
+
+func TestService_StartCombat_PostsInitiativeTracker(t *testing.T) {
+	templateID := uuid.New()
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(_ context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID: templateID, CampaignID: campaignID,
+			MapID: uuid.NullUUID{UUID: mapID, Valid: true},
+			Name:  "Goblin Ambush",
+			Creatures: json.RawMessage(`[
+				{"creature_ref_id":"goblin","short_id":"G1","display_name":"Goblin","position_col":"A","position_row":1,"quantity":1}
+			]`),
+		}, nil
+	}
+	store.getCreatureFn = func(_ context.Context, _ string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID: "goblin", Name: "Goblin", Ac: 15, HpAverage: 7,
+			Speed:         json.RawMessage(`{"walk":30}`),
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`),
+		}, nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID: charID, Name: "Aragorn", HpMax: 45, HpCurrent: 45, Ac: 18, SpeedFt: 30,
+			AbilityScores: json.RawMessage(`{"str":16,"dex":14,"con":14,"int":10,"wis":12,"cha":14}`),
+		}, nil
+	}
+	createdIDs := []uuid.UUID{}
+	store.createEncounterFn = func(_ context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: encounterID, CampaignID: campaignID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}, Name: arg.Name, Status: arg.Status, RoundNumber: arg.RoundNumber}, nil
+	}
+	store.createCombatantFn = func(_ context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		cID := uuid.New()
+		createdIDs = append(createdIDs, cID)
+		return refdata.Combatant{
+			ID: cID, EncounterID: arg.EncounterID, CharacterID: arg.CharacterID,
+			ShortID: arg.ShortID, DisplayName: arg.DisplayName, HpMax: arg.HpMax,
+			HpCurrent: arg.HpCurrent, Ac: arg.Ac, IsAlive: true, IsNpc: arg.IsNpc, IsVisible: true,
+			PositionCol: arg.PositionCol, PositionRow: arg.PositionRow,
+			Conditions: json.RawMessage(`[]`),
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: createdIDs[0], EncounterID: encounterID, DisplayName: "Goblin", ShortID: "G1", IsAlive: true, IsNpc: true, HpMax: 7, HpCurrent: 7, Conditions: json.RawMessage(`[]`), CreatureRefID: sql.NullString{String: "goblin", Valid: true}},
+			{ID: createdIDs[1], EncounterID: encounterID, DisplayName: "Aragorn", ShortID: "AR", IsAlive: true, IsNpc: false, HpMax: 45, HpCurrent: 45, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+		}, nil
+	}
+	store.updateCombatantInitiativeFn = func(_ context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		// Return rich combatant data so the tracker post (which uses the
+		// updated rows from RollInitiative) carries display names.
+		for _, c := range []refdata.Combatant{
+			{ID: createdIDs[0], DisplayName: "Goblin", IsNpc: true, HpMax: 7, HpCurrent: 7},
+			{ID: createdIDs[1], DisplayName: "Aragorn", IsNpc: false, HpMax: 45, HpCurrent: 45, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}},
+		} {
+			if c.ID == arg.ID {
+				c.EncounterID = encounterID
+				c.InitiativeRoll = arg.InitiativeRoll
+				c.InitiativeOrder = arg.InitiativeOrder
+				c.IsAlive = true
+				c.Conditions = json.RawMessage(`[]`)
+				return c, nil
+			}
+		}
+		return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, InitiativeRoll: arg.InitiativeRoll, InitiativeOrder: arg.InitiativeOrder, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.updateEncounterRoundFn = func(_ context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber, Name: "Goblin Ambush", Status: "active"}, nil
+	}
+	store.updateEncounterStatusFn = func(_ context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: arg.Status, Name: "Goblin Ambush", RoundNumber: 1}, nil
+	}
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Name: "Goblin Ambush", Status: "active", RoundNumber: 1}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(_ context.Context, _ refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	turnID := uuid.New()
+	store.createTurnFn = func(_ context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+	store.updateEncounterCurrentTurnFn = func(_ context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, CurrentTurnID: arg.CurrentTurnID, RoundNumber: 1, Name: "Goblin Ambush"}, nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 15 })
+	svc := NewService(store)
+	notifier := &stubInitiativeTrackerNotifier{}
+	svc.SetInitiativeTrackerNotifier(notifier)
+
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID:   templateID,
+		CharacterIDs: []uuid.UUID{charID},
+		CharacterPositions: map[uuid.UUID]Position{
+			charID: {Col: "D", Row: 5},
+		},
+	}, roller)
+	require.NoError(t, err)
+	require.Len(t, notifier.posts, 1, "tracker must be posted exactly once on StartCombat")
+	assert.Contains(t, notifier.posts[0], "Aragorn")
+	// AdvanceTurn (called by StartCombat) also fires UpdateTracker via
+	// createActiveTurn — at least one update should be queued.
+	assert.NotEmpty(t, notifier.updates, "AdvanceTurn must trigger an UpdateTracker call")
+}
+
+func TestService_EndCombat_PostsCompletedInitiativeTracker(t *testing.T) {
+	encounterID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 4}, nil
+	}
+	store.updateEncounterStatusFn = func(_ context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: "completed", RoundNumber: 4}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: uuid.New(), DisplayName: "Aragorn", IsAlive: true, HpCurrent: 30, Conditions: json.RawMessage(`[]`)},
+		}, nil
+	}
+
+	svc := NewService(store)
+	notifier := &stubInitiativeTrackerNotifier{}
+	svc.SetInitiativeTrackerNotifier(notifier)
+
+	_, err := svc.EndCombat(context.Background(), encounterID)
+	require.NoError(t, err)
+	require.Len(t, notifier.completedPosts, 1, "completed tracker must be posted exactly once on EndCombat")
+}

@@ -360,6 +360,18 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		return CastResult{}, fmt.Errorf("getting caster: %w", err)
 	}
 
+	// 4a. med-25 / Phase 61: pre-validate Silence zones. A caster standing
+	// in a Silence zone cannot cast spells with V or S components — this
+	// must reject BEFORE slot deduction so the player doesn't lose a slot
+	// to a silenced cast attempt.
+	inSilence, err := s.combatantInSilenceZone(ctx, caster)
+	if err != nil {
+		return CastResult{}, fmt.Errorf("checking silence zone: %w", err)
+	}
+	if err := ValidateSilenceZone(inSilence, spell); err != nil {
+		return CastResult{}, err
+	}
+
 	// 5. Look up character for spell slots and ability scores
 	if !caster.CharacterID.Valid {
 		return CastResult{}, errors.New("only player characters can cast spells via /cast")
