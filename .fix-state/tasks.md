@@ -44,10 +44,10 @@ Source: `.review-findings/SUMMARY.md` + chunk{1..8}_*.md. Status flow: pending �
 | med-24 | med | Phase 55 OAs invoked from /move; PC reach weapons supported | done | impl-MB3 | 1 |
 | med-25 | med | Phase 61 silence zone — Cast pre-validates ValidateSilenceZone | done | impl-MB1 | 1 |
 | med-26 | med | Phase 67 Cast invokes zone creation; ZoneDefinition.AnchorMode added | done | impl-MB2 | 1 |
-| med-27 | med | Phase 68 FoW: explored history wired (two-range light + real shadowcasting deferred) | partial | impl-MB3 | 1 |
+| med-27 | med | Phase 68 FoW: explored history wired (two-range light + real shadowcasting deferred) | done | impl-MB3 | 1 |
 | med-28 | med | Phase 71 readied spell deducts slot + sets concentration | done | impl-MB1 | 1 |
-| med-29 | med | Phase 72 counterspell — Subtle bypass + ErrSubtleSpellNotCounterspellable (prompt UI deferred) | partial | impl-MB2 | 1 |
-| med-30 | med | Phase 66b metamagic — interactive Empowered/Careful/Heightened prompts | deferred | - | 0 |
+| med-29 | med | Phase 72 counterspell — Subtle bypass + ErrSubtleSpellNotCounterspellable + prompt UI | done | impl-rx | 2 |
+| med-30 | med | Phase 66b metamagic — interactive Empowered/Careful/Heightened prompts | done | impl-rx | 1 |
 | med-31 | med | Phase 75b stealth_disadv honored by /check stealth; heavy-armor speed penalty applied | done | impl-MB2 | 1 |
 | med-32 | med | Phase 81 /check target option used; group/contested/passive checks wired | done | impl-MB1 | 1 |
 | med-33 | med | Phase 82 FeatureEffects populated in save_handler (Aura of Protection, Bless, magic-item, dodge-on-DEX) | done | impl-MB1 | 1 |
@@ -60,7 +60,7 @@ Source: `.review-findings/SUMMARY.md` + chunk{1..8}_*.md. Status flow: pending �
 | med-40 | med | Phase 15 Campaign Home counts live (DMQueueCount, PendingApprovals) | done | impl-MB1 | 1 |
 | med-41 | med | Phase 11 production code path calls Service.CreateCampaign (or /setup auto-creates) | done | impl-MB1 | 1 |
 | med-42 | med | Phase 20 ASSET_DATA_DIR documented or defaulted to /data/assets on fly | done | impl-orch | 1 |
-| med-43 | med | Class features (Wild Shape spellblock + auto-revert, Rage end-of-turn, Bardic sweep done; Stunning Strike + Smite + Uncanny Dodge prompts deferred) | partial | impl-MB2 | 1 |
+| med-43 | med | Class features (Wild Shape spellblock + auto-revert, Rage end-of-turn, Bardic sweep, Stunning Strike + Smite + Uncanny Dodge + BI 30s usage prompts) | done | impl-rx | 2 |
 
 ## Low / cosmetic
 

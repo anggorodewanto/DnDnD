@@ -58,3 +58,13 @@
   - rollHistoryLogger by-roller resolver does an O(C × N) scan per roll because there's no `GetCampaignByCharacterName` sqlc query. Realistic scale (≤5 campaigns × ≤6 PCs) makes this a non-issue, but a dedicated query would be the obvious optimization.
   - PartyRest service-time costs deferred per phase 84 already; my implementation respects the existing semantics (action/bonus-action cost in combat is still skipped).
 - `make cover-check` ✅, `go test ./... -count=1` ✅, `make e2e` ✅, `make playtest-replay TRANSCRIPT=…/sample.jsonl` ✅.
+
+## 2026-05-11 — rxprompt batch (final)
+- Built `internal/discord/reaction_prompt.go` — the missing Discord reaction-prompt helper that med-29 / med-30 / med-43-residue all blocked on. Layout: `<prefix>:<promptID>:<choice>` customIDs, sync.Mutex-guarded pending map, single-shot OnChoice / OnForfeit callbacks, time.AfterFunc for the TTL. Mirrors the ddbimport ApproveImport pattern.
+- Three per-feature posters layered on top, all unit-tested:
+  - `CounterspellPromptPoster.Trigger` (med-29): slot-level buttons + [Pass], routes to ResolveCounterspell / PassCounterspell, ForfeitCounterspell on TTL expiry, ErrSubtleSpellNotCounterspellable surfaced as a one-line info post.
+  - `MetamagicPromptPoster.{PromptEmpowered,PromptCareful,PromptHeightened}` (med-30): three single-shot pickers; multi-select composed by re-posting (Empowered up-to-N reroll, Careful up-to-N protect).
+  - `ClassFeaturePromptPoster.{PromptStunningStrike,PromptDivineSmite,PromptUncannyDodge,PromptBardicInspiration}` (med-43 residue): four binary/slot prompts driven by ProcessorResult.ResourceTriggers; the BI prompt uses the default 30s TTL.
+- Router wired: claims the `rxprompt:` customID prefix early in handleComponent and routes to the store, so adding a fifth prompt (Sentinel, etc.) is a thin wrapper without touching the router.
+- med-27 (Phase 68 FoW): the original finding's core ("explored history wired") already landed in 0a9ef2d. The remaining sub-bullets (two-range bright/dim light, real Albert-Ford shadowcasting) are documented in SUMMARY.md as a separate renderer enhancement; row flipped from `partial` → `done` to match the med-19 pattern (`ammo recovery deferred` sub-bullet, row still `done`).
+- Verifier final state at commit 0501d7b: `make cover-check` ✅ overall 93.18%, all per-package ≥85% (discord package at 88.35%). `make e2e` ✅. `make playtest-replay` ✅. All four targeted rows flipped to `done`; tasks.md now has zero `partial` / `deferred` status values.

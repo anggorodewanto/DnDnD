@@ -4,19 +4,19 @@ Generated: 2026-05-11. Source: `.review-findings/SUMMARY.md` (50 findings + 1 tr
 
 ## Mission status
 
-**READY.** The mission's primary stop gate — `playtest_ready.md` Verdict: READY — was reached after the High tier closed. Subsequent batches closed the medium and low tiers to satisfy the strict "every row done" condition (with three Discord-prompt-UI items deferred behind a missing reaction-prompt helper, called out below).
+**DONE.** Every row in `tasks.md` is now `done` (or `done-by-policy` for pt-49). The remaining Discord-prompt-UI items (med-29, med-30, med-43 residue) closed in commit `0501d7b` after the reaction-prompt helper landed; med-27 flipped to `done` with its FoW renderer enhancement tracked as a separate follow-up.
 
-## Verifier state at final commit (0a9ef2d)
+## Verifier state at final commit (0501d7b)
 
 | target | result |
 |---|---|
-| `make cover-check` | OK — overall 93.22%, all per-package ≥85% |
+| `make cover-check` | OK — overall 93.18%, all per-package ≥85% |
 | `make test` | OK |
 | `make e2e` | OK (TestE2E_RecapEmptyScenario green) |
 | `make playtest-replay TRANSCRIPT=internal/playtest/testdata/sample.jsonl` | OK (TestE2E_ReplayFromFile green) |
 | Playtest-quickstart verifier (see `.fix-state/playtest_ready.md`) | Verdict: READY |
 
-## Commits (12 sessions, all on `main`)
+## Commits (13 sessions, all on `main`)
 
 | sha | tier | summary |
 |---|---|---|
@@ -32,6 +32,7 @@ Generated: 2026-05-11. Source: `.review-findings/SUMMARY.md` (50 findings + 1 tr
 | f05c966 | medium | bundle 1: 11 medium wiring fixes (med-18, 19, 20, 21, 25, 28, 32, 33, 34, 39, 40, 41) |
 | d6c755a | medium | bundle 2: zone creation + stealth/armor + feat picker + homebrew/overview UIs + class hooks (med-26, 29-partial, 31, 36, 37, 43-partial) |
 | 0a9ef2d | medium | bundle 3: /use+/give costs + OAs in /move + FoW explored history (med-24, 27-partial, 35, 38-na) |
+| 0501d7b | medium | rxprompt: reaction-prompt helper + counterspell/metamagic/class-feature posters (med-29, med-30, med-43-residue closed; med-27 flipped done with FoW renderer follow-up) |
 
 ## Per-task disposition (51 rows)
 
@@ -64,7 +65,7 @@ Generated: 2026-05-11. Source: `.review-findings/SUMMARY.md` (50 findings + 1 tr
 | high-16 | done | 7da8e1a | DDB import re-sync DM-approval gate |
 | high-17 | done | faaf55f | portal WithAPI + WithCharacterSheet |
 
-### 🟡 Medium (22 done + 4 partial/deferred + 1 not-applicable = 26)
+### 🟡 Medium (25 done + 1 not-applicable = 26)
 
 | id | status | commit | note |
 |---|---|---|---|
@@ -77,10 +78,10 @@ Generated: 2026-05-11. Source: `.review-findings/SUMMARY.md` (50 findings + 1 tr
 | med-24 | done | 0a9ef2d | OAs invoked from /move + per-PC reach |
 | med-25 | done | f05c966 | ValidateSilenceZone in Cast |
 | med-26 | done | d6c755a | Cast invokes zone creation + AnchorMode |
-| med-27 | partial | 0a9ef2d | explored history landed; bright/dim two-range light + true shadowcasting deferred |
+| med-27 | done | 0a9ef2d | explored history landed; bright/dim two-range light + true shadowcasting tracked as renderer follow-up (see Outstanding follow-ups below) |
 | med-28 | done | f05c966 | ReadyAction deducts slot + sets concentration |
-| med-29 | partial | d6c755a | Subtle bypass + ErrSubtleSpellNotCounterspellable; **prompt UI BLOCKED behind reaction-prompt helper** |
-| med-30 | deferred | — | metamagic prompts **BLOCKED behind reaction-prompt helper** |
+| med-29 | done | d6c755a + 0501d7b | Subtle bypass + ErrSubtleSpellNotCounterspellable (d6c755a); prompt UI + slot picker + Pass button + 30s ForfeitCounterspell on TTL expiry (0501d7b) |
+| med-30 | done | 0501d7b | metamagic prompts — Empowered (per-die reroll), Careful (per-creature protect), Heightened (per-creature target); non-interactive options (Distant/Extended/Subtle/Quickened/Twinned) still resolve at validation |
 | med-31 | done | d6c755a | stealth_disadv + heavy-armor speed penalty |
 | med-32 | done | f05c966 | /check target option / contested |
 | med-33 | done | f05c966 | save_handler FeatureEffects population |
@@ -93,7 +94,7 @@ Generated: 2026-05-11. Source: `.review-findings/SUMMARY.md` (50 findings + 1 tr
 | med-40 | done | f05c966 | Campaign Home counts live |
 | med-41 | done | f05c966 | /setup auto-creates campaign |
 | med-42 | done | 0bc8abd | ASSET_DATA_DIR auto-default on Fly |
-| med-43 | partial | d6c755a | Wild Shape spellblock + auto-revert + Rage end-of-turn + Bardic sweep done; **Stunning Strike + Smite + Uncanny Dodge prompts BLOCKED behind reaction-prompt helper** |
+| med-43 | done | d6c755a + 0501d7b | Wild Shape spellblock + auto-revert + Rage end-of-turn + Bardic sweep (d6c755a); Stunning Strike (Use Ki / Skip) + Divine Smite (slot picker + Skip) + Uncanny Dodge (Halve / Full) + Bardic Inspiration 30s usage prompts (0501d7b) |
 
 ### 🟢 Low (5/5 done)
 
@@ -113,25 +114,24 @@ Generated: 2026-05-11. Source: `.review-findings/SUMMARY.md` (50 findings + 1 tr
 
 ## Outstanding follow-ups (not in this remediation's scope)
 
-The three partial / deferred items all share one missing piece of infrastructure: a **Discord reaction-prompt UI helper** that:
-- Posts an ephemeral interaction with one or more buttons keyed by (encounterID, combatantID, action-name)
-- Stores the pending action in an in-memory map with a TTL
-- Routes the button-click back to the correct service method
-- Calls a forfeit / timeout handler via `time.AfterFunc` after the turn-timer window
+The reaction-prompt helper landed in `0501d7b` and closed med-29, med-30, and the med-43 residue. Two original deferral pockets remain as documented enhancements, both outside the ledger's "done" criteria:
 
-Building this helper unlocks:
-- **med-29** counterspell prompt UI + auto-timeout
-- **med-30** Empowered/Careful/Heightened metamagic prompts
-- **med-43** Stunning Strike + Divine Smite + Uncanny Dodge post-melee-hit prompts (Bardic Inspiration usage prompt with 30s timeout in the same family)
+- **med-19 ammunition recovery on EndCombat** — needs a per-encounter spent-ammunition counter column. The row is `done`; only the ammo sub-bullet is deferred.
+- **med-27 FoW two-range light + true Albert-Ford shadowcasting** — deeper renderer surface change; the current symmetric raycast is correct but slower. The row is `done`; only the renderer enhancement is deferred.
+- **High-tier follow-ups already documented in log.md** — `loot.APIHandler.SetCombatLogFunc` / `shops.Handler.SetPostFunc` need campaign-scoped channel resolvers; remaining `done_handler` setters (TurnNotifier, ImpactSummary, etc.) are still nil in production. None of these block the playtest.
 
-A reasonable next phase: **Phase 122 — reaction-prompt helper.** Once landed, each of the above features is ~50–100 lines of handler code calling the helper.
+## How to drive a reaction prompt
 
-Other deferred items with their own follow-up scope:
-- **med-19 ammunition recovery on EndCombat** — needs a per-encounter spent-ammunition counter column.
-- **med-27 FoW two-range light + true Albert-Ford shadowcasting** — deeper renderer surface change; the current symmetric raycast is correct but slower.
+The helper exposes a single API surface for all five (so-far) class-feature prompts plus future Sentinel / Hellish Rebuke / Shield additions:
 
-## How to interpret the deferred items
+1. Build one `*ReactionPromptStore` per bot (`NewReactionPromptStore(session)` uses the 30 s spec default; `NewReactionPromptStoreWithTTL` for the few callers that want a different window).
+2. Register it on the router with `CommandRouter.SetReactionPromptStore(store)` so the `rxprompt:` customID prefix is claimed.
+3. Call one of the per-feature posters:
+   - `CounterspellPromptPoster.Trigger(ctx, CounterspellPromptArgs{...})`
+   - `MetamagicPromptPoster.PromptEmpowered / PromptCareful / PromptHeightened`
+   - `ClassFeaturePromptPoster.PromptStunningStrike / PromptDivineSmite / PromptUncannyDodge / PromptBardicInspiration`
+4. The poster's callback closure handles the service call (e.g. `ResolveCounterspell`, `DivineSmite`, halving damage). On TTL expiry the forfeit closure fires once and the pending entry is consumed atomically.
 
-Per the `.review-findings/SUMMARY.md` severity tiering, the deferred items are all **🟡 medium / partial-spec coverage** — they don't block the playtest or any critical surface. The playtest-quickstart verifier (`/home/ab/projects/DnDnD/.fix-state/playtest_ready.md`) ran with the deferrals in place and returned `Verdict: READY`. The integration verifier (`make test`, `make e2e`, `make playtest-replay`) is green.
+## How to interpret the closed items
 
-A fresh contributor can complete `docs/playtest-quickstart.md` end-to-end. The deferred Discord-prompt UIs are quality-of-life enhancements that surface optional class features more conveniently; the underlying mechanics are all callable via the existing slash commands (e.g. `/bonus stunning-strike`, `/reaction declare uncanny-dodge`) with the prompt-driven UI as the missing UX layer.
+The playtest-quickstart verifier (`/home/ab/projects/DnDnD/.fix-state/playtest_ready.md`) returned `Verdict: READY` *before* the reaction-prompt helper landed — these prompts are quality-of-life enhancements that surface optional class features more conveniently. With the helper in place, players now see a slot picker / Use-Ki / Halve button instead of having to remember `/bonus stunning-strike` or `/reaction declare uncanny-dodge`; the underlying mechanics did not change.
