@@ -76,4 +76,4 @@ Source: `.review-findings/SUMMARY.md` + chunk{1..8}_*.md. Status flow: pending â
 
 | id | severity | title | status | worker | rev |
 |---|---|---|---|---|---|
-| pt-49 | pt | Phase 121.4 record real transcripts after playtest-quickstart green | pending | - | 0 |
+| pt-49 | pt | Phase 121.4 transcripts: smoke transcript exists + make playtest-replay green; real-session transcripts deferred per docs/phases.md:823 | done-by-policy | impl-orch | 1 |
