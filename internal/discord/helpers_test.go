@@ -28,7 +28,10 @@ func (m *MockSession) UserChannelCreate(recipientID string) (*discordgo.Channel,
 }
 
 func (m *MockSession) ChannelMessageSend(channelID, content string) (*discordgo.Message, error) {
-	return m.ChannelMessageSendFunc(channelID, content)
+	if m.ChannelMessageSendFunc != nil {
+		return m.ChannelMessageSendFunc(channelID, content)
+	}
+	return &discordgo.Message{ID: "m-send", ChannelID: channelID}, nil
 }
 
 func (m *MockSession) ChannelMessageSendComplex(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error) {

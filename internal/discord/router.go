@@ -25,17 +25,27 @@ type CommandHandler interface {
 
 // CommandRouter dispatches slash command interactions to the appropriate handler.
 type CommandRouter struct {
-	bot         *Bot
-	handlers    map[string]CommandHandler
-	moveHandler *MoveHandler
-	flyHandler  *FlyHandler
-	doneHandler *DoneHandler
-	restHandler *RestHandler
-	lootHandler *LootHandler
-	asiHandler  *ASIHandler
+	bot           *Bot
+	handlers      map[string]CommandHandler
+	moveHandler   *MoveHandler
+	flyHandler    *FlyHandler
+	doneHandler   *DoneHandler
+	restHandler   *RestHandler
+	lootHandler   *LootHandler
+	asiHandler    *ASIHandler
+	promptStore   *ReactionPromptStore
 	// recorder persists panics and other surfaced errors for the DM
 	// dashboard badge / error panel. nil == log-only (still safe).
 	recorder errorlog.Recorder
+}
+
+// SetReactionPromptStore wires the in-memory reaction-prompt store so button
+// clicks with the rxprompt: CustomID prefix route back to the registered
+// per-prompt choice handler. Used by Counterspell, metamagic (Empowered /
+// Careful / Heightened), Stunning Strike, Divine Smite, Uncanny Dodge, and
+// Bardic Inspiration usage prompts.
+func (r *CommandRouter) SetReactionPromptStore(s *ReactionPromptStore) {
+	r.promptStore = s
 }
 
 // SetErrorRecorder wires an errorlog.Recorder so panics surfaced inside
@@ -387,6 +397,14 @@ func (r *CommandRouter) recoverInteraction(interaction *discordgo.Interaction, c
 func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 	data := interaction.Data.(discordgo.MessageComponentInteractionData)
 	customID := data.CustomID
+
+	// Reaction-prompt store callbacks (counterspell, metamagic, stunning
+	// strike, smite, uncanny dodge, bardic inspiration usage). Owns the
+	// rxprompt: prefix; claims and routes back to the per-prompt callback.
+	if r.promptStore != nil && strings.HasPrefix(customID, reactionPromptPrefix+":") {
+		r.promptStore.HandleComponent(interaction)
+		return
+	}
 
 	// Move button callbacks
 	if r.moveHandler != nil {
