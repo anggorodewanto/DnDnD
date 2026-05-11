@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/stretchr/testify/assert"
@@ -1476,6 +1477,71 @@ func TestUpdateCombatantPosition_FiresSilenceHook(t *testing.T) {
 	_, err := svc.UpdateCombatantPosition(context.Background(), combatantID, "B", 1, 0)
 	require.NoError(t, err)
 	assert.True(t, clearCalled, "movement into silence zone must trigger concentration cleanup")
+}
+
+// med-43 / Phase 47: when a Wild-Shaped Druid drops to 0 HP, applyDamageHP
+// auto-reverts the beast form and applies overflow damage to the Druid's
+// original HP via UpdateCombatantWildShape (NOT a second UpdateCombatantHP
+// call).
+func TestApplyDamageHP_AutoRevertsWildShapeAtZeroHP(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	snap := WildShapeSnapshot{HpMax: 28, HpCurrent: 25, Ac: 16, SpeedFt: 30}
+	snapJSON, _ := json.Marshal(snap)
+	wildCombatant := refdata.Combatant{
+		ID:                   combatantID,
+		EncounterID:          encounterID,
+		IsWildShaped:         true,
+		WildShapeOriginal:    pqtype.NullRawMessage{RawMessage: snapJSON, Valid: true},
+		HpMax:                11,
+		HpCurrent:            0,
+		Ac:                   13,
+		IsAlive:              true,
+		Conditions:           json.RawMessage(`[]`),
+	}
+
+	var wildShapeUpdated refdata.UpdateCombatantWildShapeParams
+	wildShapeCalled := false
+	ms := &mockStore{
+		updateCombatantHPFn: func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+			return wildCombatant, nil
+		},
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return wildCombatant, nil
+		},
+		updateCombatantWildShapeFn: func(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error) {
+			wildShapeCalled = true
+			wildShapeUpdated = arg
+			// Return the reverted form for any downstream calls.
+			return refdata.Combatant{
+				ID:        arg.ID,
+				HpMax:     arg.HpMax,
+				HpCurrent: arg.HpCurrent,
+				Ac:        arg.Ac,
+				IsAlive:   true,
+			}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: arg.ID}, nil
+		},
+		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+			return refdata.GetCombatantConcentrationRow{}, nil
+		},
+		createPendingSaveFn: func(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+			return refdata.PendingSafe{}, nil
+		},
+	}
+	svc := NewService(ms)
+	// 16 damage on 11 HP beast → newHP = -5 (unclamped); overflow = 5
+	// Pass the unclamped newHP so applyDamageHP can derive the overflow.
+	_, err := svc.applyDamageHP(context.Background(), encounterID, combatantID, 11, -5, 0, true)
+	require.NoError(t, err)
+	require.True(t, wildShapeCalled, "expected UpdateCombatantWildShape to be called for auto-revert")
+	assert.False(t, wildShapeUpdated.IsWildShaped, "must revert is_wild_shaped to false")
+	assert.Equal(t, int32(28), wildShapeUpdated.HpMax)
+	assert.Equal(t, int32(20), wildShapeUpdated.HpCurrent) // 25 - 5 overflow
+	assert.Equal(t, int32(16), wildShapeUpdated.Ac)
 }
 
 func TestApplyDamageHP_DoesNotDoubleApplyUnconscious(t *testing.T) {

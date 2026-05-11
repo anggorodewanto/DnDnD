@@ -626,6 +626,7 @@ func parseReactionRouteParams(r *http.Request) (uuid.UUID, uuid.UUID, error) {
 type triggerCounterspellRequest struct {
 	EnemySpellName string `json:"enemy_spell_name"`
 	EnemyCastLevel int    `json:"enemy_cast_level"`
+	IsSubtle       bool   `json:"is_subtle,omitempty"` // med-29 / Phase 72
 }
 
 type counterspellPromptResponse struct {
@@ -679,7 +680,7 @@ func (h *Handler) TriggerCounterspell(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prompt, err := h.svc.TriggerCounterspell(r.Context(), reactionID, req.EnemySpellName, req.EnemyCastLevel)
+	prompt, err := h.svc.TriggerCounterspell(r.Context(), reactionID, req.EnemySpellName, req.EnemyCastLevel, req.IsSubtle)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

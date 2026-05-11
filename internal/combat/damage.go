@@ -215,7 +215,12 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 	}
 
 	newHP := currentHP - adjusted
-	if newHP < 0 {
+	// med-43 / Phase 47: preserve a negative newHP for wild-shaped targets
+	// so applyDamageHP can derive the overflow used to apply excess damage
+	// to the Druid's original HP pool. For all other targets we keep the
+	// historical "clamp to 0" semantics by leaving the clamp logic intact.
+	isWildShaped := target.IsWildShaped && target.WildShapeOriginal.Valid
+	if newHP < 0 && !isWildShaped {
 		newHP = 0
 	}
 

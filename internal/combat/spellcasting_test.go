@@ -3085,6 +3085,197 @@ func TestCast_RejectsInSilenceZone(t *testing.T) {
 	assert.False(t, slotDeducted, "spell slot must NOT be deducted on silence rejection")
 }
 
+// med-26 / Phase 67: Cast must auto-create a zone for known persistent-AoE
+// spells (Spirit Guardians is combatant-anchored).
+func TestCast_CreatesZoneForKnownAoESpell(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	turnID := uuid.New()
+
+	// Use Spirit Guardians (level 3, concentration, combatant-anchored).
+	spiritGuardians := refdata.Spell{
+		ID:             "spirit-guardians",
+		Name:           "Spirit Guardians",
+		Level:          3,
+		CastingTime:    "1 action",
+		RangeType:      "self",
+		Components:     []string{"V", "S", "M"},
+		Concentration:  sql.NullBool{Bool: true, Valid: true},
+		ResolutionMode: "auto",
+	}
+
+	var zoneCreated refdata.CreateEncounterZoneParams
+	zoneCalled := false
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spiritGuardians, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.createEncounterZoneFn = func(_ context.Context, arg refdata.CreateEncounterZoneParams) (refdata.EncounterZone, error) {
+		zoneCalled = true
+		zoneCreated = arg
+		return refdata.EncounterZone{ID: uuid.New(), EncounterID: arg.EncounterID, ZoneType: arg.ZoneType, AnchorMode: arg.AnchorMode, AnchorCombatantID: arg.AnchorCombatantID, OriginCol: arg.OriginCol, OriginRow: arg.OriginRow, Shape: arg.Shape}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "spirit-guardians",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: turnID, CombatantID: caster.ID},
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	require.True(t, zoneCalled, "expected CreateEncounterZone to be called for Spirit Guardians")
+	assert.Equal(t, "Spirit Guardians", zoneCreated.SourceSpell)
+	assert.Equal(t, "combatant", zoneCreated.AnchorMode)
+	assert.True(t, zoneCreated.AnchorCombatantID.Valid)
+	assert.Equal(t, caster.ID, zoneCreated.AnchorCombatantID.UUID)
+	assert.Equal(t, caster.PositionCol, zoneCreated.OriginCol)
+	assert.Equal(t, caster.PositionRow, zoneCreated.OriginRow)
+}
+
+// med-26 / Phase 67: spells with no known zone definition do NOT create a
+// zone (e.g. Bless, Hold Person).
+func TestCast_NoZoneForUnknownSpell(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	turnID := uuid.New()
+
+	zoneCalled := false
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return makeBlessSpell(), nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.createEncounterZoneFn = func(_ context.Context, _ refdata.CreateEncounterZoneParams) (refdata.EncounterZone, error) {
+		zoneCalled = true
+		return refdata.EncounterZone{}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.Cast(context.Background(), CastCommand{
+		SpellID:  "bless",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: turnID, CombatantID: caster.ID},
+	}, testRoller())
+	require.NoError(t, err)
+	assert.False(t, zoneCalled, "Bless has no zone definition; CreateEncounterZone must not be called")
+}
+
+// med-43 / Phase 47: a Wild-Shaped Druid below level 18 cannot cast spells
+// (CanWildShapeSpellcast). The block must reject BEFORE slot deduction.
+func TestCast_RejectsWildShapedDruidBelowLevel18(t *testing.T) {
+	charID := uuid.New()
+	char := makeDruidCharacter(charID, 4, 2) // Druid 4 — Beast Spells unlocks at 18
+	caster := makeSpellCaster(charID)
+	caster.IsWildShaped = true
+	target := makeSpellTarget()
+	turnID := uuid.New()
+
+	// The druid character also needs spell slots for Cast to even attempt
+	// the cast path — set them directly.
+	slotsJSON, _ := json.Marshal(map[string]SlotInfo{"1": {Current: 4, Max: 4}})
+	char.SpellSlots = pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true}
+	char.ProficiencyBonus = 2
+
+	slotDeducted := false
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return makeBlessSpell(), nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		slotDeducted = true
+		return refdata.Character{ID: arg.ID}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "bless",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: turnID, CombatantID: caster.ID},
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.Error(t, err, "Wild-Shaped druid below level 18 must NOT be allowed to cast")
+	assert.Contains(t, err.Error(), "Wild Shape")
+	assert.False(t, slotDeducted, "spell slot must NOT be deducted on wild-shape rejection")
+}
+
+// med-43 / Phase 47: a Wild-Shaped Druid at level 18+ can cast spells via
+// Beast Spells. (CanWildShapeSpellcast == true.)
+func TestCast_AllowsWildShapedDruidAtLevel18(t *testing.T) {
+	charID := uuid.New()
+	char := makeDruidCharacter(charID, 18, 2)
+	caster := makeSpellCaster(charID)
+	caster.IsWildShaped = true
+	target := makeSpellTarget()
+	turnID := uuid.New()
+
+	slotsJSON, _ := json.Marshal(map[string]SlotInfo{"1": {Current: 4, Max: 4}})
+	char.SpellSlots = pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true}
+	char.ProficiencyBonus = 6
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return makeBlessSpell(), nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "bless",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: turnID, CombatantID: caster.ID},
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err, "Druid 18+ has Beast Spells — cast must succeed in Wild Shape")
+}
+
 // TestCast_AllowsNonVerbalInSilence verifies that a spell with no V or S
 // components is unaffected by Silence (uses an M-only spell as a sentinel).
 func TestCast_AllowsNonVerbalInSilence(t *testing.T) {

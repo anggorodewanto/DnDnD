@@ -132,12 +132,28 @@ func TestTriggerCounterspell_Success(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	prompt, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5)
+	prompt, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5, false)
 	require.NoError(t, err)
 	assert.Equal(t, "Fireball", prompt.EnemySpellName)
 	assert.Equal(t, []int{3, 4, 5}, prompt.AvailableSlots)
 	assert.Equal(t, "Gandalf", prompt.CasterName)
 	// Enemy cast level is intentionally not in CounterspellPrompt struct
+}
+
+// med-29 / Phase 72: TriggerCounterspell rejects Subtle Spell casts before
+// any DB lookup so the player isn't prompted at all.
+func TestTriggerCounterspell_SubtleSpellBypass(t *testing.T) {
+	store := defaultMockStore()
+	called := false
+	store.getReactionDeclarationFn = func(_ context.Context, _ uuid.UUID) (refdata.ReactionDeclaration, error) {
+		called = true
+		return refdata.ReactionDeclaration{}, nil
+	}
+	svc := NewService(store)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSubtleSpellNotCounterspellable)
+	assert.False(t, called, "Subtle bypass must short-circuit before any store lookup")
 }
 
 func TestTriggerCounterspell_DeclarationNotActive(t *testing.T) {
@@ -147,7 +163,7 @@ func TestTriggerCounterspell_DeclarationNotActive(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not active")
 }
@@ -188,7 +204,7 @@ func TestTriggerCounterspell_NoSlotsAvailable(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5)
+	_, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no spell slots")
 }
@@ -834,7 +850,7 @@ func TestTriggerCounterspell_GetDeclarationError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting reaction declaration")
 }
@@ -849,7 +865,7 @@ func TestTriggerCounterspell_NPCCannotCounterspell(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only player characters")
 }
@@ -864,7 +880,7 @@ func TestTriggerCounterspell_GetCombatantError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting combatant")
 }
@@ -883,7 +899,7 @@ func TestTriggerCounterspell_GetCharacterError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting character")
 }
@@ -908,7 +924,7 @@ func TestTriggerCounterspell_UpdatePromptError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "updating counterspell prompt")
 }
@@ -1605,7 +1621,7 @@ func TestTriggerCounterspell_InvalidSpellSlots(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing spell slots")
 }

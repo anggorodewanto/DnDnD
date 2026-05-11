@@ -10,6 +10,8 @@
   import NarratePanel from './NarratePanel.svelte';
   import MobileShell from './MobileShell.svelte';
   import MobileRedirect from './MobileRedirect.svelte';
+  import HomebrewEditor from './HomebrewEditor.svelte';
+  import CharacterOverview from './CharacterOverview.svelte';
   import { isMobileViewport, isDesktopOnly } from './lib/layout.js';
 
   let innerWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1920);
@@ -52,6 +54,8 @@
     if (hash === '#shops') return 'shop-list';
     if (hash === '#shop-new') return 'shop-editor';
     if (hash === '#narrate') return 'narrate';
+    if (hash === '#homebrew') return 'homebrew';
+    if (hash === '#party') return 'party';
     return 'list';
   }
 
@@ -154,6 +158,14 @@
   function onShowNarrate() {
     currentView = 'narrate';
   }
+
+  function onShowHomebrew() {
+    currentView = 'homebrew';
+  }
+
+  function onShowParty() {
+    currentView = 'party';
+  }
 </script>
 
 {#if isMobileViewport(innerWidth)}
@@ -172,6 +184,10 @@
       <h1>Shops & Merchants</h1>
     {:else if currentView === 'narrate'}
       <h1>Narrate</h1>
+    {:else if currentView === 'homebrew'}
+      <h1>Homebrew Editor</h1>
+    {:else if currentView === 'party'}
+      <h1>Party Overview</h1>
     {:else}
       <h1>Encounter Builder</h1>
     {/if}
@@ -183,6 +199,8 @@
       <button class:active={currentView === 'turn-builder'} onclick={() => currentView = 'turn-builder'}>Turn Builder</button>
       <button class:active={currentView === 'shop-list' || currentView === 'shop-editor'} onclick={onShowShops}>Shops</button>
       <button class:active={currentView === 'narrate'} onclick={onShowNarrate}>Narrate</button>
+      <button class:active={currentView === 'homebrew'} onclick={onShowHomebrew}>Homebrew</button>
+      <button class:active={currentView === 'party'} onclick={onShowParty}>Party</button>
     </nav>
 
     {#if currentView === 'editor'}
@@ -219,6 +237,10 @@
     <ShopBuilder {campaignId} shopId={editingShopId} onback={onBackFromShop} />
   {:else if currentView === 'narrate'}
     <NarratePanel {campaignId} />
+  {:else if currentView === 'homebrew'}
+    <HomebrewEditor {campaignId} />
+  {:else if currentView === 'party'}
+    <CharacterOverview {campaignId} />
   {/if}
 </main>
 {/if}

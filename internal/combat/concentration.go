@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -317,6 +318,13 @@ func (s *Service) CheckSilenceBreaksConcentration(ctx context.Context, combatant
 // single seam every damage call site funnels through, so callers do not
 // need to repeat the prevHP/newHP math.
 func (s *Service) applyDamageHP(ctx context.Context, encounterID, combatantID uuid.UUID, prevHP, newHP, tempHP int32, isAlive bool) (refdata.Combatant, error) {
+	// med-43 / Phase 47: derive Wild Shape overflow from any unclamped
+	// negative newHP before clamping the value we write to hp_current.
+	wildShapeOverflow := int32(0)
+	if newHP < 0 {
+		wildShapeOverflow = -newHP
+		newHP = 0
+	}
 	updated, err := s.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
 		ID:        combatantID,
 		HpCurrent: newHP,
@@ -334,6 +342,35 @@ func (s *Service) applyDamageHP(ctx context.Context, encounterID, combatantID uu
 
 	if _, err := s.MaybeCreateConcentrationSaveOnDamage(ctx, encounterID, combatantID, damage); err != nil {
 		return updated, fmt.Errorf("enqueuing concentration save: %w", err)
+	}
+
+	// med-43 / Phase 47: Wild Shape auto-revert. When a wild-shaped Druid
+	// transitions to (or below) 0 HP, revert to the original form and
+	// apply the excess damage to the original HP pool. This MUST happen
+	// before the unconscious-at-0-HP hook so that the post-revert HP
+	// (which may be > 0) prevents the unconscious application from
+	// misfiring.
+	//
+	// Callers may pass the unclamped newHP (a negative number) so the
+	// helper can derive the overflow accurately. When newHP is clamped
+	// to 0 by the caller, overflow is treated as 0.
+	if updated.IsWildShaped && newHP <= 0 && updated.WildShapeOriginal.Valid {
+		reverted, _, revertErr := AutoRevertWildShape(updated, wildShapeOverflow)
+		if revertErr == nil {
+			persisted, persistErr := s.store.UpdateCombatantWildShape(ctx, refdata.UpdateCombatantWildShapeParams{
+				ID:                   combatantID,
+				IsWildShaped:         false,
+				WildShapeCreatureRef: sql.NullString{},
+				WildShapeOriginal:    pqtype.NullRawMessage{},
+				HpMax:                reverted.HpMax,
+				HpCurrent:            reverted.HpCurrent,
+				Ac:                   reverted.Ac,
+			})
+			if persistErr != nil {
+				return updated, fmt.Errorf("persisting wild-shape revert: %w", persistErr)
+			}
+			return persisted, nil
+		}
 	}
 
 	// Apply unconscious when alive but newly at 0 HP. Avoid the redundant

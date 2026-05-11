@@ -3,6 +3,7 @@ package combat
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -42,10 +43,22 @@ type CounterspellResult struct {
 	DeclarationID  uuid.UUID
 }
 
+// ErrSubtleSpellNotCounterspellable is returned by TriggerCounterspell when
+// the enemy cast was flagged Subtle (Subtle Spell metamagic). Per spec line
+// 948, Subtle Spell suppresses the V/S components — Counterspell cannot be
+// triggered against it. (med-29 / Phase 72)
+var ErrSubtleSpellNotCounterspellable = errors.New("counterspell cannot trigger against a subtle spell")
+
 // TriggerCounterspell is called by the DM from the Active Reactions Panel.
 // It validates the declaration, looks up available slots, stores enemy spell info,
 // and returns a prompt with enemy spell name (but NOT cast level) and available slot levels.
-func (s *Service) TriggerCounterspell(ctx context.Context, declarationID uuid.UUID, enemySpellName string, enemyCastLevel int) (CounterspellPrompt, error) {
+//
+// med-29 / Phase 72: when isSubtle is true, return ErrSubtleSpellNotCounterspellable
+// without prompting — the Subtle Spell metamagic bypasses Counterspell.
+func (s *Service) TriggerCounterspell(ctx context.Context, declarationID uuid.UUID, enemySpellName string, enemyCastLevel int, isSubtle bool) (CounterspellPrompt, error) {
+	if isSubtle {
+		return CounterspellPrompt{}, ErrSubtleSpellNotCounterspellable
+	}
 	decl, err := s.store.GetReactionDeclaration(ctx, declarationID)
 	if err != nil {
 		return CounterspellPrompt{}, fmt.Errorf("getting reaction declaration: %w", err)

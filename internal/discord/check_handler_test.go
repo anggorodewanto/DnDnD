@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -777,5 +778,110 @@ func TestCheckHandler_Target_OpponentNotResolved_FallsBackToSingleCheck(t *testi
 
 	if strings.Contains(responded, "Contested") {
 		t.Errorf("expected single-check fallback when opponent unresolved, got: %s", responded)
+	}
+}
+
+// med-31 / Phase 75b: stealth checks made by a character wearing armor with
+// stealth_disadv = true must be rolled at disadvantage. The handler resolves
+// the equipped armor via CheckArmorLookup and applies dice.Disadvantage to
+// the SingleCheck input automatically.
+type stubArmorLookup struct {
+	armor refdata.Armor
+	err   error
+	calls int
+}
+
+func (s *stubArmorLookup) GetArmor(_ context.Context, _ string) (refdata.Armor, error) {
+	s.calls++
+	return s.armor, s.err
+}
+
+func TestCheckHandler_Stealth_AppliesArmorDisadvantage(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	// Override the character lookup to return armor-equipped Aria.
+	campaignID := uuid.New()
+	char := makeTestCharacter()
+	char.CampaignID = campaignID
+	char.EquippedArmor = sql.NullString{String: "plate", Valid: true}
+	h.campaignProvider = &mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: campaignID}, nil
+	}}
+	h.characterLookup = &mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+		return char, nil
+	}}
+	armor := &stubArmorLookup{armor: refdata.Armor{
+		ID:            "plate",
+		Name:          "Plate",
+		StealthDisadv: sql.NullBool{Bool: true, Valid: true},
+		ArmorType:     "heavy",
+	}}
+	h.SetArmorLookup(armor)
+
+	h.Handle(makeCheckInteraction("stealth", false, false))
+
+	if armor.calls != 1 {
+		t.Fatalf("expected armor lookup once, got %d", armor.calls)
+	}
+	if !strings.Contains(strings.ToLower(responded), "disadvantage") {
+		t.Errorf("expected disadvantage to be reflected in response, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_Stealth_NoArmor_NoLookup(t *testing.T) {
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error {
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	armor := &stubArmorLookup{}
+	h.SetArmorLookup(armor)
+
+	// Character returned by setupCheckHandler has no EquippedArmor — lookup
+	// must not be called.
+	h.Handle(makeCheckInteraction("stealth", false, false))
+
+	if armor.calls != 0 {
+		t.Fatalf("expected zero armor lookups when no armor equipped, got %d", armor.calls)
+	}
+}
+
+func TestCheckHandler_Stealth_ArmorWithoutDisadv_NoEffect(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	campaignID := uuid.New()
+	char := makeTestCharacter()
+	char.CampaignID = campaignID
+	char.EquippedArmor = sql.NullString{String: "leather", Valid: true}
+	h.campaignProvider = &mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: campaignID}, nil
+	}}
+	h.characterLookup = &mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+		return char, nil
+	}}
+	h.SetArmorLookup(&stubArmorLookup{armor: refdata.Armor{
+		ID:            "leather",
+		Name:          "Leather",
+		StealthDisadv: sql.NullBool{Bool: false, Valid: true},
+		ArmorType:     "light",
+	}})
+
+	h.Handle(makeCheckInteraction("stealth", false, false))
+
+	if strings.Contains(strings.ToLower(responded), "disadvantage") {
+		t.Errorf("expected NO disadvantage for non-stealth-disadv armor, got: %s", responded)
 	}
 }

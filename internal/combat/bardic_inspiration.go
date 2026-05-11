@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -223,6 +225,31 @@ type UseBardicInspirationResult struct {
 	NewTotal  int
 	Die       string
 	CombatLog string
+}
+
+// sweepExpiredBardicInspirations walks the encounter's combatants and clears
+// any whose Bardic Inspiration grant is older than the 10-minute window. The
+// sweep is best-effort: store errors are logged-and-skipped so turn flow is
+// never blocked. (med-43 / Phase 49)
+func (s *Service) sweepExpiredBardicInspirations(ctx context.Context, encounterID uuid.UUID) {
+	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return
+	}
+	now := time.Now()
+	for _, c := range combatants {
+		if !CombatantHasBardicInspiration(c) {
+			continue
+		}
+		if !c.BardicInspirationGrantedAt.Valid {
+			continue
+		}
+		if !IsBardicInspirationExpired(c.BardicInspirationGrantedAt.Time, now) {
+			continue
+		}
+		cleared := ClearBardicInspirationFromCombatant(c)
+		_, _ = s.persistBardicInspirationState(ctx, cleared)
+	}
 }
 
 // UseBardicInspiration rolls the inspiration die, adds it to the original total,

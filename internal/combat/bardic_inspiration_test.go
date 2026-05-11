@@ -604,3 +604,46 @@ func TestGrantBardicInspiration_AcceptsNowParameter(t *testing.T) {
 	assert.Equal(t, "d8", result.Die)
 	assert.Equal(t, fixedTime, capturedGrantedAt)
 }
+
+// med-43 / Phase 49: sweepExpiredBardicInspirations clears any combatant
+// whose Bardic Inspiration grant timestamp is older than 10 minutes.
+func TestSweepExpiredBardicInspirations_ClearsExpired(t *testing.T) {
+	encounterID := uuid.New()
+	expiredID := uuid.New()
+	freshID := uuid.New()
+
+	old := time.Now().Add(-15 * time.Minute)  // expired
+	fresh := time.Now().Add(-1 * time.Minute) // still valid
+
+	store := defaultMockStore()
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{
+				ID:                         expiredID,
+				DisplayName:                "Aria",
+				BardicInspirationDie:       sql.NullString{String: "d8", Valid: true},
+				BardicInspirationGrantedAt: sql.NullTime{Time: old, Valid: true},
+			},
+			{
+				ID:                         freshID,
+				DisplayName:                "Bjorn",
+				BardicInspirationDie:       sql.NullString{String: "d8", Valid: true},
+				BardicInspirationGrantedAt: sql.NullTime{Time: fresh, Valid: true},
+			},
+		}, nil
+	}
+	clearedIDs := []uuid.UUID{}
+	store.updateCombatantBardicInspirationFn = func(_ context.Context, arg refdata.UpdateCombatantBardicInspirationParams) (refdata.Combatant, error) {
+		if !arg.BardicInspirationDie.Valid {
+			clearedIDs = append(clearedIDs, arg.ID)
+		}
+		return refdata.Combatant{ID: arg.ID}, nil
+	}
+
+	svc := NewService(store)
+	svc.sweepExpiredBardicInspirations(context.Background(), encounterID)
+
+	require.Len(t, clearedIDs, 1, "exactly one combatant (the expired one) should be cleared")
+	assert.Equal(t, expiredID, clearedIDs[0])
+}
+

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -281,6 +283,23 @@ func (s *Service) ActivateRage(ctx context.Context, cmd RageCommand) (RageResult
 		Remaining: remaining,
 		RagesLeft: newRagesRemaining,
 	}, nil
+}
+
+// maybeEndRageOnTurnEnd is the AdvanceTurn-end hook that drops rage when the
+// barbarian neither attacked nor took damage this round
+// (ShouldRageEndOnTurnEnd). Best-effort: lookup or persistence errors are
+// swallowed so AdvanceTurn flow is never blocked by rage state. med-43 /
+// Phase 46.
+func (s *Service) maybeEndRageOnTurnEnd(ctx context.Context, combatantID uuid.UUID) {
+	c, err := s.store.GetCombatant(ctx, combatantID)
+	if err != nil {
+		return
+	}
+	if !ShouldRageEndOnTurnEnd(c) {
+		return
+	}
+	cleared := ClearRageFromCombatant(c)
+	_, _ = s.persistRageState(ctx, cleared)
 }
 
 // EndRage handles the /bonus end-rage command.

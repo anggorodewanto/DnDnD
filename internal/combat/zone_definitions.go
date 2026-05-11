@@ -3,12 +3,19 @@ package combat
 import "strings"
 
 // ZoneDefinition holds the default zone parameters for a known persistent AoE spell.
+//
+// AnchorMode controls whether the zone moves with the caster or stays fixed
+// at the cast location. "static" zones (the default) live at OriginCol/Row
+// for their duration. "combatant" zones (e.g. Spirit Guardians, Aura of
+// Protection) follow the caster — UpdateZoneAnchor is called whenever the
+// anchor combatant moves. (med-26 / Phase 67)
 type ZoneDefinition struct {
 	SpellName             string
 	OverlayColor          string
 	MarkerIcon            string
 	Shape                 string
 	ZoneType              string
+	AnchorMode            string
 	RequiresConcentration bool
 	Triggers              []ZoneTrigger
 }
@@ -36,6 +43,7 @@ var KnownZoneDefinitions = map[string]ZoneDefinition{
 		MarkerIcon:            "\u2728",
 		Shape:                 "circle",
 		ZoneType:              "damage",
+		AnchorMode:            "combatant",
 		RequiresConcentration: true,
 		Triggers: []ZoneTrigger{
 			{Trigger: "enter", Effect: "damage"},

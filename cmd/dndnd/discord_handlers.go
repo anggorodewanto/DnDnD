@@ -220,6 +220,12 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	if deps.queries != nil {
 		handlers.move.SetSizeSpeedLookup(newMoveSizeSpeedAdapter(deps.queries))
 	}
+	// med-31 / Phase 75b: wire armor lookup so /check stealth applies the
+	// equipped armor's stealth_disadv flag. *refdata.Queries already
+	// satisfies discord.CheckArmorLookup via GetArmor.
+	if deps.queries != nil {
+		handlers.check.SetArmorLookup(deps.queries)
+	}
 	if deps.enemyTurnEncounterLookup != nil {
 		handlers.enemyTurnNotifier.SetEncounterLookup(deps.enemyTurnEncounterLookup)
 	}
@@ -303,6 +309,11 @@ func attachInventoryAndCharacterHandlers(
 
 	if deps.levelUpService != nil {
 		handlers.asi = discord.NewASIHandler(deps.session, newASIServiceAdapter(deps.levelUpService, deps.queries), deps.dmQueueFunc)
+		// med-36 / Phase 89: wire feat lister so the "Choose a Feat"
+		// button posts a real select-menu instead of the stub.
+		if deps.queries != nil {
+			handlers.asi.SetFeatLister(newASIFeatLister(deps.queries))
+		}
 	}
 
 	// /retire shares the campaign + character lookups with inventory.
@@ -588,6 +599,41 @@ func (a *combatantByDiscordAdapter) GetCombatantIDByDiscordUser(ctx context.Cont
 	return uuid.Nil, "", sqlNoRowsLike()
 }
 
+// asiFeatLister satisfies discord.FeatLister by enumerating all seeded feats
+// (capped at 25, the Discord select-menu maximum). Prerequisite filtering is
+// delegated to the approval flow per the chunk-7 recommendation; the picker
+// surfaces every feat alphabetically for the simplest possible UX.
+// med-36 / Phase 89.
+type asiFeatLister struct {
+	queries *refdata.Queries
+}
+
+func newASIFeatLister(q *refdata.Queries) *asiFeatLister {
+	if q == nil {
+		return nil
+	}
+	return &asiFeatLister{queries: q}
+}
+
+func (a *asiFeatLister) ListEligibleFeats(ctx context.Context, _ uuid.UUID) ([]discord.FeatOption, error) {
+	feats, err := a.queries.ListFeats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]discord.FeatOption, 0, len(feats))
+	for _, f := range feats {
+		if len(out) >= 25 {
+			break
+		}
+		out = append(out, discord.FeatOption{
+			ID:          f.ID,
+			Name:        f.Name,
+			Description: f.Description,
+		})
+	}
+	return out, nil
+}
+
 // moveSizeSpeedAdapter satisfies discord.MoveSizeSpeedLookup by joining
 // the combatant to either a Character (PCs) or a Creature (NPCs) and
 // extracting the size category + walk speed. PCs default to size Medium
@@ -614,7 +660,22 @@ func (a *moveSizeSpeedAdapter) LookupSizeAndSpeed(ctx context.Context, combatant
 		if err != nil {
 			return pathfinding.SizeMedium, 30, err
 		}
-		return pathfinding.SizeMedium, int(char.SpeedFt), nil
+		speed := int(char.SpeedFt)
+		// med-31 / Phase 75b: heavy-armor STR-deficient -10 ft penalty.
+		// CheckHeavyArmorPenalty returns 0 when the armor has no
+		// strength_req or the wearer's STR meets it.
+		if char.EquippedArmor.Valid && char.EquippedArmor.String != "" {
+			armor, armorErr := a.queries.GetArmor(ctx, char.EquippedArmor.String)
+			if armorErr == nil {
+				if penalty := combat.CheckHeavyArmorPenalty(char, armor); penalty > 0 {
+					speed -= int(penalty)
+					if speed < 0 {
+						speed = 0
+					}
+				}
+			}
+		}
+		return pathfinding.SizeMedium, speed, nil
 	}
 	// NPCs: Creature.Size + parsed walk speed.
 	if combatant.CreatureRefID.Valid {
@@ -1034,6 +1095,24 @@ func newASIServiceAdapter(svc *levelup.Service, q *refdata.Queries) discord.ASIS
 }
 
 func (a *asiServiceAdapter) ApproveASI(ctx context.Context, charID uuid.UUID, choice discord.ASIChoiceData) error {
+	// med-36 / Phase 89: feat approvals route to ApplyFeat (which adds the
+	// feat to the character's features and applies any baked-in ASI bonus).
+	// Ability-score approvals continue through the existing ApproveASI
+	// path. Empty FeatID for type=="feat" is rejected upstream.
+	if choice.Type == "feat" && choice.FeatID != "" {
+		feat, err := a.queries.GetFeat(ctx, choice.FeatID)
+		if err != nil {
+			return fmt.Errorf("loading feat %q: %w", choice.FeatID, err)
+		}
+		info := levelup.FeatInfo{ID: feat.ID, Name: feat.Name}
+		if feat.AsiBonus.Valid {
+			_ = json.Unmarshal(feat.AsiBonus.RawMessage, &info.ASIBonus)
+		}
+		if feat.MechanicalEffect.Valid {
+			_ = json.Unmarshal(feat.MechanicalEffect.RawMessage, &info.MechanicalEffect)
+		}
+		return a.svc.ApplyFeat(ctx, charID, info)
+	}
 	return a.svc.ApproveASI(ctx, charID, levelup.ASIChoice{
 		Type:     levelup.ASIType(choice.Type),
 		Ability:  choice.Ability,

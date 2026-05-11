@@ -477,6 +477,36 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		return AoECastResult{}, err
 	}
 
+	// 17. med-26 / Phase 67: auto-create persistent zones at the targeted
+	// tile for known AoE spells. Different from Cast because AoE origin is
+	// the targeted coordinate, not the caster's position. Errors are
+	// surfaced so the DM can investigate.
+	if def, ok := LookupZoneDefinition(spell.Name); ok {
+		anchorID := uuid.NullUUID{}
+		if def.AnchorMode == "combatant" {
+			anchorID = uuid.NullUUID{UUID: caster.ID, Valid: true}
+		}
+		_, zoneErr := s.CreateZone(ctx, CreateZoneInput{
+			EncounterID:           caster.EncounterID,
+			SourceCombatantID:     caster.ID,
+			SourceSpell:           spell.Name,
+			Shape:                 def.Shape,
+			OriginCol:             cmd.TargetCol,
+			OriginRow:             cmd.TargetRow,
+			Dimensions:            zoneDimensionsForDefinition(def, spell),
+			AnchorMode:            zoneAnchorOrDefault(def.AnchorMode),
+			AnchorCombatantID:     anchorID,
+			ZoneType:              def.ZoneType,
+			OverlayColor:          def.OverlayColor,
+			MarkerIcon:            def.MarkerIcon,
+			RequiresConcentration: def.RequiresConcentration,
+			Triggers:              def.Triggers,
+		})
+		if zoneErr != nil {
+			return AoECastResult{}, fmt.Errorf("creating zone for %s: %w", spell.Name, zoneErr)
+		}
+	}
+
 	return AoECastResult{
 		CasterName:           caster.DisplayName,
 		SpellName:            spell.Name,

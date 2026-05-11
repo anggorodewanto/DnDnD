@@ -958,6 +958,169 @@ func TestBuildASIDescription_Unknown(t *testing.T) {
 	}
 }
 
+// med-36 / Phase 89: feat select-menu replaces the "not yet available"
+// stub. The handler resolves the feat list via FeatLister and posts a
+// Discord SelectMenu populated with eligible feats.
+type stubFeatLister struct {
+	feats []FeatOption
+	err   error
+}
+
+func (s *stubFeatLister) ListEligibleFeats(_ context.Context, _ uuid.UUID) ([]FeatOption, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.feats, nil
+}
+
+func TestASIHandler_HandleASIChoiceButton_Feat_WithLister_PostsSelectMenu(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{
+		character: &ASICharacterData{
+			ID:            charID,
+			Name:          "Aria",
+			DiscordUserID: "user123",
+			Scores:        character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8},
+			ClassInfo:     "Fighter 8",
+		},
+	}
+
+	var respondedComponents []discordgo.MessageComponent
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+			if resp.Data != nil {
+				respondedComponents = resp.Data.Components
+			}
+			return nil
+		},
+	}
+
+	handler := NewASIHandler(session, svc, nil)
+	handler.SetFeatLister(&stubFeatLister{
+		feats: []FeatOption{
+			{ID: "lucky", Name: "Lucky", Description: "Reroll d20s"},
+			{ID: "tough", Name: "Tough", Description: "+2 HP per level"},
+		},
+	})
+
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_choice:" + charID.String() + ":feat",
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "user123"}},
+	}
+
+	handler.HandleASIChoice(interaction)
+
+	if len(respondedComponents) == 0 {
+		t.Fatal("expected response with select-menu components")
+	}
+	row, ok := respondedComponents[0].(*discordgo.ActionsRow)
+	if !ok {
+		t.Fatalf("expected ActionsRow, got %T", respondedComponents[0])
+	}
+	menu, ok := row.Components[0].(discordgo.SelectMenu)
+	if !ok {
+		t.Fatalf("expected SelectMenu, got %T", row.Components[0])
+	}
+	if menu.CustomID != "asi_feat_select:"+charID.String() {
+		t.Errorf("CustomID = %q, want %q", menu.CustomID, "asi_feat_select:"+charID.String())
+	}
+	if len(menu.Options) != 2 {
+		t.Errorf("expected 2 feat options, got %d", len(menu.Options))
+	}
+}
+
+func TestASIHandler_HandleASIChoiceButton_Feat_NoLister_FallsBackToStub(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{
+		character: &ASICharacterData{ID: charID, Name: "Aria"},
+	}
+
+	var respondedContent string
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+			if resp.Data != nil {
+				respondedContent = resp.Data.Content
+			}
+			return nil
+		},
+	}
+
+	handler := NewASIHandler(session, svc, nil)
+	// no SetFeatLister wired
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_choice:" + charID.String() + ":feat",
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "user123"}},
+	}
+	handler.HandleASIChoice(interaction)
+	if !strings.Contains(respondedContent, "not yet available") {
+		t.Errorf("expected stub message when no lister wired, got: %s", respondedContent)
+	}
+}
+
+func TestASIHandler_HandleASIFeatSelect_PostsToDMQueue(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{
+		character: &ASICharacterData{
+			ID:            charID,
+			Name:          "Aria",
+			DiscordUserID: "user123",
+			Scores:        character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8},
+			ClassInfo:     "Fighter 8",
+		},
+	}
+
+	var sentMessage *discordgo.MessageSend
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error {
+			return nil
+		},
+		ChannelMessageSendComplexFunc: func(_ string, msg *discordgo.MessageSend) (*discordgo.Message, error) {
+			sentMessage = msg
+			return &discordgo.Message{}, nil
+		},
+	}
+
+	handler := NewASIHandler(session, svc, func(_ string) string { return "dm-queue-channel" })
+	handler.SetFeatLister(&stubFeatLister{
+		feats: []FeatOption{{ID: "lucky", Name: "Lucky"}, {ID: "tough", Name: "Tough"}},
+	})
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_feat_select:" + charID.String(),
+			Values:   []string{"lucky"},
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "user123"}},
+	}
+
+	handler.HandleASIFeatSelect(interaction)
+
+	pending, ok := handler.getPendingChoice(charID)
+	if !ok {
+		t.Fatal("expected pending choice stored")
+	}
+	if pending.FeatID != "lucky" {
+		t.Errorf("FeatID = %q, want lucky", pending.FeatID)
+	}
+	if pending.ASIType != "feat" {
+		t.Errorf("ASIType = %q, want feat", pending.ASIType)
+	}
+	if sentMessage == nil {
+		t.Fatal("expected DM-queue message posted")
+	}
+	if !strings.Contains(sentMessage.Content, "Lucky") {
+		t.Errorf("DM-queue content missing feat name: %s", sentMessage.Content)
+	}
+}
+
 func TestASIHandler_HandleDMDeny(t *testing.T) {
 	charID := uuid.New()
 

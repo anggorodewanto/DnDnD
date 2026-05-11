@@ -41,26 +41,26 @@ Source: `.review-findings/SUMMARY.md` + chunk{1..8}_*.md. Status flow: pending �
 | med-21 | med | Phase 30 /move look up creature size + max speed (drop Medium/30ft hardcodes) | done | impl-MB1 | 1 |
 | med-22 | med | Phase 37 thrown weapon removed from hand | done | impl-orch | 1 |
 | med-23 | med | Phase 38 Reckless first-attack-only enforcement | done | impl-orch | 1 |
-| med-24 | med | Phase 55 OAs invoked from /move; PC reach weapons supported | pending | - | 0 |
+| med-24 | med | Phase 55 OAs invoked from /move; PC reach weapons supported | deferred | - | 0 |
 | med-25 | med | Phase 61 silence zone — Cast pre-validates ValidateSilenceZone | done | impl-MB1 | 1 |
-| med-26 | med | Phase 67 Cast invokes zone creation; ZoneDefinition.AnchorMode added | pending | - | 0 |
-| med-27 | med | Phase 68 FoW: explored history, two-range light, real shadowcasting, RenderMap called | pending | - | 0 |
+| med-26 | med | Phase 67 Cast invokes zone creation; ZoneDefinition.AnchorMode added | done | impl-MB2 | 1 |
+| med-27 | med | Phase 68 FoW: explored history, two-range light, real shadowcasting, RenderMap called | deferred | - | 0 |
 | med-28 | med | Phase 71 readied spell deducts slot + sets concentration | done | impl-MB1 | 1 |
-| med-29 | med | Phase 72 counterspell — Discord prompt UI, auto-timeout, Subtle Spell bypass | pending | - | 0 |
-| med-30 | med | Phase 66b metamagic — interactive Empowered/Careful/Heightened prompts | pending | - | 0 |
-| med-31 | med | Phase 75b stealth_disadv honored by /check stealth; heavy-armor speed penalty applied | pending | - | 0 |
+| med-29 | med | Phase 72 counterspell — Subtle bypass + ErrSubtleSpellNotCounterspellable (prompt UI deferred) | partial | impl-MB2 | 1 |
+| med-30 | med | Phase 66b metamagic — interactive Empowered/Careful/Heightened prompts | deferred | - | 0 |
+| med-31 | med | Phase 75b stealth_disadv honored by /check stealth; heavy-armor speed penalty applied | done | impl-MB2 | 1 |
 | med-32 | med | Phase 81 /check target option used; group/contested/passive checks wired | done | impl-MB1 | 1 |
 | med-33 | med | Phase 82 FeatureEffects populated in save_handler (Aura of Protection, Bless, magic-item, dodge-on-DEX) | done | impl-MB1 | 1 |
 | med-34 | med | Phase 83a rest gated on DM approval | done | impl-MB1 | 1 |
 | med-35 | med | Phase 84 /use and /give combat costs + delete dead PotionBonusAction field | partial | impl-orch | 1 |
-| med-36 | med | Phase 89 ASI/feat select-menu implemented (drop "not yet available" stub) | pending | - | 0 |
-| med-37 | med | Phase 99/101 Homebrew + Character Overview Svelte UIs | pending | - | 0 |
-| med-38 | med | Phase 104b publisher fan-out: rest.Service + magicitem.Service constructed in main.go | pending | - | 0 |
+| med-36 | med | Phase 89 ASI/feat select-menu implemented (drop "not yet available" stub) | done | impl-MB2 | 1 |
+| med-37 | med | Phase 99/101 Homebrew + Character Overview Svelte UIs | done | impl-MB2 | 1 |
+| med-38 | med | Phase 104b publisher fan-out: rest.Service + magicitem.Service constructed in main.go | blocked | impl-MB2 | 1 |
 | med-39 | med | Phase 21a App.svelte campaign UUID — derive from session, drop placeholder | done | impl-MB1 | 1 |
 | med-40 | med | Phase 15 Campaign Home counts live (DMQueueCount, PendingApprovals) | done | impl-MB1 | 1 |
 | med-41 | med | Phase 11 production code path calls Service.CreateCampaign (or /setup auto-creates) | done | impl-MB1 | 1 |
 | med-42 | med | Phase 20 ASSET_DATA_DIR documented or defaulted to /data/assets on fly | done | impl-orch | 1 |
-| med-43 | med | Class features auto-prompts (Stunning Strike, Divine Smite, Uncanny Dodge, Bardic Inspiration timers, Rage no-attack auto-end, Wild Shape spell block + auto-revert) | pending | - | 0 |
+| med-43 | med | Class features (Wild Shape spellblock + auto-revert, Rage end-of-turn, Bardic sweep done; Stunning Strike + Smite + Uncanny Dodge prompts deferred) | partial | impl-MB2 | 1 |
 
 ## Low / cosmetic
 

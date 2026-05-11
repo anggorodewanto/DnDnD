@@ -522,6 +522,75 @@ func TestService_AdvanceTurn_NoCombatants(t *testing.T) {
 	assert.Contains(t, err.Error(), "no combatants")
 }
 
+// med-43 / Phase 46: AdvanceTurn invokes the rage end-of-turn auto-end
+// sweep so a raging Barbarian who neither attacked nor took damage this
+// round drops out of rage automatically (ShouldRageEndOnTurnEnd → EndRage).
+func TestService_AdvanceTurn_EndsRageWhenIdle(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	activeTurnID := uuid.New()
+	rageCombatantID := uuid.New()
+	nextCombatantID := uuid.New()
+
+	rageCombatant := refdata.Combatant{
+		ID:                      rageCombatantID,
+		EncounterID:             encounterID,
+		DisplayName:             "Grog",
+		IsAlive:                 true,
+		IsRaging:                true,
+		RageRoundsRemaining:     sql.NullInt32{Int32: 5, Valid: true},
+		RageAttackedThisRound:   false,
+		RageTookDamageThisRound: false,
+		Conditions:              json.RawMessage(`[]`),
+	}
+
+	rageEndCalled := false
+	store := defaultMockStore()
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
+			CurrentTurnID: uuid.NullUUID{UUID: activeTurnID, Valid: true},
+		}, nil
+	}
+	store.getTurnFn = func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: activeTurnID, CombatantID: rageCombatantID, EncounterID: encounterID}, nil
+	}
+	store.completeTurnFn = func(_ context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: id, Status: "completed"}, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == rageCombatantID {
+			return rageCombatant, nil
+		}
+		return refdata.Combatant{ID: id, IsAlive: true}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			rageCombatant,
+			{ID: nextCombatantID, InitiativeOrder: 2, DisplayName: "B", Conditions: json.RawMessage(`[]`), IsAlive: true},
+		}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(_ context.Context, _ refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{{CombatantID: rageCombatantID, Status: "completed"}}, nil
+	}
+	store.createTurnFn = func(_ context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, Status: arg.Status}, nil
+	}
+	store.updateCombatantRageFn = func(_ context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error) {
+		if arg.ID == rageCombatantID && !arg.IsRaging {
+			rageEndCalled = true
+		}
+		return refdata.Combatant{ID: arg.ID, IsRaging: arg.IsRaging}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.AdvanceTurn(ctx, encounterID)
+	require.NoError(t, err)
+	require.True(t, rageEndCalled, "expected EndRage (UpdateCombatantRage with IsRaging=false) when ShouldRageEndOnTurnEnd")
+}
+
 func TestService_AdvanceTurn_CompletesCurrentTurn(t *testing.T) {
 	ctx := context.Background()
 	encounterID := uuid.New()

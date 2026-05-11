@@ -395,6 +395,16 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		return CastResult{}, fmt.Errorf("parsing classes: %w", err)
 	}
 
+	// 6a-bis. med-43 / Phase 47: a Wild-Shaped Druid below level 18 cannot
+	// cast spells (Beast Spells unlocks at level 18). Reject BEFORE slot
+	// deduction so the player doesn't lose a slot to a beast-form cast.
+	if caster.IsWildShaped {
+		druidLevel := druidLevelFromClasses(classes)
+		if !CanWildShapeSpellcast(druidLevel) {
+			return CastResult{}, fmt.Errorf("cannot cast spells while in Wild Shape (Beast Spells unlocks at Druid 18)")
+		}
+	}
+
 	// 6b. Ritual validation
 	if cmd.IsRitual {
 		primaryClass := ""
@@ -681,7 +691,100 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	}
 	result.InvisibilityBroken = broken
 
+	// 19. med-26 / Phase 67: auto-create persistent zones for known
+	// AoE / area-effect spells. Best-effort — zone creation errors are
+	// logged via the returned error so DM can investigate but Cast itself
+	// has already succeeded by this point.
+	if zoneErr := s.maybeCreateSpellZone(ctx, spell, caster, cmd); zoneErr != nil {
+		return result, zoneErr
+	}
+
 	return result, nil
+}
+
+// maybeCreateSpellZone inserts an encounter_zones row when the cast spell has
+// a known ZoneDefinition. AnchorMode "combatant" pins the zone to the caster
+// so subsequent UpdateCombatantPosition calls move the zone with them. This
+// is the wiring that makes Spirit Guardians, Wall of Fire, Darkness, Silence,
+// Fog Cloud, Cloud of Daggers, Moonbeam, and Stinking Cloud actually appear
+// on the encounter map. (med-26 / Phase 67)
+func (s *Service) maybeCreateSpellZone(ctx context.Context, spell refdata.Spell, caster refdata.Combatant, cmd CastCommand) error {
+	def, ok := LookupZoneDefinition(spell.Name)
+	if !ok {
+		return nil
+	}
+	dimensions := zoneDimensionsForDefinition(def, spell)
+	anchorID := uuid.NullUUID{}
+	if def.AnchorMode == "combatant" {
+		anchorID = uuid.NullUUID{UUID: caster.ID, Valid: true}
+	}
+	_, err := s.CreateZone(ctx, CreateZoneInput{
+		EncounterID:           caster.EncounterID,
+		SourceCombatantID:     caster.ID,
+		SourceSpell:           spell.Name,
+		Shape:                 def.Shape,
+		OriginCol:             caster.PositionCol,
+		OriginRow:             caster.PositionRow,
+		Dimensions:            dimensions,
+		AnchorMode:            zoneAnchorOrDefault(def.AnchorMode),
+		AnchorCombatantID:     anchorID,
+		ZoneType:              def.ZoneType,
+		OverlayColor:          def.OverlayColor,
+		MarkerIcon:            def.MarkerIcon,
+		RequiresConcentration: def.RequiresConcentration,
+		Triggers:              def.Triggers,
+	})
+	if err != nil {
+		return fmt.Errorf("creating zone for %s: %w", spell.Name, err)
+	}
+	return nil
+}
+
+// zoneAnchorOrDefault returns "static" when the def has no explicit anchor
+// mode set, matching the encounter_zones default.
+func zoneAnchorOrDefault(mode string) string {
+	if mode == "" {
+		return "static"
+	}
+	return mode
+}
+
+// zoneDimensionsForDefinition synthesises a minimal Dimensions JSON blob
+// matching the zone's Shape so DrawZoneOverlays + tile-coverage helpers have
+// the expected radius/side/length keys. Sizes use spec defaults (Spirit
+// Guardians 15ft, Fog Cloud 20ft, etc.). When a future schema migration
+// adds a per-spell area_size column, this helper can read from it. (med-26)
+func zoneDimensionsForDefinition(def ZoneDefinition, _ refdata.Spell) json.RawMessage {
+	size := defaultZoneSizeFt(def)
+	switch def.Shape {
+	case "square":
+		return json.RawMessage(fmt.Sprintf(`{"side_ft":%d}`, size))
+	case "line":
+		return json.RawMessage(fmt.Sprintf(`{"length_ft":%d,"width_ft":5}`, size))
+	default:
+		// circle / sphere
+		return json.RawMessage(fmt.Sprintf(`{"radius_ft":%d}`, size))
+	}
+}
+
+func defaultZoneSizeFt(def ZoneDefinition) int32 {
+	switch def.SpellName {
+	case "Spirit Guardians":
+		return 15
+	case "Fog Cloud":
+		return 20
+	case "Darkness", "Silence":
+		return 20
+	case "Cloud of Daggers":
+		return 5
+	case "Moonbeam":
+		return 5
+	case "Wall of Fire":
+		return 60
+	case "Stinking Cloud":
+		return 20
+	}
+	return 20
 }
 
 // lookupCasterConcentrationID reads the authoritative concentration spell ID
@@ -1204,6 +1307,18 @@ func AddInventoryItem(items []InventoryItem, name string) []InventoryItem {
 		}
 	}
 	return append(items, InventoryItem{Name: name, Quantity: 1, Type: "component"})
+}
+
+// druidLevelFromClasses returns the Druid class level (case-insensitive) or
+// 0 when the character has no Druid level. Used by med-43 / Phase 47 to
+// gate Wild Shape spellcasting on Beast Spells (level 18+).
+func druidLevelFromClasses(classes []CharacterClass) int {
+	for _, cc := range classes {
+		if strings.EqualFold(cc.Class, "druid") {
+			return cc.Level
+		}
+	}
+	return 0
 }
 
 // resolveSpellcastingAbilityScore determines the highest applicable spellcasting

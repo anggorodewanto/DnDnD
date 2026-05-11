@@ -10,6 +10,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/check"
@@ -53,6 +54,14 @@ type CheckOpponentResolver interface {
 	ResolveContestedOpponent(ctx context.Context, encounterID uuid.UUID, targetShortID, skill string) (name string, modifier int, ok bool)
 }
 
+// CheckArmorLookup resolves an armor row by ID. Used by /check stealth to
+// honor the armor's stealth_disadv flag (med-31 / Phase 75b). Wrap
+// refdata.Queries.GetArmor in production. Nil disables the lookup so the
+// handler keeps working in unit tests built before this wiring landed.
+type CheckArmorLookup interface {
+	GetArmor(ctx context.Context, id string) (refdata.Armor, error)
+}
+
 // CheckHandler handles the /check slash command.
 type CheckHandler struct {
 	session           Session
@@ -68,7 +77,15 @@ type CheckHandler struct {
 	// contested path entirely (the handler then runs a regular single
 	// check, matching the historical behaviour).
 	opponentResolver CheckOpponentResolver
+	// med-31 / Phase 75b: armor lookup so /check stealth applies armor
+	// stealth_disadv automatically. Nil disables the lookup (preserves
+	// pre-wiring behaviour for unit tests).
+	armorLookup CheckArmorLookup
 }
+
+// SetArmorLookup wires the equipped-armor lookup so /check stealth honors the
+// armor's stealth_disadv flag. Nil disables the lookup (med-31 / Phase 75b).
+func (h *CheckHandler) SetArmorLookup(l CheckArmorLookup) { h.armorLookup = l }
 
 // SetOpponentResolver wires the contested-check opponent lookup. Pass nil
 // to keep the historical "ignore target" behaviour (med-32).
@@ -139,12 +156,19 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	rollMode := rollModeFromFlags(adv, disadv)
+	skillKey := strings.ToLower(skill)
+
+	// med-31 / Phase 75b: apply armor stealth disadvantage when the player
+	// rolls /check stealth wearing armor flagged stealth_disadv. The
+	// resolved disadv flag combines with any explicit --disadv via the
+	// usual rollModeFromFlags cancellation rules.
+	armorImposesDisadv := h.armorImposesStealthDisadv(ctx, char, skillKey)
+	rollMode := rollModeFromFlags(adv, disadv || armorImposesDisadv)
 
 	// Build input
 	input := check.SingleCheckInput{
 		Scores:           charData.Scores,
-		Skill:            strings.ToLower(skill),
+		Skill:            skillKey,
 		ProficientSkills: charData.Skills,
 		ExpertiseSkills:  charData.Expertise,
 		JackOfAllTrades:  charData.JackOfAllTrades,
@@ -400,6 +424,57 @@ func parseCharacterData(char refdata.Character) (characterData, error) {
 		Expertise:       profData.Expertise,
 		JackOfAllTrades: profData.JackOfAllTrades,
 	}, nil
+}
+
+// armorImposesStealthDisadv reports whether the character's equipped armor
+// forces disadvantage on a stealth check (armor.stealth_disadv = true). It
+// returns false for non-stealth checks, when no armor lookup is wired, when
+// the character has no equipped armor, or when the armor row can't be
+// fetched. (med-31 / Phase 75b)
+func (h *CheckHandler) armorImposesStealthDisadv(ctx context.Context, char refdata.Character, skill string) bool {
+	if skill != "stealth" {
+		return false
+	}
+	if h.armorLookup == nil {
+		return false
+	}
+	if !char.EquippedArmor.Valid || char.EquippedArmor.String == "" {
+		return false
+	}
+	armor, err := h.armorLookup.GetArmor(ctx, char.EquippedArmor.String)
+	if err != nil {
+		return false
+	}
+	if !armor.StealthDisadv.Valid || !armor.StealthDisadv.Bool {
+		return false
+	}
+	// Honor Medium Armor Master: negates stealth disadvantage for medium
+	// armor (mirrors combat.standard_actions.go Hide).
+	if armor.ArmorType == "medium" && hasFeatureEffectKey(char.Features, "no_stealth_disadvantage_medium_armor") {
+		return false
+	}
+	return true
+}
+
+// hasFeatureEffectKey reports whether a JSON-encoded features blob contains
+// any feature whose mechanical_effect string matches key. Defensive: returns
+// false on parse errors (parity with combat.hasFeatureEffect).
+func hasFeatureEffectKey(features pqtype.NullRawMessage, key string) bool {
+	if !features.Valid || len(features.RawMessage) == 0 {
+		return false
+	}
+	var feats []struct {
+		MechanicalEffect string `json:"mechanical_effect"`
+	}
+	if err := json.Unmarshal(features.RawMessage, &feats); err != nil {
+		return false
+	}
+	for _, f := range feats {
+		if f.MechanicalEffect == key {
+			return true
+		}
+	}
+	return false
 }
 
 // rollModeFromFlags converts advantage/disadvantage boolean flags to a dice.RollMode.

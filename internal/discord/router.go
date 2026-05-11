@@ -478,6 +478,14 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 
 	// ASI/Feat button and select menu callbacks
 	if r.asiHandler != nil {
+		// med-36 / Phase 89: feat select-menu. Check first because the
+		// prefix is longer than the asi_select prefix (which would
+		// otherwise still NOT match here, but the explicit ordering is
+		// safer if either prefix ever changes).
+		if strings.HasPrefix(customID, asiFeatSelectPrefix+":") {
+			r.asiHandler.HandleASIFeatSelect(interaction)
+			return
+		}
 		if strings.HasPrefix(customID, asiChoicePrefix+":") {
 			r.asiHandler.HandleASIChoice(interaction)
 			return

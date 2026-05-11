@@ -389,6 +389,21 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 			return TurnInfo{}, fmt.Errorf("processing turn end conditions: %w", err)
 		}
 
+		// med-43 / Phase 46: rage no-attack-no-damage auto-end. Rage must
+		// drop at end of turn for a Barbarian who neither attacked nor
+		// took damage this round. Best-effort: errors here do NOT abort
+		// AdvanceTurn (rage state is non-critical to turn flow).
+		s.maybeEndRageOnTurnEnd(ctx, currentTurn.CombatantID)
+
+		// med-43 / Phase 49: sweep expired Bardic Inspirations across
+		// every combatant in the encounter. Best-effort: errors are
+		// swallowed to keep turn flow non-blocking. The sweep walks the
+		// already-loaded combatant list further down so we do this after
+		// listing is convenient, but doing it now (cheap query) keeps
+		// the cleanup tied to a real player action (turn end) instead
+		// of a distinct goroutine.
+		s.sweepExpiredBardicInspirations(ctx, encounterID)
+
 		if _, err := s.store.CompleteTurn(ctx, enc.CurrentTurnID.UUID); err != nil {
 			return TurnInfo{}, fmt.Errorf("completing current turn: %w", err)
 		}
