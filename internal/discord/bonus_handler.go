@@ -28,6 +28,20 @@ type BonusCombatService interface {
 	FontOfMagicCreateSlot(ctx context.Context, cmd combat.FontOfMagicCommand) (combat.FontOfMagicResult, error)
 	LayOnHands(ctx context.Context, cmd combat.LayOnHandsCommand) (combat.LayOnHandsResult, error)
 	GrantBardicInspiration(ctx context.Context, cmd combat.BardicInspirationCommand) (combat.BardicInspirationResult, error)
+
+	// D-47 / Phase 47: Wild Shape activate / revert.
+	ActivateWildShape(ctx context.Context, cmd combat.WildShapeCommand) (combat.WildShapeResult, error)
+	RevertWildShapeService(ctx context.Context, cmd combat.RevertWildShapeCommand) (combat.RevertWildShapeResult, error)
+
+	// D-48b / Phase 48b: Flurry of Blows (monk ki bonus action, post-Attack).
+	FlurryOfBlows(ctx context.Context, cmd combat.FlurryOfBlowsCommand, roller *dice.Roller) (combat.FlurryOfBlowsResult, error)
+
+	// D-54-cunning-action / D-57: Cunning Action (rogue dash/disengage/hide).
+	CunningAction(ctx context.Context, cmd combat.CunningActionCommand, roller ...*dice.Roller) (combat.CunningActionResult, error)
+
+	// D-56 / Phase 56: Drag / Release drag for grappling combatants on /move.
+	CheckDragTargets(ctx context.Context, encounterID uuid.UUID, mover refdata.Combatant) (combat.DragCheckResult, error)
+	ReleaseDrag(ctx context.Context, mover refdata.Combatant, targets []refdata.Combatant) (combat.ReleaseDragResult, error)
 }
 
 // BonusEncounterProvider is the lookup surface /bonus needs.
@@ -126,8 +140,20 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 		h.dispatchLayOnHands(ctx, interaction, bctx, args)
 	case "bardic-inspiration", "bardicinspiration":
 		h.dispatchBardicInspiration(ctx, interaction, bctx, args)
+	case "wild-shape", "wildshape":
+		h.dispatchWildShape(ctx, interaction, bctx, args)
+	case "revert-wild-shape", "revertwildshape":
+		h.dispatchRevertWildShape(ctx, interaction, bctx)
+	case "flurry", "flurry-of-blows", "flurryofblows":
+		h.dispatchFlurryOfBlows(ctx, interaction, bctx, args)
+	case "cunning-action", "cunningaction":
+		h.dispatchCunningAction(ctx, interaction, bctx, args)
+	case "drag":
+		h.dispatchDrag(ctx, interaction, bctx, args)
+	case "release-drag", "releasedrag":
+		h.dispatchReleaseDrag(ctx, interaction, bctx)
 	default:
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Unknown bonus action %q. Try rage, end-rage, martial-arts, step-of-the-wind, patient-defense, font-of-magic, lay-on-hands, bardic-inspiration.", action))
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Unknown bonus action %q. Try rage, end-rage, martial-arts, step-of-the-wind, patient-defense, font-of-magic, lay-on-hands, bardic-inspiration, wild-shape, revert-wild-shape, flurry, cunning-action, drag, release-drag.", action))
 	}
 }
 
@@ -393,4 +419,130 @@ func parseFlagTokens(tokens []string) (curePoison, cureDisease bool) {
 		}
 	}
 	return curePoison, cureDisease
+}
+
+// --- D-47 / D-48b / D-54-cunning-action / D-56 / D-57 dispatch ---
+
+// dispatchWildShape wires /bonus wild-shape <beast> (D-47).
+func (h *BonusHandler) dispatchWildShape(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args string) {
+	beastName := strings.TrimSpace(args)
+	if beastName == "" {
+		respondEphemeral(h.session, interaction, "Wild Shape requires `<beast>` (e.g. `/bonus wild-shape wolf`).")
+		return
+	}
+	result, err := h.combatService.ActivateWildShape(ctx, combat.WildShapeCommand{
+		Combatant: bctx.actor,
+		Turn:      bctx.turn,
+		BeastName: beastName,
+	})
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Wild Shape failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)
+}
+
+// dispatchRevertWildShape wires /bonus revert-wild-shape (D-47).
+func (h *BonusHandler) dispatchRevertWildShape(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext) {
+	result, err := h.combatService.RevertWildShapeService(ctx, combat.RevertWildShapeCommand{
+		Combatant: bctx.actor,
+		Turn:      bctx.turn,
+	})
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Revert Wild Shape failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)
+}
+
+// dispatchFlurryOfBlows wires /bonus flurry <target> (D-48b). Requires the
+// Attack action to have been used this turn (enforced inside the service).
+func (h *BonusHandler) dispatchFlurryOfBlows(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args string) {
+	target, ok := h.resolveTargetArg(interaction, bctx.combatants, args, "flurry <target>")
+	if !ok {
+		return
+	}
+	result, err := h.combatService.FlurryOfBlows(ctx, combat.FlurryOfBlowsCommand{
+		Attacker: bctx.actor,
+		Target:   *target,
+		Turn:     bctx.turn,
+	}, h.roller)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Flurry of Blows failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)
+}
+
+// dispatchCunningAction wires /bonus cunning-action <dash|disengage|hide>
+// (D-54-cunning-action / D-57-cunning-action-hide).
+func (h *BonusHandler) dispatchCunningAction(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args string) {
+	mode := strings.ToLower(strings.TrimSpace(args))
+	if mode != "dash" && mode != "disengage" && mode != "hide" {
+		respondEphemeral(h.session, interaction, "Cunning Action requires `dash`, `disengage`, or `hide` (e.g. `/bonus cunning-action dash`).")
+		return
+	}
+	hostiles := filterHostiles(bctx.combatants, bctx.actor)
+	cmd := combat.CunningActionCommand{
+		Combatant: bctx.actor,
+		Turn:      bctx.turn,
+		Encounter: bctx.encounter,
+		Action:    mode,
+		Hostiles:  hostiles,
+	}
+	var result combat.CunningActionResult
+	var err error
+	if mode == "hide" {
+		if h.roller == nil {
+			respondEphemeral(h.session, interaction, "Cunning Action: Hide is not available right now (no dice roller wired).")
+			return
+		}
+		result, err = h.combatService.CunningAction(ctx, cmd, h.roller)
+	} else {
+		result, err = h.combatService.CunningAction(ctx, cmd)
+	}
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Cunning Action failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)
+}
+
+// dispatchDrag wires /bonus drag — informs the player how many creatures
+// they are currently grappling and that subsequent /move calls will incur
+// the x2 drag movement cost. No state mutation here; the actual drag
+// movement cost is applied by /move via combat.DragMovementCost. (D-56)
+func (h *BonusHandler) dispatchDrag(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args string) {
+	_ = args
+	check, err := h.combatService.CheckDragTargets(ctx, bctx.encounterID, bctx.actor)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Drag check failed: %v", err))
+		return
+	}
+	if !check.HasTargets {
+		respondEphemeral(h.session, interaction, "You are not grappling anyone — nothing to drag.")
+		return
+	}
+	respondEphemeral(h.session, interaction, combat.FormatDragPrompt(check.GrappledTargets))
+}
+
+// dispatchReleaseDrag wires /bonus release-drag (D-56). Strips the
+// grappled condition off every creature this combatant is dragging.
+func (h *BonusHandler) dispatchReleaseDrag(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext) {
+	check, err := h.combatService.CheckDragTargets(ctx, bctx.encounterID, bctx.actor)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Drag check failed: %v", err))
+		return
+	}
+	if !check.HasTargets {
+		respondEphemeral(h.session, interaction, "You are not grappling anyone — nothing to release.")
+		return
+	}
+	release, err := h.combatService.ReleaseDrag(ctx, bctx.actor, check.GrappledTargets)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Release Drag failed: %v", err))
+		return
+	}
+	log := strings.Join(release.CombatLogs, "\n")
+	h.respondAndLog(interaction, bctx.encounterID, log)
 }

@@ -36,13 +36,22 @@ func NewService(queries *refdata.Queries) *Service {
 }
 
 // validTransitions defines which status transitions are allowed.
-// Only transitions from "pending" are permitted.
+//
+// `pending` is the normal entry state from /register, /import, /create; from
+// there a row may go to approved, changes_requested, rejected, or retired.
+//
+// `approved` -> `retired` covers the realistic /retire flow: the player has
+// an already-approved character and asks to retire it (see Phase 8 spec and
+// Phase 16 retire-approval branch in internal/dashboard/approval_handler.go).
 var validTransitions = map[string]map[string]bool{
 	"pending": {
 		"approved":          true,
 		"changes_requested": true,
 		"rejected":          true,
 		"retired":           true,
+	},
+	"approved": {
+		"retired": true,
 	},
 }
 
@@ -170,7 +179,9 @@ func (s *Service) Reject(ctx context.Context, id uuid.UUID, feedback string) (*r
 	return s.transitionStatus(ctx, id, "rejected", feedback)
 }
 
-// Retire transitions a player_character from pending to retired.
+// Retire transitions a player_character to retired. The realistic case is
+// approved -> retired (player has an active character and asks to retire it);
+// pending -> retired is also supported for the pre-approval edge case.
 func (s *Service) Retire(ctx context.Context, id uuid.UUID) (*refdata.PlayerCharacter, error) {
 	return s.transitionStatus(ctx, id, "retired", "")
 }

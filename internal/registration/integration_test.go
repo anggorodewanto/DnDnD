@@ -220,6 +220,30 @@ func TestIntegration_StatusTransitions(t *testing.T) {
 			t.Errorf("expected retired, got %s", pc.Status)
 		}
 	})
+
+	// A-08-retire-approved-transition: the realistic /retire flow is
+	// approved -> retired, since the player only retires already-approved
+	// characters. Phase 8 originally only permitted transitions from
+	// 'pending', which made this case return an "invalid status transition"
+	// error.
+	t.Run("approved to retired", func(t *testing.T) {
+		createTestCharacter(t, db, campaignID, "Fighter5")
+		result, err := svc.Register(ctx, campaignID, "player-retire-approved", "Fighter5")
+		if err != nil {
+			t.Fatalf("Register: %v", err)
+		}
+		if _, err := svc.Approve(ctx, result.PlayerCharacter.ID); err != nil {
+			t.Fatalf("Approve: %v", err)
+		}
+
+		pc, err := svc.Retire(ctx, result.PlayerCharacter.ID)
+		if err != nil {
+			t.Fatalf("Retire (approved -> retired): %v", err)
+		}
+		if pc.Status != "retired" {
+			t.Errorf("expected retired, got %s", pc.Status)
+		}
+	})
 }
 
 func TestIntegration_GetStatus(t *testing.T) {
@@ -386,6 +410,58 @@ func TestIntegration_Create(t *testing.T) {
 	}
 	if pc.CreatedVia != "create" {
 		t.Errorf("expected created_via create, got %s", pc.CreatedVia)
+	}
+}
+
+// A-08-retire-created-via-schema: integration sanity-check that the new
+// migration permits 'retire' in created_via and that the new sqlc query
+// flips the existing row in place (the dashboard approval handler then
+// transitions the row's status to 'retired').
+func TestIntegration_MarkPlayerCharacterRetireRequested_FlipsCreatedVia(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx, db, queries := setupTestDB(t)
+	svc := registration.NewService(queries)
+	campaignID := createTestCampaign(t, db, "guild-retire-flag")
+	createTestCharacter(t, db, campaignID, "Gandalf")
+
+	result, err := svc.Register(ctx, campaignID, "player-retire-flag", "Gandalf")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if _, err := svc.Approve(ctx, result.PlayerCharacter.ID); err != nil {
+		t.Fatalf("Approve: %v", err)
+	}
+
+	pc, err := queries.MarkPlayerCharacterRetireRequested(ctx, refdata.MarkPlayerCharacterRetireRequestedParams{
+		CampaignID:    campaignID,
+		DiscordUserID: "player-retire-flag",
+	})
+	if err != nil {
+		t.Fatalf("MarkPlayerCharacterRetireRequested: %v", err)
+	}
+	if pc.CreatedVia != "retire" {
+		t.Errorf("expected created_via=retire, got %q", pc.CreatedVia)
+	}
+	if pc.Status != "approved" {
+		t.Errorf("expected status to remain approved, got %q", pc.Status)
+	}
+
+	// The approval-queue list must surface the row.
+	rows, err := queries.ListPlayerCharactersAwaitingApproval(ctx, campaignID)
+	if err != nil {
+		t.Fatalf("ListPlayerCharactersAwaitingApproval: %v", err)
+	}
+	var found bool
+	for _, r := range rows {
+		if r.ID == pc.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected retire-flagged PC to appear in approval queue, got %d rows", len(rows))
 	}
 }
 

@@ -162,12 +162,15 @@ func (q *Queries) DeleteCombatant(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const getCombatant = `-- name: GetCombatant :one
-SELECT id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name FROM combatants WHERE id = $1
+const getActiveCombatantByCharacterID = `-- name: GetActiveCombatantByCharacterID :one
+SELECT cb.id, cb.encounter_id, cb.character_id, cb.creature_ref_id, cb.short_id, cb.display_name, cb.initiative_roll, cb.initiative_order, cb.position_col, cb.position_row, cb.altitude_ft, cb.hp_max, cb.hp_current, cb.temp_hp, cb.ac, cb.conditions, cb.exhaustion_level, cb.death_saves, cb.is_visible, cb.is_alive, cb.is_npc, cb.is_raging, cb.rage_rounds_remaining, cb.rage_attacked_this_round, cb.rage_took_damage_this_round, cb.is_wild_shaped, cb.wild_shape_creature_ref, cb.wild_shape_original, cb.summoner_id, cb.created_at, cb.updated_at, cb.bardic_inspiration_die, cb.bardic_inspiration_source, cb.bardic_inspiration_granted_at, cb.consecutive_auto_resolves, cb.is_absent, cb.concentration_spell_id, cb.concentration_spell_name FROM combatants cb
+JOIN encounters e ON cb.encounter_id = e.id
+WHERE cb.character_id = $1 AND e.status = 'active'
+LIMIT 1
 `
 
-func (q *Queries) GetCombatant(ctx context.Context, id uuid.UUID) (Combatant, error) {
-	row := q.db.QueryRowContext(ctx, getCombatant, id)
+func (q *Queries) GetActiveCombatantByCharacterID(ctx context.Context, characterID uuid.NullUUID) (Combatant, error) {
+	row := q.db.QueryRowContext(ctx, getActiveCombatantByCharacterID, characterID)
 	var i Combatant
 	err := row.Scan(
 		&i.ID,
@@ -212,15 +215,12 @@ func (q *Queries) GetCombatant(ctx context.Context, id uuid.UUID) (Combatant, er
 	return i, err
 }
 
-const getActiveCombatantByCharacterID = `-- name: GetActiveCombatantByCharacterID :one
-SELECT cb.id, cb.encounter_id, cb.character_id, cb.creature_ref_id, cb.short_id, cb.display_name, cb.initiative_roll, cb.initiative_order, cb.position_col, cb.position_row, cb.altitude_ft, cb.hp_max, cb.hp_current, cb.temp_hp, cb.ac, cb.conditions, cb.exhaustion_level, cb.death_saves, cb.is_visible, cb.is_alive, cb.is_npc, cb.is_raging, cb.rage_rounds_remaining, cb.rage_attacked_this_round, cb.rage_took_damage_this_round, cb.is_wild_shaped, cb.wild_shape_creature_ref, cb.wild_shape_original, cb.summoner_id, cb.created_at, cb.updated_at, cb.bardic_inspiration_die, cb.bardic_inspiration_source, cb.bardic_inspiration_granted_at, cb.consecutive_auto_resolves, cb.is_absent, cb.concentration_spell_id, cb.concentration_spell_name FROM combatants cb
-JOIN encounters e ON cb.encounter_id = e.id
-WHERE cb.character_id = $1 AND e.status = 'active'
-LIMIT 1
+const getCombatant = `-- name: GetCombatant :one
+SELECT id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name FROM combatants WHERE id = $1
 `
 
-func (q *Queries) GetActiveCombatantByCharacterID(ctx context.Context, characterID uuid.NullUUID) (Combatant, error) {
-	row := q.db.QueryRowContext(ctx, getActiveCombatantByCharacterID, characterID)
+func (q *Queries) GetCombatant(ctx context.Context, id uuid.UUID) (Combatant, error) {
+	row := q.db.QueryRowContext(ctx, getCombatant, id)
 	var i Combatant
 	err := row.Scan(
 		&i.ID,

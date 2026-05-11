@@ -130,6 +130,11 @@ type ApplyDamageInput struct {
 	// outcome (or restoring a previous state) and per-target damage typing
 	// is not meaningful.
 	Override bool
+	// IsCritical indicates the incoming hit is a critical. Forwarded to the
+	// Phase 43 damage-at-0-HP rule (ApplyDamageAtZeroHP) so a crit on a dying
+	// combatant adds two death-save failures instead of one. Damage rolls
+	// that are not attack-based (AoE saves, ongoing damage) pass false.
+	IsCritical bool
 }
 
 // ApplyDamageResult holds outputs of Service.ApplyDamage.
@@ -141,8 +146,17 @@ type ApplyDamageResult struct {
 	NewHP        int32
 	IsAlive      bool
 	Reason       string
-	// Killed is true when the damage event triggered exhaustion-6 death.
+	// Killed is true when the damage event triggered exhaustion-6 death,
+	// instant-death overflow (Phase 43), or accumulated 3 death-save
+	// failures via damage-at-0-HP.
 	Killed bool
+	// InstantDeath is true when overflow damage >= max HP killed the target
+	// outright (PHB instant-death rule). Implies Killed and !IsAlive.
+	InstantDeath bool
+	// DeathSaveOutcome carries the optional outcome from a Phase 43
+	// drop-to-0 or damage-at-0-HP routing. Nil when no death-save event
+	// fired (e.g. target survived above 0 HP, NPC corpse path).
+	DeathSaveOutcome *DeathSaveOutcome
 }
 
 // ApplyDamage is the single seam for every production damage write. It
@@ -214,7 +228,8 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 		adjusted = remaining
 	}
 
-	newHP := currentHP - adjusted
+	rawNewHP := currentHP - adjusted
+	newHP := rawNewHP
 	// med-43 / Phase 47: preserve a negative newHP for wild-shaped targets
 	// so applyDamageHP can derive the overflow used to apply excess damage
 	// to the Druid's original HP pool. For all other targets we keep the
@@ -224,8 +239,22 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 		newHP = 0
 	}
 
+	// Phase 43: PC death-save routing. NPCs and wild-shaped targets are
+	// unaffected — wild-shape uses its own auto-revert path inside
+	// applyDamageHP, and NPCs die outright at 0 HP. adjusted == 0 (immunity,
+	// full temp-HP absorption) is a no-op for the death-save state machine.
+	dsRouting, err := s.routePhase43DeathSave(ctx, target, adjusted, rawNewHP, newHP, isWildShaped, input.IsCritical)
+	if err != nil {
+		return ApplyDamageResult{}, err
+	}
+
 	// PCs at 0 HP go unconscious + dying (still alive); NPCs die outright.
+	// Instant death and 3-failure death from the death-save routing above
+	// override the default "still alive" outcome for PCs.
 	isAlive := newHP > 0 || !target.IsNpc
+	if dsRouting.outcome != nil && !dsRouting.outcome.IsAlive && !dsRouting.outcome.IsStable {
+		isAlive = false
+	}
 
 	updated, err := s.applyDamageHP(ctx, input.EncounterID, target.ID, target.HpCurrent, int32(newHP), int32(tempHP), isAlive)
 	if err != nil {
@@ -238,14 +267,81 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 	s.notifyCardUpdate(ctx, updated)
 
 	return ApplyDamageResult{
-		Updated:      updated,
-		FinalDamage:  adjusted,
-		AbsorbedTemp: absorbed,
-		NewTempHP:    int32(tempHP),
-		NewHP:        int32(newHP),
-		IsAlive:      isAlive,
-		Reason:       reason,
+		Updated:          updated,
+		FinalDamage:      adjusted,
+		AbsorbedTemp:     absorbed,
+		NewTempHP:        int32(tempHP),
+		NewHP:            int32(newHP),
+		IsAlive:          isAlive,
+		Reason:           reason,
+		Killed:           !isAlive,
+		InstantDeath:     dsRouting.instantDeath,
+		DeathSaveOutcome: dsRouting.outcome,
 	}, nil
+}
+
+// phase43DeathSaveResult is the internal return of routePhase43DeathSave.
+type phase43DeathSaveResult struct {
+	outcome      *DeathSaveOutcome
+	instantDeath bool
+}
+
+// routePhase43DeathSave evaluates the Phase 43 death-save state machine for a
+// PC damage event. There are exactly three outcomes:
+//
+//   - drop-to-0 (prevHP > 0, newHP <= 0): ProcessDropToZeroHP decides between
+//     instant death (overflow >= maxHP) and the dying state.
+//   - damage-at-0 (prevHP <= 0): if overflow (= adjusted) >= maxHP, instant
+//     death; else ApplyDamageAtZeroHP increments death save failures (+1 or
+//     +2 on crit) and persists them.
+//   - any other shape (heal, NPC, wild-shape, immune): no-op (nil outcome).
+//
+// The helper persists death save tallies on the damage-at-0 path; the caller
+// is responsible for applying the unconscious / prone bundle via
+// applyDamageHP after the HP write.
+func (s *Service) routePhase43DeathSave(ctx context.Context, target refdata.Combatant, adjusted, rawNewHP, newHP int, isWildShaped, isCrit bool) (phase43DeathSaveResult, error) {
+	if target.IsNpc || isWildShaped || adjusted <= 0 {
+		return phase43DeathSaveResult{}, nil
+	}
+	maxHP := int(target.HpMax)
+
+	// Drop-to-0: overflow is the pre-clamp HP deficit.
+	if target.HpCurrent > 0 && newHP <= 0 {
+		overflow := 0
+		if rawNewHP < 0 {
+			overflow = -rawNewHP
+		}
+		outcome := ProcessDropToZeroHP(target.DisplayName, overflow, maxHP)
+		return phase43DeathSaveResult{
+			outcome:      &outcome,
+			instantDeath: outcome.TokenState == TokenDead,
+		}, nil
+	}
+
+	// Damage at 0 HP path. Only fires for PCs that were already at or below
+	// 0 HP — i.e. dying combatants receiving another tick of damage.
+	if target.HpCurrent > 0 {
+		return phase43DeathSaveResult{}, nil
+	}
+
+	// Instant-death overflow rule still wins before tallying failures.
+	if CheckInstantDeath(adjusted, maxHP) {
+		outcome := ProcessDropToZeroHP(target.DisplayName, adjusted, maxHP)
+		return phase43DeathSaveResult{outcome: &outcome, instantDeath: true}, nil
+	}
+
+	ds, err := ParseDeathSaves(target.DeathSaves.RawMessage)
+	if err != nil {
+		return phase43DeathSaveResult{}, fmt.Errorf("ApplyDamage parsing death saves: %w", err)
+	}
+	outcome := ApplyDamageAtZeroHP(target.DisplayName, ds, isCrit)
+	if _, err := s.store.UpdateCombatantDeathSaves(ctx, refdata.UpdateCombatantDeathSavesParams{
+		ID:         target.ID,
+		DeathSaves: MarshalDeathSaves(outcome.DeathSaves),
+	}); err != nil {
+		return phase43DeathSaveResult{}, fmt.Errorf("ApplyDamage persisting death saves: %w", err)
+	}
+	return phase43DeathSaveResult{outcome: &outcome}, nil
 }
 
 // resolveDamageProfile returns the target's R/I/V slices and parsed conditions.

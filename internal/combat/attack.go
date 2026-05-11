@@ -11,6 +11,7 @@ import (
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -379,6 +380,10 @@ type OffhandAttackCommand struct {
 	DMDisadvantage      bool
 	AttackerVision      VisionCapabilities
 	TargetVision        VisionCapabilities
+	// Walls are encounter-map wall segments used to compute attacker→target
+	// cover (Phase 33 / C-33). A nil/empty slice degrades to "no wall cover";
+	// creature-granted cover still applies via the encounter's combatant list.
+	Walls []renderer.WallSegment
 }
 
 // AttackCommand holds the service-level inputs for an attack.
@@ -400,6 +405,10 @@ type AttackCommand struct {
 	Reckless             bool // Reckless Attack flag
 	AttackerVision       VisionCapabilities // Vision capabilities of the attacker
 	TargetVision         VisionCapabilities // Vision capabilities of the target
+	// Walls are encounter-map wall segments used to compute attacker→target
+	// cover (Phase 33 / C-33). A nil/empty slice degrades to "no wall cover";
+	// creature-granted cover still applies via the encounter's combatant list.
+	Walls []renderer.WallSegment
 }
 
 // ResolveAttack resolves a single attack using pure inputs. Returns an error if the target
@@ -843,6 +852,15 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return AttackResult{}, fmt.Errorf("Reckless Attack must be declared on the first attack of the turn")
 	}
 
+	// Phase 33 / C-33: compute attacker→target cover BEFORE burning the
+	// attack resource or deducting ammo. Total cover short-circuits via
+	// ErrTargetFullyCovered; half / three-quarters cover are forwarded to
+	// ResolveAttack via AttackInput.Cover (applied below).
+	coverLevel, err := s.resolveAttackCover(ctx, cmd.Attacker, cmd.Target, cmd.Walls)
+	if err != nil {
+		return AttackResult{}, err
+	}
+
 	// Loading weapons: limit to 1 attack per action
 	hasCrossbowExpert := false
 	hasTavernBrawler := false
@@ -885,6 +903,7 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	offHandOccupied := char != nil && char.EquippedOffHand.Valid && char.EquippedOffHand.String != ""
 
 	distFt := combatantDistance(cmd.Attacker, cmd.Target)
+
 	input := buildAttackInput(
 		cmd.Attacker, cmd.Target, weapon, scores, profBonus, distFt,
 		cmd.HostileNearAttacker, cmd.AttackerSize,
@@ -898,6 +917,7 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	input.GWM = cmd.GWM
 	input.Sharpshooter = cmd.Sharpshooter
 	input.Reckless = cmd.Reckless
+	input.Cover = coverLevel
 
 	// Monk martial arts: set monk level for DEX/STR auto-select and die upgrade
 	if char != nil {
@@ -969,6 +989,13 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 		charPtr = &char
 	}
 
+	// Phase 33 / C-33: cover gate runs BEFORE UseAttack so total cover does
+	// not consume an attack resource on a rejected improvised throw.
+	coverLevel, err := s.resolveAttackCover(ctx, cmd.Attacker, cmd.Target, cmd.Walls)
+	if err != nil {
+		return AttackResult{}, err
+	}
+
 	updatedTurn, err := UseAttack(cmd.Turn)
 	if err != nil {
 		return AttackResult{}, fmt.Errorf("using attack resource: %w", err)
@@ -983,6 +1010,7 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	input.IsImprovised = true
 	input.ImprovisedThrown = cmd.ImprovisedThrown
 	input.HasTavernBrawler = hasTavernBrawler
+	input.Cover = coverLevel
 
 	// Obscurement from encounter zones
 	attackerObs, targetObs, err := s.resolveObscurement(ctx, cmd.Attacker.EncounterID, cmd.Attacker, cmd.Target, cmd.AttackerVision, cmd.TargetVision)
@@ -1052,6 +1080,13 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 		dmgMod = DamageModifier(scores, offWeapon)
 	}
 
+	// Phase 33 / C-33: cover gate runs BEFORE consuming the bonus action so
+	// a total-cover off-hand swing doesn't burn the resource.
+	coverLevel, err := s.resolveAttackCover(ctx, cmd.Attacker, cmd.Target, cmd.Walls)
+	if err != nil {
+		return AttackResult{}, err
+	}
+
 	updatedTurn, err := UseResource(cmd.Turn, ResourceBonusAction)
 	if err != nil {
 		return AttackResult{}, fmt.Errorf("using bonus action: %w", err)
@@ -1063,6 +1098,7 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 		cmd.HostileNearAttacker, cmd.AttackerSize,
 		cmd.DMAdvantage, cmd.DMDisadvantage, &dmgMod,
 	)
+	input.Cover = coverLevel
 
 	// Obscurement from encounter zones
 	attackerObs, targetObs, err := s.resolveObscurement(ctx, cmd.Attacker.EncounterID, cmd.Attacker, cmd.Target, cmd.AttackerVision, cmd.TargetVision)
@@ -1177,6 +1213,67 @@ func (s *Service) resolveObscurement(ctx context.Context, encounterID uuid.UUID,
 	targetObs := CombatantObscurement(targetCol, targetRow, zones, targetVision)
 
 	return attackerObs, targetObs, nil
+}
+
+// ErrTargetFullyCovered is returned by Service.Attack / OffhandAttack when
+// total cover (CoverFull) blocks the attacker→target sightline. Per 5e rules
+// a creature behind total cover can't be targeted directly by an attack
+// (PHB p.196). Phase 33 / C-33 wires this into the attack pipeline.
+var ErrTargetFullyCovered = fmt.Errorf("target has total cover and cannot be attacked")
+
+// resolveAttackCover computes attacker→target cover by combining wall geometry
+// and creature-granted cover from intervening occupants. Walls may be empty;
+// when both walls and occupants give no cover the result is CoverNone.
+// Returns ErrTargetFullyCovered on total cover so the caller can short-circuit
+// without consuming attack resources.
+//
+// Mirrors the AoE-save pattern in CalculateAoECover (aoe.go) but uses
+// attacker-corner best-of-4 (CalculateCover) rather than single-origin.
+func (s *Service) resolveAttackCover(ctx context.Context, attacker, target refdata.Combatant, walls []renderer.WallSegment) (CoverLevel, error) {
+	attackerCol := colToIndex(attacker.PositionCol)
+	attackerRow := int(attacker.PositionRow) - 1
+	targetCol := colToIndex(target.PositionCol)
+	targetRow := int(target.PositionRow) - 1
+
+	occupants, err := s.creatureCoverOccupants(ctx, attacker, target)
+	if err != nil {
+		return CoverNone, err
+	}
+
+	cover := CalculateCover(attackerCol, attackerRow, targetCol, targetRow, walls, occupants)
+	if cover == CoverFull {
+		return CoverFull, ErrTargetFullyCovered
+	}
+	return cover, nil
+}
+
+// creatureCoverOccupants lists living combatants in the attacker's encounter
+// that may grant creature cover, excluding the attacker and target themselves.
+// Dead / unconscious / invisible-to-grid combatants are filtered out so they
+// don't artificially block sightlines. A combatant with no EncounterID (rare
+// in tests) yields an empty slice rather than erroring.
+func (s *Service) creatureCoverOccupants(ctx context.Context, attacker, target refdata.Combatant) ([]CoverOccupant, error) {
+	if attacker.EncounterID == uuid.Nil {
+		return nil, nil
+	}
+	all, err := s.store.ListCombatantsByEncounterID(ctx, attacker.EncounterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing combatants for cover: %w", err)
+	}
+	occupants := make([]CoverOccupant, 0, len(all))
+	for _, c := range all {
+		if c.ID == attacker.ID || c.ID == target.ID {
+			continue
+		}
+		if !c.IsAlive {
+			continue
+		}
+		occupants = append(occupants, CoverOccupant{
+			Col: colToIndex(c.PositionCol),
+			Row: int(c.PositionRow) - 1,
+		})
+	}
+	return occupants, nil
 }
 
 // colToIndex converts a column letter (A-Z) to a 0-based index.

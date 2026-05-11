@@ -16,7 +16,7 @@ import (
 
 // fakeQueries is a test double that implements the methods DBApprovalStore needs.
 type fakeQueries struct {
-	pendingRows  []refdata.ListPlayerCharactersByStatusRow
+	pendingRows  []refdata.ListPlayerCharactersAwaitingApprovalRow
 	pendingErr   error
 	detailRow    refdata.GetPlayerCharacterWithCharacterRow
 	detailErr    error
@@ -27,7 +27,7 @@ type fakeQueries struct {
 	updateParams refdata.UpdatePlayerCharacterStatusParams
 }
 
-func (f *fakeQueries) ListPlayerCharactersByStatus(_ context.Context, _ refdata.ListPlayerCharactersByStatusParams) ([]refdata.ListPlayerCharactersByStatusRow, error) {
+func (f *fakeQueries) ListPlayerCharactersAwaitingApproval(_ context.Context, _ uuid.UUID) ([]refdata.ListPlayerCharactersAwaitingApprovalRow, error) {
 	return f.pendingRows, f.pendingErr
 }
 
@@ -50,7 +50,7 @@ func TestDBApprovalStore_ListPendingApprovals(t *testing.T) {
 	campaignID := uuid.New()
 
 	fq := &fakeQueries{
-		pendingRows: []refdata.ListPlayerCharactersByStatusRow{
+		pendingRows: []refdata.ListPlayerCharactersAwaitingApprovalRow{
 			{
 				ID:            id,
 				CampaignID:    campaignID,
@@ -79,6 +79,52 @@ func TestDBApprovalStore_ListPendingApprovals_Error(t *testing.T) {
 	store := NewDBApprovalStore(fq)
 	_, err := store.ListPendingApprovals(context.Background(), uuid.New())
 	assert.Error(t, err)
+}
+
+// A-08-retire-created-via-schema / A-16-retire-approval-unreachable: the
+// approval queue must also surface retire-flagged rows (created_via='retire')
+// whose status is 'approved'. Without this the DM never sees the request and
+// the retire branch in approval_handler.go is unreachable end-to-end.
+func TestDBApprovalStore_ListPendingApprovals_IncludesRetireRequests(t *testing.T) {
+	pendingID := uuid.New()
+	retireID := uuid.New()
+	campaignID := uuid.New()
+
+	fq := &fakeQueries{
+		pendingRows: []refdata.ListPlayerCharactersAwaitingApprovalRow{
+			{
+				ID:            pendingID,
+				CampaignID:    campaignID,
+				CharacterID:   uuid.New(),
+				DiscordUserID: "player-pending",
+				Status:        "pending",
+				CreatedVia:    "register",
+				CharacterName: "Newbie",
+			},
+			{
+				ID:            retireID,
+				CampaignID:    campaignID,
+				CharacterID:   uuid.New(),
+				DiscordUserID: "player-retiring",
+				Status:        "approved",
+				CreatedVia:    "retire",
+				CharacterName: "Gandalf",
+			},
+		},
+	}
+
+	store := NewDBApprovalStore(fq)
+	entries, err := store.ListPendingApprovals(context.Background(), campaignID)
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+
+	gotIDs := map[uuid.UUID]ApprovalEntry{}
+	for _, e := range entries {
+		gotIDs[e.ID] = e
+	}
+	require.Contains(t, gotIDs, retireID, "retire-flagged row must appear in the approval queue")
+	assert.Equal(t, "retire", gotIDs[retireID].CreatedVia)
+	assert.Equal(t, "approved", gotIDs[retireID].Status)
 }
 
 func TestDBApprovalStore_GetApprovalDetail(t *testing.T) {

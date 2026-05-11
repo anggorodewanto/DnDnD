@@ -373,17 +373,22 @@ func (s *Service) applyDamageHP(ctx context.Context, encounterID, combatantID uu
 		}
 	}
 
-	// Apply unconscious when alive but newly at 0 HP. Avoid the redundant
-	// store call if the condition is already present (e.g. another damage
-	// tick already flipped the target to unconscious in this turn).
+	// Apply the dying-condition bundle (unconscious + prone — see
+	// ConditionsForDying) when alive but newly at 0 HP. Each condition is
+	// skipped if already present (e.g. another damage tick already flipped
+	// the target during this turn).
 	if !isAlive || prevHP <= 0 || newHP > 0 {
 		return updated, nil
 	}
-	if HasCondition(updated.Conditions, "unconscious") {
-		return updated, nil
-	}
-	if _, _, err := s.ApplyCondition(ctx, combatantID, CombatCondition{Condition: "unconscious"}); err != nil {
-		return updated, fmt.Errorf("applying unconscious at 0 HP: %w", err)
+	for _, cond := range ConditionsForDying() {
+		if HasCondition(updated.Conditions, cond.Condition) {
+			continue
+		}
+		applied, _, err := s.ApplyCondition(ctx, combatantID, cond)
+		if err != nil {
+			return updated, fmt.Errorf("applying %s at 0 HP: %w", cond.Condition, err)
+		}
+		updated = applied
 	}
 	return updated, nil
 }

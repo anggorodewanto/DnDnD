@@ -24,6 +24,18 @@ func (s *stubRetireCharLookup) GetCharacterByCampaignAndDiscord(ctx context.Cont
 	return s.char, s.err
 }
 
+// stubRetirePCStore records calls to MarkPlayerCharacterRetireRequested.
+type stubRetirePCStore struct {
+	calls  []refdata.MarkPlayerCharacterRetireRequestedParams
+	result refdata.PlayerCharacter
+	err    error
+}
+
+func (s *stubRetirePCStore) MarkPlayerCharacterRetireRequested(ctx context.Context, arg refdata.MarkPlayerCharacterRetireRequestedParams) (refdata.PlayerCharacter, error) {
+	s.calls = append(s.calls, arg)
+	return s.result, s.err
+}
+
 func makeRetireInteraction(guildID, userID, reason string) *discordgo.Interaction {
 	opts := []*discordgo.ApplicationCommandInteractionDataOption{}
 	if reason != "" {
@@ -142,4 +154,80 @@ func TestRetireHandler_NoNotifier_StillRespondsConfirmation(t *testing.T) {
 	)
 	handler.Handle(makeRetireInteraction("guild1", "user1", "x"))
 	assert.Contains(t, sess.lastResponse, "DM")
+}
+
+// A-08-retire-created-via-schema / A-16-retire-approval-unreachable:
+// /retire must flag the existing player_characters row with
+// created_via='retire' so the dashboard approval handler's retire branch
+// (approval_handler.go:248) becomes reachable. The handler should still
+// also post a dm-queue notification (existing behaviour, kept).
+func TestRetireHandler_FlagsPlayerCharacterAsRetireRequest(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	pcStore := &stubRetirePCStore{}
+	notifier := &stubUndoNotifier{}
+
+	handler := NewRetireHandler(
+		sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&stubRetireCharLookup{char: refdata.Character{ID: uuid.New(), Name: "Aria"}},
+		notifier,
+	)
+	handler.SetPCStore(pcStore)
+
+	handler.Handle(makeRetireInteraction("guild1", "user1", "going to college"))
+
+	require.Len(t, pcStore.calls, 1, "MarkPlayerCharacterRetireRequested should be called exactly once")
+	assert.Equal(t, campID, pcStore.calls[0].CampaignID)
+	assert.Equal(t, "user1", pcStore.calls[0].DiscordUserID)
+
+	// The dm-queue notifier must still fire so the DM is pinged.
+	require.Len(t, notifier.posted, 1)
+	assert.Equal(t, dmqueue.KindRetireRequest, notifier.posted[0].Kind)
+}
+
+// Wiring guard: when the player_characters store update fails, /retire must
+// surface a clear error to the player rather than silently completing and
+// leaving the DM thinking it was queued.
+func TestRetireHandler_PCStoreError_RespondsWithFailure(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	pcStore := &stubRetirePCStore{err: errors.New("db down")}
+	notifier := &stubUndoNotifier{}
+
+	handler := NewRetireHandler(
+		sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&stubRetireCharLookup{char: refdata.Character{ID: uuid.New(), Name: "Aria"}},
+		notifier,
+	)
+	handler.SetPCStore(pcStore)
+
+	handler.Handle(makeRetireInteraction("guild1", "user1", "going to college"))
+
+	assert.Contains(t, sess.lastResponse, "Could not record retire request")
+	// Notifier should NOT have fired because the flag never landed.
+	assert.Empty(t, notifier.posted)
+}
+
+// Backwards-compatibility guard: with no PC store wired (the bare
+// NewRetireHandler call from earlier wiring), the handler must still post to
+// the dm-queue and respond, so existing tests do not regress.
+func TestRetireHandler_NoPCStore_NotifierStillFires(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	notifier := &stubUndoNotifier{}
+
+	handler := NewRetireHandler(
+		sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&stubRetireCharLookup{char: refdata.Character{ID: uuid.New(), Name: "Aria"}},
+		notifier,
+	)
+	// no SetPCStore call
+
+	handler.Handle(makeRetireInteraction("guild1", "user1", "x"))
+
+	require.Len(t, notifier.posted, 1)
+	assert.Equal(t, dmqueue.KindRetireRequest, notifier.posted[0].Kind)
 }

@@ -1,10 +1,14 @@
 package combat
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
+
+	"github.com/ab/dndnd/internal/refdata"
 )
 
 // TokenState represents a combatant's visual state on the map.
@@ -238,4 +242,49 @@ func ConditionsForDying() []CombatCondition {
 		{Condition: "unconscious", DurationRounds: 0},
 		{Condition: "prone", DurationRounds: 0},
 	}
+}
+
+// MaybeResetDeathSavesOnHeal is the Phase 43 hook every PC heal call site
+// funnels through after writing new HP. When the post-heal HP is >0 AND the
+// pre-heal HP was <=0 AND the target is a PC, it:
+//
+//  1. resets death save tallies (successes + failures) via
+//     UpdateCombatantDeathSaves,
+//  2. removes the dying-condition bundle (unconscious + prone — see
+//     ConditionsForDying) so the combatant becomes fully conscious.
+//
+// Healing a combatant that is not at 0 HP, or healing an NPC, is a silent
+// no-op. The caller passes the combatant snapshot taken BEFORE the HP
+// update so the routing sees the pre-heal HP. Returns the (possibly
+// further-updated) combatant.
+func (s *Service) MaybeResetDeathSavesOnHeal(ctx context.Context, preHeal refdata.Combatant, postHealHP int32) (refdata.Combatant, error) {
+	if preHeal.IsNpc || preHeal.HpCurrent > 0 || postHealHP <= 0 {
+		return preHeal, nil
+	}
+	return s.resetDyingState(ctx, preHeal.ID)
+}
+
+// resetDyingState clears death save tallies and dying conditions for a
+// combatant. Used by the heal-from-zero hook and any future stabilize-then-
+// wake-up path. The cleared death saves are persisted as a zero-valued
+// DeathSaves JSON object so subsequent reads see the reset.
+func (s *Service) resetDyingState(ctx context.Context, combatantID uuid.UUID) (refdata.Combatant, error) {
+	updated, err := s.store.UpdateCombatantDeathSaves(ctx, refdata.UpdateCombatantDeathSavesParams{
+		ID:         combatantID,
+		DeathSaves: MarshalDeathSaves(DeathSaves{}),
+	})
+	if err != nil {
+		return refdata.Combatant{}, fmt.Errorf("resetting death saves: %w", err)
+	}
+	for _, cond := range ConditionsForDying() {
+		if !HasCondition(updated.Conditions, cond.Condition) {
+			continue
+		}
+		next, _, rerr := s.RemoveConditionFromCombatant(ctx, combatantID, cond.Condition)
+		if rerr != nil {
+			return updated, fmt.Errorf("removing %s on heal-from-0: %w", cond.Condition, rerr)
+		}
+		updated = next
+	}
+	return updated, nil
 }

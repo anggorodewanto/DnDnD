@@ -1124,7 +1124,10 @@ func TestApplyDamageHP_AppliesUnconsciousAtZeroHP(t *testing.T) {
 	encounterID := uuid.New()
 	combatantID := uuid.New()
 
-	var appliedConditions []CombatCondition
+	// Capture every condition name passed through the condition writer so
+	// the test can verify the full dying-condition bundle
+	// (ConditionsForDying — unconscious + prone) is applied.
+	appliedNames := map[string]bool{}
 	ms := &mockStore{
 		updateCombatantHPFn: func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
 			return refdata.Combatant{
@@ -1149,7 +1152,9 @@ func TestApplyDamageHP_AppliesUnconsciousAtZeroHP(t *testing.T) {
 		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
 			var conds []CombatCondition
 			_ = json.Unmarshal(arg.Conditions, &conds)
-			appliedConditions = conds
+			for _, c := range conds {
+				appliedNames[c.Condition] = true
+			}
 			return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, Conditions: arg.Conditions, DisplayName: "Aria"}, nil
 		},
 		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
@@ -1163,8 +1168,8 @@ func TestApplyDamageHP_AppliesUnconsciousAtZeroHP(t *testing.T) {
 	// prevHP=10, newHP=0, isAlive=true (dying, not dead)
 	_, err := svc.applyDamageHP(context.Background(), encounterID, combatantID, 10, 0, 0, true)
 	require.NoError(t, err)
-	require.Len(t, appliedConditions, 1)
-	assert.Equal(t, "unconscious", appliedConditions[0].Condition)
+	assert.True(t, appliedNames["unconscious"], "drop to 0 must apply unconscious")
+	assert.True(t, appliedNames["prone"], "drop to 0 must apply prone (ConditionsForDying)")
 }
 
 func TestApplyDamageHP_DoesNotApplyUnconsciousWhenAlreadyDead(t *testing.T) {
@@ -1548,7 +1553,10 @@ func TestApplyDamageHP_DoesNotDoubleApplyUnconscious(t *testing.T) {
 	encounterID := uuid.New()
 	combatantID := uuid.New()
 
-	existingConds, _ := json.Marshal([]CombatCondition{{Condition: "unconscious"}})
+	// Both dying-bundle conditions (unconscious + prone — see
+	// ConditionsForDying) already present; applyDamageHP must skip the
+	// condition write entirely.
+	existingConds, _ := json.Marshal([]CombatCondition{{Condition: "unconscious"}, {Condition: "prone"}})
 	conditionsCalled := false
 	ms := &mockStore{
 		updateCombatantHPFn: func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {

@@ -34,6 +34,25 @@ type mockBonusCombatService struct {
 	fomResult     combat.FontOfMagicResult
 	layResult     combat.LayOnHandsResult
 	bardicResult  combat.BardicInspirationResult
+
+	// D-47 / D-48b / D-54-cunning / D-56 / D-57 recordings + canned results.
+	wsActivateCalls []combat.WildShapeCommand
+	wsActivateResult combat.WildShapeResult
+	wsRevertCalls   []combat.RevertWildShapeCommand
+	wsRevertResult  combat.RevertWildShapeResult
+	flurryCalls     []combat.FlurryOfBlowsCommand
+	flurryResult    combat.FlurryOfBlowsResult
+	cunningCalls    []combat.CunningActionCommand
+	cunningResult   combat.CunningActionResult
+	dragCheckCalls  int
+	dragCheckResult combat.DragCheckResult
+	releaseCalls    []releaseDragCall
+	releaseResult   combat.ReleaseDragResult
+}
+
+type releaseDragCall struct {
+	Mover   refdata.Combatant
+	Targets []refdata.Combatant
 }
 
 func (m *mockBonusCombatService) ActivateRage(_ context.Context, cmd combat.RageCommand) (combat.RageResult, error) {
@@ -79,6 +98,36 @@ func (m *mockBonusCombatService) LayOnHands(_ context.Context, cmd combat.LayOnH
 func (m *mockBonusCombatService) GrantBardicInspiration(_ context.Context, cmd combat.BardicInspirationCommand) (combat.BardicInspirationResult, error) {
 	m.bardicCalls = append(m.bardicCalls, cmd)
 	return m.bardicResult, nil
+}
+
+func (m *mockBonusCombatService) ActivateWildShape(_ context.Context, cmd combat.WildShapeCommand) (combat.WildShapeResult, error) {
+	m.wsActivateCalls = append(m.wsActivateCalls, cmd)
+	return m.wsActivateResult, nil
+}
+
+func (m *mockBonusCombatService) RevertWildShapeService(_ context.Context, cmd combat.RevertWildShapeCommand) (combat.RevertWildShapeResult, error) {
+	m.wsRevertCalls = append(m.wsRevertCalls, cmd)
+	return m.wsRevertResult, nil
+}
+
+func (m *mockBonusCombatService) FlurryOfBlows(_ context.Context, cmd combat.FlurryOfBlowsCommand, _ *dice.Roller) (combat.FlurryOfBlowsResult, error) {
+	m.flurryCalls = append(m.flurryCalls, cmd)
+	return m.flurryResult, nil
+}
+
+func (m *mockBonusCombatService) CunningAction(_ context.Context, cmd combat.CunningActionCommand, _ ...*dice.Roller) (combat.CunningActionResult, error) {
+	m.cunningCalls = append(m.cunningCalls, cmd)
+	return m.cunningResult, nil
+}
+
+func (m *mockBonusCombatService) CheckDragTargets(_ context.Context, _ uuid.UUID, _ refdata.Combatant) (combat.DragCheckResult, error) {
+	m.dragCheckCalls++
+	return m.dragCheckResult, nil
+}
+
+func (m *mockBonusCombatService) ReleaseDrag(_ context.Context, mover refdata.Combatant, targets []refdata.Combatant) (combat.ReleaseDragResult, error) {
+	m.releaseCalls = append(m.releaseCalls, releaseDragCall{Mover: mover, Targets: targets})
+	return m.releaseResult, nil
 }
 
 type mockBonusProvider struct {

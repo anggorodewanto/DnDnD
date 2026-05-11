@@ -137,6 +137,11 @@ func (s *Service) LayOnHands(ctx context.Context, cmd LayOnHandsCommand) (LayOnH
 		}); err != nil {
 			return LayOnHandsResult{}, fmt.Errorf("updating target HP: %w", err)
 		}
+		// C-43 / Phase 43: when the heal lifts the target from 0 HP back to
+		// >=1, reset death-save tallies and drop the dying-condition bundle.
+		if _, err := s.MaybeResetDeathSavesOnHeal(ctx, cmd.Target, hpAfter); err != nil {
+			return LayOnHandsResult{}, fmt.Errorf("resetting death state on heal: %w", err)
+		}
 	}
 
 	// Cure poison/disease conditions

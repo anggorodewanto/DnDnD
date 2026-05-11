@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/endpoints"
@@ -28,6 +29,7 @@ import (
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dashboard"
 	"github.com/ab/dndnd/internal/database"
+	"github.com/ab/dndnd/internal/ddbimport"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
 	"github.com/ab/dndnd/internal/dmqueue"
@@ -186,6 +188,102 @@ func newDMQueueChannelResolver(session discord.Session) func(string) string {
 // passthroughMiddleware is a no-op HTTP middleware used as a fallback when
 // Discord OAuth2 env vars are not configured (local dev without OAuth).
 func passthroughMiddleware(next http.Handler) http.Handler { return next }
+
+// combatDashboardWiring is the constructed router-mount surface for the combat
+// dashboard route block (G-94a workspace + G-95/97a/97b DM dashboard). The
+// poster is exposed so the wiring test can assert Phase 97b's CombatLogPoster
+// was threaded through to NewDMDashboardHandlerWithDeps without poking at
+// unexported handler fields.
+type combatDashboardWiring struct {
+	handler *combat.DMDashboardHandler
+	poster  combat.CombatLogPoster
+}
+
+// workspaceStoreAdapter bridges *refdata.Queries to combat.WorkspaceStore.
+// The interface names the combatant lookup GetCombatantByID; refdata calls it
+// GetCombatant. Every other method is structurally compatible.
+type workspaceStoreAdapter struct {
+	*refdata.Queries
+}
+
+func (a workspaceStoreAdapter) GetCombatantByID(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+	return a.Queries.GetCombatant(ctx, id)
+}
+
+// mountCombatDashboardRoutes wires the workspace + DM dashboard HTTP surface
+// onto router. workspaceStore may be nil to skip the WorkspaceHandler (test
+// deploys); db may be nil to disable per-turn advisory locks in unit tests.
+//
+// WorkspaceHandler, DMDashboardHandler, and combat.Handler all open their
+// own r.Route("/api/combat", ...) inside RegisterRoutes, which chi rejects as
+// a duplicate mount. To keep all three reachable on the same router this
+// helper bypasses the RegisterRoutes wrappers and binds each method directly
+// onto the shared router (combat.Handler still owns its own /api/combat
+// route group on line 612 because that path was wired first and stays the
+// canonical mount for /start /end /reactions etc).
+//
+// Returns the constructed DMDashboardHandler so tests can verify the
+// CombatLogPoster (Phase 97b) is threaded into NewDMDashboardHandlerWithDeps.
+func mountCombatDashboardRoutes(
+	router chi.Router,
+	svc *combat.Service,
+	workspaceStore combat.WorkspaceStore,
+	db combat.TxBeginner,
+	poster combat.CombatLogPoster,
+) combatDashboardWiring {
+	if workspaceStore != nil {
+		wh := combat.NewWorkspaceHandler(workspaceStore)
+		router.Get("/api/combat/workspace", wh.GetWorkspace)
+		router.Patch("/api/combat/{encounterID}/combatants/{combatantID}/hp", wh.UpdateCombatantHP)
+		router.Patch("/api/combat/{encounterID}/combatants/{combatantID}/conditions", wh.UpdateCombatantConditions)
+		router.Patch("/api/combat/{encounterID}/combatants/{combatantID}/position", wh.UpdateCombatantPosition)
+		router.Delete("/api/combat/{encounterID}/combatants/{combatantID}", wh.DeleteCombatant)
+	}
+	dm := combat.NewDMDashboardHandlerWithDeps(svc, db, poster)
+	router.Post("/api/combat/{encounterID}/advance-turn", dm.AdvanceTurn)
+	router.Get("/api/combat/{encounterID}/pending-actions", dm.ListPendingActions)
+	router.Post("/api/combat/{encounterID}/pending-actions/{actionID}/resolve", dm.ResolvePendingAction)
+	router.Get("/api/combat/{encounterID}/action-log", dm.ListActionLogViewer)
+	router.Post("/api/combat/{encounterID}/undo-last-action", dm.UndoLastAction)
+	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/hp", dm.OverrideCombatantHP)
+	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/position", dm.OverrideCombatantPosition)
+	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/conditions", dm.OverrideCombatantConditions)
+	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/initiative", dm.OverrideCombatantInitiative)
+	router.Post("/api/combat/{encounterID}/override/character/{characterID}/spell-slots", dm.OverrideCharacterSpellSlots)
+	router.Post("/api/combat/{encounterID}/combatants/{combatantID}/concentration/drop", dm.DropConcentration)
+	return combatDashboardWiring{handler: dm, poster: poster}
+}
+
+// registrationDepsConfig collects the inputs that buildRegistrationDeps
+// assembles into a discord.RegistrationDeps. Pulled into a struct so the
+// test (TestBuildRegistrationDeps_CarriesDDBImporter) can target the
+// DDBImporter wiring without setting up the full DB-backed inputs.
+type registrationDepsConfig struct {
+	regService   discord.RegistrationService
+	campaignProv discord.CampaignProvider
+	charCreator  discord.CharacterCreator
+	dmQueueFunc  func(string) string
+	dmUserFunc   func(string) string
+	tokenFunc    func(uuid.UUID, string) (string, error)
+	nameResolver discord.CharacterNameResolver
+	ddbImporter  discord.DDBImporter
+}
+
+// buildRegistrationDeps assembles the RegistrationDeps used by the Phase
+// 120a command router, threading the DDB importer through so /import lands
+// on the real ddbimport service instead of handlePlaceholderImport (G-90).
+func buildRegistrationDeps(cfg registrationDepsConfig) *discord.RegistrationDeps {
+	return &discord.RegistrationDeps{
+		RegService:   cfg.regService,
+		CampaignProv: cfg.campaignProv,
+		CharCreator:  cfg.charCreator,
+		DMQueueFunc:  cfg.dmQueueFunc,
+		DMUserFunc:   cfg.dmUserFunc,
+		TokenFunc:    cfg.tokenFunc,
+		NameResolver: cfg.nameResolver,
+		DDBImporter:  cfg.ddbImporter,
+	}
+}
 
 // authBundle bundles the session middleware and the OAuth2 service so the
 // caller can both protect dashboard routes and mount the
@@ -549,6 +647,30 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		combatHandler := combat.NewHandler(combatSvc, dice.NewRoller(nil))
 		combatHandler.RegisterRoutes(router)
 
+		// Phase 22 wiring (high-10): the campaign-settings provider resolves
+		// encounter-id -> channel_ids map for the DM combat-log poster
+		// (G-97b) and is reused by the Discord slash-command handlers below.
+		// Constructed here (before the Discord session block) so the DM
+		// dashboard handler can post corrections even when the bot is offline.
+		campaignSettingsProvider := discord.NewDefaultCampaignSettingsProvider(
+			func(ctx context.Context, encounterID uuid.UUID) (refdata.Campaign, error) {
+				return queries.GetCampaignByEncounterID(ctx, encounterID)
+			},
+		)
+
+		// G-97b: DM correction poster. Best-effort — nil session means
+		// corrections silently drop, matching the cardPoster pattern.
+		var combatLogPoster combat.CombatLogPoster
+		if discordSession != nil {
+			combatLogPoster = discord.NewDMCorrectionPoster(discordSession, campaignSettingsProvider)
+		}
+
+		// G-94a + G-95: mount the combat workspace (G-94a) and DM dashboard
+		// (G-95/97a) routes so /api/combat/workspace, /advance-turn,
+		// /pending-actions, /action-log, undo, and the override family all
+		// stop returning 404 in production.
+		mountCombatDashboardRoutes(router, combatSvc, workspaceStoreAdapter{queries}, db, combatLogPoster)
+
 		// Phase 115: wire the resume-time turn re-pinger so /api/campaigns/:id/resume
 		// automatically @mentions the current-turn player in #your-turn when
 		// the paused campaign had mid-combat state. No-op without a Discord
@@ -808,18 +930,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// and the dashboard loot endpoints in future phases.
 			lootSvc := loot.NewService(queries)
 
-			// Phase 22 wiring (high-10): the campaign-settings provider
-			// resolves encounter-id -> channel_ids map by walking the
-			// `encounters -> campaigns` join. /done relies on this to find
-			// #combat-map, #combat-log, and #your-turn for shared-channel
-			// labels. The same lookup is reused by the rollHistoryLogger
-			// adapter so #roll-history posts hit the right channel per
-			// encounter.
-			campaignSettingsProvider := discord.NewDefaultCampaignSettingsProvider(
-				func(ctx context.Context, encounterID uuid.UUID) (refdata.Campaign, error) {
-					return queries.GetCampaignByEncounterID(ctx, encounterID)
-				},
-			)
+			// Phase 22 wiring (high-10): campaignSettingsProvider is
+			// constructed above (shared with the DM combat-log poster) so
+			// /done, the rollHistoryLogger, and the discord slash-command
+			// handlers all read channel ids from a single source.
 
 			// med-20 / Phase 26a: post the first-combatant ping when
 			// StartCombat creates the first turn so players don't sit in
@@ -885,17 +999,17 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// become status-aware. The router otherwise falls through to a
 			// "not yet implemented" stub for /register.
 			//
-			// TokenFunc is a placeholder that returns a fixed token: the
-			// portal-token issuer is a Phase 14 follow-up. Without it the
-			// router panics during construction (see internal/discord/
-			// registration_handler_test.go:932 for the canonical pattern).
+			// G-90: thread the ddbimport service through DDBImporter so
+			// /import routes to the real DDB fetch/parse/diff/preview path
+			// (handlePlaceholderImport remains as fallback for offline tests).
 			regSvc := registration.NewService(queries)
-			regDeps := &discord.RegistrationDeps{
-				RegService:   regSvc,
-				CampaignProv: queries,
-				CharCreator:  regSvc,
-				DMQueueFunc:  newDMQueueChannelResolver(discordSession),
-				DMUserFunc: func(guildID string) string {
+			ddbImportSvc := ddbimport.NewService(ddbimport.NewDDBClient(), queries)
+			regDeps := buildRegistrationDeps(registrationDepsConfig{
+				regService:   regSvc,
+				campaignProv: queries,
+				charCreator:  regSvc,
+				dmQueueFunc:  newDMQueueChannelResolver(discordSession),
+				dmUserFunc: func(guildID string) string {
 					camp, err := queries.GetCampaignByGuildID(context.Background(), guildID)
 					if err != nil {
 						return ""
@@ -908,15 +1022,16 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				// on a single store. The closure captures the
 				// application context so token persistence honours
 				// graceful shutdown.
-				TokenFunc: newPortalTokenIssuer(ctx, portalTokenSvc),
-				NameResolver: func(ctx context.Context, characterID uuid.UUID) (string, error) {
+				tokenFunc: newPortalTokenIssuer(ctx, portalTokenSvc),
+				nameResolver: func(ctx context.Context, characterID uuid.UUID) (string, error) {
 					char, err := queries.GetCharacter(ctx, characterID)
 					if err != nil {
 						return "", err
 					}
 					return char.Name, nil
 				},
-			}
+				ddbImporter: ddbImportSvc,
+			})
 			// Phase 12: wire the /setup handler so the DM can create the
 			// SYSTEM/NARRATION/COMBAT/REFERENCE channel structure for their
 			// guild. Without this, /setup falls through to "Unknown command".
@@ -927,6 +1042,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// ERROR level, and recorded for the DM dashboard badge / panel.
 			cmdRouter.SetErrorRecorder(errorStore)
 			attachPhase105Handlers(cmdRouter, discordHandlerSet)
+			// H-105b: inject the Discord-backed enemy-turn notifier so
+			// combat.Handler.ExecuteEnemyTurn posts the "⚔️ <display_name>
+			// — Round N" label instead of silently no-oping in production.
+			wireEnemyTurnNotifier(combatHandler, discordHandlerSet.enemyTurnNotifier)
 			// Phase 106a: route /rest dm-queue posts through the notifier so
 			// rest requests are persisted and resolvable from the dashboard.
 			discordHandlerSet.rest.SetNotifier(dmQueueNotifier)

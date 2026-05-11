@@ -5,21 +5,35 @@ import (
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/dmqueue"
+	"github.com/ab/dndnd/internal/refdata"
 )
 
-// RetireHandler handles the /retire slash command. It does NOT call
-// registration.Service.Retire — that runs DM-side from the dashboard's
-// retire-approval handler. This handler only routes the request.
+// RetirePCStore marks an existing player_character row as a retire request
+// (created_via='retire') so the dashboard approval queue surfaces it through
+// the Phase 16 retire branch. The row stays at status='approved' until the DM
+// approves the retire from the dashboard.
+type RetirePCStore interface {
+	MarkPlayerCharacterRetireRequested(ctx context.Context, arg refdata.MarkPlayerCharacterRetireRequestedParams) (refdata.PlayerCharacter, error)
+}
+
+// RetireHandler handles the /retire slash command. It marks the player's
+// existing player_character row as a retire request and pings the DM via the
+// dm-queue notifier. The actual transition to status='retired' happens later
+// when the DM approves from the dashboard (internal/dashboard/approval_handler.go).
 type RetireHandler struct {
 	session         Session
 	campaignProv    InventoryCampaignProvider
 	characterLookup InventoryCharacterLookup
+	pcStore         RetirePCStore
 	notifier        dmqueue.Notifier
 }
 
-// NewRetireHandler constructs a RetireHandler.
+// NewRetireHandler constructs a RetireHandler. The player_character store is
+// optional and wired via SetPCStore; without it the handler still notifies
+// the DM but does not flag the row in player_characters.
 func NewRetireHandler(
 	session Session,
 	campaignProv InventoryCampaignProvider,
@@ -32,6 +46,12 @@ func NewRetireHandler(
 		characterLookup: characterLookup,
 		notifier:        notifier,
 	}
+}
+
+// SetPCStore wires the player_characters store so /retire can flag the
+// existing row with created_via='retire'.
+func (h *RetireHandler) SetPCStore(store RetirePCStore) {
+	h.pcStore = store
 }
 
 // Handle processes a /retire interaction.
@@ -63,15 +83,40 @@ func (h *RetireHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	if h.notifier != nil {
-		_, _ = h.notifier.Post(ctx, dmqueue.Event{
-			Kind:       dmqueue.KindRetireRequest,
-			PlayerName: char.Name,
-			Summary:    fmt.Sprintf("requests retirement: %s", reason),
-			GuildID:    interaction.GuildID,
-		})
+	if err := h.markPC(ctx, campaign.ID, userID); err != nil {
+		respondEphemeral(h.session, interaction, "Could not record retire request. Please try again or ask the DM.")
+		return
 	}
+
+	h.notifyDM(ctx, char, reason, interaction.GuildID)
 
 	respondEphemeral(h.session, interaction,
 		fmt.Sprintf("🪦 Retire request sent to the DM. They'll review and approve from the dashboard.\n_Reason: %s_", reason))
+}
+
+// markPC flags the player's existing player_character row as a retire request
+// (created_via='retire'). nil pcStore is a no-op so the handler can still
+// run routing-only paths without DB wiring.
+func (h *RetireHandler) markPC(ctx context.Context, campaignID uuid.UUID, discordUserID string) error {
+	if h.pcStore == nil {
+		return nil
+	}
+	_, err := h.pcStore.MarkPlayerCharacterRetireRequested(ctx, refdata.MarkPlayerCharacterRetireRequestedParams{
+		CampaignID:    campaignID,
+		DiscordUserID: discordUserID,
+	})
+	return err
+}
+
+// notifyDM posts a dm-queue retire-request notification. nil notifier is a no-op.
+func (h *RetireHandler) notifyDM(ctx context.Context, char refdata.Character, reason, guildID string) {
+	if h.notifier == nil {
+		return
+	}
+	_, _ = h.notifier.Post(ctx, dmqueue.Event{
+		Kind:       dmqueue.KindRetireRequest,
+		PlayerName: char.Name,
+		Summary:    fmt.Sprintf("requests retirement: %s", reason),
+		GuildID:    guildID,
+	})
 }

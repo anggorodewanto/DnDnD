@@ -655,6 +655,11 @@ func (s *Service) PreserveLife(ctx context.Context, cmd PreserveLifeCommand) (Pr
 		}); err != nil {
 			return PreserveLifeResult{}, fmt.Errorf("updating HP for %s: %w", target.DisplayName, err)
 		}
+		// C-43 / Phase 43: lifting a dying combatant back above 0 HP must
+		// reset death-save tallies and clear the dying-condition bundle.
+		if _, err := s.MaybeResetDeathSavesOnHeal(ctx, target, newHP); err != nil {
+			return PreserveLifeResult{}, fmt.Errorf("resetting death state for %s: %w", target.DisplayName, err)
+		}
 
 		healed = append(healed, PreserveLifeHeal{
 			CombatantID: targetID,

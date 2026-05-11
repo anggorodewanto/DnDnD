@@ -277,6 +277,88 @@ func (q *Queries) ListCharacterNamesByCampaign(ctx context.Context, campaignID u
 	return items, nil
 }
 
+const listPlayerCharactersAwaitingApproval = `-- name: ListPlayerCharactersAwaitingApproval :many
+SELECT pc.id, pc.campaign_id, pc.character_id, pc.discord_user_id, pc.status,
+       pc.dm_feedback, pc.created_via, pc.created_at, pc.updated_at,
+       c.name AS character_name, c.race, c.level, c.classes, c.hp_max,
+       c.hp_current, c.ac, c.speed_ft, c.ability_scores, c.languages, c.ddb_url
+FROM player_characters pc
+JOIN characters c ON c.id = pc.character_id
+WHERE pc.campaign_id = $1
+  AND (pc.status = 'pending' OR pc.created_via = 'retire')
+ORDER BY pc.created_at
+`
+
+type ListPlayerCharactersAwaitingApprovalRow struct {
+	ID            uuid.UUID       `json:"id"`
+	CampaignID    uuid.UUID       `json:"campaign_id"`
+	CharacterID   uuid.UUID       `json:"character_id"`
+	DiscordUserID string          `json:"discord_user_id"`
+	Status        string          `json:"status"`
+	DmFeedback    sql.NullString  `json:"dm_feedback"`
+	CreatedVia    string          `json:"created_via"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+	CharacterName string          `json:"character_name"`
+	Race          string          `json:"race"`
+	Level         int32           `json:"level"`
+	Classes       json.RawMessage `json:"classes"`
+	HpMax         int32           `json:"hp_max"`
+	HpCurrent     int32           `json:"hp_current"`
+	Ac            int32           `json:"ac"`
+	SpeedFt       int32           `json:"speed_ft"`
+	AbilityScores json.RawMessage `json:"ability_scores"`
+	Languages     []string        `json:"languages"`
+	DdbUrl        sql.NullString  `json:"ddb_url"`
+}
+
+// Returns rows in the DM approval queue: anything still 'pending' plus any
+// row flagged as a retire request (created_via='retire'). Joined with the
+// character row for the queue UI.
+func (q *Queries) ListPlayerCharactersAwaitingApproval(ctx context.Context, campaignID uuid.UUID) ([]ListPlayerCharactersAwaitingApprovalRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPlayerCharactersAwaitingApproval, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPlayerCharactersAwaitingApprovalRow{}
+	for rows.Next() {
+		var i ListPlayerCharactersAwaitingApprovalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CampaignID,
+			&i.CharacterID,
+			&i.DiscordUserID,
+			&i.Status,
+			&i.DmFeedback,
+			&i.CreatedVia,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CharacterName,
+			&i.Race,
+			&i.Level,
+			&i.Classes,
+			&i.HpMax,
+			&i.HpCurrent,
+			&i.Ac,
+			&i.SpeedFt,
+			&i.AbilityScores,
+			pq.Array(&i.Languages),
+			&i.DdbUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlayerCharactersByCampaign = `-- name: ListPlayerCharactersByCampaign :many
 SELECT id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at FROM player_characters
 WHERE campaign_id = $1
@@ -397,6 +479,38 @@ func (q *Queries) ListPlayerCharactersByStatus(ctx context.Context, arg ListPlay
 		return nil, err
 	}
 	return items, nil
+}
+
+const markPlayerCharacterRetireRequested = `-- name: MarkPlayerCharacterRetireRequested :one
+UPDATE player_characters
+SET created_via = 'retire', updated_at = now()
+WHERE campaign_id = $1 AND discord_user_id = $2
+RETURNING id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at
+`
+
+type MarkPlayerCharacterRetireRequestedParams struct {
+	CampaignID    uuid.UUID `json:"campaign_id"`
+	DiscordUserID string    `json:"discord_user_id"`
+}
+
+// Sets created_via='retire' on the row matching (campaign_id, discord_user_id)
+// so the Phase 16 dashboard approval branch can route it through the retire
+// path. Status is left untouched (typically 'approved').
+func (q *Queries) MarkPlayerCharacterRetireRequested(ctx context.Context, arg MarkPlayerCharacterRetireRequestedParams) (PlayerCharacter, error) {
+	row := q.db.QueryRowContext(ctx, markPlayerCharacterRetireRequested, arg.CampaignID, arg.DiscordUserID)
+	var i PlayerCharacter
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.CharacterID,
+		&i.DiscordUserID,
+		&i.Status,
+		&i.DmFeedback,
+		&i.CreatedVia,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updatePlayerCharacterStatus = `-- name: UpdatePlayerCharacterStatus :one

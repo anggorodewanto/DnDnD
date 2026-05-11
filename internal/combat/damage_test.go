@@ -752,14 +752,16 @@ func TestApplyDamage_PCAtZeroStaysAliveDying(t *testing.T) {
 	encounterID := uuid.New()
 	ms, captured := applyDamageMockStore()
 	svc := NewService(ms)
+	// Damage drops the PC to 0 with overflow well below HpMax so the
+	// Phase 43 instant-death rule does NOT fire (overflow < HpMax).
 	target := refdata.Combatant{
 		ID: uuid.New(), EncounterID: encounterID,
-		HpMax: 10, HpCurrent: 5, IsAlive: true, IsNpc: false,
+		HpMax: 20, HpCurrent: 5, IsAlive: true, IsNpc: false,
 		Conditions: json.RawMessage(`[]`),
 	}
 
 	_, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
-		EncounterID: encounterID, Target: target, RawDamage: 100, DamageType: "fire",
+		EncounterID: encounterID, Target: target, RawDamage: 12, DamageType: "fire",
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, int32(0), captured.HpCurrent)

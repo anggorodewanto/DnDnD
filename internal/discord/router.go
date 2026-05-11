@@ -247,6 +247,9 @@ type RegistrationDeps struct {
 	DMUserFunc   func(guildID string) string
 	TokenFunc    func(campaignID uuid.UUID, discordUserID string) (string, error)
 	NameResolver CharacterNameResolver
+	// DDBImporter routes /import URLs through the real DDB import service.
+	// nil falls back to ImportHandler.handlePlaceholderImport.
+	DDBImporter DDBImporter
 }
 
 // NewCommandRouter creates a CommandRouter with stub handlers for all player commands
@@ -282,7 +285,11 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 
 		// Wire registration commands to real handlers.
 		r.handlers["register"] = NewRegisterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.DMQueueFunc, deps.DMUserFunc)
-		r.handlers["import"] = NewImportHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc)
+		var importOpts []ImportHandlerOption
+		if deps.DDBImporter != nil {
+			importOpts = append(importOpts, WithDDBImporter(deps.DDBImporter))
+		}
+		r.handlers["import"] = NewImportHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc, importOpts...)
 		if deps.TokenFunc == nil {
 			panic("RegistrationDeps.TokenFunc is required")
 		}

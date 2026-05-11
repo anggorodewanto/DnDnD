@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -40,6 +41,40 @@ type fakeActionCombatService struct {
 	readyCalledWith      combat.ReadyActionCommand
 	readyResult          combat.ReadyActionResult
 	readyErr             error
+
+	// D-47..D-57 dispatch recordings + canned results.
+	surgeCalls           []combat.ActionSurgeCommand
+	surgeResult          combat.ActionSurgeResult
+	surgeErr             error
+	dashCalls            []combat.DashCommand
+	dashResult           combat.DashResult
+	dashErr              error
+	disengageCalls       []combat.DisengageCommand
+	disengageResult      combat.DisengageResult
+	dodgeCalls           []combat.DodgeCommand
+	dodgeResult          combat.DodgeResult
+	helpCalls            []combat.HelpCommand
+	helpResult           combat.HelpResult
+	hideCalls            []combat.HideCommand
+	hideResult           combat.HideResult
+	standCalls           []combat.StandCommand
+	standResult          combat.StandResult
+	dropProneCalls       []combat.DropProneCommand
+	dropProneResult      combat.DropProneResult
+	escapeCalls          []combat.EscapeCommand
+	escapeResult         combat.EscapeResult
+	turnUndeadCalls      []combat.TurnUndeadCommand
+	turnUndeadResult     combat.TurnUndeadResult
+	preserveLifeCalls    []combat.PreserveLifeCommand
+	preserveLifeResult   combat.PreserveLifeResult
+	sacredWeaponCalls    []combat.SacredWeaponCommand
+	sacredWeaponResult   combat.SacredWeaponResult
+	vowCalls             []combat.VowOfEnmityCommand
+	vowResult            combat.VowOfEnmityResult
+	cdDMQueueCalls       []combat.ChannelDivinityDMQueueCommand
+	cdDMQueueResult      combat.DMQueueResult
+	layCalls             []combat.LayOnHandsCommand
+	layResult            combat.LayOnHandsResult
 }
 
 func (f *fakeActionCombatService) GetEncounter(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
@@ -80,6 +115,81 @@ func (f *fakeActionCombatService) CancelExplorationFreeformAction(_ context.Cont
 func (f *fakeActionCombatService) ReadyAction(_ context.Context, cmd combat.ReadyActionCommand) (combat.ReadyActionResult, error) {
 	f.readyCalledWith = cmd
 	return f.readyResult, f.readyErr
+}
+
+func (f *fakeActionCombatService) ActionSurge(_ context.Context, cmd combat.ActionSurgeCommand) (combat.ActionSurgeResult, error) {
+	f.surgeCalls = append(f.surgeCalls, cmd)
+	return f.surgeResult, f.surgeErr
+}
+
+func (f *fakeActionCombatService) Dash(_ context.Context, cmd combat.DashCommand) (combat.DashResult, error) {
+	f.dashCalls = append(f.dashCalls, cmd)
+	return f.dashResult, f.dashErr
+}
+
+func (f *fakeActionCombatService) Disengage(_ context.Context, cmd combat.DisengageCommand) (combat.DisengageResult, error) {
+	f.disengageCalls = append(f.disengageCalls, cmd)
+	return f.disengageResult, nil
+}
+
+func (f *fakeActionCombatService) Dodge(_ context.Context, cmd combat.DodgeCommand) (combat.DodgeResult, error) {
+	f.dodgeCalls = append(f.dodgeCalls, cmd)
+	return f.dodgeResult, nil
+}
+
+func (f *fakeActionCombatService) Help(_ context.Context, cmd combat.HelpCommand) (combat.HelpResult, error) {
+	f.helpCalls = append(f.helpCalls, cmd)
+	return f.helpResult, nil
+}
+
+func (f *fakeActionCombatService) Hide(_ context.Context, cmd combat.HideCommand, _ *dice.Roller) (combat.HideResult, error) {
+	f.hideCalls = append(f.hideCalls, cmd)
+	return f.hideResult, nil
+}
+
+func (f *fakeActionCombatService) Stand(_ context.Context, cmd combat.StandCommand) (combat.StandResult, error) {
+	f.standCalls = append(f.standCalls, cmd)
+	return f.standResult, nil
+}
+
+func (f *fakeActionCombatService) DropProne(_ context.Context, cmd combat.DropProneCommand) (combat.DropProneResult, error) {
+	f.dropProneCalls = append(f.dropProneCalls, cmd)
+	return f.dropProneResult, nil
+}
+
+func (f *fakeActionCombatService) Escape(_ context.Context, cmd combat.EscapeCommand, _ *dice.Roller) (combat.EscapeResult, error) {
+	f.escapeCalls = append(f.escapeCalls, cmd)
+	return f.escapeResult, nil
+}
+
+func (f *fakeActionCombatService) TurnUndead(_ context.Context, cmd combat.TurnUndeadCommand, _ *dice.Roller) (combat.TurnUndeadResult, error) {
+	f.turnUndeadCalls = append(f.turnUndeadCalls, cmd)
+	return f.turnUndeadResult, nil
+}
+
+func (f *fakeActionCombatService) PreserveLife(_ context.Context, cmd combat.PreserveLifeCommand) (combat.PreserveLifeResult, error) {
+	f.preserveLifeCalls = append(f.preserveLifeCalls, cmd)
+	return f.preserveLifeResult, nil
+}
+
+func (f *fakeActionCombatService) SacredWeapon(_ context.Context, cmd combat.SacredWeaponCommand) (combat.SacredWeaponResult, error) {
+	f.sacredWeaponCalls = append(f.sacredWeaponCalls, cmd)
+	return f.sacredWeaponResult, nil
+}
+
+func (f *fakeActionCombatService) VowOfEnmity(_ context.Context, cmd combat.VowOfEnmityCommand) (combat.VowOfEnmityResult, error) {
+	f.vowCalls = append(f.vowCalls, cmd)
+	return f.vowResult, nil
+}
+
+func (f *fakeActionCombatService) ChannelDivinityDMQueue(_ context.Context, cmd combat.ChannelDivinityDMQueueCommand) (combat.DMQueueResult, error) {
+	f.cdDMQueueCalls = append(f.cdDMQueueCalls, cmd)
+	return f.cdDMQueueResult, nil
+}
+
+func (f *fakeActionCombatService) LayOnHands(_ context.Context, cmd combat.LayOnHandsCommand) (combat.LayOnHandsResult, error) {
+	f.layCalls = append(f.layCalls, cmd)
+	return f.layResult, nil
 }
 
 type fakeActionTurnProvider struct {

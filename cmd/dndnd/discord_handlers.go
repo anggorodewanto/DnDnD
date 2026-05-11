@@ -29,6 +29,24 @@ type userEncounterResolver interface {
 	ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
 }
 
+// enemyTurnNotifierSetter narrows combat.Handler to the SetEnemyTurnNotifier
+// hook so cmd/dndnd can write a focused wiring test for H-105b without
+// touching combat package internals.
+type enemyTurnNotifierSetter interface {
+	SetEnemyTurnNotifier(n combat.EnemyTurnNotifier)
+}
+
+// wireEnemyTurnNotifier injects the Discord-backed enemy-turn notifier into
+// the combat HTTP handler so combat.Handler.ExecuteEnemyTurn posts the
+// "⚔️ <display_name> — Round N" label instead of silently no-oping (H-105b).
+// Nil-safe so test deploys without a session or notifier do not panic.
+func wireEnemyTurnNotifier(h enemyTurnNotifierSetter, n combat.EnemyTurnNotifier) {
+	if h == nil || n == nil {
+		return
+	}
+	h.SetEnemyTurnNotifier(n)
+}
+
 // discordHandlerDeps bundles the collaborators needed to construct every
 // Phase 105 slash-command handler in one place. Optional fields may be nil —
 // constructors tolerate it and Set* wiring is applied later in run().
@@ -210,6 +228,14 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 
 	// Setter-based wiring for handlers that don't accept these via constructor.
 	handlers.summon.SetEncounterProvider(deps.resolver)
+	// D-50/D-54/D-57: /action subcommand dispatch needs a roller (Hide, Escape,
+	// Turn Undead) and a channel-id provider (combat-log mirroring).
+	if deps.roller != nil {
+		handlers.action.SetRoller(deps.roller)
+	}
+	if deps.campaignSettings != nil {
+		handlers.action.SetChannelIDProvider(deps.campaignSettings)
+	}
 	// Phase 110 it3: wire the character lookup so exploration /move can
 	// disambiguate which PC combatant belongs to the invoking Discord user
 	// (resolveExplorationMover falls back to pcs[0] when this is nil).
@@ -233,6 +259,11 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			newMoveOAPCReachAdapter(deps.queries),
 			deps.campaignSettings,
 		)
+	}
+	// D-56 / Phase 56: wire the drag lookup so /move applies the x2 drag
+	// movement cost when the mover is currently grappling another combatant.
+	if deps.combatService != nil {
+		handlers.move.SetDragLookup(deps.combatService)
 	}
 	// med-31 / Phase 75b: wire armor lookup so /check stealth applies the
 	// equipped armor's stealth_disadv flag. *refdata.Queries already
@@ -333,8 +364,14 @@ func attachInventoryAndCharacterHandlers(
 		}
 	}
 
-	// /retire shares the campaign + character lookups with inventory.
+	// /retire shares the campaign + character lookups with inventory. The
+	// PC store flags the player's existing player_characters row with
+	// created_via='retire' so the Phase 16 dashboard retire-approval branch
+	// (internal/dashboard/approval_handler.go) becomes reachable.
 	handlers.retire = discord.NewRetireHandler(deps.session, checkCampProv, characterLookup, deps.notifier)
+	if deps.queries != nil {
+		handlers.retire.SetPCStore(deps.queries)
+	}
 
 	// /undo needs the encounter resolver, the combatant lookup, and the
 	// action_log reader. All of them are nil-safe in the handler.
@@ -1032,6 +1069,69 @@ func (a *actionCombatServiceAdapter) CancelExplorationFreeformAction(ctx context
 
 func (a *actionCombatServiceAdapter) ReadyAction(ctx context.Context, cmd combat.ReadyActionCommand) (combat.ReadyActionResult, error) {
 	return a.svc.ReadyAction(ctx, cmd)
+}
+
+// D-47..D-57 dispatch passthroughs. The combat service has all of these
+// implemented; we just forward so the discord adapter interface stays small.
+
+func (a *actionCombatServiceAdapter) ActionSurge(ctx context.Context, cmd combat.ActionSurgeCommand) (combat.ActionSurgeResult, error) {
+	return a.svc.ActionSurge(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) Dash(ctx context.Context, cmd combat.DashCommand) (combat.DashResult, error) {
+	return a.svc.Dash(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) Disengage(ctx context.Context, cmd combat.DisengageCommand) (combat.DisengageResult, error) {
+	return a.svc.Disengage(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) Dodge(ctx context.Context, cmd combat.DodgeCommand) (combat.DodgeResult, error) {
+	return a.svc.Dodge(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) Help(ctx context.Context, cmd combat.HelpCommand) (combat.HelpResult, error) {
+	return a.svc.Help(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) Hide(ctx context.Context, cmd combat.HideCommand, roller *dice.Roller) (combat.HideResult, error) {
+	return a.svc.Hide(ctx, cmd, roller)
+}
+
+func (a *actionCombatServiceAdapter) Stand(ctx context.Context, cmd combat.StandCommand) (combat.StandResult, error) {
+	return a.svc.Stand(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) DropProne(ctx context.Context, cmd combat.DropProneCommand) (combat.DropProneResult, error) {
+	return a.svc.DropProne(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) Escape(ctx context.Context, cmd combat.EscapeCommand, roller *dice.Roller) (combat.EscapeResult, error) {
+	return a.svc.Escape(ctx, cmd, roller)
+}
+
+func (a *actionCombatServiceAdapter) TurnUndead(ctx context.Context, cmd combat.TurnUndeadCommand, roller *dice.Roller) (combat.TurnUndeadResult, error) {
+	return a.svc.TurnUndead(ctx, cmd, roller)
+}
+
+func (a *actionCombatServiceAdapter) PreserveLife(ctx context.Context, cmd combat.PreserveLifeCommand) (combat.PreserveLifeResult, error) {
+	return a.svc.PreserveLife(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) SacredWeapon(ctx context.Context, cmd combat.SacredWeaponCommand) (combat.SacredWeaponResult, error) {
+	return a.svc.SacredWeapon(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) VowOfEnmity(ctx context.Context, cmd combat.VowOfEnmityCommand) (combat.VowOfEnmityResult, error) {
+	return a.svc.VowOfEnmity(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) ChannelDivinityDMQueue(ctx context.Context, cmd combat.ChannelDivinityDMQueueCommand) (combat.DMQueueResult, error) {
+	return a.svc.ChannelDivinityDMQueue(ctx, cmd)
+}
+
+func (a *actionCombatServiceAdapter) LayOnHands(ctx context.Context, cmd combat.LayOnHandsCommand) (combat.LayOnHandsResult, error) {
+	return a.svc.LayOnHands(ctx, cmd)
 }
 
 // actionPendingStoreAdapter satisfies discord.ActionPendingStore over

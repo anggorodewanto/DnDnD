@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -3107,4 +3108,235 @@ func TestServiceAttack_HiddenAttackerRevealed(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.AttackerRevealed, "hidden attacker should be revealed after attacking")
 	assert.Equal(t, attackerID, revealedID, "UpdateCombatantVisibility should be called with attacker ID")
+}
+
+// --- C-33: cover bonus to AC wired into Service.Attack ---
+
+// coverTestArcher builds a longbow-wielding character + mock store wired for
+// Service.Attack happy-path resolution. The longbow gives us a generous range
+// so we can stage attacker/target several grid cells apart without tripping
+// the melee range gate, and DEX 14 (+2) is the damage stat.
+func coverTestArcher(t *testing.T) (*Service, uuid.UUID) {
+	t.Helper()
+	charID := uuid.New()
+	char := makeCharacter(10, 14, 2, "longbow")
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeLongbow(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+	return NewService(ms), charID
+}
+
+// TestServiceAttack_HalfCoverFromWalls_FlipsHitToMiss verifies that
+// Service.Attack pipes attacker→target wall cover into AttackInput.Cover so
+// the +2 AC bonus actually changes the outcome. Mirrors the half-cover wall
+// geometry from cover_test.go (TestCalculateCover_HalfCover_Wall).
+func TestServiceAttack_HalfCoverFromWalls_FlipsHitToMiss(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+
+	svc, charID := coverTestArcher(t)
+
+	// d20 rolls 13; longbow uses DEX (+2) + prof 2 → total 13+2+2 = 17.
+	// AC 17: no cover → HIT (17 >= 17). Half cover (+2) → AC 19 → MISS.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 13
+		}
+		return 4
+	})
+
+	// Attacker at A1 (col 0, row 0), target at D1 (col 3, row 0).
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin",
+		PositionCol: "D",
+		PositionRow: 1,
+		Ac:          17,
+		IsAlive:     true,
+		IsNpc:       true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{
+		ID:               uuid.New(),
+		EncounterID:      encounterID,
+		CombatantID:      attackerID,
+		AttacksRemaining: 1,
+	}
+
+	// Wall at x=2 from y=0.5 to y=1.5 — exact geometry from
+	// TestCalculateCover_HalfCover_Wall (cover_test.go line 134) — yields
+	// CoverHalf between (0,0) and (3,0).
+	walls := []renderer.WallSegment{{X1: 2, Y1: 0.5, X2: 2, Y2: 1.5}}
+
+	// Sanity check: without walls wired, this would HIT (17 vs AC 17).
+	noWalls, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, noWalls.Hit, "baseline (no walls) should HIT to make the cover flip meaningful")
+	assert.Equal(t, CoverNone, noWalls.Cover)
+
+	// With walls wired, half cover (+2 AC) bumps effective AC to 19 → MISS.
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     turn,
+		Walls:    walls,
+	}, roller)
+	require.NoError(t, err)
+	assert.Equal(t, CoverHalf, result.Cover, "expected half cover from the partial vertical wall")
+	assert.Equal(t, 19, result.EffectiveAC)
+	assert.False(t, result.Hit, "half cover (+2 AC) must flip 17 vs AC 17 to a MISS at AC 19")
+}
+
+// TestServiceAttack_ThreeQuartersCoverFromWalls_FlipsHitToMiss verifies the
+// +5 AC bonus from three-quarters cover is wired through Service.Attack.
+// Uses the L-shaped wall geometry from cover_test.go
+// (TestCalculateCover_ThreeQuartersCover).
+func TestServiceAttack_ThreeQuartersCoverFromWalls_FlipsHitToMiss(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+
+	svc, charID := coverTestArcher(t)
+
+	// d20 rolls 13; DEX 14 (+2) + prof 2 = 17. AC 17 → HIT without cover.
+	// Three-quarters cover (+5) → AC 22 → MISS.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 13
+		}
+		return 4
+	})
+
+	// Attacker at A1 (col 0, row 0), target at D4 (col 3, row 3).
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin",
+		PositionCol: "D",
+		PositionRow: 4,
+		Ac:          17,
+		IsAlive:     true,
+		IsNpc:       true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{
+		ID:               uuid.New(),
+		EncounterID:      encounterID,
+		CombatantID:      attackerID,
+		AttacksRemaining: 1,
+	}
+
+	// L-shaped walls from TestCalculateCover_ThreeQuartersCover.
+	walls := []renderer.WallSegment{
+		{X1: 3, Y1: 0, X2: 3, Y2: 4},
+		{X1: 0, Y1: 3, X2: 4, Y2: 3},
+	}
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     turn,
+		Walls:    walls,
+	}, roller)
+	require.NoError(t, err)
+	assert.Equal(t, CoverThreeQuarters, result.Cover, "L-shaped walls should yield three-quarters cover")
+	assert.Equal(t, 22, result.EffectiveAC)
+	assert.False(t, result.Hit, "three-quarters cover (+5 AC) must flip 17 vs AC 17 to a MISS at AC 22")
+}
+
+// TestServiceAttack_FullCoverRejectsAttack verifies that when attacker→target
+// cover is total (all four corner sightlines blocked), Service.Attack returns
+// ErrTargetFullyCovered rather than resolving an attack roll — the target
+// cannot be targeted at all (PHB p.196).
+func TestServiceAttack_FullCoverRejectsAttack(t *testing.T) {
+	ctx := context.Background()
+	encounterID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+
+	svc, charID := coverTestArcher(t)
+	roller := dice.NewRoller(func(max int) int { return max })
+
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 3,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin",
+		PositionCol: "D",
+		PositionRow: 3,
+		Ac:          14,
+		IsAlive:     true,
+		IsNpc:       true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{
+		ID:               uuid.New(),
+		EncounterID:      encounterID,
+		CombatantID:      attackerID,
+		AttacksRemaining: 1,
+	}
+
+	// Tall vertical wall from TestCalculateCover_FullCover_Wall.
+	walls := []renderer.WallSegment{{X1: 2, Y1: 0, X2: 2, Y2: 5}}
+
+	_, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     turn,
+		Walls:    walls,
+	}, roller)
+	require.Error(t, err, "total cover must reject the attack")
+	assert.ErrorIs(t, err, ErrTargetFullyCovered)
 }

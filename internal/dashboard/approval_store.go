@@ -12,19 +12,28 @@ import (
 
 // ApprovalQueries defines the database operations needed by DBApprovalStore.
 type ApprovalQueries interface {
-	ListPlayerCharactersByStatus(ctx context.Context, arg refdata.ListPlayerCharactersByStatusParams) ([]refdata.ListPlayerCharactersByStatusRow, error)
+	ListPlayerCharactersAwaitingApproval(ctx context.Context, campaignID uuid.UUID) ([]refdata.ListPlayerCharactersAwaitingApprovalRow, error)
 	GetPlayerCharacterWithCharacter(ctx context.Context, id uuid.UUID) (refdata.GetPlayerCharacterWithCharacterRow, error)
 	GetPlayerCharacter(ctx context.Context, id uuid.UUID) (refdata.PlayerCharacter, error)
 	UpdatePlayerCharacterStatus(ctx context.Context, arg refdata.UpdatePlayerCharacterStatusParams) (refdata.PlayerCharacter, error)
 }
 
-// validApprovalTransitions defines which status transitions are allowed per current status.
+// validApprovalTransitions defines which status transitions are allowed per
+// current status.
+//
+// `pending` covers the normal new-character flow. `approved` -> `retired`
+// covers Phase 16's /retire approval: the row sits at approved with
+// created_via='retire' once the player asks to retire, and the DM approves
+// it through the same /approve endpoint.
 var validApprovalTransitions = map[string]map[string]bool{
 	"pending": {
 		"approved":          true,
 		"changes_requested": true,
 		"rejected":          true,
 		"retired":           true,
+	},
+	"approved": {
+		"retired": true,
 	},
 }
 
@@ -38,12 +47,12 @@ func NewDBApprovalStore(queries ApprovalQueries) *DBApprovalStore {
 	return &DBApprovalStore{queries: queries}
 }
 
-// ListPendingApprovals returns all pending player characters for a campaign.
+// ListPendingApprovals returns all rows currently awaiting DM approval for a
+// campaign: status='pending' plus any row flagged as a retire request
+// (created_via='retire'). The retire-flagged rows typically sit at
+// status='approved' until the DM approves the retirement.
 func (s *DBApprovalStore) ListPendingApprovals(ctx context.Context, campaignID uuid.UUID) ([]ApprovalEntry, error) {
-	rows, err := s.queries.ListPlayerCharactersByStatus(ctx, refdata.ListPlayerCharactersByStatusParams{
-		CampaignID: campaignID,
-		Status:     "pending",
-	})
+	rows, err := s.queries.ListPlayerCharactersAwaitingApproval(ctx, campaignID)
 	if err != nil {
 		return nil, fmt.Errorf("listing pending approvals: %w", err)
 	}
@@ -103,7 +112,10 @@ func (s *DBApprovalStore) RequestChanges(ctx context.Context, id uuid.UUID, feed
 	return s.transitionStatus(ctx, id, "changes_requested", feedback)
 }
 
-// RetireCharacter transitions a player character from pending to retired.
+// RetireCharacter transitions a player character to retired. The realistic
+// flow is approved -> retired (the player /retire'd an active character and
+// the DM approved); pending -> retired remains allowed for the pre-approval
+// edge case.
 func (s *DBApprovalStore) RetireCharacter(ctx context.Context, id uuid.UUID) error {
 	return s.transitionStatus(ctx, id, "retired", "")
 }

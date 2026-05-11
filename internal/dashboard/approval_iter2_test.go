@@ -476,3 +476,27 @@ func TestDBApprovalStore_RetireCharacter(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "retired", fq.updateParams.Status)
 }
+
+// A-08-retire-approved-transition: validApprovalTransitions["approved"] must
+// permit "retired". The realistic /retire flow tags the row created_via=
+// 'retire' while leaving status='approved'; the DM then approves through the
+// existing /approve endpoint, which calls RetireCharacter and requires this
+// transition.
+func TestDBApprovalStore_RetireCharacter_FromApproved(t *testing.T) {
+	id := uuid.New()
+	fq := &fakeQueries{
+		getPC: refdata.PlayerCharacter{
+			ID:     id,
+			Status: "approved",
+		},
+		updatePC: refdata.PlayerCharacter{
+			ID:     id,
+			Status: "retired",
+		},
+	}
+
+	store := NewDBApprovalStore(fq)
+	err := store.RetireCharacter(context.Background(), id)
+	require.NoError(t, err)
+	assert.Equal(t, "retired", fq.updateParams.Status)
+}

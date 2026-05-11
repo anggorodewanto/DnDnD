@@ -91,6 +91,14 @@ type MoveChannelIDProvider interface {
 	GetChannelIDs(ctx context.Context, encounterID uuid.UUID) (map[string]string, error)
 }
 
+// MoveDragLookup detects whether the mover is currently grappling any other
+// combatant. When the returned DragCheckResult.HasTargets is true, /move
+// applies the x2 drag movement cost via combat.DragMovementCost. nil-safe:
+// when unset, drag costs are never applied (legacy behavior). (D-56 / Phase 56)
+type MoveDragLookup interface {
+	CheckDragTargets(ctx context.Context, encounterID uuid.UUID, mover refdata.Combatant) (combat.DragCheckResult, error)
+}
+
 // MoveHandler handles the /move slash command.
 type MoveHandler struct {
 	session           Session
@@ -111,7 +119,14 @@ type MoveHandler struct {
 	oaCreatures MoveOACreatureLookup
 	oaPCReach   MoveOAPCWeaponReach
 	oaChannels  MoveChannelIDProvider
+	// D-56 / Phase 56: drag-cost integration. When set, /move calls
+	// CheckDragTargets and doubles the displayed move cost via combat.DragMovementCost.
+	dragLookup MoveDragLookup
 }
+
+// SetDragLookup wires the D-56 drag-cost integration. nil-safe — when unset,
+// /move never applies the x2 drag movement cost.
+func (h *MoveHandler) SetDragLookup(l MoveDragLookup) { h.dragLookup = l }
 
 // SetCharacterLookup wires the character lookup used by exploration /move to
 // resolve the invoking Discord user's PC combatant.
@@ -372,8 +387,18 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// Build confirmation with buttons
+	// D-56 / Phase 56: when the mover is dragging one or more grappled
+	// creatures, double the displayed move cost. The grappled-target tile
+	// updates are out of scope here (the grappled creature stays put for
+	// this iteration; the player can run /bonus release-drag to drop them).
+	dragPromptPrefix := h.dragPromptForMove(context.Background(), encounterID, combatant)
+	if dragPromptPrefix != "" {
+		result.CostFt = combat.DragMovementCost(result.CostFt)
+	}
 	confirmMsg := combat.FormatMoveConfirmation(result)
+	if dragPromptPrefix != "" {
+		confirmMsg = dragPromptPrefix + "\n" + confirmMsg
+	}
 
 	// Encode move data in custom IDs for button callback
 	confirmID := fmt.Sprintf("move_confirm:%s:%s:%d:%d:%d",
@@ -722,6 +747,21 @@ func (h *MoveHandler) lookupPCReach(ctx context.Context, all []refdata.Combatant
 		out[c.ID] = reach
 	}
 	return out
+}
+
+// dragPromptForMove returns the drag confirmation prompt when the mover is
+// currently grappling other creatures, or "" when no drag is active or the
+// drag lookup is unwired / errors out. The caller doubles the move cost only
+// when a prompt is returned. (D-56 / Phase 56)
+func (h *MoveHandler) dragPromptForMove(ctx context.Context, encounterID uuid.UUID, mover refdata.Combatant) string {
+	if h.dragLookup == nil {
+		return ""
+	}
+	check, err := h.dragLookup.CheckDragTargets(ctx, encounterID, mover)
+	if err != nil || !check.HasTargets {
+		return ""
+	}
+	return combat.FormatDragPrompt(check.GrappledTargets)
 }
 
 // HandleMoveCancel processes the move cancel button click.
