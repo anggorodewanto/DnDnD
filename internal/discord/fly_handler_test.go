@@ -47,7 +47,7 @@ func setupFlyHandler(sess *mockMoveSession) (*FlyHandler, uuid.UUID, uuid.UUID, 
 				PositionCol: "A",
 				PositionRow: 1,
 				AltitudeFt:  0,
-				IsAlive:     true,
+				IsAlive: true, HpCurrent: 10,
 				IsNpc:       false,
 			}, nil
 		},
@@ -561,7 +561,7 @@ func TestFlyHandler_Descend(t *testing.T) {
 				PositionCol: "A",
 				PositionRow: 1,
 				AltitudeFt:  30,
-				IsAlive:     true,
+				IsAlive: true, HpCurrent: 10,
 			}, nil
 		},
 		listCombatants:     origSvc.listCombatants,

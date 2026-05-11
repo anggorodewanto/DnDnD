@@ -347,6 +347,16 @@ type TurnInfo struct {
 	RoundNumber       int32
 	Skipped           bool
 	SkippedCombatants []SkippedInfo
+	// ExpiryNotices holds the per-readied-action expiry strings emitted by
+	// ExpireReadiedActions at turn start (E-71-readied-action-expiry).
+	// Discord wiring surfaces these alongside the turn-start prompt via
+	// FormatTurnStartPromptWithExpiry.
+	ExpiryNotices []string
+	// ZoneTriggerResults holds the start-of-turn zone effects (Spirit
+	// Guardians, Wall of Fire, Moonbeam, etc.) that fired for the
+	// combatant whose turn is starting (E-67-zone-triggers). Discord
+	// wiring surfaces these as DM-driven save / damage prompts.
+	ZoneTriggerResults []ZoneTriggerResult
 }
 
 // MarkSurprised adds the surprised condition to a combatant.
@@ -446,11 +456,8 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 	// If no candidates, advance to next round
 	if len(candidates) == 0 {
 		roundNumber++
-		if _, err := s.store.UpdateEncounterRound(ctx, refdata.UpdateEncounterRoundParams{
-			ID:          encounterID,
-			RoundNumber: roundNumber,
-		}); err != nil {
-			return TurnInfo{}, fmt.Errorf("advancing round: %w", err)
+		if err := s.advanceRound(ctx, encounterID, roundNumber, ""); err != nil {
+			return TurnInfo{}, err
 		}
 		// Reset candidates to all alive non-summoned combatants
 		for _, c := range combatants {
@@ -500,11 +507,8 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 			reason = "all incapacitated"
 		}
 		roundNumber++
-		if _, err := s.store.UpdateEncounterRound(ctx, refdata.UpdateEncounterRoundParams{
-			ID:          encounterID,
-			RoundNumber: roundNumber,
-		}); err != nil {
-			return TurnInfo{}, fmt.Errorf("advancing round after %s: %w", reason, err)
+		if err := s.advanceRound(ctx, encounterID, roundNumber, reason); err != nil {
+			return TurnInfo{}, err
 		}
 
 		return s.findFirstActiveCombatant(ctx, encounterID, roundNumber, combatants, skippedCombatants)
@@ -672,6 +676,15 @@ func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, r
 		return TurnInfo{}, fmt.Errorf("processing turn start conditions: %w", err)
 	}
 
+	// E-71-readied-action-expiry: any readied actions the combatant had
+	// queued from a prior round expire at the start of their next turn.
+	// expireNotices is surfaced via TurnInfo so the Discord turn-start
+	// notifier can compose FormatTurnStartPromptWithExpiry.
+	expiryNotices, eerr := s.expireReadiedActionsForTurn(ctx, combatant.ID, encounterID)
+	if eerr != nil {
+		return TurnInfo{}, fmt.Errorf("expiring readied actions at turn start: %w", eerr)
+	}
+
 	// Reset summoned creature turn resources for this summoner's creatures
 	if err := s.resetSummonedCreatureResources(ctx, encounterID, combatant.ID); err != nil {
 		return TurnInfo{}, fmt.Errorf("resetting summoned creature resources: %w", err)
@@ -684,14 +697,88 @@ func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, r
 		return TurnInfo{}, fmt.Errorf("updating current turn: %w", err)
 	}
 
+	// E-67-zone-triggers: start-of-turn damaging/save effects (Spirit
+	// Guardians, Wall of Fire, Cloud of Daggers, Moonbeam) fire for the
+	// combatant whose turn just started. The per-round dedupe lives in
+	// CheckZoneTriggers so a combatant already triggered this round (via
+	// /move) won't fire again.
+	colIdx := colToIndex(combatant.PositionCol)
+	rowIdx := int(combatant.PositionRow) - 1
+	zoneResults, zerr := s.CheckZoneTriggers(ctx, combatant.ID, colIdx, rowIdx, encounterID, "start_of_turn")
+	if zerr != nil {
+		return TurnInfo{}, fmt.Errorf("zone start-of-turn trigger check: %w", zerr)
+	}
+
 	s.postEnemyTurnReady(ctx, encounterID, combatant)
 	s.refreshInitiativeTracker(ctx, encounterID, combatant.ID)
 
 	return TurnInfo{
-		Turn:        turn,
-		CombatantID: combatant.ID,
-		RoundNumber: roundNumber,
+		Turn:               turn,
+		CombatantID:        combatant.ID,
+		RoundNumber:        roundNumber,
+		ExpiryNotices:      expiryNotices,
+		ZoneTriggerResults: zoneResults,
 	}, nil
+}
+
+// advanceRound persists the new round number and fires the per-round hooks:
+//
+//   - CleanupExpiredZones removes zones whose ExpiresAtRound <= roundNumber
+//     (E-67-zone-cleanup).
+//   - ResetZoneTriggersForRound clears the per-round dedupe map so
+//     start-of-turn / enter triggers fire again for combatants who linger in
+//     or re-enter a zone (E-67-zone-triggers).
+//
+// The `reason` argument is "" for the natural round advance and "all
+// surprised" / "all incapacitated" for the skip-everyone branch; it is
+// embedded in error messages only.
+func (s *Service) advanceRound(ctx context.Context, encounterID uuid.UUID, roundNumber int32, reason string) error {
+	suffix := ""
+	if reason != "" {
+		suffix = fmt.Sprintf(" (%s)", reason)
+	}
+	if _, err := s.store.UpdateEncounterRound(ctx, refdata.UpdateEncounterRoundParams{
+		ID:          encounterID,
+		RoundNumber: roundNumber,
+	}); err != nil {
+		return fmt.Errorf("advancing round%s: %w", suffix, err)
+	}
+	if err := s.CleanupExpiredZones(ctx, encounterID, roundNumber); err != nil {
+		return fmt.Errorf("cleaning expired zones at round %d%s: %w", roundNumber, suffix, err)
+	}
+	if err := s.ResetZoneTriggersForRound(ctx, encounterID); err != nil {
+		return fmt.Errorf("resetting zone triggers at round %d%s: %w", roundNumber, suffix, err)
+	}
+	return nil
+}
+
+// expireReadiedActionsForTurn cancels any active readied actions belonging
+// to the combatant whose turn is starting and, when the readied action
+// carried a spell, drops the held concentration on that spell. Returns the
+// expiry notice strings so the caller can attach them to the turn-start
+// prompt. (E-71-readied-action-expiry)
+func (s *Service) expireReadiedActionsForTurn(ctx context.Context, combatantID, encounterID uuid.UUID) ([]string, error) {
+	notices, err := s.ExpireReadiedActions(ctx, combatantID, encounterID)
+	if err != nil {
+		return nil, err
+	}
+	if len(notices) == 0 {
+		return nil, nil
+	}
+	// med-28 / E-71: when the expiring readied action was a spell, the
+	// caster held concentration on it pending the trigger. Clear the
+	// concentration columns now that the readied spell is being dropped.
+	// ClearCombatantConcentration is a NULL-write so calling it when
+	// nothing was held is harmless.
+	for _, n := range notices {
+		if strings.Contains(n, "Concentration on") {
+			if cerr := s.store.ClearCombatantConcentration(ctx, combatantID); cerr != nil {
+				return notices, fmt.Errorf("clearing readied-spell concentration: %w", cerr)
+			}
+			break
+		}
+	}
+	return notices, nil
 }
 
 // refreshInitiativeTracker fires the wired InitiativeTrackerNotifier so the

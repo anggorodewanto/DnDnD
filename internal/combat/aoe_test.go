@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -2189,4 +2190,252 @@ func TestResolveAoESaves_NPCImmunityZeroesAoEDamage(t *testing.T) {
 	assert.Equal(t, 0, result.Targets[0].DamageDealt)
 	assert.Equal(t, 13, result.Targets[0].HPAfter)
 	assert.Equal(t, int32(13), capturedHP.HpCurrent, "immunity must keep HP unchanged")
+}
+
+// E-59 TDD: CastAoE persists one pending_saves row per affected combatant.
+// Before the fix, PendingSaves were returned on the result but never written
+// to the pending_saves table, so the resolution loop was unreachable.
+func TestCastAoE_PersistsPendingSavesForEachAffectedCombatant(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "E"
+	caster.PositionRow = 5
+
+	goblinA := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin A",
+		PositionCol: "H", PositionRow: 8,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+	goblinB := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin B",
+		PositionCol: "I", PositionRow: 8,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	fireball := makeFireball()
+	fireball.AreaOfEffect = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`{"shape":"sphere","radius_ft":20}`),
+		Valid:      true,
+	}
+	fireball.SaveEffect = sql.NullString{String: "half_damage", Valid: true}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return fireball, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster, goblinA, goblinB}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed, ActionSpellCast: arg.ActionSpellCast}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	var pendingCalls []refdata.CreatePendingSaveParams
+	store.createPendingSaveFn = func(_ context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+		pendingCalls = append(pendingCalls, arg)
+		return refdata.PendingSafe{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, Source: arg.Source}, nil
+	}
+
+	svc := NewService(store)
+	cmd := AoECastCommand{
+		SpellID:     "fireball",
+		CasterID:    caster.ID,
+		EncounterID: uuid.New(),
+		TargetCol:   "H",
+		TargetRow:   8,
+		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	result, err := svc.CastAoE(context.Background(), cmd)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(result.PendingSaves))
+	require.Equal(t, len(result.PendingSaves), len(pendingCalls),
+		"expected one pending_saves row per PendingSave returned")
+	for _, ps := range pendingCalls {
+		assert.Equal(t, "dex", ps.Ability)
+		assert.Equal(t, int32(15), ps.Dc)
+		assert.True(t, strings.HasPrefix(ps.Source, "aoe:"), "source should be aoe-tagged, got %q", ps.Source)
+		assert.Contains(t, ps.Source, "fireball")
+	}
+}
+
+// E-59 TDD: ResolveAoEPendingSaves applies damage once every pending row for
+// a given (encounter, spell) has been resolved. Mixed-saves scenario.
+func TestResolveAoEPendingSaves_AppliesDamageOnceAllResolved(t *testing.T) {
+	encounterID := uuid.New()
+	combAID := uuid.New()
+	combBID := uuid.New()
+	spellID := "fireball"
+	source := "aoe:" + spellID
+
+	combA := refdata.Combatant{ID: combAID, DisplayName: "Goblin A", HpMax: 30, HpCurrent: 30, IsAlive: true}
+	combB := refdata.Combatant{ID: combBID, DisplayName: "Goblin B", HpMax: 30, HpCurrent: 30, IsAlive: true}
+
+	fireball := makeFireball()
+	fireball.SaveEffect = sql.NullString{String: "half_damage", Valid: true}
+	fireball.Damage = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`{"dice":"8d6","damage_type":"fire"}`),
+		Valid:      true,
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return fireball, nil }
+	store.listPendingSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		// One rolled (success=true), one rolled (success=false) — fully resolved
+		return []refdata.PendingSafe{
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: combAID, Source: source, Ability: "dex", Dc: 15, Status: "rolled", RollResult: sql.NullInt32{Int32: 18, Valid: true}, Success: sql.NullBool{Bool: true, Valid: true}},
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: combBID, Source: source, Ability: "dex", Dc: 15, Status: "rolled", RollResult: sql.NullInt32{Int32: 8, Valid: true}, Success: sql.NullBool{Bool: false, Valid: true}},
+		}, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == combAID {
+			return combA, nil
+		}
+		return combB, nil
+	}
+	var hpUpdates []refdata.UpdateCombatantHPParams
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpUpdates = append(hpUpdates, arg)
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	// dice always rolls 4 → 8d6 = 32 fire damage; half_damage means saver
+	// gets 16, failer gets 32.
+	roller := dice.NewRoller(func(_ int) int { return 4 })
+	svc := NewService(store)
+
+	res, err := svc.ResolveAoEPendingSaves(context.Background(), encounterID, spellID, roller)
+	require.NoError(t, err)
+	require.NotNil(t, res, "expected damage to be applied once all saves resolved")
+	require.Equal(t, 2, len(res.Targets))
+	// Two HP updates expected, one per affected combatant.
+	require.Equal(t, 2, len(hpUpdates))
+}
+
+// E-59 TDD: AoE source helpers round-trip the spell ID.
+func TestAoEPendingSaveSourceHelpers(t *testing.T) {
+	src := AoEPendingSaveSource("fireball")
+	require.True(t, IsAoEPendingSaveSource(src))
+	require.Equal(t, "fireball", SpellIDFromAoEPendingSaveSource(src))
+	require.False(t, IsAoEPendingSaveSource("concentration"))
+	require.Equal(t, "", SpellIDFromAoEPendingSaveSource("concentration"))
+}
+
+// E-59 TDD: RecordAoEPendingSaveRoll resolves the oldest pending AoE row on
+// the combatant and writes (total, total>=Dc).
+func TestRecordAoEPendingSaveRoll_ResolvesMatchingRow(t *testing.T) {
+	combatantID := uuid.New()
+	rowID := uuid.New()
+	store := defaultMockStore()
+	store.listPendingSavesByCombatantFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: rowID, CombatantID: combatantID, Ability: "dex", Dc: 15, Source: AoEPendingSaveSource("fireball"), Status: "pending"},
+		}, nil
+	}
+	var updated refdata.UpdatePendingSaveResultParams
+	store.updatePendingSaveResultFn = func(_ context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+		updated = arg
+		return refdata.PendingSafe{ID: arg.ID, RollResult: arg.RollResult, Success: arg.Success, Source: AoEPendingSaveSource("fireball"), Status: "rolled"}, nil
+	}
+
+	svc := NewService(store)
+	spellID, resolved, err := svc.RecordAoEPendingSaveRoll(context.Background(), combatantID, "dex", 18, false)
+	require.NoError(t, err)
+	assert.True(t, resolved)
+	assert.Equal(t, "fireball", spellID)
+	assert.Equal(t, rowID, updated.ID)
+	assert.True(t, updated.Success.Bool, "18 >= 15 should be a success")
+	assert.Equal(t, int32(18), updated.RollResult.Int32)
+}
+
+// E-59 TDD: RecordAoEPendingSaveRoll fails the save when autoFail is set
+// (e.g. natural 1 / paralyzed) regardless of the total.
+func TestRecordAoEPendingSaveRoll_AutoFailMarksFailure(t *testing.T) {
+	combatantID := uuid.New()
+	store := defaultMockStore()
+	store.listPendingSavesByCombatantFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: uuid.New(), CombatantID: combatantID, Ability: "dex", Dc: 10, Source: AoEPendingSaveSource("fireball"), Status: "pending"},
+		}, nil
+	}
+	var updated refdata.UpdatePendingSaveResultParams
+	store.updatePendingSaveResultFn = func(_ context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+		updated = arg
+		return refdata.PendingSafe{ID: arg.ID, Source: AoEPendingSaveSource("fireball"), Status: "rolled"}, nil
+	}
+
+	svc := NewService(store)
+	_, resolved, err := svc.RecordAoEPendingSaveRoll(context.Background(), combatantID, "dex", 25, true)
+	require.NoError(t, err)
+	assert.True(t, resolved)
+	assert.False(t, updated.Success.Bool, "autoFail must override the total")
+}
+
+// E-59 TDD: RecordAoEPendingSaveRoll is a no-op when no matching AoE row is
+// pending (player rolled a proactive /save, or row already rolled).
+func TestRecordAoEPendingSaveRoll_NoMatchingRowIsNoop(t *testing.T) {
+	combatantID := uuid.New()
+	store := defaultMockStore()
+	store.listPendingSavesByCombatantFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: uuid.New(), CombatantID: combatantID, Ability: "con", Source: ConcentrationSaveSource, Status: "pending"},
+		}, nil
+	}
+	updateCalls := 0
+	store.updatePendingSaveResultFn = func(_ context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+		updateCalls++
+		return refdata.PendingSafe{ID: arg.ID}, nil
+	}
+
+	svc := NewService(store)
+	spellID, resolved, err := svc.RecordAoEPendingSaveRoll(context.Background(), combatantID, "dex", 18, false)
+	require.NoError(t, err)
+	assert.False(t, resolved)
+	assert.Equal(t, "", spellID)
+	assert.Equal(t, 0, updateCalls)
+}
+
+// E-59 TDD: ResolveAoEPendingSaves is a no-op when one or more rows are still
+// pending (DM-rolled enemy save outstanding, etc.).
+func TestResolveAoEPendingSaves_NoopWhenPendingRemain(t *testing.T) {
+	encounterID := uuid.New()
+	spellID := "fireball"
+	source := "aoe:" + spellID
+
+	fireball := makeFireball()
+	fireball.SaveEffect = sql.NullString{String: "half_damage", Valid: true}
+	fireball.Damage = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`{"dice":"8d6","damage_type":"fire"}`),
+		Valid:      true,
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return fireball, nil }
+	store.listPendingSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), Source: source, Status: "rolled", RollResult: sql.NullInt32{Int32: 18, Valid: true}, Success: sql.NullBool{Bool: true, Valid: true}},
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: uuid.New(), Source: source, Status: "pending"},
+		}, nil
+	}
+	var hpCalls int
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpCalls++
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent}, nil
+	}
+
+	roller := dice.NewRoller(func(_ int) int { return 4 })
+	svc := NewService(store)
+
+	res, err := svc.ResolveAoEPendingSaves(context.Background(), encounterID, spellID, roller)
+	require.NoError(t, err)
+	assert.Nil(t, res, "expected no damage applied while one save is still pending")
+	assert.Equal(t, 0, hpCalls)
 }

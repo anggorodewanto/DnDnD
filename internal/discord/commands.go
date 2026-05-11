@@ -4,7 +4,46 @@ import (
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
+
+	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/refdata"
 )
+
+// incapacitatedRejection returns ("", false) if the combatant can issue
+// turn-consuming commands (move, attack, cast, bonus, action). Returns the
+// formatted ephemeral rejection string and true when the combatant is
+// dying, unconscious, stunned, paralyzed, or otherwise incapacitated.
+//
+// C-43-block-commands / Phase 43: a dying or incapacitated combatant cannot
+// take actions on their own behalf. Initiative auto-skips them in combat
+// mode, but a dying PC can still try to fire off /move or /attack out of
+// order — this guard rejects those before any service call runs.
+//
+// `/deathsave` and the off-turn DM-side commands intentionally never
+// consult this guard.
+func incapacitatedRejection(c refdata.Combatant) (string, bool) {
+	if msg, ok := dyingRejection(c); ok {
+		return msg, true
+	}
+	if !combat.IsIncapacitatedRaw(c.Conditions) {
+		return "", false
+	}
+	return "You are incapacitated and cannot take that action.", true
+}
+
+// dyingRejection returns the "you are dying" rejection when the combatant
+// is alive at 0 HP and not yet stabilized. Split from incapacitatedRejection
+// so the dying message is more specific than the generic incapacitated copy.
+func dyingRejection(c refdata.Combatant) (string, bool) {
+	ds, err := combat.ParseDeathSaves(c.DeathSaves.RawMessage)
+	if err != nil {
+		return "", false
+	}
+	if !combat.IsDying(c.IsAlive, int(c.HpCurrent), ds) {
+		return "", false
+	}
+	return "You are dying — only `/deathsave` is available until you stabilize.", true
+}
 
 // setupPermission requires ManageChannels to run /setup.
 var setupPermission int64 = discordgo.PermissionManageChannels
@@ -144,6 +183,11 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Type:        discordgo.ApplicationCommandOptionBoolean,
 					Name:        "empowered",
 					Description: "Use Empowered Spell metamagic",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "extended",
+					Description: "Use Extended Spell metamagic (doubles spell duration up to 24h)",
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionBoolean,

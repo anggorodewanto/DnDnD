@@ -192,6 +192,12 @@ func (h *BonusHandler) resolveContext(ctx context.Context, interaction *discordg
 		respondEphemeral(h.session, interaction, "Failed to load combatant.")
 		return bonusContext{}, false
 	}
+	// C-43-block-commands: a dying or incapacitated combatant cannot
+	// take bonus actions.
+	if msg, blocked := incapacitatedRejection(actor); blocked {
+		respondEphemeral(h.session, interaction, msg)
+		return bonusContext{}, false
+	}
 	combatants, err := h.encounterProvider.ListCombatantsByEncounterID(ctx, encounterID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Failed to list combatants.")

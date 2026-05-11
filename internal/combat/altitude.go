@@ -1,10 +1,12 @@
 package combat
 
 import (
+	"context"
 	"fmt"
 	"math"
 
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/refdata"
 )
 
 // Distance3D computes 3D Euclidean distance between two grid positions with altitude,
@@ -119,4 +121,51 @@ func FormatFlyConfirmation(result *FlyResult) string {
 		return fmt.Sprintf("\U0001f985 Descend to ground level \u2014 %dft, %dft remaining after.", result.CostFt, result.RemainingFt)
 	}
 	return fmt.Sprintf("\U0001f985 Fly to %dft altitude \u2014 %dft, %dft remaining after.", result.NewAltitude, result.CostFt, result.RemainingFt)
+}
+
+// applyFallDamageOnProne fires the Phase 31 fall-damage hook whenever a
+// combatant transitions to prone while airborne (C-31). It rolls
+// FallDamage at the current altitude, applies the rolled damage through
+// the standard ApplyDamage pipeline (so resistances / vulnerabilities /
+// concentration saves all fire), and resets altitude to 0 via
+// UpdateCombatantPosition. Returns the combat-log message and the
+// final combatant snapshot. A 0ft altitude is treated as a no-op by the
+// caller (we never reach here on grounded prone). Errors are returned
+// so the surrounding ApplyCondition surfaces them.
+func (s *Service) applyFallDamageOnProne(ctx context.Context, combatant refdata.Combatant) (string, refdata.Combatant, error) {
+	if combatant.AltitudeFt <= 0 {
+		return "", combatant, nil
+	}
+	fall, err := FallDamage(combatant.AltitudeFt, s.roller)
+	if err != nil {
+		return "", combatant, fmt.Errorf("rolling fall damage: %w", err)
+	}
+	altitudeBefore := combatant.AltitudeFt
+	// Reset altitude regardless of damage (a 5ft fall still grounds the
+	// combatant); UpdateCombatantPosition writes through the same column.
+	groundedCombatant, perr := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
+		ID:          combatant.ID,
+		PositionCol: combatant.PositionCol,
+		PositionRow: combatant.PositionRow,
+		AltitudeFt:  0,
+	})
+	if perr != nil {
+		return "", combatant, fmt.Errorf("grounding combatant after fall: %w", perr)
+	}
+	if fall.TotalDamage <= 0 {
+		return fmt.Sprintf("\U0001f4a8 %s falls %dft (no damage).", combatant.DisplayName, altitudeBefore), groundedCombatant, nil
+	}
+	dmgResult, derr := s.ApplyDamage(ctx, ApplyDamageInput{
+		EncounterID: combatant.EncounterID,
+		Target:      groundedCombatant,
+		RawDamage:   fall.TotalDamage,
+		DamageType:  "bludgeoning",
+		Override:    false,
+	})
+	if derr != nil {
+		return "", groundedCombatant, fmt.Errorf("applying fall damage: %w", derr)
+	}
+	msg := fmt.Sprintf("\U0001f4a8 %s falls %dft \u2014 %dd6 = %d bludgeoning damage.",
+		combatant.DisplayName, altitudeBefore, fall.NumDice, fall.TotalDamage)
+	return msg, dmgResult.Updated, nil
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/google/uuid"
@@ -367,6 +368,18 @@ type AttackResult struct {
 	Reckless            bool
 	AttackerRevealed    bool // True if a hidden attacker was revealed by this attack
 	InvisibilityBroken  bool // True if standard Invisibility condition was broken by this attack
+
+	// Class-feature post-hit prompt eligibility hints (D-46/D-48b/D-49/D-51).
+	// The combat service surfaces these flags so the Discord layer can fire
+	// the corresponding ReactionPromptStore posts (PromptStunningStrike /
+	// PromptDivineSmite / PromptBardicInspiration). Pure data — the service
+	// does not itself post Discord UI.
+	PromptStunningStrikeEligible    bool // Monk melee hit with ki remaining
+	PromptStunningStrikeKiAvailable int  // current ki points the monk can spend
+	PromptDivineSmiteEligible       bool // Paladin melee hit with at least one slot available
+	PromptDivineSmiteSlots          []int // sorted ascending list of available slot levels
+	PromptBardicInspirationEligible bool // Attacker holds an un-expired Bardic Inspiration die
+	PromptBardicInspirationDie      string // die expression (d6/d8/d10/d12)
 }
 
 // OffhandAttackCommand holds the service-level inputs for an off-hand attack (bonus action).
@@ -822,6 +835,12 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return AttackResult{}, err
 	}
 
+	// C-40: a charmed combatant cannot make attacks against the source of
+	// the charm. Check before consuming any resource or rolling.
+	if err := validateCharmedAttack(cmd.Attacker, cmd.Target); err != nil {
+		return AttackResult{}, err
+	}
+
 	// Improvised weapon: use improvised pseudo-weapon
 	if cmd.IsImprovised {
 		return s.attackImprovised(ctx, cmd, roller)
@@ -909,6 +928,10 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		cmd.HostileNearAttacker, cmd.AttackerSize,
 		cmd.DMAdvantage, cmd.DMDisadvantage, nil,
 	)
+	// C-35 — auto-populate attacker-size / hostile-near context so the
+	// heavy-weapon and ranged-adjacent disadvantage paths fire end-to-end.
+	// Command-supplied values still win over the auto-detected ones.
+	s.populateAttackContext(ctx, &input, cmd.Attacker)
 	input.TwoHanded = cmd.TwoHanded
 	input.OffHandOccupied = offHandOccupied
 	input.Thrown = cmd.Thrown
@@ -943,6 +966,28 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	result, err := s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 	if err != nil {
 		return result, err
+	}
+
+	// D-46-rage-auto-end-quiet — mark the raging attacker so the
+	// no-attack-no-damage auto-end check at end-of-turn sees the activity.
+	s.markRageAttacked(ctx, cmd.Attacker)
+
+	// D-48b / D-49 / D-51: surface class-feature post-hit prompt eligibility
+	// hints on the AttackResult. The Discord handler reads these to decide
+	// whether to post the Stunning Strike / Divine Smite / Bardic Inspiration
+	// reaction prompts. No DB writes happen here — pure data shaping.
+	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, char)
+
+	// C-38 — Reckless Attack's target-side half: apply a transient `reckless`
+	// marker on the attacker until the start of their next turn. While
+	// active, DetectAdvantage grants advantage to attackers targeting them.
+	if cmd.Reckless {
+		s.applyRecklessMarker(ctx, cmd.Attacker)
+	}
+
+	// C-37 — track ammunition spent for post-combat half-recovery (Phase 37).
+	if char != nil && HasProperty(weapon, "ammunition") {
+		s.recordAmmoForAttack(cmd.Attacker.EncounterID, cmd.Attacker.ID, weapon)
 	}
 
 	// Phase 37 thrown weapon: the weapon leaves the attacker's hand. Clear
@@ -1007,6 +1052,8 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 		cmd.HostileNearAttacker, cmd.AttackerSize,
 		cmd.DMAdvantage, cmd.DMDisadvantage, nil,
 	)
+	// C-35 — auto-populate attacker context (size, hostile-within-5ft).
+	s.populateAttackContext(ctx, &input, cmd.Attacker)
 	input.IsImprovised = true
 	input.ImprovisedThrown = cmd.ImprovisedThrown
 	input.HasTavernBrawler = hasTavernBrawler
@@ -1025,7 +1072,13 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 		return AttackResult{}, err
 	}
 
-	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
+	result, err := s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
+	if err != nil {
+		return result, err
+	}
+	s.markRageAttacked(ctx, cmd.Attacker)
+	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, charPtr)
+	return result, nil
 }
 
 // OffhandAttack is the service-level method for a two-weapon fighting off-hand attack.
@@ -1033,6 +1086,11 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 // with 0 damage modifier (unless the character has the Two-Weapon Fighting fighting style).
 func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, roller *dice.Roller) (AttackResult, error) {
 	if err := ValidateResource(cmd.Turn, ResourceBonusAction); err != nil {
+		return AttackResult{}, err
+	}
+
+	// C-40: a charmed combatant cannot attack the source of its charm.
+	if err := validateCharmedAttack(cmd.Attacker, cmd.Target); err != nil {
 		return AttackResult{}, err
 	}
 
@@ -1098,6 +1156,8 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 		cmd.HostileNearAttacker, cmd.AttackerSize,
 		cmd.DMAdvantage, cmd.DMDisadvantage, &dmgMod,
 	)
+	// C-35 — auto-populate attacker context (size, hostile-within-5ft).
+	s.populateAttackContext(ctx, &input, cmd.Attacker)
 	input.Cover = coverLevel
 
 	// Obscurement from encounter zones
@@ -1108,7 +1168,13 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	input.AttackerObscurement = attackerObs
 	input.TargetObscurement = targetObs
 
-	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
+	result, err := s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
+	if err != nil {
+		return result, err
+	}
+	s.markRageAttacked(ctx, cmd.Attacker)
+	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, &char)
+	return result, nil
 }
 
 // resolveAttackWeaponFull resolves weapon, scores, proficiency, and optionally the character.
@@ -1153,6 +1219,116 @@ func combatantDistance(a, b refdata.Combatant) int {
 		colToIndex(a.PositionCol), int(a.PositionRow)-1, int(a.AltitudeFt),
 		colToIndex(b.PositionCol), int(b.PositionRow)-1, int(b.AltitudeFt),
 	)
+}
+
+// validateCharmedAttack rejects an attack when the attacker is charmed by the
+// target. (C-40) The charmed condition's source_combatant_id identifies the
+// charmer; targeting the charmer is forbidden until the condition ends.
+func validateCharmedAttack(attacker, target refdata.Combatant) error {
+	conds, _ := parseConditions(attacker.Conditions)
+	if IsCharmedBy(conds, target.ID.String()) {
+		return fmt.Errorf("%s is charmed by %s and cannot attack them", attacker.DisplayName, target.DisplayName)
+	}
+	return nil
+}
+
+// resolveAttackerSize returns the size category label ("Tiny" / "Small" /
+// "Medium" / "Large" / ...) used by the heavy-weapon disadvantage path in
+// DetectAdvantage (C-35). NPC combatants look up their creature row; PCs
+// default to Medium (matching grapple_shove.resolveCombatantSize). An empty
+// string is returned when no size is resolvable so the downstream check
+// short-circuits.
+func (s *Service) resolveAttackerSize(ctx context.Context, attacker refdata.Combatant) string {
+	if attacker.CreatureRefID.Valid && attacker.CreatureRefID.String != "" {
+		creature, err := s.store.GetCreature(ctx, attacker.CreatureRefID.String)
+		if err != nil {
+			return ""
+		}
+		return creature.Size
+	}
+	// PCs default to Medium. A future race-aware lookup can refine this.
+	return "Medium"
+}
+
+// detectHostileNear inspects the encounter's combatant list and returns
+// true when any *living*, *non-incapacitated* hostile (opposite IsNpc
+// faction) is within 5ft (grid Chebyshev distance) of the attacker.
+// Triggers the ranged-with-hostile-adjacent disadvantage in
+// DetectAdvantage (C-35). Returns false when the attacker has no
+// encounter ID or the store lookup fails — we never block the attack on
+// a metadata hiccup.
+func (s *Service) detectHostileNear(ctx context.Context, attacker refdata.Combatant) bool {
+	if attacker.EncounterID == uuid.Nil {
+		return false
+	}
+	all, err := s.store.ListCombatantsByEncounterID(ctx, attacker.EncounterID)
+	if err != nil {
+		return false
+	}
+	attackerCol := colToIndex(attacker.PositionCol)
+	attackerRow := int(attacker.PositionRow) - 1
+	for _, c := range all {
+		if c.ID == attacker.ID {
+			continue
+		}
+		if !c.IsAlive {
+			continue
+		}
+		// Faction split mirrors AllHostilesDefeated: PCs and NPCs are
+		// mutually hostile. Same-faction combatants (PC ally, NPC ally)
+		// do not threaten the ranged shot.
+		if c.IsNpc == attacker.IsNpc {
+			continue
+		}
+		// Incapacitated foes (unconscious, paralyzed, stunned, ...) do
+		// not threaten the shot per RAW.
+		conds, _ := parseConditions(c.Conditions)
+		if IsIncapacitated(conds) {
+			continue
+		}
+		cCol := colToIndex(c.PositionCol)
+		cRow := int(c.PositionRow) - 1
+		if gridDistance(attackerCol, attackerRow, cCol, cRow) <= 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// populateAttackContext fills the auto-derived advantage context fields on
+// an AttackInput: attacker size (heavy-weapon disadvantage) and
+// hostile-within-5ft (ranged disadvantage). Discord callers can still
+// override the values explicitly by setting them on the AttackCommand —
+// non-empty / true values from the command win over the auto-detected
+// ones. (C-35)
+func (s *Service) populateAttackContext(ctx context.Context, input *AttackInput, attacker refdata.Combatant) {
+	if input.AttackerSize == "" {
+		input.AttackerSize = s.resolveAttackerSize(ctx, attacker)
+	}
+	if !input.HostileNearAttacker {
+		input.HostileNearAttacker = s.detectHostileNear(ctx, attacker)
+	}
+}
+
+// applyRecklessMarker writes a transient `reckless` condition onto the
+// attacker so DetectAdvantage's target-side branch grants advantage to
+// incoming attacks until the marker expires at the start of the attacker's
+// next turn (C-38). The marker is idempotent: if a reckless condition with
+// the same source already exists, this is a no-op. Errors are silently
+// swallowed so a Discord/DB hiccup never rolls back a committed attack.
+func (s *Service) applyRecklessMarker(ctx context.Context, attacker refdata.Combatant) {
+	if HasCondition(attacker.Conditions, "reckless") {
+		return
+	}
+	marker := CombatCondition{
+		Condition:         "reckless",
+		DurationRounds:    1,
+		SourceCombatantID: attacker.ID.String(),
+		ExpiresOn:         "start_of_turn",
+	}
+	if _, _, err := s.ApplyCondition(ctx, attacker.ID, marker); err != nil {
+		log.Printf("applying reckless marker for %s: %v", attacker.ID, err)
+	}
 }
 
 // buildAttackInput constructs the common AttackInput fields shared by Attack and OffhandAttack.

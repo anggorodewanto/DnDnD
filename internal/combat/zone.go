@@ -302,8 +302,15 @@ func (s *Service) ListZonesForEncounter(ctx context.Context, encounterID uuid.UU
 
 // zoneAffectedTiles calculates the tiles affected by a zone based on its shape and dimensions.
 func zoneAffectedTiles(z refdata.EncounterZone) []GridPos {
-	originCol := colToIndex(z.OriginCol)
-	originRow := int(z.OriginRow) - 1
+	return ZoneAffectedTilesFromShape(z.Shape, z.OriginCol, z.OriginRow, z.Dimensions)
+}
+
+// ZoneAffectedTilesFromShape is the exported helper used by the discord map
+// renderer to compute zone-overlay tile coverage without needing the full
+// refdata.EncounterZone row. (E-67-zone-render-on-map)
+func ZoneAffectedTilesFromShape(shape, originColLetter string, originRow int32, dimensions []byte) []GridPos {
+	originCol := colToIndex(originColLetter)
+	originRowIdx := int(originRow) - 1
 
 	var dims struct {
 		RadiusFt int `json:"radius_ft"`
@@ -312,18 +319,25 @@ func zoneAffectedTiles(z refdata.EncounterZone) []GridPos {
 		LengthFt int `json:"length_ft"`
 		SideFt   int `json:"side_ft"`
 	}
-	_ = json.Unmarshal(z.Dimensions, &dims)
+	_ = json.Unmarshal(dimensions, &dims)
 
-	switch z.Shape {
+	switch shape {
 	case "circle":
-		return SphereAffectedTiles(originCol, originRow, dims.RadiusFt)
+		return SphereAffectedTiles(originCol, originRowIdx, dims.RadiusFt)
 	case "square":
-		return SquareAffectedTiles(originCol, originRow, dims.SideFt)
+		return SquareAffectedTiles(originCol, originRowIdx, dims.SideFt)
 	case "rectangle":
-		return SquareAffectedTiles(originCol, originRow, dims.WidthFt)
+		return SquareAffectedTiles(originCol, originRowIdx, dims.WidthFt)
 	default:
-		return []GridPos{{Col: originCol, Row: originRow}}
+		return []GridPos{{Col: originCol, Row: originRowIdx}}
 	}
+}
+
+// ZoneOriginIndex returns the 0-based (col, row) for the given zone origin
+// in letter/row form ("C", 3) — useful for the discord map renderer that
+// only needs the origin marker placement. (E-67-zone-render-on-map)
+func ZoneOriginIndex(originColLetter string, originRow int32) (int, int) {
+	return colToIndex(originColLetter), int(originRow) - 1
 }
 
 // tileInSet checks if a position (0-based col, 0-based row) is in the set of affected tiles.

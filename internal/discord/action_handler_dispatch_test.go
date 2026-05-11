@@ -44,7 +44,7 @@ func setupDispatchActionFixture(t *testing.T) dispatchActionFixture {
 		DisplayName: "Aria",
 		ShortID:     "AR",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive:     true,
+		IsAlive: true, HpCurrent: 10,
 		IsNpc:       false,
 		PositionCol: "B",
 		PositionRow: 2,

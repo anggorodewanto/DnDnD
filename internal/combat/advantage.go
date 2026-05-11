@@ -113,6 +113,13 @@ func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 			} else {
 				disadvReasons = append(disadvReasons, "target prone beyond 5ft")
 			}
+		case "reckless":
+			// C-38: Reckless Attack's target-side half — enemies have
+			// advantage on attack rolls against the reckless attacker
+			// until their next turn. The transient `reckless` condition
+			// is applied to the attacker in Service.Attack and clears
+			// at the start of their next turn.
+			advReasons = append(advReasons, "target reckless")
 		}
 	}
 

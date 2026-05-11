@@ -188,11 +188,12 @@ func setupMoveHandler(sess *mockMoveSession) (*MoveHandler, uuid.UUID, uuid.UUID
 				PositionRow: 1,
 				IsAlive:     true,
 				IsNpc:       false,
+				HpCurrent:   10,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 			return []refdata.Combatant{
-				{ID: combatantID, PositionCol: "A", PositionRow: 1, IsAlive: true, IsNpc: false},
+				{ID: combatantID, PositionCol: "A", PositionRow: 1, IsAlive: true, IsNpc: false, HpCurrent: 10},
 			}, nil
 		},
 		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
@@ -756,15 +757,15 @@ func TestBuildOccupants(t *testing.T) {
 	enemyID := uuid.New()
 	deadID := uuid.New()
 
-	mover := refdata.Combatant{ID: moverID, PositionCol: "A", PositionRow: 1, IsAlive: true, IsNpc: false}
+	mover := refdata.Combatant{ID: moverID, PositionCol: "A", PositionRow: 1, IsAlive: true, HpCurrent: 10, IsNpc: false}
 	all := []refdata.Combatant{
 		mover,
-		{ID: allyID, PositionCol: "B", PositionRow: 1, IsAlive: true, IsNpc: false},
-		{ID: enemyID, PositionCol: "C", PositionRow: 1, IsAlive: true, IsNpc: true},
+		{ID: allyID, PositionCol: "B", PositionRow: 1, IsAlive: true, HpCurrent: 10, IsNpc: false},
+		{ID: enemyID, PositionCol: "C", PositionRow: 1, IsAlive: true, HpCurrent: 10, IsNpc: true},
 		{ID: deadID, PositionCol: "D", PositionRow: 1, IsAlive: false, IsNpc: true},
 	}
 
-	occupants := buildOccupants(all, mover)
+	occupants := buildOccupants(all, mover, nil)
 
 	if len(occupants) != 2 {
 		t.Fatalf("expected 2 occupants (excluding mover and dead), got %d", len(occupants))
@@ -791,7 +792,7 @@ func TestBuildOccupants_InvalidPosition(t *testing.T) {
 		mover,
 		{ID: uuid.New(), PositionCol: "", PositionRow: 0, IsAlive: true}, // invalid position
 	}
-	occupants := buildOccupants(all, mover)
+	occupants := buildOccupants(all, mover, nil)
 	if len(occupants) != 0 {
 		t.Errorf("expected 0 occupants for invalid position, got %d", len(occupants))
 	}
@@ -833,13 +834,13 @@ func TestMoveHandler_SplitMovement(t *testing.T) {
 				ID:          combatantID,
 				PositionCol: currentCol,
 				PositionRow: currentRow,
-				IsAlive:     true,
+				IsAlive: true, HpCurrent: 10,
 				IsNpc:       false,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 			return []refdata.Combatant{
-				{ID: combatantID, PositionCol: currentCol, PositionRow: currentRow, IsAlive: true, IsNpc: false},
+				{ID: combatantID, PositionCol: currentCol, PositionRow: currentRow, IsAlive: true, HpCurrent: 10, IsNpc: false},
 			}, nil
 		},
 		updateCombatantPos: func(_ context.Context, _ uuid.UUID, col string, row, _ int32) (refdata.Combatant, error) {
@@ -937,12 +938,13 @@ func setupProneMoveHandler(sess *mockMoveSession) (*MoveHandler, uuid.UUID, uuid
 				PositionRow: 1,
 				IsAlive:     true,
 				IsNpc:       false,
+				HpCurrent:   10,
 				Conditions:  proneConditions,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 			return []refdata.Combatant{
-				{ID: combatantID, PositionCol: "A", PositionRow: 1, IsAlive: true, IsNpc: false, Conditions: proneConditions},
+				{ID: combatantID, PositionCol: "A", PositionRow: 1, IsAlive: true, IsNpc: false, HpCurrent: 10, Conditions: proneConditions},
 			}, nil
 		},
 		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
@@ -1710,11 +1712,11 @@ func TestMoveHandler_HandleMoveConfirm_OAFiresToYourTurnChannel(t *testing.T) {
 	hostileID := uuid.New()
 
 	mover := refdata.Combatant{
-		ID: moverID, PositionCol: "C", PositionRow: 2, IsAlive: true, IsNpc: false,
+		ID: moverID, PositionCol: "C", PositionRow: 2, IsAlive: true, HpCurrent: 10, IsNpc: false,
 		DisplayName: "Aria",
 	}
 	hostile := refdata.Combatant{
-		ID: hostileID, PositionCol: "B", PositionRow: 2, IsAlive: true, IsNpc: true,
+		ID: hostileID, PositionCol: "B", PositionRow: 2, IsAlive: true, HpCurrent: 10, IsNpc: true,
 		DisplayName: "Goblin",
 	}
 
@@ -1790,7 +1792,7 @@ func TestMoveHandler_HandleMoveConfirm_OASilentWhenChannelsUnset(t *testing.T) {
 			return refdata.Encounter{ID: encounterID}, nil
 		},
 		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
-			return refdata.Combatant{ID: moverID, PositionCol: "C", PositionRow: 2, IsAlive: true, IsNpc: false}, nil
+			return refdata.Combatant{ID: moverID, PositionCol: "C", PositionRow: 2, IsAlive: true, HpCurrent: 10, IsNpc: false}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
 		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {

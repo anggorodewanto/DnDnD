@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -358,6 +359,14 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	caster, err := s.store.GetCombatant(ctx, cmd.CasterID)
 	if err != nil {
 		return CastResult{}, fmt.Errorf("getting caster: %w", err)
+	}
+
+	// D-46-rage-spellcasting-block — a raging barbarian cannot cast any
+	// spell (the Rage feature in PHB explicitly blocks spellcasting and
+	// breaks concentration). Reject BEFORE any resource is touched so a
+	// player who fat-fingers /cast while raging doesn't burn a slot.
+	if caster.IsRaging {
+		return CastResult{}, errors.New("you cannot cast spells while raging")
 	}
 
 	// 4a. med-25 / Phase 61: pre-validate Silence zones. A caster standing
@@ -718,6 +727,7 @@ func (s *Service) maybeCreateSpellZone(ctx context.Context, spell refdata.Spell,
 	if def.AnchorMode == "combatant" {
 		anchorID = uuid.NullUUID{UUID: caster.ID, Valid: true}
 	}
+	expiresAt := s.computeZoneExpiry(ctx, caster.EncounterID, spell)
 	_, err := s.CreateZone(ctx, CreateZoneInput{
 		EncounterID:           caster.EncounterID,
 		SourceCombatantID:     caster.ID,
@@ -732,12 +742,80 @@ func (s *Service) maybeCreateSpellZone(ctx context.Context, spell refdata.Spell,
 		OverlayColor:          def.OverlayColor,
 		MarkerIcon:            def.MarkerIcon,
 		RequiresConcentration: def.RequiresConcentration,
+		ExpiresAtRound:        expiresAt,
 		Triggers:              def.Triggers,
 	})
 	if err != nil {
 		return fmt.Errorf("creating zone for %s: %w", spell.Name, err)
 	}
 	return nil
+}
+
+// computeZoneExpiry resolves a spell's Duration string ("10 minutes", "1
+// minute", "Concentration, up to 1 minute", "Instantaneous", ...) into
+// `currentRound + rounds` so CleanupExpiredZones can remove the zone when its
+// life ends. A duration the parser cannot interpret (e.g. "Until dispelled"
+// or "Special") yields an invalid sql.NullInt32 so the zone persists until
+// explicitly torn down via concentration drop, DM /undo, or encounter end.
+// (E-67-zone-cleanup)
+func (s *Service) computeZoneExpiry(ctx context.Context, encounterID uuid.UUID, spell refdata.Spell) sql.NullInt32 {
+	rounds, ok := SpellDurationRounds(spell.Duration)
+	if !ok {
+		return sql.NullInt32{}
+	}
+	enc, err := s.store.GetEncounter(ctx, encounterID)
+	if err != nil {
+		return sql.NullInt32{}
+	}
+	// The cleanup query drops zones with ExpiresAtRound <= currentRound,
+	// so a freshly-cast zone with 10 rounds of life expires at
+	// (currentRound + 10).
+	return sql.NullInt32{Int32: enc.RoundNumber + int32(rounds), Valid: true}
+}
+
+// SpellDurationRounds parses a 5e spell duration string into a count of
+// 6-second combat rounds.
+//
+// Recognised forms (case-insensitive, leading "concentration, up to "
+// stripped):
+//
+//	"1 round"          => 1
+//	"10 rounds"        => 10
+//	"1 minute"         => 10  (1 min / 6 s)
+//	"10 minutes"       => 100
+//	"1 hour"           => 600
+//	"24 hours"         => 14400
+//	"instantaneous"    => 0, false  (no zone persistence needed)
+//
+// Anything else returns (0, false) so the caller can leave ExpiresAtRound
+// unset for "Until dispelled" / "Special" / unknown values. (E-67-zone-cleanup)
+func SpellDurationRounds(duration string) (int, bool) {
+	d := strings.ToLower(strings.TrimSpace(duration))
+	d = strings.TrimPrefix(d, "concentration,")
+	d = strings.TrimSpace(d)
+	d = strings.TrimPrefix(d, "up to ")
+	d = strings.TrimSpace(d)
+	if d == "" || d == "instantaneous" || d == "permanent" || strings.HasPrefix(d, "until ") || strings.HasPrefix(d, "special") {
+		return 0, false
+	}
+	parts := strings.Fields(d)
+	if len(parts) < 2 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(parts[0])
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	unit := strings.TrimSuffix(parts[1], "s")
+	switch unit {
+	case "round":
+		return n, true
+	case "minute":
+		return n * 10, true
+	case "hour":
+		return n * 600, true
+	}
+	return 0, false
 }
 
 // zoneAnchorOrDefault returns "static" when the def has no explicit anchor

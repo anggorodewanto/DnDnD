@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -138,9 +139,10 @@ func makeCastInteraction(opts map[string]any) *discordgo.Interaction {
 		}
 	}
 	return &discordgo.Interaction{
-		Type:    discordgo.InteractionApplicationCommand,
-		GuildID: "g1",
-		Member:  &discordgo.Member{User: &discordgo.User{ID: "u1"}},
+		Type:      discordgo.InteractionApplicationCommand,
+		GuildID:   "g1",
+		ChannelID: "ch-cast",
+		Member:    &discordgo.Member{User: &discordgo.User{ID: "u1"}},
 		Data: discordgo.ApplicationCommandInteractionData{
 			Name:    "cast",
 			Options: cmdOpts,
@@ -292,6 +294,26 @@ func TestCastHandler_PassesSlotLevelAndMetamagic(t *testing.T) {
 	}
 	if !containsString(got.Metamagic, "distant") {
 		t.Errorf("expected metamagic to include 'distant', got %v", got.Metamagic)
+	}
+}
+
+// E-66b: /cast extended:true forwards "extended" to the combat service so
+// Extended Spell metamagic is reachable from Discord.
+func TestCastHandler_ForwardsExtendedMetamagic(t *testing.T) {
+	h, _, svc, _ := setupCastHandler()
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":    "fire-bolt",
+		"target":   "OS",
+		"extended": true,
+	}))
+
+	if len(svc.castCalls) != 1 {
+		t.Fatalf("expected 1 cast call, got %d", len(svc.castCalls))
+	}
+	got := svc.castCalls[0]
+	if !containsString(got.Metamagic, "extended") {
+		t.Errorf("expected metamagic to include 'extended', got %v", got.Metamagic)
 	}
 }
 
@@ -554,5 +576,286 @@ func containsString(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// --- E-59 AoE save-prompt tests ---
+
+// TestCastHandler_AoEDispatch_PromptsAffectedPlayersToSave verifies that
+// after CastAoE returns, the handler posts a /save prompt naming each
+// player-controlled affected combatant in the combat-log channel.
+func TestCastHandler_AoEDispatch_PromptsAffectedPlayersToSave(t *testing.T) {
+	h, _, svc, provider := setupCastHandler()
+	captured := []string{}
+	h.session = &capturingSession{
+		mockMoveSession: &mockMoveSession{},
+		sendFn: func(channelID, content string) {
+			captured = append(captured, channelID+":"+content)
+		},
+	}
+	h.SetChannelIDProvider(&mockDeathSaveCSP{
+		fn: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"combat-log": "ch-cl"}, nil
+		},
+	})
+
+	// Use known combatant IDs so the prompt loop can resolve display names.
+	playerCombatantID := provider.caster.ID
+	npcCombatantID := provider.target.ID
+	svc.aoeResult = combat.AoECastResult{
+		CasterName:    "Aria",
+		SpellName:     "Fireball",
+		SpellLevel:    3,
+		SaveDC:        15,
+		SaveAbility:   "dex",
+		AffectedNames: []string{"Aria", "Orc"},
+		PendingSaves: []combat.PendingSave{
+			{CombatantID: playerCombatantID, SaveAbility: "dex", DC: 15, IsNPC: false},
+			{CombatantID: npcCombatantID, SaveAbility: "dex", DC: 15, IsNPC: true},
+		},
+	}
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":  "fireball",
+		"target": "D4",
+	}))
+
+	hasSavePrompt := false
+	npcPromptCount := 0
+	for _, m := range captured {
+		if strings.Contains(m, "/save dex") && strings.Contains(m, "Aria") && strings.Contains(m, "15") {
+			hasSavePrompt = true
+		}
+		if strings.Contains(m, "/save") && strings.Contains(m, "Orc") {
+			npcPromptCount++
+		}
+	}
+	if !hasSavePrompt {
+		t.Errorf("expected per-player /save prompt mentioning Aria & DC 15, got: %v", captured)
+	}
+	if npcPromptCount != 0 {
+		t.Errorf("NPC saves should not produce player /save pings, got %d Orc pings", npcPromptCount)
+	}
+}
+
+// --- E-63 material-component prompt tests ---
+
+// setupCastHandlerWithPrompts wires the handler with a MockSession + prompt
+// store so the gold-fallback Buy & Cast / Cancel buttons can be inspected and
+// clicked back through HandleComponent.
+func setupCastHandlerWithPrompts(t *testing.T) (*CastHandler, *MockSession, *mockCastCombatService, *[]*discordgo.MessageSend) {
+	t.Helper()
+	mock, sent := captureSentComplex()
+	encID := uuid.New()
+	turnID := uuid.New()
+	casterID := uuid.New()
+	targetID := uuid.New()
+
+	provider := &mockCastProvider{
+		encID: encID,
+		enc: refdata.Encounter{
+			ID:            encID,
+			CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+			Status:        "active",
+		},
+		turn: refdata.Turn{
+			ID:          turnID,
+			CombatantID: casterID,
+		},
+		caster: refdata.Combatant{
+			ID: casterID, ShortID: "AR", DisplayName: "Aria",
+			PositionCol: "B", PositionRow: 2,
+		},
+		target: refdata.Combatant{
+			ID: targetID, ShortID: "OS", DisplayName: "Orc",
+			PositionCol: "D", PositionRow: 4,
+		},
+		spells: map[string]refdata.Spell{
+			"identify": {ID: "identify", Name: "Identify", Level: 1},
+		},
+	}
+
+	combatSvc := &mockCastCombatService{}
+	h := NewCastHandler(mock, combatSvc, provider, dice.NewRoller(func(_ int) int { return 10 }))
+	prompts := NewReactionPromptStoreWithTTL(mock, time.Hour)
+	h.SetMaterialPromptStore(prompts)
+	return h, mock, combatSvc, sent
+}
+
+// TestCastHandler_MaterialComponent_PromptsGoldFallback verifies that when
+// CastResult.MaterialComponent.NeedsGoldConfirmation is true, the handler
+// posts a Buy & Cast / Cancel confirmation rather than treating the cast as
+// completed.
+func TestCastHandler_MaterialComponent_PromptsGoldFallback(t *testing.T) {
+	h, _, svc, sent := setupCastHandlerWithPrompts(t)
+	svc.castResult = combat.CastResult{
+		CasterName: "Aria",
+		SpellName:  "Identify",
+		SpellLevel: 1,
+		MaterialComponent: &combat.CastMaterialComponentInfo{
+			NeedsGoldConfirmation: true,
+			ComponentName:         "pearl worth 100gp",
+			CostGp:                100,
+			CurrentGold:           500,
+		},
+	}
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell": "identify",
+	}))
+
+	if len(svc.castCalls) != 1 {
+		t.Fatalf("expected initial cast call, got %d", len(svc.castCalls))
+	}
+	if svc.castCalls[0].GoldFallback {
+		t.Errorf("initial cast should not set GoldFallback=true")
+	}
+	if len(*sent) != 1 {
+		t.Fatalf("expected confirmation prompt to be posted, got %d sends", len(*sent))
+	}
+	content := (*sent)[0].Content
+	if !strings.Contains(content, "pearl") {
+		t.Errorf("expected prompt to mention component name, got %q", content)
+	}
+	row, ok := (*sent)[0].Components[0].(discordgo.ActionsRow)
+	if !ok {
+		t.Fatalf("expected ActionsRow with buttons, got %+v", (*sent)[0].Components)
+	}
+	if len(row.Components) != 2 {
+		t.Fatalf("expected 2 buttons (Buy & Cast, Cancel), got %d", len(row.Components))
+	}
+}
+
+// TestCastHandler_MaterialComponent_BuyAndCastRetriesWithGoldFallback verifies
+// that clicking "Buy & Cast" re-invokes Cast with GoldFallback=true.
+func TestCastHandler_MaterialComponent_BuyAndCastRetriesWithGoldFallback(t *testing.T) {
+	h, _, svc, sent := setupCastHandlerWithPrompts(t)
+	svc.castResult = combat.CastResult{
+		CasterName: "Aria",
+		SpellName:  "Identify",
+		SpellLevel: 1,
+		MaterialComponent: &combat.CastMaterialComponentInfo{
+			NeedsGoldConfirmation: true,
+			ComponentName:         "pearl worth 100gp",
+			CostGp:                100,
+			CurrentGold:           500,
+		},
+	}
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell": "identify",
+	}))
+	if len(*sent) != 1 {
+		t.Fatalf("expected initial prompt; got %d sends", len(*sent))
+	}
+
+	// Now switch the service to return a clean success and click "Buy & Cast".
+	svc.castResult = combat.CastResult{
+		CasterName: "Aria",
+		SpellName:  "Identify",
+		SpellLevel: 1,
+	}
+
+	row := (*sent)[0].Components[0].(discordgo.ActionsRow)
+	buyBtn := row.Components[0].(discordgo.Button)
+	clickInteraction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "g1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "u1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: buyBtn.CustomID,
+		},
+	}
+	if !h.HandleComponent(clickInteraction) {
+		t.Fatalf("HandleComponent should claim the material-prompt button")
+	}
+
+	if len(svc.castCalls) != 2 {
+		t.Fatalf("expected two cast calls (initial + buy retry), got %d", len(svc.castCalls))
+	}
+	if !svc.castCalls[1].GoldFallback {
+		t.Errorf("retry cast should set GoldFallback=true, got %+v", svc.castCalls[1])
+	}
+}
+
+// TestCastHandler_MaterialComponent_NoPromptStoreFallsBackToEphemeral
+// verifies that when no prompt store is wired the handler still surfaces
+// the gold-fallback notice as an ephemeral so the caster knows the cast
+// didn't go through.
+func TestCastHandler_MaterialComponent_NoPromptStoreFallsBackToEphemeral(t *testing.T) {
+	h, sess, svc, _ := setupCastHandler()
+	// Re-use the fire-bolt spell registered in setupCastHandler; what
+	// matters is the handler's reaction to MaterialComponent on the result.
+	svc.castResult = combat.CastResult{
+		CasterName: "Aria",
+		SpellName:  "Fire Bolt",
+		SpellLevel: 0,
+		MaterialComponent: &combat.CastMaterialComponentInfo{
+			NeedsGoldConfirmation: true,
+			ComponentName:         "pearl worth 100gp",
+			CostGp:                100,
+			CurrentGold:           500,
+		},
+	}
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":  "fire-bolt",
+		"target": "OS",
+	}))
+
+	if !strings.Contains(sess.lastResponse.Data.Content, "pearl") {
+		t.Errorf("expected component name in ephemeral fallback, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+// TestCastHandler_HandleComponent_NoPromptStoreReturnsFalse verifies the
+// router contract: without a prompt store, button clicks aren't claimed.
+func TestCastHandler_HandleComponent_NoPromptStoreReturnsFalse(t *testing.T) {
+	h, _, _, _ := setupCastHandler()
+	got := h.HandleComponent(&discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{CustomID: "rxprompt:abc:buy"},
+	})
+	if got {
+		t.Errorf("expected HandleComponent to return false when no prompt store wired")
+	}
+}
+
+// TestCastHandler_MaterialComponent_CancelDoesNotRetry verifies that clicking
+// "Cancel" does not produce a second cast call.
+func TestCastHandler_MaterialComponent_CancelDoesNotRetry(t *testing.T) {
+	h, _, svc, sent := setupCastHandlerWithPrompts(t)
+	svc.castResult = combat.CastResult{
+		CasterName: "Aria",
+		SpellName:  "Identify",
+		SpellLevel: 1,
+		MaterialComponent: &combat.CastMaterialComponentInfo{
+			NeedsGoldConfirmation: true,
+			ComponentName:         "pearl worth 100gp",
+			CostGp:                100,
+			CurrentGold:           500,
+		},
+	}
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell": "identify",
+	}))
+
+	row := (*sent)[0].Components[0].(discordgo.ActionsRow)
+	cancelBtn := row.Components[1].(discordgo.Button)
+	clickInteraction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "g1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "u1"}},
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: cancelBtn.CustomID,
+		},
+	}
+	if !h.HandleComponent(clickInteraction) {
+		t.Fatalf("HandleComponent should claim the cancel button")
+	}
+
+	if len(svc.castCalls) != 1 {
+		t.Errorf("cancel should not invoke a second Cast call, got %d", len(svc.castCalls))
+	}
 }
 

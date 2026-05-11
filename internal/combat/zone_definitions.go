@@ -95,11 +95,18 @@ var KnownZoneDefinitions = map[string]ZoneDefinition{
 		},
 	},
 	"silence": {
-		SpellName:             "Silence",
+		SpellName: "Silence",
+		// Silence creates a zone whose ZoneType must match the value the
+		// silence-enforcement code filters on (combatantInSilenceZone /
+		// CheckSilenceBreaksConcentration both check `ZoneType == "silence"`).
+		// E-67-silence-zone-type / Phase 67+118: a stale "control" ZoneType
+		// here made Silence invisible to the silence checks so V/S spells
+		// could still be cast inside and concentration was never broken on
+		// movement into the zone.
 		OverlayColor:          "#4488CC",
 		MarkerIcon:            "\U0001f507",
 		Shape:                 "circle",
-		ZoneType:              "control",
+		ZoneType:              "silence",
 		RequiresConcentration: true,
 	},
 	"stinking cloud": {

@@ -83,7 +83,13 @@ func (s *Service) MartialArtsBonusAttack(ctx context.Context, cmd MartialArtsBon
 	)
 	input.MonkLevel = ml
 
-	return s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
+	result, err := s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
+	if err != nil {
+		return result, err
+	}
+	s.markRageAttacked(ctx, cmd.Attacker)
+	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, &char)
+	return result, nil
 }
 
 // FlurryOfBlowsCommand holds the inputs for Flurry of Blows.

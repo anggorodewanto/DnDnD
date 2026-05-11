@@ -3,8 +3,8 @@ id: E-67-zone-anchor-follow
 group: E
 phase: 67
 severity: HIGH
-status: open
-owner:
+status: in_review
+owner: opus 4.7 (1M) — ZONES-impl
 reviewer:
 last_update: 2026-05-11
 ---

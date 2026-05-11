@@ -109,7 +109,7 @@ func TestMoveHandler_ExplorationMode_NoPCCombatant(t *testing.T) {
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 			// only NPC combatants, no PC
 			return []refdata.Combatant{
-				{ID: uuid.New(), PositionCol: "B", PositionRow: 1, IsAlive: true, IsNpc: true},
+				{ID: uuid.New(), PositionCol: "B", PositionRow: 1, IsAlive: true, HpCurrent: 10, IsNpc: true},
 			}, nil
 		},
 	}
@@ -165,7 +165,7 @@ func TestMoveHandler_ExplorationMode_UpdatePositionError(t *testing.T) {
 				{
 					ID:          combatantID,
 					CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-					PositionCol: "A", PositionRow: 1, IsAlive: true,
+					PositionCol: "A", PositionRow: 1, IsAlive: true, HpCurrent: 10,
 				},
 			}, nil
 		},
@@ -201,7 +201,7 @@ func TestMoveHandler_ExplorationMode_InvalidCurrentPosition(t *testing.T) {
 					ID:          combatantID,
 					CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
 					// Invalid position -- no row number
-					PositionCol: "??", PositionRow: 0, IsAlive: true,
+					PositionCol: "??", PositionRow: 0, IsAlive: true, HpCurrent: 10,
 				},
 			}, nil
 		},

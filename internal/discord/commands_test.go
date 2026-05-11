@@ -56,6 +56,10 @@ func TestCommandDefinitions_ParameterHints(t *testing.T) {
 		{"cast", "distant", discordgo.ApplicationCommandOptionBoolean, false},
 		{"cast", "quickened", discordgo.ApplicationCommandOptionBoolean, false},
 		{"cast", "empowered", discordgo.ApplicationCommandOptionBoolean, false},
+		// E-66b: Extended Spell metamagic option must be exposed on /cast so
+		// players can trigger it from Discord (handler already reads
+		// metamagicFlags including "extended").
+		{"cast", "extended", discordgo.ApplicationCommandOptionBoolean, false},
 		{"bonus", "action", discordgo.ApplicationCommandOptionString, true},
 		{"action", "action", discordgo.ApplicationCommandOptionString, true},
 		{"action", "args", discordgo.ApplicationCommandOptionString, false},

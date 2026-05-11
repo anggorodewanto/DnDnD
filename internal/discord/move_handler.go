@@ -281,6 +281,12 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	// C-43-block-commands: a dying or incapacitated combatant cannot move.
+	if msg, blocked := incapacitatedRejection(combatant); blocked {
+		respondEphemeral(h.session, interaction, msg)
+		return
+	}
+
 	// Get map data
 	if !encounter.MapID.Valid {
 		respondEphemeral(h.session, interaction, "This encounter has no map.")
@@ -307,7 +313,16 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	occupants := buildOccupants(allCombatants, combatant)
+	occupants := buildOccupants(allCombatants, combatant, h.occupantSizeFn(ctx))
+
+	// C-40-frightened-move: a frightened combatant cannot move closer to
+	// the source of its fear. The validator inspects the combatant's
+	// conditions, finds any "frightened" entries with a source_combatant_id,
+	// and rejects when the destination tile is closer than the start tile.
+	if rejected := rejectFrightenedTowardSource(combatant, allCombatants, destCol, destRow); rejected != "" {
+		respondEphemeral(h.session, interaction, rejected)
+		return
+	}
 
 	grid := &pathfinding.Grid{
 		Width:     md.Width,
@@ -478,7 +493,7 @@ func (h *MoveHandler) handleExplorationMove(ctx context.Context, interaction *di
 		return
 	}
 
-	occupants := buildOccupants(allCombatants, mover)
+	occupants := buildOccupants(allCombatants, mover, h.occupantSizeFn(ctx))
 	grid := &pathfinding.Grid{
 		Width:     md.Width,
 		Height:    md.Height,
@@ -668,7 +683,7 @@ func (h *MoveHandler) buildOAPath(ctx context.Context, mover refdata.Combatant, 
 		Height:    md.Height,
 		Terrain:   md.TerrainGrid,
 		Walls:     md.Walls,
-		Occupants: buildOccupants(allCombatants, mover),
+		Occupants: buildOccupants(allCombatants, mover, h.occupantSizeFn(ctx)),
 	}
 	sizeCategory, _ := h.resolveSizeAndSpeed(ctx, mover)
 	pathReq := pathfinding.PathRequest{
@@ -776,7 +791,14 @@ func (h *MoveHandler) HandleMoveCancel(interaction *discordgo.Interaction) {
 }
 
 // buildOccupants creates a pathfinding occupant list from combatants, excluding the mover.
-func buildOccupants(all []refdata.Combatant, mover refdata.Combatant) []pathfinding.Occupant {
+// The sizeFn callback resolves each occupant's actual size category; pass nil
+// to fall back to Medium for every occupant.
+//
+// C-30 / Phase 30: previously hardcoded SizeMedium for every occupant, which
+// broke Phase 29's "size diff ≥ 2 pass-through" rule (Tiny and Large/Huge
+// blockers behaved identically to Medium). Now each occupant's size is
+// resolved per-combatant via sizeFn so the pathfinder sees the real shape.
+func buildOccupants(all []refdata.Combatant, mover refdata.Combatant, sizeFn func(refdata.Combatant) int) []pathfinding.Occupant {
 	var occupants []pathfinding.Occupant
 	for _, c := range all {
 		if c.ID == mover.ID || !c.IsAlive {
@@ -786,15 +808,68 @@ func buildOccupants(all []refdata.Combatant, mover refdata.Combatant) []pathfind
 		if err != nil {
 			continue
 		}
+		size := pathfinding.SizeMedium
+		if sizeFn != nil {
+			size = sizeFn(c)
+		}
 		occupants = append(occupants, pathfinding.Occupant{
 			Col:          col,
 			Row:          row,
 			IsAlly:       c.IsNpc == mover.IsNpc, // ally if same faction
-			SizeCategory: pathfinding.SizeMedium, // default; would look up creature size
+			SizeCategory: size,
 			AltitudeFt:   int(c.AltitudeFt),
 		})
 	}
 	return occupants
+}
+
+// rejectFrightenedTowardSource returns the ephemeral rejection message when
+// the mover's conditions include `frightened` with a source_combatant_id and
+// the proposed destination is closer to that source than the start tile.
+// Returns "" when the move is allowed (mover is not frightened, the source
+// is absent from the encounter, or the move is parallel/away).
+//
+// C-40-frightened-move / Phase 40: ValidateFrightenedMovement is defined in
+// internal/combat but the validation was never invoked from the slash-command
+// pipeline. Now wired so a frightened combatant cannot consume movement to
+// approach its fear source.
+func rejectFrightenedTowardSource(mover refdata.Combatant, all []refdata.Combatant, destCol, destRow int) string {
+	conds, err := combat.ListConditions(mover.Conditions)
+	if err != nil || len(conds) == 0 {
+		return ""
+	}
+	startCol, startRow, err := renderer.ParseCoordinate(mover.PositionCol + fmt.Sprintf("%d", mover.PositionRow))
+	if err != nil {
+		return ""
+	}
+	fearSources := make(map[string][2]int, len(all))
+	for _, c := range all {
+		col, row, perr := renderer.ParseCoordinate(c.PositionCol + fmt.Sprintf("%d", c.PositionRow))
+		if perr != nil {
+			continue
+		}
+		fearSources[c.ID.String()] = [2]int{col, row}
+	}
+	if verr := combat.ValidateFrightenedMovement(conds, startCol, startRow, destCol, destRow, fearSources); verr != nil {
+		return "Cannot move closer to the source of your fear."
+	}
+	return ""
+}
+
+// occupantSizeFn returns a closure that resolves an occupant's size via the
+// wired sizeSpeedLookup. When no lookup is wired (legacy unit tests), the
+// closure is nil so buildOccupants falls back to Medium.
+func (h *MoveHandler) occupantSizeFn(ctx context.Context) func(refdata.Combatant) int {
+	if h.sizeSpeedLookup == nil {
+		return nil
+	}
+	return func(c refdata.Combatant) int {
+		size, _, err := h.sizeSpeedLookup.LookupSizeAndSpeed(ctx, c)
+		if err != nil {
+			return pathfinding.SizeMedium
+		}
+		return size
+	}
 }
 
 // buildGridForTurn fetches the map and combatant data needed to build a pathfinding grid.
@@ -825,7 +900,7 @@ func (h *MoveHandler) buildGridForTurn(ctx context.Context, turn refdata.Turn, m
 		Height:    md.Height,
 		Terrain:   md.TerrainGrid,
 		Walls:     md.Walls,
-		Occupants: buildOccupants(allCombatants, mover),
+		Occupants: buildOccupants(allCombatants, mover, h.occupantSizeFn(ctx)),
 	}, ""
 }
 

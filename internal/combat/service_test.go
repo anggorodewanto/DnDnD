@@ -215,7 +215,10 @@ func (m *mockStore) CreateCombatant(ctx context.Context, arg refdata.CreateComba
 	return m.createCombatantFn(ctx, arg)
 }
 func (m *mockStore) GetCombatant(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
-	return m.getCombatantFn(ctx, id)
+	if m.getCombatantFn != nil {
+		return m.getCombatantFn(ctx, id)
+	}
+	return refdata.Combatant{ID: id, Conditions: json.RawMessage(`[]`)}, nil
 }
 func (m *mockStore) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
 	return m.listCombatantsByEncounterIDFn(ctx, encounterID)

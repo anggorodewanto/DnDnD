@@ -41,7 +41,7 @@ func TestMoveHandler_ExplorationMode_SkipsTurnEconomy(t *testing.T) {
 				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
 				PositionCol: "A",
 				PositionRow: 1,
-				IsAlive:     true,
+				IsAlive: true, HpCurrent: 10,
 				IsNpc:       false,
 			}, nil
 		},
@@ -52,7 +52,7 @@ func TestMoveHandler_ExplorationMode_SkipsTurnEconomy(t *testing.T) {
 					CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
 					PositionCol: "A",
 					PositionRow: 1,
-					IsAlive:     true,
+					IsAlive: true, HpCurrent: 10,
 					IsNpc:       false,
 				},
 			}, nil
@@ -113,7 +113,7 @@ func TestMoveHandler_ExplorationMode_RejectsBlockedPath(t *testing.T) {
 			return refdata.Combatant{
 				ID:          combatantID,
 				CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
-				PositionCol: "A", PositionRow: 1, IsAlive: true,
+				PositionCol: "A", PositionRow: 1, IsAlive: true, HpCurrent: 10,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
@@ -122,10 +122,10 @@ func TestMoveHandler_ExplorationMode_RejectsBlockedPath(t *testing.T) {
 				{
 					ID:          combatantID,
 					CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
-					PositionCol: "A", PositionRow: 1, IsAlive: true,
+					PositionCol: "A", PositionRow: 1, IsAlive: true, HpCurrent: 10,
 				},
 				// Wall of NPCs at D1..D5 to guarantee no path to D1 (D1 is occupied).
-				{ID: uuid.New(), PositionCol: "D", PositionRow: 1, IsAlive: true, IsNpc: true},
+				{ID: uuid.New(), PositionCol: "D", PositionRow: 1, IsAlive: true, HpCurrent: 10, IsNpc: true},
 			}, nil
 		},
 		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
@@ -195,12 +195,12 @@ func TestMoveHandler_ExplorationMode_MultiPC_ResolvesInvokerCorrectly(t *testing
 				{
 					ID:          combAID,
 					CharacterID: uuid.NullUUID{UUID: charAID, Valid: true},
-					PositionCol: "A", PositionRow: 1, IsAlive: true, IsNpc: false,
+					PositionCol: "A", PositionRow: 1, IsAlive: true, HpCurrent: 10, IsNpc: false,
 				},
 				{
 					ID:          combBID,
 					CharacterID: uuid.NullUUID{UUID: charBID, Valid: true},
-					PositionCol: "B", PositionRow: 1, IsAlive: true, IsNpc: false,
+					PositionCol: "B", PositionRow: 1, IsAlive: true, HpCurrent: 10, IsNpc: false,
 				},
 			}, nil
 		},

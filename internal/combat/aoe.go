@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -446,6 +447,24 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		}
 	}
 
+	// E-59: persist one pending_saves row per affected combatant so the
+	// /save (or DM dashboard) flow can resolve each one and trigger AoE
+	// damage once they are all rolled. Source uses the "aoe:<spell-id>"
+	// tag so the resolver can find every row tied to this cast without
+	// touching unrelated concentration/DM-prompted saves.
+	source := AoEPendingSaveSource(spell.ID)
+	for _, ps := range pendingSaves {
+		if _, err := s.store.CreatePendingSave(ctx, refdata.CreatePendingSaveParams{
+			EncounterID: cmd.EncounterID,
+			CombatantID: ps.CombatantID,
+			Ability:     ps.SaveAbility,
+			Dc:          int32(ps.DC),
+			Source:      source,
+		}); err != nil {
+			return AoECastResult{}, fmt.Errorf("creating pending AoE save for %s: %w", ps.CombatantID, err)
+		}
+	}
+
 	// 13. Resolve concentration: clean up any dropped spell, persist the new
 	// concentration to the authoritative columns when applicable.
 	concentration := ResolveConcentration(cmd.CurrentConcentration, spell)
@@ -486,6 +505,11 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		if def.AnchorMode == "combatant" {
 			anchorID = uuid.NullUUID{UUID: caster.ID, Valid: true}
 		}
+		// E-67-zone-cleanup: same duration-based expiry as Cast's
+		// maybeCreateSpellZone path so AoE-created zones (Fog Cloud,
+		// Darkness, Wall of Fire, etc.) also tick down on the round
+		// advance hook.
+		expiresAt := s.computeZoneExpiry(ctx, caster.EncounterID, spell)
 		_, zoneErr := s.CreateZone(ctx, CreateZoneInput{
 			EncounterID:           caster.EncounterID,
 			SourceCombatantID:     caster.ID,
@@ -500,6 +524,7 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 			OverlayColor:          def.OverlayColor,
 			MarkerIcon:            def.MarkerIcon,
 			RequiresConcentration: def.RequiresConcentration,
+			ExpiresAtRound:        expiresAt,
 			Triggers:              def.Triggers,
 		})
 		if zoneErr != nil {
@@ -524,6 +549,156 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		ConcentrationCleanup: cleanupResult,
 	}, nil
 }
+
+// AoEPendingSaveSourcePrefix is the source-column prefix used for pending_saves
+// rows persisted by CastAoE. Encoded as "aoe:<spell-id>" so the resolver can
+// distinguish AoE-cast rows from concentration / DM-prompted saves and look
+// the spell up for damage application without a side-table.
+const AoEPendingSaveSourcePrefix = "aoe:"
+
+// AoEPendingSaveSource returns the canonical pending_saves.source value for
+// a pending AoE save originating from the given spell.
+func AoEPendingSaveSource(spellID string) string {
+	return AoEPendingSaveSourcePrefix + spellID
+}
+
+// IsAoEPendingSaveSource reports whether the given pending_saves.source value
+// was produced by CastAoE. The /save handler uses this to detect AoE-tagged
+// rows on the rolling player's combatant.
+func IsAoEPendingSaveSource(source string) bool {
+	return strings.HasPrefix(source, AoEPendingSaveSourcePrefix)
+}
+
+// SpellIDFromAoEPendingSaveSource extracts the spell ID from an
+// "aoe:<spell-id>" source tag. Returns "" when the source is not AoE-tagged.
+func SpellIDFromAoEPendingSaveSource(source string) string {
+	if !IsAoEPendingSaveSource(source) {
+		return ""
+	}
+	return strings.TrimPrefix(source, AoEPendingSaveSourcePrefix)
+}
+
+// ResolveAoEPendingSaves checks every pending_saves row in the encounter
+// tagged for the given spell. When all are resolved (rolled or forfeited),
+// it dispatches to ResolveAoESaves to apply damage and returns the result.
+// While any row remains pending the function returns (nil, nil) — callers
+// (the /save handler, the DM dashboard) invoke it after each individual
+// resolution to drive the eventual damage application without polling.
+//
+// This is the post-resolution hook required by E-59: damage / effects must
+// land once every affected combatant's save has come back, regardless of
+// whether it was rolled by a player (/save) or by the DM (dashboard).
+func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.UUID, spellID string, roller *dice.Roller) (*AoEDamageResult, error) {
+	rows, err := s.store.ListPendingSavesByEncounter(ctx, encounterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing pending saves: %w", err)
+	}
+	source := AoEPendingSaveSource(spellID)
+	var spellRows []refdata.PendingSafe
+	for _, r := range rows {
+		if r.Source == source {
+			spellRows = append(spellRows, r)
+		}
+	}
+	if len(spellRows) == 0 {
+		return nil, nil
+	}
+	for _, r := range spellRows {
+		if r.Status == "pending" {
+			return nil, nil
+		}
+	}
+
+	// All resolved — derive damage parameters from the spell and run the
+	// existing ResolveAoESaves pipeline. Forfeited rows (DM cancelled, etc.)
+	// are treated as failed saves: that matches the player-side default of
+	// "no roll means no benefit of the save".
+	spell, err := s.store.GetSpell(ctx, spellID)
+	if err != nil {
+		return nil, fmt.Errorf("looking up spell %q for AoE damage: %w", spellID, err)
+	}
+	if !spell.Damage.Valid {
+		// Non-damaging AoE (e.g. condition-only). Nothing to apply at this
+		// hook; condition/effect work happens elsewhere.
+		return &AoEDamageResult{}, nil
+	}
+	dmgInfo, err := ParseSpellDamage(spell.Damage.RawMessage)
+	if err != nil {
+		return nil, fmt.Errorf("parsing AoE damage: %w", err)
+	}
+	saveEffect := ""
+	if spell.SaveEffect.Valid {
+		saveEffect = spell.SaveEffect.String
+	}
+	saveResults := make([]SaveResult, 0, len(spellRows))
+	for _, r := range spellRows {
+		success := r.Success.Valid && r.Success.Bool
+		total := 0
+		if r.RollResult.Valid {
+			total = int(r.RollResult.Int32)
+		}
+		saveResults = append(saveResults, SaveResult{
+			CombatantID: r.CombatantID,
+			Rolled:      total,
+			Total:       total,
+			Success:     success,
+		})
+	}
+	input := AoEDamageInput{
+		EncounterID: encounterID,
+		SpellName:   spell.Name,
+		DamageDice:  dmgInfo.Dice,
+		DamageType:  dmgInfo.DamageType,
+		SaveEffect:  saveEffect,
+		SaveResults: saveResults,
+	}
+	res, err := s.ResolveAoESaves(ctx, input, roller)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// RecordAoEPendingSaveRoll resolves a single AoE pending_saves row for a
+// player's /save command. Looks for the oldest pending row on this combatant
+// tagged with any AoE source and writes the rolled value. Success is
+// computed canonically as (total >= row.Dc) — auto-fail is signalled by the
+// caller passing autoFail=true (e.g. natural 1, paralyzed). Returns the
+// resolved row's spell ID (for the caller to drive
+// ResolveAoEPendingSavesForSpell) and a bool indicating whether anything
+// was resolved.
+//
+// When the combatant has no pending AoE save the function is a no-op so the
+// /save handler can call it unconditionally.
+func (s *Service) RecordAoEPendingSaveRoll(ctx context.Context, combatantID uuid.UUID, ability string, total int, autoFail bool) (string, bool, error) {
+	rows, err := s.store.ListPendingSavesByCombatant(ctx, combatantID)
+	if err != nil {
+		return "", false, fmt.Errorf("listing pending saves: %w", err)
+	}
+	for _, r := range rows {
+		if !IsAoEPendingSaveSource(r.Source) {
+			continue
+		}
+		if r.Status != "pending" {
+			continue
+		}
+		if r.Ability != ability {
+			continue
+		}
+		success := !autoFail && total >= int(r.Dc)
+		updated, err := s.store.UpdatePendingSaveResult(ctx, refdata.UpdatePendingSaveResultParams{
+			ID:         r.ID,
+			RollResult: sql.NullInt32{Int32: int32(total), Valid: true},
+			Success:    sql.NullBool{Bool: success, Valid: true},
+		})
+		if err != nil {
+			return "", false, fmt.Errorf("updating pending save: %w", err)
+		}
+		return SpellIDFromAoEPendingSaveSource(updated.Source), true, nil
+	}
+	return "", false, nil
+}
+
 
 // AoEDamageInput holds the inputs for resolving AoE save results and applying damage.
 type AoEDamageInput struct {

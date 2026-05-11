@@ -23,7 +23,7 @@ func TestLookupZoneDefinition_KnownSpells(t *testing.T) {
 		{"darkness", "darkness", true, "magical_darkness", "#330033"},
 		{"cloud of daggers", "cloud of daggers", true, "damage", "#C0C0C0"},
 		{"moonbeam", "moonbeam", true, "damage", "#ADD8E6"},
-		{"silence", "silence", true, "control", "#4488CC"},
+		{"silence", "silence", true, "silence", "#4488CC"},
 		{"stinking cloud", "stinking cloud", true, "control", "#558822"},
 		{"unknown spell", "magic missile", false, "", ""},
 	}
@@ -77,4 +77,15 @@ func TestZoneDefinition_StinkingCloudHasEnterTrigger(t *testing.T) {
 
 func TestKnownZoneDefinitions_Count(t *testing.T) {
 	assert.Len(t, KnownZoneDefinitions, 8)
+}
+
+// E-67-silence-zone-type: Silence definition's ZoneType must match the value
+// combatantInSilenceZone / CheckSilenceBreaksConcentration filter on
+// ("silence"), otherwise the spell creates a zone the silence-enforcement code
+// cannot see.
+func TestZoneDefinition_SilenceUsesSilenceType(t *testing.T) {
+	def, ok := LookupZoneDefinition("silence")
+	require.True(t, ok)
+	assert.Equal(t, "silence", def.ZoneType,
+		"Silence ZoneType must be 'silence' so combatantInSilenceZone / CheckSilenceBreaksConcentration can see it")
 }

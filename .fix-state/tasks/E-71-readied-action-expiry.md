@@ -3,8 +3,8 @@ id: E-71-readied-action-expiry
 group: E
 phase: 71
 severity: HIGH
-status: open
-owner:
+status: in_review
+owner: opus 4.7 (1M) — ZONES-impl
 reviewer:
 last_update: 2026-05-11
 ---

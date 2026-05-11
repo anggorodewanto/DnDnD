@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/check"
@@ -15,6 +16,53 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/save"
 )
+
+// AoESaveResolver is the slice of combat.Service the /save handler needs to
+// resolve player-rolled AoE saves and (when all saves on a spell are in)
+// dispatch damage application. Wired by main; tests inject a mock. (E-59)
+//
+// RecordAoEPendingSaveRoll: marks one pending AoE save row as resolved.
+// Returns the row's spell ID (for the next call) and whether anything was
+// resolved.
+//
+// ResolveAoEPendingSavesForSpell: when called after a successful record, it
+// triggers ResolveAoESaves on the spell if every row on this spell is now
+// rolled / forfeited.
+type AoESaveResolver interface {
+	RecordAoEPendingSaveRoll(ctx context.Context, combatantID uuid.UUID, ability string, total int, autoFail bool) (string, bool, error)
+	ResolveAoEPendingSavesForSpell(ctx context.Context, encounterID uuid.UUID, spellID string) error
+}
+
+// AoESaveServiceAdapter wraps a CastCombatService-grade combat service +
+// roller so it satisfies AoESaveResolver. Production wiring builds this in
+// cmd/dndnd; tests bypass it via the mockAoESaveResolver double.
+type AoESaveServiceAdapter struct {
+	svc interface {
+		RecordAoEPendingSaveRoll(ctx context.Context, combatantID uuid.UUID, ability string, total int, autoFail bool) (string, bool, error)
+		ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.UUID, spellID string, roller *dice.Roller) (*combat.AoEDamageResult, error)
+	}
+	roller *dice.Roller
+}
+
+// NewAoESaveServiceAdapter constructs the adapter used by cmd/dndnd to wire
+// /save into the combat service's AoE pending-save resolution path.
+func NewAoESaveServiceAdapter(svc interface {
+	RecordAoEPendingSaveRoll(ctx context.Context, combatantID uuid.UUID, ability string, total int, autoFail bool) (string, bool, error)
+	ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.UUID, spellID string, roller *dice.Roller) (*combat.AoEDamageResult, error)
+}, roller *dice.Roller) *AoESaveServiceAdapter {
+	return &AoESaveServiceAdapter{svc: svc, roller: roller}
+}
+
+// RecordAoEPendingSaveRoll passes through to the wrapped service.
+func (a *AoESaveServiceAdapter) RecordAoEPendingSaveRoll(ctx context.Context, combatantID uuid.UUID, ability string, total int, autoFail bool) (string, bool, error) {
+	return a.svc.RecordAoEPendingSaveRoll(ctx, combatantID, ability, total, autoFail)
+}
+
+// ResolveAoEPendingSavesForSpell injects the adapter's roller and forwards.
+func (a *AoESaveServiceAdapter) ResolveAoEPendingSavesForSpell(ctx context.Context, encounterID uuid.UUID, spellID string) error {
+	_, err := a.svc.ResolveAoEPendingSaves(ctx, encounterID, spellID, a.roller)
+	return err
+}
 
 // SaveHandler handles the /save slash command.
 type SaveHandler struct {
@@ -25,6 +73,14 @@ type SaveHandler struct {
 	encounterProvider CheckEncounterProvider
 	combatantLookup   CheckCombatantLookup
 	rollLogger        dice.RollHistoryLogger
+	aoeSaveResolver   AoESaveResolver // E-59: optional; nil disables AoE pending-save resolution
+}
+
+// SetAoESaveResolver wires the combat-side resolver for AoE pending saves.
+// When unset, /save behaves exactly as before (rolls and logs, but does not
+// touch pending_saves rows). (E-59)
+func (h *SaveHandler) SetAoESaveResolver(r AoESaveResolver) {
+	h.aoeSaveResolver = r
 }
 
 // HasRollLogger reports whether a non-nil dice.RollHistoryLogger has been
@@ -134,6 +190,50 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 			Timestamp:  result.D20Result.Timestamp,
 		})
 	}
+
+	// E-59: resolve any AoE pending_saves row matching this player's
+	// combatant + ability. When this was the last outstanding save for the
+	// spell, the resolver fires damage application via ResolveAoESaves.
+	h.maybeResolveAoESave(ctx, interaction, char, ability, result)
+}
+
+// maybeResolveAoESave looks up the rolling combatant's encounter and asks
+// the AoE save resolver to consume one pending row. When the resolver
+// reports that the row was the spell's last outstanding save it then drives
+// the damage-application hook for that spell. Best-effort: any wiring gap
+// (no resolver, no encounter, no matching combatant) is a no-op so the
+// surrounding /save behaviour is unaffected. (E-59)
+func (h *SaveHandler) maybeResolveAoESave(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, ability string, result save.SaveResult) {
+	if h.aoeSaveResolver == nil || h.encounterProvider == nil || h.combatantLookup == nil {
+		return
+	}
+	userID := discordUserID(interaction)
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, userID)
+	if err != nil {
+		return
+	}
+	combatants, err := h.combatantLookup.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return
+	}
+	var combatantID uuid.UUID
+	for _, c := range combatants {
+		if c.CharacterID.Valid && c.CharacterID.UUID == char.ID {
+			combatantID = c.ID
+			break
+		}
+	}
+	if combatantID == uuid.Nil {
+		return
+	}
+	// Pass the rolled total + autoFail flag; the resolver does the
+	// canonical (total >= row.Dc) comparison using the stored DC so we
+	// don't need to plumb DC into /save.
+	spellID, resolved, err := h.aoeSaveResolver.RecordAoEPendingSaveRoll(ctx, combatantID, strings.ToLower(ability), result.Total, result.AutoFail)
+	if err != nil || !resolved {
+		return
+	}
+	_ = h.aoeSaveResolver.ResolveAoEPendingSavesForSpell(ctx, encounterID, spellID)
 }
 
 // parseOptions extracts ability, adv, disadv from command options.

@@ -210,12 +210,19 @@ func buildResourceList(turn refdata.Turn) []string {
 // ResolveTurnResources determines the starting movement (ft) and attacks remaining
 // for a combatant at the start of their turn. For PCs, it looks up character speed
 // and class attacks_per_action. For NPCs, defaults are 30ft and 1 attack.
-// Condition effects (grappled/restrained → 0 speed) are applied.
+// Condition effects (grappled/restrained → 0 speed) are applied. The Feature
+// Effect System is consulted at TriggerOnTurnStart so turn-start speed
+// modifiers (Monk Unarmored Movement, future Mobile feat) are reflected in
+// the new turn's movement_remaining. (D-48a)
 func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Combatant) (speedFt int32, attacksRemaining int32, err error) {
 	conds, _ := parseConditions(combatant.Conditions)
+	exhaustion := int(combatant.ExhaustionLevel)
 
 	if combatant.IsNpc || !combatant.CharacterID.Valid {
-		return int32(EffectiveSpeed(30, conds)), 1, nil
+		// C-42: NPC speed must also reflect exhaustion (level 2+ halves,
+		// level 5+ zeroes). Conditions still take precedence (grappled /
+		// restrained -> 0) via EffectiveSpeedWithExhaustion.
+		return int32(EffectiveSpeedWithExhaustion(30, conds, exhaustion)), 1, nil
 	}
 
 	char, err := s.store.GetCharacter(ctx, combatant.CharacterID.UUID)
@@ -228,7 +235,36 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 		speedFt = 30
 	}
 
-	return int32(EffectiveSpeed(int(speedFt), conds)), int32(s.resolveAttacksPerAction(ctx, char)), nil
+	// D-48a — fold turn-start FES speed modifiers (e.g. Monk Unarmored
+	// Movement) into the base speed before exhaustion / condition halving.
+	speedFt += int32(turnStartSpeedBonus(char))
+
+	// C-42: route through EffectiveSpeedWithExhaustion so exhaustion ladder
+	// (lv2 halves, lv5 zeroes) actually applies at turn start.
+	return int32(EffectiveSpeedWithExhaustion(int(speedFt), conds, exhaustion)), int32(s.resolveAttacksPerAction(ctx, char)), nil
+}
+
+// turnStartSpeedBonus runs the Feature Effect System at TriggerOnTurnStart
+// for the given character and returns the SpeedModifier accumulator. The
+// helper builds the same FeatureDefinition list used by the attack pipeline
+// so per-class turn-start effects (Monk Unarmored Movement gated on
+// NotWearingArmor, etc.) fire correctly. Returns 0 when the character has
+// no parseable classes / features.
+func turnStartSpeedBonus(char refdata.Character) int {
+	var classes []CharacterClass
+	if len(char.Classes) > 0 {
+		_ = json.Unmarshal(char.Classes, &classes)
+	}
+	var feats []CharacterFeature
+	if char.Features.Valid && len(char.Features.RawMessage) > 0 {
+		_ = json.Unmarshal(char.Features.RawMessage, &feats)
+	}
+	defs := BuildFeatureDefinitions(classes, feats)
+	ctx := EffectContext{
+		WearingArmor: char.EquippedArmor.Valid && char.EquippedArmor.String != "",
+	}
+	result := ProcessEffects(defs, TriggerOnTurnStart, ctx)
+	return result.SpeedModifier
 }
 
 // resolveAttacksPerAction determines the number of attacks per action for a character

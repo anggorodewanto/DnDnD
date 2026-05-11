@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/sqlc-dev/pqtype"
@@ -82,6 +83,194 @@ func setupSaveHandler(sess *MockSession) (*SaveHandler, *mockCheckRollLogger) {
 		logger,
 	)
 	return h, logger
+}
+
+// --- E-59 AoE pending-save resolver tests ---
+
+type mockAoESaveResolver struct {
+	recordCombatantID uuid.UUID
+	recordAbility     string
+	recordTotal       int
+	recordSuccess     bool
+	recordCalls       int
+	recordSpellID     string
+	recordResolved    bool
+	recordErr         error
+
+	resolveCalls   int
+	resolveSpellID string
+	resolveResult  *struct{ totalDamage int }
+	resolveErr     error
+}
+
+func (m *mockAoESaveResolver) RecordAoEPendingSaveRoll(_ context.Context, combatantID uuid.UUID, ability string, total int, success bool) (string, bool, error) {
+	m.recordCalls++
+	m.recordCombatantID = combatantID
+	m.recordAbility = ability
+	m.recordTotal = total
+	m.recordSuccess = success
+	return m.recordSpellID, m.recordResolved, m.recordErr
+}
+
+func (m *mockAoESaveResolver) ResolveAoEPendingSavesForSpell(_ context.Context, _ uuid.UUID, spellID string) error {
+	m.resolveCalls++
+	m.resolveSpellID = spellID
+	return m.resolveErr
+}
+
+// TestSaveHandler_RecordsAndResolvesAoEPendingSaves verifies that when a
+// player /saves with an AoE pending row outstanding, the handler resolves
+// the row and (if it was the last one) drives the AoE damage application.
+func TestSaveHandler_RecordsAndResolvesAoEPendingSaves(t *testing.T) {
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error { return nil }
+
+	combatantID := uuid.New()
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	char := makeTestCharacterWithSaves()
+	char.CampaignID = campaignID
+
+	resolver := &mockAoESaveResolver{
+		recordSpellID:  "fireball",
+		recordResolved: true,
+	}
+
+	roller := dice.NewRoller(func(_ int) int { return 12 })
+	h := NewSaveHandler(
+		sess, roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: combatantID, CharacterID: uuid.NullUUID{UUID: char.ID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+			}, nil
+		}},
+		&mockCheckRollLogger{},
+	)
+	h.SetAoESaveResolver(resolver)
+	h.Handle(makeSaveInteraction("dex", false, false))
+
+	if resolver.recordCalls != 1 {
+		t.Fatalf("expected RecordAoEPendingSaveRoll called once, got %d", resolver.recordCalls)
+	}
+	if resolver.recordCombatantID != combatantID {
+		t.Errorf("expected resolver to be called with combatant %s, got %s", combatantID, resolver.recordCombatantID)
+	}
+	if resolver.recordAbility != "dex" {
+		t.Errorf("expected ability=dex, got %q", resolver.recordAbility)
+	}
+	if resolver.resolveCalls != 1 {
+		t.Errorf("expected ResolveAoEPendingSavesForSpell called once after a save was recorded, got %d", resolver.resolveCalls)
+	}
+	if resolver.resolveSpellID != "fireball" {
+		t.Errorf("expected resolver to drive damage on fireball, got %q", resolver.resolveSpellID)
+	}
+}
+
+// TestSaveHandler_NoAoEPendingSave_SkipsResolution verifies the resolver is
+// not invoked if no AoE row matched (player rolled save without a pending
+// row, e.g. proactive defensive check).
+func TestSaveHandler_NoAoEPendingSave_SkipsResolution(t *testing.T) {
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error { return nil }
+
+	combatantID := uuid.New()
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	char := makeTestCharacterWithSaves()
+	char.CampaignID = campaignID
+
+	resolver := &mockAoESaveResolver{recordResolved: false}
+
+	roller := dice.NewRoller(func(_ int) int { return 12 })
+	h := NewSaveHandler(
+		sess, roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: combatantID, CharacterID: uuid.NullUUID{UUID: char.ID, Valid: true}, Conditions: json.RawMessage(`[]`)},
+			}, nil
+		}},
+		&mockCheckRollLogger{},
+	)
+	h.SetAoESaveResolver(resolver)
+	h.Handle(makeSaveInteraction("dex", false, false))
+
+	if resolver.recordCalls != 1 {
+		t.Errorf("expected record-call attempted once, got %d", resolver.recordCalls)
+	}
+	if resolver.resolveCalls != 0 {
+		t.Errorf("expected no damage-resolution when no row matched, got %d", resolver.resolveCalls)
+	}
+}
+
+// TestAoESaveServiceAdapter_Forwards verifies that the adapter passes the
+// record/resolve calls straight through and injects the roller on the
+// damage-resolution path.
+func TestAoESaveServiceAdapter_Forwards(t *testing.T) {
+	mock := &mockAoESaveAdapterBackend{
+		recordSpellID:  "fireball",
+		recordResolved: true,
+	}
+	adapter := NewAoESaveServiceAdapter(mock, dice.NewRoller(func(_ int) int { return 4 }))
+
+	id := uuid.New()
+	spellID, resolved, err := adapter.RecordAoEPendingSaveRoll(context.Background(), id, "dex", 18, false)
+	if err != nil {
+		t.Fatalf("RecordAoEPendingSaveRoll: %v", err)
+	}
+	if spellID != "fireball" || !resolved {
+		t.Errorf("forwarding broken: got (%q, %v)", spellID, resolved)
+	}
+	if mock.recordCalls != 1 {
+		t.Errorf("expected backend RecordAoEPendingSaveRoll called once, got %d", mock.recordCalls)
+	}
+
+	if err := adapter.ResolveAoEPendingSavesForSpell(context.Background(), uuid.New(), "fireball"); err != nil {
+		t.Fatalf("ResolveAoEPendingSavesForSpell: %v", err)
+	}
+	if mock.resolveCalls != 1 {
+		t.Errorf("expected backend ResolveAoEPendingSaves called once, got %d", mock.resolveCalls)
+	}
+	if mock.lastRoller == nil {
+		t.Errorf("expected adapter to inject its roller, got nil")
+	}
+}
+
+type mockAoESaveAdapterBackend struct {
+	recordCalls    int
+	recordSpellID  string
+	recordResolved bool
+
+	resolveCalls int
+	lastRoller   *dice.Roller
+}
+
+func (m *mockAoESaveAdapterBackend) RecordAoEPendingSaveRoll(_ context.Context, _ uuid.UUID, _ string, _ int, _ bool) (string, bool, error) {
+	m.recordCalls++
+	return m.recordSpellID, m.recordResolved, nil
+}
+
+func (m *mockAoESaveAdapterBackend) ResolveAoEPendingSaves(_ context.Context, _ uuid.UUID, _ string, r *dice.Roller) (*combat.AoEDamageResult, error) {
+	m.resolveCalls++
+	m.lastRoller = r
+	return nil, nil
 }
 
 func TestSaveHandler_BasicSave(t *testing.T) {

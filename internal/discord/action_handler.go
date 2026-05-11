@@ -13,6 +13,7 @@ import (
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/dmqueue"
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -82,6 +83,14 @@ type ActionPendingStore interface {
 	CreatePendingAction(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error)
 }
 
+// ActionStabilizeStore persists the dying target's updated death-save
+// tallies after a successful Medicine check. C-43 / Phase 43: a DC 10
+// Medicine check stabilizes the target, which we represent as DeathSaves{
+// Successes: 3 } (the StabilizeTarget helper builds the exact value).
+type ActionStabilizeStore interface {
+	UpdateCombatantDeathSaves(ctx context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error)
+}
+
 // ActionHandler wires /action [freeform text] and /action cancel into the
 // freeform-action service (combat) or directly onto the dm-queue notifier
 // (exploration, where there is no turn / action economy).
@@ -96,6 +105,11 @@ type ActionHandler struct {
 	notifier          dmqueue.Notifier
 	roller            *dice.Roller
 	channelIDProvider CampaignSettingsProvider
+	// C-43-stabilize: optional store for persisting the dying target's
+	// updated death saves when /action stabilize succeeds. nil-safe — when
+	// unset, the stabilize subcommand reports the roll result but warns
+	// that persistence is disabled.
+	stabilizeStore ActionStabilizeStore
 }
 
 // NewActionHandler constructs an ActionHandler. The notifier is wired later
@@ -135,6 +149,13 @@ func (h *ActionHandler) SetRoller(r *dice.Roller) { h.roller = r }
 // combat-log mirroring on subcommand dispatch results.
 func (h *ActionHandler) SetChannelIDProvider(p CampaignSettingsProvider) {
 	h.channelIDProvider = p
+}
+
+// SetStabilizeStore wires the death-save persistence for /action stabilize.
+// nil-safe — leaving this unset surfaces a "stabilize unavailable" message
+// rather than silently dropping the roll.
+func (h *ActionHandler) SetStabilizeStore(s ActionStabilizeStore) {
+	h.stabilizeStore = s
 }
 
 // Handle dispatches the /action slash command.
@@ -203,7 +224,8 @@ func (h *ActionHandler) isDispatchSubcommand(sub string) bool {
 		"stand", "drop-prone", "dropprone",
 		"escape",
 		"channel-divinity", "channeldivinity",
-		"lay-on-hands", "layonhands":
+		"lay-on-hands", "layonhands",
+		"stabilize":
 		return true
 	}
 	return false
@@ -239,6 +261,16 @@ func (h *ActionHandler) handleCombat(
 	if !h.combatantBelongsToUser(ctx, interaction.GuildID, userID, combatant) {
 		respondEphemeral(h.session, interaction, "It's not your turn.")
 		return
+	}
+
+	// C-43-block-commands: a dying or incapacitated combatant cannot
+	// post freeform actions (cancel falls through so they can withdraw
+	// a queued action posted before they dropped).
+	if !isCancel {
+		if msg, blocked := incapacitatedRejection(combatant); blocked {
+			respondEphemeral(h.session, interaction, msg)
+			return
+		}
 	}
 
 	if isCancel {
@@ -486,6 +518,15 @@ func (h *ActionHandler) handleCombatSubcommand(
 		return
 	}
 
+	// C-43-block-commands: dying / incapacitated combatants cannot take
+	// actions. Stabilize is invoked BY a healthy actor TARGETING a dying
+	// target — the guard checks the invoker, not the target, so it is
+	// safe to fall through.
+	if msg, blocked := incapacitatedRejection(combatant); blocked {
+		respondEphemeral(h.session, interaction, msg)
+		return
+	}
+
 	combatants, err := h.combatService.ListCombatantsByEncounterID(ctx, encounterID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Failed to list combatants.")
@@ -515,6 +556,8 @@ func (h *ActionHandler) handleCombatSubcommand(
 		h.dispatchChannelDivinity(ctx, interaction, encounterID, encounter, combatant, turn, combatants, args)
 	case "lay-on-hands", "layonhands":
 		h.dispatchLayOnHands(ctx, interaction, encounterID, combatant, turn, combatants, args)
+	case "stabilize":
+		h.dispatchStabilize(ctx, interaction, encounterID, combatant, combatants, args)
 	}
 }
 
@@ -874,6 +917,107 @@ func (h *ActionHandler) dispatchLayOnHands(ctx context.Context, interaction *dis
 		return
 	}
 	h.respondAndLog(interaction, encounterID, result.CombatLog)
+}
+
+// dispatchStabilize wires /action stabilize <target> (C-43 / Phase 43).
+// Requires the target to be a dying combatant within 5ft of the actor.
+// Rolls Medicine (1d20 + Wisdom modifier per the helper's contract; here
+// we use the actor's display name and a flat d20 since the WIS modifier
+// is not exposed through ActionCombatService). On a result ≥ DC 10 the
+// target is stabilized via combat.StabilizeTarget and the resulting death
+// saves are persisted via the wired StabilizeStore. On failure no state
+// changes; the target keeps rolling death saves.
+func (h *ActionHandler) dispatchStabilize(
+	ctx context.Context,
+	interaction *discordgo.Interaction,
+	encounterID uuid.UUID,
+	actor refdata.Combatant,
+	combatants []refdata.Combatant,
+	args string,
+) {
+	if h.roller == nil {
+		respondEphemeral(h.session, interaction, "Stabilize is not available right now (no dice roller wired).")
+		return
+	}
+	if h.stabilizeStore == nil {
+		respondEphemeral(h.session, interaction, "Stabilize is not available right now (no persistence wired).")
+		return
+	}
+	tokens := strings.Fields(args)
+	if len(tokens) == 0 {
+		respondEphemeral(h.session, interaction, "Stabilize requires `<target>` (e.g. `/action stabilize args:AR`).")
+		return
+	}
+	target, err := combat.ResolveTarget(tokens[0], combatants)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Target %q not found.", tokens[0]))
+		return
+	}
+
+	// Reach check (5ft Chebyshev between grid tiles).
+	if dist := stabilizeReachFt(actor, *target); dist > 5 {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("%s is %dft away — stabilize requires reach (5ft).", target.DisplayName, dist))
+		return
+	}
+
+	// Target must be dying — alive at 0 HP, not yet stabilized.
+	ds, dsErr := combat.ParseDeathSaves(target.DeathSaves.RawMessage)
+	if dsErr != nil {
+		respondEphemeral(h.session, interaction, "Failed to read target death-save state.")
+		return
+	}
+	if !combat.IsDying(target.IsAlive, int(target.HpCurrent), ds) {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("%s is not dying — stabilize requires a target at 0 HP making death saves.", target.DisplayName))
+		return
+	}
+
+	rollResult, rollErr := h.roller.Roll("1d20")
+	if rollErr != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to roll Medicine check: %v", rollErr))
+		return
+	}
+	const stabilizeDC = 10
+	if rollResult.Total < stabilizeDC {
+		msg := fmt.Sprintf("🩹 %s attempts to stabilize %s — rolled %d vs DC %d, fails.",
+			actor.DisplayName, target.DisplayName, rollResult.Total, stabilizeDC)
+		h.respondAndLog(interaction, encounterID, msg)
+		return
+	}
+
+	outcome := combat.StabilizeTarget(target.DisplayName, ds, fmt.Sprintf("%s's Medicine check (%d vs DC %d)", actor.DisplayName, rollResult.Total, stabilizeDC))
+	if _, err := h.stabilizeStore.UpdateCombatantDeathSaves(ctx, refdata.UpdateCombatantDeathSavesParams{
+		ID:         target.ID,
+		DeathSaves: combat.MarshalDeathSaves(outcome.DeathSaves),
+	}); err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to persist stabilize: %v", err))
+		return
+	}
+
+	logLine := joinMessages(outcome.Messages)
+	h.respondAndLog(interaction, encounterID, logLine)
+}
+
+// stabilizeReachFt returns the Chebyshev (5-ft grid) distance between two
+// combatants. Errors decoding either position degrade to a far-away value
+// (the caller treats that as out-of-reach).
+func stabilizeReachFt(a, b refdata.Combatant) int {
+	aCol, aRow, aErr := renderer.ParseCoordinate(a.PositionCol + strconv.Itoa(int(a.PositionRow)))
+	bCol, bRow, bErr := renderer.ParseCoordinate(b.PositionCol + strconv.Itoa(int(b.PositionRow)))
+	if aErr != nil || bErr != nil {
+		return 999
+	}
+	dc := aCol - bCol
+	if dc < 0 {
+		dc = -dc
+	}
+	dr := aRow - bRow
+	if dr < 0 {
+		dr = -dr
+	}
+	if dc > dr {
+		return dc * 5
+	}
+	return dr * 5
 }
 
 // filterHostiles returns the alive combatants on the opposite faction from

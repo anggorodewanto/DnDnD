@@ -257,6 +257,8 @@ type InitiativeTrackerNotifier interface {
 type Service struct {
 	store                     Store
 	summonedResources         *SummonedTurnResources
+	ammoTracker               *AmmoSpentTracker
+	roller                    *dice.Roller
 	publisher                 EncounterPublisher
 	dmNotifier                DMNotifier
 	cardUpdater               CardUpdater
@@ -269,7 +271,21 @@ func NewService(store Store) *Service {
 	return &Service{
 		store:             store,
 		summonedResources: NewSummonedTurnResources(),
+		ammoTracker:       NewAmmoSpentTracker(),
+		roller:            dice.NewRoller(nil),
 	}
+}
+
+// SetRoller overrides the default dice roller used by service-internal
+// roll-driven hooks (e.g. fall damage on prone). Test helpers call this to
+// inject a deterministic roller. A nil roller restores the crypto/rand
+// default.
+func (s *Service) SetRoller(r *dice.Roller) {
+	if r == nil {
+		s.roller = dice.NewRoller(nil)
+		return
+	}
+	s.roller = r
 }
 
 // SetDMNotifier wires the dm-queue notifier so freeform actions and cancels
@@ -520,7 +536,29 @@ func (s *Service) UpdateCombatantHP(ctx context.Context, id uuid.UUID, hpCurrent
 }
 
 // UpdateCombatantPosition updates a combatant's position.
+//
+// Phase 67 / 118 hooks fired in order after the position is persisted:
+//
+//  1. UpdateZoneAnchor — combatant-anchored zones (Spirit Guardians, Aura of
+//     Protection) re-origin to the new tile so the zone follows the caster.
+//  2. CheckSilenceBreaksConcentration — concentrating V/S casters who walk
+//     into a Silence zone drop concentration.
+//  3. CheckZoneTriggers("enter") — damaging / save zones (Spirit Guardians,
+//     Wall of Fire, Cloud of Daggers, Moonbeam, Stinking Cloud) record an
+//     enter-trigger for this combatant. The returned trigger results are
+//     surfaced via UpdateCombatantPositionWithTriggers; this wrapper drops
+//     them for callers that don't yet consume the prompt stream so older
+//     wiring keeps the existing signature.
 func (s *Service) UpdateCombatantPosition(ctx context.Context, id uuid.UUID, col string, row, altitude int32) (refdata.Combatant, error) {
+	c, _, err := s.UpdateCombatantPositionWithTriggers(ctx, id, col, row, altitude)
+	return c, err
+}
+
+// UpdateCombatantPositionWithTriggers is the same as UpdateCombatantPosition
+// but also returns the zone-trigger results detected on the new tile so
+// callers (Discord move handler, dashboard) can surface the DM save/damage
+// prompts. (E-67-zone-triggers, E-67-zone-anchor-follow)
+func (s *Service) UpdateCombatantPositionWithTriggers(ctx context.Context, id uuid.UUID, col string, row, altitude int32) (refdata.Combatant, []ZoneTriggerResult, error) {
 	c, err := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
 		ID:          id,
 		PositionCol: col,
@@ -528,15 +566,35 @@ func (s *Service) UpdateCombatantPosition(ctx context.Context, id uuid.UUID, col
 		AltitudeFt:  altitude,
 	})
 	if err != nil {
-		return refdata.Combatant{}, err
+		return refdata.Combatant{}, nil, err
 	}
+
+	// E-67-zone-anchor-follow: combatant-anchored zones move with the
+	// caster. UpdateZoneAnchor is a no-op when the moving combatant isn't
+	// the anchor for any zone.
+	if err := s.UpdateZoneAnchor(ctx, id, col, row); err != nil {
+		return refdata.Combatant{}, nil, fmt.Errorf("updating zone anchor on move: %w", err)
+	}
+
 	// Phase 118: if the moving combatant is a concentrating caster with a
 	// V/S spell and the new tile is inside a Silence zone, break.
 	if _, serr := s.CheckSilenceBreaksConcentration(ctx, id); serr != nil {
-		return refdata.Combatant{}, fmt.Errorf("silence check on move: %w", serr)
+		return refdata.Combatant{}, nil, fmt.Errorf("silence check on move: %w", serr)
 	}
+
+	// E-67-zone-triggers: enter-triggers for damaging / save zones
+	// (Spirit Guardians, Wall of Fire, etc.). The per-round dedupe lives
+	// in CheckZoneTriggers so a repeat call within the same round is
+	// suppressed.
+	colIdx := colToIndex(col)
+	rowIdx := int(row) - 1
+	results, terr := s.CheckZoneTriggers(ctx, id, colIdx, rowIdx, c.EncounterID, "enter")
+	if terr != nil {
+		return refdata.Combatant{}, nil, fmt.Errorf("zone enter trigger check: %w", terr)
+	}
+
 	s.publish(ctx, c.EncounterID)
-	return c, nil
+	return c, results, nil
 }
 
 // UpdateCombatantConditions updates a combatant's conditions and exhaustion.
@@ -784,8 +842,10 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 	// Clean up summoned creature turn resources
 	s.summonedResources.Clear()
 
-	// Clean up all encounter zones
-	if err := s.store.DeleteEncounterZonesByEncounterID(ctx, encounterID); err != nil {
+	// E-67-zone-cleanup: route encounter-end zone cleanup through the
+	// CleanupEncounterZones service method so the cleanup path has a
+	// single seam (matches CleanupExpiredZones / CleanupConcentrationZones).
+	if err := s.CleanupEncounterZones(ctx, encounterID); err != nil {
 		return EndCombatResult{}, fmt.Errorf("cleaning up encounter zones: %w", err)
 	}
 
@@ -838,10 +898,15 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 		return EndCombatResult{}, fmt.Errorf("pausing combat timers: %w", err)
 	}
 
-	// NOTE: med-19 also calls for RecoverAmmunition to add back half of
-	// each PC's spent arrows/bolts. That requires a per-encounter spent
-	// counter (new column on combatants or turns) — deferred as a separate
-	// schema migration. The helper exists at attack.go:212 ready to call.
+	// C-37 — post-combat ammunition recovery: walk the in-memory spent
+	// tracker, recover half (rounded down) per ammunition type via
+	// RecoverAmmunition, and persist back to each PC's inventory. The
+	// schema migration to promote the in-memory counter to a column is
+	// still pending, but the wiring is live so a single-process server
+	// recovers correctly within an encounter's lifetime.
+	if err := s.recoverEncounterAmmunition(ctx, encounterID, combatants); err != nil {
+		return EndCombatResult{}, fmt.Errorf("recovering ammunition: %w", err)
+	}
 
 	casualties := 0
 	cleaned := make([]refdata.Combatant, len(combatants))

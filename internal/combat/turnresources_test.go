@@ -483,6 +483,75 @@ func TestResolveTurnResources_MulticlassHighestWins(t *testing.T) {
 	assert.Equal(t, int32(2), attacks) // Fighter 5 gives 2 attacks, Wizard 3 gives 1
 }
 
+// C-42: ResolveTurnResources must consult ExhaustionLevel when computing speed.
+// Level 2+ halves; level 5+ zeroes.
+func TestResolveTurnResources_ExhaustionLevel2HalvesSpeed(t *testing.T) {
+	charID := uuid.New()
+	combatant := refdata.Combatant{
+		CharacterID:     uuid.NullUUID{UUID: charID, Valid: true},
+		IsNpc:           false,
+		ExhaustionLevel: 2,
+		Conditions:      json.RawMessage(`[]`),
+	}
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{SpeedFt: 30, Classes: json.RawMessage(`[]`)}, nil
+	}
+	svc := NewService(store)
+	speed, _, err := svc.ResolveTurnResources(context.Background(), combatant)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(15), speed, "exhaustion 2 must halve max speed")
+}
+
+func TestResolveTurnResources_ExhaustionLevel5ZeroesSpeed(t *testing.T) {
+	charID := uuid.New()
+	combatant := refdata.Combatant{
+		CharacterID:     uuid.NullUUID{UUID: charID, Valid: true},
+		IsNpc:           false,
+		ExhaustionLevel: 5,
+		Conditions:      json.RawMessage(`[]`),
+	}
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{SpeedFt: 30, Classes: json.RawMessage(`[]`)}, nil
+	}
+	svc := NewService(store)
+	speed, _, err := svc.ResolveTurnResources(context.Background(), combatant)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(0), speed, "exhaustion 5 must zero speed")
+}
+
+func TestResolveTurnResources_NPCExhaustionLevel2HalvesSpeed(t *testing.T) {
+	combatant := refdata.Combatant{
+		IsNpc:           true,
+		ExhaustionLevel: 2,
+		Conditions:      json.RawMessage(`[]`),
+	}
+	store := defaultMockStore()
+	svc := NewService(store)
+	speed, _, err := svc.ResolveTurnResources(context.Background(), combatant)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(15), speed, "NPC exhaustion 2 must halve default 30 speed")
+}
+
+func TestResolveTurnResources_ExhaustionLevel1Unchanged(t *testing.T) {
+	charID := uuid.New()
+	combatant := refdata.Combatant{
+		CharacterID:     uuid.NullUUID{UUID: charID, Valid: true},
+		IsNpc:           false,
+		ExhaustionLevel: 1,
+		Conditions:      json.RawMessage(`[]`),
+	}
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{SpeedFt: 30, Classes: json.RawMessage(`[]`)}, nil
+	}
+	svc := NewService(store)
+	speed, _, err := svc.ResolveTurnResources(context.Background(), combatant)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(30), speed, "exhaustion 1 leaves speed unchanged")
+}
+
 func TestResolveTurnResources_InvalidAttacksPerActionJSON(t *testing.T) {
 	charID := uuid.New()
 	combatant := refdata.Combatant{

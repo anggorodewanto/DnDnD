@@ -74,6 +74,11 @@ type CastHandler struct {
 	channelIDProvider CampaignSettingsProvider
 	turnGate          TurnGate
 	inventoryAdapter  CastInventoryAdapter
+	// E-63: prompt store for the gold-fallback "Buy & Cast" / "Cancel"
+	// confirmation. When unset, /cast still falls back to posting a plain
+	// ephemeral message describing the missing component (no interactive
+	// retry available).
+	materialPrompts *ReactionPromptStore
 }
 
 // SetInventoryAdapter wires the inventory-side adapter used by the
@@ -107,6 +112,23 @@ func (h *CastHandler) SetChannelIDProvider(p CampaignSettingsProvider) {
 // action (or bonus action) so the gate is invoked.
 func (h *CastHandler) SetTurnGate(g TurnGate) {
 	h.turnGate = g
+}
+
+// SetMaterialPromptStore wires the reaction-prompt store the handler uses
+// to render the gold-fallback "Buy & Cast" / "Cancel" confirmation for
+// spells whose costly material component is missing but affordable (E-63).
+func (h *CastHandler) SetMaterialPromptStore(p *ReactionPromptStore) {
+	h.materialPrompts = p
+}
+
+// HandleComponent dispatches button clicks owned by /cast (material-component
+// prompt, etc.). Returns true when the click was claimed so the router can
+// stop fan-out. Delegates to the prompt store's routing.
+func (h *CastHandler) HandleComponent(interaction *discordgo.Interaction) bool {
+	if h.materialPrompts == nil {
+		return false
+	}
+	return h.materialPrompts.HandleComponent(interaction)
 }
 
 // Handle processes the /cast command interaction.
@@ -230,9 +252,104 @@ func (h *CastHandler) dispatchSingleTarget(
 		return
 	}
 
+	// E-63: when the service returns NeedsGoldConfirmation (component missing
+	// but the caster can afford it), surface a Buy & Cast / Cancel button
+	// instead of treating the response as a successful cast. The slot has NOT
+	// been deducted yet (Cast returns early before slot deduction in the
+	// NeedsGoldConfirmation branch).
+	if result.MaterialComponent != nil && result.MaterialComponent.NeedsGoldConfirmation {
+		h.promptMaterialFallback(ctx, interaction, encounterID, cmd, result.MaterialComponent)
+		return
+	}
+
 	logLine := combat.FormatCastLog(result)
 	h.postCombatLog(ctx, encounterID, logLine)
 	respondEphemeral(h.session, interaction, logLine)
+}
+
+// promptMaterialFallback renders the gold-fallback Buy & Cast / Cancel
+// prompt and routes the click back to the combat service. The original
+// ephemeral response is replaced by the prompt content so the caster sees
+// the confirmation in their command thread.
+func (h *CastHandler) promptMaterialFallback(
+	ctx context.Context,
+	interaction *discordgo.Interaction,
+	encounterID uuid.UUID,
+	originalCmd combat.CastCommand,
+	info *combat.CastMaterialComponentInfo,
+) {
+	promptMsg := combat.FormatGoldFallbackPrompt(combat.MaterialComponentResult{
+		ComponentName: info.ComponentName,
+		CostGp:        info.CostGp,
+	})
+
+	// Best-effort fallback when no prompt store is wired: surface the message
+	// as a plain ephemeral so the caster at least learns the spell didn't go
+	// through. Without buttons there's no interactive retry path.
+	if h.materialPrompts == nil {
+		respondEphemeral(h.session, interaction, promptMsg)
+		return
+	}
+
+	// We need a channel to post the prompt to. The combat-log mirror channel
+	// is reused so the prompt lives in the encounter feed; if no channel is
+	// available we fall back to the ephemeral path.
+	channelID := h.resolvePromptChannel(ctx, interaction, encounterID)
+	if channelID == "" {
+		respondEphemeral(h.session, interaction, promptMsg)
+		return
+	}
+
+	buttons := []ReactionPromptButton{
+		{Label: "Buy & Cast", Choice: "buy", Style: discordgo.PrimaryButton},
+		{Label: "Cancel", Choice: "cancel", Style: discordgo.SecondaryButton},
+	}
+	retryCmd := originalCmd
+	retryCmd.GoldFallback = true
+	_, postErr := h.materialPrompts.Post(ReactionPromptPostArgs{
+		ChannelID: channelID,
+		Content:   "✨ " + promptMsg,
+		Buttons:   buttons,
+		OnChoice: func(c context.Context, _ *discordgo.Interaction, choice string) {
+			if choice != "buy" {
+				_, _ = h.session.ChannelMessageSend(channelID, fmt.Sprintf("❌ Cast of %s cancelled — no gold spent, slot retained.", originalCmd.SpellID))
+				return
+			}
+			retryResult, retryErr := h.combatService.Cast(c, retryCmd, h.roller)
+			if retryErr != nil {
+				_, _ = h.session.ChannelMessageSend(channelID, fmt.Sprintf("Cast failed: %v", retryErr))
+				return
+			}
+			retryLog := combat.FormatCastLog(retryResult)
+			h.postCombatLog(c, encounterID, retryLog)
+			_, _ = h.session.ChannelMessageSend(channelID, retryLog)
+		},
+		OnForfeit: func(c context.Context) {
+			_, _ = h.session.ChannelMessageSend(channelID, fmt.Sprintf("⏳ Cast of %s timed out — slot retained, no gold spent.", originalCmd.SpellID))
+		},
+	})
+	if postErr != nil {
+		respondEphemeral(h.session, interaction, promptMsg)
+		return
+	}
+	respondEphemeral(h.session, interaction, "Confirm the material-component purchase in the combat channel.")
+}
+
+// resolvePromptChannel picks a Discord channel to render the gold-fallback
+// prompt in. Priority: combat-log channel (so the encounter sees the
+// follow-up), then the interaction's channel as a last resort. Returns ""
+// when no channel can be resolved; callers should fall back to ephemeral
+// messaging in that case.
+func (h *CastHandler) resolvePromptChannel(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID) string {
+	if h.channelIDProvider != nil {
+		channels, err := h.channelIDProvider.GetChannelIDs(ctx, encounterID)
+		if err == nil {
+			if ch, ok := channels["combat-log"]; ok && ch != "" {
+				return ch
+			}
+		}
+	}
+	return interaction.ChannelID
 }
 
 // dispatchAoE runs the AoE /cast path: parses the target coordinate, loads
@@ -283,6 +400,40 @@ func (h *CastHandler) dispatchAoE(
 	logLine := combat.FormatAoECastLog(result)
 	h.postCombatLog(ctx, encounterID, logLine)
 	respondEphemeral(h.session, interaction, logLine)
+
+	// E-59: ping affected player combatants in the combat-log channel
+	// asking them to roll /save <ability>. Each ping names the combatant so
+	// the right player knows which save to roll. NPC saves are handled by
+	// the DM dashboard; the resolver fires damage once all pending rows
+	// (player + DM) are resolved.
+	combs, _ := h.encounterProvider.ListCombatantsByEncounterID(ctx, encounterID)
+	h.postAoESavePrompts(ctx, encounterID, result, combs)
+}
+
+// postAoESavePrompts emits one /save reminder per affected player combatant
+// when the AoE spell calls for a save. Best-effort: nothing is posted when
+// the result has no save ability or the combat-log channel is not wired.
+func (h *CastHandler) postAoESavePrompts(ctx context.Context, encounterID uuid.UUID, result combat.AoECastResult, allCombatants []refdata.Combatant) {
+	if result.SaveAbility == "" || len(result.PendingSaves) == 0 {
+		return
+	}
+	combatantByID := make(map[uuid.UUID]refdata.Combatant, len(allCombatants))
+	for _, c := range allCombatants {
+		combatantByID[c.ID] = c
+	}
+	for _, ps := range result.PendingSaves {
+		if ps.IsNPC {
+			continue
+		}
+		c, ok := combatantByID[ps.CombatantID]
+		name := ps.CombatantID.String()
+		if ok {
+			name = c.DisplayName
+		}
+		msg := fmt.Sprintf("⚠️ %s — roll `/save %s` (DC %d) vs **%s**.",
+			name, ps.SaveAbility, ps.DC, result.SpellName)
+		h.postCombatLog(ctx, encounterID, msg)
+	}
 }
 
 // loadWalls best-effort loads wall segments from the encounter's map. If the

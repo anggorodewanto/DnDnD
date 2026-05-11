@@ -273,6 +273,13 @@ func (s *Service) ActivateRage(ctx context.Context, cmd RageCommand) (RageResult
 		return RageResult{}, fmt.Errorf("updating combatant rage: %w", err)
 	}
 
+	// D-46-rage-spellcasting-block — a barbarian who enters rage drops any
+	// active concentration spell. BreakConcentrationFully clears the columns,
+	// strips spell-sourced conditions, dismisses summons, and removes
+	// concentration-tagged zones. Best-effort: errors here do NOT abort rage
+	// activation (rage already persisted above).
+	_, _ = s.breakStoredConcentration(ctx, ragedCombatant, "raging")
+
 	combatLog := FormatRageActivation(cmd.Combatant.DisplayName, newRagesRemaining)
 	remaining := FormatRemainingResources(updatedTurn, nil)
 
@@ -283,6 +290,43 @@ func (s *Service) ActivateRage(ctx context.Context, cmd RageCommand) (RageResult
 		Remaining: remaining,
 		RagesLeft: newRagesRemaining,
 	}, nil
+}
+
+// markRageAttacked persists `RageAttackedThisRound = true` for a raging
+// attacker so the no-attack-no-damage auto-end check at end-of-turn (see
+// ShouldRageEndOnTurnEnd) does not fire prematurely.
+//
+// Best-effort: skip non-raging attackers and swallow persistence errors so
+// the attack pipeline is never blocked by rage state. (D-46)
+func (s *Service) markRageAttacked(ctx context.Context, attacker refdata.Combatant) {
+	if !attacker.IsRaging {
+		return
+	}
+	attacker.RageAttackedThisRound = true
+	_, _ = s.persistRageState(ctx, attacker)
+}
+
+// markRageTookDamage persists `RageTookDamageThisRound = true` for a raging
+// target that received positive damage this round. Mirrors markRageAttacked.
+// (D-46)
+func (s *Service) markRageTookDamage(ctx context.Context, target refdata.Combatant) {
+	if !target.IsRaging {
+		return
+	}
+	target.RageTookDamageThisRound = true
+	_, _ = s.persistRageState(ctx, target)
+}
+
+// maybeEndRageOnUnconscious drops rage state when a raging combatant has
+// fallen to 0 HP. Called by the damage pipeline after applying the dying
+// condition bundle. Best-effort: lookup / persistence errors are swallowed
+// because rage state is non-critical to the death-save flow. (D-46)
+func (s *Service) maybeEndRageOnUnconscious(ctx context.Context, c refdata.Combatant) {
+	if !ShouldRageEndOnUnconscious(c) {
+		return
+	}
+	cleared := ClearRageFromCombatant(c)
+	_, _ = s.persistRageState(ctx, cleared)
 }
 
 // maybeEndRageOnTurnEnd is the AdvanceTurn-end hook that drops rage when the

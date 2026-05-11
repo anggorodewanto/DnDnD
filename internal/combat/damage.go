@@ -261,6 +261,28 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 		return ApplyDamageResult{}, fmt.Errorf("ApplyDamage persisting HP: %w", err)
 	}
 
+	// D-46-rage-auto-end-quiet — mark the raging target so the
+	// no-attack-no-damage auto-end check at end-of-turn doesn't fire while
+	// the barbarian is actively taking hits. Only fires when adjusted damage
+	// actually reached HP (immunity / temp-HP absorption don't count).
+	// We carry IsRaging + RageRoundsRemaining over from the input target
+	// because UpdateCombatantHP only rewrites HP / temp_hp / is_alive, so
+	// the persisted rage columns are unchanged. (D-46)
+	postHPCombatant := updated
+	postHPCombatant.IsRaging = target.IsRaging
+	postHPCombatant.RageRoundsRemaining = target.RageRoundsRemaining
+	postHPCombatant.RageAttackedThisRound = target.RageAttackedThisRound
+	postHPCombatant.RageTookDamageThisRound = target.RageTookDamageThisRound
+	if adjusted > 0 {
+		s.markRageTookDamage(ctx, postHPCombatant)
+	}
+
+	// D-46-rage-end-on-unconscious — a raging combatant who hit 0 HP drops
+	// rage along with the dying-condition bundle. applyDamageHP already
+	// applied unconscious+prone via ConditionsForDying; here we just clear
+	// the rage columns.
+	s.maybeEndRageOnUnconscious(ctx, postHPCombatant)
+
 	// Phase 17: refresh the persistent character card so HP / temp-HP /
 	// alive flag stay in sync with combat. Silent no-op for NPCs and when
 	// no card updater is wired (e.g. tests, bot offline).

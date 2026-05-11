@@ -173,6 +173,21 @@ func (s *Service) ApplyCondition(ctx context.Context, combatantID uuid.UUID, con
 	// immediately visible. NPC combatants are silently skipped.
 	s.notifyCardUpdate(ctx, updated)
 
+	// C-31 — fall damage on prone-while-airborne. Apply 1d6 per 10ft via
+	// FallDamage and reset altitude to 0 when the new condition is prone
+	// and the combatant was airborne. The damage line is appended to msgs
+	// so the combat log surfaces the fall.
+	if condition.Condition == "prone" && c.AltitudeFt > 0 {
+		fallMsg, fallUpdated, ferr := s.applyFallDamageOnProne(ctx, updated)
+		if ferr != nil {
+			return updated, msgs, ferr
+		}
+		if fallMsg != "" {
+			msgs = append(msgs, fallMsg)
+		}
+		updated = fallUpdated
+	}
+
 	// Phase 118: incapacitating conditions auto-break concentration on the
 	// affected combatant (no save). Apply this hook after the condition has
 	// been persisted so the cleanup logic sees the up-to-date row.

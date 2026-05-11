@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/color"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -370,6 +373,9 @@ type mapRegeneratorQueries interface {
 	GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
 	GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error)
 	ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
+	// E-67-zone-render-on-map: zones are loaded so the renderer can paint
+	// their overlays alongside terrain + combatants.
+	ListEncounterZonesByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.EncounterZone, error)
 }
 
 // mapRegeneratorAdapter implements discord.MapRegenerator by parsing the
@@ -428,6 +434,16 @@ func (a *mapRegeneratorAdapter) RegenerateMap(ctx context.Context, encounterID u
 	md, err := renderer.ParseTiledJSON(m.TiledJson, renderCombatants, nil)
 	if err != nil {
 		return nil, fmt.Errorf("parse tiled json: %w", err)
+	}
+
+	// E-67-zone-render-on-map: project the active encounter_zones rows into
+	// MapData.ZoneOverlays so DrawZoneOverlays paints Fog Cloud / Wall of
+	// Fire / Darkness / Spirit Guardians overlays on the rendered PNG.
+	// Failure to load zones is non-fatal — the map still renders without
+	// overlays — but the error is logged so a DM can investigate.
+	zones, zerr := a.queries.ListEncounterZonesByEncounterID(ctx, encounterID)
+	if zerr == nil && len(zones) > 0 {
+		md.ZoneOverlays = zonesToRendererOverlays(zones)
 	}
 
 	// med-27: pre-compute the FoW (so we can layer the explored history
@@ -495,6 +511,62 @@ func (a *mapRegeneratorAdapter) recordVisibleTiles(encounterID uuid.UUID, fow *r
 			seen[idx] = true
 		}
 	}
+}
+
+// zonesToRendererOverlays converts the live encounter_zones rows into the
+// renderer.ZoneOverlay shape that DrawZoneOverlays paints. Zones with
+// unparseable hex overlay colors are skipped to keep the renderer
+// deterministic; combat-side validation already prevents bad hex from
+// being written. (E-67-zone-render-on-map)
+func zonesToRendererOverlays(in []refdata.EncounterZone) []renderer.ZoneOverlay {
+	out := make([]renderer.ZoneOverlay, 0, len(in))
+	for _, z := range in {
+		rgba, ok := parseHexRGBA(z.OverlayColor, 0x80)
+		if !ok {
+			continue
+		}
+		tiles := combat.ZoneAffectedTilesFromShape(z.Shape, z.OriginCol, z.OriginRow, z.Dimensions)
+		oc, or := combat.ZoneOriginIndex(z.OriginCol, z.OriginRow)
+		marker := ""
+		if z.MarkerIcon.Valid {
+			marker = z.MarkerIcon.String
+		}
+		overlay := renderer.ZoneOverlay{
+			OriginCol:     oc,
+			OriginRow:     or,
+			AffectedTiles: make([]renderer.GridPos, 0, len(tiles)),
+			Color:         rgba,
+			MarkerIcon:    marker,
+		}
+		for _, t := range tiles {
+			overlay.AffectedTiles = append(overlay.AffectedTiles, renderer.GridPos{Col: t.Col, Row: t.Row})
+		}
+		out = append(out, overlay)
+	}
+	return out
+}
+
+// parseHexRGBA converts an "#RRGGBB" string into a color.RGBA with the given
+// alpha. Accepts a leading "#" or "0x" prefix. Returns ok=false on malformed
+// input so the caller can skip the zone overlay rather than emit a stripe of
+// black. (E-67-zone-render-on-map)
+func parseHexRGBA(hex string, alpha uint8) (color.RGBA, bool) {
+	s := strings.TrimSpace(hex)
+	s = strings.TrimPrefix(s, "#")
+	s = strings.TrimPrefix(s, "0x")
+	if len(s) != 6 {
+		return color.RGBA{}, false
+	}
+	n, err := strconv.ParseUint(s, 16, 32)
+	if err != nil {
+		return color.RGBA{}, false
+	}
+	return color.RGBA{
+		R: uint8((n >> 16) & 0xFF),
+		G: uint8((n >> 8) & 0xFF),
+		B: uint8(n & 0xFF),
+		A: alpha,
+	}, true
 }
 
 // combatantsToRendererForm projects refdata.Combatant rows into the slimmer

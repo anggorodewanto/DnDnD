@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -245,6 +246,7 @@ type fakeMapRegenQueries struct {
 	encs       map[uuid.UUID]refdata.Encounter
 	maps       map[uuid.UUID]refdata.Map
 	combatants map[uuid.UUID][]refdata.Combatant
+	zones      map[uuid.UUID][]refdata.EncounterZone
 }
 
 func (f *fakeMapRegenQueries) GetEncounter(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
@@ -265,6 +267,96 @@ func (f *fakeMapRegenQueries) GetMapByID(_ context.Context, id uuid.UUID) (refda
 
 func (f *fakeMapRegenQueries) ListCombatantsByEncounterID(_ context.Context, id uuid.UUID) ([]refdata.Combatant, error) {
 	return f.combatants[id], nil
+}
+
+func (f *fakeMapRegenQueries) ListEncounterZonesByEncounterID(_ context.Context, id uuid.UUID) ([]refdata.EncounterZone, error) {
+	return f.zones[id], nil
+}
+
+// E-67-zone-render-on-map: zonesToRendererOverlays converts encounter_zones
+// rows into renderer.ZoneOverlay records suitable for DrawZoneOverlays.
+func TestZonesToRendererOverlays_BuildsOverlaysFromZones(t *testing.T) {
+	zones := []refdata.EncounterZone{
+		{
+			ID:           uuid.New(),
+			SourceSpell:  "Fog Cloud",
+			Shape:        "circle",
+			OriginCol:    "C",
+			OriginRow:    3,
+			Dimensions:   []byte(`{"radius_ft":20}`),
+			OverlayColor: "#808080",
+			MarkerIcon:   sql.NullString{String: "☁", Valid: true},
+		},
+		{
+			ID:           uuid.New(),
+			SourceSpell:  "Spirit Guardians",
+			Shape:        "circle",
+			OriginCol:    "B",
+			OriginRow:    2,
+			Dimensions:   []byte(`{"radius_ft":15}`),
+			OverlayColor: "#FFD700",
+			MarkerIcon:   sql.NullString{String: "✨", Valid: true},
+		},
+		{
+			// Malformed hex — should be skipped.
+			ID:           uuid.New(),
+			SourceSpell:  "Bad Zone",
+			Shape:        "circle",
+			OriginCol:    "A",
+			OriginRow:    1,
+			Dimensions:   []byte(`{"radius_ft":5}`),
+			OverlayColor: "not-a-hex",
+		},
+	}
+	overlays := zonesToRendererOverlays(zones)
+	require.Len(t, overlays, 2, "malformed-hex zone should be skipped")
+	assert.Equal(t, uint8(0x80), overlays[0].Color.R)
+	assert.Equal(t, "☁", overlays[0].MarkerIcon)
+	assert.NotEmpty(t, overlays[0].AffectedTiles)
+	assert.NotEmpty(t, overlays[1].AffectedTiles)
+}
+
+// E-67-zone-render-on-map: RegenerateMap wires zones into MapData.ZoneOverlays
+// so DrawZoneOverlays paints them.
+func TestMapRegeneratorAdapter_RendersWithZoneOverlays(t *testing.T) {
+	q := &fakeMapRegenQueries{
+		encs:       map[uuid.UUID]refdata.Encounter{},
+		maps:       map[uuid.UUID]refdata.Map{},
+		combatants: map[uuid.UUID][]refdata.Combatant{},
+		zones:      map[uuid.UUID][]refdata.EncounterZone{},
+	}
+	encID := uuid.New()
+	mapID := uuid.New()
+	q.encs[encID] = refdata.Encounter{
+		ID:    encID,
+		MapID: uuid.NullUUID{UUID: mapID, Valid: true},
+	}
+	q.maps[mapID] = refdata.Map{
+		ID: mapID,
+		TiledJson: []byte(`{
+			"width": 4, "height": 4,
+			"tilewidth": 48, "tileheight": 48,
+			"layers": [{"name": "terrain", "type": "tilelayer", "data": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}],
+			"tilesets": []
+		}`),
+	}
+	q.zones[encID] = []refdata.EncounterZone{
+		{
+			SourceSpell:  "Fog Cloud",
+			Shape:        "circle",
+			OriginCol:    "B",
+			OriginRow:    2,
+			Dimensions:   []byte(`{"radius_ft":10}`),
+			OverlayColor: "#808080",
+			MarkerIcon:   sql.NullString{String: "☁", Valid: true},
+		},
+	}
+
+	a := newMapRegeneratorAdapter(q)
+	require.NotNil(t, a)
+	png, err := a.RegenerateMap(context.Background(), encID)
+	require.NoError(t, err)
+	require.NotEmpty(t, png, "renderer must still produce PNG bytes when zones are present")
 }
 
 // --- high-13: dashboard API handlers (loot, item picker, shops, party rest) ---

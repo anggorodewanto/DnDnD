@@ -43,13 +43,13 @@ func setupDoneHandler(sess *mockMoveSession) (*DoneHandler, uuid.UUID, uuid.UUID
 				ID:          combatantID,
 				PositionCol: "A",
 				PositionRow: 1,
-				IsAlive:     true,
+				IsAlive: true, HpCurrent: 10,
 				IsNpc:       false,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 			return []refdata.Combatant{
-				{ID: combatantID, PositionCol: "A", PositionRow: 1, IsAlive: true, IsNpc: false},
+				{ID: combatantID, PositionCol: "A", PositionRow: 1, IsAlive: true, HpCurrent: 10, IsNpc: false},
 			}, nil
 		},
 		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
@@ -91,13 +91,13 @@ func TestDoneHandler_RejectsSharingTile(t *testing.T) {
 				ID:          combatantID,
 				PositionCol: "A",
 				PositionRow: 1,
-				IsAlive:     true,
+				IsAlive: true, HpCurrent: 10,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 			return []refdata.Combatant{
 				{ID: combatantID, PositionCol: "A", PositionRow: 1, IsAlive: true},
-				{ID: otherID, PositionCol: "A", PositionRow: 1, IsAlive: true, DisplayName: "Goblin"},
+				{ID: otherID, PositionCol: "A", PositionRow: 1, IsAlive: true, HpCurrent: 10, DisplayName: "Goblin"},
 			}, nil
 		},
 		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
