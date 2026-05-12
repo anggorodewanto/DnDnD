@@ -3,13 +3,16 @@ package discord
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
+	"github.com/ab/dndnd/internal/logging"
 	"github.com/ab/dndnd/internal/pathfinding"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -122,7 +125,15 @@ type MoveHandler struct {
 	// D-56 / Phase 56: drag-cost integration. When set, /move calls
 	// CheckDragTargets and doubles the displayed move cost via combat.DragMovementCost.
 	dragLookup MoveDragLookup
+	// F-20: optional structured logger. nil falls back to slog.Default()
+	// so legacy tests built before logger wiring keep working.
+	logger *slog.Logger
 }
+
+// SetLogger wires the structured logger used to emit per-command
+// observability lines via the internal/logging helper. nil-safe: when
+// unset the handler falls back to slog.Default().
+func (h *MoveHandler) SetLogger(l *slog.Logger) { h.logger = l }
 
 // SetDragLookup wires the D-56 drag-cost integration. nil-safe — when unset,
 // /move never applies the x2 drag movement cost.
@@ -212,7 +223,19 @@ func NewMoveHandler(
 
 // Handle processes the /move command interaction.
 func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
+	start := time.Now()
 	ctx := context.Background()
+	ctx = logging.WithCommand(ctx, "move")
+	ctx = logging.WithUserID(ctx, discordUserID(interaction))
+	ctx = logging.WithGuildID(ctx, interaction.GuildID)
+
+	base := h.logger
+	if base == nil {
+		base = slog.Default()
+	}
+	log := logging.WithContext(ctx, base)
+	log.Info("command received")
+	defer func() { logging.WithDuration(log, start).Info("command completed") }()
 
 	data := interaction.Data.(discordgo.ApplicationCommandInteractionData)
 	if len(data.Options) == 0 {
