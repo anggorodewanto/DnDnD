@@ -771,6 +771,92 @@ func TestDoneHandler_TurnStartNotification_WithImpact(t *testing.T) {
 	}
 }
 
+// --- E-67-followup: zone trigger results posted to #combat-log ---
+
+// TestDoneHandler_PostsZoneTriggerResultsToCombatLog verifies that when the
+// next turn's TurnInfo carries zone trigger results (e.g. Spirit Guardians
+// damage at start_of_turn), the done handler posts the formatted summary to
+// the encounter's #combat-log channel so the DM can resolve the prompt.
+func TestDoneHandler_PostsZoneTriggerResultsToCombatLog(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, nextCombatantID := setupFullDoneHandler(sess)
+
+	handler.turnAdvancer = &mockDoneTurnAdvancer{
+		advanceTurn: func(_ context.Context, _ uuid.UUID) (combat.TurnInfo, error) {
+			return combat.TurnInfo{
+				CombatantID: nextCombatantID,
+				RoundNumber: 2,
+				ZoneTriggerResults: []combat.ZoneTriggerResult{
+					{SourceSpell: "Spirit Guardians", Effect: "damage", Trigger: "start_of_turn"},
+				},
+			}, nil
+		},
+	}
+
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {},
+		notifyAutoSkip:  func(s Session, channelID string, content string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt", "combat-log": "chan-cl"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+
+	interaction := makeDoneInteraction()
+	handler.Handle(interaction)
+
+	var zoneSend *moveSessionChannelSend
+	for i := range sess.channelSends {
+		if strings.Contains(sess.channelSends[i].Content, "Spirit Guardians") {
+			zoneSend = &sess.channelSends[i]
+			break
+		}
+	}
+	if zoneSend == nil {
+		t.Fatalf("expected a #combat-log post containing the zone trigger summary, got: %#v", sess.channelSends)
+	}
+	if zoneSend.ChannelID != "chan-cl" {
+		t.Errorf("expected zone trigger post on chan-cl, got: %s", zoneSend.ChannelID)
+	}
+	if !strings.Contains(zoneSend.Content, "Goblin #1") {
+		t.Errorf("expected zone trigger post to name the affected combatant, got: %s", zoneSend.Content)
+	}
+}
+
+// TestDoneHandler_NoZoneTriggerPostWhenEmpty verifies the helper short-circuits
+// silently when TurnInfo.ZoneTriggerResults is empty so the combat-log channel
+// only sees auto-skip / explicit posts, never a blank header.
+func TestDoneHandler_NoZoneTriggerPostWhenEmpty(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, _ := setupFullDoneHandler(sess)
+
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {},
+		notifyAutoSkip:  func(s Session, channelID string, content string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt", "combat-log": "chan-cl"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+
+	interaction := makeDoneInteraction()
+	handler.Handle(interaction)
+
+	for _, send := range sess.channelSends {
+		if strings.Contains(send.Content, "Zone effects") {
+			t.Errorf("expected no zone trigger post when results empty, got: %s", send.Content)
+		}
+	}
+}
+
 // --- Auto-skip messages posted to #combat-log ---
 
 func TestDoneHandler_PostsAutoSkipToCombatLog(t *testing.T) {

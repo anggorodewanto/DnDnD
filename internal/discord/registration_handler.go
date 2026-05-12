@@ -218,16 +218,33 @@ func (h *ImportHandler) handlePlaceholderImport(interaction *discordgo.Interacti
 	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, charName, userID, "import")
 }
 
+// defaultPortalBaseURL is the production portal host used when no BASE_URL is
+// configured. CreateCharacterHandler falls back to this so unit tests and
+// local dev keep working without explicit wiring.
+const defaultPortalBaseURL = "https://portal.dndnd.app"
+
 // CreateCharacterHandler handles the /create-character slash command.
 type CreateCharacterHandler struct {
 	registrationBase
-	charCreator CharacterCreator
-	tokenFunc   func(campaignID uuid.UUID, discordUserID string) (string, error)
+	charCreator   CharacterCreator
+	tokenFunc     func(campaignID uuid.UUID, discordUserID string) (string, error)
+	portalBaseURL string
+}
+
+// CreateCharacterOption configures a CreateCharacterHandler at construction time.
+type CreateCharacterOption func(*CreateCharacterHandler)
+
+// WithCreateCharacterPortalBaseURL sets the base URL used to build the
+// /create-character portal link. Empty falls back to defaultPortalBaseURL.
+func WithCreateCharacterPortalBaseURL(baseURL string) CreateCharacterOption {
+	return func(h *CreateCharacterHandler) {
+		h.portalBaseURL = strings.TrimRight(baseURL, "/")
+	}
 }
 
 // NewCreateCharacterHandler creates a new CreateCharacterHandler.
-func NewCreateCharacterHandler(session Session, regService RegistrationService, campaignProv CampaignProvider, charCreator CharacterCreator, dmQueueFunc func(string) string, dmUserFunc func(string) string, tokenFunc func(uuid.UUID, string) (string, error)) *CreateCharacterHandler {
-	return &CreateCharacterHandler{
+func NewCreateCharacterHandler(session Session, regService RegistrationService, campaignProv CampaignProvider, charCreator CharacterCreator, dmQueueFunc func(string) string, dmUserFunc func(string) string, tokenFunc func(uuid.UUID, string) (string, error), opts ...CreateCharacterOption) *CreateCharacterHandler {
+	h := &CreateCharacterHandler{
 		registrationBase: registrationBase{
 			session:      session,
 			regService:   regService,
@@ -238,6 +255,10 @@ func NewCreateCharacterHandler(session Session, regService RegistrationService, 
 		charCreator: charCreator,
 		tokenFunc:   tokenFunc,
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // Handle processes a /create-character interaction.
@@ -268,7 +289,11 @@ func (h *CreateCharacterHandler) Handle(interaction *discordgo.Interaction) {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Error generating portal link: %s", err))
 		return
 	}
-	portalURL := fmt.Sprintf("https://portal.dndnd.app/create?token=%s", token)
+	base := h.portalBaseURL
+	if base == "" {
+		base = defaultPortalBaseURL
+	}
+	portalURL := fmt.Sprintf("%s/create?token=%s", base, token)
 
 	respondEphemeral(h.session, interaction,
 		fmt.Sprintf("✅ Registration submitted — your character is pending DM approval. You'll be pinged when approved.\n\n🔗 **Character Builder:** %s\n_(Link expires in 24 hours)_", portalURL))

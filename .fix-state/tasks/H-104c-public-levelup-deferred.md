@@ -3,8 +3,8 @@ id: H-104c-public-levelup-deferred
 group: H
 phase: 104c
 severity: MINOR
-status: open
-owner:
+status: deferred-with-justification
+owner: lifecycle
 reviewer:
 last_update: 2026-05-11
 ---

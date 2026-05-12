@@ -696,6 +696,123 @@ func TestParseBonusActions_Nil(t *testing.T) {
 	assert.Len(t, bonusActions, 0)
 }
 
+// F-78c: ResolveBonusActions prefers the structured creatures.bonus_actions
+// JSONB column. When set, the field bypasses the legacy ParseBonusActions
+// description scan entirely. Goblin Nimble Escape behavior is preserved by
+// the fallback path for rows that leave the column NULL.
+func TestResolveBonusActions_PrefersStructuredColumn(t *testing.T) {
+	creature := refdata.Creature{
+		Abilities: toNullRawMessage(json.RawMessage(`[
+			{"name":"Nimble Escape","description":"The goblin can take the Disengage or Hide action as a bonus action on each of its turns."}
+		]`)),
+		BonusActions: toNullRawMessage(json.RawMessage(`[
+			{"name":"Cunning Action","description":"Dash, Disengage or Hide."}
+		]`)),
+	}
+	abilities := []CreatureAbilityEntry{
+		{Name: "Nimble Escape", Description: "as a bonus action"},
+	}
+	got := ResolveBonusActions(creature, abilities)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Cunning Action", got[0].Name)
+}
+
+func TestResolveBonusActions_FallsBackToParseWhenColumnNull(t *testing.T) {
+	creature := refdata.Creature{
+		Abilities: toNullRawMessage(json.RawMessage(`[
+			{"name":"Nimble Escape","description":"The goblin can take the Disengage or Hide action as a bonus action on each of its turns."}
+		]`)),
+	}
+	abilities := []CreatureAbilityEntry{
+		{Name: "Nimble Escape", Description: "The goblin can take the Disengage or Hide action as a bonus action on each of its turns."},
+	}
+	got := ResolveBonusActions(creature, abilities)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Nimble Escape", got[0].Name)
+}
+
+func TestResolveBonusActions_FallsBackWhenStructuredEmpty(t *testing.T) {
+	creature := refdata.Creature{
+		BonusActions: toNullRawMessage(json.RawMessage(`[]`)),
+	}
+	abilities := []CreatureAbilityEntry{
+		{Name: "Rampage", Description: "as a bonus action move up to half its speed"},
+	}
+	got := ResolveBonusActions(creature, abilities)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Rampage", got[0].Name)
+}
+
+func TestResolveBonusActions_BadJsonFallsBack(t *testing.T) {
+	creature := refdata.Creature{
+		BonusActions: toNullRawMessage(json.RawMessage(`not-json`)),
+	}
+	abilities := []CreatureAbilityEntry{
+		{Name: "Rampage", Description: "as a bonus action move up to half its speed"},
+	}
+	got := ResolveBonusActions(creature, abilities)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Rampage", got[0].Name)
+}
+
+func TestBuildTurnPlan_UsesStructuredBonusActions(t *testing.T) {
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	npc := refdata.Combatant{
+		ID:          npcID,
+		DisplayName: "Sly Thief",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsNpc:       true,
+		IsAlive:     true,
+		HpCurrent:   12,
+	}
+	pc := refdata.Combatant{
+		ID:          pcID,
+		DisplayName: "Gandalf",
+		PositionCol: "A",
+		PositionRow: 2,
+		IsNpc:       false,
+		IsAlive:     true,
+		HpCurrent:   40,
+	}
+
+	creature := refdata.Creature{
+		Size:    "Small",
+		Speed:   json.RawMessage(`{"walk":30}`),
+		Attacks: json.RawMessage(`[{"name":"Dagger","to_hit":4,"damage":"1d4+2","damage_type":"piercing","reach_ft":5}]`),
+		// Abilities deliberately omits any bonus-action text — the
+		// structured column is what should surface the bonus action.
+		Abilities: toNullRawMessage(json.RawMessage(`[
+			{"name":"Sneak Attack","description":"Once per turn extra damage."}
+		]`)),
+		BonusActions: toNullRawMessage(json.RawMessage(`[
+			{"name":"Cunning Action","description":"Dash, Disengage or Hide as a bonus action."}
+		]`)),
+	}
+
+	grid := &pathfinding.Grid{
+		Width:   5,
+		Height:  5,
+		Terrain: testTerrainGrid(5, 5),
+	}
+
+	plan, err := BuildTurnPlan(BuildTurnPlanInput{
+		Combatant:  npc,
+		Creature:   creature,
+		Combatants: []refdata.Combatant{npc, pc},
+		Grid:       grid,
+		SpeedFt:    30,
+	})
+	require.NoError(t, err)
+
+	bonusSteps := filterStepsByType(plan.Steps, StepTypeBonusAction)
+	require.Len(t, bonusSteps, 1)
+	require.NotNil(t, bonusSteps[0].Ability)
+	assert.Equal(t, "Cunning Action", bonusSteps[0].Ability.Name)
+}
+
 func TestBuildTurnPlan_BonusAction_GoblinNimbleEscape(t *testing.T) {
 	npcID := uuid.New()
 	pcID := uuid.New()

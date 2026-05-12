@@ -8,8 +8,8 @@ SELECT * FROM creatures ORDER BY name;
 SELECT count(*) FROM creatures;
 
 -- name: UpsertCreature :exec
-INSERT INTO creatures (id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+INSERT INTO creatures (id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, bonus_actions, homebrew, source)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
 ON CONFLICT (id) DO UPDATE SET
     campaign_id = EXCLUDED.campaign_id,
     name = EXCLUDED.name,
@@ -33,6 +33,7 @@ ON CONFLICT (id) DO UPDATE SET
     cr = EXCLUDED.cr,
     attacks = EXCLUDED.attacks,
     abilities = EXCLUDED.abilities,
+    bonus_actions = EXCLUDED.bonus_actions,
     homebrew = EXCLUDED.homebrew,
     source = EXCLUDED.source,
     updated_at = now();

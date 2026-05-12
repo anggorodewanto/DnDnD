@@ -54,6 +54,27 @@ type CastInventoryAdapter interface {
 	UpdateCharacterSpellSlots(ctx context.Context, charID uuid.UUID, slots pqtype.NullRawMessage) error
 }
 
+// CastNearbyInventoryScanner scans the caster's encounter for items on
+// nearby combatants (and any dropped-loot store the scanner is wired
+// against). Per the Detect Magic spell description (PHB) the spell reveals
+// magical auras on items *near* the caster — within 30ft by default.
+// F-88c: when wired, /cast detect-magic aggregates the caster's own
+// inventory PLUS any items returned by ScanNearby; when unset the handler
+// falls back to the historical caster-only behavior.
+type CastNearbyInventoryScanner interface {
+	ScanNearby(ctx context.Context, guildID, discordUserID string, radiusFt int) ([]NearbyInventory, error)
+}
+
+// NearbyInventory groups items found on a single nearby combatant or
+// dropped-loot pool. SourceName is the display label rendered to the
+// caster (e.g. "Goblin", "Sack on the floor"), Items is the subset already
+// filtered to IsMagic = true so the scanner can also pre-filter when it
+// wants to limit per-row.
+type NearbyInventory struct {
+	SourceName string
+	Items      []character.InventoryItem
+}
+
 // CastHandler handles the /cast slash command. Dispatches to either the
 // single-target Cast service method or the AoE CastAoE method based on
 // whether the resolved spell has area_of_effect data set.
@@ -74,12 +95,31 @@ type CastHandler struct {
 	channelIDProvider CampaignSettingsProvider
 	turnGate          TurnGate
 	inventoryAdapter  CastInventoryAdapter
+	// F-88c: optional nearby-inventory scanner so /cast detect-magic
+	// extends beyond the caster's own bag to environment items / dropped
+	// loot / nearby PCs and NPCs within 30ft. Nil keeps the historical
+	// caster-only behavior.
+	nearbyScanner CastNearbyInventoryScanner
 	// E-63: prompt store for the gold-fallback "Buy & Cast" / "Cancel"
 	// confirmation. When unset, /cast still falls back to posting a plain
 	// ephemeral message describing the missing component (no interactive
 	// retry available).
 	materialPrompts *ReactionPromptStore
 }
+
+// SetNearbyScanner wires the Detect Magic environmental scanner. When
+// wired, /cast detect-magic aggregates the caster's own inventory with
+// every nearby combatant's (and dropped-loot's) inventory within radius.
+// Nil keeps the prior caster-only behavior. (F-88c)
+func (h *CastHandler) SetNearbyScanner(s CastNearbyInventoryScanner) {
+	h.nearbyScanner = s
+}
+
+// DetectMagicRadiusFt is the default radius of the Detect Magic aura scan,
+// matching the PHB description ("nearby items within 30 feet"). Exposed
+// for tests and so adapters can override per-spell if a future homebrew
+// variant carries a different range. (F-88c)
+const DetectMagicRadiusFt = 30
 
 // SetInventoryAdapter wires the inventory-side adapter used by the
 // /cast identify and /cast detect-magic short-circuit paths.
@@ -120,6 +160,11 @@ func (h *CastHandler) SetTurnGate(g TurnGate) {
 func (h *CastHandler) SetMaterialPromptStore(p *ReactionPromptStore) {
 	h.materialPrompts = p
 }
+
+// HasMaterialPromptStore reports whether a non-nil prompt store has been
+// wired. Production-wiring tests use this to detect the AOE-CAST follow-up
+// regression (nil store → /cast falls back to plain ephemerals).
+func (h *CastHandler) HasMaterialPromptStore() bool { return h.materialPrompts != nil }
 
 // HandleComponent dispatches button clicks owned by /cast (material-component
 // prompt, etc.). Returns true when the click was claimed so the router can
@@ -531,30 +576,71 @@ func (h *CastHandler) dispatchInventorySpell(ctx context.Context, interaction *d
 	}
 
 	if spellID == "detect-magic" {
-		h.dispatchDetectMagic(interaction, items)
+		h.dispatchDetectMagic(ctx, interaction, char, items)
 		return
 	}
 	h.dispatchIdentify(ctx, interaction, char, items, targetStr)
 }
 
-// dispatchDetectMagic lists the magic items in the caster's inventory.
-// Detect Magic is a ritual; we do not consume a spell slot here.
-func (h *CastHandler) dispatchDetectMagic(interaction *discordgo.Interaction, items []character.InventoryItem) {
-	magic := inventory.DetectMagicItems(items)
-	if len(magic) == 0 {
+// dispatchDetectMagic lists the magic items in the caster's inventory plus
+// (when a nearby scanner is wired) any items on nearby combatants / dropped
+// loot within the spell's radius. Detect Magic is a ritual; we do not
+// consume a spell slot here. (F-88c)
+func (h *CastHandler) dispatchDetectMagic(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, items []character.InventoryItem) {
+	selfMagic := inventory.DetectMagicItems(items)
+
+	nearby := h.collectNearbyMagic(ctx, interaction)
+
+	if len(selfMagic) == 0 && len(nearby) == 0 {
 		respondEphemeral(h.session, interaction, "✨ Detect Magic: you sense no magical auras nearby.")
 		return
 	}
+
 	var b strings.Builder
 	b.WriteString("✨ **Detect Magic** — you sense the following magical auras:\n")
-	for _, it := range magic {
-		fmt.Fprintf(&b, "> • %s", it.Name)
-		if it.Rarity != "" {
-			fmt.Fprintf(&b, " [%s]", it.Rarity)
+	if len(selfMagic) > 0 {
+		fmt.Fprintf(&b, "> __On %s (you):__\n", char.Name)
+		for _, it := range selfMagic {
+			fmt.Fprintf(&b, "> • %s", it.Name)
+			if it.Rarity != "" {
+				fmt.Fprintf(&b, " [%s]", it.Rarity)
+			}
+			b.WriteString("\n")
 		}
-		b.WriteString("\n")
+	}
+	for _, group := range nearby {
+		fmt.Fprintf(&b, "> __Nearby — %s:__\n", group.SourceName)
+		for _, it := range group.Items {
+			fmt.Fprintf(&b, "> • %s", it.Name)
+			if it.Rarity != "" {
+				fmt.Fprintf(&b, " [%s]", it.Rarity)
+			}
+			b.WriteString("\n")
+		}
 	}
 	respondEphemeral(h.session, interaction, b.String())
+}
+
+// collectNearbyMagic queries the wired scanner (if any) and returns only
+// groups that surface at least one magic item. Best-effort: scanner errors
+// degrade silently to "no nearby auras" rather than blocking the cast.
+func (h *CastHandler) collectNearbyMagic(ctx context.Context, interaction *discordgo.Interaction) []NearbyInventory {
+	if h.nearbyScanner == nil {
+		return nil
+	}
+	groups, err := h.nearbyScanner.ScanNearby(ctx, interaction.GuildID, discordUserID(interaction), DetectMagicRadiusFt)
+	if err != nil {
+		return nil
+	}
+	out := make([]NearbyInventory, 0, len(groups))
+	for _, g := range groups {
+		magic := inventory.DetectMagicItems(g.Items)
+		if len(magic) == 0 {
+			continue
+		}
+		out = append(out, NearbyInventory{SourceName: g.SourceName, Items: magic})
+	}
+	return out
 }
 
 // dispatchIdentify casts the Identify spell on a target item. Requires the

@@ -91,6 +91,34 @@ type ActionStabilizeStore interface {
 	UpdateCombatantDeathSaves(ctx context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error)
 }
 
+// ActionZoneLookup lists encounter zones so /action hide can gate on
+// obscurement (you can hide only when at least lightly obscured per 5e).
+// Nil-safe: when unset the handler keeps the historical "always allow hide"
+// behaviour. E-69 / Phase 69.
+type ActionZoneLookup interface {
+	ListZonesForEncounter(ctx context.Context, encounterID uuid.UUID) ([]combat.ZoneInfo, error)
+}
+
+// ActionSpeedLookup resolves a combatant's actual walk speed in feet.
+// /action stand uses this to compute the half-movement stand cost so
+// halflings (25ft) and tabaxi (35ft) pay the spec-correct 12-13ft instead
+// of the hardcoded 15ft default. Nil-safe: when unset, stand keeps the
+// historical 30ft default. (D-54-followup)
+type ActionSpeedLookup interface {
+	LookupWalkSpeed(ctx context.Context, combatant refdata.Combatant) (int, error)
+}
+
+// ActionMedicineLookup resolves the actor's Medicine-check modifier
+// (WIS modifier + proficiency bonus when proficient in Medicine, plus
+// double-prof for expertise). /action stabilize uses this so a high-WIS
+// proficient cleric rolls d20 + (e.g.) +6 vs DC 10 rather than the
+// historical flat d20. Nil-safe: when unset, stabilize falls back to a
+// flat d20 + 0 to preserve the pre-followup behaviour. (C-43-stabilize-
+// followup)
+type ActionMedicineLookup interface {
+	LookupMedicineModifier(ctx context.Context, combatant refdata.Combatant) (int, error)
+}
+
 // ActionHandler wires /action [freeform text] and /action cancel into the
 // freeform-action service (combat) or directly onto the dm-queue notifier
 // (exploration, where there is no turn / action economy).
@@ -110,6 +138,19 @@ type ActionHandler struct {
 	// unset, the stabilize subcommand reports the roll result but warns
 	// that persistence is disabled.
 	stabilizeStore ActionStabilizeStore
+	// E-69 / Phase 69: optional zone lookup so /action hide gates on
+	// obscurement (you can hide only when at least lightly obscured).
+	// nil-safe — when unset, Hide keeps its historical "always allow"
+	// behaviour to preserve existing tests.
+	zoneLookup ActionZoneLookup
+	// D-54-followup: optional walk-speed lookup so /action stand resolves
+	// the actor's actual max walk speed for the half-movement cost rule.
+	// nil-safe — when unset, stand falls back to the historical 30ft.
+	speedLookup ActionSpeedLookup
+	// C-43-stabilize-followup: optional Medicine modifier lookup so
+	// /action stabilize rolls d20 + WIS_mod + Medicine proficiency instead
+	// of a flat d20. nil-safe — when unset, the +0 modifier is used.
+	medicineLookup ActionMedicineLookup
 }
 
 // NewActionHandler constructs an ActionHandler. The notifier is wired later
@@ -157,6 +198,44 @@ func (h *ActionHandler) SetChannelIDProvider(p CampaignSettingsProvider) {
 func (h *ActionHandler) SetStabilizeStore(s ActionStabilizeStore) {
 	h.stabilizeStore = s
 }
+
+// HasStabilizeStore reports whether a non-nil ActionStabilizeStore has been
+// wired. Production-wiring tests use this to detect the C-43-followup
+// regression (nil store → /action stabilize reports "not available").
+func (h *ActionHandler) HasStabilizeStore() bool { return h.stabilizeStore != nil }
+
+// SetZoneLookup wires the encounter-zone lookup so /action hide checks
+// obscurement (per 5e: hide requires at least light obscurement, total cover,
+// or heavy distraction). Nil disables the gate. (E-69 / Phase 69)
+func (h *ActionHandler) SetZoneLookup(z ActionZoneLookup) { h.zoneLookup = z }
+
+// HasZoneLookup reports whether a non-nil ActionZoneLookup has been wired.
+// Production-wiring tests use this to detect the COMBAT-MISC-followup
+// regression (nil lookup => /action hide degrades to "always allow" instead
+// of enforcing obscurement gating).
+func (h *ActionHandler) HasZoneLookup() bool { return h.zoneLookup != nil }
+
+// SetSpeedLookup wires the walk-speed resolver used by /action stand so
+// the half-movement cost reflects the actor's real walk speed (Halfling
+// 25ft / Tabaxi 35ft / etc.). nil-safe — when unset, stand falls back to
+// 30ft. (D-54-followup)
+func (h *ActionHandler) SetSpeedLookup(s ActionSpeedLookup) { h.speedLookup = s }
+
+// HasSpeedLookup reports whether a non-nil ActionSpeedLookup has been
+// wired. Production-wiring tests use this to detect the D-54-followup
+// regression (nil lookup => /action stand falls back to 30ft).
+func (h *ActionHandler) HasSpeedLookup() bool { return h.speedLookup != nil }
+
+// SetMedicineLookup wires the Medicine-modifier resolver used by /action
+// stabilize so the roll is d20 + WIS_mod + Medicine proficiency. nil-safe
+// — when unset, the roll keeps the historical flat d20. (C-43-stabilize-
+// followup)
+func (h *ActionHandler) SetMedicineLookup(m ActionMedicineLookup) { h.medicineLookup = m }
+
+// HasMedicineLookup reports whether a non-nil ActionMedicineLookup has
+// been wired. Production-wiring tests use this to detect the C-43-stabilize-
+// followup regression (nil lookup => /action stabilize is a flat d20).
+func (h *ActionHandler) HasMedicineLookup() bool { return h.medicineLookup != nil }
 
 // Handle dispatches the /action slash command.
 func (h *ActionHandler) Handle(interaction *discordgo.Interaction) {
@@ -279,7 +358,9 @@ func (h *ActionHandler) handleCombat(
 	}
 
 	if isReady {
-		h.performReadyAction(ctx, interaction, combatant, turn, rawArgs)
+		spellName := strings.TrimSpace(optionString(interaction, "spell"))
+		spellSlot := optionInt(interaction, "slot")
+		h.performReadyAction(ctx, interaction, combatant, turn, rawArgs, spellName, spellSlot)
 		return
 	}
 
@@ -299,25 +380,30 @@ func (h *ActionHandler) handleCombat(
 
 // performReadyAction dispatches /action ready into combat.Service.ReadyAction
 // and posts the resulting combat log line. The trigger description is taken
-// from rawArgs verbatim ("ready" itself was stripped before dispatch). Slot
-// deduction + concentration linkage are out of scope here (med-28); the
-// service builds a reaction declaration with is_readied_action=true so the
-// DM panel surfaces the readied trigger.
+// from rawArgs verbatim ("ready" itself was stripped before dispatch).
+//
+// E-71-followup: when the optional spellName/spellSlot are non-empty, they
+// are threaded into ReadyActionCommand so the service-side ReadyAction
+// expends the slot at ready-time, sets concentration, and surfaces the
+// spell name + slot level in FormatReadiedActionsStatus.
 func (h *ActionHandler) performReadyAction(
 	ctx context.Context,
 	interaction *discordgo.Interaction,
 	combatant refdata.Combatant,
 	turn refdata.Turn,
-	description string,
+	description, spellName string,
+	spellSlot int,
 ) {
 	if strings.TrimSpace(description) == "" {
 		respondEphemeral(h.session, interaction, "Please describe the readied action (e.g. `/action ready args:shoot anyone who opens the door`).")
 		return
 	}
 	result, err := h.combatService.ReadyAction(ctx, combat.ReadyActionCommand{
-		Combatant:   combatant,
-		Turn:        turn,
-		Description: description,
+		Combatant:      combatant,
+		Turn:           turn,
+		Description:    description,
+		SpellName:      spellName,
+		SpellSlotLevel: spellSlot,
 	})
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Ready action failed: %v", err))
@@ -674,6 +760,27 @@ func (h *ActionHandler) dispatchHide(ctx context.Context, interaction *discordgo
 		respondEphemeral(h.session, interaction, "Hide is not available right now (no dice roller wired).")
 		return
 	}
+
+	// E-69 / Phase 69: when a zone lookup is wired AND zones exist in the
+	// encounter (lighting-aware combat), gate Hide on the actor's
+	// effective obscurement. ObscurementAllowsHide rejects NotObscured.
+	// Surface the obscurement reason on success so players see why Hide
+	// was allowed.
+	obscurementReason := ""
+	if h.zoneLookup != nil {
+		zones, zerr := h.zoneLookup.ListZonesForEncounter(ctx, encounterID)
+		if zerr == nil && len(zones) > 0 {
+			col := combat.ColToIndex(actor.PositionCol)
+			row := int(actor.PositionRow) - 1
+			level := combat.CombatantObscurement(col, row, zones, combat.VisionCapabilities{})
+			if !combat.ObscurementAllowsHide(level) {
+				respondEphemeral(h.session, interaction, fmt.Sprintf("%s cannot Hide here — you are in plain sight (not obscured and lacking cover).", actor.DisplayName))
+				return
+			}
+			obscurementReason = fmt.Sprintf("%s (Hide allowed)", level.String())
+		}
+	}
+
 	hostiles := filterHostiles(combatants, actor)
 	result, err := h.combatService.Hide(ctx, combat.HideCommand{
 		Combatant: actor,
@@ -685,23 +792,45 @@ func (h *ActionHandler) dispatchHide(ctx context.Context, interaction *discordgo
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Hide failed: %v", err))
 		return
 	}
-	h.respondAndLog(interaction, encounterID, result.CombatLog)
+	logMsg := result.CombatLog
+	if obscurementReason != "" {
+		logMsg = fmt.Sprintf("%s\n> %s", logMsg, obscurementReason)
+	}
+	h.respondAndLog(interaction, encounterID, logMsg)
 }
 
-// dispatchStand wires /action stand (D-54). The combat service derives the
-// max walk speed from a wired speed lookup; we pass 30 as the default here
-// since /action stand doesn't currently expose a speed-resolution adapter.
+// dispatchStand wires /action stand (D-54). The half-movement-to-stand
+// cost depends on the actor's actual walk speed, so we consult the wired
+// ActionSpeedLookup. Halflings (25ft) pay 13ft to stand, Tabaxi (35ft) pay
+// 18ft, default 30ft pays 15ft. nil lookup or a lookup error falls back to
+// 30ft to preserve pre-D-54-followup behaviour. (D-54-followup)
 func (h *ActionHandler) dispatchStand(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, actor refdata.Combatant, turn refdata.Turn) {
+	maxSpeed := h.resolveStandSpeed(ctx, actor)
 	result, err := h.combatService.Stand(ctx, combat.StandCommand{
 		Combatant: actor,
 		Turn:      turn,
-		MaxSpeed:  30,
+		MaxSpeed:  maxSpeed,
 	})
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Stand failed: %v", err))
 		return
 	}
 	h.respondAndLog(interaction, encounterID, result.CombatLog)
+}
+
+// resolveStandSpeed returns the actor's max walk speed in feet, falling
+// back to 30 when no lookup is wired or the lookup returns an error /
+// non-positive value. (D-54-followup)
+func (h *ActionHandler) resolveStandSpeed(ctx context.Context, actor refdata.Combatant) int {
+	const defaultSpeed = 30
+	if h.speedLookup == nil {
+		return defaultSpeed
+	}
+	speed, err := h.speedLookup.LookupWalkSpeed(ctx, actor)
+	if err != nil || speed <= 0 {
+		return defaultSpeed
+	}
+	return speed
 }
 
 // dispatchDropProne wires /action drop-prone (D-54).
@@ -976,15 +1105,20 @@ func (h *ActionHandler) dispatchStabilize(
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to roll Medicine check: %v", rollErr))
 		return
 	}
+	// C-43-stabilize-followup: PHB Medicine is d20 + WIS_mod + (prof if
+	// trained). When a lookup is wired, resolve the actor's modifier;
+	// fall back to +0 (the legacy flat-d20 path) when not.
+	medicineMod := h.resolveMedicineModifier(ctx, actor)
+	total := rollResult.Total + medicineMod
 	const stabilizeDC = 10
-	if rollResult.Total < stabilizeDC {
-		msg := fmt.Sprintf("🩹 %s attempts to stabilize %s — rolled %d vs DC %d, fails.",
-			actor.DisplayName, target.DisplayName, rollResult.Total, stabilizeDC)
+	if total < stabilizeDC {
+		msg := fmt.Sprintf("🩹 %s attempts to stabilize %s — rolled %d (d20=%d %s) vs DC %d, fails.",
+			actor.DisplayName, target.DisplayName, total, rollResult.Total, formatSignedMod(medicineMod), stabilizeDC)
 		h.respondAndLog(interaction, encounterID, msg)
 		return
 	}
 
-	outcome := combat.StabilizeTarget(target.DisplayName, ds, fmt.Sprintf("%s's Medicine check (%d vs DC %d)", actor.DisplayName, rollResult.Total, stabilizeDC))
+	outcome := combat.StabilizeTarget(target.DisplayName, ds, fmt.Sprintf("%s's Medicine check (%d = d20:%d %s vs DC %d)", actor.DisplayName, total, rollResult.Total, formatSignedMod(medicineMod), stabilizeDC))
 	if _, err := h.stabilizeStore.UpdateCombatantDeathSaves(ctx, refdata.UpdateCombatantDeathSavesParams{
 		ID:         target.ID,
 		DeathSaves: combat.MarshalDeathSaves(outcome.DeathSaves),
@@ -995,6 +1129,30 @@ func (h *ActionHandler) dispatchStabilize(
 
 	logLine := joinMessages(outcome.Messages)
 	h.respondAndLog(interaction, encounterID, logLine)
+}
+
+// resolveMedicineModifier returns the actor's Medicine-check modifier
+// (WIS mod + proficiency when proficient + expertise when applicable).
+// Falls back to 0 when no lookup is wired or the lookup errors out so
+// /action stabilize always produces a usable roll. (C-43-stabilize-followup)
+func (h *ActionHandler) resolveMedicineModifier(ctx context.Context, actor refdata.Combatant) int {
+	if h.medicineLookup == nil {
+		return 0
+	}
+	mod, err := h.medicineLookup.LookupMedicineModifier(ctx, actor)
+	if err != nil {
+		return 0
+	}
+	return mod
+}
+
+// formatSignedMod renders a modifier as " +N" / " -N" / " +0" for inline
+// inclusion in roll breakdown strings.
+func formatSignedMod(mod int) string {
+	if mod >= 0 {
+		return fmt.Sprintf("+%d", mod)
+	}
+	return fmt.Sprintf("%d", mod)
 }
 
 // stabilizeReachFt returns the Chebyshev (5-ft grid) distance between two

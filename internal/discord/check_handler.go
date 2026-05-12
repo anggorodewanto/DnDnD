@@ -14,6 +14,7 @@ import (
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/check"
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
@@ -62,6 +63,33 @@ type CheckArmorLookup interface {
 	GetArmor(ctx context.Context, id string) (refdata.Armor, error)
 }
 
+// CheckTargetResolver locates the caster's combatant (the one rolling the
+// /check) and the target combatant by short ID in the active encounter so
+// the handler can validate adjacency and (in combat) deduct an action.
+// Returns ok=false when either combatant can't be resolved or the caster
+// isn't in the encounter. F-81 targeted-check wiring.
+type CheckTargetResolver interface {
+	ResolveTargetCombatant(ctx context.Context, encounterID uuid.UUID, casterDiscordID, targetShortID string) (caster, target refdata.Combatant, ok bool)
+}
+
+// CheckTurnProvider resolves the active turn for the invoking character so
+// /check medicine on an adjacent ally deducts the per-turn Action when in
+// combat (F-81). When unset, /check still works but never consumes an
+// action — matches the historical out-of-combat behavior.
+type CheckTurnProvider interface {
+	GetActiveTurnForCharacter(ctx context.Context, guildID string, charID uuid.UUID) (refdata.Turn, bool, error)
+	UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
+}
+
+// CheckZoneLookup lists active encounter zones so /check perception can apply
+// obscurement-driven disadvantage and surface the lighting reason in the
+// response. Nil disables the wiring (handler keeps the historical "no
+// obscurement effect" behavior for unit tests built before this wiring landed).
+// E-69 / Phase 69.
+type CheckZoneLookup interface {
+	ListZonesForEncounter(ctx context.Context, encounterID uuid.UUID) ([]combat.ZoneInfo, error)
+}
+
 // CheckHandler handles the /check slash command.
 type CheckHandler struct {
 	session           Session
@@ -81,6 +109,17 @@ type CheckHandler struct {
 	// stealth_disadv automatically. Nil disables the lookup (preserves
 	// pre-wiring behaviour for unit tests).
 	armorLookup CheckArmorLookup
+	// F-81: targeted-check positional / action-cost wiring. Both are
+	// optional; when unset the targeted /check path keeps its existing
+	// behaviour (contested route via opponentResolver, otherwise plain
+	// single check with no adjacency or action enforcement).
+	targetResolver CheckTargetResolver
+	turnProvider   CheckTurnProvider
+	// E-69 / Phase 69: zone lookup so /check perception in an obscured
+	// area auto-applies disadvantage and includes the lighting reason in
+	// the response. Nil disables the effect (preserves pre-wiring
+	// behaviour for tests built before this wiring landed).
+	zoneLookup CheckZoneLookup
 }
 
 // SetArmorLookup wires the equipped-armor lookup so /check stealth honors the
@@ -91,10 +130,32 @@ func (h *CheckHandler) SetArmorLookup(l CheckArmorLookup) { h.armorLookup = l }
 // to keep the historical "ignore target" behaviour (med-32).
 func (h *CheckHandler) SetOpponentResolver(r CheckOpponentResolver) { h.opponentResolver = r }
 
+// SetTargetResolver wires the positional target lookup used by the targeted
+// (non-contested) /check path. F-81: when set, `/check medicine target:AR`
+// validates adjacency and deducts an action when in combat. Nil keeps the
+// historical "no enforcement" behaviour.
+func (h *CheckHandler) SetTargetResolver(r CheckTargetResolver) { h.targetResolver = r }
+
+// SetTurnProvider wires the active-turn lookup so an in-combat targeted
+// /check (e.g. medicine on a downed ally) costs the caster's Action.
+// Nil keeps the historical "no cost" behaviour. (F-81)
+func (h *CheckHandler) SetTurnProvider(p CheckTurnProvider) { h.turnProvider = p }
+
 // SetNotifier wires the dm-queue Notifier so non-trivial /check rolls are
 // gated through #dm-queue for DM narration. When nil (or unset), every
 // /check responds immediately with the numeric result and no queue post.
 func (h *CheckHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
+
+// SetZoneLookup wires the active-zone lookup so /check perception inside
+// obscurement applies disadvantage and surfaces the lighting reason. Nil
+// disables the effect. (E-69 / Phase 69)
+func (h *CheckHandler) SetZoneLookup(z CheckZoneLookup) { h.zoneLookup = z }
+
+// HasZoneLookup reports whether a non-nil CheckZoneLookup has been wired.
+// Production-wiring tests use this to detect the COMBAT-MISC-followup
+// regression (nil lookup => obscurement-driven disadvantage on Perception
+// silently no-ops).
+func (h *CheckHandler) HasZoneLookup() bool { return h.zoneLookup != nil }
 
 // HasRollLogger reports whether a non-nil dice.RollHistoryLogger has been
 // wired on this handler. Used by production-wiring tests to detect the
@@ -183,6 +244,13 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 		input.ExhaustionLevel = condInfo.ExhaustionLevel
 	}
 
+	// E-69 / Phase 69: apply obscurement-driven roll mode for sight-based
+	// checks (Perception). When the caster is in an active encounter and
+	// stands on an obscured tile, ObscurementCheckEffect imposes
+	// disadvantage. The reason is appended to the formatted response so
+	// the player sees why the check was modified.
+	obscurementReason := h.applyObscurementToInput(ctx, interaction, char.ID, &input)
+
 	// med-32 / Phase 81: targeted contested check. When the player supplies
 	// a target short ID (e.g. /check athletics target:G1), look up the
 	// opposing combatant in the active encounter and run a contested check
@@ -192,8 +260,16 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 		if h.handleContestedCheck(ctx, interaction, char, input, target) {
 			return
 		}
-		// Fall through to the regular SingleCheck path on lookup failure
-		// so the player still gets a numeric result.
+		// F-81: non-contested targeted check (e.g. `/check medicine
+		// target:AR` on a downed ally). Validate tile adjacency and, in
+		// combat, deduct an action up-front. Out-of-combat: skip the
+		// cost. When resolution fails (no resolver wired / target not in
+		// encounter), fall through to the plain single check so the
+		// player still gets a result.
+		if rejectMsg, blocked := h.enforceTargetedCheckPreconditions(ctx, interaction, char, target); blocked {
+			respondEphemeral(h.session, interaction, rejectMsg)
+			return
+		}
 	}
 
 	result, err := h.checkService.SingleCheck(input)
@@ -216,6 +292,9 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 
 	// Format and respond
 	msg := check.FormatSingleCheckResult(char.Name, result)
+	if obscurementReason != "" {
+		msg += fmt.Sprintf("\n> %s", obscurementReason)
+	}
 	respondEphemeral(h.session, interaction, msg)
 
 	h.logRollIfWanted(char, result)
@@ -264,6 +343,86 @@ func (h *CheckHandler) handleContestedCheck(ctx context.Context, interaction *di
 		})
 	}
 	return true
+}
+
+// enforceTargetedCheckPreconditions handles the non-contested targeted
+// check path (F-81). When a target resolver is wired and the active
+// encounter resolves, it validates tile adjacency (5ft Chebyshev) and, if
+// a turn provider is wired and the caster has an active turn (in combat),
+// it deducts an Action up-front. Returns blocked=true with a player-
+// facing message when adjacency fails or the Action is already spent.
+// Returns blocked=false when the path succeeds or when no resolver is
+// wired (legacy callers fall through to plain SingleCheck unchanged).
+func (h *CheckHandler) enforceTargetedCheckPreconditions(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, target string) (string, bool) {
+	if h.targetResolver == nil || h.encounterProvider == nil {
+		return "", false
+	}
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, discordUserID(interaction))
+	if err != nil {
+		// Not in combat — skip enforcement, plain single check.
+		return "", false
+	}
+	caster, targetComb, ok := h.targetResolver.ResolveTargetCombatant(ctx, encounterID, discordUserID(interaction), target)
+	if !ok {
+		// Target not in this encounter — skip enforcement.
+		return "", false
+	}
+	if !isAdjacent(caster, targetComb) {
+		return fmt.Sprintf("❌ %s is not adjacent — targeted checks require 5ft.", targetComb.DisplayName), true
+	}
+	if h.turnProvider == nil {
+		return "", false
+	}
+	turn, hasTurn, err := h.turnProvider.GetActiveTurnForCharacter(ctx, interaction.GuildID, char.ID)
+	if err != nil || !hasTurn {
+		return "", false
+	}
+	if turn.ActionUsed {
+		return "❌ You've already used your action this turn.", true
+	}
+	updated, err := combat.UseResource(turn, combat.ResourceAction)
+	if err != nil {
+		return fmt.Sprintf("❌ Cannot perform targeted check: %v", err), true
+	}
+	if _, err := h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updated)); err != nil {
+		// Persistence failure: don't block the roll — combat-state
+		// corrections can be made by the DM.
+		return "", false
+	}
+	return "", false
+}
+
+// isAdjacent reports whether two combatants share a 5ft tile boundary
+// (Chebyshev distance <= 1 with both positions parseable).
+func isAdjacent(a, b refdata.Combatant) bool {
+	aCol, aRow, okA := parseCombatantCoord(a)
+	bCol, bRow, okB := parseCombatantCoord(b)
+	if !okA || !okB {
+		return false
+	}
+	d := absInt(aCol-bCol)
+	if dr := absInt(aRow - bRow); dr > d {
+		d = dr
+	}
+	return d <= 1
+}
+
+func parseCombatantCoord(c refdata.Combatant) (int, int, bool) {
+	if c.PositionCol == "" {
+		return 0, 0, false
+	}
+	col := int(c.PositionCol[0]-'A')
+	if col < 0 || col > 25 {
+		return 0, 0, false
+	}
+	return col, int(c.PositionRow), true
+}
+
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // formatContestedCheckResult renders a contested-check outcome as a single
@@ -520,4 +679,59 @@ func lookupCombatConditions(ctx context.Context, encounterProvider CheckEncounte
 	}
 
 	return check.ConditionInfo{}, false
+}
+
+// applyObscurementToInput updates the SingleCheckInput's RollMode for
+// sight-based checks (Perception today) when the caster stands inside an
+// obscured zone and returns a player-facing reason string. All wiring is
+// nil-safe: when the zone lookup, combatant lookup, encounter provider, or
+// caster combatant can't be resolved the function is a no-op. The reason
+// (when present) is suitable for appending to the formatted check response.
+// E-69 / Phase 69.
+func (h *CheckHandler) applyObscurementToInput(ctx context.Context, interaction *discordgo.Interaction, charID uuid.UUID, input *check.SingleCheckInput) string {
+	if h.zoneLookup == nil || h.encounterProvider == nil || h.combatantLookup == nil {
+		return ""
+	}
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, discordUserID(interaction))
+	if err != nil {
+		return ""
+	}
+	combatants, err := h.combatantLookup.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return ""
+	}
+	var caster refdata.Combatant
+	found := false
+	for _, c := range combatants {
+		if !c.CharacterID.Valid || c.CharacterID.UUID != charID {
+			continue
+		}
+		caster = c
+		found = true
+		break
+	}
+	if !found {
+		return ""
+	}
+	zones, err := h.zoneLookup.ListZonesForEncounter(ctx, encounterID)
+	if err != nil || len(zones) == 0 {
+		return ""
+	}
+	col := combat.ColToIndex(caster.PositionCol)
+	row := int(caster.PositionRow) - 1
+	// Vision capabilities are zero-valued for now; matches the production
+	// attack path which also doesn't yet derive Darkvision / Devil's Sight
+	// flags from character / creature rows. Wiring those in is tracked
+	// separately under E-68.
+	vision := combat.VisionCapabilities{}
+	level := combat.CombatantObscurement(col, row, zones, vision)
+	if level == combat.NotObscured {
+		return ""
+	}
+	mode, reason := combat.ObscurementCheckEffect(level, input.Skill)
+	if reason == "" {
+		return ""
+	}
+	input.RollMode = dice.CombineRollModes(input.RollMode, mode)
+	return reason
 }

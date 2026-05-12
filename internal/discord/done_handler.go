@@ -415,6 +415,15 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 		}
 	}
 
+	// E-67-followup: post start-of-turn zone trigger results (Spirit
+	// Guardians, Wall of Fire, Moonbeam, etc.) to #combat-log so the DM
+	// can resolve the damage / save prompts. Silent no-op when the
+	// next-up combatant entered no triggered zones this round.
+	PostZoneTriggerResultsToCombatLog(
+		ctx, h.session, h.campaignSettingsProvider, encounterID,
+		nextCombatant, turnInfo.ZoneTriggerResults,
+	)
+
 	// Post turn-start notification to #your-turn
 	yourTurnCh, ok := channelIDs["your-turn"]
 	if !ok || yourTurnCh == "" {

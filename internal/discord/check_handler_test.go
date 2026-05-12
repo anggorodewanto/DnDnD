@@ -13,6 +13,7 @@ import (
 	"errors"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/sqlc-dev/pqtype"
@@ -883,5 +884,281 @@ func TestCheckHandler_Stealth_ArmorWithoutDisadv_NoEffect(t *testing.T) {
 
 	if strings.Contains(strings.ToLower(responded), "disadvantage") {
 		t.Errorf("expected NO disadvantage for non-stealth-disadv armor, got: %s", responded)
+	}
+}
+
+// --- F-81: targeted (non-contested) /check adjacency + action cost ---
+
+type stubCheckTargetResolver struct {
+	caster   refdata.Combatant
+	target   refdata.Combatant
+	ok       bool
+	seenID   string
+}
+
+func (s *stubCheckTargetResolver) ResolveTargetCombatant(_ context.Context, _ uuid.UUID, _, targetShortID string) (refdata.Combatant, refdata.Combatant, bool) {
+	s.seenID = targetShortID
+	return s.caster, s.target, s.ok
+}
+
+type stubCheckTurnProvider struct {
+	turn       refdata.Turn
+	inCombat   bool
+	updated    refdata.Turn
+	updateErr  error
+	getErr     error
+	updateCalls int
+}
+
+func (s *stubCheckTurnProvider) GetActiveTurnForCharacter(_ context.Context, _ string, _ uuid.UUID) (refdata.Turn, bool, error) {
+	if s.getErr != nil {
+		return refdata.Turn{}, false, s.getErr
+	}
+	return s.turn, s.inCombat, nil
+}
+
+func (s *stubCheckTurnProvider) UpdateTurnActions(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+	s.updateCalls++
+	s.updated = refdata.Turn{
+		ID:                  arg.ID,
+		ActionUsed:          arg.ActionUsed,
+		MovementRemainingFt: arg.MovementRemainingFt,
+		BonusActionUsed:     arg.BonusActionUsed,
+		ReactionUsed:        arg.ReactionUsed,
+		FreeInteractUsed:    arg.FreeInteractUsed,
+		AttacksRemaining:    arg.AttacksRemaining,
+	}
+	return s.updated, s.updateErr
+}
+
+func TestCheckHandler_TargetedCheck_RejectsNonAdjacentTarget(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	encID := uuid.New()
+	h.encounterProvider = &mockCheckEncounterProvider{fnUser: func(_ context.Context, _, _ string) (uuid.UUID, error) {
+		return encID, nil
+	}}
+	// Contested resolver returns ok=false so the targeted-non-contested path fires.
+	h.SetOpponentResolver(&stubOpponentResolver{ok: false})
+	h.SetTargetResolver(&stubCheckTargetResolver{
+		caster: refdata.Combatant{PositionCol: "A", PositionRow: 1},
+		target: refdata.Combatant{PositionCol: "F", PositionRow: 6, DisplayName: "Bjorn"},
+		ok:     true,
+	})
+
+	h.Handle(makeCheckInteraction("medicine", false, false, "BJ"))
+
+	if !strings.Contains(responded, "not adjacent") {
+		t.Errorf("expected adjacency rejection, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_TargetedCheck_AdjacentInCombat_DeductsAction(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	encID := uuid.New()
+	h.encounterProvider = &mockCheckEncounterProvider{fnUser: func(_ context.Context, _, _ string) (uuid.UUID, error) {
+		return encID, nil
+	}}
+	h.SetOpponentResolver(&stubOpponentResolver{ok: false})
+	h.SetTargetResolver(&stubCheckTargetResolver{
+		caster: refdata.Combatant{PositionCol: "B", PositionRow: 2},
+		target: refdata.Combatant{PositionCol: "B", PositionRow: 3, DisplayName: "Bjorn"},
+		ok:     true,
+	})
+	turnProv := &stubCheckTurnProvider{
+		turn:     refdata.Turn{ID: uuid.New(), ActionUsed: false},
+		inCombat: true,
+	}
+	h.SetTurnProvider(turnProv)
+
+	h.Handle(makeCheckInteraction("medicine", false, false, "BJ"))
+
+	if !strings.Contains(responded, "Medicine") {
+		t.Errorf("expected successful single-check response, got: %s", responded)
+	}
+	if turnProv.updateCalls != 1 {
+		t.Fatalf("expected 1 UpdateTurnActions call, got %d", turnProv.updateCalls)
+	}
+	if !turnProv.updated.ActionUsed {
+		t.Errorf("expected action_used=true after deduction")
+	}
+}
+
+func TestCheckHandler_TargetedCheck_OutOfCombat_NoDeduction(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	encID := uuid.New()
+	h.encounterProvider = &mockCheckEncounterProvider{fnUser: func(_ context.Context, _, _ string) (uuid.UUID, error) {
+		return encID, nil
+	}}
+	h.SetOpponentResolver(&stubOpponentResolver{ok: false})
+	h.SetTargetResolver(&stubCheckTargetResolver{
+		caster: refdata.Combatant{PositionCol: "B", PositionRow: 2},
+		target: refdata.Combatant{PositionCol: "B", PositionRow: 3, DisplayName: "Bjorn"},
+		ok:     true,
+	})
+	// Turn provider reports not-in-combat.
+	turnProv := &stubCheckTurnProvider{inCombat: false}
+	h.SetTurnProvider(turnProv)
+
+	h.Handle(makeCheckInteraction("medicine", false, false, "BJ"))
+
+	if turnProv.updateCalls != 0 {
+		t.Errorf("expected no UpdateTurnActions call out of combat, got %d", turnProv.updateCalls)
+	}
+	if !strings.Contains(responded, "Medicine") {
+		t.Errorf("expected single-check response, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_TargetedCheck_ActionAlreadyUsed_Rejects(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	encID := uuid.New()
+	h.encounterProvider = &mockCheckEncounterProvider{fnUser: func(_ context.Context, _, _ string) (uuid.UUID, error) {
+		return encID, nil
+	}}
+	h.SetOpponentResolver(&stubOpponentResolver{ok: false})
+	h.SetTargetResolver(&stubCheckTargetResolver{
+		caster: refdata.Combatant{PositionCol: "B", PositionRow: 2},
+		target: refdata.Combatant{PositionCol: "B", PositionRow: 3, DisplayName: "Bjorn"},
+		ok:     true,
+	})
+	turnProv := &stubCheckTurnProvider{
+		turn:     refdata.Turn{ID: uuid.New(), ActionUsed: true},
+		inCombat: true,
+	}
+	h.SetTurnProvider(turnProv)
+
+	h.Handle(makeCheckInteraction("medicine", false, false, "BJ"))
+
+	if !strings.Contains(strings.ToLower(responded), "already used your action") {
+		t.Errorf("expected action-spent rejection, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_TargetedCheck_NoResolverWired_FallsThrough(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	// no targetResolver, no opponentResolver — fall through to regular check
+	h.Handle(makeCheckInteraction("perception", false, false, "ZZ"))
+	if !strings.Contains(responded, "Perception") {
+		t.Errorf("expected fall-through single-check, got: %s", responded)
+	}
+}
+
+// --- E-69: Obscurement-aware /check ---
+
+type mockCheckZoneLookup struct {
+	fn func(ctx context.Context, encounterID uuid.UUID) ([]combat.ZoneInfo, error)
+}
+
+func (m *mockCheckZoneLookup) ListZonesForEncounter(ctx context.Context, encounterID uuid.UUID) ([]combat.ZoneInfo, error) {
+	return m.fn(ctx, encounterID)
+}
+
+// E-69: /check perception inside a heavily-obscured zone applies disadvantage
+// from ObscurementCheckEffect and surfaces the lighting reason in the response.
+func TestCheckHandler_Perception_InObscuredZone_AppliesDisadvantageAndReason(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	char := makeTestCharacter()
+	char.CampaignID = campaignID
+
+	// Caster combatant at A1 (col index 0, row 0).
+	casterCombatant := refdata.Combatant{
+		ID:          uuid.New(),
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: char.ID, Valid: true},
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+		IsAlive:     true,
+	}
+
+	// Heavy-obscurement zone covering a 5ft square at A1.
+	dims, _ := json.Marshal(map[string]int{"side_ft": 5})
+	zone := combat.ZoneInfo{
+		ID:          uuid.New(),
+		EncounterID: encounterID,
+		Shape:       "square",
+		OriginCol:   "A",
+		OriginRow:   1,
+		Dimensions:  dims,
+		ZoneType:    "heavy_obscurement",
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 12 })
+	logger := &mockCheckRollLogger{}
+
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{casterCombatant}, nil
+		}},
+		logger,
+	)
+
+	// Wire the zone lookup so the obscurement check can compute the level.
+	h.SetZoneLookup(&mockCheckZoneLookup{fn: func(_ context.Context, _ uuid.UUID) ([]combat.ZoneInfo, error) {
+		return []combat.ZoneInfo{zone}, nil
+	}})
+
+	h.Handle(makeCheckInteraction("perception", false, false))
+
+	if !strings.Contains(strings.ToLower(responded), "disadvantage") {
+		t.Errorf("expected disadvantage from heavy obscurement, got: %s", responded)
+	}
+	if !strings.Contains(strings.ToLower(responded), "obscured") {
+		t.Errorf("expected obscurement reason in response, got: %s", responded)
 	}
 }

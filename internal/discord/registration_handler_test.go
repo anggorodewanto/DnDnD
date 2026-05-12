@@ -368,6 +368,68 @@ func TestCreateCharacterHandler_CreatesRecordAndReturnsPortalLink(t *testing.T) 
 	}
 }
 
+// A-14: portal URL emitted by /create-character must respect the configured
+// BASE_URL (passed through WithCreateCharacterPortalBaseURL) instead of the
+// hard-coded production host. Default empty option still falls back to the
+// production host so unit tests and local dev keep working.
+func TestCreateCharacterHandler_PortalURL_UsesConfiguredBaseURL(t *testing.T) {
+	mock := newTestMock()
+	rc := captureResponse(mock)
+
+	charCreator := &mockCharacterCreator{
+		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
+			return refdata.Character{ID: testCharacterID(), Name: "New Character"}, nil
+		},
+	}
+	regService := newMockRegService()
+	regService.CreateFunc = func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*refdata.PlayerCharacter, error) {
+		return &refdata.PlayerCharacter{ID: testPCID(), Status: "pending"}, nil
+	}
+	tokenFunc := func(_ uuid.UUID, _ string) (string, error) { return "tkn-A14", nil }
+
+	handler := NewCreateCharacterHandler(
+		mock, regService, newMockCampaignProvider(), charCreator,
+		staticDMQueueFunc(""), staticDMUserFunc(""), tokenFunc,
+		WithCreateCharacterPortalBaseURL("https://staging.example.test"),
+	)
+	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
+
+	if !strings.Contains(rc.Content, "https://staging.example.test/create?token=tkn-A14") {
+		t.Errorf("expected portal URL rooted at configured BASE_URL, got: %s", rc.Content)
+	}
+	if strings.Contains(rc.Content, "portal.dndnd.app") {
+		t.Errorf("expected configured BASE_URL to override production host, got: %s", rc.Content)
+	}
+}
+
+// A-14 default: empty BASE_URL falls back to the production portal host so
+// existing tests and zero-config local dev keep working.
+func TestCreateCharacterHandler_PortalURL_DefaultsToProductionHost(t *testing.T) {
+	mock := newTestMock()
+	rc := captureResponse(mock)
+
+	charCreator := &mockCharacterCreator{
+		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
+			return refdata.Character{ID: testCharacterID()}, nil
+		},
+	}
+	regService := newMockRegService()
+	regService.CreateFunc = func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*refdata.PlayerCharacter, error) {
+		return &refdata.PlayerCharacter{ID: testPCID(), Status: "pending"}, nil
+	}
+	tokenFunc := func(_ uuid.UUID, _ string) (string, error) { return "tkn-default", nil }
+
+	handler := NewCreateCharacterHandler(
+		mock, regService, newMockCampaignProvider(), charCreator,
+		staticDMQueueFunc(""), staticDMUserFunc(""), tokenFunc,
+	)
+	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
+
+	if !strings.Contains(rc.Content, "https://portal.dndnd.app/create?token=tkn-default") {
+		t.Errorf("expected fallback to production host, got: %s", rc.Content)
+	}
+}
+
 // --- Status-aware response tests ---
 
 func TestStatusCheckResponse_Pending(t *testing.T) {

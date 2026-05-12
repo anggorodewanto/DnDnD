@@ -12,6 +12,8 @@
   import MobileRedirect from './MobileRedirect.svelte';
   import HomebrewEditor from './HomebrewEditor.svelte';
   import CharacterOverview from './CharacterOverview.svelte';
+  import StatBlockLibrary from './StatBlockLibrary.svelte';
+  import MessagePlayerPanel from './MessagePlayerPanel.svelte';
   import { isMobileViewport, isDesktopOnly } from './lib/layout.js';
 
   let innerWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1920);
@@ -56,6 +58,8 @@
     if (hash === '#narrate') return 'narrate';
     if (hash === '#homebrew') return 'homebrew';
     if (hash === '#party') return 'party';
+    if (hash === '#stat-block-library') return 'stat-block-library';
+    if (hash === '#message-player') return 'message-player';
     return 'list';
   }
 
@@ -77,6 +81,7 @@
     if (currentView === 'list' || currentView === 'editor') return 'map-editor';
     if (currentView === 'encounter-list' || currentView === 'encounter-editor') return 'encounter-builder';
     if (currentView === 'combat') return 'combat-workspace';
+    if (currentView === 'stat-block-library') return 'stat-block-library';
     return null;
   }
 
@@ -166,6 +171,14 @@
   function onShowParty() {
     currentView = 'party';
   }
+
+  function onShowStatBlockLibrary() {
+    currentView = 'stat-block-library';
+  }
+
+  function onShowMessagePlayer() {
+    currentView = 'message-player';
+  }
 </script>
 
 {#if isMobileViewport(innerWidth)}
@@ -188,6 +201,10 @@
       <h1>Homebrew Editor</h1>
     {:else if currentView === 'party'}
       <h1>Party Overview</h1>
+    {:else if currentView === 'stat-block-library'}
+      <h1>Stat Block Library</h1>
+    {:else if currentView === 'message-player'}
+      <h1>Message Player</h1>
     {:else}
       <h1>Encounter Builder</h1>
     {/if}
@@ -201,6 +218,8 @@
       <button class:active={currentView === 'narrate'} onclick={onShowNarrate}>Narrate</button>
       <button class:active={currentView === 'homebrew'} onclick={onShowHomebrew}>Homebrew</button>
       <button class:active={currentView === 'party'} onclick={onShowParty}>Party</button>
+      <button class:active={currentView === 'stat-block-library'} onclick={onShowStatBlockLibrary}>Stat Block Library</button>
+      <button class:active={currentView === 'message-player'} onclick={onShowMessagePlayer}>Message Player</button>
     </nav>
 
     {#if currentView === 'editor'}
@@ -241,6 +260,10 @@
     <HomebrewEditor {campaignId} />
   {:else if currentView === 'party'}
     <CharacterOverview {campaignId} />
+  {:else if currentView === 'stat-block-library'}
+    <StatBlockLibrary {campaignId} />
+  {:else if currentView === 'message-player'}
+    <MessagePlayerPanel {campaignId} />
   {/if}
 </main>
 {/if}

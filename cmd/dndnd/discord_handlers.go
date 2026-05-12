@@ -68,6 +68,13 @@ type discordHandlerDeps struct {
 	dmQueueFunc    func(guildID string) string
 	notifier       dmqueue.Notifier
 	portalBaseURL  string
+	// reactionPrompts is the shared button-prompt store. When nil, the
+	// constructor builds a fresh per-call store so unit-test wiring still
+	// exercises the SetMaterialPromptStore / SetClassFeaturePromptPoster
+	// branches. Production callers pass a single store that's also wired
+	// onto the CommandRouter via SetReactionPromptStore so button clicks
+	// route through one place.
+	reactionPrompts *discord.ReactionPromptStore
 }
 
 // discordHandlers holds the constructed slash-command handlers so main.go can
@@ -236,6 +243,30 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	if deps.campaignSettings != nil {
 		handlers.action.SetChannelIDProvider(deps.campaignSettings)
 	}
+	// C-DISCORD follow-up: wire /action stabilize persistence. *refdata.Queries
+	// already exposes UpdateCombatantDeathSaves so it satisfies the
+	// ActionStabilizeStore interface structurally. nil-safe.
+	if deps.queries != nil {
+		handlers.action.SetStabilizeStore(deps.queries)
+	}
+	// D-54-followup: wire walk-speed lookup so /action stand resolves the
+	// actor's real max speed (Halfling 25ft / Tabaxi 35ft) instead of
+	// hardcoding 30ft. moveSizeSpeedAdapter satisfies ActionSpeedLookup
+	// via its LookupWalkSpeed helper. The same adapter doubles as the
+	// ActionMedicineLookup for C-43-stabilize-followup (WIS + Medicine
+	// proficiency).
+	if deps.queries != nil {
+		speedAndMedicine := newMoveSizeSpeedAdapter(deps.queries)
+		handlers.action.SetSpeedLookup(speedAndMedicine)
+		handlers.action.SetMedicineLookup(speedAndMedicine)
+	}
+	// AOE-CAST follow-up: wire /save AoE pending-save resolution so per-
+	// player /save calls fan into Service.RecordAoEPendingSaveRoll +
+	// ResolveAoEPendingSaves. Without this wiring the per-player rolls land
+	// in pending_saves but the damage-application step never fires.
+	if deps.combatService != nil && deps.roller != nil {
+		handlers.save.SetAoESaveResolver(discord.NewAoESaveServiceAdapter(deps.combatService, deps.roller))
+	}
 	// Phase 110 it3: wire the character lookup so exploration /move can
 	// disambiguate which PC combatant belongs to the invoking Discord user
 	// (resolveExplorationMover falls back to pcs[0] when this is nil).
@@ -270,6 +301,14 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	// satisfies discord.CheckArmorLookup via GetArmor.
 	if deps.queries != nil {
 		handlers.check.SetArmorLookup(deps.queries)
+	}
+	// COMBAT-MISC-followup / E-69: wire the encounter-zone lookup on both
+	// /check (Perception disadvantage in obscurement) and /action (Hide
+	// gating). *combat.Service already exposes ListZonesForEncounter so it
+	// satisfies CheckZoneLookup / ActionZoneLookup structurally. nil-safe.
+	if deps.combatService != nil {
+		handlers.check.SetZoneLookup(deps.combatService)
+		handlers.action.SetZoneLookup(deps.combatService)
 	}
 	if deps.enemyTurnEncounterLookup != nil {
 		handlers.enemyTurnNotifier.SetEncounterLookup(deps.enemyTurnEncounterLookup)
@@ -361,6 +400,9 @@ func attachInventoryAndCharacterHandlers(
 		// button posts a real select-menu instead of the stub.
 		if deps.queries != nil {
 			handlers.asi.SetFeatLister(newASIFeatLister(deps.queries))
+			// F-89d: persist pending ASI/Feat choices across restart.
+			handlers.asi.SetPendingStore(newASIPendingStoreAdapter(deps.queries))
+			_ = handlers.asi.HydratePending(context.Background())
 		}
 	}
 
@@ -433,6 +475,26 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 		handlers.deathsave.SetChannelIDProvider(deps.campaignSettings)
 		handlers.cast.SetChannelIDProvider(deps.campaignSettings)
 	}
+
+	// C-DISCORD follow-up: wire the map provider for /attack so AttackCommand.Walls
+	// is populated and wall-based cover applies (Phase 33).
+	// *refdata.Queries.GetMapByID structurally satisfies AttackMapProvider.
+	handlers.attack.SetMapProvider(deps.queries)
+
+	// AOE-CAST follow-up: wire the shared ReactionPromptStore the cast
+	// handler uses for the gold-fallback Buy & Cast prompt (E-63), and
+	// build a ClassFeaturePromptPoster off the same store for the /attack
+	// post-hit Stunning Strike / Divine Smite / Bardic Inspiration prompts
+	// (D-48b/D-49/D-51 follow-up). A nil reactionPrompts in deps means the
+	// test deploy didn't pass a shared store; we build a fresh one in-place
+	// so the production wiring path is still exercised end-to-end.
+	prompts := deps.reactionPrompts
+	if prompts == nil {
+		prompts = discord.NewReactionPromptStore(deps.session)
+	}
+	handlers.cast.SetMaterialPromptStore(prompts)
+	handlers.attack.SetClassFeaturePromptPoster(discord.NewClassFeaturePromptPoster(prompts))
+	handlers.attack.SetClassFeatureService(deps.combatService)
 
 	if deps.db != nil {
 		gate := newTurnGateAdapter(deps.db, deps.queries)
@@ -828,6 +890,53 @@ func (a *asiFeatLister) ListEligibleFeats(ctx context.Context, _ uuid.UUID) ([]d
 	return out, nil
 }
 
+// asiPendingStoreAdapter bridges the discord.ASIPendingStore contract onto
+// refdata.Queries.UpsertPendingASI / GetPendingASI / DeletePendingASI / List
+// PendingASI so pending ASI/Feat choices survive a bot restart (F-89d).
+type asiPendingStoreAdapter struct {
+	queries *refdata.Queries
+}
+
+func newASIPendingStoreAdapter(q *refdata.Queries) *asiPendingStoreAdapter {
+	if q == nil {
+		return nil
+	}
+	return &asiPendingStoreAdapter{queries: q}
+}
+
+func (a *asiPendingStoreAdapter) Save(ctx context.Context, c discord.PendingASIChoice) error {
+	raw, err := discord.MarshalPendingASIChoice(c)
+	if err != nil {
+		return fmt.Errorf("marshalling pending ASI: %w", err)
+	}
+	return a.queries.UpsertPendingASI(ctx, refdata.UpsertPendingASIParams{
+		CharacterID:  c.CharID,
+		SnapshotJson: raw,
+	})
+}
+
+func (a *asiPendingStoreAdapter) Delete(ctx context.Context, charID uuid.UUID) error {
+	return a.queries.DeletePendingASI(ctx, charID)
+}
+
+func (a *asiPendingStoreAdapter) List(ctx context.Context) ([]discord.PendingASIChoice, error) {
+	rows, err := a.queries.ListPendingASI(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]discord.PendingASIChoice, 0, len(rows))
+	for _, r := range rows {
+		c, err := discord.UnmarshalPendingASIChoice(r.SnapshotJson)
+		if err != nil {
+			continue
+		}
+		// Ensure we always populate CharID (durable PK).
+		c.CharID = r.CharacterID
+		out = append(out, c)
+	}
+	return out, nil
+}
+
 // moveSizeSpeedAdapter satisfies discord.MoveSizeSpeedLookup by joining
 // the combatant to either a Character (PCs) or a Creature (NPCs) and
 // extracting the size category + walk speed. PCs default to size Medium
@@ -843,6 +952,86 @@ func newMoveSizeSpeedAdapter(q *refdata.Queries) *moveSizeSpeedAdapter {
 		return nil
 	}
 	return &moveSizeSpeedAdapter{queries: q}
+}
+
+// LookupWalkSpeed satisfies discord.ActionSpeedLookup by returning just the
+// walk-speed component of LookupSizeAndSpeed. D-54-followup wires this on
+// the action handler so /action stand computes the half-movement stand
+// cost from the actor's real walk speed (Halfling 25ft / Tabaxi 35ft).
+func (a *moveSizeSpeedAdapter) LookupWalkSpeed(ctx context.Context, combatant refdata.Combatant) (int, error) {
+	_, speed, err := a.LookupSizeAndSpeed(ctx, combatant)
+	return speed, err
+}
+
+// LookupMedicineModifier satisfies discord.ActionMedicineLookup by reading
+// the combatant's character / creature row and computing the full Medicine
+// modifier (WIS mod + Medicine proficiency + expertise + jack-of-all-trades).
+// NPCs use Creature.Skills' pre-calculated medicine if present, otherwise
+// fall back to WIS modifier. Errors degrade to (0, err) so the handler's
+// "always returns +0 on error" path keeps /action stabilize functioning.
+// (C-43-stabilize-followup)
+func (a *moveSizeSpeedAdapter) LookupMedicineModifier(ctx context.Context, combatant refdata.Combatant) (int, error) {
+	if combatant.CharacterID.Valid {
+		char, err := a.queries.GetCharacter(ctx, combatant.CharacterID.UUID)
+		if err != nil {
+			return 0, err
+		}
+		var scores character.AbilityScores
+		if uerr := json.Unmarshal(char.AbilityScores, &scores); uerr != nil {
+			return 0, uerr
+		}
+		profSkills, expertise, jack := parseProficienciesFromJSON(char.Proficiencies.RawMessage)
+		return character.SkillModifier(scores, "medicine", profSkills, expertise, jack, int(char.ProficiencyBonus)), nil
+	}
+	if combatant.CreatureRefID.Valid && combatant.CreatureRefID.String != "" {
+		creature, err := a.queries.GetCreature(ctx, combatant.CreatureRefID.String)
+		if err != nil {
+			return 0, err
+		}
+		if mod, ok := creatureMedicineMod(creature.Skills.RawMessage); ok {
+			return mod, nil
+		}
+		var scores combat.AbilityScores
+		if uerr := json.Unmarshal(creature.AbilityScores, &scores); uerr != nil {
+			return 0, uerr
+		}
+		return combat.AbilityModifier(scores.Wis), nil
+	}
+	return 0, nil
+}
+
+// parseProficienciesFromJSON mirrors combat.parseProficiencies (unexported).
+// Extracts skills / expertise / jack-of-all-trades from the proficiencies
+// JSON column. Bad JSON returns the zero values rather than erroring out so
+// /action stabilize degrades to "non-proficient" instead of failing.
+func parseProficienciesFromJSON(raw json.RawMessage) (skills []string, expertise []string, jackOfAllTrades bool) {
+	if len(raw) == 0 {
+		return nil, nil, false
+	}
+	var data struct {
+		Skills          []string `json:"skills"`
+		Expertise       []string `json:"expertise"`
+		JackOfAllTrades bool     `json:"jack_of_all_trades"`
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, nil, false
+	}
+	return data.Skills, data.Expertise, data.JackOfAllTrades
+}
+
+// creatureMedicineMod reads a creature's pre-calculated medicine skill
+// modifier from the Skills JSON map. Mirrors combat.creatureSkillMod
+// (unexported). Returns (0, false) when the field is missing or unparseable.
+func creatureMedicineMod(skills []byte) (int, bool) {
+	if len(skills) == 0 {
+		return 0, false
+	}
+	var m map[string]int
+	if err := json.Unmarshal(skills, &m); err != nil {
+		return 0, false
+	}
+	v, ok := m["medicine"]
+	return v, ok
 }
 
 func (a *moveSizeSpeedAdapter) LookupSizeAndSpeed(ctx context.Context, combatant refdata.Combatant) (int, int, error) {

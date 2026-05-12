@@ -14,6 +14,7 @@ import (
 
 	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
@@ -46,6 +47,19 @@ type RestHandler struct {
 // SetNotifier wires the dm-queue Notifier. When set, /rest posts a rest
 // request notification to #dm-queue before running the rest flow.
 func (h *RestHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
+
+// SetPublisher forwards the encounter publisher + lookup down into the
+// underlying rest.Service so /rest publishes a fresh dashboard snapshot
+// after HP / hit-dice / spell-slot writes (H-104b). A nil publisher is
+// tolerated and disables the fan-out (legacy / headless deploys keep
+// working). The same pattern is used by inventory and levelup.
+func (h *RestHandler) SetPublisher(p rest.EncounterPublisher, lookup rest.EncounterLookup) {
+	if h == nil || h.restService == nil {
+		return
+	}
+	h.restService.SetPublisher(p, lookup)
+}
+
 
 // postRestRequestToDMQueue posts a rest request notification via the Notifier.
 // No-op when no Notifier is wired.
@@ -295,6 +309,11 @@ func (h *RestHandler) finalizeShortRest(ctx context.Context, interaction *discor
 
 	h.persistRestChanges(ctx, char, charData, int32(result.HPAfter), result.HitDiceRemaining, nil)
 
+	// H-104b: fan out a dashboard snapshot if the character is also in
+	// a sibling active encounter. Silent no-op when not in combat or
+	// no publisher is wired.
+	h.restService.PublishForCharacter(ctx, char.ID)
+
 	msg := rest.FormatShortRestResult(char.Name, result)
 	h.editInteraction(interaction, msg)
 
@@ -311,6 +330,11 @@ func (h *RestHandler) finalizeShortRestPartial(ctx context.Context, interaction 
 
 	// Persist the partial changes (HP + hit dice so far)
 	h.persistRestChanges(ctx, char, charData, int32(result.HPAfter), result.HitDiceRemaining, nil)
+
+	// H-104b: fan out a dashboard snapshot (mid-step partial). The
+	// per-step publish is harmless and keeps the dashboard in sync as
+	// the multi-die-type flow walks through its remaining steps.
+	h.restService.PublishForCharacter(ctx, char.ID)
 
 	// Build updated prompt showing remaining dice for other types + Done button
 	otherDice := make(map[string]int)
@@ -500,10 +524,37 @@ func (h *RestHandler) handleLongRest(ctx context.Context, interaction *discordgo
 	// Persist all changes
 	h.persistLongRest(ctx, char, charData, result)
 
+	// H-104b: refresh the dashboard snapshot for a sibling encounter the
+	// character may still be a combatant in. PublishForCharacter is a
+	// silent no-op when not in combat or when no publisher is wired.
+	h.restService.PublishForCharacter(ctx, char.ID)
+
 	msg := rest.FormatLongRestResult(char.Name, result)
+
+	// E-65 / Phase 65: invoke the canonical combat.LongRestPrepareReminder
+	// helper so prepared casters (cleric / druid / paladin) get the
+	// "/prepare" hint. The format string already embeds the same text
+	// inline when PreparedCasterReminder is true; this explicit invocation
+	// ensures the wiring goes through the canonical helper and stays in
+	// sync if the helper's copy ever changes.
+	if reminder := combat.LongRestPrepareReminder(longRestPrepareClasses(charData.Classes)); reminder != "" && !strings.Contains(msg, reminder) {
+		msg = msg + "\n" + reminder
+	}
+
 	respondEphemeral(h.session, interaction, msg)
 
 	h.logRestToHistory(char.Name, "Long Rest", msg)
+}
+
+// longRestPrepareClasses adapts the rest handler's character.ClassEntry
+// slice into the combat package's CharacterClass shape so
+// combat.LongRestPrepareReminder can be invoked.
+func longRestPrepareClasses(classes []character.ClassEntry) []combat.CharacterClass {
+	out := make([]combat.CharacterClass, 0, len(classes))
+	for _, c := range classes {
+		out = append(out, combat.CharacterClass{Class: c.Class, Level: c.Level})
+	}
+	return out
 }
 
 func (h *RestHandler) persistLongRest(ctx context.Context, char refdata.Character, charData restCharacterData, result rest.LongRestResult) {

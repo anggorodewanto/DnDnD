@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
@@ -253,6 +255,37 @@ type InitiativeTrackerNotifier interface {
 	PostCompletedTracker(ctx context.Context, encounterID uuid.UUID, content string)
 }
 
+// CombatLogNotifier is the minimal callback combat.Service fires to mirror
+// lifecycle announcements ("Combat ended: …", recovered-ammo summaries) to
+// the encounter's #combat-log channel (B-26b). A nil notifier disables the
+// fan-out (legacy tests / dashboard-only deploys keep working). Errors are
+// silently swallowed by the call site so that a Discord hiccup cannot roll
+// back a successful EndCombat write.
+type CombatLogNotifier interface {
+	PostCombatLog(ctx context.Context, encounterID uuid.UUID, content string)
+}
+
+// LootPoolCreator is the minimal callback combat.Service fires after
+// EndCombat to auto-create the encounter's loot pool from the defeated
+// NPCs' inventories (B-26b-loot-auto-create). The implementation is
+// expected to be idempotent: callers MUST tolerate an "already exists"
+// outcome silently. A nil creator disables the fan-out. Errors are
+// swallowed by the call site — a loot-pool creation failure must never
+// roll back the EndCombat write.
+type LootPoolCreator interface {
+	CreateLootPool(ctx context.Context, encounterID uuid.UUID) error
+}
+
+// HostilesDefeatedNotifier is the minimal callback combat.Service fires
+// when (after a damage write) every hostile combatant in the encounter is
+// at 0 HP / not-alive (B-26b-all-hostiles-defeated-prompt). The notifier
+// surfaces a DM-facing prompt suggesting `/end-combat`. A nil notifier
+// disables the fan-out. The Service de-duplicates per-encounter so the
+// prompt fires at most once per active encounter.
+type HostilesDefeatedNotifier interface {
+	NotifyHostilesDefeated(ctx context.Context, encounterID uuid.UUID)
+}
+
 // Service manages combat encounters and their entities.
 type Service struct {
 	store                     Store
@@ -264,6 +297,11 @@ type Service struct {
 	cardUpdater               CardUpdater
 	turnStartNotifier         TurnStartNotifier
 	initiativeTrackerNotifier InitiativeTrackerNotifier
+	combatLogNotifier         CombatLogNotifier
+	lootPoolCreator           LootPoolCreator
+	hostilesDefeatedNotifier  HostilesDefeatedNotifier
+	hostilesPromptedMu        sync.Mutex
+	hostilesPrompted          map[uuid.UUID]bool
 }
 
 // NewService creates a new combat Service.
@@ -273,6 +311,7 @@ func NewService(store Store) *Service {
 		summonedResources: NewSummonedTurnResources(),
 		ammoTracker:       NewAmmoSpentTracker(),
 		roller:            dice.NewRoller(nil),
+		hostilesPrompted:  make(map[uuid.UUID]bool),
 	}
 }
 
@@ -326,13 +365,125 @@ func (s *Service) SetInitiativeTrackerNotifier(n InitiativeTrackerNotifier) {
 	s.initiativeTrackerNotifier = n
 }
 
-// notifyCardUpdate fires the OnCharacterUpdated hook for the given combatant
-// when (a) the updater is wired AND (b) the combatant is a player character
-// (i.e. carries a non-NULL character_id). NPC / creature combatants have no
-// character card to refresh and are silently skipped. Errors are swallowed
-// — a stale card is preferable to surfacing a Discord-side failure as a
+// SetCombatLogNotifier wires the #combat-log lifecycle-announcement callback
+// (B-26b). A nil notifier is tolerated and disables the fan-out so legacy
+// tests / dashboard-only deploys keep working.
+func (s *Service) SetCombatLogNotifier(n CombatLogNotifier) {
+	s.combatLogNotifier = n
+}
+
+// SetLootPoolCreator wires the post-EndCombat loot-pool auto-create hook
+// (B-26b-loot-auto-create). A nil creator is tolerated and disables the
+// fan-out. Errors are swallowed by the call site so a loot-pool failure
+// can never undo a successful EndCombat write.
+func (s *Service) SetLootPoolCreator(c LootPoolCreator) {
+	s.lootPoolCreator = c
+}
+
+// SetHostilesDefeatedNotifier wires the all-hostiles-defeated DM-prompt
+// callback (B-26b-all-hostiles-defeated-prompt). A nil notifier is
+// tolerated and disables the fan-out.
+func (s *Service) SetHostilesDefeatedNotifier(n HostilesDefeatedNotifier) {
+	s.hostilesDefeatedNotifier = n
+}
+
+// postCombatLog fires the combat-log notifier with the given content,
+// swallowing errors. Callers invoke this AFTER a successful DB mutation.
+// Best-effort: a nil notifier or empty content silently no-ops.
+func (s *Service) postCombatLog(ctx context.Context, encounterID uuid.UUID, content string) {
+	if s.combatLogNotifier == nil || content == "" {
+		return
+	}
+	s.combatLogNotifier.PostCombatLog(ctx, encounterID, content)
+}
+
+// createLootPool fires the loot-pool creator, swallowing errors. Callers
+// invoke this AFTER the encounter status flips to "completed". A nil
+// creator or "already exists" outcome silently no-ops so the auto-create
+// path is safely idempotent against the manual DM-side route.
+func (s *Service) createLootPool(ctx context.Context, encounterID uuid.UUID) {
+	if s.lootPoolCreator == nil {
+		return
+	}
+	if err := s.lootPoolCreator.CreateLootPool(ctx, encounterID); err != nil {
+		// Idempotent: another caller (manual DM action) may have created
+		// it already. Log and move on — the EndCombat write must not be
+		// undone by a loot-side hiccup.
+		log.Printf("loot pool auto-create failed for %s: %v", encounterID, err)
+	}
+}
+
+// maybePromptHostilesDefeated checks whether every hostile combatant in
+// the encounter is now down and, if so, fires the DM-facing prompt once
+// per encounter. Dedupe state lives in s.hostilesPrompted. The check is
+// a no-op when no notifier is wired (legacy tests / headless deploys).
+// Errors from the underlying store query are swallowed — a DB hiccup here
+// must not undo the calling damage write.
+func (s *Service) maybePromptHostilesDefeated(ctx context.Context, encounterID uuid.UUID) {
+	if s.hostilesDefeatedNotifier == nil {
+		return
+	}
+	if encounterID == uuid.Nil {
+		return
+	}
+	s.hostilesPromptedMu.Lock()
+	already := s.hostilesPrompted[encounterID]
+	s.hostilesPromptedMu.Unlock()
+	if already {
+		return
+	}
+	defeated, err := s.AllHostilesDefeated(ctx, encounterID)
+	if err != nil {
+		log.Printf("hostiles-defeated check failed for %s: %v", encounterID, err)
+		return
+	}
+	if !defeated {
+		return
+	}
+	s.hostilesPromptedMu.Lock()
+	if s.hostilesPrompted[encounterID] {
+		s.hostilesPromptedMu.Unlock()
+		return
+	}
+	s.hostilesPrompted[encounterID] = true
+	s.hostilesPromptedMu.Unlock()
+	s.hostilesDefeatedNotifier.NotifyHostilesDefeated(ctx, encounterID)
+}
+
+// clearHostilesPromptedState drops the per-encounter dedupe so a fresh
+// encounter (e.g. a re-roll or a new combat altogether) starts clean.
+// Called by EndCombat after the encounter is marked completed.
+func (s *Service) clearHostilesPromptedState(encounterID uuid.UUID) {
+	s.hostilesPromptedMu.Lock()
+	defer s.hostilesPromptedMu.Unlock()
+	delete(s.hostilesPrompted, encounterID)
+}
+
+// notifyCardUpdate is a post-mutation hook fired by every HP / condition /
+// concentration write. It performs two best-effort fan-outs:
+//
+//  1. OnCharacterUpdated — refresh the persistent #character-cards message
+//     for the affected player. Silent no-op for NPCs and when no updater is
+//     wired.
+//  2. maybePromptHostilesDefeated — when the mutated combatant is an NPC,
+//     dispatch the "all hostiles down" DM prompt the first time every NPC
+//     in the encounter is at 0 HP (B-26b). PC mutations cannot change the
+//     hostile-defeated state so the check is skipped for them. Silent
+//     no-op when no HostilesDefeatedNotifier is wired.
+//
+// Errors from either fan-out are swallowed — a stale card or a missed
+// hostiles prompt is preferable to surfacing a Discord-side failure as a
 // combat-mutation rollback.
 func (s *Service) notifyCardUpdate(ctx context.Context, c refdata.Combatant) {
+	// Fan-out (2): hostiles-defeated check only fires when the mutated
+	// combatant is an NPC. PC HP / condition writes cannot drop the
+	// last hostile so the list-combatants query is wasted work there.
+	if c.IsNpc {
+		s.maybePromptHostilesDefeated(ctx, c.EncounterID)
+	}
+
+	// Fan-out (1): the legacy character-card refresh. Early-returns for
+	// non-PC combatants and when no updater is wired.
 	if s.cardUpdater == nil {
 		return
 	}
@@ -904,6 +1055,14 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 	// schema migration to promote the in-memory counter to a column is
 	// still pending, but the wiring is live so a single-process server
 	// recovers correctly within an encounter's lifetime.
+	//
+	// B-26b-ammo-recovery-prompt: snapshot the spent counters BEFORE the
+	// recovery clears them so we can post a per-PC recovery summary to
+	// #combat-log after EndCombat completes.
+	ammoSnap := map[uuid.UUID]map[string]int{}
+	if s.ammoTracker != nil {
+		ammoSnap = s.ammoTracker.Snapshot(encounterID)
+	}
 	if err := s.recoverEncounterAmmunition(ctx, encounterID, combatants); err != nil {
 		return EndCombatResult{}, fmt.Errorf("recovering ammunition: %w", err)
 	}
@@ -948,6 +1107,22 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 		s.initiativeTrackerNotifier.PostCompletedTracker(ctx, encounterID, completedTracker)
 	}
 
+	// B-26b: lifecycle fan-outs (loot pool auto-create + #combat-log
+	// announcement + ammo recovery summary). Each is best-effort: a
+	// downstream Discord / loot hiccup MUST NOT undo the successful
+	// EndCombat write. The fan-outs run after the encounter status flip
+	// + tracker post so #initiative-tracker stays the first surface to
+	// see "completed".
+	s.createLootPool(ctx, encounterID)
+	s.postCombatLog(ctx, encounterID, FormatCombatEndedAnnouncement(enc, roundsElapsed, casualties))
+	if ammoLine := FormatAmmoRecoverySummary(cleaned, ammoSnap); ammoLine != "" {
+		s.postCombatLog(ctx, encounterID, ammoLine)
+	}
+
+	// Drop the per-encounter hostiles-defeated dedupe state now that the
+	// encounter is closed — a re-roll / new encounter starts clean.
+	s.clearHostilesPromptedState(encounterID)
+
 	return EndCombatResult{
 		Encounter:         enc,
 		Combatants:        cleaned,
@@ -956,6 +1131,74 @@ func (s *Service) EndCombat(ctx context.Context, encounterID uuid.UUID) (EndComb
 		RoundsElapsed:     roundsElapsed,
 		InitiativeTracker: completedTracker,
 	}, nil
+}
+
+// FormatCombatEndedAnnouncement renders the bot's "combat ended" message
+// posted to #combat-log on EndCombat (B-26b-combat-log-announcement). The
+// header reuses the encounter's player-facing display name when set, so
+// the message stays consistent with the running #initiative-tracker label.
+func FormatCombatEndedAnnouncement(enc refdata.Encounter, roundsElapsed int32, casualties int) string {
+	name := enc.Name
+	if enc.DisplayName.Valid && enc.DisplayName.String != "" {
+		name = enc.DisplayName.String
+	}
+	return fmt.Sprintf("⚔️ **Combat ended** — %s · %d round(s), %d casualty(ies)", name, roundsElapsed, casualties)
+}
+
+// FormatAmmoRecoverySummary renders a per-character ammunition-recovery
+// line for #combat-log (B-26b-ammo-recovery-prompt). The snapshot is the
+// pre-recovery spent map captured before recoverEncounterAmmunition cleared
+// the tracker; the function maps each spent count to RecoverAmmunition's
+// "half rounded down" formula so the message matches the actual inventory
+// write. Returns "" when nothing was recovered so the call site can skip
+// posting an empty line.
+func FormatAmmoRecoverySummary(combatants []refdata.Combatant, spentByCombatant map[uuid.UUID]map[string]int) string {
+	if len(spentByCombatant) == 0 {
+		return ""
+	}
+	nameByID := make(map[uuid.UUID]string, len(combatants))
+	for _, c := range combatants {
+		nameByID[c.ID] = c.DisplayName
+	}
+	type recoveredEntry struct {
+		who   string
+		ammo  []string
+	}
+	var entries []recoveredEntry
+	for combatantID, spentByAmmo := range spentByCombatant {
+		name, ok := nameByID[combatantID]
+		if !ok || name == "" {
+			continue
+		}
+		var ammoNames []string
+		for ammoName := range spentByAmmo {
+			ammoNames = append(ammoNames, ammoName)
+		}
+		sort.Strings(ammoNames)
+		var parts []string
+		for _, ammoName := range ammoNames {
+			spent := spentByAmmo[ammoName]
+			recovered := spent / 2
+			if recovered <= 0 {
+				continue
+			}
+			parts = append(parts, fmt.Sprintf("%d %s", recovered, ammoName))
+		}
+		if len(parts) == 0 {
+			continue
+		}
+		entries = append(entries, recoveredEntry{who: name, ammo: parts})
+	}
+	if len(entries) == 0 {
+		return ""
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].who < entries[j].who })
+	var lines []string
+	lines = append(lines, "🏹 **Ammunition recovered**:")
+	for _, e := range entries {
+		lines = append(lines, fmt.Sprintf("• %s: %s", e.who, strings.Join(e.ammo, ", ")))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // AllHostilesDefeated checks if all NPC combatants in the encounter have 0 HP or are not alive.

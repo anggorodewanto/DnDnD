@@ -250,6 +250,9 @@ type RegistrationDeps struct {
 	// DDBImporter routes /import URLs through the real DDB import service.
 	// nil falls back to ImportHandler.handlePlaceholderImport.
 	DDBImporter DDBImporter
+	// PortalBaseURL is the configured BASE_URL used to build /create-character
+	// portal links. Empty falls back to defaultPortalBaseURL.
+	PortalBaseURL string
 }
 
 // NewCommandRouter creates a CommandRouter with stub handlers for all player commands
@@ -293,7 +296,11 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 		if deps.TokenFunc == nil {
 			panic("RegistrationDeps.TokenFunc is required")
 		}
-		r.handlers["create-character"] = NewCreateCharacterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc, deps.TokenFunc)
+		var createOpts []CreateCharacterOption
+		if deps.PortalBaseURL != "" {
+			createOpts = append(createOpts, WithCreateCharacterPortalBaseURL(deps.PortalBaseURL))
+		}
+		r.handlers["create-character"] = NewCreateCharacterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc, deps.TokenFunc, createOpts...)
 	} else {
 		// Fallback: all stubs.
 		for _, name := range gameCommands {

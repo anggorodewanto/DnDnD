@@ -29,7 +29,10 @@ type SearchResult struct {
 	Type        string                 `json:"type"`
 	Description string                 `json:"description,omitempty"`
 	CostGP      int                    `json:"cost_gp"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	// F-86: surface the refdata homebrew flag so DM consumers can render a
+	// "homebrew" pill and let the picker filter on it server-side.
+	Homebrew bool                   `json:"homebrew"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // Handler handles item picker HTTP endpoints.
@@ -42,10 +45,16 @@ func NewHandler(store Store) *Handler {
 	return &Handler{store: store}
 }
 
-// HandleSearch handles GET /api/campaigns/:id/items/search?q=...&category=...
+// HandleSearch handles GET /api/campaigns/:id/items/search?q=...&category=...&homebrew=true|false
+// F-86: the optional `homebrew` query param filters by the refdata homebrew
+// flag — "true" keeps only homebrew rows, "false" keeps only SRD/official
+// rows, anything else (or unset) returns both. Every result also includes
+// the boolean `homebrew` field in its body so callers can render a badge
+// without a second lookup.
 func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	q := strings.ToLower(r.URL.Query().Get("q"))
 	category := r.URL.Query().Get("category")
+	homebrewFilter, hasHomebrewFilter := parseHomebrewFilter(r.URL.Query().Get("homebrew"))
 
 	results := []SearchResult{}
 
@@ -59,10 +68,15 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 			if q != "" && !strings.Contains(strings.ToLower(wp.Name), q) {
 				continue
 			}
+			homebrew := wp.Homebrew.Valid && wp.Homebrew.Bool
+			if hasHomebrewFilter && homebrew != homebrewFilter {
+				continue
+			}
 			results = append(results, SearchResult{
-				ID:   wp.ID,
-				Name: wp.Name,
-				Type: "weapon",
+				ID:       wp.ID,
+				Name:     wp.Name,
+				Type:     "weapon",
+				Homebrew: homebrew,
 				Metadata: map[string]interface{}{
 					"damage":      wp.Damage,
 					"damage_type": wp.DamageType,
@@ -82,10 +96,17 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 			if q != "" && !strings.Contains(strings.ToLower(a.Name), q) {
 				continue
 			}
+			// Armor refdata has no homebrew column today — treat every
+			// row as official so the filter shape stays consistent.
+			homebrew := false
+			if hasHomebrewFilter && homebrew != homebrewFilter {
+				continue
+			}
 			results = append(results, SearchResult{
-				ID:   a.ID,
-				Name: a.Name,
-				Type: "armor",
+				ID:       a.ID,
+				Name:     a.Name,
+				Type:     "armor",
+				Homebrew: homebrew,
 				Metadata: map[string]interface{}{
 					"ac_base":    a.AcBase,
 					"armor_type": a.ArmorType,
@@ -104,13 +125,18 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 			if q != "" && !strings.Contains(strings.ToLower(mi.Name), q) {
 				continue
 			}
+			homebrew := mi.Homebrew.Valid && mi.Homebrew.Bool
+			if hasHomebrewFilter && homebrew != homebrewFilter {
+				continue
+			}
 			results = append(results, SearchResult{
 				ID:          mi.ID,
 				Name:        mi.Name,
 				Type:        "magic_item",
 				Description: mi.Description,
+				Homebrew:    homebrew,
 				Metadata: map[string]interface{}{
-					"rarity":             mi.Rarity,
+					"rarity":              mi.Rarity,
 					"requires_attunement": mi.RequiresAttunement.Bool,
 				},
 			})
@@ -118,6 +144,88 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonOK(w, results)
+}
+
+// parseHomebrewFilter decodes the `homebrew` query param into a (value, set)
+// pair. Returns ok=false (skip filter) for empty / unrecognised values, so
+// existing callers that don't pass the param continue to see all results.
+func parseHomebrewFilter(raw string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true", "1", "yes":
+		return true, true
+	case "false", "0", "no":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+// CustomEntryRequest is the JSON body for POST .../items/custom — the DM
+// can register a one-off ("freeform") item that isn't in any refdata table.
+// All fields besides Name are optional; the server lets downstream
+// consumers (loot, shops, /give) decide defaults for missing values.
+// (F-86 custom-entry surface)
+type CustomEntryRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Quantity    int    `json:"quantity,omitempty"`
+	GoldGP      int    `json:"gold_gp,omitempty"`
+	PriceGP     int    `json:"price_gp,omitempty"`
+	Type        string `json:"type,omitempty"`
+}
+
+// CustomEntryResponse is the JSON returned to the DM after registering a
+// custom item entry. Downstream code (loot.AddItemRequest, shops.CreateShop
+// ItemParams) consumes the same fields the request carries plus a generated
+// ID so the freeform entry can be referenced once placed into inventory.
+type CustomEntryResponse struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Description string `json:"description,omitempty"`
+	Quantity    int    `json:"quantity"`
+	GoldGP      int    `json:"gold_gp"`
+	PriceGP     int    `json:"price_gp"`
+	Custom      bool   `json:"custom"`
+	Homebrew    bool   `json:"homebrew"`
+}
+
+// HandleCustomEntry handles POST /api/campaigns/:id/items/custom — registers
+// a freeform DM-authored item (name + optional description + quantity +
+// gold). F-86: the item picker shared component has historically only
+// surfaced SRD-imported rows; this lets the DM hand-roll an entry for a
+// single shop / loot drop without a homebrew round-trip.
+func (h *Handler) HandleCustomEntry(w http.ResponseWriter, r *http.Request) {
+	var req CustomEntryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		jsonError(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	qty := req.Quantity
+	if qty <= 0 {
+		qty = 1
+	}
+	itemType := strings.TrimSpace(req.Type)
+	if itemType == "" {
+		itemType = "custom"
+	}
+	resp := CustomEntryResponse{
+		ID:          "custom-" + uuid.New().String(),
+		Name:        name,
+		Type:        itemType,
+		Description: req.Description,
+		Quantity:    qty,
+		GoldGP:      req.GoldGP,
+		PriceGP:     req.PriceGP,
+		Custom:      true,
+		Homebrew:    true,
+	}
+	jsonOK(w, resp)
 }
 
 // CreatureInventory holds a single defeated creature's items and gold.

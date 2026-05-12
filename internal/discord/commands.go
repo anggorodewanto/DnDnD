@@ -233,6 +233,20 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 					Name:        "args",
 					Description: "Additional arguments (e.g. target, readied action)",
 				},
+				// E-71-followup-discord-ready-spell-flags: optional spell
+				// + slot for `/action ready`. The service-side ReadyAction
+				// expends the slot at ready-time and sets concentration when
+				// these are present. Both are no-ops for non-spell readies.
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "spell",
+					Description: "Spell name to ready (slash-cast on the trigger)",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Name:        "slot",
+					Description: "Spell slot level to expend at ready-time (1-9)",
+				},
 			},
 		},
 		{

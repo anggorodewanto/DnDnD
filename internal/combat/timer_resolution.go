@@ -162,6 +162,12 @@ func (t *TurnTimer) AutoResolveTurn(ctx context.Context, turnID uuid.UUID, rolle
 			}); err != nil {
 				return nil, fmt.Errorf("updating combatant HP: %w", err)
 			}
+			// C-43-followup: mirror MaybeResetDeathSavesOnHeal — clear death
+			// save tallies and remove the dying-condition bundle
+			// (unconscious + prone) so the PC fully wakes up.
+			if err := t.resetDyingStateAfterNat20(ctx, combatant); err != nil {
+				return nil, fmt.Errorf("resetting dying state after Nat-20: %w", err)
+			}
 		} else {
 			newDS := MarshalDeathSaves(outcome.DeathSaves)
 			if _, err := t.store.UpdateCombatantDeathSaves(ctx, refdata.UpdateCombatantDeathSavesParams{
@@ -357,5 +363,39 @@ func mustParseDeathSaves(raw pqtype.NullRawMessage) DeathSaves {
 	}
 	ds, _ := ParseDeathSaves(raw.RawMessage)
 	return ds
+}
+
+// resetDyingStateAfterNat20 clears death-save tallies and removes the
+// dying-condition bundle (unconscious + prone) after the timer auto-resolves a
+// natural-20 death save back to 1 HP. Mirrors Service.resetDyingState which is
+// invoked from MaybeResetDeathSavesOnHeal for /heal and Lay on Hands so the
+// timer path no longer leaves stale failure tallies or sleeping conditions on
+// a revived PC. (C-43-followup)
+func (t *TurnTimer) resetDyingStateAfterNat20(ctx context.Context, combatant refdata.Combatant) error {
+	if _, err := t.store.UpdateCombatantDeathSaves(ctx, refdata.UpdateCombatantDeathSavesParams{
+		ID:         combatant.ID,
+		DeathSaves: MarshalDeathSaves(DeathSaves{}),
+	}); err != nil {
+		return fmt.Errorf("resetting death saves: %w", err)
+	}
+	conds := combatant.Conditions
+	for _, cond := range ConditionsForDying() {
+		if !HasCondition(conds, cond.Condition) {
+			continue
+		}
+		next, err := RemoveCondition(conds, cond.Condition)
+		if err != nil {
+			return fmt.Errorf("removing %s on Nat-20 heal: %w", cond.Condition, err)
+		}
+		conds = next
+	}
+	if _, err := t.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+		ID:              combatant.ID,
+		Conditions:      conds,
+		ExhaustionLevel: combatant.ExhaustionLevel,
+	}); err != nil {
+		return fmt.Errorf("updating conditions after Nat-20: %w", err)
+	}
+	return nil
 }
 

@@ -4,6 +4,11 @@
   // /api/character-overview endpoint and render party cards plus the
   // shared-language rollup. No editing affordances; the DM dashboard
   // already exposes mutating endpoints via other panels.
+  //
+  // G-101: Each card now embeds a MessagePlayerPanel with the character's
+  // UUID preselected, so the DM can send a DM (and see history) without
+  // leaving the party page.
+  import MessagePlayerPanel from './MessagePlayerPanel.svelte';
 
   let { campaignId } = $props();
 
@@ -11,6 +16,7 @@
   let error = $state(null);
   let characters = $state([]);
   let partyLanguages = $state([]);
+  let messagingCharacterId = $state(null);
 
   async function load() {
     if (!campaignId) {
@@ -81,6 +87,23 @@
           {#if c.ddb_url}
             <a href={c.ddb_url} target="_blank" rel="noopener">D&amp;D Beyond sheet</a>
           {/if}
+          <button
+            class="msg-toggle"
+            data-testid="character-message-toggle-{c.character_id}"
+            onclick={() => (messagingCharacterId = messagingCharacterId === c.character_id ? null : c.character_id)}
+          >
+            {messagingCharacterId === c.character_id ? 'Close message panel' : 'Message this player'}
+          </button>
+          {#if messagingCharacterId === c.character_id}
+            <div class="msg-embed">
+              <MessagePlayerPanel
+                {campaignId}
+                playerCharacterId={c.character_id}
+                playerName={c.name}
+                hidePicker={true}
+              />
+            </div>
+          {/if}
         </div>
       {/each}
     </div>
@@ -145,5 +168,21 @@
   }
   a {
     color: #e94560;
+  }
+  .msg-toggle {
+    margin-top: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    background: #0f3460;
+    color: #e0e0e0;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .msg-toggle:hover {
+    background: #1a4a8a;
+  }
+  .msg-embed {
+    margin-top: 0.5rem;
   }
 </style>

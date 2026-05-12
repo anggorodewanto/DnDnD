@@ -63,6 +63,11 @@ func TestCommandDefinitions_ParameterHints(t *testing.T) {
 		{"bonus", "action", discordgo.ApplicationCommandOptionString, true},
 		{"action", "action", discordgo.ApplicationCommandOptionString, true},
 		{"action", "args", discordgo.ApplicationCommandOptionString, false},
+		// E-71-followup-discord-ready-spell-flags: optional spell/slot for
+		// /action ready threads into combat.ReadyActionCommand so the
+		// service expends the slot + sets concentration at ready-time.
+		{"action", "spell", discordgo.ApplicationCommandOptionString, false},
+		{"action", "slot", discordgo.ApplicationCommandOptionInteger, false},
 		{"shove", "target", discordgo.ApplicationCommandOptionString, true},
 		{"interact", "description", discordgo.ApplicationCommandOptionString, true},
 		{"command", "creature_id", discordgo.ApplicationCommandOptionString, true},

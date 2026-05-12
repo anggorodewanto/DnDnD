@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+var errStub = errors.New("stub lookup error")
 
 // dispatchActionFixture wires a ready-to-go ActionHandler with the canonical
 // "owned by invoker" combat encounter so every subcommand test only has to
@@ -217,6 +220,61 @@ func TestActionHandler_Dispatch_Stand(t *testing.T) {
 	}
 }
 
+// fakeActionSpeedLookup is a tiny stub satisfying ActionSpeedLookup.
+type fakeActionSpeedLookup struct {
+	speed int
+	err   error
+}
+
+func (f *fakeActionSpeedLookup) LookupWalkSpeed(_ context.Context, _ refdata.Combatant) (int, error) {
+	return f.speed, f.err
+}
+
+// D-54-followup: without a wired speed lookup, /action stand defaults to
+// MaxSpeed=30. (Existing behaviour locked in to detect regressions.)
+func TestActionHandler_Dispatch_Stand_NoLookupFallsBackTo30(t *testing.T) {
+	fx := setupDispatchActionFixture(t)
+	fx.svc.standResult = combat.StandResult{CombatLog: "🧍 Stand"}
+	_ = dispatchInvoke(t, fx.handler, fx.sess, "stand", "")
+	if len(fx.svc.standCalls) != 1 {
+		t.Fatalf("expected 1 stand call, got %d", len(fx.svc.standCalls))
+	}
+	if fx.svc.standCalls[0].MaxSpeed != 30 {
+		t.Errorf("MaxSpeed=%d, want 30 fallback", fx.svc.standCalls[0].MaxSpeed)
+	}
+}
+
+// D-54-followup: when a speed lookup returns 25 (Halfling), /action stand
+// must pass MaxSpeed=25 to combat.StandCommand so the service derives a
+// 13ft stand cost (round-up of 25/2) rather than the hardcoded 15ft.
+func TestActionHandler_Dispatch_Stand_UsesLookupSpeed_Halfling(t *testing.T) {
+	fx := setupDispatchActionFixture(t)
+	fx.handler.SetSpeedLookup(&fakeActionSpeedLookup{speed: 25})
+	fx.svc.standResult = combat.StandResult{CombatLog: "🧍 Stand"}
+	_ = dispatchInvoke(t, fx.handler, fx.sess, "stand", "")
+	if len(fx.svc.standCalls) != 1 {
+		t.Fatalf("expected 1 stand call, got %d", len(fx.svc.standCalls))
+	}
+	if fx.svc.standCalls[0].MaxSpeed != 25 {
+		t.Errorf("MaxSpeed=%d, want 25 (Halfling)", fx.svc.standCalls[0].MaxSpeed)
+	}
+}
+
+// D-54-followup: a lookup error or non-positive speed degrades to 30ft so
+// /action stand never breaks because of a flaky lookup.
+func TestActionHandler_Dispatch_Stand_LookupErrorFallsBack(t *testing.T) {
+	fx := setupDispatchActionFixture(t)
+	fx.handler.SetSpeedLookup(&fakeActionSpeedLookup{err: errStub})
+	fx.svc.standResult = combat.StandResult{CombatLog: "🧍 Stand"}
+	_ = dispatchInvoke(t, fx.handler, fx.sess, "stand", "")
+	if len(fx.svc.standCalls) != 1 {
+		t.Fatalf("expected 1 stand call, got %d", len(fx.svc.standCalls))
+	}
+	if fx.svc.standCalls[0].MaxSpeed != 30 {
+		t.Errorf("MaxSpeed=%d, want 30 fallback on lookup error", fx.svc.standCalls[0].MaxSpeed)
+	}
+}
+
 func TestActionHandler_Dispatch_DropProne(t *testing.T) {
 	fx := setupDispatchActionFixture(t)
 	fx.svc.dropProneResult = combat.DropProneResult{CombatLog: "⬇️ Drop Prone"}
@@ -418,5 +476,67 @@ func TestActionHandler_Dispatch_WrongOwner_Rejects(t *testing.T) {
 	}
 	if resp != "It's not your turn." {
 		t.Errorf("expected wrong-owner rejection, got %q", resp)
+	}
+}
+
+// --- E-69: Hide gating via ObscurementAllowsHide ---
+
+type fakeActionZoneLookup struct {
+	zones []combat.ZoneInfo
+}
+
+func (f *fakeActionZoneLookup) ListZonesForEncounter(_ context.Context, _ uuid.UUID) ([]combat.ZoneInfo, error) {
+	return f.zones, nil
+}
+
+// E-69: when zones are wired and the actor's tile has no obscurement
+// (NotObscured), Hide is blocked. ObscurementAllowsHide(NotObscured) == false.
+func TestActionHandler_Dispatch_Hide_BlockedWhenNotObscured(t *testing.T) {
+	fx := setupDispatchActionFixture(t)
+	// One zone exists in the encounter but it does NOT cover the actor's tile
+	// (actor is at B2; zone covers F6). Actor obscurement is NotObscured.
+	dims, _ := json.Marshal(map[string]int{"side_ft": 5})
+	fx.handler.SetZoneLookup(&fakeActionZoneLookup{zones: []combat.ZoneInfo{{
+		ID:          uuid.New(),
+		EncounterID: fx.encounterID,
+		Shape:       "square",
+		OriginCol:   "F",
+		OriginRow:   6,
+		Dimensions:  dims,
+		ZoneType:    "heavy_obscurement",
+	}}})
+
+	resp := dispatchInvoke(t, fx.handler, fx.sess, "hide", "")
+	if len(fx.svc.hideCalls) != 0 {
+		t.Errorf("expected no hide call when not obscured, got %d", len(fx.svc.hideCalls))
+	}
+	if !strings.Contains(strings.ToLower(resp), "obscured") {
+		t.Errorf("expected obscurement-required rejection, got %q", resp)
+	}
+}
+
+// E-69: when zones are wired and the actor stands in a lightly/heavily
+// obscured tile, Hide proceeds and the obscurement reason is logged.
+func TestActionHandler_Dispatch_Hide_AllowedWhenObscured(t *testing.T) {
+	fx := setupDispatchActionFixture(t)
+	dims, _ := json.Marshal(map[string]int{"side_ft": 5})
+	// Zone covers actor tile (B2 = col 1, row 1).
+	fx.handler.SetZoneLookup(&fakeActionZoneLookup{zones: []combat.ZoneInfo{{
+		ID:          uuid.New(),
+		EncounterID: fx.encounterID,
+		Shape:       "square",
+		OriginCol:   "B",
+		OriginRow:   2,
+		Dimensions:  dims,
+		ZoneType:    "heavy_obscurement",
+	}}})
+
+	fx.svc.hideResult = combat.HideResult{CombatLog: "🙈 Aria attempts to Hide — Stealth: 18", Success: true}
+	resp := dispatchInvoke(t, fx.handler, fx.sess, "hide", "")
+	if len(fx.svc.hideCalls) != 1 {
+		t.Fatalf("expected 1 hide call when obscured, got %d", len(fx.svc.hideCalls))
+	}
+	if !strings.Contains(strings.ToLower(resp), "obscured") {
+		t.Errorf("expected obscurement reason in response, got %q", resp)
 	}
 }

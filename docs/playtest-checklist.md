@@ -201,3 +201,33 @@ make playtest-replay TRANSCRIPT=internal/playtest/testdata/transcripts/<name>.js
 > session should aim to capture transcripts for #1 (combat OA) and #4
 > (death save) — those exercise the most logic per command and so will
 > catch the most regressions on replay.
+
+## Transcript capture status (H-121.4)
+
+All 11 scenarios above are intentionally `Status: pending` and the only
+recorded transcript in the repo is `internal/playtest/testdata/sample.jsonl`
+(smoke). Capture of real-session transcripts for the 11 scenarios is
+**deferred-with-justification** under task
+[`H-121.4-playtest-transcripts`](../.fix-state/tasks/H-121.4-playtest-transcripts.md):
+
+- **Why deferred:** transcripts must be produced by the
+  [`cmd/playtest-player`](../cmd/playtest-player) REPL against a live
+  Discord bot + database during an actual playtest session. The 11
+  scenarios cite cross-system flows (`#combat-log` echoes, DM dashboard
+  edits, real death-save dice) that the offline test harness cannot
+  fabricate without skipping the very integrations the transcripts are
+  meant to exercise on replay.
+- **Gating event (criterion to flip a row from `pending` to `captured`):**
+  the scenario is walked end-to-end in a live playtest session under
+  `playtest-player --record …`, the resulting JSONL file is committed
+  under `internal/playtest/testdata/transcripts/<name>.jsonl`, and
+  `make playtest-replay TRANSCRIPT=…` exits 0 against the recording.
+- **Out of scope for this fix-state campaign:** scheduling the live
+  session itself. The campaign rules treat this row as `deferred-with-
+  justification` (see
+  [`.fix-state/SUMMARY.md`](../.fix-state/SUMMARY.md)).
+- **Already in place:** the recorder (`internal/playtest/recorder.go`),
+  replay loader (`internal/playtest/replay.go`), and `make
+  playtest-replay` target (`Makefile`) are all wired and green against
+  the smoke transcript today, so adding a captured row is a docs +
+  testdata change once a session runs.

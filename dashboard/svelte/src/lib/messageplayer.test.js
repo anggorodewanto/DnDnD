@@ -1,8 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   MESSAGE_PLAYER_ENDPOINT,
+  MESSAGE_PLAYER_HISTORY_ENDPOINT,
+  CHARACTER_OVERVIEW_ENDPOINT,
   validateMessagePlayerInput,
   sendPlayerMessage,
+  buildHistoryUrl,
+  fetchHistory,
+  fetchPartyCharacters,
 } from './messageplayer.js';
 
 describe('MESSAGE_PLAYER_ENDPOINT', () => {
@@ -114,5 +119,83 @@ describe('sendPlayerMessage', () => {
         body: 'x',
       }),
     ).rejects.toThrow(/500/);
+  });
+});
+
+describe('history + party endpoints', () => {
+  it('exposes the history endpoint constant', () => {
+    expect(MESSAGE_PLAYER_HISTORY_ENDPOINT).toBe('/api/message-player/history');
+  });
+
+  it('exposes the character-overview endpoint constant', () => {
+    expect(CHARACTER_OVERVIEW_ENDPOINT).toBe('/api/character-overview');
+  });
+});
+
+describe('buildHistoryUrl', () => {
+  it('includes campaign_id and player_character_id query params', () => {
+    const url = buildHistoryUrl({ campaignId: 'c1', playerCharacterId: 'p1' });
+    expect(url).toContain('/api/message-player/history?');
+    expect(url).toContain('campaign_id=c1');
+    expect(url).toContain('player_character_id=p1');
+  });
+
+  it('includes optional limit/offset when set', () => {
+    const url = buildHistoryUrl({ campaignId: 'c1', playerCharacterId: 'p1', limit: 25, offset: 10 });
+    expect(url).toContain('limit=25');
+    expect(url).toContain('offset=10');
+  });
+
+  it('returns the bare endpoint when called with no params', () => {
+    expect(buildHistoryUrl()).toBe('/api/message-player/history');
+  });
+});
+
+describe('fetchHistory', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('GETs the history endpoint and returns parsed JSON', async () => {
+    const messages = [{ id: 'm1', body: 'hi' }];
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(messages),
+    });
+    const result = await fetchHistory({ campaignId: 'c1', playerCharacterId: 'p1' });
+    expect(result).toEqual(messages);
+    const [url] = fetch.mock.calls[0];
+    expect(url).toContain('/api/message-player/history?');
+    expect(url).toContain('campaign_id=c1');
+  });
+
+  it('throws on non-ok', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve('bad'),
+    });
+    await expect(fetchHistory({ campaignId: 'c1', playerCharacterId: 'p1' })).rejects.toThrow(
+      /bad/,
+    );
+  });
+});
+
+describe('fetchPartyCharacters', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('returns an empty list when no campaignId is provided', async () => {
+    const result = await fetchPartyCharacters('');
+    expect(result).toEqual({ characters: [] });
+  });
+
+  it('GETs character-overview with campaign_id', async () => {
+    const data = { characters: [{ character_id: 'pc1', name: 'A' }] };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(data),
+    });
+    const result = await fetchPartyCharacters('c1');
+    expect(result).toEqual(data);
+    const [url] = fetch.mock.calls[0];
+    expect(url).toBe('/api/character-overview?campaign_id=c1');
   });
 });

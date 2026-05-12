@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -217,12 +218,24 @@ type FeatLister interface {
 
 // PendingASIChoice holds a player's ASI/Feat choice awaiting DM approval.
 type PendingASIChoice struct {
-	CharID      uuid.UUID
-	ASIType     string
-	Abilities   []string
-	FeatID      string
-	PlayerID    string
-	Description string
+	CharID      uuid.UUID `json:"char_id"`
+	ASIType     string    `json:"asi_type"`
+	Abilities   []string  `json:"abilities,omitempty"`
+	FeatID      string    `json:"feat_id,omitempty"`
+	PlayerID    string    `json:"player_id"`
+	Description string    `json:"description"`
+}
+
+// ASIPendingStore persists pending ASI/Feat choices so a process restart
+// does not drop in-flight DM approvals (F-89d). The handler keeps an
+// in-memory cache for speed; the store is the durable source of truth.
+// All methods are safe to leave returning errors — the handler logs and
+// continues with the in-memory copy so a transient DB blip doesn't lose
+// the prompt outright.
+type ASIPendingStore interface {
+	Save(ctx context.Context, choice PendingASIChoice) error
+	Delete(ctx context.Context, charID uuid.UUID) error
+	List(ctx context.Context) ([]PendingASIChoice, error)
 }
 
 // ASIHandler processes Discord component interactions for the ASI/Feat flow.
@@ -235,6 +248,11 @@ type ASIHandler struct {
 	// feats. Nil falls back to the historical "not yet available" stub.
 	featLister FeatLister
 
+	// F-89d: durable store for pending ASI/Feat choices so a process
+	// restart preserves in-flight DM approvals. Nil keeps the
+	// historical in-memory-only behavior.
+	pendingStore ASIPendingStore
+
 	mu      sync.RWMutex
 	pending map[uuid.UUID]PendingASIChoice
 }
@@ -242,6 +260,35 @@ type ASIHandler struct {
 // SetFeatLister wires the eligible-feats source so the "Choose a Feat" button
 // posts a select menu instead of the placeholder stub. Nil keeps the stub.
 func (h *ASIHandler) SetFeatLister(l FeatLister) { h.featLister = l }
+
+// SetPendingStore wires the durable pending-choice store. F-89d: when wired,
+// every pending choice is upserted to the store on accept and deleted on
+// approve/deny. Call HydratePending after wiring to rehydrate from the DB
+// after a restart. Nil keeps the prior in-memory-only behavior so tests
+// built before F-89d landed keep passing unchanged.
+func (h *ASIHandler) SetPendingStore(s ASIPendingStore) { h.pendingStore = s }
+
+// HydratePending repopulates the in-memory pending map from the durable
+// store. Call once at startup after SetPendingStore. Best-effort: a store
+// failure is logged but doesn't fail the boot — the handler still works,
+// it just behaves as if there were no in-flight prompts before restart.
+// (F-89d)
+func (h *ASIHandler) HydratePending(ctx context.Context) error {
+	if h.pendingStore == nil {
+		return nil
+	}
+	rows, err := h.pendingStore.List(ctx)
+	if err != nil {
+		slog.Error("failed to hydrate pending ASI choices", "error", err)
+		return err
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, c := range rows {
+		h.pending[c.CharID] = c
+	}
+	return nil
+}
 
 // NewASIHandler creates a new ASIHandler.
 func NewASIHandler(session Session, service ASIService, dmQueueFunc func(guildID string) string) *ASIHandler {
@@ -255,8 +302,14 @@ func NewASIHandler(session Session, service ASIService, dmQueueFunc func(guildID
 
 func (h *ASIHandler) storePendingChoice(charID uuid.UUID, choice PendingASIChoice) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.pending[charID] = choice
+	h.mu.Unlock()
+	if h.pendingStore == nil {
+		return
+	}
+	if err := h.pendingStore.Save(context.Background(), choice); err != nil {
+		slog.Error("failed to persist pending ASI choice", "error", err, "character_id", charID)
+	}
 }
 
 func (h *ASIHandler) getPendingChoice(charID uuid.UUID) (PendingASIChoice, bool) {
@@ -268,8 +321,27 @@ func (h *ASIHandler) getPendingChoice(charID uuid.UUID) (PendingASIChoice, bool)
 
 func (h *ASIHandler) removePendingChoice(charID uuid.UUID) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	delete(h.pending, charID)
+	h.mu.Unlock()
+	if h.pendingStore == nil {
+		return
+	}
+	if err := h.pendingStore.Delete(context.Background(), charID); err != nil {
+		slog.Error("failed to delete pending ASI choice", "error", err, "character_id", charID)
+	}
+}
+
+// MarshalPendingASIChoice serialises a pending choice to the JSON form the
+// pending_asi.snapshot_json column carries. Exposed for adapter tests.
+func MarshalPendingASIChoice(c PendingASIChoice) ([]byte, error) {
+	return json.Marshal(c)
+}
+
+// UnmarshalPendingASIChoice deserialises a pending choice snapshot.
+func UnmarshalPendingASIChoice(raw []byte) (PendingASIChoice, error) {
+	var c PendingASIChoice
+	err := json.Unmarshal(raw, &c)
+	return c, err
 }
 
 // HandleASIChoice handles a button click for +2/+1+1/feat selection.

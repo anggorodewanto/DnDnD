@@ -568,6 +568,126 @@ func TestCastHandler_DetectMagicShortCircuits(t *testing.T) {
 	}
 }
 
+// --- F-88c: detect-magic environment scan ---
+
+type stubNearbyScanner struct {
+	groups []NearbyInventory
+	err    error
+	called bool
+}
+
+func (s *stubNearbyScanner) ScanNearby(_ context.Context, _, _ string, _ int) ([]NearbyInventory, error) {
+	s.called = true
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.groups, nil
+}
+
+func TestCastHandler_DetectMagic_ScansNearbyInventories(t *testing.T) {
+	h, sess, _, _ := setupCastHandler()
+
+	charID := uuid.New()
+	items, _ := json.Marshal([]character.InventoryItem{
+		{ItemID: "ring", Name: "Ring of Protection", Quantity: 1, Type: "magic_item", IsMagic: true},
+	})
+	slots, _ := json.Marshal(map[string]character.SlotInfo{"1": {Current: 2, Max: 2}})
+	adapter := &mockCastInventoryAdapter{char: makeIdentifyTestCharacter(charID, items, slots)}
+	h.SetInventoryAdapter(adapter)
+
+	scanner := &stubNearbyScanner{
+		groups: []NearbyInventory{
+			{
+				SourceName: "Goblin Lair Chest",
+				Items: []character.InventoryItem{
+					{ItemID: "wand", Name: "Wand of Magic Detection", IsMagic: true, Quantity: 1},
+					{ItemID: "stone", Name: "Plain Stone", IsMagic: false, Quantity: 5},
+				},
+			},
+			{
+				SourceName: "Bjorn (PC)",
+				Items: []character.InventoryItem{
+					{ItemID: "ring2", Name: "Ring of Spell Storing", IsMagic: true, Quantity: 1},
+				},
+			},
+		},
+	}
+	h.SetNearbyScanner(scanner)
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell": "detect-magic",
+	}))
+
+	if !scanner.called {
+		t.Fatalf("expected nearby scanner to be invoked")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "Ring of Protection") {
+		t.Errorf("expected caster's own magic item, got %q", content)
+	}
+	if !strings.Contains(content, "Wand of Magic Detection") {
+		t.Errorf("expected nearby loot magic item, got %q", content)
+	}
+	if !strings.Contains(content, "Ring of Spell Storing") {
+		t.Errorf("expected nearby PC magic item, got %q", content)
+	}
+	if strings.Contains(content, "Plain Stone") {
+		t.Errorf("non-magic nearby items must be filtered out, got %q", content)
+	}
+}
+
+func TestCastHandler_DetectMagic_NoNearbyMagic_StillReportsSelf(t *testing.T) {
+	h, sess, _, _ := setupCastHandler()
+
+	charID := uuid.New()
+	items, _ := json.Marshal([]character.InventoryItem{
+		{ItemID: "ring", Name: "Ring of Protection", IsMagic: true, Quantity: 1, Type: "magic_item"},
+	})
+	slots, _ := json.Marshal(map[string]character.SlotInfo{"1": {Current: 2, Max: 2}})
+	adapter := &mockCastInventoryAdapter{char: makeIdentifyTestCharacter(charID, items, slots)}
+	h.SetInventoryAdapter(adapter)
+	h.SetNearbyScanner(&stubNearbyScanner{})
+
+	h.Handle(makeCastInteraction(map[string]any{"spell": "detect-magic"}))
+	if !strings.Contains(sess.lastResponse.Data.Content, "Ring of Protection") {
+		t.Errorf("expected self-only magic to still surface, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+func TestCastHandler_DetectMagic_ScannerErrorDegradesGracefully(t *testing.T) {
+	h, sess, _, _ := setupCastHandler()
+
+	charID := uuid.New()
+	items, _ := json.Marshal([]character.InventoryItem{
+		{ItemID: "ring", Name: "Ring of Protection", IsMagic: true, Quantity: 1, Type: "magic_item"},
+	})
+	slots, _ := json.Marshal(map[string]character.SlotInfo{"1": {Current: 2, Max: 2}})
+	adapter := &mockCastInventoryAdapter{char: makeIdentifyTestCharacter(charID, items, slots)}
+	h.SetInventoryAdapter(adapter)
+	h.SetNearbyScanner(&stubNearbyScanner{err: errors.New("scanner offline")})
+
+	h.Handle(makeCastInteraction(map[string]any{"spell": "detect-magic"}))
+	if !strings.Contains(sess.lastResponse.Data.Content, "Ring of Protection") {
+		t.Errorf("scanner error should not block self-inventory result, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+func TestCastHandler_DetectMagic_NoSelfNoNearby_ReportsEmpty(t *testing.T) {
+	h, sess, _, _ := setupCastHandler()
+
+	charID := uuid.New()
+	items, _ := json.Marshal([]character.InventoryItem{})
+	slots, _ := json.Marshal(map[string]character.SlotInfo{"1": {Current: 2, Max: 2}})
+	adapter := &mockCastInventoryAdapter{char: makeIdentifyTestCharacter(charID, items, slots)}
+	h.SetInventoryAdapter(adapter)
+	h.SetNearbyScanner(&stubNearbyScanner{})
+
+	h.Handle(makeCastInteraction(map[string]any{"spell": "detect-magic"}))
+	if !strings.Contains(sess.lastResponse.Data.Content, "no magical auras") {
+		t.Errorf("expected empty-result fallback message, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
 // containsString reports whether needle is in haystack.
 func containsString(haystack []string, needle string) bool {
 	for _, s := range haystack {

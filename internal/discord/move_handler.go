@@ -587,6 +587,14 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 		return
 	}
 
+	// D-56-followup: when the mover is dragging grappled targets, sync
+	// each target's tile so it stays adjacent (5ft Chebyshev) to the
+	// dragger after the move. Best-effort: any failure aborts silently
+	// so /move never breaks because of a flaky drag sync.
+	if getErr == nil {
+		h.syncDragTargetsAlongPath(ctx, combatant, destCol, destRow)
+	}
+
 	// med-24 / Phase 55: fire opportunity-attack prompts after the move
 	// commits. Best-effort: any failure is silent so a flaky channel post
 	// can never break the move flow.
@@ -762,6 +770,69 @@ func (h *MoveHandler) lookupPCReach(ctx context.Context, all []refdata.Combatant
 		out[c.ID] = reach
 	}
 	return out
+}
+
+// syncDragTargetsAlongPath persists each grappled target's tile so it
+// stays within 5ft of the dragger after a /move confirmation. For the
+// minimal-correct step, the target lands on the dragger's PRIOR tile
+// (one step behind along the path) — that places the target adjacent to
+// the dragger's destination, satisfying the 5ft invariant for both
+// opportunity-attack detection and visibility checks. Multi-target drags
+// fan each target onto the same prior tile; ties are acceptable since the
+// grid renderer stacks tokens by altitude.
+//
+// Best-effort: any failure (no drag lookup, lookup error, no targets,
+// persistence error) aborts silently so /move can't break because of a
+// flaky drag sync. D-56-followup-drag-tile-sync.
+func (h *MoveHandler) syncDragTargetsAlongPath(ctx context.Context, dragger refdata.Combatant, destCol, destRow int) {
+	if h.dragLookup == nil {
+		return
+	}
+	check, err := h.dragLookup.CheckDragTargets(ctx, dragger.EncounterID, dragger)
+	if err != nil || !check.HasTargets {
+		return
+	}
+
+	// Compute the prior tile (one step back toward the dragger's start).
+	// The dragger row is 1-indexed (PositionRow) in DB; destRow is
+	// 0-indexed grid row from the caller.
+	startCol, startRow, perr := renderer.ParseCoordinate(dragger.PositionCol + fmt.Sprintf("%d", dragger.PositionRow))
+	if perr != nil {
+		// Fall back to placing target on the dragger's destination tile
+		// (still satisfies the 5ft invariant; just no longer "behind").
+		startCol = destCol
+		startRow = destRow
+	}
+
+	priorCol, priorRow := tileOneStepBack(startCol, startRow, destCol, destRow)
+	priorLabel := renderer.ColumnLabel(priorCol)
+	for _, target := range check.GrappledTargets {
+		_, _ = h.combatService.UpdateCombatantPosition(
+			ctx, target.ID, priorLabel, int32(priorRow+1), target.AltitudeFt,
+		)
+	}
+}
+
+// tileOneStepBack returns the tile one step from the destination back
+// toward the start. For a Chebyshev grid the answer is dest - sign(dest-start)
+// along each axis. When start==dest (no movement) the destination is
+// returned unchanged.
+func tileOneStepBack(startCol, startRow, destCol, destRow int) (int, int) {
+	colStep := 0
+	switch {
+	case destCol > startCol:
+		colStep = 1
+	case destCol < startCol:
+		colStep = -1
+	}
+	rowStep := 0
+	switch {
+	case destRow > startRow:
+		rowStep = 1
+	case destRow < startRow:
+		rowStep = -1
+	}
+	return destCol - colStep, destRow - rowStep
 }
 
 // dragPromptForMove returns the drag confirmation prompt when the mover is

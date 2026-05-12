@@ -1,22 +1,77 @@
 package rest
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"maps"
+
+	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/inventory"
 )
 
+// EncounterPublisher fans out a fresh encounter snapshot over the dashboard
+// WebSocket hub whenever a /rest mutation (HP / hit dice / spell slots /
+// dawn-recharge) touches a character that is also a combatant in an active
+// encounter (H-104b). The interface is injected (optionally) onto Service
+// so the package stays decoupled from the concrete dashboard.Publisher.
+type EncounterPublisher interface {
+	PublishEncounterSnapshot(ctx context.Context, encounterID uuid.UUID) error
+}
+
+// EncounterLookup resolves the active encounter (if any) that currently
+// contains the given character. Returns (encID, true, nil) when the
+// character is a combatant in an active encounter; (uuid.Nil, false, nil)
+// when not in combat; or a non-nil error on store failure.
+type EncounterLookup interface {
+	ActiveEncounterIDForCharacter(ctx context.Context, characterID uuid.UUID) (uuid.UUID, bool, error)
+}
+
 // Service handles rest logic (short and long rests).
 type Service struct {
-	roller *dice.Roller
+	roller    *dice.Roller
+	publisher EncounterPublisher
+	lookup    EncounterLookup
 }
 
 // NewService creates a new rest Service.
 func NewService(roller *dice.Roller) *Service {
 	return &Service{roller: roller}
+}
+
+// SetPublisher wires the optional dashboard publisher and encounter lookup
+// (H-104b). A nil publisher is tolerated and disables fan-out. Publish
+// errors are logged but never surfaced to callers so a dashboard hiccup
+// cannot undo a committed rest write.
+func (s *Service) SetPublisher(p EncounterPublisher, lookup EncounterLookup) {
+	s.publisher = p
+	s.lookup = lookup
+}
+
+// PublishForCharacter looks up the character's active encounter (if any)
+// and fires the publisher. Silently no-ops when the character is not in
+// combat, when the publisher is unset, or when the lookup/publish fails.
+// Callers (the /rest Discord handler) invoke this AFTER persisting rest
+// changes so dashboard subscribers see the refreshed HP / hit-dice /
+// spell-slot state.
+func (s *Service) PublishForCharacter(ctx context.Context, characterID uuid.UUID) {
+	if s.publisher == nil || s.lookup == nil {
+		return
+	}
+	encID, ok, err := s.lookup.ActiveEncounterIDForCharacter(ctx, characterID)
+	if err != nil {
+		log.Printf("rest: active encounter lookup failed for %s: %v", characterID, err)
+		return
+	}
+	if !ok {
+		return
+	}
+	if err := s.publisher.PublishEncounterSnapshot(ctx, encID); err != nil {
+		log.Printf("rest: encounter snapshot publish failed for %s: %v", encID, err)
+	}
 }
 
 // ShortRestInput holds parameters for a short rest.

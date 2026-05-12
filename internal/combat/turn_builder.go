@@ -148,8 +148,10 @@ func BuildTurnPlan(input BuildTurnPlanInput) (*TurnPlan, error) {
 		}
 	}
 
-	// Step 4: Bonus actions
-	bonusActions := ParseBonusActions(abilities)
+	// Step 4: Bonus actions. F-78c: prefer the structured bonus_actions
+	// column when present; legacy rows fall back to scanning the abilities
+	// blob via ParseBonusActions.
+	bonusActions := ResolveBonusActions(input.Creature, abilities)
 	for _, ba := range bonusActions {
 		plan.Steps = append(plan.Steps, TurnStep{
 			Type:      StepTypeBonusAction,
@@ -459,6 +461,22 @@ func hasMultiattackAbility(abilities []CreatureAbilityEntry) bool {
 		}
 	}
 	return false
+}
+
+// ResolveBonusActions returns the creature's bonus action ability entries.
+// F-78c: prefer the structured creatures.bonus_actions JSONB column (data
+// model promotion of what was previously a runtime scan). When that column
+// is unset or unparseable, fall back to ParseBonusActions scanning the
+// abilities blob so legacy creature rows imported before the column existed
+// continue to surface Goblin Nimble Escape / Gnoll Rampage / etc.
+func ResolveBonusActions(creature refdata.Creature, abilities []CreatureAbilityEntry) []CreatureAbilityEntry {
+	if creature.BonusActions.Valid && len(creature.BonusActions.RawMessage) > 0 {
+		var structured []CreatureAbilityEntry
+		if err := json.Unmarshal(creature.BonusActions.RawMessage, &structured); err == nil && len(structured) > 0 {
+			return structured
+		}
+	}
+	return ParseBonusActions(abilities)
 }
 
 // ParseBonusActions filters abilities whose description mentions "bonus action" (case-insensitive).

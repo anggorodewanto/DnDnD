@@ -3,8 +3,8 @@ id: H-104b-rest-magicitem-publisher
 group: H
 phase: 104b
 severity: MEDIUM
-status: open
-owner:
+status: done
+owner: lifecycle
 reviewer:
 last_update: 2026-05-11
 ---

@@ -3,8 +3,8 @@ id: B-26b-ammo-recovery-prompt
 group: B
 phase: 26b
 severity: MEDIUM
-status: open
-owner:
+status: done
+owner: lifecycle
 reviewer:
 last_update: 2026-05-11
 

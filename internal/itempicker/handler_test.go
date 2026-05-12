@@ -2,9 +2,11 @@ package itempicker_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"errors"
@@ -499,6 +501,141 @@ func TestHandleSearch_WeaponCategoryError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
+
+// --- F-86 picker contract: homebrew flag, custom entry, narrative/price ---
+
+func TestHandleSearch_SurfacesHomebrewFlag(t *testing.T) {
+	store := &stubStore{
+		weapons: []refdata.Weapon{
+			{ID: "longsword", Name: "Longsword"},
+			{ID: "homebrew-sword", Name: "Hexed Sword", Homebrew: nullBool(true)},
+		},
+	}
+	h := itempicker.NewHandler(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/search", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSearch(rec, req)
+
+	var results []itempicker.SearchResult
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&results))
+	require.Len(t, results, 2)
+	byID := map[string]bool{}
+	for _, r := range results {
+		byID[r.ID] = r.Homebrew
+	}
+	assert.False(t, byID["longsword"])
+	assert.True(t, byID["homebrew-sword"])
+}
+
+func TestHandleSearch_HomebrewFilterTrue_OnlyHomebrew(t *testing.T) {
+	store := &stubStore{
+		weapons: []refdata.Weapon{
+			{ID: "longsword", Name: "Longsword"},
+			{ID: "homebrew-sword", Name: "Hexed Sword", Homebrew: nullBool(true)},
+		},
+		magicItems: []refdata.MagicItem{
+			{ID: "cloak", Name: "Cloak of Protection"},
+			{ID: "hb-amulet", Name: "Amulet of DM Whim", Homebrew: nullBool(true)},
+		},
+	}
+	h := itempicker.NewHandler(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/search?homebrew=true", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSearch(rec, req)
+
+	var results []itempicker.SearchResult
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&results))
+	require.Len(t, results, 2)
+	for _, r := range results {
+		assert.True(t, r.Homebrew, "all rows should be homebrew=true, got %+v", r)
+	}
+}
+
+func TestHandleSearch_HomebrewFilterFalse_OnlyOfficial(t *testing.T) {
+	// Use weapons since Armor refdata has no homebrew column today.
+	store := &stubStore{
+		weapons: []refdata.Weapon{
+			{ID: "longsword", Name: "Longsword"},
+			{ID: "hb-sword", Name: "Hexed Sword", Homebrew: nullBool(true)},
+		},
+	}
+	h := itempicker.NewHandler(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/search?homebrew=false", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSearch(rec, req)
+
+	var results []itempicker.SearchResult
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&results))
+	require.Len(t, results, 1)
+	assert.Equal(t, "longsword", results[0].ID)
+	assert.False(t, results[0].Homebrew)
+}
+
+func TestHandleCustomEntry_ReturnsPayload(t *testing.T) {
+	store := &stubStore{}
+	h := itempicker.NewHandler(store)
+
+	body := `{"name":"Mystery Egg","description":"A warm, pulsating sphere.","quantity":1,"gold_gp":50,"price_gp":75}`
+	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/x/items/custom", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.HandleCustomEntry(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp itempicker.CustomEntryResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	assert.NotEmpty(t, resp.ID)
+	assert.Equal(t, "Mystery Egg", resp.Name)
+	assert.Equal(t, "A warm, pulsating sphere.", resp.Description)
+	assert.Equal(t, 1, resp.Quantity)
+	assert.Equal(t, 50, resp.GoldGP)
+	assert.Equal(t, 75, resp.PriceGP)
+	assert.True(t, resp.Custom)
+	assert.True(t, resp.Homebrew)
+}
+
+func TestHandleCustomEntry_RequiresName(t *testing.T) {
+	store := &stubStore{}
+	h := itempicker.NewHandler(store)
+
+	body := `{"description":"unnamed"}`
+	req := httptest.NewRequest(http.MethodPost, "/items/custom", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.HandleCustomEntry(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandleCustomEntry_InvalidJSON(t *testing.T) {
+	store := &stubStore{}
+	h := itempicker.NewHandler(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/items/custom", strings.NewReader("{not-json"))
+	rec := httptest.NewRecorder()
+	h.HandleCustomEntry(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandleCustomEntry_DefaultsQuantityToOne(t *testing.T) {
+	store := &stubStore{}
+	h := itempicker.NewHandler(store)
+
+	body := `{"name":"Misc Trinket"}`
+	req := httptest.NewRequest(http.MethodPost, "/items/custom", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.HandleCustomEntry(rec, req)
+
+	var resp itempicker.CustomEntryResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	assert.Equal(t, 1, resp.Quantity)
+	assert.Equal(t, "custom", resp.Type)
+}
+
+// nullBool wraps a bool as sql.NullBool for test stubs.
+func nullBool(v bool) sql.NullBool { return sql.NullBool{Bool: v, Valid: true} }
 
 func TestHandleSearch_UnknownCategory_ReturnsEmpty(t *testing.T) {
 	store := &stubStore{

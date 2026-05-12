@@ -41,6 +41,7 @@ import (
 	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/levelup"
 	"github.com/ab/dndnd/internal/loot"
+	"github.com/ab/dndnd/internal/magicitem"
 	"github.com/ab/dndnd/internal/messageplayer"
 	"github.com/ab/dndnd/internal/narration"
 	"github.com/ab/dndnd/internal/open5e"
@@ -259,29 +260,34 @@ func mountCombatDashboardRoutes(
 // test (TestBuildRegistrationDeps_CarriesDDBImporter) can target the
 // DDBImporter wiring without setting up the full DB-backed inputs.
 type registrationDepsConfig struct {
-	regService   discord.RegistrationService
-	campaignProv discord.CampaignProvider
-	charCreator  discord.CharacterCreator
-	dmQueueFunc  func(string) string
-	dmUserFunc   func(string) string
-	tokenFunc    func(uuid.UUID, string) (string, error)
-	nameResolver discord.CharacterNameResolver
-	ddbImporter  discord.DDBImporter
+	regService    discord.RegistrationService
+	campaignProv  discord.CampaignProvider
+	charCreator   discord.CharacterCreator
+	dmQueueFunc   func(string) string
+	dmUserFunc    func(string) string
+	tokenFunc     func(uuid.UUID, string) (string, error)
+	nameResolver  discord.CharacterNameResolver
+	ddbImporter   discord.DDBImporter
+	portalBaseURL string
 }
 
 // buildRegistrationDeps assembles the RegistrationDeps used by the Phase
 // 120a command router, threading the DDB importer through so /import lands
 // on the real ddbimport service instead of handlePlaceholderImport (G-90).
+// PortalBaseURL is forwarded so /create-character emits links rooted at the
+// operator-configured BASE_URL instead of the hard-coded production host
+// (A-14).
 func buildRegistrationDeps(cfg registrationDepsConfig) *discord.RegistrationDeps {
 	return &discord.RegistrationDeps{
-		RegService:   cfg.regService,
-		CampaignProv: cfg.campaignProv,
-		CharCreator:  cfg.charCreator,
-		DMQueueFunc:  cfg.dmQueueFunc,
-		DMUserFunc:   cfg.dmUserFunc,
-		TokenFunc:    cfg.tokenFunc,
-		NameResolver: cfg.nameResolver,
-		DDBImporter:  cfg.ddbImporter,
+		RegService:    cfg.regService,
+		CampaignProv:  cfg.campaignProv,
+		CharCreator:   cfg.charCreator,
+		DMQueueFunc:   cfg.dmQueueFunc,
+		DMUserFunc:    cfg.dmUserFunc,
+		TokenFunc:     cfg.tokenFunc,
+		NameResolver:  cfg.nameResolver,
+		DDBImporter:   cfg.ddbImporter,
+		PortalBaseURL: cfg.portalBaseURL,
 	}
 }
 
@@ -870,6 +876,24 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		levelUpSvc.SetPublisher(publisher, encLookup)
 		levelup.NewHandler(levelUpSvc, hub).RegisterRoutes(router)
 
+		// B-26b: lifecycle fan-outs on EndCombat. The three notifiers wire
+		// the post-combat hooks the original phase doc called for: a
+		// #combat-log announcement, a loot-pool auto-create, and a
+		// DM-facing prompt when every hostile drops to 0 HP mid-combat.
+		// Each adapter no-ops cleanly when Discord is offline so headless
+		// e2e deploys keep working.
+		combatSvc.SetCombatLogNotifier(newCombatLogNotifierAdapter(discordSession, campaignSettingsProvider))
+		combatSvc.SetLootPoolCreator(newLootPoolCreatorAdapter(lootSvcForCombat(queries)))
+		combatSvc.SetHostilesDefeatedNotifier(newHostilesDefeatedNotifierAdapter(dmQueueNotifier))
+
+		// H-104b: publisher fan-out for the magic-item activation paths.
+		// The Service surface is currently consulted by the /attune
+		// production-wiring follow-up; this construction keeps the hook
+		// reachable so a wired handler can call PublishForCharacter.
+		magicItemSvc := magicitem.NewService()
+		magicItemSvc.SetPublisher(publisher, encLookup)
+		_ = magicItemSvc // reserved for /attune handler wiring (deferred)
+
 		// Phase 104: Startup recovery per spec lines 116-121.
 		//
 		// Step 3 — Scan for stale state. PollOnce runs synchronously BEFORE
@@ -960,6 +984,14 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// positions" never reached production.
 			mapRegen := newMapRegeneratorAdapter(queries)
 
+			// AOE-CAST + D-48b/49/51 follow-up: build a single shared
+			// reaction-prompt store so the cast handler's gold-fallback
+			// confirmation and the attack handler's class-feature prompts
+			// route their button clicks through one place. The same store
+			// is registered on the CommandRouter below so rxprompt:* clicks
+			// fan back to the per-prompt OnChoice closures.
+			reactionPrompts := discord.NewReactionPromptStore(discordSession)
+
 			// Phase 105b: Construct every Phase 105 slash-command handler
 			// with the per-user encounter resolver injected, wire them into
 			// a CommandRouter, and register the router as the discordgo
@@ -988,10 +1020,11 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				// /equip, /give, /attune, /unattune, /character, ASI components,
 				// /undo, /retire. Each handler is nil-safe; missing deps mean the
 				// router falls back to the status-aware stub.
-				levelUpService: levelUpSvc,
-				dmQueueFunc:    dmQueueChannel,
-				notifier:       dmQueueNotifier,
-				portalBaseURL:  os.Getenv("BASE_URL"),
+				levelUpService:  levelUpSvc,
+				dmQueueFunc:     dmQueueChannel,
+				notifier:        dmQueueNotifier,
+				portalBaseURL:   os.Getenv("BASE_URL"),
+				reactionPrompts: reactionPrompts,
 			})
 
 			// Phase 120a: wire RegistrationDeps so /register submits land in
@@ -1030,7 +1063,8 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 					}
 					return char.Name, nil
 				},
-				ddbImporter: ddbImportSvc,
+				ddbImporter:   ddbImportSvc,
+				portalBaseURL: os.Getenv("BASE_URL"),
 			})
 			// Phase 12: wire the /setup handler so the DM can create the
 			// SYSTEM/NARRATION/COMBAT/REFERENCE channel structure for their
@@ -1041,6 +1075,11 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// panic is caught, converted into a friendly ephemeral, logged at
 			// ERROR level, and recorded for the DM dashboard badge / panel.
 			cmdRouter.SetErrorRecorder(errorStore)
+			// AOE-CAST + D-48b/49/51 follow-up: route rxprompt:* button
+			// clicks (gold-fallback Buy & Cast, Stunning Strike Use Ki,
+			// Divine Smite slot picker, Bardic Inspiration Use Die) through
+			// the shared prompt store so OnChoice closures fire.
+			cmdRouter.SetReactionPromptStore(reactionPrompts)
 			attachPhase105Handlers(cmdRouter, discordHandlerSet)
 			// H-105b: inject the Discord-backed enemy-turn notifier so
 			// combat.Handler.ExecuteEnemyTurn posts the "⚔️ <display_name>
@@ -1049,6 +1088,12 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// Phase 106a: route /rest dm-queue posts through the notifier so
 			// rest requests are persisted and resolvable from the dashboard.
 			discordHandlerSet.rest.SetNotifier(dmQueueNotifier)
+			// H-104b: fan out a dashboard snapshot when /rest mutates HP /
+			// hit dice / spell slots for a character who is also a
+			// combatant in a sibling active encounter. The lookup is the
+			// same encLookup shared with inventory + levelup so a single
+			// per-character resolver drives every Phase 104b fan-out.
+			discordHandlerSet.rest.SetPublisher(publisher, encLookup)
 			// Phase 106d: gate non-trivial /check rolls through #dm-queue.
 			discordHandlerSet.check.SetNotifier(dmQueueNotifier)
 			// Phase 106c: route /reaction declarations through the dm-queue

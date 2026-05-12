@@ -283,6 +283,29 @@ func makeActionInteraction(guildID, userID, action, args string) *discordgo.Inte
 	}
 }
 
+// makeActionInteractionWithSpell builds an /action ready interaction with
+// optional spell + slot options used by E-71-followup tests.
+func makeActionInteractionWithSpell(guildID, userID, action, args, spell string, slot int) *discordgo.Interaction {
+	i := makeActionInteraction(guildID, userID, action, args)
+	data := i.Data.(discordgo.ApplicationCommandInteractionData)
+	if spell != "" {
+		data.Options = append(data.Options, &discordgo.ApplicationCommandInteractionDataOption{
+			Name:  "spell",
+			Type:  discordgo.ApplicationCommandOptionString,
+			Value: spell,
+		})
+	}
+	if slot > 0 {
+		data.Options = append(data.Options, &discordgo.ApplicationCommandInteractionDataOption{
+			Name:  "slot",
+			Type:  discordgo.ApplicationCommandOptionInteger,
+			Value: float64(slot),
+		})
+	}
+	i.Data = data
+	return i
+}
+
 func runActionHandler(t *testing.T, h *ActionHandler, i *discordgo.Interaction) string {
 	t.Helper()
 	var content string
@@ -1929,5 +1952,122 @@ func TestActionHandler_Ready_ServiceError(t *testing.T) {
 
 	if !contains(resp, "action already used") {
 		t.Errorf("expected service error in response, got %q", resp)
+	}
+}
+
+// --- E-71-followup-discord-ready-spell-flags ---
+
+// /action ready spell:"Fireball" slot:3 args:"if a goblin enters this room"
+// must thread the spell + slot through ReadyActionCommand so the service
+// expends the slot at ready-time and sets concentration.
+func TestActionHandler_Ready_WiresSpellAndSlot(t *testing.T) {
+	sess := &MockSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	campID := uuid.New()
+
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Mira",
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsAlive: true, HpCurrent: 10,
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
+	encounter := refdata.Encounter{
+		ID:            encounterID,
+		CampaignID:    campID,
+		Mode:          "combat",
+		CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+	}
+
+	svc := &fakeActionCombatService{
+		encounters:  map[uuid.UUID]refdata.Encounter{encounterID: encounter},
+		combatants:  map[uuid.UUID]refdata.Combatant{combatantID: combatant},
+		byEncounter: map[uuid.UUID][]refdata.Combatant{encounterID: {combatant}},
+		readyResult: combat.ReadyActionResult{
+			CombatLog: "⏳ Mira readies Fireball at 3rd level",
+		},
+	}
+	turnProv := &fakeActionTurnProvider{turns: map[uuid.UUID]refdata.Turn{turnID: turn}}
+
+	h := NewActionHandler(
+		sess,
+		&fakeActionEncounterResolver{encounterID: encounterID},
+		svc,
+		turnProv,
+		&fakeActionCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&fakeActionCharacterLookup{char: refdata.Character{ID: charID}},
+		&fakeActionPendingStore{},
+	)
+
+	_ = runActionHandler(t, h, makeActionInteractionWithSpell(
+		"g1", "u1", "ready", "if a goblin enters this room", "Fireball", 3,
+	))
+
+	if svc.readyCalledWith.SpellName != "Fireball" {
+		t.Errorf("SpellName = %q want Fireball", svc.readyCalledWith.SpellName)
+	}
+	if svc.readyCalledWith.SpellSlotLevel != 3 {
+		t.Errorf("SpellSlotLevel = %d want 3", svc.readyCalledWith.SpellSlotLevel)
+	}
+	if svc.readyCalledWith.Description != "if a goblin enters this room" {
+		t.Errorf("Description = %q want trigger text", svc.readyCalledWith.Description)
+	}
+}
+
+// When no spell/slot options are supplied, /action ready stays on the
+// description-only path so non-spell readies (e.g. ready an attack) are
+// unchanged.
+func TestActionHandler_Ready_NoSpellLeavesFieldsEmpty(t *testing.T) {
+	sess := &MockSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	campID := uuid.New()
+
+	combatant := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Thorn",
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsAlive: true, HpCurrent: 10,
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
+	encounter := refdata.Encounter{
+		ID:            encounterID,
+		CampaignID:    campID,
+		Mode:          "combat",
+		CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+	}
+
+	svc := &fakeActionCombatService{
+		encounters:  map[uuid.UUID]refdata.Encounter{encounterID: encounter},
+		combatants:  map[uuid.UUID]refdata.Combatant{combatantID: combatant},
+		byEncounter: map[uuid.UUID][]refdata.Combatant{encounterID: {combatant}},
+		readyResult: combat.ReadyActionResult{CombatLog: "⏳ Thorn readies an action"},
+	}
+	turnProv := &fakeActionTurnProvider{turns: map[uuid.UUID]refdata.Turn{turnID: turn}}
+
+	h := NewActionHandler(
+		sess,
+		&fakeActionEncounterResolver{encounterID: encounterID},
+		svc,
+		turnProv,
+		&fakeActionCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&fakeActionCharacterLookup{char: refdata.Character{ID: charID}},
+		&fakeActionPendingStore{},
+	)
+
+	_ = runActionHandler(t, h, makeActionInteraction("g1", "u1", "ready", "shoot anyone who opens the door"))
+
+	if svc.readyCalledWith.SpellName != "" {
+		t.Errorf("SpellName must be empty for non-spell ready, got %q", svc.readyCalledWith.SpellName)
+	}
+	if svc.readyCalledWith.SpellSlotLevel != 0 {
+		t.Errorf("SpellSlotLevel must be 0 for non-spell ready, got %d", svc.readyCalledWith.SpellSlotLevel)
 	}
 }

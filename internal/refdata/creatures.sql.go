@@ -44,7 +44,7 @@ func (q *Queries) DeleteHomebrewCreature(ctx context.Context, arg DeleteHomebrew
 }
 
 const getCreature = `-- name: GetCreature :one
-SELECT id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source, created_at, updated_at FROM creatures WHERE id = $1
+SELECT id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source, created_at, updated_at, bonus_actions FROM creatures WHERE id = $1
 `
 
 func (q *Queries) GetCreature(ctx context.Context, id string) (Creature, error) {
@@ -78,12 +78,13 @@ func (q *Queries) GetCreature(ctx context.Context, id string) (Creature, error) 
 		&i.Source,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BonusActions,
 	)
 	return i, err
 }
 
 const listCreatures = `-- name: ListCreatures :many
-SELECT id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source, created_at, updated_at FROM creatures ORDER BY name
+SELECT id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source, created_at, updated_at, bonus_actions FROM creatures ORDER BY name
 `
 
 func (q *Queries) ListCreatures(ctx context.Context) ([]Creature, error) {
@@ -123,6 +124,7 @@ func (q *Queries) ListCreatures(ctx context.Context) ([]Creature, error) {
 			&i.Source,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.BonusActions,
 		); err != nil {
 			return nil, err
 		}
@@ -138,7 +140,7 @@ func (q *Queries) ListCreatures(ctx context.Context) ([]Creature, error) {
 }
 
 const listCreaturesByCR = `-- name: ListCreaturesByCR :many
-SELECT id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source, created_at, updated_at FROM creatures WHERE cr = $1 ORDER BY name
+SELECT id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source, created_at, updated_at, bonus_actions FROM creatures WHERE cr = $1 ORDER BY name
 `
 
 func (q *Queries) ListCreaturesByCR(ctx context.Context, cr string) ([]Creature, error) {
@@ -178,6 +180,7 @@ func (q *Queries) ListCreaturesByCR(ctx context.Context, cr string) ([]Creature,
 			&i.Source,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.BonusActions,
 		); err != nil {
 			return nil, err
 		}
@@ -193,7 +196,7 @@ func (q *Queries) ListCreaturesByCR(ctx context.Context, cr string) ([]Creature,
 }
 
 const listCreaturesByType = `-- name: ListCreaturesByType :many
-SELECT id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source, created_at, updated_at FROM creatures WHERE type = $1 ORDER BY name
+SELECT id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source, created_at, updated_at, bonus_actions FROM creatures WHERE type = $1 ORDER BY name
 `
 
 func (q *Queries) ListCreaturesByType(ctx context.Context, type_ string) ([]Creature, error) {
@@ -233,6 +236,7 @@ func (q *Queries) ListCreaturesByType(ctx context.Context, type_ string) ([]Crea
 			&i.Source,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.BonusActions,
 		); err != nil {
 			return nil, err
 		}
@@ -248,8 +252,8 @@ func (q *Queries) ListCreaturesByType(ctx context.Context, type_ string) ([]Crea
 }
 
 const upsertCreature = `-- name: UpsertCreature :exec
-INSERT INTO creatures (id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, homebrew, source)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+INSERT INTO creatures (id, campaign_id, name, size, type, alignment, ac, ac_type, hp_formula, hp_average, speed, ability_scores, saving_throws, skills, damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, senses, languages, cr, attacks, abilities, bonus_actions, homebrew, source)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
 ON CONFLICT (id) DO UPDATE SET
     campaign_id = EXCLUDED.campaign_id,
     name = EXCLUDED.name,
@@ -273,6 +277,7 @@ ON CONFLICT (id) DO UPDATE SET
     cr = EXCLUDED.cr,
     attacks = EXCLUDED.attacks,
     abilities = EXCLUDED.abilities,
+    bonus_actions = EXCLUDED.bonus_actions,
     homebrew = EXCLUDED.homebrew,
     source = EXCLUDED.source,
     updated_at = now()
@@ -302,6 +307,7 @@ type UpsertCreatureParams struct {
 	Cr                    string                `json:"cr"`
 	Attacks               json.RawMessage       `json:"attacks"`
 	Abilities             pqtype.NullRawMessage `json:"abilities"`
+	BonusActions          pqtype.NullRawMessage `json:"bonus_actions"`
 	Homebrew              sql.NullBool          `json:"homebrew"`
 	Source                sql.NullString        `json:"source"`
 }
@@ -331,6 +337,7 @@ func (q *Queries) UpsertCreature(ctx context.Context, arg UpsertCreatureParams) 
 		arg.Cr,
 		arg.Attacks,
 		arg.Abilities,
+		arg.BonusActions,
 		arg.Homebrew,
 		arg.Source,
 	)

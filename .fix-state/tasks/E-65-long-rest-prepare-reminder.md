@@ -3,8 +3,8 @@ id: E-65-long-rest-prepare-reminder
 group: E
 phase: 65
 severity: MEDIUM
-status: open
-owner:
+status: done
+owner: lifecycle
 reviewer:
 last_update: 2026-05-11
 ---

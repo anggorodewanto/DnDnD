@@ -83,6 +83,11 @@ func (h *SaveHandler) SetAoESaveResolver(r AoESaveResolver) {
 	h.aoeSaveResolver = r
 }
 
+// HasAoESaveResolver reports whether a non-nil AoESaveResolver has been
+// wired. Production-wiring tests use this to detect the AOE-CAST follow-up
+// regression (nil resolver → AoE saves are recorded but never resolved).
+func (h *SaveHandler) HasAoESaveResolver() bool { return h.aoeSaveResolver != nil }
+
 // HasRollLogger reports whether a non-nil dice.RollHistoryLogger has been
 // wired on this handler. Used by production-wiring tests to detect the
 // Phase 18 silent-no-op.

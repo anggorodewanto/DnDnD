@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
@@ -1160,5 +1161,179 @@ func TestASIHandler_HandleDMDeny(t *testing.T) {
 
 	if !svc.denyASICalled {
 		t.Error("expected DenyASI to be called")
+	}
+}
+
+// --- F-89d: pending-choice durability across restart ---
+
+// stubASIPendingStore is an in-memory implementation of ASIPendingStore for
+// the F-89d persistence tests. Records calls so we can assert the handler
+// upserts on storePendingChoice and deletes on removePendingChoice.
+type stubASIPendingStore struct {
+	mu       sync.Mutex
+	saves    []PendingASIChoice
+	deletes  []uuid.UUID
+	list     []PendingASIChoice
+	saveErr  error
+	delErr   error
+	listErr  error
+}
+
+func (s *stubASIPendingStore) Save(_ context.Context, c PendingASIChoice) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.saveErr != nil {
+		return s.saveErr
+	}
+	s.saves = append(s.saves, c)
+	return nil
+}
+
+func (s *stubASIPendingStore) Delete(_ context.Context, charID uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.delErr != nil {
+		return s.delErr
+	}
+	s.deletes = append(s.deletes, charID)
+	return nil
+}
+
+func (s *stubASIPendingStore) List(_ context.Context) ([]PendingASIChoice, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	return s.list, nil
+}
+
+func TestASIHandler_PersistsPendingChoiceToStore(t *testing.T) {
+	charID := uuid.New()
+	scores := character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}
+	svc := &mockASIService{
+		character: &ASICharacterData{
+			ID:            charID,
+			Name:          "Aria",
+			DiscordUserID: "user123",
+			Scores:        scores,
+			ClassInfo:     "Fighter 8",
+		},
+	}
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error { return nil },
+	}
+	store := &stubASIPendingStore{}
+	handler := NewASIHandler(session, svc, nil)
+	handler.SetPendingStore(store)
+
+	interaction := &discordgo.Interaction{
+		GuildID: "guild1",
+		Type:    discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_select:" + charID.String() + ":plus2",
+			Values:   []string{"str"},
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "user123"}},
+	}
+	handler.HandleASISelect(interaction)
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.saves) != 1 {
+		t.Fatalf("expected one Save call, got %d", len(store.saves))
+	}
+	if store.saves[0].CharID != charID {
+		t.Errorf("Save charID = %s, want %s", store.saves[0].CharID, charID)
+	}
+}
+
+func TestASIHandler_DeletesFromStoreOnApprove(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{}
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error { return nil },
+		InteractionResponseEditFunc: func(_ *discordgo.Interaction, _ *discordgo.WebhookEdit) (*discordgo.Message, error) {
+			return &discordgo.Message{}, nil
+		},
+		UserChannelCreateFunc: func(_ string) (*discordgo.Channel, error) {
+			return &discordgo.Channel{ID: "dm-channel"}, nil
+		},
+		ChannelMessageSendFunc: func(_ string, _ string) (*discordgo.Message, error) {
+			return &discordgo.Message{}, nil
+		},
+	}
+	store := &stubASIPendingStore{}
+	handler := NewASIHandler(session, svc, nil)
+	handler.SetPendingStore(store)
+	handler.storePendingChoice(charID, PendingASIChoice{
+		CharID:   charID,
+		ASIType:  "plus2",
+		PlayerID: "user123",
+	})
+
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_approve:" + charID.String(),
+		},
+	}
+	handler.HandleDMApprove(interaction)
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.deletes) != 1 || store.deletes[0] != charID {
+		t.Fatalf("expected one Delete call for charID=%s, got %v", charID, store.deletes)
+	}
+}
+
+func TestASIHandler_HydratePending_RehydratesAfterRestart(t *testing.T) {
+	charID := uuid.New()
+	store := &stubASIPendingStore{
+		list: []PendingASIChoice{{
+			CharID:      charID,
+			ASIType:     "plus2",
+			Abilities:   []string{"str"},
+			PlayerID:    "user123",
+			Description: "+2 STR (16 -> 18)",
+		}},
+	}
+	svc := &mockASIService{}
+	session := &MockSession{}
+	handler := NewASIHandler(session, svc, nil)
+	handler.SetPendingStore(store)
+
+	if err := handler.HydratePending(context.Background()); err != nil {
+		t.Fatalf("HydratePending error: %v", err)
+	}
+
+	got, ok := handler.getPendingChoice(charID)
+	if !ok {
+		t.Fatalf("expected pending choice for %s after hydrate", charID)
+	}
+	if got.ASIType != "plus2" || got.Description == "" {
+		t.Errorf("unexpected hydrated choice: %+v", got)
+	}
+}
+
+func TestMarshalUnmarshalPendingASIChoice_RoundTrip(t *testing.T) {
+	charID := uuid.New()
+	in := PendingASIChoice{
+		CharID:      charID,
+		ASIType:     "feat",
+		FeatID:      "alert",
+		PlayerID:    "user42",
+		Description: "Feat: Alert",
+	}
+	raw, err := MarshalPendingASIChoice(in)
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+	out, err := UnmarshalPendingASIChoice(raw)
+	if err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if out.CharID != in.CharID || out.ASIType != in.ASIType || out.FeatID != in.FeatID {
+		t.Errorf("round-trip mismatch: in=%+v out=%+v", in, out)
 	}
 }

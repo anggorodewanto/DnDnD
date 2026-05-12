@@ -648,6 +648,90 @@ func TestActionHandler_Stabilize_NoStore_ReportsUnavailable(t *testing.T) {
 	assert.Contains(t, resp, "not available")
 }
 
+// --- C-43-stabilize-followup: WIS modifier + Medicine proficiency ---
+
+// stubActionMedicineLookup is a tiny stub for ActionMedicineLookup so
+// stabilize tests can assert the resolved modifier reaches the roll.
+type stubActionMedicineLookup struct {
+	mod int
+	err error
+}
+
+func (s *stubActionMedicineLookup) LookupMedicineModifier(_ context.Context, _ refdata.Combatant) (int, error) {
+	return s.mod, s.err
+}
+
+// A high-WIS proficient stabilizer (WIS 18 = +4, prof +2 ⇒ +6) auto-passes
+// a d20=9 roll because 9 + 6 = 15 ≥ DC 10.
+func TestActionHandler_Stabilize_HighWisProficient_AutoPasses(t *testing.T) {
+	dyingID := uuid.New()
+	dsBytes, _ := json.Marshal(map[string]int{"successes": 0, "failures": 1})
+	target := refdata.Combatant{
+		ID:          dyingID,
+		ShortID:     "DY",
+		DisplayName: "Fallen",
+		IsAlive:     true,
+		HpCurrent:   0,
+		DeathSaves:  pqtype.NullRawMessage{RawMessage: dsBytes, Valid: true},
+	}
+	h, _, store, _ := setupStabilizeActionHandler(t, 9, target) // d20 = 9
+	h.SetMedicineLookup(&stubActionMedicineLookup{mod: 6})
+
+	resp := runActionHandler(t, h, makeActionInteraction("g1", "u1", "stabilize", "DY"))
+
+	require.Len(t, store.calls, 1, "expected death-save persistence on 9+6=15 ≥ DC 10: %s", resp)
+	var ds combat.DeathSaves
+	require.NoError(t, json.Unmarshal(store.calls[0].DeathSaves.RawMessage, &ds))
+	assert.Equal(t, 3, ds.Successes, "stabilize must persist 3 successes")
+	assert.Contains(t, resp, "stabilized")
+	assert.Contains(t, resp, "+6", "expected modifier in roll breakdown")
+}
+
+// A low-WIS amateur (WIS 8 = -1, no Medicine) fails a d20=9 roll because
+// 9 + (-1) = 8 < DC 10. Without the modifier wiring the same roll would
+// have passed (this is the regression the followup task closes).
+func TestActionHandler_Stabilize_LowWisAmateur_FailsAtDC10(t *testing.T) {
+	dyingID := uuid.New()
+	dsBytes, _ := json.Marshal(map[string]int{"successes": 0, "failures": 1})
+	target := refdata.Combatant{
+		ID:          dyingID,
+		ShortID:     "DY",
+		DisplayName: "Fallen",
+		IsAlive:     true,
+		HpCurrent:   0,
+		DeathSaves:  pqtype.NullRawMessage{RawMessage: dsBytes, Valid: true},
+	}
+	h, _, store, _ := setupStabilizeActionHandler(t, 9, target) // d20 = 9
+	h.SetMedicineLookup(&stubActionMedicineLookup{mod: -1})
+
+	resp := runActionHandler(t, h, makeActionInteraction("g1", "u1", "stabilize", "DY"))
+
+	assert.Len(t, store.calls, 0, "WIS-8 amateur with d20=9 (total 8) must fail DC 10")
+	assert.Contains(t, resp, "fails")
+	assert.Contains(t, resp, "-1", "expected modifier in roll breakdown")
+}
+
+// Lookup error degrades to +0 so /action stabilize never breaks because of
+// a flaky lookup. d20=10 + 0 = 10 ≥ DC 10 still passes.
+func TestActionHandler_Stabilize_LookupError_FallsBackToFlatRoll(t *testing.T) {
+	dyingID := uuid.New()
+	dsBytes, _ := json.Marshal(map[string]int{"successes": 0, "failures": 1})
+	target := refdata.Combatant{
+		ID:          dyingID,
+		ShortID:     "DY",
+		DisplayName: "Fallen",
+		IsAlive:     true,
+		HpCurrent:   0,
+		DeathSaves:  pqtype.NullRawMessage{RawMessage: dsBytes, Valid: true},
+	}
+	h, _, store, _ := setupStabilizeActionHandler(t, 10, target)
+	h.SetMedicineLookup(&stubActionMedicineLookup{err: errStub})
+
+	resp := runActionHandler(t, h, makeActionInteraction("g1", "u1", "stabilize", "DY"))
+	require.Len(t, store.calls, 1, "lookup error must degrade to +0, not block the roll: %s", resp)
+	assert.Contains(t, resp, "stabilized")
+}
+
 // --- C-32 helper unit test ---
 
 func TestRangeRejectionMessage_ParsesAttackError(t *testing.T) {

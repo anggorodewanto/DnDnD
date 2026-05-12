@@ -39,6 +39,18 @@ type AttackMapProvider interface {
 	GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error)
 }
 
+// AttackClassFeatureService is the slice of *combat.Service the attack
+// handler needs to apply Stunning Strike, Divine Smite, and Bardic
+// Inspiration after a successful hit. *combat.Service satisfies this
+// structurally. The interface is optional — when no service is wired the
+// post-hit prompts simply skip the on-choice mechanic application.
+// (D-48b/D-49/D-51 follow-up)
+type AttackClassFeatureService interface {
+	StunningStrike(ctx context.Context, cmd combat.StunningStrikeCommand, roller *dice.Roller) (combat.StunningStrikeResult, error)
+	DivineSmite(ctx context.Context, cmd combat.DivineSmiteCommand, roller *dice.Roller) (combat.DivineSmiteResult, error)
+	UseBardicInspiration(ctx context.Context, cmd combat.UseBardicInspirationCommand, roller *dice.Roller) (combat.UseBardicInspirationResult, error)
+}
+
 // AttackHandler handles the /attack slash command. Wires Phases 34-38 of
 // the combat spec: weapon override, two-handed grip, GWM/Sharpshooter/
 // Reckless modifier flags, and the off-hand bonus-action attack
@@ -55,6 +67,11 @@ type AttackHandler struct {
 	// slash-command attacks. nil-safe — when unset the cover degrades to
 	// "no wall cover".
 	mapProvider AttackMapProvider
+	// D-48b/D-49/D-51 follow-up: optional post-hit prompt poster + service.
+	// Both nil-safe: when either is unset, the eligibility flags on
+	// AttackResult are simply ignored and no prompt fires.
+	classFeaturePrompts *ClassFeaturePromptPoster
+	classFeatureService AttackClassFeatureService
 }
 
 // NewAttackHandler constructs an /attack handler.
@@ -89,6 +106,30 @@ func (h *AttackHandler) SetTurnGate(g TurnGate) {
 func (h *AttackHandler) SetMapProvider(p AttackMapProvider) {
 	h.mapProvider = p
 }
+
+// HasMapProvider reports whether a non-nil AttackMapProvider has been
+// wired. Production wiring tests use this to detect the C-33-followup
+// regression (nil map provider → no wall cover on /attack).
+func (h *AttackHandler) HasMapProvider() bool { return h.mapProvider != nil }
+
+// SetClassFeaturePromptPoster wires the optional post-hit prompt poster
+// used to fire Stunning Strike / Divine Smite / Bardic Inspiration buttons
+// after a successful /attack hit. nil-safe.
+func (h *AttackHandler) SetClassFeaturePromptPoster(p *ClassFeaturePromptPoster) {
+	h.classFeaturePrompts = p
+}
+
+// SetClassFeatureService wires the combat-side service the post-hit
+// prompt callbacks invoke (StunningStrike / DivineSmite / UseBardicInspiration).
+// nil-safe.
+func (h *AttackHandler) SetClassFeatureService(s AttackClassFeatureService) {
+	h.classFeatureService = s
+}
+
+// HasClassFeaturePromptPoster reports whether the post-hit prompt poster
+// has been wired. Used by production-wiring tests to detect the
+// D-48b/D-49/D-51 follow-up regression.
+func (h *AttackHandler) HasClassFeaturePromptPoster() bool { return h.classFeaturePrompts != nil }
 
 // loadWalls best-effort fetches map wall segments for an encounter, mirroring
 // cast_handler.loadWalls. Any failure path returns nil so the cover calc
@@ -189,7 +230,7 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 	walls := h.loadWalls(ctx, encounter)
 
 	if offhand {
-		h.dispatchOffhand(ctx, interaction, encounterID, attacker, *target, turn, walls)
+		h.dispatchOffhand(ctx, interaction, encounterID, attacker, *target, turn, walls, encounter)
 		return
 	}
 
@@ -216,6 +257,11 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 	logLine := combat.FormatAttackLog(result)
 	h.postCombatLog(ctx, encounterID, logLine)
 	respondEphemeral(h.session, interaction, logLine)
+
+	// D-48b/D-49/D-51 follow-up: surface post-hit class-feature prompts
+	// (Stunning Strike / Divine Smite / Bardic Inspiration) when the service
+	// flagged the attacker as eligible. nil-safe: no-op when no poster is wired.
+	h.postClassFeaturePrompts(ctx, interaction, encounterID, attacker, *target, encounter, result)
 }
 
 // dispatchOffhand routes the off-hand bonus-action attack through the
@@ -228,6 +274,7 @@ func (h *AttackHandler) dispatchOffhand(
 	attacker, target refdata.Combatant,
 	turn refdata.Turn,
 	walls []renderer.WallSegment,
+	encounter refdata.Encounter,
 ) {
 	cmd := combat.OffhandAttackCommand{
 		Attacker: attacker,
@@ -243,6 +290,7 @@ func (h *AttackHandler) dispatchOffhand(
 	logLine := combat.FormatAttackLog(result)
 	h.postCombatLog(ctx, encounterID, logLine)
 	respondEphemeral(h.session, interaction, logLine)
+	h.postClassFeaturePrompts(ctx, interaction, encounterID, attacker, target, encounter, result)
 }
 
 // formatAttackError translates a service-level attack error into the
@@ -290,6 +338,111 @@ func rangeRejectionMessage(err error) (string, bool) {
 // postCombatLog mirrors a combat log line to #combat-log when wired.
 func (h *AttackHandler) postCombatLog(ctx context.Context, encounterID uuid.UUID, msg string) {
 	postCombatLogChannel(ctx, h.session, h.channelIDProvider, encounterID, msg)
+}
+
+// postClassFeaturePrompts reads the post-hit eligibility flags from result
+// and fires the corresponding Stunning Strike / Divine Smite / Bardic
+// Inspiration prompts. Each prompt's OnChoice closure invokes the wired
+// combat service (StunningStrike / DivineSmite / UseBardicInspiration) and
+// mirrors the resulting combat log line to #combat-log. Forfeit / Skip
+// branches consume no resources. Nil prompt-poster or service is a no-op.
+// (D-48b/D-49/D-51 follow-up)
+func (h *AttackHandler) postClassFeaturePrompts(
+	ctx context.Context,
+	interaction *discordgo.Interaction,
+	encounterID uuid.UUID,
+	attacker, target refdata.Combatant,
+	encounter refdata.Encounter,
+	result combat.AttackResult,
+) {
+	if h.classFeaturePrompts == nil {
+		return
+	}
+	channelID := h.resolvePromptChannel(ctx, interaction, encounterID)
+	if channelID == "" {
+		return
+	}
+
+	if result.PromptStunningStrikeEligible {
+		_ = h.classFeaturePrompts.PromptStunningStrike(StunningStrikePromptArgs{
+			ChannelID:    channelID,
+			AttackerName: attacker.DisplayName,
+			TargetName:   target.DisplayName,
+			KiAvailable:  result.PromptStunningStrikeKiAvailable,
+		}, func(res StunningStrikePromptResult) {
+			if res.Forfeited || !res.UseKi || h.classFeatureService == nil {
+				return
+			}
+			ssResult, err := h.classFeatureService.StunningStrike(ctx, combat.StunningStrikeCommand{
+				Attacker:     attacker,
+				Target:       target,
+				CurrentRound: int(encounter.RoundNumber),
+			}, h.roller)
+			if err == nil && ssResult.CombatLog != "" {
+				h.postCombatLog(ctx, encounterID, ssResult.CombatLog)
+			}
+		})
+	}
+
+	if result.PromptDivineSmiteEligible && len(result.PromptDivineSmiteSlots) > 0 {
+		_ = h.classFeaturePrompts.PromptDivineSmite(DivineSmitePromptArgs{
+			ChannelID:      channelID,
+			AttackerName:   attacker.DisplayName,
+			TargetName:     target.DisplayName,
+			AvailableSlots: result.PromptDivineSmiteSlots,
+		}, func(res DivineSmitePromptResult) {
+			if res.Forfeited || !res.UseSlot || h.classFeatureService == nil {
+				return
+			}
+			dsResult, err := h.classFeatureService.DivineSmite(ctx, combat.DivineSmiteCommand{
+				Attacker:     attacker,
+				Target:       target,
+				SlotLevel:    res.SlotLevel,
+				IsCritical:   result.CriticalHit,
+				AttackResult: result,
+			}, h.roller)
+			if err == nil && dsResult.CombatLog != "" {
+				h.postCombatLog(ctx, encounterID, dsResult.CombatLog)
+			}
+		})
+	}
+
+	if result.PromptBardicInspirationEligible {
+		_ = h.classFeaturePrompts.PromptBardicInspiration(BardicInspirationPromptArgs{
+			ChannelID:  channelID,
+			HolderName: attacker.DisplayName,
+			Die:        result.PromptBardicInspirationDie,
+			Context:    "attack roll",
+		}, func(res BardicInspirationPromptResult) {
+			if res.Forfeited || !res.UseDie || h.classFeatureService == nil {
+				return
+			}
+			biResult, err := h.classFeatureService.UseBardicInspiration(ctx, combat.UseBardicInspirationCommand{
+				Combatant:     attacker,
+				OriginalTotal: result.D20Roll.Total,
+			}, h.roller)
+			if err == nil && biResult.CombatLog != "" {
+				h.postCombatLog(ctx, encounterID, biResult.CombatLog)
+			}
+		})
+	}
+}
+
+// resolvePromptChannel picks a Discord channel to render post-hit class-
+// feature prompts in. Priority: combat-log channel (so the encounter sees
+// the follow-up), then the interaction's channel as a last resort. Mirrors
+// CastHandler.resolvePromptChannel — kept package-private to each handler
+// so changes can diverge without coordinated edits.
+func (h *AttackHandler) resolvePromptChannel(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID) string {
+	if h.channelIDProvider != nil {
+		channels, err := h.channelIDProvider.GetChannelIDs(ctx, encounterID)
+		if err == nil {
+			if ch, ok := channels["combat-log"]; ok && ch != "" {
+				return ch
+			}
+		}
+	}
+	return interaction.ChannelID
 }
 
 // optionBool extracts a named boolean option from an interaction's

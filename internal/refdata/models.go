@@ -201,6 +201,7 @@ type Creature struct {
 	Source                sql.NullString        `json:"source"`
 	CreatedAt             time.Time             `json:"created_at"`
 	UpdatedAt             time.Time             `json:"updated_at"`
+	BonusActions          pqtype.NullRawMessage `json:"bonus_actions"`
 }
 
 type DmPlayerMessage struct {
@@ -393,6 +394,27 @@ type PendingAction struct {
 	CreatedAt        time.Time     `json:"created_at"`
 	UpdatedAt        time.Time     `json:"updated_at"`
 	DmQueueItemID    uuid.NullUUID `json:"dm_queue_item_id"`
+}
+
+type PendingAsi struct {
+	CharacterID  uuid.UUID       `json:"character_id"`
+	SnapshotJson json.RawMessage `json:"snapshot_json"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
+}
+
+type PendingCheck struct {
+	ID          uuid.UUID      `json:"id"`
+	EncounterID uuid.UUID      `json:"encounter_id"`
+	CombatantID uuid.UUID      `json:"combatant_id"`
+	Skill       string         `json:"skill"`
+	Dc          int32          `json:"dc"`
+	Reason      sql.NullString `json:"reason"`
+	Status      string         `json:"status"`
+	RollResult  sql.NullInt32  `json:"roll_result"`
+	Success     sql.NullBool   `json:"success"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 type PendingSafe struct {

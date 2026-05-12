@@ -1257,3 +1257,86 @@ func TestFormatDMDecisionPrompt_ShowsPendingSaves(t *testing.T) {
 	assert.Contains(t, msg, "Pending saves")
 }
 
+// C-43-followup: Nat-20 timer path also resets death-save tallies and clears
+// the dying-condition bundle (unconscious + prone), mirroring the
+// MaybeResetDeathSavesOnHeal hook used by /heal and Lay on Hands.
+func TestAutoResolveTurn_DyingCombatant_Nat20_ResetsDeathSavesAndDyingConditions(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+
+	// Pre-existing tallies: 1 success, 2 failures — Nat-20 should reset to 0,0.
+	ds := DeathSaves{Successes: 1, Failures: 2}
+	dsJSON, _ := json.Marshal(ds)
+
+	// Conditions include the dying bundle (unconscious + prone).
+	conds := []CombatCondition{
+		{Condition: "unconscious", DurationRounds: 0},
+		{Condition: "prone", DurationRounds: 0},
+	}
+	condsJSON, _ := json.Marshal(conds)
+
+	store := defaultMockStore()
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID: turnID, EncounterID: encounterID, CombatantID: combatantID,
+			RoundNumber: 2, Status: "active",
+		}, nil
+	}
+	currentCombatant := refdata.Combatant{
+		ID: combatantID, EncounterID: encounterID, DisplayName: "Borr",
+		HpCurrent: 0, HpMax: 40, IsAlive: true, Conditions: condsJSON,
+		DeathSaves: pqtype.NullRawMessage{RawMessage: dsJSON, Valid: true},
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return currentCombatant, nil
+	}
+	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: uuid.New(), Settings: settingsJSON(24)}, nil
+	}
+
+	hpUpdated := false
+	store.updateCombatantHPFn = func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpUpdated = true
+		assert.Equal(t, int32(1), arg.HpCurrent)
+		assert.True(t, arg.IsAlive)
+		currentCombatant.HpCurrent = arg.HpCurrent
+		currentCombatant.IsAlive = arg.IsAlive
+		return currentCombatant, nil
+	}
+
+	var capturedDS pqtype.NullRawMessage
+	store.updateCombatantDeathSavesFn = func(ctx context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error) {
+		capturedDS = arg.DeathSaves
+		currentCombatant.DeathSaves = arg.DeathSaves
+		return currentCombatant, nil
+	}
+
+	var capturedConds json.RawMessage
+	store.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		capturedConds = arg.Conditions
+		currentCombatant.Conditions = arg.Conditions
+		return currentCombatant, nil
+	}
+
+	notifier := &mockNotifier{}
+	timer := NewTurnTimer(store, notifier, 30*time.Second)
+	roller := dice.NewRoller(func(max int) int { return 20 })
+
+	_, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
+	require.NoError(t, err)
+	assert.True(t, hpUpdated, "HP must be set to 1 on Nat-20")
+
+	// Death saves persisted as zero tallies.
+	require.True(t, capturedDS.Valid, "death saves must be persisted on Nat-20")
+	persistedDS, err := ParseDeathSaves(capturedDS.RawMessage)
+	require.NoError(t, err)
+	assert.Equal(t, 0, persistedDS.Successes, "successes must reset to 0")
+	assert.Equal(t, 0, persistedDS.Failures, "failures must reset to 0")
+
+	// Dying conditions (unconscious + prone) must be removed.
+	require.NotNil(t, capturedConds, "conditions must be persisted on Nat-20")
+	assert.False(t, HasCondition(capturedConds, "unconscious"), "unconscious must be removed")
+	assert.False(t, HasCondition(capturedConds, "prone"), "prone must be removed")
+}
+
