@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -683,4 +684,67 @@ func TestCommandRouter_ImportHandlerUsesDDBImporterWhenWired(t *testing.T) {
 
 	assert.Equal(t, 1, importer.calls,
 		"/import interaction must route through deps.DDBImporter when wired")
+}
+
+// --- SR-003: Bot.HandleGuildCreate / HandleGuildMemberAdd + IntentsGuildMembers wiring ---
+
+// fakeGatewayWirer captures handler/intent wiring for SR-003 without spinning
+// up a real discordgo session. AddHandler stores each registered callback
+// keyed by its Go type signature so the test can prove that GuildCreate +
+// GuildMemberAdd + InteractionCreate handlers are all registered.
+type fakeGatewayWirer struct {
+	handlers []any
+	intents  discordgo.Intent
+}
+
+func (f *fakeGatewayWirer) AddHandler(h any) func() {
+	f.handlers = append(f.handlers, h)
+	return func() {}
+}
+
+func (f *fakeGatewayWirer) OrIntent(i discordgo.Intent) { f.intents |= i }
+
+// hasHandlerOfType reports whether any registered handler matches the
+// signature `func(*discordgo.Session, *<eventPtr>)`. eventPtr is a non-nil
+// pointer to a zero-value event struct (e.g. (*discordgo.GuildCreate)(nil)).
+func (f *fakeGatewayWirer) hasHandlerOfType(eventPtr any) bool {
+	want := reflect.TypeOf(eventPtr)
+	for _, h := range f.handlers {
+		ht := reflect.TypeOf(h)
+		if ht.Kind() != reflect.Func {
+			continue
+		}
+		if ht.NumIn() != 2 || ht.NumOut() != 0 {
+			continue
+		}
+		if ht.In(0) != reflect.TypeOf((*discordgo.Session)(nil)) {
+			continue
+		}
+		if ht.In(1) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// TestWireBotHandlers_RegistersGuildAndInteractionHandlers asserts the SR-003
+// fix: after wireBotHandlers runs, the gateway has GuildCreate +
+// GuildMemberAdd + InteractionCreate handlers attached AND Identify.Intents
+// includes IntentsGuildMembers (without which discordgo's privileged-intent
+// default excludes member-join events).
+func TestWireBotHandlers_RegistersGuildAndInteractionHandlers(t *testing.T) {
+	w := &fakeGatewayWirer{}
+	bot := discord.NewBot(&testSession{}, "app-id", nil)
+	router := discord.NewCommandRouter(bot, nil, nil)
+
+	wireBotHandlers(w, w, bot, router)
+
+	assert.True(t, w.hasHandlerOfType((*discordgo.GuildCreate)(nil)),
+		"wireBotHandlers must register Bot.HandleGuildCreate so dynamic guild-join command registration fires (spec line 179)")
+	assert.True(t, w.hasHandlerOfType((*discordgo.GuildMemberAdd)(nil)),
+		"wireBotHandlers must register Bot.HandleGuildMemberAdd so welcome DMs fire (spec lines 183-200)")
+	assert.True(t, w.hasHandlerOfType((*discordgo.InteractionCreate)(nil)),
+		"wireBotHandlers must keep the InteractionCreate handler that routes slash commands through CommandRouter")
+	assert.NotZero(t, w.intents&discordgo.IntentsGuildMembers,
+		"wireBotHandlers must OR-in IntentsGuildMembers so the privileged member-join gateway event is actually delivered")
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/character"
@@ -45,6 +46,58 @@ func wireEnemyTurnNotifier(h enemyTurnNotifierSetter, n combat.EnemyTurnNotifier
 		return
 	}
 	h.SetEnemyTurnNotifier(n)
+}
+
+// gatewayHandlerAdder narrows *discordgo.Session.AddHandler to the surface
+// wireBotHandlers needs so the SR-003 wiring is unit-testable with a fake.
+type gatewayHandlerAdder interface {
+	AddHandler(handler any) func()
+}
+
+// gatewayIntentSetter narrows the OR-in-an-intent operation against a
+// *discordgo.Session's Identify.Intents field. The production adapter below
+// (wrapping *discordgo.Session) sets the bit directly; the test fake records
+// the OR so the assertion can prove IntentsGuildMembers was requested.
+type gatewayIntentSetter interface {
+	OrIntent(i discordgo.Intent)
+}
+
+// sessionIntentSetter adapts *discordgo.Session to gatewayIntentSetter so
+// wireBotHandlers can OR-in IntentsGuildMembers on the real session without
+// every caller knowing the Identify field name.
+type sessionIntentSetter struct {
+	s *discordgo.Session
+}
+
+func (a *sessionIntentSetter) OrIntent(i discordgo.Intent) {
+	a.s.Identify.Intents |= i
+}
+
+// wireBotHandlers registers the three gateway callbacks required for SR-003:
+// HandleGuildCreate (dynamic guild-join command registration, spec line 179),
+// HandleGuildMemberAdd (welcome DMs, spec lines 183-200), and the
+// InteractionCreate router shim that dispatches slash commands through
+// CommandRouter. It also OR-s IntentsGuildMembers into Identify.Intents —
+// without that bit discordgo's default IntentsAllWithoutPrivileged excludes
+// the GuildMembers privileged intent and member-join events never arrive.
+//
+// The adder + intents seam is what makes this unit-testable; in production
+// the same *discordgo.Session satisfies both adder (via its AddHandler
+// method) and intents (via sessionIntentSetter).
+func wireBotHandlers(adder gatewayHandlerAdder, intents gatewayIntentSetter, bot *discord.Bot, router *discord.CommandRouter) {
+	if adder == nil || bot == nil {
+		return
+	}
+	adder.AddHandler(bot.HandleGuildCreate)
+	adder.AddHandler(bot.HandleGuildMemberAdd)
+	if router != nil {
+		adder.AddHandler(func(_ *discordgo.Session, i *discordgo.InteractionCreate) {
+			router.Handle(i.Interaction)
+		})
+	}
+	if intents != nil {
+		intents.OrIntent(discordgo.IntentsGuildMembers)
+	}
 }
 
 // discordHandlerDeps bundles the collaborators needed to construct every

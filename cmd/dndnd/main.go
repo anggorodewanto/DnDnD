@@ -1295,9 +1295,14 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// player can cancel it before the DM resolves.
 			discordHandlerSet.action.SetNotifier(dmQueueNotifier)
 			if rawDG != nil {
-				rawDG.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-					cmdRouter.Handle(i.Interaction)
-				})
+				// SR-003: wire HandleGuildCreate (spec line 179, dynamic
+				// guild-join command registration) + HandleGuildMemberAdd
+				// (spec lines 183-200, welcome DMs) alongside the existing
+				// InteractionCreate router shim. Also OR-in
+				// IntentsGuildMembers so the privileged member-join gateway
+				// event is actually delivered (discordgo's default
+				// IntentsAllWithoutPrivileged excludes it).
+				wireBotHandlers(rawDG, &sessionIntentSetter{s: rawDG}, bot, cmdRouter)
 
 				if state := discordSession.GetState(); state != nil {
 					guildIDs := make([]string, 0, len(state.Guilds))
