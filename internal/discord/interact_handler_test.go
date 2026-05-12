@@ -214,3 +214,132 @@ func TestInteractHandler_GetTurnError(t *testing.T) {
 		t.Errorf("expected load-turn rejection, got %q", sess.lastResponse.Data.Content)
 	}
 }
+
+// --- SR-005: combat.Interact wiring ---
+
+// fakeInteractCombatService records the InteractCommand received and returns a
+// canned InteractResult / error. Lets handler tests assert SR-005 routing
+// (first/second/third /interact) without needing a full combat.Service.
+type fakeInteractCombatService struct {
+	calls  []combat.InteractCommand
+	result combat.InteractResult
+	err    error
+}
+
+func (f *fakeInteractCombatService) Interact(_ context.Context, cmd combat.InteractCommand) (combat.InteractResult, error) {
+	f.calls = append(f.calls, cmd)
+	if f.err != nil {
+		return combat.InteractResult{}, f.err
+	}
+	return f.result, nil
+}
+
+// TestInteractHandler_SR005_FirstFreeInteractConsumesFreeFlag covers
+// acceptance criterion (a): first /interact with combat service wired
+// routes through combat.Interact, marks FreeInteractUsed, and leaves the
+// action untouched.
+func TestInteractHandler_SR005_FirstFreeInteractConsumesFreeFlag(t *testing.T) {
+	h, sess, turnStore, _ := setupInteractHandler()
+
+	fake := &fakeInteractCombatService{
+		result: combat.InteractResult{
+			Turn:         refdata.Turn{ID: turnStore.turn.ID, FreeInteractUsed: true},
+			CombatLog:    "🤚 Aria: draw longsword",
+			AutoResolved: true,
+		},
+	}
+	h.SetCombatService(fake)
+
+	h.Handle(makeInteractInteraction("draw longsword"))
+
+	if len(fake.calls) != 1 {
+		t.Fatalf("expected combat.Interact to be called once, got %d", len(fake.calls))
+	}
+	if fake.calls[0].Turn.FreeInteractUsed {
+		t.Error("expected to pass un-consumed turn to combat.Interact")
+	}
+	if fake.calls[0].Description != "draw longsword" {
+		t.Errorf("expected description forwarded, got %q", fake.calls[0].Description)
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "draw longsword") {
+		t.Errorf("expected combat-log line in response, got %q", sess.lastResponse.Data.Content)
+	}
+	// SR-005: handler must no longer touch the legacy turn store when the
+	// combat service is wired — combat.Interact owns the UpdateTurnActions
+	// write.
+	if turnStore.updated != nil {
+		t.Error("expected handler to delegate turn update to combat.Interact")
+	}
+}
+
+// TestInteractHandler_SR005_SecondInteractFallsBackToAction covers acceptance
+// criterion (b): with FreeInteractUsed already true, /interact must call
+// combat.Interact (which consumes the action and creates a pending_actions
+// row); the player sees a "sent to DM queue" combat log instead of an error.
+func TestInteractHandler_SR005_SecondInteractFallsBackToAction(t *testing.T) {
+	h, sess, turnStore, _ := setupInteractHandler()
+	turnStore.turn.FreeInteractUsed = true
+
+	pendingID := uuid.New()
+	fake := &fakeInteractCombatService{
+		result: combat.InteractResult{
+			Turn: refdata.Turn{
+				ID:               turnStore.turn.ID,
+				FreeInteractUsed: true,
+				ActionUsed:       true,
+			},
+			PendingAction: refdata.PendingAction{
+				ID:         pendingID,
+				ActionText: "search the chest",
+				Status:     "pending",
+			},
+			CombatLog:      `🤚 Aria: "search the chest" — sent to DM queue`,
+			DMQueueMessage: `🤚 **Interact** — Aria: "search the chest"`,
+		},
+	}
+	h.SetCombatService(fake)
+
+	h.Handle(makeInteractInteraction("search the chest"))
+
+	if len(fake.calls) != 1 {
+		t.Fatalf("expected combat.Interact to be called once, got %d", len(fake.calls))
+	}
+	if !fake.calls[0].Turn.FreeInteractUsed {
+		t.Error("expected handler to forward turn.FreeInteractUsed=true so service falls back to action")
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "DM queue") {
+		t.Errorf("expected DM-queue line in response, got %q", sess.lastResponse.Data.Content)
+	}
+	if strings.Contains(sess.lastResponse.Data.Content, "Cannot interact") {
+		t.Errorf("second /interact must not be rejected, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+// TestInteractHandler_SR005_ThirdInteractRejectedWhenActionSpent covers
+// acceptance criterion (c): when both free interact and action are spent,
+// combat.Interact returns the action-spent error and the handler surfaces it.
+func TestInteractHandler_SR005_ThirdInteractRejectedWhenActionSpent(t *testing.T) {
+	h, sess, turnStore, _ := setupInteractHandler()
+	turnStore.turn.FreeInteractUsed = true
+	turnStore.turn.ActionUsed = true
+
+	fake := &fakeInteractCombatService{
+		err: errors.New("Free interaction already used and action is spent"),
+	}
+	h.SetCombatService(fake)
+
+	h.Handle(makeInteractInteraction("draw dagger"))
+
+	if len(fake.calls) != 1 {
+		t.Fatalf("expected combat.Interact to be called once, got %d", len(fake.calls))
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Cannot interact") {
+		t.Errorf("expected action-spent rejection, got %q", sess.lastResponse.Data.Content)
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "action is spent") {
+		t.Errorf("expected action-spent rejection wording, got %q", sess.lastResponse.Data.Content)
+	}
+	if turnStore.updated != nil {
+		t.Error("expected no turn update when action is spent")
+	}
+}

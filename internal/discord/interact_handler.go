@@ -25,17 +25,30 @@ type InteractEncounterProvider interface {
 	GetCombatant(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 }
 
-// InteractHandler handles /interact <description>. Free Object Interaction
-// (Phase 74) is freeform: the player declares one item-handling action per
-// turn at no resource cost beyond the per-turn FreeInteractUsed flag. No
-// dedicated combat service exists; this handler simply marks the flag and
-// posts the description to #combat-log.
+// InteractCombatService runs the full /interact flow: free→action fallback,
+// auto-resolvable pattern detection, and pending_actions row insertion so the
+// DM dashboard / #dm-queue can resolve non-auto interactions. *combat.Service
+// implements it.
+type InteractCombatService interface {
+	Interact(ctx context.Context, cmd combat.InteractCommand) (combat.InteractResult, error)
+}
+
+// InteractHandler handles /interact <description>.
+//
+// SR-005: when a combat service is wired (SetCombatService) the handler
+// routes through combat.Interact, which implements the spec'd free→action
+// fallback (Phase 74 spec line 1200) and creates a pending_actions row for
+// the DM. When nil, the handler keeps the legacy UseResource(turn,
+// ResourceFreeInteract) path used by handler test fixtures that pre-date
+// SR-005 — second /interact in the legacy path is rejected outright, which
+// is the spec-violating behavior SR-005 fixes.
 type InteractHandler struct {
 	session           Session
 	encounterProvider InteractEncounterProvider
 	turnStore         InteractTurnStore
 	channelIDProvider CampaignSettingsProvider
 	turnGate          TurnGate
+	combatSvc         InteractCombatService
 }
 
 // NewInteractHandler constructs a /interact handler.
@@ -49,6 +62,14 @@ func NewInteractHandler(
 		encounterProvider: encounterProvider,
 		turnStore:         turnStore,
 	}
+}
+
+// SetCombatService wires the combat.Interact service so /interact runs the
+// spec'd free→action fallback and creates a pending_actions row for the DM
+// (SR-005). With no service wired the handler keeps the legacy
+// UseResource-only path.
+func (h *InteractHandler) SetCombatService(svc InteractCombatService) {
+	h.combatSvc = svc
 }
 
 // SetChannelIDProvider wires the campaign settings provider for combat-log
@@ -105,6 +126,61 @@ func (h *InteractHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	// SR-005: route through combat.Interact when wired. The service owns
+	// turn updates + free→action fallback + pending_actions insertion.
+	if h.combatSvc != nil {
+		h.handleViaCombat(ctx, interaction, encounterID, turn, desc)
+		return
+	}
+
+	h.handleLegacy(ctx, interaction, encounterID, turn, desc)
+}
+
+// handleViaCombat is the SR-005 path. combat.Interact owns the resource
+// gating (free→action fallback), pending_actions insertion, and the human-
+// readable combat log. The handler just looks up the combatant for the
+// service command, posts the resulting log line to #combat-log, and echoes
+// it back to the invoker.
+func (h *InteractHandler) handleViaCombat(
+	ctx context.Context,
+	interaction *discordgo.Interaction,
+	encounterID uuid.UUID,
+	turn refdata.Turn,
+	desc string,
+) {
+	combatant, err := h.encounterProvider.GetCombatant(ctx, turn.CombatantID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to load combatant.")
+		return
+	}
+
+	result, err := h.combatSvc.Interact(ctx, combat.InteractCommand{
+		Combatant:   combatant,
+		Turn:        turn,
+		Description: desc,
+	})
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot interact: %v", err))
+		return
+	}
+
+	if result.CombatLog != "" {
+		h.postCombatLog(ctx, encounterID, result.CombatLog)
+	}
+	respondEphemeral(h.session, interaction, result.CombatLog)
+}
+
+// handleLegacy is the pre-SR-005 path used when no combat service is wired
+// (handler test fixtures). It marks FreeInteractUsed directly and rejects
+// the second interact outright. Spec-divergent on purpose for backward
+// compatibility; production wiring always passes through handleViaCombat.
+func (h *InteractHandler) handleLegacy(
+	ctx context.Context,
+	interaction *discordgo.Interaction,
+	encounterID uuid.UUID,
+	turn refdata.Turn,
+	desc string,
+) {
 	updatedTurn, err := combat.UseResource(turn, combat.ResourceFreeInteract)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot interact: %v", err))

@@ -514,6 +514,10 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 	handlers.bonus = discord.NewBonusHandler(deps.session, deps.combatService, combatLookup, deps.roller)
 	handlers.shove = discord.NewShoveHandler(deps.session, deps.combatService, combatLookup, deps.roller)
 	handlers.interact = discord.NewInteractHandler(deps.session, combatLookup, deps.queries)
+	// SR-005: route /interact through combat.Interact so the second interact
+	// on a turn falls back to the action (instead of being rejected outright)
+	// and a pending_actions row is created for the DM queue / dashboard.
+	handlers.interact.SetCombatService(deps.combatService)
 	handlers.deathsave = discord.NewDeathSaveHandler(
 		deps.session,
 		deps.roller,
