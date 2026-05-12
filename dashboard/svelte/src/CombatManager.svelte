@@ -106,7 +106,7 @@
     // sync with the current encounter list.
     const proto = window.location?.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location?.host || 'localhost';
-    tabsWs = createEncounterTabsWs({ url: `${proto}//${host}/api/ws` });
+    tabsWs = createEncounterTabsWs({ url: `${proto}//${host}/dashboard/ws` });
     const unsubscribe = tabsWs.subscribe((encID, state) => {
       pendingByEncounter = {
         ...pendingByEncounter,

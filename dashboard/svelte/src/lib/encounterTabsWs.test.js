@@ -30,7 +30,7 @@ beforeEach(() => { FakeWebSocket.instances = []; });
 describe('createEncounterTabsWs', () => {
   it('opens one WebSocket per encounter ID with encounter_id query parameter', () => {
     const mgr = createEncounterTabsWs({
-      url: 'ws://localhost/api/ws',
+      url: 'ws://localhost/dashboard/ws',
       WebSocketCtor: FakeWebSocket,
       setTimeout: () => 0,
       clearTimeout: () => {},
@@ -47,7 +47,7 @@ describe('createEncounterTabsWs', () => {
 
   it('routes snapshots through mergeSnapshot into the encounter state store', () => {
     const mgr = createEncounterTabsWs({
-      url: 'ws://localhost/api/ws',
+      url: 'ws://localhost/dashboard/ws',
       WebSocketCtor: FakeWebSocket,
       setTimeout: () => 0,
       clearTimeout: () => {},
@@ -71,7 +71,7 @@ describe('createEncounterTabsWs', () => {
 
   it('preserves dirty DM edits and records them in _pendingFromSnapshot', () => {
     const mgr = createEncounterTabsWs({
-      url: 'ws://localhost/api/ws',
+      url: 'ws://localhost/dashboard/ws',
       WebSocketCtor: FakeWebSocket,
       setTimeout: () => 0,
       clearTimeout: () => {},
@@ -99,7 +99,7 @@ describe('createEncounterTabsWs', () => {
 
   it('closes sockets for encounters removed from the active list', () => {
     const mgr = createEncounterTabsWs({
-      url: 'ws://localhost/api/ws',
+      url: 'ws://localhost/dashboard/ws',
       WebSocketCtor: FakeWebSocket,
       setTimeout: () => 0,
       clearTimeout: () => {},
@@ -119,7 +119,7 @@ describe('createEncounterTabsWs', () => {
 
   it('does not open duplicate sockets for encounters already connected', () => {
     const mgr = createEncounterTabsWs({
-      url: 'ws://localhost/api/ws',
+      url: 'ws://localhost/dashboard/ws',
       WebSocketCtor: FakeWebSocket,
       setTimeout: () => 0,
       clearTimeout: () => {},
@@ -134,7 +134,7 @@ describe('createEncounterTabsWs', () => {
 
   it('clearDirty removes a field from the dirty set', () => {
     const mgr = createEncounterTabsWs({
-      url: 'ws://localhost/api/ws',
+      url: 'ws://localhost/dashboard/ws',
       WebSocketCtor: FakeWebSocket,
       setTimeout: () => 0,
       clearTimeout: () => {},
@@ -155,7 +155,7 @@ describe('createEncounterTabsWs', () => {
 
   it('notifies subscribers whenever an encounter state changes', () => {
     const mgr = createEncounterTabsWs({
-      url: 'ws://localhost/api/ws',
+      url: 'ws://localhost/dashboard/ws',
       WebSocketCtor: FakeWebSocket,
       setTimeout: () => 0,
       clearTimeout: () => {},
