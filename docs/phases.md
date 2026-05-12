@@ -111,7 +111,7 @@
   - Scope: Svelte map editor: specify grid dimensions, blank grid with default terrain, terrain brush (open ground, difficult terrain, water, lava, pit), wall tool (draw along tile edges). Map save/load via API.
   - Depends on: Phase 15, Phase 19
   - Done when: DM can create maps with terrain and walls, save and reload them.
-  - Note: Campaign ID is currently a placeholder in the Svelte frontend. Needs wiring via the dashboard session (OAuth user → campaign lookup). Should be addressed when the first dashboard phase that requires live campaign context is implemented (e.g., Phase 23 Encounter Builder).
+  - Note: Campaign ID is wired into the Svelte frontend via `/api/me` (OAuth-authed user → active campaign lookup); see `dashboard/svelte/src/App.svelte`. The earlier placeholder is gone.
 
 - [x] **Phase 21b: Map Editor — Image Import & Opacity (Dashboard)**
   - Scope: Image import as background layer with adjustable opacity slider. Image stored via AssetStore. Background renders beneath terrain layer.

@@ -19,8 +19,15 @@ type TxBeginner interface {
 	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 }
 
-// UUIDToInt64 converts a UUID to an int64 by reading the first 8 bytes as a big-endian int64.
-// This provides sufficient uniqueness for PostgreSQL advisory lock keys.
+// UUIDToInt64 converts a UUID to an int64 by reading the first 8 bytes as a
+// big-endian int64. PostgreSQL advisory-lock keys are bigint; the truncation
+// from 128 → 64 bits leaves a 2^-64 collision probability per pair of
+// concurrent turns. Two turns that happen to share their leading 8 bytes
+// would serialise against each other (a false-positive lock), but the
+// space is large enough that this is operationally negligible. We accept
+// the truncation as a documented trade-off (Phase 27, F-17) rather than
+// hash-folding all 16 bytes — the failure mode is "occasional spurious
+// wait", never a missed lock.
 func UUIDToInt64(id uuid.UUID) int64 {
 	return int64(binary.BigEndian.Uint64(id[:8]))
 }
