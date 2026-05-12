@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 
@@ -283,10 +284,14 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 
 	// F-15: persist the action deduction now that the service validated
 	// adjacency + action availability. Persistence failures are
-	// non-blocking — the DM can correct combat state if needed.
+	// non-blocking — the DM can correct combat state if needed — but we
+	// log so silent action-leakage is detectable in production.
 	if pendingTurnDeduct != nil {
-		if updated, uerr := combat.UseResource(*pendingTurnDeduct, combat.ResourceAction); uerr == nil {
-			_, _ = h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updated))
+		updated, uerr := combat.UseResource(*pendingTurnDeduct, combat.ResourceAction)
+		if uerr != nil {
+			log.Printf("check: UseResource for targeted check failed: %v", uerr)
+		} else if _, perr := h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updated)); perr != nil {
+			log.Printf("check: UpdateTurnActions for targeted check failed: %v", perr)
 		}
 	}
 

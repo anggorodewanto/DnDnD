@@ -766,6 +766,26 @@ func TestSingleCheck_TargetContext_ReachVariants(t *testing.T) {
 	}
 }
 
+// Pin the UX ordering: when reach AND action both fail, ErrTargetNotInReach
+// wins because it's the more actionable hint. The Discord handler maps each
+// error to a distinct player-facing string, so flipping the order would
+// silently change the player message in the dual-failure case.
+func TestSingleCheck_TargetContext_ReachCheckBeforeAction(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+	_, err := svc.SingleCheck(SingleCheckInput{
+		Scores: character.AbilityScores{}, Skill: "str",
+		Target: &TargetContext{
+			AttackerPosition: [3]int{0, 0, 0},
+			TargetPosition:   [3]int{10, 10, 0},
+			InCombat:         true,
+			ActionAvailable:  false,
+		},
+	})
+	if !errors.Is(err, ErrTargetNotInReach) {
+		t.Errorf("dual-failure should surface ErrTargetNotInReach first, got %v", err)
+	}
+}
+
 func TestFormatGroupCheckResult_Failure(t *testing.T) {
 	result := GroupCheckResult{
 		DC:      20,

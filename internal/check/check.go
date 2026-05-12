@@ -152,7 +152,10 @@ func (s *Service) SingleCheck(input SingleCheckInput) (SingleCheckResult, error)
 
 // validateTargetContext enforces adjacency + action-cost preconditions when
 // a TargetContext is attached to the input. Returns nil when ctx is nil so
-// legacy callers are unaffected. (F-15)
+// legacy callers are unaffected. Reach is checked BEFORE action-availability
+// so the more-actionable "target not in reach" hint wins when both fail —
+// the Discord handler maps each error to a distinct player-facing string,
+// so the ordering is a UX contract worth preserving. (F-15)
 func validateTargetContext(ctx *TargetContext) error {
 	if ctx == nil {
 		return nil
