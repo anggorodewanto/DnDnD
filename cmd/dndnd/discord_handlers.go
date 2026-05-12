@@ -432,6 +432,16 @@ func attachInventoryAndCharacterHandlers(
 
 	handlers.inventory = discord.NewInventoryHandler(deps.session, checkCampProv, characterLookup)
 	handlers.equip = discord.NewEquipHandler(deps.session, checkCampProv, characterLookup, deps.queries)
+	// SR-004: route /equip through combat.Equip so 2H/shield validation,
+	// in-combat armor block, AC recalc, and equipped_main_hand/off_hand/
+	// armor column writes actually happen (downstream grapple, somatic,
+	// stealth, attack all read those columns). When combat svc is nil
+	// (test deploys without a combat service) the handler keeps the
+	// legacy inventory-JSON-only fallback.
+	if deps.combatService != nil {
+		handlers.equip.SetCombatService(deps.combatService)
+		handlers.equip.SetEncounterProvider(newCombatActionLookupAdapter(deps.combatService, deps.queries, deps.resolver))
+	}
 	handlers.attune = discord.NewAttuneHandler(deps.session, checkCampProv, characterLookup, deps.queries)
 	handlers.unattune = discord.NewUnattuneHandler(deps.session, checkCampProv, characterLookup, deps.queries)
 	handlers.give = discord.NewGiveHandler(
