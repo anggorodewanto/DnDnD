@@ -1,4 +1,4 @@
-.PHONY: build test cover cover-check cover-html run docker-build clean e2e playtest-replay
+.PHONY: build test cover cover-check cover-html run docker-build clean e2e playtest-replay sqlc-check
 
 # Excludes sqlc-generated query files, the cmd/dndnd main wiring, the thin
 # discordgo *Adapter delegations, and the coverage_check tool itself —
@@ -38,6 +38,12 @@ docker-build:
 
 clean:
 	rm -rf bin/ coverage.out coverage.html
+
+# Phase 118c local convenience target — same check the CI workflow runs.
+# Re-runs `sqlc generate` and fails if any tracked file under internal/refdata
+# changes. Requires the `sqlc` binary on PATH (or SQLC_BIN env override).
+sqlc-check:
+	go run ./scripts/sqlc_drift_check
 
 # Phase 120: end-to-end test target. Runs only the scenario tests built
 # under the `e2e` build tag, against a freshly-spun testcontainers Postgres.
