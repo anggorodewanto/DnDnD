@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/character"
@@ -18,12 +19,22 @@ type AttuneCharacterStore interface {
 	UpdateCharacterAttunementSlots(ctx context.Context, arg refdata.UpdateCharacterAttunementSlotsParams) (refdata.Character, error)
 }
 
+// AttunePublisher refreshes the dashboard encounter snapshot for a character
+// whose magic-item state just changed (H-104b / F-9). The handler depends on
+// this minimal interface so it does not need to import internal/magicitem.
+// Implementations (e.g. *magicitem.Service) must silently no-op when the
+// character is not currently in an active encounter.
+type AttunePublisher interface {
+	PublishForCharacter(ctx context.Context, characterID uuid.UUID)
+}
+
 // AttuneHandler handles the /attune slash command.
 type AttuneHandler struct {
 	session         Session
 	campaignProv    InventoryCampaignProvider
 	characterLookup InventoryCharacterLookup
 	store           AttuneCharacterStore
+	publisher       AttunePublisher
 }
 
 // NewAttuneHandler creates a new AttuneHandler.
@@ -39,6 +50,12 @@ func NewAttuneHandler(
 		characterLookup: characterLookup,
 		store:           store,
 	}
+}
+
+// SetPublisher wires the optional dashboard publisher (F-9). A nil publisher
+// is tolerated and disables fan-out — Handle simply skips the call.
+func (h *AttuneHandler) SetPublisher(p AttunePublisher) {
+	h.publisher = p
 }
 
 // Handle processes the /attune command interaction.
@@ -120,6 +137,12 @@ func (h *AttuneHandler) Handle(interaction *discordgo.Interaction) {
 	}); err != nil {
 		respondEphemeral(h.session, interaction, "Failed to save attunement changes. Please try again.")
 		return
+	}
+
+	// F-9: fan out a fresh encounter snapshot if the character is currently
+	// in combat (publisher silently no-ops otherwise).
+	if h.publisher != nil {
+		h.publisher.PublishForCharacter(ctx, char.ID)
 	}
 
 	respondEphemeral(h.session, interaction, result.Message)

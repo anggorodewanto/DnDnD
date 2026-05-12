@@ -22,6 +22,15 @@ type mockAttuneStore struct {
 	err               error
 }
 
+// stubAttunePublisher records PublishForCharacter calls.
+type stubAttunePublisher struct {
+	calls []uuid.UUID
+}
+
+func (s *stubAttunePublisher) PublishForCharacter(_ context.Context, characterID uuid.UUID) {
+	s.calls = append(s.calls, characterID)
+}
+
 func (m *mockAttuneStore) UpdateCharacterAttunementSlots(ctx context.Context, arg refdata.UpdateCharacterAttunementSlotsParams) (refdata.Character, error) {
 	if m.err != nil {
 		return refdata.Character{}, m.err
@@ -279,6 +288,78 @@ func TestAttuneHandler_ClassRestrictionDenied(t *testing.T) {
 	handler.Handle(interaction)
 
 	assert.Contains(t, sess.lastResponse, "restriction")
+}
+
+// F-9: a successful attune must fan out a dashboard encounter snapshot for
+// the character via the injected publisher.
+func TestAttuneHandler_Success_PublishesSnapshot(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "cloak-of-protection", Name: "Cloak of Protection", Quantity: 1, Type: "magic_item", IsMagic: true, RequiresAttunement: true},
+	}
+	itemsJSON, _ := json.Marshal(items)
+	slotsJSON, _ := json.Marshal([]character.AttunementSlot{})
+
+	store := &mockAttuneStore{char: refdata.Character{ID: charID}}
+	publisher := &stubAttunePublisher{}
+
+	handler := NewAttuneHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:              charID,
+			CampaignID:      campID,
+			Name:            "Aria",
+			Inventory:       pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+			AttunementSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+		}},
+		store,
+	)
+	handler.SetPublisher(publisher)
+
+	interaction := makeAttuneInteraction("guild1", "user1", "cloak-of-protection")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Attuned")
+	require.Len(t, publisher.calls, 1)
+	assert.Equal(t, charID, publisher.calls[0])
+}
+
+// F-9: when persistence fails the publisher must NOT be invoked — we must
+// never broadcast a snapshot that doesn't reflect committed state.
+func TestAttuneHandler_StoreError_DoesNotPublish(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "cloak-of-protection", Name: "Cloak of Protection", Quantity: 1, Type: "magic_item", IsMagic: true, RequiresAttunement: true},
+	}
+	itemsJSON, _ := json.Marshal(items)
+	slotsJSON, _ := json.Marshal([]character.AttunementSlot{})
+
+	publisher := &stubAttunePublisher{}
+
+	handler := NewAttuneHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:              charID,
+			CampaignID:      campID,
+			Name:            "Aria",
+			Inventory:       pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+			AttunementSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+		}},
+		&mockAttuneStore{err: assert.AnError},
+	)
+	handler.SetPublisher(publisher)
+
+	interaction := makeAttuneInteraction("guild1", "user1", "cloak-of-protection")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Failed to save")
+	assert.Empty(t, publisher.calls)
 }
 
 func TestAttuneHandler_ClassRestrictionAllowed(t *testing.T) {

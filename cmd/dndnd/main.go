@@ -952,13 +952,13 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		combatSvc.SetLootPoolCreator(newLootPoolCreatorAdapter(lootSvcForCombat(queries)))
 		combatSvc.SetHostilesDefeatedNotifier(newHostilesDefeatedNotifierAdapter(dmQueueNotifier))
 
-		// H-104b: publisher fan-out for the magic-item activation paths.
-		// The Service surface is currently consulted by the /attune
-		// production-wiring follow-up; this construction keeps the hook
-		// reachable so a wired handler can call PublishForCharacter.
+		// H-104b / F-9: publisher fan-out for the magic-item activation
+		// paths. The Service surface is injected into the /attune handler
+		// (see SetPublisher call after buildDiscordHandlers below) so a
+		// successful attune refreshes the dashboard encounter snapshot
+		// when the character is also a combatant in an active encounter.
 		magicItemSvc := magicitem.NewService()
 		magicItemSvc.SetPublisher(publisher, encLookup)
-		_ = magicItemSvc // reserved for /attune handler wiring (deferred)
 
 		// Phase 104: Startup recovery per spec lines 116-121.
 		//
@@ -1092,6 +1092,14 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				portalBaseURL:   os.Getenv("BASE_URL"),
 				reactionPrompts: reactionPrompts,
 			})
+
+			// F-9: inject the magic-item publisher into /attune so a
+			// successful attune refreshes the dashboard encounter snapshot
+			// when the character is currently a combatant. The Service
+			// silently no-ops when the character is not in combat.
+			if discordHandlerSet.attune != nil {
+				discordHandlerSet.attune.SetPublisher(magicItemSvc)
+			}
 
 			// Phase 120a: wire RegistrationDeps so /register submits land in
 			// the database (status=pending) and downstream stub commands
