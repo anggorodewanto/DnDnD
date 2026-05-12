@@ -868,3 +868,48 @@ export async function listActionLog(encounterId, filters = {}) {
   const res = await apiFetch(url);
   return res.json();
 }
+
+// --- F-8: per-campaign Open5e source toggle ---
+
+/**
+ * Fetch the curated catalog of Open5e source documents the DM can toggle
+ * per campaign. The catalog itself is global (not campaign-scoped).
+ *
+ * @returns {Promise<{sources: Array<{slug: string, title: string, publisher?: string, description?: string}>}>}
+ */
+export async function listOpen5eSources() {
+  const res = await apiFetch('/api/open5e/sources');
+  return res.json();
+}
+
+/**
+ * Read the slugs of Open5e documents currently enabled for a campaign.
+ * Always returns a `{campaign_id, enabled}` shape with `enabled` an array
+ * (possibly empty).
+ *
+ * @param {string} campaignId
+ * @returns {Promise<{campaign_id: string, enabled: string[]}>}
+ */
+export async function getCampaignOpen5eSources(campaignId) {
+  const res = await apiFetch(`/api/open5e/campaigns/${campaignId}/sources`);
+  return res.json();
+}
+
+/**
+ * Replace the campaign's `open5e_sources` JSONB list with the given slugs.
+ * Other settings fields (turn_timeout_hours, channel_ids, ...) are
+ * preserved server-side. Slugs that are not in the catalog are rejected
+ * with a 400.
+ *
+ * @param {string} campaignId
+ * @param {string[]} enabled
+ * @returns {Promise<{campaign_id: string, enabled: string[]}>}
+ */
+export async function updateCampaignOpen5eSources(campaignId, enabled) {
+  const res = await apiFetch(`/api/open5e/campaigns/${campaignId}/sources`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  return res.json();
+}

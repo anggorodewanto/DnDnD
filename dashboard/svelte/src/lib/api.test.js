@@ -14,6 +14,9 @@ import {
   updateEncounterDisplayName,
   startCombat,
   importTiledMap,
+  listOpen5eSources,
+  getCampaignOpen5eSources,
+  updateCampaignOpen5eSources,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -638,5 +641,94 @@ describe('importTiledMap', () => {
       name: 'Big',
       file,
     })).rejects.toThrow('infinite maps are not supported');
+  });
+});
+
+// F-8: per-campaign Open5e source toggle — wired by Open5eSourcesPanel.svelte.
+describe('listOpen5eSources', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('GETs the catalog and returns parsed JSON', async () => {
+    const mockResponse = {
+      sources: [
+        { slug: 'wotc-srd', title: '5e SRD' },
+        { slug: 'tome-of-beasts', title: 'Tome of Beasts', publisher: 'Kobold Press' },
+      ],
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    });
+    const result = await listOpen5eSources();
+    expect(result).toEqual(mockResponse);
+    expect(fetch).toHaveBeenCalledWith('/api/open5e/sources', undefined);
+  });
+
+  it('throws on non-ok response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve('boom'),
+    });
+    await expect(listOpen5eSources()).rejects.toThrow('boom');
+  });
+});
+
+describe('getCampaignOpen5eSources', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('GETs per-campaign enabled list', async () => {
+    const mockResponse = { campaign_id: 'cid', enabled: ['tome-of-beasts'] };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    });
+    const result = await getCampaignOpen5eSources('cid');
+    expect(result).toEqual(mockResponse);
+    expect(fetch).toHaveBeenCalledWith('/api/open5e/campaigns/cid/sources', undefined);
+  });
+});
+
+describe('updateCampaignOpen5eSources', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('PUTs the new enabled list and returns parsed JSON', async () => {
+    const mockResponse = { campaign_id: 'cid', enabled: ['tome-of-beasts', 'deep-magic'] };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    });
+    const result = await updateCampaignOpen5eSources('cid', ['tome-of-beasts', 'deep-magic']);
+    expect(result).toEqual(mockResponse);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/open5e/campaigns/cid/sources');
+    expect(options.method).toBe('PUT');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(options.body)).toEqual({ enabled: ['tome-of-beasts', 'deep-magic'] });
+  });
+
+  it('PUTs an empty list to disable everything', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ campaign_id: 'cid', enabled: [] }),
+    });
+    await updateCampaignOpen5eSources('cid', []);
+    const [, options] = fetch.mock.calls[0];
+    expect(JSON.parse(options.body)).toEqual({ enabled: [] });
+  });
+
+  it('surfaces backend error text on non-ok response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve('unknown open5e source: "bogus"'),
+    });
+    await expect(updateCampaignOpen5eSources('cid', ['bogus'])).rejects.toThrow('unknown open5e source');
   });
 });

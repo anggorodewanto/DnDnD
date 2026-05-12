@@ -14,6 +14,7 @@
   import CharacterOverview from './CharacterOverview.svelte';
   import StatBlockLibrary from './StatBlockLibrary.svelte';
   import MessagePlayerPanel from './MessagePlayerPanel.svelte';
+  import Open5eSourcesPanel from './Open5eSourcesPanel.svelte';
   import { isMobileViewport, isDesktopOnly } from './lib/layout.js';
 
   let innerWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1920);
@@ -60,6 +61,7 @@
     if (hash === '#party') return 'party';
     if (hash === '#stat-block-library') return 'stat-block-library';
     if (hash === '#message-player') return 'message-player';
+    if (hash === '#open5e-sources') return 'open5e-sources';
     return 'list';
   }
 
@@ -179,6 +181,10 @@
   function onShowMessagePlayer() {
     currentView = 'message-player';
   }
+
+  function onShowOpen5eSources() {
+    currentView = 'open5e-sources';
+  }
 </script>
 
 {#if isMobileViewport(innerWidth)}
@@ -205,6 +211,8 @@
       <h1>Stat Block Library</h1>
     {:else if currentView === 'message-player'}
       <h1>Message Player</h1>
+    {:else if currentView === 'open5e-sources'}
+      <h1>Open5e Sources</h1>
     {:else}
       <h1>Encounter Builder</h1>
     {/if}
@@ -220,6 +228,7 @@
       <button class:active={currentView === 'party'} onclick={onShowParty}>Party</button>
       <button class:active={currentView === 'stat-block-library'} onclick={onShowStatBlockLibrary}>Stat Block Library</button>
       <button class:active={currentView === 'message-player'} onclick={onShowMessagePlayer}>Message Player</button>
+      <button class:active={currentView === 'open5e-sources'} onclick={onShowOpen5eSources}>Open5e Sources</button>
     </nav>
 
     {#if currentView === 'editor'}
@@ -264,6 +273,8 @@
     <StatBlockLibrary {campaignId} />
   {:else if currentView === 'message-player'}
     <MessagePlayerPanel {campaignId} />
+  {:else if currentView === 'open5e-sources'}
+    <Open5eSourcesPanel {campaignId} />
   {/if}
 </main>
 {/if}

@@ -601,6 +601,13 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		open5eSvc := open5e.NewService(open5eClient, open5eCache)
 		open5eHandler := open5e.NewHandler(open5eSvc)
 		open5eHandler.RegisterRoutes(router)
+		// F-8: per-campaign Open5e source toggle. The catalog list (no
+		// campaign data) mounts publicly on `router` so the Svelte SPA
+		// can render its checkboxes; the per-campaign GET/PUT pair is
+		// mounted further down behind dmAuthMw alongside the other
+		// DM-only endpoints (search "F-8 sources mount" below).
+		open5eSourcesHandler := open5e.NewSourcesHandler(queries)
+		router.Get("/api/open5e/sources", open5eSourcesHandler.ListCatalog)
 
 		// Wire Homebrew Content API handler (Phase 99)
 		homebrewSvc := homebrew.NewService(queries)
@@ -784,6 +791,16 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		explorationSvc := exploration.NewService(queries)
 		explorationHandler := exploration.NewDashboardHandler(explorationSvc, queries)
 		dashboard.RegisterExplorationRoutes(router, explorationHandler, dmAuthMw)
+
+		// F-8 sources mount: per-campaign Open5e source GET/PUT behind
+		// dmAuthMw. Mutating which third-party books a campaign trusts is
+		// strictly a DM concern (spec line 2546) — non-DM authenticated
+		// users must get 403 here rather than silently flipping flags.
+		router.Group(func(r chi.Router) {
+			r.Use(dmAuthMw)
+			r.Get("/api/open5e/campaigns/{id}/sources", open5eSourcesHandler.GetCampaignSources)
+			r.Put("/api/open5e/campaigns/{id}/sources", open5eSourcesHandler.UpdateCampaignSources)
+		})
 
 		// Phase 121: DM character-create form. charCreateRefData drops the
 		// per-campaign Open5e gating arg because the DM-side form is
