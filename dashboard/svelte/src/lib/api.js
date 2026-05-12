@@ -478,6 +478,116 @@ export async function postShopToDiscord(campaignId, shopId) {
   return res.json();
 }
 
+/**
+ * List encounters in this campaign that are eligible to own a loot pool.
+ * Backend currently returns encounters with status == "completed", sorted by
+ * most recent.
+ *
+ * @param {string} campaignId - Campaign UUID.
+ * @returns {Promise<object>} { encounters: [{ id, name, display_name, status }] }
+ */
+export async function listEligibleLootEncounters(campaignId) {
+  const res = await apiFetch(`/api/campaigns/${campaignId}/loot/eligible-encounters`);
+  return res.json();
+}
+
+// --- Loot Pool API (F-13) ---
+//
+// Mirrors mountLootRoutes in cmd/dndnd/dashboard_apis.go. All routes are nested
+// under /api/campaigns/:campaignID/encounters/:encounterID/loot. The backend
+// returns a LootPoolResult of the form { Pool: {...}, Items: [...] } (Go's
+// default JSON encoding capitalises field names since the struct has no tags).
+//
+function lootBase(campaignId, encounterId) {
+  return `/api/campaigns/${campaignId}/encounters/${encounterId}/loot`;
+}
+
+/**
+ * Get the loot pool for an encounter. Returns 404 when no pool exists yet.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} encounterId - Encounter UUID.
+ * @returns {Promise<object>} { Pool, Items }
+ */
+export async function getLootPool(campaignId, encounterId) {
+  const res = await apiFetch(lootBase(campaignId, encounterId));
+  return res.json();
+}
+
+/**
+ * Create the loot pool for a completed encounter. Auto-populates from defeated
+ * NPC inventories. Errors with 400 if encounter is not completed, 409 if a
+ * pool already exists.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} encounterId - Encounter UUID.
+ * @returns {Promise<object>} { Pool, Items }
+ */
+export async function createLootPool(campaignId, encounterId) {
+  const res = await apiFetch(lootBase(campaignId, encounterId), {
+    method: 'POST',
+  });
+  return res.json();
+}
+
+/**
+ * Add a custom item to the loot pool.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {object} item - { item_id?, name, description?, quantity?, type?,
+ *   is_magic?, magic_bonus?, magic_properties?, requires_attunement?, rarity? }
+ * @returns {Promise<object>} The created loot pool item.
+ */
+export async function addLootPoolItem(campaignId, encounterId, item) {
+  const res = await apiFetch(`${lootBase(campaignId, encounterId)}/items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(item),
+  });
+  return res.json();
+}
+
+/**
+ * Remove an item from the loot pool.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} itemId - Loot pool item UUID.
+ * @returns {Promise<object>} { status: "ok" }
+ */
+export async function removeLootPoolItem(campaignId, encounterId, itemId) {
+  const res = await apiFetch(`${lootBase(campaignId, encounterId)}/items/${itemId}`, {
+    method: 'DELETE',
+  });
+  return res.json();
+}
+
+/**
+ * Set the total gold pool value.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {number} gold - New gold total.
+ * @returns {Promise<object>} The updated loot pool.
+ */
+export async function setLootGold(campaignId, encounterId, gold) {
+  const res = await apiFetch(`${lootBase(campaignId, encounterId)}/gold`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gold }),
+  });
+  return res.json();
+}
+
+/**
+ * Post the loot announcement to the campaign's #combat-log / #the-story channel.
+ * @param {string} campaignId - Campaign UUID.
+ * @param {string} encounterId - Encounter UUID.
+ * @returns {Promise<object>} { status, message }
+ */
+export async function postLootAnnouncement(campaignId, encounterId) {
+  const res = await apiFetch(`${lootBase(campaignId, encounterId)}/post`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
 // --- Combat Workspace API ---
 
 /**

@@ -85,6 +85,8 @@ func mountLootRoutes(r chi.Router, authMw func(http.Handler) http.Handler, h *lo
 		r.Post("/post", h.HandlePostAnnouncement)
 		r.Put("/gold", h.HandleSetGold)
 	})
+	// F-13: lists encounters eligible for a loot pool (campaign-scoped).
+	r.With(authMw).Get("/api/campaigns/{campaignID}/loot/eligible-encounters", h.HandleListEligibleEncounters)
 }
 
 // mountItemPickerRoutes delegates to itempicker.RegisterRoutes which already

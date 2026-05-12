@@ -17,6 +17,13 @@ import {
   listOpen5eSources,
   getCampaignOpen5eSources,
   updateCampaignOpen5eSources,
+  getLootPool,
+  createLootPool,
+  addLootPoolItem,
+  removeLootPoolItem,
+  setLootGold,
+  postLootAnnouncement,
+  listEligibleLootEncounters,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -730,5 +737,111 @@ describe('updateCampaignOpen5eSources', () => {
       text: () => Promise.resolve('unknown open5e source: "bogus"'),
     });
     await expect(updateCampaignOpen5eSources('cid', ['bogus'])).rejects.toThrow('unknown open5e source');
+  });
+});
+
+// --- F-13: Loot Pool API ---
+
+describe('loot pool API', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('getLootPool GETs the encounter pool', async () => {
+    const mockResult = { Pool: { id: 'p1', gold_total: 10 }, Items: [{ id: 'it1', name: 'Sword' }] };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResult),
+    });
+    const result = await getLootPool('cid', 'eid');
+    expect(result).toEqual(mockResult);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/campaigns/cid/encounters/eid/loot');
+    // GET should send no body / method override
+    expect(options).toBeUndefined();
+  });
+
+  it('createLootPool POSTs to the pool root', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ Pool: { id: 'p1' }, Items: [] }),
+    });
+    await createLootPool('cid', 'eid');
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/campaigns/cid/encounters/eid/loot');
+    expect(options.method).toBe('POST');
+  });
+
+  it('addLootPoolItem POSTs the item JSON body', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ id: 'it1' }),
+    });
+    const item = { name: 'Potion of Healing', quantity: 2, type: 'consumable', is_magic: true, rarity: 'common' };
+    await addLootPoolItem('cid', 'eid', item);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/campaigns/cid/encounters/eid/loot/items');
+    expect(options.method).toBe('POST');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(options.body)).toEqual(item);
+  });
+
+  it('removeLootPoolItem DELETEs the specific item', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ok' }),
+    });
+    await removeLootPoolItem('cid', 'eid', 'it1');
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/campaigns/cid/encounters/eid/loot/items/it1');
+    expect(options.method).toBe('DELETE');
+  });
+
+  it('setLootGold PUTs the new total', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ id: 'p1', gold_total: 50 }),
+    });
+    await setLootGold('cid', 'eid', 50);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/campaigns/cid/encounters/eid/loot/gold');
+    expect(options.method).toBe('PUT');
+    expect(JSON.parse(options.body)).toEqual({ gold: 50 });
+  });
+
+  it('postLootAnnouncement POSTs to the post route', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ok', message: 'Loot available...' }),
+    });
+    await postLootAnnouncement('cid', 'eid');
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/campaigns/cid/encounters/eid/loot/post');
+    expect(options.method).toBe('POST');
+  });
+
+  it('surfaces a 404 (no pool yet) as a rejected promise', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: () => Promise.resolve('loot pool not found'),
+    });
+    await expect(getLootPool('cid', 'eid')).rejects.toThrow('loot pool not found');
+  });
+
+  it('listEligibleLootEncounters GETs the campaign-scoped route', async () => {
+    const mockResp = {
+      encounters: [
+        { id: 'e1', name: 'Goblin Ambush', display_name: 'Goblin Ambush!', status: 'completed' },
+      ],
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResp),
+    });
+    const result = await listEligibleLootEncounters('cid');
+    expect(result).toEqual(mockResp);
+    const [url] = fetch.mock.calls[0];
+    expect(url).toBe('/api/campaigns/cid/loot/eligible-encounters');
   });
 });

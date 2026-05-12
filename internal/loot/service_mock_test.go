@@ -17,6 +17,7 @@ import (
 // mockStore implements loot.Store for unit testing error branches.
 type mockStore struct {
 	getEncounterFn                          func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
+	listEncountersByCampaignIDFn            func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
 	listCombatantsByEncounterIDFn           func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
 	getCharacterFn                          func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	createLootPoolFn                        func(ctx context.Context, arg refdata.CreateLootPoolParams) (refdata.LootPool, error)
@@ -37,6 +38,12 @@ type mockStore struct {
 
 func (m *mockStore) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
 	return m.getEncounterFn(ctx, id)
+}
+func (m *mockStore) ListEncountersByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error) {
+	if m.listEncountersByCampaignIDFn == nil {
+		return nil, nil
+	}
+	return m.listEncountersByCampaignIDFn(ctx, campaignID)
 }
 func (m *mockStore) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
 	return m.listCombatantsByEncounterIDFn(ctx, encounterID)

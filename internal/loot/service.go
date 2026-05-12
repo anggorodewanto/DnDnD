@@ -27,6 +27,7 @@ var (
 // Store defines the database operations needed by the loot service.
 type Store interface {
 	GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
+	ListEncountersByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
 	ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	CreateLootPool(ctx context.Context, arg refdata.CreateLootPoolParams) (refdata.LootPool, error)
@@ -138,6 +139,43 @@ func (s *Service) CreateLootPool(ctx context.Context, encounterID uuid.UUID) (Lo
 	}
 
 	return LootPoolResult{Pool: pool, Items: poolItems}, nil
+}
+
+// EligibleEncounter is a thin projection of refdata.Encounter for the loot
+// pool widget. Captures just the fields the DM needs to pick an encounter.
+type EligibleEncounter struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	DisplayName string    `json:"display_name"`
+	Status      string    `json:"status"`
+}
+
+// ListEligibleEncounters returns encounters in the given campaign that are
+// eligible to own a loot pool (currently: status == "completed"). The slice
+// is sorted by Encounter.UpdatedAt descending so the most recently finished
+// encounter shows first in the dashboard dropdown.
+func (s *Service) ListEligibleEncounters(ctx context.Context, campaignID uuid.UUID) ([]EligibleEncounter, error) {
+	encs, err := s.store.ListEncountersByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("listing encounters: %w", err)
+	}
+	out := make([]EligibleEncounter, 0, len(encs))
+	for _, e := range encs {
+		if e.Status != "completed" {
+			continue
+		}
+		dn := ""
+		if e.DisplayName.Valid {
+			dn = e.DisplayName.String
+		}
+		out = append(out, EligibleEncounter{
+			ID:          e.ID,
+			Name:        e.Name,
+			DisplayName: dn,
+			Status:      e.Status,
+		})
+	}
+	return out, nil
 }
 
 // GetLootPool returns the loot pool for an encounter with all its items.

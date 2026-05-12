@@ -64,6 +64,24 @@ func jsonOK(w http.ResponseWriter, v interface{}) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// HandleListEligibleEncounters handles GET
+// /api/campaigns/:campaignID/loot/eligible-encounters and returns the
+// completed encounters the DM can attach a loot pool to. Used by the Svelte
+// LootPoolPanel (F-13).
+func (h *APIHandler) HandleListEligibleEncounters(w http.ResponseWriter, r *http.Request) {
+	campaignID, err := uuid.Parse(chi.URLParam(r, "campaignID"))
+	if err != nil {
+		jsonError(w, "invalid campaign_id", http.StatusBadRequest)
+		return
+	}
+	encs, err := h.svc.ListEligibleEncounters(r.Context(), campaignID)
+	if err != nil {
+		jsonError(w, "failed to list encounters", http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, map[string]interface{}{"encounters": encs})
+}
+
 // HandleGetLootPool handles GET /api/campaigns/:id/encounters/:eid/loot.
 func (h *APIHandler) HandleGetLootPool(w http.ResponseWriter, r *http.Request) {
 	result, ok := h.resolvePool(w, r)

@@ -527,3 +527,55 @@ func TestAPI_SetGold_BadEncounterID(t *testing.T) {
 	handler.HandleSetGold(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
+
+// --- F-13: eligible-encounter listing for the LootPoolPanel ---
+
+func TestAPI_ListEligibleEncounters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	_, q := setupTestDB(t)
+	camp := createCampaign(t, q)
+	completed := createEncounter(t, q, camp.ID, "completed")
+	_ = createEncounter(t, q, camp.ID, "active") // should be filtered out
+
+	svc := loot.NewService(q)
+	handler := loot.NewAPIHandler(svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = chiCtx(req, map[string]string{"campaignID": camp.ID.String()})
+	rec := httptest.NewRecorder()
+	handler.HandleListEligibleEncounters(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Encounters []struct {
+			ID     string `json:"id"`
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"encounters"`
+	}
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	require.Len(t, resp.Encounters, 1)
+	assert.Equal(t, completed.ID.String(), resp.Encounters[0].ID)
+	assert.Equal(t, "completed", resp.Encounters[0].Status)
+}
+
+func TestAPI_ListEligibleEncounters_BadCampaignID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	_, q := setupTestDB(t)
+	svc := loot.NewService(q)
+	handler := loot.NewAPIHandler(svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = chiCtx(req, map[string]string{"campaignID": "not-a-uuid"})
+	rec := httptest.NewRecorder()
+	handler.HandleListEligibleEncounters(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
