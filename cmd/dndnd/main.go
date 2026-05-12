@@ -114,6 +114,22 @@ func (l dashboardCampaignLookup) LookupActiveCampaign(ctx context.Context, dmUse
 	return "", "", nil
 }
 
+// IsDM satisfies dashboard.DMVerifier (F-2) by reusing LookupActiveCampaign:
+// a non-empty id means at least one non-archived campaign is owned by the
+// user, which is the per-request DM verification spec line 65 calls for.
+// Errors propagate so the middleware degrades to 403 — a transient DB blip
+// must not silently grant access.
+func (l dashboardCampaignLookup) IsDM(ctx context.Context, dmUserID string) (bool, error) {
+	if dmUserID == "" {
+		return false, nil
+	}
+	id, _, err := l.LookupActiveCampaign(ctx, dmUserID)
+	if err != nil {
+		return false, err
+	}
+	return id != "", nil
+}
+
 // approvalsCounter adapts dashboard.ApprovalStore.ListPendingApprovals to
 // dashboard.PendingApprovalsCounter for the Campaign Home pending-approvals
 // card (med-40 / Phase 15).
@@ -724,14 +740,31 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// /portal/auth/* mounting below; oauthSvc is nil in passthrough mode.
 		authBundle := buildAuth(db, logger)
 		authMw := authBundle.middleware
-		dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, authMw)
+
+		// F-2: per-request DM verification (docs/dnd-async-discord-spec.md
+		// line 65). dmAuthMw chains the session middleware with RequireDM so
+		// every DM-only route rejects requests from authenticated
+		// non-DM users (403 JSON) instead of merely rendering an empty UI.
+		// dashboardCampaignLookup satisfies dashboard.DMVerifier via its IsDM
+		// method. The verifier is nil in passthrough-auth mode so the local
+		// dev path (DISCORD_CLIENT_ID unset) keeps working without OAuth.
+		var dmVerifier dashboard.DMVerifier
+		if authBundle.oauthSvc != nil {
+			dmVerifier = dashboardCampaignLookup{queries: queries}
+		}
+		dmRequire := dashboard.RequireDM(dmVerifier)
+		dmAuthMw := func(next http.Handler) http.Handler {
+			return authMw(dmRequire(next))
+		}
+
+		dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, dmAuthMw)
 
 		// Phase 112: DM dashboard errors panel. Mount the /dashboard/errors
-		// page behind authMw and (when a top-level Handler is present, via
-		// MountDashboard in future phases) wire the sidebar 24h badge off
-		// the same errorlog.Reader.
-		dashHandler := dashboard.MountDashboard(router, logger, hub, authMw)
-		dashboard.MountErrorsRoutes(router, dashHandler, errorStore, time.Now, authMw)
+		// page behind dmAuthMw (F-2) and (when a top-level Handler is
+		// present, via MountDashboard in future phases) wire the sidebar
+		// 24h badge off the same errorlog.Reader.
+		dashHandler := dashboard.MountDashboard(router, logger, hub, dmAuthMw)
+		dashboard.MountErrorsRoutes(router, dashHandler, errorStore, time.Now, dmAuthMw)
 
 		// Phase 115: drive the Pause/Resume button label + data-campaign-id
 		// off the DM's current campaign.
@@ -739,15 +772,18 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 
 		// med-39 / Phase 21a: GET /api/me returns the authenticated DM's
 		// active campaign id so the Svelte SPA can replace its hard-coded
-		// placeholder UUID with the real per-DM campaign id on boot.
+		// placeholder UUID with the real per-DM campaign id on boot. This
+		// route stays on the session-only authMw (NOT dmAuthMw) because the
+		// SPA fetches it before the user is known to be a DM — the response
+		// itself carries the empty campaign_id that the UI uses to detect
+		// the "not a DM" state.
 		dashboard.RegisterMeRoute(router, dashboard.NewMeHandler(logger, dashboardCampaignLookup{queries: queries}), authMw)
 
-		// Phase 110: exploration dashboard (Q4a). Mount behind authMw so the
-		// page is only reachable to authenticated DMs. Queries directly
-		// satisfy exploration.Store and exploration.MapLister.
+		// Phase 110: exploration dashboard (Q4a). Mount behind dmAuthMw
+		// (F-2) so non-DM authenticated users get 403 instead of an empty UI.
 		explorationSvc := exploration.NewService(queries)
 		explorationHandler := exploration.NewDashboardHandler(explorationSvc, queries)
-		dashboard.RegisterExplorationRoutes(router, explorationHandler, authMw)
+		dashboard.RegisterExplorationRoutes(router, explorationHandler, dmAuthMw)
 
 		// Phase 121: DM character-create form. charCreateRefData drops the
 		// per-campaign Open5e gating arg because the DM-side form is
@@ -756,7 +792,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		charCreateStore := portal.NewBuilderStoreAdapter(queries, nil)
 		charCreateSvc := dashboard.NewDMCharCreateService(charCreateStore)
 		charCreateHandler := dashboard.NewCharCreateHandler(logger, charCreateSvc, charCreateRefData{a: charCreateRefAdapter})
-		charCreateHandler.RegisterCharCreateRoutes(router.With(authMw))
+		charCreateHandler.RegisterCharCreateRoutes(router.With(dmAuthMw))
 
 		// Phase 121: character approval queue. SetCampaignLookup reuses the
 		// same lookup the Pause/Resume button uses, so the handler serves
@@ -787,7 +823,9 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		}
 		approvalHandler := dashboard.NewApprovalHandler(logger, approvalStore, approvalNotifier, hub, uuid.Nil, cardPoster)
 		approvalHandler.SetCampaignLookup(dashboardCampaignLookup{queries: queries})
-		approvalHandler.RegisterApprovalRoutes(router.With(authMw))
+		// F-2: approvals are DM-only — mount behind dmAuthMw so non-DM
+		// authenticated users get 403 instead of an empty list.
+		approvalHandler.RegisterApprovalRoutes(router.With(dmAuthMw))
 
 		// Phase 91a: portal routes. The TokenService both issues
 		// /create-character links (via newPortalTokenIssuer below) and
@@ -821,7 +859,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		encLookup := encounterLookupAdapter{queries: queries}
 		inventoryAPIHandler := inventory.NewAPIHandler(queries)
 		inventoryAPIHandler.SetPublisher(publisher, encLookup)
-		dashboard.RegisterInventoryAPI(router, inventoryAPIHandler, authMw)
+		// F-2: /api/inventory/* are DM-only inventory mutations — apply
+		// dmAuthMw so non-DM authenticated users get 403 instead of
+		// reaching the handler.
+		dashboard.RegisterInventoryAPI(router, inventoryAPIHandler, dmAuthMw)
 
 		// Phase 83b/85/86/87 wiring (high-13): mount the loot pool, item
 		// picker, shops, and party-rest dashboard endpoints. Without this
