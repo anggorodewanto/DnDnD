@@ -42,6 +42,7 @@ type UseHandler struct {
 	combatProv      UseCombatProvider
 	dmQueueFunc     func(guildID string) string
 	notifier        dmqueue.Notifier
+	cardUpdater     CardUpdater // SR-007
 }
 
 // NewUseHandler creates a new UseHandler.
@@ -73,6 +74,12 @@ func (h *UseHandler) SetDMQueueFunc(fn func(guildID string) string) {
 // dmQueueFunc path.
 func (h *UseHandler) SetNotifier(n dmqueue.Notifier) {
 	h.notifier = n
+}
+
+// SetCardUpdater wires the SR-007 character-card refresh callback. Fires
+// after a successful /use write (consumable or magic-item charge).
+func (h *UseHandler) SetCardUpdater(u CardUpdater) {
+	h.cardUpdater = u
 }
 
 // Handle processes the /use command interaction.
@@ -175,6 +182,9 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 		}
 	}
 
+	// SR-007: refresh #character-cards after a successful /use write.
+	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
+
 	// med-35: persist the turn-resource deduction. Best-effort: a save
 	// failure is logged but does not undo the committed inventory change.
 	if inCombat {
@@ -266,6 +276,9 @@ func (h *UseHandler) handleMagicItemCharge(
 		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
 		return
 	}
+
+	// SR-007: refresh #character-cards after a magic-item charge write.
+	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
 
 	if inCombat {
 		h.spendTurnResource(ctx, turn, combat.ResourceAction)

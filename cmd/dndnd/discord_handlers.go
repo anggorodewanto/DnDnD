@@ -128,6 +128,10 @@ type discordHandlerDeps struct {
 	// onto the CommandRouter via SetReactionPromptStore so button clicks
 	// route through one place.
 	reactionPrompts *discord.ReactionPromptStore
+	// SR-007: optional CardUpdater fan-out so non-combat mutators
+	// (/equip /use /give /loot /attune /unattune /rest /prepare) refresh
+	// the persistent #character-cards message on success. Nil-safe.
+	cardUpdater discord.CardUpdater
 }
 
 // discordHandlers holds the constructed slash-command handlers so main.go can
@@ -233,20 +237,32 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			combatantLookup,
 			deps.rollHistoryLogger,
 		),
-		rest: discord.NewRestHandler(
-			deps.session,
-			deps.roller,
-			checkCampProv,
-			characterLookup,
-			deps.resolver,
-			restCharUpdater,
-			deps.rollHistoryLogger,
-			deps.dmQueueFunc,
-		),
+		rest: func() *discord.RestHandler {
+			h := discord.NewRestHandler(
+				deps.session,
+				deps.roller,
+				checkCampProv,
+				characterLookup,
+				deps.resolver,
+				restCharUpdater,
+				deps.rollHistoryLogger,
+				deps.dmQueueFunc,
+			)
+			if deps.cardUpdater != nil {
+				h.SetCardUpdater(deps.cardUpdater)
+			}
+			return h
+		}(),
 		summon:   discord.NewSummonCommandHandler(deps.session, summonSvc),
 		recap:    discord.NewRecapHandler(deps.session, recapSvc, deps.resolver, newRecapPlayerLookupAdapter(combatantLookup)),
 		reaction: discord.NewReactionHandler(deps.session, newReactionServiceAdapter(deps.combatService), deps.resolver, combatantLookup),
-		use:      discord.NewUseHandler(deps.session, checkCampProv, characterLookup, useStore, nil, newUseGiveTurnAdapter(deps.queries)),
+		use: func() *discord.UseHandler {
+			h := discord.NewUseHandler(deps.session, checkCampProv, characterLookup, useStore, nil, newUseGiveTurnAdapter(deps.queries))
+			if deps.cardUpdater != nil {
+				h.SetCardUpdater(deps.cardUpdater)
+			}
+			return h
+		}(),
 		status: discord.NewStatusHandler(
 			deps.session,
 			checkCampProv,
@@ -284,6 +300,9 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			deps.queries,
 			deps.lootService,
 		)
+		if deps.cardUpdater != nil {
+			handlers.loot.SetCardUpdater(deps.cardUpdater)
+		}
 	}
 
 	// Setter-based wiring for handlers that don't accept these via constructor.
@@ -442,8 +461,18 @@ func attachInventoryAndCharacterHandlers(
 		handlers.equip.SetCombatService(deps.combatService)
 		handlers.equip.SetEncounterProvider(newCombatActionLookupAdapter(deps.combatService, deps.queries, deps.resolver))
 	}
+	if deps.cardUpdater != nil {
+		// SR-007: legacy inventory-only fallback path also needs to refresh
+		// the persistent #character-cards message. The SR-004 combat-routed
+		// path is wired one level down via combat.Service.SetCardUpdater.
+		handlers.equip.SetCardUpdater(deps.cardUpdater)
+	}
 	handlers.attune = discord.NewAttuneHandler(deps.session, checkCampProv, characterLookup, deps.queries)
 	handlers.unattune = discord.NewUnattuneHandler(deps.session, checkCampProv, characterLookup, deps.queries)
+	if deps.cardUpdater != nil {
+		handlers.attune.SetCardUpdater(deps.cardUpdater)
+		handlers.unattune.SetCardUpdater(deps.cardUpdater)
+	}
 	handlers.give = discord.NewGiveHandler(
 		deps.session,
 		checkCampProv,
@@ -455,6 +484,9 @@ func attachInventoryAndCharacterHandlers(
 	// med-35: wire turn provider so /give in combat costs the per-turn
 	// free object interaction. Out-of-combat /give carries no cost.
 	handlers.give.SetTurnProvider(newUseGiveTurnAdapter(deps.queries))
+	if deps.cardUpdater != nil {
+		handlers.give.SetCardUpdater(deps.cardUpdater)
+	}
 	handlers.character = discord.NewCharacterHandler(deps.session, deps.queries, deps.queries, deps.portalBaseURL)
 
 	if deps.levelUpService != nil {
@@ -541,6 +573,9 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 		checkCampProv,
 		characterLookup,
 	)
+	if deps.cardUpdater != nil {
+		handlers.prepare.SetCardUpdater(deps.cardUpdater)
+	}
 
 	if deps.campaignSettings != nil {
 		handlers.attack.SetChannelIDProvider(deps.campaignSettings)

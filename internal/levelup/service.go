@@ -101,13 +101,23 @@ type EncounterLookup interface {
 	ActiveEncounterIDForCharacter(ctx context.Context, characterID uuid.UUID) (uuid.UUID, bool, error)
 }
 
+// CardUpdater is the SR-007 hook the service fires after any character-stat
+// mutation so the persistent #character-cards message refreshes. The same
+// charactercard.Service.OnCharacterUpdated method that combat wires also
+// satisfies this interface. Errors are swallowed by the call site — a stale
+// card must never undo a committed level-up write.
+type CardUpdater interface {
+	OnCharacterUpdated(ctx context.Context, characterID uuid.UUID) error
+}
+
 // Service orchestrates the level-up workflow.
 type Service struct {
-	charStore  CharacterStore
-	classStore ClassStore
-	notifier   Notifier
-	publisher  EncounterPublisher
-	lookup     EncounterLookup
+	charStore   CharacterStore
+	classStore  ClassStore
+	notifier    Notifier
+	publisher   EncounterPublisher
+	lookup      EncounterLookup
+	cardUpdater CardUpdater
 }
 
 // NewService creates a new level-up Service.
@@ -125,6 +135,24 @@ func NewService(charStore CharacterStore, classStore ClassStore, notifier Notifi
 func (s *Service) SetPublisher(p EncounterPublisher, lookup EncounterLookup) {
 	s.publisher = p
 	s.lookup = lookup
+}
+
+// SetCardUpdater wires the SR-007 character-card refresh callback fired
+// after a successful level-up / ASI approval / feat application. A nil
+// updater is tolerated and disables the fan-out.
+func (s *Service) SetCardUpdater(u CardUpdater) {
+	s.cardUpdater = u
+}
+
+// notifyCardUpdate fires the SR-007 card refresh, swallowing errors. Nil
+// updater and uuid.Nil are silent no-ops.
+func (s *Service) notifyCardUpdate(ctx context.Context, characterID uuid.UUID) {
+	if s.cardUpdater == nil || characterID == uuid.Nil {
+		return
+	}
+	if err := s.cardUpdater.OnCharacterUpdated(ctx, characterID); err != nil {
+		slog.Error("levelup: card auto-update failed", "error", err, "character_id", characterID)
+	}
 }
 
 // publishForCharacter fires the publisher with the character's active
@@ -227,6 +255,7 @@ func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, class
 		return nil, fmt.Errorf("updating character: %w", err)
 	}
 	s.publishForCharacter(ctx, characterID)
+	s.notifyCardUpdate(ctx, characterID)
 
 	// Determine if this level grants ASI
 	grantsASI := IsASILevel(classID, newClassLevel)
@@ -295,6 +324,7 @@ func (s *Service) ApproveASI(ctx context.Context, characterID uuid.UUID, choice 
 		return err
 	}
 	s.publishForCharacter(ctx, characterID)
+	s.notifyCardUpdate(ctx, characterID)
 	return nil
 }
 
@@ -353,6 +383,7 @@ func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat Fea
 		return fmt.Errorf("updating features: %w", err)
 	}
 	s.publishForCharacter(ctx, characterID)
+	s.notifyCardUpdate(ctx, characterID)
 
 	// Apply ASI bonus from feat if present
 	if len(feat.ASIBonus) > 0 {
@@ -393,6 +424,7 @@ func (s *Service) applyFeatASI(ctx context.Context, char *StoredCharacter, asiBo
 		return err
 	}
 	s.publishForCharacter(ctx, char.ID)
+	s.notifyCardUpdate(ctx, char.ID)
 	return nil
 }
 

@@ -934,8 +934,9 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			dmQueueCounter{store: dmQueueStore},
 		)
 		var cardPoster dashboard.CharacterCardPoster
+		var cardSvc *charactercard.Service
 		if discordSession != nil {
-			cardSvc := charactercard.NewService(discordSession, queries, logger)
+			cardSvc = charactercard.NewService(discordSession, queries, logger)
 			cardPoster = cardSvc
 			// Phase 17 Cards: combat mutations (HP, conditions,
 			// concentration, exhaustion) re-render the card via the
@@ -984,6 +985,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		encLookup := encounterLookupAdapter{queries: queries}
 		inventoryAPIHandler := inventory.NewAPIHandler(queries)
 		inventoryAPIHandler.SetPublisher(publisher, encLookup)
+		// SR-007: DM-side inventory mutations refresh #character-cards.
+		if cardSvc != nil {
+			inventoryAPIHandler.SetCardUpdater(cardSvc)
+		}
 		// F-2: /api/inventory/* are DM-only inventory mutations — apply
 		// dmAuthMw so non-DM authenticated users get 403 instead of
 		// reaching the handler.
@@ -1048,6 +1053,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			levelup.NewNotifierAdapterWithStory(levelUpDM, levelUpStory),
 		)
 		levelUpSvc.SetPublisher(publisher, encLookup)
+		// SR-007: refresh #character-cards on level-up / ASI / feat writes.
+		if cardSvc != nil {
+			levelUpSvc.SetCardUpdater(cardSvc)
+		}
 		levelup.NewHandler(levelUpSvc, hub).RegisterRoutes(router)
 
 		// B-26b: lifecycle fan-outs on EndCombat. The three notifiers wire
@@ -1199,6 +1208,9 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				notifier:        dmQueueNotifier,
 				portalBaseURL:   os.Getenv("BASE_URL"),
 				reactionPrompts: reactionPrompts,
+				// SR-007: charactercard.Service satisfies discord.CardUpdater.
+				// Nil in headless / no-discord deploys (handlers stay no-op).
+				cardUpdater: cardSvc,
 			})
 
 			// F-9: inject the magic-item publisher into /attune so a

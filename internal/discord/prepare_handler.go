@@ -53,6 +53,13 @@ type PrepareHandler struct {
 	encounterProv   PrepareEncounterProvider
 	campaignProv    PrepareCampaignProvider
 	characterLookup PrepareCharacterLookup
+	cardUpdater     CardUpdater // SR-007
+}
+
+// SetCardUpdater wires the SR-007 character-card refresh callback fired
+// after a successful /prepare commit.
+func (h *PrepareHandler) SetCardUpdater(u CardUpdater) {
+	h.cardUpdater = u
 }
 
 // preparedClassEntry is the local subset of character.ClassEntry the
@@ -198,6 +205,9 @@ func (h *PrepareHandler) commit(ctx context.Context, interaction *discordgo.Inte
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to prepare spells: %v", err))
 		return
 	}
+
+	// SR-007: refresh #character-cards after a successful /prepare commit.
+	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
 
 	respondEphemeral(h.session, interaction, fmt.Sprintf(
 		"✅ Prepared %d/%d spells for %s.",

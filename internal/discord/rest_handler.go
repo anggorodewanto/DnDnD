@@ -42,6 +42,13 @@ type RestHandler struct {
 	rollLogger       dice.RollHistoryLogger
 	dmQueueFunc      func(guildID string) string // reserved for future DM approval flow
 	notifier         dmqueue.Notifier
+	cardUpdater      CardUpdater // SR-007
+}
+
+// SetCardUpdater wires the SR-007 character-card refresh callback fired
+// after every successful rest write (short / long / partial).
+func (h *RestHandler) SetCardUpdater(u CardUpdater) {
+	h.cardUpdater = u
 }
 
 // SetNotifier wires the dm-queue Notifier. When set, /rest posts a rest
@@ -317,6 +324,9 @@ func (h *RestHandler) finalizeShortRest(ctx context.Context, interaction *discor
 	// no publisher is wired.
 	h.restService.PublishForCharacter(ctx, char.ID)
 
+	// SR-007: refresh #character-cards after the rest write.
+	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
+
 	msg := rest.FormatShortRestResult(char.Name, result)
 	h.editInteraction(interaction, msg)
 
@@ -338,6 +348,9 @@ func (h *RestHandler) finalizeShortRestPartial(ctx context.Context, interaction 
 	// per-step publish is harmless and keeps the dashboard in sync as
 	// the multi-die-type flow walks through its remaining steps.
 	h.restService.PublishForCharacter(ctx, char.ID)
+
+	// SR-007: refresh #character-cards after the partial rest write.
+	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
 
 	// Build updated prompt showing remaining dice for other types + Done button
 	otherDice := make(map[string]int)
@@ -531,6 +544,9 @@ func (h *RestHandler) handleLongRest(ctx context.Context, interaction *discordgo
 	// character may still be a combatant in. PublishForCharacter is a
 	// silent no-op when not in combat or when no publisher is wired.
 	h.restService.PublishForCharacter(ctx, char.ID)
+
+	// SR-007: refresh #character-cards after the long-rest write.
+	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
 
 	msg := rest.FormatLongRestResult(char.Name, result)
 

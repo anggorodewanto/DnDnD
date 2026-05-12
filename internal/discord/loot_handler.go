@@ -24,6 +24,13 @@ type LootHandler struct {
 	characterLookup InventoryCharacterLookup
 	encounterProv   LootEncounterProvider
 	lootSvc         *loot.Service
+	cardUpdater     CardUpdater // SR-007
+}
+
+// SetCardUpdater wires the SR-007 character-card refresh callback fired
+// after a successful /loot claim.
+func (h *LootHandler) SetCardUpdater(u CardUpdater) {
+	h.cardUpdater = u
 }
 
 // NewLootHandler creates a new LootHandler.
@@ -171,6 +178,9 @@ func (h *LootHandler) HandleLootClaim(interaction *discordgo.Interaction, poolID
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot claim item: %v", err))
 		return
 	}
+
+	// SR-007: refresh #character-cards for the claimant.
+	notifyCardUpdate(ctx, h.cardUpdater, characterID)
 
 	respondEphemeral(h.session, interaction, fmt.Sprintf("\u2705 You claimed **%s**!", claimed.Name))
 }

@@ -40,12 +40,22 @@ type CharacterStore interface {
 	UpdateTwoCharacterInventories(ctx context.Context, id1 uuid.UUID, inv1 pqtype.NullRawMessage, id2 uuid.UUID, inv2 pqtype.NullRawMessage) error
 }
 
+// CardUpdater is the SR-007 hook the API fires after any DM-side inventory
+// or gold mutation so the persistent #character-cards message refreshes.
+// charactercard.Service.OnCharacterUpdated satisfies this interface.
+// Errors are swallowed by the call site — a stale card must never undo a
+// committed DB write.
+type CardUpdater interface {
+	OnCharacterUpdated(ctx context.Context, characterID uuid.UUID) error
+}
+
 // APIHandler handles DM inventory management HTTP endpoints.
 type APIHandler struct {
 	store       CharacterStore
 	combatLogFn func(msg string)
 	publisher   EncounterPublisher
 	lookup      EncounterLookup
+	cardUpdater CardUpdater
 }
 
 // NewAPIHandler creates a new APIHandler.
@@ -64,6 +74,24 @@ func (h *APIHandler) SetCombatLogFunc(fn func(msg string)) {
 func (h *APIHandler) SetPublisher(p EncounterPublisher, lookup EncounterLookup) {
 	h.publisher = p
 	h.lookup = lookup
+}
+
+// SetCardUpdater wires the SR-007 character-card refresh callback fired
+// after every successful DM-side inventory or gold mutation. A nil updater
+// is tolerated.
+func (h *APIHandler) SetCardUpdater(u CardUpdater) {
+	h.cardUpdater = u
+}
+
+// notifyCardUpdate fires the card refresh; nil updater / uuid.Nil are silent
+// no-ops. Errors are logged and swallowed.
+func (h *APIHandler) notifyCardUpdate(ctx context.Context, characterID uuid.UUID) {
+	if h.cardUpdater == nil || characterID == uuid.Nil {
+		return
+	}
+	if err := h.cardUpdater.OnCharacterUpdated(ctx, characterID); err != nil {
+		log.Printf("inventory api: card auto-update failed for %s: %v", characterID, err)
+	}
 }
 
 // publishForCharacter looks up the character's active encounter (if any) and
@@ -166,6 +194,7 @@ func (h *APIHandler) HandleIdentifyItem(w http.ResponseWriter, r *http.Request) 
 	}
 
 	h.publishForCharacter(r.Context(), charID)
+	h.notifyCardUpdate(r.Context(), charID)
 	h.logCombat(fmt.Sprintf("🔍 DM updated identification of **%s** for **%s** (identified: %v).", result.ItemName, char.Name, req.Identified))
 
 	w.Header().Set("Content-Type", "application/json")
@@ -207,6 +236,7 @@ func (h *APIHandler) HandleAddItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.publishForCharacter(r.Context(), charID)
+	h.notifyCardUpdate(r.Context(), charID)
 	h.logCombat(fmt.Sprintf("📦 DM added **%s** ×%d to **%s**'s inventory.", req.Item.Name, req.Item.Quantity, char.Name))
 
 	w.Header().Set("Content-Type", "application/json")
@@ -251,6 +281,7 @@ func (h *APIHandler) HandleRemoveItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.publishForCharacter(r.Context(), charID)
+	h.notifyCardUpdate(r.Context(), charID)
 	h.logCombat(fmt.Sprintf("📦 DM removed **%s** ×%d from **%s**'s inventory.", itemName, qty, char.Name))
 
 	w.Header().Set("Content-Type", "application/json")
@@ -331,6 +362,8 @@ func (h *APIHandler) HandleTransferItem(w http.ResponseWriter, r *http.Request) 
 
 	h.publishForCharacter(r.Context(), fromID)
 	h.publishForCharacter(r.Context(), toID)
+	h.notifyCardUpdate(r.Context(), fromID)
+	h.notifyCardUpdate(r.Context(), toID)
 	h.logCombat(fmt.Sprintf("📦 DM transferred **%s** ×%d from **%s** to **%s**.", item.Name, qty, fromChar.Name, toChar.Name))
 
 	w.Header().Set("Content-Type", "application/json")
@@ -373,6 +406,7 @@ func (h *APIHandler) HandleSetGold(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.publishForCharacter(r.Context(), charID)
+	h.notifyCardUpdate(r.Context(), charID)
 	h.logCombat(fmt.Sprintf("💰 DM set **%s**'s gold to **%d** gp (was %d gp).", char.Name, req.Gold, char.Gold))
 
 	w.Header().Set("Content-Type", "application/json")

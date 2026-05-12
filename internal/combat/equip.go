@@ -96,7 +96,24 @@ func equipUpdateParams(char refdata.Character, ac int32) refdata.UpdateCharacter
 }
 
 // Equip handles the /equip command for weapons, shields, and armor.
+//
+// SR-007: on a successful equipment write the character card is refreshed via
+// the CardUpdater hook so the persistent #character-cards message keeps the
+// "Equipped:" / AC lines in sync with the just-written `equipped_*` columns.
+// The fan-out is best-effort — a Discord hiccup must not undo the DB write.
 func (s *Service) Equip(ctx context.Context, cmd EquipCommand) (EquipResult, error) {
+	result, err := s.dispatchEquip(ctx, cmd)
+	if err != nil {
+		return result, err
+	}
+	s.notifyCardUpdateByCharacterID(ctx, result.Character.ID)
+	return result, nil
+}
+
+// dispatchEquip routes the EquipCommand to the matching sub-handler. Kept
+// separate from Equip so the single post-success card-update fan-out can wrap
+// every branch.
+func (s *Service) dispatchEquip(ctx context.Context, cmd EquipCommand) (EquipResult, error) {
 	// Handle unequip ("none")
 	if strings.EqualFold(cmd.ItemName, "none") {
 		return s.unequip(ctx, cmd)

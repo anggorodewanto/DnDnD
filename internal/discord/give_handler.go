@@ -47,6 +47,7 @@ type GiveHandler struct {
 	store           GiveCharacterStore
 	combatProv      GiveCombatProvider
 	turnProv        GiveTurnProvider
+	cardUpdater     CardUpdater // SR-007
 }
 
 // NewGiveHandler creates a new GiveHandler.
@@ -73,6 +74,13 @@ func NewGiveHandler(
 // /give never deducts a turn resource.
 func (h *GiveHandler) SetTurnProvider(p GiveTurnProvider) {
 	h.turnProv = p
+}
+
+// SetCardUpdater wires the SR-007 character-card refresh callback.
+// /give fires it for BOTH giver and receiver after the atomic inventory
+// write because both characters' inventory state may surface on the card.
+func (h *GiveHandler) SetCardUpdater(u CardUpdater) {
+	h.cardUpdater = u
 }
 
 // Handle processes the /give command interaction.
@@ -169,6 +177,10 @@ func (h *GiveHandler) Handle(interaction *discordgo.Interaction) {
 		respondEphemeral(h.session, interaction, "Failed to save inventory changes. Please try again.")
 		return
 	}
+
+	// SR-007: refresh #character-cards for both parties after the transfer.
+	notifyCardUpdate(ctx, h.cardUpdater, giver.ID)
+	notifyCardUpdate(ctx, h.cardUpdater, receiver.ID)
 
 	// med-35: persist the free-interaction deduction. Best-effort: a
 	// save failure does not undo the committed inventory transfer.

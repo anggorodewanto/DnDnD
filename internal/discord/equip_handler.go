@@ -50,6 +50,11 @@ type EquipHandler struct {
 	// without a combat service).
 	combatSvc         EquipCombatService
 	encounterProvider EquipEncounterProvider
+	// SR-007: optional card-update fan-out for the inventory-only legacy
+	// fallback. The SR-004 combat-routed path fires the card update from
+	// combat.Service.Equip; this seam covers the fallback used by tests
+	// and headless deploys without a wired combat service.
+	cardUpdater CardUpdater
 }
 
 // NewEquipHandler creates a new EquipHandler.
@@ -77,6 +82,12 @@ func (h *EquipHandler) SetCombatService(svc EquipCombatService) {
 // handler can pass the current Turn to combat.Equip for in-combat gating.
 func (h *EquipHandler) SetEncounterProvider(p EquipEncounterProvider) {
 	h.encounterProvider = p
+}
+
+// SetCardUpdater wires the SR-007 character-card refresh callback for the
+// inventory-only legacy fallback. A nil updater is tolerated.
+func (h *EquipHandler) SetCardUpdater(u CardUpdater) {
+	h.cardUpdater = u
 }
 
 // Handle processes the /equip command interaction.
@@ -279,6 +290,9 @@ func (h *EquipHandler) handleViaInventoryOnly(
 		respondEphemeral(h.session, interaction, "Failed to save equipment changes. Please try again.")
 		return
 	}
+
+	// SR-007: refresh #character-cards after the inventory write.
+	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
 
 	msg := result.Message
 	if result.Warning != "" {

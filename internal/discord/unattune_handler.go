@@ -19,6 +19,13 @@ type UnattuneHandler struct {
 	campaignProv    InventoryCampaignProvider
 	characterLookup InventoryCharacterLookup
 	store           AttuneCharacterStore
+	cardUpdater     CardUpdater // SR-007
+}
+
+// SetCardUpdater wires the SR-007 character-card refresh callback fired
+// after a successful /unattune write.
+func (h *UnattuneHandler) SetCardUpdater(u CardUpdater) {
+	h.cardUpdater = u
 }
 
 // NewUnattuneHandler creates a new UnattuneHandler.
@@ -93,6 +100,9 @@ func (h *UnattuneHandler) Handle(interaction *discordgo.Interaction) {
 		respondEphemeral(h.session, interaction, "Failed to save attunement changes. Please try again.")
 		return
 	}
+
+	// SR-007: refresh #character-cards after the unattune write.
+	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
 
 	respondEphemeral(h.session, interaction, result.Message)
 }

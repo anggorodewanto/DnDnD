@@ -35,6 +35,7 @@ type AttuneHandler struct {
 	characterLookup InventoryCharacterLookup
 	store           AttuneCharacterStore
 	publisher       AttunePublisher
+	cardUpdater     CardUpdater // SR-007
 }
 
 // NewAttuneHandler creates a new AttuneHandler.
@@ -56,6 +57,12 @@ func NewAttuneHandler(
 // is tolerated and disables fan-out — Handle simply skips the call.
 func (h *AttuneHandler) SetPublisher(p AttunePublisher) {
 	h.publisher = p
+}
+
+// SetCardUpdater wires the SR-007 character-card refresh callback fired
+// after a successful /attune write.
+func (h *AttuneHandler) SetCardUpdater(u CardUpdater) {
+	h.cardUpdater = u
 }
 
 // Handle processes the /attune command interaction.
@@ -144,6 +151,9 @@ func (h *AttuneHandler) Handle(interaction *discordgo.Interaction) {
 	if h.publisher != nil {
 		h.publisher.PublishForCharacter(ctx, char.ID)
 	}
+
+	// SR-007: refresh #character-cards after the attunement write.
+	notifyCardUpdate(ctx, h.cardUpdater, char.ID)
 
 	respondEphemeral(h.session, interaction, result.Message)
 }
