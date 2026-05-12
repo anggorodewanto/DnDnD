@@ -70,6 +70,43 @@ export async function updateMap(id, params) {
 }
 
 /**
+ * Import a Tiled `.tmj` file as a new map. Reads the file as text, parses it
+ * as JSON, and POSTs the payload to /api/maps/import. The backend validates
+ * the .tmj, strips unsupported features, and returns
+ * { map: {...}, skipped: [...] }.
+ *
+ * @param {object} params - { campaignId, name, file, backgroundImageId? }
+ * @param {string} params.campaignId - Campaign UUID.
+ * @param {string} params.name - Map name (required by the backend).
+ * @param {File}   params.file - The .tmj file selected by the user.
+ * @param {string} [params.backgroundImageId] - Optional asset UUID.
+ * @returns {Promise<{map: object, skipped: object[]}>}
+ */
+export async function importTiledMap({ campaignId, name, file, backgroundImageId }) {
+  const text = await file.text();
+  let tmj;
+  try {
+    tmj = JSON.parse(text);
+  } catch (e) {
+    throw new Error('Selected file is not valid JSON');
+  }
+  const body = {
+    campaign_id: campaignId,
+    name,
+    tmj,
+  };
+  if (backgroundImageId) {
+    body.background_image_id = backgroundImageId;
+  }
+  const res = await apiFetch(`${API_BASE}/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+/**
  * Upload an asset file.
  * @param {object} params - { campaignId, type, file }
  * @returns {Promise<object>} The uploaded asset { id, url }.

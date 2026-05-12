@@ -1,5 +1,5 @@
 <script>
-  import { createMap, getMap, updateMap, uploadAsset } from './lib/api.js';
+  import { createMap, getMap, updateMap, uploadAsset, importTiledMap } from './lib/api.js';
   import {
     TERRAIN_TYPES,
     terrainByGid,
@@ -62,6 +62,11 @@
 
   // File input ref
   let fileInputEl = $state(null);
+
+  // F-7: Tiled .tmj import state + file input ref.
+  let tmjFileInputEl = $state(null);
+  let importingTmj = $state(false);
+  let skippedFeatures = $state(null);
 
   // Mouse state for painting
   let isPainting = $state(false);
@@ -205,6 +210,48 @@
       error = e.message;
     } finally {
       uploadingImage = false;
+    }
+  }
+
+  // F-7: handle a user-selected .tmj file. Posts to /api/maps/import, then
+  // loads the persisted map into the editor so the DM can review/save it.
+  async function handleTmjImport(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    importingTmj = true;
+    error = null;
+    skippedFeatures = null;
+    statusMsg = '';
+    try {
+      const result = await importTiledMap({
+        campaignId,
+        name: mapName || file.name.replace(/\.tmj$/i, ''),
+        file,
+      });
+      // Backend returns { map, skipped }. Load the persisted map into the
+      // editor view by reusing the same flow GetMap uses.
+      const m = result.map;
+      mapName = m.name;
+      mapWidth = m.width;
+      mapHeight = m.height;
+      tiledMap = typeof m.tiled_json === 'string' ? JSON.parse(m.tiled_json) : m.tiled_json;
+      savedMapId = m.id;
+      if (m.background_image_id) {
+        backgroundImageId = m.background_image_id;
+        backgroundImageUrl = `/api/assets/${m.background_image_id}`;
+        loadBackgroundImage(backgroundImageUrl);
+      }
+      showNewMapForm = false;
+      dirty = false;
+      skippedFeatures = Array.isArray(result.skipped) ? result.skipped : [];
+      statusMsg = `Imported "${m.name}".`;
+    } catch (err) {
+      error = err.message;
+    } finally {
+      importingTmj = false;
+      // Reset the input so selecting the same file again re-triggers change.
+      if (tmjFileInputEl) tmjFileInputEl.value = '';
     }
   }
 
@@ -686,7 +733,23 @@
       {#if error}
         <p class="error">{error}</p>
       {/if}
-      <button class="primary-btn" onclick={createNewMap}>Create Map</button>
+      <div class="form-row">
+        <button class="primary-btn" onclick={createNewMap}>Create Map</button>
+        <!-- F-7: import a Tiled `.tmj` instead of authoring blank. -->
+        <input
+          type="file"
+          accept=".tmj,application/json"
+          style="display:none"
+          bind:this={tmjFileInputEl}
+          onchange={handleTmjImport}
+        />
+        <button
+          class="import-tmj-btn"
+          onclick={() => tmjFileInputEl?.click()}
+          disabled={importingTmj}
+          title="Import a Tiled .tmj file as a new map"
+        >{importingTmj ? 'Importing...' : 'Import Tiled (.tmj)'}</button>
+      </div>
     </div>
   {:else}
     <!-- Toolbar -->
@@ -874,6 +937,18 @@
 
     {#if error}
       <p class="error">{error}</p>
+    {/if}
+
+    {#if skippedFeatures && skippedFeatures.length > 0}
+      <!-- F-7: surface Tiled features the importer stripped. -->
+      <div class="skipped-features">
+        <strong>Tiled import: stripped {skippedFeatures.length} unsupported feature{skippedFeatures.length === 1 ? '' : 's'}:</strong>
+        <ul>
+          {#each skippedFeatures as feat}
+            <li>{feat.feature || 'feature'}{feat.detail ? ` — ${feat.detail}` : ''}</li>
+          {/each}
+        </ul>
+      </div>
     {/if}
 
     <!-- Canvas -->
@@ -1094,6 +1169,41 @@
 
   .error {
     color: #ff4444;
+  }
+
+  /* F-7: Tiled .tmj import affordance. */
+  .import-tmj-btn {
+    padding: 0.75rem 1.25rem;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95rem;
+  }
+
+  .import-tmj-btn:hover:not(:disabled) {
+    background: #0f3460;
+  }
+
+  .import-tmj-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .skipped-features {
+    margin: 0.5rem 0;
+    padding: 0.6rem 0.9rem;
+    background: #2a2410;
+    border-left: 3px solid #ffc107;
+    color: #ffc107;
+    font-size: 0.85rem;
+    border-radius: 4px;
+  }
+
+  .skipped-features ul {
+    margin: 0.25rem 0 0 1rem;
+    padding: 0;
   }
 
   .undo-btn, .redo-btn {

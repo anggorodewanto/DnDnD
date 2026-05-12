@@ -13,6 +13,7 @@ import {
   overrideCharacterSpellSlots,
   updateEncounterDisplayName,
   startCombat,
+  importTiledMap,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -557,5 +558,85 @@ describe('startCombat', () => {
       text: () => Promise.resolve('invalid template_id'),
     });
     await expect(startCombat({ template_id: 'bad' })).rejects.toThrow('invalid template_id');
+  });
+});
+
+// F-7: Tiled .tmj import — wired by MapEditor.svelte's new "Import Tiled" button.
+describe('importTiledMap', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reads the file as text, parses it as JSON, and POSTs to /api/maps/import', async () => {
+    const responseBody = {
+      map: { id: 'map-123', name: 'Dungeon', width: 10, height: 8, tiled_json: {} },
+      skipped: [],
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(responseBody),
+    });
+
+    const tmj = { width: 10, height: 8, orientation: 'orthogonal', layers: [] };
+    const file = new File([JSON.stringify(tmj)], 'dungeon.tmj', { type: 'application/json' });
+
+    const result = await importTiledMap({
+      campaignId: 'campaign-uuid',
+      name: 'Dungeon',
+      file,
+    });
+
+    expect(result).toEqual(responseBody);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/maps/import');
+    expect(options.method).toBe('POST');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    const body = JSON.parse(options.body);
+    expect(body.campaign_id).toBe('campaign-uuid');
+    expect(body.name).toBe('Dungeon');
+    expect(body.tmj).toEqual(tmj);
+    expect(body.background_image_id).toBeUndefined();
+  });
+
+  it('includes background_image_id when provided', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ map: {}, skipped: [] }),
+    });
+    const file = new File(['{"layers":[]}'], 'm.tmj', { type: 'application/json' });
+    await importTiledMap({
+      campaignId: 'c1',
+      name: 'M',
+      file,
+      backgroundImageId: 'asset-9',
+    });
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(body.background_image_id).toBe('asset-9');
+  });
+
+  it('rejects when the file is not valid JSON', async () => {
+    globalThis.fetch = vi.fn();
+    const file = new File(['not json {{'], 'bad.tmj', { type: 'application/json' });
+    await expect(importTiledMap({
+      campaignId: 'c1',
+      name: 'Bad',
+      file,
+    })).rejects.toThrow(/not valid JSON/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('surfaces backend error text from a non-ok response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve('infinite maps are not supported'),
+    });
+    const file = new File(['{"infinite":true}'], 'big.tmj', { type: 'application/json' });
+    await expect(importTiledMap({
+      campaignId: 'c1',
+      name: 'Big',
+      file,
+    })).rejects.toThrow('infinite maps are not supported');
   });
 });
