@@ -123,6 +123,20 @@ func TestRun_AuthProtectedRoutesRejectUnauthenticated(t *testing.T) {
 	}{
 		{"dm queue", http.MethodGet, "/dashboard/queue/some-item", ""},
 		{"inventory API", http.MethodPost, "/api/inventory/add", "{}"},
+		// SR-001 / F-2: every DM-mutation route group below should
+		// require auth. Walking one path per group is enough — the
+		// gating is shared (mountDMOnlyAPIs).
+		{"map import", http.MethodPost, "/api/maps/import", "{}"},
+		{"statblocks list", http.MethodGet, "/api/statblocks/", ""},
+		{"homebrew create", http.MethodPost, "/api/homebrew/creatures", "{}"},
+		{"campaign pause", http.MethodPost, "/api/campaigns/00000000-0000-0000-0000-000000000001/pause", "{}"},
+		{"narration post", http.MethodPost, "/api/narration/post", "{}"},
+		{"narration templates list", http.MethodGet, "/api/narration/templates/", ""},
+		{"character overview", http.MethodGet, "/api/character-overview?campaign_id=00000000-0000-0000-0000-000000000001", ""},
+		{"message player", http.MethodPost, "/api/message-player/", "{}"},
+		{"combat start", http.MethodPost, "/api/combat/start", "{}"},
+		{"combat advance-turn", http.MethodPost, "/api/combat/00000000-0000-0000-0000-000000000001/advance-turn", "{}"},
+		{"combat workspace", http.MethodGet, "/api/combat/workspace?campaign_id=00000000-0000-0000-0000-000000000001", ""},
 	}
 
 	for _, tt := range tests {

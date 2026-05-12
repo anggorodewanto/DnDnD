@@ -227,6 +227,78 @@ func (a workspaceStoreAdapter) GetCombatantByID(ctx context.Context, id uuid.UUI
 	return a.Queries.GetCombatant(ctx, id)
 }
 
+// dmOnlyAPIDeps groups every HTTP handler whose routes mutate or expose
+// DM-only state. Each field is nil-safe so partially-wired test deploys
+// can call mountDMOnlyAPIs without panicking. The combat workspace + DM
+// dashboard sub-routes (see mountCombatDashboardRoutes) are mounted from
+// the combatSvc + workspaceStore + db + combatLogPoster trio rather than a
+// separate handler since chi rejects two r.Route("/api/combat", ...) calls
+// on the same mux.
+//
+// SR-001 / F-2 (docs/dnd-async-discord-spec.md line 65): every route group
+// in this struct must mount behind dmAuthMw so non-DM authenticated callers
+// receive 403 instead of reaching the handler. mountDMOnlyAPIs is the
+// single source of truth.
+type dmOnlyAPIDeps struct {
+	mapHandler               *gamemap.Handler
+	statBlockHandler         *statblocklibrary.Handler
+	homebrewHandler          *homebrew.Handler
+	campaignHandler          *campaign.Handler
+	narrationHandler         *narration.Handler
+	narrationTemplateHandler *narration.TemplateHandler
+	characterOverviewHandler *characteroverview.Handler
+	messagePlayerHandler     *messageplayer.Handler
+	combatHandler            *combat.Handler
+	combatSvc                *combat.Service
+	workspaceStore           combat.WorkspaceStore
+	db                       combat.TxBeginner
+	combatLogPoster          combat.CombatLogPoster
+}
+
+// mountDMOnlyAPIs registers every DM-mutation route group behind dmAuthMw so
+// non-DM authenticated callers receive 403 (F-2 systemic regression fix per
+// SR-001 / SUMMARY.md §1 item 1). Each handler is mounted inside a
+// router.Group that applies dmAuthMw, matching the pattern used by the
+// dashboard inventory/approval routes.
+//
+// Nil handlers are silently skipped so test deploys that wire only a subset
+// of services do not panic.
+func mountDMOnlyAPIs(router chi.Router, deps dmOnlyAPIDeps, dmAuthMw func(http.Handler) http.Handler) {
+	router.Group(func(r chi.Router) {
+		r.Use(dmAuthMw)
+		if deps.mapHandler != nil {
+			deps.mapHandler.RegisterRoutes(r)
+		}
+		if deps.statBlockHandler != nil {
+			deps.statBlockHandler.RegisterRoutes(r)
+		}
+		if deps.homebrewHandler != nil {
+			deps.homebrewHandler.RegisterRoutes(r)
+		}
+		if deps.campaignHandler != nil {
+			deps.campaignHandler.RegisterRoutes(r)
+		}
+		if deps.narrationHandler != nil {
+			deps.narrationHandler.RegisterRoutes(r)
+		}
+		if deps.narrationTemplateHandler != nil {
+			deps.narrationTemplateHandler.RegisterRoutes(r)
+		}
+		if deps.characterOverviewHandler != nil {
+			deps.characterOverviewHandler.RegisterRoutes(r)
+		}
+		if deps.messagePlayerHandler != nil {
+			deps.messagePlayerHandler.RegisterRoutes(r)
+		}
+		if deps.combatHandler != nil {
+			deps.combatHandler.RegisterRoutes(r)
+		}
+		if deps.combatSvc != nil {
+			mountCombatDashboardRoutes(r, deps.combatSvc, deps.workspaceStore, deps.db, deps.combatLogPoster)
+		}
+	})
+}
+
 // mountCombatDashboardRoutes wires the workspace + DM dashboard HTTP surface
 // onto router. workspaceStore may be nil to skip the WorkspaceHandler (test
 // deploys); db may be nil to disable per-turn advisory locks in unit tests.
@@ -555,11 +627,13 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// Phase 112: wire the DB ping into the health endpoint.
 		health.Register("db", server.NewDBChecker(db))
 
-		// Wire map API handler
+		// Wire map API handler. SR-001 / F-2: registration is deferred to
+		// mountDMOnlyAPIs (below dmAuthMw) so the bare router never sees
+		// /api/maps/import — non-DM authenticated users get 403 instead of
+		// being able to overwrite Tiled JSON.
 		queries := refdata.New(db)
 		mapSvc := gamemap.NewService(queries)
 		mapHandler := gamemap.NewHandler(mapSvc)
-		mapHandler.RegisterRoutes(router)
 
 		// Wire encounter API handler
 		encounterSvc := encounter.NewService(queries)
@@ -588,10 +662,11 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// Phase 111: inject an Open5e campaign-lookup so the library
 		// applies per-campaign open5e_sources gating when a campaign_id
 		// accompanies the request.
+		// SR-001 / F-2: registration is deferred to mountDMOnlyAPIs so
+		// players can't read hidden enemy stats (spec line 258).
 		statBlockSvc := statblocklibrary.NewService(queries)
 		open5eCampaignLookup := open5e.NewCampaignSourceLookup(queries)
 		statBlockHandler := statblocklibrary.NewHandlerWithCampaignLookup(statBlockSvc, open5eCampaignLookup)
-		statBlockHandler.RegisterRoutes(router)
 
 		// Phase 111: Open5e extended-content integration. Live search
 		// proxy + on-demand cache into creatures/spells tables. Sources
@@ -609,10 +684,12 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		open5eSourcesHandler := open5e.NewSourcesHandler(queries)
 		router.Get("/api/open5e/sources", open5eSourcesHandler.ListCatalog)
 
-		// Wire Homebrew Content API handler (Phase 99)
+		// Wire Homebrew Content API handler (Phase 99).
+		// SR-001 / F-2: registration is deferred to mountDMOnlyAPIs so
+		// non-DM users can't create/edit homebrew content (spec says
+		// homebrew CRUD is DM-only).
 		homebrewSvc := homebrew.NewService(queries)
 		homebrewHandler := homebrew.NewHandler(homebrewSvc)
-		homebrewHandler.RegisterRoutes(router)
 
 		// Wire Narration API handler (Phase 100a). Phase 104: inject the
 		// Discord narration poster if a session is available; otherwise
@@ -630,27 +707,29 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		if discordSession != nil {
 			campaignAnnouncer = discord.NewCampaignAnnouncer(discordSession)
 		}
+		// SR-001 / F-2: campaign, narration, narration-template, character-
+		// overview, message-player, and combat handlers are all constructed
+		// here but their RegisterRoutes calls are deferred to
+		// mountDMOnlyAPIs (below dmAuthMw) so non-DM authenticated callers
+		// can't pause campaigns, post narrations as the DM, read other
+		// players' character sheets, DM other players, or mutate combat.
 		campaignSvc := campaign.NewService(queries, campaignAnnouncer)
 		campaignHandler := campaign.NewHandler(campaignSvc)
-		campaignHandler.RegisterRoutes(router)
 		narrationStore := narration.NewDBStore(queries)
 		narrationAssets := narration.NewAssetAttachmentResolver(assetSvc)
 		narrationCampaigns := narration.NewCampaignResolverAdapter(campaignSvc)
 		narrationSvc := narration.NewService(narrationStore, narrationPoster, narrationAssets, narrationCampaigns)
 		narrationHandler := narration.NewHandler(narrationSvc)
-		narrationHandler.RegisterRoutes(router)
 
 		// Wire Narration Template API handler (Phase 100b).
 		narrationTemplateStore := narration.NewTemplateDBStore(queries)
 		narrationTemplateSvc := narration.NewTemplateService(narrationTemplateStore)
 		narrationTemplateHandler := narration.NewTemplateHandler(narrationTemplateSvc)
-		narrationTemplateHandler.RegisterRoutes(router)
 
 		// Wire Character Overview API handler (Phase 101).
 		characterOverviewStore := characteroverview.NewDBStore(queries)
 		characterOverviewSvc := characteroverview.NewService(characterOverviewStore)
 		characterOverviewHandler := characteroverview.NewHandler(characterOverviewSvc)
-		characterOverviewHandler.RegisterRoutes(router)
 
 		// Wire Message Player API handler (Phase 101). Phase 104: inject a
 		// real Discord direct messenger when a session is available.
@@ -662,7 +741,6 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		messagePlayerLookup := messageplayer.NewPlayerLookupAdapter(queries)
 		messagePlayerSvc := messageplayer.NewService(messagePlayerStore, messagePlayerLookup, directMessenger)
 		messagePlayerHandler := messageplayer.NewHandler(messagePlayerSvc)
-		messagePlayerHandler.RegisterRoutes(router)
 
 		// Phase 104: Dashboard publisher + combat service wiring.
 		// The publisher is injected into combat.Service so every HP /
@@ -676,7 +754,6 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		combatSvc := combat.NewService(combatStore)
 		combatSvc.SetPublisher(publisher)
 		combatHandler := combat.NewHandler(combatSvc, dice.NewRoller(nil))
-		combatHandler.RegisterRoutes(router)
 
 		// Phase 22 wiring (high-10): the campaign-settings provider resolves
 		// encounter-id -> channel_ids map for the DM combat-log poster
@@ -696,11 +773,12 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			combatLogPoster = discord.NewDMCorrectionPoster(discordSession, campaignSettingsProvider)
 		}
 
-		// G-94a + G-95: mount the combat workspace (G-94a) and DM dashboard
-		// (G-95/97a) routes so /api/combat/workspace, /advance-turn,
-		// /pending-actions, /action-log, undo, and the override family all
-		// stop returning 404 in production.
-		mountCombatDashboardRoutes(router, combatSvc, workspaceStoreAdapter{queries}, db, combatLogPoster)
+		// G-94a + G-95: combat workspace (G-94a) and DM dashboard
+		// (G-95/97a) routes — /api/combat/workspace, /advance-turn,
+		// /pending-actions, /action-log, undo, the override family —
+		// are mounted from mountDMOnlyAPIs (below dmAuthMw) so non-DM
+		// authenticated callers can't read hidden HP or mutate combat
+		// (SR-001 / F-2).
 
 		// Phase 115: wire the resume-time turn re-pinger so /api/campaigns/:id/resume
 		// automatically @mentions the current-turn player in #your-turn when
@@ -763,6 +841,28 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		dmAuthMw := func(next http.Handler) http.Handler {
 			return authMw(dmRequire(next))
 		}
+
+		// SR-001 / F-2 systemic fix (SUMMARY.md §1 item 1, batches 1/13/16):
+		// every DM-mutation HTTP route group is mounted here in one place
+		// behind dmAuthMw. Previously these handlers' RegisterRoutes calls
+		// landed on the bare router above the auth middleware, letting any
+		// authenticated Discord user pause campaigns, mutate combat, read
+		// hidden enemy HP, post narrations as the DM, and DM other players.
+		mountDMOnlyAPIs(router, dmOnlyAPIDeps{
+			mapHandler:               mapHandler,
+			statBlockHandler:         statBlockHandler,
+			homebrewHandler:          homebrewHandler,
+			campaignHandler:          campaignHandler,
+			narrationHandler:         narrationHandler,
+			narrationTemplateHandler: narrationTemplateHandler,
+			characterOverviewHandler: characterOverviewHandler,
+			messagePlayerHandler:     messagePlayerHandler,
+			combatHandler:            combatHandler,
+			combatSvc:                combatSvc,
+			workspaceStore:           workspaceStoreAdapter{queries},
+			db:                       db,
+			combatLogPoster:          combatLogPoster,
+		}, dmAuthMw)
 
 		dmQueueDashHandler := dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, dmAuthMw)
 		// F-12: aggregate pending queue items into a single dashboard list.
