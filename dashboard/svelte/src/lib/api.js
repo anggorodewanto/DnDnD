@@ -979,6 +979,39 @@ export async function listActionLog(encounterId, filters = {}) {
   return res.json();
 }
 
+// --- Level-up API (F-16 / Phase 89) ---
+//
+// Mirrors the JSON request/response in internal/levelup/handler.go
+// (LevelUpRequest / LevelUpResponse). The Svelte LevelUpPanel uses this
+// helper; the legacy server-rendered /dashboard/levelup page also POSTs
+// to the same endpoint via inline JS.
+
+/**
+ * Apply a level-up for a character.
+ *
+ * @param {object} req
+ * @param {string} req.character_id - Character UUID.
+ * @param {string} req.class_id - Class identifier (e.g. "fighter").
+ * @param {number} req.new_level - New class level (>= 1).
+ * @returns {Promise<{
+ *   new_level: number,
+ *   hp_gained: number,
+ *   new_hp_max: number,
+ *   new_proficiency_bonus: number,
+ *   new_attacks_per_action: number,
+ *   grants_asi: boolean,
+ *   needs_subclass: boolean,
+ * }>}
+ */
+export async function applyLevelUp(req) {
+  const res = await apiFetch('/api/levelup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  return res.json();
+}
+
 // --- F-8: per-campaign Open5e source toggle ---
 
 /**

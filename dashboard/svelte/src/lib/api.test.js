@@ -24,6 +24,7 @@ import {
   setLootGold,
   postLootAnnouncement,
   listEligibleLootEncounters,
+  applyLevelUp,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -843,5 +844,57 @@ describe('loot pool API', () => {
     expect(result).toEqual(mockResp);
     const [url] = fetch.mock.calls[0];
     expect(url).toBe('/api/campaigns/cid/loot/eligible-encounters');
+  });
+});
+
+// F-16: SPA migration of the Phase 89 level-up widget.
+describe('applyLevelUp', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs the level-up payload to /api/levelup and returns the parsed response', async () => {
+    const mockResp = {
+      new_level: 5,
+      hp_gained: 7,
+      new_hp_max: 42,
+      new_proficiency_bonus: 3,
+      new_attacks_per_action: 2,
+      grants_asi: false,
+      needs_subclass: false,
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResp),
+    });
+
+    const result = await applyLevelUp({
+      character_id: '11111111-2222-3333-4444-555555555555',
+      class_id: 'fighter',
+      new_level: 5,
+    });
+
+    expect(result).toEqual(mockResp);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/levelup');
+    expect(options.method).toBe('POST');
+    expect(options.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(options.body)).toEqual({
+      character_id: '11111111-2222-3333-4444-555555555555',
+      class_id: 'fighter',
+      new_level: 5,
+    });
+  });
+
+  it('throws when the server returns a non-OK status', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve('character_id is required'),
+    });
+
+    await expect(
+      applyLevelUp({ character_id: '', class_id: '', new_level: 0 }),
+    ).rejects.toThrow('character_id is required');
   });
 });

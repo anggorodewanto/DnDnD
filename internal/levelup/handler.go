@@ -272,6 +272,12 @@ const levelUpTemplate = `<!DOCTYPE html>
     <div class="main">
         <h1>Level Up Character</h1>
 
+        <div class="alert alert-warning" style="display:block; margin-bottom: 1rem;">
+            <strong>Heads up:</strong> A Svelte equivalent of this widget now lives at
+            <a href="/dashboard/app/#levelup" style="color:#e94560;">/dashboard/app/#levelup</a>.
+            This page is kept as a fallback (F-16).
+        </div>
+
         <div class="form-group">
             <label for="character-id">Character ID</label>
             <input type="text" id="character-id" placeholder="Enter character UUID">

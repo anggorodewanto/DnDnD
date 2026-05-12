@@ -17,6 +17,7 @@
   import Open5eSourcesPanel from './Open5eSourcesPanel.svelte';
   import DMQueuePanel from './DMQueuePanel.svelte';
   import LootPoolPanel from './LootPoolPanel.svelte';
+  import LevelUpPanel from './LevelUpPanel.svelte';
   import { isMobileViewport, isDesktopOnly } from './lib/layout.js';
 
   let innerWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1920);
@@ -66,6 +67,7 @@
     if (hash === '#open5e-sources') return 'open5e-sources';
     if (hash === '#dm-queue') return 'dm-queue';
     if (hash === '#loot') return 'loot';
+    if (hash === '#levelup') return 'levelup';
     return 'list';
   }
 
@@ -197,6 +199,10 @@
   function onShowLoot() {
     currentView = 'loot';
   }
+
+  function onShowLevelUp() {
+    currentView = 'levelup';
+  }
 </script>
 
 {#if isMobileViewport(innerWidth)}
@@ -229,6 +235,8 @@
       <h1>DM Queue</h1>
     {:else if currentView === 'loot'}
       <h1>Loot Pool</h1>
+    {:else if currentView === 'levelup'}
+      <h1>Level Up</h1>
     {:else}
       <h1>Encounter Builder</h1>
     {/if}
@@ -247,6 +255,7 @@
       <button class:active={currentView === 'open5e-sources'} onclick={onShowOpen5eSources}>Open5e Sources</button>
       <button class:active={currentView === 'dm-queue'} onclick={onShowDMQueue}>DM Queue</button>
       <button class:active={currentView === 'loot'} onclick={onShowLoot}>Loot</button>
+      <button class:active={currentView === 'levelup'} onclick={onShowLevelUp}>Level Up</button>
     </nav>
 
     {#if currentView === 'editor'}
@@ -297,6 +306,8 @@
     <DMQueuePanel />
   {:else if currentView === 'loot'}
     <LootPoolPanel {campaignId} />
+  {:else if currentView === 'levelup'}
+    <LevelUpPanel />
   {/if}
 </main>
 {/if}
