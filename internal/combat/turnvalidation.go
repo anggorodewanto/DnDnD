@@ -120,6 +120,47 @@ func ValidateTurnOwnership(ctx context.Context, queries TurnValidationQuerier, e
 // ErrTurnChanged is returned when the active turn changed between validation and lock acquisition.
 var ErrTurnChanged = errors.New("it's no longer your turn")
 
+// RunUnderTurnLock validates ownership, acquires the per-turn advisory
+// lock, runs fn while the lock is still held, then commits the tx (releasing
+// the lock per pg_advisory_xact_lock semantics). If fn returns an error the
+// tx is rolled back and fn's error propagates verbatim; validation / lock
+// errors are returned BEFORE fn runs and are the same combat.Err* sentinels
+// as AcquireTurnLockWithValidation.
+//
+// fn's context carries the lock-holding *sql.Tx (via ContextWithTx). Callers
+// that want their writes to share the lock-holding tx call TxFromContext and
+// pass the result to refdata.Queries.WithTx; callers that don't opt in still
+// get serialization — peers block at the pg_advisory_xact_lock acquire until
+// our tx commits/rolls back. (F-4)
+func RunUnderTurnLock(ctx context.Context, db TxBeginner, queries TurnValidationQuerier, encounterID uuid.UUID, discordUserID string, fn func(ctx context.Context) error) (TurnOwnerInfo, error) {
+	if fn == nil {
+		return TurnOwnerInfo{}, fmt.Errorf("RunUnderTurnLock: fn must not be nil")
+	}
+	tx, info, err := AcquireTurnLockWithValidation(ctx, db, queries, encounterID, discordUserID)
+	if err != nil {
+		return TurnOwnerInfo{}, err
+	}
+
+	txCtx := ContextWithTx(ctx, tx)
+	runErr := func() (runErr error) {
+		defer func() {
+			if r := recover(); r != nil {
+				runErr = fmt.Errorf("RunUnderTurnLock: fn panicked: %v", r)
+			}
+		}()
+		return fn(txCtx)
+	}()
+
+	if runErr != nil {
+		_ = tx.Rollback()
+		return TurnOwnerInfo{}, runErr
+	}
+	if commitErr := tx.Commit(); commitErr != nil {
+		return TurnOwnerInfo{}, commitErr
+	}
+	return info, nil
+}
+
 // AcquireTurnLockWithValidation validates turn ownership and acquires the advisory lock.
 // After acquiring the lock, it re-validates that the turn hasn't changed (TOCTOU protection).
 // Returns the transaction for the caller to use (commit/rollback).

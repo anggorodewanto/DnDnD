@@ -549,6 +549,14 @@ func (h *MoveHandler) resolveExplorationMover(ctx context.Context, all []refdata
 }
 
 // HandleMoveConfirm processes the move confirmation button click.
+//
+// F-4: the actual write (turn resource deduction + combatant position
+// update) runs INSIDE turnGate.AcquireAndRun so the per-turn advisory lock
+// is still held across the persistence step. A peer /move on the same turn
+// blocks at the lock acquire until our writes commit, eliminating the
+// previous "two handlers both pass the gate then race their writes" lost-
+// update window. When the gate is unwired (legacy unit tests) the writes
+// still happen — only the serialization guarantee is lost.
 func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turnID, combatantID uuid.UUID, destCol, destRow, costFt int) {
 	ctx := context.Background()
 
@@ -558,57 +566,85 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 		return
 	}
 
-	// Deduct movement
-	updatedTurn, err := combat.UseMovement(turn, int32(costFt))
-	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot move: %v", err))
-		return
+	// confirmMove is the lock-held write body. Errors map to a stable set
+	// of sentinel strings so the AcquireAndRun wrapper can translate to a
+	// user-facing ephemeral message without leaking DB errors.
+	var (
+		responseMsg    string
+		moverCombatant refdata.Combatant
+		moverFetchOK   bool
+		updatedTurn    refdata.Turn
+		destLabel      = renderer.ColumnLabel(destCol)
+	)
+
+	confirmMove := func(ctx context.Context) error {
+		var moveErr error
+		updatedTurn, moveErr = combat.UseMovement(turn, int32(costFt))
+		if moveErr != nil {
+			respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot move: %v", moveErr))
+			return errAlreadyResponded
+		}
+
+		if _, txErr := h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updatedTurn)); txErr != nil {
+			respondEphemeral(h.session, interaction, "Failed to update turn resources.")
+			return errAlreadyResponded
+		}
+
+		combatant, getErr := h.combatService.GetCombatant(ctx, combatantID)
+		currentAltitude := int32(0)
+		if getErr == nil {
+			currentAltitude = combatant.AltitudeFt
+			moverCombatant = combatant
+			moverFetchOK = true
+		}
+
+		if _, posErr := h.combatService.UpdateCombatantPosition(ctx, combatantID, destLabel, int32(destRow+1), currentAltitude); posErr != nil {
+			respondEphemeral(h.session, interaction, "Failed to update position.")
+			return errAlreadyResponded
+		}
+
+		remaining := combat.FormatRemainingResources(updatedTurn, nil)
+		responseMsg = fmt.Sprintf("\U0001f3c3 Moved to %s%d. %s", destLabel, destRow+1, remaining)
+		return nil
 	}
 
-	// Persist turn resources
-	_, err = h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updatedTurn))
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to update turn resources.")
-		return
-	}
-
-	// Get combatant to preserve altitude during horizontal movement
-	combatant, getErr := h.combatService.GetCombatant(ctx, combatantID)
-	currentAltitude := int32(0)
-	if getErr == nil {
-		currentAltitude = combatant.AltitudeFt
-	}
-
-	// Update combatant position (preserving current altitude)
-	destLabel := renderer.ColumnLabel(destCol)
-	_, err = h.combatService.UpdateCombatantPosition(ctx, combatantID, destLabel, int32(destRow+1), currentAltitude)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to update position.")
+	if h.turnGate != nil {
+		if _, gateErr := h.turnGate.AcquireAndRun(ctx, turn.EncounterID, discordUserID(interaction), confirmMove); gateErr != nil {
+			// If confirmMove already wrote a response, respect it; otherwise
+			// the failure was at the gate (ownership / lock / DB) and we
+			// surface the standard turn-gate translation.
+			if gateErr != errAlreadyResponded {
+				respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+			}
+			return
+		}
+	} else if runErr := confirmMove(ctx); runErr != nil {
+		// Unit-test path with no gate wired. confirmMove already responded.
 		return
 	}
 
 	// D-56-followup: when the mover is dragging grappled targets, sync
 	// each target's tile so it stays adjacent (5ft Chebyshev) to the
 	// dragger after the move. Best-effort: any failure aborts silently
-	// so /move never breaks because of a flaky drag sync.
-	if getErr == nil {
-		h.syncDragTargetsAlongPath(ctx, combatant, destCol, destRow)
+	// so /move never breaks because of a flaky drag sync. Runs OUTSIDE
+	// the lock-held tx because these per-target writes do not need the
+	// active-turn serialization guarantee — they target combatants the
+	// mover is grappling, which are not the active turn's combatant.
+	if moverFetchOK {
+		h.syncDragTargetsAlongPath(ctx, moverCombatant, destCol, destRow)
 	}
 
 	// med-24 / Phase 55: fire opportunity-attack prompts after the move
 	// commits. Best-effort: any failure is silent so a flaky channel post
 	// can never break the move flow.
-	if getErr == nil {
-		h.fireOpportunityAttacks(ctx, combatant, updatedTurn, destCol, destRow)
+	if moverFetchOK {
+		h.fireOpportunityAttacks(ctx, moverCombatant, updatedTurn, destCol, destRow)
 	}
-
-	remaining := combat.FormatRemainingResources(updatedTurn, nil)
-	msg := fmt.Sprintf("\U0001f3c3 Moved to %s%d. %s", destLabel, destRow+1, remaining)
 
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
-			Content:    msg,
+			Content:    responseMsg,
 			Components: []discordgo.MessageComponent{}, // remove buttons
 		},
 	})

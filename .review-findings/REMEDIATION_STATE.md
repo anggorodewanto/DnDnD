@@ -8,7 +8,6 @@ Source: `.review-findings/FINAL_REVIEW.md`
 - `go build ./...` clean on `main` @ dbb1464.
 
 ## Pending
-- [ ] F-4: TurnGate releases advisory lock before write — severity: MED — origin: FINAL_REVIEW.md §Medium #4
 - [ ] F-5: No XP awarding pipeline — severity: MED — origin: FINAL_REVIEW.md §Medium #5
 - [ ] F-6: Fly auto-stop conflicts with poll timer — severity: MED — origin: FINAL_REVIEW.md §Medium #6
 - [ ] F-7: Tiled `.tmj` map import has no UI — severity: MED — origin: FINAL_REVIEW.md §Medium #7
@@ -35,6 +34,7 @@ Source: `.review-findings/FINAL_REVIEW.md`
 ## Done (closed + reviewer passed)
 - [x] F-1: WS URL mismatch — closed 2026-05-12 — review: PASS — commit `a5ed9de`
 - [x] F-2: DM-role enforcement on dashboard routes — closed 2026-05-12 — review: PASS — commit `b23a8cd`. Worker flagged follow-up: per-resource authz on `/api/maps/import`, `/api/combat/*`, `/api/levelup`, party-rest, loot/item-picker/shops (separate scope).
+- [x] F-4: TurnGate write-inside-lock — closed 2026-05-12 — added `combat.RunUnderTurnLock` + `TurnGate.AcquireAndRun(ctx, encID, userID, fn)` that holds the per-turn advisory lock across the caller's write callback. Tx is threaded into fn's context via `combat.ContextWithTx` / `combat.TxFromContext` so handlers can opt into running their writes on the lock-holding tx; peers block at `pg_advisory_xact_lock` until our tx commits/rolls back regardless. Migrated `/move` `HandleMoveConfirm` as the proof case. 10 new combat integration tests cover happy/error/panic/concurrency/rollback; 3 new discord unit tests cover the migration. Follow-up: `HandleMoveConfirmWithMode`, `HandleFlyConfirm`, `cast_handler`, `attack_handler`, `bonus_handler`, `shove_handler`, `interact_handler` confirm/persist paths still call `AcquireAndRelease` (or rely on a separate confirm-button flow); migrating each is a separate ticket (no functional regression — all gates still fire pre-write, just without the post-validation lock-held window).
 - [x] F-3: `conditions_ref` SQL table — closed 2026-05-12 (NO-CODE-CHANGE; already implemented in Phase 3 — `4a1c5d3`). Verified: table created in `db/migrations/20260310120002_create_reference_tables.sql:31-38` with spec columns (id PK, name, description, mechanical_effects JSONB); sqlc queries `GetCondition`, `ListConditions`, `CountConditions`, `UpsertCondition` in `db/queries/conditions.sql`; 16-row seed (14 SRD + exhaustion + surprised) in `internal/refdata/seeder.go:180-355` via `UpsertCondition ON CONFLICT DO UPDATE` (idempotent); integration tests `TestIntegration_ReferenceTablesMigration`, `TestIntegration_SeedAll_ListConditions`, `TestConditionCount_IncludesSurprised` all PASS. Finding text in `FINAL_REVIEW.md §Medium #3` and `.review-findings/05-cross-cutting.md` was stale at audit time. Mechanical-effects JSONB format: `[{effect_type, target?, condition?, value?, description?}]` — descriptive vocabulary (Feature Effect System terms); Go code in `internal/combat/condition_effects.go` remains the source of truth for enforcement per Design Decision #2.
 
 ## Skipped (with justification)

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/combat"
@@ -16,12 +17,25 @@ import (
 // records its call args so tests can assert the gate fired with the right
 // inputs. Counters let tests verify the gate ran exactly once and that the
 // downstream service calls were skipped on rejection.
+//
+// runCalls counts AcquireAndRun invocations separately so tests can assert
+// which gate method a handler used (F-4: writers must call AcquireAndRun so
+// the lock stays held across the persistence step).
 type stubTurnGate struct {
 	info       combat.TurnOwnerInfo
 	err        error
 	calls      int
+	runCalls   int
 	lastEnc    uuid.UUID
 	lastUserID string
+	// runErr, when non-nil, is returned as the synthetic fn error inside
+	// AcquireAndRun so tests can simulate a write failure WITHOUT making
+	// validation itself fail. When nil and fn was supplied, fn is invoked
+	// normally and its error (if any) propagates.
+	runErr error
+	// ranInsideLock is set true when AcquireAndRun ran fn (proves the gate
+	// invoked the callback rather than short-circuiting on a gate error).
+	ranInsideLock bool
 }
 
 func (s *stubTurnGate) AcquireAndRelease(_ context.Context, encounterID uuid.UUID, discordUserID string) (combat.TurnOwnerInfo, error) {
@@ -29,6 +43,26 @@ func (s *stubTurnGate) AcquireAndRelease(_ context.Context, encounterID uuid.UUI
 	s.lastEnc = encounterID
 	s.lastUserID = discordUserID
 	return s.info, s.err
+}
+
+func (s *stubTurnGate) AcquireAndRun(ctx context.Context, encounterID uuid.UUID, discordUserID string, fn func(ctx context.Context) error) (combat.TurnOwnerInfo, error) {
+	s.calls++
+	s.runCalls++
+	s.lastEnc = encounterID
+	s.lastUserID = discordUserID
+	if s.err != nil {
+		return combat.TurnOwnerInfo{}, s.err
+	}
+	if fn != nil {
+		s.ranInsideLock = true
+		if runErr := fn(ctx); runErr != nil {
+			return combat.TurnOwnerInfo{}, runErr
+		}
+	}
+	if s.runErr != nil {
+		return combat.TurnOwnerInfo{}, s.runErr
+	}
+	return s.info, nil
 }
 
 // callCountingMoveService wraps mockMoveService and counts UpdateCombatantPosition
@@ -238,6 +272,97 @@ func TestIsExemptCommand_DistanceListed(t *testing.T) {
 	}
 	if !combat.IsExemptCommand("reaction") {
 		t.Fatal("IsExemptCommand contract regression: reaction should remain exempt")
+	}
+}
+
+// --- F-4: HandleMoveConfirm uses AcquireAndRun (lock held across write) ---
+
+func TestMoveHandler_HandleMoveConfirm_UsesAcquireAndRun(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupMoveHandler(sess)
+
+	// Wrap service so we can assert the write fired AND happened inside fn.
+	wrapped := &callCountingMoveService{mockMoveService: handler.combatService.(*mockMoveService)}
+	handler.combatService = wrapped
+
+	gate := &stubTurnGate{} // success
+	handler.SetTurnGate(gate)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirm(interaction, turnID, combatantID, 3, 0, 15)
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected HandleMoveConfirm to call AcquireAndRun exactly once, got %d", gate.runCalls)
+	}
+	if gate.calls != 1 {
+		t.Fatalf("expected gate.calls == 1, got %d", gate.calls)
+	}
+	if !gate.ranInsideLock {
+		t.Error("expected fn to run inside AcquireAndRun (proves the write happened with lock held)")
+	}
+	if wrapped.updatePosCalls != 1 {
+		t.Errorf("expected exactly one position write inside the gated fn, got %d", wrapped.updatePosCalls)
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirm_GateRejectsBeforeWrite(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupMoveHandler(sess)
+
+	wrapped := &callCountingMoveService{mockMoveService: handler.combatService.(*mockMoveService)}
+	handler.combatService = wrapped
+
+	// Simulate "the turn ended between Handle (showing the button) and the
+	// user clicking Confirm". The gate must reject and fn must NOT run.
+	gate := &stubTurnGate{err: combat.ErrTurnChanged}
+	handler.SetTurnGate(gate)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirm(interaction, turnID, combatantID, 3, 0, 15)
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire even on rejection, got %d", gate.runCalls)
+	}
+	if gate.ranInsideLock {
+		t.Error("fn must NOT run when gate rejects (validation failed)")
+	}
+	if wrapped.updatePosCalls != 0 {
+		t.Errorf("expected zero writes when gate rejects, got %d", wrapped.updatePosCalls)
+	}
+	if sess.lastResponse == nil {
+		t.Fatal("expected ephemeral rejection response")
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "no longer your turn") {
+		t.Errorf("expected ErrTurnChanged message, got: %s", sess.lastResponse.Data.Content)
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirm_NilGate_StillWrites(t *testing.T) {
+	// Legacy / unit-test path: no gate wired. Writes must still happen so
+	// the existing TestMoveHandler_HandleMoveConfirm (which doesn't wire a
+	// gate) keeps passing. This is the explicit nil-gate contract.
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupMoveHandler(sess)
+	wrapped := &callCountingMoveService{mockMoveService: handler.combatService.(*mockMoveService)}
+	handler.combatService = wrapped
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirm(interaction, turnID, combatantID, 3, 0, 15)
+
+	if wrapped.updatePosCalls != 1 {
+		t.Errorf("expected position write to fire even without a gate, got %d", wrapped.updatePosCalls)
 	}
 }
 

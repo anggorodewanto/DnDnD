@@ -1384,12 +1384,11 @@ func (a *combatActionLookupAdapter) GetTurn(ctx context.Context, id uuid.UUID) (
 }
 
 // turnGateAdapter satisfies discord.TurnGate by delegating to
-// combat.AcquireTurnLockWithValidation. After validation succeeds we commit
-// the held tx immediately to release the advisory lock — this is intentional:
-// today's /move and /fly handlers do their persistence outside the lock-held
-// tx, so the gate's job is to fire the wrong-owner check (and serialize peers
-// at the validation point). A future patch can extend the adapter to thread
-// the tx through the persistence layer for true serialized writes.
+// combat.AcquireTurnLockWithValidation. AcquireAndRelease commits the
+// validation tx immediately (read-only validator); AcquireAndRun (F-4) holds
+// the tx across a caller-supplied write callback so concurrent handlers
+// serialize on the advisory lock instead of interleaving writes against the
+// same turn.
 type turnGateAdapter struct {
 	db      combat.TxBeginner
 	queries *refdata.Queries
@@ -1411,6 +1410,22 @@ func (a *turnGateAdapter) AcquireAndRelease(ctx context.Context, encounterID uui
 		return combat.TurnOwnerInfo{}, commitErr
 	}
 	return info, nil
+}
+
+// AcquireAndRun validates ownership, acquires the per-turn advisory lock,
+// runs fn with the lock still held, then commits (releasing the lock). If
+// fn returns an error the tx is rolled back and fn's error propagates;
+// validation/lock errors are returned BEFORE fn runs.
+//
+// fn's context carries the lock-holding *sql.Tx (via combat.ContextWithTx).
+// Handlers that want their writes to share the lock-holding tx call
+// combat.TxFromContext(ctx) and pass the result to refdata.Queries.WithTx.
+// Handlers that don't opt in still get serialization: a peer's
+// AcquireAndRun blocks at the pg_advisory_xact_lock acquire until our tx
+// commits, so two concurrent handlers can never interleave their writes
+// against the same turn.
+func (a *turnGateAdapter) AcquireAndRun(ctx context.Context, encounterID uuid.UUID, discordUserID string, fn func(ctx context.Context) error) (combat.TurnOwnerInfo, error) {
+	return combat.RunUnderTurnLock(ctx, a.db, a.queries, encounterID, discordUserID, fn)
 }
 
 // castLookupAdapter satisfies discord.CastEncounterProvider over

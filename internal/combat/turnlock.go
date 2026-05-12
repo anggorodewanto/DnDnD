@@ -63,3 +63,30 @@ func isLockTimeoutError(err error) bool {
 	}
 	return false
 }
+
+// txContextKey is the unexported key used to stash a *sql.Tx in a
+// context.Context. F-4: AcquireAndRun threads its lock-holding tx through the
+// fn's context so callers can opt into running their writes on the same tx
+// (e.g. via refdata.Queries.WithTx(tx)). Callers that don't opt in still
+// benefit from serialization — peers block at the advisory-lock acquire
+// until our tx commits/rolls back.
+type txContextKey struct{}
+
+// ContextWithTx returns a copy of ctx that carries tx. Use TxFromContext to
+// retrieve it inside an AcquireAndRun callback.
+func ContextWithTx(ctx context.Context, tx *sql.Tx) context.Context {
+	return context.WithValue(ctx, txContextKey{}, tx)
+}
+
+// TxFromContext returns the *sql.Tx stashed in ctx by ContextWithTx, or nil
+// when no tx is attached. AcquireAndRun callbacks that want to run their
+// writes on the lock-holding tx call this and pass the returned tx to
+// refdata.Queries.WithTx; callbacks that don't care can ignore it (writes
+// will still be serialized via the held advisory lock).
+func TxFromContext(ctx context.Context) *sql.Tx {
+	if ctx == nil {
+		return nil
+	}
+	tx, _ := ctx.Value(txContextKey{}).(*sql.Tx)
+	return tx
+}
