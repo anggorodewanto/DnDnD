@@ -79,7 +79,8 @@ type mockNotifier struct {
 	privateMessages []string
 }
 
-func (m *mockNotifier) SendPublicLevelUp(ctx context.Context, characterName string, newLevel int) error {
+func (m *mockNotifier) SendPublicLevelUp(ctx context.Context, characterID uuid.UUID, characterName string, newLevel int) error {
+	_ = characterID
 	m.publicMessages = append(m.publicMessages, fmt.Sprintf("%s reached Level %d", characterName, newLevel))
 	return nil
 }
@@ -545,7 +546,10 @@ func TestService_ApplyLevelUp_WithSpellcasting(t *testing.T) {
 // mockErrorNotifier returns errors from all Send methods.
 type mockErrorNotifier struct{}
 
-func (m *mockErrorNotifier) SendPublicLevelUp(ctx context.Context, characterName string, newLevel int) error {
+func (m *mockErrorNotifier) SendPublicLevelUp(ctx context.Context, characterID uuid.UUID, characterName string, newLevel int) error {
+	_ = characterID
+	_ = characterName
+	_ = newLevel
 	return fmt.Errorf("public notification failed")
 }
 func (m *mockErrorNotifier) SendPrivateLevelUp(ctx context.Context, discordUserID string, details LevelUpDetails) error {

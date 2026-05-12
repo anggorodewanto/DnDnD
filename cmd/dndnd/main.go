@@ -251,6 +251,8 @@ func mountCombatDashboardRoutes(
 	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/conditions", dm.OverrideCombatantConditions)
 	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/initiative", dm.OverrideCombatantInitiative)
 	router.Post("/api/combat/{encounterID}/override/character/{characterID}/spell-slots", dm.OverrideCharacterSpellSlots)
+	// C-35: per-attack DM advantage/disadvantage override.
+	router.Post("/api/combat/{encounterID}/override/combatant/{combatantID}/advantage", dm.OverrideCombatantNextAttackAdvantage)
 	router.Post("/api/combat/{encounterID}/combatants/{combatantID}/concentration/drop", dm.DropConcentration)
 	return combatDashboardWiring{handler: dm, poster: poster}
 }
@@ -860,18 +862,24 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			partyRestHandler: partyRestHandler,
 		})
 
-		// Phase 104c: Level-up handler. DB-backed store/class adapters plus
-		// a DM-only notifier (public announcements deferred) share the
-		// publisher/lookup used by combat and inventory. SetPublisher runs
-		// before RegisterRoutes so no mutation can land without fan-out.
+		// Phase 104c / H-104c: Level-up handler. DB-backed store/class
+		// adapters plus a DM-capable notifier with the public-channel
+		// StoryPoster wired through narration.Poster so #the-story gets a
+		// "🎉 X reached Level N!" announcement on every level-up. Both
+		// the messenger and the story poster are optional — either being
+		// nil silently no-ops the corresponding surface so headless
+		// deploys keep working. SetPublisher runs before RegisterRoutes
+		// so no mutation can land without fan-out.
 		var levelUpDM levelup.DirectMessenger
+		var levelUpStory levelup.StoryPoster
 		if discordSession != nil {
 			levelUpDM = discord.NewDirectMessenger(discordSession)
+			levelUpStory = newLevelUpStoryPosterAdapter(queries, discord.NewNarrationPoster(discordSession))
 		}
 		levelUpSvc := levelup.NewService(
 			levelup.NewCharacterStoreAdapter(queries),
 			levelup.NewClassStoreAdapter(queries),
-			levelup.NewNotifierAdapter(levelUpDM),
+			levelup.NewNotifierAdapterWithStory(levelUpDM, levelUpStory),
 		)
 		levelUpSvc.SetPublisher(publisher, encLookup)
 		levelup.NewHandler(levelUpSvc, hub).RegisterRoutes(router)

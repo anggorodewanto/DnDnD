@@ -202,6 +202,13 @@ type Store interface {
 	SetCombatantConcentration(ctx context.Context, arg refdata.SetCombatantConcentrationParams) error
 	ClearCombatantConcentration(ctx context.Context, id uuid.UUID) error
 	GetCombatantConcentration(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error)
+
+	// C-35 — DM dashboard advantage/disadvantage override for a combatant's
+	// next attack roll. The override is consumed (cleared) when the affected
+	// combatant rolls an attack, matching the per-attack semantics from
+	// Phase 35 of docs/phases.md.
+	SetCombatantNextAttackAdvOverride(ctx context.Context, arg refdata.SetCombatantNextAttackAdvOverrideParams) error
+	ClearCombatantNextAttackAdvOverride(ctx context.Context, id uuid.UUID) error
 }
 
 // EncounterPublisher fans out a fresh encounter snapshot over the dashboard

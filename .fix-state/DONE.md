@@ -14,15 +14,17 @@ Gate verdict: **READY** (see `.fix-state/PLAYTEST-GATE.md`)
 |---|---:|---:|
 | CRITICAL | 8 | 0 |
 | HIGH | 40 | 0 |
-| MEDIUM | 27 | 2 |
-| MINOR / LOW | 11 | 3 |
-| **Total** | **86** | **5** |
+| MEDIUM | 28 | 1 |
+| MINOR / LOW | 13 | 1 |
+| **Total** | **89** | **2** |
 
-Deferred (with cited justification, all non-blocking for playtest):
-- `H-104c-public-levelup-deferred` — spec scope `docs/phases.md:646-649` ("DB Store Adapter mount" only; public announcement out-of-scope).
-- `E-68-fov-minor` — renderer-package sub-items reside in `internal/gamemap/renderer/` (closed for combat-package edit zones); flagged for renderer batch.
-- `C-35-dm-adv-flags` — requires new `DMDashboardHandler` POST override endpoint; gated on a future dashboard batch.
-- `H-121.4-playtest-transcripts` — task file explicitly designates deferral as expected outcome; real transcripts gathered during live playtest sessions.
+Follow-up round (2026-05-12) closed three previously-deferred items:
+- `H-104c-public-levelup-deferred` — wired `SendPublicLevelUp` through `narration.Poster` (same surface as `/narrate`); `internal/levelup` cov 90.93%.
+- `E-68-fov-minor` — added `VisionSource.HasDevilsSight`, `FogOfWar.DMSeesAll`, new `ComputeVisibilityWithZones` (magical-darkness demotes darkvision at FoW level), documented shadowcasting algorithm; renderer cov 97.00%.
+- `C-35-dm-adv-flags` — new `POST /api/combat/{enc}/override/combatant/{cid}/advantage` endpoint, `combatants.next_attack_adv_override` column (migration 20260512120000), per-attack consume-then-clear across all 5 attack paths.
+
+Remaining deferred (with cited justification, non-blocking for playtest):
+- `H-121.4-playtest-transcripts` — task file explicitly designates deferral as expected outcome; real transcripts gathered during live playtest sessions. Gating event documented in `docs/playtest-checklist.md:205-233`.
 - `PLAYTEST-REPLAY-followup-path-handling` — Makefile target requires absolute TRANSCRIPT path; documented in `docs/playtest-checklist.md`.
 
 ## Diff summary
@@ -78,9 +80,6 @@ documented `make` targets.
 15. **Svelte UI**: StatBlockLibrary component, HomebrewEditor structured form (7 categories), MessagePlayer desktop nav + history + character-overview embed.
 
 ## Outstanding (deferred) tickets to re-bundle later
-- H-104c (public level-up announcement)
-- E-68 (FoV renderer refinements)
-- C-35-dm-adv-flags (DM advantage override endpoint)
 - H-121.4 (real playtest transcripts — generated during live sessions)
 - PLAYTEST-REPLAY-followup-path-handling (Makefile relative-path)
 

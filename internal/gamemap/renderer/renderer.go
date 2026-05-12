@@ -31,7 +31,13 @@ func RenderMap(md *MapData) ([]byte, error) {
 
 	// Compute fog of war if vision sources or light sources are provided but fog is not pre-computed
 	if (len(md.VisionSources) > 0 || len(md.LightSources) > 0) && md.FogOfWar == nil {
-		md.FogOfWar = ComputeVisibilityWithLights(md.VisionSources, md.LightSources, md.Walls, md.Width, md.Height)
+		md.FogOfWar = ComputeVisibilityWithZones(md.VisionSources, md.LightSources, md.Walls, md.MagicalDarknessTiles, md.Width, md.Height)
+	}
+	// Propagate DMSeesAll into the FoW so downstream draw helpers see it
+	// regardless of whether the caller pre-computed the fog or asked for
+	// auto-compute. DMSeesAll on the FoW is the load-bearing flag.
+	if md.FogOfWar != nil && md.DMSeesAll {
+		md.FogOfWar.DMSeesAll = true
 	}
 
 	// Filter combatants based on fog visibility

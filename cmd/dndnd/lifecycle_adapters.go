@@ -3,13 +3,16 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/discord"
 	"github.com/ab/dndnd/internal/dmqueue"
+	"github.com/ab/dndnd/internal/levelup"
 	"github.com/ab/dndnd/internal/loot"
+	"github.com/ab/dndnd/internal/narration"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -117,10 +120,65 @@ func (a *hostilesDefeatedNotifierAdapter) NotifyHostilesDefeated(ctx context.Con
 	})
 }
 
+// levelUpStoryQueries is the subset of refdata.Queries the level-up
+// StoryPoster adapter needs: character lookup (to find the campaign) and
+// campaign lookup (to find the Discord guild). Declared as an interface
+// so unit tests can inject a fake without touching the DB.
+type levelUpStoryQueries interface {
+	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	GetCampaignByID(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
+}
+
+// narrationPoster is the subset of narration.Poster the level-up
+// StoryPoster adapter needs. *discord.NarrationPoster satisfies it.
+type narrationPoster interface {
+	PostToStory(guildID, body string, embeds []narration.DiscordEmbed, attachmentURLs []string) ([]string, error)
+}
+
+// levelUpStoryPosterAdapter satisfies levelup.StoryPoster by resolving the
+// character → campaign → guild chain via refdata.Queries and posting the
+// formatted announcement through narration.Poster (the same surface the
+// /narrate handler uses). A nil poster OR a nil queries adapter degrades
+// to a silent no-op so headless deploys keep working.
+type levelUpStoryPosterAdapter struct {
+	queries levelUpStoryQueries
+	poster  narrationPoster
+}
+
+func newLevelUpStoryPosterAdapter(q levelUpStoryQueries, p narrationPoster) *levelUpStoryPosterAdapter {
+	if q == nil || p == nil {
+		return nil
+	}
+	return &levelUpStoryPosterAdapter{queries: q, poster: p}
+}
+
+func (a *levelUpStoryPosterAdapter) PostPublicLevelUp(ctx context.Context, characterID uuid.UUID, characterName string, newLevel int) error {
+	if a == nil || a.queries == nil || a.poster == nil {
+		return nil
+	}
+	char, err := a.queries.GetCharacter(ctx, characterID)
+	if err != nil {
+		return fmt.Errorf("resolving character for public level-up: %w", err)
+	}
+	camp, err := a.queries.GetCampaignByID(ctx, char.CampaignID)
+	if err != nil {
+		return fmt.Errorf("resolving campaign for public level-up: %w", err)
+	}
+	if camp.GuildID == "" {
+		return nil
+	}
+	body := levelup.FormatPublicLevelUpMessage(characterName, newLevel)
+	if _, err := a.poster.PostToStory(camp.GuildID, body, nil, nil); err != nil {
+		return fmt.Errorf("posting public level-up to #the-story: %w", err)
+	}
+	return nil
+}
+
 // Compile-time satisfies-assertions so a future refactor of the combat
 // service interfaces breaks the build instead of going stale at runtime.
 var (
 	_ combat.CombatLogNotifier        = (*combatLogNotifierAdapter)(nil)
 	_ combat.LootPoolCreator          = (*lootPoolCreatorAdapter)(nil)
 	_ combat.HostilesDefeatedNotifier = (*hostilesDefeatedNotifierAdapter)(nil)
+	_ levelup.StoryPoster             = (*levelUpStoryPosterAdapter)(nil)
 )

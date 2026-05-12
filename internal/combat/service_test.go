@@ -153,6 +153,10 @@ type mockStore struct {
 	setCombatantConcentrationFn   func(ctx context.Context, arg refdata.SetCombatantConcentrationParams) error
 	clearCombatantConcentrationFn func(ctx context.Context, id uuid.UUID) error
 	getCombatantConcentrationFn   func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error)
+
+	// C-35 — DM dashboard advantage/disadvantage override (per-attack, single-use)
+	setCombatantNextAttackAdvOverrideFn   func(ctx context.Context, arg refdata.SetCombatantNextAttackAdvOverrideParams) error
+	clearCombatantNextAttackAdvOverrideFn func(ctx context.Context, id uuid.UUID) error
 }
 
 func (m *mockStore) SetCombatantConcentration(ctx context.Context, arg refdata.SetCombatantConcentrationParams) error {
@@ -174,6 +178,20 @@ func (m *mockStore) GetCombatantConcentration(ctx context.Context, id uuid.UUID)
 		return m.getCombatantConcentrationFn(ctx, id)
 	}
 	return refdata.GetCombatantConcentrationRow{}, nil
+}
+
+func (m *mockStore) SetCombatantNextAttackAdvOverride(ctx context.Context, arg refdata.SetCombatantNextAttackAdvOverrideParams) error {
+	if m.setCombatantNextAttackAdvOverrideFn != nil {
+		return m.setCombatantNextAttackAdvOverrideFn(ctx, arg)
+	}
+	return nil
+}
+
+func (m *mockStore) ClearCombatantNextAttackAdvOverride(ctx context.Context, id uuid.UUID) error {
+	if m.clearCombatantNextAttackAdvOverrideFn != nil {
+		return m.clearCombatantNextAttackAdvOverrideFn(ctx, id)
+	}
+	return nil
 }
 
 func (m *mockStore) UpdateEncounterDisplayName(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {

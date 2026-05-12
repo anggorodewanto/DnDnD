@@ -27,6 +27,18 @@ func (q *Queries) ClearCombatantConcentration(ctx context.Context, id uuid.UUID)
 	return err
 }
 
+const clearCombatantNextAttackAdvOverride = `-- name: ClearCombatantNextAttackAdvOverride :exec
+UPDATE combatants
+SET next_attack_adv_override = NULL,
+    updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) ClearCombatantNextAttackAdvOverride(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, clearCombatantNextAttackAdvOverride, id)
+	return err
+}
+
 const createCombatant = `-- name: CreateCombatant :one
 INSERT INTO combatants (
     encounter_id, character_id, creature_ref_id, short_id, display_name,
@@ -44,7 +56,7 @@ VALUES (
     $23, $24,
     $25, $26, $27, $28
 )
-RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 type CreateCombatantParams struct {
@@ -149,6 +161,7 @@ func (q *Queries) CreateCombatant(ctx context.Context, arg CreateCombatantParams
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
@@ -163,7 +176,7 @@ func (q *Queries) DeleteCombatant(ctx context.Context, id uuid.UUID) error {
 }
 
 const getActiveCombatantByCharacterID = `-- name: GetActiveCombatantByCharacterID :one
-SELECT cb.id, cb.encounter_id, cb.character_id, cb.creature_ref_id, cb.short_id, cb.display_name, cb.initiative_roll, cb.initiative_order, cb.position_col, cb.position_row, cb.altitude_ft, cb.hp_max, cb.hp_current, cb.temp_hp, cb.ac, cb.conditions, cb.exhaustion_level, cb.death_saves, cb.is_visible, cb.is_alive, cb.is_npc, cb.is_raging, cb.rage_rounds_remaining, cb.rage_attacked_this_round, cb.rage_took_damage_this_round, cb.is_wild_shaped, cb.wild_shape_creature_ref, cb.wild_shape_original, cb.summoner_id, cb.created_at, cb.updated_at, cb.bardic_inspiration_die, cb.bardic_inspiration_source, cb.bardic_inspiration_granted_at, cb.consecutive_auto_resolves, cb.is_absent, cb.concentration_spell_id, cb.concentration_spell_name FROM combatants cb
+SELECT cb.id, cb.encounter_id, cb.character_id, cb.creature_ref_id, cb.short_id, cb.display_name, cb.initiative_roll, cb.initiative_order, cb.position_col, cb.position_row, cb.altitude_ft, cb.hp_max, cb.hp_current, cb.temp_hp, cb.ac, cb.conditions, cb.exhaustion_level, cb.death_saves, cb.is_visible, cb.is_alive, cb.is_npc, cb.is_raging, cb.rage_rounds_remaining, cb.rage_attacked_this_round, cb.rage_took_damage_this_round, cb.is_wild_shaped, cb.wild_shape_creature_ref, cb.wild_shape_original, cb.summoner_id, cb.created_at, cb.updated_at, cb.bardic_inspiration_die, cb.bardic_inspiration_source, cb.bardic_inspiration_granted_at, cb.consecutive_auto_resolves, cb.is_absent, cb.concentration_spell_id, cb.concentration_spell_name, cb.next_attack_adv_override FROM combatants cb
 JOIN encounters e ON cb.encounter_id = e.id
 WHERE cb.character_id = $1 AND e.status = 'active'
 LIMIT 1
@@ -211,12 +224,13 @@ func (q *Queries) GetActiveCombatantByCharacterID(ctx context.Context, character
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
 
 const getCombatant = `-- name: GetCombatant :one
-SELECT id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name FROM combatants WHERE id = $1
+SELECT id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override FROM combatants WHERE id = $1
 `
 
 func (q *Queries) GetCombatant(ctx context.Context, id uuid.UUID) (Combatant, error) {
@@ -261,6 +275,7 @@ func (q *Queries) GetCombatant(ctx context.Context, id uuid.UUID) (Combatant, er
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
@@ -282,7 +297,7 @@ func (q *Queries) GetCombatantConcentration(ctx context.Context, id uuid.UUID) (
 }
 
 const listCombatantsByEncounterID = `-- name: ListCombatantsByEncounterID :many
-SELECT id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name FROM combatants WHERE encounter_id = $1 ORDER BY initiative_order ASC
+SELECT id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override FROM combatants WHERE encounter_id = $1 ORDER BY initiative_order ASC
 `
 
 func (q *Queries) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]Combatant, error) {
@@ -333,6 +348,7 @@ func (q *Queries) ListCombatantsByEncounterID(ctx context.Context, encounterID u
 			&i.IsAbsent,
 			&i.ConcentrationSpellID,
 			&i.ConcentrationSpellName,
+			&i.NextAttackAdvOverride,
 		); err != nil {
 			return nil, err
 		}
@@ -348,7 +364,7 @@ func (q *Queries) ListCombatantsByEncounterID(ctx context.Context, encounterID u
 }
 
 const resetCombatantAutoResolveCount = `-- name: ResetCombatantAutoResolveCount :one
-UPDATE combatants SET consecutive_auto_resolves = 0, is_absent = false, updated_at = now() WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+UPDATE combatants SET consecutive_auto_resolves = 0, is_absent = false, updated_at = now() WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 func (q *Queries) ResetCombatantAutoResolveCount(ctx context.Context, id uuid.UUID) (Combatant, error) {
@@ -393,6 +409,7 @@ func (q *Queries) ResetCombatantAutoResolveCount(ctx context.Context, id uuid.UU
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
@@ -416,8 +433,25 @@ func (q *Queries) SetCombatantConcentration(ctx context.Context, arg SetCombatan
 	return err
 }
 
+const setCombatantNextAttackAdvOverride = `-- name: SetCombatantNextAttackAdvOverride :exec
+UPDATE combatants
+SET next_attack_adv_override = $2,
+    updated_at = now()
+WHERE id = $1
+`
+
+type SetCombatantNextAttackAdvOverrideParams struct {
+	ID                    uuid.UUID      `json:"id"`
+	NextAttackAdvOverride sql.NullString `json:"next_attack_adv_override"`
+}
+
+func (q *Queries) SetCombatantNextAttackAdvOverride(ctx context.Context, arg SetCombatantNextAttackAdvOverrideParams) error {
+	_, err := q.db.ExecContext(ctx, setCombatantNextAttackAdvOverride, arg.ID, arg.NextAttackAdvOverride)
+	return err
+}
+
 const updateCombatantAutoResolveCount = `-- name: UpdateCombatantAutoResolveCount :one
-UPDATE combatants SET consecutive_auto_resolves = $2, is_absent = $3, updated_at = now() WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+UPDATE combatants SET consecutive_auto_resolves = $2, is_absent = $3, updated_at = now() WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 type UpdateCombatantAutoResolveCountParams struct {
@@ -468,6 +502,7 @@ func (q *Queries) UpdateCombatantAutoResolveCount(ctx context.Context, arg Updat
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
@@ -478,7 +513,7 @@ UPDATE combatants SET
     bardic_inspiration_source = $3,
     bardic_inspiration_granted_at = $4,
     updated_at = now()
-WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 type UpdateCombatantBardicInspirationParams struct {
@@ -535,13 +570,14 @@ func (q *Queries) UpdateCombatantBardicInspiration(ctx context.Context, arg Upda
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
 
 const updateCombatantConditions = `-- name: UpdateCombatantConditions :one
 UPDATE combatants SET conditions = $2, exhaustion_level = $3, updated_at = now()
-WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 type UpdateCombatantConditionsParams struct {
@@ -592,13 +628,14 @@ func (q *Queries) UpdateCombatantConditions(ctx context.Context, arg UpdateComba
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
 
 const updateCombatantDeathSaves = `-- name: UpdateCombatantDeathSaves :one
 UPDATE combatants SET death_saves = $2, updated_at = now()
-WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 type UpdateCombatantDeathSavesParams struct {
@@ -648,13 +685,14 @@ func (q *Queries) UpdateCombatantDeathSaves(ctx context.Context, arg UpdateComba
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
 
 const updateCombatantHP = `-- name: UpdateCombatantHP :one
 UPDATE combatants SET hp_current = $2, temp_hp = $3, is_alive = $4, updated_at = now()
-WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 type UpdateCombatantHPParams struct {
@@ -711,13 +749,14 @@ func (q *Queries) UpdateCombatantHP(ctx context.Context, arg UpdateCombatantHPPa
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
 
 const updateCombatantInitiative = `-- name: UpdateCombatantInitiative :one
 UPDATE combatants SET initiative_roll = $2, initiative_order = $3, updated_at = now()
-WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 type UpdateCombatantInitiativeParams struct {
@@ -768,13 +807,14 @@ func (q *Queries) UpdateCombatantInitiative(ctx context.Context, arg UpdateComba
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
 
 const updateCombatantPosition = `-- name: UpdateCombatantPosition :one
 UPDATE combatants SET position_col = $2, position_row = $3, altitude_ft = $4, updated_at = now()
-WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 type UpdateCombatantPositionParams struct {
@@ -831,6 +871,7 @@ func (q *Queries) UpdateCombatantPosition(ctx context.Context, arg UpdateCombata
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
@@ -842,7 +883,7 @@ UPDATE combatants SET
     rage_attacked_this_round = $4,
     rage_took_damage_this_round = $5,
     updated_at = now()
-WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 type UpdateCombatantRageParams struct {
@@ -901,13 +942,14 @@ func (q *Queries) UpdateCombatantRage(ctx context.Context, arg UpdateCombatantRa
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
 
 const updateCombatantVisibility = `-- name: UpdateCombatantVisibility :one
 UPDATE combatants SET is_visible = $2, updated_at = now()
-WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 type UpdateCombatantVisibilityParams struct {
@@ -957,6 +999,7 @@ func (q *Queries) UpdateCombatantVisibility(ctx context.Context, arg UpdateComba
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }
@@ -970,7 +1013,7 @@ UPDATE combatants SET
     hp_current = $6,
     ac = $7,
     updated_at = now()
-WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name
+WHERE id = $1 RETURNING id, encounter_id, character_id, creature_ref_id, short_id, display_name, initiative_roll, initiative_order, position_col, position_row, altitude_ft, hp_max, hp_current, temp_hp, ac, conditions, exhaustion_level, death_saves, is_visible, is_alive, is_npc, is_raging, rage_rounds_remaining, rage_attacked_this_round, rage_took_damage_this_round, is_wild_shaped, wild_shape_creature_ref, wild_shape_original, summoner_id, created_at, updated_at, bardic_inspiration_die, bardic_inspiration_source, bardic_inspiration_granted_at, consecutive_auto_resolves, is_absent, concentration_spell_id, concentration_spell_name, next_attack_adv_override
 `
 
 type UpdateCombatantWildShapeParams struct {
@@ -1033,6 +1076,7 @@ func (q *Queries) UpdateCombatantWildShape(ctx context.Context, arg UpdateCombat
 		&i.IsAbsent,
 		&i.ConcentrationSpellID,
 		&i.ConcentrationSpellName,
+		&i.NextAttackAdvOverride,
 	)
 	return i, err
 }

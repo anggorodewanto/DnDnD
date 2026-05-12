@@ -162,6 +162,7 @@ type Combatant struct {
 	IsAbsent                   bool                  `json:"is_absent"`
 	ConcentrationSpellID       sql.NullString        `json:"concentration_spell_id"`
 	ConcentrationSpellName     sql.NullString        `json:"concentration_spell_name"`
+	NextAttackAdvOverride      sql.NullString        `json:"next_attack_adv_override"`
 }
 
 type ConditionsRef struct {

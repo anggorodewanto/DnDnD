@@ -203,4 +203,15 @@ type MapData struct {
 	VisionSources []VisionSource // player vision sources; if non-empty, fog is computed
 	LightSources  []LightSource  // light sources (torches, Light cantrip, etc.)
 	FogOfWar      *FogOfWar      // pre-computed fog; if nil and VisionSources/LightSources set, computed automatically
+
+	// MagicalDarknessTiles is the union of every magical-darkness zone's
+	// affected-tile set. Used by ComputeVisibilityWithZones to demote
+	// darkvision inside the zone (Devil's Sight still penetrates).
+	MagicalDarknessTiles []GridPos
+
+	// DMSeesAll, when true, propagates to the auto-computed FogOfWar and
+	// instructs DrawFogOfWar + filterCombatantsForFog to bypass fog so the
+	// DM-view PNG renders every tile at full brightness regardless of
+	// player vision. Caller may also set FogOfWar.DMSeesAll directly.
+	DMSeesAll bool
 }

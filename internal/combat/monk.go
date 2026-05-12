@@ -76,10 +76,13 @@ func (s *Service) MartialArtsBonusAttack(ctx context.Context, cmd MartialArtsBon
 
 	weapon := UnarmedStrike()
 	distFt := combatantDistance(cmd.Attacker, cmd.Target)
+	// C-35 — consume any DM-set per-attack advantage override before the
+	// monk bonus swing rolls. Same per-attack semantics as Service.Attack.
+	dmAdv, dmDisadv := s.consumeDMAdvOverride(ctx, cmd.Attacker, cmd.DMAdvantage, cmd.DMDisadvantage)
 	input := buildAttackInput(
 		cmd.Attacker, cmd.Target, weapon, scores, int(char.ProficiencyBonus), distFt,
 		cmd.HostileNearAttacker, cmd.AttackerSize,
-		cmd.DMAdvantage, cmd.DMDisadvantage, nil,
+		dmAdv, dmDisadv, nil,
 	)
 	input.MonkLevel = ml
 
@@ -143,12 +146,17 @@ func (s *Service) FlurryOfBlows(ctx context.Context, cmd FlurryOfBlowsCommand, r
 	weapon := UnarmedStrike()
 	distFt := combatantDistance(cmd.Attacker, cmd.Target)
 
+	// C-35 — consume any DM-set per-attack advantage override. Flurry of
+	// Blows fires two strikes from one command invocation, so the override
+	// is consumed once and applies to both swings.
+	dmAdv, dmDisadv := s.consumeDMAdvOverride(ctx, cmd.Attacker, cmd.DMAdvantage, cmd.DMDisadvantage)
+
 	var attacks []AttackResult
 	for i := 0; i < 2; i++ {
 		input := buildAttackInput(
 			cmd.Attacker, cmd.Target, weapon, scores, int(char.ProficiencyBonus), distFt,
 			cmd.HostileNearAttacker, cmd.AttackerSize,
-			cmd.DMAdvantage, cmd.DMDisadvantage, nil,
+			dmAdv, dmDisadv, nil,
 		)
 		input.MonkLevel = ml
 

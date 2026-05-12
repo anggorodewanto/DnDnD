@@ -9,8 +9,13 @@ import (
 // DrawFogOfWar renders the fog overlay on non-visible tiles.
 // Unexplored tiles get a solid black overlay. Explored tiles get a dim overlay.
 // Visible tiles have no overlay.
+// When FogOfWar.DMSeesAll is true the fog overlay is bypassed entirely so the
+// DM-view PNG shows every tile at full brightness regardless of player vision.
 func DrawFogOfWar(dc *gg.Context, md *MapData) {
 	if md.FogOfWar == nil {
+		return
+	}
+	if md.FogOfWar.DMSeesAll {
 		return
 	}
 
@@ -42,9 +47,13 @@ func DrawFogOfWar(dc *gg.Context, md *MapData) {
 // filterCombatantsForFog returns combatants that should be rendered given the fog state.
 // Player tokens are always rendered. Enemy tokens on unexplored tiles are hidden.
 // Enemy tokens on explored (dim) tiles are included but marked with InFog=true
-// so they render greyed out. If fog is nil, all combatants are returned (DM mode).
+// so they render greyed out. If fog is nil OR FogOfWar.DMSeesAll is true,
+// all combatants are returned unmodified (DM mode).
 func filterCombatantsForFog(combatants []Combatant, fow *FogOfWar) []Combatant {
 	if fow == nil {
+		return combatants
+	}
+	if fow.DMSeesAll {
 		return combatants
 	}
 

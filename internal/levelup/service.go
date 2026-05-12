@@ -78,9 +78,11 @@ type ClassStore interface {
 	GetClassRefData(ctx context.Context, classID string) (*ClassRefData, error)
 }
 
-// Notifier sends level-up notifications.
+// Notifier sends level-up notifications. SendPublicLevelUp receives the
+// character ID so adapters can resolve the owning campaign / guild and
+// route through the campaign's #the-story channel.
 type Notifier interface {
-	SendPublicLevelUp(ctx context.Context, characterName string, newLevel int) error
+	SendPublicLevelUp(ctx context.Context, characterID uuid.UUID, characterName string, newLevel int) error
 	SendPrivateLevelUp(ctx context.Context, discordUserID string, details LevelUpDetails) error
 	SendASIPrompt(ctx context.Context, discordUserID string, characterID uuid.UUID, characterName string) error
 	SendASIDenied(ctx context.Context, discordUserID string, characterName string, reason string) error
@@ -250,7 +252,7 @@ func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, class
 
 	// Send notifications (log errors rather than silently discarding)
 	if s.notifier != nil {
-		if err := s.notifier.SendPublicLevelUp(ctx, char.Name, result.NewLevel); err != nil {
+		if err := s.notifier.SendPublicLevelUp(ctx, char.ID, char.Name, result.NewLevel); err != nil {
 			slog.Error("failed to send public level-up notification", "error", err, "character", char.Name)
 		}
 		if err := s.notifier.SendPrivateLevelUp(ctx, char.DiscordUserID, *details); err != nil {

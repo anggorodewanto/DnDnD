@@ -106,3 +106,15 @@ SELECT cb.* FROM combatants cb
 JOIN encounters e ON cb.encounter_id = e.id
 WHERE cb.character_id = $1 AND e.status = 'active'
 LIMIT 1;
+
+-- name: SetCombatantNextAttackAdvOverride :exec
+UPDATE combatants
+SET next_attack_adv_override = $2,
+    updated_at = now()
+WHERE id = $1;
+
+-- name: ClearCombatantNextAttackAdvOverride :exec
+UPDATE combatants
+SET next_attack_adv_override = NULL,
+    updated_at = now()
+WHERE id = $1;

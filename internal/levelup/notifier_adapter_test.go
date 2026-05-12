@@ -33,6 +33,30 @@ func (f *fakeDirectMessenger) SendDirectMessage(userID, body string) ([]string, 
 	return []string{"msg-id"}, nil
 }
 
+// fakeStoryPoster records public-channel posts so tests can assert the
+// rendered #the-story body without needing a real Discord session.
+type fakeStoryPoster struct {
+	calls []fakeStoryPost
+	err   error
+}
+
+type fakeStoryPost struct {
+	characterID   uuid.UUID
+	characterName string
+	newLevel      int
+	body          string
+}
+
+func (f *fakeStoryPoster) PostPublicLevelUp(_ context.Context, characterID uuid.UUID, characterName string, newLevel int) error {
+	f.calls = append(f.calls, fakeStoryPost{
+		characterID:   characterID,
+		characterName: characterName,
+		newLevel:      newLevel,
+		body:          levelup.FormatPublicLevelUpMessage(characterName, newLevel),
+	})
+	return f.err
+}
+
 func TestNotifierAdapter_SendPrivateLevelUp_DMsFormattedBody(t *testing.T) {
 	fake := &fakeDirectMessenger{}
 	adapter := levelup.NewNotifierAdapter(fake)
@@ -75,14 +99,47 @@ func TestNotifierAdapter_SendASIDenied_DMsPlayerWithReason(t *testing.T) {
 	assert.Contains(t, fake.calls[0].body, "no min-maxing")
 }
 
-func TestNotifierAdapter_SendPublicLevelUp_NoOp(t *testing.T) {
-	// Phase 104c defers real public-channel posting; the adapter should
-	// be callable without error and must NOT fall back to DMing anyone.
+func TestNotifierAdapter_SendPublicLevelUp_PostsToStory(t *testing.T) {
+	// H-104c: public level-up announcements now route through the
+	// injected StoryPoster (a #the-story-bound poster wired in main.go).
+	// The adapter must NOT fall back to DMing anyone — the public
+	// channel is the entire point of this surface.
+	fake := &fakeDirectMessenger{}
+	story := &fakeStoryPoster{}
+	adapter := levelup.NewNotifierAdapterWithStory(fake, story)
+
+	charID := uuid.New()
+	err := adapter.SendPublicLevelUp(context.Background(), charID, "Aria", 6)
+	require.NoError(t, err)
+	require.Len(t, story.calls, 1, "expected exactly one story post")
+	assert.Equal(t, charID, story.calls[0].characterID)
+	assert.Equal(t, "Aria", story.calls[0].characterName)
+	assert.Equal(t, 6, story.calls[0].newLevel)
+	assert.Contains(t, story.calls[0].body, "Aria")
+	assert.Contains(t, story.calls[0].body, "Level 6")
+	assert.Empty(t, fake.calls, "public level-up must not produce DMs")
+}
+
+func TestNotifierAdapter_SendPublicLevelUp_NoStoryPoster_NoOp(t *testing.T) {
+	// When no StoryPoster is wired (e.g. headless deploys without a
+	// Discord session) the adapter degrades to a silent no-op so the
+	// level-up HTTP handler can still mutate state.
 	fake := &fakeDirectMessenger{}
 	adapter := levelup.NewNotifierAdapter(fake)
-	err := adapter.SendPublicLevelUp(context.Background(), "Aria", 6)
+
+	err := adapter.SendPublicLevelUp(context.Background(), uuid.New(), "Aria", 6)
 	require.NoError(t, err)
 	assert.Empty(t, fake.calls)
+}
+
+func TestNotifierAdapter_SendPublicLevelUp_StoryPosterError_Surfaces(t *testing.T) {
+	// Story-poster errors surface to the caller so the Service can log
+	// them via the existing slog.Error wiring in ApplyLevelUp.
+	story := &fakeStoryPoster{err: assertableError("post failed")}
+	adapter := levelup.NewNotifierAdapterWithStory(nil, story)
+
+	err := adapter.SendPublicLevelUp(context.Background(), uuid.New(), "Aria", 6)
+	require.Error(t, err)
 }
 
 func TestNotifierAdapter_NilMessenger_Tolerated(t *testing.T) {
@@ -93,8 +150,14 @@ func TestNotifierAdapter_NilMessenger_Tolerated(t *testing.T) {
 	require.NoError(t, adapter.SendPrivateLevelUp(context.Background(), "u", levelup.LevelUpDetails{CharacterName: "x"}))
 	require.NoError(t, adapter.SendASIPrompt(context.Background(), "u", uuid.New(), "x"))
 	require.NoError(t, adapter.SendASIDenied(context.Background(), "u", "x", "y"))
-	require.NoError(t, adapter.SendPublicLevelUp(context.Background(), "x", 2))
+	require.NoError(t, adapter.SendPublicLevelUp(context.Background(), uuid.New(), "x", 2))
 }
+
+// assertableError is a tiny error helper so tests don't pull in errors.New
+// just to seed a sentinel — string equality is enough for the assertion.
+type assertableError string
+
+func (e assertableError) Error() string { return string(e) }
 
 func TestNotifierAdapter_EmptyDiscordUserID_SkipsDM(t *testing.T) {
 	// DM NPCs / unlinked characters surface an empty discord_user_id. The

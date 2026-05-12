@@ -54,7 +54,7 @@ Status legend: open | in-progress | review | closed | deferred | blocked | verif
 | B-26b-ammo-recovery-prompt | MEDIUM | 26b | closed |  |  | 2026-05-11 |
 | B-26b-combat-log-announcement | MEDIUM | 26b | closed |  |  | 2026-05-11 |
 | B-26b-loot-auto-create | MEDIUM | 26b | closed |  |  | 2026-05-11 |
-| C-35-dm-adv-flags | MEDIUM | 35 | deferred |  |  | 2026-05-11 |
+| C-35-dm-adv-flags | MEDIUM | 35 | closed | implementer | reviewer | 2026-05-12 |
 | C-37-ammo-recovery | MEDIUM | 37 | closed |  |  | 2026-05-11 |
 | C-43-block-commands | MEDIUM | 43 | closed |  |  | 2026-05-11 |
 | D-46-rage-end-on-unconscious | MEDIUM | 46 | closed |  |  | 2026-05-11 |
@@ -73,17 +73,17 @@ Status legend: open | in-progress | review | closed | deferred | blocked | verif
 | G-101-message-player-desktop | MEDIUM | 101 | closed |  |  | 2026-05-11 |
 | G-99-homebrew-form-ui | MEDIUM | 99 | closed |  |  | 2026-05-11 |
 | H-104b-rest-magicitem-publisher | MEDIUM | 104b | closed |  |  | 2026-05-11 |
-| H-121.4-playtest-transcripts | MEDIUM | 121.4 | deferred |  |  | 2026-05-11 |
+| H-121.4-playtest-transcripts | MEDIUM | 121.4 | deferred-with-justification | implementer | reviewer | 2026-05-12 |
 | A-10-auth-routes-dead-code | MINOR | 10 | closed |  |  | 2026-05-11 |
 | A-14-portal-url-baseurl | MINOR | 14 | closed |  |  | 2026-05-11 |
 | C-32-range-rejection-format | MINOR | 32 | closed |  |  | 2026-05-11 |
 | C-38-reckless-target-side | MINOR | 38 | closed |  |  | 2026-05-11 |
-| E-68-fov-minor | MINOR | 68 | deferred |  |  | 2026-05-11 |
+| E-68-fov-minor | MINOR | 68 | closed | implementer | reviewer | 2026-05-12 |
 | F-78c-bonus-actions-schema | MINOR | 78c | closed |  |  | 2026-05-11 |
 | F-86-item-picker-narrative-price | MINOR | 86 | closed |  |  | 2026-05-11 |
 | F-89d-asi-restart-persistence | MINOR | 89d | closed |  |  | 2026-05-11 |
 | G-102-mobile-quickactions | MINOR | 102 | closed |  |  | 2026-05-11 |
-| H-104c-public-levelup-deferred | MINOR | 104c | deferred |  |  | 2026-05-11 |
+| H-104c-public-levelup-deferred | MINOR | 104c | closed | implementer | reviewer | 2026-05-12 |
 | C-33-followup-discord-walls | HIGH | 33 | closed |  |  | 2026-05-11 |
 | C-43-followup-timer-nat20-heal-reset | MEDIUM | 43 | closed |  |  | 2026-05-11 |
 | D-56-followup-drag-tile-sync | MEDIUM | 56 | closed |  |  | 2026-05-11 |

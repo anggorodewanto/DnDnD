@@ -923,10 +923,16 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 
 	distFt := combatantDistance(cmd.Attacker, cmd.Target)
 
+	// C-35 — consume any DM-set per-attack advantage/disadvantage override
+	// for this attacker. Override ORs into the caller flags (so a Reckless
+	// or other context-derived flag stays in effect even when the override
+	// is cleared) and the persistent row is deleted single-use.
+	dmAdv, dmDisadv := s.consumeDMAdvOverride(ctx, cmd.Attacker, cmd.DMAdvantage, cmd.DMDisadvantage)
+
 	input := buildAttackInput(
 		cmd.Attacker, cmd.Target, weapon, scores, profBonus, distFt,
 		cmd.HostileNearAttacker, cmd.AttackerSize,
-		cmd.DMAdvantage, cmd.DMDisadvantage, nil,
+		dmAdv, dmDisadv, nil,
 	)
 	// C-35 — auto-populate attacker-size / hostile-near context so the
 	// heavy-weapon and ranged-adjacent disadvantage paths fire end-to-end.
@@ -1047,10 +1053,13 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	}
 
 	distFt := combatantDistance(cmd.Attacker, cmd.Target)
+	// C-35 — consume any DM-set per-attack advantage override; mirrors
+	// Service.Attack so improvised swings honor the dashboard override.
+	dmAdv, dmDisadv := s.consumeDMAdvOverride(ctx, cmd.Attacker, cmd.DMAdvantage, cmd.DMDisadvantage)
 	input := buildAttackInput(
 		cmd.Attacker, cmd.Target, weapon, scores, profBonus, distFt,
 		cmd.HostileNearAttacker, cmd.AttackerSize,
-		cmd.DMAdvantage, cmd.DMDisadvantage, nil,
+		dmAdv, dmDisadv, nil,
 	)
 	// C-35 — auto-populate attacker context (size, hostile-within-5ft).
 	s.populateAttackContext(ctx, &input, cmd.Attacker)
@@ -1151,10 +1160,14 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	}
 
 	distFt := combatantDistance(cmd.Attacker, cmd.Target)
+	// C-35 — consume any DM-set per-attack advantage override on the
+	// off-hand swing too. Off-hand attacks rolled independently from the
+	// main hand so the override applies to whichever swing fires first.
+	dmAdv, dmDisadv := s.consumeDMAdvOverride(ctx, cmd.Attacker, cmd.DMAdvantage, cmd.DMDisadvantage)
 	input := buildAttackInput(
 		cmd.Attacker, cmd.Target, offWeapon, scores, int(char.ProficiencyBonus), distFt,
 		cmd.HostileNearAttacker, cmd.AttackerSize,
-		cmd.DMAdvantage, cmd.DMDisadvantage, &dmgMod,
+		dmAdv, dmDisadv, &dmgMod,
 	)
 	// C-35 — auto-populate attacker context (size, hostile-within-5ft).
 	s.populateAttackContext(ctx, &input, cmd.Attacker)

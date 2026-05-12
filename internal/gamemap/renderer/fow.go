@@ -10,9 +10,19 @@ type wallLine struct {
 // shadowcast performs symmetric visibility computation from (originCol, originRow)
 // with the given vision range in tiles. Returns a set of visible tile positions.
 //
-// Uses center-to-center raycasting with wall segment intersection checks.
-// A tile is visible if the ray from the origin tile center to the target tile center
-// does not cross any wall segment. This is inherently symmetric: if A sees B, B sees A.
+// Algorithm: center-to-center raycasting with wall segment intersection checks.
+// A tile is visible iff the ray from the origin tile center to the target tile
+// center does not cross any wall segment. This is symmetric by construction
+// — the ray is geometrically reversible — so if A sees B then B sees A.
+// This is equivalent, for our use, to Albert Ford's symmetric shadowcasting
+// (https://www.albertford.com/shadowcasting/): both algorithms compute the
+// same symmetric LOS predicate, and we prefer the raycasting form because
+// our walls are arbitrary line segments rather than axis-aligned tile edges,
+// which is what classical shadowcasting assumes.
+//
+// The TestShadowcast_Symmetry / TestShadowcast_SymmetryInvariant_Documented
+// tests guard the symmetry invariant — replacing this with anything
+// asymmetric must break them.
 func shadowcast(originCol, originRow, visionRange int, walls []WallSegment, width, height int) map[GridPos]bool {
 	visible := make(map[GridPos]bool)
 	visible[GridPos{originCol, originRow}] = true
