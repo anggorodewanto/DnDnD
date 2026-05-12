@@ -97,3 +97,4 @@ Status legend: open | in-progress | review | closed | deferred | blocked | verif
 | AOE-CAST-followup-cmd-wire-setters | HIGH | 59,63 | closed |  |  | 2026-05-11 |
 | COMBAT-MISC-followup-cmd-zone-lookup | MEDIUM | 69 | closed |  |  | 2026-05-12 |
 | E-67-followup-zone-prompt-callsites | LOW | 67 | closed |  |  | 2026-05-12 |
+| PLAYTEST-REPLAY-followup-path-handling | LOW | 121.3 | deferred |  |  | 2026-05-12 |

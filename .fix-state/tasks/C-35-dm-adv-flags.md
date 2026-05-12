@@ -3,7 +3,7 @@ id: C-35-dm-adv-flags
 group: C
 phase: 35
 severity: MEDIUM
-status: open
+status: deferred
 owner:
 reviewer:
 last_update: 2026-05-11

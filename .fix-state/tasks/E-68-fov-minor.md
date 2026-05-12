@@ -3,7 +3,7 @@ id: E-68-fov-minor
 group: E
 phase: 68
 severity: MINOR
-status: open
+status: deferred
 owner:
 reviewer:
 last_update: 2026-05-11
