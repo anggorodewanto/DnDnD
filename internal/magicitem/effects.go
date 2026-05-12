@@ -148,6 +148,12 @@ func convertPassiveEffect(pe passiveEffect) (combat.Effect, bool) {
 			Dice:        pe.Dice,
 			DamageTypes: []string{pe.DamageType},
 		}, true
+	case "modify_speed":
+		return combat.Effect{
+			Type:     combat.EffectModifySpeed,
+			Trigger:  combat.TriggerOnTurnStart,
+			Modifier: pe.Modifier,
+		}, true
 	default:
 		return combat.Effect{}, false
 	}

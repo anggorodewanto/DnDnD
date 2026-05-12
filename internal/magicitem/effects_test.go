@@ -310,6 +310,18 @@ func TestParsePassiveEffects_BonusDamage(t *testing.T) {
 	assert.Equal(t, []string{"cold"}, effects[0].DamageTypes)
 }
 
+func TestParsePassiveEffects_ModifySpeed(t *testing.T) {
+	raw := `[{"type": "modify_speed", "modifier": 10}]`
+
+	effects, err := ParsePassiveEffects(raw)
+	require.NoError(t, err)
+	require.Len(t, effects, 1)
+
+	assert.Equal(t, combat.EffectModifySpeed, effects[0].Type)
+	assert.Equal(t, combat.TriggerOnTurnStart, effects[0].Trigger)
+	assert.Equal(t, 10, effects[0].Modifier)
+}
+
 func TestParsePassiveEffects_UnknownTypeSkipped(t *testing.T) {
 	raw := `[{"type": "bonus_hp", "modifier": 1, "per_level": true}, {"type": "modify_ac", "modifier": 1}]`
 
