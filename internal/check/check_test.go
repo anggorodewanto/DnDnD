@@ -1,6 +1,7 @@
 package check
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -651,6 +652,117 @@ func TestFormatSingleCheckResult_RawAbility(t *testing.T) {
 	msg := FormatSingleCheckResult("Aria", result)
 	if !strings.Contains(msg, "Dex") {
 		t.Errorf("expected Dex in message, got: %s", msg)
+	}
+}
+
+// --- F-15: TargetContext enforcement at the service layer ---
+
+func TestSingleCheck_TargetContextNil_LegacyBehaviorUnchanged(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+	result, err := svc.SingleCheck(SingleCheckInput{
+		Scores:    character.AbilityScores{WIS: 16},
+		Skill:     "perception",
+		ProfBonus: 2,
+		Target:    nil,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Total != 13 {
+		t.Errorf("expected total 13, got %d", result.Total)
+	}
+}
+
+func TestSingleCheck_TargetContext_Adjacent_Passes(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+	result, err := svc.SingleCheck(SingleCheckInput{
+		Scores: character.AbilityScores{WIS: 10},
+		Skill:  "medicine",
+		Target: &TargetContext{
+			AttackerPosition: [3]int{1, 1, 0},
+			TargetPosition:   [3]int{1, 2, 0},
+			InCombat:         true,
+			ActionAvailable:  true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error for adjacent target: %v", err)
+	}
+	if result.Total != 10 {
+		t.Errorf("expected total 10, got %d", result.Total)
+	}
+}
+
+func TestSingleCheck_TargetContext_OutOfReach_ReturnsErrTargetNotInReach(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+	_, err := svc.SingleCheck(SingleCheckInput{
+		Scores: character.AbilityScores{WIS: 10},
+		Skill:  "medicine",
+		Target: &TargetContext{
+			AttackerPosition: [3]int{0, 0, 0},
+			TargetPosition:   [3]int{5, 5, 0},
+			InCombat:         true,
+			ActionAvailable:  true,
+		},
+	})
+	if !errors.Is(err, ErrTargetNotInReach) {
+		t.Errorf("expected ErrTargetNotInReach, got %v", err)
+	}
+}
+
+func TestSingleCheck_TargetContext_NoActionAvailable_ReturnsErr(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+	_, err := svc.SingleCheck(SingleCheckInput{
+		Scores: character.AbilityScores{WIS: 10},
+		Skill:  "medicine",
+		Target: &TargetContext{
+			AttackerPosition: [3]int{2, 2, 0},
+			TargetPosition:   [3]int{2, 3, 0},
+			InCombat:         true,
+			ActionAvailable:  false,
+		},
+	})
+	if !errors.Is(err, ErrNoActionAvailable) {
+		t.Errorf("expected ErrNoActionAvailable, got %v", err)
+	}
+}
+
+func TestSingleCheck_TargetContext_OutOfCombat_IgnoresActionFlag(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+	// Out of combat: ActionAvailable=false must not block the check.
+	result, err := svc.SingleCheck(SingleCheckInput{
+		Scores: character.AbilityScores{WIS: 10},
+		Skill:  "medicine",
+		Target: &TargetContext{
+			AttackerPosition: [3]int{0, 0, 0},
+			TargetPosition:   [3]int{1, 0, 0},
+			InCombat:         false,
+			ActionAvailable:  false,
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error out of combat: %v", err)
+	}
+	if result.Total != 10 {
+		t.Errorf("expected total 10, got %d", result.Total)
+	}
+}
+
+func TestSingleCheck_TargetContext_ReachVariants(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+	// ProficientReach=0 should default to 1; (0,0)->(1,1) is Chebyshev 1.
+	if _, err := svc.SingleCheck(SingleCheckInput{
+		Scores: character.AbilityScores{}, Skill: "str",
+		Target: &TargetContext{AttackerPosition: [3]int{0, 0, 0}, TargetPosition: [3]int{1, 1, 0}, ActionAvailable: true},
+	}); err != nil {
+		t.Errorf("default reach 1 should allow diagonal adjacency, got %v", err)
+	}
+	// Reach 2 lets the attacker hit a target 2 tiles away (e.g. polearm).
+	if _, err := svc.SingleCheck(SingleCheckInput{
+		Scores: character.AbilityScores{}, Skill: "str",
+		Target: &TargetContext{AttackerPosition: [3]int{0, 0, 0}, TargetPosition: [3]int{2, 0, 0}, ProficientReach: 2, ActionAvailable: true},
+	}); err != nil {
+		t.Errorf("reach=2 should allow distance 2, got %v", err)
 	}
 }
 

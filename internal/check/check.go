@@ -2,6 +2,7 @@ package check
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,40 @@ import (
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 )
+
+// F-15: errors surfaced when the optional TargetContext on SingleCheckInput
+// fails preconditions. Callers (Discord handler today, dashboard-prompted
+// path tomorrow) should map these to player-facing messages. Keeping the
+// errors typed lets non-Discord entry paths enforce the same rules without
+// reimplementing the validation logic.
+var (
+	// ErrTargetNotInReach is returned when the attacker/target Chebyshev
+	// distance exceeds TargetContext.ProficientReach.
+	ErrTargetNotInReach = errors.New("target not in reach")
+	// ErrNoActionAvailable is returned when TargetContext.InCombat is true
+	// but ActionAvailable is false (the caster has already used their
+	// Action this round).
+	ErrNoActionAvailable = errors.New("no action available")
+)
+
+// TargetContext, when attached to SingleCheckInput, enables service-layer
+// adjacency + action-cost enforcement so non-Discord entry paths can't
+// bypass the rules. (F-15 / Phase 81 finding)
+//
+// AttackerPosition / TargetPosition are caller-defined coordinates in tiles
+// (typically [col, row, 0]). Chebyshev distance is used so a 5ft tile maps
+// to ProficientReach=1. When ProficientReach is 0 it defaults to 1.
+//
+// When InCombat is true the caster must have ActionAvailable=true or
+// ErrNoActionAvailable is returned. When InCombat is false the
+// ActionAvailable flag is ignored (out-of-combat checks are free).
+type TargetContext struct {
+	AttackerPosition [3]int
+	TargetPosition   [3]int
+	InCombat         bool
+	ActionAvailable  bool
+	ProficientReach  int
+}
 
 // ConditionInfo carries condition data from a combatant for check processing.
 type ConditionInfo struct {
@@ -56,6 +91,10 @@ type SingleCheckInput struct {
 	Conditions       []combat.CombatCondition
 	ConditionCtx     combat.AbilityCheckContext
 	ExhaustionLevel  int
+	// Target is optional: when nil, SingleCheck preserves legacy behavior.
+	// When set, SingleCheck enforces adjacency and (when InCombat)
+	// action-availability before rolling. (F-15)
+	Target *TargetContext
 }
 
 // SingleCheckResult holds the result of a single ability/skill check.
@@ -70,6 +109,10 @@ type SingleCheckResult struct {
 
 // SingleCheck performs a single ability or skill check.
 func (s *Service) SingleCheck(input SingleCheckInput) (SingleCheckResult, error) {
+	if err := validateTargetContext(input.Target); err != nil {
+		return SingleCheckResult{}, err
+	}
+
 	skill := strings.ToLower(input.Skill)
 
 	modifier, err := calculateModifier(input, skill)
@@ -105,6 +148,46 @@ func (s *Service) SingleCheck(input SingleCheckInput) (SingleCheckResult, error)
 	result.D20Result = d20
 	result.Total = d20.Total
 	return result, nil
+}
+
+// validateTargetContext enforces adjacency + action-cost preconditions when
+// a TargetContext is attached to the input. Returns nil when ctx is nil so
+// legacy callers are unaffected. (F-15)
+func validateTargetContext(ctx *TargetContext) error {
+	if ctx == nil {
+		return nil
+	}
+	reach := ctx.ProficientReach
+	if reach <= 0 {
+		reach = 1
+	}
+	if chebyshev3(ctx.AttackerPosition, ctx.TargetPosition) > reach {
+		return ErrTargetNotInReach
+	}
+	if ctx.InCombat && !ctx.ActionAvailable {
+		return ErrNoActionAvailable
+	}
+	return nil
+}
+
+// chebyshev3 returns the Chebyshev (chessboard) distance between two 3D
+// tile positions: the max axis delta. For a flat grid pass z=0 on both.
+func chebyshev3(a, b [3]int) int {
+	d := absInt(a[0] - b[0])
+	if v := absInt(a[1] - b[1]); v > d {
+		d = v
+	}
+	if v := absInt(a[2] - b[2]); v > d {
+		d = v
+	}
+	return d
+}
+
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // calculateModifier computes the total modifier for a check.

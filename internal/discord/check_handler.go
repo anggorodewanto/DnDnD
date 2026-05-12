@@ -256,26 +256,38 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 	// opposing combatant in the active encounter and run a contested check
 	// using check.Service.ContestedCheck. Falls back to a single check when
 	// the target cannot be resolved (no encounter / unknown short id).
+	var pendingTurnDeduct *refdata.Turn // set when service validation passes and we owe an UpdateTurnActions
+	var pendingTargetName string
 	if target != "" {
 		if h.handleContestedCheck(ctx, interaction, char, input, target) {
 			return
 		}
-		// F-81: non-contested targeted check (e.g. `/check medicine
-		// target:AR` on a downed ally). Validate tile adjacency and, in
-		// combat, deduct an action up-front. Out-of-combat: skip the
-		// cost. When resolution fails (no resolver wired / target not in
-		// encounter), fall through to the plain single check so the
-		// player still gets a result.
-		if rejectMsg, blocked := h.enforceTargetedCheckPreconditions(ctx, interaction, char, target); blocked {
-			respondEphemeral(h.session, interaction, rejectMsg)
-			return
+		// F-15 / F-81: non-contested targeted check (e.g. `/check
+		// medicine target:AR` on a downed ally). Build a TargetContext
+		// so the check service enforces adjacency + action availability
+		// regardless of caller. When resolution fails (no resolver wired
+		// / target not in encounter), Target stays nil and we fall
+		// through to a plain single check unchanged.
+		if tc, turn, targetName, ok := h.buildTargetContext(ctx, interaction, char, target); ok {
+			input.Target = tc
+			pendingTurnDeduct = turn
+			pendingTargetName = targetName
 		}
 	}
 
 	result, err := h.checkService.SingleCheck(input)
 	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Check failed: %v", err))
+		respondEphemeral(h.session, interaction, formatTargetedCheckError(err, pendingTargetName))
 		return
+	}
+
+	// F-15: persist the action deduction now that the service validated
+	// adjacency + action availability. Persistence failures are
+	// non-blocking — the DM can correct combat state if needed.
+	if pendingTurnDeduct != nil {
+		if updated, uerr := combat.UseResource(*pendingTurnDeduct, combat.ResourceAction); uerr == nil {
+			_, _ = h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updated))
+		}
 	}
 
 	// Phase 106d: gate non-trivial outcomes through #dm-queue. AutoFail
@@ -345,66 +357,69 @@ func (h *CheckHandler) handleContestedCheck(ctx context.Context, interaction *di
 	return true
 }
 
-// enforceTargetedCheckPreconditions handles the non-contested targeted
-// check path (F-81). When a target resolver is wired and the active
-// encounter resolves, it validates tile adjacency (5ft Chebyshev) and, if
-// a turn provider is wired and the caster has an active turn (in combat),
-// it deducts an Action up-front. Returns blocked=true with a player-
-// facing message when adjacency fails or the Action is already spent.
-// Returns blocked=false when the path succeeds or when no resolver is
-// wired (legacy callers fall through to plain SingleCheck unchanged).
-func (h *CheckHandler) enforceTargetedCheckPreconditions(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, target string) (string, bool) {
+// buildTargetContext resolves the caster + target combatants and active turn
+// state, then returns a check.TargetContext the service can validate
+// against. Also returns the pre-deduction turn snapshot (when in combat)
+// for the handler to persist after SingleCheck succeeds, plus the target's
+// display name for error formatting. ok=false means no enforcement should
+// apply (no resolver wired / target not in this encounter / unparseable
+// positions); callers should leave input.Target nil and run the plain
+// single check unchanged. (F-15)
+//
+// NOTE: dashboard-prompted contested-check paths don't currently call
+// SingleCheck directly — they go through the Discord /check command. When
+// a future dashboard route lands (TODO), it should build a TargetContext
+// the same way so it picks up the same service-layer enforcement.
+func (h *CheckHandler) buildTargetContext(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, target string) (*check.TargetContext, *refdata.Turn, string, bool) {
 	if h.targetResolver == nil || h.encounterProvider == nil {
-		return "", false
+		return nil, nil, "", false
 	}
 	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, discordUserID(interaction))
 	if err != nil {
-		// Not in combat — skip enforcement, plain single check.
-		return "", false
+		return nil, nil, "", false
 	}
 	caster, targetComb, ok := h.targetResolver.ResolveTargetCombatant(ctx, encounterID, discordUserID(interaction), target)
 	if !ok {
-		// Target not in this encounter — skip enforcement.
-		return "", false
+		return nil, nil, "", false
 	}
-	if !isAdjacent(caster, targetComb) {
-		return fmt.Sprintf("❌ %s is not adjacent — targeted checks require 5ft.", targetComb.DisplayName), true
+	casterCol, casterRow, okA := parseCombatantCoord(caster)
+	targetCol, targetRow, okB := parseCombatantCoord(targetComb)
+	if !okA || !okB {
+		return nil, nil, "", false
 	}
-	if h.turnProvider == nil {
-		return "", false
+	tc := &check.TargetContext{
+		AttackerPosition: [3]int{casterCol, casterRow, 0},
+		TargetPosition:   [3]int{targetCol, targetRow, 0},
+		ProficientReach:  1, // 5ft / 1 tile
+		// ActionAvailable defaults true so out-of-combat (no turn provider
+		// or no active turn) skips the action-cost gate entirely.
+		ActionAvailable: true,
 	}
-	turn, hasTurn, err := h.turnProvider.GetActiveTurnForCharacter(ctx, interaction.GuildID, char.ID)
-	if err != nil || !hasTurn {
-		return "", false
+	var pendingTurn *refdata.Turn
+	if h.turnProvider != nil {
+		turn, hasTurn, terr := h.turnProvider.GetActiveTurnForCharacter(ctx, interaction.GuildID, char.ID)
+		if terr == nil && hasTurn {
+			tc.InCombat = true
+			tc.ActionAvailable = !turn.ActionUsed
+			turnCopy := turn
+			pendingTurn = &turnCopy
+		}
 	}
-	if turn.ActionUsed {
-		return "❌ You've already used your action this turn.", true
-	}
-	updated, err := combat.UseResource(turn, combat.ResourceAction)
-	if err != nil {
-		return fmt.Sprintf("❌ Cannot perform targeted check: %v", err), true
-	}
-	if _, err := h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updated)); err != nil {
-		// Persistence failure: don't block the roll — combat-state
-		// corrections can be made by the DM.
-		return "", false
-	}
-	return "", false
+	return tc, pendingTurn, targetComb.DisplayName, true
 }
 
-// isAdjacent reports whether two combatants share a 5ft tile boundary
-// (Chebyshev distance <= 1 with both positions parseable).
-func isAdjacent(a, b refdata.Combatant) bool {
-	aCol, aRow, okA := parseCombatantCoord(a)
-	bCol, bRow, okB := parseCombatantCoord(b)
-	if !okA || !okB {
-		return false
+// formatTargetedCheckError maps service-layer F-15 errors to the same
+// player-facing messages the legacy handler emitted, so the UX is
+// preserved when validation moves into the service. Non-target errors
+// fall back to the generic "Check failed: %v" template.
+func formatTargetedCheckError(err error, targetName string) string {
+	if errors.Is(err, check.ErrTargetNotInReach) {
+		return fmt.Sprintf("❌ %s is not adjacent — targeted checks require 5ft.", targetName)
 	}
-	d := absInt(aCol-bCol)
-	if dr := absInt(aRow - bRow); dr > d {
-		d = dr
+	if errors.Is(err, check.ErrNoActionAvailable) {
+		return "❌ You've already used your action this turn."
 	}
-	return d <= 1
+	return fmt.Sprintf("Check failed: %v", err)
 }
 
 func parseCombatantCoord(c refdata.Combatant) (int, int, bool) {
@@ -416,13 +431,6 @@ func parseCombatantCoord(c refdata.Combatant) (int, int, bool) {
 		return 0, 0, false
 	}
 	return col, int(c.PositionRow), true
-}
-
-func absInt(n int) int {
-	if n < 0 {
-		return -n
-	}
-	return n
 }
 
 // formatContestedCheckResult renders a contested-check outcome as a single
