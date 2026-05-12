@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -13,6 +14,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -248,6 +250,9 @@ type fakeMapRegenQueries struct {
 	maps       map[uuid.UUID]refdata.Map
 	combatants map[uuid.UUID][]refdata.Combatant
 	zones      map[uuid.UUID][]refdata.EncounterZone
+	characters map[uuid.UUID]refdata.Character
+	races      map[string]refdata.Race
+	creatures  map[string]refdata.Creature
 }
 
 func (f *fakeMapRegenQueries) GetEncounter(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
@@ -272,6 +277,30 @@ func (f *fakeMapRegenQueries) ListCombatantsByEncounterID(_ context.Context, id 
 
 func (f *fakeMapRegenQueries) ListEncounterZonesByEncounterID(_ context.Context, id uuid.UUID) ([]refdata.EncounterZone, error) {
 	return f.zones[id], nil
+}
+
+func (f *fakeMapRegenQueries) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {
+	c, ok := f.characters[id]
+	if !ok {
+		return refdata.Character{}, sql.ErrNoRows
+	}
+	return c, nil
+}
+
+func (f *fakeMapRegenQueries) GetRace(_ context.Context, id string) (refdata.Race, error) {
+	r, ok := f.races[id]
+	if !ok {
+		return refdata.Race{}, sql.ErrNoRows
+	}
+	return r, nil
+}
+
+func (f *fakeMapRegenQueries) GetCreature(_ context.Context, id string) (refdata.Creature, error) {
+	c, ok := f.creatures[id]
+	if !ok {
+		return refdata.Creature{}, sql.ErrNoRows
+	}
+	return c, nil
 }
 
 // E-67-zone-render-on-map: zonesToRendererOverlays converts encounter_zones
@@ -358,6 +387,336 @@ func TestMapRegeneratorAdapter_RendersWithZoneOverlays(t *testing.T) {
 	png, err := a.RegenerateMap(context.Background(), encID)
 	require.NoError(t, err)
 	require.NotEmpty(t, png, "renderer must still produce PNG bytes when zones are present")
+}
+
+// --- SR-008: fog of war must be wired in production ---
+
+// TestTilesFromFeet covers the ft→tile conversion used to project race
+// darkvision and creature senses into renderer.VisionSource tile-units.
+func TestTilesFromFeet(t *testing.T) {
+	assert.Equal(t, 0, tilesFromFeet(0))
+	assert.Equal(t, 12, tilesFromFeet(60))    // typical darkvision
+	assert.Equal(t, 24, tilesFromFeet(120))   // 120ft darkvision / Devil's Sight
+	assert.Equal(t, 1, tilesFromFeet(5))      // single-tile range
+	assert.Equal(t, 0, tilesFromFeet(-10))    // negative ft is clamped
+	// Non-multiples truncate down (matches Devil's Sight rounding convention).
+	assert.Equal(t, 1, tilesFromFeet(9))
+}
+
+// TestBuildVisionSources_PCDarkvisionFromRace exercises the PC branch:
+// combatant.character_id → GetCharacter → Race string → GetRace.DarkvisionFt.
+// A PC at (col B, row 3) with race darkvision 60ft must produce a
+// renderer.VisionSource at (1, 2) with DarkvisionTiles=12.
+func TestBuildVisionSources_PCDarkvisionFromRace(t *testing.T) {
+	charID := uuid.New()
+	q := &fakeMapRegenQueries{
+		characters: map[uuid.UUID]refdata.Character{
+			charID: {ID: charID, Race: "elf"},
+		},
+		races: map[string]refdata.Race{
+			"elf": {ID: "elf", DarkvisionFt: 60},
+		},
+	}
+	combatants := []refdata.Combatant{
+		{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			PositionCol: "B",
+			PositionRow: 3,
+			IsNpc:       false,
+			IsAlive:     true,
+		},
+	}
+
+	sources := buildVisionSources(context.Background(), q, combatants)
+
+	require.Len(t, sources, 1)
+	assert.Equal(t, 1, sources[0].Col, "column 'B' maps to col index 1")
+	assert.Equal(t, 2, sources[0].Row, "row 3 maps to row index 2 (1-based input)")
+	assert.Equal(t, 12, sources[0].DarkvisionTiles, "60ft darkvision = 12 tiles")
+	assert.Greater(t, sources[0].RangeTiles, 0, "base sight must be positive so PC sees in lit areas")
+}
+
+// TestBuildVisionSources_NPCSensesFromCreature exercises the NPC branch:
+// combatant.creature_ref_id → GetCreature → Senses JSONB
+// {darkvision, blindsight, truesight} → renderer.VisionSource.
+func TestBuildVisionSources_NPCSensesFromCreature(t *testing.T) {
+	q := &fakeMapRegenQueries{
+		creatures: map[string]refdata.Creature{
+			"shadow-demon": {
+				ID:     "shadow-demon",
+				Senses: pqtype.NullRawMessage{RawMessage: []byte(`{"darkvision": 120, "blindsight": 10}`), Valid: true},
+			},
+		},
+	}
+	combatants := []refdata.Combatant{
+		{
+			ID:            uuid.New(),
+			CreatureRefID: sql.NullString{String: "shadow-demon", Valid: true},
+			PositionCol:   "A",
+			PositionRow:   1,
+			IsNpc:         true,
+			IsAlive:       true,
+		},
+	}
+
+	sources := buildVisionSources(context.Background(), q, combatants)
+
+	require.Len(t, sources, 1)
+	assert.Equal(t, 24, sources[0].DarkvisionTiles, "120ft darkvision = 24 tiles")
+	assert.Equal(t, 2, sources[0].BlindsightTiles, "10ft blindsight = 2 tiles")
+}
+
+// TestBuildVisionSources_SkipsDeadAndUnparseablePositions guards the helper
+// against dead combatants (no sight) and unparseable position strings.
+func TestBuildVisionSources_SkipsDeadAndUnparseablePositions(t *testing.T) {
+	q := &fakeMapRegenQueries{}
+	combatants := []refdata.Combatant{
+		{PositionCol: "A", PositionRow: 1, IsAlive: false}, // dead
+		{PositionCol: "", PositionRow: 0, IsAlive: true},   // unparseable
+	}
+	assert.Empty(t, buildVisionSources(context.Background(), q, combatants))
+}
+
+// TestBuildMagicalDarknessTiles_FiltersByZoneType covers the magical-darkness
+// projection: only zones with ZoneType="magical_darkness" contribute tiles.
+func TestBuildMagicalDarknessTiles_FiltersByZoneType(t *testing.T) {
+	zones := []refdata.EncounterZone{
+		{
+			SourceSpell: "Darkness",
+			Shape:       "circle",
+			OriginCol:   "C",
+			OriginRow:   3,
+			Dimensions:  []byte(`{"radius_ft":10}`),
+			ZoneType:    "magical_darkness",
+		},
+		{
+			SourceSpell: "Fog Cloud",
+			Shape:       "circle",
+			OriginCol:   "G",
+			OriginRow:   7,
+			Dimensions:  []byte(`{"radius_ft":20}`),
+			ZoneType:    "heavy_obscurement", // not magical_darkness
+		},
+	}
+	tiles := buildMagicalDarknessTiles(zones)
+	require.NotEmpty(t, tiles, "Darkness zone must contribute tiles")
+	// Origin of Darkness zone (C,3 → col=2,row=2) must be in the set.
+	originSeen := false
+	for _, t2 := range tiles {
+		if t2.Col == 2 && t2.Row == 2 {
+			originSeen = true
+		}
+	}
+	assert.True(t, originSeen, "Darkness origin tile must be included")
+	// No tile from the Fog Cloud area (col 6+) should appear.
+	for _, t2 := range tiles {
+		assert.NotEqual(t, 6, t2.Col, "Fog Cloud tiles must not be projected as magical darkness")
+	}
+}
+
+// TestRegenerateMap_PCAndTorchVisibility is the SR-008 acceptance integration
+// test: a 30x30 scene with a PC at (5,5) carrying 30ft darkvision and a torch
+// at (3,3) with 20ft radius. PC-view fog must mark in-radius tiles Visible
+// and out-of-radius tiles Unexplored. The map is sized larger than the PC's
+// combined base-sight + darkvision radius so the far-corner assertion is
+// stable.
+func TestRegenerateMap_PCAndTorchVisibility(t *testing.T) {
+	// Build a 30x30 empty terrain.
+	tiledJSON := mapJSON30x30()
+	charID := uuid.New()
+	encID := uuid.New()
+	mapID := uuid.New()
+	q := &fakeMapRegenQueries{
+		encs:       map[uuid.UUID]refdata.Encounter{encID: {ID: encID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}}},
+		maps:       map[uuid.UUID]refdata.Map{mapID: {ID: mapID, TiledJson: tiledJSON}},
+		combatants: map[uuid.UUID][]refdata.Combatant{},
+		characters: map[uuid.UUID]refdata.Character{
+			charID: {ID: charID, Race: "half-orc"},
+		},
+		races: map[string]refdata.Race{
+			"half-orc": {ID: "half-orc", DarkvisionFt: 30}, // 6 tiles
+		},
+	}
+	// PC at column F (index 5), row 6 (index 5). 1-based row input.
+	q.combatants[encID] = []refdata.Combatant{
+		{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			PositionCol: "F",
+			PositionRow: 6,
+			IsAlive:     true,
+			IsVisible:   true,
+		},
+	}
+
+	a := newMapRegeneratorAdapter(q)
+	require.NotNil(t, a)
+
+	// Render: this exercises the production wiring (buildVisionSources + the
+	// guard `if len(md.VisionSources) > 0`). Without SR-008 the fog stays nil
+	// and the assertion below fails.
+	png, err := a.RegenerateMap(context.Background(), encID)
+	require.NoError(t, err)
+	require.NotEmpty(t, png)
+
+	// To assert the renderer-side correctness, replay the helper alone and
+	// hand-feed a torch LightSource (production has no lit-torch data source
+	// today — see SR-008 plan, "Out of scope"). Confirms the PNG pipeline
+	// honours both vision and light radius for the PC view.
+	sources := buildVisionSources(context.Background(), q, q.combatants[encID])
+	require.Len(t, sources, 1)
+	lights := []renderer.LightSource{{Col: 2, Row: 2, RangeTiles: 4}} // torch at C/3, 20ft = 4 tiles
+	fow := renderer.ComputeVisibilityWithLights(sources, lights, nil, 30, 30)
+	require.NotNil(t, fow)
+
+	// PC's own tile (F/6 = 5,5) must be Visible.
+	assert.Equal(t, renderer.Visible, fow.StateAt(5, 5), "PC's own tile must be Visible")
+	// A tile adjacent to the torch (within 4-tile light radius) must be Visible.
+	assert.Equal(t, renderer.Visible, fow.StateAt(3, 3), "torch-lit tile must be Visible")
+	// PC's combined RangeTiles (defaultBaseSightTiles=12) + DarkvisionTiles (6
+	// for 30ft) means anything within 12 chebyshev tiles of (5,5) is Visible.
+	// (29,29) is dist 24 — well beyond. Torch covers 4 tiles of (2,2); (29,29)
+	// is dist 27 from there. So it must remain Unexplored.
+	assert.Equal(t, renderer.Unexplored, fow.StateAt(29, 29), "tile beyond both vision and light radius must be Unexplored")
+}
+
+// TestRegenerateMapForDM_BypassesFog covers the DMSeesAll branch: even though
+// the adapter populates VisionSources, the DM view must render every
+// combatant at full visibility because the FoW carries DMSeesAll=true.
+func TestRegenerateMapForDM_BypassesFog(t *testing.T) {
+	tiledJSON := mapJSON10x10()
+	charID := uuid.New()
+	encID := uuid.New()
+	mapID := uuid.New()
+	q := &fakeMapRegenQueries{
+		encs:       map[uuid.UUID]refdata.Encounter{encID: {ID: encID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}}},
+		maps:       map[uuid.UUID]refdata.Map{mapID: {ID: mapID, TiledJson: tiledJSON}},
+		combatants: map[uuid.UUID][]refdata.Combatant{},
+		characters: map[uuid.UUID]refdata.Character{
+			charID: {ID: charID, Race: "elf"},
+		},
+		races: map[string]refdata.Race{"elf": {ID: "elf", DarkvisionFt: 60}},
+	}
+	q.combatants[encID] = []refdata.Combatant{
+		{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			PositionCol: "A",
+			PositionRow: 1,
+			IsAlive:     true,
+			IsVisible:   true,
+		},
+	}
+
+	a := newMapRegeneratorAdapter(q)
+	require.NotNil(t, a)
+
+	// Player view (RegenerateMap): the PC sees in their own area, but a tile
+	// far away on the map must be marked Unexplored when re-computed.
+	playerPNG, err := a.RegenerateMap(context.Background(), encID)
+	require.NoError(t, err)
+	require.NotEmpty(t, playerPNG)
+	playerFow := renderer.ComputeVisibilityWithZones(
+		buildVisionSources(context.Background(), q, q.combatants[encID]),
+		nil, nil, nil, 10, 10,
+	)
+	require.NotNil(t, playerFow)
+	assert.Equal(t, renderer.Unexplored, playerFow.StateAt(9, 9))
+
+	// DM view: same setup but DMSeesAll must propagate.
+	dmPNG, err := a.RegenerateMapForDM(context.Background(), encID)
+	require.NoError(t, err)
+	require.NotEmpty(t, dmPNG)
+	// PNGs must differ because the DM view paints the full grid while the
+	// player view paints fog overlay on unseen tiles.
+	assert.NotEqual(t, playerPNG, dmPNG, "DM view PNG must differ from player view")
+}
+
+// TestRegenerateMap_MagicalDarknessZonePopulatesMagicalDarknessTiles asserts
+// the magical-darkness zone is projected through to ComputeVisibilityWithZones
+// — a darkvision-only PC cannot see Visible into the darkness zone.
+func TestRegenerateMap_MagicalDarknessZonePopulatesMagicalDarknessTiles(t *testing.T) {
+	tiledJSON := mapJSON10x10()
+	charID := uuid.New()
+	encID := uuid.New()
+	mapID := uuid.New()
+	q := &fakeMapRegenQueries{
+		encs:       map[uuid.UUID]refdata.Encounter{encID: {ID: encID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}}},
+		maps:       map[uuid.UUID]refdata.Map{mapID: {ID: mapID, TiledJson: tiledJSON}},
+		combatants: map[uuid.UUID][]refdata.Combatant{},
+		characters: map[uuid.UUID]refdata.Character{charID: {ID: charID, Race: "dwarf"}},
+		races:      map[string]refdata.Race{"dwarf": {ID: "dwarf", DarkvisionFt: 60}}, // 12 tiles
+		zones:      map[uuid.UUID][]refdata.EncounterZone{},
+	}
+	q.combatants[encID] = []refdata.Combatant{
+		{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			PositionCol: "A",
+			PositionRow: 1,
+			IsAlive:     true,
+			IsVisible:   true,
+		},
+	}
+	q.zones[encID] = []refdata.EncounterZone{
+		{
+			SourceSpell:  "Darkness",
+			Shape:        "circle",
+			OriginCol:    "D",
+			OriginRow:    4, // 1-based → row index 3
+			Dimensions:   []byte(`{"radius_ft":5}`),
+			OverlayColor: "#330033",
+			ZoneType:     "magical_darkness",
+		},
+	}
+
+	a := newMapRegeneratorAdapter(q)
+	require.NotNil(t, a)
+	// Render must not error even with a magical-darkness zone present.
+	png, err := a.RegenerateMap(context.Background(), encID)
+	require.NoError(t, err)
+	require.NotEmpty(t, png)
+
+	// Run the helper directly so we can assert the projected magical-darkness
+	// tiles exist and contain the zone's origin.
+	tiles := buildMagicalDarknessTiles(q.zones[encID])
+	require.NotEmpty(t, tiles, "magical_darkness zone must project at least one tile")
+
+	// Confirm the renderer demotes darkvision in that zone: re-run the
+	// computation manually with and without the magical-darkness tiles and
+	// observe the difference.
+	sources := buildVisionSources(context.Background(), q, q.combatants[encID])
+	require.NotEmpty(t, sources)
+	withDark := renderer.ComputeVisibilityWithZones(sources, nil, nil, tiles, 10, 10)
+	withoutDark := renderer.ComputeVisibilityWithZones(sources, nil, nil, nil, 10, 10)
+
+	// Origin of the Darkness zone is (3,3). Without magical-darkness it's
+	// Visible (within 12-tile darkvision of A/1 = (0,0)); with it, the
+	// darkvision-only PC must NOT see it Visible.
+	assert.Equal(t, renderer.Visible, withoutDark.StateAt(3, 3),
+		"without magical-darkness, darkvision must light up the tile")
+	assert.NotEqual(t, renderer.Visible, withDark.StateAt(3, 3),
+		"with magical-darkness, darkvision-only PC must NOT see Visible into the zone")
+}
+
+// mapJSON10x10 builds a minimal 10x10 Tiled JSON used by the SR-008 integration
+// tests so they don't have to hand-roll the layer structure each time.
+func mapJSON10x10() []byte {
+	return mapJSONNxN(10)
+}
+
+// mapJSON30x30 returns a 30x30 empty terrain Tiled JSON. Used by the SR-008
+// PC+torch visibility test which needs a map larger than the PC's combined
+// base-sight + darkvision radius.
+func mapJSON30x30() []byte {
+	return mapJSONNxN(30)
+}
+
+func mapJSONNxN(n int) []byte {
+	count := n * n
+	data := strings.Repeat("0,", count-1) + "0"
+	return []byte(fmt.Sprintf(`{"width":%d,"height":%d,"tilewidth":48,"tileheight":48,"layers":[{"name":"terrain","type":"tilelayer","data":[%s]}],"tilesets":[]}`, n, n, data))
 }
 
 // --- high-13: dashboard API handlers (loot, item picker, shops, party rest) ---

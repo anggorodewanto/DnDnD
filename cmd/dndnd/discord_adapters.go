@@ -376,6 +376,11 @@ type mapRegeneratorQueries interface {
 	// E-67-zone-render-on-map: zones are loaded so the renderer can paint
 	// their overlays alongside terrain + combatants.
 	ListEncounterZonesByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.EncounterZone, error)
+	// SR-008: PC vision sources are derived from Character.Race → Race.DarkvisionFt.
+	// NPC vision sources come from Creature.Senses JSONB.
+	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	GetRace(ctx context.Context, id string) (refdata.Race, error)
+	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
 }
 
 // mapRegeneratorAdapter implements discord.MapRegenerator by parsing the
@@ -409,12 +414,29 @@ func newMapRegeneratorAdapter(q mapRegeneratorQueries) *mapRegeneratorAdapter {
 }
 
 // RegenerateMap loads the encounter, its map, and its combatants, then
-// renders a fresh PNG. Combatant positions are translated from the
-// "letter+row" string form to the renderer's 0-indexed col/row. After
-// rendering, currently-visible tiles are unioned into the per-encounter
-// explored set so the next render shows them as dim Explored when the
-// vision source is no longer covering them (med-27 / Phase 68).
+// renders a fresh PNG for the shared #combat-map channel (player view).
+// Combatant positions are translated from the "letter+row" string form to
+// the renderer's 0-indexed col/row. After rendering, currently-visible tiles
+// are unioned into the per-encounter explored set so the next render shows
+// them as dim Explored when the vision source is no longer covering them
+// (med-27 / Phase 68).
 func (a *mapRegeneratorAdapter) RegenerateMap(ctx context.Context, encounterID uuid.UUID) ([]byte, error) {
+	return a.renderInternal(ctx, encounterID, false)
+}
+
+// RegenerateMapForDM renders the same encounter with DMSeesAll=true so the
+// dashboard's Combat Manager view (and any "DM only" PNG poster) bypasses
+// the player-side fog and shows every combatant / tile at full brightness.
+// SR-008: completes the "DM view vs player view" branching the spec calls
+// for in §"Dynamic Fog of War".
+func (a *mapRegeneratorAdapter) RegenerateMapForDM(ctx context.Context, encounterID uuid.UUID) ([]byte, error) {
+	return a.renderInternal(ctx, encounterID, true)
+}
+
+// renderInternal is the shared body used by RegenerateMap (player view) and
+// RegenerateMapForDM (DM view). The `dmView` flag flips DMSeesAll on the
+// produced MapData so the renderer's downstream draw helpers bypass fog.
+func (a *mapRegeneratorAdapter) renderInternal(ctx context.Context, encounterID uuid.UUID, dmView bool) ([]byte, error) {
 	enc, err := a.queries.GetEncounter(ctx, encounterID)
 	if err != nil {
 		return nil, fmt.Errorf("get encounter %s: %w", encounterID, err)
@@ -444,14 +466,30 @@ func (a *mapRegeneratorAdapter) RegenerateMap(ctx context.Context, encounterID u
 	zones, zerr := a.queries.ListEncounterZonesByEncounterID(ctx, encounterID)
 	if zerr == nil && len(zones) > 0 {
 		md.ZoneOverlays = zonesToRendererOverlays(zones)
+		md.MagicalDarknessTiles = buildMagicalDarknessTiles(zones)
 	}
+
+	// SR-008: populate FoW inputs from the live combatants + zones so the
+	// shadowcasting algorithm actually fires. Without this the
+	// `len(md.VisionSources) > 0` guard below stays false and the map is
+	// rendered with no fog at all.
+	//
+	// LightSources intentionally stays empty: there is no production data
+	// source for "lit torches" or persisted Light/Daylight/Continual Flame
+	// spell positions today. Wiring those is tracked separately under
+	// SR-008 follow-up (needs a new `light_emitters` service that knows
+	// which inventory torches are currently lit and which Light cantrips
+	// are anchored to which combatant).
+	md.VisionSources = buildVisionSources(ctx, a.queries, combatants)
+	md.DMSeesAll = dmView
 
 	// med-27: pre-compute the FoW (so we can layer the explored history
 	// on top before the renderer paints) only when there are vision or
 	// light sources to compute against. Otherwise the renderer's
 	// auto-compute path stays in charge and explored history is a no-op.
 	if len(md.VisionSources) > 0 || len(md.LightSources) > 0 {
-		md.FogOfWar = renderer.ComputeVisibilityWithLights(md.VisionSources, md.LightSources, md.Walls, md.Width, md.Height)
+		md.FogOfWar = renderer.ComputeVisibilityWithZones(md.VisionSources, md.LightSources, md.Walls, md.MagicalDarknessTiles, md.Width, md.Height)
+		md.FogOfWar.DMSeesAll = dmView
 		a.applyExploredHistory(encounterID, md.FogOfWar)
 	}
 
@@ -567,6 +605,134 @@ func parseHexRGBA(hex string, alpha uint8) (color.RGBA, bool) {
 		B: uint8(n & 0xFF),
 		A: alpha,
 	}, true
+}
+
+// tilesFromFeet converts a feet measurement into the renderer's tile units
+// (5ft per tile, mirroring the convention used by `devilsSightTileRange` in
+// internal/gamemap/renderer/fog_types.go and the AoE pipeline). Negative
+// inputs clamp to 0 so a missing/zero darkvision_ft never blows up the
+// shadowcaster.
+func tilesFromFeet(ft int) int {
+	if ft <= 0 {
+		return 0
+	}
+	return ft / 5
+}
+
+// defaultBaseSightTiles is the fallback "bright outdoor / lit dungeon"
+// sight range used when no per-tile static lighting is available. Picked at
+// 60ft (12 tiles) so a sighted PC with no darkvision still has a meaningful
+// vision radius on a typical map. Once SR-029 wires the static lighting
+// brush GIDs through ParseTiledJSON, this default narrows to match the
+// per-tile light level.
+const defaultBaseSightTiles = 12
+
+// senses captures the subset of Creature.Senses JSONB that the renderer's
+// VisionSource cares about. Field names match the spec's documented shape
+// ({darkvision, blindsight, truesight, ...}). Missing keys default to 0.
+type senses struct {
+	Darkvision int `json:"darkvision"`
+	Blindsight int `json:"blindsight"`
+	Truesight  int `json:"truesight"`
+}
+
+// buildVisionSourcesQueries is the narrow read-only contract buildVisionSources
+// needs from a mapRegeneratorQueries. Splitting it out makes the helper
+// straight to unit-test from the test fake without invoking the full
+// adapter.
+type buildVisionSourcesQueries interface {
+	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	GetRace(ctx context.Context, id string) (refdata.Race, error)
+	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
+}
+
+// buildVisionSources projects each living combatant into a renderer.VisionSource:
+//   - PCs: combatant.character_id → Character.Race → Race.DarkvisionFt
+//   - NPCs: combatant.creature_ref_id → Creature.Senses (darkvision / blindsight /
+//     truesight)
+//
+// Combatants with unparseable coordinates or empty linkage are skipped so the
+// shadowcaster doesn't fire from (-1,-1). Lookup errors are non-fatal — the
+// combatant is dropped from the source list and the rest of the encounter
+// still gets fog computed. (SR-008)
+func buildVisionSources(ctx context.Context, q buildVisionSourcesQueries, in []refdata.Combatant) []renderer.VisionSource {
+	out := make([]renderer.VisionSource, 0, len(in))
+	for _, c := range in {
+		if !c.IsAlive {
+			continue
+		}
+		col, row, err := renderer.ParseCoordinate(fmt.Sprintf("%s%d", c.PositionCol, c.PositionRow))
+		if err != nil {
+			continue
+		}
+		src := renderer.VisionSource{
+			Col:        col,
+			Row:        row,
+			RangeTiles: defaultBaseSightTiles,
+		}
+		if c.IsNpc {
+			if !c.CreatureRefID.Valid || q == nil {
+				out = append(out, src)
+				continue
+			}
+			creature, err := q.GetCreature(ctx, c.CreatureRefID.String)
+			if err == nil && creature.Senses.Valid {
+				var s senses
+				if json.Unmarshal(creature.Senses.RawMessage, &s) == nil {
+					src.DarkvisionTiles = tilesFromFeet(s.Darkvision)
+					src.BlindsightTiles = tilesFromFeet(s.Blindsight)
+					src.TruesightTiles = tilesFromFeet(s.Truesight)
+				}
+			}
+			out = append(out, src)
+			continue
+		}
+		// PC branch.
+		if !c.CharacterID.Valid || q == nil {
+			out = append(out, src)
+			continue
+		}
+		ch, err := q.GetCharacter(ctx, c.CharacterID.UUID)
+		if err != nil {
+			out = append(out, src)
+			continue
+		}
+		if ch.Race != "" {
+			race, err := q.GetRace(ctx, ch.Race)
+			if err == nil {
+				src.DarkvisionTiles = tilesFromFeet(int(race.DarkvisionFt))
+			}
+		}
+		out = append(out, src)
+	}
+	return out
+}
+
+// buildMagicalDarknessTiles projects every magical-darkness encounter zone
+// (zone_type == "magical_darkness", e.g. the Darkness spell) into its
+// affected-tile set. The renderer's ComputeVisibilityWithZones consumes this
+// to demote ordinary vision + darkvision inside those tiles; Devil's Sight,
+// Blindsight and Truesight still penetrate. (SR-008)
+//
+// Returns an empty slice when no magical-darkness zones are active — the
+// renderer treats nil and an empty slice the same way. SR-014 is the upstream
+// dependency that ensures zone overlays are populated by combat handlers;
+// until that's fixed this slice may be empty in production even when the
+// spell *is* active.
+func buildMagicalDarknessTiles(zones []refdata.EncounterZone) []renderer.GridPos {
+	if len(zones) == 0 {
+		return nil
+	}
+	var tiles []renderer.GridPos
+	for _, z := range zones {
+		if z.ZoneType != "magical_darkness" {
+			continue
+		}
+		for _, t := range combat.ZoneAffectedTilesFromShape(z.Shape, z.OriginCol, z.OriginRow, z.Dimensions) {
+			tiles = append(tiles, renderer.GridPos{Col: t.Col, Row: t.Row})
+		}
+	}
+	return tiles
 }
 
 // combatantsToRendererForm projects refdata.Combatant rows into the slimmer
