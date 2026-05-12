@@ -2,24 +2,40 @@ package dashboard
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"html/template"
 	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/auth"
 	"github.com/ab/dndnd/internal/dmqueue"
 )
 
+// CampaignQueueLister returns pending dm-queue items scoped to a single
+// campaign. The dashboard list view (F-12) uses this to aggregate every
+// pending item — whisper, freeform, rest, etc. — into one screen instead
+// of forcing the DM to browse Discord #dm-queue. Implementations typically
+// wrap dmqueue.PgStore.ListPendingForCampaign; nil lister disables the
+// endpoint at the wiring layer (no panel rendered).
+type CampaignQueueLister interface {
+	ListPendingForCampaign(ctx context.Context, campaignID uuid.UUID) ([]dmqueue.Item, error)
+}
+
 // DMQueueHandler serves the per-item DM queue resolver page.
 // Phase 106a minimum viable: shows the item and a form to mark it resolved.
-// Future phases will expand this into a dedicated resolver panel.
+// F-12 extends this with a campaign-scoped JSON list endpoint that the
+// Svelte dashboard panel consumes.
 type DMQueueHandler struct {
-	logger   *slog.Logger
-	notifier dmqueue.Notifier
-	tmpl     *template.Template
+	logger         *slog.Logger
+	notifier       dmqueue.Notifier
+	tmpl           *template.Template
+	lister         CampaignQueueLister
+	campaignLookup CampaignLookup
 }
 
 // NewDMQueueHandler constructs a DMQueueHandler.
@@ -32,6 +48,22 @@ func NewDMQueueHandler(logger *slog.Logger, notifier dmqueue.Notifier) *DMQueueH
 		notifier: notifier,
 		tmpl:     template.Must(template.New("dmqueue_item").Parse(dmqueueItemTemplate)),
 	}
+}
+
+// SetCampaignLister wires the campaign-scoped pending-items source used by
+// the F-12 list endpoint. Pair with SetCampaignLookup so the handler can
+// resolve the DM's active campaign per request. Either nil leaves the list
+// endpoint returning an empty array (still 200) so the SPA renders cleanly
+// in passthrough-auth dev mode.
+func (h *DMQueueHandler) SetCampaignLister(lister CampaignQueueLister) {
+	h.lister = lister
+}
+
+// SetCampaignLookup wires the per-request campaign resolver used by the
+// F-12 list endpoint. Reuses the same CampaignLookup interface the
+// dashboard.Handler uses.
+func (h *DMQueueHandler) SetCampaignLookup(lookup CampaignLookup) {
+	h.campaignLookup = lookup
 }
 
 type dmqueueItemView struct {
@@ -76,6 +108,84 @@ func (h *DMQueueHandler) ServeItem(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(buf.Bytes())
+}
+
+// dmqueueListEntry is a JSON-friendly projection of dmqueue.Item used by
+// the F-12 list endpoint. Trimmed down to the fields the dashboard panel
+// needs so the wire shape can evolve without leaking internal struct
+// changes.
+type dmqueueListEntry struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	KindLabel   string `json:"kind_label"`
+	PlayerName  string `json:"player_name"`
+	Summary     string `json:"summary"`
+	Status      string `json:"status"`
+	ResolvePath string `json:"resolve_path"`
+}
+
+// ServeList renders GET /dashboard/queue as a JSON array of pending items
+// for the authenticated DM's active campaign. F-12: aggregates every
+// pending dm-queue item type (whisper, freeform, rest, etc.) so the DM can
+// browse them in one place instead of scrolling Discord #dm-queue.
+//
+// The route is mounted behind dmAuthMw (F-2) so non-DM authenticated users
+// already receive a 403 before this handler runs. We still enforce the
+// session-user check defensively in case the handler is mounted bare in
+// tests.
+func (h *DMQueueHandler) ServeList(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.DiscordUserIDFromContext(r.Context())
+	if !ok || userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	entries := h.listForUser(r.Context(), userID)
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(entries); err != nil {
+		h.logger.Error("dmqueue list encode", "error", err)
+	}
+}
+
+// listForUser resolves the DM's active campaign and returns its pending
+// queue items as JSON-friendly entries. Best-effort: any missing lookup,
+// missing lister, unknown campaign, or backing-store error degrades to an
+// empty slice so the SPA renders cleanly.
+func (h *DMQueueHandler) listForUser(ctx context.Context, dmUserID string) []dmqueueListEntry {
+	if h.lister == nil || h.campaignLookup == nil {
+		return []dmqueueListEntry{}
+	}
+	idStr, _, err := h.campaignLookup.LookupActiveCampaign(ctx, dmUserID)
+	if err != nil {
+		h.logger.Warn("dmqueue list: campaign lookup failed", "error", err)
+		return []dmqueueListEntry{}
+	}
+	if idStr == "" {
+		return []dmqueueListEntry{}
+	}
+	campaignID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.logger.Warn("dmqueue list: invalid campaign id", "id", idStr, "error", err)
+		return []dmqueueListEntry{}
+	}
+	items, err := h.lister.ListPendingForCampaign(ctx, campaignID)
+	if err != nil {
+		h.logger.Error("dmqueue list: lister failed", "error", err)
+		return []dmqueueListEntry{}
+	}
+	out := make([]dmqueueListEntry, 0, len(items))
+	for _, it := range items {
+		out = append(out, dmqueueListEntry{
+			ID:          it.ID,
+			Kind:        string(it.Event.Kind),
+			KindLabel:   kindLabelFor(it.Event.Kind),
+			PlayerName:  it.Event.PlayerName,
+			Summary:     it.Event.Summary,
+			Status:      string(it.Status),
+			ResolvePath: it.Event.ResolvePath,
+		})
+	}
+	return out
 }
 
 // HandleResolve processes POST /dashboard/queue/{itemID}/resolve with an "outcome" form field.

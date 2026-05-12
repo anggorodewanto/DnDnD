@@ -15,6 +15,7 @@
   import StatBlockLibrary from './StatBlockLibrary.svelte';
   import MessagePlayerPanel from './MessagePlayerPanel.svelte';
   import Open5eSourcesPanel from './Open5eSourcesPanel.svelte';
+  import DMQueuePanel from './DMQueuePanel.svelte';
   import { isMobileViewport, isDesktopOnly } from './lib/layout.js';
 
   let innerWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1920);
@@ -62,6 +63,7 @@
     if (hash === '#stat-block-library') return 'stat-block-library';
     if (hash === '#message-player') return 'message-player';
     if (hash === '#open5e-sources') return 'open5e-sources';
+    if (hash === '#dm-queue') return 'dm-queue';
     return 'list';
   }
 
@@ -185,6 +187,10 @@
   function onShowOpen5eSources() {
     currentView = 'open5e-sources';
   }
+
+  function onShowDMQueue() {
+    currentView = 'dm-queue';
+  }
 </script>
 
 {#if isMobileViewport(innerWidth)}
@@ -213,6 +219,8 @@
       <h1>Message Player</h1>
     {:else if currentView === 'open5e-sources'}
       <h1>Open5e Sources</h1>
+    {:else if currentView === 'dm-queue'}
+      <h1>DM Queue</h1>
     {:else}
       <h1>Encounter Builder</h1>
     {/if}
@@ -229,6 +237,7 @@
       <button class:active={currentView === 'stat-block-library'} onclick={onShowStatBlockLibrary}>Stat Block Library</button>
       <button class:active={currentView === 'message-player'} onclick={onShowMessagePlayer}>Message Player</button>
       <button class:active={currentView === 'open5e-sources'} onclick={onShowOpen5eSources}>Open5e Sources</button>
+      <button class:active={currentView === 'dm-queue'} onclick={onShowDMQueue}>DM Queue</button>
     </nav>
 
     {#if currentView === 'editor'}
@@ -275,6 +284,8 @@
     <MessagePlayerPanel {campaignId} />
   {:else if currentView === 'open5e-sources'}
     <Open5eSourcesPanel {campaignId} />
+  {:else if currentView === 'dm-queue'}
+    <DMQueuePanel />
   {/if}
 </main>
 {/if}

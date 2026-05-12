@@ -764,7 +764,15 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			return authMw(dmRequire(next))
 		}
 
-		dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, dmAuthMw)
+		dmQueueDashHandler := dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, dmAuthMw)
+		// F-12: aggregate pending queue items into a single dashboard list.
+		// Reuses dmQueueStore (PgStore) for campaign-scoped pending items
+		// and dashboardCampaignLookup so the active campaign is resolved
+		// per request from the authenticated DM's discord user id.
+		if dmQueueStore != nil {
+			dmQueueDashHandler.SetCampaignLister(dmQueueStore)
+			dmQueueDashHandler.SetCampaignLookup(dashboardCampaignLookup{queries: queries})
+		}
 
 		// Phase 112: DM dashboard errors panel. Mount the /dashboard/errors
 		// page behind dmAuthMw (F-2) and (when a top-level Handler is

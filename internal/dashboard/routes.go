@@ -32,15 +32,20 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(http.Handler) 
 
 // RegisterDMQueueRoutes mounts the dm-queue resolver pages.
 // Phase 106a: minimal viable — list pending items, view one, mark it resolved.
-func RegisterDMQueueRoutes(r chi.Router, logger *slog.Logger, notifier dmqueue.Notifier, authMiddleware func(http.Handler) http.Handler) {
+// F-12: also mounts GET /dashboard/queue/ (list aggregator).
+// Returns the constructed handler so callers can wire optional dependencies
+// (CampaignLister + CampaignLookup) for the list endpoint.
+func RegisterDMQueueRoutes(r chi.Router, logger *slog.Logger, notifier dmqueue.Notifier, authMiddleware func(http.Handler) http.Handler) *DMQueueHandler {
 	h := NewDMQueueHandler(logger, notifier)
 	r.Route("/dashboard/queue", func(r chi.Router) {
 		r.Use(authMiddleware)
+		r.Get("/", h.ServeList)
 		r.Get("/{itemID}", h.ServeItem)
 		r.Post("/{itemID}/resolve", h.HandleResolve)
 		r.Post("/{itemID}/reply", h.HandleWhisperReply)
 		r.Post("/{itemID}/narrate", h.HandleSkillCheckNarration)
 	})
+	return h
 }
 
 // ExplorationHandler is the narrow surface of the exploration dashboard
