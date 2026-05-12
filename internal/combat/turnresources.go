@@ -21,12 +21,12 @@ type CharacterClass struct {
 type ResourceType string
 
 const (
-	ResourceAction      ResourceType = "action"
-	ResourceBonusAction ResourceType = "bonus action"
-	ResourceReaction    ResourceType = "reaction"
-	ResourceMovement    ResourceType = "movement"
+	ResourceAction       ResourceType = "action"
+	ResourceBonusAction  ResourceType = "bonus action"
+	ResourceReaction     ResourceType = "reaction"
+	ResourceMovement     ResourceType = "movement"
 	ResourceFreeInteract ResourceType = "free object interaction"
-	ResourceAttack      ResourceType = "attack"
+	ResourceAttack       ResourceType = "attack"
 )
 
 // ErrResourceSpent is the base error for when a resource has already been used.
@@ -259,7 +259,10 @@ func turnStartSpeedBonus(char refdata.Character) int {
 	if char.Features.Valid && len(char.Features.RawMessage) > 0 {
 		_ = json.Unmarshal(char.Features.RawMessage, &feats)
 	}
-	defs := BuildFeatureDefinitions(classes, feats)
+	// SR-006 / Phase 88a / F-14: include equipped + attuned magic-item
+	// FeatureDefinitions so passive `modify_speed` effects (Boots of Speed)
+	// reach the turn-start speed accumulator.
+	defs := BuildFeatureDefinitions(classes, feats, collectMagicItemFeatures(char))
 	ctx := EffectContext{
 		WearingArmor: char.EquippedArmor.Valid && char.EquippedArmor.String != "",
 	}

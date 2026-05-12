@@ -13,6 +13,7 @@ import (
 	"github.com/ab/dndnd/internal/check"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/magicitem"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/save"
 )
@@ -163,7 +164,7 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 	// feature effects rather than failing the whole roll.
 	input.FeatureEffects = buildSaveFeatureEffects(char)
 	input.EffectCtx = combat.EffectContext{
-		AbilityUsed: strings.ToLower(ability),
+		AbilityUsed:  strings.ToLower(ability),
 		WearingArmor: char.EquippedArmor.Valid && char.EquippedArmor.String != "",
 	}
 
@@ -263,8 +264,8 @@ type saveCharacterData struct {
 }
 
 // buildSaveFeatureEffects collects FES feature definitions from the
-// character's classes + features columns (the same pair that drives attack
-// feature effects). Unmarshal errors degrade to a nil slice — better to
+// character's classes + features columns AND equipped + attuned magic items
+// (SR-006 / Phase 88a). Unmarshal errors degrade to a nil slice — better to
 // drop a feature bonus than to fail the whole save roll. (med-33)
 func buildSaveFeatureEffects(char refdata.Character) []combat.FeatureDefinition {
 	var classes []combat.CharacterClass
@@ -275,10 +276,30 @@ func buildSaveFeatureEffects(char refdata.Character) []combat.FeatureDefinition 
 	if char.Features.Valid && len(char.Features.RawMessage) > 0 {
 		_ = json.Unmarshal(char.Features.RawMessage, &feats)
 	}
-	if len(classes) == 0 && len(feats) == 0 {
+	itemDefs := magicItemFeatureDefs(char)
+	if len(classes) == 0 && len(feats) == 0 && len(itemDefs) == 0 {
 		return nil
 	}
-	return combat.BuildFeatureDefinitions(classes, feats)
+	return combat.BuildFeatureDefinitions(classes, feats, itemDefs)
+}
+
+// magicItemFeatureDefs parses the character's inventory + attunement columns
+// and returns the FeatureDefinitions contributed by equipped (and attuned,
+// when required) magic items. Inventory / attunement JSON errors degrade to
+// a nil slice so a corrupted row never fails the whole /save.
+func magicItemFeatureDefs(char refdata.Character) []combat.FeatureDefinition {
+	items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
+	if err != nil {
+		return nil
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	attunement, err := character.ParseAttunementSlots(char.AttunementSlots.RawMessage, char.AttunementSlots.Valid)
+	if err != nil {
+		return nil
+	}
+	return magicitem.CollectItemFeatures(items, attunement)
 }
 
 // parseSaveCharacterData extracts ability scores and save proficiencies from a character.

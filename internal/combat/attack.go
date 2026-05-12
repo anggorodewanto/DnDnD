@@ -315,29 +315,29 @@ type AttackInput struct {
 	AttackerSize        string
 	DMAdvantage         bool
 	DMDisadvantage      bool
-	OverrideDmgMod      *int // If set, overrides the normal ability modifier for damage
-	TwoHanded           bool // Use versatile damage die (requires free off-hand)
-	OffHandOccupied     bool // True if off-hand is occupied (blocks two-handed)
-	Thrown               bool // Melee weapon thrown at range
-	IsImprovised        bool // Improvised weapon (no proficiency unless Tavern Brawler)
-	ImprovisedThrown    bool // Improvised weapon thrown (range 20/60)
-	HasCrossbowExpert   bool // Character has Crossbow Expert feat
-	HasTavernBrawler    bool // Character has Tavern Brawler feat
-	GWM                 bool // Great Weapon Master: -5 hit, +10 damage (heavy melee)
-	Sharpshooter        bool // Sharpshooter: -5 hit, +10 damage (ranged)
-	Reckless            bool // Reckless Attack: advantage on melee STR attacks (Barbarian)
-	MonkLevel           int  // Monk level (0 = not a monk)
-	AttackerHidden      bool // Attacker is hidden (not visible)
-	TargetHidden        bool // Target is hidden (not visible)
-	AttackerObscurement ObscurementLevel // Effective obscurement for attacker
-	TargetObscurement   ObscurementLevel // Effective obscurement for target
+	OverrideDmgMod      *int                // If set, overrides the normal ability modifier for damage
+	TwoHanded           bool                // Use versatile damage die (requires free off-hand)
+	OffHandOccupied     bool                // True if off-hand is occupied (blocks two-handed)
+	Thrown              bool                // Melee weapon thrown at range
+	IsImprovised        bool                // Improvised weapon (no proficiency unless Tavern Brawler)
+	ImprovisedThrown    bool                // Improvised weapon thrown (range 20/60)
+	HasCrossbowExpert   bool                // Character has Crossbow Expert feat
+	HasTavernBrawler    bool                // Character has Tavern Brawler feat
+	GWM                 bool                // Great Weapon Master: -5 hit, +10 damage (heavy melee)
+	Sharpshooter        bool                // Sharpshooter: -5 hit, +10 damage (ranged)
+	Reckless            bool                // Reckless Attack: advantage on melee STR attacks (Barbarian)
+	MonkLevel           int                 // Monk level (0 = not a monk)
+	AttackerHidden      bool                // Attacker is hidden (not visible)
+	TargetHidden        bool                // Target is hidden (not visible)
+	AttackerObscurement ObscurementLevel    // Effective obscurement for attacker
+	TargetObscurement   ObscurementLevel    // Effective obscurement for target
 	Features            []FeatureDefinition // Feature Effect System definitions (magic items, etc.)
-	IsRaging            bool            // Attacker is currently raging (Phase 46)
-	WearingArmor        bool            // Attacker is wearing armor (Defense fighting style)
-	OneHandedMeleeOnly  bool            // Wielding a one-handed melee weapon with no off-hand weapon (Dueling)
-	AllyWithinFt        int             // Distance to nearest ally relative to target (Pack Tactics, Sneak Attack)
-	AbilityUsed         string          // "str" or "dex" — which ability mod was chosen for this attack
-	UsedThisTurn        map[string]bool // Per-turn feature usage tracking (Sneak Attack OncePerTurn)
+	IsRaging            bool                // Attacker is currently raging (Phase 46)
+	WearingArmor        bool                // Attacker is wearing armor (Defense fighting style)
+	OneHandedMeleeOnly  bool                // Wielding a one-handed melee weapon with no off-hand weapon (Dueling)
+	AllyWithinFt        int                 // Distance to nearest ally relative to target (Pack Tactics, Sneak Attack)
+	AbilityUsed         string              // "str" or "dex" — which ability mod was chosen for this attack
+	UsedThisTurn        map[string]bool     // Per-turn feature usage tracking (Sneak Attack OncePerTurn)
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -374,11 +374,11 @@ type AttackResult struct {
 	// the corresponding ReactionPromptStore posts (PromptStunningStrike /
 	// PromptDivineSmite / PromptBardicInspiration). Pure data — the service
 	// does not itself post Discord UI.
-	PromptStunningStrikeEligible    bool // Monk melee hit with ki remaining
-	PromptStunningStrikeKiAvailable int  // current ki points the monk can spend
-	PromptDivineSmiteEligible       bool // Paladin melee hit with at least one slot available
-	PromptDivineSmiteSlots          []int // sorted ascending list of available slot levels
-	PromptBardicInspirationEligible bool // Attacker holds an un-expired Bardic Inspiration die
+	PromptStunningStrikeEligible    bool   // Monk melee hit with ki remaining
+	PromptStunningStrikeKiAvailable int    // current ki points the monk can spend
+	PromptDivineSmiteEligible       bool   // Paladin melee hit with at least one slot available
+	PromptDivineSmiteSlots          []int  // sorted ascending list of available slot levels
+	PromptBardicInspirationEligible bool   // Attacker holds an un-expired Bardic Inspiration die
 	PromptBardicInspirationDie      string // die expression (d6/d8/d10/d12)
 }
 
@@ -409,15 +409,15 @@ type AttackCommand struct {
 	AttackerSize        string
 	DMAdvantage         bool
 	DMDisadvantage      bool
-	TwoHanded           bool // Use versatile two-handed grip
-	IsImprovised        bool // Improvised weapon attack
-	ImprovisedThrown    bool // Improvised weapon thrown
-	Thrown               bool // Throw a melee weapon with "thrown" property
-	GWM                  bool // Great Weapon Master flag
-	Sharpshooter         bool // Sharpshooter flag
-	Reckless             bool // Reckless Attack flag
-	AttackerVision       VisionCapabilities // Vision capabilities of the attacker
-	TargetVision         VisionCapabilities // Vision capabilities of the target
+	TwoHanded           bool               // Use versatile two-handed grip
+	IsImprovised        bool               // Improvised weapon attack
+	ImprovisedThrown    bool               // Improvised weapon thrown
+	Thrown              bool               // Throw a melee weapon with "thrown" property
+	GWM                 bool               // Great Weapon Master flag
+	Sharpshooter        bool               // Sharpshooter flag
+	Reckless            bool               // Reckless Attack flag
+	AttackerVision      VisionCapabilities // Vision capabilities of the attacker
+	TargetVision        VisionCapabilities // Vision capabilities of the target
 	// Walls are encounter-map wall segments used to compute attacker→target
 	// cover (Phase 33 / C-33). A nil/empty slice degrades to "no wall cover";
 	// creature-granted cover still applies via the encounter's combatant list.
@@ -1581,6 +1581,10 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 	if char.Features.Valid && len(char.Features.RawMessage) > 0 {
 		_ = json.Unmarshal(char.Features.RawMessage, &feats)
 	}
-	input.Features = BuildFeatureDefinitions(classes, feats)
+	// SR-006 / Phase 88a: feed equipped + attuned magic items into the FES
+	// pipeline so +1 weapons, Cloak of Protection, etc. actually modify the
+	// attack roll / damage. collectMagicItemFeatures degrades to nil on bad
+	// inventory JSON rather than failing the whole attack.
+	input.Features = BuildFeatureDefinitions(classes, feats, collectMagicItemFeatures(*char))
 	return nil
 }

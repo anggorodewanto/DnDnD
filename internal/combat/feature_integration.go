@@ -8,6 +8,7 @@ import (
 
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -386,4 +387,136 @@ func BuildAttackEffectContext(input AttackEffectInput) EffectContext {
 func SneakAttackDice(rogueLevel int) string {
 	count := (rogueLevel + 1) / 2
 	return fmt.Sprintf("%dd6", count)
+}
+
+// collectMagicItemFeatures builds the FeatureDefinition list contributed by a
+// character's equipped (and attuned, when required) magic items. It mirrors
+// magicitem.CollectItemFeatures but lives inside the combat package so the
+// hot attack/turn paths don't have to import magicitem (which already imports
+// combat — the reverse would cycle).
+//
+// Inventory / attunement JSON parse errors degrade silently to nil, matching
+// the buildSaveFeatureEffects / populateAttackFES "drop the bonus rather than
+// fail the roll" convention. Per-item passive-effect parse errors fall back to
+// the MagicBonus path so a single bad magic_properties row never wipes the
+// rest of the equipped magic loadout.
+func collectMagicItemFeatures(char refdata.Character) []FeatureDefinition {
+	items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
+	if err != nil {
+		return nil
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	attunement, err := character.ParseAttunementSlots(char.AttunementSlots.RawMessage, char.AttunementSlots.Valid)
+	if err != nil {
+		return nil
+	}
+	attunedSet := make(map[string]bool, len(attunement))
+	for _, a := range attunement {
+		attunedSet[a.ItemID] = true
+	}
+
+	var defs []FeatureDefinition
+	for _, item := range items {
+		if !item.IsMagic || !item.Equipped {
+			continue
+		}
+		if item.RequiresAttunement && !attunedSet[item.ItemID] {
+			continue
+		}
+		if item.MagicProperties != "" {
+			if effects := parseMagicItemPassiveEffects(item.MagicProperties); len(effects) > 0 {
+				defs = append(defs, FeatureDefinition{
+					Name:    item.Name,
+					Source:  "magic_item",
+					Effects: effects,
+				})
+				continue
+			}
+		}
+		if effects := magicBonusEffects(item); len(effects) > 0 {
+			defs = append(defs, FeatureDefinition{
+				Name:    item.Name,
+				Source:  "magic_item",
+				Effects: effects,
+			})
+		}
+	}
+	return defs
+}
+
+// magicBonusEffects converts an equipped weapon/armor's MagicBonus into combat
+// Effects. Twin of magicitem.ItemFeatures, kept in-package to avoid the
+// combat→magicitem cycle.
+func magicBonusEffects(item character.InventoryItem) []Effect {
+	if item.MagicBonus == 0 {
+		return nil
+	}
+	switch item.Type {
+	case "weapon":
+		return []Effect{
+			{Type: EffectModifyAttackRoll, Trigger: TriggerOnAttackRoll, Modifier: item.MagicBonus},
+			{Type: EffectModifyDamageRoll, Trigger: TriggerOnDamageRoll, Modifier: item.MagicBonus},
+		}
+	case "armor":
+		return []Effect{
+			{Type: EffectModifyAC, Trigger: TriggerOnAttackRoll, Modifier: item.MagicBonus},
+		}
+	}
+	return nil
+}
+
+// magicItemPassiveEntry mirrors magicitem.passiveEffect — kept private and
+// minimal to avoid importing magicitem (which would cycle).
+type magicItemPassiveEntry struct {
+	Type       string `json:"type"`
+	Modifier   int    `json:"modifier,omitempty"`
+	DamageType string `json:"damage_type,omitempty"`
+	Dice       string `json:"dice,omitempty"`
+}
+
+// parseMagicItemPassiveEffects converts a magic_properties JSON array into
+// combat.Effect values. Returns nil on parse error so the caller can fall back
+// to the MagicBonus path. Twin of magicitem.ParsePassiveEffects +
+// convertPassiveEffect — must stay in lockstep with the magicitem package.
+func parseMagicItemPassiveEffects(raw string) []Effect {
+	if raw == "" {
+		return nil
+	}
+	var entries []magicItemPassiveEntry
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		return nil
+	}
+	var effects []Effect
+	for _, e := range entries {
+		eff, ok := convertMagicItemPassiveEntry(e)
+		if !ok {
+			continue
+		}
+		effects = append(effects, eff)
+	}
+	return effects
+}
+
+// convertMagicItemPassiveEntry maps a single passive-effect entry to a
+// combat.Effect. Mirror of magicitem.convertPassiveEffect.
+func convertMagicItemPassiveEntry(pe magicItemPassiveEntry) (Effect, bool) {
+	switch pe.Type {
+	case "modify_attack":
+		return Effect{Type: EffectModifyAttackRoll, Trigger: TriggerOnAttackRoll, Modifier: pe.Modifier}, true
+	case "modify_damage":
+		return Effect{Type: EffectModifyDamageRoll, Trigger: TriggerOnDamageRoll, Modifier: pe.Modifier}, true
+	case "modify_ac":
+		return Effect{Type: EffectModifyAC, Trigger: TriggerOnAttackRoll, Modifier: pe.Modifier}, true
+	case "modify_saving_throw":
+		return Effect{Type: EffectModifySave, Trigger: TriggerOnSave, Modifier: pe.Modifier}, true
+	case "resistance":
+		return Effect{Type: EffectGrantResistance, Trigger: TriggerOnTakeDamage, DamageTypes: []string{pe.DamageType}}, true
+	case "bonus_damage":
+		return Effect{Type: EffectExtraDamageDice, Trigger: TriggerOnDamageRoll, Dice: pe.Dice, DamageTypes: []string{pe.DamageType}}, true
+	case "modify_speed":
+		return Effect{Type: EffectModifySpeed, Trigger: TriggerOnTurnStart, Modifier: pe.Modifier}, true
+	}
+	return Effect{}, false
 }
