@@ -424,6 +424,14 @@ func attachInventoryAndCharacterHandlers(
 		deps.queries,
 		deps.notifier,
 	)
+	// SR-002: thread the campaign-by-guild lookup so /undo dm-queue posts
+	// carry the campaign UUID that PgStore.Insert requires.
+	handlers.undo.SetCampaignProvider(checkCampProv)
+
+	// SR-002: same wiring for /reaction declarations.
+	if handlers.reaction != nil {
+		handlers.reaction.SetCampaignProvider(checkCampProv)
+	}
 }
 
 // attachCombatActionHandlers builds the /attack, /bonus, /shove,

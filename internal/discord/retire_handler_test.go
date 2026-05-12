@@ -76,6 +76,10 @@ func TestRetireHandler_PostsToDMQueue(t *testing.T) {
 	assert.Equal(t, "Aria", evt.PlayerName)
 	assert.Contains(t, evt.Summary, "going to college")
 	assert.Equal(t, "guild1", evt.GuildID)
+	// SR-002: CampaignID must be populated so PgStore.Insert persists the
+	// dm-queue row instead of failing with "parse campaign id".
+	assert.Equal(t, campID.String(), evt.CampaignID,
+		"SR-002: /retire dm-queue post must carry CampaignID")
 	assert.Contains(t, sess.lastResponse, "DM")
 }
 

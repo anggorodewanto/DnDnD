@@ -88,7 +88,7 @@ func (h *RetireHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	h.notifyDM(ctx, char, reason, interaction.GuildID)
+	h.notifyDM(ctx, char, reason, interaction.GuildID, campaign.ID.String())
 
 	respondEphemeral(h.session, interaction,
 		fmt.Sprintf("🪦 Retire request sent to the DM. They'll review and approve from the dashboard.\n_Reason: %s_", reason))
@@ -109,7 +109,9 @@ func (h *RetireHandler) markPC(ctx context.Context, campaignID uuid.UUID, discor
 }
 
 // notifyDM posts a dm-queue retire-request notification. nil notifier is a no-op.
-func (h *RetireHandler) notifyDM(ctx context.Context, char refdata.Character, reason, guildID string) {
+// SR-002: CampaignID is required by PgStore.Insert; passing it here keeps the
+// row persistable so the dashboard can resolve the request.
+func (h *RetireHandler) notifyDM(ctx context.Context, char refdata.Character, reason, guildID, campaignID string) {
 	if h.notifier == nil {
 		return
 	}
@@ -118,5 +120,6 @@ func (h *RetireHandler) notifyDM(ctx context.Context, char refdata.Character, re
 		PlayerName: char.Name,
 		Summary:    fmt.Sprintf("requests retirement: %s", reason),
 		GuildID:    guildID,
+		CampaignID: campaignID,
 	})
 }

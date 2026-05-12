@@ -149,9 +149,17 @@ func NewNotifierWithStore(sender Sender, resolver ChannelResolver, pathBldr Reso
 	}
 }
 
-// Post formats an Event, sends it to the guild's #dm-queue, and persists
-// an Item record. If no channel is configured for the guild, returns
+// Post formats an Event, persists an Item record, then sends the message to
+// the guild's #dm-queue. If no channel is configured for the guild, returns
 // ("", nil) — treat as a silent no-op.
+//
+// SR-002: ordering is insert-then-send so a failed persistence step never
+// leaves an orphan Discord message that the dashboard cannot resolve.
+// The placeholder message_id stored at Insert time is the itemID itself,
+// which is globally unique and satisfies the (channel_id, message_id)
+// unique constraint; it is overwritten by SetMessageID after a successful
+// Sender.Send. If Send fails after a successful Insert, the row stays
+// pending so the DM can see + cancel the entry from the dashboard.
 func (n *DefaultNotifier) Post(ctx context.Context, e Event) (string, error) {
 	channelID := n.resolver(e.GuildID)
 	if channelID == "" {
@@ -162,13 +170,17 @@ func (n *DefaultNotifier) Post(ctx context.Context, e Event) (string, error) {
 	e.ResolvePath = n.pathBldr(itemID)
 	content := FormatEvent(e)
 
-	msgID, err := n.sender.Send(channelID, content)
-	if err != nil {
+	if _, err := n.store.Insert(ctx, itemID, e, channelID, itemID, content); err != nil {
 		return "", err
 	}
 
-	if _, err := n.store.Insert(ctx, itemID, e, channelID, msgID, content); err != nil {
-		return "", err
+	msgID, err := n.sender.Send(channelID, content)
+	if err != nil {
+		return itemID, err
+	}
+
+	if err := n.store.SetMessageID(ctx, itemID, msgID); err != nil {
+		return itemID, err
 	}
 	return itemID, nil
 }

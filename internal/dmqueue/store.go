@@ -17,8 +17,16 @@ import (
 type Store interface {
 	// Insert persists a new item in pending status. The Event's CampaignID
 	// and GuildID are taken as-is; channelID/messageID are recorded so
-	// later edits know which Discord message to mutate.
+	// later edits know which Discord message to mutate. Callers using the
+	// SR-002 insert-then-send ordering pass an empty messageID (or any
+	// unique placeholder) and follow up with SetMessageID after Sender.Send
+	// returns the real Discord message ID.
 	Insert(ctx context.Context, id string, e Event, channelID, messageID, postedText string) (Item, error)
+	// SetMessageID updates a row's Discord message_id. Used by
+	// Notifier.Post after a successful Sender.Send to record the real
+	// message ID following the insert-then-send ordering (SR-002).
+	// Returns ErrItemNotFound for unknown ids.
+	SetMessageID(ctx context.Context, id, messageID string) error
 	// Get returns a copy of the item by ID.
 	Get(ctx context.Context, id string) (Item, bool, error)
 	// MarkResolved transitions a pending item to resolved with the given outcome.
@@ -60,6 +68,19 @@ func (m *MemoryStore) Insert(_ context.Context, id string, e Event, channelID, m
 	m.items[id] = item
 	m.order = append(m.order, id)
 	return *item, nil
+}
+
+// SetMessageID updates the stored MessageID for the given item. Returns
+// ErrItemNotFound when the id is unknown. (SR-002 insert-then-send.)
+func (m *MemoryStore) SetMessageID(_ context.Context, id, messageID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	item, ok := m.items[id]
+	if !ok {
+		return ErrItemNotFound
+	}
+	item.MessageID = messageID
+	return nil
 }
 
 // Get returns a copy of the item by ID.

@@ -31,6 +31,12 @@ FROM dm_queue_items
 WHERE status = 'pending'
 ORDER BY created_at ASC;
 
+-- name: UpdateDMQueueItemMessageID :one
+UPDATE dm_queue_items
+SET message_id = $2
+WHERE id = $1
+RETURNING *;
+
 -- name: MarkDMQueueItemResolved :one
 UPDATE dm_queue_items
 SET status = 'resolved',

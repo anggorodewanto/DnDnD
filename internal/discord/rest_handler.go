@@ -63,7 +63,9 @@ func (h *RestHandler) SetPublisher(p rest.EncounterPublisher, lookup rest.Encoun
 
 // postRestRequestToDMQueue posts a rest request notification via the Notifier.
 // No-op when no Notifier is wired.
-func (h *RestHandler) postRestRequestToDMQueue(ctx context.Context, guildID, charName, restType string) {
+// SR-002: CampaignID is required by PgStore.Insert; without it the row would
+// fail to persist after the Discord message is sent.
+func (h *RestHandler) postRestRequestToDMQueue(ctx context.Context, guildID, campaignID, charName, restType string) {
 	if h.notifier == nil {
 		return
 	}
@@ -72,6 +74,7 @@ func (h *RestHandler) postRestRequestToDMQueue(ctx context.Context, guildID, cha
 		PlayerName: charName,
 		Summary:    fmt.Sprintf("requests a %s rest", restType),
 		GuildID:    guildID,
+		CampaignID: campaignID,
 	})
 }
 
@@ -145,7 +148,7 @@ func (h *RestHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	// Notify DM of the rest request via #dm-queue (no-op if no notifier wired).
-	h.postRestRequestToDMQueue(ctx, interaction.GuildID, char.Name, restType)
+	h.postRestRequestToDMQueue(ctx, interaction.GuildID, campaign.ID.String(), char.Name, restType)
 
 	// med-34 / Phase 83a: gate behind the auto_approve_rest campaign
 	// setting. When the DM has explicitly turned off auto-approval, we

@@ -110,6 +110,7 @@ func TestUndoHandler_PostsToDMQueue(t *testing.T) {
 	sess := &mockInventorySession{}
 	encID := uuid.New()
 	combatantID := uuid.New()
+	campID := uuid.New()
 
 	notifier := &stubUndoNotifier{}
 	handler := NewUndoHandler(
@@ -136,6 +137,10 @@ func TestUndoHandler_PostsToDMQueue(t *testing.T) {
 		}},
 		notifier,
 	)
+	// SR-002: wire campaign provider so post carries CampaignID.
+	handler.SetCampaignProvider(&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: campID}, nil
+	}})
 
 	handler.Handle(makeUndoInteraction("guild1", "user1", "misclicked"))
 
@@ -146,6 +151,9 @@ func TestUndoHandler_PostsToDMQueue(t *testing.T) {
 	assert.Equal(t, "guild1", evt.GuildID)
 	assert.Contains(t, evt.Summary, "misclicked")
 	assert.Contains(t, evt.Summary, "Aria moves to (3,4)", "summary should include the most recent action")
+	// SR-002: CampaignID populated so PgStore.Insert succeeds.
+	assert.Equal(t, campID.String(), evt.CampaignID,
+		"SR-002: /undo dm-queue post must carry CampaignID")
 	assert.Contains(t, sess.lastResponse, "sent")
 }
 

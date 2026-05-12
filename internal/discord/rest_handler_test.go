@@ -105,13 +105,40 @@ func setupRestHandler(sess *MockSession) *RestHandler {
 
 // TestRestHandler_PostsToDMQueueViaNotifier verifies that /rest posts a
 // rest-request notification to the dmqueue Notifier when one is wired.
+// SR-002: also pins the CampaignID payload so PgStore.Insert can persist
+// the row instead of failing with "parse campaign id" after the Discord
+// message is sent.
 func TestRestHandler_PostsToDMQueueViaNotifier(t *testing.T) {
 	sess := newTestMock()
 	sess.InteractionRespondFunc = func(*discordgo.Interaction, *discordgo.InteractionResponse) error {
 		return nil
 	}
 
-	h := setupRestHandler(sess)
+	campaignID := uuid.New()
+	char := makeRestTestCharacter()
+	char.CampaignID = campaignID
+	roller := dice.NewRoller(func(max int) int { return 6 })
+	updater := &mockRestCharacterUpdater{
+		updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+			return refdata.Character{ID: arg.ID, HpCurrent: arg.HpCurrent}, nil
+		},
+	}
+	h := NewRestHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		updater,
+		&mockCheckRollLogger{},
+		nil,
+	)
 	rec := &recordingNotifier{}
 	h.SetNotifier(rec)
 	h.Handle(makeRestInteraction("short"))
@@ -128,6 +155,10 @@ func TestRestHandler_PostsToDMQueueViaNotifier(t *testing.T) {
 	}
 	if ev.GuildID != "guild1" {
 		t.Errorf("guild = %q want guild1", ev.GuildID)
+	}
+	// SR-002: CampaignID must be set so PgStore.Insert succeeds.
+	if ev.CampaignID != campaignID.String() {
+		t.Errorf("CampaignID = %q want %q (SR-002)", ev.CampaignID, campaignID.String())
 	}
 }
 

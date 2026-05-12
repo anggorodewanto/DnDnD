@@ -323,6 +323,10 @@ func TestUseHandler_PostsViaNotifier(t *testing.T) {
 	require.Equal("Aria", ev.PlayerName)
 	require.Contains(ev.Summary, "Ball Bearings")
 	require.Equal("guild1", ev.GuildID)
+	// SR-002: CampaignID must be populated so PgStore.Insert can persist
+	// the row. Without it the Discord message would orphan.
+	require.Equal(campID.String(), ev.CampaignID,
+		"SR-002: /use dm-queue post must carry CampaignID")
 	// Legacy channel path must NOT be invoked when notifier is set.
 	require.Empty(sess.sentChannelID, "legacy dmQueueFunc path should be bypassed")
 }

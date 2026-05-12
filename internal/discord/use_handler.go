@@ -194,7 +194,7 @@ func (h *UseHandler) Handle(interaction *discordgo.Interaction) {
 				break
 			}
 		}
-		h.postConsumableToDMQueue(ctx, interaction.GuildID, char.Name, usedItemName)
+		h.postConsumableToDMQueue(ctx, interaction.GuildID, campaign.ID.String(), char.Name, usedItemName)
 	}
 
 	respondEphemeral(h.session, interaction, result.Message)
@@ -303,13 +303,15 @@ func (h *UseHandler) spendTurnResource(ctx context.Context, turn refdata.Turn, r
 // postConsumableToDMQueue dispatches a consumable-without-effect notification
 // either through the dmqueue Notifier (preferred) or the legacy dmQueueFunc
 // fallback. Both paths produce content containing the player and item names.
-func (h *UseHandler) postConsumableToDMQueue(ctx context.Context, guildID, charName, itemName string) {
+// SR-002: CampaignID is required by PgStore.Insert.
+func (h *UseHandler) postConsumableToDMQueue(ctx context.Context, guildID, campaignID, charName, itemName string) {
 	if h.notifier != nil {
 		_, _ = h.notifier.Post(ctx, dmqueue.Event{
 			Kind:       dmqueue.KindConsumable,
 			PlayerName: charName,
 			Summary:    fmt.Sprintf("uses %s", itemName),
 			GuildID:    guildID,
+			CampaignID: campaignID,
 		})
 		return
 	}

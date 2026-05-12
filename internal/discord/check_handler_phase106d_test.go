@@ -65,6 +65,14 @@ func makeCheckInteractionWithDC(skill string, dc int, channelID, userID string) 
 // setupCheckHandlerWithRoll builds a CheckHandler whose roller produces a
 // fixed d20 face value (no modifiers). Useful for gating tests.
 func setupCheckHandlerWithRoll(sess *MockSession, d20Face int) (*CheckHandler, *checkRecordingNotifier) {
+	h, rec, _ := setupCheckHandlerWithRollAndCampaign(sess, d20Face)
+	return h, rec
+}
+
+// setupCheckHandlerWithRollAndCampaign mirrors setupCheckHandlerWithRoll but
+// also returns the generated campaign UUID so SR-002 tests can assert that
+// the posted Event.CampaignID matches it.
+func setupCheckHandlerWithRollAndCampaign(sess *MockSession, d20Face int) (*CheckHandler, *checkRecordingNotifier, uuid.UUID) {
 	campaignID := uuid.New()
 	char := makeTestCharacter()
 	char.CampaignID = campaignID
@@ -87,7 +95,27 @@ func setupCheckHandlerWithRoll(sess *MockSession, d20Face int) (*CheckHandler, *
 	)
 	rec := &checkRecordingNotifier{}
 	h.SetNotifier(rec)
-	return h, rec
+	return h, rec, campaignID
+}
+
+// SR-002: /check skill-check narration posts must carry CampaignID so
+// PgStore.Insert can persist the row instead of failing after the Discord
+// message is already sent. Reproduces the bug from check_handler.go:499.
+func TestCheckHandler_Gating_PostCarriesCampaignID(t *testing.T) {
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error {
+		return nil
+	}
+
+	h, rec, campaignID := setupCheckHandlerWithRollAndCampaign(sess, 12)
+	h.Handle(makeCheckInteractionWithDC("perception", 15, "chan-99", "user1"))
+
+	if len(rec.posted) != 1 {
+		t.Fatalf("expected 1 dm-queue post, got %d", len(rec.posted))
+	}
+	if got := rec.posted[0].CampaignID; got != campaignID.String() {
+		t.Errorf("Event.CampaignID = %q want %q (SR-002)", got, campaignID.String())
+	}
 }
 
 // --- Gating: trivial nat 20 with DC met → ungated ---

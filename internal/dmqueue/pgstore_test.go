@@ -22,6 +22,7 @@ type fakePgQueries struct {
 	resolveErr error
 	cancelErr  error
 	listErr    error
+	updateMsgErr error
 }
 
 func (f *fakePgQueries) InsertDMQueueItem(_ context.Context, arg refdata.InsertDMQueueItemParams) (refdata.DmQueueItem, error) {
@@ -76,6 +77,13 @@ func (f *fakePgQueries) MarkDMQueueItemCancelled(_ context.Context, _ refdata.Ma
 		return refdata.DmQueueItem{}, f.cancelErr
 	}
 	return refdata.DmQueueItem{ID: uuid.New(), Status: string(StatusCancelled)}, nil
+}
+
+func (f *fakePgQueries) UpdateDMQueueItemMessageID(_ context.Context, arg refdata.UpdateDMQueueItemMessageIDParams) (refdata.DmQueueItem, error) {
+	if f.updateMsgErr != nil {
+		return refdata.DmQueueItem{}, f.updateMsgErr
+	}
+	return refdata.DmQueueItem{ID: arg.ID, MessageID: arg.MessageID, Status: string(StatusPending)}, nil
 }
 
 func TestPgStore_Insert_BadIDOrCampaign(t *testing.T) {
@@ -196,6 +204,8 @@ func (e *errorStore) Get(_ context.Context, _ string) (Item, bool, error) {
 	}
 	return Item{ID: "id", Status: StatusPending}, true, nil
 }
+
+func (e *errorStore) SetMessageID(_ context.Context, _, _ string) error { return nil }
 
 func (e *errorStore) MarkResolved(_ context.Context, _, _ string) (Item, error) { return Item{}, nil }
 func (e *errorStore) MarkCancelled(_ context.Context, _, _ string) (Item, error) {

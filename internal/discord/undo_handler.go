@@ -38,6 +38,13 @@ type UndoHandler struct {
 	combatantLookup UndoCombatantLookup
 	actionLog       UndoActionLog
 	notifier        dmqueue.Notifier
+	campaignProv    CheckCampaignProvider
+}
+
+// SetCampaignProvider wires the campaign-by-guild lookup so /undo dm-queue
+// posts carry the campaign UUID required by PgStore.Insert (SR-002). Nil-safe.
+func (h *UndoHandler) SetCampaignProvider(p CheckCampaignProvider) {
+	h.campaignProv = p
 }
 
 // NewUndoHandler constructs an UndoHandler.
@@ -77,11 +84,26 @@ func (h *UndoHandler) Handle(interaction *discordgo.Interaction) {
 			PlayerName: playerName,
 			Summary:    summary,
 			GuildID:    interaction.GuildID,
+			CampaignID: h.resolveCampaignID(ctx, interaction.GuildID),
 		})
 	}
 
 	respondEphemeral(h.session, interaction,
 		fmt.Sprintf("⏪ Undo request sent to the DM. They'll resolve it from the dashboard.\n_Reason: %s_", reason))
+}
+
+// resolveCampaignID returns the campaign UUID string for the guild, or ""
+// when the provider is unwired or the lookup fails. Used to thread
+// CampaignID through dm-queue posts (SR-002).
+func (h *UndoHandler) resolveCampaignID(ctx context.Context, guildID string) string {
+	if h.campaignProv == nil {
+		return ""
+	}
+	campaign, err := h.campaignProv.GetCampaignByGuildID(ctx, guildID)
+	if err != nil {
+		return ""
+	}
+	return campaign.ID.String()
 }
 
 // lookupPlayerContext returns the player's display name (defaulting to "Player"

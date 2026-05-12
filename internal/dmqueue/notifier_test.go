@@ -114,11 +114,104 @@ func TestNotifier_Post_NoChannelIsNoOp(t *testing.T) {
 
 func TestNotifier_Post_SendErrorReturned(t *testing.T) {
 	f := &fakeSender{sendErr: errors.New("boom")}
-	n := NewNotifier(f, staticChannelResolver("c"), func(id string) string { return "/x/" + id })
+	store := NewMemoryStore()
+	n := NewNotifierWithStore(f, staticChannelResolver("c"), func(id string) string { return "/x/" + id }, store)
 	_, err := n.Post(context.Background(), Event{Kind: KindConsumable, PlayerName: "A", Summary: "uses X"})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
+	// SR-002: with insert-then-send ordering, a send failure leaves the row
+	// pending so the DM can still see + resolve it from the dashboard. The
+	// row's MessageID retains the itemID placeholder set at Insert time
+	// (the real Discord message id is only written on Send success).
+	pending := n.ListPending()
+	if len(pending) != 1 {
+		t.Fatalf("expected 1 pending row after send failure, got %d", len(pending))
+	}
+	if pending[0].MessageID != pending[0].ID {
+		t.Errorf("expected placeholder message id == item id, got message_id=%q id=%q",
+			pending[0].MessageID, pending[0].ID)
+	}
+}
+
+// failingStore returns insertErr from Insert; used to verify Notifier.Post
+// short-circuits before calling Sender.Send when persistence fails (SR-002).
+type failingStore struct {
+	Store
+	insertErr error
+	inserted  int
+}
+
+func (f *failingStore) Insert(ctx context.Context, id string, e Event, channelID, messageID, postedText string) (Item, error) {
+	f.inserted++
+	if f.insertErr != nil {
+		return Item{}, f.insertErr
+	}
+	return f.Store.Insert(ctx, id, e, channelID, messageID, postedText)
+}
+
+// TestNotifier_Post_InsertFailureSkipsSend pins the insert-then-send
+// ordering: when Store.Insert returns an error, no Discord message must be
+// posted. Reverses the historical send-then-insert path that orphaned
+// #dm-queue messages when CampaignID was missing on the Event. (SR-002)
+func TestNotifier_Post_InsertFailureSkipsSend(t *testing.T) {
+	f := &fakeSender{nextMsgID: "should-never-arrive"}
+	store := &failingStore{Store: NewMemoryStore(), insertErr: errors.New("parse campaign id")}
+	n := NewNotifierWithStore(f, staticChannelResolver("c"), func(id string) string { return "/x/" + id }, store)
+
+	itemID, err := n.Post(context.Background(), Event{Kind: KindConsumable, PlayerName: "A", Summary: "uses X"})
+	if err == nil {
+		t.Fatalf("expected error from failing Insert")
+	}
+	if itemID != "" {
+		t.Errorf("expected empty itemID on insert failure, got %q", itemID)
+	}
+	if store.inserted != 1 {
+		t.Errorf("expected Insert attempted once, got %d", store.inserted)
+	}
+	if len(f.sendCalls) != 0 {
+		t.Fatalf("expected 0 Sender.Send calls when Insert fails, got %d", len(f.sendCalls))
+	}
+}
+
+// TestNotifier_Post_InsertBeforeSend pins call ordering: Insert must execute
+// before Send so the dashboard row is created up front and a later send
+// failure cannot orphan a Discord message. (SR-002)
+func TestNotifier_Post_InsertBeforeSend(t *testing.T) {
+	f := &fakeSender{nextMsgID: "m1"}
+	store := &orderingStore{Store: NewMemoryStore()}
+	n := NewNotifierWithStore(f, staticChannelResolver("c"), func(id string) string { return "/x/" + id }, store)
+
+	// Snapshot send-call count when Insert is invoked.
+	store.beforeSendCount = func() int { return len(f.sendCalls) }
+
+	_, err := n.Post(context.Background(), Event{
+		Kind: KindRestRequest, PlayerName: "Aria", Summary: "long rest", GuildID: "g1",
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	if store.sendCountAtInsert != 0 {
+		t.Errorf("Insert ran AFTER Send (sendCount at Insert=%d); want Insert-first", store.sendCountAtInsert)
+	}
+	if len(f.sendCalls) != 1 {
+		t.Fatalf("expected 1 send after successful insert, got %d", len(f.sendCalls))
+	}
+}
+
+// orderingStore records the Sender.Send call-count observed at the moment
+// Insert runs. With insert-then-send ordering the snapshot is 0.
+type orderingStore struct {
+	Store
+	beforeSendCount   func() int
+	sendCountAtInsert int
+}
+
+func (o *orderingStore) Insert(ctx context.Context, id string, e Event, channelID, messageID, postedText string) (Item, error) {
+	if o.beforeSendCount != nil {
+		o.sendCountAtInsert = o.beforeSendCount()
+	}
+	return o.Store.Insert(ctx, id, e, channelID, messageID, postedText)
 }
 
 func TestNotifier_Cancel_EditsMessage(t *testing.T) {

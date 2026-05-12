@@ -174,12 +174,17 @@ func TestReactionHandler_Declare_PostsToDMQueue(t *testing.T) {
 	enc := uuid.New()
 	combatantID := uuid.New()
 	declID := uuid.New()
+	campID := uuid.New()
 
 	svc := &fakeReactionService{
 		canDeclare:    true,
 		declareResult: refdata.ReactionDeclaration{ID: declID, Description: "Shield if I get hit", Status: "active"},
 	}
 	h, sess, _ := newTestReactionHandler(svc, enc, combatantID)
+	// SR-002: wire campaign provider so post carries CampaignID.
+	h.SetCampaignProvider(&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: campID}, nil
+	}})
 
 	rec := &cancelRecordingNotifier{nextItemID: "item-xyz"}
 	h.SetNotifier(rec)
@@ -193,6 +198,9 @@ func TestReactionHandler_Declare_PostsToDMQueue(t *testing.T) {
 	assert.Equal(t, "Aria", ev.PlayerName)
 	assert.Contains(t, ev.Summary, "Shield if I get hit")
 	assert.Equal(t, "guild1", ev.GuildID)
+	// SR-002: CampaignID populated so PgStore.Insert succeeds.
+	assert.Equal(t, campID.String(), ev.CampaignID,
+		"SR-002: /reaction dm-queue post must carry CampaignID")
 	assert.Equal(t, declID.String(), ev.ExtraMetadata["reaction_declaration_id"])
 
 	// Player gets an ephemeral confirmation.

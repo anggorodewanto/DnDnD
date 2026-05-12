@@ -49,11 +49,12 @@ type ReactionCombatantLookup interface {
 // or clear the pending dm-queue item manually. This keeps phase 106c focused
 // on handler wiring without requiring a schema migration.
 type ReactionHandler struct {
-	session  Session
-	service  ReactionService
-	resolver ReactionEncounterResolver
-	lookup   ReactionCombatantLookup
-	notifier dmqueue.Notifier
+	session      Session
+	service      ReactionService
+	resolver     ReactionEncounterResolver
+	lookup       ReactionCombatantLookup
+	notifier     dmqueue.Notifier
+	campaignProv CheckCampaignProvider
 
 	mu      sync.Mutex
 	itemIDs map[uuid.UUID]stashedItem // declarationID → stashed dm-queue item
@@ -83,6 +84,14 @@ func NewReactionHandler(session Session, service ReactionService, resolver React
 // SetNotifier wires the dm-queue Notifier. When nil, declare/cancel flows
 // still persist reaction_declarations rows but skip the #dm-queue post/edit.
 func (h *ReactionHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
+
+// SetCampaignProvider wires the campaign-by-guild lookup so dm-queue posts
+// carry the campaign UUID required by PgStore.Insert (SR-002). When nil or
+// unwired, declaration posts still go through but include an empty
+// CampaignID — the in-memory MemoryStore tolerates this; PgStore rejects it.
+func (h *ReactionHandler) SetCampaignProvider(p CheckCampaignProvider) {
+	h.campaignProv = p
+}
 
 // ItemIDForDeclaration returns the stashed dm-queue item ID for a
 // declaration, or "" if none. Exposed for tests and potential future
@@ -161,6 +170,7 @@ func (h *ReactionHandler) postReactionDeclaration(ctx context.Context, decl refd
 		PlayerName: playerName,
 		Summary:    decl.Description,
 		GuildID:    guildID,
+		CampaignID: h.resolveCampaignID(ctx, guildID),
 		ExtraMetadata: map[string]string{
 			"reaction_declaration_id": decl.ID.String(),
 		},
@@ -172,6 +182,20 @@ func (h *ReactionHandler) postReactionDeclaration(ctx context.Context, decl refd
 	h.mu.Lock()
 	h.itemIDs[decl.ID] = stashedItem{combatantID: combatantID, itemID: itemID}
 	h.mu.Unlock()
+}
+
+// resolveCampaignID looks up the campaign for the guild and returns its UUID
+// string, or "" when the provider is unwired or lookup fails. Used to thread
+// CampaignID through reaction-declaration dm-queue posts (SR-002).
+func (h *ReactionHandler) resolveCampaignID(ctx context.Context, guildID string) string {
+	if h.campaignProv == nil {
+		return ""
+	}
+	campaign, err := h.campaignProv.GetCampaignByGuildID(ctx, guildID)
+	if err != nil {
+		return ""
+	}
+	return campaign.ID.String()
 }
 
 func (h *ReactionHandler) handleCancel(interaction *discordgo.Interaction, sub *discordgo.ApplicationCommandInteractionDataOption) {

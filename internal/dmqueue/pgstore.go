@@ -17,6 +17,7 @@ import (
 // PostgreSQL — integration coverage still uses the real *refdata.Queries.
 type pgQueries interface {
 	InsertDMQueueItem(ctx context.Context, arg refdata.InsertDMQueueItemParams) (refdata.DmQueueItem, error)
+	UpdateDMQueueItemMessageID(ctx context.Context, arg refdata.UpdateDMQueueItemMessageIDParams) (refdata.DmQueueItem, error)
 	GetDMQueueItem(ctx context.Context, id uuid.UUID) (refdata.DmQueueItem, error)
 	ListAllPendingDMQueueItems(ctx context.Context) ([]refdata.DmQueueItem, error)
 	ListPendingDMQueueItems(ctx context.Context, campaignID uuid.UUID) ([]refdata.DmQueueItem, error)
@@ -72,6 +73,27 @@ func (p *PgStore) Insert(ctx context.Context, id string, e Event, channelID, mes
 		return Item{}, err
 	}
 	return rowToItem(row)
+}
+
+// SetMessageID updates the row's message_id (used by Notifier.Post after
+// Sender.Send returns the real Discord message ID under the insert-then-send
+// ordering — SR-002). Returns ErrItemNotFound for unknown ids.
+func (p *PgStore) SetMessageID(ctx context.Context, id, messageID string) error {
+	itemUUID, err := uuid.Parse(id)
+	if err != nil {
+		return ErrItemNotFound
+	}
+	_, err = p.q.UpdateDMQueueItemMessageID(ctx, refdata.UpdateDMQueueItemMessageIDParams{
+		ID:        itemUUID,
+		MessageID: messageID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrItemNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 // Get returns the item by ID, or (zero, false, nil) if not found.

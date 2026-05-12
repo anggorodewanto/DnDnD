@@ -264,3 +264,37 @@ func (q *Queries) MarkDMQueueItemResolved(ctx context.Context, arg MarkDMQueueIt
 	)
 	return i, err
 }
+
+const updateDMQueueItemMessageID = `-- name: UpdateDMQueueItemMessageID :one
+UPDATE dm_queue_items
+SET message_id = $2
+WHERE id = $1
+RETURNING id, campaign_id, guild_id, channel_id, message_id, kind, player_name, summary, resolve_path, status, outcome, extra, created_at, resolved_at
+`
+
+type UpdateDMQueueItemMessageIDParams struct {
+	ID        uuid.UUID `json:"id"`
+	MessageID string    `json:"message_id"`
+}
+
+func (q *Queries) UpdateDMQueueItemMessageID(ctx context.Context, arg UpdateDMQueueItemMessageIDParams) (DmQueueItem, error) {
+	row := q.db.QueryRowContext(ctx, updateDMQueueItemMessageID, arg.ID, arg.MessageID)
+	var i DmQueueItem
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.GuildID,
+		&i.ChannelID,
+		&i.MessageID,
+		&i.Kind,
+		&i.PlayerName,
+		&i.Summary,
+		&i.ResolvePath,
+		&i.Status,
+		&i.Outcome,
+		&i.Extra,
+		&i.CreatedAt,
+		&i.ResolvedAt,
+	)
+	return i, err
+}
