@@ -24,6 +24,30 @@ type BuilderStoreAdapter struct {
 	tokenSvc *TokenService
 }
 
+// resolveClassEntries returns the multiclass entries to persist. When the
+// caller supplied a non-empty Classes slice it is filtered to drop empty
+// rows; otherwise a single ClassEntry is constructed from Class/Subclass
+// at level 1 (the legacy single-class path).
+func resolveClassEntries(p CreateCharacterParams) []character.ClassEntry {
+	if len(p.Classes) > 0 {
+		out := make([]character.ClassEntry, 0, len(p.Classes))
+		for _, c := range p.Classes {
+			if c.Class == "" {
+				continue
+			}
+			lvl := c.Level
+			if lvl < 1 {
+				lvl = 1
+			}
+			out = append(out, character.ClassEntry{Class: c.Class, Subclass: c.Subclass, Level: lvl})
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return []character.ClassEntry{{Class: p.Class, Subclass: p.Subclass, Level: 1}}
+}
+
 // NewBuilderStoreAdapter creates a new BuilderStoreAdapter.
 func NewBuilderStoreAdapter(q CharacterCreator, tokenSvc *TokenService) *BuilderStoreAdapter {
 	return &BuilderStoreAdapter{q: q, tokenSvc: tokenSvc}
@@ -32,9 +56,18 @@ func NewBuilderStoreAdapter(q CharacterCreator, tokenSvc *TokenService) *Builder
 // CreateCharacterRecord creates a character in the database.
 func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p CreateCharacterParams) (string, error) {
 	scoresJSON, _ := json.Marshal(p.AbilityScores)
-	classEntry := character.ClassEntry{Class: p.Class, Subclass: p.Subclass, Level: 1}
-	classesJSON, _ := json.Marshal([]character.ClassEntry{classEntry})
-	hitDiceJSON, _ := json.Marshal(map[string]int{p.Class: 1})
+	classEntries := resolveClassEntries(p)
+	classesJSON, _ := json.Marshal(classEntries)
+	hitDice := make(map[string]int, len(classEntries))
+	totalLevel := 0
+	for _, ce := range classEntries {
+		hitDice[ce.Class] = ce.Level
+		totalLevel += ce.Level
+	}
+	if totalLevel < 1 {
+		totalLevel = 1
+	}
+	hitDiceJSON, _ := json.Marshal(hitDice)
 	profJSON, _ := json.Marshal(character.Proficiencies{
 		Skills: p.Skills,
 		Saves:  p.Saves,
@@ -61,9 +94,21 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		featuresMsg = pqtype.NullRawMessage{RawMessage: featJSON, Valid: true}
 	}
 
-	var charDataMsg pqtype.NullRawMessage
+	// character_data carries spells today; we also stash subrace and
+	// background here since the characters table has no dedicated column
+	// for them. Downstream code can read these without a migration.
+	charData := map[string]any{}
 	if len(p.Spells) > 0 {
-		charData := map[string]any{"spells": p.Spells}
+		charData["spells"] = p.Spells
+	}
+	if p.Subrace != "" {
+		charData["subrace"] = p.Subrace
+	}
+	if p.Background != "" {
+		charData["background"] = p.Background
+	}
+	var charDataMsg pqtype.NullRawMessage
+	if len(charData) > 0 {
 		charDataJSON, _ := json.Marshal(charData)
 		charDataMsg = pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true}
 	}
@@ -78,7 +123,7 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		Name:             p.Name,
 		Race:             p.Race,
 		Classes:          classesJSON,
-		Level:            1,
+		Level:            int32(totalLevel),
 		AbilityScores:    scoresJSON,
 		HpMax:            int32(p.HPMax),
 		HpCurrent:        int32(p.HPMax),

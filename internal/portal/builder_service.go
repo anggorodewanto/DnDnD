@@ -18,17 +18,22 @@ var (
 )
 
 // CharacterSubmission is the payload sent by the character builder form.
+//
+// Classes is the multiclass entry — when non-empty it overrides
+// Class/Subclass for persistence. Class/Subclass remain on the payload
+// so older single-class submitters keep working.
 type CharacterSubmission struct {
-	Name          string        `json:"name"`
-	Race          string        `json:"race"`
-	Subrace       string        `json:"subrace,omitempty"`
-	Background    string        `json:"background"`
-	Class         string        `json:"class"`
-	Subclass      string        `json:"subclass,omitempty"`
-	AbilityScores PointBuyScores `json:"ability_scores"`
-	Skills        []string      `json:"skills"`
-	Equipment     []string      `json:"equipment,omitempty"`
-	Spells        []string      `json:"spells,omitempty"`
+	Name          string                  `json:"name"`
+	Race          string                  `json:"race"`
+	Subrace       string                  `json:"subrace,omitempty"`
+	Background    string                  `json:"background"`
+	Class         string                  `json:"class"`
+	Subclass      string                  `json:"subclass,omitempty"`
+	Classes       []character.ClassEntry  `json:"classes,omitempty"`
+	AbilityScores PointBuyScores          `json:"ability_scores"`
+	Skills        []string                `json:"skills"`
+	Equipment     []string                `json:"equipment,omitempty"`
+	Spells        []string                `json:"spells,omitempty"`
 }
 
 // ValidateSubmission returns a list of validation error messages.
@@ -50,12 +55,17 @@ func ValidateSubmission(s CharacterSubmission) []string {
 }
 
 // CreateCharacterParams holds params for creating a character record.
+//
+// Classes drives the JSONB classes column when non-empty; otherwise the
+// adapter falls back to a single ClassEntry built from Class/Subclass.
 type CreateCharacterParams struct {
 	CampaignID    string
 	Name          string
 	Race          string
+	Subrace       string
 	Class         string
 	Subclass      string
+	Classes       []character.ClassEntry
 	Background    string
 	AbilityScores character.AbilityScores
 	HPMax         int
@@ -157,8 +167,10 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 		CampaignID:    campaignID,
 		Name:          sub.Name,
 		Race:          sub.Race,
+		Subrace:       sub.Subrace,
 		Class:         sub.Class,
 		Subclass:      sub.Subclass,
+		Classes:       sub.Classes,
 		Background:    sub.Background,
 		AbilityScores: scores,
 		HPMax:         hp,

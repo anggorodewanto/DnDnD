@@ -1,6 +1,11 @@
 <script>
   import { listRaces, listClasses, listSpells, listEquipment, getStartingEquipment, submitCharacter } from './lib/api.js';
   import { remainingPoints, abilityModifier, canIncrement, canDecrement, scoreCost } from './lib/pointbuy.js';
+  import { skillsForBackground, mergeBackgroundSkills } from './lib/backgrounds.js';
+  import {
+    subraceOptions, subclassOptions, isSubclassEligible,
+    emptyClassRow, addClassRow, removeClassRow, updateClassRow,
+  } from './lib/builder-options.js';
 
   let { token = '', campaignId = '' } = $props();
 
@@ -13,8 +18,11 @@
   let race = $state('');
   let subrace = $state('');
   let background = $state('');
-  let selectedClass = $state('');
-  let subclass = $state('');
+  // Multi-class entries — the first row drives the primary class for spell
+  // list / starting equipment loading. selectedClass / subclass are kept as
+  // derived mirrors of classEntries[0] for compatibility with the existing
+  // single-class UI code paths.
+  let classEntries = $state([emptyClassRow()]);
   let scores = $state({ str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 });
   let selectedSkills = $state([]);
   let equipment = $state([]);
@@ -56,11 +64,27 @@
     }
   }
 
-  // Load spells and starting equipment when class changes
+  // The primary class drives spell/equipment loading and HP. We mirror
+  // classEntries[0].class for compatibility with the legacy single-class
+  // pickers + downstream review code.
+  let selectedClass = $derived(classEntries[0]?.class || '');
+  let subclass = $derived(classEntries[0]?.subclass || '');
+
+  // Load spells and starting equipment when the primary class changes.
   $effect(() => {
     if (selectedClass) {
       loadSpells(selectedClass);
       loadStartingEquipment(selectedClass);
+    }
+  });
+
+  // Auto-add background skills whenever the user changes background. We
+  // only ever add (never remove) so manual deselection still works after.
+  let lastBackground = '';
+  $effect(() => {
+    if (background && background !== lastBackground) {
+      selectedSkills = mergeBackgroundSkills(selectedSkills, background);
+      lastBackground = background;
     }
   });
 
@@ -240,6 +264,14 @@
     submitting = true;
     error = '';
     try {
+      // Re-merge background skills at submit time as a safety net in case
+      // the user toggled them off after picking a background.
+      const skills = mergeBackgroundSkills(selectedSkills, background);
+      // Filter out incomplete class rows so the backend never sees a blank
+      // class entry.
+      const classes = classEntries
+        .filter(c => c.class)
+        .map(c => ({ class: c.class, level: Number(c.level) || 1, subclass: c.subclass || '' }));
       await submitCharacter({
         token,
         campaign_id: campaignId,
@@ -249,8 +281,9 @@
         background,
         class: selectedClass,
         subclass,
+        classes,
         ability_scores: scores,
-        skills: selectedSkills,
+        skills,
         equipment: selectedEquipment(),
         spells: selectedSpells,
       });
@@ -265,6 +298,46 @@
   const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
   const ABILITY_NAMES = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
 
+  // Derived helpers for the basics/class steps.
+  let subraceList = $derived(subraceOptions(selectedRaceData));
+
+  // Reset subrace when race changes if the current value is no longer valid.
+  $effect(() => {
+    const opts = subraceList;
+    if (subrace && !opts.some(o => o.id === subrace)) {
+      subrace = '';
+    }
+  });
+
+  function setClassRow(idx, patch) {
+    classEntries = updateClassRow(classEntries, idx, patch);
+  }
+
+  function appendClassRow() {
+    classEntries = addClassRow(classEntries);
+  }
+
+  function dropClassRow(idx) {
+    classEntries = removeClassRow(classEntries, idx);
+  }
+
+  function classOptionsFor(idx) {
+    // Stop a class from being selected twice across rows.
+    const taken = new Set(classEntries.filter((_, i) => i !== idx).map(c => c.class).filter(Boolean));
+    return classes.filter(c => !taken.has(c.id));
+  }
+
+  function subclassListFor(classId) {
+    const cls = classes.find(c => c.id === classId);
+    return subclassOptions(cls);
+  }
+
+  function isSubclassPickerVisible(row) {
+    const cls = classes.find(c => c.id === row.class);
+    return isSubclassEligible(cls, Number(row.level) || 0);
+  }
+
+  // PHB backgrounds — slugs match keys of BACKGROUND_SKILLS in lib/backgrounds.js.
   const BACKGROUNDS = ['acolyte', 'charlatan', 'criminal', 'entertainer', 'folk-hero', 'guild-artisan', 'hermit', 'noble', 'outlander', 'sage', 'sailor', 'soldier', 'urchin'];
 
   const ALL_SKILLS = [
@@ -319,6 +392,17 @@
             {/each}
           </select>
         </label>
+        {#if subraceList.length > 0}
+          <label>
+            Subrace
+            <select bind:value={subrace}>
+              <option value="">Select a subrace...</option>
+              {#each subraceList as sr}
+                <option value={sr.id}>{sr.name}</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
         <label>
           Background
           <select bind:value={background}>
@@ -328,24 +412,69 @@
             {/each}
           </select>
         </label>
+        {#if background && skillsForBackground(background).length > 0}
+          <p class="bg-skill-hint">
+            Background grants:
+            {#each skillsForBackground(background) as sk, i}
+              <span class="bg-skill-tag">{sk.replace(/-/g, ' ')}</span>{i < skillsForBackground(background).length - 1 ? ' ' : ''}
+            {/each}
+          </p>
+        {/if}
       </div>
 
-    <!-- Step 1: Class -->
+    <!-- Step 1: Class (with multiclass support) -->
     {:else if currentStep === 1}
       <div class="step-content">
         <h3>Choose Your Class</h3>
-        <label>
-          Class
-          <select bind:value={selectedClass}>
-            <option value="">Select a class...</option>
-            {#each classes as c}
-              <option value={c.id}>{c.name} (Hit Die: {c.hit_die})</option>
-            {/each}
-          </select>
-        </label>
+        {#each classEntries as row, idx (idx)}
+          <div class="class-row">
+            <label class="class-row-field">
+              Class
+              <select
+                value={row.class}
+                onchange={(e) => setClassRow(idx, { class: e.currentTarget.value, subclass: '' })}
+              >
+                <option value="">Select a class...</option>
+                {#each classOptionsFor(idx) as c}
+                  <option value={c.id}>{c.name} (Hit Die: {c.hit_die})</option>
+                {/each}
+              </select>
+            </label>
+            <label class="class-row-field class-row-level">
+              Level
+              <input
+                type="number"
+                min="1"
+                max="20"
+                value={row.level}
+                oninput={(e) => setClassRow(idx, { level: Math.max(1, Math.min(20, Number(e.currentTarget.value) || 1)) })}
+              />
+            </label>
+            {#if isSubclassPickerVisible(row)}
+              <label class="class-row-field">
+                Subclass
+                <select
+                  value={row.subclass}
+                  onchange={(e) => setClassRow(idx, { subclass: e.currentTarget.value })}
+                >
+                  <option value="">Select a subclass...</option>
+                  {#each subclassListFor(row.class) as sc}
+                    <option value={sc.id}>{sc.name}</option>
+                  {/each}
+                </select>
+              </label>
+            {/if}
+            {#if idx > 0}
+              <button type="button" class="row-remove-btn" onclick={() => dropClassRow(idx)} aria-label="Remove class">x</button>
+            {/if}
+          </div>
+        {/each}
+        <button type="button" class="row-add-btn" onclick={appendClassRow} disabled={classEntries.length >= 4}>
+          + Add another class
+        </button>
         {#if selectedClassData}
           <div class="class-info">
-            <p><strong>Hit Die:</strong> {selectedClassData.hit_die}</p>
+            <p><strong>Primary Class Hit Die:</strong> {selectedClassData.hit_die}</p>
             {#if selectedClassData.save_proficiencies}
               <p><strong>Save Proficiencies:</strong> {selectedClassData.save_proficiencies.join(', ').toUpperCase()}</p>
             {/if}
@@ -379,11 +508,22 @@
       <div class="step-content">
         <h3>Skills & Proficiencies</h3>
         <p>Select your skill proficiencies:</p>
+        {#if background && skillsForBackground(background).length > 0}
+          <p class="bg-skill-hint">
+            From <strong>{background.replace(/-/g, ' ')}</strong> background:
+            {#each skillsForBackground(background) as sk}
+              <span class="bg-skill-tag">{sk.replace(/-/g, ' ')}</span>
+            {/each}
+          </p>
+        {/if}
         <div class="skill-grid">
           {#each ALL_SKILLS as skill}
-            <label class="skill-option">
+            <label class="skill-option" class:bg-granted={skillsForBackground(background).includes(skill)}>
               <input type="checkbox" checked={selectedSkills.includes(skill)} onchange={() => toggleSkill(skill)} />
               {skill.replace(/-/g, ' ')}
+              {#if skillsForBackground(background).includes(skill)}
+                <span class="bg-skill-tag-inline">background</span>
+              {/if}
             </label>
           {/each}
         </div>
@@ -511,9 +651,16 @@
         <div class="review-section">
           <h4>Basics</h4>
           <p><strong>Name:</strong> {name || '(not set)'}</p>
-          <p><strong>Race:</strong> {selectedRaceData?.name || race || '(not set)'}</p>
+          <p><strong>Race:</strong> {selectedRaceData?.name || race || '(not set)'}{#if subrace} / {subraceList.find(s => s.id === subrace)?.name || subrace}{/if}</p>
           <p><strong>Background:</strong> {background ? background.replace(/-/g, ' ') : '(not set)'}</p>
-          <p><strong>Class:</strong> {selectedClassData?.name || selectedClass || '(not set)'}</p>
+          <p><strong>Classes:</strong>
+            {#each classEntries.filter(c => c.class) as c, i}
+              {#if i > 0} / {/if}
+              {classes.find(x => x.id === c.class)?.name || c.class} {c.level}{#if c.subclass} ({subclassListFor(c.class).find(s => s.id === c.subclass)?.name || c.subclass}){/if}
+            {:else}
+              (not set)
+            {/each}
+          </p>
         </div>
 
         <div class="review-section">
@@ -652,4 +799,62 @@
   .selected-list { margin: 0.25rem 0; padding-left: 1.5rem; }
   .selected-list li { text-transform: capitalize; }
   .truncated { color: #888; font-size: 0.85rem; font-style: italic; }
+  .class-row {
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr 32px;
+    gap: 0.5rem;
+    align-items: end;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    background: #1a1a2e;
+    border-radius: 4px;
+    border: 1px solid #0f3460;
+  }
+  .class-row-field { margin-bottom: 0; }
+  .class-row-level input {
+    text-align: center;
+    padding: 0.4rem;
+  }
+  .row-remove-btn {
+    background: #441111;
+    color: #ff8888;
+    border: 1px solid #663333;
+    border-radius: 4px;
+    cursor: pointer;
+    height: 38px;
+  }
+  .row-add-btn {
+    padding: 0.5rem 1rem;
+    background: #16213e;
+    color: #e0e0e0;
+    border: 1px dashed #0f3460;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 1rem;
+  }
+  .row-add-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .bg-skill-hint {
+    margin: 0.5rem 0;
+    color: #aaa;
+    font-size: 0.9rem;
+  }
+  .bg-skill-tag {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    margin: 0 0.15rem;
+    background: #0f3460;
+    color: #e0e0e0;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    text-transform: capitalize;
+  }
+  .bg-skill-tag-inline {
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.4rem;
+    background: #0f3460;
+    color: #aac;
+    border-radius: 8px;
+    font-size: 0.7rem;
+  }
+  .skill-option.bg-granted { color: #e0e0e0; }
 </style>

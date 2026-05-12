@@ -283,6 +283,47 @@ func TestAPIHandler_SubmitCharacter_InvalidJSON(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// TestAPIHandler_SubmitCharacter_AcceptsClassesAndSubrace verifies the
+// JSON decoder accepts the new multiclass + subrace fields on the
+// /portal/api/characters POST body.
+func TestAPIHandler_SubmitCharacter_AcceptsClassesAndSubrace(t *testing.T) {
+	refStore := &mockRefDataStore{}
+	builderStore := &mockBuilderStore{charID: "char-1", pcID: "pc-1"}
+	builderSvc := portal.NewBuilderService(builderStore)
+	h := portal.NewAPIHandler(slog.Default(), refStore, builderSvc)
+
+	body := `{
+		"token": "tok-abc",
+		"campaign_id": "campaign-1",
+		"name": "Multi",
+		"race": "elf",
+		"subrace": "high-elf",
+		"background": "sage",
+		"class": "fighter",
+		"subclass": "champion",
+		"classes": [
+			{"class":"fighter","subclass":"champion","level":5},
+			{"class":"wizard","subclass":"evocation","level":3}
+		],
+		"ability_scores": {"str":15,"dex":14,"con":13,"int":12,"wis":10,"cha":8},
+		"skills": ["athletics","perception"]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/portal/api/characters", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	ctx := auth.ContextWithDiscordUserID(req.Context(), "user-1")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	h.SubmitCharacter(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	assert.Equal(t, "high-elf", builderStore.lastCharSubrace)
+	require.Len(t, builderStore.lastCharClasses, 2)
+	assert.Equal(t, "fighter", builderStore.lastCharClasses[0].Class)
+	assert.Equal(t, 5, builderStore.lastCharClasses[0].Level)
+	assert.Equal(t, "wizard", builderStore.lastCharClasses[1].Class)
+}
+
 func TestAPIHandler_SubmitCharacter_ValidationError(t *testing.T) {
 	h := portal.NewAPIHandler(slog.Default(), &mockRefDataStore{}, portal.NewBuilderService(&mockBuilderStore{}))
 

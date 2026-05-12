@@ -304,3 +304,136 @@ func TestDeriveAC(t *testing.T) {
 	ac := portal.DeriveAC(scores)
 	assert.Equal(t, 12, ac)
 }
+
+// TestBuilderStoreAdapter_CreateCharacterRecord_Multiclass verifies the
+// builder writes the supplied multiclass entries into the `classes`
+// JSONB column and sums level + hit dice across them.
+func TestBuilderStoreAdapter_CreateCharacterRecord_Multiclass(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Multi",
+		Race:          "human",
+		Class:         "fighter",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		HPMax:         12,
+		AC:            16,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes: []character.ClassEntry{
+			{Class: "fighter", Subclass: "champion", Level: 5},
+			{Class: "wizard", Subclass: "evocation", Level: 3},
+		},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	var classes []character.ClassEntry
+	require.NoError(t, json.Unmarshal(creator.capturedParams.Classes, &classes))
+	require.Len(t, classes, 2)
+	assert.Equal(t, "fighter", classes[0].Class)
+	assert.Equal(t, "champion", classes[0].Subclass)
+	assert.Equal(t, 5, classes[0].Level)
+	assert.Equal(t, "wizard", classes[1].Class)
+	assert.Equal(t, "evocation", classes[1].Subclass)
+	assert.Equal(t, 3, classes[1].Level)
+
+	// Total level should reflect the sum
+	assert.Equal(t, int32(8), creator.capturedParams.Level)
+
+	// Hit dice map should include both classes
+	var hitDice map[string]int
+	require.NoError(t, json.Unmarshal(creator.capturedParams.HitDiceRemaining, &hitDice))
+	assert.Equal(t, 5, hitDice["fighter"])
+	assert.Equal(t, 3, hitDice["wizard"])
+}
+
+// TestBuilderStoreAdapter_CreateCharacterRecord_FallsBackToSingleClass
+// verifies the legacy single-class submission path still works.
+func TestBuilderStoreAdapter_CreateCharacterRecord_FallsBackToSingleClass(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Solo",
+		Race:          "human",
+		Class:         "rogue",
+		Subclass:      "thief",
+		AbilityScores: character.AbilityScores{STR: 10, DEX: 16, CON: 12, INT: 10, WIS: 10, CHA: 10},
+		HPMax:         9,
+		AC:            13,
+		SpeedFt:       30,
+		ProfBonus:     2,
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	var classes []character.ClassEntry
+	require.NoError(t, json.Unmarshal(creator.capturedParams.Classes, &classes))
+	require.Len(t, classes, 1)
+	assert.Equal(t, "rogue", classes[0].Class)
+	assert.Equal(t, "thief", classes[0].Subclass)
+	assert.Equal(t, 1, classes[0].Level)
+	assert.Equal(t, int32(1), creator.capturedParams.Level)
+}
+
+// TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSubrace verifies
+// the subrace field is stashed in character_data.
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSubrace(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Legolas",
+		Race:          "elf",
+		Subrace:       "high-elf",
+		Class:         "ranger",
+		AbilityScores: character.AbilityScores{STR: 12, DEX: 16, CON: 12, INT: 10, WIS: 14, CHA: 10},
+		HPMax:         11,
+		AC:            13,
+		SpeedFt:       30,
+		ProfBonus:     2,
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.CharacterData.Valid)
+	var charData map[string]any
+	require.NoError(t, json.Unmarshal(creator.capturedParams.CharacterData.RawMessage, &charData))
+	assert.Equal(t, "high-elf", charData["subrace"])
+}
+
+// TestBuilderStoreAdapter_CreateCharacterRecord_PersistsBackground
+// verifies background gets stashed in character_data for the player card.
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsBackground(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Sage",
+		Race:          "human",
+		Class:         "wizard",
+		Background:    "sage",
+		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 12, CHA: 10},
+		HPMax:         8,
+		AC:            12,
+		SpeedFt:       30,
+		ProfBonus:     2,
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.CharacterData.Valid)
+	var charData map[string]any
+	require.NoError(t, json.Unmarshal(creator.capturedParams.CharacterData.RawMessage, &charData))
+	assert.Equal(t, "sage", charData["background"])
+}

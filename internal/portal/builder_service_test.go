@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/portal"
 	"github.com/stretchr/testify/assert"
 )
@@ -224,6 +225,8 @@ type mockBuilderStore struct {
 
 	lastCharName        string
 	lastCharClass       string
+	lastCharSubrace     string
+	lastCharClasses     []character.ClassEntry
 	lastCharEquipment   []string
 	lastPCStatus        string
 	lastPCCreatedVia    string
@@ -234,6 +237,8 @@ type mockBuilderStore struct {
 func (m *mockBuilderStore) CreateCharacterRecord(_ context.Context, p portal.CreateCharacterParams) (string, error) {
 	m.lastCharName = p.Name
 	m.lastCharClass = p.Class
+	m.lastCharSubrace = p.Subrace
+	m.lastCharClasses = p.Classes
 	m.lastCharEquipment = p.Equipment
 	if m.createCharErr != nil {
 		return "", m.createCharErr
@@ -338,6 +343,42 @@ func TestBuilderService_CreateCharacter_WithEquipment(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "c-1", result.CharacterID)
 	assert.Equal(t, []string{"longsword", "chain-mail", "shield"}, store.lastCharEquipment)
+}
+
+// TestBuilderService_CreateCharacter_PassesMulticlass confirms a payload
+// with `Classes` set is threaded through CreateCharacterParams so the
+// adapter can persist the multiclass entries.
+func TestBuilderService_CreateCharacter_PassesMulticlass(t *testing.T) {
+	store := &mockBuilderStore{charID: "c-1", pcID: "pc-1"}
+	svc := portal.NewBuilderService(store)
+
+	sub := validSubmission()
+	sub.Classes = []character.ClassEntry{
+		{Class: "fighter", Subclass: "champion", Level: 5},
+		{Class: "wizard", Subclass: "evocation", Level: 3},
+	}
+
+	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "u1", "tok", sub)
+	assert.NoError(t, err)
+	assert.Len(t, store.lastCharClasses, 2)
+	assert.Equal(t, "fighter", store.lastCharClasses[0].Class)
+	assert.Equal(t, "champion", store.lastCharClasses[0].Subclass)
+	assert.Equal(t, "wizard", store.lastCharClasses[1].Class)
+}
+
+// TestBuilderService_CreateCharacter_PassesSubrace confirms the subrace
+// from the submission ends up on CreateCharacterParams.
+func TestBuilderService_CreateCharacter_PassesSubrace(t *testing.T) {
+	store := &mockBuilderStore{charID: "c-1", pcID: "pc-1"}
+	svc := portal.NewBuilderService(store)
+
+	sub := validSubmission()
+	sub.Race = "elf"
+	sub.Subrace = "high-elf"
+
+	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "u1", "tok", sub)
+	assert.NoError(t, err)
+	assert.Equal(t, "high-elf", store.lastCharSubrace)
 }
 
 func TestPointBuyCost(t *testing.T) {
