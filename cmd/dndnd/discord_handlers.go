@@ -620,6 +620,10 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 		prompts = discord.NewReactionPromptStore(deps.session)
 	}
 	handlers.cast.SetMaterialPromptStore(prompts)
+	// SR-025: wire the Empowered/Careful/Heightened Spell prompt poster so
+	// /cast surfaces the interactive metamagic UI instead of leaving the
+	// poster unreachable (the dead-code regression SR-025 closes).
+	handlers.cast.SetMetamagicPromptPoster(discord.NewMetamagicPromptPoster(prompts))
 	handlers.attack.SetClassFeaturePromptPoster(discord.NewClassFeaturePromptPoster(prompts))
 	handlers.attack.SetClassFeatureService(deps.combatService)
 

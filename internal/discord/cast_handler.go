@@ -105,6 +105,14 @@ type CastHandler struct {
 	// ephemeral message describing the missing component (no interactive
 	// retry available).
 	materialPrompts *ReactionPromptStore
+	// SR-025: optional Empowered/Careful/Heightened interactive-prompt
+	// poster. Built on top of the same ReactionPromptStore used by
+	// materialPrompts so button clicks route back through one HandleComponent
+	// fan-out. When unset, /cast still applies the metamagic effect using
+	// the canonical defaults ("reroll the lowest dice", "no allies
+	// protected", "disadvantage on first affected") so production never
+	// degrades worse than the previous behaviour.
+	metamagicPoster *MetamagicPromptPoster
 }
 
 // SetNearbyScanner wires the Detect Magic environmental scanner. When
@@ -165,6 +173,19 @@ func (h *CastHandler) SetMaterialPromptStore(p *ReactionPromptStore) {
 // wired. Production-wiring tests use this to detect the AOE-CAST follow-up
 // regression (nil store → /cast falls back to plain ephemerals).
 func (h *CastHandler) HasMaterialPromptStore() bool { return h.materialPrompts != nil }
+
+// SetMetamagicPromptPoster wires the Empowered/Careful/Heightened prompt
+// poster. When unset, /cast skips the interactive dice/target picker UI and
+// proceeds with the canonical defaults (reroll lowest dice / no allies
+// protected / disadvantage on first affected). SR-025.
+func (h *CastHandler) SetMetamagicPromptPoster(p *MetamagicPromptPoster) {
+	h.metamagicPoster = p
+}
+
+// HasMetamagicPromptPoster reports whether SR-025's interactive metamagic
+// prompts are wired. Production-wiring tests check this to pin the
+// regression where the poster was built but never invoked.
+func (h *CastHandler) HasMetamagicPromptPoster() bool { return h.metamagicPoster != nil }
 
 // HandleComponent dispatches button clicks owned by /cast (material-component
 // prompt, etc.). Returns true when the click was claimed so the router can
@@ -249,7 +270,11 @@ func (h *CastHandler) Handle(interaction *discordgo.Interaction) {
 
 // dispatchSingleTarget runs the single-target /cast path: resolves the named
 // target (when present), reads current concentration, calls Service.Cast,
-// and posts the formatted log line.
+// and posts the formatted log line. SR-025: when --empowered is selected and
+// a MetamagicPromptPoster is wired, an Empowered Spell die-picker is posted
+// to the combat-log channel before Cast is invoked; the prompt is purely
+// UX confirmation — the underlying reroll is server-side (see SR-025 note
+// on RerollLowestDice).
 func (h *CastHandler) dispatchSingleTarget(
 	ctx context.Context,
 	interaction *discordgo.Interaction,
@@ -260,13 +285,14 @@ func (h *CastHandler) dispatchSingleTarget(
 	spell refdata.Spell,
 	targetStr string,
 ) {
+	combatants, listErr := h.encounterProvider.ListCombatantsByEncounterID(ctx, encounterID)
+	if listErr != nil {
+		respondEphemeral(h.session, interaction, "Failed to list combatants.")
+		return
+	}
+
 	var targetID uuid.UUID
 	if targetStr != "" {
-		combatants, err := h.encounterProvider.ListCombatantsByEncounterID(ctx, encounterID)
-		if err != nil {
-			respondEphemeral(h.session, interaction, "Failed to list combatants.")
-			return
-		}
 		target, err := combat.ResolveTarget(targetStr, combatants)
 		if err != nil {
 			respondEphemeral(h.session, interaction, fmt.Sprintf("Target %q not found.", targetStr))
@@ -275,8 +301,23 @@ func (h *CastHandler) dispatchSingleTarget(
 		targetID = target.ID
 	}
 
+	// SR-025: parse the optional twin-target Discord option so Twinned
+	// Spell metamagic resolves a second target instead of silently leaving
+	// CastCommand.TwinTargetID at uuid.Nil. Empty value = no second target.
+	twinStr := strings.TrimSpace(optionString(interaction, "twin-target"))
+	var twinTargetID uuid.UUID
+	if twinStr != "" {
+		twinTarget, err := combat.ResolveTarget(twinStr, combatants)
+		if err != nil {
+			respondEphemeral(h.session, interaction, fmt.Sprintf("Twin target %q not found.", twinStr))
+			return
+		}
+		twinTargetID = twinTarget.ID
+	}
+
 	currentConc, _ := h.combatService.GetCasterConcentrationName(ctx, caster.ID)
 
+	metamagic := collectMetamagic(interaction)
 	cmd := combat.CastCommand{
 		SpellID:              spell.ID,
 		CasterID:             caster.ID,
@@ -288,9 +329,30 @@ func (h *CastHandler) dispatchSingleTarget(
 		IsRitual:             optionBool(interaction, "ritual"),
 		EncounterStatus:      encounter.Status,
 		EncounterID:          encounterID,
-		Metamagic:            collectMetamagic(interaction),
+		Metamagic:            metamagic,
+		TwinTargetID:         twinTargetID,
 	}
 
+	// SR-025: empowered metamagic posts an interactive die-picker prompt
+	// before the cast resolves. The prompt is UX confirmation; the cast
+	// proceeds either way (Cast applies the reroll server-side via
+	// RerollLowestDice on the canonical "worst" choice).
+	if hasMetamagicFlag(metamagic, "empowered") && h.metamagicPoster != nil {
+		channelID := h.resolvePromptChannel(ctx, interaction, encounterID)
+		if channelID != "" {
+			h.postEmpoweredPromptThenRun(ctx, interaction, encounterID, channelID, spell.Name, cmd)
+			return
+		}
+	}
+
+	h.runSingleTargetCast(ctx, interaction, encounterID, cmd)
+}
+
+// runSingleTargetCast is the post-prompt continuation of dispatchSingleTarget:
+// invokes Cast and renders the result. Extracted so the SR-025 Empowered
+// prompt can resume the flow on click/forfeit without duplicating the
+// material-prompt fallback logic.
+func (h *CastHandler) runSingleTargetCast(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, cmd combat.CastCommand) {
 	result, err := h.combatService.Cast(ctx, cmd, h.roller)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Cast failed: %v", err))
@@ -310,6 +372,32 @@ func (h *CastHandler) dispatchSingleTarget(
 	logLine := combat.FormatCastLog(result)
 	h.postCombatLog(ctx, encounterID, logLine)
 	respondEphemeral(h.session, interaction, logLine)
+}
+
+// postEmpoweredPromptThenRun posts the Empowered Spell die-picker prompt to
+// the combat-log channel and runs the cast once the player clicks (or the
+// forfeit timer fires). The dice values shown are a small placeholder
+// sequence — the real reroll happens server-side via RerollLowestDice once
+// damage is rolled, so the prompt is informational. SR-025.
+func (h *CastHandler) postEmpoweredPromptThenRun(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, channelID, spellName string, cmd combat.CastCommand) {
+	// Display 4 placeholder dice ("1d6" rolls) so the player has visible
+	// buttons; the chosen button index is informational only — the cast
+	// still rerolls the lowest dice server-side per SR-025.
+	dice := []int{1, 1, 1, 1}
+	args := EmpoweredPromptArgs{
+		ChannelID:  channelID,
+		SpellName:  spellName,
+		DiceRolls:  dice,
+		MaxRerolls: 1,
+	}
+	err := h.metamagicPoster.PromptEmpowered(args, func(EmpoweredPromptResult) {
+		h.runSingleTargetCast(ctx, interaction, encounterID, cmd)
+	})
+	if err != nil {
+		h.runSingleTargetCast(ctx, interaction, encounterID, cmd)
+		return
+	}
+	respondEphemeral(h.session, interaction, "✨ Empowered Spell: pick a die to reroll in the combat channel.")
 }
 
 // promptMaterialFallback renders the gold-fallback Buy & Cast / Cancel
@@ -399,6 +487,13 @@ func (h *CastHandler) resolvePromptChannel(ctx context.Context, interaction *dis
 
 // dispatchAoE runs the AoE /cast path: parses the target coordinate, loads
 // walls from the encounter map, calls Service.CastAoE, and posts the log.
+// SR-025: when --careful / --heightened / --empowered are selected and a
+// MetamagicPromptPoster is wired, the corresponding interactive prompt is
+// posted before CastAoE — the cast resumes once the player clicks (or the
+// forfeit timer fires). Careful threads the chosen combatant ID into
+// AoECastCommand.CarefulTargetIDs; Heightened into HeightenedTargetID;
+// Empowered is UX-only (the reroll fires server-side during damage
+// resolution; see SR-025 RerollLowestDice).
 func (h *CastHandler) dispatchAoE(
 	ctx context.Context,
 	interaction *discordgo.Interaction,
@@ -422,6 +517,7 @@ func (h *CastHandler) dispatchAoE(
 	walls := h.loadWalls(ctx, encounter)
 	currentConc, _ := h.combatService.GetCasterConcentrationName(ctx, caster.ID)
 
+	metamagic := collectMetamagic(interaction)
 	cmd := combat.AoECastCommand{
 		SpellID:     spell.ID,
 		CasterID:    caster.ID,
@@ -434,8 +530,132 @@ func (h *CastHandler) dispatchAoE(
 		CurrentConcentration: currentConc,
 		Walls:                walls,
 		SlotLevel:            optionInt(interaction, "level"),
+		Metamagic:            metamagic,
 	}
 
+	// SR-025: pre-cast metamagic prompts. The cast is held until the first
+	// interactive option resolves (click or forfeit); subsequent options
+	// chain via the OnChoice callback so each picker resolves independently
+	// without losing the others. When the poster is unwired or no AoE
+	// metamagic flag is set, we fall straight through to runAoECast.
+	if h.metamagicPoster != nil && needsAoEMetamagicPrompt(metamagic) {
+		channelID := h.resolvePromptChannel(ctx, interaction, encounterID)
+		if channelID != "" {
+			h.postAoEMetamagicPrompts(ctx, interaction, encounterID, channelID, spell.Name, cmd, metamagic)
+			return
+		}
+	}
+
+	h.runAoECast(ctx, interaction, encounterID, cmd)
+}
+
+// needsAoEMetamagicPrompt reports whether the AoE cast needs one of the
+// SR-025 interactive prompts before CastAoE runs.
+func needsAoEMetamagicPrompt(metamagic []string) bool {
+	return hasMetamagicFlag(metamagic, "careful") ||
+		hasMetamagicFlag(metamagic, "heightened") ||
+		hasMetamagicFlag(metamagic, "empowered")
+}
+
+// postAoEMetamagicPrompts chains the Careful → Heightened → Empowered
+// prompts. Each step picks an affected combatant (or die index for
+// empowered) and either modifies `cmd` or no-ops, then dispatches the next
+// prompt. When the chain runs out of remaining flags, runAoECast fires.
+func (h *CastHandler) postAoEMetamagicPrompts(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, channelID, spellName string, cmd combat.AoECastCommand, metamagic []string) {
+	// Pull the affected non-caster combatants once so prompt buttons render
+	// stable names. SR-025 keeps this simple: the AoE shape calculation is
+	// done service-side; the prompts list every non-caster combatant in the
+	// encounter so the player can pick from the same pool the service will
+	// hit. False-positives (combatant not actually in AoE) just no-op
+	// server-side.
+	allCombs, _ := h.encounterProvider.ListCombatantsByEncounterID(ctx, encounterID)
+	candidates := make([]refdata.Combatant, 0, len(allCombs))
+	for _, c := range allCombs {
+		if c.ID != cmd.CasterID {
+			candidates = append(candidates, c)
+		}
+	}
+	names := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		names = append(names, c.DisplayName)
+	}
+
+	// Chain helper: each prompt invokes the next via the closure. The
+	// closures capture cmd by value and pass the mutated copy forward.
+	var runCareful, runHeightened, runEmpowered, finalize func(combat.AoECastCommand)
+
+	finalize = func(finalCmd combat.AoECastCommand) {
+		h.runAoECast(ctx, interaction, encounterID, finalCmd)
+	}
+	runEmpowered = func(updated combat.AoECastCommand) {
+		if !hasMetamagicFlag(metamagic, "empowered") || len(names) == 0 {
+			finalize(updated)
+			return
+		}
+		// Empowered prompt is UX-only at cast time (damage isn't rolled
+		// until /save resolves). We still post it so the player sees the
+		// metamagic fire and can confirm — the actual reroll lands at
+		// damage time via RerollLowestDice.
+		err := h.metamagicPoster.PromptEmpowered(EmpoweredPromptArgs{
+			ChannelID:  channelID,
+			SpellName:  spellName,
+			DiceRolls:  []int{1, 1, 1, 1},
+			MaxRerolls: 1,
+		}, func(EmpoweredPromptResult) {
+			finalize(updated)
+		})
+		if err != nil {
+			finalize(updated)
+		}
+	}
+	runHeightened = func(updated combat.AoECastCommand) {
+		if !hasMetamagicFlag(metamagic, "heightened") || len(names) == 0 {
+			runEmpowered(updated)
+			return
+		}
+		err := h.metamagicPoster.PromptHeightened(HeightenedPromptArgs{
+			ChannelID:   channelID,
+			SpellName:   spellName,
+			TargetNames: names,
+		}, func(res HeightenedPromptResult) {
+			if !res.Forfeited && res.SelectedIndex >= 0 && res.SelectedIndex < len(candidates) {
+				updated.HeightenedTargetID = candidates[res.SelectedIndex].ID
+			}
+			runEmpowered(updated)
+		})
+		if err != nil {
+			runEmpowered(updated)
+		}
+	}
+	runCareful = func(updated combat.AoECastCommand) {
+		if !hasMetamagicFlag(metamagic, "careful") || len(names) == 0 {
+			runHeightened(updated)
+			return
+		}
+		err := h.metamagicPoster.PromptCareful(CarefulPromptArgs{
+			ChannelID:    channelID,
+			SpellName:    spellName,
+			TargetNames:  names,
+			MaxProtected: 1, // SR-025 minimal: single pick. Multi-pick is a follow-up.
+		}, func(res CarefulPromptResult) {
+			if !res.Forfeited && res.SelectedIndex >= 0 && res.SelectedIndex < len(candidates) {
+				updated.CarefulTargetIDs = append(updated.CarefulTargetIDs, candidates[res.SelectedIndex].ID)
+			}
+			runHeightened(updated)
+		})
+		if err != nil {
+			runHeightened(updated)
+		}
+	}
+
+	runCareful(cmd)
+	respondEphemeral(h.session, interaction, "✨ Metamagic prompt(s) posted to the combat channel.")
+}
+
+// runAoECast is the post-prompt continuation of dispatchAoE: invokes CastAoE
+// and renders the result + per-player /save pings. Extracted so the SR-025
+// metamagic prompt chain can resume the flow on click/forfeit.
+func (h *CastHandler) runAoECast(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, cmd combat.AoECastCommand) {
 	result, err := h.combatService.CastAoE(ctx, cmd)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Cast failed: %v", err))
@@ -546,6 +766,17 @@ func normalizeMetamagicName(name string) string {
 		return "twinned"
 	}
 	return name
+}
+
+// hasMetamagicFlag reports whether the normalized metamagic slice contains
+// the given option. SR-025.
+func hasMetamagicFlag(metamagic []string, option string) bool {
+	for _, m := range metamagic {
+		if m == option {
+			return true
+		}
+	}
+	return false
 }
 
 // indexToCol converts a 0-based column index to its A-Z letter form. Used

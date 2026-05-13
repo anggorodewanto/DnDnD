@@ -79,6 +79,17 @@ func TestBuildDiscordHandlers_CastHandlerHasMaterialPromptStore(t *testing.T) {
 		"cast handler must have a *ReactionPromptStore wired in production")
 }
 
+// SR-025: /cast must have a MetamagicPromptPoster wired so
+// Empowered/Careful/Heightened Spell prompts fire interactively when a
+// sorcerer selects the corresponding metamagic option. Without this wire-up
+// the prompts are dead code (the regression SR-025 closes).
+func TestBuildDiscordHandlers_CastHandlerHasMetamagicPromptPoster(t *testing.T) {
+	set := buildDiscordHandlersForWiring(t)
+	require.NotNil(t, set.cast)
+	assert.True(t, set.cast.HasMetamagicPromptPoster(),
+		"cast handler must have a *MetamagicPromptPoster wired in production")
+}
+
 // TestBuildDiscordHandlers_SaveHandlerHasAoESaveResolver verifies the
 // AOE-CAST follow-up: /save must have an AoESaveResolver wired so per-
 // player AoE saves resolve into the damage-application pipeline.

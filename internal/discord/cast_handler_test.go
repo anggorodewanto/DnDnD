@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/combat"
@@ -60,6 +63,10 @@ type mockCastProvider struct {
 	getSpellErr error
 	listErr    error
 	getMapErr  error
+	// listCombatantsOverride, when non-nil, replaces the default
+	// `[caster, target]` slice ListCombatantsByEncounterID returns. SR-025
+	// tests use this to seed extra combatants (twin target, AoE protectees).
+	listCombatantsOverride []refdata.Combatant
 }
 
 func (m *mockCastProvider) ActiveEncounterForUser(_ context.Context, _, _ string) (uuid.UUID, error) {
@@ -83,12 +90,23 @@ func (m *mockCastProvider) GetCombatant(_ context.Context, id uuid.UUID) (refdat
 	if id == m.caster.ID {
 		return m.caster, nil
 	}
+	if id == m.target.ID {
+		return m.target, nil
+	}
+	for _, c := range m.listCombatantsOverride {
+		if c.ID == id {
+			return c, nil
+		}
+	}
 	return m.target, nil
 }
 
 func (m *mockCastProvider) ListCombatantsByEncounterID(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
+	}
+	if m.listCombatantsOverride != nil {
+		return m.listCombatantsOverride, nil
 	}
 	return []refdata.Combatant{m.caster, m.target}, nil
 }
@@ -977,5 +995,248 @@ func TestCastHandler_MaterialComponent_CancelDoesNotRetry(t *testing.T) {
 	if len(svc.castCalls) != 1 {
 		t.Errorf("cancel should not invoke a second Cast call, got %d", len(svc.castCalls))
 	}
+}
+
+// --- SR-025: Metamagic interactive prompts + twin-target wiring ---
+
+// setupCastHandlerForMetamagic wires a cast handler with a MockSession that
+// captures complex message sends (so prompt buttons can be inspected), plus
+// a ReactionPromptStore + MetamagicPromptPoster. Three combatants are seeded
+// so AoE casts have multiple targets and the second-target lookup for
+// Twinned has someone other than the caster + primary target.
+func setupCastHandlerForMetamagic(t *testing.T) (*CastHandler, *MockSession, *mockCastCombatService, *mockCastProvider, *[]*discordgo.MessageSend) {
+	t.Helper()
+	mock, sent := captureSentComplex()
+
+	encID := uuid.New()
+	turnID := uuid.New()
+	casterID := uuid.New()
+	targetID := uuid.New()
+	twinID := uuid.New()
+	mapID := uuid.New()
+
+	provider := &mockCastProvider{
+		encID: encID,
+		enc: refdata.Encounter{
+			ID:            encID,
+			CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+			MapID:         uuid.NullUUID{UUID: mapID, Valid: true},
+			Status:        "active",
+		},
+		turn: refdata.Turn{
+			ID:          turnID,
+			CombatantID: casterID,
+		},
+		caster: refdata.Combatant{
+			ID: casterID, ShortID: "AR", DisplayName: "Aria",
+			PositionCol: "B", PositionRow: 2,
+		},
+		target: refdata.Combatant{
+			ID: targetID, ShortID: "OS", DisplayName: "Orc",
+			PositionCol: "D", PositionRow: 4,
+		},
+		spells: map[string]refdata.Spell{
+			"fire-bolt": {ID: "fire-bolt", Name: "Fire Bolt", Level: 0},
+			"hold-person": {ID: "hold-person", Name: "Hold Person", Level: 2,
+				SaveAbility: sql.NullString{String: "wis", Valid: true}},
+			"fireball": {ID: "fireball", Name: "Fireball", Level: 3,
+				AreaOfEffect: pqtype.NullRawMessage{
+					RawMessage: []byte(`{"shape":"sphere","radius_ft":20}`),
+					Valid:      true,
+				},
+				SaveAbility: sql.NullString{String: "dex", Valid: true},
+			},
+		},
+		mapData: refdata.Map{TiledJson: []byte(minimalTiledJSON)},
+	}
+	// Inject a third combatant for AoE-prompt + twin-target tests via the
+	// ListCombatantsByEncounterID seam. We override the list path by hand
+	// because mockCastProvider returns only caster+target by default.
+	provider.listCombatantsOverride = []refdata.Combatant{
+		provider.caster,
+		provider.target,
+		{ID: twinID, ShortID: "GB", DisplayName: "Goblin", PositionCol: "C", PositionRow: 3},
+	}
+
+	combatSvc := &mockCastCombatService{
+		castResult: combat.CastResult{
+			CasterName: "Aria", SpellName: "Hold Person", SpellLevel: 2, TargetName: "Orc",
+		},
+		aoeResult: combat.AoECastResult{
+			CasterName: "Aria", SpellName: "Fireball", SpellLevel: 3,
+			AffectedNames: []string{"Orc", "Goblin"},
+		},
+	}
+
+	h := NewCastHandler(mock, combatSvc, provider, dice.NewRoller(func(_ int) int { return 10 }))
+	prompts := NewReactionPromptStoreWithTTL(mock, time.Hour)
+	h.SetMaterialPromptStore(prompts)
+	h.SetMetamagicPromptPoster(NewMetamagicPromptPoster(prompts))
+	// Pipe combat-log posts to a known channel so prompt postings have somewhere
+	// to land.
+	h.SetChannelIDProvider(&mockDeathSaveCSP{
+		fn: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"combat-log": "ch-cl"}, nil
+		},
+	})
+
+	return h, mock, combatSvc, provider, sent
+}
+
+// SR-025: /cast twin-target:<short-id> resolves the second target and threads
+// CastCommand.TwinTargetID into the combat service call.
+func TestCastHandler_TwinTarget_ThreadsTwinTargetID(t *testing.T) {
+	h, _, svc, provider, _ := setupCastHandlerForMetamagic(t)
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":       "hold-person",
+		"target":      "OS",
+		"twin-target": "GB", // Goblin
+		"twin":        true,
+	}))
+
+	require.Len(t, svc.castCalls, 1, "expected one Cast call")
+	got := svc.castCalls[0]
+	assert.NotEqual(t, uuid.Nil, got.TwinTargetID, "TwinTargetID must be set when twin-target option is provided")
+	// Verify it resolved to Goblin, not the primary Orc target.
+	goblinID := provider.listCombatantsOverride[2].ID
+	assert.Equal(t, goblinID, got.TwinTargetID, "TwinTargetID must point at the resolved second target")
+}
+
+// SR-025: /cast twin-target:<unknown> short-circuits with an error rather
+// than silently dropping the option.
+func TestCastHandler_TwinTarget_UnknownRejects(t *testing.T) {
+	h, mock, svc, _, _ := setupCastHandlerForMetamagic(t)
+	var lastInteractionContent string
+	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		if resp.Data != nil {
+			lastInteractionContent = resp.Data.Content
+		}
+		return nil
+	}
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":       "hold-person",
+		"target":      "OS",
+		"twin-target": "ZZZ",
+		"twin":        true,
+	}))
+
+	assert.Len(t, svc.castCalls, 0, "should not invoke Cast when twin target unresolvable")
+	assert.Contains(t, strings.ToLower(lastInteractionContent), "twin")
+}
+
+// SR-025: single-target cast with empowered metamagic posts the
+// PromptEmpowered button row before invoking Cast — the cast proceeds when
+// the player picks a die (or the forfeit timer fires).
+func TestCastHandler_Empowered_PostsPromptAndResumesCast(t *testing.T) {
+	h, _, svc, _, sent := setupCastHandlerForMetamagic(t)
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":     "hold-person",
+		"target":    "OS",
+		"empowered": true,
+	}))
+
+	require.NotEmpty(t, *sent, "expected at least one prompt message")
+	last := (*sent)[len(*sent)-1]
+	assert.Contains(t, last.Content, "Empowered", "prompt content should mention Empowered")
+	row, ok := last.Components[0].(discordgo.ActionsRow)
+	require.True(t, ok, "expected ActionsRow")
+	require.NotEmpty(t, row.Components, "expected at least one button")
+
+	// Click the first die button to resume the cast.
+	btn := row.Components[0].(discordgo.Button)
+	h.HandleComponent(&discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{CustomID: btn.CustomID},
+	})
+
+	require.Len(t, svc.castCalls, 1, "Cast should fire once the prompt resolves")
+	assert.Contains(t, svc.castCalls[0].Metamagic, "empowered")
+}
+
+// SR-025: AoE cast with careful metamagic posts the PromptCareful button
+// row; clicking a target threads that combatant's ID into
+// AoECastCommand.CarefulTargetIDs.
+func TestCastHandler_Careful_AoEPostsPromptAndThreadsTargets(t *testing.T) {
+	h, _, svc, provider, sent := setupCastHandlerForMetamagic(t)
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":   "fireball",
+		"target":  "D4",
+		"careful": true,
+	}))
+
+	require.NotEmpty(t, *sent, "expected at least one prompt message")
+	last := (*sent)[len(*sent)-1]
+	assert.Contains(t, last.Content, "Careful")
+	row, ok := last.Components[0].(discordgo.ActionsRow)
+	require.True(t, ok)
+	require.GreaterOrEqual(t, len(row.Components), 2, "should list at least the two affected non-caster combatants")
+
+	// Click the first target (Orc) to resume.
+	btn := row.Components[0].(discordgo.Button)
+	h.HandleComponent(&discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{CustomID: btn.CustomID},
+	})
+
+	require.Len(t, svc.aoeCalls, 1, "CastAoE should fire after the prompt resolves")
+	got := svc.aoeCalls[0]
+	require.Len(t, got.CarefulTargetIDs, 1, "expected one careful target threaded")
+	orcID := provider.listCombatantsOverride[1].ID
+	assert.Equal(t, orcID, got.CarefulTargetIDs[0])
+}
+
+// SR-025: AoE cast with heightened metamagic posts the PromptHeightened
+// button row; clicking a target threads HeightenedTargetID into the AoE
+// cast command.
+func TestCastHandler_Heightened_AoEPostsPromptAndThreadsTarget(t *testing.T) {
+	h, _, svc, provider, sent := setupCastHandlerForMetamagic(t)
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":      "fireball",
+		"target":     "D4",
+		"heightened": true,
+	}))
+
+	require.NotEmpty(t, *sent, "expected at least one prompt message")
+	last := (*sent)[len(*sent)-1]
+	assert.Contains(t, last.Content, "Heightened")
+	row, ok := last.Components[0].(discordgo.ActionsRow)
+	require.True(t, ok)
+	require.GreaterOrEqual(t, len(row.Components), 1)
+
+	btn := row.Components[0].(discordgo.Button)
+	h.HandleComponent(&discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{CustomID: btn.CustomID},
+	})
+
+	require.Len(t, svc.aoeCalls, 1)
+	orcID := provider.listCombatantsOverride[1].ID
+	assert.Equal(t, orcID, svc.aoeCalls[0].HeightenedTargetID)
+}
+
+// SR-025: HandleComponent must claim metamagic-poster buttons so the router
+// stops fan-out. (Mirrors the SR-024 cast-handler material-prompt contract.)
+func TestCastHandler_HandleComponent_ClaimsMetamagicPromptClicks(t *testing.T) {
+	h, _, _, _, sent := setupCastHandlerForMetamagic(t)
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":     "hold-person",
+		"target":    "OS",
+		"empowered": true,
+	}))
+	require.NotEmpty(t, *sent)
+	row := (*sent)[0].Components[0].(discordgo.ActionsRow)
+	btn := row.Components[0].(discordgo.Button)
+
+	claimed := h.HandleComponent(&discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{CustomID: btn.CustomID},
+	})
+	assert.True(t, claimed, "HandleComponent must claim metamagic-prompt clicks")
 }
 

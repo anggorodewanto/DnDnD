@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -346,6 +347,12 @@ type AoECastCommand struct {
 	// Metamagic includes "careful". Capped at CHA mod (CarefulSpellCreatureCount).
 	// Discord prompt UX (SR-025) populates this; CastAoE just honours it.
 	CarefulTargetIDs []uuid.UUID
+	// HeightenedTargetID names the affected combatant whose save gains
+	// Disadvantage when Metamagic includes "heightened". When unset
+	// (uuid.Nil) the existing behaviour falls back to "first affected
+	// combatant" so Heightened still works from non-interactive code paths
+	// (DM dashboard, replays). SR-025.
+	HeightenedTargetID uuid.UUID
 }
 
 // CastAoE orchestrates the AoE spell casting flow:
@@ -514,6 +521,10 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		}
 	}
 	heightened := hasMetamagic(cmd.Metamagic, "heightened")
+	// SR-025: explicit HeightenedTargetID (from the Discord prompt) wins
+	// over the "first affected" default. uuid.Nil falls back to first-
+	// affected so existing call sites (DM dashboard, replay) keep working.
+	heightenedExplicit := cmd.HeightenedTargetID != uuid.Nil
 
 	var pendingSaves []PendingSave
 	var affectedNames []string
@@ -525,9 +536,14 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 			if carefulSet[c.ID] {
 				ps.AutoSuccess = true
 			}
-			if heightened && !heightenedAssigned && !ps.AutoSuccess {
-				ps.Disadvantage = true
-				heightenedAssigned = true
+			if heightened && !ps.AutoSuccess {
+				if heightenedExplicit && c.ID == cmd.HeightenedTargetID {
+					ps.Disadvantage = true
+					heightenedAssigned = true
+				} else if !heightenedExplicit && !heightenedAssigned {
+					ps.Disadvantage = true
+					heightenedAssigned = true
+				}
 			}
 			pendingSaves = append(pendingSaves, ps)
 		}
@@ -543,7 +559,14 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	// = DC, success = true) so the all-rolls-resolved gate in
 	// ResolveAoEPendingSaves advances without waiting on a player roll the
 	// ally would never make.
-	source := AoEPendingSaveSource(spell.ID)
+	// SR-025: when Empowered is in the metamagic list, bake the reroll
+	// count (CHA-mod, min 1) into the source tag so ResolveAoEPendingSaves
+	// can echo it into ResolveAoESaves(EmpoweredRerolls: N).
+	empoweredRerolls := 0
+	if hasMetamagic(cmd.Metamagic, "empowered") {
+		empoweredRerolls = EmpoweredRerollCount(scores.Cha)
+	}
+	source := AoEPendingSaveSourceEmpowered(spell.ID, empoweredRerolls)
 	for _, ps := range pendingSaves {
 		created, err := s.store.CreatePendingSave(ctx, refdata.CreatePendingSaveParams{
 			EncounterID: cmd.EncounterID,
@@ -693,15 +716,27 @@ func applyAoEMetamagicEffects(result *AoECastResult, metamagics []string, spell 
 }
 
 // AoEPendingSaveSourcePrefix is the source-column prefix used for pending_saves
-// rows persisted by CastAoE. Encoded as "aoe:<spell-id>" so the resolver can
-// distinguish AoE-cast rows from concentration / DM-prompted saves and look
-// the spell up for damage application without a side-table.
+// rows persisted by CastAoE. Encoded as "aoe:<spell-id>" (or
+// "aoe:<spell-id>:e<N>" when Empowered metamagic is active) so the resolver
+// can distinguish AoE-cast rows from concentration / DM-prompted saves and
+// look the spell up for damage application without a side-table.
 const AoEPendingSaveSourcePrefix = "aoe:"
 
 // AoEPendingSaveSource returns the canonical pending_saves.source value for
 // a pending AoE save originating from the given spell.
 func AoEPendingSaveSource(spellID string) string {
 	return AoEPendingSaveSourcePrefix + spellID
+}
+
+// AoEPendingSaveSourceEmpowered is the SR-025 variant that bakes the
+// Empowered reroll count into the source string. ResolveAoEPendingSaves
+// reads this back to drive ResolveAoESaves(EmpoweredRerolls: N) so the
+// damage roll re-rolls the N lowest dice once.
+func AoEPendingSaveSourceEmpowered(spellID string, rerolls int) string {
+	if rerolls <= 0 {
+		return AoEPendingSaveSource(spellID)
+	}
+	return fmt.Sprintf("%s%s:e%d", AoEPendingSaveSourcePrefix, spellID, rerolls)
 }
 
 // IsAoEPendingSaveSource reports whether the given pending_saves.source value
@@ -712,12 +747,36 @@ func IsAoEPendingSaveSource(source string) bool {
 }
 
 // SpellIDFromAoEPendingSaveSource extracts the spell ID from an
-// "aoe:<spell-id>" source tag. Returns "" when the source is not AoE-tagged.
+// "aoe:<spell-id>" or "aoe:<spell-id>:e<N>" source tag. Returns "" when the
+// source is not AoE-tagged. SR-025: trailing `:e<N>` suffix is stripped.
 func SpellIDFromAoEPendingSaveSource(source string) string {
 	if !IsAoEPendingSaveSource(source) {
 		return ""
 	}
-	return strings.TrimPrefix(source, AoEPendingSaveSourcePrefix)
+	rest := strings.TrimPrefix(source, AoEPendingSaveSourcePrefix)
+	if idx := strings.LastIndex(rest, ":e"); idx >= 0 {
+		return rest[:idx]
+	}
+	return rest
+}
+
+// EmpoweredRerollsFromAoEPendingSaveSource extracts the Empowered reroll
+// count from an "aoe:<spell-id>:e<N>" source. Returns 0 when no suffix is
+// present. SR-025.
+func EmpoweredRerollsFromAoEPendingSaveSource(source string) int {
+	if !IsAoEPendingSaveSource(source) {
+		return 0
+	}
+	rest := strings.TrimPrefix(source, AoEPendingSaveSourcePrefix)
+	idx := strings.LastIndex(rest, ":e")
+	if idx < 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(rest[idx+2:])
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 // ResolveAoEPendingSaves checks every pending_saves row in the encounter
@@ -735,11 +794,19 @@ func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.U
 	if err != nil {
 		return nil, fmt.Errorf("listing pending saves: %w", err)
 	}
-	source := AoEPendingSaveSource(spellID)
+	// SR-025: rows for the same spell may use either the plain source
+	// ("aoe:<spell-id>") or the Empowered variant ("aoe:<spell-id>:eN").
+	// Match by SpellIDFromAoEPendingSaveSource so both shapes resolve and
+	// the highest-N suffix wins as the empowered reroll count.
+	empoweredRerolls := 0
 	var spellRows []refdata.PendingSafe
 	for _, r := range rows {
-		if r.Source == source {
-			spellRows = append(spellRows, r)
+		if SpellIDFromAoEPendingSaveSource(r.Source) != spellID {
+			continue
+		}
+		spellRows = append(spellRows, r)
+		if n := EmpoweredRerollsFromAoEPendingSaveSource(r.Source); n > empoweredRerolls {
+			empoweredRerolls = n
 		}
 	}
 	if len(spellRows) == 0 {
@@ -787,12 +854,13 @@ func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.U
 		})
 	}
 	input := AoEDamageInput{
-		EncounterID: encounterID,
-		SpellName:   spell.Name,
-		DamageDice:  dmgInfo.Dice,
-		DamageType:  dmgInfo.DamageType,
-		SaveEffect:  saveEffect,
-		SaveResults: saveResults,
+		EncounterID:      encounterID,
+		SpellName:        spell.Name,
+		DamageDice:       dmgInfo.Dice,
+		DamageType:       dmgInfo.DamageType,
+		SaveEffect:       saveEffect,
+		SaveResults:      saveResults,
+		EmpoweredRerolls: empoweredRerolls, // SR-025
 	}
 	res, err := s.ResolveAoESaves(ctx, input, roller)
 	if err != nil {
@@ -850,6 +918,14 @@ type AoEDamageInput struct {
 	DamageType  string // e.g., "fire"
 	SaveEffect  string // "half_damage", "no_effect", "special"
 	SaveResults []SaveResult
+	// SR-025: when > 0, ResolveAoESaves re-rolls the N lowest damage dice
+	// once after the initial roll (Empowered Spell metamagic). The reroll
+	// always targets the lowest values because the interactive prompt's
+	// "pick which dice" UI is forfeit-friendly: the canonical default is
+	// "reroll the worst", which is what an empowered cast resolves to
+	// when the player does not click before the AoE save-resolution gate
+	// fires (every per-target save has already returned).
+	EmpoweredRerolls int
 }
 
 // AoEDamageResult holds the outcomes of resolving AoE saves and applying damage.
@@ -878,6 +954,43 @@ func (s *Service) ResolveAoESaves(ctx context.Context, input AoEDamageInput, rol
 		return AoEDamageResult{}, fmt.Errorf("rolling damage %q: %w", input.DamageDice, err)
 	}
 	baseDamage := rollResult.Total
+
+	// 1a. SR-025: when Empowered metamagic is active, re-roll the N lowest
+	// damage dice once and recompute the total. Walks each group in the
+	// roll result (so multi-group expressions like "8d6+1d4" reroll within
+	// each group separately by face count). The original rolls aren't
+	// mutated — RerollLowestDice returns a new slice.
+	if input.EmpoweredRerolls > 0 {
+		remaining := input.EmpoweredRerolls
+		newTotal := 0
+		for _, g := range rollResult.Groups {
+			if remaining <= 0 || g.Die == 0 {
+				newTotal += g.Total
+				continue
+			}
+			rerolledGroup := RerollLowestDice(g.Results, g.Die, remaining, func(faces int) int {
+				one, rerollErr := roller.Roll(fmt.Sprintf("1d%d", faces))
+				if rerollErr != nil {
+					return 1
+				}
+				return one.Total
+			})
+			groupTotal := 0
+			for _, v := range rerolledGroup {
+				groupTotal += v
+			}
+			newTotal += groupTotal
+			// Burn the rerolls used in this group against the remaining
+			// budget. RerollLowestDice clamps count to len internally so
+			// `min(remaining, len(g.Results))` is what was spent.
+			used := remaining
+			if used > len(g.Results) {
+				used = len(g.Results)
+			}
+			remaining -= used
+		}
+		baseDamage = newTotal + rollResult.Modifier
+	}
 
 	var targets []AoETargetOutcome
 	totalDamage := 0

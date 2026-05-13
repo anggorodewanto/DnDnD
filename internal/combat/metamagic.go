@@ -233,3 +233,45 @@ func CarefulSpellCreatureCount(chaScore int) int {
 func EmpoweredRerollCount(chaScore int) int {
 	return chaModMin1(chaScore)
 }
+
+// RerollLowestDice replaces the `count` lowest values in `rolls` with fresh
+// rolls drawn from `randFn` (which must return an integer in [1, faces]).
+// Returns a new slice; the input is not mutated. When `count` is <= 0 the
+// function returns a copy of the input unchanged; when `count` exceeds
+// `len(rolls)` every die is rerolled.
+//
+// This is the server-side executor for Empowered Spell metamagic. The spec
+// lets the sorcerer pick which dice to reroll, but the canonical "always pick
+// the worst" choice is what an empowered cast resolves to whenever the
+// interactive prompt is forfeited (or when the AoE damage roll fires after
+// every per-target save has resolved). SR-025.
+func RerollLowestDice(rolls []int, faces, count int, randFn func(int) int) []int {
+	out := make([]int, len(rolls))
+	copy(out, rolls)
+	if count <= 0 || len(out) == 0 {
+		return out
+	}
+	if count > len(out) {
+		count = len(out)
+	}
+	// Build (value, index) tuples, stable-sort by value ascending, take
+	// first `count` indices — those are the dice to reroll. n is small
+	// (CHA mod, ≤ 5) so a tiny insertion sort is preferred over
+	// sort.SliceStable's allocations.
+	type indexed struct {
+		val, idx int
+	}
+	pairs := make([]indexed, len(out))
+	for i, v := range out {
+		pairs[i] = indexed{val: v, idx: i}
+	}
+	for i := 1; i < len(pairs); i++ {
+		for j := i; j > 0 && pairs[j-1].val > pairs[j].val; j-- {
+			pairs[j-1], pairs[j] = pairs[j], pairs[j-1]
+		}
+	}
+	for i := 0; i < count; i++ {
+		out[pairs[i].idx] = randFn(faces)
+	}
+	return out
+}

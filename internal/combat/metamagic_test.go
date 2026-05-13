@@ -356,6 +356,35 @@ func TestEmpoweredRerollCount(t *testing.T) {
 	assert.Equal(t, 1, EmpoweredRerollCount(8))  // mod = -1, min 1
 }
 
+// SR-025: RerollLowestDice replaces the N lowest rolls with fresh rolls.
+// The "Empowered Spell" feature lets the sorcerer reroll a number of the
+// spell's damage dice equal to their CHA mod (min 1). Mechanically the
+// player picks which dice to reroll; the executor defaults to "lowest N"
+// when no choice is made — that's the only path SR-025 requires server-
+// side. The original slice is not mutated.
+func TestRerollLowestDice_ReplacesNLowestRolls(t *testing.T) {
+	rolls := []int{2, 6, 1, 4}
+	// Roller always returns 5 (constant). The two lowest values (1 at idx
+	// 2, 2 at idx 0) should be replaced with 5; idx 1 (6) and idx 3 (4)
+	// untouched.
+	got := RerollLowestDice(rolls, 6, 2, func(_ int) int { return 5 })
+	assert.Equal(t, []int{5, 6, 5, 4}, got)
+	// Original slice untouched (pure function contract).
+	assert.Equal(t, []int{2, 6, 1, 4}, rolls)
+}
+
+// Edge case: reroll count exceeds slice length — clamp to len.
+func TestRerollLowestDice_RerollCountExceedsLen(t *testing.T) {
+	got := RerollLowestDice([]int{3, 1}, 6, 5, func(_ int) int { return 4 })
+	assert.Equal(t, []int{4, 4}, got)
+}
+
+// Edge case: rerollCount <= 0 returns a copy unchanged.
+func TestRerollLowestDice_ZeroOrNegativeIsNoOp(t *testing.T) {
+	got := RerollLowestDice([]int{3, 1, 2}, 6, 0, func(_ int) int { return 6 })
+	assert.Equal(t, []int{3, 1, 2}, got)
+}
+
 // TDD Cycle 14: Empty metamagic list passes validation
 func TestValidateMetamagicOptions_Empty(t *testing.T) {
 	err := ValidateMetamagicOptions(nil, makeFireball())

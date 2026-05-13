@@ -2744,6 +2744,66 @@ func TestCastAoE_Twinned_Rejected(t *testing.T) {
 	assert.False(t, slotDeducted, "rejected metamagic must NOT burn a slot")
 }
 
+// SR-025: When AoEDamageInput.EmpoweredRerolls > 0, ResolveAoESaves must
+// reroll the N lowest damage dice once before applying the multiplier. SR-013
+// only wired the metamagic flag onto AoECastResult; the actual reroll was
+// deferred to SR-025.
+//
+// Roller sequence (1d6 die):
+//   - First 8 rolls (Fireball 8d6) come back in order [1,1,1,1,5,5,5,5] (sum 24).
+//   - Empowered with rerolls=2 then re-rolls the two lowest dice (both 1s
+//     at idx 0 and 1, stable order). Roller returns 6 then 6 → new total
+//     is [6,6,1,1,5,5,5,5] = 34. Failed save against half_damage means
+//     full damage (34) lands on the goblin (HP 50 → 16).
+func TestResolveAoESaves_Empowered_RerollsLowestDice(t *testing.T) {
+	goblinID := uuid.New()
+	goblin := refdata.Combatant{
+		ID: goblinID, DisplayName: "Goblin", HpMax: 50, HpCurrent: 50,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	store := defaultMockStore()
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == goblinID {
+			return goblin, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	// Roller returns 1,1,1,1,5,5,5,5,6,6 — first 8 are the 8d6 roll, last
+	// two satisfy the empowered reroll on the two lowest values.
+	calls := 0
+	seq := []int{1, 1, 1, 1, 5, 5, 5, 5, 6, 6}
+	roller := dice.NewRoller(func(_ int) int {
+		v := seq[calls]
+		calls++
+		return v
+	})
+	svc := NewService(store)
+
+	input := AoEDamageInput{
+		EncounterID:      uuid.New(),
+		SpellName:        "Fireball",
+		DamageDice:       "8d6",
+		DamageType:       "fire",
+		SaveEffect:       "half_damage",
+		EmpoweredRerolls: 2,
+		SaveResults: []SaveResult{
+			{CombatantID: goblinID, Rolled: 8, Total: 8, Success: false},
+		},
+	}
+
+	result, err := svc.ResolveAoESaves(context.Background(), input, roller)
+	require.NoError(t, err)
+	require.Len(t, result.Targets, 1)
+	// 6+6+1+1+5+5+5+5 = 34
+	assert.Equal(t, 34, result.Targets[0].DamageDealt, "Empowered must reroll the two lowest dice")
+	assert.Equal(t, 16, result.Targets[0].HPAfter)
+}
+
 // TestCastAoE_Empowered_SetsFlag verifies Empowered surfaces on AoECastResult.
 func TestCastAoE_Empowered_SetsFlag(t *testing.T) {
 	f := newSR013SorcererFixture(t, sr013SorcererFireball())
