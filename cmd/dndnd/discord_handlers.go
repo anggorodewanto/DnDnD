@@ -374,6 +374,15 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	if deps.queries != nil {
 		handlers.check.SetArmorLookup(deps.queries)
 	}
+	// SR-022: wire the beast lookup on /check and /save so a Wild Shaped
+	// druid actually rolls with the beast's STR/DEX/CON. *refdata.Queries
+	// already exposes GetCreature so it satisfies CheckCreatureLookup
+	// structurally. Nil-safe — handlers fall back to druid scores when
+	// unwired.
+	if deps.queries != nil {
+		handlers.check.SetCreatureLookup(deps.queries)
+		handlers.save.SetCreatureLookup(deps.queries)
+	}
 	// COMBAT-MISC-followup / E-69: wire the encounter-zone lookup on both
 	// /check (Perception disadvantage in obscurement) and /action (Hide
 	// gating). *combat.Service already exposes ListZonesForEncounter so it

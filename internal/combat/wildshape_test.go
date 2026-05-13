@@ -11,6 +11,7 @@ import (
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -718,6 +719,216 @@ func TestRevertWildShape_NoSnapshot(t *testing.T) {
 	}
 	_, _, err := RevertWildShape(c, 0)
 	assert.ErrorContains(t, err, "no Wild Shape snapshot")
+}
+
+// SR-022: Wild Shape must swap STR/DEX/CON to the beast's scores while
+// preserving the druid's INT/WIS/CHA. Revert must restore the druid's
+// original physical scores. The originals are persisted in the existing
+// WildShapeOriginal snapshot — no new column needed.
+
+func TestEffectiveAbilityScores_WildShapedBrownBear(t *testing.T) {
+	// Druid pre-transform scores live on the character row.
+	druid := character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 18, CHA: 10}
+	// Brown Bear MM stat block.
+	bear := character.AbilityScores{STR: 19, DEX: 10, CON: 16, INT: 2, WIS: 13, CHA: 7}
+
+	snap := WildShapeSnapshot{
+		HpMax: 28, HpCurrent: 28, Ac: 16, SpeedFt: 30,
+		AbilityScores: map[string]int{"str": 8, "dex": 14, "con": 12, "int": 16, "wis": 18, "cha": 10},
+	}
+	snapJSON, _ := json.Marshal(snap)
+	c := refdata.Combatant{
+		IsWildShaped:      true,
+		WildShapeOriginal: pqtype.NullRawMessage{RawMessage: snapJSON, Valid: true},
+	}
+
+	got := EffectiveAbilityScores(c, druid, bear)
+	// Physicals swapped to bear values.
+	assert.Equal(t, 19, got.STR)
+	assert.Equal(t, 10, got.DEX)
+	assert.Equal(t, 16, got.CON)
+	// Mentals retained from druid.
+	assert.Equal(t, 16, got.INT)
+	assert.Equal(t, 18, got.WIS)
+	assert.Equal(t, 10, got.CHA)
+}
+
+func TestEffectiveAbilityScores_NotWildShaped(t *testing.T) {
+	druid := character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 18, CHA: 10}
+	// Beast scores ignored when not wild-shaped.
+	bear := character.AbilityScores{STR: 19, DEX: 10, CON: 16}
+
+	c := refdata.Combatant{IsWildShaped: false}
+
+	got := EffectiveAbilityScores(c, druid, bear)
+	assert.Equal(t, druid, got)
+}
+
+func TestEffectiveAbilityScores_RevertRestoresPhysicals(t *testing.T) {
+	// Round-trip: activate → physicals are bear's; revert → physicals
+	// restored to druid's originals from the snapshot.
+	druid := character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 18, CHA: 10}
+	bear := character.AbilityScores{STR: 19, DEX: 10, CON: 16, INT: 2, WIS: 13, CHA: 7}
+
+	snap := WildShapeSnapshot{
+		HpMax: 28, HpCurrent: 28, Ac: 16, SpeedFt: 30,
+		AbilityScores: map[string]int{"str": 8, "dex": 14, "con": 12, "int": 16, "wis": 18, "cha": 10},
+	}
+	snapJSON, _ := json.Marshal(snap)
+	wild := refdata.Combatant{
+		IsWildShaped:      true,
+		WildShapeOriginal: pqtype.NullRawMessage{RawMessage: snapJSON, Valid: true},
+		HpMax:             34, HpCurrent: 34, Ac: 11,
+	}
+
+	// While wild-shaped: physicals = bear.
+	mid := EffectiveAbilityScores(wild, druid, bear)
+	assert.Equal(t, 19, mid.STR)
+	assert.Equal(t, 16, mid.CON)
+
+	// Revert clears the snapshot and IsWildShaped.
+	reverted, _, err := RevertWildShape(wild, 0)
+	require.NoError(t, err)
+
+	// After revert: physicals restored to druid's originals.
+	got := EffectiveAbilityScores(reverted, druid, bear)
+	assert.Equal(t, 8, got.STR)
+	assert.Equal(t, 14, got.DEX)
+	assert.Equal(t, 12, got.CON)
+	assert.Equal(t, 16, got.INT)
+	assert.Equal(t, 18, got.WIS)
+	assert.Equal(t, 10, got.CHA)
+}
+
+// SR-022 plumbing tests: LookupBeastScores + ResolveAttackerScores are the
+// adapter the runtime call sites (/check, /save, /attack) use to thread
+// the merged Wild Shape scores into player rolls.
+
+// stubCreatureLookup is a tiny CreatureScoresLookup mock used by the
+// SR-022 plumbing tests.
+type stubCreatureLookup struct {
+	getFn func(ctx context.Context, id string) (refdata.Creature, error)
+}
+
+func (s *stubCreatureLookup) GetCreature(ctx context.Context, id string) (refdata.Creature, error) {
+	return s.getFn(ctx, id)
+}
+
+func wildShapedCombatantOnBeast(beastID string) refdata.Combatant {
+	return refdata.Combatant{
+		IsWildShaped:         true,
+		WildShapeCreatureRef: sql.NullString{String: beastID, Valid: true},
+	}
+}
+
+func brownBearCreature() refdata.Creature {
+	return refdata.Creature{
+		ID:            "brown-bear",
+		Name:          "Brown Bear",
+		Type:          "beast",
+		AbilityScores: json.RawMessage(`{"str":19,"dex":10,"con":16,"int":2,"wis":13,"cha":7}`),
+	}
+}
+
+func TestLookupBeastScores_ReturnsBeastScoresWhenWildShaped(t *testing.T) {
+	lookup := &stubCreatureLookup{
+		getFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			assert.Equal(t, "brown-bear", id)
+			return brownBearCreature(), nil
+		},
+	}
+	got, ok := LookupBeastScores(context.Background(), lookup, wildShapedCombatantOnBeast("brown-bear"))
+	require.True(t, ok)
+	assert.Equal(t, 19, got.STR)
+	assert.Equal(t, 10, got.DEX)
+	assert.Equal(t, 16, got.CON)
+}
+
+func TestLookupBeastScores_NotWildShaped(t *testing.T) {
+	lookup := &stubCreatureLookup{
+		getFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			t.Fatalf("GetCreature should not be called when not Wild Shaped")
+			return refdata.Creature{}, nil
+		},
+	}
+	_, ok := LookupBeastScores(context.Background(), lookup, refdata.Combatant{IsWildShaped: false})
+	assert.False(t, ok)
+}
+
+func TestLookupBeastScores_NilLookupDegrades(t *testing.T) {
+	_, ok := LookupBeastScores(context.Background(), nil, wildShapedCombatantOnBeast("brown-bear"))
+	assert.False(t, ok, "nil lookup must degrade to ok=false, not panic")
+}
+
+func TestLookupBeastScores_MissingBeastRefDegrades(t *testing.T) {
+	lookup := &stubCreatureLookup{
+		getFn: func(ctx context.Context, _ string) (refdata.Creature, error) {
+			t.Fatalf("GetCreature should not be called when ref is empty")
+			return refdata.Creature{}, nil
+		},
+	}
+	c := refdata.Combatant{
+		IsWildShaped:         true,
+		WildShapeCreatureRef: sql.NullString{Valid: false},
+	}
+	_, ok := LookupBeastScores(context.Background(), lookup, c)
+	assert.False(t, ok)
+}
+
+func TestLookupBeastScores_GetCreatureErrorDegrades(t *testing.T) {
+	lookup := &stubCreatureLookup{
+		getFn: func(ctx context.Context, _ string) (refdata.Creature, error) {
+			return refdata.Creature{}, fmt.Errorf("not found")
+		},
+	}
+	_, ok := LookupBeastScores(context.Background(), lookup, wildShapedCombatantOnBeast("ghost-beast"))
+	assert.False(t, ok)
+}
+
+func TestLookupBeastScores_MalformedJSONDegrades(t *testing.T) {
+	lookup := &stubCreatureLookup{
+		getFn: func(ctx context.Context, _ string) (refdata.Creature, error) {
+			return refdata.Creature{AbilityScores: json.RawMessage(`not-json`)}, nil
+		},
+	}
+	_, ok := LookupBeastScores(context.Background(), lookup, wildShapedCombatantOnBeast("broken"))
+	assert.False(t, ok)
+}
+
+func TestResolveAttackerScores_WildShapedMergesBeastPhysicals(t *testing.T) {
+	druid := AbilityScores{Str: 8, Dex: 14, Con: 12, Int: 16, Wis: 18, Cha: 10}
+	lookup := &stubCreatureLookup{
+		getFn: func(ctx context.Context, _ string) (refdata.Creature, error) {
+			return brownBearCreature(), nil
+		},
+	}
+	got := ResolveAttackerScores(context.Background(), lookup, wildShapedCombatantOnBeast("brown-bear"), druid)
+	// Beast STR/DEX/CON.
+	assert.Equal(t, 19, got.Str)
+	assert.Equal(t, 10, got.Dex)
+	assert.Equal(t, 16, got.Con)
+	// Druid mentals.
+	assert.Equal(t, 16, got.Int)
+	assert.Equal(t, 18, got.Wis)
+	assert.Equal(t, 10, got.Cha)
+}
+
+func TestResolveAttackerScores_NotWildShapedReturnsDruid(t *testing.T) {
+	druid := AbilityScores{Str: 8, Dex: 14, Con: 12, Int: 16, Wis: 18, Cha: 10}
+	got := ResolveAttackerScores(context.Background(), nil, refdata.Combatant{}, druid)
+	assert.Equal(t, druid, got)
+}
+
+func TestResolveAttackerScores_BeastLookupErrorDegradesToDruid(t *testing.T) {
+	druid := AbilityScores{Str: 8, Dex: 14, Con: 12, Int: 16, Wis: 18, Cha: 10}
+	lookup := &stubCreatureLookup{
+		getFn: func(ctx context.Context, _ string) (refdata.Creature, error) {
+			return refdata.Creature{}, fmt.Errorf("db down")
+		},
+	}
+	got := ResolveAttackerScores(context.Background(), lookup, wildShapedCombatantOnBeast("brown-bear"), druid)
+	// Silent fallback to druid (SR-006 pattern).
+	assert.Equal(t, druid, got)
 }
 
 func TestRevertWildShape_OverflowClampsToZero(t *testing.T) {

@@ -1072,11 +1072,15 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 		if err != nil {
 			return AttackResult{}, fmt.Errorf("getting character: %w", err)
 		}
-		s, err := ParseAbilityScores(char.AbilityScores)
+		parsed, err := ParseAbilityScores(char.AbilityScores)
 		if err != nil {
 			return AttackResult{}, fmt.Errorf("parsing ability scores: %w", err)
 		}
-		scores = s
+		// SR-022: druid Wild Shaped into a beast swings with beast STR/DEX
+		// even on improvised attacks. ResolveAttackerScores degrades to
+		// druid scores when the lookup fails (SR-006 pattern), so a missing
+		// beast row never blocks the roll.
+		scores = ResolveAttackerScores(ctx, s.store, cmd.Attacker, parsed)
 		profBonus = int(char.ProficiencyBonus)
 		hasTavernBrawler = HasFeat(char.Features, "tavern-brawler")
 		charPtr = &char
@@ -1159,10 +1163,13 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 		return AttackResult{}, fmt.Errorf("getting character: %w", err)
 	}
 
-	scores, err := ParseAbilityScores(char.AbilityScores)
+	parsed, err := ParseAbilityScores(char.AbilityScores)
 	if err != nil {
 		return AttackResult{}, fmt.Errorf("parsing ability scores: %w", err)
 	}
+	// SR-022: off-hand swings made while Wild Shaped use the beast's
+	// merged STR/DEX/CON. Failed beast lookup degrades to druid scores.
+	scores := ResolveAttackerScores(ctx, s.store, cmd.Attacker, parsed)
 
 	// Validate main hand weapon exists and is light
 	if !char.EquippedMainHand.Valid || char.EquippedMainHand.String == "" {
@@ -1252,10 +1259,15 @@ func (s *Service) resolveAttackWeaponFull(ctx context.Context, cmd AttackCommand
 		return refdata.Weapon{}, AbilityScores{}, 0, nil, fmt.Errorf("getting character: %w", err)
 	}
 
-	scores, err := ParseAbilityScores(char.AbilityScores)
+	parsed, err := ParseAbilityScores(char.AbilityScores)
 	if err != nil {
 		return refdata.Weapon{}, AbilityScores{}, 0, nil, fmt.Errorf("parsing ability scores: %w", err)
 	}
+	// SR-022: Wild Shaped druid swings with beast physicals (STR/DEX/CON)
+	// while retaining mental scores. ResolveAttackerScores is a no-op when
+	// the attacker is not Wild Shaped and silently degrades to druid
+	// scores on any beast-lookup failure (SR-006 pattern).
+	scores := ResolveAttackerScores(ctx, s.store, cmd.Attacker, parsed)
 
 	profBonus := int(char.ProficiencyBonus)
 

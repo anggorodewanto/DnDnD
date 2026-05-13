@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -575,4 +576,136 @@ func TestBuildSaveFeatureEffects_BadJSON_DegradesToNil(t *testing.T) {
 	}
 	// Should degrade gracefully — no panic, no error, just no extra effects.
 	_ = buildSaveFeatureEffects(char)
+}
+
+// --- SR-022: /save uses beast STR/DEX/CON while Wild Shaped ---
+
+// TestSaveHandler_WildShaped_StrSaveUsesBeastStr — a STR-8 druid Wild
+// Shaped into a brown bear (STR 19 → +4 mod) must roll /save str with bear
+// STR. d20 pinned to 10 → expected total 10 + 4 = 14, not 10 - 1 = 9.
+func TestSaveHandler_WildShaped_StrSaveUsesBeastStr(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	scores, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 18, CHA: 10})
+	char := refdata.Character{
+		ID:               charID,
+		CampaignID:       campaignID,
+		Name:             "Elara",
+		Level:            4,
+		ProficiencyBonus: 2,
+		AbilityScores:    scores,
+	}
+
+	combatant := refdata.Combatant{
+		ID:                   uuid.New(),
+		EncounterID:          encounterID,
+		CharacterID:          uuid.NullUUID{UUID: charID, Valid: true},
+		IsWildShaped:         true,
+		WildShapeCreatureRef: sql.NullString{String: "brown-bear", Valid: true},
+		Conditions:           json.RawMessage(`[]`),
+	}
+
+	roller := dice.NewRoller(func(_ int) int { return 10 })
+	h := NewSaveHandler(
+		sess, roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{combatant}, nil
+		}},
+		&mockCheckRollLogger{},
+	)
+	h.SetCreatureLookup(&mockCheckCreatureLookup{fn: func(_ context.Context, id string) (refdata.Creature, error) {
+		if id == "brown-bear" {
+			return brownBearCreatureRow(), nil
+		}
+		return refdata.Creature{}, sql.ErrNoRows
+	}})
+
+	h.Handle(makeSaveInteraction("str", false, false))
+
+	if !strings.Contains(responded, "14") {
+		t.Fatalf("expected STR save total 14 (bear +4), got: %s", responded)
+	}
+}
+
+// TestSaveHandler_NotWildShaped_StrSaveUsesDruidStr — without Wild Shape,
+// /save str rolls the druid's own STR (-1).
+func TestSaveHandler_NotWildShaped_StrSaveUsesDruidStr(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	scores, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 18, CHA: 10})
+	char := refdata.Character{
+		ID:               charID,
+		CampaignID:       campaignID,
+		Name:             "Elara",
+		Level:            4,
+		ProficiencyBonus: 2,
+		AbilityScores:    scores,
+	}
+
+	combatant := refdata.Combatant{
+		ID:          uuid.New(),
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	roller := dice.NewRoller(func(_ int) int { return 10 })
+	creatureCalled := false
+	h := NewSaveHandler(
+		sess, roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{combatant}, nil
+		}},
+		&mockCheckRollLogger{},
+	)
+	h.SetCreatureLookup(&mockCheckCreatureLookup{fn: func(_ context.Context, _ string) (refdata.Creature, error) {
+		creatureCalled = true
+		return brownBearCreatureRow(), nil
+	}})
+
+	h.Handle(makeSaveInteraction("str", false, false))
+
+	if creatureCalled {
+		t.Fatalf("creature lookup must not be consulted when not Wild Shaped")
+	}
+	// 10 + (-1) = 9.
+	if !strings.Contains(responded, " 9") {
+		t.Fatalf("expected druid STR save total 9, got: %s", responded)
+	}
 }

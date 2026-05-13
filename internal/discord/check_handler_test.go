@@ -1162,3 +1162,230 @@ func TestCheckHandler_Perception_InObscuredZone_AppliesDisadvantageAndReason(t *
 		t.Errorf("expected obscurement reason in response, got: %s", responded)
 	}
 }
+
+// --- SR-022: /check uses beast STR/DEX/CON while Wild Shaped ---
+
+type mockCheckCreatureLookup struct {
+	fn func(ctx context.Context, id string) (refdata.Creature, error)
+}
+
+func (m *mockCheckCreatureLookup) GetCreature(ctx context.Context, id string) (refdata.Creature, error) {
+	return m.fn(ctx, id)
+}
+
+// brownBearCreatureRow returns a refdata.Creature row matching the brown
+// bear used by the SR-022 wildshape_test cases (STR 19, DEX 10, CON 16).
+func brownBearCreatureRow() refdata.Creature {
+	return refdata.Creature{
+		ID:            "brown-bear",
+		Name:          "Brown Bear",
+		Type:          "beast",
+		AbilityScores: json.RawMessage(`{"str":19,"dex":10,"con":16,"int":2,"wis":13,"cha":7}`),
+	}
+}
+
+// TestCheckHandler_WildShaped_AthleticsUsesBeastStr — a STR-8 druid Wild
+// Shaped into a brown bear (STR 19, +4 mod) must roll /check athletics with
+// bear STR, not druid STR. d20 is pinned to 10 so the only variable in the
+// printed total is the STR modifier. Expected: 10 + 4 = 14, not 10 - 1 = 9.
+func TestCheckHandler_WildShaped_AthleticsUsesBeastStr(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	// Druid scores: STR 8 (-1) but the player should roll with bear STR.
+	scores, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 18, CHA: 10})
+	char := refdata.Character{
+		ID:               charID,
+		CampaignID:       campaignID,
+		Name:             "Elara",
+		Level:            4,
+		ProficiencyBonus: 2,
+		AbilityScores:    scores,
+	}
+
+	combatant := refdata.Combatant{
+		ID:                   uuid.New(),
+		EncounterID:          encounterID,
+		CharacterID:          uuid.NullUUID{UUID: charID, Valid: true},
+		IsWildShaped:         true,
+		WildShapeCreatureRef: sql.NullString{String: "brown-bear", Valid: true},
+		Conditions:           json.RawMessage(`[]`),
+	}
+
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 10
+		}
+		return 1
+	})
+
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{combatant}, nil
+		}},
+		&mockCheckRollLogger{},
+	)
+	h.SetCreatureLookup(&mockCheckCreatureLookup{fn: func(_ context.Context, id string) (refdata.Creature, error) {
+		if id == "brown-bear" {
+			return brownBearCreatureRow(), nil
+		}
+		return refdata.Creature{}, sql.ErrNoRows
+	}})
+
+	h.Handle(makeCheckInteraction("athletics", false, false))
+
+	// 10 + 4 (bear STR mod) = 14. Druid STR alone would yield 10 - 1 = 9.
+	if !strings.Contains(responded, "14") {
+		t.Fatalf("expected athletics total 14 from bear STR, got: %s", responded)
+	}
+	if strings.Contains(responded, " 9 ") {
+		t.Fatalf("druid STR (-1) leaked into the roll: %s", responded)
+	}
+}
+
+// TestCheckHandler_NotWildShaped_UsesDruidStr — sanity check: with the
+// creature lookup wired but the player not Wild Shaped, the druid's own
+// STR is used (10 + (-1) = 9).
+func TestCheckHandler_NotWildShaped_UsesDruidStr(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	scores, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 18, CHA: 10})
+	char := refdata.Character{
+		ID:               charID,
+		CampaignID:       campaignID,
+		Name:             "Elara",
+		Level:            4,
+		ProficiencyBonus: 2,
+		AbilityScores:    scores,
+	}
+
+	// IsWildShaped: false — the lookup should never be consulted.
+	combatant := refdata.Combatant{
+		ID:          uuid.New(),
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	creatureCalled := false
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{combatant}, nil
+		}},
+		&mockCheckRollLogger{},
+	)
+	h.SetCreatureLookup(&mockCheckCreatureLookup{fn: func(_ context.Context, _ string) (refdata.Creature, error) {
+		creatureCalled = true
+		return brownBearCreatureRow(), nil
+	}})
+
+	h.Handle(makeCheckInteraction("athletics", false, false))
+
+	if creatureCalled {
+		t.Fatalf("creature lookup must not be consulted when player is not Wild Shaped")
+	}
+	// 10 - 1 (druid STR) = 9.
+	if !strings.Contains(responded, " 9") {
+		t.Fatalf("expected druid athletics total 9, got: %s", responded)
+	}
+}
+
+// TestCheckHandler_WildShaped_BeastLookupFails_FallsBackToDruid — when the
+// beast can't be resolved (e.g. database hiccup), /check must degrade to
+// druid scores rather than rejecting the roll (SR-006 silent-fallback).
+func TestCheckHandler_WildShaped_BeastLookupFails_FallsBackToDruid(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	scores, _ := json.Marshal(character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 16, WIS: 18, CHA: 10})
+	char := refdata.Character{
+		ID: charID, CampaignID: campaignID, Name: "Elara",
+		Level: 4, ProficiencyBonus: 2, AbilityScores: scores,
+	}
+
+	combatant := refdata.Combatant{
+		ID:                   uuid.New(),
+		EncounterID:          encounterID,
+		CharacterID:          uuid.NullUUID{UUID: charID, Valid: true},
+		IsWildShaped:         true,
+		WildShapeCreatureRef: sql.NullString{String: "ghost-beast", Valid: true},
+		Conditions:           json.RawMessage(`[]`),
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 10 })
+	h := NewCheckHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{combatant}, nil
+		}},
+		&mockCheckRollLogger{},
+	)
+	h.SetCreatureLookup(&mockCheckCreatureLookup{fn: func(_ context.Context, _ string) (refdata.Creature, error) {
+		return refdata.Creature{}, errors.New("not found")
+	}})
+
+	h.Handle(makeCheckInteraction("athletics", false, false))
+
+	// Beast lookup failed, fall back to druid STR (-1): 10 - 1 = 9.
+	if !strings.Contains(responded, " 9") {
+		t.Fatalf("expected druid fallback total 9 on lookup error, got: %s", responded)
+	}
+}

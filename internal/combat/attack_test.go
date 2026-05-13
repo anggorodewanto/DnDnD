@@ -3340,3 +3340,162 @@ func TestServiceAttack_FullCoverRejectsAttack(t *testing.T) {
 	require.Error(t, err, "total cover must reject the attack")
 	assert.ErrorIs(t, err, ErrTargetFullyCovered)
 }
+
+// --- SR-022: Wild Shape merged scores feed Service.Attack ---
+
+// TestServiceAttack_WildShapedUsesBeastStr — a druid (STR 8 → -1 mod) Wild
+// Shaped into a brown bear (STR 19 → +4 mod) must roll to-hit and damage
+// with bear STR, not druid STR. We pin the d20 to 10 and d8 to 4 so any
+// movement in the totals must come from the STR modifier swap.
+func TestServiceAttack_WildShapedUsesBeastStr(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	// Druid with STR 8 (mod -1) wielding a longsword (STR weapon).
+	char := makeCharacter(8, 14, 2, "longsword")
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		if id == "longsword" {
+			return makeLongsword(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		if id == "brown-bear" {
+			return brownBearCreature(), nil
+		}
+		return refdata.Creature{}, sql.ErrNoRows
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	// d20 → 10, damage die → 4. STR mod is the only variable.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 10
+		}
+		return 4
+	})
+
+	attacker := refdata.Combatant{
+		ID:                   attackerID,
+		CharacterID:          uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName:          "Elara",
+		PositionCol:          "A",
+		PositionRow:          1,
+		IsAlive:              true,
+		Conditions:           json.RawMessage(`[]`),
+		IsWildShaped:         true,
+		WildShapeCreatureRef: sql.NullString{String: "brown-bear", Valid: true},
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		DisplayName: "Goblin",
+		PositionCol: "B",
+		PositionRow: 1,
+		Ac:          10, // intentionally low so the swing hits and damage surfaces
+		IsAlive:     true,
+		IsNpc:       true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{
+		ID:               turnID,
+		EncounterID:      encounterID,
+		CombatantID:      attackerID,
+		AttacksRemaining: 1,
+	}
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	require.True(t, result.Hit, "swing should land vs AC 10")
+
+	// Bear STR 19 → +4 mod. d8 → 4. Total damage = 4 + 4 = 8.
+	// Druid STR 8 → -1 mod would give 4 - 1 = 3.
+	assert.Equal(t, 8, result.DamageTotal, "damage must use bear STR mod (+4), not druid (-1)")
+
+	// To-hit: d20(10) + bear STR mod(+4) + prof(+2) = 16.
+	// Druid STR would yield 10 - 1 + 2 = 11.
+	assert.Equal(t, 16, result.D20Roll.Total, "d20 total must include bear STR + prof")
+}
+
+// TestServiceAttack_NotWildShapedUsesDruidStr — sanity-check the inverse:
+// a non-Wild-Shaped druid attack rolls with the druid's STR, not the beast's.
+func TestServiceAttack_NotWildShapedUsesDruidStr(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(8, 14, 2, "longsword")
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		if id == "longsword" {
+			return makeLongsword(), nil
+		}
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+	ms.getCreatureFn = func(ctx context.Context, _ string) (refdata.Creature, error) {
+		// If this is ever called for a non-wild-shaped attacker, the helper
+		// would silently degrade — but it should never be called at all.
+		t.Fatalf("GetCreature should not be called when attacker is not Wild Shaped")
+		return refdata.Creature{}, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 10
+		}
+		return 4
+	})
+
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Elara",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		Conditions:  json.RawMessage(`[]`),
+		// IsWildShaped explicitly false.
+	}
+	target := refdata.Combatant{
+		ID:          uuid.New(),
+		PositionCol: "B",
+		PositionRow: 1,
+		Ac:          10,
+		IsAlive:     true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1}
+
+	result, err := svc.Attack(ctx, AttackCommand{Attacker: attacker, Target: target, Turn: turn}, roller)
+	require.NoError(t, err)
+	require.True(t, result.Hit)
+	// Druid STR 8 → -1 mod. d8 → 4. Total damage = 4 - 1 = 3.
+	assert.Equal(t, 3, result.DamageTotal, "non-wild-shaped druid must use own STR")
+}

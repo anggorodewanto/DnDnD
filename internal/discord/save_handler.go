@@ -75,6 +75,10 @@ type SaveHandler struct {
 	combatantLookup   CheckCombatantLookup
 	rollLogger        dice.RollHistoryLogger
 	aoeSaveResolver   AoESaveResolver // E-59: optional; nil disables AoE pending-save resolution
+	// SR-022: beast lookup so a Wild Shaped druid's STR/DEX/CON saves use
+	// the beast's scores. Nil keeps the historical behaviour (druid scores
+	// always used — the bug SR-022 fixes).
+	creatureLookup CheckCreatureLookup
 }
 
 // SetAoESaveResolver wires the combat-side resolver for AoE pending saves.
@@ -83,6 +87,11 @@ type SaveHandler struct {
 func (h *SaveHandler) SetAoESaveResolver(r AoESaveResolver) {
 	h.aoeSaveResolver = r
 }
+
+// SetCreatureLookup wires the beast lookup so a Wild Shaped druid's STR/DEX/
+// CON saves are rolled with beast scores. Nil keeps the historical
+// behaviour (druid scores always used — the bug SR-022 fixes).
+func (h *SaveHandler) SetCreatureLookup(l CheckCreatureLookup) { h.creatureLookup = l }
 
 // HasAoESaveResolver reports whether a non-nil AoESaveResolver has been
 // wired. Production-wiring tests use this to detect the AOE-CAST follow-up
@@ -148,8 +157,13 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 
 	rollMode := rollModeFromFlags(adv, disadv)
 
+	// SR-022: a Wild Shaped druid's STR/DEX/CON saves use the beast's
+	// scores. The helper degrades silently to druid scores when the
+	// invoking player is not wild-shaped or any lookup link is missing.
+	effectiveScores := h.resolveEffectiveScores(ctx, interaction, char.ID, charData.Scores)
+
 	input := save.SaveInput{
-		Scores:          charData.Scores,
+		Scores:          effectiveScores,
 		Ability:         strings.ToLower(ability),
 		ProficientSaves: charData.Saves,
 		ProfBonus:       int(char.ProficiencyBonus),
@@ -300,6 +314,26 @@ func magicItemFeatureDefs(char refdata.Character) []combat.FeatureDefinition {
 		return nil
 	}
 	return magicitem.CollectItemFeatures(items, attunement)
+}
+
+// resolveEffectiveScores returns the ability scores in effect for the
+// invoking character. When the player is Wild Shaped, the beast's physical
+// scores (STR/DEX/CON) replace the druid's; mental scores (INT/WIS/CHA)
+// stay with the druid. Silent fallback on any lookup gap mirrors the
+// SR-006 pattern so a missing beast row never blocks a save roll. (SR-022)
+func (h *SaveHandler) resolveEffectiveScores(ctx context.Context, interaction *discordgo.Interaction, charID uuid.UUID, druidScores character.AbilityScores) character.AbilityScores {
+	if h.creatureLookup == nil {
+		return druidScores
+	}
+	combatant, ok := lookupInvokerCombatant(ctx, h.encounterProvider, h.combatantLookup, interaction.GuildID, discordUserID(interaction), charID)
+	if !ok {
+		return druidScores
+	}
+	beastScores, ok := combat.LookupBeastScores(ctx, h.creatureLookup, combatant)
+	if !ok {
+		return druidScores
+	}
+	return combat.EffectiveAbilityScores(combatant, druidScores, beastScores)
 }
 
 // parseSaveCharacterData extracts ability scores and save proficiencies from a character.

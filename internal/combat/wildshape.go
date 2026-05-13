@@ -10,8 +10,48 @@ import (
 
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+// CreatureScoresLookup is the minimal slice of the combat Store needed to
+// resolve a beast's ability scores by ID. The /check and /save handlers
+// (which live in package discord) inject an implementation so they can
+// pass beast scores to EffectiveAbilityScores while the player is Wild
+// Shaped. Returning the parsed character.AbilityScores keeps the handler
+// side free of the combat.AbilityScores ↔ character.AbilityScores
+// conversion noise. (SR-022)
+type CreatureScoresLookup interface {
+	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
+}
+
+// LookupBeastScores resolves the beast's parsed character.AbilityScores for
+// a Wild Shaped combatant, returning ok=false (and no error) when the
+// combatant is not wild-shaped, has no beast ref, the lookup fails, or
+// the beast's ability_scores column can't be parsed. The silent
+// degradation matches the SR-006 pattern: a lookup gap must never block a
+// player's roll — better to fall back to druid scores than fail the
+// /check or /save. (SR-022)
+func LookupBeastScores(ctx context.Context, lookup CreatureScoresLookup, c refdata.Combatant) (character.AbilityScores, bool) {
+	if lookup == nil {
+		return character.AbilityScores{}, false
+	}
+	if !c.IsWildShaped {
+		return character.AbilityScores{}, false
+	}
+	if !c.WildShapeCreatureRef.Valid || c.WildShapeCreatureRef.String == "" {
+		return character.AbilityScores{}, false
+	}
+	beast, err := lookup.GetCreature(ctx, c.WildShapeCreatureRef.String)
+	if err != nil {
+		return character.AbilityScores{}, false
+	}
+	var scores character.AbilityScores
+	if err := json.Unmarshal(beast.AbilityScores, &scores); err != nil {
+		return character.AbilityScores{}, false
+	}
+	return scores, true
+}
 
 // WildShapeCRLimit returns the maximum CR beast a druid can Wild Shape into.
 // Standard druids: CR 1/4 at level 2, CR 1/2 at level 4, CR 1 at level 8.
@@ -56,6 +96,71 @@ func SnapshotCombatantState(c refdata.Combatant, speedFt int32, abilityScores js
 		AbilityScores: scores,
 	}
 	return json.Marshal(snap)
+}
+
+// EffectiveAbilityScores returns the ability scores in effect for a
+// combatant right now. When the combatant is Wild Shaped, the beast's
+// physical scores (STR/DEX/CON) replace the druid's while INT/WIS/CHA are
+// retained from the druid (PHB Druid: "your game statistics are replaced
+// by the statistics of the beast, but you retain your alignment,
+// personality, and Intelligence, Wisdom, and Charisma scores"). When the
+// combatant is not Wild Shaped, the druid's scores pass through unchanged.
+//
+// The druid's pre-transform scores are persisted in the existing
+// WildShapeOriginal snapshot, so revert is implicit: once
+// RevertWildShape clears the snapshot and flips IsWildShaped to false,
+// this helper falls back to druidScores automatically — no extra restore
+// step required at the call site. (SR-022)
+func EffectiveAbilityScores(c refdata.Combatant, druidScores, beastScores character.AbilityScores) character.AbilityScores {
+	if !c.IsWildShaped {
+		return druidScores
+	}
+	// Merge: beast physicals + druid mentals.
+	return character.AbilityScores{
+		STR: beastScores.STR,
+		DEX: beastScores.DEX,
+		CON: beastScores.CON,
+		INT: druidScores.INT,
+		WIS: druidScores.WIS,
+		CHA: druidScores.CHA,
+	}
+}
+
+// characterScoresFromCombat converts a combat.AbilityScores (lowercase
+// field names, matches the JSONB tag layout) into a character.AbilityScores
+// (uppercase field names, the canonical type used by check/save/character
+// packages). The two structs predate SR-022 and are kept independent.
+func characterScoresFromCombat(s AbilityScores) character.AbilityScores {
+	return character.AbilityScores{
+		STR: s.Str, DEX: s.Dex, CON: s.Con,
+		INT: s.Int, WIS: s.Wis, CHA: s.Cha,
+	}
+}
+
+// combatScoresFromCharacter is the inverse of characterScoresFromCombat.
+// Used by Service.Attack / OffhandAttack to feed merged Wild Shape scores
+// back into the combat.AbilityScores-typed buildAttackInput pipeline.
+func combatScoresFromCharacter(s character.AbilityScores) AbilityScores {
+	return AbilityScores{
+		Str: s.STR, Dex: s.DEX, Con: s.CON,
+		Int: s.INT, Wis: s.WIS, Cha: s.CHA,
+	}
+}
+
+// ResolveAttackerScores returns the combat.AbilityScores in effect for the
+// given attacker right now. When the attacker is Wild Shaped and the
+// beast can be resolved via lookup, the beast's STR/DEX/CON replace the
+// druid's while INT/WIS/CHA stay with the druid. On any lookup gap
+// (no lookup wired, beast not found, malformed beast row, attacker not
+// wild-shaped) the druid's scores pass through unchanged — the SR-006
+// silent-degradation pattern. (SR-022)
+func ResolveAttackerScores(ctx context.Context, lookup CreatureScoresLookup, attacker refdata.Combatant, druidScores AbilityScores) AbilityScores {
+	beastScores, ok := LookupBeastScores(ctx, lookup, attacker)
+	if !ok {
+		return druidScores
+	}
+	merged := EffectiveAbilityScores(attacker, characterScoresFromCombat(druidScores), beastScores)
+	return combatScoresFromCharacter(merged)
 }
 
 // ApplyBeastFormToCombatant overwrites the combatant's stats with the beast's stats.

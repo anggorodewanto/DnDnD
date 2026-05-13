@@ -91,6 +91,14 @@ type CheckZoneLookup interface {
 	ListZonesForEncounter(ctx context.Context, encounterID uuid.UUID) ([]combat.ZoneInfo, error)
 }
 
+// CheckCreatureLookup fetches a creature row by ID so /check can resolve the
+// beast's ability scores while the invoking druid is Wild Shaped. Wired via
+// SetCreatureLookup. Nil keeps the historical behaviour (always rolls with
+// the druid's own scores, even in bear form — the bug SR-022 fixes).
+type CheckCreatureLookup interface {
+	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
+}
+
 // CheckHandler handles the /check slash command.
 type CheckHandler struct {
 	session           Session
@@ -121,6 +129,10 @@ type CheckHandler struct {
 	// the response. Nil disables the effect (preserves pre-wiring
 	// behaviour for tests built before this wiring landed).
 	zoneLookup CheckZoneLookup
+	// SR-022: beast lookup so a Wild Shaped druid's /check uses bear
+	// STR/DEX/CON instead of their own. Nil keeps the historical behaviour
+	// (druid scores always used — the gameplay bug SR-022 fixes).
+	creatureLookup CheckCreatureLookup
 }
 
 // SetArmorLookup wires the equipped-armor lookup so /check stealth honors the
@@ -151,6 +163,11 @@ func (h *CheckHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
 // obscurement applies disadvantage and surfaces the lighting reason. Nil
 // disables the effect. (E-69 / Phase 69)
 func (h *CheckHandler) SetZoneLookup(z CheckZoneLookup) { h.zoneLookup = z }
+
+// SetCreatureLookup wires the beast lookup so a Wild Shaped druid's /check
+// uses the beast's physical scores. Nil keeps the historical behaviour
+// (druid scores always used). (SR-022)
+func (h *CheckHandler) SetCreatureLookup(l CheckCreatureLookup) { h.creatureLookup = l }
 
 // HasZoneLookup reports whether a non-nil CheckZoneLookup has been wired.
 // Production-wiring tests use this to detect the COMBAT-MISC-followup
@@ -227,9 +244,16 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 	armorImposesDisadv := h.armorImposesStealthDisadv(ctx, char, skillKey)
 	rollMode := rollModeFromFlags(adv, disadv || armorImposesDisadv)
 
+	// SR-022: when the invoking druid is currently Wild Shaped, swap in the
+	// beast's STR/DEX/CON before building the SingleCheckInput so an
+	// athletics check made in bear form actually rolls with bear STR. The
+	// helper is a no-op when no encounter / no combatant / not wild-shaped /
+	// no creature lookup, so non-wild-shaped /check paths are unaffected.
+	effectiveScores := h.resolveEffectiveScores(ctx, interaction, char.ID, charData.Scores)
+
 	// Build input
 	input := check.SingleCheckInput{
-		Scores:           charData.Scores,
+		Scores:           effectiveScores,
 		Skill:            skillKey,
 		ProficientSkills: charData.Skills,
 		ExpertiseSkills:  charData.Expertise,
@@ -695,6 +719,54 @@ func lookupCombatConditions(ctx context.Context, encounterProvider CheckEncounte
 	}
 
 	return check.ConditionInfo{}, false
+}
+
+// resolveEffectiveScores returns the ability scores in effect for the
+// invoking character right now. When the player is currently Wild Shaped,
+// the beast's STR/DEX/CON replace the druid's while INT/WIS/CHA stay with
+// the druid — combat.EffectiveAbilityScores enforces the merge. Any wiring
+// gap (no creature lookup, no encounter, no combatant row, beast not
+// found, beast JSON malformed) silently falls back to the druid's own
+// scores (SR-006 pattern: never block a player's roll on a lookup miss).
+// (SR-022)
+func (h *CheckHandler) resolveEffectiveScores(ctx context.Context, interaction *discordgo.Interaction, charID uuid.UUID, druidScores character.AbilityScores) character.AbilityScores {
+	if h.creatureLookup == nil {
+		return druidScores
+	}
+	combatant, ok := lookupInvokerCombatant(ctx, h.encounterProvider, h.combatantLookup, interaction.GuildID, discordUserID(interaction), charID)
+	if !ok {
+		return druidScores
+	}
+	beastScores, ok := combat.LookupBeastScores(ctx, h.creatureLookup, combatant)
+	if !ok {
+		return druidScores
+	}
+	return combat.EffectiveAbilityScores(combatant, druidScores, beastScores)
+}
+
+// lookupInvokerCombatant locates the invoking character's combatant row in
+// the active encounter. Returns ok=false when any link in the chain is
+// missing so callers can degrade silently. Mirrors lookupCombatConditions
+// but returns the full combatant (needed for IsWildShaped /
+// WildShapeCreatureRef inspection in SR-022).
+func lookupInvokerCombatant(ctx context.Context, encounterProvider CheckEncounterProvider, combatantLookup CheckCombatantLookup, guildID, discordUserID string, charID uuid.UUID) (refdata.Combatant, bool) {
+	if encounterProvider == nil || combatantLookup == nil {
+		return refdata.Combatant{}, false
+	}
+	encounterID, err := encounterProvider.ActiveEncounterForUser(ctx, guildID, discordUserID)
+	if err != nil {
+		return refdata.Combatant{}, false
+	}
+	combatants, err := combatantLookup.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return refdata.Combatant{}, false
+	}
+	for _, c := range combatants {
+		if c.CharacterID.Valid && c.CharacterID.UUID == charID {
+			return c, true
+		}
+	}
+	return refdata.Combatant{}, false
 }
 
 // applyObscurementToInput updates the SingleCheckInput's RollMode for
