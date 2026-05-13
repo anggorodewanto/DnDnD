@@ -99,6 +99,15 @@ type Handler struct {
 	// to 0 (the original placeholder behaviour).
 	approvalsCounter PendingApprovalsCounter
 	dmQueueCounter   DMQueueCounter
+	// SR-016: WebSocket origin policy. wsInsecureSkipVerify=true keeps the
+	// historical permissive dev behaviour (any Origin accepted). When false,
+	// ServeWebSocket relies on nhooyr/websocket's built-in same-host check
+	// plus wsAllowedOrigins (matched via filepath.Match against the request
+	// Origin host) to reject cross-origin upgrade attempts with HTTP 403.
+	// Defaults: insecureSkipVerify=true so existing callers/tests keep the
+	// old behaviour until cmd/dndnd/main.go explicitly opts into prod mode.
+	wsAllowedOrigins     []string
+	wsInsecureSkipVerify bool
 }
 
 // SetCampaignLookup wires a CampaignLookup so the Pause/Resume button can
@@ -140,7 +149,28 @@ func NewHandler(logger *slog.Logger, hub *Hub) *Handler {
 		logger: logger,
 		tmpl:   tmpl,
 		hub:    hub,
+		// SR-016: preserve historical dev behaviour by default. Production
+		// wiring in cmd/dndnd/main.go calls SetWebSocketOriginPolicy with the
+		// configured BASE_URL host + insecureSkipVerify=false to switch to
+		// strict origin checking.
+		wsInsecureSkipVerify: true,
 	}
+}
+
+// SetWebSocketOriginPolicy configures the WebSocket upgrade origin check.
+//
+// SR-016: production deploys should pass insecureSkipVerify=false plus a
+// non-empty allowedOrigins list (e.g. []string{"dashboard.example.com"})
+// so cross-origin upgrade attempts are rejected with HTTP 403 by
+// nhooyr/websocket's authenticateOrigin. Dev/local deploys may pass
+// insecureSkipVerify=true to keep the historical permissive behaviour.
+//
+// allowedOrigins entries are matched case-insensitively against the
+// request Origin host via filepath.Match (the nhooyr default). Same-host
+// requests are always authorised regardless of this list.
+func (h *Handler) SetWebSocketOriginPolicy(allowedOrigins []string, insecureSkipVerify bool) {
+	h.wsAllowedOrigins = allowedOrigins
+	h.wsInsecureSkipVerify = insecureSkipVerify
 }
 
 // lookupCounts resolves the live Campaign Home counts. Best-effort: any

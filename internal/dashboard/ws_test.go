@@ -1,7 +1,9 @@
 package dashboard
 
 import (
+	"bufio"
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -310,6 +312,126 @@ func TestHub_BroadcastGlobal_StillDeliversToEncounterClients(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("expected global broadcast")
 		}
+	}
+}
+
+// SR-016: WS Origin verification must reject foreign origins in prod and
+// accept them in dev. Same-origin must always be accepted.
+//
+// Prod mode = SetWebSocketOriginPolicy([]string{"dashboard.example.com"}, false).
+// Dev mode  = SetWebSocketOriginPolicy(nil, true) (current default behaviour).
+//
+// We can't drive the WS upgrade via httptest because httptest's loopback host
+// changes per run; we instead exercise ServeWebSocket directly with a crafted
+// http.Request carrying the Sec-WebSocket-* handshake headers + a deliberate
+// Origin. nhooyr/websocket's Accept writes HTTP 403 on origin failure, so we
+// can assert on the recorded response status code without completing a full
+// upgrade.
+func newWSHandshakeRequest(t *testing.T, originHeader, hostHeader string) *http.Request {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/ws", nil)
+	req.Host = hostHeader
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-WebSocket-Version", "13")
+	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+	if originHeader != "" {
+		req.Header.Set("Origin", originHeader)
+	}
+	r := req.WithContext(contextWithUser(req.Context(), "dm-user-1"))
+	return r
+}
+
+// hijackableRecorder is a httptest.ResponseRecorder that implements
+// http.Hijacker so nhooyr/websocket's Accept doesn't bail out with 501.
+type hijackableRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func (h *hijackableRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	// We never want the upgrade to succeed because we don't have a real
+	// underlying TCP conn — returning an error after the origin check has
+	// passed is fine: the test only cares about the recorded HTTP status
+	// (403 on origin failure, anything-not-403 if origin check passed).
+	return nil, nil, errHijackNotSupported
+}
+
+var errHijackNotSupported = errHijack("hijack not supported in test")
+
+type errHijack string
+
+func (e errHijack) Error() string { return string(e) }
+
+func TestWebSocketEndpoint_ProdMode_RejectsForeignOrigin(t *testing.T) {
+	hub := NewHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	h := NewHandler(nil, hub)
+	h.SetWebSocketOriginPolicy([]string{"dashboard.example.com"}, false)
+
+	rec := &hijackableRecorder{ResponseRecorder: httptest.NewRecorder()}
+	req := newWSHandshakeRequest(t, "https://evil.example.com", "dashboard.example.com")
+
+	h.ServeWebSocket(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code,
+		"foreign Origin in prod mode must yield 403, got %d (body=%q)",
+		rec.Code, rec.Body.String())
+}
+
+func TestWebSocketEndpoint_DevMode_AcceptsForeignOrigin(t *testing.T) {
+	hub := NewHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	h := NewHandler(nil, hub)
+	h.SetWebSocketOriginPolicy(nil, true) // dev: skip origin verification
+
+	rec := &hijackableRecorder{ResponseRecorder: httptest.NewRecorder()}
+	req := newWSHandshakeRequest(t, "https://evil.example.com", "dashboard.example.com")
+
+	h.ServeWebSocket(rec, req)
+
+	// In dev mode, origin check is skipped; the upgrade then proceeds and
+	// fails on our fake hijacker. The key assertion is that we do NOT get
+	// HTTP 403 (the origin-rejection status).
+	assert.NotEqual(t, http.StatusForbidden, rec.Code,
+		"foreign Origin in dev mode must NOT be rejected; got %d (body=%q)",
+		rec.Code, rec.Body.String())
+}
+
+func TestWebSocketEndpoint_SameOriginAccepted_BothModes(t *testing.T) {
+	cases := []struct {
+		name            string
+		allowed         []string
+		insecureSkipVer bool
+	}{
+		{"prod", []string{"dashboard.example.com"}, false},
+		{"dev", nil, true},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			hub := NewHub()
+			go hub.Run()
+			defer hub.Stop()
+
+			h := NewHandler(nil, hub)
+			h.SetWebSocketOriginPolicy(tc.allowed, tc.insecureSkipVer)
+
+			rec := &hijackableRecorder{ResponseRecorder: httptest.NewRecorder()}
+			req := newWSHandshakeRequest(t,
+				"https://dashboard.example.com",
+				"dashboard.example.com",
+			)
+
+			h.ServeWebSocket(rec, req)
+
+			assert.NotEqual(t, http.StatusForbidden, rec.Code,
+				"same-origin upgrade in %s mode must be accepted; got %d",
+				tc.name, rec.Code)
+		})
 	}
 }
 

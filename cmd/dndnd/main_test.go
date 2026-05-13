@@ -391,3 +391,35 @@ func TestRun_DefaultAddr(t *testing.T) {
 		t.Fatalf("run returned error: %v", err)
 	}
 }
+
+// TestWsAllowedOriginsFromEnv covers the SR-016 BASE_URL → allow-list helper.
+// nil return means "only same-host upgrades authorised" (strictly tighter
+// than the old InsecureSkipVerify=true default), so empty/invalid inputs
+// must not crash the wiring path.
+func TestWsAllowedOriginsFromEnv(t *testing.T) {
+	cases := []struct {
+		name    string
+		baseURL string
+		want    []string
+	}{
+		{"empty", "", nil},
+		{"unparsable", "://", nil},
+		{"no_host", "/just/a/path", nil},
+		{"https_host", "https://dashboard.example.com", []string{"dashboard.example.com"}},
+		{"http_host_with_port", "http://localhost:8080", []string{"localhost:8080"}},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := wsAllowedOriginsFromEnv(tc.baseURL)
+			if len(got) != len(tc.want) {
+				t.Fatalf("wsAllowedOriginsFromEnv(%q) = %v, want %v", tc.baseURL, got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("wsAllowedOriginsFromEnv(%q)[%d] = %q, want %q", tc.baseURL, i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}

@@ -115,8 +115,15 @@ func (h *Handler) ServeWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SR-016: origin check is governed by SetWebSocketOriginPolicy. Default
+	// is insecureSkipVerify=true (dev fallback so existing tests and local
+	// runs keep working without explicit wiring). Production wires the
+	// strict path with insecureSkipVerify=false plus an OriginPatterns
+	// allowlist sourced from BASE_URL so cross-origin upgrade attempts
+	// are rejected by nhooyr/websocket's authenticateOrigin with HTTP 403.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true, // Allow connections from any origin in dev
+		InsecureSkipVerify: h.wsInsecureSkipVerify,
+		OriginPatterns:     h.wsAllowedOrigins,
 	})
 	if err != nil {
 		h.logger.Error("websocket accept failed", "error", err)

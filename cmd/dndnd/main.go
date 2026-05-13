@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -450,6 +451,29 @@ func buildDiscordSession(token string) (discord.Session, *discordgo.Session, err
 	return &discord.DiscordgoSession{S: dg}, dg, nil
 }
 
+// wsAllowedOriginsFromEnv derives the WebSocket allow-list host from BASE_URL.
+// SR-016 prod mode passes the resulting slice (plus insecureSkipVerify=false)
+// to Handler.SetWebSocketOriginPolicy so cross-origin upgrade attempts are
+// rejected with HTTP 403 by nhooyr/websocket's authenticateOrigin.
+//
+// Returns nil when baseURL is empty or unparsable. nhooyr/websocket still
+// authorises same-host requests regardless, so a nil allow-list in prod
+// means "only same-host upgrades are accepted" — strictly stricter than
+// the old InsecureSkipVerify=true default.
+func wsAllowedOriginsFromEnv(baseURL string) []string {
+	if baseURL == "" {
+		return nil
+	}
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return nil
+	}
+	if u.Host == "" {
+		return nil
+	}
+	return []string{u.Host}
+}
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -880,6 +904,17 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// 24h badge off the same errorlog.Reader.
 		dashHandler := dashboard.MountDashboard(router, logger, hub, dmAuthMw)
 		dashboard.MountErrorsRoutes(router, dashHandler, errorStore, time.Now, dmAuthMw)
+
+		// SR-016: tighten the WebSocket upgrade Origin check in production.
+		// Treat the deploy as prod when COOKIE_SECURE=true (the same gate the
+		// session cookie uses at main.go:428). In that mode we derive the
+		// allowed Origin host from BASE_URL and pass insecureSkipVerify=false
+		// so cross-origin upgrade attempts get HTTP 403. Local / dev runs
+		// (COOKIE_SECURE unset) keep the historical permissive default.
+		if os.Getenv("COOKIE_SECURE") == "true" {
+			allowed := wsAllowedOriginsFromEnv(os.Getenv("BASE_URL"))
+			dashHandler.SetWebSocketOriginPolicy(allowed, false)
+		}
 
 		// Phase 115: drive the Pause/Resume button label + data-campaign-id
 		// off the DM's current campaign.
