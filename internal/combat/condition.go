@@ -188,6 +188,17 @@ func (s *Service) ApplyCondition(ctx context.Context, combatantID uuid.UUID, con
 		updated = fallUpdated
 	}
 
+	if appliedConditionRemovesFlySpeed(condition) && c.AltitudeFt > 0 {
+		fallMsg, fallUpdated, ferr := s.applyFallDamageFromAltitude(ctx, updated)
+		if ferr != nil {
+			return updated, msgs, ferr
+		}
+		if fallMsg != "" {
+			msgs = append(msgs, fallMsg)
+		}
+		updated = fallUpdated
+	}
+
 	// Phase 118: incapacitating conditions auto-break concentration on the
 	// affected combatant (no save). Apply this hook after the condition has
 	// been persisted so the cleanup logic sees the up-to-date row.
@@ -200,6 +211,16 @@ func (s *Service) ApplyCondition(ctx context.Context, combatantID uuid.UUID, con
 	}
 	msgs = append(msgs, extra...)
 	return updated, msgs, nil
+}
+
+func appliedConditionRemovesFlySpeed(condition CombatCondition) bool {
+	if condition.Condition != PolymorphNonFlyingCondition {
+		return false
+	}
+	if condition.SourceSpell == "" {
+		return true
+	}
+	return condition.SourceSpell == PolymorphSpellID
 }
 
 // maybeAutoBreakConcentration looks up the target's concentration spell from

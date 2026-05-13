@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1022,6 +1023,113 @@ func TestBreakConcentrationFully_ZeroEffects(t *testing.T) {
 	)
 }
 
+func TestBreakConcentrationFully_FlyExpirationFallsAirborneTarget(t *testing.T) {
+	encounterID := uuid.New()
+	casterID := uuid.New()
+	targetID := uuid.New()
+
+	flyConds, _ := json.Marshal([]CombatCondition{
+		{Condition: FlySpeedCondition, SourceCombatantID: casterID.String(), SourceSpell: FlySpellID},
+	})
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Aria",
+		HpMax:       30,
+		HpCurrent:   30,
+		AltitudeFt:  30,
+		IsAlive:     true,
+		Conditions:  flyConds,
+	}
+
+	var altitudeAfter int32 = -1
+	var hpAfter int32 = -1
+	ms := defaultMockStore()
+	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{target}, nil
+	}
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		target.Conditions = arg.Conditions
+		return target, nil
+	}
+	ms.updateCombatantPositionFn = func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+		altitudeAfter = arg.AltitudeFt
+		target.AltitudeFt = arg.AltitudeFt
+		return target, nil
+	}
+	ms.updateCombatantHPFn = func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpAfter = arg.HpCurrent
+		target.HpCurrent = arg.HpCurrent
+		target.IsAlive = arg.IsAlive
+		return target, nil
+	}
+
+	svc := NewService(ms)
+	svc.SetRoller(dice.NewRoller(func(max int) int { return 3 }))
+	result, err := svc.BreakConcentrationFully(context.Background(), BreakConcentrationFullyInput{
+		EncounterID: encounterID,
+		CasterID:    casterID,
+		CasterName:  "Merlin",
+		SpellID:     FlySpellID,
+		SpellName:   "Fly",
+		Reason:      "spell expired",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.ConditionsRemoved)
+	assert.Equal(t, int32(0), altitudeAfter)
+	assert.Equal(t, int32(21), hpAfter, "30ft fall should deal 3d6; deterministic d6 rolls are 3 each")
+}
+
+func TestApplyCondition_PolymorphNonFlyingFormFallsAirborneTarget(t *testing.T) {
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+	target := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Druid",
+		HpMax:       24,
+		HpCurrent:   24,
+		AltitudeFt:  20,
+		IsAlive:     true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	var altitudeAfter int32 = -1
+	var hpAfter int32 = -1
+	ms := defaultMockStore()
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return target, nil
+	}
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		target.Conditions = arg.Conditions
+		return target, nil
+	}
+	ms.updateCombatantPositionFn = func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+		altitudeAfter = arg.AltitudeFt
+		target.AltitudeFt = arg.AltitudeFt
+		return target, nil
+	}
+	ms.updateCombatantHPFn = func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpAfter = arg.HpCurrent
+		target.HpCurrent = arg.HpCurrent
+		target.IsAlive = arg.IsAlive
+		return target, nil
+	}
+
+	svc := NewService(ms)
+	svc.SetRoller(dice.NewRoller(func(max int) int { return 3 }))
+	_, _, err := svc.ApplyCondition(context.Background(), combatantID, CombatCondition{
+		Condition:         PolymorphNonFlyingCondition,
+		SourceCombatantID: uuid.NewString(),
+		SourceSpell:       PolymorphSpellID,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(0), altitudeAfter)
+	assert.Equal(t, int32(18), hpAfter, "20ft fall should deal 2d6; deterministic d6 rolls are 3 each")
+}
+
 func TestBreakConcentrationAndDismissSummons(t *testing.T) {
 	summonerID := uuid.New()
 	encounterID := uuid.New()
@@ -1495,15 +1603,15 @@ func TestApplyDamageHP_AutoRevertsWildShapeAtZeroHP(t *testing.T) {
 	snap := WildShapeSnapshot{HpMax: 28, HpCurrent: 25, Ac: 16, SpeedFt: 30}
 	snapJSON, _ := json.Marshal(snap)
 	wildCombatant := refdata.Combatant{
-		ID:                   combatantID,
-		EncounterID:          encounterID,
-		IsWildShaped:         true,
-		WildShapeOriginal:    pqtype.NullRawMessage{RawMessage: snapJSON, Valid: true},
-		HpMax:                11,
-		HpCurrent:            0,
-		Ac:                   13,
-		IsAlive:              true,
-		Conditions:           json.RawMessage(`[]`),
+		ID:                combatantID,
+		EncounterID:       encounterID,
+		IsWildShaped:      true,
+		WildShapeOriginal: pqtype.NullRawMessage{RawMessage: snapJSON, Valid: true},
+		HpMax:             11,
+		HpCurrent:         0,
+		Ac:                13,
+		IsAlive:           true,
+		Conditions:        json.RawMessage(`[]`),
 	}
 
 	var wildShapeUpdated refdata.UpdateCombatantWildShapeParams

@@ -137,32 +137,32 @@ func SpellcastingAbilityForClass(className string) string {
 
 // CastResult holds the outcome of a /cast command.
 type CastResult struct {
-	CasterName      string
-	SpellName       string
-	SpellLevel      int
-	IsBonusAction   bool
-	IsAttack        bool
-	AttackRoll      int
-	AttackTotal     int
-	TargetAC        int
-	Hit             bool
-	TargetName      string
-	SaveDC          int
-	SaveAbility     string
-	Concentration   ConcentrationResult
-	ResolutionMode  string
-	SlotUsed           int
-	SlotsRemaining     int
-	UsedPactSlot       bool
-	PactSlotsRemaining int
-	IsRitual        bool
-	ScaledDamageDice string // damage dice after upcast/cantrip scaling
-	DamageType      string // damage type from spell damage JSON
-	ScaledHealingDice string // healing dice after upcast scaling
-	Teleport          *TeleportResult          // teleportation outcome, nil if not a teleport spell
-	MaterialComponent *CastMaterialComponentInfo // material component outcome, nil if no costly component
-	MetamagicCost          int // total sorcery points spent on metamagic
-	SorceryPointsRemaining int // sorcery points remaining after metamagic cost
+	CasterName             string
+	SpellName              string
+	SpellLevel             int
+	IsBonusAction          bool
+	IsAttack               bool
+	AttackRoll             int
+	AttackTotal            int
+	TargetAC               int
+	Hit                    bool
+	TargetName             string
+	SaveDC                 int
+	SaveAbility            string
+	Concentration          ConcentrationResult
+	ResolutionMode         string
+	SlotUsed               int
+	SlotsRemaining         int
+	UsedPactSlot           bool
+	PactSlotsRemaining     int
+	IsRitual               bool
+	ScaledDamageDice       string                     // damage dice after upcast/cantrip scaling
+	DamageType             string                     // damage type from spell damage JSON
+	ScaledHealingDice      string                     // healing dice after upcast scaling
+	Teleport               *TeleportResult            // teleportation outcome, nil if not a teleport spell
+	MaterialComponent      *CastMaterialComponentInfo // material component outcome, nil if no costly component
+	MetamagicCost          int                        // total sorcery points spent on metamagic
+	SorceryPointsRemaining int                        // sorcery points remaining after metamagic cost
 	// Metamagic effect fields
 	CarefulSpellCreatures int    // number of creatures that auto-succeed on AoE save (CHA mod)
 	DistantRange          string // new range description after Distant Spell
@@ -317,11 +317,11 @@ type CastCommand struct {
 	CasterID             uuid.UUID
 	TargetID             uuid.UUID // zero value for self spells
 	Turn                 refdata.Turn
-	CurrentConcentration string // name of current concentration spell, if any
-	SlotLevel            int    // explicit slot choice; 0 = auto-select lowest available
-	UseSpellSlot         bool   // true = force using regular spell slots instead of pact slots
-	IsRitual             bool   // true = cast as ritual (no slot consumed)
-	EncounterStatus      string // encounter status for ritual validation ("preparing", "active", "completed")
+	CurrentConcentration string    // name of current concentration spell, if any
+	SlotLevel            int       // explicit slot choice; 0 = auto-select lowest available
+	UseSpellSlot         bool      // true = force using regular spell slots instead of pact slots
+	IsRitual             bool      // true = cast as ritual (no slot consumed)
+	EncounterStatus      string    // encounter status for ritual validation ("preparing", "active", "completed")
 	EncounterID          uuid.UUID // encounter ID (needed for teleport occupant checks)
 	TeleportDestCol      string    // teleport destination column (e.g. "D")
 	TeleportDestRow      int32     // teleport destination row (e.g. 5)
@@ -703,6 +703,12 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		result.InvisibilityTargetID = recipient
 	}
 
+	if spell.ID == FlySpellID {
+		if err := s.applyFlySpeedConditionFromCast(ctx, spell, caster, cmd.TargetID); err != nil {
+			return CastResult{}, err
+		}
+	}
+
 	// 17a. SR-017: /cast spare-the-dying on a dying creature stabilizes them
 	// per SRD ("a living creature that has 0 hit points ... becomes stable").
 	// Skipped silently when the target is not dying — the spell still spends
@@ -957,6 +963,22 @@ func (s *Service) applyInvisibilityConditionFromCast(ctx context.Context, spell 
 	return recipientID.String(), nil
 }
 
+func (s *Service) applyFlySpeedConditionFromCast(ctx context.Context, spell refdata.Spell, caster refdata.Combatant, targetID uuid.UUID) error {
+	recipientID := targetID
+	if recipientID == uuid.Nil {
+		recipientID = caster.ID
+	}
+	cond := CombatCondition{
+		Condition:         FlySpeedCondition,
+		SourceCombatantID: caster.ID.String(),
+		SourceSpell:       spell.ID,
+	}
+	if _, _, err := s.ApplyCondition(ctx, recipientID, cond); err != nil {
+		return fmt.Errorf("applying fly speed condition: %w", err)
+	}
+	return nil
+}
+
 // SlotDeduction holds the outcome of deducting a spell slot.
 type SlotDeduction struct {
 	SlotUsed       int
@@ -1076,10 +1098,10 @@ func intToStringKeyedSlots(slots map[int]SlotInfo) map[string]SlotInfo {
 
 // SpellDamageInfo holds parsed damage data from a spell's Damage JSON.
 type SpellDamageInfo struct {
-	Dice           string `json:"dice"`
-	DamageType     string `json:"type"`
+	Dice            string `json:"dice"`
+	DamageType      string `json:"type"`
 	HigherLevelDice string `json:"higher_level_dice"`
-	CantripScaling bool   `json:"cantrip_scaling"`
+	CantripScaling  bool   `json:"cantrip_scaling"`
 }
 
 // ParseSpellDamage parses the damage JSON from a spell.
@@ -1096,7 +1118,7 @@ func ParseSpellDamage(raw []byte) (SpellDamageInfo, error) {
 
 // SpellHealingInfo holds parsed healing data from a spell's Healing JSON.
 type SpellHealingInfo struct {
-	Dice           string `json:"dice"`
+	Dice            string `json:"dice"`
 	HigherLevelDice string `json:"higher_level_dice"`
 }
 
@@ -1338,11 +1360,11 @@ const (
 
 // MaterialComponentResult holds the outcome of a material component check.
 type MaterialComponentResult struct {
-	Outcome             MaterialCheckOutcome
-	ComponentName       string  // material description
-	CostGp              float64 // gold cost
-	CurrentGold         int32   // character's current gold
-	MaterialConsumed    bool    // whether the material is consumed on cast
+	Outcome          MaterialCheckOutcome
+	ComponentName    string  // material description
+	CostGp           float64 // gold cost
+	CurrentGold      int32   // character's current gold
+	MaterialConsumed bool    // whether the material is consumed on cast
 }
 
 // ValidateMaterialComponent checks whether a spell's material component requirements are met.

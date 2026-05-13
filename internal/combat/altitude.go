@@ -9,6 +9,13 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
+const (
+	FlySpellID                  = "fly"
+	PolymorphSpellID            = "polymorph"
+	FlySpeedCondition           = "fly_speed"
+	PolymorphNonFlyingCondition = "polymorphed_non_flying"
+)
+
 // Distance3D computes 3D Euclidean distance between two grid positions with altitude,
 // rounded to the nearest 5ft. col/row are 0-based grid coordinates (each tile = 5ft).
 // altitudeFt values are in feet.
@@ -133,6 +140,10 @@ func FormatFlyConfirmation(result *FlyResult) string {
 // caller (we never reach here on grounded prone). Errors are returned
 // so the surrounding ApplyCondition surfaces them.
 func (s *Service) applyFallDamageOnProne(ctx context.Context, combatant refdata.Combatant) (string, refdata.Combatant, error) {
+	return s.applyFallDamageFromAltitude(ctx, combatant)
+}
+
+func (s *Service) applyFallDamageFromAltitude(ctx context.Context, combatant refdata.Combatant) (string, refdata.Combatant, error) {
 	if combatant.AltitudeFt <= 0 {
 		return "", combatant, nil
 	}

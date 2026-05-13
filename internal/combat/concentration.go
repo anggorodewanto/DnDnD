@@ -182,9 +182,13 @@ func (s *Service) RemoveSpellSourcedConditions(ctx context.Context, encounterID,
 		}
 		filtered := make([]CombatCondition, 0, len(conds))
 		removed := 0
+		lostFlySpeed := false
 		for _, cond := range conds {
 			if cond.SourceCombatantID == casterIDStr && cond.SourceSpell == spellID {
 				removed++
+				if removedConditionEndsFlySpeed(cond) {
+					lostFlySpeed = true
+				}
 				continue
 			}
 			filtered = append(filtered, cond)
@@ -203,9 +207,24 @@ func (s *Service) RemoveSpellSourcedConditions(ctx context.Context, encounterID,
 		}); uerr != nil {
 			return totalRemoved, fmt.Errorf("updating conditions for %s: %w", c.DisplayName, uerr)
 		}
+		if lostFlySpeed && c.AltitudeFt > 0 {
+			if _, _, ferr := s.applyFallDamageFromAltitude(ctx, c); ferr != nil {
+				return totalRemoved, fmt.Errorf("applying fall damage for %s: %w", c.DisplayName, ferr)
+			}
+		}
 		totalRemoved += removed
 	}
 	return totalRemoved, nil
+}
+
+func removedConditionEndsFlySpeed(cond CombatCondition) bool {
+	if cond.SourceSpell == FlySpellID {
+		return true
+	}
+	if cond.Condition == FlySpeedCondition {
+		return true
+	}
+	return false
 }
 
 // BreakConcentrationAndDismissSummons breaks concentration, invokes cleanup, and also
