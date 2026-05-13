@@ -291,3 +291,45 @@ func TestDMCharCreateService_CreateCharacter_Multiclass(t *testing.T) {
 	assert.Contains(t, store.lastCharParams.Saves, "str")
 	assert.Contains(t, store.lastCharParams.Saves, "con")
 }
+
+// TestDMCharCreateService_CreateCharacter_Multiclass_ForwardsClasses
+// guards SR-015: a DM-created Fighter-3 / Rogue-2 multiclass must
+// persist BOTH class entries at the correct levels and surface the
+// correct multiclass proficiency bonus, not collapse to a level-1
+// single-class fallback.
+func TestDMCharCreateService_CreateCharacter_Multiclass_ForwardsClasses(t *testing.T) {
+	store := &mockCharCreateStore{
+		charID: "char-fr",
+		pcID:   "pc-fr",
+	}
+	svc := NewDMCharCreateService(store)
+
+	sub := DMCharacterSubmission{
+		Name: "Fightrogue",
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Subclass: "Champion", Level: 3},
+			{Class: "Rogue", Subclass: "Thief", Level: 2},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 14, DEX: 16, CON: 14, INT: 10, WIS: 10, CHA: 8,
+		},
+	}
+
+	_, err := svc.CreateCharacter(context.Background(), "campaign-1", sub)
+	require.NoError(t, err)
+
+	// Full multiclass slice must reach the store.
+	require.Len(t, store.lastCharParams.Classes, 2,
+		"sub.Classes must be forwarded into CreateCharacterParams.Classes")
+	assert.Equal(t, "Fighter", store.lastCharParams.Classes[0].Class)
+	assert.Equal(t, "Champion", store.lastCharParams.Classes[0].Subclass)
+	assert.Equal(t, 3, store.lastCharParams.Classes[0].Level)
+	assert.Equal(t, "Rogue", store.lastCharParams.Classes[1].Class)
+	assert.Equal(t, "Thief", store.lastCharParams.Classes[1].Subclass)
+	assert.Equal(t, 2, store.lastCharParams.Classes[1].Level)
+
+	// Total level 5 → proficiency bonus +3 (not +2 from a L1 fallback).
+	assert.Equal(t, 3, store.lastCharParams.ProfBonus,
+		"multiclass total level 5 must yield prof bonus +3")
+}

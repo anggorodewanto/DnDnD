@@ -77,6 +77,10 @@ func (svc *DMCharCreateService) CreateCharacter(ctx context.Context, campaignID 
 		Race:          sub.Race,
 		Class:         primaryClass,
 		Subclass:      primarySubclass,
+		// Forward the full multiclass list so BuilderStoreAdapter
+		// persists every class/subclass/level entry (SR-015). Without
+		// this, resolveClassEntries falls back to a single L1 entry.
+		Classes:       sub.Classes,
 		Background:    sub.Background,
 		AbilityScores: sub.AbilityScores,
 		HPMax:         stats.HPMax,
