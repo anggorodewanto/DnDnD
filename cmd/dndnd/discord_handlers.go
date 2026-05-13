@@ -615,6 +615,9 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 	// is populated and wall-based cover applies (Phase 33).
 	// *refdata.Queries.GetMapByID structurally satisfies AttackMapProvider.
 	handlers.attack.SetMapProvider(deps.queries)
+	// SR-037: /bonus offhand reuses the off-hand attack service path, so it
+	// needs the same wall/full-cover context as legacy /attack offhand:true.
+	handlers.bonus.SetMapProvider(deps.queries)
 
 	// AOE-CAST follow-up: wire the shared ReactionPromptStore the cast
 	// handler uses for the gold-fallback Buy & Cast prompt (E-63), and

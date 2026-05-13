@@ -12,6 +12,7 @@ import (
 
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -21,6 +22,7 @@ import (
 type BonusCombatService interface {
 	ActivateRage(ctx context.Context, cmd combat.RageCommand) (combat.RageResult, error)
 	EndRage(ctx context.Context, cmd combat.RageCommand) (combat.RageResult, error)
+	OffhandAttack(ctx context.Context, cmd combat.OffhandAttackCommand, roller *dice.Roller) (combat.AttackResult, error)
 	MartialArtsBonusAttack(ctx context.Context, cmd combat.MartialArtsBonusAttackCommand, roller *dice.Roller) (combat.AttackResult, error)
 	StepOfTheWind(ctx context.Context, cmd combat.StepOfTheWindCommand) (combat.KiAbilityResult, error)
 	PatientDefense(ctx context.Context, cmd combat.KiAbilityCommand) (combat.KiAbilityResult, error)
@@ -68,6 +70,7 @@ type BonusHandler struct {
 	roller            *dice.Roller
 	channelIDProvider CampaignSettingsProvider
 	turnGate          TurnGate
+	mapProvider       AttackMapProvider
 }
 
 // NewBonusHandler constructs a /bonus handler.
@@ -94,6 +97,35 @@ func (h *BonusHandler) SetChannelIDProvider(p CampaignSettingsProvider) {
 // SetTurnGate wires the Phase 27 turn-ownership gate.
 func (h *BonusHandler) SetTurnGate(g TurnGate) {
 	h.turnGate = g
+}
+
+// SetMapProvider wires the optional map lookup used to forward wall cover
+// context into /bonus offhand, matching the legacy /attack offhand:true path.
+func (h *BonusHandler) SetMapProvider(p AttackMapProvider) {
+	h.mapProvider = p
+}
+
+// HasMapProvider reports whether a non-nil AttackMapProvider has been
+// wired. Production wiring tests use this to detect regressions where
+// /bonus offhand would lose wall/full-cover context.
+func (h *BonusHandler) HasMapProvider() bool { return h.mapProvider != nil }
+
+func (h *BonusHandler) loadWalls(ctx context.Context, encounter refdata.Encounter) []renderer.WallSegment {
+	if h.mapProvider == nil {
+		return nil
+	}
+	if !encounter.MapID.Valid {
+		return nil
+	}
+	mapData, err := h.mapProvider.GetMapByID(ctx, encounter.MapID.UUID)
+	if err != nil {
+		return nil
+	}
+	md, err := renderer.ParseTiledJSON(mapData.TiledJson, nil, nil)
+	if err != nil {
+		return nil
+	}
+	return md.Walls
 }
 
 // bonusContext is the resolved per-invocation state shared by every
@@ -128,6 +160,8 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 		h.dispatchRage(ctx, interaction, bctx)
 	case "end-rage", "endrage":
 		h.dispatchEndRage(ctx, interaction, bctx)
+	case "offhand", "off-hand":
+		h.dispatchOffhand(ctx, interaction, bctx, args)
 	case "martial-arts", "martialarts":
 		h.dispatchMartialArts(ctx, interaction, bctx, args)
 	case "step-of-the-wind", "stepofthewind":
@@ -153,7 +187,7 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 	case "release-drag", "releasedrag":
 		h.dispatchReleaseDrag(ctx, interaction, bctx)
 	default:
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Unknown bonus action %q. Try rage, end-rage, martial-arts, step-of-the-wind, patient-defense, font-of-magic, lay-on-hands, bardic-inspiration, wild-shape, revert-wild-shape, flurry, cunning-action, drag, release-drag.", action))
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Unknown bonus action %q. Try offhand, rage, end-rage, martial-arts, step-of-the-wind, patient-defense, font-of-magic, lay-on-hands, bardic-inspiration, wild-shape, revert-wild-shape, flurry, cunning-action, drag, release-drag.", action))
 	}
 }
 
@@ -234,6 +268,24 @@ func (h *BonusHandler) dispatchEndRage(ctx context.Context, interaction *discord
 		return
 	}
 	h.respondAndLog(interaction, bctx.encounterID, result.CombatLog)
+}
+
+func (h *BonusHandler) dispatchOffhand(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args string) {
+	target, ok := h.resolveTargetArg(interaction, bctx.combatants, args, "offhand <target>")
+	if !ok {
+		return
+	}
+	result, err := h.combatService.OffhandAttack(ctx, combat.OffhandAttackCommand{
+		Attacker: bctx.actor,
+		Target:   *target,
+		Turn:     bctx.turn,
+		Walls:    h.loadWalls(ctx, bctx.encounter),
+	}, h.roller)
+	if err != nil {
+		respondEphemeral(h.session, interaction, formatOffhandAttackError(err))
+		return
+	}
+	h.respondAndLog(interaction, bctx.encounterID, combat.FormatAttackLog(result))
 }
 
 func (h *BonusHandler) dispatchMartialArts(ctx context.Context, interaction *discordgo.Interaction, bctx bonusContext, args string) {

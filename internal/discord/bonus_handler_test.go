@@ -2,6 +2,8 @@ package discord
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -18,6 +20,7 @@ import (
 type mockBonusCombatService struct {
 	rageCalls       []combat.RageCommand
 	endRageCalls    []combat.RageCommand
+	offhandCalls    []combat.OffhandAttackCommand
 	martialCalls    []combat.MartialArtsBonusAttackCommand
 	stepCalls       []combat.StepOfTheWindCommand
 	patientCalls    []combat.KiAbilityCommand
@@ -28,6 +31,7 @@ type mockBonusCombatService struct {
 
 	rageResult    combat.RageResult
 	endRageResult combat.RageResult
+	offhandResult combat.AttackResult
 	martialResult combat.AttackResult
 	stepResult    combat.KiAbilityResult
 	patientResult combat.KiAbilityResult
@@ -36,18 +40,18 @@ type mockBonusCombatService struct {
 	bardicResult  combat.BardicInspirationResult
 
 	// D-47 / D-48b / D-54-cunning / D-56 / D-57 recordings + canned results.
-	wsActivateCalls []combat.WildShapeCommand
+	wsActivateCalls  []combat.WildShapeCommand
 	wsActivateResult combat.WildShapeResult
-	wsRevertCalls   []combat.RevertWildShapeCommand
-	wsRevertResult  combat.RevertWildShapeResult
-	flurryCalls     []combat.FlurryOfBlowsCommand
-	flurryResult    combat.FlurryOfBlowsResult
-	cunningCalls    []combat.CunningActionCommand
-	cunningResult   combat.CunningActionResult
-	dragCheckCalls  int
-	dragCheckResult combat.DragCheckResult
-	releaseCalls    []releaseDragCall
-	releaseResult   combat.ReleaseDragResult
+	wsRevertCalls    []combat.RevertWildShapeCommand
+	wsRevertResult   combat.RevertWildShapeResult
+	flurryCalls      []combat.FlurryOfBlowsCommand
+	flurryResult     combat.FlurryOfBlowsResult
+	cunningCalls     []combat.CunningActionCommand
+	cunningResult    combat.CunningActionResult
+	dragCheckCalls   int
+	dragCheckResult  combat.DragCheckResult
+	releaseCalls     []releaseDragCall
+	releaseResult    combat.ReleaseDragResult
 }
 
 type releaseDragCall struct {
@@ -63,6 +67,11 @@ func (m *mockBonusCombatService) ActivateRage(_ context.Context, cmd combat.Rage
 func (m *mockBonusCombatService) EndRage(_ context.Context, cmd combat.RageCommand) (combat.RageResult, error) {
 	m.endRageCalls = append(m.endRageCalls, cmd)
 	return m.endRageResult, nil
+}
+
+func (m *mockBonusCombatService) OffhandAttack(_ context.Context, cmd combat.OffhandAttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
+	m.offhandCalls = append(m.offhandCalls, cmd)
+	return m.offhandResult, nil
 }
 
 func (m *mockBonusCombatService) MartialArtsBonusAttack(_ context.Context, cmd combat.MartialArtsBonusAttackCommand, _ *dice.Roller) (combat.AttackResult, error) {
@@ -213,6 +222,15 @@ func setupBonusHandler() (*BonusHandler, *mockMoveSession, *mockBonusCombatServi
 	combatSvc := &mockBonusCombatService{
 		rageResult:    combat.RageResult{CombatLog: "🦁 Aria rages!"},
 		endRageResult: combat.RageResult{CombatLog: "🦁 Aria's rage ends."},
+		offhandResult: combat.AttackResult{
+			AttackerName: "Aria",
+			TargetName:   "Orc",
+			WeaponName:   "Dagger",
+			Hit:          true,
+			IsMelee:      true,
+			DistanceFt:   5,
+			DamageTotal:  3,
+		},
 		martialResult: combat.AttackResult{AttackerName: "Aria", TargetName: "Orc", WeaponName: "unarmed", Hit: true, IsMelee: true},
 		stepResult:    combat.KiAbilityResult{CombatLog: "💨 Aria uses Step of the Wind (dash)"},
 		patientResult: combat.KiAbilityResult{CombatLog: "🛡️ Aria uses Patient Defense"},
@@ -243,6 +261,285 @@ func TestBonusHandler_EndRage(t *testing.T) {
 	h.Handle(makeBonusInteraction("end-rage", ""))
 	if len(svc.endRageCalls) != 1 {
 		t.Fatalf("expected 1 end-rage call, got %d", len(svc.endRageCalls))
+	}
+}
+
+func TestBonusHandler_OffhandRoutesToOffhandAttack(t *testing.T) {
+	h, sess, svc, provider := setupBonusHandler()
+
+	h.Handle(makeBonusInteraction("offhand", "OS"))
+
+	if len(svc.offhandCalls) != 1 {
+		t.Fatalf("expected 1 offhand call, got %d", len(svc.offhandCalls))
+	}
+	got := svc.offhandCalls[0]
+	if got.Attacker.ID != provider.actor.ID {
+		t.Errorf("expected attacker %s, got %s", provider.actor.ID, got.Attacker.ID)
+	}
+	if got.Target.ShortID != "OS" {
+		t.Errorf("expected target OS, got %s", got.Target.ShortID)
+	}
+	if got.Turn.ID != provider.turn.ID {
+		t.Errorf("expected turn %s, got %s", provider.turn.ID, got.Turn.ID)
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Dagger") {
+		t.Errorf("expected offhand attack log, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+func TestBonusHandler_OffhandForwardsMapWalls(t *testing.T) {
+	h, _, svc, provider := setupBonusHandler()
+	mapID := uuid.New()
+	provider.enc.MapID = uuid.NullUUID{UUID: mapID, Valid: true}
+	tiled := json.RawMessage(`{
+		"height": 3, "width": 3, "tilewidth": 48, "tileheight": 48,
+		"layers": [
+			{"name": "terrain", "type": "tilelayer", "width": 3, "height": 3,
+			 "data": [1,1,1, 1,1,1, 1,1,1]},
+			{"name": "walls", "type": "objectgroup",
+			 "objects": [{"x": 96, "y": 0, "width": 0, "height": 48}]}
+		],
+		"tilesets": [{"firstgid": 1, "name": "base", "tiles": [{"id": 0, "type": "open_ground"}]}]
+	}`)
+	h.SetMapProvider(&stubAttackMapProvider{mapData: refdata.Map{ID: mapID, TiledJson: tiled}})
+
+	h.Handle(makeBonusInteraction("offhand", "OS"))
+
+	if len(svc.offhandCalls) != 1 {
+		t.Fatalf("expected 1 offhand call, got %d", len(svc.offhandCalls))
+	}
+	if len(svc.offhandCalls[0].Walls) == 0 {
+		t.Fatal("expected /bonus offhand to forward encounter map walls")
+	}
+}
+
+type bonusOffhandCommandPathStore struct {
+	combat.Store
+
+	char       refdata.Character
+	attacker   refdata.Combatant
+	target     refdata.Combatant
+	savedTurns []refdata.UpdateTurnActionsParams
+}
+
+func (s *bonusOffhandCommandPathStore) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {
+	if id == s.char.ID {
+		return s.char, nil
+	}
+	return refdata.Character{}, sql.ErrNoRows
+}
+
+func (s *bonusOffhandCommandPathStore) GetWeapon(_ context.Context, id string) (refdata.Weapon, error) {
+	switch id {
+	case "shortsword":
+		return refdata.Weapon{
+			ID:         "shortsword",
+			Name:       "Shortsword",
+			Damage:     "1d6",
+			DamageType: "piercing",
+			WeaponType: "martial_melee",
+			Properties: []string{"finesse", "light"},
+		}, nil
+	case "dagger":
+		return refdata.Weapon{
+			ID:         "dagger",
+			Name:       "Dagger",
+			Damage:     "1d4",
+			DamageType: "piercing",
+			WeaponType: "simple_melee",
+			Properties: []string{"finesse", "light", "thrown"},
+		}, nil
+	default:
+		return refdata.Weapon{}, sql.ErrNoRows
+	}
+}
+
+func (s *bonusOffhandCommandPathStore) UpdateTurnActions(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+	s.savedTurns = append(s.savedTurns, arg)
+	return refdata.Turn{
+		ID:               arg.ID,
+		CombatantID:      s.attacker.ID,
+		AttacksRemaining: arg.AttacksRemaining,
+		ActionUsed:       arg.ActionUsed,
+		BonusActionUsed:  arg.BonusActionUsed,
+		ReactionUsed:     arg.ReactionUsed,
+	}, nil
+}
+
+func (s *bonusOffhandCommandPathStore) ListCombatantsByEncounterID(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+	return []refdata.Combatant{s.attacker, s.target}, nil
+}
+
+func (s *bonusOffhandCommandPathStore) ListEncounterZonesByEncounterID(_ context.Context, _ uuid.UUID) ([]refdata.EncounterZone, error) {
+	return nil, nil
+}
+
+func TestBonusHandler_OffhandCommandPathConsumesBonusActionAndOmitsDamageMod(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	scores, err := json.Marshal(combat.AbilityScores{Str: 16, Dex: 14, Con: 10, Int: 10, Wis: 10, Cha: 10})
+	if err != nil {
+		t.Fatalf("marshal ability scores: %v", err)
+	}
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		ShortID:     "AR",
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 1,
+		HpCurrent:   10,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		ShortID:     "OS",
+		DisplayName: "Orc",
+		PositionCol: "B",
+		PositionRow: 1,
+		Ac:          13,
+		HpCurrent:   10,
+		IsAlive:     true,
+		IsNpc:       true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	provider := &mockBonusProvider{
+		encID: encounterID,
+		enc: refdata.Encounter{
+			ID:            encounterID,
+			CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+		},
+		turn: refdata.Turn{
+			ID:          turnID,
+			CombatantID: attackerID,
+		},
+		actor:  attacker,
+		target: target,
+	}
+	store := &bonusOffhandCommandPathStore{
+		char: refdata.Character{
+			ID:               charID,
+			AbilityScores:    scores,
+			ProficiencyBonus: 2,
+			EquippedMainHand: sql.NullString{String: "shortsword", Valid: true},
+			EquippedOffHand:  sql.NullString{String: "dagger", Valid: true},
+		},
+		attacker: attacker,
+		target:   target,
+	}
+	sess := &mockMoveSession{}
+	h := NewBonusHandler(sess, combat.NewService(store), provider, dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 3
+	}))
+
+	h.Handle(makeBonusInteraction("offhand", "OS"))
+
+	if len(store.savedTurns) != 1 {
+		t.Fatalf("expected one persisted turn update, got %d; response: %q", len(store.savedTurns), sess.lastResponse.Data.Content)
+	}
+	if !store.savedTurns[0].BonusActionUsed {
+		t.Fatal("expected /bonus offhand to consume the bonus action")
+	}
+	if got := sess.lastResponse.Data.Content; !strings.Contains(got, "Damage: 3 piercing") {
+		t.Fatalf("expected off-hand damage to omit STR mod and deal 3 piercing, got %q", got)
+	}
+}
+
+func TestBonusHandler_OffhandCommandPathRejectsFullCoverBeforeBonusAction(t *testing.T) {
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	mapID := uuid.New()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	scores, err := json.Marshal(combat.AbilityScores{Str: 16, Dex: 14, Con: 10, Int: 10, Wis: 10, Cha: 10})
+	if err != nil {
+		t.Fatalf("marshal ability scores: %v", err)
+	}
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		ShortID:     "AR",
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 3,
+		HpCurrent:   10,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		ShortID:     "OS",
+		DisplayName: "Orc",
+		PositionCol: "D",
+		PositionRow: 3,
+		Ac:          13,
+		HpCurrent:   10,
+		IsAlive:     true,
+		IsNpc:       true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	provider := &mockBonusProvider{
+		encID: encounterID,
+		enc: refdata.Encounter{
+			ID:            encounterID,
+			CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+			MapID:         uuid.NullUUID{UUID: mapID, Valid: true},
+		},
+		turn: refdata.Turn{
+			ID:          turnID,
+			CombatantID: attackerID,
+		},
+		actor:  attacker,
+		target: target,
+	}
+	store := &bonusOffhandCommandPathStore{
+		char: refdata.Character{
+			ID:               charID,
+			AbilityScores:    scores,
+			ProficiencyBonus: 2,
+			EquippedMainHand: sql.NullString{String: "shortsword", Valid: true},
+			EquippedOffHand:  sql.NullString{String: "dagger", Valid: true},
+		},
+		attacker: attacker,
+		target:   target,
+	}
+	tiled := json.RawMessage(`{
+		"height": 5, "width": 5, "tilewidth": 48, "tileheight": 48,
+		"layers": [
+			{"name": "terrain", "type": "tilelayer", "width": 5, "height": 5,
+			 "data": [1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1]},
+			{"name": "walls", "type": "objectgroup",
+			 "objects": [{"x": 96, "y": 0, "width": 0, "height": 240}]}
+		],
+		"tilesets": [{"firstgid": 1, "name": "base", "tiles": [{"id": 0, "type": "open_ground"}]}]
+	}`)
+	sess := &mockMoveSession{}
+	h := NewBonusHandler(sess, combat.NewService(store), provider, dice.NewRoller(func(max int) int { return max }))
+	h.SetMapProvider(&stubAttackMapProvider{mapData: refdata.Map{ID: mapID, TiledJson: tiled}})
+
+	h.Handle(makeBonusInteraction("offhand", "OS"))
+
+	if len(store.savedTurns) != 0 {
+		t.Fatalf("expected full-cover rejection before bonus-action persistence, got %d turn updates", len(store.savedTurns))
+	}
+	if got := sess.lastResponse.Data.Content; !strings.Contains(got, "total cover") {
+		t.Fatalf("expected total-cover rejection, got %q", got)
 	}
 }
 

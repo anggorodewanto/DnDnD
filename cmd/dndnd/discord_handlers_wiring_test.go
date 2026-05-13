@@ -46,6 +46,16 @@ func TestBuildDiscordHandlers_AttackHandlerHasMapProvider(t *testing.T) {
 		"attack handler must have a non-nil AttackMapProvider wired in production")
 }
 
+// TestBuildDiscordHandlers_BonusHandlerHasMapProvider verifies SR-037:
+// /bonus offhand must receive the same map wall/full-cover context as the
+// legacy /attack offhand:true command path.
+func TestBuildDiscordHandlers_BonusHandlerHasMapProvider(t *testing.T) {
+	set := buildDiscordHandlersForWiring(t)
+	require.NotNil(t, set.bonus)
+	assert.True(t, set.bonus.HasMapProvider(),
+		"bonus handler must have a non-nil AttackMapProvider wired in production")
+}
+
 // TestBuildDiscordHandlers_AttackHandlerHasClassFeaturePromptPoster verifies
 // the D-48b/49/51 follow-up: /attack must have the post-hit prompt poster
 // wired so Stunning Strike / Divine Smite / Bardic Inspiration prompts
