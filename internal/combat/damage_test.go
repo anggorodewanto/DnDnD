@@ -1040,3 +1040,168 @@ func TestApplyDamage_NonRagingBarbarianTakesFullSlashing(t *testing.T) {
 	assert.Equal(t, int32(20), captured.HpCurrent)
 }
 
+// --- SR-023: Turned auto-clears on damage ---
+
+// turnedConditionStore wires a mockStore that captures
+// UpdateCombatantConditions writes (so we can assert "turned" was cleared).
+// GetCombatant returns the current state of the combatant pointer so
+// RemoveConditionFromCombatant sees the up-to-date row, and
+// UpdateCombatantHP returns the in-memory combatant (preserving its
+// Conditions column).
+func turnedConditionStore(c *refdata.Combatant) (*mockStore, *[]json.RawMessage) {
+	ms := defaultMockStore()
+	conditionWrites := &[]json.RawMessage{}
+	ms.updateCombatantHPFn = func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		c.HpCurrent = arg.HpCurrent
+		c.TempHp = arg.TempHp
+		c.IsAlive = arg.IsAlive
+		return *c, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return *c, nil
+	}
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		*conditionWrites = append(*conditionWrites, arg.Conditions)
+		c.Conditions = arg.Conditions
+		c.ExhaustionLevel = arg.ExhaustionLevel
+		return *c, nil
+	}
+	return ms, conditionWrites
+}
+
+func turnedConditionsJSON(t *testing.T, sourceID string) json.RawMessage {
+	t.Helper()
+	conds := []CombatCondition{{
+		Condition:         "turned",
+		DurationRounds:    10,
+		StartedRound:      1,
+		SourceCombatantID: sourceID,
+		ExpiresOn:         "end_of_turn",
+	}}
+	raw, err := json.Marshal(conds)
+	if err != nil {
+		t.Fatalf("marshalling conditions: %v", err)
+	}
+	return raw
+}
+
+// SR-023: Undead with `turned` condition that takes positive damage has the
+// condition removed.
+func TestApplyDamage_ClearsTurnedConditionOnDamage(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnerID := uuid.New().String()
+	target := &refdata.Combatant{
+		ID: combatantID, EncounterID: encounterID,
+		DisplayName: "Skeleton", HpMax: 20, HpCurrent: 20, IsAlive: true, IsNpc: true,
+		CreatureRefID: sql.NullString{String: "skeleton", Valid: true},
+		Conditions:    turnedConditionsJSON(t, turnerID),
+	}
+	ms, conditionWrites := turnedConditionStore(target)
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "skeleton"}, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: *target, RawDamage: 6, DamageType: "slashing",
+	})
+	assert.NoError(t, err)
+	// The final persisted conditions must NOT contain "turned".
+	if !assert.NotEmpty(t, *conditionWrites, "expected an UpdateCombatantConditions write") {
+		return
+	}
+	final := (*conditionWrites)[len(*conditionWrites)-1]
+	assert.False(t, HasCondition(final, "turned"), "turned should be cleared after damage; got %s", string(final))
+}
+
+// SR-023: Damage from a third party (different source than the turner) also
+// clears `turned`. The clearing logic is source-agnostic.
+func TestApplyDamage_ClearsTurnedFromTurnerOrThirdParty(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnerID := uuid.New().String()
+	// turnerID is recorded as the SourceCombatantID; the damage in this test
+	// comes from a different combatant (ApplyDamage is not given an
+	// attacker ID — the helper inspects only the target). This proves the
+	// "third-party damage clears turned" case.
+	target := &refdata.Combatant{
+		ID: combatantID, EncounterID: encounterID,
+		DisplayName: "Zombie", HpMax: 22, HpCurrent: 22, IsAlive: true, IsNpc: true,
+		CreatureRefID: sql.NullString{String: "zombie", Valid: true},
+		Conditions:    turnedConditionsJSON(t, turnerID),
+	}
+	ms, conditionWrites := turnedConditionStore(target)
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "zombie"}, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: *target, RawDamage: 4, DamageType: "fire",
+	})
+	assert.NoError(t, err)
+	if !assert.NotEmpty(t, *conditionWrites, "expected an UpdateCombatantConditions write") {
+		return
+	}
+	final := (*conditionWrites)[len(*conditionWrites)-1]
+	assert.False(t, HasCondition(final, "turned"), "turned should be cleared regardless of damage source; got %s", string(final))
+}
+
+// SR-023: Immune target (adjusted damage = 0) keeps `turned`. No HP loss → no
+// condition clear.
+func TestApplyDamage_DoesNotClearTurnedOnZeroAdjustedDamage(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnerID := uuid.New().String()
+	target := &refdata.Combatant{
+		ID: combatantID, EncounterID: encounterID,
+		DisplayName: "Skeleton", HpMax: 20, HpCurrent: 20, IsAlive: true, IsNpc: true,
+		CreatureRefID: sql.NullString{String: "skeleton-poison-immune", Valid: true},
+		Conditions:    turnedConditionsJSON(t, turnerID),
+	}
+	ms, conditionWrites := turnedConditionStore(target)
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "skeleton-poison-immune", DamageImmunities: []string{"poison"}}, nil
+	}
+	svc := NewService(ms)
+
+	_, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: *target, RawDamage: 12, DamageType: "poison",
+	})
+	assert.NoError(t, err)
+	// No condition write should have occurred because the helper gates on
+	// adjusted > 0. If any write did happen, "turned" must still be present.
+	for _, raw := range *conditionWrites {
+		assert.True(t, HasCondition(raw, "turned"), "turned must persist when damage is fully blocked; got %s", string(raw))
+	}
+}
+
+// SR-023: Temp-HP fully absorbs damage (adjusted = 0) → keeps `turned`.
+// Covers the "healing or zero damage does NOT clear" invariant.
+func TestApplyDamage_DoesNotClearTurnedWhenFullyAbsorbedByTempHP(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	turnerID := uuid.New().String()
+	target := &refdata.Combatant{
+		ID: combatantID, EncounterID: encounterID,
+		DisplayName: "Wight", HpMax: 30, HpCurrent: 30, TempHp: 12, IsAlive: true, IsNpc: true,
+		CreatureRefID: sql.NullString{String: "wight", Valid: true},
+		Conditions:    turnedConditionsJSON(t, turnerID),
+	}
+	ms, conditionWrites := turnedConditionStore(target)
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "wight"}, nil
+	}
+	svc := NewService(ms)
+
+	// 8 raw damage fully absorbed by 12 temp HP → adjusted = 0.
+	_, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: *target, RawDamage: 8, DamageType: "slashing",
+	})
+	assert.NoError(t, err)
+	for _, raw := range *conditionWrites {
+		assert.True(t, HasCondition(raw, "turned"), "turned must persist when damage is fully absorbed by temp HP; got %s", string(raw))
+	}
+}
+

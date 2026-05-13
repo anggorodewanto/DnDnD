@@ -257,6 +257,22 @@ func (s *Service) RemoveConditionFromCombatant(ctx context.Context, combatantID 
 	return updated, []string{msg}, nil
 }
 
+// maybeClearTurnedOnDamage clears the `turned` condition from a target that
+// just took positive damage. Mirrors the markRageTookDamage /
+// maybeEndRageOnUnconscious post-damage-effects hook in damage.go: the call
+// site gates on `adjusted > 0`, so healing, immunity, and full temp-HP
+// absorption never reach here. The clearing is source-agnostic — both damage
+// from the original turner and from a third party trigger removal, matching
+// the Turn Undead spec rule that any damage to a Turned creature ends the
+// condition. Best-effort: lookup / persistence errors are swallowed so the
+// damage write is never blocked by cleanup. (SR-023)
+func (s *Service) maybeClearTurnedOnDamage(ctx context.Context, target refdata.Combatant) {
+	if !HasCondition(target.Conditions, "turned") {
+		return
+	}
+	_, _, _ = s.RemoveConditionFromCombatant(ctx, target.ID, "turned")
+}
+
 // RemoveConditionWithLog removes a condition and persists the log message to action_log.
 func (s *Service) RemoveConditionWithLog(ctx context.Context, combatantID uuid.UUID, conditionName string, encounterID uuid.UUID, turnID uuid.UUID) (refdata.Combatant, []string, error) {
 	updated, msgs, err := s.RemoveConditionFromCombatant(ctx, combatantID, conditionName)

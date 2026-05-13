@@ -276,6 +276,11 @@ func (s *Service) ApplyDamage(ctx context.Context, input ApplyDamageInput) (Appl
 	postHPCombatant.RageTookDamageThisRound = target.RageTookDamageThisRound
 	if adjusted > 0 {
 		s.markRageTookDamage(ctx, postHPCombatant)
+		// SR-023: Turn Undead's `turned` condition ends early when the
+		// creature takes any damage. Source-agnostic — both turner and
+		// third-party damage clear the condition. Gated on adjusted > 0
+		// so immunity / temp-HP-absorbed hits do NOT clear `turned`.
+		s.maybeClearTurnedOnDamage(ctx, postHPCombatant)
 	}
 
 	// D-46-rage-end-on-unconscious — a raging combatant who hit 0 HP drops
