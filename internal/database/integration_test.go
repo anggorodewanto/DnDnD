@@ -70,6 +70,7 @@ func TestIntegration_MigrateDown(t *testing.T) {
 
 	// Roll back migrations from most recent to oldest.
 	for _, name := range []string{
+		"make_player_characters_unique_partial",
 		"add_combatant_next_attack_adv_override",
 		"create_pending_checks",
 		"create_pending_asi",

@@ -465,6 +465,84 @@ func TestIntegration_MarkPlayerCharacterRetireRequested_FlipsCreatedVia(t *testi
 	}
 }
 
+// SR-012: spec line 40 promises that after retire approval the player can
+// `/register` a new character. The original schema enforced
+// `UNIQUE(campaign_id, discord_user_id)` table-wide, blocking the second
+// INSERT. The fix is a partial unique index `WHERE status != 'retired'` so
+// retired rows no longer occupy the slot. Spec line 43 also requires the
+// retired row to remain queryable for story continuity / DM re-activation,
+// so we assert both rows survive.
+func TestIntegration_Register_AfterRetire_Succeeds(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx, db, queries := setupTestDB(t)
+	svc := registration.NewService(queries)
+	campaignID := createTestCampaign(t, db, "guild-sr012-reregister")
+	createTestCharacter(t, db, campaignID, "Aria")
+	createTestCharacter(t, db, campaignID, "Bob")
+
+	// Register + approve + retire Aria.
+	first, err := svc.Register(ctx, campaignID, "player-sr012", "Aria")
+	if err != nil {
+		t.Fatalf("first Register: %v", err)
+	}
+	if _, err := svc.Approve(ctx, first.PlayerCharacter.ID); err != nil {
+		t.Fatalf("Approve Aria: %v", err)
+	}
+	retired, err := svc.Retire(ctx, first.PlayerCharacter.ID)
+	if err != nil {
+		t.Fatalf("Retire Aria: %v", err)
+	}
+	if retired.Status != "retired" {
+		t.Fatalf("expected retired status, got %q", retired.Status)
+	}
+
+	// Same discord_user_id should now be free to register Bob.
+	second, err := svc.Register(ctx, campaignID, "player-sr012", "Bob")
+	if err != nil {
+		t.Fatalf("second Register after retire: %v", err)
+	}
+	if second.Status != registration.ResultExactMatch {
+		t.Fatalf("expected ExactMatch for Bob, got %v", second.Status)
+	}
+	if second.PlayerCharacter == nil {
+		t.Fatal("expected PlayerCharacter for Bob to be set")
+	}
+	if second.PlayerCharacter.Status != "pending" {
+		t.Errorf("expected pending status for Bob, got %q", second.PlayerCharacter.Status)
+	}
+
+	// Both rows must remain queryable (spec line 43: story continuity).
+	rows, err := queries.ListPlayerCharactersByCampaign(ctx, campaignID)
+	if err != nil {
+		t.Fatalf("ListPlayerCharactersByCampaign: %v", err)
+	}
+	var sawRetired, sawPending bool
+	for _, r := range rows {
+		if r.ID == first.PlayerCharacter.ID && r.Status == "retired" {
+			sawRetired = true
+		}
+		if r.ID == second.PlayerCharacter.ID && r.Status == "pending" {
+			sawPending = true
+		}
+	}
+	if !sawRetired {
+		t.Errorf("expected retired Aria row to remain queryable, got rows=%+v", rows)
+	}
+	if !sawPending {
+		t.Errorf("expected pending Bob row to be queryable, got rows=%+v", rows)
+	}
+
+	// And the active-collision case must still fail: registering a *third*
+	// active character for the same (campaign, discord_user_id) while Bob is
+	// still pending should error.
+	createTestCharacter(t, db, campaignID, "Caz")
+	if _, err := svc.Register(ctx, campaignID, "player-sr012", "Caz"); err == nil {
+		t.Fatal("expected error when registering a second active PC for same player")
+	}
+}
+
 func TestIntegration_InvalidStatusTransition(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
