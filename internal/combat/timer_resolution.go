@@ -189,13 +189,17 @@ func (t *TurnTimer) AutoResolveTurn(ctx context.Context, turnID uuid.UUID, rolle
 			}
 		}
 	} else if combatant.IsAlive && combatant.HpCurrent > 0 {
-		// Normal turn: apply Dodge action (no movement)
+		// Normal turn: apply Dodge action (no movement).
+		// SR-020: ExpiresOn must be "start_of_turn" and SourceCombatantID must
+		// be the dodging creature so isExpired matches at the start of their
+		// next turn. Mirrors hand-rolled /action dodge (standard_actions.go).
 		if !turn.ActionUsed {
 			newConditions, err := AddCondition(combatant.Conditions, CombatCondition{
-				Condition:      "dodge",
-				DurationRounds: 1,
-				StartedRound:   int(turn.RoundNumber),
-				ExpiresOn:      "start_of_next_turn",
+				Condition:         "dodge",
+				DurationRounds:    1,
+				StartedRound:      int(turn.RoundNumber),
+				SourceCombatantID: combatant.ID.String(),
+				ExpiresOn:         "start_of_turn",
 			})
 			if err != nil {
 				return nil, fmt.Errorf("adding dodge condition: %w", err)

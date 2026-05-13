@@ -198,6 +198,126 @@ func TestAutoResolveTurn_NormalTurn(t *testing.T) {
 	assert.Contains(t, actions, "Reaction declarations forfeited")
 }
 
+// SR-020: auto-skip Dodge must use an ExpiresOn value isExpired recognises
+// ("start_of_turn") and carry the dodging combatant's ID as SourceCombatantID,
+// so it actually clears when that combatant's next turn begins. Previously it
+// was applied with "start_of_next_turn" + empty source and stuck forever.
+func TestAutoResolveTurn_DodgeExpiresAtStartOfNextTurn(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID:          turnID,
+			EncounterID: encounterID,
+			CombatantID: combatantID,
+			RoundNumber: 1,
+			Status:      "active",
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:          combatantID,
+			EncounterID: encounterID,
+			DisplayName: "Aria",
+			HpCurrent:   30,
+			HpMax:       30,
+			IsAlive:     true,
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: uuid.New(), Settings: settingsJSON(24)}, nil
+	}
+
+	var capturedConditions json.RawMessage
+	store.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		capturedConditions = arg.Conditions
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	notifier := &mockNotifier{}
+	timer := NewTurnTimer(store, notifier, 30*time.Second)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
+	require.NoError(t, err)
+
+	cond, found := GetCondition(capturedConditions, "dodge")
+	require.True(t, found, "auto-skip dodge condition not present on combatant")
+	assert.Equal(t, "start_of_turn", cond.ExpiresOn,
+		"ExpiresOn must be a value isExpired recognises so dodge actually clears")
+	assert.Equal(t, combatantID.String(), cond.SourceCombatantID,
+		"SourceCombatantID must be the dodging combatant so expiry matches on their next turn")
+	assert.Equal(t, 1, cond.DurationRounds)
+	assert.Equal(t, 1, cond.StartedRound)
+
+	// Round 2 (next turn of the same combatant) at start_of_turn timing → expires.
+	updated, expired, err := CheckExpiredConditions(capturedConditions, 2, combatantID.String(), "start_of_turn")
+	require.NoError(t, err)
+	require.Len(t, expired, 1, "auto-skip dodge should expire at start of dodging creature's next turn")
+	assert.Equal(t, "dodge", expired[0].Condition)
+	_, stillThere := GetCondition(updated, "dodge")
+	assert.False(t, stillThere, "dodge should be cleared after own start_of_turn expiry")
+}
+
+// SR-020: enemy turns must NOT clear the dodging creature's Dodge.
+// Expiry is source-scoped: only the dodging creature's own start_of_turn
+// triggers the clear, so intervening combatants leave Dodge intact.
+func TestAutoResolveTurn_DodgePersistsThroughEnemyTurn(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+	enemyID := uuid.New()
+
+	store := defaultMockStore()
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID:          turnID,
+			EncounterID: encounterID,
+			CombatantID: combatantID,
+			RoundNumber: 1,
+			Status:      "active",
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:          combatantID,
+			EncounterID: encounterID,
+			DisplayName: "Aria",
+			HpCurrent:   30,
+			HpMax:       30,
+			IsAlive:     true,
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: uuid.New(), Settings: settingsJSON(24)}, nil
+	}
+
+	var capturedConditions json.RawMessage
+	store.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		capturedConditions = arg.Conditions
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	notifier := &mockNotifier{}
+	timer := NewTurnTimer(store, notifier, 30*time.Second)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	_, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
+	require.NoError(t, err)
+
+	// Enemy's start_of_turn next round should NOT expire the dodging creature's Dodge.
+	updated, expired, err := CheckExpiredConditions(capturedConditions, 2, enemyID.String(), "start_of_turn")
+	require.NoError(t, err)
+	assert.Len(t, expired, 0, "enemy turn must not clear dodging creature's Dodge")
+	_, stillThere := GetCondition(updated, "dodge")
+	assert.True(t, stillThere, "dodge should persist through enemy turn")
+}
+
 func TestAutoResolveTurn_DyingCombatant(t *testing.T) {
 	turnID := uuid.New()
 	combatantID := uuid.New()
