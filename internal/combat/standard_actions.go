@@ -247,12 +247,16 @@ func (s *Service) Help(ctx context.Context, cmd HelpCommand) (HelpResult, error)
 		return HelpResult{}, err
 	}
 
-	// Apply help_advantage condition on the ally
+	// Apply help_advantage condition on the ally. SR-018: TargetCombatantID
+	// scopes the grant to the named target — DetectAdvantage only fires the
+	// "help advantage" reason when the attack is against this combatant, and
+	// Service.Attack clears the condition after a single attack vs that target.
 	helpCond := CombatCondition{
 		Condition:         "help_advantage",
 		DurationRounds:    1,
 		StartedRound:      int(cmd.Encounter.RoundNumber),
 		SourceCombatantID: cmd.Helper.ID.String(),
+		TargetCombatantID: cmd.Target.ID.String(),
 		ExpiresOn:         "start_of_turn",
 	}
 

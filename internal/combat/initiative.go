@@ -88,6 +88,10 @@ type CombatCondition struct {
 	// "invisibility" or "greater-invisibility"). Used to break condition on
 	// attack/cast for spells like standard Invisibility.
 	SourceSpell string `json:"source_spell,omitempty"`
+	// TargetCombatantID scopes a condition to a single target combatant.
+	// SR-018: Help action sets this to the named target's ID so the
+	// help_advantage grant is consumed only on an attack against that target.
+	TargetCombatantID string `json:"target_combatant_id,omitempty"`
 }
 
 // SurprisedCondition returns the standard surprised condition struct.

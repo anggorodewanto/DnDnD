@@ -494,3 +494,51 @@ func TestDetectAdvantage_AttackerHidden_CancelsWithDisadvantage(t *testing.T) {
 	assert.Contains(t, advReasons, "attacker hidden")
 	assert.Contains(t, disadvReasons, "attacker poisoned")
 }
+
+// SR-018: Help action advantage is target-scoped and single-shot. The
+// help_advantage condition lives on the helped creature (the attacker here)
+// and carries the named target's combatant ID. DetectAdvantage grants
+// advantage only when the current attack targets that combatant.
+
+func TestDetectAdvantage_HelpAdvantage_MatchingTarget(t *testing.T) {
+	targetID := "goblin-uuid"
+	input := AdvantageInput{
+		AttackerConditions: []CombatCondition{{
+			Condition:         "help_advantage",
+			TargetCombatantID: targetID,
+		}},
+		TargetCombatantID: targetID,
+	}
+	mode, advReasons, disadvReasons := DetectAdvantage(input)
+	assert.Equal(t, dice.Advantage, mode)
+	assert.Contains(t, advReasons, "help advantage")
+	assert.Empty(t, disadvReasons)
+}
+
+func TestDetectAdvantage_HelpAdvantage_DifferentTarget(t *testing.T) {
+	input := AdvantageInput{
+		AttackerConditions: []CombatCondition{{
+			Condition:         "help_advantage",
+			TargetCombatantID: "goblin-uuid",
+		}},
+		TargetCombatantID: "orc-uuid",
+	}
+	mode, advReasons, _ := DetectAdvantage(input)
+	assert.Equal(t, dice.Normal, mode, "help advantage is target-scoped")
+	assert.Empty(t, advReasons)
+}
+
+func TestDetectAdvantage_HelpAdvantage_EmptyTargetScope(t *testing.T) {
+	// Defensive: a help_advantage with no target_combatant_id must not
+	// grant universal advantage.
+	input := AdvantageInput{
+		AttackerConditions: []CombatCondition{{
+			Condition:         "help_advantage",
+			TargetCombatantID: "",
+		}},
+		TargetCombatantID: "goblin-uuid",
+	}
+	mode, advReasons, _ := DetectAdvantage(input)
+	assert.Equal(t, dice.Normal, mode)
+	assert.Empty(t, advReasons)
+}

@@ -22,6 +22,9 @@ type AdvantageInput struct {
 	TargetHidden        bool
 	AttackerObscurement ObscurementLevel
 	TargetObscurement   ObscurementLevel
+	// TargetCombatantID is the ID of the combatant currently being attacked.
+	// SR-018: enables target-scoped condition checks (e.g. help_advantage).
+	TargetCombatantID string
 }
 
 // DetectAdvantage examines attacker/target conditions, weapon properties, and combat
@@ -72,6 +75,13 @@ func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 			disadvReasons = append(disadvReasons, "attacker prone")
 		case "restrained":
 			disadvReasons = append(disadvReasons, "attacker restrained")
+		case "help_advantage":
+			// SR-018: Help action grants advantage on the helped creature's
+			// next attack vs the named target only. Empty TargetCombatantID
+			// is treated as no grant (defensive — never universal advantage).
+			if c.TargetCombatantID != "" && c.TargetCombatantID == input.TargetCombatantID {
+				advReasons = append(advReasons, "help advantage")
+			}
 		}
 	}
 

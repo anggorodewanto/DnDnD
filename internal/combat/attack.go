@@ -331,6 +331,10 @@ type AttackInput struct {
 	TargetHidden        bool                // Target is hidden (not visible)
 	AttackerObscurement ObscurementLevel    // Effective obscurement for attacker
 	TargetObscurement   ObscurementLevel    // Effective obscurement for target
+	// TargetCombatantID is the ID of the combatant currently being attacked.
+	// SR-018: piped into DetectAdvantage so target-scoped attacker conditions
+	// (help_advantage) only fire when the named target is the one under attack.
+	TargetCombatantID string
 	Features            []FeatureDefinition // Feature Effect System definitions (magic items, etc.)
 	IsRaging            bool                // Attacker is currently raging (Phase 46)
 	WearingArmor        bool                // Attacker is wearing armor (Defense fighting style)
@@ -528,6 +532,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		TargetHidden:        input.TargetHidden,
 		AttackerObscurement: input.AttackerObscurement,
 		TargetObscurement:   input.TargetObscurement,
+		TargetCombatantID:   input.TargetCombatantID,
 	}
 	rollMode, advReasons, disadvReasons := DetectAdvantage(advInput)
 	// Thrown/improvised-thrown in long range: add disadvantage
@@ -1022,6 +1027,12 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		s.applyRecklessMarker(ctx, cmd.Attacker)
 	}
 
+	// SR-018 — clear any help_advantage scoped to this target. The grant is
+	// single-shot: the next attack vs the named target spends it. Runs after
+	// resolveAndPersistAttack so a range/cover/charmed rejection does not
+	// burn the Help.
+	s.consumeHelpAdvantage(ctx, cmd.Attacker, cmd.Target)
+
 	// C-37 — track ammunition spent for post-combat half-recovery (Phase 37).
 	if char != nil && HasProperty(weapon, "ammunition") {
 		s.recordAmmoForAttack(cmd.Attacker.EncounterID, cmd.Attacker.ID, weapon)
@@ -1121,6 +1132,8 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	s.markUsedEffects(cmd.Attacker.EncounterID, cmd.Attacker.ID, result.OncePerTurnEffectsFired)
 	s.markRageAttacked(ctx, cmd.Attacker)
 	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, charPtr)
+	// SR-018 — improvised attacks also consume help_advantage targeting cmd.Target.
+	s.consumeHelpAdvantage(ctx, cmd.Attacker, cmd.Target)
 	return result, nil
 }
 
@@ -1221,6 +1234,9 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	}
 	s.markRageAttacked(ctx, cmd.Attacker)
 	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, &char)
+	// SR-018 — off-hand swings count as an attack vs the target and so spend
+	// any help_advantage scoped to that target.
+	s.consumeHelpAdvantage(ctx, cmd.Attacker, cmd.Target)
 	return result, nil
 }
 
@@ -1378,6 +1394,45 @@ func (s *Service) applyRecklessMarker(ctx context.Context, attacker refdata.Comb
 	}
 }
 
+// consumeHelpAdvantage clears a help_advantage condition from the attacker
+// when its TargetCombatantID matches the combatant just attacked. SR-018:
+// Help grants advantage on the helped creature's next attack vs the named
+// target; once that attack has been resolved (hit or miss) the condition is
+// spent and must not carry over to subsequent attacks (same target or not).
+// Conditions scoped to a different target are left in place so a fresh
+// /attack vs the named target still triggers DetectAdvantage's help branch.
+func (s *Service) consumeHelpAdvantage(ctx context.Context, attacker refdata.Combatant, target refdata.Combatant) {
+	conds, err := parseConditions(attacker.Conditions)
+	if err != nil {
+		return
+	}
+	targetID := target.ID.String()
+	filtered := make([]CombatCondition, 0, len(conds))
+	consumed := false
+	for _, c := range conds {
+		if c.Condition == "help_advantage" && c.TargetCombatantID == targetID {
+			consumed = true
+			continue
+		}
+		filtered = append(filtered, c)
+	}
+	if !consumed {
+		return
+	}
+	newConds, err := json.Marshal(filtered)
+	if err != nil {
+		log.Printf("marshaling conditions after help_advantage consume for %s: %v", attacker.ID, err)
+		return
+	}
+	if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+		ID:              attacker.ID,
+		Conditions:      newConds,
+		ExhaustionLevel: attacker.ExhaustionLevel,
+	}); err != nil {
+		log.Printf("clearing help_advantage on %s: %v", attacker.ID, err)
+	}
+}
+
 // buildAttackInput constructs the common AttackInput fields shared by Attack and OffhandAttack.
 func buildAttackInput(
 	attacker, target refdata.Combatant,
@@ -1413,6 +1468,7 @@ func buildAttackInput(
 		OverrideDmgMod:      overrideDmgMod,
 		AttackerHidden:      !attacker.IsVisible,
 		TargetHidden:        !target.IsVisible,
+		TargetCombatantID:   target.ID.String(),
 	}
 }
 
