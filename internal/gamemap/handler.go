@@ -82,12 +82,22 @@ type updateMapRequest struct {
 }
 
 // generateDefaultTiledJSON creates a default Tiled-compatible JSON for a blank map.
+// Layer schema mirrors the Svelte editor's generateBlankMap
+// (dashboard/svelte/src/lib/mapdata.js): terrain + walls + lighting + elevation +
+// spawn_zones, in that order. The three new layers (SR-030) are empty/zero-filled
+// but well-formed so renderer.ParseTiledJSON (SR-029) accepts the round-trip and
+// downstream consumers see the same shape regardless of whether the map was
+// authored in the editor or created via raw POST /api/maps.
 func generateDefaultTiledJSON(width, height, tileSize int) json.RawMessage {
-	// Create terrain data array filled with 1 (open ground)
-	data := make([]int, width*height)
-	for i := range data {
-		data[i] = 1
+	tileCount := width * height
+
+	// Terrain defaults to GID 1 (open_ground); lighting/elevation default to 0.
+	terrainData := make([]int, tileCount)
+	for i := range terrainData {
+		terrainData[i] = 1
 	}
+	lightingData := make([]int, tileCount)
+	elevationData := make([]int, tileCount)
 
 	tiledMap := map[string]interface{}{
 		"width":       width,
@@ -102,12 +112,37 @@ func generateDefaultTiledJSON(width, height, tileSize int) json.RawMessage {
 				"type":    "tilelayer",
 				"width":   width,
 				"height":  height,
-				"data":    data,
+				"data":    terrainData,
 				"visible": true,
 				"opacity": 1,
 			},
 			{
 				"name":    "walls",
+				"type":    "objectgroup",
+				"objects": []interface{}{},
+				"visible": true,
+				"opacity": 1,
+			},
+			{
+				"name":    "lighting",
+				"type":    "tilelayer",
+				"width":   width,
+				"height":  height,
+				"data":    lightingData,
+				"visible": true,
+				"opacity": 1,
+			},
+			{
+				"name":    "elevation",
+				"type":    "tilelayer",
+				"width":   width,
+				"height":  height,
+				"data":    elevationData,
+				"visible": true,
+				"opacity": 1,
+			},
+			{
+				"name":    "spawn_zones",
 				"type":    "objectgroup",
 				"objects": []interface{}{},
 				"visible": true,
@@ -125,6 +160,18 @@ func generateDefaultTiledJSON(width, height, tileSize int) json.RawMessage {
 					{"id": 2, "type": "water"},
 					{"id": 3, "type": "lava"},
 					{"id": 4, "type": "pit"},
+				},
+			},
+			{
+				"firstgid":  7,
+				"name":      "lighting",
+				"tilecount": 6,
+				"tiles": []map[string]interface{}{
+					{"id": 0, "type": "dim_light"},
+					{"id": 1, "type": "darkness"},
+					{"id": 2, "type": "magical_darkness"},
+					{"id": 3, "type": "fog"},
+					{"id": 4, "type": "light_obscurement"},
 				},
 			},
 		},

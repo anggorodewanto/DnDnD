@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -502,10 +503,14 @@ func TestHandler_CreateMap_DefaultTiledJSON_Structure(t *testing.T) {
 	assert.Equal(t, float64(48), parsed["tilewidth"])
 	assert.Equal(t, "orthogonal", parsed["orientation"])
 
-	// Check layers
+	// Check layers — SR-030 raised the default from 2 (terrain+walls) to 5
+	// (terrain, walls, lighting, elevation, spawn_zones) to match the Svelte
+	// editor's generateBlankMap. Detailed shape is asserted in
+	// TestGenerateDefaultTiledJSON_FiveLayers; here we only verify the handler
+	// forwards the canonical 5-layer JSON unchanged.
 	layers, ok := parsed["layers"].([]interface{})
 	require.True(t, ok)
-	assert.Len(t, layers, 2)
+	require.Len(t, layers, 5)
 
 	// Terrain layer
 	terrainLayer := layers[0].(map[string]interface{})
@@ -524,9 +529,9 @@ func TestHandler_CreateMap_DefaultTiledJSON_Structure(t *testing.T) {
 	objects := wallsLayer["objects"].([]interface{})
 	assert.Empty(t, objects)
 
-	// Check tilesets
+	// Check tilesets — terrain + lighting (firstgid 7) after SR-030
 	tilesets := parsed["tilesets"].([]interface{})
-	require.Len(t, tilesets, 1)
+	require.Len(t, tilesets, 2)
 	tileset := tilesets[0].(map[string]interface{})
 	assert.Equal(t, float64(1), tileset["firstgid"])
 	tiles := tileset["tiles"].([]interface{})
@@ -920,4 +925,108 @@ func TestHandler_UpdateMap_InvalidBackgroundImageID(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Contains(t, rec.Body.String(), "invalid background_image_id")
+}
+
+// --- SR-030: default tiled JSON must carry all five editor layers ---
+
+// TestGenerateDefaultTiledJSON_FiveLayers locks in the canonical layer schema
+// emitted by the Svelte editor's generateBlankMap (dashboard/svelte/src/lib/mapdata.js):
+// terrain, walls, lighting, elevation, spawn_zones — in that order, with the
+// new three layers well-formed but empty (zero-filled data / empty objects).
+// Also asserts the lighting tileset entry is present so renderer.ParseTiledJSON
+// can resolve lighting GIDs via the tileset path (SR-029 buildLightingGIDMap).
+func TestGenerateDefaultTiledJSON_FiveLayers(t *testing.T) {
+	const w, h, ts = 4, 3, 48
+	raw := generateDefaultTiledJSON(w, h, ts)
+
+	var parsed map[string]interface{}
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+
+	layers, ok := parsed["layers"].([]interface{})
+	require.True(t, ok, "layers must be an array")
+	require.Len(t, layers, 5, "default map must have 5 layers like the editor")
+
+	expectedOrder := []struct {
+		name      string
+		layerType string
+		tile      bool // true => tilelayer, false => objectgroup
+	}{
+		{"terrain", "tilelayer", true},
+		{"walls", "objectgroup", false},
+		{"lighting", "tilelayer", true},
+		{"elevation", "tilelayer", true},
+		{"spawn_zones", "objectgroup", false},
+	}
+	tileCount := w * h
+	for i, want := range expectedOrder {
+		layer := layers[i].(map[string]interface{})
+		assert.Equal(t, want.name, layer["name"], "layer[%d] name", i)
+		assert.Equal(t, want.layerType, layer["type"], "layer[%d] type", i)
+		assert.Equal(t, true, layer["visible"], "layer[%d] visible", i)
+		if !want.tile {
+			objects, ok := layer["objects"].([]interface{})
+			require.True(t, ok, "layer[%d] objects must be array", i)
+			assert.Empty(t, objects, "layer[%d] objects should be empty by default", i)
+			continue
+		}
+		assert.Equal(t, float64(w), layer["width"], "layer[%d] width", i)
+		assert.Equal(t, float64(h), layer["height"], "layer[%d] height", i)
+		data, ok := layer["data"].([]interface{})
+		require.True(t, ok, "layer[%d] data must be array", i)
+		require.Len(t, data, tileCount, "layer[%d] data length", i)
+		// terrain defaults to open_ground (GID 1); lighting & elevation default to 0.
+		wantFill := 0.0
+		if want.name == "terrain" {
+			wantFill = 1.0
+		}
+		for j, cell := range data {
+			assert.Equal(t, wantFill, cell, "layer[%d=%s] data[%d]", i, want.name, j)
+		}
+	}
+
+	// Lighting tileset must be present so the renderer can resolve lighting GIDs
+	// via the tileset path (firstgid + tile.id) — mirrors mapdata.js LIGHTING_TYPES.
+	tilesets, ok := parsed["tilesets"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, tilesets, 2, "expect terrain + lighting tilesets")
+	lighting := tilesets[1].(map[string]interface{})
+	assert.Equal(t, "lighting", lighting["name"])
+	assert.Equal(t, float64(7), lighting["firstgid"], "lighting firstgid follows the editor (terrain firstgid 1 + tilecount 6)")
+	tiles := lighting["tiles"].([]interface{})
+	gotTypes := make([]string, 0, len(tiles))
+	for _, tl := range tiles {
+		gotTypes = append(gotTypes, tl.(map[string]interface{})["type"].(string))
+	}
+	assert.Equal(t, []string{"dim_light", "darkness", "magical_darkness", "fog", "light_obscurement"}, gotTypes)
+}
+
+// TestGenerateDefaultTiledJSON_RoundTrip pushes the default JSON through the
+// SR-029 renderer parser and asserts a clean parse: dimensions match, terrain
+// is fully open ground, walls/magical-darkness/spawn-zones are empty, and the
+// elevation grid is zero-filled with length width*height.
+func TestGenerateDefaultTiledJSON_RoundTrip(t *testing.T) {
+	const w, h, ts = 5, 4, 48
+	raw := generateDefaultTiledJSON(w, h, ts)
+
+	md, err := renderer.ParseTiledJSON(raw, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, md)
+
+	assert.Equal(t, w, md.Width)
+	assert.Equal(t, h, md.Height)
+	assert.Equal(t, ts, md.TileSize)
+
+	require.Len(t, md.TerrainGrid, w*h)
+	for i, terr := range md.TerrainGrid {
+		assert.Equal(t, renderer.TerrainOpenGround, terr, "terrain[%d]", i)
+	}
+
+	assert.Empty(t, md.Walls, "default walls layer is empty")
+	assert.Empty(t, md.MagicalDarknessTiles, "default lighting layer has no magical darkness")
+	assert.Empty(t, md.SpawnZones, "default spawn_zones layer is empty")
+
+	require.Len(t, md.ElevationByTile, w*h, "elevation grid must be width*height")
+	for i, e := range md.ElevationByTile {
+		assert.Equal(t, 0, e, "elevation[%d]", i)
+	}
 }
