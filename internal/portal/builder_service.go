@@ -23,17 +23,17 @@ var (
 // Class/Subclass for persistence. Class/Subclass remain on the payload
 // so older single-class submitters keep working.
 type CharacterSubmission struct {
-	Name          string                  `json:"name"`
-	Race          string                  `json:"race"`
-	Subrace       string                  `json:"subrace,omitempty"`
-	Background    string                  `json:"background"`
-	Class         string                  `json:"class"`
-	Subclass      string                  `json:"subclass,omitempty"`
-	Classes       []character.ClassEntry  `json:"classes,omitempty"`
-	AbilityScores PointBuyScores          `json:"ability_scores"`
-	Skills        []string                `json:"skills"`
-	Equipment     []string                `json:"equipment,omitempty"`
-	Spells        []string                `json:"spells,omitempty"`
+	Name          string                 `json:"name"`
+	Race          string                 `json:"race"`
+	Subrace       string                 `json:"subrace,omitempty"`
+	Background    string                 `json:"background"`
+	Class         string                 `json:"class"`
+	Subclass      string                 `json:"subclass,omitempty"`
+	Classes       []character.ClassEntry `json:"classes,omitempty"`
+	AbilityScores PointBuyScores         `json:"ability_scores"`
+	Skills        []string               `json:"skills"`
+	Equipment     []string               `json:"equipment,omitempty"`
+	Spells        []string               `json:"spells,omitempty"`
 }
 
 // ValidateSubmission returns a list of validation error messages.
@@ -59,21 +59,21 @@ func ValidateSubmission(s CharacterSubmission) []string {
 // Classes drives the JSONB classes column when non-empty; otherwise the
 // adapter falls back to a single ClassEntry built from Class/Subclass.
 type CreateCharacterParams struct {
-	CampaignID    string
-	Name          string
-	Race          string
-	Subrace       string
-	Class         string
-	Subclass      string
-	Classes       []character.ClassEntry
-	Background    string
-	AbilityScores character.AbilityScores
-	HPMax         int
-	AC            int
-	SpeedFt       int
-	ProfBonus     int
-	Skills        []string
-	Saves         []string
+	CampaignID     string
+	Name           string
+	Race           string
+	Subrace        string
+	Class          string
+	Subclass       string
+	Classes        []character.ClassEntry
+	Background     string
+	AbilityScores  character.AbilityScores
+	HPMax          int
+	AC             int
+	SpeedFt        int
+	ProfBonus      int
+	Skills         []string
+	Saves          []string
 	Equipment      []string
 	Spells         []string
 	Languages      []string
@@ -84,11 +84,11 @@ type CreateCharacterParams struct {
 
 // CreatePlayerCharacterParams holds params for the player_characters record.
 type CreatePlayerCharacterParams struct {
-	CampaignID  string
-	CharacterID string
+	CampaignID    string
+	CharacterID   string
 	DiscordUserID string
-	Status      string
-	CreatedVia  string
+	Status        string
+	CreatedVia    string
 }
 
 // CreateCharacterResult holds the IDs from character creation.
@@ -161,7 +161,11 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 
 	hp := DeriveHP(sub.Class, scores)
 	ac := DeriveAC(scores)
-	profBonus := character.ProficiencyBonus(1)
+	totalLevel := 1
+	if len(sub.Classes) > 0 {
+		totalLevel = character.TotalLevel(sub.Classes)
+	}
+	profBonus := character.ProficiencyBonus(totalLevel)
 
 	charParams := CreateCharacterParams{
 		CampaignID:    campaignID,

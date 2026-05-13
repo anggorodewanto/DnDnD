@@ -228,6 +228,7 @@ type mockBuilderStore struct {
 	lastCharSubrace     string
 	lastCharClasses     []character.ClassEntry
 	lastCharEquipment   []string
+	lastCharProfBonus   int
 	lastPCStatus        string
 	lastPCCreatedVia    string
 	lastPCDiscordUserID string
@@ -240,6 +241,7 @@ func (m *mockBuilderStore) CreateCharacterRecord(_ context.Context, p portal.Cre
 	m.lastCharSubrace = p.Subrace
 	m.lastCharClasses = p.Classes
 	m.lastCharEquipment = p.Equipment
+	m.lastCharProfBonus = p.ProfBonus
 	if m.createCharErr != nil {
 		return "", m.createCharErr
 	}
@@ -364,6 +366,46 @@ func TestBuilderService_CreateCharacter_PassesMulticlass(t *testing.T) {
 	assert.Equal(t, "fighter", store.lastCharClasses[0].Class)
 	assert.Equal(t, "champion", store.lastCharClasses[0].Subclass)
 	assert.Equal(t, "wizard", store.lastCharClasses[1].Class)
+}
+
+func TestBuilderService_CreateCharacter_ProficiencyBonusFromTotalLevel(t *testing.T) {
+	tests := []struct {
+		name    string
+		classes []character.ClassEntry
+		want    int
+	}{
+		{
+			name: "fighter 5",
+			classes: []character.ClassEntry{
+				{Class: "fighter", Subclass: "champion", Level: 5},
+			},
+			want: 3,
+		},
+		{
+			name: "fighter 3 rogue 2",
+			classes: []character.ClassEntry{
+				{Class: "fighter", Subclass: "champion", Level: 3},
+				{Class: "rogue", Subclass: "thief", Level: 2},
+			},
+			want: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &mockBuilderStore{charID: "c-1", pcID: "pc-1"}
+			svc := portal.NewBuilderService(store)
+
+			sub := validSubmission()
+			sub.Class = tt.classes[0].Class
+			sub.Subclass = tt.classes[0].Subclass
+			sub.Classes = tt.classes
+
+			_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "u1", "tok", sub)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, store.lastCharProfBonus)
+		})
+	}
 }
 
 // TestBuilderService_CreateCharacter_PassesSubrace confirms the subrace
