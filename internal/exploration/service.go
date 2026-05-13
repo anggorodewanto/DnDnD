@@ -58,6 +58,12 @@ type StartResult struct {
 	PCs map[uuid.UUID]combat.Position
 }
 
+// TransitionResult is the captured handoff from exploration mode to combat.
+type TransitionResult struct {
+	Encounter refdata.Encounter
+	Positions map[uuid.UUID]combat.Position
+}
+
 // StartExploration creates a new exploration-mode encounter on the given map,
 // reads spawn zones from the map's tiled_json, and seats each provided PC at
 // a player spawn tile (row-major, deterministic).
@@ -201,6 +207,26 @@ func (s *Service) CapturePositions(ctx context.Context, encounterID uuid.UUID) (
 		out[c.CharacterID.UUID] = combat.Position{Col: c.PositionCol, Row: c.PositionRow}
 	}
 	return out, nil
+}
+
+// TransitionToCombat captures current PC positions and flips the encounter to
+// combat mode so turn structure can be added by the combat dashboard flow.
+func (s *Service) TransitionToCombat(ctx context.Context, encounterID uuid.UUID) (TransitionResult, error) {
+	positions, err := s.CapturePositions(ctx, encounterID)
+	if err != nil {
+		return TransitionResult{}, err
+	}
+	enc, err := s.store.UpdateEncounterMode(ctx, refdata.UpdateEncounterModeParams{
+		ID:   encounterID,
+		Mode: "combat",
+	})
+	if err != nil {
+		return TransitionResult{}, fmt.Errorf("updating encounter mode: %w", err)
+	}
+	return TransitionResult{
+		Encounter: enc,
+		Positions: positions,
+	}, nil
 }
 
 // ApplyPositionOverrides returns a new map that is base + overrides (overrides

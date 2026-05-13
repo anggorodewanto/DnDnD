@@ -139,10 +139,11 @@ func (h *DashboardHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleTransitionToCombat captures the current exploration encounter's PC
-// positions and applies any per-PC override_<characterID>=<coord> form fields
-// supplied by the DM (Phase 110 Q3/Q4 clarification). Returns JSON:
+// positions, flips the encounter to combat mode, and applies any per-PC
+// override_<characterID>=<coord> form fields supplied by the DM (Phase 110
+// Q3/Q4 clarification). Returns JSON:
 //
-//	{"positions": {"<character_id>": {"col": "D", "row": 5}, ...}}
+//	{"mode": "combat", "positions": {"<character_id>": {"col": "D", "row": 5}, ...}}
 //
 // The merged map is what a combat-transition flow would feed into
 // StartCombatInput.CharacterPositions.
@@ -189,19 +190,22 @@ func (h *DashboardHandler) HandleTransitionToCombat(w http.ResponseWriter, r *ht
 		}
 	}
 
-	base, err := h.svc.CapturePositions(r.Context(), encID)
+	result, err := h.svc.TransitionToCombat(r.Context(), encID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	merged := ApplyPositionOverrides(base, overrides)
+	merged := ApplyPositionOverrides(result.Positions, overrides)
 
 	posMap := make(map[string]map[string]any, len(merged))
 	for k, v := range merged {
 		posMap[k.String()] = map[string]any{"col": v.Col, "row": v.Row}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"positions": posMap})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"mode":      result.Encounter.Mode,
+		"positions": posMap,
+	})
 }
 
 // dashboardTemplate is a minimal HTML page: a table of maps with a

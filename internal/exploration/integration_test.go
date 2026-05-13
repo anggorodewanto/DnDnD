@@ -3,13 +3,19 @@ package exploration_test
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	dbfs "github.com/ab/dndnd/db"
 	"github.com/ab/dndnd/internal/database"
+	"github.com/ab/dndnd/internal/exploration"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/testutil"
 )
@@ -73,4 +79,53 @@ func TestIntegration_EncounterModeColumn(t *testing.T) {
 		Mode: "nonsense",
 	})
 	require.Error(t, err, "expected CHECK constraint to reject invalid mode")
+}
+
+func TestIntegration_DashboardTransitionToCombatFlipsModeInDB(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := testutil.NewTestDB(t)
+	require.NoError(t, database.MigrateUp(db, dbfs.Migrations))
+
+	q := refdata.New(db)
+	ctx := context.Background()
+
+	campaign := testutil.NewTestCampaign(t, q, "g-transition")
+	gameMap := testutil.NewTestMap(t, q, campaign.ID)
+	character := testutil.NewTestCharacter(t, q, campaign.ID, "Clara", 1)
+	encounter, err := q.CreateExplorationEncounter(ctx, refdata.CreateExplorationEncounterParams{
+		CampaignID: campaign.ID,
+		MapID:      uuid.NullUUID{UUID: gameMap.ID, Valid: true},
+		Name:       "Exploring",
+	})
+	require.NoError(t, err)
+	_ = testutil.NewTestCombatant(t, q, encounter.ID, character.ID)
+
+	svc := exploration.NewService(q)
+	h := exploration.NewDashboardHandler(svc, q)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	form := url.Values{}
+	form.Set("encounter_id", encounter.ID.String())
+	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/transition-to-combat", form)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+
+	var out struct {
+		Mode string `json:"mode"`
+	}
+	require.NoError(t, json.Unmarshal(body, &out))
+	require.Equal(t, "combat", out.Mode)
+
+	stored, err := q.GetEncounter(ctx, encounter.ID)
+	require.NoError(t, err)
+	require.Equal(t, "combat", stored.Mode)
 }

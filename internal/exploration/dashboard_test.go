@@ -258,6 +258,67 @@ func TestDashboardHandler_TransitionToCombat_NoOverrides_UsesCapturedPositions(t
 	}
 }
 
+func TestDashboardHandler_TransitionToCombat_FlipsEncounterMode(t *testing.T) {
+	store := newDashboardStore()
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	store.maps[mapID] = refdata.Map{ID: mapID, TiledJson: buildMapWithPlayerZone(t)}
+
+	charID := uuid.New()
+	store.characters[charID] = refdata.Character{ID: charID, Name: "Clara"}
+	encID := uuid.New()
+	store.encounters[encID] = refdata.Encounter{
+		ID: encID, CampaignID: campaignID,
+		MapID: uuid.NullUUID{UUID: mapID, Valid: true},
+		Mode:  "exploration", Status: "active",
+	}
+	store.combatants[encID] = []refdata.Combatant{
+		{
+			ID: uuid.New(), EncounterID: encID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			PositionCol: "B", PositionRow: 4, IsAlive: true,
+		},
+	}
+
+	svc := exploration.NewService(store.fakeStore)
+	h := exploration.NewDashboardHandler(svc, store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	form := url.Values{}
+	form.Set("encounter_id", encID.String())
+	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/transition-to-combat", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, body)
+	}
+
+	var out struct {
+		Mode string `json:"mode"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("bad JSON: %v body=%s", err, body)
+	}
+	if out.Mode != "combat" {
+		t.Fatalf("mode = %q, want combat; body=%s", out.Mode, body)
+	}
+	if got := store.encounters[encID].Mode; got != "combat" {
+		t.Fatalf("stored encounter mode = %q, want combat", got)
+	}
+	if len(store.updateModeCalls) != 1 {
+		t.Fatalf("UpdateEncounterMode calls = %d, want 1", len(store.updateModeCalls))
+	}
+	if store.updateModeCalls[0].ID != encID || store.updateModeCalls[0].Mode != "combat" {
+		t.Fatalf("UpdateEncounterMode arg = %+v", store.updateModeCalls[0])
+	}
+}
+
 func TestDashboardHandler_TransitionToCombat_InvalidEncounterID(t *testing.T) {
 	store := newDashboardStore()
 	svc := exploration.NewService(store.fakeStore)
