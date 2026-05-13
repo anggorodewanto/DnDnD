@@ -671,6 +671,13 @@ func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, r
 		return TurnInfo{}, fmt.Errorf("creating turn: %w", err)
 	}
 
+	// SR-010: a combatant's once-per-turn FES effect slots (Sneak Attack
+	// extra_damage_dice, etc.) re-arm at the start of their own turn. RAW
+	// for once-per-turn = "since your turn started", so this clear must
+	// happen on the combatant whose turn just *began* — not on the
+	// previously-active combatant at turn-end.
+	s.clearUsedEffectsForCombatant(encounterID, combatant.ID)
+
 	// Process turn-start condition expiration (after turn created so we have turnID for logging)
 	if _, err := s.ProcessTurnStartWithLog(ctx, encounterID, combatant, roundNumber, turn.ID); err != nil {
 		return TurnInfo{}, fmt.Errorf("processing turn start conditions: %w", err)

@@ -224,6 +224,230 @@ func TestServiceAttack_Rogue_SneakAttackFiresOnAdvantage(t *testing.T) {
 		"sneak attack should add 3d6 (15) to base damage 5+3=8, total 23")
 }
 
+// makeRogueFixture builds a level-5 rogue attacking a prone goblin within
+// 5ft using a rapier — i.e. the canonical "sneak attack with advantage"
+// scenario. The combatant IDs and encounter ID are returned so tests can
+// reuse them across multiple Service.Attack calls.
+func makeRogueFixture(t *testing.T) (svc *Service, attacker, target refdata.Combatant, encounterID uuid.UUID) {
+	t.Helper()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	encounterID = uuid.New()
+
+	classes := []CharacterClass{{Class: "Rogue", Level: 5}}
+	feats := []CharacterFeature{{Name: "Sneak Attack", MechanicalEffect: "sneak_attack"}}
+	char := makeCharacterWithFeats(10, 16, 3, "rapier", feats, classes)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeRapier(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc = NewService(ms)
+	attacker = refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Snik",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	proneCond, _ := json.Marshal([]CombatCondition{{Condition: "prone"}})
+	target = refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin",
+		PositionCol: "B",
+		PositionRow: 1,
+		Ac:          12,
+		IsAlive:     true,
+		IsNpc:       true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(proneCond),
+	}
+	return svc, attacker, target, encounterID
+}
+
+// TestServiceAttack_Rogue_SneakAttackOncePerTurn_ExtraAttack proves that a
+// rogue making two attacks on the same turn (e.g., via Action Surge or
+// Haste) only adds Sneak Attack dice once. Without the OncePerTurn wiring
+// in populateAttackFES, every qualifying attack re-adds 3d6.
+//
+// First attack: 1d8(5) + DEX(+3) + 3d6 sneak (each 5) = 5+3+15 = 23.
+// Second attack (same turn): 1d8(5) + DEX(+3) only = 8.
+func TestServiceAttack_Rogue_SneakAttackOncePerTurn_ExtraAttack(t *testing.T) {
+	ctx := context.Background()
+	svc, attacker, target, encounterID := makeRogueFixture(t)
+	turnID := uuid.New()
+
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 5
+	})
+
+	turn := refdata.Turn{
+		ID:               turnID,
+		EncounterID:      encounterID,
+		CombatantID:      attacker.ID,
+		AttacksRemaining: 2,
+	}
+
+	first, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	require.True(t, first.Hit)
+	assert.Equal(t, 23, first.DamageTotal, "first attack should add 3d6 sneak attack")
+
+	// Second attack on the same turn — sneak attack must NOT re-apply.
+	turn.AttacksRemaining = 1
+	second, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	require.True(t, second.Hit)
+	assert.Equal(t, 8, second.DamageTotal,
+		"second attack on the same turn must not re-add sneak attack dice (OncePerTurn)")
+}
+
+// TestServiceAttack_Rogue_SneakAttack_ReactionAttackOnEnemyTurnApplies proves
+// that a rogue's reaction attack during *another creature's* turn — when the
+// rogue has not yet used sneak attack since their own last turn started —
+// still triggers the sneak attack dice. The "turn" RAW for once-per-turn is
+// "since your turn started", not "the currently active turn".
+//
+// In this test cmd.Turn refers to the enemy's turn row (different CombatantID),
+// but the rogue has not used sneak attack this round, so it must fire.
+func TestServiceAttack_Rogue_SneakAttack_ReactionAttackOnEnemyTurnApplies(t *testing.T) {
+	ctx := context.Background()
+	svc, attacker, target, encounterID := makeRogueFixture(t)
+
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 5
+	})
+
+	// The active turn belongs to the *target* (enemy) — i.e. this is a
+	// reaction attack provoked by the enemy's movement.
+	enemyTurnID := uuid.New()
+	enemyTurn := refdata.Turn{
+		ID:               enemyTurnID,
+		EncounterID:      encounterID,
+		CombatantID:      target.ID, // enemy is currently up
+		AttacksRemaining: 1,         // pretend reaction-as-attack budget
+	}
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     enemyTurn,
+	}, roller)
+	require.NoError(t, err)
+	require.True(t, result.Hit)
+	assert.Equal(t, 23, result.DamageTotal,
+		"reaction attack on enemy's turn (not yet used since rogue's turn started) must apply sneak attack")
+}
+
+// TestServiceAttack_Rogue_SneakAttack_ReactionAfterOwnTurnUseDoesNotReapply
+// proves the negative side of the reaction rider: if the rogue already used
+// sneak attack on their own turn, a follow-up reaction attack during the
+// next creature's turn (before the rogue's own next turn starts) must NOT
+// re-apply sneak attack dice. The tracker must persist across turn rows
+// keyed on the attacker's combatant identity.
+func TestServiceAttack_Rogue_SneakAttack_ReactionAfterOwnTurnUseDoesNotReapply(t *testing.T) {
+	ctx := context.Background()
+	svc, attacker, target, encounterID := makeRogueFixture(t)
+
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 5
+	})
+
+	// (1) Rogue's own turn — fires sneak attack.
+	ownTurn := refdata.Turn{
+		ID:               uuid.New(),
+		EncounterID:      encounterID,
+		CombatantID:      attacker.ID,
+		AttacksRemaining: 1,
+	}
+	first, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     ownTurn,
+	}, roller)
+	require.NoError(t, err)
+	require.True(t, first.Hit)
+	assert.Equal(t, 23, first.DamageTotal, "first attack on rogue's own turn should add sneak attack")
+
+	// (2) Enemy's turn — rogue makes a reaction attack BEFORE their next own
+	// turn starts. Sneak attack must NOT re-apply.
+	enemyTurn := refdata.Turn{
+		ID:               uuid.New(),
+		EncounterID:      encounterID,
+		CombatantID:      target.ID,
+		AttacksRemaining: 1,
+	}
+	second, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     enemyTurn,
+	}, roller)
+	require.NoError(t, err)
+	require.True(t, second.Hit)
+	assert.Equal(t, 8, second.DamageTotal,
+		"reaction attack after sneak attack was already used this turn must not re-apply")
+}
+
+// TestServiceClearUsedEffects_ResetsAtRogueTurnStart proves the tracker is
+// cleared when the rogue's *own* turn starts again — i.e., sneak attack is
+// rearmed for the next round.
+func TestServiceClearUsedEffects_ResetsAtRogueTurnStart(t *testing.T) {
+	ctx := context.Background()
+	svc, attacker, target, encounterID := makeRogueFixture(t)
+
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 15
+		}
+		return 5
+	})
+
+	turn1 := refdata.Turn{ID: uuid.New(), EncounterID: encounterID, CombatantID: attacker.ID, AttacksRemaining: 1}
+	first, err := svc.Attack(ctx, AttackCommand{Attacker: attacker, Target: target, Turn: turn1}, roller)
+	require.NoError(t, err)
+	assert.Equal(t, 23, first.DamageTotal)
+
+	// Simulate a new round starting for the rogue (the initiative-side hook).
+	svc.clearUsedEffectsForCombatant(encounterID, attacker.ID)
+
+	turn2 := refdata.Turn{ID: uuid.New(), EncounterID: encounterID, CombatantID: attacker.ID, AttacksRemaining: 1}
+	second, err := svc.Attack(ctx, AttackCommand{Attacker: attacker, Target: target, Turn: turn2}, roller)
+	require.NoError(t, err)
+	assert.Equal(t, 23, second.DamageTotal,
+		"new turn for rogue must re-arm sneak attack (tracker cleared)")
+}
+
 // TestBuildAttackEffectContext_WiresAllRequestedFields documents the contract
 // between Service.Attack and BuildAttackEffectContext: every flag the chunk-4
 // review called out (HasAdvantage, AllyWithinFt, WearingArmor,

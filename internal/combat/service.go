@@ -309,6 +309,16 @@ type Service struct {
 	hostilesDefeatedNotifier  HostilesDefeatedNotifier
 	hostilesPromptedMu        sync.Mutex
 	hostilesPrompted          map[uuid.UUID]bool
+	// SR-010 — in-memory tracker for once-per-turn feature effects
+	// (e.g. Sneak Attack EffectExtraDamageDice). Keyed by encounter ID then
+	// combatant ID (the *attacker*, not the active-turn combatant — RAW
+	// once-per-turn means "since *your* turn started", so reaction attacks
+	// during another creature's turn must read this attacker-keyed slate).
+	// Cleared in createActiveTurn when the combatant's own turn begins. No
+	// DB column — encounter IDs never reappear so a stale map entry is
+	// harmless (best-effort GC on EndCombat).
+	usedEffectsMu sync.Mutex
+	usedEffects   map[uuid.UUID]map[uuid.UUID]map[string]bool
 }
 
 // NewService creates a new combat Service.
@@ -319,7 +329,59 @@ func NewService(store Store) *Service {
 		ammoTracker:       NewAmmoSpentTracker(),
 		roller:            dice.NewRoller(nil),
 		hostilesPrompted:  make(map[uuid.UUID]bool),
+		usedEffects:       make(map[uuid.UUID]map[uuid.UUID]map[string]bool),
 	}
+}
+
+// usedEffectsSnapshot returns a copy of the once-per-turn effect-type set
+// recorded for (encounterID, combatantID). The returned map is always
+// non-nil so the on-attack pipeline can rely on a stable shape; the caller
+// must treat it as read-only (mutations would race with markUsedEffects).
+// Used by populateAttackFES to thread AttackInput.UsedThisTurn.
+func (s *Service) usedEffectsSnapshot(encounterID, combatantID uuid.UUID) map[string]bool {
+	s.usedEffectsMu.Lock()
+	defer s.usedEffectsMu.Unlock()
+	src := s.usedEffects[encounterID][combatantID]
+	out := make(map[string]bool, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
+}
+
+// markUsedEffects records that the given once-per-turn effect types have
+// been consumed by (encounterID, combatantID) for the duration of that
+// combatant's current "turn window" (since their own turn last started).
+// Used by Service.Attack / attackImprovised after a successful Attack so
+// the next Attack from the same combatant — even a reaction during an
+// enemy's turn — sees the flag.
+func (s *Service) markUsedEffects(encounterID, combatantID uuid.UUID, effectTypes []string) {
+	if len(effectTypes) == 0 {
+		return
+	}
+	s.usedEffectsMu.Lock()
+	defer s.usedEffectsMu.Unlock()
+	if s.usedEffects[encounterID] == nil {
+		s.usedEffects[encounterID] = make(map[uuid.UUID]map[string]bool)
+	}
+	if s.usedEffects[encounterID][combatantID] == nil {
+		s.usedEffects[encounterID][combatantID] = make(map[string]bool)
+	}
+	for _, et := range effectTypes {
+		s.usedEffects[encounterID][combatantID][et] = true
+	}
+}
+
+// clearUsedEffectsForCombatant wipes the once-per-turn effect-type set for
+// (encounterID, combatantID). Called from createActiveTurn at the start of
+// the combatant's own turn — RAW: "since your turn started" resets here.
+func (s *Service) clearUsedEffectsForCombatant(encounterID, combatantID uuid.UUID) {
+	s.usedEffectsMu.Lock()
+	defer s.usedEffectsMu.Unlock()
+	if s.usedEffects[encounterID] == nil {
+		return
+	}
+	delete(s.usedEffects[encounterID], combatantID)
 }
 
 // SetRoller overrides the default dice roller used by service-internal

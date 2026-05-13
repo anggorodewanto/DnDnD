@@ -380,6 +380,14 @@ type AttackResult struct {
 	PromptDivineSmiteSlots          []int  // sorted ascending list of available slot levels
 	PromptBardicInspirationEligible bool   // Attacker holds an un-expired Bardic Inspiration die
 	PromptBardicInspirationDie      string // die expression (d6/d8/d10/d12)
+
+	// SR-010: list of EffectType strings whose conditions included
+	// OncePerTurn:true and which actually fired (passed condition filtering)
+	// in the on_damage_roll pass. Service.Attack reads this to mark the
+	// effect types used so subsequent attacks by the same combatant — same
+	// turn or a reaction on another creature's turn — skip them until the
+	// combatant's own turn starts again.
+	OncePerTurnEffectsFired []string
 }
 
 // OffhandAttackCommand holds the service-level inputs for an off-hand attack (bonus action).
@@ -552,6 +560,15 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		dmgResult := ProcessEffects(input.Features, TriggerOnDamageRoll, attackCtx)
 		dmgMod += dmgResult.FlatModifier
 		fesDamageDice = dmgResult.ExtraDice
+		// SR-010: surface once-per-turn effect types that actually fired
+		// so the service layer can mark them used for this combatant's
+		// "turn window" (since their own turn last started). The damage
+		// trigger is where Sneak Attack's extra_damage_dice lives.
+		for _, re := range dmgResult.AppliedEffects {
+			if re.Effect.Conditions.OncePerTurn {
+				result.OncePerTurnEffectsFired = append(result.OncePerTurnEffectsFired, string(re.Effect.Type))
+			}
+		}
 	}
 
 	// Auto-crit: skip attack roll, auto-hit and auto-crit
@@ -974,6 +991,13 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return result, err
 	}
 
+	// SR-010: persist the once-per-turn effect-type bits so subsequent
+	// attacks by the same attacker (whether on the same turn or as a
+	// reaction during an enemy turn) skip those effects. Runs after the
+	// attack actually resolved so a miss / out-of-range error doesn't
+	// burn the once-per-turn slot.
+	s.markUsedEffects(cmd.Attacker.EncounterID, cmd.Attacker.ID, result.OncePerTurnEffectsFired)
+
 	// D-46-rage-auto-end-quiet — mark the raging attacker so the
 	// no-attack-no-damage auto-end check at end-of-turn sees the activity.
 	s.markRageAttacked(ctx, cmd.Attacker)
@@ -1085,6 +1109,9 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	if err != nil {
 		return result, err
 	}
+	// SR-010 — mirror Service.Attack: improvised hits that produce a
+	// once-per-turn FES effect must close that slot too.
+	s.markUsedEffects(cmd.Attacker.EncounterID, cmd.Attacker.ID, result.OncePerTurnEffectsFired)
 	s.markRageAttacked(ctx, cmd.Attacker)
 	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, charPtr)
 	return result, nil
@@ -1560,6 +1587,13 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 		!HasProperty(weapon, "two-handed") &&
 		!input.TwoHanded &&
 		!input.OffHandOccupied
+
+	// SR-010: thread the per-attacker once-per-turn used-effects map so
+	// Sneak Attack's OncePerTurn filter actually trips in production. The
+	// tracker is keyed on the attacker's combatant ID (not the active
+	// turn's CombatantID) so reaction attacks during another creature's
+	// turn correctly read the rogue's slate.
+	input.UsedThisTurn = s.usedEffectsSnapshot(cmd.Attacker.EncounterID, cmd.Attacker.ID)
 
 	allCombatants, err := s.store.ListCombatantsByEncounterID(ctx, cmd.Attacker.EncounterID)
 	if err != nil {
