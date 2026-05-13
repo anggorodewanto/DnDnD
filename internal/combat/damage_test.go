@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/ab/dndnd/internal/dice"
@@ -949,5 +950,93 @@ func TestApplyDamage_FiresConcentrationSave(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, saveCreated, "concentration save must be enqueued")
 	assert.Equal(t, "concentration", capturedSave.Source)
+}
+
+// --- SR-021: Rage damage resistance has a consumer in damage.go ---
+//
+// Rage declares `EffectGrantResistance` over bludgeoning/piercing/slashing
+// when the combatant is raging. Before SR-021, ProcessorResult.Resistances
+// was populated but never read by the damage pipeline, so a raging
+// barbarian took full slashing damage. These tests pin the contract:
+// raging halves B/P/S, leaves non-physical types alone, and is a no-op
+// when the combatant is not actually raging.
+
+// ragingBarbarianFixture builds a PC combatant + matching character row
+// representing a level-3 raging barbarian with the canonical "rage"
+// mechanical_effect feature. The mockStore's getCharacterFn is wired
+// to return the character when ApplyDamage's resolveDamageProfile
+// looks it up by CharacterID.
+func ragingBarbarianFixture(t *testing.T, ms *mockStore, isRaging bool) (refdata.Combatant, uuid.UUID) {
+	t.Helper()
+	charID := uuid.New()
+	classesJSON := []byte(`[{"class":"Barbarian","level":3}]`)
+	featuresJSON := []byte(`[{"name":"Rage","mechanical_effect":"rage"}]`)
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		if id != charID {
+			return refdata.Character{}, sql.ErrNoRows
+		}
+		return refdata.Character{
+			ID:       charID,
+			Classes:  classesJSON,
+			Features: pqtype.NullRawMessage{RawMessage: featuresJSON, Valid: true},
+		}, nil
+	}
+	target := refdata.Combatant{
+		ID:          uuid.New(),
+		HpMax:       30,
+		HpCurrent:   30,
+		IsAlive:     true,
+		IsNpc:       false,
+		IsRaging:    isRaging,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		Conditions:  json.RawMessage(`[]`),
+	}
+	return target, charID
+}
+
+func TestApplyDamage_RagingBarbarianHalvesSlashing(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	target, _ := ragingBarbarianFixture(t, ms, true)
+	target.EncounterID = encounterID
+	svc := NewService(ms)
+
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 10, DamageType: "slashing",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 5, res.FinalDamage, "rage must halve slashing")
+	assert.Contains(t, res.Reason, "resistance")
+	assert.Equal(t, int32(25), captured.HpCurrent)
+}
+
+func TestApplyDamage_RagingBarbarianFireUnaffected(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	target, _ := ragingBarbarianFixture(t, ms, true)
+	target.EncounterID = encounterID
+	svc := NewService(ms)
+
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 10, DamageType: "fire",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 10, res.FinalDamage, "rage must NOT resist fire")
+	assert.Equal(t, int32(20), captured.HpCurrent)
+}
+
+func TestApplyDamage_NonRagingBarbarianTakesFullSlashing(t *testing.T) {
+	encounterID := uuid.New()
+	ms, captured := applyDamageMockStore()
+	target, _ := ragingBarbarianFixture(t, ms, false)
+	target.EncounterID = encounterID
+	svc := NewService(ms)
+
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encounterID, Target: target, RawDamage: 10, DamageType: "slashing",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 10, res.FinalDamage, "non-raging barb takes full slashing")
+	assert.Equal(t, int32(20), captured.HpCurrent)
 }
 

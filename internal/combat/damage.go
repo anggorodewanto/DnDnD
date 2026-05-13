@@ -3,6 +3,7 @@ package combat
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -367,14 +368,19 @@ func (s *Service) routePhase43DeathSave(ctx context.Context, target refdata.Comb
 }
 
 // resolveDamageProfile returns the target's R/I/V slices and parsed conditions.
-// PCs default to empty R/I/V (not yet schema-tracked); NPCs pull from the
-// referenced creature row, falling back to empty on missing creature.
+// NPCs pull from the referenced creature row, falling back to empty on missing
+// creature. PCs pull FES-derived resistances from their classes/features (e.g.
+// Rage's bludgeoning/piercing/slashing resistance) — see SR-021.
 func (s *Service) resolveDamageProfile(ctx context.Context, target refdata.Combatant) ([]string, []string, []string, []CombatCondition, error) {
 	conditions, err := ListConditions(target.Conditions)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("parsing conditions: %w", err)
 	}
-	if !target.IsNpc || !target.CreatureRefID.Valid {
+	if !target.IsNpc {
+		fesResistances := s.collectFESResistances(ctx, target)
+		return fesResistances, nil, nil, conditions, nil
+	}
+	if !target.CreatureRefID.Valid {
 		return nil, nil, nil, conditions, nil
 	}
 	creature, err := s.store.GetCreature(ctx, target.CreatureRefID.String)
@@ -385,4 +391,36 @@ func (s *Service) resolveDamageProfile(ctx context.Context, target refdata.Comba
 		return nil, nil, nil, nil, fmt.Errorf("looking up creature %s: %w", target.CreatureRefID.String, err)
 	}
 	return creature.DamageResistances, creature.DamageImmunities, creature.DamageVulnerabilities, conditions, nil
+}
+
+// collectFESResistances runs the Feature Effect System processor against the
+// target PC's classes/features at the TriggerOnTakeDamage trigger and returns
+// any damage types granted resistance (e.g. Rage's B/P/S). SR-021.
+//
+// Best-effort: any failure (no character row, JSON parse error, missing
+// CharacterID) degrades to nil. This matches the SR-006 / populateAttackFES
+// convention of "drop the bonus rather than fail the roll" — a missing
+// character row should never block a damage application.
+func (s *Service) collectFESResistances(ctx context.Context, target refdata.Combatant) []string {
+	if !target.CharacterID.Valid {
+		return nil
+	}
+	char, err := s.store.GetCharacter(ctx, target.CharacterID.UUID)
+	if err != nil {
+		return nil
+	}
+	var classes []CharacterClass
+	if len(char.Classes) > 0 {
+		_ = json.Unmarshal(char.Classes, &classes)
+	}
+	var feats []CharacterFeature
+	if char.Features.Valid && len(char.Features.RawMessage) > 0 {
+		_ = json.Unmarshal(char.Features.RawMessage, &feats)
+	}
+	defs := BuildFeatureDefinitions(classes, feats)
+	if len(defs) == 0 {
+		return nil
+	}
+	result := ProcessEffects(defs, TriggerOnTakeDamage, EffectContext{IsRaging: target.IsRaging})
+	return result.Resistances
 }
