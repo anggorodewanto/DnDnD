@@ -69,5 +69,11 @@ func FormatLongRestResult(charName string, result LongRestResult) string {
 		b.WriteString("> You can change your prepared spells with `/prepare`.\n")
 	}
 
+	// SR-019: long rest decrements exhaustion by 1 level. Show the new
+	// level only when it changed so a 0-exhaustion rest stays quiet.
+	if result.ExhaustionDecreased {
+		fmt.Fprintf(&b, "> Exhaustion: level %d\n", result.ExhaustionLevelAfter)
+	}
+
 	return b.String()
 }

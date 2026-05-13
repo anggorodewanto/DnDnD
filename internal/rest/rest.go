@@ -225,6 +225,13 @@ type LongRestInput struct {
 	// recharged inventory replaces the input slice in the result.
 	Inventory    []character.InventoryItem
 	RechargeInfo map[string]inventory.RechargeInfo
+
+	// SR-019: current exhaustion level [0-6]. A long rest decrements by 1
+	// (floor 0). SR-042 will resolve where this value lives on the
+	// character + persist the decrement back; today the LongRest result
+	// surfaces ExhaustionLevelAfter so callers (the /rest handler and any
+	// future combatant-side persistence) can act on it.
+	ExhaustionLevel int
 }
 
 // LongRestResult holds the results of a long rest.
@@ -244,6 +251,25 @@ type LongRestResult struct {
 	// Dawn recharge outputs (populated when input carries Inventory + RechargeInfo).
 	UpdatedInventory []character.InventoryItem
 	RechargedItems   []inventory.RechargedItem
+
+	// SR-019: long-rest exhaustion decrement. ExhaustionLevelAfter is
+	// max(0, input.ExhaustionLevel-1). ExhaustionDecreased is true only
+	// when the level actually changed (i.e. input was > 0).
+	ExhaustionLevelAfter int
+	ExhaustionDecreased  bool
+}
+
+// LongRestExhaustionLevel returns the exhaustion level after a long rest:
+// max(0, current-1). Per spec line 1365, a long rest (with food/water)
+// decreases exhaustion by 1 level. Negative inputs are treated as 0 so the
+// helper is total — callers do not need to validate. SR-042 will wire this
+// into combatant persistence; today it is exposed via LongRest's result and
+// the DM-dashboard exhaustion override.
+func LongRestExhaustionLevel(current int) int {
+	if current <= 0 {
+		return 0
+	}
+	return current - 1
 }
 
 // preparedCasterClasses are classes that prepare spells and should be reminded.
@@ -324,6 +350,12 @@ func (s *Service) LongRest(input LongRestInput) LongRestResult {
 	if input.DeathSaveSuccesses > 0 || input.DeathSaveFailures > 0 {
 		result.DeathSavesReset = true
 	}
+
+	// SR-019: long rest decreases exhaustion by 1 (floor 0). Decreased
+	// flag drives the format/Discord message — already-at-zero rests
+	// stay silent on the exhaustion line.
+	result.ExhaustionLevelAfter = LongRestExhaustionLevel(input.ExhaustionLevel)
+	result.ExhaustionDecreased = input.ExhaustionLevel > 0
 
 	// Prepared caster reminder
 	for _, c := range input.Classes {

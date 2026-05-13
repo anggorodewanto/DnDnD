@@ -924,3 +924,94 @@ func TestShortRest_Error_InvalidDieType(t *testing.T) {
 		t.Fatal("expected error for invalid die type d4")
 	}
 }
+
+// --- SR-019: Exhaustion mutation surface (long-rest decrement helper) ---
+
+func TestLongRestExhaustionLevel(t *testing.T) {
+	cases := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"zero stays zero (floor)", 0, 0},
+		{"one decrements to zero", 1, 0},
+		{"three decrements to two", 3, 2},
+		{"six decrements to five", 6, 5},
+		{"negative input clamps to zero", -1, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := LongRestExhaustionLevel(tc.in)
+			if got != tc.want {
+				t.Errorf("LongRestExhaustionLevel(%d) = %d, want %d", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLongRest_ExhaustionDecrements(t *testing.T) {
+	svc := NewService(nil)
+	input := LongRestInput{
+		HPCurrent:        40,
+		HPMax:            40,
+		HitDiceRemaining: map[string]int{"d10": 5},
+		Classes:          []character.ClassEntry{{Class: "fighter", Level: 5}},
+		FeatureUses:      map[string]character.FeatureUse{},
+		SpellSlots:       map[string]character.SlotInfo{},
+		ExhaustionLevel:  3,
+	}
+	result := svc.LongRest(input)
+	if result.ExhaustionLevelAfter != 2 {
+		t.Errorf("ExhaustionLevelAfter = %d, want 2", result.ExhaustionLevelAfter)
+	}
+	if !result.ExhaustionDecreased {
+		t.Error("ExhaustionDecreased = false, want true")
+	}
+}
+
+func TestLongRest_ExhaustionFloorAtZero(t *testing.T) {
+	svc := NewService(nil)
+	input := LongRestInput{
+		HPCurrent:        40,
+		HPMax:            40,
+		HitDiceRemaining: map[string]int{"d10": 5},
+		Classes:          []character.ClassEntry{{Class: "fighter", Level: 5}},
+		FeatureUses:      map[string]character.FeatureUse{},
+		SpellSlots:       map[string]character.SlotInfo{},
+		ExhaustionLevel:  0,
+	}
+	result := svc.LongRest(input)
+	if result.ExhaustionLevelAfter != 0 {
+		t.Errorf("ExhaustionLevelAfter = %d, want 0", result.ExhaustionLevelAfter)
+	}
+	if result.ExhaustionDecreased {
+		t.Error("ExhaustionDecreased = true, want false (already at floor)")
+	}
+}
+
+func TestFormatLongRestResult_ExhaustionLine(t *testing.T) {
+	// Decreased: line appears.
+	msg := FormatLongRestResult("Aragorn", LongRestResult{
+		HPAfter:              40,
+		HPMax:                40,
+		ExhaustionLevelAfter: 2,
+		ExhaustionDecreased:  true,
+	})
+	if !strings.Contains(msg, "Exhaustion") {
+		t.Errorf("expected exhaustion line in result, got:\n%s", msg)
+	}
+	if !strings.Contains(msg, "2") {
+		t.Errorf("expected new exhaustion level in result, got:\n%s", msg)
+	}
+
+	// Not decreased: line is hidden.
+	msg2 := FormatLongRestResult("Aragorn", LongRestResult{
+		HPAfter:              40,
+		HPMax:                40,
+		ExhaustionLevelAfter: 0,
+		ExhaustionDecreased:  false,
+	})
+	if strings.Contains(msg2, "Exhaustion") {
+		t.Errorf("did not expect exhaustion line when not decreased, got:\n%s", msg2)
+	}
+}

@@ -307,6 +307,42 @@ type overrideSpellSlotsRequest struct {
 	Reason     string          `json:"reason"`
 }
 
+// overrideExhaustionRequest is the JSON body for POST .../exhaustion.
+//
+// Two modes:
+//   - delta != 0: relative adjustment (current + delta), clamped to [0, 6].
+//     Used by the forced-march / starvation / DM-decrement flow.
+//   - delta == 0: absolute set to ExhaustionLevel, clamped to [0, 6]. Used
+//     when the DM wants to assert a specific level (e.g. greater
+//     restoration => 0).
+//
+// SR-019: spec line 1365 "applied by DM from dashboard".
+type overrideExhaustionRequest struct {
+	ExhaustionLevel int32  `json:"exhaustion_level"`
+	Delta           int32  `json:"delta"`
+	Reason          string `json:"reason"`
+}
+
+// maxExhaustionLevel is the SRD upper bound (6 = death). Higher values are
+// silently clamped so the DM cannot put a combatant into an undefined state.
+const maxExhaustionLevel int32 = 6
+
+// resolveExhaustionLevel applies the override request's delta-or-absolute
+// rule, then clamps to [0, maxExhaustionLevel]. Pure for testability.
+func resolveExhaustionLevel(current int32, req overrideExhaustionRequest) int32 {
+	next := req.ExhaustionLevel
+	if req.Delta != 0 {
+		next = current + req.Delta
+	}
+	if next < 0 {
+		return 0
+	}
+	if next > maxExhaustionLevel {
+		return maxExhaustionLevel
+	}
+	return next
+}
+
 // parseCombatantOverrideIDs returns the parsed encounter and combatant UUIDs.
 func parseCombatantOverrideIDs(r *http.Request) (uuid.UUID, uuid.UUID, error) {
 	encounterID, err := parseEncounterID(r)
@@ -504,6 +540,55 @@ func (h *DMDashboardHandler) OverrideCombatantInitiative(w http.ResponseWriter, 
 			return nil
 		},
 	)
+}
+
+// OverrideCombatantExhaustion handles POST .../override/combatant/{combatantID}/exhaustion.
+//
+// SR-019: the mutation surface for exhaustion. Per spec line 1365,
+// exhaustion is "applied by DM from dashboard" — increment via the
+// forced-march hook (`delta: 1`), decrement on greater restoration
+// (`delta: -1`) or remove entirely (`exhaustion_level: 0`, `delta: 0`).
+// Long-rest auto-decrement is wired through rest.LongRest; this endpoint
+// powers the manual DM path. Value is clamped to [0, 6].
+func (h *DMDashboardHandler) OverrideCombatantExhaustion(w http.ResponseWriter, r *http.Request) {
+	var req overrideExhaustionRequest
+	h.runOverride(w, r,
+		func() error { return json.NewDecoder(r.Body).Decode(&req) },
+		func(ctx context.Context, encounterID, combatantID, turnID uuid.UUID) error {
+			c, err := h.svc.store.GetCombatant(ctx, combatantID)
+			if err != nil {
+				return fmt.Errorf("getting combatant: %w", err)
+			}
+			before, _ := snapshotExhaustionState(c)
+			next := resolveExhaustionLevel(c.ExhaustionLevel, req)
+			updated, err := h.svc.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+				ID:              combatantID,
+				Conditions:      c.Conditions,
+				ExhaustionLevel: next,
+			})
+			if err != nil {
+				return fmt.Errorf("updating exhaustion: %w", err)
+			}
+			after, _ := snapshotExhaustionState(updated)
+			h.logOverride(ctx, turnID, encounterID, combatantID, req.Reason, before, after)
+
+			base := fmt.Sprintf("⚠️ **DM Correction:** %s exhaustion adjusted to level %d", c.DisplayName, next)
+			h.postCorrection(ctx, encounterID, correctionMsg(base, req.Reason))
+			return nil
+		},
+	)
+}
+
+// snapshotExhaustionState marshals the combatant's exhaustion level for the
+// dm_override audit row. Kept separate from snapshotCombatantState so the
+// undo path stays scoped to HP/position/conditions (this override is not
+// yet covered by undoBeforeState; that's a follow-up if SR-019 acceptance
+// asks for it).
+func snapshotExhaustionState(c refdata.Combatant) (json.RawMessage, error) {
+	snapshot := struct {
+		ExhaustionLevel int32 `json:"exhaustion_level"`
+	}{ExhaustionLevel: c.ExhaustionLevel}
+	return json.Marshal(snapshot)
 }
 
 // OverrideCharacterSpellSlots handles POST .../override/character/{characterID}/spell-slots.
