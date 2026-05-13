@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -27,6 +28,7 @@ type WorkspaceStore interface {
 	DeleteCombatant(ctx context.Context, id uuid.UUID) error
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
+	CountPendingDMQueueItemsByCampaign(ctx context.Context, campaignID uuid.UUID) (int64, error)
 }
 
 // WorkspaceHandler serves combat workspace API endpoints.
@@ -67,6 +69,7 @@ type workspaceEncounterResponse struct {
 	Zones                   []workspaceZoneResponse      `json:"zones"`
 	ActiveTurnCombatantID   string                       `json:"active_turn_combatant_id"`
 	ActiveTurnCombatantName string                       `json:"active_turn_combatant_name"`
+	PendingQueueCount       int32                        `json:"pending_queue_count"`
 }
 
 type workspaceCombatantResponse struct {
@@ -155,12 +158,21 @@ func (h *WorkspaceHandler) GetWorkspace(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	pendingQueueCount, err := h.store.CountPendingDMQueueItemsByCampaign(r.Context(), campaignID)
+	if err != nil {
+		http.Error(w, "failed to count pending queue items", http.StatusInternalServerError)
+		return
+	}
+	if pendingQueueCount > math.MaxInt32 {
+		pendingQueueCount = math.MaxInt32
+	}
+
 	resp := workspaceResponse{
 		Encounters: make([]workspaceEncounterResponse, 0, len(activeEncounters)),
 	}
 
 	for _, enc := range activeEncounters {
-		encResp, err := h.buildEncounterResponse(r.Context(), enc)
+		encResp, err := h.buildEncounterResponse(r.Context(), enc, int32(pendingQueueCount))
 		if err != nil {
 			http.Error(w, "failed to build encounter data", http.StatusInternalServerError)
 			return
@@ -171,7 +183,7 @@ func (h *WorkspaceHandler) GetWorkspace(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (h *WorkspaceHandler) buildEncounterResponse(ctx context.Context, enc refdata.Encounter) (workspaceEncounterResponse, error) {
+func (h *WorkspaceHandler) buildEncounterResponse(ctx context.Context, enc refdata.Encounter, pendingQueueCount int32) (workspaceEncounterResponse, error) {
 	combatants, err := h.store.ListCombatantsByEncounterID(ctx, enc.ID)
 	if err != nil {
 		return workspaceEncounterResponse{}, err
@@ -244,6 +256,7 @@ func (h *WorkspaceHandler) buildEncounterResponse(ctx context.Context, enc refda
 		Zones:                   zoneResp,
 		ActiveTurnCombatantID:   activeTurnCombatantID,
 		ActiveTurnCombatantName: activeTurnCombatantName,
+		PendingQueueCount:       pendingQueueCount,
 	}, nil
 }
 

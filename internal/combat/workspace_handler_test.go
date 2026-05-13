@@ -32,6 +32,7 @@ type mockWorkspaceStore struct {
 	deleteCombatantFn                 func(ctx context.Context, id uuid.UUID) error
 	getCharacterFn                    func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	getCreatureFn                     func(ctx context.Context, id string) (refdata.Creature, error)
+	countPendingDMQueueByCampaignFn   func(ctx context.Context, campaignID uuid.UUID) (int64, error)
 }
 
 func (m *mockWorkspaceStore) ListEncountersByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error) {
@@ -75,6 +76,12 @@ func (m *mockWorkspaceStore) GetCreature(ctx context.Context, id string) (refdat
 		return refdata.Creature{}, sql.ErrNoRows
 	}
 	return m.getCreatureFn(ctx, id)
+}
+func (m *mockWorkspaceStore) CountPendingDMQueueItemsByCampaign(ctx context.Context, campaignID uuid.UUID) (int64, error) {
+	if m.countPendingDMQueueByCampaignFn == nil {
+		return 0, nil
+	}
+	return m.countPendingDMQueueByCampaignFn(ctx, campaignID)
 }
 
 // --- TDD Cycle: parseCreatureWalkSpeed ---
@@ -190,12 +197,12 @@ func TestWorkspaceHandler_GetWorkspace_Success(t *testing.T) {
 			assert.Equal(t, campaignID, cid)
 			return []refdata.Encounter{
 				{
-					ID:          encounterID,
-					CampaignID:  campaignID,
-					Name:        "Goblin Ambush",
-					Status:      "active",
-					RoundNumber: 3,
-					MapID:       uuid.NullUUID{UUID: mapID, Valid: true},
+					ID:            encounterID,
+					CampaignID:    campaignID,
+					Name:          "Goblin Ambush",
+					Status:        "active",
+					RoundNumber:   3,
+					MapID:         uuid.NullUUID{UUID: mapID, Valid: true},
 					CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
 				},
 				{
@@ -410,10 +417,10 @@ func TestWorkspaceHandler_UpdateCombatantHP_Success(t *testing.T) {
 			assert.Equal(t, int32(0), arg.TempHp)
 			assert.True(t, arg.IsAlive)
 			return refdata.Combatant{
-				ID:        combatantID,
-				HpCurrent: 15,
-				TempHp:    0,
-				IsAlive:   true,
+				ID:         combatantID,
+				HpCurrent:  15,
+				TempHp:     0,
+				IsAlive:    true,
 				Conditions: json.RawMessage(`[]`),
 			}, nil
 		},
@@ -992,6 +999,145 @@ func TestWorkspaceHandler_DeleteCombatant_StoreError(t *testing.T) {
 	h.RegisterRoutes(r)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/combat/"+encounterID.String()+"/combatants/"+combatantID.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// --- SR-032: pending_queue_count populated from dm_queue_items aggregation ---
+
+// Phase 94a's Combat Workspace tab badges + Encounter Overview "queued" pill
+// read `enc.pending_queue_count` (CombatManager.svelte:878,900). The field
+// was previously absent from workspaceEncounterResponse, so the UI badge
+// never lit up. These tests pin the field-presence + population contract.
+
+func TestWorkspaceHandler_GetWorkspace_PopulatesPendingQueueCount(t *testing.T) {
+	campaignID := uuid.New()
+	encA := uuid.New()
+	encB := uuid.New()
+	turnA := uuid.New()
+	turnB := uuid.New()
+	combA := uuid.New()
+	combB := uuid.New()
+
+	store := &mockWorkspaceStore{
+		listEncountersByCampaignIDFn: func(ctx context.Context, cid uuid.UUID) ([]refdata.Encounter, error) {
+			assert.Equal(t, campaignID, cid)
+			return []refdata.Encounter{
+				{ID: encA, CampaignID: campaignID, Name: "Goblin Fight", Status: "active", RoundNumber: 1, CurrentTurnID: uuid.NullUUID{UUID: turnA, Valid: true}},
+				{ID: encB, CampaignID: campaignID, Name: "Rooftop Chase", Status: "active", RoundNumber: 2, CurrentTurnID: uuid.NullUUID{UUID: turnB, Valid: true}},
+			}, nil
+		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			if eid == encA {
+				return []refdata.Combatant{{ID: combA, EncounterID: encA, ShortID: "PC1", DisplayName: "Aragorn", HpMax: 30, HpCurrent: 30, IsAlive: true, Conditions: json.RawMessage(`[]`)}}, nil
+			}
+			return []refdata.Combatant{{ID: combB, EncounterID: encB, ShortID: "PC2", DisplayName: "Gimli", HpMax: 28, HpCurrent: 28, IsAlive: true, Conditions: json.RawMessage(`[]`)}}, nil
+		},
+		listEncounterZonesByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.EncounterZone, error) {
+			return []refdata.EncounterZone{}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			if eid == encA {
+				return refdata.Turn{ID: turnA, CombatantID: combA}, nil
+			}
+			return refdata.Turn{ID: turnB, CombatantID: combB}, nil
+		},
+		countPendingDMQueueByCampaignFn: func(ctx context.Context, cid uuid.UUID) (int64, error) {
+			assert.Equal(t, campaignID, cid)
+			return 2, nil
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/workspace?campaign_id="+campaignID.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	// Decode through map[string]any so this test pins the exact JSON tag the
+	// Svelte UI reads (`pending_queue_count`) rather than the Go field name.
+	var raw struct {
+		Encounters []map[string]any `json:"encounters"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+	require.Len(t, raw.Encounters, 2)
+	for i, enc := range raw.Encounters {
+		val, ok := enc["pending_queue_count"]
+		require.Truef(t, ok, "encounter %d missing pending_queue_count JSON field", i)
+		assert.Equal(t, float64(2), val, "encounter %d pending_queue_count", i)
+	}
+}
+
+func TestWorkspaceHandler_GetWorkspace_PendingQueueCount_ZeroWhenNoPending(t *testing.T) {
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	store := &mockWorkspaceStore{
+		listEncountersByCampaignIDFn: func(ctx context.Context, cid uuid.UUID) ([]refdata.Encounter, error) {
+			return []refdata.Encounter{
+				{ID: encounterID, CampaignID: campaignID, Name: "Quiet Camp", Status: "active", RoundNumber: 1},
+			}, nil
+		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{{ID: combatantID, EncounterID: eid, ShortID: "PC", DisplayName: "Frodo", HpMax: 20, HpCurrent: 20, IsAlive: true, Conditions: json.RawMessage(`[]`)}}, nil
+		},
+		listEncounterZonesByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.EncounterZone, error) {
+			return []refdata.EncounterZone{}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{}, sql.ErrNoRows
+		},
+		countPendingDMQueueByCampaignFn: func(ctx context.Context, cid uuid.UUID) (int64, error) {
+			// The SQL `WHERE status='pending'` filter is what guarantees that
+			// resolved/cancelled rows are excluded; from the handler's
+			// perspective an empty queue returns 0 here.
+			return 0, nil
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/workspace?campaign_id="+campaignID.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp workspaceResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Encounters, 1)
+	assert.Equal(t, int32(0), resp.Encounters[0].PendingQueueCount)
+}
+
+func TestWorkspaceHandler_GetWorkspace_PendingQueueCount_StoreError(t *testing.T) {
+	campaignID := uuid.New()
+	encounterID := uuid.New()
+
+	store := &mockWorkspaceStore{
+		listEncountersByCampaignIDFn: func(ctx context.Context, cid uuid.UUID) ([]refdata.Encounter, error) {
+			return []refdata.Encounter{
+				{ID: encounterID, CampaignID: campaignID, Name: "Anywhere", Status: "active"},
+			}, nil
+		},
+		countPendingDMQueueByCampaignFn: func(ctx context.Context, cid uuid.UUID) (int64, error) {
+			return 0, errors.New("db down")
+		},
+	}
+
+	h := NewWorkspaceHandler(store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/workspace?campaign_id="+campaignID.String(), nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 

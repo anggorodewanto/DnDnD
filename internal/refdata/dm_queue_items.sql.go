@@ -12,6 +12,23 @@ import (
 	"github.com/google/uuid"
 )
 
+const countPendingDMQueueItemsByCampaign = `-- name: CountPendingDMQueueItemsByCampaign :one
+SELECT count(*)::BIGINT AS pending_count
+FROM dm_queue_items
+WHERE campaign_id = $1 AND status = 'pending'
+`
+
+// SR-032: counts unresolved dm-queue items for a campaign so the Combat
+// Workspace tab badges + Encounter Overview "queued" pill can render the
+// pending-action backlog. Resolved/cancelled rows are excluded by the
+// status filter.
+func (q *Queries) CountPendingDMQueueItemsByCampaign(ctx context.Context, campaignID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countPendingDMQueueItemsByCampaign, campaignID)
+	var pending_count int64
+	err := row.Scan(&pending_count)
+	return pending_count, err
+}
+
 const getDMQueueItem = `-- name: GetDMQueueItem :one
 SELECT id, campaign_id, guild_id, channel_id, message_id, kind, player_name, summary, resolve_path, status, outcome, extra, created_at, resolved_at
 FROM dm_queue_items

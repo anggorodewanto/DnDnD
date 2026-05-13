@@ -52,3 +52,12 @@ SET status = 'cancelled',
     resolved_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- name: CountPendingDMQueueItemsByCampaign :one
+-- SR-032: counts unresolved dm-queue items for a campaign so the Combat
+-- Workspace tab badges + Encounter Overview "queued" pill can render the
+-- pending-action backlog. Resolved/cancelled rows are excluded by the
+-- status filter.
+SELECT count(*)::BIGINT AS pending_count
+FROM dm_queue_items
+WHERE campaign_id = $1 AND status = 'pending';

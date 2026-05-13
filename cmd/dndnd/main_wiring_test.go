@@ -413,10 +413,10 @@ func TestMapRegeneratorAdapter_RendersWithZoneOverlays(t *testing.T) {
 // darkvision and creature senses into renderer.VisionSource tile-units.
 func TestTilesFromFeet(t *testing.T) {
 	assert.Equal(t, 0, tilesFromFeet(0))
-	assert.Equal(t, 12, tilesFromFeet(60))    // typical darkvision
-	assert.Equal(t, 24, tilesFromFeet(120))   // 120ft darkvision / Devil's Sight
-	assert.Equal(t, 1, tilesFromFeet(5))      // single-tile range
-	assert.Equal(t, 0, tilesFromFeet(-10))    // negative ft is clamped
+	assert.Equal(t, 12, tilesFromFeet(60))  // typical darkvision
+	assert.Equal(t, 24, tilesFromFeet(120)) // 120ft darkvision / Devil's Sight
+	assert.Equal(t, 1, tilesFromFeet(5))    // single-tile range
+	assert.Equal(t, 0, tilesFromFeet(-10))  // negative ft is clamped
 	// Non-multiples truncate down (matches Devil's Sight rounding convention).
 	assert.Equal(t, 1, tilesFromFeet(9))
 }
@@ -1014,6 +1014,9 @@ func (stubWorkspaceStore) GetCharacter(context.Context, uuid.UUID) (refdata.Char
 }
 func (stubWorkspaceStore) GetCreature(context.Context, string) (refdata.Creature, error) {
 	return refdata.Creature{}, nil
+}
+func (stubWorkspaceStore) CountPendingDMQueueItemsByCampaign(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
 }
 
 type recordingCombatLogPoster struct {
