@@ -2439,3 +2439,328 @@ func TestResolveAoEPendingSaves_NoopWhenPendingRemain(t *testing.T) {
 	assert.Nil(t, res, "expected no damage applied while one save is still pending")
 	assert.Equal(t, 0, hpCalls)
 }
+
+// ---------------------------------------------------------------------------
+// SR-013: cylinder shape + AoE Metamagic plumbing
+// ---------------------------------------------------------------------------
+
+// TestGetAffectedTiles_Cylinder verifies cylinder shape selects the same disc
+// of tiles as a sphere of the same radius (height_ft is decorative for 2D).
+func TestGetAffectedTiles_Cylinder(t *testing.T) {
+	t.Run("20ft radius cylinder == 20ft sphere disc", func(t *testing.T) {
+		cyl := AreaOfEffect{Shape: "cylinder", RadiusFt: 20}
+		sph := AreaOfEffect{Shape: "sphere", RadiusFt: 20}
+		cylTiles, err := GetAffectedTiles(cyl, 10, 10, 10, 10)
+		require.NoError(t, err)
+		sphTiles, err := GetAffectedTiles(sph, 10, 10, 10, 10)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, sphTiles, cylTiles)
+	})
+
+	t.Run("5ft radius Moonbeam disc", func(t *testing.T) {
+		// 5ft radius from (10,10) = origin + 4 cardinals; diagonals excluded.
+		cyl := AreaOfEffect{Shape: "cylinder", RadiusFt: 5}
+		tiles, err := GetAffectedTiles(cyl, 5, 5, 10, 10)
+		require.NoError(t, err)
+		assert.Contains(t, tiles, GridPos{10, 10})
+		assert.Contains(t, tiles, GridPos{9, 10})
+		assert.Contains(t, tiles, GridPos{11, 10})
+		assert.Contains(t, tiles, GridPos{10, 9})
+		assert.Contains(t, tiles, GridPos{10, 11})
+		assert.NotContains(t, tiles, GridPos{9, 9})
+		assert.NotContains(t, tiles, GridPos{11, 11})
+	})
+}
+
+// TestCastAoE_Cylinder_Moonbeam exercises the full CastAoE pipeline against a
+// cylinder-shaped spell so we know the switch fix wires through.
+func TestCastAoE_Cylinder_Moonbeam(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "E"
+	caster.PositionRow = 5
+
+	target := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin",
+		PositionCol: "H", PositionRow: 8,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	moonbeam := refdata.Spell{
+		ID:             "moonbeam",
+		Name:           "Moonbeam",
+		Level:          2,
+		CastingTime:    "1 action",
+		RangeType:      "ranged",
+		RangeFt:        sql.NullInt32{Int32: 120, Valid: true},
+		SaveAbility:    sql.NullString{String: "con", Valid: true},
+		SaveEffect:     sql.NullString{String: "half_damage", Valid: true},
+		Concentration:  sql.NullBool{Bool: true, Valid: true},
+		ResolutionMode: "auto",
+		AreaOfEffect: pqtype.NullRawMessage{
+			RawMessage: json.RawMessage(`{"shape":"cylinder","radius_ft":5,"height_ft":40}`),
+			Valid:      true,
+		},
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return moonbeam, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster, target}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	svc := NewService(store)
+	cmd := AoECastCommand{
+		SpellID:     "moonbeam",
+		CasterID:    caster.ID,
+		EncounterID: uuid.New(),
+		TargetCol:   "H",
+		TargetRow:   8,
+		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	result, err := svc.CastAoE(context.Background(), cmd)
+	require.NoError(t, err)
+	// Target sits at the cylinder's origin -> affected.
+	assert.Contains(t, result.AffectedNames, "Goblin")
+	assert.Equal(t, "Moonbeam", result.SpellName)
+}
+
+// sr013SorcererFixture is a focused mock setup for AoE metamagic tests.
+type sr013SorcererFixture struct {
+	svc      *Service
+	store    *mockStore
+	caster   refdata.Combatant
+	ally     refdata.Combatant
+	enemy    refdata.Combatant
+}
+
+func newSR013SorcererFixture(t *testing.T, spell refdata.Spell) sr013SorcererFixture {
+	t.Helper()
+	charID := uuid.New()
+	char := makeSorcererCharacter(charID, 5, 5) // CHA 18 → mod 4; 5 SP
+	caster := makeSorcererCombatant(charID)
+	caster.PositionCol = "E"
+	caster.PositionRow = 5
+
+	// Two targets near the AoE origin (H8) so a 20ft sphere covers both.
+	ally := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Ally",
+		PositionCol: "H", PositionRow: 8,
+		IsAlive: true, IsNpc: false, Conditions: json.RawMessage(`[]`),
+	}
+	enemy := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin",
+		PositionCol: "I", PositionRow: 8,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster, ally, enemy}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.updateCharacterFeatureUsesFn = func(_ context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, FeatureUses: arg.FeatureUses}, nil
+	}
+
+	return sr013SorcererFixture{
+		svc:    NewService(store),
+		store:  store,
+		caster: caster,
+		ally:   ally,
+		enemy:  enemy,
+	}
+}
+
+func sr013SorcererFireball() refdata.Spell {
+	return refdata.Spell{
+		ID:          "fireball",
+		Name:        "Fireball",
+		Level:       3,
+		CastingTime: "1 action",
+		RangeType:   "ranged",
+		RangeFt:     sql.NullInt32{Int32: 150, Valid: true},
+		SaveAbility: sql.NullString{String: "dex", Valid: true},
+		SaveEffect:  sql.NullString{String: "half_damage", Valid: true},
+		Damage: pqtype.NullRawMessage{
+			RawMessage: json.RawMessage(`{"dice":"8d6","type":"fire"}`),
+			Valid:      true,
+		},
+		AreaOfEffect: pqtype.NullRawMessage{
+			RawMessage: json.RawMessage(`{"shape":"sphere","radius_ft":20}`),
+			Valid:      true,
+		},
+		ResolutionMode: "auto",
+		Concentration:  sql.NullBool{Bool: false, Valid: true},
+		Duration:       "Instantaneous",
+		Components:     []string{"V", "S", "M"},
+	}
+}
+
+// TestCastAoE_Careful_SparesAlly verifies that CarefulTargetIDs flips the
+// matched ally's PendingSave to AutoSuccess and immediately resolves the row
+// at the DB layer, while non-careful targets remain pending.
+func TestCastAoE_Careful_SparesAlly(t *testing.T) {
+	f := newSR013SorcererFixture(t, sr013SorcererFireball())
+
+	var resolvedSuccesses []uuid.UUID
+	createdRows := map[uuid.UUID]uuid.UUID{} // combatantID -> rowID
+	f.store.createPendingSaveFn = func(_ context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+		row := refdata.PendingSafe{
+			ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID,
+			Ability: arg.Ability, Dc: arg.Dc, Source: arg.Source, Status: "pending",
+		}
+		createdRows[arg.CombatantID] = row.ID
+		return row, nil
+	}
+	f.store.updatePendingSaveResultFn = func(_ context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+		if arg.Success.Valid && arg.Success.Bool {
+			resolvedSuccesses = append(resolvedSuccesses, arg.ID)
+		}
+		return refdata.PendingSafe{ID: arg.ID, Status: "rolled", RollResult: arg.RollResult, Success: arg.Success}, nil
+	}
+
+	cmd := AoECastCommand{
+		SpellID:          "fireball",
+		CasterID:         f.caster.ID,
+		EncounterID:      uuid.New(),
+		TargetCol:        "H",
+		TargetRow:        8,
+		Turn:             refdata.Turn{ID: uuid.New(), CombatantID: f.caster.ID},
+		Metamagic:        []string{"careful"},
+		CarefulTargetIDs: []uuid.UUID{f.ally.ID},
+	}
+
+	result, err := f.svc.CastAoE(context.Background(), cmd)
+	require.NoError(t, err)
+	assert.Equal(t, 4, result.CarefulSpellCreatures) // CHA mod 4
+	assert.Equal(t, 1, result.MetamagicCost)         // 1 SP for careful
+	assert.Equal(t, 4, result.SorceryPointsRemaining)
+
+	// PendingSaves: ally has AutoSuccess, enemy does not.
+	var allyPS, enemyPS *PendingSave
+	for i, ps := range result.PendingSaves {
+		switch ps.CombatantID {
+		case f.ally.ID:
+			allyPS = &result.PendingSaves[i]
+		case f.enemy.ID:
+			enemyPS = &result.PendingSaves[i]
+		}
+	}
+	require.NotNil(t, allyPS, "ally save row missing")
+	require.NotNil(t, enemyPS, "enemy save row missing")
+	assert.True(t, allyPS.AutoSuccess, "Careful ally should auto-succeed")
+	assert.False(t, enemyPS.AutoSuccess, "enemy should NOT auto-succeed")
+
+	// DB row: ally's row was resolved as a success.
+	allyRowID := createdRows[f.ally.ID]
+	assert.Contains(t, resolvedSuccesses, allyRowID, "Careful ally save row should be DB-resolved as success")
+}
+
+// TestCastAoE_Heightened_FirstTargetDisadvantage verifies the first affected
+// target's PendingSave is flagged Disadvantage; the rest are not.
+func TestCastAoE_Heightened_FirstTargetDisadvantage(t *testing.T) {
+	f := newSR013SorcererFixture(t, sr013SorcererFireball())
+
+	cmd := AoECastCommand{
+		SpellID:     "fireball",
+		CasterID:    f.caster.ID,
+		EncounterID: uuid.New(),
+		TargetCol:   "H",
+		TargetRow:   8,
+		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: f.caster.ID},
+		Metamagic:   []string{"heightened"},
+	}
+
+	result, err := f.svc.CastAoE(context.Background(), cmd)
+	require.NoError(t, err)
+	assert.True(t, result.IsHeightened)
+	assert.Equal(t, 3, result.MetamagicCost) // Heightened = 3 SP
+
+	require.GreaterOrEqual(t, len(result.PendingSaves), 2, "need >=2 affected targets")
+	disCount := 0
+	for _, ps := range result.PendingSaves {
+		if ps.Disadvantage {
+			disCount++
+		}
+	}
+	assert.Equal(t, 1, disCount, "exactly one target should get Heightened disadvantage")
+	assert.True(t, result.PendingSaves[0].Disadvantage, "first save row must be the Heightened one")
+}
+
+// TestCastAoE_Twinned_Rejected verifies Twinned Spell is rejected on an AoE
+// cast (the spec disallows Twinned for area spells; ValidateMetamagicOptions
+// surfaces this via validateTwinnedSpell).
+func TestCastAoE_Twinned_Rejected(t *testing.T) {
+	f := newSR013SorcererFixture(t, sr013SorcererFireball())
+
+	var slotDeducted bool
+	f.store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		slotDeducted = true
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	cmd := AoECastCommand{
+		SpellID:     "fireball",
+		CasterID:    f.caster.ID,
+		EncounterID: uuid.New(),
+		TargetCol:   "H",
+		TargetRow:   8,
+		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: f.caster.ID},
+		Metamagic:   []string{"twinned"},
+	}
+
+	_, err := f.svc.CastAoE(context.Background(), cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "area of effect", "Twinned must reject AoE shapes")
+	assert.False(t, slotDeducted, "rejected metamagic must NOT burn a slot")
+}
+
+// TestCastAoE_Empowered_SetsFlag verifies Empowered surfaces on AoECastResult.
+func TestCastAoE_Empowered_SetsFlag(t *testing.T) {
+	f := newSR013SorcererFixture(t, sr013SorcererFireball())
+
+	cmd := AoECastCommand{
+		SpellID:     "fireball",
+		CasterID:    f.caster.ID,
+		EncounterID: uuid.New(),
+		TargetCol:   "H",
+		TargetRow:   8,
+		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: f.caster.ID},
+		Metamagic:   []string{"empowered"},
+	}
+
+	result, err := f.svc.CastAoE(context.Background(), cmd)
+	require.NoError(t, err)
+	assert.True(t, result.IsEmpowered)
+	assert.Equal(t, 4, result.EmpoweredRerolls) // CHA mod 4
+	assert.Equal(t, 1, result.MetamagicCost)
+}

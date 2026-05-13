@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
@@ -162,12 +163,25 @@ func FindAffectedCombatants(affectedTiles []GridPos, combatants []refdata.Combat
 }
 
 // PendingSave represents a save that needs to be resolved for an AoE spell.
+//
+// AutoSuccess flips a row to a guaranteed save (Careful Spell metamagic). The
+// pending_saves row is still inserted and resolved as a "success" so the
+// existing all-rolls-resolved gate in ResolveAoEPendingSaves continues to
+// fire damage application for the non-spared targets.
+//
+// Disadvantage marks the first save target for Heightened Spell metamagic so
+// the rolling surface (/save) can apply disadvantage. The DB pending_saves
+// table has no advantage column today, so this flag is informational on the
+// in-memory result returned by CastAoE; wiring it end-to-end through the
+// /save UX is SR-025 territory.
 type PendingSave struct {
-	CombatantID uuid.UUID
-	SaveAbility string
-	DC          int
-	CoverBonus  int
-	IsNPC       bool
+	CombatantID  uuid.UUID
+	SaveAbility  string
+	DC           int
+	CoverBonus   int
+	IsNPC        bool
+	AutoSuccess  bool
+	Disadvantage bool
 }
 
 // SaveResult holds the outcome of a saving throw.
@@ -221,11 +235,19 @@ func ApplySaveResult(saveSuccess bool, saveEffect string) float64 {
 }
 
 // GetAffectedTiles dispatches to the correct shape function based on the AoE shape.
-// For sphere/square, the origin is the target point.
+// For sphere/cylinder/square, the origin is the target point.
 // For cone/line, the caster position and target direction are used.
+//
+// Cylinder geometry note: a cylinder of radius R and height H projected onto a
+// top-down 2D grid covers exactly the same disc of tiles as a sphere of radius
+// R — height_ft is decorative for tile selection and only matters for vertical
+// clearance / fog / line-of-effect, which we do not model here. SR-008/SR-014
+// covers the 3D side of this if/when needed.
 func GetAffectedTiles(aoe AreaOfEffect, casterCol, casterRow, targetCol, targetRow int) ([]GridPos, error) {
 	switch aoe.Shape {
 	case "sphere":
+		return SphereAffectedTiles(targetCol, targetRow, aoe.RadiusFt), nil
+	case "cylinder":
 		return SphereAffectedTiles(targetCol, targetRow, aoe.RadiusFt), nil
 	case "cone":
 		return ConeAffectedTiles(casterCol, casterRow, targetCol, targetRow, aoe.LengthFt), nil
@@ -253,6 +275,16 @@ type AoECastResult struct {
 	SlotsRemaining int
 	OriginCol      int
 	OriginRow      int
+	// SR-013: AoE pipeline now consumes Metamagic. Mirrors CastResult's fields.
+	CarefulSpellCreatures  int    // CHA mod cap on auto-success allies (Careful Spell)
+	IsEmpowered            bool   // Empowered Spell active — may reroll damage dice
+	EmpoweredRerolls       int    // CHA mod re-roll allowance
+	IsHeightened           bool   // first save target gets disadvantage (Heightened Spell)
+	IsSubtle               bool   // Subtle Spell active
+	DistantRange           string // Distant Spell new range description
+	ExtendedDuration       string // Extended Spell new duration
+	MetamagicCost          int    // sorcery points spent on metamagic
+	SorceryPointsRemaining int    // sorcery points after metamagic spend
 	// Phase 118: when this cast replaced an existing concentration spell, the
 	// dropped spell's effects were cleaned up across the encounter. The
 	// result is surfaced here so the handler can post the consolidated 💨 line.
@@ -308,6 +340,12 @@ type AoECastCommand struct {
 	CurrentConcentration string
 	Walls                []renderer.WallSegment
 	SlotLevel            int // explicit slot choice; 0 = auto-select lowest available
+	// SR-013: AoE pipeline accepts Metamagic. Mirrors CastCommand naming.
+	Metamagic []string // normalized option names ("careful", "heightened", ...)
+	// CarefulTargetIDs lists allies who auto-succeed on the save when
+	// Metamagic includes "careful". Capped at CHA mod (CarefulSpellCreatureCount).
+	// Discord prompt UX (SR-025) populates this; CastAoE just honours it.
+	CarefulTargetIDs []uuid.UUID
 }
 
 // CastAoE orchestrates the AoE spell casting flow:
@@ -377,6 +415,30 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		}
 	}
 
+	// 6b. SR-013: Metamagic validation. Must run BEFORE slot deduction (and
+	// before pending_saves rows are written) so a rejected metamagic cast
+	// doesn't burn a slot. ValidateMetamagicOptions reads the spell shape —
+	// Twinned Spell rejects AoE here via validateTwinnedSpell.
+	var metamagicCost int
+	var metamagicFeatureUses map[string]character.FeatureUse
+	var metamagicCurrentPoints int
+	if len(cmd.Metamagic) > 0 {
+		metamagicFeatureUses, metamagicCurrentPoints, err = ParseFeatureUses(char, FeatureKeySorceryPoints)
+		if err != nil {
+			return AoECastResult{}, err
+		}
+		if err := ValidateMetamagic(cmd.Metamagic, spellLevel, metamagicCurrentPoints); err != nil {
+			return AoECastResult{}, err
+		}
+		if err := ValidateMetamagicOptions(cmd.Metamagic, spell); err != nil {
+			return AoECastResult{}, err
+		}
+		metamagicCost, err = MetamagicTotalCost(cmd.Metamagic, spellLevel)
+		if err != nil {
+			return AoECastResult{}, err
+		}
+	}
+
 	// 7. Validate range to target coordinate
 	targetColIdx := colToIndex(cmd.TargetCol)
 	targetRowIdx := int(cmd.TargetRow) - 1
@@ -437,12 +499,36 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		originRow = casterRowIdx
 	}
 
+	// SR-013: precompute Careful Spell allow-list (capped at CHA mod). The
+	// command's CarefulTargetIDs may exceed the cap if the prompt UX over-
+	// fills; we truncate canonically by first-N-input-order.
+	carefulSet := make(map[uuid.UUID]bool)
+	carefulCap := 0
+	if hasMetamagic(cmd.Metamagic, "careful") {
+		carefulCap = CarefulSpellCreatureCount(scores.Cha)
+		for i, id := range cmd.CarefulTargetIDs {
+			if i >= carefulCap {
+				break
+			}
+			carefulSet[id] = true
+		}
+	}
+	heightened := hasMetamagic(cmd.Metamagic, "heightened")
+
 	var pendingSaves []PendingSave
 	var affectedNames []string
+	heightenedAssigned := false
 	for _, c := range affected {
 		affectedNames = append(affectedNames, c.DisplayName)
 		if saveAbility != "" {
 			ps := CalculateAoECover(originCol, originRow, c, saveAbility, saveDC, cmd.Walls)
+			if carefulSet[c.ID] {
+				ps.AutoSuccess = true
+			}
+			if heightened && !heightenedAssigned && !ps.AutoSuccess {
+				ps.Disadvantage = true
+				heightenedAssigned = true
+			}
 			pendingSaves = append(pendingSaves, ps)
 		}
 	}
@@ -452,16 +538,31 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	// damage once they are all rolled. Source uses the "aoe:<spell-id>"
 	// tag so the resolver can find every row tied to this cast without
 	// touching unrelated concentration/DM-prompted saves.
+	//
+	// SR-013: Careful Spell auto-success rows are immediately resolved (rolled
+	// = DC, success = true) so the all-rolls-resolved gate in
+	// ResolveAoEPendingSaves advances without waiting on a player roll the
+	// ally would never make.
 	source := AoEPendingSaveSource(spell.ID)
 	for _, ps := range pendingSaves {
-		if _, err := s.store.CreatePendingSave(ctx, refdata.CreatePendingSaveParams{
+		created, err := s.store.CreatePendingSave(ctx, refdata.CreatePendingSaveParams{
 			EncounterID: cmd.EncounterID,
 			CombatantID: ps.CombatantID,
 			Ability:     ps.SaveAbility,
 			Dc:          int32(ps.DC),
 			Source:      source,
-		}); err != nil {
+		})
+		if err != nil {
 			return AoECastResult{}, fmt.Errorf("creating pending AoE save for %s: %w", ps.CombatantID, err)
+		}
+		if ps.AutoSuccess {
+			if _, err := s.store.UpdatePendingSaveResult(ctx, refdata.UpdatePendingSaveResultParams{
+				ID:         created.ID,
+				RollResult: sql.NullInt32{Int32: int32(ps.DC), Valid: true},
+				Success:    sql.NullBool{Bool: true, Valid: true},
+			}); err != nil {
+				return AoECastResult{}, fmt.Errorf("auto-resolving Careful Spell save for %s: %w", ps.CombatantID, err)
+			}
 		}
 	}
 
@@ -494,6 +595,15 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	deduction, err := s.deductAndPersistSlot(ctx, char.ID, slots, effectiveSlotLevel)
 	if err != nil {
 		return AoECastResult{}, err
+	}
+
+	// 16a. SR-013: deduct sorcery points for metamagic.
+	sorceryPointsRemaining := metamagicCurrentPoints
+	if metamagicCost > 0 {
+		sorceryPointsRemaining, err = s.DeductFeaturePool(ctx, char, FeatureKeySorceryPoints, metamagicFeatureUses, metamagicCurrentPoints, metamagicCost)
+		if err != nil {
+			return AoECastResult{}, err
+		}
 	}
 
 	// 17. med-26 / Phase 67: auto-create persistent zones at the targeted
@@ -532,7 +642,10 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		}
 	}
 
-	return AoECastResult{
+	// SR-013: surface metamagic-derived fields. Empowered/Heightened/Subtle/
+	// Extended/Distant/Careful are populated whenever the matching flag is in
+	// cmd.Metamagic, mirroring CastResult's contract.
+	result := AoECastResult{
 		CasterName:           caster.DisplayName,
 		SpellName:            spell.Name,
 		SpellLevel:           spellLevel,
@@ -547,7 +660,36 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		OriginCol:            originCol,
 		OriginRow:            originRow,
 		ConcentrationCleanup: cleanupResult,
-	}, nil
+	}
+	if len(cmd.Metamagic) > 0 {
+		applyAoEMetamagicEffects(&result, cmd.Metamagic, spell, scores.Cha)
+		result.MetamagicCost = metamagicCost
+		result.SorceryPointsRemaining = sorceryPointsRemaining
+	}
+	return result, nil
+}
+
+// applyAoEMetamagicEffects mirrors applyMetamagicEffects (CastResult flavor)
+// for AoE casts. Kept separate because AoECastResult / CastResult are distinct
+// types; the behavior is identical for the AoE-eligible options.
+func applyAoEMetamagicEffects(result *AoECastResult, metamagics []string, spell refdata.Spell, chaScore int) {
+	for _, m := range metamagics {
+		switch strings.ToLower(m) {
+		case "careful":
+			result.CarefulSpellCreatures = CarefulSpellCreatureCount(chaScore)
+		case "distant":
+			result.DistantRange = ApplyDistantSpell(spell)
+		case "empowered":
+			result.IsEmpowered = true
+			result.EmpoweredRerolls = EmpoweredRerollCount(chaScore)
+		case "extended":
+			result.ExtendedDuration = ApplyExtendedSpell(spell.Duration)
+		case "heightened":
+			result.IsHeightened = true
+		case "subtle":
+			result.IsSubtle = true
+		}
+	}
 }
 
 // AoEPendingSaveSourcePrefix is the source-column prefix used for pending_saves
