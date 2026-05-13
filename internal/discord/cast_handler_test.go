@@ -1426,3 +1426,127 @@ func TestCastHandler_DMRequired_CastErrorSkipsPost(t *testing.T) {
 		"SR-026: a failed cast must not create a dm_queue row — only successful casts post")
 }
 
+// --- SR-027 -----------------------------------------------------------------
+// SR-027 calls for `/cast` to invoke `PostNarrativeTeleport` for high-level
+// narrative teleports. SR-026 already routes those casts through the shared
+// Notifier with Kind=KindNarrativeTeleport and the exact same Summary text
+// that PostNarrativeTeleport produces, so the framework-only complaint is
+// resolved without an extra production code change. The test below pins the
+// runtime contract end-to-end against the *real* DefaultNotifier (memory
+// store + fake sender) so any future drift between the generic Post path and
+// the PostNarrativeTeleport helper is caught:
+//
+//  1. A row of kind="narrative_teleport" exists in the store after Handle.
+//  2. The rendered Discord message body is byte-identical to what
+//     DefaultNotifier.PostNarrativeTeleport would have produced for the same
+//     caster + spell, proving the two paths are equivalent.
+
+// sr027FakeSender is a minimal dmqueue.Sender for the end-to-end SR-027 test.
+// It records each Send call so the assertion can compare message content
+// against the PostNarrativeTeleport helper's output verbatim.
+type sr027FakeSender struct {
+	sent []struct {
+		channelID string
+		content   string
+	}
+	nextID int
+}
+
+func (s *sr027FakeSender) Send(channelID, content string) (string, error) {
+	s.sent = append(s.sent, struct {
+		channelID string
+		content   string
+	}{channelID, content})
+	s.nextID++
+	return "msg-" + uuid.NewString(), nil
+}
+func (s *sr027FakeSender) Edit(_, _, _ string) error { return nil }
+
+func TestCastHandler_SR027_NarrativeTeleport_RowExistsAndMatchesHelper(t *testing.T) {
+	// Real DefaultNotifier so we exercise the actual Insert → Send path the
+	// framework guarantees, not just the recording stub.
+	store := dmqueue.NewMemoryStore()
+	sender := &sr027FakeSender{}
+	resolver := func(string) string { return "dm-queue-channel" }
+	pathBldr := func(itemID string) string { return "/dashboard/queue/" + itemID }
+	notifier := dmqueue.NewNotifierWithStore(sender, resolver, pathBldr, store)
+
+	h, _, svc, _ := setupCastHandler()
+	provider := h.encounterProvider.(*mockCastProvider)
+	provider.spells["teleport"] = refdata.Spell{
+		ID:             "teleport",
+		Name:           "Teleport",
+		Level:          7,
+		ResolutionMode: "dm_required",
+		Teleport: pqtype.NullRawMessage{
+			RawMessage: []byte(`{"target":"group","range_ft":0,"requires_sight":false}`),
+			Valid:      true,
+		},
+	}
+	campID := uuid.New()
+	h.SetNotifier(notifier)
+	h.SetCampaignProvider(&mockCheckCampaignProvider{
+		fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campID}, nil
+		},
+	})
+
+	// CastResult mirrors spellcasting.go:646 — Cast service promotes
+	// ResolutionMode to "dm_required" when teleResult.DMQueueRouted is true.
+	svc.castResult = combat.CastResult{
+		CasterName:     "Aria",
+		SpellName:      "Teleport",
+		SpellLevel:     7,
+		ResolutionMode: "dm_required",
+		Teleport: &combat.TeleportResult{
+			DMQueueRouted: true,
+		},
+	}
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell": "teleport",
+	}))
+
+	pending := notifier.ListPending()
+	require.Len(t, pending, 1, "SR-027: cast of high-level Teleport must create exactly one dm_queue_items row")
+	item := pending[0]
+	assert.Equal(t, dmqueue.KindNarrativeTeleport, item.Event.Kind,
+		"SR-027: the stored row's kind must be narrative_teleport")
+	assert.Equal(t, "Aria", item.Event.PlayerName)
+	assert.Equal(t, campID.String(), item.Event.CampaignID)
+
+	// Equivalence proof: the rendered Discord message must match what
+	// DefaultNotifier.PostNarrativeTeleport produces for the same caster +
+	// spell. If this fails, the generic Post path and the dedicated helper
+	// have drifted and SR-027 should re-open as a real production change.
+	require.Len(t, sender.sent, 1, "exactly one Discord message must be sent")
+	gotContent := sender.sent[0].content
+
+	helperStore := dmqueue.NewMemoryStore()
+	helperSender := &sr027FakeSender{}
+	helperNotifier := dmqueue.NewNotifierWithStore(helperSender, resolver, pathBldr, helperStore)
+	_, err := helperNotifier.PostNarrativeTeleport(context.Background(), "Aria", "Teleport", "g1", campID.String())
+	require.NoError(t, err)
+	require.Len(t, helperSender.sent, 1)
+	wantContent := helperSender.sent[0].content
+
+	// ResolvePath embeds the item id which differs per call; strip the
+	// trailing Resolve link before comparing so we compare emoji + label +
+	// player + summary (the SR-027 contract surface).
+	gotBody := stripResolveSuffixSR027(gotContent)
+	wantBody := stripResolveSuffixSR027(wantContent)
+	assert.Equal(t, wantBody, gotBody,
+		"SR-027: generic Post path must render the same message body as PostNarrativeTeleport — otherwise the helper has unique behaviour and /cast should call it directly")
+}
+
+// stripResolveSuffixSR027 mirrors dmqueue.stripResolveLink (unexported there)
+// so the SR-027 test can compare message bodies without leaking the unique
+// per-call item ID embedded in the resolve URL.
+func stripResolveSuffixSR027(s string) string {
+	idx := strings.LastIndex(s, " — [Resolve →](")
+	if idx < 0 {
+		return s
+	}
+	return s[:idx]
+}
+
