@@ -576,6 +576,10 @@ func TestServiceAttack_Reckless_BarbarianClass_OK(t *testing.T) {
 	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
 		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
 	}
+	// SR-011: Reckless first-attack gate compares AttacksRemaining vs the
+	// class's resolved max attacks. Wire the Barbarian class so swing 1
+	// (AttacksRemaining=2=max) is recognized as "first attack".
+	ms.getClassFn = barbarianClassWithExtraAttack
 
 	svc := NewService(ms)
 	callIdx := 0
@@ -600,4 +604,60 @@ func TestServiceAttack_Reckless_BarbarianClass_OK(t *testing.T) {
 	assert.True(t, result.Reckless)
 	assert.Equal(t, dice.Advantage, result.RollMode)
 	assert.Contains(t, result.AdvantageReasons, "Reckless Attack")
+}
+
+// barbarianClassWithExtraAttack returns a getClassFn that serves a Barbarian
+// class definition with attacks_per_action {1:1, 5:2} — matches the seeded
+// production class data used to drive the SR-011 first-attack gate.
+func barbarianClassWithExtraAttack(ctx context.Context, id string) (refdata.Class, error) {
+	return refdata.Class{
+		ID:               id,
+		Name:             id,
+		AttacksPerAction: json.RawMessage(`{"1":1,"5":2}`),
+	}, nil
+}
+
+// SR-011: Reckless must be declared on the FIRST attack of the turn (spec
+// line 682). A Barbarian L5 has 2 attacks per action; swing 2 (AttacksRemaining
+// already decremented from 2 to 1) with --reckless must be rejected, and
+// crucially advantage must NOT be applied to the rejected swing.
+func TestServiceAttack_Reckless_RejectedOnExtraAttackSwing(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	char := makeCharacterWithFeats(18, 10, 3, "greataxe", nil,
+		[]CharacterClass{{Class: "Barbarian", Level: 5}},
+	)
+	char.ID = charID
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeGreataxe(), nil
+	}
+	ms.getClassFn = barbarianClassWithExtraAttack
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 16 })
+
+	// AttacksRemaining=1 with class max=2 → swing 2, not the first.
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Grog", PositionCol: "A", PositionRow: 1, IsAlive: true, IsVisible: true, Conditions: json.RawMessage(`[]`)},
+		Target:   refdata.Combatant{ID: targetID, DisplayName: "Ogre", PositionCol: "B", PositionRow: 1, Ac: 15, IsAlive: true, IsVisible: true, Conditions: json.RawMessage(`[]`)},
+		Turn:     refdata.Turn{ID: turnID, CombatantID: attackerID, AttacksRemaining: 1},
+		Reckless: true,
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "first attack of the turn")
+	// Advantage must NOT be applied to a rejected swing.
+	assert.False(t, result.Reckless, "rejected attack must not record Reckless")
+	assert.NotEqual(t, dice.Advantage, result.RollMode, "rejected attack must not gain advantage")
 }

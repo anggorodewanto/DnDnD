@@ -879,13 +879,20 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		return AttackResult{}, fmt.Errorf("Reckless Attack requires Barbarian class")
 	}
 
-	// Phase 38: Reckless is declared on the FIRST attack of the action
-	// per RAW (the bonus then carries through subsequent attacks of the
-	// same turn). Reject the flag on a non-first attack to surface the
-	// constraint to the player; the carry-through effect is implicit
-	// because the FES + advantage path stays in effect for the turn.
-	if cmd.Reckless && cmd.Turn.ActionUsed {
-		return AttackResult{}, fmt.Errorf("Reckless Attack must be declared on the first attack of the turn")
+	// Phase 38 / SR-011: Reckless is declared on the FIRST attack of the
+	// action per RAW (the carry-through is implicit because the attacker
+	// keeps the transient `reckless` condition applied below). The previous
+	// gate read `cmd.Turn.ActionUsed`, but Service.Attack never sets that
+	// field for multi-attack — only `AttacksRemaining` decrements. Compare
+	// `AttacksRemaining` against the character's resolved max attacks per
+	// action; equality means no attack has been spent yet this turn. Reckless
+	// requires Barbarian class (gated above) so `char` is always non-nil
+	// here, but stay defensive in case future callers diverge.
+	if cmd.Reckless && char != nil {
+		maxAttacks := int32(s.resolveAttacksPerAction(ctx, *char))
+		if cmd.Turn.AttacksRemaining < maxAttacks {
+			return AttackResult{}, fmt.Errorf("Reckless Attack must be declared on the first attack of the turn")
+		}
 	}
 
 	// Phase 33 / C-33: compute attacker→target cover BEFORE burning the
