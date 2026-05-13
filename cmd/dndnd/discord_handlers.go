@@ -624,6 +624,14 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 	// /cast surfaces the interactive metamagic UI instead of leaving the
 	// poster unreachable (the dead-code regression SR-025 closes).
 	handlers.cast.SetMetamagicPromptPoster(discord.NewMetamagicPromptPoster(prompts))
+	// SR-026: route dm_required casts and high-level narrative teleports
+	// through the shared Notifier so the DM dashboard receives a real
+	// dm_queue_items row. CampaignID is required by PgStore.Insert per
+	// SR-002, so the campaign-by-guild provider goes alongside the notifier.
+	if deps.notifier != nil {
+		handlers.cast.SetNotifier(deps.notifier)
+	}
+	handlers.cast.SetCampaignProvider(checkCampProv)
 	handlers.attack.SetClassFeaturePromptPoster(discord.NewClassFeaturePromptPoster(prompts))
 	handlers.attack.SetClassFeatureService(deps.combatService)
 

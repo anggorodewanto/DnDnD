@@ -14,6 +14,7 @@ import (
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/refdata"
@@ -113,6 +114,15 @@ type CastHandler struct {
 	// protected", "disadvantage on first affected") so production never
 	// degrades worse than the previous behaviour.
 	metamagicPoster *MetamagicPromptPoster
+	// SR-026: dm_required spells and high-level (narrative) teleports must
+	// create a real dm_queue_items row so the DM dashboard surfaces the
+	// cast. The Notifier itself performs insert-then-send (post-SR-002), so
+	// a failed insert never produces an orphan Discord message. Both fields
+	// are optional — when either is unset, the dm-queue post is silently
+	// skipped (matches the legacy "string flag only" behaviour, which is
+	// strictly no worse than pre-SR-026).
+	notifier     dmqueue.Notifier
+	campaignProv CheckCampaignProvider
 }
 
 // SetNearbyScanner wires the Detect Magic environmental scanner. When
@@ -186,6 +196,20 @@ func (h *CastHandler) SetMetamagicPromptPoster(p *MetamagicPromptPoster) {
 // prompts are wired. Production-wiring tests check this to pin the
 // regression where the poster was built but never invoked.
 func (h *CastHandler) HasMetamagicPromptPoster() bool { return h.metamagicPoster != nil }
+
+// SetNotifier wires the shared dm-queue Notifier. When wired alongside a
+// CampaignProvider, /cast posts a `dm_queue_items` row for every cast whose
+// resolution mode is `dm_required` (charm-person, polymorph, banishment, …)
+// or whose spell is a high-level narrative teleport (Teleport, Plane Shift,
+// Word of Recall). Order is insert-then-send via Notifier.Post (SR-002) so a
+// persistence failure never leaves an orphan #dm-queue message. (SR-026)
+func (h *CastHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
+
+// SetCampaignProvider wires the campaign-by-guild lookup used to populate
+// `Event.CampaignID` on SR-026 dm-queue posts. Without it the Notifier still
+// inserts but PgStore.Insert rejects the row for missing CampaignID — same
+// SR-002 invariant the other handlers honour.
+func (h *CastHandler) SetCampaignProvider(p CheckCampaignProvider) { h.campaignProv = p }
 
 // HandleComponent dispatches button clicks owned by /cast (material-component
 // prompt, etc.). Returns true when the click was claimed so the router can
@@ -340,19 +364,21 @@ func (h *CastHandler) dispatchSingleTarget(
 	if hasMetamagicFlag(metamagic, "empowered") && h.metamagicPoster != nil {
 		channelID := h.resolvePromptChannel(ctx, interaction, encounterID)
 		if channelID != "" {
-			h.postEmpoweredPromptThenRun(ctx, interaction, encounterID, channelID, spell.Name, cmd)
+			h.postEmpoweredPromptThenRun(ctx, interaction, encounterID, channelID, spell, cmd)
 			return
 		}
 	}
 
-	h.runSingleTargetCast(ctx, interaction, encounterID, cmd)
+	h.runSingleTargetCast(ctx, interaction, encounterID, spell, cmd)
 }
 
 // runSingleTargetCast is the post-prompt continuation of dispatchSingleTarget:
 // invokes Cast and renders the result. Extracted so the SR-025 Empowered
 // prompt can resume the flow on click/forfeit without duplicating the
-// material-prompt fallback logic.
-func (h *CastHandler) runSingleTargetCast(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, cmd combat.CastCommand) {
+// material-prompt fallback logic. SR-026: `spell` is threaded so the post-
+// cast dm-queue branch can read ResolutionMode + Teleport without an
+// additional service lookup.
+func (h *CastHandler) runSingleTargetCast(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, spell refdata.Spell, cmd combat.CastCommand) {
 	result, err := h.combatService.Cast(ctx, cmd, h.roller)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Cast failed: %v", err))
@@ -372,6 +398,12 @@ func (h *CastHandler) runSingleTargetCast(ctx context.Context, interaction *disc
 	logLine := combat.FormatCastLog(result)
 	h.postCombatLog(ctx, encounterID, logLine)
 	respondEphemeral(h.session, interaction, logLine)
+
+	// SR-026: dm_required spells + narrative teleports surface a real
+	// dm_queue_items row so the DM dashboard receives the cast. The
+	// Notifier itself does insert-then-send (SR-002) so a failed insert
+	// never produces an orphan Discord message.
+	h.maybePostCastDMQueue(ctx, interaction, result)
 }
 
 // postEmpoweredPromptThenRun posts the Empowered Spell die-picker prompt to
@@ -379,22 +411,22 @@ func (h *CastHandler) runSingleTargetCast(ctx context.Context, interaction *disc
 // forfeit timer fires). The dice values shown are a small placeholder
 // sequence — the real reroll happens server-side via RerollLowestDice once
 // damage is rolled, so the prompt is informational. SR-025.
-func (h *CastHandler) postEmpoweredPromptThenRun(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, channelID, spellName string, cmd combat.CastCommand) {
+func (h *CastHandler) postEmpoweredPromptThenRun(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, channelID string, spell refdata.Spell, cmd combat.CastCommand) {
 	// Display 4 placeholder dice ("1d6" rolls) so the player has visible
 	// buttons; the chosen button index is informational only — the cast
 	// still rerolls the lowest dice server-side per SR-025.
 	dice := []int{1, 1, 1, 1}
 	args := EmpoweredPromptArgs{
 		ChannelID:  channelID,
-		SpellName:  spellName,
+		SpellName:  spell.Name,
 		DiceRolls:  dice,
 		MaxRerolls: 1,
 	}
 	err := h.metamagicPoster.PromptEmpowered(args, func(EmpoweredPromptResult) {
-		h.runSingleTargetCast(ctx, interaction, encounterID, cmd)
+		h.runSingleTargetCast(ctx, interaction, encounterID, spell, cmd)
 	})
 	if err != nil {
-		h.runSingleTargetCast(ctx, interaction, encounterID, cmd)
+		h.runSingleTargetCast(ctx, interaction, encounterID, spell, cmd)
 		return
 	}
 	respondEphemeral(h.session, interaction, "✨ Empowered Spell: pick a die to reroll in the combat channel.")
@@ -456,6 +488,10 @@ func (h *CastHandler) promptMaterialFallback(
 			retryLog := combat.FormatCastLog(retryResult)
 			h.postCombatLog(c, encounterID, retryLog)
 			_, _ = h.session.ChannelMessageSend(channelID, retryLog)
+			// SR-026: retry-on-buy completes the cast, so route the
+			// dm_queue post through the same helper the primary success
+			// path uses.
+			h.maybePostCastDMQueue(c, interaction, retryResult)
 		},
 		OnForfeit: func(c context.Context) {
 			_, _ = h.session.ChannelMessageSend(channelID, fmt.Sprintf("⏳ Cast of %s timed out — slot retained, no gold spent.", originalCmd.SpellID))
@@ -541,12 +577,12 @@ func (h *CastHandler) dispatchAoE(
 	if h.metamagicPoster != nil && needsAoEMetamagicPrompt(metamagic) {
 		channelID := h.resolvePromptChannel(ctx, interaction, encounterID)
 		if channelID != "" {
-			h.postAoEMetamagicPrompts(ctx, interaction, encounterID, channelID, spell.Name, cmd, metamagic)
+			h.postAoEMetamagicPrompts(ctx, interaction, encounterID, channelID, spell, cmd, metamagic)
 			return
 		}
 	}
 
-	h.runAoECast(ctx, interaction, encounterID, cmd)
+	h.runAoECast(ctx, interaction, encounterID, spell, cmd)
 }
 
 // needsAoEMetamagicPrompt reports whether the AoE cast needs one of the
@@ -561,7 +597,8 @@ func needsAoEMetamagicPrompt(metamagic []string) bool {
 // prompts. Each step picks an affected combatant (or die index for
 // empowered) and either modifies `cmd` or no-ops, then dispatches the next
 // prompt. When the chain runs out of remaining flags, runAoECast fires.
-func (h *CastHandler) postAoEMetamagicPrompts(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, channelID, spellName string, cmd combat.AoECastCommand, metamagic []string) {
+func (h *CastHandler) postAoEMetamagicPrompts(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, channelID string, spell refdata.Spell, cmd combat.AoECastCommand, metamagic []string) {
+	spellName := spell.Name
 	// Pull the affected non-caster combatants once so prompt buttons render
 	// stable names. SR-025 keeps this simple: the AoE shape calculation is
 	// done service-side; the prompts list every non-caster combatant in the
@@ -585,7 +622,7 @@ func (h *CastHandler) postAoEMetamagicPrompts(ctx context.Context, interaction *
 	var runCareful, runHeightened, runEmpowered, finalize func(combat.AoECastCommand)
 
 	finalize = func(finalCmd combat.AoECastCommand) {
-		h.runAoECast(ctx, interaction, encounterID, finalCmd)
+		h.runAoECast(ctx, interaction, encounterID, spell, finalCmd)
 	}
 	runEmpowered = func(updated combat.AoECastCommand) {
 		if !hasMetamagicFlag(metamagic, "empowered") || len(names) == 0 {
@@ -654,8 +691,10 @@ func (h *CastHandler) postAoEMetamagicPrompts(ctx context.Context, interaction *
 
 // runAoECast is the post-prompt continuation of dispatchAoE: invokes CastAoE
 // and renders the result + per-player /save pings. Extracted so the SR-025
-// metamagic prompt chain can resume the flow on click/forfeit.
-func (h *CastHandler) runAoECast(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, cmd combat.AoECastCommand) {
+// metamagic prompt chain can resume the flow on click/forfeit. SR-026: when
+// the spell's ResolutionMode is "dm_required" we surface the cast on the DM
+// dashboard via the shared Notifier (post-SR-002 insert-then-send).
+func (h *CastHandler) runAoECast(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, spell refdata.Spell, cmd combat.AoECastCommand) {
 	result, err := h.combatService.CastAoE(ctx, cmd)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Cast failed: %v", err))
@@ -673,6 +712,14 @@ func (h *CastHandler) runAoECast(ctx context.Context, interaction *discordgo.Int
 	// (player + DM) are resolved.
 	combs, _ := h.encounterProvider.ListCombatantsByEncounterID(ctx, encounterID)
 	h.postAoESavePrompts(ctx, encounterID, result, combs)
+
+	// SR-026: dm_required AoE casts (e.g. fog-cloud, sleet-storm, animate-
+	// dead, magic-circle) surface a real dm_queue_items row so the DM
+	// dashboard receives the cast. AoECastResult doesn't carry
+	// ResolutionMode today, so we read it straight from the dispatched
+	// spell row. The single-target helper handles its own ResolutionMode
+	// read from the CastResult.
+	h.maybePostAoECastDMQueue(ctx, interaction, spell, result)
 }
 
 // postAoESavePrompts emits one /save reminder per affected player combatant
@@ -723,6 +770,92 @@ func (h *CastHandler) loadWalls(ctx context.Context, encounter refdata.Encounter
 // postCombatLog mirrors a combat log line to #combat-log when wired.
 func (h *CastHandler) postCombatLog(ctx context.Context, encounterID uuid.UUID, msg string) {
 	postCombatLogChannel(ctx, h.session, h.channelIDProvider, encounterID, msg)
+}
+
+// maybePostCastDMQueue inserts a dm_queue_items row for a single-target
+// cast when the cast's resolution mode is dm_required (which covers both
+// seeded dm_required spells and the high-level teleport promotion at
+// spellcasting.go:646). The Notifier itself performs insert-then-send per
+// SR-002, so a failed Store.Insert never produces an orphan Discord
+// message. Best-effort: any Notifier error is swallowed so the player's
+// cast log + ephemeral response are unaffected. (SR-026)
+func (h *CastHandler) maybePostCastDMQueue(ctx context.Context, interaction *discordgo.Interaction, result combat.CastResult) {
+	if h.notifier == nil {
+		return
+	}
+	if result.ResolutionMode != "dm_required" {
+		return
+	}
+	kind := castDMQueueKind(result)
+	_, _ = h.notifier.Post(ctx, dmqueue.Event{
+		Kind:       kind,
+		PlayerName: result.CasterName,
+		Summary:    castDMQueueSummary(kind, result.SpellName),
+		GuildID:    interaction.GuildID,
+		CampaignID: h.resolveCampaignID(ctx, interaction.GuildID),
+	})
+}
+
+// maybePostAoECastDMQueue is the AoE-path twin of maybePostCastDMQueue.
+// AoECastResult doesn't carry ResolutionMode today, so the decision is made
+// from the dispatched spell row directly. (SR-026)
+func (h *CastHandler) maybePostAoECastDMQueue(ctx context.Context, interaction *discordgo.Interaction, spell refdata.Spell, result combat.AoECastResult) {
+	if h.notifier == nil {
+		return
+	}
+	if spell.ResolutionMode != "dm_required" {
+		return
+	}
+	// AoE casts cannot themselves be narrative teleports (spell.Teleport
+	// fires on the single-target path), so always use KindFreeformAction.
+	kind := dmqueue.KindFreeformAction
+	_, _ = h.notifier.Post(ctx, dmqueue.Event{
+		Kind:       kind,
+		PlayerName: result.CasterName,
+		Summary:    castDMQueueSummary(kind, result.SpellName),
+		GuildID:    interaction.GuildID,
+		CampaignID: h.resolveCampaignID(ctx, interaction.GuildID),
+	})
+}
+
+// castDMQueueKind picks the dm-queue event kind for a single-target cast.
+// A narrative teleport (high-level Teleport / Plane Shift / Word of Recall
+// per IsDMQueueTeleport) becomes KindNarrativeTeleport so the dashboard
+// renders the ✨ Spell label; every other dm_required spell falls through to
+// KindFreeformAction so the DM still receives the prompt.
+func castDMQueueKind(result combat.CastResult) dmqueue.EventKind {
+	if result.Teleport != nil && result.Teleport.DMQueueRouted {
+		return dmqueue.KindNarrativeTeleport
+	}
+	return dmqueue.KindFreeformAction
+}
+
+// castDMQueueSummary renders the Event.Summary text. KindNarrativeTeleport
+// piggybacks the existing PostNarrativeTeleport phrasing ("casts X
+// (narrative resolution)") so the dashboard look matches the framework
+// helper; freeform DM-required casts use a generic "casts X (DM-resolved)"
+// summary.
+func castDMQueueSummary(kind dmqueue.EventKind, spellName string) string {
+	if kind == dmqueue.KindNarrativeTeleport {
+		return fmt.Sprintf("casts %s (narrative resolution)", spellName)
+	}
+	return fmt.Sprintf("casts %s (DM-resolved)", spellName)
+}
+
+// resolveCampaignID looks up the campaign UUID for a guild via the wired
+// CheckCampaignProvider. Returns "" when no provider is wired or the
+// lookup fails — Notifier.Post tolerates an empty CampaignID at the
+// in-memory store, and the PgStore reject in production matches the SR-002
+// invariant for unwired handlers.
+func (h *CastHandler) resolveCampaignID(ctx context.Context, guildID string) string {
+	if h.campaignProv == nil {
+		return ""
+	}
+	campaign, err := h.campaignProv.GetCampaignByGuildID(ctx, guildID)
+	if err != nil {
+		return ""
+	}
+	return campaign.ID.String()
 }
 
 // optionInt extracts a named integer option from an interaction's command

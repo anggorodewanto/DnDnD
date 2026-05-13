@@ -18,6 +18,7 @@ import (
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -1238,5 +1239,190 @@ func TestCastHandler_HandleComponent_ClaimsMetamagicPromptClicks(t *testing.T) {
 		Data: discordgo.MessageComponentInteractionData{CustomID: btn.CustomID},
 	})
 	assert.True(t, claimed, "HandleComponent must claim metamagic-prompt clicks")
+}
+
+// SR-026 ------------------------------------------------------------------
+//
+// dm_required spells and high-level (narrative) teleports must create a
+// real `dm_queue_items` row so the dashboard sees the cast. Insert-then-send
+// ordering is delivered by the shared Notifier (post-SR-002); the cast
+// handler only needs to invoke Notifier.Post on the success path.
+
+// recordingCastNotifier captures dmqueue.Event posts for SR-026 assertions
+// and lets a test simulate an insert failure by setting postErr.
+type recordingCastNotifier struct {
+	posted  []dmqueue.Event
+	postErr error
+}
+
+func (r *recordingCastNotifier) Post(_ context.Context, e dmqueue.Event) (string, error) {
+	r.posted = append(r.posted, e)
+	if r.postErr != nil {
+		return "", r.postErr
+	}
+	return "item-1", nil
+}
+func (r *recordingCastNotifier) Cancel(_ context.Context, _, _ string) error  { return nil }
+func (r *recordingCastNotifier) Resolve(_ context.Context, _, _ string) error { return nil }
+func (r *recordingCastNotifier) ResolveWhisper(_ context.Context, _, _ string) error {
+	return nil
+}
+func (r *recordingCastNotifier) ResolveSkillCheckNarration(_ context.Context, _, _ string) error {
+	return nil
+}
+func (r *recordingCastNotifier) Get(string) (dmqueue.Item, bool) { return dmqueue.Item{}, false }
+func (r *recordingCastNotifier) ListPending() []dmqueue.Item    { return nil }
+
+// setupCastHandlerWithDMQueue extends setupCastHandler with a wired Notifier
+// and CampaignProvider, plus seeds an extra dm_required spell ("charm-person")
+// and a high-level narrative teleport ("teleport") so SR-026 tests can drive
+// both code paths without redefining the whole mock.
+func setupCastHandlerWithDMQueue(t *testing.T) (*CastHandler, *mockCastCombatService, *mockCastProvider, *recordingCastNotifier, uuid.UUID) {
+	t.Helper()
+	h, _, svc, provider := setupCastHandler()
+
+	// Seed: dm_required single-target spell (no AoE, no teleport).
+	provider.spells["charm-person"] = refdata.Spell{
+		ID:             "charm-person",
+		Name:           "Charm Person",
+		Level:          1,
+		ResolutionMode: "dm_required",
+	}
+	// Seed: high-level teleport with target=group (IsDMQueueTeleport=true).
+	provider.spells["teleport"] = refdata.Spell{
+		ID:             "teleport",
+		Name:           "Teleport",
+		Level:          7,
+		ResolutionMode: "dm_required",
+		Teleport: pqtype.NullRawMessage{
+			RawMessage: []byte(`{"target":"group","range_ft":0,"requires_sight":false}`),
+			Valid:      true,
+		},
+	}
+	// Seed: dm_required AoE spell (e.g. fog-cloud).
+	provider.spells["fog-cloud"] = refdata.Spell{
+		ID:             "fog-cloud",
+		Name:           "Fog Cloud",
+		Level:          1,
+		ResolutionMode: "dm_required",
+		AreaOfEffect: pqtype.NullRawMessage{
+			RawMessage: []byte(`{"shape":"sphere","radius_ft":20}`),
+			Valid:      true,
+		},
+	}
+
+	rec := &recordingCastNotifier{}
+	campID := uuid.New()
+	h.SetNotifier(rec)
+	h.SetCampaignProvider(&mockCheckCampaignProvider{
+		fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campID}, nil
+		},
+	})
+
+	// CastResult mirrors what the service would return for a dm_required spell:
+	// ResolutionMode propagates from spell.ResolutionMode at spellcasting.go:565.
+	svc.castResult = combat.CastResult{
+		CasterName:     "Aria",
+		SpellName:      "Charm Person",
+		SpellLevel:     1,
+		ResolutionMode: "dm_required",
+	}
+	svc.aoeResult = combat.AoECastResult{
+		CasterName: "Aria",
+		SpellName:  "Fog Cloud",
+		SpellLevel: 1,
+	}
+	return h, svc, provider, rec, campID
+}
+
+func TestCastHandler_DMRequired_SinglePostsToDMQueue(t *testing.T) {
+	h, svc, _, rec, campID := setupCastHandlerWithDMQueue(t)
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":  "charm-person",
+		"target": "OS",
+	}))
+
+	require.Len(t, svc.castCalls, 1, "Cast must still run")
+	require.Len(t, rec.posted, 1, "SR-026: dm_required cast must post one dm_queue_items row")
+	ev := rec.posted[0]
+	assert.Equal(t, "Aria", ev.PlayerName)
+	assert.Equal(t, "g1", ev.GuildID)
+	assert.Equal(t, campID.String(), ev.CampaignID,
+		"SR-026: CampaignID must be threaded so PgStore.Insert can persist")
+	assert.Contains(t, strings.ToLower(ev.Summary), "charm person",
+		"Summary should name the cast spell")
+}
+
+func TestCastHandler_HighLevelTeleport_PostsKindNarrativeTeleport(t *testing.T) {
+	h, svc, _, rec, _ := setupCastHandlerWithDMQueue(t)
+	// Teleport's CastResult: Cast service flips ResolutionMode to "dm_required"
+	// when teleResult.DMQueueRouted is true (spellcasting.go:646-648).
+	svc.castResult = combat.CastResult{
+		CasterName:     "Aria",
+		SpellName:      "Teleport",
+		SpellLevel:     7,
+		ResolutionMode: "dm_required",
+		Teleport: &combat.TeleportResult{
+			DMQueueRouted: true,
+		},
+	}
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell": "teleport",
+	}))
+
+	require.Len(t, rec.posted, 1, "high-level teleport must post a dm_queue_items row")
+	ev := rec.posted[0]
+	assert.Equal(t, dmqueue.KindNarrativeTeleport, ev.Kind,
+		"narrative teleport casts must use KindNarrativeTeleport")
+	assert.Equal(t, "Aria", ev.PlayerName)
+}
+
+func TestCastHandler_AutoresolveSpell_NoDMQueuePost(t *testing.T) {
+	h, _, _, rec, _ := setupCastHandlerWithDMQueue(t)
+	// Override to an autoresolve cast (ResolutionMode != "dm_required").
+	h.combatService.(*mockCastCombatService).castResult = combat.CastResult{
+		CasterName:     "Aria",
+		SpellName:      "Fire Bolt",
+		SpellLevel:     0,
+		ResolutionMode: "auto",
+	}
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":  "fire-bolt",
+		"target": "OS",
+	}))
+
+	assert.Empty(t, rec.posted, "SR-026: autoresolve spells must NOT create dm_queue rows")
+}
+
+func TestCastHandler_DMRequired_AoEPostsToQueue(t *testing.T) {
+	h, _, _, rec, campID := setupCastHandlerWithDMQueue(t)
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":  "fog-cloud",
+		"target": "D4",
+	}))
+
+	require.Len(t, rec.posted, 1, "dm_required AoE casts must post one dm_queue row")
+	ev := rec.posted[0]
+	assert.Equal(t, "Aria", ev.PlayerName)
+	assert.Equal(t, campID.String(), ev.CampaignID)
+	assert.Contains(t, strings.ToLower(ev.Summary), "fog cloud")
+}
+
+func TestCastHandler_DMRequired_CastErrorSkipsPost(t *testing.T) {
+	h, svc, _, rec, _ := setupCastHandlerWithDMQueue(t)
+	svc.castErr = errors.New("not enough slots")
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":  "charm-person",
+		"target": "OS",
+	}))
+
+	assert.Empty(t, rec.posted,
+		"SR-026: a failed cast must not create a dm_queue row — only successful casts post")
 }
 
