@@ -1,5 +1,5 @@
 <script>
-  import { listRaces, listClasses, listSpells, listEquipment, getStartingEquipment, submitCharacter } from './lib/api.js';
+  import { listRaces, listClasses, listSpells, listEquipment, getStartingEquipment, listAbilityMethods, submitCharacter } from './lib/api.js';
   import { remainingPoints, abilityModifier, canIncrement, canDecrement, scoreCost } from './lib/pointbuy.js';
   import { skillsForBackground, mergeBackgroundSkills } from './lib/backgrounds.js';
   import {
@@ -24,6 +24,8 @@
   // single-class UI code paths.
   let classEntries = $state([emptyClassRow()]);
   let scores = $state({ str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 });
+  let abilityMethod = $state('point_buy');
+  let abilityRolls = $state({});
   let selectedSkills = $state([]);
   let equipment = $state([]);
   let selectedSpells = $state([]);
@@ -34,6 +36,7 @@
   let spells = $state([]);
   let allEquipment = $state([]);
   let startingPacks = $state([]);
+  let abilityMethods = $state(['point_buy', 'standard_array', 'roll']);
 
   // Equipment selection state
   let packChoices = $state({});   // { choiceIndex: selectedOptionIndex }
@@ -54,9 +57,13 @@
   async function loadRefData() {
     try {
       loading = true;
-      const [r, c] = await Promise.all([listRaces(), listClasses()]);
+      const [r, c, methods] = await Promise.all([listRaces(), listClasses(), listAbilityMethods(campaignId)]);
       races = r;
       classes = c;
+      abilityMethods = methods.length > 0 ? methods : ['point_buy', 'standard_array', 'roll'];
+      if (!abilityMethods.includes(abilityMethod)) {
+        setAbilityMethod(abilityMethods[0]);
+      }
     } catch (e) {
       error = 'Failed to load reference data: ' + e.message;
     } finally {
@@ -142,6 +149,31 @@
     if (canDecrement(scores, ability)) {
       scores = { ...scores, [ability]: scores[ability] - 1 };
     }
+  }
+
+  function setAbilityMethod(method) {
+    abilityMethod = method;
+    abilityRolls = {};
+    if (method === 'standard_array') {
+      scores = { str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 };
+      return;
+    }
+    if (method === 'point_buy') {
+      scores = { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 };
+    }
+  }
+
+  function rollAbilityScores() {
+    const nextScores = {};
+    const nextRolls = {};
+    for (const ability of ABILITIES) {
+      const dice = Array.from({ length: 4 }, () => Math.floor(Math.random() * 6) + 1);
+      const sorted = [...dice].sort((a, b) => a - b);
+      nextScores[ability] = sorted[1] + sorted[2] + sorted[3];
+      nextRolls[ability] = dice;
+    }
+    scores = nextScores;
+    abilityRolls = nextRolls;
   }
 
   function toggleSkill(skill) {
@@ -283,6 +315,8 @@
         subclass,
         classes,
         ability_scores: scores,
+        ability_method: abilityMethod,
+        ability_rolls: abilityRolls,
         skills,
         equipment: selectedEquipment(),
         spells: selectedSpells,
@@ -485,19 +519,42 @@
     <!-- Step 2: Ability Scores -->
     {:else if currentStep === 2}
       <div class="step-content">
-        <h3>Ability Scores (Point Buy)</h3>
-        <p class="points-remaining">
-          Points Remaining: <strong class:overspent={remainingPoints(scores) < 0}>{remainingPoints(scores)}</strong> / 27
-        </p>
+        <h3>Ability Scores</h3>
+        <div class="method-tabs">
+          {#each abilityMethods as method}
+            <button
+              type="button"
+              class:active={abilityMethod === method}
+              onclick={() => setAbilityMethod(method)}
+            >
+              {method === 'point_buy' ? 'Point Buy' : method === 'standard_array' ? 'Standard Array' : 'Roll'}
+            </button>
+          {/each}
+        </div>
+        {#if abilityMethod === 'point_buy'}
+          <p class="points-remaining">
+            Points Remaining: <strong class:overspent={remainingPoints(scores) < 0}>{remainingPoints(scores)}</strong> / 27
+          </p>
+        {:else if abilityMethod === 'roll'}
+          <button type="button" class="roll-btn" onclick={rollAbilityScores}>Roll 4d6</button>
+        {/if}
         <div class="ability-grid">
           {#each ABILITIES as ability}
             <div class="ability-row">
               <span class="ability-name">{ABILITY_NAMES[ability]}</span>
-              <button class="score-btn" onclick={() => decrement(ability)} disabled={!canDecrement(scores, ability)}>-</button>
+              {#if abilityMethod === 'point_buy'}
+                <button class="score-btn" onclick={() => decrement(ability)} disabled={!canDecrement(scores, ability)}>-</button>
+              {/if}
               <span class="score-value">{scores[ability]}</span>
-              <button class="score-btn" onclick={() => increment(ability)} disabled={!canIncrement(scores, ability)}>+</button>
+              {#if abilityMethod === 'point_buy'}
+                <button class="score-btn" onclick={() => increment(ability)} disabled={!canIncrement(scores, ability)}>+</button>
+              {/if}
               <span class="score-mod">({abilityModifier(scores[ability]) >= 0 ? '+' : ''}{abilityModifier(scores[ability])})</span>
-              <span class="score-cost">{scoreCost(scores[ability])} pts</span>
+              {#if abilityMethod === 'point_buy'}
+                <span class="score-cost">{scoreCost(scores[ability])} pts</span>
+              {:else if abilityMethod === 'roll' && abilityRolls[ability]}
+                <span class="score-cost">{abilityRolls[ability].join(', ')}</span>
+              {/if}
             </div>
           {/each}
         </div>
@@ -741,6 +798,13 @@
   }
   .points-remaining { font-size: 1.1rem; margin-bottom: 1rem; }
   .overspent { color: #ff4444; }
+  .method-tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .method-tabs button, .roll-btn {
+    padding: 0.45rem 0.8rem; border: 1px solid #0f3460; background: #16213e;
+    color: #e0e0e0; border-radius: 4px; cursor: pointer;
+  }
+  .method-tabs button.active { background: #e94560; border-color: #e94560; color: white; }
+  .roll-btn { margin-bottom: 1rem; }
   .ability-grid { display: flex; flex-direction: column; gap: 0.5rem; }
   .ability-row { display: flex; align-items: center; gap: 0.75rem; }
   .ability-name { width: 120px; }

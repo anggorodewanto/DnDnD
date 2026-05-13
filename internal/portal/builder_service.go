@@ -2,9 +2,11 @@ package portal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -31,6 +33,8 @@ type CharacterSubmission struct {
 	Subclass      string                 `json:"subclass,omitempty"`
 	Classes       []character.ClassEntry `json:"classes,omitempty"`
 	AbilityScores PointBuyScores         `json:"ability_scores"`
+	AbilityMethod AbilityScoreMethod     `json:"ability_method,omitempty"`
+	AbilityRolls  map[string][]int       `json:"ability_rolls,omitempty"`
 	Skills        []string               `json:"skills"`
 	Equipment     []string               `json:"equipment,omitempty"`
 	Spells        []string               `json:"spells,omitempty"`
@@ -48,7 +52,7 @@ func ValidateSubmission(s CharacterSubmission) []string {
 	if s.Class == "" {
 		errs = append(errs, "class is required")
 	}
-	if err := ValidatePointBuy(s.AbilityScores); err != nil {
+	if err := ValidateAbilityScoreGeneration(s); err != nil {
 		errs = append(errs, err.Error())
 	}
 	return errs
@@ -109,6 +113,19 @@ type DMQueueNotifier interface {
 	NotifyDMQueue(ctx context.Context, characterName, playerDiscordID, via string) error
 }
 
+// AbilityMethodProvider returns the generation methods enabled for a campaign.
+type AbilityMethodProvider interface {
+	AllowedAbilityScoreMethods(ctx context.Context, campaignID string) ([]AbilityScoreMethod, error)
+}
+
+// StaticAbilityMethodProvider is a test/helper provider with fixed methods.
+type StaticAbilityMethodProvider []AbilityScoreMethod
+
+// AllowedAbilityScoreMethods returns the fixed method list.
+func (p StaticAbilityMethodProvider) AllowedAbilityScoreMethods(_ context.Context, _ string) ([]AbilityScoreMethod, error) {
+	return []AbilityScoreMethod(p), nil
+}
+
 // BuilderServiceOption configures optional features of BuilderService.
 type BuilderServiceOption func(*BuilderService)
 
@@ -126,11 +143,19 @@ func WithLogger(l *slog.Logger) BuilderServiceOption {
 	}
 }
 
+// WithAbilityMethodProvider adds campaign ability-score method gating.
+func WithAbilityMethodProvider(p AbilityMethodProvider) BuilderServiceOption {
+	return func(svc *BuilderService) {
+		svc.abilityMethods = p
+	}
+}
+
 // BuilderService handles character creation from the portal form.
 type BuilderService struct {
-	store    BuilderStore
-	notifier DMQueueNotifier
-	logger   *slog.Logger
+	store          BuilderStore
+	notifier       DMQueueNotifier
+	logger         *slog.Logger
+	abilityMethods AbilityMethodProvider
 }
 
 // NewBuilderService creates a new BuilderService.
@@ -146,6 +171,9 @@ func NewBuilderService(store BuilderStore, opts ...BuilderServiceOption) *Builde
 // creates the character + player_character records, and redeems the token.
 func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, discordUserID, token string, sub CharacterSubmission) (CreateCharacterResult, error) {
 	errs := ValidateSubmission(sub)
+	if err := svc.validateAllowedAbilityMethod(ctx, campaignID, sub.AbilityMethod); err != nil {
+		errs = append(errs, err.Error())
+	}
 	if len(errs) > 0 {
 		return CreateCharacterResult{}, fmt.Errorf("validation failed: %s", strings.Join(errs, "; "))
 	}
@@ -220,6 +248,46 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 	}, nil
 }
 
+func (svc *BuilderService) validateAllowedAbilityMethod(ctx context.Context, campaignID string, method AbilityScoreMethod) error {
+	allowed, err := svc.AllowedAbilityScoreMethods(ctx, campaignID)
+	if err != nil {
+		return fmt.Errorf("loading ability score methods: %w", err)
+	}
+	if len(allowed) == 0 {
+		return nil
+	}
+	if method == "" {
+		method = AbilityMethodPointBuy
+	}
+	for _, allowedMethod := range allowed {
+		if method == allowedMethod {
+			return nil
+		}
+	}
+	return fmt.Errorf("ability score method %s is not allowed", method)
+}
+
+// AllowedAbilityScoreMethods returns campaign-enabled methods for the builder.
+func (svc *BuilderService) AllowedAbilityScoreMethods(ctx context.Context, campaignID string) ([]AbilityScoreMethod, error) {
+	provider := svc.abilityMethods
+	if provider == nil {
+		if p, ok := svc.store.(AbilityMethodProvider); ok {
+			provider = p
+		}
+	}
+	if provider == nil {
+		return DefaultAbilityScoreMethods(), nil
+	}
+	allowed, err := provider.AllowedAbilityScoreMethods(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if len(allowed) > 0 {
+		return allowed, nil
+	}
+	return DefaultAbilityScoreMethods(), nil
+}
+
 // PointBuyScores holds the six ability scores for point-buy validation.
 type PointBuyScores struct {
 	STR int `json:"str"`
@@ -228,6 +296,126 @@ type PointBuyScores struct {
 	INT int `json:"int"`
 	WIS int `json:"wis"`
 	CHA int `json:"cha"`
+}
+
+// AbilityScoreMethod identifies how character creation produced ability scores.
+type AbilityScoreMethod string
+
+const (
+	AbilityMethodPointBuy      AbilityScoreMethod = "point_buy"
+	AbilityMethodStandardArray AbilityScoreMethod = "standard_array"
+	AbilityMethodRoll          AbilityScoreMethod = "roll"
+)
+
+// DefaultAbilityScoreMethods returns the spec-supported generation modes.
+func DefaultAbilityScoreMethods() []AbilityScoreMethod {
+	return []AbilityScoreMethod{AbilityMethodPointBuy, AbilityMethodStandardArray, AbilityMethodRoll}
+}
+
+// CampaignAbilitySettings is the subset of campaign settings used by creation.
+type CampaignAbilitySettings struct {
+	AbilityScoreMethods []AbilityScoreMethod `json:"ability_score_methods,omitempty"`
+}
+
+// AbilityScoreMethodsFromSettings decodes enabled generation modes from settings JSON.
+func AbilityScoreMethodsFromSettings(raw json.RawMessage) []AbilityScoreMethod {
+	if len(raw) == 0 {
+		return DefaultAbilityScoreMethods()
+	}
+	var settings CampaignAbilitySettings
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		return DefaultAbilityScoreMethods()
+	}
+	if len(settings.AbilityScoreMethods) == 0 {
+		return DefaultAbilityScoreMethods()
+	}
+	return settings.AbilityScoreMethods
+}
+
+// PointBuyScoresFromCharacter converts character scores to the creation score shape.
+func PointBuyScoresFromCharacter(scores character.AbilityScores) PointBuyScores {
+	return PointBuyScores{
+		STR: scores.STR,
+		DEX: scores.DEX,
+		CON: scores.CON,
+		INT: scores.INT,
+		WIS: scores.WIS,
+		CHA: scores.CHA,
+	}
+}
+
+// ValidateAbilityScoreGeneration checks the selected generation method.
+func ValidateAbilityScoreGeneration(sub CharacterSubmission) error {
+	method := sub.AbilityMethod
+	if method == "" {
+		method = AbilityMethodPointBuy
+	}
+	return ValidateAbilityScores(method, sub.AbilityScores, sub.AbilityRolls)
+}
+
+// ValidateAbilityScores checks ability scores for point-buy, standard array, or roll mode.
+func ValidateAbilityScores(method AbilityScoreMethod, scores PointBuyScores, rolls map[string][]int) error {
+	switch method {
+	case "", AbilityMethodPointBuy:
+		return ValidatePointBuy(scores)
+	case AbilityMethodStandardArray:
+		return ValidateStandardArray(scores)
+	case AbilityMethodRoll:
+		return ValidateRolledScores(scores, rolls)
+	default:
+		return fmt.Errorf("unknown ability score method: %s", method)
+	}
+}
+
+// ValidateStandardArray checks that the six scores are exactly 15,14,13,12,10,8.
+func ValidateStandardArray(scores PointBuyScores) error {
+	got := []int{scores.STR, scores.DEX, scores.CON, scores.INT, scores.WIS, scores.CHA}
+	sort.Ints(got)
+	want := []int{8, 10, 12, 13, 14, 15}
+	for i := range want {
+		if got[i] != want[i] {
+			return fmt.Errorf("standard array must use scores 15, 14, 13, 12, 10, 8")
+		}
+	}
+	return nil
+}
+
+// ValidateRolledScores checks 4d6-drop-lowest details when provided.
+func ValidateRolledScores(scores PointBuyScores, rolls map[string][]int) error {
+	scoreByAbility := map[string]int{
+		"str": scores.STR,
+		"dex": scores.DEX,
+		"con": scores.CON,
+		"int": scores.INT,
+		"wis": scores.WIS,
+		"cha": scores.CHA,
+	}
+	for ability, score := range scoreByAbility {
+		if score < 3 || score > 18 {
+			return fmt.Errorf("%s rolled score must be between 3 and 18", strings.ToUpper(ability))
+		}
+	}
+	for ability, score := range scoreByAbility {
+		dice := rolls[ability]
+		if len(dice) != 4 {
+			return fmt.Errorf("%s roll must include four d6 results", strings.ToUpper(ability))
+		}
+		total := 0
+		lowest := 7
+		for _, die := range dice {
+			if die < 1 || die > 6 {
+				return fmt.Errorf("%s roll contains non-d6 result %d", strings.ToUpper(ability), die)
+			}
+			total += die
+			if die < lowest {
+				lowest = die
+			}
+		}
+		if total-lowest != score {
+			return fmt.Errorf("%s score %d does not match 4d6 drop lowest", strings.ToUpper(ability), score)
+		}
+	}
+	return nil
 }
 
 // PointBuyCost returns the point cost for a single ability score value.

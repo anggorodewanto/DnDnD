@@ -9,6 +9,7 @@ import (
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/portal"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidatePointBuy_AllEights(t *testing.T) {
@@ -47,6 +48,99 @@ func TestValidatePointBuy_Exact27(t *testing.T) {
 	scores := portal.PointBuyScores{STR: 15, DEX: 15, CON: 8, INT: 8, WIS: 8, CHA: 8}
 	err := portal.ValidatePointBuy(scores)
 	assert.NoError(t, err)
+}
+
+func TestValidateAbilityScores_MethodRules(t *testing.T) {
+	tests := []struct {
+		name    string
+		sub     portal.CharacterSubmission
+		wantErr string
+	}{
+		{
+			name: "point buy",
+			sub: func() portal.CharacterSubmission {
+				sub := validSubmission()
+				sub.AbilityMethod = portal.AbilityMethodPointBuy
+				return sub
+			}(),
+		},
+		{
+			name: "standard array",
+			sub: func() portal.CharacterSubmission {
+				sub := validSubmission()
+				sub.AbilityMethod = portal.AbilityMethodStandardArray
+				sub.AbilityScores = portal.PointBuyScores{STR: 15, DEX: 14, CON: 13, INT: 12, WIS: 10, CHA: 8}
+				return sub
+			}(),
+		},
+		{
+			name: "roll with 4d6 drop lowest details",
+			sub: func() portal.CharacterSubmission {
+				sub := validSubmission()
+				sub.AbilityMethod = portal.AbilityMethodRoll
+				sub.AbilityScores = portal.PointBuyScores{STR: 15, DEX: 13, CON: 12, INT: 12, WIS: 9, CHA: 6}
+				sub.AbilityRolls = map[string][]int{
+					"str": []int{6, 5, 4, 1},
+					"dex": []int{6, 4, 3, 1},
+					"con": []int{4, 4, 4, 1},
+					"int": []int{6, 3, 2, 3},
+					"wis": []int{2, 2, 5, 2},
+					"cha": []int{1, 2, 3, 1},
+				}
+				return sub
+			}(),
+		},
+		{
+			name: "roll rejects mismatched score",
+			sub: func() portal.CharacterSubmission {
+				sub := validSubmission()
+				sub.AbilityMethod = portal.AbilityMethodRoll
+				sub.AbilityScores = portal.PointBuyScores{STR: 16, DEX: 13, CON: 12, INT: 12, WIS: 9, CHA: 6}
+				sub.AbilityRolls = map[string][]int{
+					"str": []int{6, 5, 4, 1},
+					"dex": []int{6, 4, 3, 1},
+					"con": []int{4, 4, 4, 1},
+					"int": []int{6, 3, 2, 3},
+					"wis": []int{2, 2, 5, 2},
+					"cha": []int{1, 2, 3, 1},
+				}
+				return sub
+			}(),
+			wantErr: "does not match 4d6 drop lowest",
+		},
+		{
+			name: "roll rejects missing roll details",
+			sub: func() portal.CharacterSubmission {
+				sub := validSubmission()
+				sub.AbilityMethod = portal.AbilityMethodRoll
+				sub.AbilityScores = portal.PointBuyScores{STR: 18, DEX: 18, CON: 18, INT: 18, WIS: 18, CHA: 18}
+				return sub
+			}(),
+			wantErr: "roll must include four d6 results",
+		},
+		{
+			name: "standard array rejects duplicate",
+			sub: func() portal.CharacterSubmission {
+				sub := validSubmission()
+				sub.AbilityMethod = portal.AbilityMethodStandardArray
+				sub.AbilityScores = portal.PointBuyScores{STR: 15, DEX: 15, CON: 13, INT: 12, WIS: 10, CHA: 8}
+				return sub
+			}(),
+			wantErr: "standard array",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := portal.ValidateAbilityScoreGeneration(tt.sub)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
 }
 
 func TestValidateSubmission_EmptyName(t *testing.T) {
@@ -213,6 +307,20 @@ func TestBuilderService_CreateCharacter_RedeemToken(t *testing.T) {
 	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
 	assert.NoError(t, err)
 	assert.Equal(t, "tok-abc", store.lastRedeemedToken)
+}
+
+func TestBuilderService_CreateCharacter_RejectsDisallowedAbilityMethod(t *testing.T) {
+	store := &mockBuilderStore{charID: "char-1", pcID: "pc-1"}
+	provider := portal.StaticAbilityMethodProvider([]portal.AbilityScoreMethod{portal.AbilityMethodPointBuy})
+	svc := portal.NewBuilderService(store, portal.WithAbilityMethodProvider(provider))
+
+	sub := validSubmission()
+	sub.AbilityMethod = portal.AbilityMethodStandardArray
+	sub.AbilityScores = portal.PointBuyScores{STR: 15, DEX: 14, CON: 13, INT: 12, WIS: 10, CHA: 8}
+
+	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ability score method standard_array is not allowed")
 }
 
 // mockBuilderStore implements portal.BuilderStore for testing.

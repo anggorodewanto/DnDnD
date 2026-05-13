@@ -64,6 +64,16 @@ export async function getStartingEquipment(className) {
   return res.json();
 }
 
+/** List campaign-enabled ability score generation methods. */
+export async function listAbilityMethods(campaignId) {
+  let url = `${API_BASE}/ability-methods`;
+  if (campaignId) {
+    url += `?campaign_id=${encodeURIComponent(campaignId)}`;
+  }
+  const res = await apiFetch(url);
+  return res.json();
+}
+
 /**
  * Submit a character for DM approval.
  * @param {object} data - The character submission payload.

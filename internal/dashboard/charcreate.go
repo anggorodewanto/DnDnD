@@ -10,16 +10,18 @@ import (
 
 // DMCharacterSubmission is the payload for DM-created characters.
 type DMCharacterSubmission struct {
-	Name          string                 `json:"name"`
-	Race          string                 `json:"race"`
-	Background    string                 `json:"background"`
-	Classes       []character.ClassEntry `json:"classes"`
-	AbilityScores character.AbilityScores `json:"ability_scores"`
-	Equipment      []string               `json:"equipment,omitempty"`
-	Spells         []string               `json:"spells,omitempty"`
-	Languages      []string               `json:"languages,omitempty"`
-	EquippedWeapon string                 `json:"equipped_weapon,omitempty"`
-	WornArmor      string                 `json:"worn_armor,omitempty"`
+	Name           string                    `json:"name"`
+	Race           string                    `json:"race"`
+	Background     string                    `json:"background"`
+	Classes        []character.ClassEntry    `json:"classes"`
+	AbilityScores  character.AbilityScores   `json:"ability_scores"`
+	AbilityMethod  portal.AbilityScoreMethod `json:"ability_method,omitempty"`
+	AbilityRolls   map[string][]int          `json:"ability_rolls,omitempty"`
+	Equipment      []string                  `json:"equipment,omitempty"`
+	Spells         []string                  `json:"spells,omitempty"`
+	Languages      []string                  `json:"languages,omitempty"`
+	EquippedWeapon string                    `json:"equipped_weapon,omitempty"`
+	WornArmor      string                    `json:"worn_armor,omitempty"`
 }
 
 // ValidateDMSubmission returns a list of validation error messages.
@@ -65,6 +67,12 @@ func ValidateDMSubmission(s DMCharacterSubmission) []string {
 	for _, a := range abilityNames {
 		if a.value < 1 || a.value > 30 {
 			errs = append(errs, fmt.Sprintf("%s must be between 1 and 30", a.name))
+		}
+	}
+	if s.AbilityMethod != "" {
+		scores := portal.PointBuyScoresFromCharacter(s.AbilityScores)
+		if err := portal.ValidateAbilityScores(s.AbilityMethod, scores, s.AbilityRolls); err != nil {
+			errs = append(errs, err.Error())
 		}
 	}
 

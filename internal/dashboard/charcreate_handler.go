@@ -20,6 +20,10 @@ type CharCreateServicer interface {
 	CreateCharacter(ctx context.Context, campaignID string, sub DMCharacterSubmission) (portal.CreateCharacterResult, error)
 }
 
+type abilityMethodLister interface {
+	AllowedAbilityScoreMethods(ctx context.Context, campaignID string) ([]portal.AbilityScoreMethod, error)
+}
+
 // RefDataForCreate provides reference data for the character creation form.
 type RefDataForCreate interface {
 	ListRaces(ctx context.Context) ([]portal.RaceInfo, error)
@@ -67,6 +71,7 @@ func (h *CharCreateHandler) RegisterCharCreateRoutes(r chi.Router) {
 		r.Get("/ref/equipment", h.HandleListRefEquipment)
 		r.Get("/ref/starting-equipment", h.HandleListRefStartingEquipment)
 		r.Get("/ref/spells", h.HandleListRefSpells)
+		r.Get("/ability-methods", h.HandleAbilityMethods)
 	})
 }
 
@@ -156,6 +161,25 @@ func (h *CharCreateHandler) HandlePreview(w http.ResponseWriter, r *http.Request
 		)
 	}
 	writeJSONResponse(w, http.StatusOK, stats)
+}
+
+// HandleAbilityMethods returns campaign-enabled ability score methods.
+func (h *CharCreateHandler) HandleAbilityMethods(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAuthHelper(r); !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	methods := portal.DefaultAbilityScoreMethods()
+	if lister, ok := h.svc.(abilityMethodLister); ok {
+		allowed, err := lister.AllowedAbilityScoreMethods(r.Context(), r.URL.Query().Get("campaign_id"))
+		if err != nil {
+			h.logger.Error("listing ability methods", "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		methods = allowed
+	}
+	writeJSONResponse(w, http.StatusOK, methods)
 }
 
 // HandleListRefRaces returns available races as JSON.
@@ -371,6 +395,8 @@ const charCreatePageTemplate = `<!DOCTYPE html>
         .item-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
         .item-tag { background: #0f3460; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; }
         .item-tag .remove { cursor: pointer; color: #e94560; font-weight: bold; }
+        .method-tabs { display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem; }
+        .method-tabs button.active { background:#e94560; border-color:#e94560; color:white; }
         .feature-card { background: #16213e; border: 1px solid #0f3460; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem; }
         .feature-card .feat-name { color: #e94560; font-weight: bold; }
         .feature-card .feat-source { color: #999; font-size: 0.8rem; }
@@ -422,6 +448,8 @@ const charCreatePageTemplate = `<!DOCTYPE html>
             </div>
         </div>
         <div id="step-3" class="section">
+            <div class="method-tabs" id="ability-method-tabs"></div>
+            <button class="btn btn-secondary" id="roll-abilities-btn" onclick="rollAbilityScores()" style="display:none;margin-bottom:1rem">Roll 4d6</button>
             <div class="ability-grid" id="ability-grid"></div>
             <div id="preview-panel" class="preview-panel" style="display:none">
                 <h2>Derived Stats Preview</h2>
@@ -495,6 +523,9 @@ var selectedSpells = [];
 var allEquipment = [];
 var allSpellsCache = {};
 var cachedPreview = null;
+var abilityMethod = 'roll';
+var abilityRolls = {};
+var abilityMethods = ['point_buy','standard_array','roll'];
 
 (function() {
     var abilities = ['STR','DEX','CON','INT','WIS','CHA'];
@@ -505,8 +536,16 @@ var cachedPreview = null;
         d.innerHTML = '<label>' + ab + '</label><input type="number" id="score-' + ab.toLowerCase() + '" value="10" min="1" max="30">';
         grid.appendChild(d);
     });
+    renderAbilityMethods();
 
     addClass();
+
+    var campaignID = new URLSearchParams(location.search).get('campaign_id') || '';
+    fetch('/dashboard/api/characters/ability-methods?campaign_id=' + encodeURIComponent(campaignID)).then(function(r){return r.json()}).then(function(methods){
+        abilityMethods = methods && methods.length ? methods : abilityMethods;
+        if (abilityMethods.indexOf(abilityMethod) < 0) abilityMethod = abilityMethods[0];
+        renderAbilityMethods();
+    });
 
     fetch('/dashboard/api/characters/ref/races').then(function(r){return r.json()}).then(function(races){
         var sel = document.getElementById('char-race');
@@ -556,6 +595,50 @@ function updateSubclasses(sel) {
             (subs||[]).forEach(function(s){ var name = s.name || s; var o = document.createElement('option'); o.value = name; o.textContent = name; subSel.appendChild(o); });
         }
     }
+}
+
+function renderAbilityMethods() {
+    var tabs = document.getElementById('ability-method-tabs');
+    tabs.innerHTML = '';
+    abilityMethods.forEach(function(method) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-secondary' + (method === abilityMethod ? ' active' : '');
+        btn.textContent = method === 'point_buy' ? 'Point Buy' : method === 'standard_array' ? 'Standard Array' : 'Roll';
+        btn.onclick = function() { setAbilityMethod(method); };
+        tabs.appendChild(btn);
+    });
+    document.getElementById('roll-abilities-btn').style.display = abilityMethod === 'roll' ? '' : 'none';
+    Array.prototype.forEach.call(document.querySelectorAll('#ability-grid input'), function(input) {
+        input.readOnly = abilityMethod === 'standard_array' || abilityMethod === 'roll';
+    });
+}
+
+function setAbilityMethod(method) {
+    abilityMethod = method;
+    abilityRolls = {};
+    if (method === 'point_buy') setScores({str:8,dex:8,con:8,int:8,wis:8,cha:8});
+    if (method === 'standard_array') setScores({str:15,dex:14,con:13,int:12,wis:10,cha:8});
+    renderAbilityMethods();
+}
+
+function setScores(scores) {
+    Object.keys(scores).forEach(function(ab) {
+        document.getElementById('score-' + ab).value = scores[ab];
+    });
+}
+
+function rollAbilityScores() {
+    var scores = {};
+    abilityRolls = {};
+    ['str','dex','con','int','wis','cha'].forEach(function(ab) {
+        var dice = [];
+        for (var i = 0; i < 4; i++) dice.push(Math.floor(Math.random() * 6) + 1);
+        var sorted = dice.slice().sort(function(a,b){ return a-b; });
+        scores[ab] = sorted[1] + sorted[2] + sorted[3];
+        abilityRolls[ab] = dice;
+    });
+    setScores(scores);
 }
 
 function addEquipment() {
@@ -777,6 +860,8 @@ function gatherData() {
             wis: parseInt(document.getElementById('score-wis').value) || 10,
             cha: parseInt(document.getElementById('score-cha').value) || 10,
         },
+        ability_method: abilityMethod,
+        ability_rolls: abilityRolls,
         equipment: selectedEquipment,
         spells: selectedSpells,
         equipped_weapon: document.getElementById('equipped-weapon-select').value,

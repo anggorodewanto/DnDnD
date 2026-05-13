@@ -18,6 +18,10 @@ type CharacterCreator interface {
 	CreatePlayerCharacter(ctx context.Context, arg refdata.CreatePlayerCharacterParams) (refdata.PlayerCharacter, error)
 }
 
+type campaignGetter interface {
+	GetCampaignByID(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
+}
+
 // BuilderStoreAdapter adapts refdata.Queries + TokenService to BuilderStore.
 type BuilderStoreAdapter struct {
 	q        CharacterCreator
@@ -178,6 +182,26 @@ func (a *BuilderStoreAdapter) RedeemToken(ctx context.Context, token string) err
 		return nil
 	}
 	return a.tokenSvc.RedeemToken(ctx, token)
+}
+
+// AllowedAbilityScoreMethods reads campaign settings for creation method gating.
+func (a *BuilderStoreAdapter) AllowedAbilityScoreMethods(ctx context.Context, campaignID string) ([]AbilityScoreMethod, error) {
+	getter, ok := a.q.(campaignGetter)
+	if !ok {
+		return DefaultAbilityScoreMethods(), nil
+	}
+	id, err := uuid.Parse(campaignID)
+	if err != nil {
+		return DefaultAbilityScoreMethods(), nil
+	}
+	campaign, err := getter.GetCampaignByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !campaign.Settings.Valid {
+		return DefaultAbilityScoreMethods(), nil
+	}
+	return AbilityScoreMethodsFromSettings(campaign.Settings.RawMessage), nil
 }
 
 // knownWeapons is the set of weapon IDs from the SRD.

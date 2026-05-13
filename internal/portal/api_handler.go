@@ -165,6 +165,22 @@ func (h *APIHandler) GetStartingEquipment(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, packs)
 }
 
+// ListAbilityMethods returns campaign-enabled ability-score generation methods.
+func (h *APIHandler) ListAbilityMethods(w http.ResponseWriter, r *http.Request) {
+	campaignID := r.URL.Query().Get("campaign_id")
+	methods := DefaultAbilityScoreMethods()
+	if h.builderSvc != nil {
+		allowed, err := h.builderSvc.AllowedAbilityScoreMethods(r.Context(), campaignID)
+		if err != nil {
+			h.logger.Error("listing ability methods", "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		methods = allowed
+	}
+	writeJSON(w, http.StatusOK, methods)
+}
+
 // submitRequest is the JSON body for character submission.
 type submitRequest struct {
 	Token      string `json:"token"`

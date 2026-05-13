@@ -13,12 +13,12 @@ import (
 
 // mockCharCreateStore implements CharCreateStore for testing.
 type mockCharCreateStore struct {
-	createCharErr    error
-	createPCErr      error
-	charID           string
-	pcID             string
-	lastCharParams   portal.CreateCharacterParams
-	lastPCParams     portal.CreatePlayerCharacterParams
+	createCharErr  error
+	createPCErr    error
+	charID         string
+	pcID           string
+	lastCharParams portal.CreateCharacterParams
+	lastPCParams   portal.CreatePlayerCharacterParams
 }
 
 func (m *mockCharCreateStore) CreateCharacterRecord(ctx context.Context, p portal.CreateCharacterParams) (string, error) {
@@ -245,9 +245,9 @@ func TestDMCharCreateService_CreateCharacter_PassesEquippedWeaponAndArmor(t *tes
 			{Class: "Fighter", Level: 1},
 		},
 		AbilityScores:  character.AbilityScores{STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 10, CHA: 10},
-		Equipment:       []string{"longsword", "chain-mail", "shield"},
-		EquippedWeapon:  "longsword",
-		WornArmor:       "chain-mail",
+		Equipment:      []string{"longsword", "chain-mail", "shield"},
+		EquippedWeapon: "longsword",
+		WornArmor:      "chain-mail",
 	}
 
 	result, err := svc.CreateCharacter(context.Background(), "campaign-1", sub)
@@ -332,4 +332,69 @@ func TestDMCharCreateService_CreateCharacter_Multiclass_ForwardsClasses(t *testi
 	// Total level 5 → proficiency bonus +3 (not +2 from a L1 fallback).
 	assert.Equal(t, 3, store.lastCharParams.ProfBonus,
 		"multiclass total level 5 must yield prof bonus +3")
+}
+
+func TestDMCharCreateService_CreateCharacter_AbilityMethodsUseCampaignGate(t *testing.T) {
+	store := &mockCharCreateStore{charID: "char-method", pcID: "pc-method"}
+	provider := portal.StaticAbilityMethodProvider([]portal.AbilityScoreMethod{portal.AbilityMethodRoll})
+	svc := NewDMCharCreateService(store, WithDMAbilityMethodProvider(provider))
+
+	sub := DMCharacterSubmission{
+		Name: "Roller",
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityMethod: portal.AbilityMethodRoll,
+		AbilityScores: character.AbilityScores{STR: 15, DEX: 13, CON: 12, INT: 12, WIS: 9, CHA: 6},
+		AbilityRolls: map[string][]int{
+			"str": []int{6, 5, 4, 1},
+			"dex": []int{6, 4, 3, 1},
+			"con": []int{4, 4, 4, 1},
+			"int": []int{6, 3, 2, 3},
+			"wis": []int{2, 2, 5, 2},
+			"cha": []int{1, 2, 3, 1},
+		},
+	}
+
+	_, err := svc.CreateCharacter(context.Background(), "campaign-1", sub)
+	require.NoError(t, err)
+
+	sub.AbilityRolls = nil
+	_, err = svc.CreateCharacter(context.Background(), "campaign-1", sub)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "roll must include four d6 results")
+
+	sub.AbilityRolls = map[string][]int{
+		"str": []int{6, 5, 4, 1},
+		"dex": []int{6, 4, 3, 1},
+		"con": []int{4, 4, 4, 1},
+		"int": []int{6, 3, 2, 3},
+		"wis": []int{2, 2, 5, 2},
+		"cha": []int{1, 2, 3, 1},
+	}
+	sub.AbilityMethod = portal.AbilityMethodStandardArray
+	sub.AbilityScores = character.AbilityScores{STR: 15, DEX: 14, CON: 13, INT: 12, WIS: 10, CHA: 8}
+	_, err = svc.CreateCharacter(context.Background(), "campaign-1", sub)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ability score method standard_array is not allowed")
+}
+
+func TestDMCharCreateService_CreateCharacter_OmittedAbilityMethodCannotBypassCampaignGate(t *testing.T) {
+	store := &mockCharCreateStore{charID: "char-method", pcID: "pc-method"}
+	provider := portal.StaticAbilityMethodProvider([]portal.AbilityScoreMethod{portal.AbilityMethodRoll})
+	svc := NewDMCharCreateService(store, WithDMAbilityMethodProvider(provider))
+
+	sub := DMCharacterSubmission{
+		Name: "ManualBypass",
+		Race: "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{STR: 18, DEX: 18, CON: 18, INT: 18, WIS: 18, CHA: 18},
+	}
+
+	_, err := svc.CreateCharacter(context.Background(), "campaign-1", sub)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ability score method point_buy is not allowed")
 }

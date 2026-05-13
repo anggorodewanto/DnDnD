@@ -20,10 +20,11 @@ const (
 
 // Settings represents the JSONB campaign settings.
 type Settings struct {
-	TurnTimeoutHours int               `json:"turn_timeout_hours"`
-	DiagonalRule     string            `json:"diagonal_rule"`
-	Open5eSources    []string          `json:"open5e_sources,omitempty"`
-	ChannelIDs       map[string]string `json:"channel_ids,omitempty"`
+	TurnTimeoutHours    int               `json:"turn_timeout_hours"`
+	DiagonalRule        string            `json:"diagonal_rule"`
+	Open5eSources       []string          `json:"open5e_sources,omitempty"`
+	ChannelIDs          map[string]string `json:"channel_ids,omitempty"`
+	AbilityScoreMethods []string          `json:"ability_score_methods,omitempty"`
 	// AutoApproveRest gates the /rest command (med-34 / Phase 83a). When
 	// nil (default) or true, /rest applies its benefits immediately. When
 	// explicitly false, /rest only posts a request to #dm-queue and waits

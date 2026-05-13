@@ -73,6 +73,7 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(handler http.H
 					r.Get("/spells", cfg.apiH.ListSpells)
 					r.Get("/equipment", cfg.apiH.ListEquipment)
 					r.Get("/starting-equipment", cfg.apiH.GetStartingEquipment)
+					r.Get("/ability-methods", cfg.apiH.ListAbilityMethods)
 					r.Post("/characters", cfg.apiH.SubmitCharacter)
 				})
 			}
