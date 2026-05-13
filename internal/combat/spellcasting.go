@@ -176,6 +176,11 @@ type CastResult struct {
 	InvisibilityBroken    bool   // true if standard Invisibility was broken by casting
 	InvisibilityApplied   bool   // true if this cast applied the invisible condition to a target
 	InvisibilityTargetID  string // combatant that received the invisible condition (if any)
+	// SR-017: when /cast spare-the-dying lands on a dying creature, the
+	// stabilize log line surfaces here so handlers / FormatCastLog can mirror
+	// the 🩹 outcome alongside the cast header. Empty when the spell was cast
+	// on a non-dying target (no-op) or when the cast was not spare-the-dying.
+	StabilizeMessage string
 	// Phase 118: when this cast replaced an existing concentration spell, the
 	// dropped spell's effects were cleaned up server-side. The full result is
 	// surfaced here so the handler can post the consolidated 💨 log line.
@@ -291,6 +296,11 @@ func FormatCastLog(result CastResult) string {
 	}
 	if result.InvisibilityBroken {
 		fmt.Fprintf(&b, "\U0001f441\ufe0f Invisibility ends \u2014 %s is visible again.\n", result.CasterName)
+	}
+
+	// SR-017: stabilize outcome from /cast spare-the-dying.
+	if result.StabilizeMessage != "" {
+		fmt.Fprintf(&b, "%s\n", result.StabilizeMessage)
 	}
 
 	// DM required
@@ -693,6 +703,18 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		result.InvisibilityTargetID = recipient
 	}
 
+	// 17a. SR-017: /cast spare-the-dying on a dying creature stabilizes them
+	// per SRD ("a living creature that has 0 hit points ... becomes stable").
+	// Skipped silently when the target is not dying — the spell still spends
+	// the action but no death-save state changes.
+	if spell.ID == SpareTheDyingSpellID && hasTarget {
+		stabilizeMsg, err := s.applySpareTheDyingFromCast(ctx, target)
+		if err != nil {
+			return CastResult{}, err
+		}
+		result.StabilizeMessage = stabilizeMsg
+	}
+
 	// 18. Break standard Invisibility on the caster (Greater persists).
 	broken, err := s.breakInvisibilityAndPersist(ctx, caster)
 	if err != nil {
@@ -886,6 +908,32 @@ func (s *Service) lookupCasterConcentrationID(ctx context.Context, casterID uuid
 		return ""
 	}
 	return row.ConcentrationSpellID.String
+}
+
+// applySpareTheDyingFromCast wires the spare-the-dying cantrip's auto-resolve
+// effect (SR-017). When the target is a dying combatant (alive at 0 HP, not
+// yet stable per IsDying) it calls StabilizeTarget and persists the 3-success
+// outcome via UpdateCombatantDeathSaves; any prior failure tally is preserved
+// in case the DM later wants to inspect what happened. On a non-dying target
+// the helper returns "" with no error so the cast still consumes the action
+// but no death-save state changes — matches the SRD restriction "a living
+// creature that has 0 hit points".
+func (s *Service) applySpareTheDyingFromCast(ctx context.Context, target refdata.Combatant) (string, error) {
+	ds, err := ParseDeathSaves(target.DeathSaves.RawMessage)
+	if err != nil {
+		return "", fmt.Errorf("parsing target death saves: %w", err)
+	}
+	if !IsDying(target.IsAlive, int(target.HpCurrent), ds) {
+		return "", nil
+	}
+	outcome := StabilizeTarget(target.DisplayName, ds, "Spare the Dying")
+	if _, err := s.store.UpdateCombatantDeathSaves(ctx, refdata.UpdateCombatantDeathSavesParams{
+		ID:         target.ID,
+		DeathSaves: MarshalDeathSaves(outcome.DeathSaves),
+	}); err != nil {
+		return "", fmt.Errorf("persisting stabilize: %w", err)
+	}
+	return strings.Join(outcome.Messages, "\n"), nil
 }
 
 // applyInvisibilityConditionFromCast adds an "invisible" condition to the spell's

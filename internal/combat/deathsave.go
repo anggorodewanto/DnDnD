@@ -11,6 +11,11 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
+// SpareTheDyingSpellID is the canonical spell ID for the Spare the Dying
+// cantrip. Used by Service.Cast (SR-017) to dispatch the auto-stabilize
+// branch when the spell is cast on a dying creature.
+const SpareTheDyingSpellID = "spare-the-dying"
+
 // TokenState represents a combatant's visual state on the map.
 type TokenState string
 
