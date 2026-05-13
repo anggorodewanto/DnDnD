@@ -716,6 +716,13 @@ func (s *Service) createActiveTurn(ctx context.Context, encounterID uuid.UUID, r
 		return TurnInfo{}, fmt.Errorf("zone start-of-turn trigger check: %w", zerr)
 	}
 
+	// SR-014: auto-roll and apply start-of-turn zone damage via the central
+	// damage pipeline. Best-effort per-trigger handling lives in
+	// ApplyZoneDamage; a missing spell row is silently skipped.
+	if _, derr := s.ApplyZoneDamage(ctx, combatant, zoneResults); derr != nil {
+		return TurnInfo{}, fmt.Errorf("zone start-of-turn damage application: %w", derr)
+	}
+
 	s.postEnemyTurnReady(ctx, encounterID, combatant)
 	s.refreshInitiativeTracker(ctx, encounterID, combatant.ID)
 

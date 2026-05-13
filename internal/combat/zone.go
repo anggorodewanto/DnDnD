@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
@@ -328,9 +330,132 @@ func ZoneAffectedTilesFromShape(shape, originColLetter string, originRow int32, 
 		return SquareAffectedTiles(originCol, originRowIdx, dims.SideFt)
 	case "rectangle":
 		return SquareAffectedTiles(originCol, originRowIdx, dims.WidthFt)
+	case "line":
+		// SR-014: a line zone (Wall of Fire) has no stored direction, so we
+		// render it axis-aligned along the east axis (positive columns).
+		// `length_ft` defines the length in feet; `width_ft` defines the
+		// perpendicular thickness in feet. Both are tile-quantized at 5 ft
+		// per tile. Minimum 1×1 so a degenerate dims still yields the origin
+		// tile rather than nil. (Future: add a direction column to swap
+		// this for combat.LineAffectedTiles with a true target vector.)
+		lengthSquares := dims.LengthFt / 5
+		widthSquares := dims.WidthFt / 5
+		if lengthSquares < 1 {
+			lengthSquares = 1
+		}
+		if widthSquares < 1 {
+			widthSquares = 1
+		}
+		tiles := make([]GridPos, 0, lengthSquares*widthSquares)
+		for dc := 0; dc < lengthSquares; dc++ {
+			for dr := 0; dr < widthSquares; dr++ {
+				tiles = append(tiles, GridPos{Col: originCol + dc, Row: originRowIdx + dr})
+			}
+		}
+		return tiles
 	default:
 		return []GridPos{{Col: originCol, Row: originRowIdx}}
 	}
+}
+
+// SpellIDFromName converts a spell display name into its kebab-case ID slug
+// used by the spells table (e.g. "Wall of Fire" -> "wall-of-fire"). Matches
+// the convention used across `internal/refdata/seed_spells_*.go`. Returns ""
+// for an empty input.
+func SpellIDFromName(name string) string {
+	if name == "" {
+		return ""
+	}
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(name)), " ", "-")
+}
+
+// ZoneDamageOutcome describes a single zone-trigger damage application —
+// returned by Service.ApplyZoneDamage so callers can log per-zone damage to
+// #combat-log. Skipped triggers (non-damage effect, missing spell row,
+// non-damage spell) are excluded from the slice.
+type ZoneDamageOutcome struct {
+	ZoneID      uuid.UUID
+	SourceSpell string
+	Damage      int
+	DamageType  string
+	Updated     refdata.Combatant
+}
+
+// ApplyZoneDamage rolls and applies the damage for each ZoneTriggerResult
+// whose Effect == "damage", routing each damage event through the central
+// Service.ApplyDamage pipeline so Phase 42 R/I/V, temp HP absorption,
+// concentration saves, and unconscious-at-0-HP all fire.
+//
+// SR-014: Spirit Guardians, Wall of Fire, Cloud of Daggers, and Moonbeam all
+// rely on this seam. CheckZoneTriggers returns Effect="damage" rows but no
+// caller previously rolled and applied damage; only a DM-prompt was posted to
+// #combat-log. This funnels the damage through the existing pipeline so the
+// spec's auto-resolution actually fires.
+//
+// Best-effort: a missing spell row, missing damage JSON, or non-damage effect
+// is silently skipped (returned outcomes only include applied events). Per-
+// trigger errors from ApplyDamage propagate so the move/turn caller can log
+// them, but the trigger loop runs in declaration order so a later trigger
+// can still fire if an earlier one's dice expression is malformed.
+func (s *Service) ApplyZoneDamage(ctx context.Context, target refdata.Combatant, results []ZoneTriggerResult) ([]ZoneDamageOutcome, error) {
+	if len(results) == 0 || !target.IsAlive {
+		return nil, nil
+	}
+	outcomes := make([]ZoneDamageOutcome, 0, len(results))
+	current := target
+	for _, r := range results {
+		if r.Effect != "damage" {
+			continue
+		}
+		spellID := SpellIDFromName(r.SourceSpell)
+		if spellID == "" {
+			continue
+		}
+		spell, err := s.store.GetSpell(ctx, spellID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return outcomes, fmt.Errorf("zone damage: looking up spell %q: %w", spellID, err)
+		}
+		if !spell.Damage.Valid || len(spell.Damage.RawMessage) == 0 {
+			continue
+		}
+		dmgInfo, err := ParseSpellDamage(spell.Damage.RawMessage)
+		if err != nil {
+			continue
+		}
+		if dmgInfo.Dice == "" {
+			continue
+		}
+		rolled, err := s.roller.Roll(dmgInfo.Dice)
+		if err != nil {
+			return outcomes, fmt.Errorf("zone damage: rolling %q: %w", dmgInfo.Dice, err)
+		}
+		dmgRes, err := s.ApplyDamage(ctx, ApplyDamageInput{
+			EncounterID: current.EncounterID,
+			Target:      current,
+			RawDamage:   rolled.Total,
+			DamageType:  dmgInfo.DamageType,
+		})
+		if err != nil {
+			return outcomes, fmt.Errorf("zone damage: applying %s damage: %w", spell.Name, err)
+		}
+		current = dmgRes.Updated
+		// Preserve IsAlive for downstream loop short-circuit on PCs dying.
+		current.IsAlive = dmgRes.IsAlive
+		outcomes = append(outcomes, ZoneDamageOutcome{
+			ZoneID:      r.ZoneID,
+			SourceSpell: spell.Name,
+			Damage:      dmgRes.FinalDamage,
+			DamageType:  dmgInfo.DamageType,
+			Updated:     dmgRes.Updated,
+		})
+		if !dmgRes.IsAlive {
+			break
+		}
+	}
+	return outcomes, nil
 }
 
 // ZoneOriginIndex returns the 0-based (col, row) for the given zone origin

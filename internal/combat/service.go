@@ -813,6 +813,14 @@ func (s *Service) UpdateCombatantPositionWithTriggers(ctx context.Context, id uu
 		return refdata.Combatant{}, nil, fmt.Errorf("zone enter trigger check: %w", terr)
 	}
 
+	// SR-014: auto-roll and apply damage for any Effect="damage" results
+	// (Spirit Guardians, Wall of Fire, Cloud of Daggers, Moonbeam). Errors
+	// are surfaced — best-effort per-trigger handling lives in
+	// ApplyZoneDamage itself (missing spell row is silently skipped).
+	if _, derr := s.ApplyZoneDamage(ctx, c, results); derr != nil {
+		return refdata.Combatant{}, nil, fmt.Errorf("zone enter damage application: %w", derr)
+	}
+
 	s.publish(ctx, c.EncounterID)
 	return c, results, nil
 }

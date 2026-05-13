@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -521,6 +522,8 @@ func TestZoneAffectedTiles_Rectangle(t *testing.T) {
 }
 
 func TestZoneAffectedTiles_Line(t *testing.T) {
+	// SR-014: a line of length 30 ft width 5 ft anchored at A1 covers six
+	// tiles (6 cols x 1 row) along the east axis, not just the origin.
 	zone := refdata.EncounterZone{
 		Shape:      "line",
 		OriginCol:  "A",
@@ -528,8 +531,24 @@ func TestZoneAffectedTiles_Line(t *testing.T) {
 		Dimensions: json.RawMessage(`{"length_ft":30,"width_ft":5}`),
 	}
 	tiles := zoneAffectedTiles(zone)
-	// Line defaults to just origin tile
-	assert.Len(t, tiles, 1)
+	require.Len(t, tiles, 6, "30ft x 5ft line should cover 6 tiles")
+	// Origin tile is included.
+	assert.Contains(t, tiles, GridPos{Col: 0, Row: 0})
+	// Far end is included.
+	assert.Contains(t, tiles, GridPos{Col: 5, Row: 0})
+}
+
+// SR-014: a line zone of width 10 (two-tile thick) covers a length x 2 rect.
+func TestZoneAffectedTiles_Line_DoubleWidth(t *testing.T) {
+	zone := refdata.EncounterZone{
+		Shape:      "line",
+		OriginCol:  "A",
+		OriginRow:  1,
+		Dimensions: json.RawMessage(`{"length_ft":15,"width_ft":10}`),
+	}
+	tiles := zoneAffectedTiles(zone)
+	// 3 cols x 2 rows = 6 tiles.
+	assert.Len(t, tiles, 6)
 }
 
 // Test zone with invalid triggers JSON (should be skipped gracefully)
@@ -600,4 +619,260 @@ func TestCheckZoneTriggers_StartOfTurn(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "Moonbeam", results[0].SourceSpell)
+}
+
+// --- SR-014: ApplyZoneDamage rolls and applies damage via ApplyDamage pipeline ---
+
+// SR-014: SpellIDFromName slugifies "Wall of Fire" -> "wall-of-fire", matching
+// the kebab-case spell ID convention used by the seed data.
+func TestSpellIDFromName(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"Spirit Guardians", "spirit-guardians"},
+		{"Wall of Fire", "wall-of-fire"},
+		{"Moonbeam", "moonbeam"},
+		{"Cloud of Daggers", "cloud-of-daggers"},
+		{"", ""},
+	}
+	for _, tc := range cases {
+		got := SpellIDFromName(tc.in)
+		assert.Equal(t, tc.want, got, "SpellIDFromName(%q)", tc.in)
+	}
+}
+
+// SR-014: ApplyZoneDamage on a Spirit Guardians trigger result rolls the
+// spell's damage dice and funnels the result through ApplyDamage so HP drops.
+func TestApplyZoneDamage_SpiritGuardians_AppliesDamage(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	ms := defaultMockStore()
+	target := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin",
+		HpCurrent:   20,
+		HpMax:       20,
+		IsAlive:     true,
+		IsNpc:       true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	ms.getCombatantFn = func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+		return target, nil
+	}
+	ms.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
+		require.Equal(t, "spirit-guardians", id)
+		return refdata.Spell{
+			ID:     "spirit-guardians",
+			Name:   "Spirit Guardians",
+			Damage: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"dice":"3d8","type":"radiant"}`), Valid: true},
+		}, nil
+	}
+	var newHP int32 = -1
+	ms.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		newHP = arg.HpCurrent
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(ms)
+	// Deterministic roller: 3d8 with every die rolling 1 -> 3 damage total.
+	svc.SetRoller(dice.NewRoller(func(max int) int { return 1 }))
+
+	results := []ZoneTriggerResult{{ZoneID: uuid.New(), SourceSpell: "Spirit Guardians", ZoneType: "damage", Effect: "damage", Trigger: "enter"}}
+	outcomes, err := svc.ApplyZoneDamage(context.Background(), target, results)
+	require.NoError(t, err)
+	require.Len(t, outcomes, 1)
+	assert.Equal(t, 3, outcomes[0].Damage, "3d8 with min rolls should deal 3")
+	assert.Equal(t, "Spirit Guardians", outcomes[0].SourceSpell)
+	assert.Equal(t, int32(17), newHP, "HP should drop from 20 to 17 after 3 damage")
+}
+
+// SR-014: ApplyZoneDamage is a silent no-op when the spell row is absent —
+// missing seed data should not crash the move handler.
+func TestApplyZoneDamage_NoMatchingSpell_NoOp(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	ms := defaultMockStore()
+	target := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		HpCurrent:   10,
+		IsAlive:     true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	ms.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return refdata.Spell{}, sql.ErrNoRows
+	}
+	hpWritten := false
+	ms.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpWritten = true
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent}, nil
+	}
+
+	svc := NewService(ms)
+	results := []ZoneTriggerResult{{SourceSpell: "Unknown Zone", Effect: "damage", Trigger: "enter"}}
+	outcomes, err := svc.ApplyZoneDamage(context.Background(), target, results)
+	require.NoError(t, err)
+	assert.Empty(t, outcomes)
+	assert.False(t, hpWritten, "no spell row means no damage write")
+}
+
+// SR-014: UpdateCombatantPositionWithTriggers applies the enter-trigger
+// damage via ApplyZoneDamage so Wall of Fire damages a combatant who walks
+// into the zone.
+func TestUpdateCombatantPositionWithTriggers_AppliesWallOfFireDamage(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	ms := defaultMockStore()
+	// Initial combatant has 30 HP.
+	startingHP := int32(30)
+	ms.updateCombatantPositionFn = func(_ context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:          arg.ID,
+			EncounterID: encounterID,
+			DisplayName: "Aria",
+			PositionCol: arg.PositionCol,
+			PositionRow: arg.PositionRow,
+			HpCurrent:   startingHP,
+			HpMax:       30,
+			IsAlive:     true,
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	ms.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:          id,
+			EncounterID: encounterID,
+			DisplayName: "Aria",
+			HpCurrent:   startingHP,
+			HpMax:       30,
+			IsAlive:     true,
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	ms.listEncounterZonesByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.EncounterZone, error) {
+		triggers, _ := json.Marshal([]ZoneTrigger{{Trigger: "enter", Effect: "damage"}})
+		return []refdata.EncounterZone{
+			{
+				ID:          uuid.New(),
+				EncounterID: encounterID,
+				SourceSpell: "Wall of Fire",
+				Shape:       "line",
+				OriginCol:   "A",
+				OriginRow:   1,
+				Dimensions:  json.RawMessage(`{"length_ft":30,"width_ft":5}`),
+				ZoneType:    "damage",
+				ZoneTriggers: pqtype.NullRawMessage{
+					RawMessage: triggers,
+					Valid:      true,
+				},
+				TriggeredThisRound: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{}`), Valid: true},
+			},
+		}, nil
+	}
+	ms.updateEncounterZoneTriggeredThisRoundFn = func(_ context.Context, arg refdata.UpdateEncounterZoneTriggeredThisRoundParams) (refdata.EncounterZone, error) {
+		return refdata.EncounterZone{ID: arg.ID}, nil
+	}
+	ms.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
+		require.Equal(t, "wall-of-fire", id)
+		return refdata.Spell{
+			ID:     "wall-of-fire",
+			Name:   "Wall of Fire",
+			Damage: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"dice":"5d8","type":"fire"}`), Valid: true},
+		}, nil
+	}
+	var hpWritten int32 = -1
+	ms.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpWritten = arg.HpCurrent
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(ms)
+	// Min rolls: 5d8 -> 5 damage.
+	svc.SetRoller(dice.NewRoller(func(max int) int { return 1 }))
+
+	// Move to A1 (col=0, row=0) which is inside the line zone.
+	_, results, err := svc.UpdateCombatantPositionWithTriggers(context.Background(), combatantID, "A", 1, 0)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "moving into Wall of Fire should fire enter trigger")
+	assert.Equal(t, int32(25), hpWritten, "HP should drop from 30 to 25 after 5 fire damage")
+}
+
+// SR-014: createActiveTurn applies the start-of-turn zone damage so Moonbeam
+// damages a combatant who starts its turn in the zone.
+func TestCreateActiveTurn_AppliesMoonbeamStartOfTurnDamage(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	ms := defaultMockStore()
+	ms.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, RoundNumber: 1, Status: "active"}, nil
+	}
+	target := refdata.Combatant{
+		ID:          combatantID,
+		EncounterID: encounterID,
+		DisplayName: "Vampire",
+		HpCurrent:   25,
+		HpMax:       25,
+		IsAlive:     true,
+		IsNpc:       true,
+		PositionCol: "C",
+		PositionRow: 3,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	ms.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{target}, nil
+	}
+	ms.getCombatantFn = func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return target, nil }
+	ms.listTurnsByEncounterAndRoundFn = func(_ context.Context, _ refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	ms.listEncounterZonesByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.EncounterZone, error) {
+		triggers, _ := json.Marshal([]ZoneTrigger{{Trigger: "start_of_turn", Effect: "damage"}})
+		return []refdata.EncounterZone{
+			{
+				ID:          uuid.New(),
+				EncounterID: encounterID,
+				SourceSpell: "Moonbeam",
+				Shape:       "circle",
+				OriginCol:   "C",
+				OriginRow:   3,
+				Dimensions:  json.RawMessage(`{"radius_ft":5}`),
+				ZoneType:    "damage",
+				ZoneTriggers: pqtype.NullRawMessage{
+					RawMessage: triggers,
+					Valid:      true,
+				},
+				TriggeredThisRound: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{}`), Valid: true},
+			},
+		}, nil
+	}
+	ms.updateEncounterZoneTriggeredThisRoundFn = func(_ context.Context, arg refdata.UpdateEncounterZoneTriggeredThisRoundParams) (refdata.EncounterZone, error) {
+		return refdata.EncounterZone{ID: arg.ID}, nil
+	}
+	ms.getSpellFn = func(_ context.Context, id string) (refdata.Spell, error) {
+		require.Equal(t, "moonbeam", id)
+		return refdata.Spell{
+			ID:     "moonbeam",
+			Name:   "Moonbeam",
+			Damage: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"dice":"2d10","type":"radiant"}`), Valid: true},
+		}, nil
+	}
+	var hpWritten int32 = -1
+	ms.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpWritten = arg.HpCurrent
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(ms)
+	// 2d10 min rolls -> 2 damage.
+	svc.SetRoller(dice.NewRoller(func(max int) int { return 1 }))
+
+	info, err := svc.AdvanceTurn(context.Background(), encounterID)
+	require.NoError(t, err)
+	require.Len(t, info.ZoneTriggerResults, 1, "start-of-turn in Moonbeam should fire trigger")
+	assert.Equal(t, int32(23), hpWritten, "Moonbeam should deal 2 damage on turn start (25 -> 23)")
 }
