@@ -381,6 +381,9 @@ type mapRegeneratorQueries interface {
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	GetRace(ctx context.Context, id string) (refdata.Race, error)
 	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
+	// SR-031: persist the explored-tile set per encounter so bot restarts
+	// don't wipe a party's exploration history.
+	UpdateEncounterExploredCells(ctx context.Context, arg refdata.UpdateEncounterExploredCellsParams) error
 }
 
 // mapRegeneratorAdapter implements discord.MapRegenerator by parsing the
@@ -392,15 +395,21 @@ type mapRegeneratorQueries interface {
 // Phase 22 done-when wiring: produces PNGs for #combat-map. Production was
 // silent because main.go never set discordHandlerDeps.mapRegenerator (high-10).
 //
-// med-27 / Phase 68: keeps an in-memory per-encounter "explored cells" map
-// so previously-visible tiles render with the dim Explored overlay even
-// after the vision source has moved away. The map is best-effort and resets
-// on process restart — durable persistence is a follow-up phase.
+// med-27 / Phase 68: persists a per-encounter "explored cells" set so
+// previously-visible tiles render with the dim Explored overlay even after
+// the vision source has moved away. SR-031 graduated the explored history
+// from in-memory-only to a JSONB column on `encounters.explored_cells`, so a
+// bot restart no longer wipes a party's exploration history.
+//
+// The adapter holds a small per-encounter mutex (keyed by encounter UUID so
+// concurrent renders of *different* encounters don't serialize) to keep
+// read-modify-write of the explored set atomic against itself; the DB row
+// is the source of truth.
 type mapRegeneratorAdapter struct {
 	queries mapRegeneratorQueries
 
-	exploredMu    sync.Mutex
-	exploredCells map[uuid.UUID]map[int]bool // encounterID → set of (row*width+col) tile indexes
+	exploredMu sync.Mutex
+	exploredKM map[uuid.UUID]*sync.Mutex // encounterID → per-encounter R-M-W lock
 }
 
 func newMapRegeneratorAdapter(q mapRegeneratorQueries) *mapRegeneratorAdapter {
@@ -408,9 +417,25 @@ func newMapRegeneratorAdapter(q mapRegeneratorQueries) *mapRegeneratorAdapter {
 		return nil
 	}
 	return &mapRegeneratorAdapter{
-		queries:       q,
-		exploredCells: make(map[uuid.UUID]map[int]bool),
+		queries:    q,
+		exploredKM: make(map[uuid.UUID]*sync.Mutex),
 	}
+}
+
+// lockForEncounter returns (and lazily creates) a per-encounter mutex used to
+// serialize the read-modify-write of the persisted explored-cells set. Two
+// concurrent regenerations of the same encounter must not race on the JSONB
+// blob; two concurrent regenerations of *different* encounters proceed in
+// parallel.
+func (a *mapRegeneratorAdapter) lockForEncounter(encounterID uuid.UUID) *sync.Mutex {
+	a.exploredMu.Lock()
+	defer a.exploredMu.Unlock()
+	m, ok := a.exploredKM[encounterID]
+	if !ok {
+		m = &sync.Mutex{}
+		a.exploredKM[encounterID] = m
+	}
+	return m
 }
 
 // RegenerateMap loads the encounter, its map, and its combatants, then
@@ -487,10 +512,22 @@ func (a *mapRegeneratorAdapter) renderInternal(ctx context.Context, encounterID 
 	// on top before the renderer paints) only when there are vision or
 	// light sources to compute against. Otherwise the renderer's
 	// auto-compute path stays in charge and explored history is a no-op.
+	//
+	// SR-031: the explored set lives in `encounters.explored_cells` so a
+	// bot restart restores it. We serialize the read-modify-write of that
+	// blob with a per-encounter mutex (different encounters render in
+	// parallel; the same encounter's renders queue up).
+	var seen map[int]bool
+	var fowComputed bool
 	if len(md.VisionSources) > 0 || len(md.LightSources) > 0 {
+		lock := a.lockForEncounter(encounterID)
+		lock.Lock()
+		defer lock.Unlock()
+		seen = decodeExploredCells(enc.ExploredCells)
 		md.FogOfWar = renderer.ComputeVisibilityWithZones(md.VisionSources, md.LightSources, md.Walls, md.MagicalDarknessTiles, md.Width, md.Height)
 		md.FogOfWar.DMSeesAll = dmView
-		a.applyExploredHistory(encounterID, md.FogOfWar)
+		applyExploredHistoryToFow(seen, md.FogOfWar)
+		fowComputed = true
 	}
 
 	png, err := renderer.RenderMap(md)
@@ -500,24 +537,88 @@ func (a *mapRegeneratorAdapter) renderInternal(ctx context.Context, encounterID 
 
 	// Union the currently-visible tiles into the persistent explored set
 	// so the next render carries them as Explored when no longer Visible.
-	if md.FogOfWar != nil {
-		a.recordVisibleTiles(encounterID, md.FogOfWar)
+	// Write the updated set back to the DB so a process restart picks it
+	// up. Best-effort: a failed write only loses *new* exploration (the
+	// previously-stored set stays correct).
+	if fowComputed && md.FogOfWar != nil {
+		if seen == nil {
+			seen = map[int]bool{}
+		}
+		changed := unionVisibleTilesInto(seen, md.FogOfWar)
+		if changed {
+			a.persistExploredCells(ctx, encounterID, seen)
+		}
 	}
 
 	return png, nil
 }
 
-// applyExploredHistory upgrades any tile previously seen but not currently
-// Visible from Unexplored to Explored. Visible tiles are left alone so the
-// renderer paints them at full brightness.
-func (a *mapRegeneratorAdapter) applyExploredHistory(encounterID uuid.UUID, fow *renderer.FogOfWar) {
-	if fow == nil {
+// decodeExploredCells unpacks the JSONB array stored in
+// encounters.explored_cells into the in-memory set keyed by
+// (row*width+col) tile index. A nil / empty / malformed payload yields an
+// empty set so the caller can treat "no history yet" the same as "history
+// is empty". (SR-031)
+func decodeExploredCells(raw json.RawMessage) map[int]bool {
+	out := map[int]bool{}
+	if len(raw) == 0 {
+		return out
+	}
+	var idxs []int
+	if err := json.Unmarshal(raw, &idxs); err != nil {
+		return out
+	}
+	for _, i := range idxs {
+		if i < 0 {
+			continue
+		}
+		out[i] = true
+	}
+	return out
+}
+
+// encodeExploredCells packs the in-memory set back into the JSONB-friendly
+// sorted int array form used by encounters.explored_cells. Sorted output
+// keeps the JSONB blob diffable in DB dumps. (SR-031)
+func encodeExploredCells(seen map[int]bool) (json.RawMessage, error) {
+	idxs := make([]int, 0, len(seen))
+	for i := range seen {
+		idxs = append(idxs, i)
+	}
+	// sort.Ints would pull in the sort import for no functional gain, so
+	// use insertion to keep determinism via a manual selection. For typical
+	// map sizes (hundreds of tiles) the cost is irrelevant.
+	for i := 1; i < len(idxs); i++ {
+		for j := i; j > 0 && idxs[j-1] > idxs[j]; j-- {
+			idxs[j-1], idxs[j] = idxs[j], idxs[j-1]
+		}
+	}
+	return json.Marshal(idxs)
+}
+
+// persistExploredCells writes the updated explored set back to the DB.
+// Failures are swallowed (best-effort) so rendering never fails over a
+// persistence hiccup; the previously-stored set stays correct on a retry.
+// (SR-031)
+func (a *mapRegeneratorAdapter) persistExploredCells(ctx context.Context, encounterID uuid.UUID, seen map[int]bool) {
+	raw, err := encodeExploredCells(seen)
+	if err != nil {
 		return
 	}
-	a.exploredMu.Lock()
-	defer a.exploredMu.Unlock()
-	seen := a.exploredCells[encounterID]
-	if len(seen) == 0 {
+	_ = a.queries.UpdateEncounterExploredCells(ctx, refdata.UpdateEncounterExploredCellsParams{
+		ID:            encounterID,
+		ExploredCells: raw,
+	})
+}
+
+// applyExploredHistoryToFow upgrades any tile in `seen` (the persisted
+// explored set) but not currently Visible from Unexplored to Explored.
+// Visible tiles are left alone so the renderer paints them at full
+// brightness. Caller must hold the per-encounter lock. (SR-031 replaces the
+// pre-existing mapRegeneratorAdapter.applyExploredHistory with this pure
+// helper so the explored set is sourced from the DB instead of an in-memory
+// map.)
+func applyExploredHistoryToFow(seen map[int]bool, fow *renderer.FogOfWar) {
+	if fow == nil || len(seen) == 0 {
 		return
 	}
 	for idx := range seen {
@@ -530,25 +631,24 @@ func (a *mapRegeneratorAdapter) applyExploredHistory(encounterID uuid.UUID, fow 
 	}
 }
 
-// recordVisibleTiles unions the FoW's Visible cells into the per-encounter
-// explored set so subsequent renders treat them as Explored when no longer
-// in vision.
-func (a *mapRegeneratorAdapter) recordVisibleTiles(encounterID uuid.UUID, fow *renderer.FogOfWar) {
+// unionVisibleTilesInto adds every currently-Visible tile from the FoW into
+// the `seen` set and reports whether any tile was newly added (i.e. whether
+// the caller needs to persist the updated set). (SR-031)
+func unionVisibleTilesInto(seen map[int]bool, fow *renderer.FogOfWar) bool {
 	if fow == nil {
-		return
+		return false
 	}
-	a.exploredMu.Lock()
-	defer a.exploredMu.Unlock()
-	seen, ok := a.exploredCells[encounterID]
-	if !ok {
-		seen = make(map[int]bool)
-		a.exploredCells[encounterID] = seen
-	}
+	changed := false
 	for idx, state := range fow.States {
-		if state == renderer.Visible {
+		if state != renderer.Visible {
+			continue
+		}
+		if !seen[idx] {
 			seen[idx] = true
+			changed = true
 		}
 	}
+	return changed
 }
 
 // zonesToRendererOverlays converts the live encounter_zones rows into the

@@ -48,3 +48,12 @@ SELECT e.id FROM encounters e
 JOIN combatants cb ON cb.encounter_id = e.id
 WHERE cb.character_id = $1 AND e.status = 'active'
 LIMIT 1;
+
+-- name: UpdateEncounterExploredCells :exec
+-- SR-031: Persist the packed explored-tile set (JSON array of int indexes,
+-- where each index = row*width+col) for this encounter. Called by
+-- mapRegeneratorAdapter after every successful render so a bot restart
+-- restores the dim "Explored" overlay on previously-seen tiles.
+UPDATE encounters
+SET explored_cells = $2, updated_at = now()
+WHERE id = $1;

@@ -233,18 +233,19 @@ type DmQueueItem struct {
 }
 
 type Encounter struct {
-	ID            uuid.UUID      `json:"id"`
-	CampaignID    uuid.UUID      `json:"campaign_id"`
-	MapID         uuid.NullUUID  `json:"map_id"`
-	Name          string         `json:"name"`
-	DisplayName   sql.NullString `json:"display_name"`
-	TemplateID    uuid.NullUUID  `json:"template_id"`
-	Status        string         `json:"status"`
-	RoundNumber   int32          `json:"round_number"`
-	CurrentTurnID uuid.NullUUID  `json:"current_turn_id"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
-	Mode          string         `json:"mode"`
+	ID            uuid.UUID       `json:"id"`
+	CampaignID    uuid.UUID       `json:"campaign_id"`
+	MapID         uuid.NullUUID   `json:"map_id"`
+	Name          string          `json:"name"`
+	DisplayName   sql.NullString  `json:"display_name"`
+	TemplateID    uuid.NullUUID   `json:"template_id"`
+	Status        string          `json:"status"`
+	RoundNumber   int32           `json:"round_number"`
+	CurrentTurnID uuid.NullUUID   `json:"current_turn_id"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+	Mode          string          `json:"mode"`
+	ExploredCells json.RawMessage `json:"explored_cells"`
 }
 
 type EncounterTemplate struct {

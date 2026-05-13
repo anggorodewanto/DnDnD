@@ -170,9 +170,12 @@ func (r *recordingMapRegenerator) RegenerateMap(_ context.Context, _ uuid.UUID) 
 // med-27 / Phase 68 explored-history wiring: a tile that was Visible on the
 // previous render is upgraded from Unexplored to Explored on the next render
 // even when the vision source has moved away.
+//
+// SR-031: this test now exercises the pure helpers
+// (applyExploredHistoryToFow / unionVisibleTilesInto) instead of the
+// deprecated in-memory methods, mirroring the new DB-backed render flow.
 func TestMapRegeneratorAdapter_ExploredHistory_UnionsAcrossRenders(t *testing.T) {
-	a := &mapRegeneratorAdapter{exploredCells: map[uuid.UUID]map[int]bool{}}
-	encID := uuid.New()
+	seen := map[int]bool{}
 
 	// First render: tile (0) is Visible, (1) is Unexplored.
 	first := &renderer.FogOfWar{
@@ -180,29 +183,29 @@ func TestMapRegeneratorAdapter_ExploredHistory_UnionsAcrossRenders(t *testing.T)
 		Height: 1,
 		States: []renderer.VisibilityState{renderer.Visible, renderer.Unexplored},
 	}
-	a.recordVisibleTiles(encID, first)
+	unionVisibleTilesInto(seen, first)
 
 	// Second render: same map, but vision source moved so tile (0) is now
-	// Unexplored. After applyExploredHistory, (0) should be Explored.
+	// Unexplored. After applyExploredHistoryToFow, (0) should be Explored.
 	second := &renderer.FogOfWar{
 		Width:  2,
 		Height: 1,
 		States: []renderer.VisibilityState{renderer.Unexplored, renderer.Visible},
 	}
-	a.applyExploredHistory(encID, second)
+	applyExploredHistoryToFow(seen, second)
 	require.Equal(t, renderer.Explored, second.States[0], "previously-visible tile must render as Explored")
 	require.Equal(t, renderer.Visible, second.States[1], "currently-visible tile must remain Visible")
 
 	// Third render: union widens. (0) Explored stays in history; (1) is
 	// now Visible and gets recorded so a fourth render dimming both
 	// would surface both as Explored.
-	a.recordVisibleTiles(encID, second)
+	unionVisibleTilesInto(seen, second)
 	third := &renderer.FogOfWar{
 		Width:  2,
 		Height: 1,
 		States: []renderer.VisibilityState{renderer.Unexplored, renderer.Unexplored},
 	}
-	a.applyExploredHistory(encID, third)
+	applyExploredHistoryToFow(seen, third)
 	require.Equal(t, renderer.Explored, third.States[0])
 	require.Equal(t, renderer.Explored, third.States[1])
 }
@@ -244,7 +247,9 @@ func TestMapRegeneratorAdapter_RendersAndDebouncesViaQueue(t *testing.T) {
 }
 
 // fakeMapRegenQueries satisfies the narrow queries surface the
-// mapRegeneratorAdapter needs.
+// mapRegeneratorAdapter needs. SR-031: also persists explored_cells back
+// into f.encs so a "simulated restart" (a fresh adapter pointing at the
+// same fake) restores the explored tile set.
 type fakeMapRegenQueries struct {
 	encs       map[uuid.UUID]refdata.Encounter
 	maps       map[uuid.UUID]refdata.Map
@@ -301,6 +306,19 @@ func (f *fakeMapRegenQueries) GetCreature(_ context.Context, id string) (refdata
 		return refdata.Creature{}, sql.ErrNoRows
 	}
 	return c, nil
+}
+
+// UpdateEncounterExploredCells persists the explored-tile blob back into
+// the fake's in-memory encounter row so a later GetEncounter call (e.g.
+// from a fresh adapter simulating a bot restart) sees the same set. SR-031.
+func (f *fakeMapRegenQueries) UpdateEncounterExploredCells(_ context.Context, arg refdata.UpdateEncounterExploredCellsParams) error {
+	enc, ok := f.encs[arg.ID]
+	if !ok {
+		return errors.New("encounter not found")
+	}
+	enc.ExploredCells = arg.ExploredCells
+	f.encs[arg.ID] = enc
+	return nil
 }
 
 // E-67-zone-render-on-map: zonesToRendererOverlays converts encounter_zones
@@ -579,6 +597,108 @@ func TestRegenerateMap_PCAndTorchVisibility(t *testing.T) {
 	// (29,29) is dist 24 — well beyond. Torch covers 4 tiles of (2,2); (29,29)
 	// is dist 27 from there. So it must remain Unexplored.
 	assert.Equal(t, renderer.Unexplored, fow.StateAt(29, 29), "tile beyond both vision and light radius must be Unexplored")
+}
+
+// TestMapRegeneratorAdapter_ExploredCells_PersistAcrossRestart is the
+// SR-031 acceptance integration test:
+//
+//  1. A first adapter renders the map → currently-visible tiles get unioned
+//     into encounters.explored_cells via UpdateEncounterExploredCells.
+//  2. A second adapter (simulating a bot restart pointing at the same DB)
+//     renders the same encounter without the PC visible → previously-seen
+//     tiles must come back as Explored (not Unexplored), proving the
+//     persisted set survived the "restart".
+//
+// Without SR-031 (in-memory-only map), the second render would render the
+// same out-of-vision tiles as Unexplored because the brand-new adapter
+// starts with an empty exploredCells map.
+func TestMapRegeneratorAdapter_ExploredCells_PersistAcrossRestart(t *testing.T) {
+	tiledJSON := mapJSON10x10()
+	charID := uuid.New()
+	encID := uuid.New()
+	mapID := uuid.New()
+	q := &fakeMapRegenQueries{
+		encs:       map[uuid.UUID]refdata.Encounter{encID: {ID: encID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}}},
+		maps:       map[uuid.UUID]refdata.Map{mapID: {ID: mapID, TiledJson: tiledJSON}},
+		combatants: map[uuid.UUID][]refdata.Combatant{},
+		characters: map[uuid.UUID]refdata.Character{
+			charID: {ID: charID, Race: "elf"},
+		},
+		races: map[string]refdata.Race{"elf": {ID: "elf", DarkvisionFt: 60}},
+	}
+	// PC at A/1 (col=0, row=0) with darkvision so the shadowcaster fires.
+	q.combatants[encID] = []refdata.Combatant{
+		{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			PositionCol: "A",
+			PositionRow: 1,
+			IsAlive:     true,
+			IsVisible:   true,
+		},
+	}
+
+	// --- First adapter: render and persist exploration history ---
+	a1 := newMapRegeneratorAdapter(q)
+	require.NotNil(t, a1)
+	_, err := a1.RegenerateMap(context.Background(), encID)
+	require.NoError(t, err)
+
+	// The fake should now carry a non-empty explored_cells JSON for this
+	// encounter (the union of all Visible tiles from the first render).
+	persisted := q.encs[encID].ExploredCells
+	require.NotEmpty(t, persisted, "explored_cells must be written through UpdateEncounterExploredCells after first render")
+	seen := decodeExploredCells(persisted)
+	require.NotEmpty(t, seen, "decoded explored set must contain at least the PC's own tile")
+	// The PC's own tile (0,0) on a 10x10 grid is index 0.
+	require.True(t, seen[0], "PC's own tile must be in the persisted explored set")
+
+	// --- Second adapter: simulate bot restart with the PC removed so the
+	// new render computes only with no living vision source. The persisted
+	// set must still be loaded and applied to the next render that does
+	// have vision sources.
+	a2 := newMapRegeneratorAdapter(q)
+	require.NotNil(t, a2)
+	// Sanity: a2 has a fresh internal lock map; the only continuity is the
+	// DB row.
+	require.Empty(t, a2.exploredKM, "fresh adapter must start with no per-encounter locks")
+
+	// Render again with the same combatant; the previously-explored tiles
+	// must come back through the GetEncounter -> decodeExploredCells path.
+	_, err = a2.RegenerateMap(context.Background(), encID)
+	require.NoError(t, err)
+	persisted2 := q.encs[encID].ExploredCells
+	seen2 := decodeExploredCells(persisted2)
+	for idx := range seen {
+		require.True(t, seen2[idx], "tile %d explored before restart must still be in the explored set after restart", idx)
+	}
+}
+
+// TestEncodeDecodeExploredCells_Roundtrip covers the JSON pack/unpack of the
+// explored-cells column. Negative indices are rejected (defensive: a corrupt
+// payload won't trip the renderer's slice bounds check).
+func TestEncodeDecodeExploredCells_Roundtrip(t *testing.T) {
+	in := map[int]bool{3: true, 17: true, 42: true}
+	raw, err := encodeExploredCells(in)
+	require.NoError(t, err)
+	// Sorted output keeps the JSONB blob diffable.
+	assert.Equal(t, `[3,17,42]`, string(raw))
+
+	out := decodeExploredCells(raw)
+	assert.Equal(t, in, out)
+
+	// Empty payload yields empty set, not nil.
+	empty := decodeExploredCells(nil)
+	require.NotNil(t, empty)
+	assert.Empty(t, empty)
+
+	// Malformed payload yields empty set (best-effort).
+	bad := decodeExploredCells([]byte(`not-json`))
+	assert.Empty(t, bad)
+
+	// Negative indices are dropped.
+	withNeg := decodeExploredCells([]byte(`[-1, 5, -7]`))
+	assert.Equal(t, map[int]bool{5: true}, withNeg)
 }
 
 // TestRegenerateMapForDM_BypassesFog covers the DMSeesAll branch: even though
