@@ -11,7 +11,6 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
-
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -143,8 +142,8 @@ func TestStatusHandler_NotInCombat_NoEffects(t *testing.T) {
 		mock,
 		&mockStatusCampaignProvider{campaign: refdata.Campaign{ID: uuid.New()}},
 		&mockStatusCharacterLookup{char: refdata.Character{
-			ID:   charID,
-			Name: "Aria",
+			ID:      charID,
+			Name:    "Aria",
 			Classes: json.RawMessage(`[{"class":"Fighter","level":5}]`),
 		}},
 		&mockStatusEncounterProvider{err: errors.New("no encounter")},
@@ -307,14 +306,14 @@ func TestStatusHandler_NotInCombat_WithKi(t *testing.T) {
 	mock := newTestMock()
 	charID := uuid.New()
 
-	kiJSON := json.RawMessage(`{"ki":3}`)
+	kiJSON := json.RawMessage(`{"ki":{"current":3,"max":3,"recharge":"long"}}`)
 	h := NewStatusHandler(
 		mock,
 		&mockStatusCampaignProvider{campaign: refdata.Campaign{ID: uuid.New()}},
 		&mockStatusCharacterLookup{char: refdata.Character{
-			ID:      charID,
-			Name:    "Monk",
-			Classes: json.RawMessage(`[{"class":"Monk","level":5}]`),
+			ID:          charID,
+			Name:        "Monk",
+			Classes:     json.RawMessage(`[{"class":"Monk","level":5}]`),
 			FeatureUses: pqtypeNull(kiJSON),
 		}},
 		&mockStatusEncounterProvider{err: errors.New("no encounter")},
@@ -328,14 +327,14 @@ func TestStatusHandler_NotInCombat_WithSorceryPoints(t *testing.T) {
 	mock := newTestMock()
 	charID := uuid.New()
 
-	spJSON := json.RawMessage(`{"sorcery-points":4}`)
+	spJSON := json.RawMessage(`{"sorcery-points":{"current":4,"max":4,"recharge":"long"}}`)
 	h := NewStatusHandler(
 		mock,
 		&mockStatusCampaignProvider{campaign: refdata.Campaign{ID: uuid.New()}},
 		&mockStatusCharacterLookup{char: refdata.Character{
-			ID:      charID,
-			Name:    "Sorc",
-			Classes: json.RawMessage(`[{"class":"Sorcerer","level":7}]`),
+			ID:          charID,
+			Name:        "Sorc",
+			Classes:     json.RawMessage(`[{"class":"Sorcerer","level":7}]`),
 			FeatureUses: pqtypeNull(spJSON),
 		}},
 		&mockStatusEncounterProvider{err: errors.New("no encounter")},

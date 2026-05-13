@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
-
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -82,7 +81,7 @@ func TestService_ActivateRage_DropsConcentration(t *testing.T) {
 			ID:      charID,
 			Classes: json.RawMessage(`[{"class":"Barbarian","level":5}]`),
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"rage":3}`),
+				RawMessage: json.RawMessage(`{"rage":{"current":3,"max":3,"recharge":"long"}}`),
 				Valid:      true,
 			},
 		}, nil
@@ -497,7 +496,7 @@ func TestService_Attack_MonkHit_SurfacesStunningStrikePrompt(t *testing.T) {
 			EquippedMainHand: sql.NullString{String: "shortsword", Valid: true},
 			ProficiencyBonus: 3,
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"ki":5}`),
+				RawMessage: json.RawMessage(`{"ki":{"current":5,"max":5,"recharge":"long"}}`),
 				Valid:      true,
 			},
 		}, nil
@@ -574,7 +573,7 @@ func TestService_Attack_MonkOutOfKi_NoStunningStrikePrompt(t *testing.T) {
 			EquippedMainHand: sql.NullString{String: "shortsword", Valid: true},
 			ProficiencyBonus: 3,
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"ki":0}`),
+				RawMessage: json.RawMessage(`{"ki":{"current":0,"max":0,"recharge":"long"}}`),
 				Valid:      true,
 			},
 		}, nil

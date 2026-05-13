@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -18,7 +19,7 @@ import (
 
 func makeFighterChar(charID uuid.UUID, fighterLevel int, surgeUses int) refdata.Character {
 	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Fighter", Level: fighterLevel}})
-	featureUsesJSON, _ := json.Marshal(map[string]int{FeatureKeyActionSurge: surgeUses})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{FeatureKeyActionSurge: {Current: surgeUses, Max: surgeUses, Recharge: "long"}})
 	return refdata.Character{
 		ID:               charID,
 		Name:             "Kael",
@@ -519,8 +520,8 @@ func TestActionSurge_DoesNotResetBonusOrReaction(t *testing.T) {
 	turn := refdata.Turn{
 		ID:               uuid.New(),
 		ActionUsed:       true,
-		BonusActionUsed:  true,  // already used
-		ReactionUsed:     true,  // already used
+		BonusActionUsed:  true, // already used
+		ReactionUsed:     true, // already used
 		AttacksRemaining: 0,
 		ActionSurged:     false,
 	}

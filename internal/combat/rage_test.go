@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
-
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -144,9 +143,9 @@ func TestShouldRageEndOnTurnEnd(t *testing.T) {
 
 func TestShouldRageEndOnTurnStart(t *testing.T) {
 	tests := []struct {
-		name   string
-		c      refdata.Combatant
-		want   bool
+		name string
+		c    refdata.Combatant
+		want bool
 	}{
 		{"not raging", refdata.Combatant{IsRaging: false}, false},
 		{"rounds remaining", refdata.Combatant{
@@ -276,7 +275,7 @@ func TestService_ActivateRage_Success(t *testing.T) {
 			ID:      charID,
 			Classes: json.RawMessage(`[{"class":"Barbarian","level":5}]`),
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"rage":3}`),
+				RawMessage: json.RawMessage(`{"rage":{"current":3,"max":3,"recharge":"long"}}`),
 				Valid:      true,
 			},
 			EquippedArmor: sql.NullString{String: "chain-mail", Valid: true},
@@ -345,7 +344,7 @@ func TestService_ActivateRage_AlreadyRaging(t *testing.T) {
 			ID:      charID,
 			Classes: json.RawMessage(`[{"class":"Barbarian","level":5}]`),
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"rage":3}`),
+				RawMessage: json.RawMessage(`{"rage":{"current":3,"max":3,"recharge":"long"}}`),
 				Valid:      true,
 			},
 		}, nil
@@ -373,7 +372,7 @@ func TestService_ActivateRage_HeavyArmor(t *testing.T) {
 			Classes:       json.RawMessage(`[{"class":"Barbarian","level":5}]`),
 			EquippedArmor: sql.NullString{String: "plate", Valid: true},
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"rage":3}`),
+				RawMessage: json.RawMessage(`{"rage":{"current":3,"max":3,"recharge":"long"}}`),
 				Valid:      true,
 			},
 		}, nil
@@ -402,7 +401,7 @@ func TestService_ActivateRage_NoRagesLeft(t *testing.T) {
 			ID:      charID,
 			Classes: json.RawMessage(`[{"class":"Barbarian","level":5}]`),
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"rage":0}`),
+				RawMessage: json.RawMessage(`{"rage":{"current":0,"max":0,"recharge":"long"}}`),
 				Valid:      true,
 			},
 		}, nil
@@ -514,7 +513,7 @@ func TestService_ActivateRage_UnlimitedLevel20(t *testing.T) {
 			ID:      charID,
 			Classes: json.RawMessage(`[{"class":"Barbarian","level":20}]`),
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"rage":0}`),
+				RawMessage: json.RawMessage(`{"rage":{"current":0,"max":0,"recharge":"long"}}`),
 				Valid:      true,
 			},
 		}, nil
@@ -684,7 +683,7 @@ func TestService_ActivateRage_NoArmorEquipped(t *testing.T) {
 			ID:      charID,
 			Classes: json.RawMessage(`[{"class":"Barbarian","level":5}]`),
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"rage":3}`),
+				RawMessage: json.RawMessage(`{"rage":{"current":3,"max":3,"recharge":"long"}}`),
 				Valid:      true,
 			},
 			// No armor equipped
@@ -754,7 +753,7 @@ func TestService_ActivateRage_UpdateCombatantRageError(t *testing.T) {
 			ID:      charID,
 			Classes: json.RawMessage(`[{"class":"Barbarian","level":5}]`),
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"rage":3}`),
+				RawMessage: json.RawMessage(`{"rage":{"current":3,"max":3,"recharge":"long"}}`),
 				Valid:      true,
 			},
 		}, nil
@@ -789,7 +788,7 @@ func TestService_ActivateRage_UpdateTurnError(t *testing.T) {
 			ID:      charID,
 			Classes: json.RawMessage(`[{"class":"Barbarian","level":5}]`),
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"rage":3}`),
+				RawMessage: json.RawMessage(`{"rage":{"current":3,"max":3,"recharge":"long"}}`),
 				Valid:      true,
 			},
 		}, nil
@@ -821,7 +820,7 @@ func TestService_ActivateRage_UpdateFeatureUsesError(t *testing.T) {
 			ID:      charID,
 			Classes: json.RawMessage(`[{"class":"Barbarian","level":5}]`),
 			FeatureUses: pqtype.NullRawMessage{
-				RawMessage: json.RawMessage(`{"rage":3}`),
+				RawMessage: json.RawMessage(`{"rage":{"current":3,"max":3,"recharge":"long"}}`),
 				Valid:      true,
 			},
 		}, nil
@@ -910,8 +909,8 @@ func TestRageUsesPerDay(t *testing.T) {
 
 func TestRageFeature_DamageScaling(t *testing.T) {
 	tests := []struct {
-		level    int
-		wantMod  int
+		level   int
+		wantMod int
 	}{
 		{1, 2}, {8, 2}, {9, 3}, {15, 3}, {16, 4}, {20, 4},
 	}

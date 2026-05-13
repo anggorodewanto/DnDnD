@@ -9,7 +9,6 @@ import (
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -292,7 +291,7 @@ func TestLayOnHands_HealsFromZero_ResetsDeathSaves(t *testing.T) {
 		return refdata.Character{
 			ID:          charID,
 			Classes:     json.RawMessage(`[{"class":"Paladin","level":3}]`),
-			FeatureUses: nullRaw(`{"lay-on-hands":15}`),
+			FeatureUses: nullRaw(`{"lay-on-hands":{"current":15,"max":15,"recharge":"long"}}`),
 		}, nil
 	}
 	ms.updateCharacterFeatureUsesFn = func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error) {

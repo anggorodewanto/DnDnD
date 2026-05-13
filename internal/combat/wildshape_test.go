@@ -11,7 +11,6 @@ import (
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -250,8 +249,8 @@ func TestParseCR(t *testing.T) {
 		{"2", 2},
 		{"3", 3},
 		{"10", 10},
-		{"1/0", 0},  // zero denominator edge case
-		{"abc", 0},  // non-numeric string
+		{"1/0", 0}, // zero denominator edge case
+		{"abc", 0}, // non-numeric string
 	}
 	for _, tt := range tests {
 		t.Run(tt.cr, func(t *testing.T) {
@@ -278,7 +277,7 @@ func makeWolfBeast() refdata.Creature {
 }
 
 func makeDruidCharacter(charID uuid.UUID, level int, wildShapeUses int) refdata.Character {
-	featureUses := fmt.Sprintf(`{"wild_shape":%d}`, wildShapeUses)
+	featureUses := fmt.Sprintf(`{"wild_shape":{"current":%d,"max":2,"recharge":"short"}}`, wildShapeUses)
 	return refdata.Character{
 		ID:            charID,
 		Name:          "Elara",
@@ -661,14 +660,14 @@ func TestParseWildShapeUses(t *testing.T) {
 	// Normal case
 	char := refdata.Character{
 		FeatureUses: pqtype.NullRawMessage{
-			RawMessage: json.RawMessage(`{"wild_shape":2}`),
+			RawMessage: json.RawMessage(`{"wild_shape":{"current":2,"max":2,"recharge":"long"}}`),
 			Valid:      true,
 		},
 	}
 	uses, remaining, err := ParseFeatureUses(char, FeatureKeyWildShape)
 	require.NoError(t, err)
 	assert.Equal(t, 2, remaining)
-	assert.Equal(t, 2, uses["wild_shape"])
+	assert.Equal(t, 2, uses["wild_shape"].Current)
 
 	// No feature uses
 	char = refdata.Character{}

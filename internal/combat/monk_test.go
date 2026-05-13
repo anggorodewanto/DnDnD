@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
@@ -1033,14 +1034,14 @@ func TestServiceMartialArtsBonusAttack_UpdateTurnError(t *testing.T) {
 // TDD Cycle 1: parseKiUses extracts ki points from feature_uses
 
 func TestParseKiUses_WithKiPoints(t *testing.T) {
-	featureUsesJSON := json.RawMessage(`{"ki":3}`)
+	featureUsesJSON := json.RawMessage(`{"ki":{"current":3,"max":3,"recharge":"long"}}`)
 	char := refdata.Character{
 		FeatureUses: pqtype.NullRawMessage{RawMessage: featureUsesJSON, Valid: true},
 	}
 	uses, remaining, err := ParseFeatureUses(char, FeatureKeyKi)
 	require.NoError(t, err)
 	assert.Equal(t, 3, remaining)
-	assert.Equal(t, 3, uses["ki"])
+	assert.Equal(t, 3, uses["ki"].Current)
 }
 
 func TestParseKiUses_Empty(t *testing.T) {
@@ -1086,7 +1087,7 @@ func makeMonkCharacterWithKi(str, dex, wis int, monkLevel int, kiPoints int) ref
 	scoresJSON, _ := json.Marshal(scores)
 	classes := []CharacterClass{{Class: "Monk", Level: monkLevel}}
 	classesJSON, _ := json.Marshal(classes)
-	featureUses := map[string]int{"ki": kiPoints}
+	featureUses := map[string]character.FeatureUse{"ki": {Current: kiPoints, Max: kiPoints, Recharge: "long"}}
 	featureUsesJSON, _ := json.Marshal(featureUses)
 	return refdata.Character{
 		ID:               uuid.New(),
@@ -1154,9 +1155,9 @@ func TestServiceFlurryOfBlows_HappyPath(t *testing.T) {
 	assert.Len(t, result.Attacks, 2, "flurry of blows should make 2 attacks")
 	assert.Equal(t, 4, result.KiRemaining, "should deduct 1 ki point")
 	// Verify ki was persisted
-	var uses map[string]int
+	var uses map[string]character.FeatureUse
 	require.NoError(t, json.Unmarshal(updatedFeatureUses.RawMessage, &uses))
-	assert.Equal(t, 4, uses["ki"])
+	assert.Equal(t, 4, uses["ki"].Current)
 }
 
 func TestServiceFlurryOfBlows_BonusActionSpent(t *testing.T) {
@@ -1581,7 +1582,7 @@ func TestServiceStunningStrike_NotMonk(t *testing.T) {
 	scores := AbilityScores{Str: 16, Dex: 10, Con: 10, Int: 10, Wis: 10, Cha: 10}
 	scoresJSON, _ := json.Marshal(scores)
 	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Fighter", Level: 5}})
-	featureUsesJSON, _ := json.Marshal(map[string]int{"ki": 5})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{"ki": {Current: 5, Max: 5, Recharge: "long"}})
 
 	ms := defaultMockStore()
 	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -1639,9 +1640,9 @@ func TestServiceStunningStrike_CreatureWithConSaveBonus(t *testing.T) {
 	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
 		savesJSON, _ := json.Marshal(map[string]int{"con": 5})
 		return refdata.Creature{
-			ID:             "ogre",
-			AbilityScores:  json.RawMessage(`{"str":19,"dex":8,"con":16,"int":5,"wis":7,"cha":7}`),
-			SavingThrows:   pqtype.NullRawMessage{RawMessage: savesJSON, Valid: true},
+			ID:            "ogre",
+			AbilityScores: json.RawMessage(`{"str":19,"dex":8,"con":16,"int":5,"wis":7,"cha":7}`),
+			SavingThrows:  pqtype.NullRawMessage{RawMessage: savesJSON, Valid: true},
 		}, nil
 	}
 
@@ -1700,7 +1701,7 @@ func TestServiceFlurryOfBlows_BadAbilityScores(t *testing.T) {
 	ctx := context.Background()
 	charID := uuid.New()
 	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Monk", Level: 5}})
-	featureUsesJSON, _ := json.Marshal(map[string]int{"ki": 5})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{"ki": {Current: 5, Max: 5, Recharge: "long"}})
 
 	ms := defaultMockStore()
 	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -1907,7 +1908,7 @@ func TestServiceStunningStrike_BadAbilityScores(t *testing.T) {
 	ctx := context.Background()
 	charID := uuid.New()
 	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Monk", Level: 5}})
-	featureUsesJSON, _ := json.Marshal(map[string]int{"ki": 5})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{"ki": {Current: 5, Max: 5, Recharge: "long"}})
 
 	ms := defaultMockStore()
 	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -2138,7 +2139,7 @@ func TestServiceFlurryOfBlows_NotAMonk(t *testing.T) {
 	scores := AbilityScores{Str: 16, Dex: 10, Con: 10, Int: 10, Wis: 10, Cha: 10}
 	scoresJSON, _ := json.Marshal(scores)
 	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Fighter", Level: 5}})
-	featureUsesJSON, _ := json.Marshal(map[string]int{"ki": 5})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{"ki": {Current: 5, Max: 5, Recharge: "long"}})
 
 	ms := defaultMockStore()
 	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -141,7 +142,7 @@ type fontOfMagicContext struct {
 	caster        refdata.Combatant
 	char          refdata.Character
 	sorcLevel     int
-	featureUses   map[string]int
+	featureUses   map[string]character.FeatureUse
 	currentPoints int
 }
 

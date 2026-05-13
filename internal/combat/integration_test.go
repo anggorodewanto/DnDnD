@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
@@ -120,11 +121,11 @@ func TestIntegration_EncounterCRUD(t *testing.T) {
 
 	// Create
 	enc, err := queries.CreateEncounter(ctx, refdata.CreateEncounterParams{
-		CampaignID: campaignID,
-		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
-		Name:       "Goblin Ambush",
+		CampaignID:  campaignID,
+		MapID:       uuid.NullUUID{UUID: mapID, Valid: true},
+		Name:        "Goblin Ambush",
 		DisplayName: sql.NullString{String: "The Dark Forest", Valid: true},
-		Status:     "preparing",
+		Status:      "preparing",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "Goblin Ambush", enc.Name)
@@ -808,7 +809,7 @@ func TestIntegration_ConditionAutoExpiration(t *testing.T) {
 func createTestBardCharacter(t *testing.T, db *sql.DB, campaignID uuid.UUID) uuid.UUID {
 	t.Helper()
 	id := uuid.New()
-	featureUses, _ := json.Marshal(map[string]int{"bardic-inspiration": 3})
+	featureUses, _ := json.Marshal(map[string]character.FeatureUse{"bardic-inspiration": {Current: 3, Max: 3, Recharge: "long"}})
 	_, err := db.Exec(`INSERT INTO characters (id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, ac, speed_ft, proficiency_bonus, hit_dice_remaining, languages, feature_uses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 		id, campaignID, "Thorn", "half-elf", `[{"class":"Bard","level":5}]`, 5,
 		`{"str":10,"dex":14,"con":12,"int":10,"wis":12,"cha":16}`,
@@ -936,10 +937,10 @@ func TestIntegration_BardicInspirationGrantFlow(t *testing.T) {
 	// Verify bard's feature_uses decremented
 	fetchedChar, err := f.queries.GetCharacter(ctx, f.bardCharID)
 	require.NoError(t, err)
-	var featureUses map[string]int
+	var featureUses map[string]character.FeatureUse
 	err = json.Unmarshal(fetchedChar.FeatureUses.RawMessage, &featureUses)
 	require.NoError(t, err)
-	assert.Equal(t, 2, featureUses["bardic-inspiration"])
+	assert.Equal(t, 2, featureUses["bardic-inspiration"].Current)
 
 	// Verify turn had bonus action consumed
 	fetchedTurn, err := f.queries.GetTurn(ctx, f.turn.ID)

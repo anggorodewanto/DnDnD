@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -58,9 +59,9 @@ func TestDeductFeaturePool(t *testing.T) {
 		svc := NewService(ms)
 		char := refdata.Character{
 			ID:          charID,
-			FeatureUses: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"lay-on-hands": 25}`), Valid: true},
+			FeatureUses: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"lay-on-hands":{"current":25,"max":25,"recharge":"long"}}`), Valid: true},
 		}
-		featureUses := map[string]int{"lay-on-hands": 25}
+		featureUses := map[string]character.FeatureUse{"lay-on-hands": {Current: 25, Max: 25, Recharge: "long"}}
 
 		newRemaining, err := svc.DeductFeaturePool(ctx, char, FeatureKeyLayOnHands, featureUses, 25, 10)
 		require.NoError(t, err)
@@ -72,9 +73,9 @@ func TestDeductFeaturePool(t *testing.T) {
 		svc := NewService(ms)
 		char := refdata.Character{
 			ID:          charID,
-			FeatureUses: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"lay-on-hands": 5}`), Valid: true},
+			FeatureUses: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"lay-on-hands":{"current":5,"max":25,"recharge":"long"}}`), Valid: true},
 		}
-		featureUses := map[string]int{"lay-on-hands": 5}
+		featureUses := map[string]character.FeatureUse{"lay-on-hands": {Current: 5, Max: 25, Recharge: "long"}}
 
 		_, err := svc.DeductFeaturePool(ctx, char, FeatureKeyLayOnHands, featureUses, 5, 10)
 		assert.Error(t, err)
@@ -95,7 +96,9 @@ func layOnHandsTestSetup() (uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, *mockSto
 
 func makePaladinChar(charID uuid.UUID, paladinLevel int, poolRemaining int) refdata.Character {
 	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Paladin", Level: paladinLevel}})
-	featureUsesJSON, _ := json.Marshal(map[string]int{FeatureKeyLayOnHands: poolRemaining})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{
+		FeatureKeyLayOnHands: {Current: poolRemaining, Max: 5 * paladinLevel, Recharge: "long"},
+	})
 	return refdata.Character{
 		ID:               charID,
 		Name:             "Thorn",
@@ -495,8 +498,8 @@ func TestLayOnHands_HPCappedAtMax(t *testing.T) {
 
 	result, err := svc.LayOnHands(ctx, cmd)
 	require.NoError(t, err)
-	assert.Equal(t, int32(30), result.HPAfter)    // capped at max
-	assert.Equal(t, int32(2), result.HPRestored)   // only healed 2
+	assert.Equal(t, int32(30), result.HPAfter)   // capped at max
+	assert.Equal(t, int32(2), result.HPRestored) // only healed 2
 }
 
 // TDD Cycle 8: Cure poison

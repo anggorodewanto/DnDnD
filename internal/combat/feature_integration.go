@@ -22,16 +22,20 @@ const (
 	FeatureKeySorceryPoints     = "sorcery-points"
 )
 
-// ParseFeatureUses extracts the feature_uses map and a named feature's remaining count.
-func ParseFeatureUses(char refdata.Character, featureKey string) (map[string]int, int, error) {
-	featureUses := make(map[string]int)
-	if char.FeatureUses.Valid && len(char.FeatureUses.RawMessage) > 0 {
-		if err := json.Unmarshal(char.FeatureUses.RawMessage, &featureUses); err != nil {
-			return nil, 0, fmt.Errorf("parsing feature_uses: %w", err)
-		}
+// ParseFeatureUses extracts the canonical feature_uses map (keyed by feature
+// name, valued by character.FeatureUse) and the named feature's remaining
+// Current count. Unifies the previous flat int shape with rest/dashboard's
+// {Current, Max, Recharge} struct so combat-written rows can be recharged on
+// rest and dashboard-written rows can be decremented by combat (SR-009).
+func ParseFeatureUses(char refdata.Character, featureKey string) (map[string]character.FeatureUse, int, error) {
+	featureUses := make(map[string]character.FeatureUse)
+	if !char.FeatureUses.Valid || len(char.FeatureUses.RawMessage) == 0 {
+		return featureUses, 0, nil
 	}
-	remaining, _ := featureUses[featureKey]
-	return featureUses, remaining, nil
+	if err := json.Unmarshal(char.FeatureUses.RawMessage, &featureUses); err != nil {
+		return nil, 0, fmt.Errorf("parsing feature_uses: %w", err)
+	}
+	return featureUses, featureUses[featureKey].Current, nil
 }
 
 // ClassLevelFromJSON returns the level for the named class from raw JSON.
@@ -47,16 +51,20 @@ func ClassLevelFromJSON(classesJSON []byte, className string) int {
 }
 
 // DeductFeaturePool deducts a variable amount from a feature's pool, persists, and returns the new remaining value.
-func (s *Service) DeductFeaturePool(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]int, current int, amount int) (int, error) {
+func (s *Service) DeductFeaturePool(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]character.FeatureUse, current int, amount int) (int, error) {
 	if amount > current {
 		return 0, fmt.Errorf("insufficient %s pool: need %d, have %d", featureKey, amount, current)
 	}
 	return s.SetFeaturePool(ctx, char, featureKey, featureUses, current-amount)
 }
 
-// SetFeaturePool sets a feature's pool to an absolute value, persists, and returns the new value.
-func (s *Service) SetFeaturePool(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]int, value int) (int, error) {
-	featureUses[featureKey] = value
+// SetFeaturePool sets a feature's Current pool to an absolute value, preserves
+// the row's Max + Recharge metadata, persists the canonical shape, and returns
+// the new Current value.
+func (s *Service) SetFeaturePool(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]character.FeatureUse, value int) (int, error) {
+	fu := featureUses[featureKey]
+	fu.Current = value
+	featureUses[featureKey] = fu
 	featureUsesJSON, err := json.Marshal(featureUses)
 	if err != nil {
 		return 0, fmt.Errorf("marshaling feature_uses: %w", err)
@@ -71,7 +79,7 @@ func (s *Service) SetFeaturePool(ctx context.Context, char refdata.Character, fe
 }
 
 // DeductFeatureUse decrements a feature's remaining uses by 1, persists, and returns the new count.
-func (s *Service) DeductFeatureUse(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]int, current int) (int, error) {
+func (s *Service) DeductFeatureUse(ctx context.Context, char refdata.Character, featureKey string, featureUses map[string]character.FeatureUse, current int) (int, error) {
 	return s.DeductFeaturePool(ctx, char, featureKey, featureUses, current, 1)
 }
 

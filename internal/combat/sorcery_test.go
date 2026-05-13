@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,9 +30,7 @@ func makeSorcererCharacter(id uuid.UUID, sorcLevel int, sorceryPoints int) refda
 		Str: 8, Dex: 14, Con: 12, Int: 10, Wis: 10, Cha: 18,
 	})
 	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Sorcerer", Level: sorcLevel}})
-	featureUsesJSON, _ := json.Marshal(map[string]int{
-		FeatureKeySorceryPoints: sorceryPoints,
-	})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{FeatureKeySorceryPoints: {Current: sorceryPoints, Max: sorceryPoints, Recharge: "long"}})
 	return refdata.Character{
 		ID:               id,
 		Name:             "Elara",
@@ -70,8 +69,8 @@ func TestSorceryPointCost(t *testing.T) {
 		{"heightened", 3, 3},
 		{"quickened", 3, 2},
 		{"subtle", 3, 1},
-		{"twinned", 3, 3},   // spell level
-		{"twinned", 0, 1},   // cantrip costs 1
+		{"twinned", 3, 3}, // spell level
+		{"twinned", 0, 1}, // cantrip costs 1
 		{"twinned", 1, 1},
 		{"twinned", 5, 5},
 	}
@@ -196,9 +195,9 @@ func TestFontOfMagic_SlotToPoints(t *testing.T) {
 
 	// Verify feature uses were updated
 	require.True(t, savedFeatureUses.Valid)
-	var uses map[string]int
+	var uses map[string]character.FeatureUse
 	require.NoError(t, json.Unmarshal(savedFeatureUses.RawMessage, &uses))
-	assert.Equal(t, 5, uses[FeatureKeySorceryPoints])
+	assert.Equal(t, 5, uses[FeatureKeySorceryPoints].Current)
 
 	// Verify slot was deducted
 	require.True(t, savedSlots.Valid)
@@ -305,8 +304,8 @@ func TestFontOfMagic_PointsToSlot(t *testing.T) {
 
 	svc := NewService(store)
 	result, err := svc.FontOfMagicCreateSlot(context.Background(), FontOfMagicCommand{
-		CasterID:       caster.ID,
-		Turn:           refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
 		CreateSlotLevel: 3, // costs 5 SP
 	})
 
@@ -316,9 +315,9 @@ func TestFontOfMagic_PointsToSlot(t *testing.T) {
 
 	// Verify feature uses were updated
 	require.True(t, savedFeatureUses.Valid)
-	var uses map[string]int
+	var uses map[string]character.FeatureUse
 	require.NoError(t, json.Unmarshal(savedFeatureUses.RawMessage, &uses))
-	assert.Equal(t, 0, uses[FeatureKeySorceryPoints])
+	assert.Equal(t, 0, uses[FeatureKeySorceryPoints].Current)
 
 	// Verify slot was added
 	require.True(t, savedSlots.Valid)
@@ -342,8 +341,8 @@ func TestFontOfMagic_PointsToSlot_InsufficientPoints(t *testing.T) {
 
 	svc := NewService(store)
 	_, err := svc.FontOfMagicCreateSlot(context.Background(), FontOfMagicCommand{
-		CasterID:       caster.ID,
-		Turn:           refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
 		CreateSlotLevel: 2, // costs 3 SP, but only 2 available
 	})
 
@@ -366,8 +365,8 @@ func TestFontOfMagic_PointsToSlot_Above5thLevel(t *testing.T) {
 
 	svc := NewService(store)
 	_, err := svc.FontOfMagicCreateSlot(context.Background(), FontOfMagicCommand{
-		CasterID:       caster.ID,
-		Turn:           refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
 		CreateSlotLevel: 6,
 	})
 
@@ -474,9 +473,9 @@ func TestCast_WithMetamagic_DeductsSorceryPoints(t *testing.T) {
 
 	// Verify sorcery points were deducted
 	require.True(t, savedFeatureUses.Valid)
-	var uses map[string]int
+	var uses map[string]character.FeatureUse
 	require.NoError(t, json.Unmarshal(savedFeatureUses.RawMessage, &uses))
-	assert.Equal(t, 4, uses[FeatureKeySorceryPoints])
+	assert.Equal(t, 4, uses[FeatureKeySorceryPoints].Current)
 }
 
 // TDD Cycle 11: Cast with metamagic rejects insufficient points
@@ -672,7 +671,7 @@ func TestCast_NoMetamagic_NonSorcerer(t *testing.T) {
 func TestFontOfMagic_RequiresLevel2(t *testing.T) {
 	charID := uuid.New()
 	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Sorcerer", Level: 1}})
-	featureUsesJSON, _ := json.Marshal(map[string]int{FeatureKeySorceryPoints: 1})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{FeatureKeySorceryPoints: {Current: 1, Max: 1, Recharge: "long"}})
 	char := refdata.Character{
 		ID:          charID,
 		Name:        "NewSorc",
@@ -757,8 +756,8 @@ func TestFontOfMagic_CreateSlot_NPC(t *testing.T) {
 
 	svc := NewService(store)
 	_, err := svc.FontOfMagicCreateSlot(context.Background(), FontOfMagicCommand{
-		CasterID:       npc.ID,
-		Turn:           refdata.Turn{ID: uuid.New(), CombatantID: npc.ID},
+		CasterID:        npc.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: npc.ID},
 		CreateSlotLevel: 1,
 	})
 
@@ -782,8 +781,8 @@ func TestFontOfMagic_CreateSlot_BonusActionRequired(t *testing.T) {
 
 	svc := NewService(store)
 	_, err := svc.FontOfMagicCreateSlot(context.Background(), FontOfMagicCommand{
-		CasterID:       caster.ID,
-		Turn:           refdata.Turn{ID: uuid.New(), CombatantID: caster.ID, BonusActionUsed: true},
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: caster.ID, BonusActionUsed: true},
 		CreateSlotLevel: 1,
 	})
 
@@ -795,7 +794,7 @@ func TestFontOfMagic_CreateSlot_BonusActionRequired(t *testing.T) {
 func TestFontOfMagic_CreateSlot_RequiresLevel2(t *testing.T) {
 	charID := uuid.New()
 	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Sorcerer", Level: 1}})
-	featureUsesJSON, _ := json.Marshal(map[string]int{FeatureKeySorceryPoints: 2})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{FeatureKeySorceryPoints: {Current: 2, Max: 2, Recharge: "long"}})
 	char := refdata.Character{
 		ID:          charID,
 		Name:        "NewSorc",
@@ -816,8 +815,8 @@ func TestFontOfMagic_CreateSlot_RequiresLevel2(t *testing.T) {
 
 	svc := NewService(store)
 	_, err := svc.FontOfMagicCreateSlot(context.Background(), FontOfMagicCommand{
-		CasterID:       caster.ID,
-		Turn:           refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
 		CreateSlotLevel: 1,
 	})
 
@@ -834,7 +833,7 @@ func TestFontOfMagic_SlotToPoints_NoSlotAvailable(t *testing.T) {
 		"2": {Current: 3, Max: 3},
 	})
 	classesJSON, _ := json.Marshal([]CharacterClass{{Class: "Sorcerer", Level: 5}})
-	featureUsesJSON, _ := json.Marshal(map[string]int{FeatureKeySorceryPoints: 2})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{FeatureKeySorceryPoints: {Current: 2, Max: 2, Recharge: "long"}})
 	char := refdata.Character{
 		ID:          charID,
 		Name:        "Elara",

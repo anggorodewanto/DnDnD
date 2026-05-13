@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -198,7 +199,7 @@ func TestBuildResourceListWithoutBardicInspiration(t *testing.T) {
 func bardTestCharacter(bardLevel int, chaScore int, usesRemaining int) refdata.Character {
 	classes, _ := json.Marshal([]CharacterClass{{Class: "Bard", Level: bardLevel}})
 	scores, _ := json.Marshal(AbilityScores{Cha: chaScore, Str: 10, Dex: 10, Con: 10, Int: 10, Wis: 10})
-	featureUses, _ := json.Marshal(map[string]int{"bardic-inspiration": usesRemaining})
+	featureUses, _ := json.Marshal(map[string]character.FeatureUse{"bardic-inspiration": {Current: usesRemaining, Max: usesRemaining, Recharge: "long"}})
 	return refdata.Character{
 		ID:            uuid.New(),
 		Classes:       classes,
@@ -227,10 +228,10 @@ func TestGrantBardicInspiration_HappyPath(t *testing.T) {
 	}
 	store.updateCombatantBardicInspirationFn = func(ctx context.Context, arg refdata.UpdateCombatantBardicInspirationParams) (refdata.Combatant, error) {
 		return refdata.Combatant{
-			ID:                   targetID,
-			DisplayName:          "Aria",
-			BardicInspirationDie: arg.BardicInspirationDie,
-			BardicInspirationSource: arg.BardicInspirationSource,
+			ID:                         targetID,
+			DisplayName:                "Aria",
+			BardicInspirationDie:       arg.BardicInspirationDie,
+			BardicInspirationSource:    arg.BardicInspirationSource,
 			BardicInspirationGrantedAt: arg.BardicInspirationGrantedAt,
 		}, nil
 	}
@@ -496,10 +497,10 @@ func TestUseBardicInspiration_HappyPath(t *testing.T) {
 
 	result, err := svc.UseBardicInspiration(context.Background(), UseBardicInspirationCommand{
 		Combatant: refdata.Combatant{
-			ID:                      targetID,
-			DisplayName:             "Aria",
-			BardicInspirationDie:    sql.NullString{String: "d8", Valid: true},
-			BardicInspirationSource: sql.NullString{String: "Thorn", Valid: true},
+			ID:                         targetID,
+			DisplayName:                "Aria",
+			BardicInspirationDie:       sql.NullString{String: "d8", Valid: true},
+			BardicInspirationSource:    sql.NullString{String: "Thorn", Valid: true},
 			BardicInspirationGrantedAt: sql.NullTime{Time: time.Now(), Valid: true},
 		},
 		OriginalTotal: 14,
@@ -541,10 +542,10 @@ func TestUseBardicInspiration_PersistError(t *testing.T) {
 
 	_, err := svc.UseBardicInspiration(context.Background(), UseBardicInspirationCommand{
 		Combatant: refdata.Combatant{
-			ID:                      uuid.New(),
-			DisplayName:             "Aria",
-			BardicInspirationDie:    sql.NullString{String: "d6", Valid: true},
-			BardicInspirationSource: sql.NullString{String: "Thorn", Valid: true},
+			ID:                         uuid.New(),
+			DisplayName:                "Aria",
+			BardicInspirationDie:       sql.NullString{String: "d6", Valid: true},
+			BardicInspirationSource:    sql.NullString{String: "Thorn", Valid: true},
 			BardicInspirationGrantedAt: sql.NullTime{Time: time.Now(), Valid: true},
 		},
 		OriginalTotal: 10,
@@ -646,4 +647,3 @@ func TestSweepExpiredBardicInspirations_ClearsExpired(t *testing.T) {
 	require.Len(t, clearedIDs, 1, "exactly one combatant (the expired one) should be cleared")
 	assert.Equal(t, expiredID, clearedIDs[0])
 }
-

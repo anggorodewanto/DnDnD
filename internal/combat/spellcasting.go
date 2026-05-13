@@ -497,7 +497,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 
 	// 6e. Metamagic validation and sorcery point tracking
 	var metamagicCost int
-	var metamagicFeatureUses map[string]int
+	var metamagicFeatureUses map[string]character.FeatureUse
 	var metamagicCurrentPoints int
 	if len(cmd.Metamagic) > 0 {
 		metamagicFeatureUses, metamagicCurrentPoints, err = ParseFeatureUses(char, FeatureKeySorceryPoints)
