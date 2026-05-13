@@ -767,6 +767,11 @@ func (s *Service) advanceRound(ctx context.Context, encounterID uuid.UUID, round
 	if err := s.ResetZoneTriggersForRound(ctx, encounterID); err != nil {
 		return fmt.Errorf("resetting zone triggers at round %d%s: %w", roundNumber, suffix, err)
 	}
+	// SR-028: any DM-controlled hostile OA prompt the DM hasn't acted on
+	// is now stale (the hostile's reaction window has closed) — cancel
+	// each via the DM notifier so #dm-queue visibly forfeits the prompt
+	// instead of leaving it pending forever.
+	s.ForfeitPendingOAs(ctx, encounterID)
 	return nil
 }
 

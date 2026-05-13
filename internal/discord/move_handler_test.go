@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -1822,4 +1824,240 @@ func TestMoveHandler_HandleMoveConfirm_OASilentWhenChannelsUnset(t *testing.T) {
 	handler.HandleMoveConfirm(interaction, turnID, moverID, 4, 1, 10)
 
 	assert.Empty(t, sess.channelSends, "no OA prompt should fire without a channels provider")
+}
+
+// --- SR-028: DM-controlled hostile OA routing + forfeit recording ---
+
+// moveOANotifierStub captures dmqueue.Notifier.Post calls so move-handler
+// tests can assert SR-028 routing without spinning up a real notifier.
+type moveOANotifierStub struct {
+	mu     sync.Mutex
+	posts  []dmqueue.Event
+	postID string
+	err    error
+}
+
+func (m *moveOANotifierStub) Post(_ context.Context, e dmqueue.Event) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.posts = append(m.posts, e)
+	if m.err != nil {
+		return "", m.err
+	}
+	id := m.postID
+	if id == "" {
+		id = "stub-item-id"
+	}
+	return id, nil
+}
+
+// moveOARecorderStub captures the encounter + item ID a move-handler test
+// expects to be recorded via the SR-028 forfeit-sweep tracker.
+type moveOARecorderStub struct {
+	mu       sync.Mutex
+	recorded []moveOARecordedEntry
+}
+
+type moveOARecordedEntry struct {
+	EncounterID uuid.UUID
+	ItemID      string
+}
+
+func (r *moveOARecorderStub) RecordPendingOA(encounterID uuid.UUID, itemID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.recorded = append(r.recorded, moveOARecordedEntry{EncounterID: encounterID, ItemID: itemID})
+}
+
+// setupOATestHandler builds a /move handler with the standard OA hooks
+// already wired plus a DM-controlled hostile next to the mover. Caller
+// passes any extra wiring via setExtras (e.g. SetOpportunityAttackNotifier).
+func setupOATestHandler(t *testing.T, sess *mockMoveSession, hostileIsNpc bool) (handler *MoveHandler, encounterID, turnID, moverID, hostileID, campaignID uuid.UUID, channels *moveOAChannelStub) {
+	t.Helper()
+	encounterID = uuid.New()
+	turnID = uuid.New()
+	moverID = uuid.New()
+	hostileID = uuid.New()
+	campaignID = uuid.New()
+	mapID := uuid.New()
+
+	mover := refdata.Combatant{
+		ID: moverID, PositionCol: "C", PositionRow: 2, IsAlive: true, HpCurrent: 10, IsNpc: false,
+		DisplayName: "Aria",
+	}
+	hostile := refdata.Combatant{
+		ID: hostileID, PositionCol: "B", PositionRow: 2, IsAlive: true, HpCurrent: 10, IsNpc: hostileIsNpc,
+		DisplayName: "Hostile",
+	}
+
+	combatSvc := &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{ID: encounterID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}, CampaignID: campaignID}, nil
+		},
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+			return mover, nil
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{mover, hostile}, nil
+		},
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
+	}
+	mapProv := &mockMoveMapProvider{
+		getByID: func(_ context.Context, _ uuid.UUID) (refdata.Map, error) {
+			return refdata.Map{ID: mapID, WidthSquares: 5, HeightSquares: 5, TiledJson: tiledJSON5x5()}, nil
+		},
+	}
+	turnProv := &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: moverID, MovementRemainingFt: 30}, nil
+		},
+		updateTurnActions: func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{}, nil
+		},
+	}
+	encProv := &mockMoveEncounterProvider{
+		activeEncounterForUser: func(_ context.Context, _, _ string) (uuid.UUID, error) { return encounterID, nil },
+	}
+
+	handler = NewMoveHandler(sess, combatSvc, mapProv, turnProv, encProv, nil)
+	channels = &moveOAChannelStub{channels: map[string]string{"your-turn": "your-turn-ch"}}
+	handler.SetOpportunityAttackHooks(
+		&moveOATurnsStub{turns: map[uuid.UUID]refdata.Turn{hostileID: {ReactionUsed: false}}},
+		&moveOACreatureStub{attacks: map[string][]combat.CreatureAttackEntry{}},
+		&moveOAPCReachStub{},
+		channels,
+	)
+	return handler, encounterID, turnID, moverID, hostileID, campaignID, channels
+}
+
+func TestMoveHandler_OARoutesToDMQueueForDMControlledHostile(t *testing.T) {
+	// PC mover at C2 leaves a DM-controlled hostile NPC at B2's reach.
+	// Spec (SR-028): the OA must surface in #dm-queue via the notifier,
+	// NOT in #your-turn — the DM owns the NPC's reaction, not the PC.
+	sess := &mockMoveSession{}
+	handler, encounterID, turnID, moverID, _, campaignID, _ := setupOATestHandler(t, sess, true)
+
+	notifier := &moveOANotifierStub{postID: "oa-item-42"}
+	recorder := &moveOARecorderStub{}
+	handler.SetOpportunityAttackNotifier(notifier, recorder)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild-sr028",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirm(interaction, turnID, moverID, 4, 1, 10)
+
+	// One notifier post; no #your-turn channel send.
+	require.Len(t, notifier.posts, 1, "expected DM-controlled OA to route through notifier")
+	post := notifier.posts[0]
+	assert.Equal(t, dmqueue.KindOpportunityAttack, post.Kind)
+	assert.Equal(t, "Hostile", post.PlayerName)
+	assert.Contains(t, post.Summary, "Aria")
+	assert.Contains(t, post.Summary, "C2", "summary should embed exit tile label")
+	assert.Equal(t, "guild-sr028", post.GuildID)
+	assert.Equal(t, campaignID.String(), post.CampaignID)
+	assert.Empty(t, sess.channelSends, "DM-controlled OA must NOT post to #your-turn")
+
+	// Recorder receives the encounter+itemID so the forfeit sweep can find it.
+	require.Len(t, recorder.recorded, 1)
+	assert.Equal(t, encounterID, recorder.recorded[0].EncounterID)
+	assert.Equal(t, "oa-item-42", recorder.recorded[0].ItemID)
+}
+
+func TestMoveHandler_OAStillPostsToYourTurnForPCHostile(t *testing.T) {
+	// Regression guard: when the OA-triggering hostile is a PC
+	// (IsNpc=false), the prompt must keep flowing to #your-turn so the
+	// player owning that PC can react — the SR-028 dm-queue branch
+	// applies only to DM-controlled (NPC) hostiles. Mover here is an
+	// NPC so the PC hostile is the "opposite faction" required by
+	// DetectOpportunityAttacks.
+	sess := &mockMoveSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	moverID := uuid.New()
+	hostileID := uuid.New()
+	mapID := uuid.New()
+
+	mover := refdata.Combatant{
+		ID: moverID, PositionCol: "C", PositionRow: 2, IsAlive: true, HpCurrent: 10, IsNpc: true,
+		DisplayName: "Goblin",
+	}
+	hostile := refdata.Combatant{
+		ID: hostileID, PositionCol: "B", PositionRow: 2, IsAlive: true, HpCurrent: 10, IsNpc: false,
+		DisplayName: "Aria",
+	}
+	combatSvc := &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{ID: encounterID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}, CampaignID: uuid.New()}, nil
+		},
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+			return mover, nil
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{mover, hostile}, nil
+		},
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
+	}
+	mapProv := &mockMoveMapProvider{
+		getByID: func(_ context.Context, _ uuid.UUID) (refdata.Map, error) {
+			return refdata.Map{ID: mapID, WidthSquares: 5, HeightSquares: 5, TiledJson: tiledJSON5x5()}, nil
+		},
+	}
+	turnProv := &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: moverID, MovementRemainingFt: 30}, nil
+		},
+		updateTurnActions: func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{}, nil
+		},
+	}
+	encProv := &mockMoveEncounterProvider{
+		activeEncounterForUser: func(_ context.Context, _, _ string) (uuid.UUID, error) { return encounterID, nil },
+	}
+	handler := NewMoveHandler(sess, combatSvc, mapProv, turnProv, encProv, nil)
+	handler.SetOpportunityAttackHooks(
+		&moveOATurnsStub{turns: map[uuid.UUID]refdata.Turn{hostileID: {ReactionUsed: false}}},
+		&moveOACreatureStub{attacks: map[string][]combat.CreatureAttackEntry{}},
+		&moveOAPCReachStub{},
+		&moveOAChannelStub{channels: map[string]string{"your-turn": "your-turn-ch"}},
+	)
+	notifier := &moveOANotifierStub{}
+	recorder := &moveOARecorderStub{}
+	handler.SetOpportunityAttackNotifier(notifier, recorder)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild-sr028",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirm(interaction, turnID, moverID, 4, 1, 10)
+
+	require.Len(t, sess.channelSends, 1, "expected #your-turn prompt for PC-controlled hostile")
+	assert.Equal(t, "your-turn-ch", sess.channelSends[0].ChannelID)
+	assert.Empty(t, notifier.posts, "PC-controlled hostile must NOT route to dm-queue")
+	assert.Empty(t, recorder.recorded, "recorder should only receive DM-controlled OAs")
+}
+
+func TestMoveHandler_OAFallsBackToYourTurnWhenNotifierUnwired(t *testing.T) {
+	// Even for a DM-controlled hostile, if the notifier isn't wired the
+	// handler must keep using the legacy #your-turn behavior so the OA
+	// surface is never silently dropped.
+	sess := &mockMoveSession{}
+	handler, _, turnID, moverID, _, _, _ := setupOATestHandler(t, sess, true)
+	// Notably: NO SetOpportunityAttackNotifier call here.
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild-sr028",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleMoveConfirm(interaction, turnID, moverID, 4, 1, 10)
+
+	require.Len(t, sess.channelSends, 1, "without notifier wiring, DM-controlled OA falls back to #your-turn")
+	assert.Equal(t, "your-turn-ch", sess.channelSends[0].ChannelID)
 }

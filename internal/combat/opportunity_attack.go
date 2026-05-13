@@ -1,6 +1,7 @@
 package combat
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -229,6 +230,43 @@ func ParseCreatureAttacks(attacksJSON json.RawMessage) ([]CreatureAttackEntry, e
 		return nil, fmt.Errorf("parsing creature attacks: %w", err)
 	}
 	return attacks, nil
+}
+
+// RecordPendingOA appends a dm-queue itemID to the per-encounter pending-OA
+// tracker so the round-advance forfeiture sweep can cancel it later. Called by
+// the move handler after a successful Post to #dm-queue for a DM-controlled
+// hostile's opportunity attack (SR-028). Empty item IDs are silently ignored
+// (Notifier.Post returns "" when no #dm-queue is configured for the guild).
+func (s *Service) RecordPendingOA(encounterID uuid.UUID, itemID string) {
+	if itemID == "" {
+		return
+	}
+	s.pendingOAsMu.Lock()
+	defer s.pendingOAsMu.Unlock()
+	s.pendingOAsByEncounter[encounterID] = append(s.pendingOAsByEncounter[encounterID], itemID)
+}
+
+// ForfeitPendingOAs drains the per-encounter pending-OA tracker and cancels
+// each remaining dm-queue prompt via the wired DM notifier with a "forfeited
+// at end of round" reason. Called from advanceRound so a DM-controlled
+// hostile's unanswered OA visibly resolves (strikethrough) instead of
+// silently rotting in #dm-queue. Best-effort: a nil notifier or a per-item
+// Cancel error is swallowed (the in-memory slice is still drained so a flaky
+// Notifier never causes the same item to be retried indefinitely).
+func (s *Service) ForfeitPendingOAs(ctx context.Context, encounterID uuid.UUID) {
+	s.pendingOAsMu.Lock()
+	pending := s.pendingOAsByEncounter[encounterID]
+	delete(s.pendingOAsByEncounter, encounterID)
+	s.pendingOAsMu.Unlock()
+	if len(pending) == 0 {
+		return
+	}
+	if s.dmNotifier == nil {
+		return
+	}
+	for _, itemID := range pending {
+		_ = s.dmNotifier.Cancel(ctx, itemID, "forfeited at end of round")
+	}
 }
 
 // ParseCreatureAttacksWithSource parses a creature's Attacks JSONB into

@@ -363,6 +363,14 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			deps.campaignSettings,
 		)
 	}
+	// SR-028: route DM-controlled hostile OAs to #dm-queue and register
+	// the returned item IDs with combat.Service so the end-of-round
+	// forfeit sweep can cancel any prompt the DM didn't act on. Both
+	// notifier and combatService must be non-nil; otherwise /move falls
+	// back to the legacy #your-turn behavior for every hostile.
+	if deps.notifier != nil && deps.combatService != nil {
+		handlers.move.SetOpportunityAttackNotifier(deps.notifier, deps.combatService)
+	}
 	// D-56 / Phase 56: wire the drag lookup so /move applies the x2 drag
 	// movement cost when the mover is currently grappling another combatant.
 	if deps.combatService != nil {

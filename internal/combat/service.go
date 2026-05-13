@@ -319,17 +319,29 @@ type Service struct {
 	// harmless (best-effort GC on EndCombat).
 	usedEffectsMu sync.Mutex
 	usedEffects   map[uuid.UUID]map[uuid.UUID]map[string]bool
+	// SR-028 — in-memory tracker of pending OA dm-queue item IDs keyed by
+	// encounter ID. Move handler appends an entry after posting an OA prompt
+	// to #dm-queue for a DM-controlled hostile; advanceRound drains the
+	// per-encounter slice at end-of-round and calls dmNotifier.Cancel on
+	// each remaining item so the prompt is visibly forfeited rather than
+	// silently sitting around forever. No DB column — entries are dropped
+	// on EndCombat as a best-effort GC and never survive process restart
+	// (an orphaned prompt after a restart is harmless; the DM can still
+	// resolve/cancel from the dashboard).
+	pendingOAsMu          sync.Mutex
+	pendingOAsByEncounter map[uuid.UUID][]string
 }
 
 // NewService creates a new combat Service.
 func NewService(store Store) *Service {
 	return &Service{
-		store:             store,
-		summonedResources: NewSummonedTurnResources(),
-		ammoTracker:       NewAmmoSpentTracker(),
-		roller:            dice.NewRoller(nil),
-		hostilesPrompted:  make(map[uuid.UUID]bool),
-		usedEffects:       make(map[uuid.UUID]map[uuid.UUID]map[string]bool),
+		store:                 store,
+		summonedResources:     NewSummonedTurnResources(),
+		ammoTracker:           NewAmmoSpentTracker(),
+		roller:                dice.NewRoller(nil),
+		hostilesPrompted:      make(map[uuid.UUID]bool),
+		usedEffects:           make(map[uuid.UUID]map[uuid.UUID]map[string]bool),
+		pendingOAsByEncounter: make(map[uuid.UUID][]string),
 	}
 }
 
@@ -1238,8 +1250,8 @@ func FormatAmmoRecoverySummary(combatants []refdata.Combatant, spentByCombatant 
 		nameByID[c.ID] = c.DisplayName
 	}
 	type recoveredEntry struct {
-		who   string
-		ammo  []string
+		who  string
+		ammo []string
 	}
 	var entries []recoveredEntry
 	for combatantID, spentByAmmo := range spentByCombatant {

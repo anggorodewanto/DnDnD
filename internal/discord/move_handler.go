@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/logging"
 	"github.com/ab/dndnd/internal/pathfinding"
@@ -102,6 +103,21 @@ type MoveDragLookup interface {
 	CheckDragTargets(ctx context.Context, encounterID uuid.UUID, mover refdata.Combatant) (combat.DragCheckResult, error)
 }
 
+// MoveOANotifier is the minimal dmqueue.Notifier surface the move handler
+// uses to post DM-side opportunity-attack prompts for DM-controlled hostile
+// reactions. Defined locally so the discord package doesn't take an extra
+// dependency on dmqueue at compile time. (SR-028)
+type MoveOANotifier interface {
+	Post(ctx context.Context, e dmqueue.Event) (itemID string, err error)
+}
+
+// MoveOAReactionRecorder records the dm-queue item ID returned by a
+// successful OA prompt Post so the round-advance forfeit sweep can cancel
+// any prompts that remain pending at end of round. (SR-028)
+type MoveOAReactionRecorder interface {
+	RecordPendingOA(encounterID uuid.UUID, itemID string)
+}
+
 // MoveHandler handles the /move slash command.
 type MoveHandler struct {
 	session           Session
@@ -122,6 +138,15 @@ type MoveHandler struct {
 	oaCreatures MoveOACreatureLookup
 	oaPCReach   MoveOAPCWeaponReach
 	oaChannels  MoveChannelIDProvider
+	// SR-028: optional DM-side OA fan-out. When wired, DM-controlled
+	// hostile OAs route to #dm-queue via the notifier (and are tracked
+	// for the end-of-round forfeit sweep via the recorder) instead of
+	// the player-facing #your-turn channel. Both must be non-nil to
+	// enable the DM-side branch; if either is unset, DM-controlled
+	// hostiles fall back to the legacy #your-turn path (the pre-SR-028
+	// behavior).
+	oaNotifier MoveOANotifier
+	oaRecorder MoveOAReactionRecorder
 	// D-56 / Phase 56: drag-cost integration. When set, /move calls
 	// CheckDragTargets and doubles the displayed move cost via combat.DragMovementCost.
 	dragLookup MoveDragLookup
@@ -176,6 +201,19 @@ func (h *MoveHandler) SetOpportunityAttackHooks(
 	h.oaCreatures = creatures
 	h.oaPCReach = pcReach
 	h.oaChannels = channels
+}
+
+// SetOpportunityAttackNotifier wires the SR-028 DM-side OA fan-out. When
+// both notifier and recorder are non-nil, opportunity attacks triggered by
+// a DM-controlled hostile (combatant.IsNpc == true) post a
+// KindOpportunityAttack event to #dm-queue and register the returned
+// item ID with the recorder so the end-of-round forfeit sweep can cancel
+// it. PC-controlled hostiles (IsNpc == false) keep using the #your-turn
+// path established by SetOpportunityAttackHooks. Passing nil for either
+// argument disables the DM-side branch.
+func (h *MoveHandler) SetOpportunityAttackNotifier(n MoveOANotifier, r MoveOAReactionRecorder) {
+	h.oaNotifier = n
+	h.oaRecorder = r
 }
 
 // resolveSizeAndSpeed returns (sizeCategory, walkSpeedFt) for the combatant.
@@ -661,7 +699,7 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 	// commits. Best-effort: any failure is silent so a flaky channel post
 	// can never break the move flow.
 	if moverFetchOK {
-		h.fireOpportunityAttacks(ctx, moverCombatant, updatedTurn, destCol, destRow)
+		h.fireOpportunityAttacks(ctx, moverCombatant, updatedTurn, destCol, destRow, interaction.GuildID)
 	}
 
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
@@ -674,11 +712,18 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 }
 
 // fireOpportunityAttacks runs combat.DetectOpportunityAttacks against the
-// just-confirmed move and posts each prompt to the encounter's #your-turn
-// channel. Best-effort throughout: any failure aborts silently so OA wiring
-// can never block /move from completing.
-func (h *MoveHandler) fireOpportunityAttacks(ctx context.Context, mover refdata.Combatant, moverTurn refdata.Turn, destCol, destRow int) {
-	if h.oaChannels == nil {
+// just-confirmed move and routes each prompt to the appropriate surface:
+// PC-controlled hostiles get a #your-turn ping (med-24 / Phase 55 legacy
+// behavior); DM-controlled hostiles get a #dm-queue notification via the
+// SR-028 notifier wiring so the DM (not the PC who owns the reaction)
+// decides whether to spend the reaction. Best-effort throughout: any
+// failure aborts silently so OA wiring can never block /move from
+// completing. The guildID is threaded from the invoking interaction so
+// the dm-queue notifier can resolve the per-guild #dm-queue channel
+// without an extra DB round-trip.
+func (h *MoveHandler) fireOpportunityAttacks(ctx context.Context, mover refdata.Combatant, moverTurn refdata.Turn, destCol, destRow int, guildID string) {
+	// If neither surface is wired there's nothing to do.
+	if h.oaChannels == nil && h.oaNotifier == nil {
 		return
 	}
 
@@ -708,17 +753,80 @@ func (h *MoveHandler) fireOpportunityAttacks(ctx context.Context, mover refdata.
 		return
 	}
 
-	channelIDs, err := h.oaChannels.GetChannelIDs(ctx, moverTurn.EncounterID)
+	hostileByID := indexHostilesByID(allCombatants)
+	yourTurnCh := h.resolveYourTurnChannel(ctx, moverTurn.EncounterID)
+	campaignID := h.resolveCampaignIDForEncounter(ctx, moverTurn.EncounterID)
+
+	for _, trigger := range triggers {
+		hostile, ok := hostileByID[trigger.HostileID]
+		dmControlled := ok && hostile.IsNpc
+		if dmControlled && h.oaNotifier != nil {
+			h.postOAToDMQueue(ctx, moverTurn.EncounterID, trigger, guildID, campaignID)
+			continue
+		}
+		if yourTurnCh == "" {
+			continue
+		}
+		_, _ = h.session.ChannelMessageSend(yourTurnCh, combat.FormatOAPrompt(trigger))
+	}
+}
+
+// indexHostilesByID returns a map of combatantID → combatant for O(1)
+// lookups by trigger.HostileID inside fireOpportunityAttacks.
+func indexHostilesByID(all []refdata.Combatant) map[uuid.UUID]refdata.Combatant {
+	out := make(map[uuid.UUID]refdata.Combatant, len(all))
+	for _, c := range all {
+		out[c.ID] = c
+	}
+	return out
+}
+
+// resolveYourTurnChannel returns the encounter's #your-turn channel ID or
+// "" when the channels provider is unwired / errors / lacks a your-turn
+// mapping. nil-safe: an unwired oaChannels degrades to "" so the caller
+// can still fan DM-controlled hostiles to the notifier.
+func (h *MoveHandler) resolveYourTurnChannel(ctx context.Context, encounterID uuid.UUID) string {
+	if h.oaChannels == nil {
+		return ""
+	}
+	channelIDs, err := h.oaChannels.GetChannelIDs(ctx, encounterID)
+	if err != nil {
+		return ""
+	}
+	return channelIDs["your-turn"]
+}
+
+// resolveCampaignIDForEncounter returns the encounter's campaign_id as a
+// string, or "" on lookup failure. Used to populate the SR-028 dm-queue
+// event so the dashboard can scope items per campaign.
+func (h *MoveHandler) resolveCampaignIDForEncounter(ctx context.Context, encounterID uuid.UUID) string {
+	if h.combatService == nil {
+		return ""
+	}
+	enc, err := h.combatService.GetEncounter(ctx, encounterID)
+	if err != nil {
+		return ""
+	}
+	return enc.CampaignID.String()
+}
+
+// postOAToDMQueue builds a KindOpportunityAttack dmqueue.Event and posts
+// it via the wired notifier, then records the returned item ID with the
+// SR-028 forfeit-sweep recorder. Errors are intentionally swallowed —
+// the prompt is best-effort and must never block /move.
+func (h *MoveHandler) postOAToDMQueue(ctx context.Context, encounterID uuid.UUID, trigger combat.OATrigger, guildID, campaignID string) {
+	itemID, err := h.oaNotifier.Post(ctx, dmqueue.Event{
+		Kind:       dmqueue.KindOpportunityAttack,
+		PlayerName: trigger.HostileName,
+		Summary:    fmt.Sprintf("%s left reach at %s — react?", trigger.TargetName, trigger.ExitLabel),
+		GuildID:    guildID,
+		CampaignID: campaignID,
+	})
 	if err != nil {
 		return
 	}
-	yourTurnCh, ok := channelIDs["your-turn"]
-	if !ok || yourTurnCh == "" {
-		return
-	}
-
-	for _, trigger := range triggers {
-		_, _ = h.session.ChannelMessageSend(yourTurnCh, combat.FormatOAPrompt(trigger))
+	if h.oaRecorder != nil {
+		h.oaRecorder.RecordPendingOA(encounterID, itemID)
 	}
 }
 

@@ -28,6 +28,14 @@ const (
 	// character. The dashboard's approval handler calls registration.
 	// Service.Retire when the DM accepts; this event surfaces the request.
 	KindRetireRequest EventKind = "retire_request"
+	// KindOpportunityAttack is a DM-side prompt asking whether a
+	// DM-controlled hostile will spend its reaction on an opportunity
+	// attack against a PC who just left its reach. The kind is
+	// distinct from KindReactionDeclaration (which is a player-declared
+	// reaction) so the dashboard can route OA prompts to the live
+	// encounter pane and so the end-of-round forfeit sweep can cancel
+	// any that remain pending. (SR-028)
+	KindOpportunityAttack EventKind = "opportunity_attack"
 )
 
 // WhisperTargetDiscordUserIDKey is the ExtraMetadata key under which the
@@ -84,6 +92,7 @@ var kindLabels = map[EventKind]kindLabel{
 	KindPlayerWhisper:       {emoji: "🤫", label: "Whisper", useColon: true},
 	KindUndoRequest:         {emoji: "⏪", label: "Undo Request", useColon: false},
 	KindRetireRequest:       {emoji: "🪦", label: "Retire Request", useColon: false},
+	KindOpportunityAttack:   {emoji: "⚔️", label: "Opportunity Attack", useColon: true},
 }
 
 var defaultLabel = kindLabel{emoji: "📨", label: "Notification", useColon: true}

@@ -1,6 +1,8 @@
 package combat
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -554,3 +556,139 @@ func TestResolveHostileReach_NPCNotInMap(t *testing.T) {
 	}
 	assert.Equal(t, 5, resolveHostileReach(hostile, attacks))
 }
+
+// --- SR-028: pending OA tracker + end-of-round forfeit sweep ---
+
+func TestRecordPendingOA_ForfeitsCancelsThroughNotifier(t *testing.T) {
+	encounterID := uuid.New()
+	notifier := &fakeDMNotifier{}
+
+	svc := NewService(defaultMockStore())
+	svc.SetDMNotifier(notifier)
+
+	svc.RecordPendingOA(encounterID, "oa-item-1")
+	svc.RecordPendingOA(encounterID, "oa-item-2")
+
+	svc.ForfeitPendingOAs(context.Background(), encounterID)
+
+	require.Len(t, notifier.cancels, 2, "expected each pending OA to be cancelled")
+	assert.Equal(t, "oa-item-1", notifier.cancels[0])
+	assert.Equal(t, "oa-item-2", notifier.cancels[1])
+
+	// Second sweep is a no-op (slice already drained).
+	svc.ForfeitPendingOAs(context.Background(), encounterID)
+	assert.Len(t, notifier.cancels, 2, "second sweep should drain to empty")
+}
+
+func TestRecordPendingOA_EmptyItemIDIgnored(t *testing.T) {
+	encounterID := uuid.New()
+	notifier := &fakeDMNotifier{}
+
+	svc := NewService(defaultMockStore())
+	svc.SetDMNotifier(notifier)
+
+	svc.RecordPendingOA(encounterID, "")
+	svc.ForfeitPendingOAs(context.Background(), encounterID)
+
+	assert.Empty(t, notifier.cancels, "empty item IDs (no #dm-queue configured) are skipped")
+}
+
+func TestForfeitPendingOAs_NoNotifierStillDrains(t *testing.T) {
+	encounterID := uuid.New()
+
+	svc := NewService(defaultMockStore())
+	// No SetDMNotifier — sweep must still drain so a later wiring of the
+	// notifier doesn't re-cancel the same stale items.
+	svc.RecordPendingOA(encounterID, "oa-orphan-1")
+	svc.ForfeitPendingOAs(context.Background(), encounterID)
+
+	// Re-wire after the sweep and confirm the tracker is empty.
+	notifier := &fakeDMNotifier{}
+	svc.SetDMNotifier(notifier)
+	svc.ForfeitPendingOAs(context.Background(), encounterID)
+	assert.Empty(t, notifier.cancels, "post-drain sweep should not re-cancel stale items")
+}
+
+func TestForfeitPendingOAs_CancelErrorSwallowed(t *testing.T) {
+	encounterID := uuid.New()
+	notifier := &fakeDMNotifier{cancelErr: errors.New("discord 500")}
+
+	svc := NewService(defaultMockStore())
+	svc.SetDMNotifier(notifier)
+
+	svc.RecordPendingOA(encounterID, "oa-item-1")
+	svc.RecordPendingOA(encounterID, "oa-item-2")
+
+	// Must not panic / propagate the error; both cancel attempts still fire.
+	svc.ForfeitPendingOAs(context.Background(), encounterID)
+	assert.Len(t, notifier.cancels, 2)
+}
+
+func TestAdvanceTurn_RoundAdvanceForfeitsPendingOAs(t *testing.T) {
+	// When the active turn completes and every combatant has already gone
+	// in this round, AdvanceTurn rolls the round forward via advanceRound.
+	// advanceRound must drain the pending OA tracker and cancel each
+	// remaining prompt so DM-controlled hostiles' unanswered OAs visibly
+	// forfeit at end of round (SR-028).
+	ctx := context.Background()
+	encounterID := uuid.New()
+	combatant1ID := uuid.New()
+	combatant2ID := uuid.New()
+	activeTurnID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
+			CurrentTurnID: uuid.NullUUID{UUID: activeTurnID, Valid: true},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: combatant1ID, InitiativeOrder: 1, DisplayName: "Aria", Conditions: rawEmpty(), IsAlive: true},
+			{ID: combatant2ID, InitiativeOrder: 2, DisplayName: "Goblin", Conditions: rawEmpty(), IsAlive: true},
+		}, nil
+	}
+	store.getTurnFn = func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: activeTurnID, CombatantID: combatant2ID, RoundNumber: 1, Status: "active"}, nil
+	}
+	store.completeTurnFn = func(_ context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: id, Status: "completed"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(_ context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		if arg.RoundNumber == 1 {
+			return []refdata.Turn{
+				{CombatantID: combatant1ID, Status: "completed"},
+				{CombatantID: combatant2ID, Status: "completed"},
+			}, nil
+		}
+		return []refdata.Turn{}, nil
+	}
+	store.updateEncounterRoundFn = func(_ context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber}, nil
+	}
+	store.createTurnFn = func(_ context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+
+	notifier := &fakeDMNotifier{}
+	svc := NewService(store)
+	svc.SetDMNotifier(notifier)
+
+	// Pretend an OA prompt was posted earlier in this round and never
+	// resolved. Round advance should now cancel it.
+	svc.RecordPendingOA(encounterID, "stale-oa-item")
+
+	_, err := svc.AdvanceTurn(ctx, encounterID)
+	require.NoError(t, err)
+
+	require.Len(t, notifier.cancels, 1, "round advance should forfeit the pending OA")
+	assert.Equal(t, "stale-oa-item", notifier.cancels[0])
+}
+
+// rawEmpty is a local helper that returns an empty conditions JSONB array
+// — extracted so the OA round-forfeit test doesn't pull in encoding/json
+// just to spell []byte("[]").
+func rawEmpty() []byte { return []byte(`[]`) }
