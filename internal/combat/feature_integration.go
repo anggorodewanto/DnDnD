@@ -247,6 +247,52 @@ func ApplyGreatWeaponFighting(rolls []int, dieSides int, rerollFn func(int) int)
 	return result
 }
 
+// AuraOfProtectionFeature returns the FeatureDefinition for Paladin Aura of
+// Protection (SR-024). The paladin (and allies within the aura radius —
+// gated upstream by the caller's distance check) adds the paladin's CHA mod
+// to saving throws. Radius is level-gated via PaladinAuraRadiusFt and is
+// applied at the call site (e.g. save_handler.nearbyPaladinAuras) rather
+// than inside the effect-condition machinery, since EffectConditions has no
+// concept of "ally within N of a specific other combatant."
+func AuraOfProtectionFeature(chaMod int) FeatureDefinition {
+	return FeatureDefinition{
+		Name:   "Aura of Protection",
+		Source: "paladin",
+		Effects: []Effect{
+			{
+				Type:     EffectModifySave,
+				Trigger:  TriggerOnSave,
+				Modifier: chaMod,
+			},
+		},
+	}
+}
+
+// PaladinAuraRadiusFt returns the Aura of Protection radius in feet for a
+// given paladin level: 0 below L6, 10 ft at L6–L17, 30 ft at L18+ (spec
+// line 2587). SR-024.
+func PaladinAuraRadiusFt(paladinLevel int) int {
+	if paladinLevel >= 18 {
+		return 30
+	}
+	if paladinLevel >= 6 {
+		return 10
+	}
+	return 0
+}
+
+// ResolvePaladinAura inspects a character's classes and, when the character
+// is a Paladin at L6+, returns the FeatureDefinition for Aura of Protection
+// with the given CHA modifier baked in. Returns (_, false) for non-paladins
+// or sub-L6 paladins so the caller can early-return. SR-024.
+func ResolvePaladinAura(classes []CharacterClass, chaMod int) (FeatureDefinition, bool) {
+	level := classLevel(classes, "Paladin")
+	if level < 6 {
+		return FeatureDefinition{}, false
+	}
+	return AuraOfProtectionFeature(chaMod), true
+}
+
 // PackTacticsFeature returns the FeatureDefinition for Pack Tactics.
 // Creature feature: advantage on attack when ally within 5ft of target.
 func PackTacticsFeature() FeatureDefinition {
@@ -300,6 +346,17 @@ func BuildFeatureDefinitions(classes []CharacterClass, features []CharacterFeatu
 				defs = append(defs, GreatWeaponFightingFeature())
 			case "pack_tactics":
 				defs = append(defs, PackTacticsFeature())
+			case "aura_of_protection":
+				// SR-024 — recognise the seed-class mechanical_effect string
+				// so future seed_classes.go updates Just Work. CHA mod is not
+				// available at this layer (BuildFeatureDefinitions only sees
+				// classes+features, not ability scores), so emit a zero-mod
+				// placeholder. The live CHA-scaled aura is produced by
+				// ResolvePaladinAura at the save-handler layer where scores
+				// are in scope. Gated on paladin L6+ to match the spec.
+				if classLevel(classes, "Paladin") >= 6 {
+					defs = append(defs, AuraOfProtectionFeature(0))
+				}
 			case "wild_shape":
 				// Wild Shape is an activation command, not a passive combat effect.
 				// No FeatureDefinition needed here; handled by ActivateWildShape service method.

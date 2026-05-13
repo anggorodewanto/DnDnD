@@ -444,6 +444,116 @@ func TestBuildFeatureDefinitions_Empty(t *testing.T) {
 	}
 }
 
+// SR-024 — Aura of Protection: L6+ paladin grants CHA-mod to saves of self
+// and allies within 10ft (30ft at L18). Registry-level: helper must produce
+// an EffectModifySave on TriggerOnSave with the supplied CHA mod, sourced as
+// a paladin class feature.
+func TestAuraOfProtectionFeature_BuildsModifySaveEffect(t *testing.T) {
+	fd := AuraOfProtectionFeature(3)
+
+	if fd.Name != "Aura of Protection" {
+		t.Errorf("Name = %q, want %q", fd.Name, "Aura of Protection")
+	}
+	if fd.Source != "paladin" {
+		t.Errorf("Source = %q, want %q", fd.Source, "paladin")
+	}
+	if len(fd.Effects) != 1 {
+		t.Fatalf("expected 1 effect, got %d", len(fd.Effects))
+	}
+	e := fd.Effects[0]
+	if e.Type != EffectModifySave {
+		t.Errorf("Type = %q, want %q", e.Type, EffectModifySave)
+	}
+	if e.Trigger != TriggerOnSave {
+		t.Errorf("Trigger = %q, want %q", e.Trigger, TriggerOnSave)
+	}
+	if e.Modifier != 3 {
+		t.Errorf("Modifier = %d, want 3", e.Modifier)
+	}
+}
+
+// SR-024 — PaladinAuraRadiusFt is 10 ft for levels 6..17 and 30 ft from 18+.
+// Below L6 the radius is 0 (aura inactive).
+func TestPaladinAuraRadiusFt(t *testing.T) {
+	cases := []struct {
+		level    int
+		wantFt   int
+	}{
+		{1, 0},
+		{5, 0},
+		{6, 10},
+		{17, 10},
+		{18, 30},
+		{20, 30},
+	}
+	for _, c := range cases {
+		if got := PaladinAuraRadiusFt(c.level); got != c.wantFt {
+			t.Errorf("PaladinAuraRadiusFt(%d) = %d, want %d", c.level, got, c.wantFt)
+		}
+	}
+}
+
+// SR-024 — ResolvePaladinAura returns (feature, true) only when classes
+// include Paladin at L6+. Resolves directly from class-level data — no
+// caller-side literal construction of the feature.
+func TestResolvePaladinAura_L6_L18_LowLevel(t *testing.T) {
+	t.Run("L6 with CHA mod +3", func(t *testing.T) {
+		classes := []CharacterClass{{Class: "Paladin", Level: 6}}
+		fd, ok := ResolvePaladinAura(classes, 3)
+		if !ok {
+			t.Fatalf("expected ok=true for L6 paladin")
+		}
+		if fd.Effects[0].Modifier != 3 {
+			t.Errorf("Modifier = %d, want 3", fd.Effects[0].Modifier)
+		}
+	})
+	t.Run("L18 with CHA mod +5", func(t *testing.T) {
+		classes := []CharacterClass{{Class: "Paladin", Level: 18}}
+		fd, ok := ResolvePaladinAura(classes, 5)
+		if !ok {
+			t.Fatalf("expected ok=true for L18 paladin")
+		}
+		if fd.Effects[0].Modifier != 5 {
+			t.Errorf("Modifier = %d, want 5", fd.Effects[0].Modifier)
+		}
+	})
+	t.Run("L5 paladin — no aura yet", func(t *testing.T) {
+		classes := []CharacterClass{{Class: "Paladin", Level: 5}}
+		if _, ok := ResolvePaladinAura(classes, 3); ok {
+			t.Errorf("expected ok=false for L5 paladin")
+		}
+	})
+	t.Run("non-paladin", func(t *testing.T) {
+		classes := []CharacterClass{{Class: "Fighter", Level: 20}}
+		if _, ok := ResolvePaladinAura(classes, 3); ok {
+			t.Errorf("expected ok=false for non-paladin")
+		}
+	})
+}
+
+// SR-024 — BuildFeatureDefinitions recognises the `aura_of_protection`
+// mechanical_effect literal so a future seed_classes.go update Just Works.
+// Without a CHA mod available at this level the registry emits a zero-mod
+// placeholder; the save handler / explicit ResolvePaladinAura is responsible
+// for emitting the live CHA-scaled aura.
+func TestBuildFeatureDefinitions_PaladinL6_AuraOfProtection(t *testing.T) {
+	classes := []CharacterClass{{Class: "Paladin", Level: 6}}
+	features := []CharacterFeature{
+		{Name: "Aura of Protection", MechanicalEffect: "aura_of_protection"},
+	}
+	defs := BuildFeatureDefinitions(classes, features)
+	found := false
+	for _, d := range defs {
+		if d.Name == "Aura of Protection" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected Aura of Protection in defs, got: %+v", defs)
+	}
+}
+
 func TestBuildAttackEffectContext(t *testing.T) {
 	ctx := BuildAttackEffectContext(AttackEffectInput{
 		Weapon: refdata.Weapon{

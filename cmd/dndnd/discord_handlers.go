@@ -383,6 +383,14 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		handlers.check.SetCreatureLookup(deps.queries)
 		handlers.save.SetCreatureLookup(deps.queries)
 	}
+	// SR-024: wire the character-row lookup on /save so a paladin L6+
+	// projects their Aura of Protection (CHA mod to saves within 10 ft;
+	// 30 ft at L18) onto allies' /save FES. *refdata.Queries.GetCharacter
+	// satisfies discord.SaveNearbyPaladinLookup structurally. Nil-safe —
+	// /save silently skips the aura when unwired.
+	if deps.queries != nil {
+		handlers.save.SetNearbyPaladinLookup(deps.queries)
+	}
 	// COMBAT-MISC-followup / E-69: wire the encounter-zone lookup on both
 	// /check (Perception disadvantage in obscurement) and /action (Hide
 	// gating). *combat.Service already exposes ListZonesForEncounter so it

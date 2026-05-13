@@ -79,6 +79,10 @@ type SaveHandler struct {
 	// the beast's scores. Nil keeps the historical behaviour (druid scores
 	// always used — the bug SR-022 fixes).
 	creatureLookup CheckCreatureLookup
+	// SR-024: lookup for other PCs' character rows so /save can project a
+	// nearby paladin ally's Aura of Protection onto the saver's FES. Nil
+	// disables the feature (degrades silently — SR-006 convention).
+	paladinLookup SaveNearbyPaladinLookup
 }
 
 // SetAoESaveResolver wires the combat-side resolver for AoE pending saves.
@@ -92,6 +96,12 @@ func (h *SaveHandler) SetAoESaveResolver(r AoESaveResolver) {
 // CON saves are rolled with beast scores. Nil keeps the historical
 // behaviour (druid scores always used — the bug SR-022 fixes).
 func (h *SaveHandler) SetCreatureLookup(l CheckCreatureLookup) { h.creatureLookup = l }
+
+// SetNearbyPaladinLookup wires the character-row lookup so /save can project
+// a nearby paladin ally's Aura of Protection (L6+ within 10 ft, 30 ft at L18)
+// onto the saver's FES. Nil keeps the historical behaviour ("no aura for
+// allies" — SR-006 silent-skip convention). SR-024.
+func (h *SaveHandler) SetNearbyPaladinLookup(l SaveNearbyPaladinLookup) { h.paladinLookup = l }
 
 // HasAoESaveResolver reports whether a non-nil AoESaveResolver has been
 // wired. Production-wiring tests use this to detect the AOE-CAST follow-up
@@ -177,6 +187,15 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 	// drive BuildFeatureDefinitions; an unmarshal error degrades to no
 	// feature effects rather than failing the whole roll.
 	input.FeatureEffects = buildSaveFeatureEffects(char)
+	// SR-024: project nearby paladin allies' Aura of Protection onto the
+	// saver's FES. Requires an active encounter + wired lookups; any gap
+	// degrades silently to "no aura" (SR-006 convention). Self-aura works
+	// naturally because the saver is one of the encounter's combatants.
+	if h.encounterProvider != nil && h.combatantLookup != nil && h.paladinLookup != nil {
+		if encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, userID); err == nil {
+			input.FeatureEffects = append(input.FeatureEffects, nearbyPaladinAuras(ctx, h.combatantLookup, h.paladinLookup, encounterID, char.ID)...)
+		}
+	}
 	input.EffectCtx = combat.EffectContext{
 		AbilityUsed:  strings.ToLower(ability),
 		WearingArmor: char.EquippedArmor.Valid && char.EquippedArmor.String != "",
@@ -295,6 +314,135 @@ func buildSaveFeatureEffects(char refdata.Character) []combat.FeatureDefinition 
 		return nil
 	}
 	return combat.BuildFeatureDefinitions(classes, feats, itemDefs)
+}
+
+// SaveNearbyPaladinLookup fetches a character row by ID. Used by /save to
+// resolve nearby paladin allies' class data (level + CHA) so their Aura of
+// Protection projects onto an ally's save FES. SR-024. Production wiring uses
+// refdata.Queries; tests inject a mock. Nil disables the feature — degrading
+// silently to "no aura for allies" mirrors the SR-006 silent-skip pattern.
+type SaveNearbyPaladinLookup interface {
+	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+}
+
+// nearbyPaladinAuras returns the list of paladin Aura-of-Protection
+// FeatureDefinitions that should layer onto `saverCharID`'s save FES given
+// the encounter's combatants. For each other living combatant in the
+// encounter that maps to a Paladin L6+ character, the helper computes the
+// grid Chebyshev distance to the saver and, when within
+// PaladinAuraRadiusFt(level), emits an AuraOfProtectionFeature sized by the
+// paladin's CHA mod.
+//
+// All lookup failures (encounter list, character row, ability-score
+// unmarshal) degrade silently to "no aura from that paladin" — better to
+// drop a single optional bonus than to fail the whole save roll (SR-006
+// convention).
+//
+// SR-024.
+func nearbyPaladinAuras(
+	ctx context.Context,
+	combatantLookup CheckCombatantLookup,
+	paladinLookup SaveNearbyPaladinLookup,
+	encounterID uuid.UUID,
+	saverCharID uuid.UUID,
+) []combat.FeatureDefinition {
+	if combatantLookup == nil || paladinLookup == nil {
+		return nil
+	}
+	combatants, err := combatantLookup.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return nil
+	}
+	saver, ok := findCombatantByCharID(combatants, saverCharID)
+	if !ok {
+		return nil
+	}
+
+	var defs []combat.FeatureDefinition
+	for _, c := range combatants {
+		if !c.CharacterID.Valid {
+			continue
+		}
+		// Self-aura is allowed: a paladin's own save benefits from their
+		// aura. Distance to self = 0 ≤ radius is handled below.
+		pal, err := paladinLookup.GetCharacter(ctx, c.CharacterID.UUID)
+		if err != nil {
+			continue
+		}
+		def, level, ok := paladinAuraForCharacter(pal)
+		if !ok {
+			continue
+		}
+		radius := combat.PaladinAuraRadiusFt(level)
+		distFt := combat.GridDistanceFt(
+			c.PositionCol, int(c.PositionRow),
+			saver.PositionCol, int(saver.PositionRow),
+		)
+		if distFt > radius {
+			continue
+		}
+		defs = append(defs, def)
+	}
+	return defs
+}
+
+// paladinAuraForCharacter parses a candidate character's classes + scores
+// and, when the character is a Paladin L6+, returns the live aura
+// FeatureDefinition (CHA mod baked in) plus the paladin level so callers
+// can resolve the level-gated radius. Returns ok=false on any parse error
+// or for non-paladins / sub-L6 paladins. SR-024.
+func paladinAuraForCharacter(c refdata.Character) (combat.FeatureDefinition, int, bool) {
+	if len(c.Classes) == 0 {
+		return combat.FeatureDefinition{}, 0, false
+	}
+	var classes []combat.CharacterClass
+	if err := json.Unmarshal(c.Classes, &classes); err != nil {
+		return combat.FeatureDefinition{}, 0, false
+	}
+	var scores character.AbilityScores
+	if err := json.Unmarshal(c.AbilityScores, &scores); err != nil {
+		return combat.FeatureDefinition{}, 0, false
+	}
+	level := paladinLevel(classes)
+	def, ok := combat.ResolvePaladinAura(classes, abilityMod(scores.CHA))
+	if !ok {
+		return combat.FeatureDefinition{}, 0, false
+	}
+	return def, level, true
+}
+
+// paladinLevel returns the Paladin level from a parsed class slice, or 0 if
+// the character is not a paladin. SR-024.
+func paladinLevel(classes []combat.CharacterClass) int {
+	for _, cl := range classes {
+		if strings.EqualFold(cl.Class, "Paladin") {
+			return cl.Level
+		}
+	}
+	return 0
+}
+
+// abilityMod returns the 5e ability modifier for a given score:
+// floor((score - 10) / 2). SR-024.
+func abilityMod(score int) int {
+	// Integer floor for negative-bias rounding: handle the -1 boundary
+	// (score=9 → -1) via subtraction before division.
+	diff := score - 10
+	if diff < 0 {
+		return (diff - 1) / 2
+	}
+	return diff / 2
+}
+
+// findCombatantByCharID locates the combatant in a slice that maps to the
+// given character ID. Returns ok=false when not found. SR-024.
+func findCombatantByCharID(combatants []refdata.Combatant, charID uuid.UUID) (refdata.Combatant, bool) {
+	for _, c := range combatants {
+		if c.CharacterID.Valid && c.CharacterID.UUID == charID {
+			return c, true
+		}
+	}
+	return refdata.Combatant{}, false
 }
 
 // magicItemFeatureDefs parses the character's inventory + attunement columns
