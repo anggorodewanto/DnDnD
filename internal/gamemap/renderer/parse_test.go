@@ -168,6 +168,168 @@ func TestParseTiledJSON_NoTerrainLayer(t *testing.T) {
 	}
 }
 
+// SR-029: lighting layer with magical_darkness tiles populates MagicalDarknessTiles.
+// This variant exercises the "raw LIGHTING_TYPES.gid" path that the Svelte editor
+// actually writes today (lighting layer data carries small canonical GIDs that do
+// not match the lighting tileset's firstgid offset — SR-030 drift).
+func TestParseTiledJSON_LightingMagicalDarkness_RawGID(t *testing.T) {
+	// 3x3 lighting layer; (col=1,row=1) is magical_darkness (GID 3 in
+	// LIGHTING_TYPES). Other tiles are normal (GID 0).
+	tiledJSON := `{
+		"width": 3, "height": 3, "tilewidth": 48, "tileheight": 48,
+		"layers": [
+			{"name": "terrain", "type": "tilelayer", "width": 3, "height": 3, "data": [1,1,1,1,1,1,1,1,1]},
+			{"name": "lighting", "type": "tilelayer", "width": 3, "height": 3, "data": [0,0,0, 0,3,0, 0,0,0]}
+		],
+		"tilesets": [{"firstgid": 1, "name": "terrain", "tiles": [{"id":0,"type":"open_ground"}]}]
+	}`
+
+	md, err := ParseTiledJSON(json.RawMessage(tiledJSON), nil, nil)
+	if err != nil {
+		t.Fatalf("ParseTiledJSON error: %v", err)
+	}
+
+	if len(md.MagicalDarknessTiles) != 1 {
+		t.Fatalf("MagicalDarknessTiles len = %d, want 1; got %v", len(md.MagicalDarknessTiles), md.MagicalDarknessTiles)
+	}
+	got := md.MagicalDarknessTiles[0]
+	if got.Col != 1 || got.Row != 1 {
+		t.Errorf("MagicalDarknessTiles[0] = %+v, want {Col:1 Row:1}", got)
+	}
+}
+
+// SR-029: lighting layer resolves magical_darkness via tileset metadata
+// (the Tiled-correct path: firstgid + tile.id with tile.type).
+func TestParseTiledJSON_LightingMagicalDarkness_TilesetType(t *testing.T) {
+	// Lighting tileset firstgid=7 — tile id=2 is magical_darkness, so its
+	// resolved GID is 9. Place 9 at (2,0).
+	tiledJSON := `{
+		"width": 3, "height": 2, "tilewidth": 48, "tileheight": 48,
+		"layers": [
+			{"name": "terrain", "type": "tilelayer", "width": 3, "height": 2, "data": [1,1,1,1,1,1]},
+			{"name": "lighting", "type": "tilelayer", "width": 3, "height": 2, "data": [0,0,9, 0,0,0]}
+		],
+		"tilesets": [
+			{"firstgid": 1, "name": "terrain", "tiles": [{"id":0,"type":"open_ground"}]},
+			{"firstgid": 7, "name": "lighting", "tiles": [
+				{"id": 0, "type": "dim_light"},
+				{"id": 1, "type": "darkness"},
+				{"id": 2, "type": "magical_darkness"},
+				{"id": 3, "type": "fog"},
+				{"id": 4, "type": "light_obscurement"}
+			]}
+		]
+	}`
+
+	md, err := ParseTiledJSON(json.RawMessage(tiledJSON), nil, nil)
+	if err != nil {
+		t.Fatalf("ParseTiledJSON error: %v", err)
+	}
+
+	if len(md.MagicalDarknessTiles) != 1 {
+		t.Fatalf("MagicalDarknessTiles len = %d, want 1", len(md.MagicalDarknessTiles))
+	}
+	got := md.MagicalDarknessTiles[0]
+	if got.Col != 2 || got.Row != 0 {
+		t.Errorf("MagicalDarknessTiles[0] = %+v, want {Col:2 Row:0}", got)
+	}
+}
+
+// SR-029: elevation layer populates MapData.ElevationByTile in feet, row-major.
+func TestParseTiledJSON_Elevation(t *testing.T) {
+	tiledJSON := `{
+		"width": 3, "height": 3, "tilewidth": 48, "tileheight": 48,
+		"layers": [
+			{"name": "terrain", "type": "tilelayer", "width": 3, "height": 3, "data": [1,1,1,1,1,1,1,1,1]},
+			{"name": "elevation", "type": "tilelayer", "width": 3, "height": 3, "data": [0,0,3, 0,5,0, 0,0,0]}
+		],
+		"tilesets": [{"firstgid": 1, "name": "terrain", "tiles": [{"id":0,"type":"open_ground"}]}]
+	}`
+
+	md, err := ParseTiledJSON(json.RawMessage(tiledJSON), nil, nil)
+	if err != nil {
+		t.Fatalf("ParseTiledJSON error: %v", err)
+	}
+
+	want := []int{0, 0, 3, 0, 5, 0, 0, 0, 0}
+	if len(md.ElevationByTile) != len(want) {
+		t.Fatalf("ElevationByTile len = %d, want %d", len(md.ElevationByTile), len(want))
+	}
+	for i, w := range want {
+		if md.ElevationByTile[i] != w {
+			t.Errorf("ElevationByTile[%d] = %d, want %d", i, md.ElevationByTile[i], w)
+		}
+	}
+}
+
+// SR-029: spawn_zones objectgroup populates MapData.SpawnZones with tile-unit coords.
+func TestParseTiledJSON_SpawnZones(t *testing.T) {
+	// 5x5 map, tilewidth=48. Player zone at tile (0,0) 2x2 -> pixel (0,0,96,96).
+	// Enemy zone at tile (3,3) 2x2 -> pixel (144,144,96,96).
+	tiledJSON := `{
+		"width": 5, "height": 5, "tilewidth": 48, "tileheight": 48,
+		"layers": [
+			{"name": "terrain", "type": "tilelayer", "width": 5, "height": 5, "data": [1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1]},
+			{"name": "spawn_zones", "type": "objectgroup", "objects": [
+				{"id": 1, "type": "player", "x": 0,   "y": 0,   "width": 96, "height": 96},
+				{"id": 2, "type": "enemy",  "x": 144, "y": 144, "width": 96, "height": 96}
+			]}
+		],
+		"tilesets": [{"firstgid": 1, "name": "terrain", "tiles": [{"id":0,"type":"open_ground"}]}]
+	}`
+
+	md, err := ParseTiledJSON(json.RawMessage(tiledJSON), nil, nil)
+	if err != nil {
+		t.Fatalf("ParseTiledJSON error: %v", err)
+	}
+
+	if len(md.SpawnZones) != 2 {
+		t.Fatalf("SpawnZones len = %d, want 2", len(md.SpawnZones))
+	}
+	p := md.SpawnZones[0]
+	if p.ZoneType != "player" || p.TileX != 0 || p.TileY != 0 || p.TileWidth != 2 || p.TileHeight != 2 {
+		t.Errorf("SpawnZones[0] = %+v, want player at (0,0) 2x2", p)
+	}
+	e := md.SpawnZones[1]
+	if e.ZoneType != "enemy" || e.TileX != 3 || e.TileY != 3 || e.TileWidth != 2 || e.TileHeight != 2 {
+		t.Errorf("SpawnZones[1] = %+v, want enemy at (3,3) 2x2", e)
+	}
+}
+
+// SR-029 acceptance criterion: a map with a magical-darkness tile painted in
+// the lighting layer demotes FoW correctly when parsed. End-to-end check that
+// MagicalDarknessTiles flows from ParseTiledJSON -> ComputeVisibilityWithZones.
+func TestParseTiledJSON_MagicalDarkness_DemotesFoW(t *testing.T) {
+	// 5x1 corridor: viewer at col 0 with darkvision range 4. Magical darkness
+	// at col 3. Darkvision should NOT reach col 3 (demoted to Unexplored).
+	tiledJSON := `{
+		"width": 5, "height": 1, "tilewidth": 48, "tileheight": 48,
+		"layers": [
+			{"name": "terrain", "type": "tilelayer", "width": 5, "height": 1, "data": [1,1,1,1,1]},
+			{"name": "lighting", "type": "tilelayer", "width": 5, "height": 1, "data": [0,0,0,3,0]}
+		],
+		"tilesets": [{"firstgid": 1, "name": "terrain", "tiles": [{"id":0,"type":"open_ground"}]}]
+	}`
+
+	md, err := ParseTiledJSON(json.RawMessage(tiledJSON), nil, nil)
+	if err != nil {
+		t.Fatalf("ParseTiledJSON error: %v", err)
+	}
+
+	// Viewer with darkvision only (no Devil's Sight) → magical darkness blocks it.
+	sources := []VisionSource{
+		{Col: 0, Row: 0, RangeTiles: 0, DarkvisionTiles: 4},
+	}
+	fow := ComputeVisibilityWithZones(sources, nil, md.Walls, md.MagicalDarknessTiles, md.Width, md.Height)
+
+	if got := fow.StateAt(2, 0); got != Visible {
+		t.Errorf("tile col=2 = %v, want Visible (in darkvision range, no darkness)", got)
+	}
+	if got := fow.StateAt(3, 0); got != Unexplored {
+		t.Errorf("tile col=3 (magical darkness) = %v, want Unexplored (darkvision demoted)", got)
+	}
+}
+
 func TestParseTiledJSON_WithActiveEffects(t *testing.T) {
 	tiledJSON := `{
 		"width": 3, "height": 3, "tilewidth": 48, "tileheight": 48,

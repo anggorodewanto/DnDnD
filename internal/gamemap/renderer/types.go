@@ -188,6 +188,31 @@ type LightSource struct {
 	RangeTiles int // illumination range in tiles
 }
 
+// LightingType represents the painted lighting/obscurement classification of a
+// map tile (Phase 21c "lighting brush"). Mirrors Svelte LIGHTING_TYPES.
+type LightingType int
+
+const (
+	LightingNormal LightingType = iota
+	LightingDimLight
+	LightingDarkness
+	LightingMagicalDarkness
+	LightingFog
+	LightingLightObscurement
+)
+
+// SpawnZoneRect is a rectangular spawn-zone region painted in the Map Editor,
+// expressed in tile units. ZoneType is "player" or "enemy". Parallel to
+// internal/exploration.SpawnZone but renderer-local so the renderer package
+// does not depend on exploration.
+type SpawnZoneRect struct {
+	ZoneType   string // "player" or "enemy"
+	TileX      int
+	TileY      int
+	TileWidth  int
+	TileHeight int
+}
+
 // MapData holds all the data needed to render a map image.
 type MapData struct {
 	Width         int           // map width in tiles
@@ -207,7 +232,22 @@ type MapData struct {
 	// MagicalDarknessTiles is the union of every magical-darkness zone's
 	// affected-tile set. Used by ComputeVisibilityWithZones to demote
 	// darkvision inside the zone (Devil's Sight still penetrates).
+	// Populated both from runtime encounter_zones (SR-008) and from
+	// statically-painted map lighting tiles (SR-029).
 	MagicalDarknessTiles []GridPos
+
+	// ElevationByTile is the row-major elevation grid in feet (len = Width*Height)
+	// parsed from the Tiled "elevation" tilelayer (SR-029). Map-baked elevation
+	// only sets ground elevation per tile; combatant altitude (`Combatant.AltitudeFt`)
+	// still wins for token rendering. Downstream consumers (cliff cover, default
+	// altitude) are out of scope for SR-029.
+	ElevationByTile []int
+
+	// SpawnZones lists the player/enemy spawn rectangles parsed from the Tiled
+	// "spawn_zones" objectgroup (SR-029). Exploration code reads the same JSON
+	// separately via internal/exploration.ParseSpawnZones — this field is the
+	// renderer-side mirror for future DM-view overlays.
+	SpawnZones []SpawnZoneRect
 
 	// DMSeesAll, when true, propagates to the auto-computed FogOfWar and
 	// instructs DrawFogOfWar + filterCombatantsForFog to bypass fog so the
