@@ -323,16 +323,18 @@ func (h *ASIHandler) getPendingChoice(charID uuid.UUID) (PendingASIChoice, bool)
 	return c, ok
 }
 
-func (h *ASIHandler) removePendingChoice(charID uuid.UUID) {
+func (h *ASIHandler) removePendingChoice(charID uuid.UUID) error {
+	if h.pendingStore != nil {
+		if err := h.pendingStore.Delete(context.Background(), charID); err != nil {
+			slog.Error("failed to delete pending ASI choice", "error", err, "character_id", charID)
+			return err
+		}
+	}
+
 	h.mu.Lock()
 	delete(h.pending, charID)
 	h.mu.Unlock()
-	if h.pendingStore == nil {
-		return
-	}
-	if err := h.pendingStore.Delete(context.Background(), charID); err != nil {
-		slog.Error("failed to delete pending ASI choice", "error", err, "character_id", charID)
-	}
+	return nil
 }
 
 // MarshalPendingASIChoice serialises a pending choice to the JSON form the
@@ -485,8 +487,17 @@ func (h *ASIHandler) HandleDMApprove(interaction *discordgo.Interaction) {
 		choice.FeatChoices = pending.FeatChoices
 	}
 
+	if err := h.removePendingChoice(charID); err != nil {
+		content := fmt.Sprintf("\u274c Approval failed: could not clear pending ASI choice: %v", err)
+		_, _ = h.session.InteractionResponseEdit(interaction, &discordgo.WebhookEdit{
+			Content: &content,
+		})
+		return
+	}
+
 	err = h.service.ApproveASI(context.Background(), charID, choice)
 	if err != nil {
+		h.storePendingChoice(charID, pending)
 		slog.Error("failed to approve ASI", "error", err, "character_id", charID)
 		content := fmt.Sprintf("\u274c Approval failed: %v", err)
 		empty := []discordgo.MessageComponent{}
@@ -496,8 +507,6 @@ func (h *ASIHandler) HandleDMApprove(interaction *discordgo.Interaction) {
 		})
 		return
 	}
-
-	h.removePendingChoice(charID)
 
 	// Update the DM queue message
 	content := fmt.Sprintf("\u2705 Approved: %s", pending.Description)
@@ -537,7 +546,7 @@ func (h *ASIHandler) HandleDMDeny(interaction *discordgo.Interaction) {
 		slog.Error("failed to deny ASI", "error", err, "character_id", charID)
 	}
 
-	h.removePendingChoice(charID)
+	_ = h.removePendingChoice(charID)
 
 	// Update the DM queue message
 	content := fmt.Sprintf("\u274c Denied: %s", pending.Description)

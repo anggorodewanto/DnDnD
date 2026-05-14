@@ -29,6 +29,7 @@ type Store interface {
 	GetCharacterCardMessageID(ctx context.Context, id uuid.UUID) (sql.NullString, error)
 	SetCharacterCardMessageID(ctx context.Context, arg refdata.SetCharacterCardMessageIDParams) error
 	ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
+	GetPendingASI(ctx context.Context, characterID uuid.UUID) (refdata.PendingAsi, error)
 	// GetActiveCombatantByCharacterID returns the combatant row for the given
 	// character in any active encounter. Returns sql.ErrNoRows when the
 	// character is not in any active encounter (treated as "no combat-side
@@ -227,6 +228,7 @@ func (s *Service) buildCardData(ctx context.Context, char refdata.Character, sho
 	spellCount, preparedCount, homebrewSpellCount := extractSpellCounts(char)
 
 	conditions, concentration, exhaustion := s.fetchCombatantState(ctx, char.ID)
+	asiFeatPending := s.hasPendingASI(ctx, char.ID)
 
 	return CardData{
 		Name:               char.Name,
@@ -252,7 +254,19 @@ func (s *Service) buildCardData(ctx context.Context, char refdata.Character, sho
 		Gold:               int(char.Gold),
 		Languages:          char.Languages,
 		Retired:            retired,
+		ASIFeatPending:     asiFeatPending,
 	}
+}
+
+func (s *Service) hasPendingASI(ctx context.Context, characterID uuid.UUID) bool {
+	_, err := s.store.GetPendingASI(ctx, characterID)
+	if err == nil {
+		return true
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		s.logger.Warn("character card: pending ASI lookup failed", "character_id", characterID, "error", err)
+	}
+	return false
 }
 
 // fetchCombatantState pulls Conditions / Concentration / Exhaustion from the

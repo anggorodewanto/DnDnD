@@ -80,6 +80,10 @@ type mockStore struct {
 	activeCombatant     refdata.Combatant
 	activeCombatantErr  error
 	activeCombatantSeen uuid.NullUUID
+
+	pendingASI     refdata.PendingAsi
+	pendingASIErr  error
+	pendingASISeen uuid.UUID
 }
 
 func (m *mockStore) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {
@@ -111,6 +115,17 @@ func (m *mockStore) GetActiveCombatantByCharacterID(_ context.Context, character
 	return m.activeCombatant, nil
 }
 
+func (m *mockStore) GetPendingASI(_ context.Context, characterID uuid.UUID) (refdata.PendingAsi, error) {
+	m.pendingASISeen = characterID
+	if m.pendingASIErr != nil {
+		return refdata.PendingAsi{}, m.pendingASIErr
+	}
+	if m.pendingASI.CharacterID == uuid.Nil {
+		return refdata.PendingAsi{}, sql.ErrNoRows
+	}
+	return m.pendingASI, nil
+}
+
 // --- Tests ---
 
 func newTestCharacter() refdata.Character {
@@ -121,20 +136,20 @@ func newTestCharacter() refdata.Character {
 		"str": 16, "dex": 14, "con": 14, "wis": 10, "int": 10, "cha": 10,
 	})
 	return refdata.Character{
-		ID:         uuid.MustParse("00000000-0000-0000-0000-000000000001"),
-		CampaignID: uuid.MustParse("00000000-0000-0000-0000-000000000002"),
-		Name:       "Aria",
-		Race:       "Half-Elf",
-		Classes:    classes,
-		Level:      5,
-		AbilityScores: abilities,
-		HpMax:      40,
-		HpCurrent:  35,
-		Ac:         16,
-		SpeedFt:    30,
+		ID:               uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		CampaignID:       uuid.MustParse("00000000-0000-0000-0000-000000000002"),
+		Name:             "Aria",
+		Race:             "Half-Elf",
+		Classes:          classes,
+		Level:            5,
+		AbilityScores:    abilities,
+		HpMax:            40,
+		HpCurrent:        35,
+		Ac:               16,
+		SpeedFt:          30,
 		EquippedMainHand: sql.NullString{String: "Longsword", Valid: true},
-		Gold:       50,
-		Languages:  []string{"Common", "Elvish"},
+		Gold:             50,
+		Languages:        []string{"Common", "Elvish"},
 	}
 }
 
@@ -384,6 +399,48 @@ func TestService_PostCharacterCard_SpellSlots(t *testing.T) {
 	err := svc.PostCharacterCard(context.Background(), char.ID, "Aria", "player1")
 	require.NoError(t, err)
 	assert.Contains(t, session.sentContent, "1st: 3/4")
+}
+
+func TestService_PostCharacterCard_ASITierPendingChoice_ShowsPendingIndicator(t *testing.T) {
+	char := newTestCharacter()
+	char.Level = 4
+	store := &mockStore{
+		character: char,
+		campaign:  newTestCampaign(),
+		pendingASI: refdata.PendingAsi{
+			CharacterID:  char.ID,
+			SnapshotJson: json.RawMessage(`{"char_id":"00000000-0000-0000-0000-000000000001","asi_type":"plus2","abilities":["str"],"player_id":"player1","description":"+2 STR"}`),
+		},
+		activeCombatantErr: sql.ErrNoRows,
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.PostCharacterCard(context.Background(), char.ID, "Aria", "player1")
+	require.NoError(t, err)
+
+	assert.Equal(t, char.ID, store.pendingASISeen)
+	assert.Contains(t, session.sentContent, "⏳ ASI/Feat pending")
+}
+
+func TestService_UpdateCard_ASIChoiceMade_ClearsPendingIndicator(t *testing.T) {
+	char := newTestCharacter()
+	char.Level = 4
+	store := &mockStore{
+		character:          char,
+		campaign:           newTestCampaign(),
+		cardMsgID:          sql.NullString{String: "msg-existing", Valid: true},
+		pendingASIErr:      sql.ErrNoRows,
+		activeCombatantErr: sql.ErrNoRows,
+	}
+	session := &mockDiscordSession{}
+	svc := NewService(session, store, nil)
+
+	err := svc.UpdateCard(context.Background(), char.ID)
+	require.NoError(t, err)
+
+	assert.Equal(t, char.ID, store.pendingASISeen)
+	assert.NotContains(t, session.editedContent, "⏳ ASI/Feat pending")
 }
 
 func TestService_UpdateCardRetired_EditError(t *testing.T) {

@@ -39,6 +39,7 @@ type CardData struct {
 	PreparedCount      int
 	HomebrewSpellCount int
 	Retired            bool
+	ASIFeatPending     bool
 }
 
 // FormatCard produces the formatted character card string per the spec.
@@ -53,6 +54,9 @@ func FormatCard(d CardData) string {
 	}
 	b.WriteString(header)
 	b.WriteByte('\n')
+	if d.ASIFeatPending {
+		b.WriteString("⏳ ASI/Feat pending\n")
+	}
 
 	// HP line
 	hpStr := fmt.Sprintf("HP: %d/%d", d.HpCurrent, d.HpMax)

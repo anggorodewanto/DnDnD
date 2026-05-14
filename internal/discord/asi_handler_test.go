@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/charactercard"
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 )
@@ -402,6 +403,63 @@ func TestASIHandler_HandleDMApprove_ApproveError(t *testing.T) {
 	}
 }
 
+func TestASIHandler_HandleDMApprove_DeletePendingErrorPreservesApprovalState(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{}
+
+	var editedContent string
+	var editedComponents *[]discordgo.MessageComponent
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error {
+			return nil
+		},
+		InteractionResponseEditFunc: func(_ *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error) {
+			if newresp.Content != nil {
+				editedContent = *newresp.Content
+			}
+			editedComponents = newresp.Components
+			return &discordgo.Message{}, nil
+		},
+	}
+	store := &stubASIPendingStore{}
+	handler := NewASIHandler(session, svc, nil)
+	handler.SetPendingStore(store)
+	wantPending := PendingASIChoice{
+		CharID:      charID,
+		ASIType:     "plus2",
+		Abilities:   []string{"str"},
+		PlayerID:    "user123",
+		Description: "+2 STR (16 -> 18)",
+	}
+	handler.storePendingChoice(charID, wantPending)
+	store.delErr = fmt.Errorf("delete failed")
+
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_approve:" + charID.String(),
+		},
+	}
+	handler.HandleDMApprove(interaction)
+
+	if svc.approveASICalled {
+		t.Fatal("ApproveASI should not be called when durable pending delete fails")
+	}
+	gotPending, ok := handler.getPendingChoice(charID)
+	if !ok {
+		t.Fatal("pending choice should remain available for retry")
+	}
+	if gotPending.Description != wantPending.Description {
+		t.Fatalf("pending choice changed: got %+v, want %+v", gotPending, wantPending)
+	}
+	if !strings.Contains(editedContent, "could not clear pending ASI choice") {
+		t.Fatalf("expected durable delete failure message, got %q", editedContent)
+	}
+	if editedComponents != nil {
+		t.Fatalf("failure edit should preserve DM approval controls, got %+v", *editedComponents)
+	}
+}
+
 func TestASIHandler_HandleDMDeny_NoPending(t *testing.T) {
 	charID := uuid.New()
 	svc := &mockASIService{}
@@ -519,6 +577,7 @@ type mockASIService struct {
 	approveASIErr    error
 	approveCharID    uuid.UUID
 	approveChoice    ASIChoiceData
+	approveHook      func(ctx context.Context, charID uuid.UUID, choice ASIChoiceData)
 
 	denyASICalled bool
 	denyCharID    uuid.UUID
@@ -532,6 +591,9 @@ func (m *mockASIService) ApproveASI(ctx context.Context, charID uuid.UUID, choic
 	m.approveASICalled = true
 	m.approveCharID = charID
 	m.approveChoice = choice
+	if m.approveHook != nil {
+		m.approveHook(ctx, charID, choice)
+	}
 	return m.approveASIErr
 }
 
@@ -1456,6 +1518,62 @@ func TestASIHandler_DeletesFromStoreOnApprove(t *testing.T) {
 	defer store.mu.Unlock()
 	if len(store.deletes) != 1 || store.deletes[0] != charID {
 		t.Fatalf("expected one Delete call for charID=%s, got %v", charID, store.deletes)
+	}
+}
+
+func TestASIHandler_HandleDMApprove_RemovesPendingBeforeApprovalRefresh(t *testing.T) {
+	charID := uuid.New()
+	store := &stubASIPendingStore{}
+	var refreshedCard string
+	svc := &mockASIService{
+		approveHook: func(_ context.Context, approvedCharID uuid.UUID, _ ASIChoiceData) {
+			store.mu.Lock()
+			pendingDeleted := len(store.deletes) == 1 && store.deletes[0] == approvedCharID
+			store.mu.Unlock()
+			refreshedCard = charactercard.FormatCard(charactercard.CardData{
+				Name:           "Aria",
+				ShortID:        "ARIA",
+				Level:          8,
+				Race:           "human",
+				ASIFeatPending: !pendingDeleted,
+			})
+		},
+	}
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error { return nil },
+		InteractionResponseEditFunc: func(_ *discordgo.Interaction, _ *discordgo.WebhookEdit) (*discordgo.Message, error) {
+			return &discordgo.Message{}, nil
+		},
+		UserChannelCreateFunc: func(_ string) (*discordgo.Channel, error) {
+			return &discordgo.Channel{ID: "dm-channel"}, nil
+		},
+		ChannelMessageSendFunc: func(_ string, _ string) (*discordgo.Message, error) {
+			return &discordgo.Message{}, nil
+		},
+	}
+	handler := NewASIHandler(session, svc, nil)
+	handler.SetPendingStore(store)
+	handler.storePendingChoice(charID, PendingASIChoice{
+		CharID:      charID,
+		ASIType:     "plus2",
+		Abilities:   []string{"str"},
+		PlayerID:    "user123",
+		Description: "+2 STR (16 -> 18)",
+	})
+
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_approve:" + charID.String(),
+		},
+	}
+	handler.HandleDMApprove(interaction)
+
+	if !svc.approveASICalled {
+		t.Fatal("expected ApproveASI to be called")
+	}
+	if strings.Contains(refreshedCard, "⏳ ASI/Feat pending") {
+		t.Fatalf("approval refresh rendered stale pending indicator:\n%s", refreshedCard)
 	}
 }
 
