@@ -255,6 +255,26 @@ func (t *TurnTimer) AutoResolveTurn(ctx context.Context, turnID uuid.UUID, rolle
 			ps.Ability, ps.Dc, source, roll, outcome))
 	}
 
+	// Explicitly decline on-hit decisions and Bardic Inspiration (best-effort).
+	if combatant.IsAlive && combatant.HpCurrent > 0 {
+		// Divine Smite — paladin with feature + available slots.
+		if combatant.CharacterID.Valid {
+			if char, err := t.store.GetCharacter(ctx, combatant.CharacterID.UUID); err == nil {
+				if HasFeatureByName(char.Features.RawMessage, "Divine Smite") {
+					if slots, err := ParseSpellSlots(char.SpellSlots.RawMessage); err == nil {
+						if len(AvailableSmiteSlots(slots)) > 0 {
+							actions = append(actions, "⚡ Divine Smite declined (auto-resolved)")
+						}
+					}
+				}
+			}
+		}
+		// Bardic Inspiration — combatant holds an active die.
+		if CombatantHasBardicInspiration(combatant) {
+			actions = append(actions, "🎵 Bardic Inspiration declined (auto-resolved)")
+		}
+	}
+
 	// Forfeit pending actions
 	if err := t.store.CancelAllPendingActionsByCombatant(ctx, refdata.CancelAllPendingActionsByCombatantParams{
 		CombatantID: combatant.ID,

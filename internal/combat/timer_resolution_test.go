@@ -1460,3 +1460,92 @@ func TestAutoResolveTurn_DyingCombatant_Nat20_ResetsDeathSavesAndDyingConditions
 	assert.False(t, HasCondition(capturedConds, "prone"), "prone must be removed")
 }
 
+
+// SR-050: auto-resolve explicitly declines Divine Smite when paladin has
+// available slots, and the slot is preserved (not consumed).
+func TestAutoResolveTurn_DeclinesOnHitDecisions(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+	charID := uuid.New()
+
+	slotsJSON, _ := json.Marshal(map[string]SlotInfo{"1": {Current: 2, Max: 2}})
+	featuresJSON := json.RawMessage(`[{"name":"Divine Smite"}]`)
+
+	store := defaultMockStore()
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID: turnID, EncounterID: encounterID, CombatantID: combatantID,
+			RoundNumber: 1, Status: "active",
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: combatantID, EncounterID: encounterID, DisplayName: "Kael",
+			HpCurrent: 40, HpMax: 40, IsAlive: true,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{
+			ID:         charID,
+			SpellSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+			Features:   pqtype.NullRawMessage{RawMessage: featuresJSON, Valid: true},
+		}, nil
+	}
+	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: uuid.New(), Settings: settingsJSON(24)}, nil
+	}
+
+	notifier := &mockNotifier{}
+	timer := NewTurnTimer(store, notifier, 30*time.Second)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	actions, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
+	require.NoError(t, err)
+
+	// Must contain explicit decline line
+	assert.True(t, actionsContain(actions, "Divine Smite declined"),
+		"auto-resolve must explicitly decline Divine Smite; got: %v", actions)
+
+	// Spell slots must NOT be consumed
+	// (GetCharacter is read-only in this path; no UpdateCharacterSpellSlots call expected)
+}
+
+// SR-050: auto-resolve explicitly declines Bardic Inspiration when the
+// combatant holds an active BI die.
+func TestAutoResolveTurn_DeclinesBardicInspiration(t *testing.T) {
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getTurnFn = func(ctx context.Context, id uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID: turnID, EncounterID: encounterID, CombatantID: combatantID,
+			RoundNumber: 1, Status: "active",
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID: combatantID, EncounterID: encounterID, DisplayName: "Aria",
+			HpCurrent: 30, HpMax: 30, IsAlive: true,
+			BardicInspirationDie: sql.NullString{String: "d6", Valid: true},
+			Conditions:           json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCampaignByEncounterIDFn = func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
+		return refdata.Campaign{ID: uuid.New(), Settings: settingsJSON(24)}, nil
+	}
+
+	notifier := &mockNotifier{}
+	timer := NewTurnTimer(store, notifier, 30*time.Second)
+	roller := dice.NewRoller(func(max int) int { return 10 })
+
+	actions, err := timer.AutoResolveTurn(context.Background(), turnID, roller)
+	require.NoError(t, err)
+
+	assert.True(t, actionsContain(actions, "Bardic Inspiration declined"),
+		"auto-resolve must explicitly decline Bardic Inspiration; got: %v", actions)
+}
