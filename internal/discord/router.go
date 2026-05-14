@@ -23,6 +23,15 @@ type CommandHandler interface {
 	Handle(interaction *discordgo.Interaction)
 }
 
+// ErrorReportingHandler is an optional extension of CommandHandler. Handlers
+// that implement it have their error return recorded to errorlog (DM dashboard
+// badge) and trigger the friendly ephemeral reply to the player. Handlers
+// that only implement CommandHandler continue to work unchanged.
+type ErrorReportingHandler interface {
+	CommandHandler
+	HandleCommand(interaction *discordgo.Interaction) error
+}
+
 // CommandRouter dispatches slash command interactions to the appropriate handler.
 type CommandRouter struct {
 	bot         *Bot
@@ -344,6 +353,15 @@ func (r *CommandRouter) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	// If the handler implements ErrorReportingHandler, use HandleCommand so
+	// non-panic errors are captured in errorlog for the DM dashboard badge.
+	if erh, ok := handler.(ErrorReportingHandler); ok {
+		if err := erh.HandleCommand(interaction); err != nil {
+			r.recordHandlerError(interaction, command, err)
+		}
+		return
+	}
+
 	handler.Handle(interaction)
 }
 
@@ -394,6 +412,28 @@ func (r *CommandRouter) recoverInteraction(interaction *discordgo.Interaction, c
 			"user_id", userID,
 			"error", err,
 			"stack", string(debug.Stack()),
+		)
+	}
+	respondEphemeral(r.bot.session, interaction, friendlyErrorMessage)
+	if r.recorder == nil {
+		return
+	}
+	_ = r.recorder.Record(context.Background(), errorlog.Entry{
+		Command: command,
+		UserID:  userID,
+		Summary: errorlog.BuildSummary(command, userID, err),
+	})
+}
+
+// recordHandlerError handles a non-nil error returned by an ErrorReportingHandler:
+// logs it, sends the friendly ephemeral to the player, and records to errorlog.
+func (r *CommandRouter) recordHandlerError(interaction *discordgo.Interaction, command string, err error) {
+	userID := discordUserID(interaction)
+	if r.bot != nil && r.bot.logger != nil {
+		r.bot.logger.Error("discord handler error",
+			"command", command,
+			"user_id", userID,
+			"error", err,
 		)
 	}
 	respondEphemeral(r.bot.session, interaction, friendlyErrorMessage)
