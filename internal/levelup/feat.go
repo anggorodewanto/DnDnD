@@ -1,11 +1,14 @@
 package levelup
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/ab/dndnd/internal/character"
 )
+
+var ErrInvalidFeatChoices = errors.New("invalid feat choices")
 
 // FeatPrerequisites represents the prerequisites for a feat.
 type FeatPrerequisites struct {
@@ -22,6 +25,51 @@ type FeatInfo struct {
 	Prerequisites    FeatPrerequisites
 	ASIBonus         map[string]any
 	MechanicalEffect []map[string]string
+	Choices          FeatChoices
+}
+
+// FeatChoices carries feat-internal selections made before DM approval.
+type FeatChoices struct {
+	Ability    string   `json:"ability,omitempty"`
+	Skills     []string `json:"skills,omitempty"`
+	DamageType string   `json:"damage_type,omitempty"`
+}
+
+func validateRequiredFeatChoices(feat FeatInfo) error {
+	switch feat.ID {
+	case "resilient":
+		if !validAbilities[feat.Choices.Ability] {
+			return fmt.Errorf("%w: resilient requires a valid ability choice", ErrInvalidFeatChoices)
+		}
+	case "skilled":
+		if len(feat.Choices.Skills) != 3 {
+			return fmt.Errorf("%w: skilled requires exactly three skill choices", ErrInvalidFeatChoices)
+		}
+		seen := make(map[string]bool, len(feat.Choices.Skills))
+		for _, skill := range feat.Choices.Skills {
+			if !validSkill(skill) {
+				return fmt.Errorf("%w: skilled has invalid skill choice %q", ErrInvalidFeatChoices, skill)
+			}
+			if seen[skill] {
+				return fmt.Errorf("%w: skilled requires three distinct skill choices", ErrInvalidFeatChoices)
+			}
+			seen[skill] = true
+		}
+	case "elemental-adept":
+		if !validElementalAdeptDamageType(feat.Choices.DamageType) {
+			return fmt.Errorf("%w: elemental adept requires a valid damage type choice", ErrInvalidFeatChoices)
+		}
+	}
+	return nil
+}
+
+func validElementalAdeptDamageType(damageType string) bool {
+	switch damageType {
+	case "acid", "cold", "fire", "lightning", "thunder":
+		return true
+	default:
+		return false
+	}
 }
 
 // CheckFeatPrerequisites validates whether a character meets a feat's prerequisites.

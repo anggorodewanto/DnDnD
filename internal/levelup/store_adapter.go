@@ -43,6 +43,7 @@ func (a *characterStoreAdapter) GetCharacterForLevelUp(ctx context.Context, id u
 		SpellSlots:       rawFromNullable(row.SpellSlots),
 		PactMagicSlots:   rawFromNullable(row.PactMagicSlots),
 		Features:         rawFromNullable(row.Features),
+		Proficiencies:    rawFromNullable(row.Proficiencies),
 	}, nil
 }
 
@@ -88,6 +89,13 @@ func (a *characterStoreAdapter) UpdateFeatures(ctx context.Context, id uuid.UUID
 	return a.queries.UpdateCharacterFeaturesOnly(ctx, refdata.UpdateCharacterFeaturesOnlyParams{
 		ID:       id,
 		Features: pqtype.NullRawMessage{RawMessage: features, Valid: true},
+	})
+}
+
+func (a *characterStoreAdapter) UpdateProficiencies(ctx context.Context, id uuid.UUID, proficiencies json.RawMessage) error {
+	return a.queries.UpdateCharacterProficienciesOnly(ctx, refdata.UpdateCharacterProficienciesOnlyParams{
+		ID:            id,
+		Proficiencies: pqtype.NullRawMessage{RawMessage: proficiencies, Valid: true},
 	})
 }
 

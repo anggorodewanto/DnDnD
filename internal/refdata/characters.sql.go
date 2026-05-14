@@ -265,7 +265,7 @@ func (q *Queries) GetCharacterCardMessageID(ctx context.Context, id uuid.UUID) (
 const getCharacterForLevelUp = `-- name: GetCharacterForLevelUp :one
 SELECT c.id, c.name, c.level, c.hp_max, c.hp_current, c.proficiency_bonus,
        c.classes, c.ability_scores, c.spell_slots, c.pact_magic_slots,
-       c.features,
+       c.features, c.proficiencies,
        COALESCE(pc.discord_user_id, '') AS discord_user_id
 FROM characters c
 LEFT JOIN player_characters pc ON pc.character_id = c.id
@@ -285,6 +285,7 @@ type GetCharacterForLevelUpRow struct {
 	SpellSlots       pqtype.NullRawMessage `json:"spell_slots"`
 	PactMagicSlots   pqtype.NullRawMessage `json:"pact_magic_slots"`
 	Features         pqtype.NullRawMessage `json:"features"`
+	Proficiencies    pqtype.NullRawMessage `json:"proficiencies"`
 	DiscordUserID    string                `json:"discord_user_id"`
 }
 
@@ -308,6 +309,7 @@ func (q *Queries) GetCharacterForLevelUp(ctx context.Context, id uuid.UUID) (Get
 		&i.SpellSlots,
 		&i.PactMagicSlots,
 		&i.Features,
+		&i.Proficiencies,
 		&i.DiscordUserID,
 	)
 	return i, err
@@ -1274,6 +1276,22 @@ func (q *Queries) UpdateCharacterPactMagicSlots(ctx context.Context, arg UpdateC
 		&i.CardMessageID,
 	)
 	return i, err
+}
+
+const updateCharacterProficienciesOnly = `-- name: UpdateCharacterProficienciesOnly :exec
+UPDATE characters SET proficiencies = $2, updated_at = now()
+WHERE id = $1
+`
+
+type UpdateCharacterProficienciesOnlyParams struct {
+	ID            uuid.UUID             `json:"id"`
+	Proficiencies pqtype.NullRawMessage `json:"proficiencies"`
+}
+
+// Used by feat application to grant selected save/skill proficiencies.
+func (q *Queries) UpdateCharacterProficienciesOnly(ctx context.Context, arg UpdateCharacterProficienciesOnlyParams) error {
+	_, err := q.db.ExecContext(ctx, updateCharacterProficienciesOnly, arg.ID, arg.Proficiencies)
+	return err
 }
 
 const updateCharacterSpellSlots = `-- name: UpdateCharacterSpellSlots :one

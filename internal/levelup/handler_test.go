@@ -278,6 +278,110 @@ func TestHandler_HandleApplyFeat_Success(t *testing.T) {
 	}
 }
 
+func TestHandler_HandleApplyFeat_RejectsMissingRequiredFeatChoices(t *testing.T) {
+	tests := []struct {
+		name string
+		feat FeatInfo
+	}{
+		{
+			name: "resilient",
+			feat: FeatInfo{ID: "resilient", Name: "Resilient"},
+		},
+		{
+			name: "skilled",
+			feat: FeatInfo{ID: "skilled", Name: "Skilled"},
+		},
+		{
+			name: "elemental adept",
+			feat: FeatInfo{ID: "elemental-adept", Name: "Elemental Adept"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, charStore, _, _ := setupTestHandler(t)
+			charID := uuid.New()
+			charStore.chars[charID] = &StoredCharacter{
+				ID:            charID,
+				Name:          "Cira",
+				AbilityScores: mustJSON(t, character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10}),
+				Features:      mustJSON(t, []character.Feature{}),
+				Proficiencies: mustJSON(t, character.Proficiencies{}),
+			}
+
+			body, _ := json.Marshal(FeatApplyRequest{
+				CharacterID: charID,
+				Feat:        tt.feat,
+			})
+			req := httptest.NewRequest(http.MethodPost, "/api/levelup/feat/apply", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			h.HandleApplyFeat(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusBadRequest, w.Body.String())
+			}
+
+			var features []character.Feature
+			if err := json.Unmarshal(charStore.chars[charID].Features, &features); err != nil {
+				t.Fatalf("unmarshal features: %v", err)
+			}
+			if len(features) != 0 {
+				t.Fatalf("expected no feature appended, got %+v", features)
+			}
+		})
+	}
+}
+
+func TestHandler_HandleApplyFeat_RejectsInvalidRequiredFeatChoices(t *testing.T) {
+	tests := []struct {
+		name string
+		feat FeatInfo
+	}{
+		{
+			name: "resilient invalid ability",
+			feat: FeatInfo{ID: "resilient", Name: "Resilient", Choices: FeatChoices{Ability: "luck"}},
+		},
+		{
+			name: "skilled invalid skill",
+			feat: FeatInfo{ID: "skilled", Name: "Skilled", Choices: FeatChoices{Skills: []string{"arcana", "history", "luck"}}},
+		},
+		{
+			name: "elemental adept invalid damage type",
+			feat: FeatInfo{ID: "elemental-adept", Name: "Elemental Adept", Choices: FeatChoices{DamageType: "force"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, charStore, _, _ := setupTestHandler(t)
+			charID := uuid.New()
+			charStore.chars[charID] = &StoredCharacter{
+				ID:            charID,
+				Name:          "Cira",
+				AbilityScores: mustJSON(t, character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10}),
+				Features:      mustJSON(t, []character.Feature{}),
+				Proficiencies: mustJSON(t, character.Proficiencies{}),
+			}
+
+			body, _ := json.Marshal(FeatApplyRequest{
+				CharacterID: charID,
+				Feat:        tt.feat,
+			})
+			req := httptest.NewRequest(http.MethodPost, "/api/levelup/feat/apply", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			h.HandleApplyFeat(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusBadRequest, w.Body.String())
+			}
+		})
+	}
+}
+
 func TestHandler_HandleCheckFeatPrereqs(t *testing.T) {
 	h, _, _, _ := setupTestHandler(t)
 

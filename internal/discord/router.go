@@ -25,15 +25,15 @@ type CommandHandler interface {
 
 // CommandRouter dispatches slash command interactions to the appropriate handler.
 type CommandRouter struct {
-	bot           *Bot
-	handlers      map[string]CommandHandler
-	moveHandler   *MoveHandler
-	flyHandler    *FlyHandler
-	doneHandler   *DoneHandler
-	restHandler   *RestHandler
-	lootHandler   *LootHandler
-	asiHandler    *ASIHandler
-	promptStore   *ReactionPromptStore
+	bot         *Bot
+	handlers    map[string]CommandHandler
+	moveHandler *MoveHandler
+	flyHandler  *FlyHandler
+	doneHandler *DoneHandler
+	restHandler *RestHandler
+	lootHandler *LootHandler
+	asiHandler  *ASIHandler
+	promptStore *ReactionPromptStore
 	// recorder persists panics and other surfaced errors for the DM
 	// dashboard badge / error panel. nil == log-only (still safe).
 	recorder errorlog.Recorder
@@ -516,6 +516,10 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 		// safer if either prefix ever changes).
 		if strings.HasPrefix(customID, asiFeatSelectPrefix+":") {
 			r.asiHandler.HandleASIFeatSelect(interaction)
+			return
+		}
+		if strings.HasPrefix(customID, asiFeatChoicePrefix+":") {
+			r.asiHandler.HandleASIFeatSubChoiceSelect(interaction)
 			return
 		}
 		if strings.HasPrefix(customID, asiChoicePrefix+":") {

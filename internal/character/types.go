@@ -59,11 +59,12 @@ type FeatureUse struct {
 
 // Feature represents a class or racial feature.
 type Feature struct {
-	Name             string `json:"name"`
-	Source           string `json:"source"`
-	Level            int    `json:"level"`
-	Description      string `json:"description"`
-	MechanicalEffect string `json:"mechanical_effect,omitempty"`
+	Name             string              `json:"name"`
+	Source           string              `json:"source"`
+	Level            int                 `json:"level"`
+	Description      string              `json:"description"`
+	MechanicalEffect string              `json:"mechanical_effect,omitempty"`
+	Choices          map[string][]string `json:"choices,omitempty"`
 }
 
 // SlotInfo tracks current and max for a spell slot level.

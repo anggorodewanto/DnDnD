@@ -203,7 +203,6 @@ func TestFormatDMQueueASIMessage(t *testing.T) {
 	}
 }
 
-
 func TestParseDMApprovalCustomID(t *testing.T) {
 	charID := uuid.New()
 
@@ -1122,6 +1121,179 @@ func TestASIHandler_HandleASIFeatSelect_PostsToDMQueue(t *testing.T) {
 	}
 }
 
+func TestBuildFeatSubChoiceMenu_ResilientAbilityChoice(t *testing.T) {
+	charID := uuid.New()
+	components, ok := buildFeatSubChoiceMenu(charID, "resilient")
+	if !ok {
+		t.Fatal("expected Resilient to require a sub-choice")
+	}
+
+	row := components[0].(*discordgo.ActionsRow)
+	menu := row.Components[0].(discordgo.SelectMenu)
+	if menu.CustomID != "asi_feat_choice:"+charID.String()+":resilient:ability" {
+		t.Errorf("CustomID = %q", menu.CustomID)
+	}
+	if menu.MaxValues != 1 {
+		t.Errorf("MaxValues = %d, want 1", menu.MaxValues)
+	}
+	if len(menu.Options) != 6 {
+		t.Errorf("options = %d, want 6 abilities", len(menu.Options))
+	}
+}
+
+func TestBuildFeatSubChoiceMenu_SkilledSkillChoices(t *testing.T) {
+	charID := uuid.New()
+	components, ok := buildFeatSubChoiceMenu(charID, "skilled")
+	if !ok {
+		t.Fatal("expected Skilled to require sub-choices")
+	}
+
+	row := components[0].(*discordgo.ActionsRow)
+	menu := row.Components[0].(discordgo.SelectMenu)
+	if menu.CustomID != "asi_feat_choice:"+charID.String()+":skilled:skills" {
+		t.Errorf("CustomID = %q", menu.CustomID)
+	}
+	if menu.MaxValues != 3 {
+		t.Errorf("MaxValues = %d, want 3", menu.MaxValues)
+	}
+	if len(menu.Options) != len(character.SkillAbilityMap) {
+		t.Errorf("options = %d, want %d skills", len(menu.Options), len(character.SkillAbilityMap))
+	}
+}
+
+func TestBuildFeatSubChoiceMenu_ElementalAdeptDamageTypeChoice(t *testing.T) {
+	charID := uuid.New()
+	components, ok := buildFeatSubChoiceMenu(charID, "elemental-adept")
+	if !ok {
+		t.Fatal("expected Elemental Adept to require a sub-choice")
+	}
+
+	row := components[0].(*discordgo.ActionsRow)
+	menu := row.Components[0].(discordgo.SelectMenu)
+	if menu.CustomID != "asi_feat_choice:"+charID.String()+":elemental-adept:damage_type" {
+		t.Errorf("CustomID = %q", menu.CustomID)
+	}
+	if menu.MaxValues != 1 {
+		t.Errorf("MaxValues = %d, want 1", menu.MaxValues)
+	}
+	if len(menu.Options) != 5 {
+		t.Errorf("options = %d, want 5 damage types", len(menu.Options))
+	}
+}
+
+func TestASIHandler_HandleASIFeatSelect_SubChoiceRespondsWithFollowUpMenu(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{character: &ASICharacterData{ID: charID, Name: "Aria", ClassInfo: "Fighter 8"}}
+
+	var respondedComponents []discordgo.MessageComponent
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+			if resp.Data != nil {
+				respondedComponents = resp.Data.Components
+			}
+			return nil
+		},
+	}
+
+	handler := NewASIHandler(session, svc, func(_ string) string { return "dm-queue-channel" })
+	handler.SetFeatLister(&stubFeatLister{feats: []FeatOption{{ID: "resilient", Name: "Resilient"}}})
+
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_feat_select:" + charID.String(),
+			Values:   []string{"resilient"},
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "user123"}},
+	}
+
+	handler.HandleASIFeatSelect(interaction)
+
+	if len(respondedComponents) == 0 {
+		t.Fatal("expected follow-up sub-choice menu")
+	}
+	if _, ok := handler.getPendingChoice(charID); ok {
+		t.Fatal("feat should not be pending until sub-choice is selected")
+	}
+}
+
+func TestASIHandler_HandleFeatSubChoiceSelect_PostsToDMQueue(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{character: &ASICharacterData{ID: charID, Name: "Aria", ClassInfo: "Fighter 8"}}
+
+	var sentMessage *discordgo.MessageSend
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error { return nil },
+		ChannelMessageSendComplexFunc: func(_ string, msg *discordgo.MessageSend) (*discordgo.Message, error) {
+			sentMessage = msg
+			return &discordgo.Message{}, nil
+		},
+	}
+
+	handler := NewASIHandler(session, svc, func(_ string) string { return "dm-queue-channel" })
+	handler.SetFeatLister(&stubFeatLister{feats: []FeatOption{{ID: "skilled", Name: "Skilled"}}})
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_feat_choice:" + charID.String() + ":skilled:skills",
+			Values:   []string{"arcana", "history", "stealth"},
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "user123"}},
+	}
+
+	handler.HandleASIFeatSubChoiceSelect(interaction)
+
+	pending, ok := handler.getPendingChoice(charID)
+	if !ok {
+		t.Fatal("expected pending choice stored")
+	}
+	if pending.FeatChoices["skills"][2] != "stealth" {
+		t.Fatalf("expected skill choices recorded, got %+v", pending.FeatChoices)
+	}
+	if sentMessage == nil || !strings.Contains(sentMessage.Content, "arcana, history, stealth") {
+		t.Fatalf("expected DM queue message with skill choices, got %+v", sentMessage)
+	}
+}
+
+func TestASIHandler_HandleDMApprove_PropagatesFeatSubChoices(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{}
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error { return nil },
+		InteractionResponseEditFunc: func(_ *discordgo.Interaction, _ *discordgo.WebhookEdit) (*discordgo.Message, error) {
+			return &discordgo.Message{}, nil
+		},
+		UserChannelCreateFunc:  func(_ string) (*discordgo.Channel, error) { return &discordgo.Channel{ID: "dm"}, nil },
+		ChannelMessageSendFunc: func(_, _ string) (*discordgo.Message, error) { return &discordgo.Message{}, nil },
+	}
+
+	handler := NewASIHandler(session, svc, nil)
+	handler.storePendingChoice(charID, PendingASIChoice{
+		CharID:      charID,
+		ASIType:     "feat",
+		FeatID:      "elemental-adept",
+		FeatChoices: map[string][]string{"damage_type": []string{"fire"}},
+		PlayerID:    "user123",
+		Description: "Feat: Elemental Adept (fire)",
+	})
+
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{CustomID: "asi_approve:" + charID.String()},
+	}
+
+	handler.HandleDMApprove(interaction)
+
+	if !svc.approveASICalled {
+		t.Fatal("expected ApproveASI to be called")
+	}
+	if svc.approveChoice.FeatChoices["damage_type"][0] != "fire" {
+		t.Fatalf("expected damage type propagated, got %+v", svc.approveChoice.FeatChoices)
+	}
+}
+
 func TestASIHandler_HandleDMDeny(t *testing.T) {
 	charID := uuid.New()
 
@@ -1170,13 +1342,13 @@ func TestASIHandler_HandleDMDeny(t *testing.T) {
 // the F-89d persistence tests. Records calls so we can assert the handler
 // upserts on storePendingChoice and deletes on removePendingChoice.
 type stubASIPendingStore struct {
-	mu       sync.Mutex
-	saves    []PendingASIChoice
-	deletes  []uuid.UUID
-	list     []PendingASIChoice
-	saveErr  error
-	delErr   error
-	listErr  error
+	mu      sync.Mutex
+	saves   []PendingASIChoice
+	deletes []uuid.UUID
+	list    []PendingASIChoice
+	saveErr error
+	delErr  error
+	listErr error
 }
 
 func (s *stubASIPendingStore) Save(_ context.Context, c PendingASIChoice) error {

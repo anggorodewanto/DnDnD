@@ -3,6 +3,7 @@ package levelup
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -22,13 +23,13 @@ type LevelUpRequest struct {
 
 // LevelUpResponse is the JSON response after a level-up.
 type LevelUpResponse struct {
-	NewLevel            int              `json:"new_level"`
-	HPGained            int              `json:"hp_gained"`
-	NewHPMax            int              `json:"new_hp_max"`
-	NewProficiencyBonus int              `json:"new_proficiency_bonus"`
-	NewAttacksPerAction int              `json:"new_attacks_per_action"`
-	GrantsASI           bool             `json:"grants_asi"`
-	NeedsSubclass       bool             `json:"needs_subclass"`
+	NewLevel            int  `json:"new_level"`
+	HPGained            int  `json:"hp_gained"`
+	NewHPMax            int  `json:"new_hp_max"`
+	NewProficiencyBonus int  `json:"new_proficiency_bonus"`
+	NewAttacksPerAction int  `json:"new_attacks_per_action"`
+	GrantsASI           bool `json:"grants_asi"`
+	NeedsSubclass       bool `json:"needs_subclass"`
 }
 
 // ASIApprovalRequest is the JSON body for approving an ASI choice.
@@ -51,10 +52,10 @@ type FeatApplyRequest struct {
 
 // FeatPrereqCheckRequest is the JSON body for checking feat prerequisites.
 type FeatPrereqCheckRequest struct {
-	Prerequisites    FeatPrerequisites       `json:"prerequisites"`
-	Scores           character.AbilityScores `json:"scores"`
-	ArmorProficiencies []string              `json:"armor_proficiencies"`
-	IsSpellcaster    bool                    `json:"is_spellcaster"`
+	Prerequisites      FeatPrerequisites       `json:"prerequisites"`
+	Scores             character.AbilityScores `json:"scores"`
+	ArmorProficiencies []string                `json:"armor_proficiencies"`
+	IsSpellcaster      bool                    `json:"is_spellcaster"`
 }
 
 // FeatPrereqCheckResponse is the JSON response for a feat prerequisite check.
@@ -169,6 +170,10 @@ func (h *Handler) HandleApplyFeat(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.service.ApplyFeat(r.Context(), req.CharacterID, req.Feat); err != nil {
 		h.logger.Error("feat application failed", "error", err)
+		if errors.Is(err, ErrInvalidFeatChoices) {
+			http.Error(w, "feat application failed: "+err.Error(), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, "feat application failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

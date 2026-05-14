@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/google/uuid"
@@ -24,6 +25,7 @@ type StoredCharacter struct {
 	SpellSlots       json.RawMessage `json:"spell_slots"`
 	PactMagicSlots   json.RawMessage `json:"pact_magic_slots"`
 	Features         json.RawMessage `json:"features"`
+	Proficiencies    json.RawMessage `json:"proficiencies"`
 }
 
 // StatsUpdate holds the fields to update after a level-up.
@@ -71,6 +73,7 @@ type CharacterStore interface {
 	UpdateCharacterStats(ctx context.Context, id uuid.UUID, update StatsUpdate) error
 	UpdateAbilityScores(ctx context.Context, id uuid.UUID, scores json.RawMessage) error
 	UpdateFeatures(ctx context.Context, id uuid.UUID, features json.RawMessage) error
+	UpdateProficiencies(ctx context.Context, id uuid.UUID, proficiencies json.RawMessage) error
 }
 
 // ClassStore is the interface for class reference data access.
@@ -349,6 +352,10 @@ func (s *Service) DenyASI(ctx context.Context, characterID uuid.UUID, reason str
 
 // ApplyFeat adds a feat to a character's features and applies any ASI bonuses.
 func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat FeatInfo) error {
+	if err := validateRequiredFeatChoices(feat); err != nil {
+		return err
+	}
+
 	char, err := s.charStore.GetCharacterForLevelUp(ctx, characterID)
 	if err != nil {
 		return fmt.Errorf("loading character: %w", err)
@@ -369,9 +376,10 @@ func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat Fea
 		Description: fmt.Sprintf("Feat: %s", feat.Name),
 	}
 	if len(feat.MechanicalEffect) > 0 {
-		effectJSON, _ := json.Marshal(feat.MechanicalEffect)
+		effectJSON, _ := json.Marshal(specializeFeatEffects(feat.MechanicalEffect, feat.Choices))
 		feature.MechanicalEffect = string(effectJSON)
 	}
+	feature.Choices = featChoicesMap(feat.Choices)
 	features = append(features, feature)
 
 	featuresJSON, err := json.Marshal(features)
@@ -387,12 +395,125 @@ func (s *Service) ApplyFeat(ctx context.Context, characterID uuid.UUID, feat Fea
 
 	// Apply ASI bonus from feat if present
 	if len(feat.ASIBonus) > 0 {
-		if err := s.applyFeatASI(ctx, char, feat.ASIBonus); err != nil {
+		asiBonus := specializeFeatASIBonus(feat.ASIBonus, feat.Choices)
+		if err := s.applyFeatASI(ctx, char, asiBonus); err != nil {
 			return fmt.Errorf("applying feat ASI: %w", err)
 		}
 	}
+	if err := s.applyFeatProficiencyChoices(ctx, char, feat); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func specializeFeatASIBonus(asiBonus map[string]any, choices FeatChoices) map[string]any {
+	if choices.Ability == "" {
+		return asiBonus
+	}
+	bonus, ok := toInt(asiBonus["choose_ability"])
+	if !ok {
+		return asiBonus
+	}
+	out := make(map[string]any, len(asiBonus)+1)
+	for key, val := range asiBonus {
+		out[key] = val
+	}
+	out[choices.Ability] = bonus
+	return out
+}
+
+func featChoicesMap(choices FeatChoices) map[string][]string {
+	out := make(map[string][]string)
+	if choices.Ability != "" {
+		out["ability"] = []string{choices.Ability}
+	}
+	if len(choices.Skills) > 0 {
+		out["skills"] = append([]string(nil), choices.Skills...)
+	}
+	if choices.DamageType != "" {
+		out["damage_type"] = []string{choices.DamageType}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func specializeFeatEffects(effects []map[string]string, choices FeatChoices) []map[string]string {
+	out := make([]map[string]string, 0, len(effects))
+	for _, effect := range effects {
+		next := make(map[string]string, len(effect)+1)
+		for k, v := range effect {
+			next[k] = v
+		}
+		if choices.Ability != "" && strings.Contains(next["effect_type"], "chosen_ability") {
+			next["ability"] = choices.Ability
+		}
+		if choices.DamageType != "" && strings.Contains(next["effect_type"], "chosen_element") {
+			next["damage_type"] = choices.DamageType
+		}
+		out = append(out, next)
+	}
+	return out
+}
+
+func (s *Service) applyFeatProficiencyChoices(ctx context.Context, char *StoredCharacter, feat FeatInfo) error {
+	if feat.ID != "resilient" && feat.ID != "skilled" {
+		return nil
+	}
+
+	profs, err := parseStoredProficiencies(char.Proficiencies)
+	if err != nil {
+		return fmt.Errorf("parsing proficiencies: %w", err)
+	}
+	if feat.ID == "resilient" && feat.Choices.Ability != "" {
+		profs.Saves = appendUnique(profs.Saves, feat.Choices.Ability)
+	}
+	if feat.ID == "skilled" {
+		for _, skill := range feat.Choices.Skills {
+			if !validSkill(skill) {
+				continue
+			}
+			profs.Skills = appendUnique(profs.Skills, skill)
+		}
+	}
+
+	raw, err := json.Marshal(profs)
+	if err != nil {
+		return fmt.Errorf("marshaling proficiencies: %w", err)
+	}
+	if err := s.charStore.UpdateProficiencies(ctx, char.ID, raw); err != nil {
+		return fmt.Errorf("updating proficiencies: %w", err)
+	}
+	s.publishForCharacter(ctx, char.ID)
+	s.notifyCardUpdate(ctx, char.ID)
+	return nil
+}
+
+func parseStoredProficiencies(raw json.RawMessage) (character.Proficiencies, error) {
+	if len(raw) == 0 {
+		return character.Proficiencies{}, nil
+	}
+	var profs character.Proficiencies
+	if err := json.Unmarshal(raw, &profs); err != nil {
+		return character.Proficiencies{}, err
+	}
+	return profs, nil
+}
+
+func appendUnique(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func validSkill(skill string) bool {
+	_, ok := character.SkillAbilityMap[skill]
+	return ok
 }
 
 // applyFeatASI applies the ASI bonus from a feat (e.g. {"con": 1} or {"choose_ability": 1, "from": [...]}).

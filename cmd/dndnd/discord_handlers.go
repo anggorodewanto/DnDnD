@@ -1722,6 +1722,11 @@ func (a *asiServiceAdapter) ApproveASI(ctx context.Context, charID uuid.UUID, ch
 		if feat.MechanicalEffect.Valid {
 			_ = json.Unmarshal(feat.MechanicalEffect.RawMessage, &info.MechanicalEffect)
 		}
+		info.Choices = levelup.FeatChoices{
+			Ability:    firstChoice(choice.FeatChoices, "ability"),
+			Skills:     choice.FeatChoices["skills"],
+			DamageType: firstChoice(choice.FeatChoices, "damage_type"),
+		}
 		return a.svc.ApplyFeat(ctx, charID, info)
 	}
 	return a.svc.ApproveASI(ctx, charID, levelup.ASIChoice{
@@ -1730,6 +1735,14 @@ func (a *asiServiceAdapter) ApproveASI(ctx context.Context, charID uuid.UUID, ch
 		Ability2: choice.Ability2,
 		FeatID:   choice.FeatID,
 	})
+}
+
+func firstChoice(choices map[string][]string, key string) string {
+	values := choices[key]
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }
 
 func (a *asiServiceAdapter) DenyASI(ctx context.Context, charID uuid.UUID, reason string) error {

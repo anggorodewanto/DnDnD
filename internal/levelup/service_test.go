@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
@@ -55,6 +56,15 @@ func (m *mockCharacterStore) UpdateFeatures(ctx context.Context, id uuid.UUID, f
 		return fmt.Errorf("not found")
 	}
 	c.Features = features
+	return nil
+}
+
+func (m *mockCharacterStore) UpdateProficiencies(ctx context.Context, id uuid.UUID, proficiencies json.RawMessage) error {
+	c, ok := m.chars[id]
+	if !ok {
+		return fmt.Errorf("not found")
+	}
+	c.Proficiencies = proficiencies
 	return nil
 }
 
@@ -500,6 +510,245 @@ func TestService_ApplyFeat_WithChooseAbilityASI(t *testing.T) {
 	json.Unmarshal(charStore.chars[charID].AbilityScores, &updatedScores)
 	if updatedScores.STR != 16 {
 		t.Errorf("STR = %d, want 16 (unchanged)", updatedScores.STR)
+	}
+}
+
+func TestService_ApplyFeat_ResilientChoiceAddsSaveProficiencyAndASI(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+	scores := character.AbilityScores{STR: 10, DEX: 14, CON: 13, INT: 10, WIS: 12, CHA: 8}
+	profs := character.Proficiencies{Saves: []string{"str"}, Skills: []string{"perception"}}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:               charID,
+		Name:             "Vera",
+		ProficiencyBonus: 3,
+		AbilityScores:    mustJSON(t, scores),
+		Features:         mustJSON(t, []character.Feature{}),
+		Proficiencies:    mustJSON(t, profs),
+	}
+
+	feat := FeatInfo{
+		ID:       "resilient",
+		Name:     "Resilient",
+		ASIBonus: map[string]any{"choose_ability": float64(1), "from": []any{"str", "dex", "con", "int", "wis", "cha"}},
+		MechanicalEffect: []map[string]string{
+			{"effect_type": "proficiency_saving_throw_chosen_ability"},
+		},
+		Choices: FeatChoices{Ability: "con"},
+	}
+
+	svc := NewService(charStore, classStore, &mockNotifier{})
+	if err := svc.ApplyFeat(context.Background(), charID, feat); err != nil {
+		t.Fatalf("ApplyFeat error: %v", err)
+	}
+
+	var updatedScores character.AbilityScores
+	if err := json.Unmarshal(charStore.chars[charID].AbilityScores, &updatedScores); err != nil {
+		t.Fatalf("unmarshal scores: %v", err)
+	}
+	if updatedScores.CON != 14 {
+		t.Errorf("CON = %d, want 14", updatedScores.CON)
+	}
+
+	var updatedProfs character.Proficiencies
+	if err := json.Unmarshal(charStore.chars[charID].Proficiencies, &updatedProfs); err != nil {
+		t.Fatalf("unmarshal proficiencies: %v", err)
+	}
+	if got := character.SavingThrowModifier(updatedScores, "con", updatedProfs.Saves, int(charStore.chars[charID].ProficiencyBonus)); got != 5 {
+		t.Errorf("CON save modifier = %d, want 5", got)
+	}
+
+	var features []character.Feature
+	if err := json.Unmarshal(charStore.chars[charID].Features, &features); err != nil {
+		t.Fatalf("unmarshal features: %v", err)
+	}
+	if len(features) != 1 || features[0].Choices["ability"][0] != "con" {
+		t.Fatalf("expected Resilient ability choice recorded, got %+v", features)
+	}
+}
+
+func TestService_ApplyFeat_SkilledChoiceAddsSkillProficiencies(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+	scores := character.AbilityScores{STR: 10, DEX: 14, CON: 13, INT: 16, WIS: 12, CHA: 8}
+	profs := character.Proficiencies{Skills: []string{"perception"}}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:               charID,
+		Name:             "Nia",
+		ProficiencyBonus: 3,
+		AbilityScores:    mustJSON(t, scores),
+		Features:         mustJSON(t, []character.Feature{}),
+		Proficiencies:    mustJSON(t, profs),
+	}
+
+	feat := FeatInfo{
+		ID:               "skilled",
+		Name:             "Skilled",
+		MechanicalEffect: []map[string]string{{"effect_type": "gain_3_skill_or_tool_proficiencies"}},
+		Choices:          FeatChoices{Skills: []string{"arcana", "history", "stealth"}},
+	}
+
+	svc := NewService(charStore, classStore, &mockNotifier{})
+	if err := svc.ApplyFeat(context.Background(), charID, feat); err != nil {
+		t.Fatalf("ApplyFeat error: %v", err)
+	}
+
+	var updatedProfs character.Proficiencies
+	if err := json.Unmarshal(charStore.chars[charID].Proficiencies, &updatedProfs); err != nil {
+		t.Fatalf("unmarshal proficiencies: %v", err)
+	}
+	if got := character.SkillModifier(scores, "arcana", updatedProfs.Skills, nil, false, 3); got != 6 {
+		t.Errorf("arcana modifier = %d, want 6", got)
+	}
+	if got := character.SkillModifier(scores, "stealth", updatedProfs.Skills, nil, false, 3); got != 5 {
+		t.Errorf("stealth modifier = %d, want 5", got)
+	}
+}
+
+func TestService_ApplyFeat_ElementalAdeptChoiceSpecializesMechanicalEffect(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Ira",
+		AbilityScores: mustJSON(t, character.AbilityScores{INT: 16}),
+		Features:      mustJSON(t, []character.Feature{}),
+		Proficiencies: mustJSON(t, character.Proficiencies{}),
+	}
+
+	feat := FeatInfo{
+		ID:   "elemental-adept",
+		Name: "Elemental Adept",
+		MechanicalEffect: []map[string]string{
+			{"effect_type": "ignore_resistance_chosen_element"},
+			{"effect_type": "min_damage_die_2_chosen_element"},
+		},
+		Choices: FeatChoices{DamageType: "fire"},
+	}
+
+	svc := NewService(charStore, classStore, &mockNotifier{})
+	if err := svc.ApplyFeat(context.Background(), charID, feat); err != nil {
+		t.Fatalf("ApplyFeat error: %v", err)
+	}
+
+	var features []character.Feature
+	if err := json.Unmarshal(charStore.chars[charID].Features, &features); err != nil {
+		t.Fatalf("unmarshal features: %v", err)
+	}
+	if len(features) != 1 {
+		t.Fatalf("features count = %d, want 1", len(features))
+	}
+	if features[0].Choices["damage_type"][0] != "fire" {
+		t.Fatalf("expected damage type choice recorded, got %+v", features[0].Choices)
+	}
+	if !strings.Contains(features[0].MechanicalEffect, `"damage_type":"fire"`) {
+		t.Errorf("mechanical effect should include chosen damage type, got %s", features[0].MechanicalEffect)
+	}
+}
+
+func TestService_ApplyFeat_RejectsMissingRequiredFeatChoices(t *testing.T) {
+	tests := []struct {
+		name string
+		feat FeatInfo
+	}{
+		{
+			name: "resilient",
+			feat: FeatInfo{ID: "resilient", Name: "Resilient"},
+		},
+		{
+			name: "skilled",
+			feat: FeatInfo{ID: "skilled", Name: "Skilled"},
+		},
+		{
+			name: "elemental adept",
+			feat: FeatInfo{ID: "elemental-adept", Name: "Elemental Adept"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			charID := uuid.New()
+			charStore := newMockCharacterStore()
+			charStore.chars[charID] = &StoredCharacter{
+				ID:            charID,
+				Name:          "Choice Test",
+				AbilityScores: mustJSON(t, character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10}),
+				Features:      mustJSON(t, []character.Feature{}),
+				Proficiencies: mustJSON(t, character.Proficiencies{}),
+			}
+
+			svc := NewService(charStore, newMockClassStore(), &mockNotifier{})
+			err := svc.ApplyFeat(context.Background(), charID, tt.feat)
+			if err == nil {
+				t.Fatal("expected missing feat choice error")
+			}
+
+			var features []character.Feature
+			if unmarshalErr := json.Unmarshal(charStore.chars[charID].Features, &features); unmarshalErr != nil {
+				t.Fatalf("unmarshal features: %v", unmarshalErr)
+			}
+			if len(features) != 0 {
+				t.Fatalf("expected no feature appended, got %+v", features)
+			}
+		})
+	}
+}
+
+func TestService_ApplyFeat_RejectsInvalidRequiredFeatChoices(t *testing.T) {
+	tests := []struct {
+		name string
+		feat FeatInfo
+	}{
+		{
+			name: "resilient invalid ability",
+			feat: FeatInfo{ID: "resilient", Name: "Resilient", Choices: FeatChoices{Ability: "luck"}},
+		},
+		{
+			name: "skilled invalid skill",
+			feat: FeatInfo{ID: "skilled", Name: "Skilled", Choices: FeatChoices{Skills: []string{"arcana", "history", "luck"}}},
+		},
+		{
+			name: "skilled too few skills",
+			feat: FeatInfo{ID: "skilled", Name: "Skilled", Choices: FeatChoices{Skills: []string{"arcana", "history"}}},
+		},
+		{
+			name: "elemental adept invalid damage type",
+			feat: FeatInfo{ID: "elemental-adept", Name: "Elemental Adept", Choices: FeatChoices{DamageType: "force"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			charID := uuid.New()
+			charStore := newMockCharacterStore()
+			charStore.chars[charID] = &StoredCharacter{
+				ID:            charID,
+				Name:          "Choice Test",
+				AbilityScores: mustJSON(t, character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10}),
+				Features:      mustJSON(t, []character.Feature{}),
+				Proficiencies: mustJSON(t, character.Proficiencies{}),
+			}
+
+			svc := NewService(charStore, newMockClassStore(), &mockNotifier{})
+			err := svc.ApplyFeat(context.Background(), charID, tt.feat)
+			if err == nil {
+				t.Fatal("expected invalid feat choice error")
+			}
+
+			var features []character.Feature
+			if unmarshalErr := json.Unmarshal(charStore.chars[charID].Features, &features); unmarshalErr != nil {
+				t.Fatalf("unmarshal features: %v", unmarshalErr)
+			}
+			if len(features) != 0 {
+				t.Fatalf("expected no feature appended, got %+v", features)
+			}
+		})
 	}
 }
 

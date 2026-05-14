@@ -172,7 +172,7 @@ UPDATE characters SET card_message_id = $2, updated_at = now() WHERE id = $1;
 -- empty string via COALESCE.
 SELECT c.id, c.name, c.level, c.hp_max, c.hp_current, c.proficiency_bonus,
        c.classes, c.ability_scores, c.spell_slots, c.pact_magic_slots,
-       c.features,
+       c.features, c.proficiencies,
        COALESCE(pc.discord_user_id, '') AS discord_user_id
 FROM characters c
 LEFT JOIN player_characters pc ON pc.character_id = c.id
@@ -202,4 +202,9 @@ WHERE id = $1;
 -- name: UpdateCharacterFeaturesOnly :exec
 -- Used by feat application to append a feat to a character's features.
 UPDATE characters SET features = $2, updated_at = now()
+WHERE id = $1;
+
+-- name: UpdateCharacterProficienciesOnly :exec
+-- Used by feat application to grant selected save/skill proficiencies.
+UPDATE characters SET proficiencies = $2, updated_at = now()
 WHERE id = $1;

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 
@@ -19,6 +20,7 @@ const (
 	asiApprovePrefix    = "asi_approve"
 	asiDenyPrefix       = "asi_deny"
 	asiFeatSelectPrefix = "asi_feat_select"
+	asiFeatChoicePrefix = "asi_feat_choice"
 )
 
 // abilityOrder defines the standard display order for ability scores.
@@ -179,10 +181,11 @@ func ParseDMApprovalCustomID(customID string) (uuid.UUID, error) {
 
 // ASIChoiceData holds the data for an ASI choice to be approved.
 type ASIChoiceData struct {
-	Type     string   `json:"type"`
-	Ability  string   `json:"ability,omitempty"`
-	Ability2 string   `json:"ability2,omitempty"`
-	FeatID   string   `json:"feat_id,omitempty"`
+	Type        string              `json:"type"`
+	Ability     string              `json:"ability,omitempty"`
+	Ability2    string              `json:"ability2,omitempty"`
+	FeatID      string              `json:"feat_id,omitempty"`
+	FeatChoices map[string][]string `json:"feat_choices,omitempty"`
 }
 
 // ASICharacterData holds the character data needed for ASI interactions.
@@ -218,12 +221,13 @@ type FeatLister interface {
 
 // PendingASIChoice holds a player's ASI/Feat choice awaiting DM approval.
 type PendingASIChoice struct {
-	CharID      uuid.UUID `json:"char_id"`
-	ASIType     string    `json:"asi_type"`
-	Abilities   []string  `json:"abilities,omitempty"`
-	FeatID      string    `json:"feat_id,omitempty"`
-	PlayerID    string    `json:"player_id"`
-	Description string    `json:"description"`
+	CharID      uuid.UUID           `json:"char_id"`
+	ASIType     string              `json:"asi_type"`
+	Abilities   []string            `json:"abilities,omitempty"`
+	FeatID      string              `json:"feat_id,omitempty"`
+	FeatChoices map[string][]string `json:"feat_choices,omitempty"`
+	PlayerID    string              `json:"player_id"`
+	Description string              `json:"description"`
 }
 
 // ASIPendingStore persists pending ASI/Feat choices so a process restart
@@ -477,6 +481,9 @@ func (h *ASIHandler) HandleDMApprove(interaction *discordgo.Interaction) {
 	if pending.FeatID != "" {
 		choice.FeatID = pending.FeatID
 	}
+	if len(pending.FeatChoices) > 0 {
+		choice.FeatChoices = pending.FeatChoices
+	}
 
 	err = h.service.ApproveASI(context.Background(), charID, choice)
 	if err != nil {
@@ -662,6 +669,17 @@ func (h *ASIHandler) HandleASIFeatSelect(interaction *discordgo.Interaction) {
 		}
 	}
 	description := fmt.Sprintf("Feat: %s", featName)
+	if components, ok := buildFeatSubChoiceMenu(charID, featID); ok {
+		_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content:    fmt.Sprintf("\U0001f4d6 Choose options for **%s**:", featName),
+				Components: components,
+				Flags:      discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
 
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -697,6 +715,165 @@ func (h *ASIHandler) HandleASIFeatSelect(interaction *discordgo.Interaction) {
 	}); err != nil {
 		slog.Error("failed to post feat choice to DM queue", "error", err, "character", charData.Name)
 	}
+}
+
+// HandleASIFeatSubChoiceSelect handles the second step for feats that need
+// internal choices before the DM approval request is posted.
+func (h *ASIHandler) HandleASIFeatSubChoiceSelect(interaction *discordgo.Interaction) {
+	data := interaction.Data.(discordgo.MessageComponentInteractionData)
+	charID, featID, choiceKind, err := parseFeatSubChoiceCustomID(data.CustomID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Invalid feat choice: %v", err))
+		return
+	}
+	if len(data.Values) == 0 {
+		respondEphemeral(h.session, interaction, "No feat option selected.")
+		return
+	}
+
+	charData, err := h.service.GetCharacterForASI(context.Background(), charID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Could not load character data.")
+		return
+	}
+
+	featName := h.lookupFeatName(context.Background(), charID, featID)
+	choices := map[string][]string{choiceKind: append([]string(nil), data.Values...)}
+	description := fmt.Sprintf("Feat: %s (%s)", featName, strings.Join(data.Values, ", "))
+
+	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("\u23f3 Your choice (%s) has been sent to the DM for approval.", description),
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+
+	pending := PendingASIChoice{
+		CharID:      charID,
+		ASIType:     "feat",
+		FeatID:      featID,
+		FeatChoices: choices,
+		PlayerID:    discordUserID(interaction),
+		Description: description,
+	}
+	h.storePendingChoice(charID, pending)
+
+	if h.dmQueueFunc == nil {
+		return
+	}
+	channelID := h.dmQueueFunc(interaction.GuildID)
+	if channelID == "" {
+		return
+	}
+	msg := FormatDMQueueASIMessage(charData.Name, charData.ClassInfo, description)
+	components := BuildDMApprovalComponents(charID)
+	if _, err := h.session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+		Content:    msg,
+		Components: components,
+	}); err != nil {
+		slog.Error("failed to post feat sub-choice to DM queue", "error", err, "character", charData.Name)
+	}
+}
+
+func (h *ASIHandler) lookupFeatName(ctx context.Context, charID uuid.UUID, featID string) string {
+	if h.featLister == nil {
+		return featID
+	}
+	feats, err := h.featLister.ListEligibleFeats(ctx, charID)
+	if err != nil {
+		return featID
+	}
+	for _, f := range feats {
+		if f.ID == featID {
+			return f.Name
+		}
+	}
+	return featID
+}
+
+func buildFeatSubChoiceMenu(charID uuid.UUID, featID string) ([]discordgo.MessageComponent, bool) {
+	switch featID {
+	case "resilient":
+		return buildFeatSelect(charID, featID, "ability", "Choose ability", abilityFeatOptions(), 1), true
+	case "skilled":
+		return buildFeatSelect(charID, featID, "skills", "Choose three skills", skillFeatOptions(), 3), true
+	case "elemental-adept":
+		return buildFeatSelect(charID, featID, "damage_type", "Choose damage type", damageTypeOptions(), 1), true
+	default:
+		return nil, false
+	}
+}
+
+func buildFeatSelect(charID uuid.UUID, featID, kind, placeholder string, options []discordgo.SelectMenuOption, maxValues int) []discordgo.MessageComponent {
+	minValues := &maxValues
+	return []discordgo.MessageComponent{
+		&discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+			discordgo.SelectMenu{
+				CustomID:    fmt.Sprintf("%s:%s:%s:%s", asiFeatChoicePrefix, charID.String(), featID, kind),
+				Placeholder: placeholder,
+				MinValues:   minValues,
+				MaxValues:   maxValues,
+				Options:     options,
+			},
+		}},
+	}
+}
+
+func abilityFeatOptions() []discordgo.SelectMenuOption {
+	options := make([]discordgo.SelectMenuOption, 0, len(abilityOrder))
+	for _, ab := range abilityOrder {
+		options = append(options, discordgo.SelectMenuOption{Label: ab.Label, Value: ab.Key})
+	}
+	return options
+}
+
+func skillFeatOptions() []discordgo.SelectMenuOption {
+	skills := make([]string, 0, len(character.SkillAbilityMap))
+	for skill := range character.SkillAbilityMap {
+		skills = append(skills, skill)
+	}
+	sort.Strings(skills)
+	options := make([]discordgo.SelectMenuOption, 0, len(skills))
+	for _, skill := range skills {
+		options = append(options, discordgo.SelectMenuOption{
+			Label: titleFeatOption(skill),
+			Value: skill,
+		})
+	}
+	return options
+}
+
+func damageTypeOptions() []discordgo.SelectMenuOption {
+	types := []string{"acid", "cold", "fire", "lightning", "thunder"}
+	options := make([]discordgo.SelectMenuOption, 0, len(types))
+	for _, typ := range types {
+		options = append(options, discordgo.SelectMenuOption{Label: titleFeatOption(typ), Value: typ})
+	}
+	return options
+}
+
+func titleFeatOption(value string) string {
+	parts := strings.FieldsFunc(value, func(r rune) bool { return r == '-' || r == '_' })
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return strings.Join(parts, " ")
+}
+
+func parseFeatSubChoiceCustomID(customID string) (uuid.UUID, string, string, error) {
+	parts := strings.Split(customID, ":")
+	if len(parts) != 4 || parts[0] != asiFeatChoicePrefix {
+		return uuid.Nil, "", "", fmt.Errorf("invalid %s custom ID: %s", asiFeatChoicePrefix, customID)
+	}
+	charID, err := uuid.Parse(parts[1])
+	if err != nil {
+		return uuid.Nil, "", "", fmt.Errorf("invalid character ID: %w", err)
+	}
+	return charID, parts[2], parts[3], nil
 }
 
 func (h *ASIHandler) notifyPlayer(playerDiscordID, message string) {
