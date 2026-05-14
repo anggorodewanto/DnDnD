@@ -540,3 +540,44 @@ func TestActionHandler_Dispatch_Hide_AllowedWhenObscured(t *testing.T) {
 		t.Errorf("expected obscurement reason in response, got %q", resp)
 	}
 }
+
+// --- SR-048: /action grapple alias ---
+
+func TestActionHandler_Dispatch_Grapple(t *testing.T) {
+	fx := setupDispatchActionFixture(t)
+	fx.svc.grappleResult = combat.GrappleResult{CombatLog: "🤼 Aria grapples Orc — Grappled!", Success: true}
+	resp := dispatchInvoke(t, fx.handler, fx.sess, "grapple", "OS")
+	if len(fx.svc.grappleCalls) != 1 {
+		t.Fatalf("expected 1 grapple call, got %d", len(fx.svc.grappleCalls))
+	}
+	got := fx.svc.grappleCalls[0]
+	if got.Target.ShortID != "OS" {
+		t.Errorf("expected target OS, got %s", got.Target.ShortID)
+	}
+	if got.Grappler.ShortID != "AR" {
+		t.Errorf("expected grappler AR, got %s", got.Grappler.ShortID)
+	}
+	if !strings.Contains(resp, "Grappled") {
+		t.Errorf("expected grapple log in response, got %q", resp)
+	}
+}
+
+func TestActionHandler_Dispatch_Grapple_MissingTarget(t *testing.T) {
+	fx := setupDispatchActionFixture(t)
+	resp := dispatchInvoke(t, fx.handler, fx.sess, "grapple", "")
+	if len(fx.svc.grappleCalls) != 0 {
+		t.Errorf("expected no grapple call for missing target, got %d", len(fx.svc.grappleCalls))
+	}
+	if !strings.Contains(resp, "Grapple requires a target") {
+		t.Errorf("expected usage hint, got %q", resp)
+	}
+}
+
+func TestActionHandler_Dispatch_Grapple_ServiceError(t *testing.T) {
+	fx := setupDispatchActionFixture(t)
+	fx.svc.grappleErr = errors.New("target is too large to grapple")
+	resp := dispatchInvoke(t, fx.handler, fx.sess, "grapple", "OS")
+	if !strings.Contains(resp, "Grapple failed") {
+		t.Errorf("expected failure message, got %q", resp)
+	}
+}

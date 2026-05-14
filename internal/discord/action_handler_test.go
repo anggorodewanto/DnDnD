@@ -75,6 +75,9 @@ type fakeActionCombatService struct {
 	cdDMQueueResult      combat.DMQueueResult
 	layCalls             []combat.LayOnHandsCommand
 	layResult            combat.LayOnHandsResult
+	grappleCalls         []combat.GrappleCommand
+	grappleResult        combat.GrappleResult
+	grappleErr           error
 }
 
 func (f *fakeActionCombatService) GetEncounter(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
@@ -190,6 +193,11 @@ func (f *fakeActionCombatService) ChannelDivinityDMQueue(_ context.Context, cmd 
 func (f *fakeActionCombatService) LayOnHands(_ context.Context, cmd combat.LayOnHandsCommand) (combat.LayOnHandsResult, error) {
 	f.layCalls = append(f.layCalls, cmd)
 	return f.layResult, nil
+}
+
+func (f *fakeActionCombatService) Grapple(_ context.Context, cmd combat.GrappleCommand, _ *dice.Roller) (combat.GrappleResult, error) {
+	f.grappleCalls = append(f.grappleCalls, cmd)
+	return f.grappleResult, f.grappleErr
 }
 
 type fakeActionTurnProvider struct {
@@ -451,10 +459,10 @@ func TestActionHandler_CombatMode_CombinesActionAndArgs(t *testing.T) {
 		&fakeActionPendingStore{},
 	)
 
-	_ = runActionHandler(t, h, makeActionInteraction("g1", "u1", "grapple", "the bandit"))
+	_ = runActionHandler(t, h, makeActionInteraction("g1", "u1", "flip", "the table"))
 
-	if svc.freeformCalledWith.ActionText != "grapple the bandit" {
-		t.Errorf("ActionText = %q want %q", svc.freeformCalledWith.ActionText, "grapple the bandit")
+	if svc.freeformCalledWith.ActionText != "flip the table" {
+		t.Errorf("ActionText = %q want %q", svc.freeformCalledWith.ActionText, "flip the table")
 	}
 }
 

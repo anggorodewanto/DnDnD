@@ -45,6 +45,7 @@ type ActionCombatService interface {
 	Stand(ctx context.Context, cmd combat.StandCommand) (combat.StandResult, error)
 	DropProne(ctx context.Context, cmd combat.DropProneCommand) (combat.DropProneResult, error)
 	Escape(ctx context.Context, cmd combat.EscapeCommand, roller *dice.Roller) (combat.EscapeResult, error)
+	Grapple(ctx context.Context, cmd combat.GrappleCommand, roller *dice.Roller) (combat.GrappleResult, error)
 
 	// D-50 / Phase 50: Channel Divinity dispatch. DM-queued options route via
 	// ChannelDivinityDMQueue for DM resolution; the four resolved-in-engine
@@ -301,7 +302,7 @@ func (h *ActionHandler) isDispatchSubcommand(sub string) bool {
 	case "surge", "action-surge",
 		"dash", "disengage", "dodge", "help", "hide",
 		"stand", "drop-prone", "dropprone",
-		"escape",
+		"escape", "grapple",
 		"channel-divinity", "channeldivinity",
 		"lay-on-hands", "layonhands",
 		"stabilize":
@@ -638,6 +639,8 @@ func (h *ActionHandler) handleCombatSubcommand(
 		h.dispatchDropProne(ctx, interaction, encounterID, encounter, combatant, turn)
 	case "escape":
 		h.dispatchEscape(ctx, interaction, encounterID, encounter, combatant, turn, combatants)
+	case "grapple":
+		h.dispatchGrapple(ctx, interaction, encounterID, encounter, combatant, turn, combatants, args)
 	case "channel-divinity", "channeldivinity":
 		h.dispatchChannelDivinity(ctx, interaction, encounterID, encounter, combatant, turn, combatants, args)
 	case "lay-on-hands", "layonhands":
@@ -881,6 +884,36 @@ func (h *ActionHandler) dispatchEscape(ctx context.Context, interaction *discord
 	}, h.roller)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Escape failed: %v", err))
+		return
+	}
+	h.respondAndLog(interaction, encounterID, result.CombatLog)
+}
+
+// dispatchGrapple wires /action grapple <target> (SR-048 / Phase 56).
+// Resolves the target from args and delegates to combat.Service.Grapple.
+func (h *ActionHandler) dispatchGrapple(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, encounter refdata.Encounter, actor refdata.Combatant, turn refdata.Turn, combatants []refdata.Combatant, args string) {
+	if h.roller == nil {
+		respondEphemeral(h.session, interaction, "Grapple is not available right now (no dice roller wired).")
+		return
+	}
+	targetStr := strings.TrimSpace(args)
+	if targetStr == "" {
+		respondEphemeral(h.session, interaction, "Grapple requires a target (e.g. `/action grapple args:G1`).")
+		return
+	}
+	target, err := combat.ResolveTarget(strings.Fields(targetStr)[0], combatants)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Target %q not found.", targetStr))
+		return
+	}
+	result, err := h.combatService.Grapple(ctx, combat.GrappleCommand{
+		Grappler:  actor,
+		Target:    *target,
+		Turn:      turn,
+		Encounter: encounter,
+	}, h.roller)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Grapple failed: %v", err))
 		return
 	}
 	h.respondAndLog(interaction, encounterID, result.CombatLog)

@@ -1543,6 +1543,10 @@ func (a *actionCombatServiceAdapter) Escape(ctx context.Context, cmd combat.Esca
 	return a.svc.Escape(ctx, cmd, roller)
 }
 
+func (a *actionCombatServiceAdapter) Grapple(ctx context.Context, cmd combat.GrappleCommand, roller *dice.Roller) (combat.GrappleResult, error) {
+	return a.svc.Grapple(ctx, cmd, roller)
+}
+
 func (a *actionCombatServiceAdapter) TurnUndead(ctx context.Context, cmd combat.TurnUndeadCommand, roller *dice.Roller) (combat.TurnUndeadResult, error) {
 	return a.svc.TurnUndead(ctx, cmd, roller)
 }
