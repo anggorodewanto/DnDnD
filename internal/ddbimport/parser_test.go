@@ -259,6 +259,54 @@ func TestParseDDBJSON_Level(t *testing.T) {
 	}
 }
 
+func TestParseDDBJSON_MarksWizardCureWoundsOffListHomebrew(t *testing.T) {
+	data := []byte(`{
+		"data": {
+			"name": "Mira",
+			"race": {"fullName": "Human"},
+			"classes": [{"definition": {"name": "Wizard", "hitDice": 6}, "level": 3}],
+			"stats": [
+				{"id": 1, "value": 8},
+				{"id": 2, "value": 14},
+				{"id": 3, "value": 12},
+				{"id": 4, "value": 16},
+				{"id": 5, "value": 10},
+				{"id": 6, "value": 10}
+			],
+			"bonusStats": [{"id":1,"value":null},{"id":2,"value":null},{"id":3,"value":null},{"id":4,"value":null},{"id":5,"value":null},{"id":6,"value":null}],
+			"overrideStats": [{"id":1,"value":null},{"id":2,"value":null},{"id":3,"value":null},{"id":4,"value":null},{"id":5,"value":null},{"id":6,"value":null}],
+			"baseHitPoints": 18,
+			"bonusHitPoints": 0,
+			"removedHitPoints": 0,
+			"temporaryHitPoints": 0,
+			"inventory": [],
+			"currencies": {"gp": 0, "sp": 0, "cp": 0, "ep": 0, "pp": 0},
+			"modifiers": {"race": [], "class": [], "background": [], "item": [], "feat": [], "condition": []},
+			"spells": {
+				"class": [{"definition": {"name": "Cure Wounds", "level": 1}}],
+				"race": [],
+				"item": [],
+				"feat": []
+			}
+		}
+	}`)
+
+	result, err := ParseDDBJSON(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Spells) != 1 {
+		t.Fatalf("expected 1 spell, got %d", len(result.Spells))
+	}
+	spell := result.Spells[0]
+	if !spell.OffList {
+		t.Fatalf("expected Cure Wounds to be marked off-list: %+v", spell)
+	}
+	if !spell.Homebrew {
+		t.Fatalf("expected off-list Cure Wounds to be tagged homebrew: %+v", spell)
+	}
+}
+
 func TestParseDDBJSON_AbilityScores(t *testing.T) {
 	result, err := ParseDDBJSON(testDDBJSON)
 	if err != nil {
@@ -323,6 +371,58 @@ func TestParseDDBJSON_Inventory(t *testing.T) {
 	}
 	if result.Inventory[0].Name != "Longsword" {
 		t.Errorf("first item = %q, want %q", result.Inventory[0].Name, "Longsword")
+	}
+}
+
+func TestParseDDBJSON_InventoryHomebrewSourceTags(t *testing.T) {
+	data := []byte(`{
+		"data": {
+			"name": "Mira",
+			"race": {"fullName": "Human"},
+			"classes": [{"definition": {"name": "Wizard", "hitDice": 6}, "level": 3}],
+			"stats": [
+				{"id": 1, "value": 8},
+				{"id": 2, "value": 14},
+				{"id": 3, "value": 12},
+				{"id": 4, "value": 16},
+				{"id": 5, "value": 10},
+				{"id": 6, "value": 10}
+			],
+			"bonusStats": [], "overrideStats": [],
+			"baseHitPoints": 18,
+			"inventory": [{
+				"id": 42,
+				"quantity": 1,
+				"equipped": false,
+				"definition": {
+					"name": "Wand of House Rules",
+					"filterType": "Wand",
+					"magic": true,
+					"rarity": "Rare",
+					"sourceId": 999999,
+					"sourceName": "Mira's Homebrew Vault",
+					"isHomebrew": true
+				}
+			}],
+			"currencies": {"gp": 0, "sp": 0, "cp": 0, "ep": 0, "pp": 0},
+			"modifiers": {"race": [], "class": [], "background": [], "item": [], "feat": [], "condition": []},
+			"spells": {"class": [], "race": [], "item": [], "feat": []}
+		}
+	}`)
+
+	result, err := ParseDDBJSON(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Inventory) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Inventory))
+	}
+	item := result.Inventory[0]
+	if !item.Homebrew {
+		t.Fatalf("expected homebrew item tag: %+v", item)
+	}
+	if item.Source != "Mira's Homebrew Vault" {
+		t.Fatalf("expected DDB source name to be preserved, got %q", item.Source)
 	}
 }
 

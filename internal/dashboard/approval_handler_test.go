@@ -17,19 +17,19 @@ import (
 
 // mockApprovalStore implements ApprovalStore for testing.
 type mockApprovalStore struct {
-	entries           []ApprovalEntry
-	detail            *ApprovalDetail
-	listErr           error
-	detailErr         error
-	approveErr        error
-	requestErr        error
-	rejectErr         error
-	approvedID        uuid.UUID
-	requestedID       uuid.UUID
-	requestedFB       string
-	rejectedID        uuid.UUID
-	rejectedFB        string
-	listedCampaignID  uuid.UUID
+	entries          []ApprovalEntry
+	detail           *ApprovalDetail
+	listErr          error
+	detailErr        error
+	approveErr       error
+	requestErr       error
+	rejectErr        error
+	approvedID       uuid.UUID
+	requestedID      uuid.UUID
+	requestedFB      string
+	rejectedID       uuid.UUID
+	rejectedFB       string
+	listedCampaignID uuid.UUID
 }
 
 func (m *mockApprovalStore) ListPendingApprovals(_ context.Context, campaignID uuid.UUID) ([]ApprovalEntry, error) {
@@ -64,12 +64,12 @@ func (m *mockApprovalStore) RejectCharacter(_ context.Context, id uuid.UUID, fee
 
 // mockNotifier implements PlayerNotifier for testing.
 type mockNotifier struct {
-	approvalCalls       int
-	changesCalls        int
-	rejectionCalls      int
-	lastDiscordUserID   string
-	lastCharacterName   string
-	lastFeedback        string
+	approvalCalls     int
+	changesCalls      int
+	rejectionCalls    int
+	lastDiscordUserID string
+	lastCharacterName string
+	lastFeedback      string
 }
 
 func (m *mockNotifier) NotifyApproval(_ context.Context, discordUserID, characterName string) error {
@@ -182,6 +182,9 @@ func TestGetApprovalDetail_ReturnsJSON(t *testing.T) {
 			Classes: `[{"class":"wizard","level":5}]`,
 			HpMax:   32,
 			Ac:      12,
+			Advisories: []string{
+				"Spell Cure Wounds is homebrew/off-list for its imported class.",
+			},
 		},
 	}
 	_, r := setupApprovalTest(store, &mockNotifier{})
@@ -197,6 +200,8 @@ func TestGetApprovalDetail_ReturnsJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Gandalf", result.CharacterName)
 	assert.Equal(t, "Human", result.Race)
+	require.Len(t, result.Advisories, 1)
+	assert.Contains(t, result.Advisories[0], "Cure Wounds")
 }
 
 func TestGetApprovalDetail_NotFound(t *testing.T) {

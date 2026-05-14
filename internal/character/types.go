@@ -44,10 +44,10 @@ type ClassEntry struct {
 
 // Proficiencies represents all character proficiencies.
 type Proficiencies struct {
-	Saves    []string `json:"saves"`
-	Skills   []string `json:"skills"`
-	Weapons  []string `json:"weapons"`
-	Armor    []string `json:"armor"`
+	Saves   []string `json:"saves"`
+	Skills  []string `json:"skills"`
+	Weapons []string `json:"weapons"`
+	Armor   []string `json:"armor"`
 }
 
 // FeatureUse tracks a single feature with limited uses.
@@ -87,21 +87,23 @@ type AttunementSlot struct {
 
 // InventoryItem represents a single item in the character's inventory.
 type InventoryItem struct {
-	ItemID             string `json:"item_id"`
-	Name               string `json:"name"`
-	Quantity           int    `json:"quantity"`
-	Equipped           bool   `json:"equipped"`
-	EquipSlot          string `json:"equip_slot,omitempty"`
-	Type               string `json:"type"`
-	IsMagic            bool   `json:"is_magic"`
-	MagicBonus         int    `json:"magic_bonus,omitempty"`
-	MagicProperties    string `json:"magic_properties,omitempty"`
+	ItemID                string `json:"item_id"`
+	Name                  string `json:"name"`
+	Quantity              int    `json:"quantity"`
+	Equipped              bool   `json:"equipped"`
+	EquipSlot             string `json:"equip_slot,omitempty"`
+	Type                  string `json:"type"`
+	IsMagic               bool   `json:"is_magic"`
+	MagicBonus            int    `json:"magic_bonus,omitempty"`
+	MagicProperties       string `json:"magic_properties,omitempty"`
 	RequiresAttunement    bool   `json:"requires_attunement,omitempty"`
 	AttunementRestriction string `json:"attunement_restriction,omitempty"`
 	Rarity                string `json:"rarity,omitempty"`
-	Charges            int    `json:"charges,omitempty"`
-	MaxCharges         int    `json:"max_charges,omitempty"`
-	Identified         *bool  `json:"identified,omitempty"` // nil or true = identified; false = unidentified
+	Charges               int    `json:"charges,omitempty"`
+	MaxCharges            int    `json:"max_charges,omitempty"`
+	Identified            *bool  `json:"identified,omitempty"` // nil or true = identified; false = unidentified
+	Source                string `json:"source,omitempty"`
+	Homebrew              bool   `json:"homebrew,omitempty"`
 }
 
 // ParseInventoryItems unmarshals a character's JSONB inventory field.
@@ -140,10 +142,10 @@ func MarshalAttunementSlots(slots []AttunementSlot) ([]byte, error) {
 
 // ArmorInfo represents the armor data needed for AC calculation.
 type ArmorInfo struct {
-	ACBase    int  `json:"ac_base"`
-	DexBonus  bool `json:"dex_bonus"`
-	DexMax    int  `json:"dex_max"`    // 0 means no cap
-	IsShield  bool `json:"is_shield"`
+	ACBase   int  `json:"ac_base"`
+	DexBonus bool `json:"dex_bonus"`
+	DexMax   int  `json:"dex_max"` // 0 means no cap
+	IsShield bool `json:"is_shield"`
 }
 
 // ClassSpellcasting holds the spellcasting data from the class reference.
@@ -188,9 +190,11 @@ func Slugify(name string) string {
 
 // DDBSpellEntry matches the DDB import spell format stored in character_data.
 type DDBSpellEntry struct {
-	Name   string `json:"name"`
-	Level  int    `json:"level"`
-	Source string `json:"source"`
+	Name     string `json:"name"`
+	Level    int    `json:"level"`
+	Source   string `json:"source"`
+	Homebrew bool   `json:"homebrew,omitempty"`
+	OffList  bool   `json:"off_list,omitempty"`
 }
 
 // SkillAbilityMap maps each skill to its associated ability.

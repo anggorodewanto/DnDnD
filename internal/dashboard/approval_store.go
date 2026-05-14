@@ -3,9 +3,11 @@ package dashboard
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
 )
@@ -99,7 +101,41 @@ func (s *DBApprovalStore) GetApprovalDetail(ctx context.Context, id uuid.UUID) (
 		AbilityScores: string(row.AbilityScores),
 		Languages:     strings.Join(row.Languages, ", "),
 		DdbURL:        row.DdbUrl.String,
+		Advisories:    deriveDDBAdvisories(row.CharacterData.RawMessage, row.CharacterData.Valid),
 	}, nil
+}
+
+func deriveDDBAdvisories(raw []byte, valid bool) []string {
+	if !valid || len(raw) == 0 {
+		return nil
+	}
+
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil
+	}
+
+	var advisories []string
+	if spellsRaw, ok := data["spells"]; ok {
+		var spells []character.DDBSpellEntry
+		if err := json.Unmarshal(spellsRaw, &spells); err == nil {
+			for _, spell := range spells {
+				if spell.Homebrew && spell.OffList {
+					advisories = append(advisories, fmt.Sprintf("Spell %s is homebrew/off-list for its imported class.", spell.Name))
+					continue
+				}
+				if spell.Homebrew {
+					advisories = append(advisories, fmt.Sprintf("Spell %s is tagged homebrew.", spell.Name))
+					continue
+				}
+				if spell.OffList {
+					advisories = append(advisories, fmt.Sprintf("Spell %s is off-list for its imported class.", spell.Name))
+				}
+			}
+		}
+	}
+
+	return advisories
 }
 
 // ApproveCharacter transitions a player character from pending to approved.

@@ -277,10 +277,12 @@ func extractSpells(charData pqtype.NullRawMessage) []SpellDisplayEntry {
 		entries := make([]SpellDisplayEntry, len(ddbSpells))
 		for i, s := range ddbSpells {
 			entries[i] = SpellDisplayEntry{
-				ID:     character.Slugify(s.Name),
-				Name:   s.Name,
-				Level:  s.Level,
-				Source: s.Source,
+				ID:       character.Slugify(s.Name),
+				Name:     s.Name,
+				Level:    s.Level,
+				Source:   s.Source,
+				Homebrew: s.Homebrew,
+				OffList:  s.OffList,
 			}
 		}
 		return entries

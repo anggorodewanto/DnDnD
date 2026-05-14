@@ -3,6 +3,8 @@ package ddbimport
 import (
 	"fmt"
 	"strings"
+
+	"github.com/ab/dndnd/internal/character"
 )
 
 // Warning represents a non-blocking advisory validation issue.
@@ -109,7 +111,27 @@ func Validate(pc *ParsedCharacter) ([]Warning, error) {
 		})
 	}
 
+	for _, spell := range pc.Spells {
+		if !spell.OffList {
+			continue
+		}
+		className := primaryClassName(pc.Classes)
+		if className == "" {
+			continue
+		}
+		warnings = append(warnings, Warning{
+			Message: fmt.Sprintf("%s spell list includes %s (not on %s spell list)", className, spell.Name, className),
+		})
+	}
+
 	return warnings, nil
+}
+
+func primaryClassName(classes []character.ClassEntry) string {
+	if len(classes) == 0 {
+		return ""
+	}
+	return classes[0].Class
 }
 
 // meetsPrereq checks if the given ability scores meet a prerequisite string.

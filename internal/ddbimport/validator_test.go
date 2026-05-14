@@ -169,6 +169,28 @@ func TestValidate_Warning_AttunementLimit(t *testing.T) {
 	}
 }
 
+func TestValidate_Warning_OffListWizardSpell(t *testing.T) {
+	c := validCharacter()
+	c.Classes = []character.ClassEntry{{Class: "Wizard", Level: 3}}
+	c.Spells = []SpellEntry{{Name: "Cure Wounds", Level: 1, Source: "class", OffList: true, Homebrew: true}}
+
+	warnings, err := Validate(c)
+	if err != nil {
+		t.Fatalf("unexpected structural error: %v", err)
+	}
+
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w.Message, "Wizard spell list includes Cure Wounds") &&
+			strings.Contains(w.Message, "not on Wizard spell list") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected off-list Cure Wounds warning, got %v", warnings)
+	}
+}
+
 func TestValidate_NilCharacter(t *testing.T) {
 	_, err := Validate(nil)
 	if err == nil {

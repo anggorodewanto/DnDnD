@@ -65,6 +65,44 @@ func TestImportHandler_DDB_Success(t *testing.T) {
 	}
 }
 
+func TestImportHandler_DDB_DMQueueIncludesAdvisoryWarnings(t *testing.T) {
+	mock := newTestMock()
+	var dmQueueMessage string
+	mock.ChannelMessageSendFunc = func(_ string, content string) (*discordgo.Message, error) {
+		dmQueueMessage = content
+		return &discordgo.Message{}, nil
+	}
+
+	importer := &mockDDBImporter{
+		ImportFunc: func(_ context.Context, _ uuid.UUID, _ string) (*ddbimport.ImportResult, error) {
+			return &ddbimport.ImportResult{
+				Character: refdata.Character{ID: testCharacterID(), Name: "Mira"},
+				Preview:   "**Mira** — Human\n**Warnings:**\n⚠️ Spell Cure Wounds is not normally on the Wizard spell list and is tagged homebrew/off-list.",
+				Warnings: []ddbimport.Warning{
+					{Message: "Spell Cure Wounds is not normally on the Wizard spell list and is tagged homebrew/off-list."},
+				},
+			}, nil
+		},
+	}
+	regService := newMockRegService()
+	regService.ImportFunc = func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*refdata.PlayerCharacter, error) {
+		return &refdata.PlayerCharacter{ID: testPCID(), Status: "pending", CreatedVia: "import"}, nil
+	}
+
+	handler := NewImportHandler(mock, regService, newMockCampaignProvider(), nil,
+		staticDMQueueFunc("dm-queue-chan"), staticDMUserFunc("dm-user-1"),
+		WithDDBImporter(importer))
+
+	handler.Handle(makeInteraction("import", "player-1", "guild-1", stringOption("ddb-url", "https://www.dndbeyond.com/characters/12345")))
+
+	if !strings.Contains(dmQueueMessage, "Warnings") {
+		t.Fatalf("expected warning heading in dm-queue message, got: %s", dmQueueMessage)
+	}
+	if !strings.Contains(dmQueueMessage, "Cure Wounds") || !strings.Contains(dmQueueMessage, "Wizard") {
+		t.Fatalf("expected Wizard Cure Wounds advisory in dm-queue message, got: %s", dmQueueMessage)
+	}
+}
+
 func TestImportHandler_DDB_ImportError(t *testing.T) {
 	mock := newTestMock()
 	rc := captureResponse(mock)

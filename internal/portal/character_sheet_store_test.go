@@ -262,6 +262,50 @@ func TestCharacterSheetStoreAdapter_GetCharacterForSheet_DDBSpells(t *testing.T)
 	assert.Equal(t, "Evocation", byID["fire-bolt"].School)
 }
 
+func TestCharacterSheetStoreAdapter_GetCharacterForSheet_DDBSpellHomebrewTags(t *testing.T) {
+	charID := uuid.New()
+
+	scores := character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10}
+	scoresJSON, _ := json.Marshal(scores)
+	classes := []character.ClassEntry{{Class: "Wizard", Level: 3}}
+	classesJSON, _ := json.Marshal(classes)
+
+	type ddbSpell struct {
+		Name     string `json:"name"`
+		Level    int    `json:"level"`
+		Source   string `json:"source"`
+		Homebrew bool   `json:"homebrew"`
+		OffList  bool   `json:"off_list"`
+	}
+	charData := map[string]any{"spells": []ddbSpell{
+		{Name: "Cure Wounds", Level: 1, Source: "class", Homebrew: true, OffList: true},
+	}}
+	charDataJSON, _ := json.Marshal(charData)
+
+	q := &mockCharacterQuerier{
+		character: refdata.Character{
+			ID:            charID,
+			Name:          "Mira",
+			Race:          "Human",
+			Level:         3,
+			Classes:       classesJSON,
+			AbilityScores: scoresJSON,
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+		spells: []refdata.Spell{
+			{ID: "cure-wounds", Name: "Cure Wounds", Level: 1, School: "Evocation", CastingTime: "1 action", RangeType: "touch"},
+		},
+	}
+
+	store := portal.NewCharacterSheetStoreAdapter(q)
+	data, err := store.GetCharacterForSheet(context.Background(), charID.String())
+
+	require.NoError(t, err)
+	require.Len(t, data.Spells, 1)
+	assert.True(t, data.Spells[0].Homebrew)
+	assert.True(t, data.Spells[0].OffList)
+}
+
 func TestCharacterSheetStoreAdapter_GetCharacterForSheet_SpellRangeTouch(t *testing.T) {
 	charID := uuid.New()
 

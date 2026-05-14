@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/sqlc-dev/pqtype"
 )
 
 // fakeQueries is a test double that implements the methods DBApprovalStore needs.
@@ -161,6 +162,35 @@ func TestDBApprovalStore_GetApprovalDetail(t *testing.T) {
 	assert.Contains(t, detail.Classes, "wizard")
 	assert.Equal(t, "https://ddb.example.com", detail.DdbURL)
 	assert.Contains(t, detail.Languages, "Common")
+}
+
+func TestDBApprovalStore_GetApprovalDetail_DerivesDDBAdvisories(t *testing.T) {
+	id := uuid.New()
+	charDataJSON := json.RawMessage(`{"spells":[{"name":"Cure Wounds","level":1,"source":"class","homebrew":true,"off_list":true}]}`)
+
+	fq := &fakeQueries{
+		detailRow: refdata.GetPlayerCharacterWithCharacterRow{
+			ID:            id,
+			CharacterID:   uuid.New(),
+			DiscordUserID: "player1",
+			Status:        "pending",
+			CreatedVia:    "import",
+			CharacterName: "Mira",
+			Race:          "Human",
+			Level:         3,
+			Classes:       json.RawMessage(`[{"class":"Wizard","level":3}]`),
+			AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":12,"int":18,"wis":14,"cha":10}`),
+			CharacterData: pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true},
+		},
+	}
+
+	store := NewDBApprovalStore(fq)
+	detail, err := store.GetApprovalDetail(context.Background(), id)
+	require.NoError(t, err)
+	require.Len(t, detail.Advisories, 1)
+	assert.Contains(t, detail.Advisories[0], "Cure Wounds")
+	assert.Contains(t, detail.Advisories[0], "off-list")
+	assert.Contains(t, detail.Advisories[0], "homebrew")
 }
 
 func TestDBApprovalStore_GetApprovalDetail_NotFound(t *testing.T) {

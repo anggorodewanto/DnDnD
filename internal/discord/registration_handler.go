@@ -92,7 +92,7 @@ func (h *RegisterHandler) Handle(interaction *discordgo.Interaction) {
 	case registration.ResultExactMatch:
 		respondEphemeral(h.session, interaction,
 			fmt.Sprintf("✅ Registration submitted — %s is pending DM approval. You'll be pinged when approved.", characterName))
-		postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, characterName, userID, "register")
+		postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, characterName, userID, "register", nil)
 
 	case registration.ResultFuzzyMatch:
 		suggestions := strings.Join(result.Suggestions, ", ")
@@ -195,7 +195,7 @@ func (h *ImportHandler) handleDDBImport(interaction *discordgo.Interaction, camp
 	}
 
 	respondEphemeral(h.session, interaction, msg)
-	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, importResult.Character.Name, userID, "import")
+	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, importResult.Character.Name, userID, "import", importResult.Warnings)
 }
 
 func (h *ImportHandler) handlePlaceholderImport(interaction *discordgo.Interaction, campaign refdata.Campaign, userID, ddbURL string) {
@@ -215,7 +215,7 @@ func (h *ImportHandler) handlePlaceholderImport(interaction *discordgo.Interacti
 
 	respondEphemeral(h.session, interaction,
 		fmt.Sprintf("✅ Registration submitted — %s is pending DM approval. You'll be pinged when approved.", charName))
-	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, charName, userID, "import")
+	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, charName, userID, "import", nil)
 }
 
 // defaultPortalBaseURL is the production portal host used when no BASE_URL is
@@ -297,17 +297,27 @@ func (h *CreateCharacterHandler) Handle(interaction *discordgo.Interaction) {
 
 	respondEphemeral(h.session, interaction,
 		fmt.Sprintf("✅ Registration submitted — your character is pending DM approval. You'll be pinged when approved.\n\n🔗 **Character Builder:** %s\n_(Link expires in 24 hours)_", portalURL))
-	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, charName, userID, "create-character")
+	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, charName, userID, "create-character", nil)
 }
 
 // postDMQueueNotification sends a registration notification to the DM queue channel.
-func postDMQueueNotification(session Session, dmQueueFunc, dmUserFunc func(string) string, guildID, characterName, playerUserID, via string) {
+func postDMQueueNotification(session Session, dmQueueFunc, dmUserFunc func(string) string, guildID, characterName, playerUserID, via string, warnings []ddbimport.Warning) {
 	channelID := dmQueueFunc(guildID)
 	if channelID == "" {
 		return
 	}
 	dmUserID := dmUserFunc(guildID)
 	msg := fmt.Sprintf("🆕 <@%s> — **%s** registration by <@%s> via /%s. Pending approval.", dmUserID, characterName, playerUserID, via)
+	if len(warnings) > 0 {
+		var b strings.Builder
+		b.WriteString(msg)
+		b.WriteString("\n\n**Warnings:**")
+		for _, warning := range warnings {
+			b.WriteString("\n⚠️ ")
+			b.WriteString(warning.Message)
+		}
+		msg = b.String()
+	}
 	_, _ = session.ChannelMessageSend(channelID, msg)
 }
 
@@ -446,4 +456,3 @@ func (h *StatusAwareStubHandler) Handle(interaction *discordgo.Interaction) {
 	}
 	respondEphemeral(h.session, interaction, fmt.Sprintf("/%s is not yet implemented.", h.name))
 }
-

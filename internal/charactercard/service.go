@@ -224,33 +224,34 @@ func (s *Service) buildCardData(ctx context.Context, char refdata.Character, sho
 		_ = json.Unmarshal(char.SpellSlots.RawMessage, &spellSlots)
 	}
 
-	spellCount, preparedCount := extractSpellCounts(char)
+	spellCount, preparedCount, homebrewSpellCount := extractSpellCounts(char)
 
 	conditions, concentration, exhaustion := s.fetchCombatantState(ctx, char.ID)
 
 	return CardData{
-		Name:             char.Name,
-		ShortID:          shortID,
-		Level:            int(char.Level),
-		Race:             char.Race,
-		Classes:          classes,
-		HpCurrent:        int(char.HpCurrent),
-		HpMax:            int(char.HpMax),
-		TempHP:           int(char.TempHp),
-		AC:               int(char.Ac),
-		SpeedFt:          int(char.SpeedFt),
-		AbilityScores:    abilities,
-		EquippedMainHand: char.EquippedMainHand.String,
-		EquippedOffHand:  char.EquippedOffHand.String,
-		SpellSlots:       spellSlots,
-		SpellCount:       spellCount,
-		PreparedCount:    preparedCount,
-		Conditions:       conditions,
-		Concentration:    concentration,
-		Exhaustion:       exhaustion,
-		Gold:             int(char.Gold),
-		Languages:        char.Languages,
-		Retired:          retired,
+		Name:               char.Name,
+		ShortID:            shortID,
+		Level:              int(char.Level),
+		Race:               char.Race,
+		Classes:            classes,
+		HpCurrent:          int(char.HpCurrent),
+		HpMax:              int(char.HpMax),
+		TempHP:             int(char.TempHp),
+		AC:                 int(char.Ac),
+		SpeedFt:            int(char.SpeedFt),
+		AbilityScores:      abilities,
+		EquippedMainHand:   char.EquippedMainHand.String,
+		EquippedOffHand:    char.EquippedOffHand.String,
+		SpellSlots:         spellSlots,
+		SpellCount:         spellCount,
+		PreparedCount:      preparedCount,
+		HomebrewSpellCount: homebrewSpellCount,
+		Conditions:         conditions,
+		Concentration:      concentration,
+		Exhaustion:         exhaustion,
+		Gold:               int(char.Gold),
+		Languages:          char.Languages,
+		Retired:            retired,
 	}
 }
 
@@ -314,27 +315,34 @@ func buildConditionInfos(raw json.RawMessage, exhaustionLevel int) []ConditionIn
 }
 
 // extractSpellCounts counts spells and prepared spells from character_data.
-func extractSpellCounts(char refdata.Character) (spellCount int, preparedCount int) {
+func extractSpellCounts(char refdata.Character) (spellCount int, preparedCount int, homebrewCount int) {
 	if !char.CharacterData.Valid || len(char.CharacterData.RawMessage) == 0 {
-		return 0, 0
+		return 0, 0, 0
 	}
 
 	var data map[string]json.RawMessage
 	if err := json.Unmarshal(char.CharacterData.RawMessage, &data); err != nil {
-		return 0, 0
+		return 0, 0, 0
 	}
 
 	spellsRaw, ok := data["spells"]
 	if !ok {
-		return 0, 0
+		return 0, 0, 0
 	}
 
 	// Try DDB format first: []{"name":..., "level":...}
 	var ddbSpells []struct {
-		Name string `json:"name"`
+		Name     string `json:"name"`
+		Homebrew bool   `json:"homebrew"`
+		OffList  bool   `json:"off_list"`
 	}
 	if err := json.Unmarshal(spellsRaw, &ddbSpells); err == nil && len(ddbSpells) > 0 && ddbSpells[0].Name != "" {
 		spellCount = len(ddbSpells)
+		for _, spell := range ddbSpells {
+			if spell.Homebrew || spell.OffList {
+				homebrewCount++
+			}
+		}
 	} else {
 		// Try portal format: []string
 		var portalSpells []string
@@ -351,5 +359,5 @@ func extractSpellCounts(char refdata.Character) (spellCount int, preparedCount i
 		}
 	}
 
-	return spellCount, preparedCount
+	return spellCount, preparedCount, homebrewCount
 }

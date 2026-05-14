@@ -16,28 +16,29 @@ type ConditionInfo struct {
 
 // CardData holds all data needed to render a character card.
 type CardData struct {
-	Name             string
-	ShortID          string
-	Level            int
-	Race             string
-	Classes          []character.ClassEntry
-	HpCurrent        int
-	HpMax            int
-	TempHP           int
-	AC               int
-	SpeedFt          int
-	AbilityScores    character.AbilityScores
-	EquippedMainHand string
-	EquippedOffHand  string
-	SpellSlots       map[string]character.SlotInfo
-	Conditions       []ConditionInfo
-	Concentration    string
-	Exhaustion       int
-	Gold             int
-	Languages        []string
-	SpellCount       int
-	PreparedCount    int
-	Retired          bool
+	Name               string
+	ShortID            string
+	Level              int
+	Race               string
+	Classes            []character.ClassEntry
+	HpCurrent          int
+	HpMax              int
+	TempHP             int
+	AC                 int
+	SpeedFt            int
+	AbilityScores      character.AbilityScores
+	EquippedMainHand   string
+	EquippedOffHand    string
+	SpellSlots         map[string]character.SlotInfo
+	Conditions         []ConditionInfo
+	Concentration      string
+	Exhaustion         int
+	Gold               int
+	Languages          []string
+	SpellCount         int
+	PreparedCount      int
+	HomebrewSpellCount int
+	Retired            bool
 }
 
 // FormatCard produces the formatted character card string per the spec.
@@ -82,6 +83,9 @@ func FormatCard(d CardData) string {
 			fmt.Fprintf(&b, "%d prepared / %d known", d.PreparedCount, d.SpellCount)
 		} else {
 			fmt.Fprintf(&b, "%d known", d.SpellCount)
+		}
+		if d.HomebrewSpellCount > 0 {
+			fmt.Fprintf(&b, " (%d homebrew/off-list)", d.HomebrewSpellCount)
 		}
 		b.WriteByte('\n')
 	}

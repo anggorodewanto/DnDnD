@@ -225,6 +225,33 @@ func TestServeCharacterSheet_SpellsSection(t *testing.T) {
 	assert.Contains(t, body, "Shield")
 }
 
+func TestServeCharacterSheet_DDBSpellHomebrewOffListBadges(t *testing.T) {
+	svc := &fakeCharacterSheetService{
+		data: &portal.CharacterSheetData{
+			Name:             "Mira",
+			Race:             "Human",
+			Level:            3,
+			ClassSummary:     "Wizard 3",
+			AbilityModifiers: map[string]int{"STR": 0, "DEX": 0, "CON": 0, "INT": 0, "WIS": 0, "CHA": 0},
+			Spells: []portal.SpellDisplayEntry{
+				{Name: "Cure Wounds", Level: 1, School: "Evocation", Homebrew: true, OffList: true},
+			},
+		},
+	}
+
+	h := portal.NewCharacterSheetHandler(slog.Default(), svc)
+	rec := httptest.NewRecorder()
+	req := newCharacterSheetRequest("char-1", "user-123")
+
+	h.ServeCharacterSheet(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "Cure Wounds")
+	assert.Contains(t, body, "Homebrew")
+	assert.Contains(t, body, "Off-list")
+}
+
 func TestServeCharacterSheet_NoSpellsSection(t *testing.T) {
 	svc := &fakeCharacterSheetService{
 		data: &portal.CharacterSheetData{

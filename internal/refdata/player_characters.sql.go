@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/sqlc-dev/pqtype"
 )
 
 const createPlayerCharacter = `-- name: CreatePlayerCharacter :one
@@ -186,33 +187,35 @@ const getPlayerCharacterWithCharacter = `-- name: GetPlayerCharacterWithCharacte
 SELECT pc.id, pc.campaign_id, pc.character_id, pc.discord_user_id, pc.status,
        pc.dm_feedback, pc.created_via, pc.created_at, pc.updated_at,
        c.name AS character_name, c.race, c.level, c.classes, c.hp_max,
-       c.hp_current, c.ac, c.speed_ft, c.ability_scores, c.languages, c.ddb_url
+       c.hp_current, c.ac, c.speed_ft, c.ability_scores, c.languages, c.ddb_url,
+       c.character_data
 FROM player_characters pc
 JOIN characters c ON c.id = pc.character_id
 WHERE pc.id = $1
 `
 
 type GetPlayerCharacterWithCharacterRow struct {
-	ID            uuid.UUID       `json:"id"`
-	CampaignID    uuid.UUID       `json:"campaign_id"`
-	CharacterID   uuid.UUID       `json:"character_id"`
-	DiscordUserID string          `json:"discord_user_id"`
-	Status        string          `json:"status"`
-	DmFeedback    sql.NullString  `json:"dm_feedback"`
-	CreatedVia    string          `json:"created_via"`
-	CreatedAt     time.Time       `json:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
-	CharacterName string          `json:"character_name"`
-	Race          string          `json:"race"`
-	Level         int32           `json:"level"`
-	Classes       json.RawMessage `json:"classes"`
-	HpMax         int32           `json:"hp_max"`
-	HpCurrent     int32           `json:"hp_current"`
-	Ac            int32           `json:"ac"`
-	SpeedFt       int32           `json:"speed_ft"`
-	AbilityScores json.RawMessage `json:"ability_scores"`
-	Languages     []string        `json:"languages"`
-	DdbUrl        sql.NullString  `json:"ddb_url"`
+	ID            uuid.UUID             `json:"id"`
+	CampaignID    uuid.UUID             `json:"campaign_id"`
+	CharacterID   uuid.UUID             `json:"character_id"`
+	DiscordUserID string                `json:"discord_user_id"`
+	Status        string                `json:"status"`
+	DmFeedback    sql.NullString        `json:"dm_feedback"`
+	CreatedVia    string                `json:"created_via"`
+	CreatedAt     time.Time             `json:"created_at"`
+	UpdatedAt     time.Time             `json:"updated_at"`
+	CharacterName string                `json:"character_name"`
+	Race          string                `json:"race"`
+	Level         int32                 `json:"level"`
+	Classes       json.RawMessage       `json:"classes"`
+	HpMax         int32                 `json:"hp_max"`
+	HpCurrent     int32                 `json:"hp_current"`
+	Ac            int32                 `json:"ac"`
+	SpeedFt       int32                 `json:"speed_ft"`
+	AbilityScores json.RawMessage       `json:"ability_scores"`
+	Languages     []string              `json:"languages"`
+	DdbUrl        sql.NullString        `json:"ddb_url"`
+	CharacterData pqtype.NullRawMessage `json:"character_data"`
 }
 
 func (q *Queries) GetPlayerCharacterWithCharacter(ctx context.Context, id uuid.UUID) (GetPlayerCharacterWithCharacterRow, error) {
@@ -239,6 +242,7 @@ func (q *Queries) GetPlayerCharacterWithCharacter(ctx context.Context, id uuid.U
 		&i.AbilityScores,
 		pq.Array(&i.Languages),
 		&i.DdbUrl,
+		&i.CharacterData,
 	)
 	return i, err
 }

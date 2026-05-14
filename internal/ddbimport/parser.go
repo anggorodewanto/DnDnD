@@ -3,15 +3,18 @@ package ddbimport
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ab/dndnd/internal/character"
 )
 
 // SpellEntry represents a spell known or prepared by the character.
 type SpellEntry struct {
-	Name   string `json:"name"`
-	Level  int    `json:"level"`
-	Source string `json:"source"`
+	Name     string `json:"name"`
+	Level    int    `json:"level"`
+	Source   string `json:"source"`
+	Homebrew bool   `json:"homebrew,omitempty"`
+	OffList  bool   `json:"off_list,omitempty"`
 }
 
 // ParsedCharacter holds the parsed result from DDB JSON, ready for conversion to internal format.
@@ -40,21 +43,21 @@ type ddbResponse struct {
 }
 
 type ddbCharacter struct {
-	Name              string         `json:"name"`
-	Race              ddbRace        `json:"race"`
-	Classes           []ddbClass     `json:"classes"`
-	Stats             []ddbStat      `json:"stats"`
-	BonusStats        []ddbStat      `json:"bonusStats"`
-	OverrideStats     []ddbStat      `json:"overrideStats"`
-	BaseHitPoints     int            `json:"baseHitPoints"`
-	BonusHitPoints    int            `json:"bonusHitPoints"`
-	OverrideHitPoints *int           `json:"overrideHitPoints"`
-	RemovedHitPoints  int            `json:"removedHitPoints"`
+	Name               string        `json:"name"`
+	Race               ddbRace       `json:"race"`
+	Classes            []ddbClass    `json:"classes"`
+	Stats              []ddbStat     `json:"stats"`
+	BonusStats         []ddbStat     `json:"bonusStats"`
+	OverrideStats      []ddbStat     `json:"overrideStats"`
+	BaseHitPoints      int           `json:"baseHitPoints"`
+	BonusHitPoints     int           `json:"bonusHitPoints"`
+	OverrideHitPoints  *int          `json:"overrideHitPoints"`
+	RemovedHitPoints   int           `json:"removedHitPoints"`
 	TemporaryHitPoints int           `json:"temporaryHitPoints"`
-	Inventory         []ddbItem      `json:"inventory"`
-	Currencies        ddbCurrencies  `json:"currencies"`
-	Modifiers         ddbModifiers   `json:"modifiers"`
-	Spells            ddbSpells      `json:"spells"`
+	Inventory          []ddbItem     `json:"inventory"`
+	Currencies         ddbCurrencies `json:"currencies"`
+	Modifiers          ddbModifiers  `json:"modifiers"`
+	Spells             ddbSpells     `json:"spells"`
 }
 
 type ddbRace struct {
@@ -62,9 +65,9 @@ type ddbRace struct {
 }
 
 type ddbClass struct {
-	Definition          ddbClassDef  `json:"definition"`
-	SubclassDefinition  *ddbSubclass `json:"subclassDefinition"`
-	Level               int          `json:"level"`
+	Definition         ddbClassDef  `json:"definition"`
+	SubclassDefinition *ddbSubclass `json:"subclassDefinition"`
+	Level              int          `json:"level"`
 }
 
 type ddbClassDef struct {
@@ -91,10 +94,10 @@ type ddbStat struct {
 }
 
 type ddbItem struct {
-	ID         int           `json:"id"`
-	Definition ddbItemDef    `json:"definition"`
-	Equipped   bool          `json:"equipped"`
-	Quantity   int           `json:"quantity"`
+	ID         int        `json:"id"`
+	Definition ddbItemDef `json:"definition"`
+	Equipped   bool       `json:"equipped"`
+	Quantity   int        `json:"quantity"`
 }
 
 type ddbItemDef struct {
@@ -106,6 +109,9 @@ type ddbItemDef struct {
 	Magic       bool   `json:"magic"`
 	Rarity      string `json:"rarity"`
 	Description string `json:"description"`
+	SourceName  string `json:"sourceName"`
+	IsHomebrew  bool   `json:"isHomebrew"`
+	Homebrew    bool   `json:"homebrew"`
 }
 
 type ddbCurrencies struct {
@@ -209,7 +215,7 @@ func ParseDDBJSON(data []byte) (*ParsedCharacter, error) {
 	pc.Features = parseFeatures(d.Classes)
 
 	// Parse spells from all sources
-	pc.Spells = parseSpells(&d.Spells)
+	pc.Spells = parseSpells(&d.Spells, pc.Classes)
 
 	// Speed defaults to 30 (DDB doesn't have a simple speed field; it's computed from modifiers)
 	pc.SpeedFt = 30
@@ -262,9 +268,18 @@ func parseInventory(items []ddbItem) []character.InventoryItem {
 			IsMagic:            item.Definition.Magic,
 			RequiresAttunement: item.Definition.CanAttune,
 			Rarity:             item.Definition.Rarity,
+			Source:             item.Definition.SourceName,
+			Homebrew:           isDDBItemHomebrew(item.Definition),
 		})
 	}
 	return result
+}
+
+func isDDBItemHomebrew(def ddbItemDef) bool {
+	if def.IsHomebrew || def.Homebrew {
+		return true
+	}
+	return strings.Contains(strings.ToLower(def.SourceName), "homebrew")
 }
 
 // computeAC calculates AC from equipped armor and shield.
@@ -333,7 +348,7 @@ func parseFeatures(classes []ddbClass) []character.Feature {
 	return features
 }
 
-func parseSpells(spells *ddbSpells) []SpellEntry {
+func parseSpells(spells *ddbSpells, classes []character.ClassEntry) []SpellEntry {
 	var result []SpellEntry
 
 	sources := []struct {
@@ -348,15 +363,62 @@ func parseSpells(spells *ddbSpells) []SpellEntry {
 
 	for _, src := range sources {
 		for _, entry := range src.entries {
-			result = append(result, SpellEntry{
+			spell := SpellEntry{
 				Name:   entry.Definition.Name,
 				Level:  entry.Definition.Level,
 				Source: src.source,
-			})
+			}
+			if src.source == "class" && isOffListClassSpell(spell.Name, classes) {
+				spell.OffList = true
+				spell.Homebrew = true
+			}
+			result = append(result, spell)
 		}
 	}
 
 	return result
+}
+
+var classSpellLists = map[string]map[string]struct{}{
+	"wizard": {
+		"acid splash":      {},
+		"burning hands":    {},
+		"charm person":     {},
+		"detect magic":     {},
+		"fire bolt":        {},
+		"fireball":         {},
+		"light":            {},
+		"mage armor":       {},
+		"magic missile":    {},
+		"prestidigitation": {},
+		"ray of frost":     {},
+		"shield":           {},
+		"shocking grasp":   {},
+		"sleep":            {},
+		"thunderwave":      {},
+		"true strike":      {},
+	},
+}
+
+func isOffListClassSpell(name string, classes []character.ClassEntry) bool {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	if normalized == "" {
+		return false
+	}
+
+	hasKnownList := false
+	for _, class := range classes {
+		list, ok := classSpellLists[strings.ToLower(strings.TrimSpace(class.Class))]
+		if !ok {
+			continue
+		}
+		hasKnownList = true
+		if _, ok := list[normalized]; ok {
+			return false
+		}
+	}
+
+	return hasKnownList
 }
 
 // allModifiers collects modifiers from all sources (race, class, background, feat).

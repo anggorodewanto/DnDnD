@@ -376,6 +376,8 @@ const approvalPageTemplate = `<!DOCTYPE html>
         .stat-item { background: #1a1a2e; padding: 0.75rem; border-radius: 6px; text-align: center; }
         .stat-item .label { color: #999; font-size: 0.8rem; text-transform: uppercase; }
         .stat-item .value { font-size: 1.2rem; font-weight: bold; color: #e94560; }
+        .warning-box { margin: 1rem 0; padding: 0.75rem; border: 1px solid #f39c12; border-radius: 6px; background: rgba(243, 156, 18, 0.12); }
+        .warning-box strong { color: #f8c471; }
         .actions { display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap; }
         .btn { padding: 0.75rem 1.5rem; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; color: white; }
         .btn-approve { background: #27ae60; }
@@ -479,6 +481,11 @@ const approvalPageTemplate = `<!DOCTYPE html>
                 if (d.classes) extra += '<p><strong>Classes:</strong> ' + escapeHtml(d.classes) + '</p>';
                 if (d.ability_scores) extra += '<p><strong>Abilities:</strong> ' + escapeHtml(d.ability_scores) + '</p>';
                 if (d.languages) extra += '<p><strong>Languages:</strong> ' + escapeHtml(d.languages) + '</p>';
+                if (d.advisories && d.advisories.length) {
+                    extra += '<div class="warning-box"><strong>Warnings:</strong><ul>' +
+                        d.advisories.map(function(a) { return '<li>' + escapeHtml(a) + '</li>'; }).join('') +
+                        '</ul></div>';
+                }
                 if (d.ddb_url) extra += '<p><a href="' + escapeHtml(d.ddb_url) + '" target="_blank">D&amp;D Beyond Sheet</a></p>';
                 document.getElementById('detail-extra').innerHTML = extra;
                 document.getElementById('approval-list').style.display = 'none';

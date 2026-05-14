@@ -20,16 +20,17 @@ type ApprovalEntry struct {
 // ApprovalDetail represents a full character sheet for DM review.
 type ApprovalDetail struct {
 	ApprovalEntry
-	Race          string `json:"race"`
-	Level         int32  `json:"level"`
-	Classes       string `json:"classes"`
-	HpMax         int32  `json:"hp_max"`
-	HpCurrent     int32  `json:"hp_current"`
-	Ac            int32  `json:"ac"`
-	SpeedFt       int32  `json:"speed_ft"`
-	AbilityScores string `json:"ability_scores"`
-	Languages     string `json:"languages"`
-	DdbURL        string `json:"ddb_url,omitempty"`
+	Race          string   `json:"race"`
+	Level         int32    `json:"level"`
+	Classes       string   `json:"classes"`
+	HpMax         int32    `json:"hp_max"`
+	HpCurrent     int32    `json:"hp_current"`
+	Ac            int32    `json:"ac"`
+	SpeedFt       int32    `json:"speed_ft"`
+	AbilityScores string   `json:"ability_scores"`
+	Languages     string   `json:"languages"`
+	DdbURL        string   `json:"ddb_url,omitempty"`
+	Advisories    []string `json:"advisories,omitempty"`
 }
 
 // ApprovalStore is the interface for approval queue data access.

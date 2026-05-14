@@ -1,10 +1,12 @@
 package charactercard
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -225,10 +227,10 @@ func TestFormatCard_SpellSlotOrdering(t *testing.T) {
 		Classes: []character.ClassEntry{
 			{Class: "Wizard", Level: 5},
 		},
-		HpCurrent: 25,
-		HpMax:     25,
-		AC:        12,
-		SpeedFt:   30,
+		HpCurrent:     25,
+		HpMax:         25,
+		AC:            12,
+		SpeedFt:       30,
 		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, WIS: 12, INT: 18, CHA: 10},
 		SpellSlots: map[string]character.SlotInfo{
 			"3": {Current: 2, Max: 2},
@@ -257,10 +259,10 @@ func TestFormatCard_HighLevelSlot(t *testing.T) {
 		Classes: []character.ClassEntry{
 			{Class: "Wizard", Level: 17},
 		},
-		HpCurrent: 80,
-		HpMax:     80,
-		AC:        12,
-		SpeedFt:   30,
+		HpCurrent:     80,
+		HpMax:         80,
+		AC:            12,
+		SpeedFt:       30,
 		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 14, WIS: 14, INT: 20, CHA: 10},
 		SpellSlots: map[string]character.SlotInfo{
 			"4": {Current: 1, Max: 1},
@@ -308,22 +310,63 @@ func TestFormatCard_SpellCount(t *testing.T) {
 		Classes: []character.ClassEntry{
 			{Class: "Wizard", Level: 5},
 		},
-		HpCurrent: 25,
-		HpMax:     25,
-		AC:        12,
-		SpeedFt:   30,
+		HpCurrent:     25,
+		HpMax:         25,
+		AC:            12,
+		SpeedFt:       30,
 		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, WIS: 12, INT: 18, CHA: 10},
 		SpellSlots: map[string]character.SlotInfo{
 			"1": {Current: 4, Max: 4},
 		},
-		SpellCount:     8,
-		PreparedCount:  5,
-		Gold:           50,
-		Languages:      []string{"Common"},
+		SpellCount:    8,
+		PreparedCount: 5,
+		Gold:          50,
+		Languages:     []string{"Common"},
 	}
 
 	result := FormatCard(data)
 	assert.Contains(t, result, "Spells: 5 prepared / 8 known")
+}
+
+func TestFormatCard_SpellCount_HomebrewOffListBadge(t *testing.T) {
+	data := CardData{
+		Name:    "Mage",
+		ShortID: "MA",
+		Level:   3,
+		Race:    "Human",
+		Classes: []character.ClassEntry{
+			{Class: "Wizard", Level: 3},
+		},
+		HpCurrent:          18,
+		HpMax:              18,
+		AC:                 12,
+		SpeedFt:            30,
+		AbilityScores:      character.AbilityScores{STR: 8, DEX: 14, CON: 12, WIS: 10, INT: 16, CHA: 10},
+		SpellCount:         1,
+		HomebrewSpellCount: 1,
+		Gold:               10,
+		Languages:          []string{"Common"},
+	}
+
+	result := FormatCard(data)
+	assert.Contains(t, result, "Spells: 1 known (1 homebrew/off-list)")
+}
+
+func TestExtractSpellCounts_CountsHomebrewDDBSpells(t *testing.T) {
+	char := newTestCharacter()
+	charData := map[string]any{
+		"spells": []map[string]any{
+			{"name": "Cure Wounds", "level": 1, "source": "class", "homebrew": true, "off_list": true},
+		},
+	}
+	charDataJSON, _ := json.Marshal(charData)
+	char.CharacterData = pqtype.NullRawMessage{RawMessage: charDataJSON, Valid: true}
+
+	spellCount, preparedCount, homebrewCount := extractSpellCounts(char)
+
+	assert.Equal(t, 1, spellCount)
+	assert.Equal(t, 0, preparedCount)
+	assert.Equal(t, 1, homebrewCount)
 }
 
 func TestFormatCard_SpellCount_ZeroPrepared(t *testing.T) {
@@ -335,10 +378,10 @@ func TestFormatCard_SpellCount_ZeroPrepared(t *testing.T) {
 		Classes: []character.ClassEntry{
 			{Class: "Sorcerer", Level: 3},
 		},
-		HpCurrent: 20,
-		HpMax:     20,
-		AC:        12,
-		SpeedFt:   30,
+		HpCurrent:     20,
+		HpMax:         20,
+		AC:            12,
+		SpeedFt:       30,
 		AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, WIS: 10, INT: 10, CHA: 18},
 		SpellCount:    6,
 		Gold:          30,
@@ -358,10 +401,10 @@ func TestFormatCard_NoSpellCount(t *testing.T) {
 		Classes: []character.ClassEntry{
 			{Class: "Barbarian", Level: 5},
 		},
-		HpCurrent: 50,
-		HpMax:     50,
-		AC:        15,
-		SpeedFt:   25,
+		HpCurrent:     50,
+		HpMax:         50,
+		AC:            15,
+		SpeedFt:       25,
 		AbilityScores: character.AbilityScores{STR: 18, DEX: 12, CON: 16, WIS: 10, INT: 8, CHA: 8},
 		Gold:          25,
 		Languages:     []string{"Common"},
@@ -380,18 +423,17 @@ func TestFormatCard_OnlyOffHand(t *testing.T) {
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		HpCurrent:      10,
-		HpMax:          10,
-		AC:             18,
-		SpeedFt:        30,
-		AbilityScores:  character.AbilityScores{STR: 16, DEX: 14, CON: 14, WIS: 10, INT: 10, CHA: 10},
+		HpCurrent:       10,
+		HpMax:           10,
+		AC:              18,
+		SpeedFt:         30,
+		AbilityScores:   character.AbilityScores{STR: 16, DEX: 14, CON: 14, WIS: 10, INT: 10, CHA: 10},
 		EquippedOffHand: "Shield",
-		Gold:           10,
-		Languages:      []string{"Common"},
+		Gold:            10,
+		Languages:       []string{"Common"},
 	}
 
 	result := FormatCard(data)
 	assert.Contains(t, result, "Shield (off-hand)")
 	assert.NotContains(t, result, "(main)")
 }
-

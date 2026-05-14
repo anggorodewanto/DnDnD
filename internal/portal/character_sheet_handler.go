@@ -21,8 +21,8 @@ type CharacterSheetLoader interface {
 
 // CharacterSheetHandler serves the character sheet page.
 type CharacterSheetHandler struct {
-	logger   *slog.Logger
-	svc      CharacterSheetLoader
+	logger    *slog.Logger
+	svc       CharacterSheetLoader
 	sheetTmpl *template.Template
 }
 
@@ -402,6 +402,8 @@ const characterSheetTemplate = `<!DOCTYPE html>
                         {{if .Prepared}}<span class="prof-dot prof-yes">●</span>{{end}}
                         {{.Name}}
                         {{if .School}}<span style="color:#a0a0b0; font-size:0.8rem;">({{.School}})</span>{{end}}
+                        {{if .Homebrew}}<span style="color:#ffd166; font-size:0.75rem; margin-left:0.35rem;">Homebrew</span>{{end}}
+                        {{if .OffList}}<span style="color:#ffd166; font-size:0.75rem; margin-left:0.35rem;">Off-list</span>{{end}}
                     </span>
                     <span style="color:#a0a0b0; font-size:0.8rem;">
                         {{if .CastingTime}}{{.CastingTime}}{{end}}
@@ -423,6 +425,8 @@ const characterSheetTemplate = `<!DOCTYPE html>
                     {{.Name}}
                     {{if gt .Quantity 1}}(x{{.Quantity}}){{end}}
                     {{if .IsMagic}}✦{{end}}
+                    {{if .Homebrew}}<span style="color:#ffd166; font-size:0.75rem; margin-left:0.35rem;">Homebrew</span>{{end}}
+                    {{if .Source}}<span style="color:#a0a0b0; font-size:0.75rem; margin-left:0.35rem;">{{.Source}}</span>{{end}}
                 </span>
                 <span>
                     {{if .Equipped}}<span class="item-equipped">Equipped</span>{{end}}

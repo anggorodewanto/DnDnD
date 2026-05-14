@@ -39,6 +39,8 @@ func TestServeApprovalPage_ReturnsHTML(t *testing.T) {
 	require.Contains(t, body, "Character Approval Queue")
 	require.Contains(t, body, "sidebar")
 	require.Contains(t, body, "/dashboard/api/approvals")
+	require.Contains(t, body, "d.advisories")
+	require.Contains(t, body, "warning-box")
 }
 
 func TestServeApprovalPage_RequiresAuth(t *testing.T) {

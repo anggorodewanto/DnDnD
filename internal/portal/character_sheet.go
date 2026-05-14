@@ -65,6 +65,8 @@ type SpellDisplayEntry struct {
 	Range       string
 	Prepared    bool
 	Source      string
+	Homebrew    bool
+	OffList     bool
 }
 
 // SkillDisplay holds display data for a single skill.

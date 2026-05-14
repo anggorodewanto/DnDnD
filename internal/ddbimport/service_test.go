@@ -119,6 +119,39 @@ func minimalDDBJSON() []byte {
 	}`)
 }
 
+func wizardCureWoundsDDBJSON() []byte {
+	return []byte(`{
+		"data": {
+			"name": "Mira",
+			"race": {"fullName": "Human"},
+			"classes": [{"definition": {"name": "Wizard", "hitDice": 6}, "level": 3}],
+			"stats": [
+				{"id": 1, "value": 8},
+				{"id": 2, "value": 14},
+				{"id": 3, "value": 12},
+				{"id": 4, "value": 16},
+				{"id": 5, "value": 10},
+				{"id": 6, "value": 10}
+			],
+			"bonusStats": [{"id":1,"value":null},{"id":2,"value":null},{"id":3,"value":null},{"id":4,"value":null},{"id":5,"value":null},{"id":6,"value":null}],
+			"overrideStats": [{"id":1,"value":null},{"id":2,"value":null},{"id":3,"value":null},{"id":4,"value":null},{"id":5,"value":null},{"id":6,"value":null}],
+			"baseHitPoints": 18,
+			"bonusHitPoints": 0,
+			"removedHitPoints": 0,
+			"temporaryHitPoints": 0,
+			"inventory": [],
+			"currencies": {"gp": 0, "sp": 0, "cp": 0, "ep": 0, "pp": 0},
+			"modifiers": {"race": [], "class": [], "background": [], "item": [], "feat": [], "condition": []},
+			"spells": {
+				"class": [{"definition": {"name": "Cure Wounds", "level": 1}}],
+				"race": [],
+				"item": [],
+				"feat": []
+			}
+		}
+	}`)
+}
+
 func TestService_Import_Success(t *testing.T) {
 	campaignID := uuid.New()
 	charID := uuid.New()
@@ -273,6 +306,48 @@ func TestService_Import_WithWarnings(t *testing.T) {
 	}
 	if !strings.Contains(result.Preview, "STR 22") {
 		t.Errorf("preview should contain warning about STR 22:\n%s", result.Preview)
+	}
+}
+
+func TestService_Import_WizardCureWoundsAdvisoryAndPersistedTag(t *testing.T) {
+	charID := uuid.New()
+	campaignID := uuid.New()
+	ddbURL := "https://www.dndbeyond.com/characters/12345"
+	var createdParams refdata.CreateCharacterParams
+
+	client := &mockClient{
+		FetchFunc: func(ctx context.Context, id string) ([]byte, error) {
+			return wizardCureWoundsDDBJSON(), nil
+		},
+	}
+	store := &mockCharStore{
+		CreateFunc: func(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error) {
+			createdParams = params
+			return refdata.Character{ID: charID, CampaignID: campaignID, Name: params.Name, CharacterData: params.CharacterData}, nil
+		},
+	}
+
+	svc := NewService(client, store)
+	result, err := svc.Import(context.Background(), campaignID, ddbURL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(result.Preview, "Wizard spell list includes Cure Wounds") {
+		t.Fatalf("preview should show off-list advisory:\n%s", result.Preview)
+	}
+
+	var charData struct {
+		Spells []SpellEntry `json:"spells"`
+	}
+	if err := json.Unmarshal(createdParams.CharacterData.RawMessage, &charData); err != nil {
+		t.Fatalf("unmarshal persisted character_data: %v", err)
+	}
+	if len(charData.Spells) != 1 {
+		t.Fatalf("expected 1 persisted spell, got %d", len(charData.Spells))
+	}
+	if !charData.Spells[0].Homebrew || !charData.Spells[0].OffList {
+		t.Fatalf("expected persisted spell tagged homebrew/off-list, got %+v", charData.Spells[0])
 	}
 }
 

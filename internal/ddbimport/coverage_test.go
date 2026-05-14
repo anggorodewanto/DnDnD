@@ -344,7 +344,7 @@ func TestParseFeatures_HighLevelSubclassExcluded(t *testing.T) {
 
 func TestParseSpells_Empty(t *testing.T) {
 	spells := &ddbSpells{}
-	result := parseSpells(spells)
+	result := parseSpells(spells, nil)
 	if len(result) != 0 {
 		t.Errorf("expected 0 spells, got %d", len(result))
 	}
@@ -357,7 +357,7 @@ func TestParseSpells_AllSources(t *testing.T) {
 		Item:  []ddbSpellEntry{{Definition: ddbSpellDef{Name: "ItemSpell", Level: 2}}},
 		Feat:  []ddbSpellEntry{{Definition: ddbSpellDef{Name: "FeatSpell", Level: 0}}},
 	}
-	result := parseSpells(spells)
+	result := parseSpells(spells, nil)
 	if len(result) != 4 {
 		t.Fatalf("expected 4 spells, got %d", len(result))
 	}
