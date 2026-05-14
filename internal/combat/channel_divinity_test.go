@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -609,6 +610,61 @@ func TestChannelDivinityDMQueue(t *testing.T) {
 	assert.Contains(t, result.CombatLog, "Knowledge of the Ages")
 	assert.Contains(t, result.CombatLog, "#dm-queue")
 	assert.Equal(t, "Knowledge of the Ages", result.OptionName)
+}
+
+// SR-059: Narrative Channel Divinity options must insert a dm_queue_items row.
+func TestChannelDivinityDMQueue_PostsDMQueueItem(t *testing.T) {
+	clericID := uuid.New()
+	clericCombatantID := uuid.New()
+	encounterID := uuid.New()
+	turnID := uuid.New()
+
+	char := refdata.Character{
+		ID:               clericID,
+		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+	}
+
+	cleric := refdata.Combatant{
+		ID:          clericCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: clericID, Valid: true},
+		DisplayName: "Thorn",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{cleric}, nil)
+	notifier := &fakeDMNotifier{postID: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}
+	svc := NewService(ms)
+	svc.SetDMNotifier(notifier)
+
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: clericCombatantID}
+
+	result, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
+		Caster:     cleric,
+		Turn:       turn,
+		OptionName: "Knowledge of the Ages",
+		ClassName:  "Cleric",
+		GuildID:    "guild-1",
+		CampaignID: "campaign-1",
+	})
+	require.NoError(t, err)
+
+	// Verify a dm_queue_items row was posted via the notifier.
+	require.Len(t, notifier.posts, 1)
+	posted := notifier.posts[0]
+	assert.Equal(t, dmqueue.KindChannelDivinity, posted.Kind)
+	assert.Equal(t, "Thorn", posted.PlayerName)
+	assert.Equal(t, "Knowledge of the Ages", posted.Summary)
+	assert.Equal(t, "guild-1", posted.GuildID)
+	assert.Equal(t, "campaign-1", posted.CampaignID)
+
+	// The returned DMQueueItemID must match the notifier's response.
+	assert.Equal(t, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", result.DMQueueItemID)
 }
 
 // TDD Cycle 8: SacredWeapon and VowOfEnmity

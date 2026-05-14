@@ -1013,6 +1013,8 @@ func (h *ActionHandler) dispatchChannelDivinity(ctx context.Context, interaction
 			Turn:       turn,
 			OptionName: option,
 			ClassName:  className,
+			GuildID:    interaction.GuildID,
+			CampaignID: encounter.CampaignID.String(),
 		})
 		if err != nil {
 			respondEphemeral(h.session, interaction, fmt.Sprintf("Channel Divinity failed: %v", err))

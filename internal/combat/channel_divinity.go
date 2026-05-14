@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -338,10 +339,11 @@ type PreserveLifeHeal struct {
 
 // DMQueueResult holds the result for a DM-resolved Channel Divinity option.
 type DMQueueResult struct {
-	UsesLeft   int
-	CombatLog  string
-	Turn       refdata.Turn
-	OptionName string
+	UsesLeft      int
+	CombatLog     string
+	Turn          refdata.Turn
+	OptionName    string
+	DMQueueItemID string
 }
 
 // SacredWeaponCommand holds inputs for Sacred Weapon (Devotion Paladin).
@@ -509,6 +511,8 @@ type ChannelDivinityDMQueueCommand struct {
 	Turn       refdata.Turn
 	OptionName string
 	ClassName  string
+	GuildID    string
+	CampaignID string
 }
 
 // ChannelDivinityDMQueue handles DM-resolved Channel Divinity options by routing to #dm-queue.
@@ -550,12 +554,34 @@ func (s *Service) ChannelDivinityDMQueue(ctx context.Context, cmd ChannelDivinit
 
 	combatLog := fmt.Sprintf("✝️ %s channels %s — routed to #dm-queue for DM resolution", cmd.Caster.DisplayName, cmd.OptionName)
 
+	dmItemID, err := s.postChannelDivinityToDMQueue(ctx, cmd)
+	if err != nil {
+		return DMQueueResult{}, fmt.Errorf("posting to dm queue: %w", err)
+	}
+
 	return DMQueueResult{
-		UsesLeft:   newUsesRemaining,
-		CombatLog:  combatLog,
-		Turn:       updatedTurn,
-		OptionName: cmd.OptionName,
+		UsesLeft:      newUsesRemaining,
+		CombatLog:     combatLog,
+		Turn:          updatedTurn,
+		OptionName:    cmd.OptionName,
+		DMQueueItemID: dmItemID,
 	}, nil
+}
+
+// postChannelDivinityToDMQueue dispatches a Channel Divinity notification
+// through the wired Notifier (when present) and returns the resulting item ID.
+// When no notifier is wired the call is a silent no-op.
+func (s *Service) postChannelDivinityToDMQueue(ctx context.Context, cmd ChannelDivinityDMQueueCommand) (string, error) {
+	if s.dmNotifier == nil {
+		return "", nil
+	}
+	return s.dmNotifier.Post(ctx, dmqueue.Event{
+		Kind:       dmqueue.KindChannelDivinity,
+		PlayerName: cmd.Caster.DisplayName,
+		Summary:    cmd.OptionName,
+		GuildID:    cmd.GuildID,
+		CampaignID: cmd.CampaignID,
+	})
 }
 
 // PreserveLife handles the Preserve Life (Life Domain) Channel Divinity option.

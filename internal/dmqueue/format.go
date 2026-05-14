@@ -36,6 +36,9 @@ const (
 	// encounter pane and so the end-of-round forfeit sweep can cancel
 	// any that remain pending. (SR-028)
 	KindOpportunityAttack EventKind = "opportunity_attack"
+	// KindChannelDivinity is a DM-resolved Channel Divinity subclass
+	// option (narrative/conditional) that requires manual adjudication.
+	KindChannelDivinity EventKind = "channel_divinity"
 )
 
 // WhisperTargetDiscordUserIDKey is the ExtraMetadata key under which the
@@ -93,6 +96,7 @@ var kindLabels = map[EventKind]kindLabel{
 	KindUndoRequest:         {emoji: "⏪", label: "Undo Request", useColon: false},
 	KindRetireRequest:       {emoji: "🪦", label: "Retire Request", useColon: false},
 	KindOpportunityAttack:   {emoji: "⚔️", label: "Opportunity Attack", useColon: true},
+	KindChannelDivinity:     {emoji: "✝️", label: "Channel Divinity", useColon: true},
 }
 
 var defaultLabel = kindLabel{emoji: "📨", label: "Notification", useColon: true}
