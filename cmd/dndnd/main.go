@@ -476,7 +476,7 @@ func buildAuth(db *sql.DB, logger *slog.Logger) authBundle {
 	userFetcher := &auth.DiscordUserInfoFetcher{}
 	oauthSvc := auth.NewOAuthService(oauthCfg, sessionStore, userFetcher, logger, secure)
 	return authBundle{
-		middleware: auth.SessionMiddleware(sessionStore, oauthCfg, logger),
+		middleware: auth.SessionMiddleware(sessionStore, oauthCfg, logger, secure),
 		oauthSvc:   oauthSvc,
 	}
 }

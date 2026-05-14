@@ -28,7 +28,7 @@ func ContextWithDiscordUserID(ctx context.Context, userID string) context.Contex
 
 // SessionMiddleware validates session cookies and injects the Discord user ID
 // into the request context. It also handles transparent token refresh and TTL sliding.
-func SessionMiddleware(sessions SessionRepository, refresher TokenRefresher, logger *slog.Logger) func(http.Handler) http.Handler {
+func SessionMiddleware(sessions SessionRepository, refresher TokenRefresher, logger *slog.Logger, secure bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie(CookieName)
@@ -63,6 +63,17 @@ func SessionMiddleware(sessions SessionRepository, refresher TokenRefresher, log
 			// Slide TTL
 			if err := sessions.SlideTTL(r.Context(), sessionID); err != nil {
 				logger.Error("failed to slide session TTL", "error", err, "session_id", sessionID)
+			} else {
+				// Re-issue cookie with refreshed MaxAge so browser and DB stay in sync
+				http.SetCookie(w, &http.Cookie{
+					Name:     CookieName,
+					Value:    sessionID.String(),
+					Path:     "/",
+					MaxAge:   int(SessionTTL.Seconds()),
+					HttpOnly: true,
+					Secure:   secure,
+					SameSite: http.SameSiteLaxMode,
+				})
 			}
 
 			ctx := context.WithValue(r.Context(), discordUserIDKey, sess.DiscordUserID)
