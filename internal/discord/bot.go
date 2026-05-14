@@ -85,6 +85,7 @@ func (b *Bot) trackAndRegister(guildID string) error {
 // It registers commands for the guild and tracks it.
 func (b *Bot) HandleGuildCreate(_ *discordgo.Session, event *discordgo.GuildCreate) {
 	b.logger.Info("guild create event", "guild_id", event.Guild.ID)
+	b.ValidateGuildPermissions(event.Guild.ID, event.Guild.Permissions)
 	b.trackAndRegister(event.Guild.ID)
 }
 
@@ -98,6 +99,19 @@ func (b *Bot) RegisterAllGuilds(guildIDs []string) []error {
 		}
 	}
 	return errs
+}
+
+// ValidateGuildPermissions checks whether the bot has all required permissions
+// in the given guild and logs a warning listing any that are missing.
+func (b *Bot) ValidateGuildPermissions(guildID string, granted int64) {
+	missing := ValidatePermissions(granted)
+	if len(missing) == 0 {
+		return
+	}
+	b.logger.Warn("bot missing required permissions",
+		"guild_id", guildID,
+		"missing", missing,
+	)
 }
 
 // HandleGuildMemberAdd is called when a new member joins a guild.
