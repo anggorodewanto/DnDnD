@@ -947,6 +947,84 @@ func TestEscape_ActionAlreadyUsed(t *testing.T) {
 	assert.ErrorIs(t, err, ErrResourceSpent)
 }
 
+// SR-054: Escape auto-picks higher of STR/DEX when no explicit choice
+func TestEscape_AutoPickHigherMod(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	escapee := makePCCombatant(combatantID, encounterID, charID, "Shadow")
+	grappledCond, _ := json.Marshal([]CombatCondition{{Condition: "grappled"}})
+	escapee.Conditions = grappledCond
+	// DEX 18 (+4) > STR 8 (-1) — system should auto-pick Acrobatics
+	char := makeBasicChar(charID, 30)
+	char.AbilityScores = json.RawMessage(`{"str":8,"dex":18,"con":12,"int":14,"wis":13,"cha":8}`)
+
+	grappler := makeNPCCombatantWithCreature(uuid.New(), encounterID, "Ogre", "ogre")
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "ogre",
+			AbilityScores: json.RawMessage(`{"str":10,"dex":8,"con":12,"int":6,"wis":10,"cha":8}`),
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	encounter := makeBasicEncounter(encounterID, 1)
+	roller := dice.NewRoller(deterministic)
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	// Neither UseAcrobatics nor UseAthletics set — should auto-pick DEX (Acrobatics)
+	cmd := EscapeCommand{
+		Escapee: escapee, Grappler: grappler, Turn: turn,
+		Encounter: encounter,
+	}
+	result, err := svc.Escape(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	assert.True(t, result.Success)
+	assert.Contains(t, result.CombatLog, "Acrobatics")
+}
+
+// SR-054: Escape with explicit --athletics override still uses Athletics
+func TestEscape_ExplicitAthletics(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	escapee := makePCCombatant(combatantID, encounterID, charID, "Shadow")
+	grappledCond, _ := json.Marshal([]CombatCondition{{Condition: "grappled"}})
+	escapee.Conditions = grappledCond
+	// DEX 18 (+4) > STR 8 (-1) — but user explicitly picks Athletics
+	char := makeBasicChar(charID, 30)
+	char.AbilityScores = json.RawMessage(`{"str":8,"dex":18,"con":12,"int":14,"wis":13,"cha":8}`)
+
+	grappler := makeNPCCombatantWithCreature(uuid.New(), encounterID, "Ogre", "ogre")
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{
+			ID:            "ogre",
+			AbilityScores: json.RawMessage(`{"str":10,"dex":8,"con":12,"int":6,"wis":10,"cha":8}`),
+		}, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	encounter := makeBasicEncounter(encounterID, 1)
+	roller := dice.NewRoller(deterministic)
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	cmd := EscapeCommand{
+		Escapee: escapee, Grappler: grappler, Turn: turn,
+		Encounter: encounter, UseAthletics: true,
+	}
+	result, err := svc.Escape(context.Background(), cmd, roller)
+	require.NoError(t, err)
+
+	assert.Contains(t, result.CombatLog, "Athletics")
+}
+
 // =====================
 // 9. CUNNING ACTION
 // =====================

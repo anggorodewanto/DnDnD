@@ -685,6 +685,7 @@ type EscapeCommand struct {
 	Turn          refdata.Turn
 	Encounter     refdata.Encounter
 	UseAcrobatics bool
+	UseAthletics  bool
 }
 
 // EscapeResult holds the outputs of an Escape action.
@@ -715,6 +716,19 @@ func (s *Service) Escape(ctx context.Context, cmd EscapeCommand, roller *dice.Ro
 	escAbility := "str" // Athletics
 	if cmd.UseAcrobatics {
 		escAbility = "dex" // Acrobatics
+	} else if !cmd.UseAthletics {
+		// Auto-pick: use whichever mod is higher (spec default)
+		strMod, err := s.getAbilityMod(ctx, cmd.Escapee, "str")
+		if err != nil {
+			return EscapeResult{}, err
+		}
+		dexMod, err := s.getAbilityMod(ctx, cmd.Escapee, "dex")
+		if err != nil {
+			return EscapeResult{}, err
+		}
+		if dexMod > strMod {
+			escAbility = "dex"
+		}
 	}
 	escMod, err := s.getAbilityMod(ctx, cmd.Escapee, escAbility)
 	if err != nil {
@@ -765,7 +779,7 @@ func (s *Service) Escape(ctx context.Context, cmd EscapeCommand, roller *dice.Ro
 	}
 
 	skillName := "Athletics"
-	if cmd.UseAcrobatics {
+	if escAbility == "dex" {
 		skillName = "Acrobatics"
 	}
 

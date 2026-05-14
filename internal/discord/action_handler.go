@@ -874,13 +874,16 @@ func (h *ActionHandler) dispatchEscape(ctx context.Context, interaction *discord
 		respondEphemeral(h.session, interaction, "Could not find the creature grappling you.")
 		return
 	}
-	useAcrobatics := strings.Contains(strings.ToLower(strings.TrimSpace(optionString(interaction, "args"))), "acrobatics")
+	argsLower := strings.ToLower(strings.TrimSpace(optionString(interaction, "args")))
+	useAcrobatics := strings.Contains(argsLower, "acrobatics")
+	useAthletics := strings.Contains(argsLower, "athletics")
 	result, err := h.combatService.Escape(ctx, combat.EscapeCommand{
 		Escapee:       actor,
 		Grappler:      *grappler,
 		Turn:          turn,
 		Encounter:     encounter,
 		UseAcrobatics: useAcrobatics,
+		UseAthletics:  useAthletics,
 	}, h.roller)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Escape failed: %v", err))
