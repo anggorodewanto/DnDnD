@@ -264,6 +264,7 @@ func (s *Service) ShortRest(input ShortRestInput) (ShortRestResult, error) {
 type LongRestInput struct {
 	HPCurrent          int
 	HPMax              int
+	TempHP             int
 	HitDiceRemaining   map[string]int
 	Classes            []character.ClassEntry
 	FeatureUses        map[string]character.FeatureUse
@@ -294,6 +295,7 @@ type LongRestResult struct {
 	HPAfter                int
 	HPMax                  int
 	HPHealed               int
+	TempHPCleared          bool
 	HitDiceRemaining       map[string]int
 	HitDiceRestored        int
 	FeaturesRecharged      []string
@@ -455,6 +457,11 @@ func (s *Service) LongRest(input LongRestInput) LongRestResult {
 			result.PreparedCasterReminder = true
 			break
 		}
+	}
+
+	// SR-053: long rest clears temp HP (spec line 1346).
+	if input.TempHP > 0 {
+		result.TempHPCleared = true
 	}
 
 	// Phase 88b: dawn recharge for magic items with charges.

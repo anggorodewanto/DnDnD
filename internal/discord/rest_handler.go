@@ -457,6 +457,7 @@ func (h *RestHandler) persistLongRestChanges(ctx context.Context, char refdata.C
 
 	params := baseUpdateParams(char)
 	params.HpCurrent = int32(result.HPAfter)
+	params.TempHp = 0 // SR-053: long rest clears temp HP
 	params.HitDiceRemaining = hitDiceData
 	params.FeatureUses = pqtype.NullRawMessage{RawMessage: featureData, Valid: true}
 	if slotData, err := json.Marshal(result.SpellSlots); err == nil {
@@ -572,6 +573,7 @@ func (h *RestHandler) handleLongRest(ctx context.Context, interaction *discordgo
 	input := rest.LongRestInput{
 		HPCurrent:        int(char.HpCurrent),
 		HPMax:            int(char.HpMax),
+		TempHP:           int(char.TempHp),
 		HitDiceRemaining: charData.HitDiceRemaining,
 		Classes:          charData.Classes,
 		FeatureUses:      charData.FeatureUses,

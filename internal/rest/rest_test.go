@@ -1114,3 +1114,45 @@ func TestService_CombatantExhaustionStore(t *testing.T) {
 		t.Fatalf("update calls after unchanged result = %d, want 1", store.updateCalls)
 	}
 }
+
+// --- SR-053: Long rest clears temp HP ---
+
+func TestLongRest_ClearsTempHP(t *testing.T) {
+	svc := NewService(nil)
+
+	input := LongRestInput{
+		HPCurrent:        30,
+		HPMax:            40,
+		TempHP:           8,
+		HitDiceRemaining: map[string]int{"d10": 5},
+		Classes:          []character.ClassEntry{{Class: "fighter", Level: 5}},
+		FeatureUses:      map[string]character.FeatureUse{},
+		SpellSlots:       map[string]character.SlotInfo{},
+	}
+
+	result := svc.LongRest(input)
+
+	if !result.TempHPCleared {
+		t.Error("TempHPCleared = false, want true (long rest clears temp HP)")
+	}
+}
+
+func TestLongRest_NoTempHP_NotCleared(t *testing.T) {
+	svc := NewService(nil)
+
+	input := LongRestInput{
+		HPCurrent:        30,
+		HPMax:            40,
+		TempHP:           0,
+		HitDiceRemaining: map[string]int{"d10": 5},
+		Classes:          []character.ClassEntry{{Class: "fighter", Level: 5}},
+		FeatureUses:      map[string]character.FeatureUse{},
+		SpellSlots:       map[string]character.SlotInfo{},
+	}
+
+	result := svc.LongRest(input)
+
+	if result.TempHPCleared {
+		t.Error("TempHPCleared = true, want false (no temp HP to clear)")
+	}
+}

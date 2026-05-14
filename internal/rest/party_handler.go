@@ -16,6 +16,7 @@ type PartyCharacterInfo struct {
 	DiscordUserID    string
 	HPCurrent        int
 	HPMax            int
+	TempHP           int
 	CONModifier      int
 	HitDiceRemaining map[string]int
 	Classes          []character.ClassEntry
@@ -30,6 +31,7 @@ type PartyCharacterInfo struct {
 type CharacterRestUpdate struct {
 	CharacterID      uuid.UUID
 	HPCurrent        int
+	TempHPCleared    bool
 	HitDiceRemaining map[string]int
 	FeatureUses      map[string]character.FeatureUse
 	SpellSlots       map[string]character.SlotInfo
@@ -180,6 +182,7 @@ func (h *PartyRestHandler) applyPartyLongRest(ctx context.Context, chars []Party
 		input := LongRestInput{
 			HPCurrent:        c.HPCurrent,
 			HPMax:            c.HPMax,
+			TempHP:           c.TempHP,
 			HitDiceRemaining: c.HitDiceRemaining,
 			Classes:          c.Classes,
 			FeatureUses:      c.FeatureUses,
@@ -193,6 +196,7 @@ func (h *PartyRestHandler) applyPartyLongRest(ctx context.Context, chars []Party
 		update := CharacterRestUpdate{
 			CharacterID:      c.ID,
 			HPCurrent:        result.HPAfter,
+			TempHPCleared:    result.TempHPCleared,
 			HitDiceRemaining: result.HitDiceRemaining,
 			FeatureUses:      c.FeatureUses,
 			SpellSlots:       result.SpellSlots,
