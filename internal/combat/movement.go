@@ -206,6 +206,14 @@ func FormatMoveConfirmation(result *MoveResult) string {
 	}
 }
 
+// FormatMoveConfirmationFromParts formats a simple move confirmation message
+// from raw parts (destCol, destRow, costFt). Used by the SR-047 drag choice
+// handler where the full MoveResult is no longer available.
+func FormatMoveConfirmationFromParts(destCol, destRow, costFt int) string {
+	label := renderer.ColumnLabel(destCol) + fmt.Sprintf("%d", destRow+1)
+	return fmt.Sprintf("\U0001f3c3 Move to %s — %dft", label, costFt)
+}
+
 // ValidateEndTurnPosition checks if the combatant is sharing a tile with another creature.
 // Returns an error message if they cannot end their turn there, empty string if OK.
 func ValidateEndTurnPosition(combatant refdata.Combatant, allCombatants []refdata.Combatant) string {

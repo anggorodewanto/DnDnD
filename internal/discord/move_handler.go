@@ -105,6 +105,13 @@ type MoveDragLookup interface {
 	CheckDragTargets(ctx context.Context, encounterID uuid.UUID, mover refdata.Combatant) (combat.DragCheckResult, error)
 }
 
+// MoveDragReleaser releases all grappled targets for a mover. Used by the
+// SR-047 interactive "Release & Move" button to end grapples before moving
+// at normal speed. nil-safe: when unset, the Release & Move button is not shown.
+type MoveDragReleaser interface {
+	ReleaseDrag(ctx context.Context, mover refdata.Combatant, targets []refdata.Combatant) (combat.ReleaseDragResult, error)
+}
+
 // MovePassiveCheckResolver calculates passive skill totals for a combatant.
 // Production uses check.Service.PassiveCheck; tests can inject a recorder to
 // prove movement invokes the passive-check path.
@@ -159,6 +166,8 @@ type MoveHandler struct {
 	// D-56 / Phase 56: drag-cost integration. When set, /move calls
 	// CheckDragTargets and doubles the displayed move cost via combat.DragMovementCost.
 	dragLookup MoveDragLookup
+	// SR-047: optional drag releaser for the interactive "Release & Move" button.
+	dragReleaser MoveDragReleaser
 	// SR-043: optional passive-check resolver for movement-side hidden enemy
 	// detection. Nil keeps legacy movement behavior in minimal test wiring.
 	passiveChecks MovePassiveCheckResolver
@@ -175,6 +184,10 @@ func (h *MoveHandler) SetLogger(l *slog.Logger) { h.logger = l }
 // SetDragLookup wires the D-56 drag-cost integration. nil-safe — when unset,
 // /move never applies the x2 drag movement cost.
 func (h *MoveHandler) SetDragLookup(l MoveDragLookup) { h.dragLookup = l }
+
+// SetDragReleaser wires the SR-047 interactive "Release & Move" button.
+// nil-safe — when unset, the Release & Move choice is not shown.
+func (h *MoveHandler) SetDragReleaser(r MoveDragReleaser) { h.dragReleaser = r }
 
 // SetPassiveCheckResolver wires SR-043 movement-side passive Perception
 // detection for hidden enemies.
@@ -479,18 +492,53 @@ func (h *MoveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// D-56 / Phase 56: when the mover is dragging one or more grappled
-	// creatures, double the displayed move cost. The grappled-target tile
-	// updates are out of scope here (the grappled creature stays put for
-	// this iteration; the player can run /bonus release-drag to drop them).
+	// SR-047 / D-56 / Phase 56: when the mover is dragging one or more
+	// grappled creatures, show a Drag / Release & Move button choice before
+	// the standard move confirmation. The player picks whether to drag
+	// (doubled cost) or release (normal cost).
 	dragPromptPrefix := h.dragPromptForMove(context.Background(), encounterID, combatant)
 	if dragPromptPrefix != "" {
-		result.CostFt = combat.DragMovementCost(result.CostFt)
+		dragID := fmt.Sprintf("drag_choice:drag:%s:%s:%d:%d:%d",
+			turn.ID.String(), combatant.ID.String(), destCol, destRow, result.CostFt)
+		releaseID := fmt.Sprintf("drag_choice:release:%s:%s:%d:%d:%d",
+			turn.ID.String(), combatant.ID.String(), destCol, destRow, result.CostFt)
+		cancelID := fmt.Sprintf("move_cancel:%s", turn.ID.String())
+
+		_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: dragPromptPrefix,
+				Flags:   discordgo.MessageFlagsEphemeral,
+				Components: []discordgo.MessageComponent{
+					discordgo.ActionsRow{
+						Components: []discordgo.MessageComponent{
+							discordgo.Button{
+								Label:    "Drag",
+								Style:    discordgo.SuccessButton,
+								CustomID: dragID,
+								Emoji:    &discordgo.ComponentEmoji{Name: "\u2705"},
+							},
+							discordgo.Button{
+								Label:    "Release & Move",
+								Style:    discordgo.PrimaryButton,
+								CustomID: releaseID,
+								Emoji:    &discordgo.ComponentEmoji{Name: "\u274c"},
+							},
+							discordgo.Button{
+								Label:    "Cancel",
+								Style:    discordgo.DangerButton,
+								CustomID: cancelID,
+								Emoji:    &discordgo.ComponentEmoji{Name: "\U0001f6ab"},
+							},
+						},
+					},
+				},
+			},
+		})
+		return
 	}
+
 	confirmMsg := combat.FormatMoveConfirmation(result)
-	if dragPromptPrefix != "" {
-		confirmMsg = dragPromptPrefix + "\n" + confirmMsg
-	}
 
 	// Encode move data in custom IDs for button callback
 	confirmID := fmt.Sprintf("move_confirm:%s:%s:%d:%d:%d",
@@ -1139,6 +1187,70 @@ func (h *MoveHandler) HandleMoveCancel(interaction *discordgo.Interaction) {
 	})
 }
 
+// HandleDragChoice processes the Drag / Release & Move button click (SR-047).
+// mode is "drag" or "release". For "drag", the move confirmation is shown
+// with doubled cost. For "release", grappled targets are released first, then
+// the move confirmation is shown at normal cost.
+func (h *MoveHandler) HandleDragChoice(interaction *discordgo.Interaction, mode string, turnID, combatantID uuid.UUID, destCol, destRow, baseCostFt int) {
+	ctx := context.Background()
+
+	if mode == "release" {
+		// Release all grappled targets, then show normal-cost confirmation.
+		if h.dragReleaser != nil && h.dragLookup != nil {
+			combatant, err := h.combatService.GetCombatant(ctx, combatantID)
+			if err != nil {
+				respondEphemeral(h.session, interaction, "Failed to get combatant data.")
+				return
+			}
+			check, err := h.dragLookup.CheckDragTargets(ctx, combatant.EncounterID, combatant)
+			if err == nil && check.HasTargets {
+				_, _ = h.dragReleaser.ReleaseDrag(ctx, combatant, check.GrappledTargets)
+			}
+		}
+		// Show move confirmation at normal cost.
+		h.showMoveConfirmation(interaction, turnID, combatantID, destCol, destRow, baseCostFt)
+		return
+	}
+
+	// "drag" — show move confirmation with doubled cost.
+	h.showMoveConfirmation(interaction, turnID, combatantID, destCol, destRow, combat.DragMovementCost(baseCostFt))
+}
+
+// showMoveConfirmation renders the standard Confirm/Cancel move prompt with
+// the given cost. Used by HandleDragChoice to present the final move step.
+func (h *MoveHandler) showMoveConfirmation(interaction *discordgo.Interaction, turnID, combatantID uuid.UUID, destCol, destRow, costFt int) {
+	confirmMsg := combat.FormatMoveConfirmationFromParts(destCol, destRow, costFt)
+	confirmID := fmt.Sprintf("move_confirm:%s:%s:%d:%d:%d",
+		turnID.String(), combatantID.String(), destCol, destRow, costFt)
+	cancelID := fmt.Sprintf("move_cancel:%s", turnID.String())
+
+	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Content: confirmMsg,
+			Flags:   discordgo.MessageFlagsEphemeral,
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.Button{
+							Label:    "Confirm",
+							Style:    discordgo.SuccessButton,
+							CustomID: confirmID,
+							Emoji:    &discordgo.ComponentEmoji{Name: "\u2705"},
+						},
+						discordgo.Button{
+							Label:    "Cancel",
+							Style:    discordgo.DangerButton,
+							CustomID: cancelID,
+							Emoji:    &discordgo.ComponentEmoji{Name: "\u274c"},
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
 // buildOccupants creates a pathfinding occupant list from combatants, excluding the mover.
 // The sizeFn callback resolves each occupant's actual size category; pass nil
 // to fall back to Medium for every occupant.
@@ -1510,6 +1622,35 @@ func ParseMoveConfirmWithModeData(customID string) (turnID, combatantID uuid.UUI
 		return uuid.Nil, uuid.Nil, 0, 0, 0, "", 0, fmt.Errorf("invalid combatant ID: %w", err)
 	}
 	return turnID, combatantID, destCol, destRow, costFt, mode, standCostFt, nil
+}
+
+// ParseDragChoiceData parses a drag choice button custom ID.
+// Format: drag_choice:<mode>:<turnID>:<combatantID>:<col>:<row>:<cost>
+func ParseDragChoiceData(customID string) (mode string, turnID, combatantID uuid.UUID, destCol, destRow, costFt int, err error) {
+	var modeStr string
+	n, scanErr := fmt.Sscanf(customID, "drag_choice:%s", &modeStr)
+	if scanErr != nil || n != 1 {
+		return "", uuid.Nil, uuid.Nil, 0, 0, 0, fmt.Errorf("invalid drag choice data: %q", customID)
+	}
+	// modeStr captured everything after "drag_choice:" — split on ":"
+	parts := strings.SplitN(modeStr, ":", 6)
+	if len(parts) != 6 {
+		return "", uuid.Nil, uuid.Nil, 0, 0, 0, fmt.Errorf("invalid drag choice data: %q", customID)
+	}
+	mode = parts[0]
+	turnID, err = uuid.Parse(parts[1])
+	if err != nil {
+		return "", uuid.Nil, uuid.Nil, 0, 0, 0, fmt.Errorf("invalid turn ID: %w", err)
+	}
+	combatantID, err = uuid.Parse(parts[2])
+	if err != nil {
+		return "", uuid.Nil, uuid.Nil, 0, 0, 0, fmt.Errorf("invalid combatant ID: %w", err)
+	}
+	_, scanErr = fmt.Sscanf(parts[3]+":"+parts[4]+":"+parts[5], "%d:%d:%d", &destCol, &destRow, &costFt)
+	if scanErr != nil {
+		return "", uuid.Nil, uuid.Nil, 0, 0, 0, fmt.Errorf("invalid coordinates in drag choice: %q", customID)
+	}
+	return mode, turnID, combatantID, destCol, destRow, costFt, nil
 }
 
 // ParseProneMoveData parses a prone movement button custom ID.

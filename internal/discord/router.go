@@ -462,6 +462,16 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 			return
 		}
 
+		if strings.HasPrefix(customID, "drag_choice:") {
+			mode, turnID, combatantID, destCol, destRow, costFt, err := ParseDragChoiceData(customID)
+			if err != nil {
+				respondEphemeral(r.bot.session, interaction, fmt.Sprintf("Invalid drag choice data: %v", err))
+				return
+			}
+			r.moveHandler.HandleDragChoice(interaction, mode, turnID, combatantID, destCol, destRow, costFt)
+			return
+		}
+
 		if strings.HasPrefix(customID, "move_cancel:") {
 			r.moveHandler.HandleMoveCancel(interaction)
 			return
