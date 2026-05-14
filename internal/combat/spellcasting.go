@@ -1371,6 +1371,41 @@ type MaterialComponentResult struct {
 	MaterialConsumed bool    // whether the material is consumed on cast
 }
 
+// normalizeComponentName strips leading articles, "worth (at least) N gp" suffixes,
+// and normalizes casing/whitespace for material component comparison.
+func normalizeComponentName(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	// Strip leading articles
+	for _, article := range []string{"a ", "an ", "the "} {
+		if strings.HasPrefix(s, article) {
+			s = s[len(article):]
+			break
+		}
+	}
+	// Strip "worth (at least) N gp" suffix and anything after
+	if idx := strings.Index(s, " worth "); idx >= 0 {
+		s = s[:idx]
+	}
+	// Strip ", which the spell consumes" and similar trailing clauses
+	if idx := strings.Index(s, ", which "); idx >= 0 {
+		s = s[:idx]
+	}
+	return strings.TrimSpace(s)
+}
+
+// matchesMaterialComponent checks whether an inventory item name matches a spell's
+// material description using normalized comparison rather than exact string matching.
+func matchesMaterialComponent(itemName, materialDesc string) bool {
+	normItem := normalizeComponentName(itemName)
+	normDesc := normalizeComponentName(materialDesc)
+	if normItem == "" || normDesc == "" {
+		return false
+	}
+	// Either the normalized item matches the normalized description,
+	// or one contains the other (e.g., item "diamond" matches desc "diamond")
+	return normItem == normDesc || strings.Contains(normDesc, normItem) || strings.Contains(normItem, normDesc)
+}
+
 // ValidateMaterialComponent checks whether a spell's material component requirements are met.
 // Returns MaterialCheckProceed if no costly component or if the item is in inventory.
 // Returns MaterialCheckNeedsGoldConfirmation if the item is missing but the caster has enough gold.
@@ -1392,9 +1427,9 @@ func ValidateMaterialComponent(spell refdata.Spell, inventory []InventoryItem, g
 		MaterialConsumed: spell.MaterialConsumed.Valid && spell.MaterialConsumed.Bool,
 	}
 
-	// Check inventory for the required item (match by material description, case-insensitive)
+	// Check inventory for the required item (normalized comparison)
 	for _, item := range inventory {
-		if strings.EqualFold(item.Name, desc) && item.Quantity > 0 {
+		if matchesMaterialComponent(item.Name, desc) && item.Quantity > 0 {
 			base.Outcome = MaterialCheckProceed
 			return base
 		}
@@ -1424,13 +1459,16 @@ func FormatGoldFallbackPrompt(r MaterialComponentResult) string {
 }
 
 // RemoveInventoryItem decrements the quantity of a named item by 1, removing it if quantity reaches 0.
+// Uses normalized matching consistent with ValidateMaterialComponent.
 func RemoveInventoryItem(items []InventoryItem, name string) []InventoryItem {
 	result := make([]InventoryItem, 0, len(items))
+	removed := false
 	for _, item := range items {
-		if !strings.EqualFold(item.Name, name) {
+		if removed || !matchesMaterialComponent(item.Name, name) {
 			result = append(result, item)
 			continue
 		}
+		removed = true
 		if item.Quantity > 1 {
 			item.Quantity--
 			result = append(result, item)

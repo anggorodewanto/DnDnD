@@ -2168,6 +2168,37 @@ func TestValidateMaterialComponent_Rejected(t *testing.T) {
 	assert.Equal(t, int32(50), result.CurrentGold)
 }
 
+// TDD Cycle SR-045: Material component matching uses normalized comparison
+func TestValidateMaterialComponent_NormalizedMatching(t *testing.T) {
+	spell := refdata.Spell{
+		Name:                "Revivify",
+		MaterialDescription: sql.NullString{String: "a diamond worth at least 300 gp", Valid: true},
+		MaterialCostGp:      sql.NullFloat64{Float64: 300, Valid: true},
+		MaterialConsumed:    sql.NullBool{Bool: true, Valid: true},
+	}
+
+	tests := []struct {
+		name     string
+		itemName string
+		want     MaterialCheckOutcome
+	}{
+		{"exact canonical name", "diamond", MaterialCheckProceed},
+		{"uppercase", "Diamond", MaterialCheckProceed},
+		{"leading article", "a diamond", MaterialCheckProceed},
+		{"whitespace variants", "  diamond  ", MaterialCheckProceed},
+		{"full description match", "a diamond worth at least 300 gp", MaterialCheckProceed},
+		{"partial with article and caps", "A Diamond", MaterialCheckProceed},
+		{"unrelated item", "ruby", MaterialCheckNeedsGoldConfirmation},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			items := []InventoryItem{{Name: tc.itemName, Quantity: 1, Type: "component"}}
+			result := ValidateMaterialComponent(spell, items, 500)
+			assert.Equal(t, tc.want, result.Outcome)
+		})
+	}
+}
+
 // TDD Cycle P63-5: FormatMaterialRejection
 func TestFormatMaterialRejection(t *testing.T) {
 	r := MaterialComponentResult{
