@@ -35,6 +35,10 @@ type Info struct {
 	SorceryCurrent       int
 	SorceryMax           int
 	HasSorcery           bool
+	ChannelDivinityCurrent int
+	ChannelDivinityMax     int
+	HasChannelDivinity     bool
+	SmiteSlots             string // formatted "1st: 3/4 | 2nd: 1/2"
 
 	// Reaction declarations and readied actions
 	Reactions      []string
@@ -105,6 +109,14 @@ func FormatStatus(info Info) string {
 
 	if info.HasSorcery {
 		sections = append(sections, fmt.Sprintf("**Sorcery Points:** %d/%d", info.SorceryCurrent, info.SorceryMax))
+	}
+
+	if info.HasChannelDivinity {
+		sections = append(sections, fmt.Sprintf("**Channel Divinity:** %d/%d", info.ChannelDivinityCurrent, info.ChannelDivinityMax))
+	}
+
+	if info.SmiteSlots != "" {
+		sections = append(sections, "**Smite Slots:** "+info.SmiteSlots)
 	}
 
 	if len(info.Reactions) > 0 {

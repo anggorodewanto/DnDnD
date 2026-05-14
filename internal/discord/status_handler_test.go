@@ -561,6 +561,57 @@ func TestClassLevelFrom_NotFound(t *testing.T) {
 	}
 }
 
+func TestStatusHandler_Paladin_ChannelDivinityAndSmiteSlots(t *testing.T) {
+	mock := newTestMock()
+	charID := uuid.New()
+
+	featureUsesJSON := json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`)
+	spellSlotsJSON := json.RawMessage(`{"1":{"current":3,"max":4},"2":{"current":1,"max":2}}`)
+
+	h := NewStatusHandler(
+		mock,
+		&mockStatusCampaignProvider{campaign: refdata.Campaign{ID: uuid.New()}},
+		&mockStatusCharacterLookup{char: refdata.Character{
+			ID:          charID,
+			Name:        "Kael",
+			Classes:     json.RawMessage(`[{"class":"Paladin","level":5}]`),
+			FeatureUses: pqtypeNull(featureUsesJSON),
+			SpellSlots:  pqtype.NullRawMessage{RawMessage: spellSlotsJSON, Valid: true},
+		}},
+		&mockStatusEncounterProvider{err: errors.New("no encounter")},
+		nil, nil, nil,
+	)
+	content, _ := runStatusHandler(t, h, "guild-1", "user-1")
+	assertContains(t, content, "**Channel Divinity:** 1/1")
+	assertContains(t, content, "**Smite Slots:** 1st: 3/4 | 2nd: 1/2")
+}
+
+func TestStatusHandler_Cleric_ChannelDivinity(t *testing.T) {
+	mock := newTestMock()
+	charID := uuid.New()
+
+	featureUsesJSON := json.RawMessage(`{"channel-divinity":{"current":2,"max":2,"recharge":"short"}}`)
+
+	h := NewStatusHandler(
+		mock,
+		&mockStatusCampaignProvider{campaign: refdata.Campaign{ID: uuid.New()}},
+		&mockStatusCharacterLookup{char: refdata.Character{
+			ID:          charID,
+			Name:        "Theron",
+			Classes:     json.RawMessage(`[{"class":"Cleric","level":6}]`),
+			FeatureUses: pqtypeNull(featureUsesJSON),
+		}},
+		&mockStatusEncounterProvider{err: errors.New("no encounter")},
+		nil, nil, nil,
+	)
+	content, _ := runStatusHandler(t, h, "guild-1", "user-1")
+	assertContains(t, content, "**Channel Divinity:** 2/2")
+	// Cleric should NOT show smite slots
+	if strings.Contains(content, "Smite") {
+		t.Errorf("cleric should not show smite slots, got: %q", content)
+	}
+}
+
 // --- test helpers ---
 
 func assertContains(t *testing.T, got, want string) {

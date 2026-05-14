@@ -3,6 +3,9 @@ package discord
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -232,7 +235,8 @@ func (h *StatusHandler) populateReactions(ctx context.Context, info *status.Info
 	}
 }
 
-// populateFeatureUses populates ki points and sorcery points from character data.
+// populateFeatureUses populates ki points, sorcery points, channel divinity,
+// and smite slots from character data.
 func (h *StatusHandler) populateFeatureUses(info *status.Info, char refdata.Character) {
 	// Parse classes to determine max values
 	var classes []classEntry
@@ -257,6 +261,30 @@ func (h *StatusHandler) populateFeatureUses(info *status.Info, char refdata.Char
 			info.HasSorcery = true
 			info.SorceryCurrent = remaining
 			info.SorceryMax = sorcLevel
+		}
+	}
+
+	// Channel Divinity (Cleric 2+ / Paladin 3+)
+	clericLevel := classLevelFrom(classes, "Cleric")
+	paladinLevel := classLevelFrom(classes, "Paladin")
+	cdMax := combat.ChannelDivinityMaxUses("Cleric", clericLevel)
+	if pMax := combat.ChannelDivinityMaxUses("Paladin", paladinLevel); pMax > cdMax {
+		cdMax = pMax
+	}
+	if cdMax > 0 {
+		_, remaining, err := combat.ParseFeatureUses(char, combat.FeatureKeyChannelDivinity)
+		if err == nil {
+			info.HasChannelDivinity = true
+			info.ChannelDivinityCurrent = remaining
+			info.ChannelDivinityMax = cdMax
+		}
+	}
+
+	// Smite Slots (Paladin only — show spell slots available for smites)
+	if paladinLevel >= 2 && char.SpellSlots.Valid && len(char.SpellSlots.RawMessage) > 0 {
+		slots, err := combat.ParseSpellSlots(char.SpellSlots.RawMessage)
+		if err == nil && len(slots) > 0 {
+			info.SmiteSlots = formatSmiteSlots(slots)
 		}
 	}
 }
@@ -288,4 +316,38 @@ func titleCase(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// formatSmiteSlots formats spell slots as "1st: 3/4 | 2nd: 1/2".
+func formatSmiteSlots(slots map[string]combat.SlotInfo) string {
+	levels := make([]int, 0, len(slots))
+	for k := range slots {
+		lvl, err := strconv.Atoi(k)
+		if err != nil {
+			continue
+		}
+		levels = append(levels, lvl)
+	}
+	sort.Ints(levels)
+
+	parts := make([]string, 0, len(levels))
+	for _, lvl := range levels {
+		s := slots[strconv.Itoa(lvl)]
+		parts = append(parts, fmt.Sprintf("%s: %d/%d", ordinal(lvl), s.Current, s.Max))
+	}
+	return strings.Join(parts, " | ")
+}
+
+// ordinal returns "1st", "2nd", "3rd", "4th", etc.
+func ordinal(n int) string {
+	switch n {
+	case 1:
+		return "1st"
+	case 2:
+		return "2nd"
+	case 3:
+		return "3rd"
+	default:
+		return fmt.Sprintf("%dth", n)
+	}
 }
