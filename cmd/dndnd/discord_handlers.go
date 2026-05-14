@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/check"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
@@ -350,6 +351,7 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	// lookup. Skipped when no Queries are wired (test deploys).
 	if deps.queries != nil {
 		handlers.move.SetSizeSpeedLookup(newMoveSizeSpeedAdapter(deps.queries))
+		handlers.move.SetPassiveCheckResolver(newMovePassiveCheckAdapter(deps.queries))
 	}
 	// med-24 / Phase 55: wire opportunity-attack hooks so /move fires
 	// reaction prompts to #your-turn when a mover leaves a hostile's
@@ -774,8 +776,100 @@ func (a *moveServiceAdapter) UpdateCombatantPosition(ctx context.Context, id uui
 	})
 }
 
+func (a *moveServiceAdapter) UpdateCombatantVisibility(ctx context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error) {
+	return a.queries.UpdateCombatantVisibility(ctx, arg)
+}
+
 func (a *moveServiceAdapter) UpdateCombatantConditions(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
 	return a.queries.UpdateCombatantConditions(ctx, arg)
+}
+
+type movePassiveCheckAdapter struct {
+	queries *refdata.Queries
+	service *check.Service
+}
+
+func newMovePassiveCheckAdapter(q *refdata.Queries) *movePassiveCheckAdapter {
+	if q == nil {
+		return nil
+	}
+	return &movePassiveCheckAdapter{queries: q, service: check.NewService(nil)}
+}
+
+func (a *movePassiveCheckAdapter) PassiveCheckForCombatant(ctx context.Context, combatant refdata.Combatant, skill string) (check.PassiveCheckResult, error) {
+	if combatant.CharacterID.Valid {
+		return a.passiveCheckForCharacter(ctx, combatant.CharacterID.UUID, skill)
+	}
+	if combatant.CreatureRefID.Valid && combatant.CreatureRefID.String != "" {
+		return a.passiveCheckForCreature(ctx, combatant.CreatureRefID.String, skill)
+	}
+	return a.service.PassiveCheck(check.PassiveCheckInput{Skill: skill}), nil
+}
+
+func (a *movePassiveCheckAdapter) passiveCheckForCharacter(ctx context.Context, characterID uuid.UUID, skill string) (check.PassiveCheckResult, error) {
+	char, err := a.queries.GetCharacter(ctx, characterID)
+	if err != nil {
+		return check.PassiveCheckResult{}, err
+	}
+	var scores character.AbilityScores
+	if err := json.Unmarshal(char.AbilityScores, &scores); err != nil {
+		return check.PassiveCheckResult{}, err
+	}
+	profSkills, expertiseSkills, jackOfAllTrades := parseMoveProficiencies(char.Proficiencies.RawMessage)
+	return a.service.PassiveCheck(check.PassiveCheckInput{
+		Scores:           scores,
+		Skill:            skill,
+		ProficientSkills: profSkills,
+		ExpertiseSkills:  expertiseSkills,
+		JackOfAllTrades:  jackOfAllTrades,
+		ProfBonus:        int(char.ProficiencyBonus),
+	}), nil
+}
+
+func (a *movePassiveCheckAdapter) passiveCheckForCreature(ctx context.Context, creatureRefID, skill string) (check.PassiveCheckResult, error) {
+	creature, err := a.queries.GetCreature(ctx, creatureRefID)
+	if err != nil {
+		return check.PassiveCheckResult{}, err
+	}
+	if mod, ok := moveCreatureSkillMod(creature.Skills.RawMessage, skill); ok {
+		_ = a.service.PassiveCheck(check.PassiveCheckInput{Skill: skill})
+		return check.PassiveCheckResult{Skill: skill, Modifier: mod, Total: 10 + mod}, nil
+	}
+	var scores character.AbilityScores
+	if err := json.Unmarshal(creature.AbilityScores, &scores); err != nil {
+		return check.PassiveCheckResult{}, err
+	}
+	return a.service.PassiveCheck(check.PassiveCheckInput{
+		Scores: scores,
+		Skill:  skill,
+	}), nil
+}
+
+func parseMoveProficiencies(raw json.RawMessage) (skills []string, expertise []string, jackOfAllTrades bool) {
+	if len(raw) == 0 {
+		return nil, nil, false
+	}
+	var data struct {
+		Skills          []string `json:"skills"`
+		Expertise       []string `json:"expertise"`
+		JackOfAllTrades bool     `json:"jack_of_all_trades"`
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, nil, false
+	}
+	return data.Skills, data.Expertise, data.JackOfAllTrades
+}
+
+func moveCreatureSkillMod(raw []byte, skill string) (int, bool) {
+	if len(raw) == 0 {
+		return 0, false
+	}
+	var skills map[string]int
+	if err := json.Unmarshal(raw, &skills); err != nil {
+		return 0, false
+	}
+	mod, ok := skills[skill]
+	return mod, ok
 }
 
 // mapProviderAdapter satisfies discord.MoveMapProvider. Refdata exposes the

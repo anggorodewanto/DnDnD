@@ -10,6 +10,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/check"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/gamemap/renderer"
@@ -24,6 +25,7 @@ type MoveService interface {
 	GetCombatant(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 	ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
 	UpdateCombatantPosition(ctx context.Context, id uuid.UUID, col string, row, altitude int32) (refdata.Combatant, error)
+	UpdateCombatantVisibility(ctx context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error)
 	UpdateCombatantConditions(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
 }
 
@@ -103,6 +105,13 @@ type MoveDragLookup interface {
 	CheckDragTargets(ctx context.Context, encounterID uuid.UUID, mover refdata.Combatant) (combat.DragCheckResult, error)
 }
 
+// MovePassiveCheckResolver calculates passive skill totals for a combatant.
+// Production uses check.Service.PassiveCheck; tests can inject a recorder to
+// prove movement invokes the passive-check path.
+type MovePassiveCheckResolver interface {
+	PassiveCheckForCombatant(ctx context.Context, combatant refdata.Combatant, skill string) (check.PassiveCheckResult, error)
+}
+
 // MoveOANotifier is the minimal dmqueue.Notifier surface the move handler
 // uses to post DM-side opportunity-attack prompts for DM-controlled hostile
 // reactions. Defined locally so the discord package doesn't take an extra
@@ -150,6 +159,9 @@ type MoveHandler struct {
 	// D-56 / Phase 56: drag-cost integration. When set, /move calls
 	// CheckDragTargets and doubles the displayed move cost via combat.DragMovementCost.
 	dragLookup MoveDragLookup
+	// SR-043: optional passive-check resolver for movement-side hidden enemy
+	// detection. Nil keeps legacy movement behavior in minimal test wiring.
+	passiveChecks MovePassiveCheckResolver
 	// F-20: optional structured logger. nil falls back to slog.Default()
 	// so legacy tests built before logger wiring keep working.
 	logger *slog.Logger
@@ -163,6 +175,10 @@ func (h *MoveHandler) SetLogger(l *slog.Logger) { h.logger = l }
 // SetDragLookup wires the D-56 drag-cost integration. nil-safe — when unset,
 // /move never applies the x2 drag movement cost.
 func (h *MoveHandler) SetDragLookup(l MoveDragLookup) { h.dragLookup = l }
+
+// SetPassiveCheckResolver wires SR-043 movement-side passive Perception
+// detection for hidden enemies.
+func (h *MoveHandler) SetPassiveCheckResolver(r MovePassiveCheckResolver) { h.passiveChecks = r }
 
 // SetCharacterLookup wires the character lookup used by exploration /move to
 // resolve the invoking Discord user's PC combatant.
@@ -702,6 +718,12 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 		h.fireOpportunityAttacks(ctx, moverCombatant, updatedTurn, destCol, destRow, interaction.GuildID)
 	}
 
+	if moverFetchOK {
+		if spotted := h.revealHiddenEnemiesByPassiveCheck(ctx, moverCombatant, updatedTurn, destCol, destRow); spotted != "" {
+			responseMsg += "\n" + spotted
+		}
+	}
+
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
@@ -828,6 +850,95 @@ func (h *MoveHandler) postOAToDMQueue(ctx context.Context, encounterID uuid.UUID
 	if h.oaRecorder != nil {
 		h.oaRecorder.RecordPendingOA(encounterID, itemID)
 	}
+}
+
+func (h *MoveHandler) revealHiddenEnemiesByPassiveCheck(ctx context.Context, mover refdata.Combatant, moverTurn refdata.Turn, destCol, destRow int) string {
+	if h.passiveChecks == nil {
+		return ""
+	}
+
+	startCol, startRow, err := renderer.ParseCoordinate(mover.PositionCol + fmt.Sprintf("%d", mover.PositionRow))
+	if err != nil {
+		return ""
+	}
+
+	allCombatants, err := h.combatService.ListCombatantsByEncounterID(ctx, moverTurn.EncounterID)
+	if err != nil {
+		return ""
+	}
+
+	path := h.buildOAPath(ctx, mover, moverTurn, startCol, startRow, destCol, destRow, allCombatants)
+	if len(path) == 0 {
+		return ""
+	}
+
+	perception, err := h.passiveChecks.PassiveCheckForCombatant(ctx, mover, "perception")
+	if err != nil {
+		return ""
+	}
+
+	var spotted []string
+	for _, hidden := range allCombatants {
+		if !shouldCheckHiddenEnemy(mover, hidden) {
+			continue
+		}
+		if !pathComesNearCombatant(path, hidden, 1) {
+			continue
+		}
+		stealth, err := h.passiveChecks.PassiveCheckForCombatant(ctx, hidden, "stealth")
+		if err != nil {
+			continue
+		}
+		if perception.Total < stealth.Total {
+			continue
+		}
+		if _, err := h.combatService.UpdateCombatantVisibility(ctx, refdata.UpdateCombatantVisibilityParams{ID: hidden.ID, IsVisible: true}); err != nil {
+			continue
+		}
+		spotted = append(spotted, hidden.DisplayName)
+	}
+
+	if len(spotted) == 0 {
+		return ""
+	}
+	return "Spotted " + strings.Join(spotted, ", ")
+}
+
+func shouldCheckHiddenEnemy(mover, candidate refdata.Combatant) bool {
+	if candidate.ID == mover.ID {
+		return false
+	}
+	if !candidate.IsAlive || candidate.IsVisible {
+		return false
+	}
+	return candidate.IsNpc != mover.IsNpc
+}
+
+func pathComesNearCombatant(path []pathfinding.Point, combatant refdata.Combatant, reachTiles int) bool {
+	col, row, err := renderer.ParseCoordinate(combatant.PositionCol + fmt.Sprintf("%d", combatant.PositionRow))
+	if err != nil {
+		return false
+	}
+	for _, p := range path {
+		if maxInt(absInt(p.Col-col), absInt(p.Row-row)) <= reachTiles {
+			return true
+		}
+	}
+	return false
+}
+
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // buildOAPath re-runs pathfinding for the just-confirmed move so OA detection
@@ -1335,6 +1446,12 @@ func (h *MoveHandler) HandleMoveConfirmWithMode(interaction *discordgo.Interacti
 		msg = fmt.Sprintf("\U0001f3c3 Stood up and moved to %s%d. %s", destLabel, destRow+1, remaining)
 	} else {
 		msg = fmt.Sprintf("\U0001f41b Crawled to %s%d. %s", destLabel, destRow+1, remaining)
+	}
+
+	if getErr == nil {
+		if spotted := h.revealHiddenEnemiesByPassiveCheck(ctx, combatant, updatedTurn, destCol, destRow); spotted != "" {
+			msg += "\n" + spotted
+		}
 	}
 
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{

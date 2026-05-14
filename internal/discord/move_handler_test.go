@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/check"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
@@ -25,7 +26,8 @@ type mockMoveService struct {
 	getCombatant              func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 	listCombatants            func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
 	updateCombatantPos        func(ctx context.Context, id uuid.UUID, col string, row, alt int32) (refdata.Combatant, error)
-	updateConditions func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
+	updateCombatantVisibility func(ctx context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error)
+	updateConditions          func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
 }
 
 func (m *mockMoveService) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
@@ -39,6 +41,12 @@ func (m *mockMoveService) ListCombatantsByEncounterID(ctx context.Context, encou
 }
 func (m *mockMoveService) UpdateCombatantPosition(ctx context.Context, id uuid.UUID, col string, row, alt int32) (refdata.Combatant, error) {
 	return m.updateCombatantPos(ctx, id, col, row, alt)
+}
+func (m *mockMoveService) UpdateCombatantVisibility(ctx context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error) {
+	if m.updateCombatantVisibility != nil {
+		return m.updateCombatantVisibility(ctx, arg)
+	}
+	return refdata.Combatant{}, nil
 }
 func (m *mockMoveService) UpdateCombatantConditions(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
 	if m.updateConditions != nil {
@@ -71,8 +79,8 @@ type mockMoveEncounterProvider struct {
 	// Phase 105: routed via the invoker's combatant entry. The mock retains a
 	// guild-only func for legacy tests and a new user-aware func for
 	// disambiguation tests; when the user-aware func is set it takes precedence.
-	getActiveEncounterID    func(ctx context.Context, guildID string) (uuid.UUID, error)
-	activeEncounterForUser  func(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
+	getActiveEncounterID   func(ctx context.Context, guildID string) (uuid.UUID, error)
+	activeEncounterForUser func(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
 }
 
 func (m *mockMoveEncounterProvider) ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error) {
@@ -106,6 +114,16 @@ type mockMoveSession struct {
 type moveSessionChannelSend struct {
 	ChannelID string
 	Content   string
+}
+
+type recordingMovePassiveResolver struct {
+	totals map[uuid.UUID]int
+	calls  []string
+}
+
+func (r *recordingMovePassiveResolver) PassiveCheckForCombatant(_ context.Context, combatant refdata.Combatant, skill string) (check.PassiveCheckResult, error) {
+	r.calls = append(r.calls, combatant.DisplayName+":"+skill)
+	return check.PassiveCheckResult{Skill: skill, Total: r.totals[combatant.ID]}, nil
 }
 
 func (m *mockMoveSession) InteractionRespond(i *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
@@ -731,8 +749,8 @@ func TestMoveHandler_HandleMoveConfirm_PositionUpdateError(t *testing.T) {
 	handler, _, turnID, combatantID := setupMoveHandler(sess)
 
 	handler.combatService = &mockMoveService{
-		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) { return refdata.Encounter{}, nil },
-		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		getEncounter:   func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) { return refdata.Encounter{}, nil },
+		getCombatant:   func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
 		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
 			return refdata.Combatant{}, errors.New("pos error")
@@ -836,8 +854,8 @@ func TestMoveHandler_SplitMovement(t *testing.T) {
 				ID:          combatantID,
 				PositionCol: currentCol,
 				PositionRow: currentRow,
-				IsAlive: true, HpCurrent: 10,
-				IsNpc:       false,
+				IsAlive:     true, HpCurrent: 10,
+				IsNpc: false,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
@@ -1424,8 +1442,8 @@ func TestMoveHandler_HandleProneStandAndMove_MapError(t *testing.T) {
 		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
 			return refdata.Encounter{MapID: uuid.NullUUID{Valid: false}}, nil
 		},
-		getCombatant: handler.combatService.(*mockMoveService).getCombatant,
-		listCombatants: handler.combatService.(*mockMoveService).listCombatants,
+		getCombatant:       handler.combatService.(*mockMoveService).getCombatant,
+		listCombatants:     handler.combatService.(*mockMoveService).listCombatants,
 		updateCombatantPos: handler.combatService.(*mockMoveService).updateCombatantPos,
 	}
 
@@ -1449,8 +1467,8 @@ func TestMoveHandler_HandleProneCrawl_MapError(t *testing.T) {
 		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
 			return refdata.Encounter{MapID: uuid.NullUUID{Valid: false}}, nil
 		},
-		getCombatant: handler.combatService.(*mockMoveService).getCombatant,
-		listCombatants: handler.combatService.(*mockMoveService).listCombatants,
+		getCombatant:       handler.combatService.(*mockMoveService).getCombatant,
+		listCombatants:     handler.combatService.(*mockMoveService).listCombatants,
 		updateCombatantPos: handler.combatService.(*mockMoveService).updateCombatantPos,
 	}
 
@@ -1535,8 +1553,8 @@ func TestMoveHandler_HandleMoveConfirmWithMode_PositionError(t *testing.T) {
 		},
 	}
 	handler.combatService = &mockMoveService{
-		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) { return refdata.Encounter{}, nil },
-		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		getEncounter:   func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) { return refdata.Encounter{}, nil },
+		getCombatant:   func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
 		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
 			return refdata.Combatant{}, errors.New("pos error")
@@ -1824,6 +1842,293 @@ func TestMoveHandler_HandleMoveConfirm_OASilentWhenChannelsUnset(t *testing.T) {
 	handler.HandleMoveConfirm(interaction, turnID, moverID, 4, 1, 10)
 
 	assert.Empty(t, sess.channelSends, "no OA prompt should fire without a channels provider")
+}
+
+func TestMoveHandler_HandleMoveConfirm_PassivePerceptionRevealsNearbyHiddenEnemy(t *testing.T) {
+	sess := &mockMoveSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	moverID := uuid.New()
+	hiddenID := uuid.New()
+	mapID := uuid.New()
+	revealed := false
+
+	mover := refdata.Combatant{
+		ID:          moverID,
+		EncounterID: encounterID,
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   true,
+	}
+	hidden := refdata.Combatant{
+		ID:          hiddenID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin Sneak",
+		PositionCol: "B",
+		PositionRow: 2,
+		IsAlive:     true,
+		IsVisible:   false,
+		IsNpc:       true,
+	}
+
+	combatSvc := &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{
+				ID:         encounterID,
+				CampaignID: uuid.New(),
+				MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
+			}, nil
+		},
+		getCombatant: func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			if id == moverID {
+				return mover, nil
+			}
+			if id == hiddenID {
+				return hidden, nil
+			}
+			return refdata.Combatant{}, errors.New("not found")
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{mover, hidden}, nil
+		},
+		updateCombatantPos: func(_ context.Context, id uuid.UUID, col string, row, alt int32) (refdata.Combatant, error) {
+			require.Equal(t, moverID, id)
+			require.Equal(t, "C", col)
+			require.Equal(t, int32(1), row)
+			mover.PositionCol = col
+			mover.PositionRow = row
+			mover.AltitudeFt = alt
+			return mover, nil
+		},
+		updateCombatantVisibility: func(_ context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error) {
+			require.Equal(t, hiddenID, arg.ID)
+			require.True(t, arg.IsVisible)
+			revealed = true
+			hidden.IsVisible = true
+			return hidden, nil
+		},
+	}
+	mapProv := &mockMoveMapProvider{getByID: func(_ context.Context, _ uuid.UUID) (refdata.Map, error) {
+		return refdata.Map{ID: mapID, TiledJson: tiledJSON5x5()}, nil
+	}}
+	turnProv := &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: moverID, MovementRemainingFt: 30}, nil
+		},
+		updateTurnActions: func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: moverID, MovementRemainingFt: arg.MovementRemainingFt}, nil
+		},
+	}
+	handler := NewMoveHandler(sess, combatSvc, mapProv, turnProv, &mockMoveEncounterProvider{}, nil)
+	passive := &recordingMovePassiveResolver{
+		totals: map[uuid.UUID]int{
+			moverID:  15,
+			hiddenID: 12,
+		},
+	}
+	handler.SetPassiveCheckResolver(passive)
+
+	handler.HandleMoveConfirm(makeMoveInteraction("C1"), turnID, moverID, 2, 0, 10)
+
+	require.True(t, revealed, "hidden enemy should be revealed when mover passive Perception beats passive Stealth")
+	require.ElementsMatch(t, []string{"Aria:perception", "Goblin Sneak:stealth"}, passive.calls)
+	require.NotNil(t, sess.lastResponse)
+	assert.Contains(t, sess.lastResponse.Data.Content, "Moved to C1")
+	assert.Contains(t, sess.lastResponse.Data.Content, "Spotted Goblin Sneak")
+}
+
+func TestMoveHandler_HandleMoveConfirmWithMode_PassivePerceptionRevealsNearbyHiddenEnemy(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		mode       string
+		costFt     int
+		standCost  int
+		wantPrefix string
+	}{
+		{name: "stand and move", mode: "stand_and_move", costFt: 10, standCost: 15, wantPrefix: "Stood up and moved to C1"},
+		{name: "crawl", mode: "crawl", costFt: 10, standCost: 0, wantPrefix: "Crawled to C1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sess := &mockMoveSession{}
+			encounterID := uuid.New()
+			turnID := uuid.New()
+			moverID := uuid.New()
+			hiddenID := uuid.New()
+			mapID := uuid.New()
+			revealed := false
+
+			proneConditions, _ := json.Marshal([]map[string]interface{}{{"condition": "prone"}})
+			mover := refdata.Combatant{
+				ID:          moverID,
+				EncounterID: encounterID,
+				DisplayName: "Aria",
+				PositionCol: "A",
+				PositionRow: 1,
+				IsAlive:     true,
+				IsVisible:   true,
+				Conditions:  proneConditions,
+			}
+			hidden := refdata.Combatant{
+				ID:          hiddenID,
+				EncounterID: encounterID,
+				DisplayName: "Goblin Sneak",
+				PositionCol: "B",
+				PositionRow: 2,
+				IsAlive:     true,
+				IsVisible:   false,
+				IsNpc:       true,
+			}
+
+			combatSvc := &mockMoveService{
+				getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+					return refdata.Encounter{ID: encounterID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}}, nil
+				},
+				getCombatant: func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+					if id == moverID {
+						return mover, nil
+					}
+					if id == hiddenID {
+						return hidden, nil
+					}
+					return refdata.Combatant{}, errors.New("not found")
+				},
+				listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+					return []refdata.Combatant{mover, hidden}, nil
+				},
+				updateCombatantPos: func(_ context.Context, id uuid.UUID, col string, row, alt int32) (refdata.Combatant, error) {
+					require.Equal(t, moverID, id)
+					require.Equal(t, "C", col)
+					require.Equal(t, int32(1), row)
+					mover.PositionCol = col
+					mover.PositionRow = row
+					mover.AltitudeFt = alt
+					return mover, nil
+				},
+				updateCombatantVisibility: func(_ context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error) {
+					require.Equal(t, hiddenID, arg.ID)
+					require.True(t, arg.IsVisible)
+					revealed = true
+					hidden.IsVisible = true
+					return hidden, nil
+				},
+				updateConditions: func(_ context.Context, _ refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+					return mover, nil
+				},
+			}
+			mapProv := &mockMoveMapProvider{getByID: func(_ context.Context, _ uuid.UUID) (refdata.Map, error) {
+				return refdata.Map{ID: mapID, TiledJson: tiledJSON5x5()}, nil
+			}}
+			turnProv := &mockMoveTurnProvider{
+				getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+					return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: moverID, MovementRemainingFt: 30}, nil
+				},
+				updateTurnActions: func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+					return refdata.Turn{
+						ID:                  turnID,
+						EncounterID:         encounterID,
+						CombatantID:         moverID,
+						MovementRemainingFt: arg.MovementRemainingFt,
+						HasStoodThisTurn:    arg.HasStoodThisTurn,
+					}, nil
+				},
+			}
+			handler := NewMoveHandler(sess, combatSvc, mapProv, turnProv, &mockMoveEncounterProvider{}, nil)
+			passive := &recordingMovePassiveResolver{totals: map[uuid.UUID]int{moverID: 15, hiddenID: 12}}
+			handler.SetPassiveCheckResolver(passive)
+
+			handler.HandleMoveConfirmWithMode(makeMoveInteraction("C1"), turnID, moverID, 2, 0, tc.costFt, tc.mode, tc.standCost)
+
+			require.True(t, revealed, "hidden enemy should be revealed when mover passive Perception beats passive Stealth")
+			require.ElementsMatch(t, []string{"Aria:perception", "Goblin Sneak:stealth"}, passive.calls)
+			require.NotNil(t, sess.lastResponse)
+			assert.Contains(t, sess.lastResponse.Data.Content, tc.wantPrefix)
+			assert.Contains(t, sess.lastResponse.Data.Content, "Spotted Goblin Sneak")
+		})
+	}
+}
+
+func TestMoveHandler_HandleMoveConfirm_PassivePerceptionFailureLeavesHiddenEnemyHidden(t *testing.T) {
+	sess := &mockMoveSession{}
+	encounterID := uuid.New()
+	turnID := uuid.New()
+	moverID := uuid.New()
+	hiddenID := uuid.New()
+	mapID := uuid.New()
+	revealAttempted := false
+
+	mover := refdata.Combatant{
+		ID:          moverID,
+		EncounterID: encounterID,
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   true,
+	}
+	hidden := refdata.Combatant{
+		ID:          hiddenID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin Sneak",
+		PositionCol: "B",
+		PositionRow: 2,
+		IsAlive:     true,
+		IsVisible:   false,
+		IsNpc:       true,
+	}
+
+	combatSvc := &mockMoveService{
+		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{ID: encounterID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}}, nil
+		},
+		getCombatant: func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			if id == moverID {
+				return mover, nil
+			}
+			if id == hiddenID {
+				return hidden, nil
+			}
+			return refdata.Combatant{}, errors.New("not found")
+		},
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{mover, hidden}, nil
+		},
+		updateCombatantPos: func(_ context.Context, id uuid.UUID, col string, row, alt int32) (refdata.Combatant, error) {
+			require.Equal(t, moverID, id)
+			mover.PositionCol = col
+			mover.PositionRow = row
+			mover.AltitudeFt = alt
+			return mover, nil
+		},
+		updateCombatantVisibility: func(_ context.Context, _ refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error) {
+			revealAttempted = true
+			return refdata.Combatant{}, nil
+		},
+	}
+	mapProv := &mockMoveMapProvider{getByID: func(_ context.Context, _ uuid.UUID) (refdata.Map, error) {
+		return refdata.Map{ID: mapID, TiledJson: tiledJSON5x5()}, nil
+	}}
+	turnProv := &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: moverID, MovementRemainingFt: 30}, nil
+		},
+		updateTurnActions: func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: moverID, MovementRemainingFt: arg.MovementRemainingFt}, nil
+		},
+	}
+	handler := NewMoveHandler(sess, combatSvc, mapProv, turnProv, &mockMoveEncounterProvider{}, nil)
+	passive := &recordingMovePassiveResolver{totals: map[uuid.UUID]int{moverID: 10, hiddenID: 18}}
+	handler.SetPassiveCheckResolver(passive)
+
+	handler.HandleMoveConfirm(makeMoveInteraction("C1"), turnID, moverID, 2, 0, 10)
+
+	require.False(t, revealAttempted, "hidden enemy should remain hidden when passive Stealth beats passive Perception")
+	require.ElementsMatch(t, []string{"Aria:perception", "Goblin Sneak:stealth"}, passive.calls)
+	require.NotNil(t, sess.lastResponse)
+	assert.Contains(t, sess.lastResponse.Data.Content, "Moved to C1")
+	assert.NotContains(t, sess.lastResponse.Data.Content, "Spotted")
+	assert.False(t, hidden.IsVisible)
 }
 
 // --- SR-028: DM-controlled hostile OA routing + forfeit recording ---
