@@ -15,6 +15,7 @@ import (
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -331,6 +332,8 @@ type CastCommand struct {
 	GoldFallback         bool      // true if user confirmed "Buy & Cast" gold fallback
 	Metamagic            []string  // metamagic options: "careful", "distant", "empowered", etc.
 	TwinTargetID         uuid.UUID // second target for Twinned Spell
+	Walls                []renderer.WallSegment
+	FogOfWar             *renderer.FogOfWar
 }
 
 // Cast orchestrates the full spell casting flow:
@@ -1296,7 +1299,8 @@ func (s *Service) resolveTeleport(ctx context.Context, raw json.RawMessage, cast
 		companion = &comp
 	}
 
-	if err := ValidateTeleportDestination(info, caster, cmd.TeleportDestCol, cmd.TeleportDestRow, occupants, companion); err != nil {
+	sight := TeleportSightOptions{Walls: cmd.Walls, FogOfWar: cmd.FogOfWar}
+	if err := ValidateTeleportDestinationWithSight(info, caster, cmd.TeleportDestCol, cmd.TeleportDestRow, occupants, companion, sight); err != nil {
 		return nil, err
 	}
 

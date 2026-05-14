@@ -1,0 +1,145 @@
+bootstrap complete: 63 items queued
+2026-05-12T20:42:18+07:00 SR-001 implementer spawned
+2026-05-12T20:54:07+07:00 SR-001 implementer done: needs_review
+2026-05-12T20:57:52+07:00 SR-001 reviewer: approved, committed 36f3335, removed from queue
+2026-05-12T21:17:05+07:00 SR-002 implementer done: needs_review
+2026-05-12T21:20:15+07:00 SR-002 reviewer: approved, committed 1a3b85d
+2026-05-12T21:26:09+07:00 SR-003 implementer done: needs_review
+2026-05-12T21:28:21+07:00 SR-003 reviewer: approved, committed 1177916
+2026-05-12T21:40:23+07:00 SR-004 implementer done: needs_review
+2026-05-12T21:42:57+07:00 SR-004 reviewer: approved, committed 5d7f456
+2026-05-12T21:49:05+07:00 SR-005 implementer done: needs_review
+2026-05-12T21:50:51+07:00 SR-005 reviewer: approved
+2026-05-12T21:51:12+07:00 SR-005 reviewer: approved, committed c59f17f
+2026-05-13T05:33:35+07:00 SR-006 implementer done: needs_review
+2026-05-13T05:36:03+07:00 SR-006 reviewer: approved, committed 95897c6
+2026-05-13T05:55:13+07:00 SR-007 implementer done: needs_review
+2026-05-13T05:58:06+07:00 SR-007 reviewer: approved, committed befdd92
+2026-05-13T06:09:59+07:00 SR-008 implementer done: needs_review
+2026-05-13T06:12:33+07:00 SR-008 reviewer: approved, committed c61f5f1; SR-068 follow-up noted
+2026-05-13T06:12:48+07:00 SR-068 created (SR-008 follow-up: LightSources + DM PNG endpoint)
+2026-05-13T10:09:02+07:00 SR-009 implementer done: needs_review
+2026-05-13T10:11:11+07:00 SR-009 reviewer: approved, committed 393b0f0
+2026-05-13T10:22:43+07:00 SR-010 implementer done: needs_review
+2026-05-13T10:26:44+07:00 SR-010 reviewer: approved, committed e90c684
+2026-05-13T10:32:02+07:00 SR-011 implementer done: needs_review
+2026-05-13T10:37:36+07:00 SR-011 reviewer: approved, committed 64fadbb
+2026-05-13T10:45:41+07:00 SR-012 implementer done: needs_review
+2026-05-13T10:48:03+07:00 SR-012 reviewer: approved, committed feebf17
+2026-05-13T10:57:46+07:00 SR-013 implementer done: needs_review
+2026-05-13T11:00:43+07:00 SR-013 reviewer: approved, committed de207e8
+2026-05-13T11:12:25+07:00 SR-014 implementer done: needs_review
+2026-05-13T11:15:06+07:00 SR-014 reviewer: approved, committed 4c34fce
+2026-05-13T11:18:40+07:00 SR-015 implementer done: needs_review
+2026-05-13T11:19:48+07:00 SR-015 reviewer: approved, committed 37bf87e
+2026-05-13T11:29:05+07:00 SR-016 implementer done: needs_review
+2026-05-13T11:36:11+07:00 SR-016 reviewer: approved, committed 582800b
+2026-05-13T11:36:33+07:00 queue restored: appended SR-053..063 + SR-068 (reviewer truncation)
+2026-05-13T11:46:21+07:00 SR-017 implementer done: needs_review
+2026-05-13T11:48:03+07:00 SR-017 reviewer: approved, committed 0a1ca41
+2026-05-13T11:57:09+07:00 SR-018 implementer done: needs_review
+2026-05-13T12:01:27+07:00 SR-018 reviewer: approved, committed b2c31c4
+2026-05-13T12:08:56+07:00 SR-019 implementer done: needs_review
+2026-05-13T12:12:46+07:00 SR-019 reviewer: rejected — endpoint not gated by dmAuthMw
+2026-05-13T12:16:00+07:00 SR-019 implementer retry: needs_review
+2026-05-13T12:18:16+07:00 SR-019 reviewer retry: approved, committed 8d7a3ce
+2026-05-13T12:22:51+07:00 SR-020 implementer done: needs_review
+2026-05-13T12:24:28+07:00 SR-020 reviewer: approved, committed 31b72c6
+2026-05-13T12:31:34+07:00 SR-021 implementer done: needs_review
+2026-05-13T12:42:29+07:00 SR-021 reviewer: approved, committed c58e5a9
+2026-05-13T12:48:26+07:00 SR-022 implementer done: needs_review
+2026-05-13T12:50:00+07:00 SR-022 reviewer: rejected — no production caller for EffectiveAbilityScores
+2026-05-13T13:02:26+07:00 SR-022 implementer retry: needs_review
+2026-05-13T13:05:22+07:00 SR-022 reviewer retry: approved, committed 6aa7694
+2026-05-13T13:11:07+07:00 SR-023 implementer done: needs_review
+2026-05-13T13:12:20+07:00 SR-023 reviewer: approved, committed 49940e0
+2026-05-13T13:21:46+07:00 SR-024 implementer done: needs_review
+2026-05-13T13:23:25+07:00 SR-024 reviewer: rejected — helper not wired into Handle()
+2026-05-13T13:28:39+07:00 SR-024 implementer retry: needs_review
+2026-05-13T13:30:42+07:00 SR-024 reviewer retry: approved, committed 3b5a082
+2026-05-13T13:49:33+07:00 SR-025 implementer done: needs_review
+2026-05-13T13:52:57+07:00 SR-025 reviewer: approved, committed cf64b65
+2026-05-13T14:08:35+07:00 SR-026 implementer done: needs_review
+2026-05-13T14:10:11+07:00 SR-026 reviewer: approved, committed 9b956be
+2026-05-13T14:13:49+07:00 SR-027 implementer done: needs_review (consolidation)
+2026-05-13T14:16:54+07:00 SR-027 reviewer: approved, committed 81e7dd4
+2026-05-13T14:31:39+07:00 SR-028 implementer done: needs_review
+2026-05-13T14:35:22+07:00 SR-028 reviewer: approved, committed 143f797
+2026-05-13T14:43:54+07:00 SR-029 implementer done: needs_review
+2026-05-13T14:46:26+07:00 SR-029 reviewer: approved, committed 079bed9
+2026-05-13T14:52:23+07:00 SR-030 implementer done: needs_review
+2026-05-13T14:54:08+07:00 SR-030 reviewer: approved, committed 96d6447
+2026-05-13T15:08:56+07:00 SR-031 implementer done: needs_review
+2026-05-13T15:11:00+07:00 SR-031 reviewer: approved, committed 5ff8462
+2026-05-13T18:57:30+07:00 SR-032 reviewer: approved
+2026-05-13 SR-033 implementer done: proficiency bonus derived from total submitted class level
+2026-05-13 SR-033 reviewer: approved
+2026-05-13T19:31:51+07:00 SR-034 implementer spawned
+2026-05-13T19:41:46+07:00 SR-034 implementer done: needs_review
+2026-05-13T19:44:53+07:00 SR-034 reviewer: rejected — roll details and omitted method bypass
+2026-05-13T19:50:02+07:00 SR-034 implementer retry: needs_review
+2026-05-13T19:52:18+07:00 SR-034 reviewer retry: approved
+2026-05-13T19:52:48+07:00 SR-034 committed 47fa1ab and removed from queue
+2026-05-13T19:52:58+07:00 SR-035 implementer spawned
+2026-05-13T20:00:31+07:00 SR-035 implementer done: needs_review
+2026-05-13T20:02:31+07:00 SR-035 reviewer: approved
+2026-05-13T20:02:38+07:00 SR-035 committed f3b1b44 and removed from queue
+2026-05-13T20:02:47+07:00 SR-036 implementer spawned
+2026-05-13T20:08:10+07:00 SR-036 implementer done: needs_review
+2026-05-13T20:09:41+07:00 SR-036 reviewer: approved
+2026-05-13T20:09:51+07:00 SR-036 committed 3ddb54f and removed from queue
+2026-05-13T20:10:03+07:00 SR-037 implementer spawned
+2026-05-14T06:40:52+07:00 SR-037 implementer done: needs_review
+2026-05-14T06:42:44+07:00 SR-037 reviewer: rejected — offhand path drops wall context and lacks end-to-end behavior test
+2026-05-14T06:49:04+07:00 SR-037 implementer retry: needs_review
+2026-05-14T06:50:45+07:00 SR-037 reviewer retry: rejected — bonus map provider not wired in production
+2026-05-14T06:54:36+07:00 SR-037 implementer wiring retry: needs_review
+2026-05-14T06:56:25+07:00 SR-037 reviewer final: approved
+2026-05-14T06:56:32+07:00 SR-037 committed 2ca60cd and removed from queue
+2026-05-14T06:56:49+07:00 orchestrator checkpoint after SR-037: go test ./... and make cover-check passed
+2026-05-14T06:56:58+07:00 SR-038 implementer spawned
+2026-05-14T07:05:53+07:00 SR-038 implementer done: needs_review
+2026-05-14T07:07:37+07:00 SR-038 reviewer: rejected — sqlc-check drift
+2026-05-14T07:10:34+07:00 SR-038 implementer retry: needs_review
+2026-05-14T07:12:57+07:00 SR-038 reviewer retry: approved
+2026-05-14T07:13:08+07:00 SR-038 committed 920065a and removed from queue
+2026-05-14T07:13:20+07:00 SR-039 implementer spawned
+2026-05-14T07:20:47+07:00 SR-039 implementer done: needs_review
+2026-05-14T07:23:00+07:00 SR-039 reviewer: rejected — DM surfaces and item tags incomplete
+2026-05-14T11:42:03+07:00 SR-039 implementer retry: needs_review
+2026-05-14T11:44:21+07:00 SR-039 reviewer retry: approved
+2026-05-14T11:44:33+07:00 SR-039 committed 1c11f72 and removed from queue
+2026-05-14T11:44:45+07:00 SR-040 implementer spawned
+2026-05-14T11:55:51+07:00 SR-040 implementer done: needs_review
+2026-05-14T11:57:41+07:00 SR-040 reviewer: rejected — direct feat application accepts missing choices
+2026-05-14T12:02:55+07:00 SR-040 implementer retry: needs_review
+2026-05-14T12:05:07+07:00 SR-040 reviewer retry: approved
+2026-05-14T12:05:17+07:00 SR-040 committed db18c98 and removed from queue
+2026-05-14T12:05:27+07:00 SR-041 implementer spawned
+2026-05-14T12:11:14+07:00 SR-041 implementer done: needs_review
+2026-05-14T12:12:43+07:00 SR-041 reviewer: rejected — card refresh before pending_asi delete
+2026-05-14T12:17:49+07:00 SR-041 implementer retry: needs_review
+2026-05-14T12:19:32+07:00 SR-041 reviewer retry: rejected — delete failure loses in-memory pending choice
+2026-05-14T12:23:41+07:00 SR-041 implementer second retry: needs_review
+2026-05-14T12:25:38+07:00 SR-041 reviewer second retry: approved
+2026-05-14T12:25:45+07:00 SR-041 committed 50032cb and removed from queue
+2026-05-14T12:25:57+07:00 SR-042 implementer spawned
+2026-05-14T17:51:52+07:00 SR-042 implementer done: needs_review
+2026-05-14T17:53:40+07:00 SR-042 reviewer: rejected — active-encounter lookup misses allowed long rests
+2026-05-14T18:01:01+07:00 SR-042 implementer retry: needs_review
+2026-05-14T18:03:13+07:00 SR-042 reviewer retry: rejected — Discord durable no-active tests missing
+2026-05-14T18:05:33+07:00 SR-042 implementer second retry: needs_review
+2026-05-14T18:07:25+07:00 SR-042 reviewer final: approved
+2026-05-14T18:07:41+07:00 SR-042 committed 36471cb and removed from queue
+2026-05-14T18:07:53+07:00 SR-043 implementer spawned
+2026-05-14T18:14:49+07:00 SR-043 implementer done: needs_review
+2026-05-14T18:16:25+07:00 SR-043 reviewer: rejected — prone move confirm bypasses PassiveCheck
+2026-05-14T18:21:19+07:00 SR-043 implementer retry: needs_review
+2026-05-14T18:23:14+07:00 SR-043 reviewer retry: approved
+2026-05-14T18:23:24+07:00 SR-043 committed 60c9c5e and removed from queue
+2026-05-14T18:23:43+07:00 orchestrator checkpoint after SR-043: go test ./... and make cover-check passed
+2026-05-14T18:23:53+07:00 SR-044 implementer spawned
+2026-05-14T18:29:40+07:00 SR-044 implementer done: needs_review
+2026-05-14T18:38:00+07:00 SR-044 implementer retry: needs_review
+2026-05-14T18:38:30+07:00 SR-044 reviewer retry: approved
+2026-05-14T18:38:45+07:00 SR-044 committed and removed from queue

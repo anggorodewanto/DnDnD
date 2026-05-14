@@ -357,6 +357,16 @@ func (h *CastHandler) dispatchSingleTarget(
 		TwinTargetID:         twinTargetID,
 	}
 
+	// SR-044: populate Walls and FogOfWar for teleport spells with requires_sight=true
+	// so the combat validator can enforce line-of-sight in production.
+	if spell.Teleport.Valid {
+		info, parseErr := combat.ParseTeleportInfo(spell.Teleport.RawMessage)
+		if parseErr == nil && info.RequiresSight {
+			cmd.Walls = h.loadWalls(ctx, encounter)
+			cmd.FogOfWar = h.loadCasterFogOfWar(ctx, encounter, caster, combatants)
+		}
+	}
+
 	// SR-025: empowered metamagic posts an interactive die-picker prompt
 	// before the cast resolves. The prompt is UX confirmation; the cast
 	// proceeds either way (Cast applies the reroll server-side via
@@ -765,6 +775,30 @@ func (h *CastHandler) loadWalls(ctx context.Context, encounter refdata.Encounter
 		return nil
 	}
 	return md.Walls
+}
+
+// loadCasterFogOfWar best-effort computes the fog of war from the caster's
+// perspective. Returns nil when the encounter has no map or parsing fails —
+// the teleport validator will fail closed when requires_sight is true and
+// FoW is nil (SR-044).
+func (h *CastHandler) loadCasterFogOfWar(ctx context.Context, encounter refdata.Encounter, caster refdata.Combatant, combatants []refdata.Combatant) *renderer.FogOfWar {
+	if !encounter.MapID.Valid {
+		return nil
+	}
+	mapData, err := h.encounterProvider.GetMapByID(ctx, encounter.MapID.UUID)
+	if err != nil {
+		return nil
+	}
+	md, err := renderer.ParseTiledJSON(mapData.TiledJson, nil, nil)
+	if err != nil {
+		return nil
+	}
+	col, row, err := renderer.ParseCoordinate(caster.PositionCol + fmt.Sprintf("%d", caster.PositionRow))
+	if err != nil {
+		return nil
+	}
+	src := renderer.VisionSource{Col: col, Row: row, RangeTiles: 24}
+	return renderer.ComputeVisibility([]renderer.VisionSource{src}, md.Walls, md.Width, md.Height)
 }
 
 // postCombatLog mirrors a combat log line to #combat-log when wired.

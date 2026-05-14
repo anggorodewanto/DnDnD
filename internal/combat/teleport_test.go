@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -150,10 +151,10 @@ func TestCastResult_TeleportFields(t *testing.T) {
 		SpellName:  "Misty Step",
 		SpellLevel: 2,
 		Teleport: &TeleportResult{
-			CasterMoved:    true,
-			CasterDestCol:  "D",
-			CasterDestRow:  5,
-			DMQueueRouted:  false,
+			CasterMoved:   true,
+			CasterDestCol: "D",
+			CasterDestRow: 5,
+			DMQueueRouted: false,
 		},
 	}
 	assert.NotNil(t, result.Teleport)
@@ -197,12 +198,12 @@ func TestCastResult_TeleportWithCompanion(t *testing.T) {
 // TDD Cycle 8: FormatCastLog includes teleportation for self teleport
 func TestFormatCastLog_TeleportSelf(t *testing.T) {
 	result := CastResult{
-		CasterName: "Gandalf",
-		SpellName:  "Misty Step",
-		SpellLevel: 2,
-		SlotUsed:   2,
+		CasterName:     "Gandalf",
+		SpellName:      "Misty Step",
+		SpellLevel:     2,
+		SlotUsed:       2,
 		SlotsRemaining: 2,
-		IsBonusAction: true,
+		IsBonusAction:  true,
 		Teleport: &TeleportResult{
 			CasterMoved:   true,
 			CasterDestCol: "D",
@@ -215,10 +216,10 @@ func TestFormatCastLog_TeleportSelf(t *testing.T) {
 
 func TestFormatCastLog_TeleportWithCompanion(t *testing.T) {
 	result := CastResult{
-		CasterName: "Gandalf",
-		SpellName:  "Dimension Door",
-		SpellLevel: 4,
-		SlotUsed:   4,
+		CasterName:     "Gandalf",
+		SpellName:      "Dimension Door",
+		SpellLevel:     4,
+		SlotUsed:       4,
 		SlotsRemaining: 0,
 		Teleport: &TeleportResult{
 			CasterMoved:      true,
@@ -253,10 +254,10 @@ func TestFormatCastLog_TeleportDMQueue(t *testing.T) {
 
 func TestFormatCastLog_TeleportAdditionalEffects(t *testing.T) {
 	result := CastResult{
-		CasterName: "Gandalf",
-		SpellName:  "Thunder Step",
-		SpellLevel: 3,
-		SlotUsed:   3,
+		CasterName:     "Gandalf",
+		SpellName:      "Thunder Step",
+		SpellLevel:     3,
+		SlotUsed:       3,
 		SlotsRemaining: 1,
 		Teleport: &TeleportResult{
 			CasterMoved:       true,
@@ -395,13 +396,18 @@ func TestCast_TeleportSelf(t *testing.T) {
 	}
 
 	svc := NewService(store)
+	// Explicit sight context: caster at E5 (col=4, row=4), dest F6 (col=5, row=5).
+	fow := &renderer.FogOfWar{Width: 10, Height: 10, States: make([]renderer.VisibilityState, 100)}
+	fow.States[5*10+5] = renderer.Visible // F6 visible
 	cmd := CastCommand{
-		SpellID:     "misty-step",
-		CasterID:    caster.ID,
-		Turn:        refdata.Turn{ID: turnID, CombatantID: caster.ID},
-		EncounterID: caster.EncounterID,
+		SpellID:         "misty-step",
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: turnID, CombatantID: caster.ID},
+		EncounterID:     caster.EncounterID,
 		TeleportDestCol: "F",
 		TeleportDestRow: 6,
+		Walls:           []renderer.WallSegment{{X1: 9, Y1: 0, X2: 9, Y2: 9}},
+		FogOfWar:        fow,
 	}
 
 	result, err := svc.Cast(context.Background(), cmd, testRoller())
@@ -615,6 +621,143 @@ func TestCast_TeleportOutOfRange(t *testing.T) {
 	assert.Contains(t, err.Error(), "teleport range")
 }
 
+func TestCast_TeleportRequiresSightRejectsDestinationBehindWall(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "A"
+	caster.PositionRow = 3
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeMistyStepWithTeleport(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+		return caster, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:         "misty-step",
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		EncounterID:     caster.EncounterID,
+		TeleportDestCol: "D",
+		TeleportDestRow: 3,
+		Walls:           []renderer.WallSegment{{X1: 2, Y1: 0, X2: 2, Y2: 5}},
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.Error(t, err)
+	assert.EqualError(t, err, "target has full cover — no line of sight")
+}
+
+func TestCast_TeleportRequiresSightRejectsDestinationNotVisibleInFoW(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "A"
+	caster.PositionRow = 3
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeMistyStepWithTeleport(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+		return caster, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster}, nil
+	}
+
+	// FoW where destination D3 (col=3, row=2) is Unexplored (not visible).
+	fow := &renderer.FogOfWar{Width: 10, Height: 10, States: make([]renderer.VisibilityState, 100)}
+	// All tiles default to Unexplored (0); destination is NOT visible.
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:         "misty-step",
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		EncounterID:     caster.EncounterID,
+		TeleportDestCol: "D",
+		TeleportDestRow: 3,
+		FogOfWar:        fow,
+		Walls:           []renderer.WallSegment{}, // empty but non-nil to pass fail-closed gate
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.Error(t, err)
+	assert.EqualError(t, err, "target has full cover — no line of sight")
+}
+
+func TestCast_TeleportRequiresSightAllowsDestinationWithLineOfSight(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "A"
+	caster.PositionRow = 3
+
+	var posUpdated bool
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeMistyStepWithTeleport(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+		return caster, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: true, BonusActionSpellCast: true}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+	store.updateCombatantPositionFn = func(_ context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+		posUpdated = true
+		return refdata.Combatant{ID: arg.ID, PositionCol: arg.PositionCol, PositionRow: arg.PositionRow, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	// Explicit FoW with destination visible and non-blocking walls (SR-044).
+	// Caster at A3 (col=0, row=2), destination D3 (col=3, row=2).
+	// Wall at col 5 does not block the path.
+	fow := &renderer.FogOfWar{Width: 10, Height: 10, States: make([]renderer.VisibilityState, 100)}
+	fow.States[2*10+3] = renderer.Visible // D3 (col=3, row=2) is visible
+	walls := []renderer.WallSegment{{X1: 5, Y1: 0, X2: 5, Y2: 5}} // wall far to the right
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:         "misty-step",
+		CasterID:        caster.ID,
+		Turn:            refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		EncounterID:     caster.EncounterID,
+		TeleportDestCol: "D",
+		TeleportDestRow: 3,
+		Walls:           walls,
+		FogOfWar:        fow,
+	}
+
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	require.NotNil(t, result.Teleport)
+	assert.True(t, result.Teleport.CasterMoved)
+	assert.True(t, posUpdated)
+}
+
 // TDD Cycle 14: Cast integration — Thunder Step with additional effects
 func TestCast_TeleportWithAdditionalEffects(t *testing.T) {
 	charID := uuid.New()
@@ -646,6 +789,9 @@ func TestCast_TeleportWithAdditionalEffects(t *testing.T) {
 	}
 
 	svc := NewService(store)
+	// Explicit sight context: caster at E5 (col=4, row=4), dest F6 (col=5, row=5).
+	fow := &renderer.FogOfWar{Width: 10, Height: 10, States: make([]renderer.VisibilityState, 100)}
+	fow.States[5*10+5] = renderer.Visible // F6 visible
 	cmd := CastCommand{
 		SpellID:         "thunder-step",
 		CasterID:        caster.ID,
@@ -653,6 +799,8 @@ func TestCast_TeleportWithAdditionalEffects(t *testing.T) {
 		EncounterID:     caster.EncounterID,
 		TeleportDestCol: "F",
 		TeleportDestRow: 6,
+		Walls:           []renderer.WallSegment{{X1: 9, Y1: 0, X2: 9, Y2: 9}},
+		FogOfWar:        fow,
 	}
 
 	result, err := svc.Cast(context.Background(), cmd, testRoller())

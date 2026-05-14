@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -62,6 +63,13 @@ type TeleportResult struct {
 	AdditionalEffects string
 }
 
+type TeleportSightOptions struct {
+	Walls    []renderer.WallSegment
+	FogOfWar *renderer.FogOfWar
+}
+
+var ErrTeleportNoLineOfSight = errors.New("target has full cover — no line of sight")
+
 // ValidateTeleportDestination validates that a teleport destination is valid:
 // (1) destination is unoccupied, (2) within range,
 // (3) companion within companion_range_ft if applicable.
@@ -83,6 +91,36 @@ func ValidateTeleportDestination(info TeleportInfo, caster refdata.Combatant, de
 		if companionDist > info.CompanionRangeFt {
 			return fmt.Errorf("companion is %dft away — must be within %dft", companionDist, info.CompanionRangeFt)
 		}
+	}
+
+	return nil
+}
+
+func ValidateTeleportDestinationWithSight(info TeleportInfo, caster refdata.Combatant, destCol string, destRow int32, occupants []refdata.Combatant, companion *refdata.Combatant, sight TeleportSightOptions) error {
+	if err := ValidateTeleportDestination(info, caster, destCol, destRow, occupants, companion); err != nil {
+		return err
+	}
+
+	if !info.RequiresSight {
+		return nil
+	}
+
+	// Fail closed: if requires_sight is true but no sight context was supplied,
+	// reject the cast rather than silently allowing it.
+	if sight.FogOfWar == nil && len(sight.Walls) == 0 {
+		return ErrTeleportNoLineOfSight
+	}
+
+	destColIndex := colToIndex(destCol)
+	destRowIndex := int(destRow) - 1
+	if sight.FogOfWar != nil && sight.FogOfWar.StateAt(destColIndex, destRowIndex) != renderer.Visible {
+		return ErrTeleportNoLineOfSight
+	}
+
+	casterCol := colToIndex(caster.PositionCol)
+	casterRow := int(caster.PositionRow) - 1
+	if len(sight.Walls) > 0 && CalculateCover(casterCol, casterRow, destColIndex, destRowIndex, sight.Walls, nil) == CoverFull {
+		return ErrTeleportNoLineOfSight
 	}
 
 	return nil
