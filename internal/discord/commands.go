@@ -629,36 +629,13 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 	}
 }
 
-// RegisterCommands registers the current command set for a guild and deletes stale commands.
+// RegisterCommands registers the current command set for a guild.
+// ApplicationCommandBulkOverwrite atomically replaces all commands, removing stale ones.
 func RegisterCommands(s Session, appID, guildID string) error {
-	// Fetch existing commands to detect stale ones.
-	existing, err := s.ApplicationCommands(appID, guildID)
-	if err != nil {
-		return fmt.Errorf("fetching existing commands for guild %s: %w", guildID, err)
-	}
-
-	// Bulk overwrite with current definitions.
 	defs := CommandDefinitions()
-	_, err = s.ApplicationCommandBulkOverwrite(appID, guildID, defs)
+	_, err := s.ApplicationCommandBulkOverwrite(appID, guildID, defs)
 	if err != nil {
 		return fmt.Errorf("bulk overwriting commands for guild %s: %w", guildID, err)
 	}
-
-	// Build set of current command names.
-	currentNames := make(map[string]bool, len(defs))
-	for _, d := range defs {
-		currentNames[d.Name] = true
-	}
-
-	// Delete stale commands not in the current set.
-	for _, cmd := range existing {
-		if currentNames[cmd.Name] {
-			continue
-		}
-		if err := s.ApplicationCommandDelete(appID, guildID, cmd.ID); err != nil {
-			return fmt.Errorf("deleting stale command %s in guild %s: %w", cmd.Name, guildID, err)
-		}
-	}
-
 	return nil
 }

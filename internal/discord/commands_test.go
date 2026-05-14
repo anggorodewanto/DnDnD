@@ -233,29 +233,6 @@ func TestRegisterCommands_BulkOverwrites(t *testing.T) {
 	}
 }
 
-func TestRegisterCommands_DeletesStaleCommands(t *testing.T) {
-	var deletedIDs []string
-
-	mock := newTestMock()
-	mock.ApplicationCommandsFunc = func(appID, guildID string) ([]*discordgo.ApplicationCommand, error) {
-		return []*discordgo.ApplicationCommand{
-			{ID: "stale-1", Name: "old-removed-command"},
-		}, nil
-	}
-	mock.ApplicationCommandDeleteFunc = func(appID, guildID, cmdID string) error {
-		deletedIDs = append(deletedIDs, cmdID)
-		return nil
-	}
-
-	err := RegisterCommands(mock, "app-1", "guild-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(deletedIDs) != 1 || deletedIDs[0] != "stale-1" {
-		t.Fatalf("expected stale-1 to be deleted, got %v", deletedIDs)
-	}
-}
-
 func TestCommandDefinitions_ContainsAllExpectedCommands(t *testing.T) {
 	expected := []string{
 		"move", "fly", "attack", "cast", "bonus", "action", "shove",
@@ -287,28 +264,4 @@ func TestCommandDefinitions_AllHaveDescriptions(t *testing.T) {
 	}
 }
 
-func TestRegisterCommands_NoDeleteForCurrentCommands(t *testing.T) {
-	defs := CommandDefinitions()
-	existing := make([]*discordgo.ApplicationCommand, len(defs))
-	for i, d := range defs {
-		existing[i] = &discordgo.ApplicationCommand{ID: "id-" + d.Name, Name: d.Name}
-	}
 
-	var deletedIDs []string
-	mock := newTestMock()
-	mock.ApplicationCommandsFunc = func(appID, guildID string) ([]*discordgo.ApplicationCommand, error) {
-		return existing, nil
-	}
-	mock.ApplicationCommandDeleteFunc = func(appID, guildID, cmdID string) error {
-		deletedIDs = append(deletedIDs, cmdID)
-		return nil
-	}
-
-	err := RegisterCommands(mock, "app-1", "guild-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(deletedIDs) != 0 {
-		t.Fatalf("expected no deletions, got %v", deletedIDs)
-	}
-}
