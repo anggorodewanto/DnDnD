@@ -277,10 +277,10 @@ func (s *Service) RollInitiative(ctx context.Context, encounterID uuid.UUID, rol
 		return nil, errors.New("no combatants in encounter")
 	}
 
-	// Filter out summoned creatures — they share their summoner's turn.
+	// Filter out summoned creatures that share their summoner's turn.
 	var rollable []refdata.Combatant
 	for _, c := range combatants {
-		if !IsSummonedCreature(c) {
+		if !SharesCasterTurn(c) {
 			rollable = append(rollable, c)
 		}
 	}
@@ -448,10 +448,10 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 	}
 
 	// Build ordered list of candidates (alive combatants who haven't gone yet).
-	// Summoned creatures share their summoner's turn — they never get their own.
+	// Summoned creatures that share their summoner's turn are excluded.
 	var candidates []refdata.Combatant
 	for _, c := range combatants {
-		if !c.IsAlive || hadTurn[c.ID] || IsSummonedCreature(c) {
+		if !c.IsAlive || hadTurn[c.ID] || SharesCasterTurn(c) {
 			continue
 		}
 		candidates = append(candidates, c)
@@ -463,9 +463,9 @@ func (s *Service) AdvanceTurn(ctx context.Context, encounterID uuid.UUID) (TurnI
 		if err := s.advanceRound(ctx, encounterID, roundNumber, ""); err != nil {
 			return TurnInfo{}, err
 		}
-		// Reset candidates to all alive non-summoned combatants
+		// Reset candidates to all alive non-caster-turn combatants
 		for _, c := range combatants {
-			if c.IsAlive && !IsSummonedCreature(c) {
+			if c.IsAlive && !SharesCasterTurn(c) {
 				candidates = append(candidates, c)
 			}
 		}
@@ -549,7 +549,7 @@ func (s *Service) skipOrActivate(ctx context.Context, encounterID uuid.UUID, rou
 // and returns a TurnInfo for the first combatant that can act.
 func (s *Service) findFirstActiveCombatant(ctx context.Context, encounterID uuid.UUID, roundNumber int32, combatants []refdata.Combatant, skippedCombatants []SkippedInfo) (TurnInfo, error) {
 	for _, c := range combatants {
-		if !c.IsAlive || IsSummonedCreature(c) {
+		if !c.IsAlive || SharesCasterTurn(c) {
 			continue
 		}
 		conds, _ := parseConditions(c.Conditions)

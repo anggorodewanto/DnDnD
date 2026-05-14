@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -1135,4 +1136,168 @@ func TestHandleSummonDeath_IgnoresAlive(t *testing.T) {
 	removed, err := svc.HandleSummonDeath(context.Background(), creature)
 	require.NoError(t, err)
 	assert.False(t, removed)
+}
+
+func TestSharesCasterTurn_SummonedWithNoInitiative(t *testing.T) {
+	// A summoned creature with InitiativeOrder == 0 shares caster's turn
+	c := refdata.Combatant{
+		ID:              uuid.New(),
+		SummonerID:      uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		InitiativeOrder: 0,
+	}
+	assert.True(t, SharesCasterTurn(c))
+}
+
+func TestSharesCasterTurn_SummonedWithOwnInitiative(t *testing.T) {
+	// A summoned creature with InitiativeOrder > 0 has independent initiative
+	c := refdata.Combatant{
+		ID:              uuid.New(),
+		SummonerID:      uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		InitiativeOrder: 3,
+	}
+	assert.False(t, SharesCasterTurn(c))
+}
+
+func TestSharesCasterTurn_NotSummoned(t *testing.T) {
+	// A non-summoned creature never shares caster's turn
+	c := refdata.Combatant{
+		ID:              uuid.New(),
+		SummonerID:      uuid.NullUUID{},
+		InitiativeOrder: 1,
+	}
+	assert.False(t, SharesCasterTurn(c))
+}
+
+func TestInsertSummonIntoInitiative(t *testing.T) {
+	encounterID := uuid.New()
+	summonerID := uuid.New()
+	creatureID := uuid.New()
+
+	var updatedParams refdata.UpdateCombatantInitiativeParams
+
+	ms := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, encID uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: uuid.New(), ShortID: "AR", DisplayName: "Aragorn", InitiativeOrder: 1, InitiativeRoll: 18, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+				{ID: uuid.New(), ShortID: "G1", DisplayName: "Goblin", InitiativeOrder: 2, InitiativeRoll: 12, IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`)},
+			}, nil
+		},
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:          creatureID,
+				ShortID:     "WF1",
+				DisplayName: "Wolf #1",
+				SummonerID:  uuid.NullUUID{UUID: summonerID, Valid: true},
+				IsAlive:     true,
+				Conditions:  json.RawMessage(`[]`),
+				CreatureRefID: sql.NullString{String: "wolf", Valid: true},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{
+				ID:            "wolf",
+				AbilityScores: json.RawMessage(`{"str":12,"dex":15,"con":12,"int":3,"wis":12,"cha":6}`),
+			}, nil
+		},
+		updateCombatantInitiativeFn: func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+			updatedParams = arg
+			return refdata.Combatant{
+				ID:              arg.ID,
+				InitiativeRoll:  arg.InitiativeRoll,
+				InitiativeOrder: arg.InitiativeOrder,
+			}, nil
+		},
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(n int) int { return 10 }) // always rolls 10
+
+	result, err := svc.InsertSummonIntoInitiative(context.Background(), encounterID, creatureID, roller)
+	require.NoError(t, err)
+	assert.Equal(t, creatureID, updatedParams.ID)
+	assert.True(t, updatedParams.InitiativeOrder > 0, "should have a non-zero initiative order")
+	assert.True(t, result.InitiativeRoll > 0, "should have a non-zero initiative roll")
+}
+
+func TestAdvanceTurn_IncludesIndependentInitiativeSummon(t *testing.T) {
+	summonerID := uuid.New()
+	creatureID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
+			CurrentTurnID: uuid.NullUUID{},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: summonerID, InitiativeOrder: 1, InitiativeRoll: 18, DisplayName: "Aria", Conditions: json.RawMessage(`[]`), IsAlive: true, IsNpc: false},
+			// Independent-initiative summon: has InitiativeOrder > 0
+			{ID: creatureID, InitiativeOrder: 2, InitiativeRoll: 14, DisplayName: "Wolf #1", ShortID: "WF1", Conditions: json.RawMessage(`[]`), IsAlive: true, IsNpc: true, SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}},
+		}, nil
+	}
+	turnCount := 0
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		if turnCount == 0 {
+			return []refdata.Turn{}, nil
+		}
+		// After first advance, summoner has had a turn
+		return []refdata.Turn{{CombatantID: summonerID}}, nil
+	}
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		turnCount++
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+
+	svc := NewService(store)
+
+	// First advance: summoner's turn (order 1)
+	info, err := svc.AdvanceTurn(context.Background(), encounterID)
+	require.NoError(t, err)
+	assert.Equal(t, summonerID, info.CombatantID)
+
+	// Second advance: wolf's turn (order 2, independent initiative summon)
+	info, err = svc.AdvanceTurn(context.Background(), encounterID)
+	require.NoError(t, err)
+	assert.Equal(t, creatureID, info.CombatantID, "independent-initiative summon should get its own turn")
+}
+
+func TestAdvanceTurn_ExcludesCasterTurnSummon(t *testing.T) {
+	summonerID := uuid.New()
+	creatureID := uuid.New()
+	encounterID := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
+			CurrentTurnID: uuid.NullUUID{},
+		}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: summonerID, InitiativeOrder: 1, InitiativeRoll: 18, DisplayName: "Aria", Conditions: json.RawMessage(`[]`), IsAlive: true, IsNpc: false},
+			// Caster-turn summon: InitiativeOrder == 0
+			{ID: creatureID, InitiativeOrder: 0, DisplayName: "Spiritual Weapon", ShortID: "SW", Conditions: json.RawMessage(`[]`), IsAlive: true, IsNpc: true, SummonerID: uuid.NullUUID{UUID: summonerID, Valid: true}},
+		}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: uuid.New(), CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+
+	svc := NewService(store)
+
+	// First advance: summoner's turn
+	info, err := svc.AdvanceTurn(context.Background(), encounterID)
+	require.NoError(t, err)
+	assert.Equal(t, summonerID, info.CombatantID, "caster-turn summon should NOT get its own turn")
 }

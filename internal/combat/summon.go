@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -253,6 +254,74 @@ func (s *Service) CommandCreature(ctx context.Context, input CommandCreatureInpu
 // IsSummonedCreature returns true if the combatant is a summoned creature.
 func IsSummonedCreature(c refdata.Combatant) bool {
 	return c.SummonerID.Valid
+}
+
+// SharesCasterTurn returns true if the combatant is a summoned creature that
+// shares its summoner's turn (i.e., was never given its own initiative slot).
+// Creatures with InitiativeOrder > 0 have independent initiative.
+func SharesCasterTurn(c refdata.Combatant) bool {
+	return c.SummonerID.Valid && c.InitiativeOrder == 0
+}
+
+// InsertSummonIntoInitiative rolls initiative for a summoned creature and
+// inserts it into the existing turn order. Used for creatures that act on
+// their own turn (familiars, conjured animals, animated dead).
+func (s *Service) InsertSummonIntoInitiative(ctx context.Context, encounterID, creatureID uuid.UUID, roller *dice.Roller) (refdata.Combatant, error) {
+	creature, err := s.store.GetCombatant(ctx, creatureID)
+	if err != nil {
+		return refdata.Combatant{}, fmt.Errorf("getting creature for initiative: %w", err)
+	}
+
+	dexMod, err := s.getDexModifier(ctx, creature)
+	if err != nil {
+		return refdata.Combatant{}, fmt.Errorf("getting dex modifier: %w", err)
+	}
+
+	result, err := roller.RollD20(dexMod, dice.Normal)
+	if err != nil {
+		return refdata.Combatant{}, fmt.Errorf("rolling initiative: %w", err)
+	}
+
+	// Determine position in initiative order based on roll
+	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return refdata.Combatant{}, fmt.Errorf("listing combatants: %w", err)
+	}
+
+	// Find the correct position: insert after all combatants with higher or equal rolls
+	order := int32(1)
+	for _, c := range combatants {
+		if c.InitiativeOrder == 0 {
+			continue
+		}
+		if c.InitiativeRoll >= int32(result.Total) {
+			order = c.InitiativeOrder + 1
+		}
+	}
+
+	// Shift down combatants at or after the insertion point
+	for _, c := range combatants {
+		if c.InitiativeOrder >= order && c.InitiativeOrder > 0 && c.ID != creatureID {
+			if _, err := s.store.UpdateCombatantInitiative(ctx, refdata.UpdateCombatantInitiativeParams{
+				ID:              c.ID,
+				InitiativeRoll:  c.InitiativeRoll,
+				InitiativeOrder: c.InitiativeOrder + 1,
+			}); err != nil {
+				return refdata.Combatant{}, fmt.Errorf("shifting initiative order: %w", err)
+			}
+		}
+	}
+
+	updated, err := s.store.UpdateCombatantInitiative(ctx, refdata.UpdateCombatantInitiativeParams{
+		ID:              creatureID,
+		InitiativeRoll:  int32(result.Total),
+		InitiativeOrder: order,
+	})
+	if err != nil {
+		return refdata.Combatant{}, fmt.Errorf("setting creature initiative: %w", err)
+	}
+
+	return updated, nil
 }
 
 // ListSummonedCreatures returns all combatants summoned by the given summoner.
