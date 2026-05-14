@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -80,6 +81,10 @@ func TestCombatantFromCharacter(t *testing.T) {
 		TempHp:    5,
 		Ac:        16,
 		SpeedFt:   30,
+		CharacterData: pqtype.NullRawMessage{
+			RawMessage: []byte(`{"exhaustion_level":2}`),
+			Valid:      true,
+		},
 	}
 
 	params := CombatantFromCharacter(char, "AR", "A", 5)
@@ -92,6 +97,7 @@ func TestCombatantFromCharacter(t *testing.T) {
 	assert.Equal(t, int32(5), params.TempHP)
 	assert.Equal(t, int32(16), params.AC)
 	assert.Equal(t, int32(30), params.SpeedFt)
+	assert.Equal(t, int32(2), params.ExhaustionLevel)
 	assert.Equal(t, "A", params.PositionCol)
 	assert.Equal(t, int32(5), params.PositionRow)
 	assert.False(t, params.IsNPC)

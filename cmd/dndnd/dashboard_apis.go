@@ -212,6 +212,11 @@ func characterToPartyInfo(ch refdata.Character, discordUserID string) (rest.Part
 			info.PactMagicSlots = &pact
 		}
 	}
+	if ch.CharacterData.Valid {
+		if exhaustion, ok := rest.ExhaustionLevelFromCharacterData(ch.CharacterData.RawMessage); ok {
+			info.ExhaustionLevel = exhaustion
+		}
+	}
 
 	return info, nil
 }
@@ -254,6 +259,10 @@ func (a *partyCharacterUpdaterAdapter) ApplyRestUpdate(ctx context.Context, u re
 		if pactJSON, err := json.Marshal(u.PactMagicSlots); err == nil {
 			params.PactMagicSlots = pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true}
 		}
+	}
+	params.CharacterData = pqtype.NullRawMessage{
+		RawMessage: rest.CharacterDataWithExhaustion(ch.CharacterData.RawMessage, u.ExhaustionLevel),
+		Valid:      true,
 	}
 
 	_, err = a.queries.UpdateCharacter(ctx, params)

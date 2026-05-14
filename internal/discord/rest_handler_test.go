@@ -14,6 +14,7 @@ import (
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/rest"
 )
 
 // --- Mock types for RestHandler ---
@@ -27,6 +28,29 @@ func (m *mockRestCharacterUpdater) UpdateCharacter(ctx context.Context, arg refd
 		return m.updateCharacterFn(ctx, arg)
 	}
 	return refdata.Character{}, nil
+}
+
+type fakeRestExhaustionStore struct {
+	combatantID     uuid.UUID
+	conditions      []byte
+	exhaustionLevel int
+	updated         bool
+	updatedLevel    int
+}
+
+func (f *fakeRestExhaustionStore) ActiveCombatantExhaustionForCharacter(_ context.Context, _ uuid.UUID) (rest.CombatantExhaustionState, bool, error) {
+	return rest.CombatantExhaustionState{
+		ID:              f.combatantID,
+		Conditions:      f.conditions,
+		ExhaustionLevel: f.exhaustionLevel,
+	}, true, nil
+}
+
+func (f *fakeRestExhaustionStore) UpdateCombatantExhaustion(_ context.Context, _ uuid.UUID, _ []byte, level int) error {
+	f.updated = true
+	f.updatedLevel = level
+	f.exhaustionLevel = level
+	return nil
 }
 
 // --- Helpers ---
@@ -968,6 +992,180 @@ func TestRestHandler_LongRest_FullRestore(t *testing.T) {
 
 	if !strings.Contains(responded, "44/44 HP") {
 		t.Errorf("expected full HP restore in response, got: %s", responded)
+	}
+}
+
+func TestRestHandler_LongRest_DecrementsCombatantExhaustion(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	store := &fakeRestExhaustionStore{
+		combatantID:     uuid.New(),
+		conditions:      []byte(`[]`),
+		exhaustionLevel: 2,
+	}
+	h := setupRestHandler(sess)
+	h.restService.SetCombatantExhaustionStore(store)
+
+	h.Handle(makeRestInteraction("long"))
+
+	if !store.updated {
+		t.Fatal("expected combatant exhaustion to be persisted")
+	}
+	if store.updatedLevel != 1 {
+		t.Errorf("updated exhaustion level = %d, want 1", store.updatedLevel)
+	}
+	if !strings.Contains(responded, "Exhaustion: level 1") {
+		t.Errorf("expected exhaustion result line, got: %s", responded)
+	}
+}
+
+func TestRestHandler_LongRest_ExhaustionZeroStaysZero(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	store := &fakeRestExhaustionStore{
+		combatantID:     uuid.New(),
+		conditions:      []byte(`[]`),
+		exhaustionLevel: 0,
+	}
+	h := setupRestHandler(sess)
+	h.restService.SetCombatantExhaustionStore(store)
+
+	h.Handle(makeRestInteraction("long"))
+
+	if store.exhaustionLevel != 0 {
+		t.Errorf("exhaustion level = %d, want 0", store.exhaustionLevel)
+	}
+	if store.updated {
+		t.Error("expected no persistence write when exhaustion is already 0")
+	}
+	if strings.Contains(responded, "Exhaustion:") {
+		t.Errorf("did not expect exhaustion result line, got: %s", responded)
+	}
+}
+
+func TestRestHandler_LongRest_DecrementsDurableExhaustionWithoutActiveEncounter(t *testing.T) {
+	var responded string
+	var capturedParams refdata.UpdateCharacterParams
+	var updated bool
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	char := makeRestTestCharacter()
+	char.CampaignID = campaignID
+	char.CharacterData = pqtype.NullRawMessage{
+		RawMessage: []byte(`{"exhaustion_level":2,"notes":"durable"}`),
+		Valid:      true,
+	}
+
+	h := NewRestHandler(
+		sess,
+		dice.NewRoller(func(max int) int { return 6 }),
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		&mockRestCharacterUpdater{
+			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+				updated = true
+				capturedParams = arg
+				return refdata.Character{ID: arg.ID}, nil
+			},
+		},
+		&mockCheckRollLogger{},
+		nil,
+	)
+
+	h.Handle(makeRestInteraction("long"))
+
+	if !updated {
+		t.Fatal("expected durable character update")
+	}
+	exhaustion, ok := rest.ExhaustionLevelFromCharacterData(capturedParams.CharacterData.RawMessage)
+	if !ok {
+		t.Fatalf("persisted character_data missing exhaustion_level: %s", capturedParams.CharacterData.RawMessage)
+	}
+	if exhaustion != 1 {
+		t.Errorf("persisted exhaustion level = %d, want 1", exhaustion)
+	}
+	if !strings.Contains(responded, "Exhaustion: level 1") {
+		t.Errorf("expected exhaustion result line, got: %s", responded)
+	}
+}
+
+func TestRestHandler_LongRest_DurableExhaustionZeroStaysZeroWithoutActiveEncounter(t *testing.T) {
+	var responded string
+	var capturedParams refdata.UpdateCharacterParams
+	var updated bool
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	char := makeRestTestCharacter()
+	char.CampaignID = campaignID
+	char.CharacterData = pqtype.NullRawMessage{
+		RawMessage: []byte(`{"exhaustion_level":0}`),
+		Valid:      true,
+	}
+
+	h := NewRestHandler(
+		sess,
+		dice.NewRoller(func(max int) int { return 6 }),
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		&mockRestCharacterUpdater{
+			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+				updated = true
+				capturedParams = arg
+				return refdata.Character{ID: arg.ID}, nil
+			},
+		},
+		&mockCheckRollLogger{},
+		nil,
+	)
+
+	h.Handle(makeRestInteraction("long"))
+
+	if !updated {
+		t.Fatal("expected durable character update")
+	}
+	exhaustion, ok := rest.ExhaustionLevelFromCharacterData(capturedParams.CharacterData.RawMessage)
+	if !ok {
+		t.Fatalf("persisted character_data missing exhaustion_level: %s", capturedParams.CharacterData.RawMessage)
+	}
+	if exhaustion != 0 {
+		t.Errorf("persisted exhaustion level = %d, want 0", exhaustion)
+	}
+	if strings.Contains(responded, "Exhaustion:") {
+		t.Errorf("did not expect exhaustion result line, got: %s", responded)
 	}
 }
 

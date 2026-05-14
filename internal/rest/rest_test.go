@@ -1,11 +1,13 @@
 package rest
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/google/uuid"
 )
 
 // --- TDD Cycle 1: Short rest hit dice spending heals character ---
@@ -16,9 +18,9 @@ func TestShortRest_SpendHitDice_SingleClass(t *testing.T) {
 	svc := NewService(roller)
 
 	input := ShortRestInput{
-		HPCurrent: 20,
-		HPMax:     40,
-		CONModifier: 2,
+		HPCurrent:        20,
+		HPMax:            40,
+		CONModifier:      2,
 		HitDiceRemaining: map[string]int{"d10": 5},
 		HitDiceSpend:     map[string]int{"d10": 2},
 		FeatureUses:      map[string]character.FeatureUse{},
@@ -79,10 +81,10 @@ func TestShortRest_FeatureRecharge(t *testing.T) {
 	svc := NewService(roller)
 
 	features := map[string]character.FeatureUse{
-		"action-surge":    {Current: 0, Max: 1, Recharge: "short"},
-		"second-wind":     {Current: 0, Max: 1, Recharge: "short"},
-		"indomitable":     {Current: 0, Max: 1, Recharge: "long"},
-		"already-full":    {Current: 2, Max: 2, Recharge: "short"},
+		"action-surge": {Current: 0, Max: 1, Recharge: "short"},
+		"second-wind":  {Current: 0, Max: 1, Recharge: "short"},
+		"indomitable":  {Current: 0, Max: 1, Recharge: "long"},
+		"already-full": {Current: 2, Max: 2, Recharge: "short"},
 	}
 
 	input := ShortRestInput{
@@ -214,7 +216,7 @@ func TestLongRest_FullHPRestore(t *testing.T) {
 			"1": {Current: 0, Max: 4},
 			"2": {Current: 1, Max: 3},
 		},
-		PactMagicSlots: &character.PactMagicSlots{SlotLevel: 3, Current: 0, Max: 2},
+		PactMagicSlots:     &character.PactMagicSlots{SlotLevel: 3, Current: 0, Max: 2},
 		DeathSaveSuccesses: 2,
 		DeathSaveFailures:  1,
 	}
@@ -480,16 +482,16 @@ func TestFormatShortRestResult(t *testing.T) {
 
 func TestFormatLongRestResult(t *testing.T) {
 	result := LongRestResult{
-		HPBefore:              10,
-		HPAfter:               40,
-		HPMax:                 40,
-		HPHealed:              30,
-		HitDiceRemaining:      map[string]int{"d10": 4},
-		HitDiceRestored:       2,
-		FeaturesRecharged:     []string{"action-surge", "indomitable"},
-		SpellSlots:            map[string]character.SlotInfo{"1": {Current: 4, Max: 4}},
-		PactSlotsRestored:     true,
-		DeathSavesReset:       true,
+		HPBefore:               10,
+		HPAfter:                40,
+		HPMax:                  40,
+		HPHealed:               30,
+		HitDiceRemaining:       map[string]int{"d10": 4},
+		HitDiceRestored:        2,
+		FeaturesRecharged:      []string{"action-surge", "indomitable"},
+		SpellSlots:             map[string]character.SlotInfo{"1": {Current: 4, Max: 4}},
+		PactSlotsRestored:      true,
+		DeathSavesReset:        true,
 		PreparedCasterReminder: false,
 	}
 
@@ -507,12 +509,12 @@ func TestFormatLongRestResult(t *testing.T) {
 
 func TestFormatLongRestResult_PreparedCasterReminder(t *testing.T) {
 	result := LongRestResult{
-		HPBefore:              40,
-		HPAfter:               40,
-		HitDiceRemaining:      map[string]int{"d8": 5},
-		HitDiceRestored:       0,
-		FeaturesRecharged:     []string{},
-		SpellSlots:            map[string]character.SlotInfo{},
+		HPBefore:               40,
+		HPAfter:                40,
+		HitDiceRemaining:       map[string]int{"d8": 5},
+		HitDiceRestored:        0,
+		FeaturesRecharged:      []string{},
+		SpellSlots:             map[string]character.SlotInfo{},
 		PreparedCasterReminder: true,
 	}
 
@@ -521,7 +523,6 @@ func TestFormatLongRestResult_PreparedCasterReminder(t *testing.T) {
 		t.Errorf("expected '/prepare' reminder in message, got: %s", msg)
 	}
 }
-
 
 // --- TDD Cycle 18: Short rest negative CON modifier floor at 0 ---
 
@@ -1013,5 +1014,103 @@ func TestFormatLongRestResult_ExhaustionLine(t *testing.T) {
 	})
 	if strings.Contains(msg2, "Exhaustion") {
 		t.Errorf("did not expect exhaustion line when not decreased, got:\n%s", msg2)
+	}
+}
+
+func TestExhaustionLevelFromCharacterData(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  []byte
+		want int
+		ok   bool
+	}{
+		{"present", []byte(`{"exhaustion_level":2,"spells":[]}`), 2, true},
+		{"missing", []byte(`{"spells":[]}`), 0, false},
+		{"invalid json", []byte(`not-json`), 0, false},
+		{"negative clamps", []byte(`{"exhaustion_level":-2}`), 0, true},
+		{"wrong type", []byte(`{"exhaustion_level":"tired"}`), 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ExhaustionLevelFromCharacterData(tc.raw)
+			if got != tc.want || ok != tc.ok {
+				t.Fatalf("ExhaustionLevelFromCharacterData = (%d, %v), want (%d, %v)", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+func TestCharacterDataWithExhaustion(t *testing.T) {
+	raw := CharacterDataWithExhaustion([]byte(`{"spells":["shield"],"exhaustion_level":3}`), 1)
+	got, ok := ExhaustionLevelFromCharacterData(raw)
+	if !ok || got != 1 {
+		t.Fatalf("exhaustion = (%d, %v), want (1, true); raw=%s", got, ok, raw)
+	}
+	if !strings.Contains(string(raw), "shield") {
+		t.Fatalf("expected existing character_data fields to be preserved, got %s", raw)
+	}
+
+	raw = CharacterDataWithExhaustion([]byte(`not-json`), -1)
+	got, ok = ExhaustionLevelFromCharacterData(raw)
+	if !ok || got != 0 {
+		t.Fatalf("exhaustion from invalid source = (%d, %v), want (0, true); raw=%s", got, ok, raw)
+	}
+}
+
+type fakeCombatantExhaustionStore struct {
+	state        CombatantExhaustionState
+	ok           bool
+	err          error
+	updatedID    uuid.UUID
+	updatedLevel int
+	updateCalls  int
+}
+
+func (f *fakeCombatantExhaustionStore) ActiveCombatantExhaustionForCharacter(context.Context, uuid.UUID) (CombatantExhaustionState, bool, error) {
+	return f.state, f.ok, f.err
+}
+
+func (f *fakeCombatantExhaustionStore) UpdateCombatantExhaustion(_ context.Context, combatantID uuid.UUID, _ []byte, exhaustionLevel int) error {
+	f.updatedID = combatantID
+	f.updatedLevel = exhaustionLevel
+	f.updateCalls++
+	return f.err
+}
+
+func TestService_CombatantExhaustionStore(t *testing.T) {
+	charID := uuid.New()
+	combatantID := uuid.New()
+	store := &fakeCombatantExhaustionStore{
+		state: CombatantExhaustionState{
+			ID:              combatantID,
+			Conditions:      []byte(`[]`),
+			ExhaustionLevel: 2,
+		},
+		ok: true,
+	}
+	svc := NewService(nil)
+	svc.SetCombatantExhaustionStore(store)
+
+	if got := svc.ExhaustionLevelForCharacter(context.Background(), charID); got != 2 {
+		t.Fatalf("ExhaustionLevelForCharacter = %d, want 2", got)
+	}
+
+	svc.PersistLongRestExhaustion(context.Background(), charID, LongRestResult{
+		ExhaustionLevelAfter: 1,
+		ExhaustionDecreased:  true,
+	})
+	if store.updateCalls != 1 {
+		t.Fatalf("update calls = %d, want 1", store.updateCalls)
+	}
+	if store.updatedID != combatantID || store.updatedLevel != 1 {
+		t.Fatalf("update = (%s, %d), want (%s, 1)", store.updatedID, store.updatedLevel, combatantID)
+	}
+
+	svc.PersistLongRestExhaustion(context.Background(), charID, LongRestResult{
+		ExhaustionLevelAfter: 0,
+		ExhaustionDecreased:  false,
+	})
+	if store.updateCalls != 1 {
+		t.Fatalf("update calls after unchanged result = %d, want 1", store.updateCalls)
 	}
 }

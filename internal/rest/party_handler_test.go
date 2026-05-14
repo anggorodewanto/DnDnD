@@ -124,6 +124,88 @@ func TestPartyRestHandler_LongRest_AppliesAll(t *testing.T) {
 	}
 }
 
+func TestPartyRestHandler_LongRest_DecrementsDurableExhaustion(t *testing.T) {
+	id := uuid.New()
+	char := newTestCharInfo("Kael", id, "user1")
+	char.ExhaustionLevel = 2
+
+	updater := &mockCharacterUpdater{}
+	notifier := &mockNotifier{}
+	h := NewPartyRestHandler(
+		NewService(dice.NewRoller(nil)),
+		&mockCharacterLister{characters: []PartyCharacterInfo{char}},
+		updater,
+		&mockEncounterChecker{active: false},
+		notifier,
+		&mockSummaryPoster{},
+	)
+
+	body := PartyRestRequest{
+		RestType:     "long",
+		CharacterIDs: []uuid.UUID{id},
+		CampaignID:   uuid.New(),
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/party-rest", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	h.HandlePartyRest(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if len(updater.updates) != 1 {
+		t.Fatalf("update count = %d, want 1", len(updater.updates))
+	}
+	if updater.updates[0].ExhaustionLevel != 1 {
+		t.Errorf("durable exhaustion level = %d, want 1", updater.updates[0].ExhaustionLevel)
+	}
+	if len(notifier.notifications) != 1 || !bytes.Contains([]byte(notifier.notifications[0].Message), []byte("Exhaustion: level 1")) {
+		t.Fatalf("expected exhaustion notification, got %#v", notifier.notifications)
+	}
+}
+
+func TestPartyRestHandler_LongRest_ZeroDurableExhaustionStaysZero(t *testing.T) {
+	id := uuid.New()
+	char := newTestCharInfo("Aria", id, "user1")
+	char.ExhaustionLevel = 0
+
+	updater := &mockCharacterUpdater{}
+	notifier := &mockNotifier{}
+	h := NewPartyRestHandler(
+		NewService(dice.NewRoller(nil)),
+		&mockCharacterLister{characters: []PartyCharacterInfo{char}},
+		updater,
+		&mockEncounterChecker{active: false},
+		notifier,
+		&mockSummaryPoster{},
+	)
+
+	body := PartyRestRequest{
+		RestType:     "long",
+		CharacterIDs: []uuid.UUID{id},
+		CampaignID:   uuid.New(),
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/party-rest", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	h.HandlePartyRest(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if len(updater.updates) != 1 {
+		t.Fatalf("update count = %d, want 1", len(updater.updates))
+	}
+	if updater.updates[0].ExhaustionLevel != 0 {
+		t.Errorf("durable exhaustion level = %d, want 0", updater.updates[0].ExhaustionLevel)
+	}
+	if len(notifier.notifications) != 1 || bytes.Contains([]byte(notifier.notifications[0].Message), []byte("Exhaustion:")) {
+		t.Fatalf("did not expect exhaustion notification line, got %#v", notifier.notifications)
+	}
+}
+
 // --- TDD Cycle 9: Party rest rejects during active combat ---
 
 func TestPartyRestHandler_RejectsDuringCombat(t *testing.T) {
@@ -489,10 +571,10 @@ func TestInterruptRestHandler_ListerError(t *testing.T) {
 	)
 
 	body := InterruptRestRequest{
-		RestType:       "short",
-		CharacterIDs:   []uuid.UUID{uuid.New()},
-		CampaignID:     uuid.New(),
-		Reason:         "test",
+		RestType:     "short",
+		CharacterIDs: []uuid.UUID{uuid.New()},
+		CampaignID:   uuid.New(),
+		Reason:       "test",
 	}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/interrupt-rest", bytes.NewReader(b))
@@ -562,10 +644,10 @@ func TestInterruptRestHandler_MultipleCharacters(t *testing.T) {
 	)
 
 	body := InterruptRestRequest{
-		RestType:       "short",
-		CharacterIDs:   []uuid.UUID{id1, id2},
-		CampaignID:     uuid.New(),
-		Reason:         "Ambush!",
+		RestType:     "short",
+		CharacterIDs: []uuid.UUID{id1, id2},
+		CampaignID:   uuid.New(),
+		Reason:       "Ambush!",
 	}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/interrupt-rest", bytes.NewReader(b))

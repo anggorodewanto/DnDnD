@@ -76,6 +76,51 @@ func (a encounterLookupAdapter) ActiveEncounterIDForCharacter(ctx context.Contex
 	return encID, true, nil
 }
 
+type combatantExhaustionStoreAdapter struct {
+	queries *refdata.Queries
+}
+
+func (a combatantExhaustionStoreAdapter) ActiveCombatantExhaustionForCharacter(ctx context.Context, characterID uuid.UUID) (rest.CombatantExhaustionState, bool, error) {
+	if a.queries == nil {
+		return rest.CombatantExhaustionState{}, false, nil
+	}
+	encID, err := a.queries.GetActiveEncounterIDByCharacterID(ctx, uuid.NullUUID{UUID: characterID, Valid: true})
+	if errors.Is(err, sql.ErrNoRows) {
+		return rest.CombatantExhaustionState{}, false, nil
+	}
+	if err != nil {
+		return rest.CombatantExhaustionState{}, false, err
+	}
+
+	combatants, err := a.queries.ListCombatantsByEncounterID(ctx, encID)
+	if err != nil {
+		return rest.CombatantExhaustionState{}, false, err
+	}
+	for _, c := range combatants {
+		if !c.CharacterID.Valid || c.CharacterID.UUID != characterID {
+			continue
+		}
+		return rest.CombatantExhaustionState{
+			ID:              c.ID,
+			Conditions:      c.Conditions,
+			ExhaustionLevel: int(c.ExhaustionLevel),
+		}, true, nil
+	}
+	return rest.CombatantExhaustionState{}, false, nil
+}
+
+func (a combatantExhaustionStoreAdapter) UpdateCombatantExhaustion(ctx context.Context, combatantID uuid.UUID, conditions []byte, exhaustionLevel int) error {
+	if a.queries == nil {
+		return nil
+	}
+	_, err := a.queries.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+		ID:              combatantID,
+		Conditions:      conditions,
+		ExhaustionLevel: int32(exhaustionLevel),
+	})
+	return err
+}
+
 // resumePlayerLookupAdapter bridges refdata.Queries to the
 // discord.ResumePlayerLookup contract so the Phase 115 resume re-pinger can
 // @mention the current-turn player by their Discord user id.
@@ -1019,6 +1064,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// character currently in?" so each service can skip publishing when
 		// the mutation doesn't touch live combat state.
 		encLookup := encounterLookupAdapter{queries: queries}
+		exhaustionStore := combatantExhaustionStoreAdapter{queries: queries}
 		inventoryAPIHandler := inventory.NewAPIHandler(queries)
 		inventoryAPIHandler.SetPublisher(publisher, encLookup)
 		// SR-007: DM-side inventory mutations refresh #character-cards.
@@ -1054,8 +1100,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			partyPoster = a
 		}
 		if partyLister != nil && partyUpdater != nil && partyEncounterChecker != nil {
+			partyRestService := rest.NewService(dice.NewRoller(nil))
+			partyRestService.SetCombatantExhaustionStore(exhaustionStore)
 			partyRestHandler = rest.NewPartyRestHandler(
-				rest.NewService(dice.NewRoller(nil)),
+				partyRestService,
 				partyLister,
 				partyUpdater,
 				partyEncounterChecker,
@@ -1324,6 +1372,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// same encLookup shared with inventory + levelup so a single
 			// per-character resolver drives every Phase 104b fan-out.
 			discordHandlerSet.rest.SetPublisher(publisher, encLookup)
+			discordHandlerSet.rest.SetCombatantExhaustionStore(exhaustionStore)
 			// Phase 106d: gate non-trivial /check rolls through #dm-queue.
 			discordHandlerSet.check.SetNotifier(dmQueueNotifier)
 			// Phase 106c: route /reaction declarations through the dm-queue

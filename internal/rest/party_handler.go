@@ -23,6 +23,7 @@ type PartyCharacterInfo struct {
 	SpellSlots       map[string]character.SlotInfo
 	PactMagicSlots   *character.PactMagicSlots
 	DeathSaves       int // successes + failures combined (nonzero means needs reset)
+	ExhaustionLevel  int
 }
 
 // CharacterRestUpdate holds the data to persist after a rest.
@@ -33,6 +34,7 @@ type CharacterRestUpdate struct {
 	FeatureUses      map[string]character.FeatureUse
 	SpellSlots       map[string]character.SlotInfo
 	PactMagicSlots   *character.PactMagicSlots
+	ExhaustionLevel  int
 }
 
 // PlayerNotification holds data for a notification to a player.
@@ -183,6 +185,7 @@ func (h *PartyRestHandler) applyPartyLongRest(ctx context.Context, chars []Party
 			FeatureUses:      c.FeatureUses,
 			SpellSlots:       c.SpellSlots,
 			PactMagicSlots:   c.PactMagicSlots,
+			ExhaustionLevel:  c.ExhaustionLevel,
 		}
 
 		result := h.restService.LongRest(input)
@@ -194,8 +197,10 @@ func (h *PartyRestHandler) applyPartyLongRest(ctx context.Context, chars []Party
 			FeatureUses:      c.FeatureUses,
 			SpellSlots:       result.SpellSlots,
 			PactMagicSlots:   c.PactMagicSlots,
+			ExhaustionLevel:  result.ExhaustionLevelAfter,
 		}
 		_ = h.updater.ApplyRestUpdate(ctx, update)
+		h.restService.PersistLongRestExhaustion(ctx, c.ID, result)
 
 		msg := FormatLongRestResult(c.Name, result)
 		_ = h.notifier.NotifyPlayer(ctx, PlayerNotification{

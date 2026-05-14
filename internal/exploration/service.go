@@ -141,21 +141,22 @@ func (s *Service) createCombatantFromParams(ctx context.Context, encID uuid.UUID
 		}
 	}
 	return s.store.CreateCombatant(ctx, refdata.CreateCombatantParams{
-		EncounterID: encID,
-		CharacterID: charID,
-		ShortID:     p.ShortID,
-		DisplayName: p.DisplayName,
-		HpMax:       p.HPMax,
-		HpCurrent:   p.HPCurrent,
-		TempHp:      p.TempHP,
-		Ac:          p.AC,
-		PositionCol: p.PositionCol,
-		PositionRow: p.PositionRow,
-		Conditions:  json.RawMessage(`[]`),
-		IsAlive:     p.IsAlive,
-		IsVisible:   p.IsVisible,
-		IsNpc:       p.IsNPC,
-		DeathSaves:  nullRaw(p.DeathSaves),
+		EncounterID:     encID,
+		CharacterID:     charID,
+		ShortID:         p.ShortID,
+		DisplayName:     p.DisplayName,
+		HpMax:           p.HPMax,
+		HpCurrent:       p.HPCurrent,
+		TempHp:          p.TempHP,
+		Ac:              p.AC,
+		PositionCol:     p.PositionCol,
+		PositionRow:     p.PositionRow,
+		Conditions:      json.RawMessage(`[]`),
+		ExhaustionLevel: p.ExhaustionLevel,
+		IsAlive:         p.IsAlive,
+		IsVisible:       p.IsVisible,
+		IsNpc:           p.IsNPC,
+		DeathSaves:      nullRaw(p.DeathSaves),
 	})
 }
 

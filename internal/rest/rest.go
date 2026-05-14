@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"maps"
@@ -12,6 +13,8 @@ import (
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/inventory"
 )
+
+const characterDataExhaustionKey = "exhaustion_level"
 
 // EncounterPublisher fans out a fresh encounter snapshot over the dashboard
 // WebSocket hub whenever a /rest mutation (HP / hit dice / spell slots /
@@ -30,11 +33,23 @@ type EncounterLookup interface {
 	ActiveEncounterIDForCharacter(ctx context.Context, characterID uuid.UUID) (uuid.UUID, bool, error)
 }
 
+type CombatantExhaustionState struct {
+	ID              uuid.UUID
+	Conditions      []byte
+	ExhaustionLevel int
+}
+
+type CombatantExhaustionStore interface {
+	ActiveCombatantExhaustionForCharacter(ctx context.Context, characterID uuid.UUID) (CombatantExhaustionState, bool, error)
+	UpdateCombatantExhaustion(ctx context.Context, combatantID uuid.UUID, conditions []byte, exhaustionLevel int) error
+}
+
 // Service handles rest logic (short and long rests).
 type Service struct {
-	roller    *dice.Roller
-	publisher EncounterPublisher
-	lookup    EncounterLookup
+	roller          *dice.Roller
+	publisher       EncounterPublisher
+	lookup          EncounterLookup
+	exhaustionStore CombatantExhaustionStore
 }
 
 // NewService creates a new rest Service.
@@ -49,6 +64,45 @@ func NewService(roller *dice.Roller) *Service {
 func (s *Service) SetPublisher(p EncounterPublisher, lookup EncounterLookup) {
 	s.publisher = p
 	s.lookup = lookup
+}
+
+func (s *Service) SetCombatantExhaustionStore(store CombatantExhaustionStore) {
+	s.exhaustionStore = store
+}
+
+func (s *Service) ExhaustionLevelForCharacter(ctx context.Context, characterID uuid.UUID) int {
+	if s.exhaustionStore == nil {
+		return 0
+	}
+	state, ok, err := s.exhaustionStore.ActiveCombatantExhaustionForCharacter(ctx, characterID)
+	if err != nil {
+		log.Printf("rest: active combatant exhaustion lookup failed for %s: %v", characterID, err)
+		return 0
+	}
+	if !ok {
+		return 0
+	}
+	return state.ExhaustionLevel
+}
+
+func (s *Service) PersistLongRestExhaustion(ctx context.Context, characterID uuid.UUID, result LongRestResult) {
+	if s.exhaustionStore == nil {
+		return
+	}
+	if !result.ExhaustionDecreased {
+		return
+	}
+	state, ok, err := s.exhaustionStore.ActiveCombatantExhaustionForCharacter(ctx, characterID)
+	if err != nil {
+		log.Printf("rest: active combatant exhaustion lookup failed for %s: %v", characterID, err)
+		return
+	}
+	if !ok {
+		return
+	}
+	if err := s.exhaustionStore.UpdateCombatantExhaustion(ctx, state.ID, state.Conditions, result.ExhaustionLevelAfter); err != nil {
+		log.Printf("rest: combatant exhaustion update failed for %s: %v", state.ID, err)
+	}
 }
 
 // PublishForCharacter looks up the character's active encounter (if any)
@@ -79,8 +133,8 @@ type ShortRestInput struct {
 	HPCurrent        int
 	HPMax            int
 	CONModifier      int
-	HitDiceRemaining map[string]int            // e.g. {"d10": 5, "d8": 2}
-	HitDiceSpend     map[string]int            // e.g. {"d10": 2} — how many to spend per die type
+	HitDiceRemaining map[string]int // e.g. {"d10": 5, "d8": 2}
+	HitDiceSpend     map[string]int // e.g. {"d10": 2} — how many to spend per die type
 	FeatureUses      map[string]character.FeatureUse
 	PactMagicSlots   *character.PactMagicSlots // nil if not a warlock
 	Classes          []character.ClassEntry
@@ -98,18 +152,18 @@ type HitDieRoll struct {
 
 // ShortRestResult holds the results of a short rest.
 type ShortRestResult struct {
-	HPBefore            int
-	HPAfter             int
-	HPMax               int
-	HPHealed            int
-	HitDieRolls         []HitDieRoll
-	HitDiceRemaining    map[string]int
-	FeaturesRecharged   []string
-	PactSlotsRestored   bool
-	PactSlotsCurrent    int
-	ItemStudied         bool
-	StudiedItemName     string
-	UpdatedInventory    []character.InventoryItem
+	HPBefore          int
+	HPAfter           int
+	HPMax             int
+	HPHealed          int
+	HitDieRolls       []HitDieRoll
+	HitDiceRemaining  map[string]int
+	FeaturesRecharged []string
+	PactSlotsRestored bool
+	PactSlotsCurrent  int
+	ItemStudied       bool
+	StudiedItemName   string
+	UpdatedInventory  []character.InventoryItem
 }
 
 // ShortRest applies a short rest to a character.
@@ -236,16 +290,16 @@ type LongRestInput struct {
 
 // LongRestResult holds the results of a long rest.
 type LongRestResult struct {
-	HPBefore              int
-	HPAfter               int
-	HPMax                 int
-	HPHealed              int
-	HitDiceRemaining      map[string]int
-	HitDiceRestored       int
-	FeaturesRecharged     []string
-	SpellSlots            map[string]character.SlotInfo
-	PactSlotsRestored     bool
-	DeathSavesReset       bool
+	HPBefore               int
+	HPAfter                int
+	HPMax                  int
+	HPHealed               int
+	HitDiceRemaining       map[string]int
+	HitDiceRestored        int
+	FeaturesRecharged      []string
+	SpellSlots             map[string]character.SlotInfo
+	PactSlotsRestored      bool
+	DeathSavesReset        bool
 	PreparedCasterReminder bool
 
 	// Dawn recharge outputs (populated when input carries Inventory + RechargeInfo).
@@ -270,6 +324,44 @@ func LongRestExhaustionLevel(current int) int {
 		return 0
 	}
 	return current - 1
+}
+
+func ExhaustionLevelFromCharacterData(raw []byte) (int, bool) {
+	if len(raw) == 0 {
+		return 0, false
+	}
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return 0, false
+	}
+	value, ok := data[characterDataExhaustionKey]
+	if !ok {
+		return 0, false
+	}
+	var level int
+	if err := json.Unmarshal(value, &level); err != nil {
+		return 0, false
+	}
+	if level < 0 {
+		return 0, true
+	}
+	return level, true
+}
+
+func CharacterDataWithExhaustion(raw []byte, level int) []byte {
+	data := map[string]any{}
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &data)
+	}
+	if level < 0 {
+		level = 0
+	}
+	data[characterDataExhaustionKey] = level
+	out, err := json.Marshal(data)
+	if err != nil {
+		return []byte(fmt.Sprintf(`{"%s":%d}`, characterDataExhaustionKey, level))
+	}
+	return out
 }
 
 // preparedCasterClasses are classes that prepare spells and should be reminded.

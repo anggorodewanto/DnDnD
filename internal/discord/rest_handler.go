@@ -36,13 +36,13 @@ type RestHandler struct {
 	session           Session
 	restService       *rest.Service
 	campaignProvider  CheckCampaignProvider
-	characterLookup  CheckCharacterLookup
+	characterLookup   CheckCharacterLookup
 	encounterProvider CheckEncounterProvider
-	charUpdater      RestCharacterUpdater
-	rollLogger       dice.RollHistoryLogger
-	dmQueueFunc      func(guildID string) string // reserved for future DM approval flow
-	notifier         dmqueue.Notifier
-	cardUpdater      CardUpdater // SR-007
+	charUpdater       RestCharacterUpdater
+	rollLogger        dice.RollHistoryLogger
+	dmQueueFunc       func(guildID string) string // reserved for future DM approval flow
+	notifier          dmqueue.Notifier
+	cardUpdater       CardUpdater // SR-007
 }
 
 // SetCardUpdater wires the SR-007 character-card refresh callback fired
@@ -67,6 +67,12 @@ func (h *RestHandler) SetPublisher(p rest.EncounterPublisher, lookup rest.Encoun
 	h.restService.SetPublisher(p, lookup)
 }
 
+func (h *RestHandler) SetCombatantExhaustionStore(store rest.CombatantExhaustionStore) {
+	if h == nil || h.restService == nil {
+		return
+	}
+	h.restService.SetCombatantExhaustionStore(store)
+}
 
 // postRestRequestToDMQueue posts a rest request notification via the Notifier.
 // No-op when no Notifier is wired.
@@ -105,11 +111,11 @@ func NewRestHandler(
 		session:           session,
 		restService:       rest.NewService(roller),
 		campaignProvider:  campaignProvider,
-		characterLookup:  characterLookup,
+		characterLookup:   characterLookup,
 		encounterProvider: encounterProvider,
-		charUpdater:      charUpdater,
-		rollLogger:       rollLogger,
-		dmQueueFunc:      dmQueueFunc,
+		charUpdater:       charUpdater,
+		rollLogger:        rollLogger,
+		dmQueueFunc:       dmQueueFunc,
 	}
 }
 
@@ -435,6 +441,40 @@ func (h *RestHandler) persistRestChanges(ctx context.Context, char refdata.Chara
 	_, _ = h.charUpdater.UpdateCharacter(ctx, params)
 }
 
+func (h *RestHandler) persistLongRestChanges(ctx context.Context, char refdata.Character, charData restCharacterData, result rest.LongRestResult) {
+	if h.charUpdater == nil {
+		return
+	}
+
+	hitDiceData, err := json.Marshal(result.HitDiceRemaining)
+	if err != nil {
+		return
+	}
+	featureData, err := json.Marshal(charData.FeatureUses)
+	if err != nil {
+		return
+	}
+
+	params := baseUpdateParams(char)
+	params.HpCurrent = int32(result.HPAfter)
+	params.HitDiceRemaining = hitDiceData
+	params.FeatureUses = pqtype.NullRawMessage{RawMessage: featureData, Valid: true}
+	if slotData, err := json.Marshal(result.SpellSlots); err == nil {
+		params.SpellSlots = pqtype.NullRawMessage{RawMessage: slotData, Valid: true}
+	}
+	if charData.PactMagicSlots != nil {
+		if pactData, err := json.Marshal(charData.PactMagicSlots); err == nil {
+			params.PactMagicSlots = pqtype.NullRawMessage{RawMessage: pactData, Valid: true}
+		}
+	}
+	params.CharacterData = pqtype.NullRawMessage{
+		RawMessage: rest.CharacterDataWithExhaustion(char.CharacterData.RawMessage, result.ExhaustionLevelAfter),
+		Valid:      true,
+	}
+
+	_, _ = h.charUpdater.UpdateCharacter(ctx, params)
+}
+
 // baseUpdateParams creates UpdateCharacterParams with all fields copied from the character.
 // Callers override the fields they want to change.
 func baseUpdateParams(char refdata.Character) refdata.UpdateCharacterParams {
@@ -525,6 +565,10 @@ func ParseHitDiceCustomID(customID string) (uuid.UUID, string, int, error) {
 }
 
 func (h *RestHandler) handleLongRest(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, charData restCharacterData) {
+	exhaustionLevel := charData.ExhaustionLevel
+	if !charData.ExhaustionLevelSet {
+		exhaustionLevel = h.restService.ExhaustionLevelForCharacter(ctx, char.ID)
+	}
 	input := rest.LongRestInput{
 		HPCurrent:        int(char.HpCurrent),
 		HPMax:            int(char.HpMax),
@@ -533,12 +577,14 @@ func (h *RestHandler) handleLongRest(ctx context.Context, interaction *discordgo
 		FeatureUses:      charData.FeatureUses,
 		SpellSlots:       charData.SpellSlots,
 		PactMagicSlots:   charData.PactMagicSlots,
+		ExhaustionLevel:  exhaustionLevel,
 	}
 
 	result := h.restService.LongRest(input)
 
 	// Persist all changes
 	h.persistLongRest(ctx, char, charData, result)
+	h.restService.PersistLongRestExhaustion(ctx, char.ID, result)
 
 	// H-104b: refresh the dashboard snapshot for a sibling encounter the
 	// character may still be a combatant in. PublishForCharacter is a
@@ -577,7 +623,7 @@ func longRestPrepareClasses(classes []character.ClassEntry) []combat.CharacterCl
 }
 
 func (h *RestHandler) persistLongRest(ctx context.Context, char refdata.Character, charData restCharacterData, result rest.LongRestResult) {
-	h.persistRestChanges(ctx, char, charData, int32(result.HPAfter), result.HitDiceRemaining, result.SpellSlots)
+	h.persistLongRestChanges(ctx, char, charData, result)
 }
 
 func (h *RestHandler) logRestToHistory(charName, restType, msg string) {
@@ -602,12 +648,14 @@ func (h *RestHandler) parseRestType(opts []*discordgo.ApplicationCommandInteract
 
 // restCharacterData holds parsed character data needed for rests.
 type restCharacterData struct {
-	Scores           character.AbilityScores
-	Classes          []character.ClassEntry
-	HitDiceRemaining map[string]int
-	FeatureUses      map[string]character.FeatureUse
-	SpellSlots       map[string]character.SlotInfo
-	PactMagicSlots   *character.PactMagicSlots
+	Scores             character.AbilityScores
+	Classes            []character.ClassEntry
+	HitDiceRemaining   map[string]int
+	FeatureUses        map[string]character.FeatureUse
+	SpellSlots         map[string]character.SlotInfo
+	PactMagicSlots     *character.PactMagicSlots
+	ExhaustionLevel    int
+	ExhaustionLevelSet bool
 }
 
 // parseRestCharacterData extracts all fields needed for rest processing.
@@ -650,6 +698,12 @@ func parseRestCharacterData(char refdata.Character) (restCharacterData, error) {
 		}
 		if pact.Max > 0 {
 			data.PactMagicSlots = &pact
+		}
+	}
+	if char.CharacterData.Valid {
+		if exhaustion, ok := rest.ExhaustionLevelFromCharacterData(char.CharacterData.RawMessage); ok {
+			data.ExhaustionLevel = exhaustion
+			data.ExhaustionLevelSet = true
 		}
 	}
 

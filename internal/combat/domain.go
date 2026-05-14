@@ -6,26 +6,28 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/rest"
 )
 
 // CombatantParams holds the data needed to create a combatant,
 // independent of the database layer.
 type CombatantParams struct {
-	CharacterID  string
-	CreatureRefID string
-	ShortID      string
-	DisplayName  string
-	HPMax        int32
-	HPCurrent    int32
-	TempHP       int32
-	AC           int32
-	SpeedFt      int32
-	PositionCol  string
-	PositionRow  int32
-	IsNPC        bool
-	IsAlive      bool
-	IsVisible    bool
-	DeathSaves   json.RawMessage
+	CharacterID     string
+	CreatureRefID   string
+	ShortID         string
+	DisplayName     string
+	HPMax           int32
+	HPCurrent       int32
+	TempHP          int32
+	AC              int32
+	SpeedFt         int32
+	PositionCol     string
+	PositionRow     int32
+	IsNPC           bool
+	IsAlive         bool
+	IsVisible       bool
+	DeathSaves      json.RawMessage
+	ExhaustionLevel int32
 }
 
 // DeathSaves tracks PC death saving throws.
@@ -65,21 +67,26 @@ func CombatantFromCreature(creature refdata.Creature, shortID, displayName, posC
 // CombatantFromCharacter builds CombatantParams from a player character.
 func CombatantFromCharacter(char refdata.Character, shortID, posCol string, posRow int32) CombatantParams {
 	ds, _ := json.Marshal(DeathSaves{Successes: 0, Failures: 0})
+	exhaustionLevel := 0
+	if char.CharacterData.Valid {
+		exhaustionLevel, _ = rest.ExhaustionLevelFromCharacterData(char.CharacterData.RawMessage)
+	}
 	return CombatantParams{
-		CharacterID: char.ID.String(),
-		ShortID:     shortID,
-		DisplayName: char.Name,
-		HPMax:       char.HpMax,
-		HPCurrent:   char.HpCurrent,
-		TempHP:      char.TempHp,
-		AC:          char.Ac,
-		SpeedFt:     char.SpeedFt,
-		PositionCol: posCol,
-		PositionRow: posRow,
-		IsNPC:       false,
-		IsAlive:     true,
-		IsVisible:   true,
-		DeathSaves:  ds,
+		CharacterID:     char.ID.String(),
+		ShortID:         shortID,
+		DisplayName:     char.Name,
+		HPMax:           char.HpMax,
+		HPCurrent:       char.HpCurrent,
+		TempHP:          char.TempHp,
+		AC:              char.Ac,
+		SpeedFt:         char.SpeedFt,
+		PositionCol:     posCol,
+		PositionRow:     posRow,
+		IsNPC:           false,
+		IsAlive:         true,
+		IsVisible:       true,
+		DeathSaves:      ds,
+		ExhaustionLevel: int32(exhaustionLevel),
 	}
 }
 
@@ -91,28 +98,28 @@ type Position struct {
 
 // StartCombatInput holds parameters for the StartCombat flow.
 type StartCombatInput struct {
-	TemplateID           uuid.UUID              `json:"template_id"`
-	CharacterIDs         []uuid.UUID            `json:"character_ids"`
-	CharacterPositions   map[uuid.UUID]Position `json:"character_positions"`
-	SurprisedShortIDs    []string               `json:"surprised_short_ids,omitempty"`
+	TemplateID         uuid.UUID              `json:"template_id"`
+	CharacterIDs       []uuid.UUID            `json:"character_ids"`
+	CharacterPositions map[uuid.UUID]Position `json:"character_positions"`
+	SurprisedShortIDs  []string               `json:"surprised_short_ids,omitempty"`
 }
 
 // StartCombatResult holds the result of the StartCombat flow.
 type StartCombatResult struct {
-	Encounter          refdata.Encounter    `json:"encounter"`
-	Combatants         []refdata.Combatant  `json:"combatants"`
-	InitiativeTracker  string               `json:"initiative_tracker"`
-	FirstTurn          TurnInfo             `json:"first_turn"`
+	Encounter         refdata.Encounter   `json:"encounter"`
+	Combatants        []refdata.Combatant `json:"combatants"`
+	InitiativeTracker string              `json:"initiative_tracker"`
+	FirstTurn         TurnInfo            `json:"first_turn"`
 }
 
 // EndCombatResult holds the result of the EndCombat operation.
 type EndCombatResult struct {
-	Encounter          refdata.Encounter   `json:"encounter"`
-	Combatants         []refdata.Combatant `json:"combatants"`
-	Summary            string              `json:"summary"`
-	Casualties         int                 `json:"casualties"`
-	RoundsElapsed      int32               `json:"rounds_elapsed"`
-	InitiativeTracker  string              `json:"initiative_tracker"`
+	Encounter         refdata.Encounter   `json:"encounter"`
+	Combatants        []refdata.Combatant `json:"combatants"`
+	Summary           string              `json:"summary"`
+	Casualties        int                 `json:"casualties"`
+	RoundsElapsed     int32               `json:"rounds_elapsed"`
+	InitiativeTracker string              `json:"initiative_tracker"`
 }
 
 // ParseTemplateCreatures parses the JSONB creatures array from an encounter template.
