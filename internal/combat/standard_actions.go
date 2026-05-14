@@ -658,21 +658,15 @@ func (s *Service) DropProne(ctx context.Context, cmd DropProneCommand) (DropPron
 		DurationRounds: 0, // indefinite - removed by Stand
 	}
 
-	newConds, err := AddCondition(cmd.Combatant.Conditions, proneCond)
+	updatedCombatant, msgs, err := s.ApplyCondition(ctx, cmd.Combatant.ID, proneCond)
 	if err != nil {
-		return DropProneResult{}, fmt.Errorf("adding prone condition: %w", err)
-	}
-
-	updatedCombatant, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
-		ID:              cmd.Combatant.ID,
-		Conditions:      newConds,
-		ExhaustionLevel: cmd.Combatant.ExhaustionLevel,
-	})
-	if err != nil {
-		return DropProneResult{}, fmt.Errorf("updating combatant conditions: %w", err)
+		return DropProneResult{}, fmt.Errorf("applying prone condition: %w", err)
 	}
 
 	log := fmt.Sprintf("\u2B07\ufe0f %s drops prone", cmd.Combatant.DisplayName)
+	for _, m := range msgs {
+		log += "\n" + m
+	}
 
 	return DropProneResult{
 		Combatant: updatedCombatant,

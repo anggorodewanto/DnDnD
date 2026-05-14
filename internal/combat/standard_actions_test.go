@@ -735,6 +735,53 @@ func TestDropProne_NoCost(t *testing.T) {
 	require.NoError(t, err, "drop prone should work even with all actions spent")
 }
 
+// SR-052: DropProne while airborne triggers fall damage via ApplyCondition
+func TestDropProne_Airborne_FallDamage(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+
+	combatant := makePCCombatant(combatantID, encounterID, charID, "Kael")
+	combatant.AltitudeFt = 30
+
+	var altitudeAfter int32 = -1
+	var hpAfter int32 = -1
+
+	ms := defaultMockStore()
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return combatant, nil
+	}
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		combatant.Conditions = arg.Conditions
+		return combatant, nil
+	}
+	ms.updateCombatantPositionFn = func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+		altitudeAfter = arg.AltitudeFt
+		combatant.AltitudeFt = arg.AltitudeFt
+		return combatant, nil
+	}
+	ms.updateCombatantHPFn = func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		hpAfter = arg.HpCurrent
+		combatant.HpCurrent = arg.HpCurrent
+		combatant.IsAlive = arg.IsAlive
+		return combatant, nil
+	}
+
+	svc := NewService(ms)
+	svc.SetRoller(dice.NewRoller(func(max int) int { return 3 })) // d6 → 3 each
+
+	turn := makeBasicTurn()
+	encounter := makeBasicEncounter(encounterID, 1)
+	cmd := DropProneCommand{Combatant: combatant, Turn: turn, Encounter: encounter, CurrentRound: 1}
+	result, err := svc.DropProne(context.Background(), cmd)
+	require.NoError(t, err)
+
+	assert.True(t, HasCondition(result.Combatant.Conditions, "prone"))
+	assert.Equal(t, int32(0), altitudeAfter, "altitude should be reset to 0 after fall")
+	assert.Equal(t, int32(31), hpAfter, "30ft fall = 3d6, deterministic 3 each = 9 damage, 40-9=31")
+	assert.Contains(t, result.CombatLog, "falls 30ft")
+}
+
 // =====================
 // 8. ESCAPE
 // =====================
@@ -1213,7 +1260,7 @@ func TestDropProne_UpdateConditionsError(t *testing.T) {
 	cmd := DropProneCommand{Combatant: combatant, Turn: turn, Encounter: encounter, CurrentRound: 1}
 	_, err := svc.DropProne(context.Background(), cmd)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "updating combatant conditions")
+	assert.Contains(t, err.Error(), "applying prone condition")
 }
 
 // TDD Cycle 49: Escape incapacitated
