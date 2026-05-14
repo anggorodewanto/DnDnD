@@ -31,7 +31,7 @@ type mockCounterspellService struct {
 	forfeitCalls       int32
 }
 
-func (m *mockCounterspellService) TriggerCounterspell(ctx context.Context, declID uuid.UUID, name string, lvl int, subtle bool) (combat.CounterspellPrompt, error) {
+func (m *mockCounterspellService) TriggerCounterspell(ctx context.Context, declID uuid.UUID, name string, lvl int, subtle bool, enemyCasterID uuid.UUID) (combat.CounterspellPrompt, error) {
 	m.mu.Lock()
 	m.triggerCalledWith = &struct{ DeclarationID uuid.UUID; EnemySpellName string; EnemyCastLevel int; IsSubtle bool }{declID, name, lvl, subtle}
 	m.mu.Unlock()

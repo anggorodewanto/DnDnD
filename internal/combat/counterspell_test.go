@@ -132,7 +132,7 @@ func TestTriggerCounterspell_Success(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	prompt, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5, false)
+	prompt, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5, false, uuid.Nil)
 	require.NoError(t, err)
 	assert.Equal(t, "Fireball", prompt.EnemySpellName)
 	assert.Equal(t, []int{3, 4, 5}, prompt.AvailableSlots)
@@ -150,7 +150,7 @@ func TestTriggerCounterspell_SubtleSpellBypass(t *testing.T) {
 		return refdata.ReactionDeclaration{}, nil
 	}
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, true)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, true, uuid.Nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrSubtleSpellNotCounterspellable)
 	assert.False(t, called, "Subtle bypass must short-circuit before any store lookup")
@@ -163,7 +163,7 @@ func TestTriggerCounterspell_DeclarationNotActive(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not active")
 }
@@ -204,7 +204,7 @@ func TestTriggerCounterspell_NoSlotsAvailable(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5, false)
+	_, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5, false, uuid.Nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no spell slots")
 }
@@ -850,7 +850,7 @@ func TestTriggerCounterspell_GetDeclarationError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting reaction declaration")
 }
@@ -865,7 +865,7 @@ func TestTriggerCounterspell_NPCCannotCounterspell(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only player characters")
 }
@@ -880,7 +880,7 @@ func TestTriggerCounterspell_GetCombatantError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting combatant")
 }
@@ -899,7 +899,7 @@ func TestTriggerCounterspell_GetCharacterError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting character")
 }
@@ -924,7 +924,7 @@ func TestTriggerCounterspell_UpdatePromptError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "updating counterspell prompt")
 }
@@ -1621,7 +1621,7 @@ func TestTriggerCounterspell_InvalidSpellSlots(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing spell slots")
 }
@@ -1746,4 +1746,344 @@ func TestHandler_ForfeitCounterspell_ServiceError(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// --- SR-046: Counterspell retroactive slot cleanup ---
+
+func TestResolveCounterspell_RefundsEnemySlotOnSuccess(t *testing.T) {
+	declID := uuid.New()
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	enemyCombatantID := uuid.New()
+	enemyCharID := uuid.New()
+	char := testWizardCharacter()
+	char.ID = charID
+	turnID := uuid.New()
+
+	// Enemy caster has a 3rd-level slot that was spent (1 of 2 remaining → 1 current)
+	enemySlotsJSON, _ := json.Marshal(map[string]SlotInfo{
+		"1": {Current: 4, Max: 4},
+		"2": {Current: 3, Max: 3},
+		"3": {Current: 1, Max: 2}, // one slot was spent casting Fireball
+	})
+	enemyChar := refdata.Character{
+		ID:         enemyCharID,
+		Name:       "Enemy Wizard",
+		SpellSlots: pqtype.NullRawMessage{RawMessage: enemySlotsJSON, Valid: true},
+	}
+
+	var refundedSlots pqtype.NullRawMessage
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{
+			ID:                        declID,
+			EncounterID:               encounterID,
+			CombatantID:               combatantID,
+			Status:                    "active",
+			CounterspellEnemySpell:    sql.NullString{String: "Fireball", Valid: true},
+			CounterspellEnemyLevel:    sql.NullInt32{Int32: 3, Valid: true},
+			CounterspellStatus:        sql.NullString{String: "prompted", Valid: true},
+			CounterspellEnemyCasterID: uuid.NullUUID{UUID: enemyCombatantID, Valid: true},
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == enemyCombatantID {
+			return refdata.Combatant{
+				ID:          enemyCombatantID,
+				CharacterID: uuid.NullUUID{UUID: enemyCharID, Valid: true},
+				DisplayName: "Enemy Wizard",
+				Conditions:  json.RawMessage(`[]`),
+			}, nil
+		}
+		return refdata.Combatant{
+			ID:          combatantID,
+			EncounterID: encounterID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Gandalf",
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		if id == enemyCharID {
+			return enemyChar, nil
+		}
+		return char, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 1, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{
+			{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 1, Status: "active"},
+		}, nil
+	}
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, ReactionUsed: true}, nil
+	}
+	store.updateReactionDeclarationStatusUsedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID, Status: "used"}, nil
+	}
+	store.updateReactionDeclarationCounterspellResolvedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellResolvedParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		if arg.ID == enemyCharID {
+			refundedSlots = arg.SpellSlots
+		}
+		return refdata.Character{ID: arg.ID}, nil
+	}
+
+	svc := NewService(store)
+	result, err := svc.ResolveCounterspell(context.Background(), declID, 3)
+	require.NoError(t, err)
+	assert.Equal(t, CounterspellCountered, result.Outcome)
+	assert.True(t, result.EnemySlotRefunded, "enemy slot should be refunded on successful counterspell")
+
+	// Verify the refunded slots have the 3rd-level slot restored
+	require.True(t, refundedSlots.Valid)
+	var slots map[string]SlotInfo
+	require.NoError(t, json.Unmarshal(refundedSlots.RawMessage, &slots))
+	assert.Equal(t, 2, slots["3"].Current, "3rd-level slot should be restored from 1 to 2")
+}
+
+func TestResolveCounterspell_DoesNotRefundOnNeedsCheck(t *testing.T) {
+	declID := uuid.New()
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	enemyCombatantID := uuid.New()
+	char := testWizardCharacter()
+	char.ID = charID
+	turnID := uuid.New()
+
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{
+			ID:                        declID,
+			EncounterID:               encounterID,
+			CombatantID:               combatantID,
+			Status:                    "active",
+			CounterspellEnemySpell:    sql.NullString{String: "Fireball", Valid: true},
+			CounterspellEnemyLevel:    sql.NullInt32{Int32: 5, Valid: true}, // cast at 5th level
+			CounterspellStatus:        sql.NullString{String: "prompted", Valid: true},
+			CounterspellEnemyCasterID: uuid.NullUUID{UUID: enemyCombatantID, Valid: true},
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:          combatantID,
+			EncounterID: encounterID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Gandalf",
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 1, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{
+			{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 1, Status: "active"},
+		}, nil
+	}
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, ReactionUsed: true}, nil
+	}
+	store.updateReactionDeclarationStatusUsedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID, Status: "used"}, nil
+	}
+	store.updateReactionDeclarationCounterspellResolvedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellResolvedParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID}, nil
+	}
+
+	svc := NewService(store)
+	result, err := svc.ResolveCounterspell(context.Background(), declID, 3) // slot 3 < enemy level 5
+	require.NoError(t, err)
+	assert.Equal(t, CounterspellNeedsCheck, result.Outcome)
+	assert.False(t, result.EnemySlotRefunded, "enemy slot should NOT be refunded when counterspell needs check")
+}
+
+func TestResolveCounterspellCheck_RefundsEnemySlotOnSuccess(t *testing.T) {
+	declID := uuid.New()
+	enemyCombatantID := uuid.New()
+	enemyCharID := uuid.New()
+	combatantID := uuid.New()
+
+	enemySlotsJSON, _ := json.Marshal(map[string]SlotInfo{
+		"3": {Current: 0, Max: 2}, // both slots spent
+	})
+	enemyChar := refdata.Character{
+		ID:         enemyCharID,
+		Name:       "Enemy Wizard",
+		SpellSlots: pqtype.NullRawMessage{RawMessage: enemySlotsJSON, Valid: true},
+	}
+
+	var refundedSlots pqtype.NullRawMessage
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{
+			ID:                        declID,
+			CombatantID:               combatantID,
+			CounterspellEnemySpell:    sql.NullString{String: "Fireball", Valid: true},
+			CounterspellEnemyLevel:    sql.NullInt32{Int32: 3, Valid: true},
+			CounterspellSlotUsed:      sql.NullInt32{Int32: 3, Valid: true},
+			CounterspellStatus:        sql.NullString{String: "needs_check", Valid: true},
+			CounterspellDc:            sql.NullInt32{Int32: 13, Valid: true},
+			CounterspellEnemyCasterID: uuid.NullUUID{UUID: enemyCombatantID, Valid: true},
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == enemyCombatantID {
+			return refdata.Combatant{
+				ID:          enemyCombatantID,
+				CharacterID: uuid.NullUUID{UUID: enemyCharID, Valid: true},
+				DisplayName: "Enemy Wizard",
+				Conditions:  json.RawMessage(`[]`),
+			}, nil
+		}
+		return refdata.Combatant{
+			ID:          combatantID,
+			DisplayName: "Gandalf",
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return enemyChar, nil
+	}
+	store.updateReactionDeclarationCounterspellResolvedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellResolvedParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		refundedSlots = arg.SpellSlots
+		return refdata.Character{ID: arg.ID}, nil
+	}
+
+	svc := NewService(store)
+	result, err := svc.ResolveCounterspellCheck(context.Background(), declID, 15) // 15 >= DC 13
+	require.NoError(t, err)
+	assert.Equal(t, CounterspellCountered, result.Outcome)
+	assert.True(t, result.EnemySlotRefunded, "enemy slot should be refunded on successful check")
+
+	// Verify the refunded slots
+	require.True(t, refundedSlots.Valid)
+	var slots map[string]SlotInfo
+	require.NoError(t, json.Unmarshal(refundedSlots.RawMessage, &slots))
+	assert.Equal(t, 1, slots["3"].Current, "3rd-level slot should be restored from 0 to 1")
+}
+
+func TestResolveCounterspellCheck_DoesNotRefundOnFailure(t *testing.T) {
+	declID := uuid.New()
+	enemyCombatantID := uuid.New()
+	combatantID := uuid.New()
+
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{
+			ID:                        declID,
+			CombatantID:               combatantID,
+			CounterspellEnemySpell:    sql.NullString{String: "Fireball", Valid: true},
+			CounterspellEnemyLevel:    sql.NullInt32{Int32: 5, Valid: true},
+			CounterspellSlotUsed:      sql.NullInt32{Int32: 3, Valid: true},
+			CounterspellStatus:        sql.NullString{String: "needs_check", Valid: true},
+			CounterspellDc:            sql.NullInt32{Int32: 15, Valid: true},
+			CounterspellEnemyCasterID: uuid.NullUUID{UUID: enemyCombatantID, Valid: true},
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:          combatantID,
+			DisplayName: "Gandalf",
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	store.updateReactionDeclarationCounterspellResolvedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellResolvedParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID}, nil
+	}
+
+	refundCalled := false
+	store.updateCharacterSpellSlotsFn = func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		refundCalled = true
+		return refdata.Character{}, nil
+	}
+
+	svc := NewService(store)
+	result, err := svc.ResolveCounterspellCheck(context.Background(), declID, 10) // 10 < DC 15
+	require.NoError(t, err)
+	assert.Equal(t, CounterspellFailed, result.Outcome)
+	assert.False(t, result.EnemySlotRefunded, "enemy slot should NOT be refunded on failed check")
+	assert.False(t, refundCalled, "updateCharacterSpellSlots should not be called on failure")
+}
+
+func TestResolveCounterspell_NoRefundForNPCEnemy(t *testing.T) {
+	declID := uuid.New()
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	enemyCombatantID := uuid.New()
+	char := testWizardCharacter()
+	char.ID = charID
+	turnID := uuid.New()
+
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{
+			ID:                        declID,
+			EncounterID:               encounterID,
+			CombatantID:               combatantID,
+			Status:                    "active",
+			CounterspellEnemySpell:    sql.NullString{String: "Fireball", Valid: true},
+			CounterspellEnemyLevel:    sql.NullInt32{Int32: 3, Valid: true},
+			CounterspellStatus:        sql.NullString{String: "prompted", Valid: true},
+			CounterspellEnemyCasterID: uuid.NullUUID{UUID: enemyCombatantID, Valid: true},
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == enemyCombatantID {
+			// NPC — no CharacterID
+			return refdata.Combatant{
+				ID:          enemyCombatantID,
+				CharacterID: uuid.NullUUID{Valid: false},
+				DisplayName: "Goblin Shaman",
+				IsNpc:       true,
+				Conditions:  json.RawMessage(`[]`),
+			}, nil
+		}
+		return refdata.Combatant{
+			ID:          combatantID,
+			EncounterID: encounterID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Gandalf",
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getActiveTurnByEncounterIDFn = func(ctx context.Context, encID uuid.UUID) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 1, Status: "active"}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{
+			{ID: turnID, EncounterID: encounterID, CombatantID: combatantID, RoundNumber: 1, Status: "active"},
+		}, nil
+	}
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, ReactionUsed: true}, nil
+	}
+	store.updateReactionDeclarationStatusUsedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID, Status: "used"}, nil
+	}
+	store.updateReactionDeclarationCounterspellResolvedFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellResolvedParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID}, nil
+	}
+
+	svc := NewService(store)
+	result, err := svc.ResolveCounterspell(context.Background(), declID, 3)
+	require.NoError(t, err)
+	assert.Equal(t, CounterspellCountered, result.Outcome)
+	assert.False(t, result.EnemySlotRefunded, "NPC enemy should not have slot refunded")
 }

@@ -621,12 +621,25 @@ func parseReactionRouteParams(r *http.Request) (uuid.UUID, uuid.UUID, error) {
 	return encounterID, reactionID, nil
 }
 
+// parseUUIDOrNil parses a UUID string, returning uuid.Nil on empty or invalid input.
+func parseUUIDOrNil(s string) uuid.UUID {
+	if s == "" {
+		return uuid.Nil
+	}
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.Nil
+	}
+	return id
+}
+
 // --- Counterspell handler types ---
 
 type triggerCounterspellRequest struct {
 	EnemySpellName string `json:"enemy_spell_name"`
 	EnemyCastLevel int    `json:"enemy_cast_level"`
-	IsSubtle       bool   `json:"is_subtle,omitempty"` // med-29 / Phase 72
+	EnemyCasterID  string `json:"enemy_caster_id,omitempty"` // SR-046: combatant ID of the caster being counterspelled
+	IsSubtle       bool   `json:"is_subtle,omitempty"`       // med-29 / Phase 72
 }
 
 type counterspellPromptResponse struct {
@@ -680,7 +693,7 @@ func (h *Handler) TriggerCounterspell(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prompt, err := h.svc.TriggerCounterspell(r.Context(), reactionID, req.EnemySpellName, req.EnemyCastLevel, req.IsSubtle)
+	prompt, err := h.svc.TriggerCounterspell(r.Context(), reactionID, req.EnemySpellName, req.EnemyCastLevel, req.IsSubtle, parseUUIDOrNil(req.EnemyCasterID))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

@@ -482,22 +482,23 @@ type Race struct {
 }
 
 type ReactionDeclaration struct {
-	ID                     uuid.UUID      `json:"id"`
-	EncounterID            uuid.UUID      `json:"encounter_id"`
-	CombatantID            uuid.UUID      `json:"combatant_id"`
-	Description            string         `json:"description"`
-	Status                 string         `json:"status"`
-	CreatedAt              time.Time      `json:"created_at"`
-	UsedAt                 sql.NullTime   `json:"used_at"`
-	UsedOnRound            sql.NullInt32  `json:"used_on_round"`
-	IsReadiedAction        bool           `json:"is_readied_action"`
-	SpellName              sql.NullString `json:"spell_name"`
-	SpellSlotLevel         sql.NullInt32  `json:"spell_slot_level"`
-	CounterspellEnemySpell sql.NullString `json:"counterspell_enemy_spell"`
-	CounterspellEnemyLevel sql.NullInt32  `json:"counterspell_enemy_level"`
-	CounterspellSlotUsed   sql.NullInt32  `json:"counterspell_slot_used"`
-	CounterspellStatus     sql.NullString `json:"counterspell_status"`
-	CounterspellDc         sql.NullInt32  `json:"counterspell_dc"`
+	ID                        uuid.UUID      `json:"id"`
+	EncounterID               uuid.UUID      `json:"encounter_id"`
+	CombatantID               uuid.UUID      `json:"combatant_id"`
+	Description               string         `json:"description"`
+	Status                    string         `json:"status"`
+	CreatedAt                 time.Time      `json:"created_at"`
+	UsedAt                    sql.NullTime   `json:"used_at"`
+	UsedOnRound               sql.NullInt32  `json:"used_on_round"`
+	IsReadiedAction           bool           `json:"is_readied_action"`
+	SpellName                 sql.NullString `json:"spell_name"`
+	SpellSlotLevel            sql.NullInt32  `json:"spell_slot_level"`
+	CounterspellEnemySpell    sql.NullString `json:"counterspell_enemy_spell"`
+	CounterspellEnemyLevel    sql.NullInt32  `json:"counterspell_enemy_level"`
+	CounterspellSlotUsed      sql.NullInt32  `json:"counterspell_slot_used"`
+	CounterspellStatus        sql.NullString `json:"counterspell_status"`
+	CounterspellDc            sql.NullInt32  `json:"counterspell_dc"`
+	CounterspellEnemyCasterID uuid.NullUUID  `json:"counterspell_enemy_caster_id"`
 }
 
 type Session struct {

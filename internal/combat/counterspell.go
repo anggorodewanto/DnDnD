@@ -3,11 +3,13 @@ package combat
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -34,13 +36,14 @@ type CounterspellPrompt struct {
 
 // CounterspellResult holds the outcome of a Counterspell resolution step.
 type CounterspellResult struct {
-	Outcome        CounterspellOutcome
-	CasterName     string
-	EnemySpellName string
-	EnemyCastLevel int
-	SlotUsed       int
-	DC             int // DC for ability check (10 + enemy spell level), set when needs_check
-	DeclarationID  uuid.UUID
+	Outcome          CounterspellOutcome
+	CasterName       string
+	EnemySpellName   string
+	EnemyCastLevel   int
+	SlotUsed         int
+	DC               int // DC for ability check (10 + enemy spell level), set when needs_check
+	DeclarationID    uuid.UUID
+	EnemySlotRefunded bool // true when the countered caster's slot was automatically refunded (SR-046)
 }
 
 // ErrSubtleSpellNotCounterspellable is returned by TriggerCounterspell when
@@ -53,9 +56,12 @@ var ErrSubtleSpellNotCounterspellable = errors.New("counterspell cannot trigger 
 // It validates the declaration, looks up available slots, stores enemy spell info,
 // and returns a prompt with enemy spell name (but NOT cast level) and available slot levels.
 //
+// enemyCasterID identifies the combatant whose spell is being counterspelled.
+// When counterspell succeeds, their spell slot is automatically refunded (SR-046).
+//
 // med-29 / Phase 72: when isSubtle is true, return ErrSubtleSpellNotCounterspellable
 // without prompting — the Subtle Spell metamagic bypasses Counterspell.
-func (s *Service) TriggerCounterspell(ctx context.Context, declarationID uuid.UUID, enemySpellName string, enemyCastLevel int, isSubtle bool) (CounterspellPrompt, error) {
+func (s *Service) TriggerCounterspell(ctx context.Context, declarationID uuid.UUID, enemySpellName string, enemyCastLevel int, isSubtle bool, enemyCasterID uuid.UUID) (CounterspellPrompt, error) {
 	if isSubtle {
 		return CounterspellPrompt{}, ErrSubtleSpellNotCounterspellable
 	}
@@ -92,9 +98,10 @@ func (s *Service) TriggerCounterspell(ctx context.Context, declarationID uuid.UU
 	}
 
 	if _, err := s.store.UpdateReactionDeclarationCounterspellPrompt(ctx, refdata.UpdateReactionDeclarationCounterspellPromptParams{
-		ID:                     declarationID,
-		CounterspellEnemySpell: sql.NullString{String: enemySpellName, Valid: true},
-		CounterspellEnemyLevel: sql.NullInt32{Int32: int32(enemyCastLevel), Valid: true},
+		ID:                        declarationID,
+		CounterspellEnemySpell:    sql.NullString{String: enemySpellName, Valid: true},
+		CounterspellEnemyLevel:    sql.NullInt32{Int32: int32(enemyCastLevel), Valid: true},
+		CounterspellEnemyCasterID: uuid.NullUUID{UUID: enemyCasterID, Valid: enemyCasterID != uuid.Nil},
 	}); err != nil {
 		return CounterspellPrompt{}, fmt.Errorf("updating counterspell prompt: %w", err)
 	}
@@ -183,6 +190,14 @@ func (s *Service) ResolveCounterspell(ctx context.Context, declarationID uuid.UU
 		return CounterspellResult{}, fmt.Errorf("updating counterspell %s: %w", resolvedParams.CounterspellStatus.String, err)
 	}
 
+	if result.Outcome == CounterspellCountered {
+		refunded, err := s.refundCounterspelledSlot(ctx, decl.CounterspellEnemyCasterID, enemyCastLevel)
+		if err != nil {
+			return CounterspellResult{}, fmt.Errorf("refunding counterspelled slot: %w", err)
+		}
+		result.EnemySlotRefunded = refunded
+	}
+
 	return result, nil
 }
 
@@ -226,6 +241,14 @@ func (s *Service) ResolveCounterspellCheck(ctx context.Context, declarationID uu
 		CounterspellDc:       sql.NullInt32{Int32: int32(dc), Valid: true},
 	}); err != nil {
 		return CounterspellResult{}, fmt.Errorf("updating counterspell check result: %w", err)
+	}
+
+	if result.Outcome == CounterspellCountered {
+		refunded, err := s.refundCounterspelledSlot(ctx, decl.CounterspellEnemyCasterID, result.EnemyCastLevel)
+		if err != nil {
+			return CounterspellResult{}, fmt.Errorf("refunding counterspelled slot: %w", err)
+		}
+		result.EnemySlotRefunded = refunded
 	}
 
 	return result, nil
@@ -330,4 +353,47 @@ func AvailableCounterspellSlots(slots map[int]SlotInfo, pact PactMagicSlotState)
 	}
 	slices.Sort(levels)
 	return levels
+}
+
+// refundCounterspelledSlot restores the spell slot of the enemy caster whose spell
+// was successfully counterspelled. If the enemy caster is an NPC (no CharacterID),
+// this is a no-op. Returns true if a slot was refunded. (SR-046)
+func (s *Service) refundCounterspelledSlot(ctx context.Context, enemyCasterID uuid.NullUUID, slotLevel int) (bool, error) {
+	if !enemyCasterID.Valid || slotLevel <= 0 {
+		return false, nil
+	}
+	combatant, err := s.store.GetCombatant(ctx, enemyCasterID.UUID)
+	if err != nil {
+		return false, fmt.Errorf("getting enemy combatant for slot refund: %w", err)
+	}
+	if !combatant.CharacterID.Valid {
+		return false, nil // NPC — no tracked slots to refund
+	}
+	char, err := s.store.GetCharacter(ctx, combatant.CharacterID.UUID)
+	if err != nil {
+		return false, fmt.Errorf("getting enemy character for slot refund: %w", err)
+	}
+	slots, err := parseIntKeyedSlots(char.SpellSlots.RawMessage)
+	if err != nil {
+		return false, fmt.Errorf("parsing enemy spell slots for refund: %w", err)
+	}
+	info, ok := slots[slotLevel]
+	if !ok {
+		return false, nil
+	}
+	if info.Current >= info.Max {
+		return false, nil // already at max — nothing to refund
+	}
+	slots[slotLevel] = SlotInfo{Current: info.Current + 1, Max: info.Max}
+	slotsJSON, err := json.Marshal(intToStringKeyedSlots(slots))
+	if err != nil {
+		return false, fmt.Errorf("marshaling refunded spell slots: %w", err)
+	}
+	if _, err := s.store.UpdateCharacterSpellSlots(ctx, refdata.UpdateCharacterSpellSlotsParams{
+		ID:         char.ID,
+		SpellSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+	}); err != nil {
+		return false, fmt.Errorf("persisting refunded spell slot: %w", err)
+	}
+	return true, nil
 }

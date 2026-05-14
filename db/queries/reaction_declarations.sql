@@ -42,7 +42,7 @@ WHERE combatant_id = $1 AND encounter_id = $2 AND status = 'active';
 
 -- name: UpdateReactionDeclarationCounterspellPrompt :one
 UPDATE reaction_declarations
-SET counterspell_enemy_spell = $2, counterspell_enemy_level = $3, counterspell_status = 'prompted'
+SET counterspell_enemy_spell = $2, counterspell_enemy_level = $3, counterspell_enemy_caster_id = $4, counterspell_status = 'prompted'
 WHERE id = $1
 RETURNING *;
 

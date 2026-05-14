@@ -15,7 +15,7 @@ import (
 // CounterspellService is the slice of *combat.Service the Counterspell prompt
 // poster needs. *combat.Service satisfies it structurally; tests inject a mock.
 type CounterspellService interface {
-	TriggerCounterspell(ctx context.Context, declarationID uuid.UUID, enemySpellName string, enemyCastLevel int, isSubtle bool) (combat.CounterspellPrompt, error)
+	TriggerCounterspell(ctx context.Context, declarationID uuid.UUID, enemySpellName string, enemyCastLevel int, isSubtle bool, enemyCasterID uuid.UUID) (combat.CounterspellPrompt, error)
 	ResolveCounterspell(ctx context.Context, declarationID uuid.UUID, slotLevel int) (combat.CounterspellResult, error)
 	PassCounterspell(ctx context.Context, declarationID uuid.UUID) (combat.CounterspellResult, error)
 	ForfeitCounterspell(ctx context.Context, declarationID uuid.UUID) (combat.CounterspellResult, error)
@@ -44,6 +44,7 @@ type CounterspellPromptArgs struct {
 	DeclarationID  uuid.UUID
 	EnemySpellName string
 	EnemyCastLevel int
+	EnemyCasterID  uuid.UUID // SR-046: combatant whose spell is being counterspelled
 	IsSubtle       bool
 	ChannelID      string
 }
@@ -52,7 +53,7 @@ type CounterspellPromptArgs struct {
 // buttons + [Pass] are posted to ChannelID. On ErrSubtleSpellNotCounterspellable
 // a one-line info message is posted instead. Any other error bubbles up.
 func (p *CounterspellPromptPoster) Trigger(ctx context.Context, args CounterspellPromptArgs) error {
-	prompt, err := p.svc.TriggerCounterspell(ctx, args.DeclarationID, args.EnemySpellName, args.EnemyCastLevel, args.IsSubtle)
+	prompt, err := p.svc.TriggerCounterspell(ctx, args.DeclarationID, args.EnemySpellName, args.EnemyCastLevel, args.IsSubtle, args.EnemyCasterID)
 	if errors.Is(err, combat.ErrSubtleSpellNotCounterspellable) {
 		_, _ = p.session.ChannelMessageSend(args.ChannelID, fmt.Sprintf("\U0001f910 %s was cast subtly — Counterspell cannot trigger.", args.EnemySpellName))
 		return nil
