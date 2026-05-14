@@ -118,6 +118,7 @@ var MutableTables = []string{
 	"pending_actions",
 	"pending_checks",
 	"pending_asi",
+	"pending_ddb_imports",
 	"loot_pool_items",
 	"loot_pools",
 	"shop_items",

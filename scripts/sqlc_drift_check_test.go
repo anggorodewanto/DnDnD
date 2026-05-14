@@ -126,6 +126,26 @@ func TestSqlcDriftCheck_FailsWhenDirty(t *testing.T) {
 	}
 }
 
+func TestSqlcDriftCheck_PassesWhenAlreadyDirtyButUnchanged(t *testing.T) {
+	const target = "internal/refdata"
+	const oldContent = "// generated v1\npackage refdata\n"
+	const newContent = "// generated v2\npackage refdata\n"
+	workdir := initRepo(t, target, oldContent)
+	path := filepath.Join(workdir, target, "queries.sql.go")
+	if err := os.WriteFile(path, []byte(newContent), 0o600); err != nil {
+		t.Fatalf("write dirty generated file: %v", err)
+	}
+
+	sqlc := fakeSqlc(t, target, newContent)
+	out, err := runDriftCheck(t, workdir, sqlc, target)
+	if err != nil {
+		t.Fatalf("expected unchanged dirty tree to pass, got err %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "OK") {
+		t.Errorf("expected OK marker, got: %s", out)
+	}
+}
+
 func TestSqlcDriftCheck_FailsWhenSqlcMissing(t *testing.T) {
 	const target = "internal/refdata"
 	workdir := initRepo(t, target, "// generated\npackage refdata\n")

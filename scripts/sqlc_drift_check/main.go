@@ -17,13 +17,15 @@
 package main
 
 import (
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"strings"
+	"path/filepath"
+	"sort"
 )
 
 func main() {
@@ -59,17 +61,22 @@ func run(args []string, stdout, stderr io.Writer) error {
 		sqlcBin = "sqlc"
 	}
 
+	before, err := fileFingerprints(*target)
+	if err != nil {
+		return fmt.Errorf("snapshotting %s before sqlc generate: %w", *target, err)
+	}
+
 	if err := runSqlc(sqlcBin, stdout, stderr); err != nil {
 		return fmt.Errorf("running %s generate: %w", sqlcBin, err)
 	}
 
-	dirty, err := dirtyPaths(*target)
+	changed, err := changedPaths(*target, before)
 	if err != nil {
-		return fmt.Errorf("checking git status for %s: %w", *target, err)
+		return fmt.Errorf("checking generated files for %s: %w", *target, err)
 	}
-	if len(dirty) > 0 {
+	if len(changed) > 0 {
 		fmt.Fprintf(stdout, "DIRTY: sqlc drift detected under %s:\n", *target)
-		for _, p := range dirty {
+		for _, p := range changed {
 			fmt.Fprintf(stdout, "  %s\n", p)
 		}
 		fmt.Fprintln(stdout, "Run `sqlc generate` and commit the result.")
@@ -86,27 +93,51 @@ func runSqlc(bin string, stdout, stderr io.Writer) error {
 	return cmd.Run()
 }
 
-// dirtyPaths returns the list of paths under target that git reports as
-// modified, deleted, added, or untracked. We use porcelain v1 because its
-// format is documented as stable and trivial to parse: each line is
-// "XY path" where XY are 2 status chars.
-func dirtyPaths(target string) ([]string, error) {
-	cmd := exec.Command("git", "status", "--porcelain", "--", target)
-	out, err := cmd.Output()
+type fileFingerprint struct {
+	sum [sha256.Size]byte
+}
+
+func fileFingerprints(target string) (map[string]fileFingerprint, error) {
+	files := make(map[string]fileFingerprint)
+	err := filepath.WalkDir(target, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files[filepath.ToSlash(path)] = fileFingerprint{sum: sha256.Sum256(body)}
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) {
+		return files, nil
+	}
+	return files, err
+}
+
+func changedPaths(target string, before map[string]fileFingerprint) ([]string, error) {
+	after, err := fileFingerprints(target)
 	if err != nil {
 		return nil, err
 	}
-	body := strings.TrimRight(string(out), "\n")
-	if body == "" {
-		return nil, nil
-	}
-	lines := strings.Split(body, "\n")
-	paths := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if len(line) < 4 {
-			continue
+	seen := make(map[string]bool, len(after))
+	paths := make([]string, 0)
+	for path, afterFile := range after {
+		seen[path] = true
+		beforeFile, ok := before[path]
+		if !ok || beforeFile != afterFile {
+			paths = append(paths, path)
 		}
-		paths = append(paths, strings.TrimSpace(line[3:]))
 	}
+	for path := range before {
+		if !seen[path] {
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
 	return paths, nil
 }

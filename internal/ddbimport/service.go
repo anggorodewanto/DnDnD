@@ -19,6 +19,9 @@ type CharacterStore interface {
 	CreateCharacter(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error)
 	GetCharacterByDdbURL(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error)
 	UpdateCharacterFull(ctx context.Context, params refdata.UpdateCharacterFullParams) (refdata.Character, error)
+	UpsertPendingDDBImport(ctx context.Context, params refdata.UpsertPendingDDBImportParams) error
+	GetPendingDDBImport(ctx context.Context, id uuid.UUID) (refdata.PendingDdbImport, error)
+	DeletePendingDDBImport(ctx context.Context, id uuid.UUID) error
 }
 
 // ImportResult contains the result of an import operation.
@@ -42,9 +45,9 @@ type ImportResult struct {
 // import id is unknown, has already been consumed, or has expired.
 var ErrPendingImportNotFound = errors.New("pending import not found or expired")
 
-// pendingImportTTL is how long a staged re-sync stays in the in-memory map
-// before ApproveImport refuses to apply it. 24h matches the
-// portal-token TTL and gives a DM a full day to review on Discord.
+// pendingImportTTL is how long a staged re-sync stays pending before
+// ApproveImport refuses to apply it. 24h matches the portal-token TTL and
+// gives a DM a full day to review on Discord.
 const pendingImportTTL = 24 * time.Hour
 
 // pendingImport is an internal record holding the UpdateCharacterFull params
@@ -57,16 +60,10 @@ type pendingImport struct {
 // Service orchestrates the DDB import flow.
 //
 // Re-syncs of an existing DDB character are not applied to the DB inside
-// Import: they are staged in an in-memory map keyed by a freshly-minted
-// import id (returned in ImportResult.PendingImportID). The caller is
-// expected to surface that id to the DM (#dm-queue) and only call
-// ApproveImport once the DM has explicitly approved the change. Pending
-// entries time out after pendingImportTTL.
-//
-// Trade-off (recorded for follow-up): the pending map is in-process memory.
-// Bot restarts drop staged imports; the player can simply re-run /import to
-// regenerate the diff. A pending_imports DB table would be required only if
-// per-restart durability becomes a real requirement.
+// Import: they are staged as pending rows keyed by a freshly-minted import id
+// (returned in ImportResult.PendingImportID). The caller is expected to surface
+// that id to the DM (#dm-queue) and only call ApproveImport once the DM has
+// explicitly approved the change. Pending entries time out after pendingImportTTL.
 type Service struct {
 	client Client
 	store  CharacterStore
@@ -100,7 +97,7 @@ func NewServiceWithClock(client Client, store CharacterStore, now func() time.Ti
 //   - on a fresh import: create the character row immediately (no DM gate;
 //     a brand-new row is harmless to "preview").
 //   - on a re-sync of an existing DDB character: stage the
-//     UpdateCharacterFullParams in memory and return a PendingImportID. The
+//     UpdateCharacterFullParams and return a PendingImportID. The
 //     DB row is NOT mutated until ApproveImport is called.
 func (s *Service) Import(ctx context.Context, campaignID uuid.UUID, ddbURL string) (*ImportResult, error) {
 	charID, err := ParseCharacterURL(ddbURL)
@@ -162,10 +159,24 @@ func (s *Service) Import(ctx context.Context, campaignID uuid.UUID, ddbURL strin
 
 	updateParams := buildUpdateParams(existing.ID, params)
 	importID := uuid.New()
+	created := s.now()
+	paramsJSON, err := json.Marshal(updateParams)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling pending import: %w", err)
+	}
+	if err := s.store.UpsertPendingDDBImport(ctx, refdata.UpsertPendingDDBImportParams{
+		ID:          importID,
+		CharacterID: existing.ID,
+		ParamsJson:  paramsJSON,
+		CreatedAt:   created,
+	}); err != nil {
+		return nil, fmt.Errorf("persisting pending import: %w", err)
+	}
+
 	s.mu.Lock()
 	s.pending[importID] = pendingImport{
 		params:  updateParams,
-		created: s.now(),
+		created: created,
 	}
 	s.mu.Unlock()
 	result.PendingImportID = importID
@@ -177,19 +188,20 @@ func (s *Service) Import(ctx context.Context, campaignID uuid.UUID, ddbURL strin
 // calls UpdateCharacterFull for re-syncs. On success the pending entry is
 // consumed (a second Approve with the same id returns ErrPendingImportNotFound).
 func (s *Service) ApproveImport(ctx context.Context, importID uuid.UUID) (refdata.Character, error) {
-	s.mu.Lock()
-	entry, ok := s.pending[importID]
+	entry, ok, err := s.loadPendingImport(ctx, importID)
+	if err != nil {
+		return refdata.Character{}, err
+	}
 	if !ok {
-		s.mu.Unlock()
 		return refdata.Character{}, ErrPendingImportNotFound
 	}
-	if s.now().Sub(entry.created) > pendingImportTTL {
-		delete(s.pending, importID)
-		s.mu.Unlock()
-		return refdata.Character{}, ErrPendingImportNotFound
-	}
+
+	s.mu.Lock()
 	delete(s.pending, importID)
 	s.mu.Unlock()
+	if err := s.store.DeletePendingDDBImport(ctx, importID); err != nil {
+		return refdata.Character{}, fmt.Errorf("deleting pending import: %w", err)
+	}
 
 	updated, err := s.store.UpdateCharacterFull(ctx, entry.params)
 	if err != nil {
@@ -204,6 +216,41 @@ func (s *Service) DiscardImport(importID uuid.UUID) {
 	s.mu.Lock()
 	delete(s.pending, importID)
 	s.mu.Unlock()
+	_ = s.store.DeletePendingDDBImport(context.Background(), importID)
+}
+
+func (s *Service) loadPendingImport(ctx context.Context, importID uuid.UUID) (pendingImport, bool, error) {
+	s.mu.Lock()
+	entry, ok := s.pending[importID]
+	if ok {
+		if s.now().Sub(entry.created) > pendingImportTTL {
+			delete(s.pending, importID)
+			s.mu.Unlock()
+			_ = s.store.DeletePendingDDBImport(ctx, importID)
+			return pendingImport{}, false, nil
+		}
+		s.mu.Unlock()
+		return entry, true, nil
+	}
+	s.mu.Unlock()
+
+	row, err := s.store.GetPendingDDBImport(ctx, importID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return pendingImport{}, false, nil
+	}
+	if err != nil {
+		return pendingImport{}, false, fmt.Errorf("loading pending import: %w", err)
+	}
+	if s.now().Sub(row.CreatedAt) > pendingImportTTL {
+		_ = s.store.DeletePendingDDBImport(ctx, importID)
+		return pendingImport{}, false, nil
+	}
+
+	var params refdata.UpdateCharacterFullParams
+	if err := json.Unmarshal(row.ParamsJson, &params); err != nil {
+		return pendingImport{}, false, fmt.Errorf("unmarshaling pending import: %w", err)
+	}
+	return pendingImport{params: params, created: row.CreatedAt}, true, nil
 }
 
 func marshalField(name string, v interface{}) ([]byte, error) {

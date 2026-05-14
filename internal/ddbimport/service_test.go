@@ -29,6 +29,7 @@ type mockCharStore struct {
 	CreateFunc      func(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error)
 	GetByDdbURLFunc func(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error)
 	UpdateFunc      func(ctx context.Context, params refdata.UpdateCharacterFullParams) (refdata.Character, error)
+	pending         map[uuid.UUID]refdata.PendingDdbImport
 }
 
 func (m *mockCharStore) CreateCharacter(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error) {
@@ -47,6 +48,33 @@ func (m *mockCharStore) UpdateCharacterFull(ctx context.Context, params refdata.
 		return m.UpdateFunc(ctx, params)
 	}
 	return refdata.Character{}, nil
+}
+
+func (m *mockCharStore) UpsertPendingDDBImport(ctx context.Context, params refdata.UpsertPendingDDBImportParams) error {
+	if m.pending == nil {
+		m.pending = make(map[uuid.UUID]refdata.PendingDdbImport)
+	}
+	m.pending[params.ID] = refdata.PendingDdbImport{
+		ID:          params.ID,
+		CharacterID: params.CharacterID,
+		ParamsJson:  params.ParamsJson,
+		CreatedAt:   params.CreatedAt,
+		UpdatedAt:   params.CreatedAt,
+	}
+	return nil
+}
+
+func (m *mockCharStore) GetPendingDDBImport(ctx context.Context, id uuid.UUID) (refdata.PendingDdbImport, error) {
+	row, ok := m.pending[id]
+	if !ok {
+		return refdata.PendingDdbImport{}, sql.ErrNoRows
+	}
+	return row, nil
+}
+
+func (m *mockCharStore) DeletePendingDDBImport(ctx context.Context, id uuid.UUID) error {
+	delete(m.pending, id)
+	return nil
 }
 
 func minimalDDBJSON() []byte {
@@ -362,6 +390,58 @@ func TestService_ApproveImport_Success(t *testing.T) {
 	approved, err := svc.ApproveImport(context.Background(), result.PendingImportID)
 	if err != nil {
 		t.Fatalf("ApproveImport: %v", err)
+	}
+	if updateCalls != 1 {
+		t.Errorf("UpdateCharacterFull should be called exactly once; got %d", updateCalls)
+	}
+	if approved.ID != existingID {
+		t.Errorf("approved.ID = %s, want %s", approved.ID, existingID)
+	}
+}
+
+func TestService_ApproveImport_PendingSurvivesRestart(t *testing.T) {
+	campaignID := uuid.New()
+	existingID := uuid.New()
+	ddbURL := "https://www.dndbeyond.com/characters/12345"
+
+	client := &mockClient{
+		FetchFunc: func(ctx context.Context, id string) ([]byte, error) { return minimalDDBJSON(), nil },
+	}
+
+	scores, _ := json.Marshal(character.AbilityScores{STR: 14, DEX: 14, CON: 15, INT: 10, WIS: 12, CHA: 8})
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "Fighter", Level: 2}})
+
+	updateCalls := 0
+	store := &mockCharStore{
+		GetByDdbURLFunc: func(ctx context.Context, params refdata.GetCharacterByDdbURLParams) (refdata.Character, error) {
+			return refdata.Character{
+				ID: existingID, CampaignID: campaignID, Name: "Old Name", Race: "Human",
+				Level: 2, AbilityScores: scores, Classes: classes,
+				DdbUrl: sql.NullString{String: ddbURL, Valid: true},
+			}, nil
+		},
+		UpdateFunc: func(ctx context.Context, params refdata.UpdateCharacterFullParams) (refdata.Character, error) {
+			updateCalls++
+			if params.ID != existingID {
+				t.Errorf("update called with wrong ID: %s", params.ID)
+			}
+			return refdata.Character{ID: existingID, Name: params.Name}, nil
+		},
+	}
+
+	svc := NewService(client, store)
+	result, err := svc.Import(context.Background(), campaignID, ddbURL)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if result.PendingImportID == uuid.Nil {
+		t.Fatal("expected pending import id")
+	}
+
+	restarted := NewService(client, store)
+	approved, err := restarted.ApproveImport(context.Background(), result.PendingImportID)
+	if err != nil {
+		t.Fatalf("ApproveImport after restart: %v", err)
 	}
 	if updateCalls != 1 {
 		t.Errorf("UpdateCharacterFull should be called exactly once; got %d", updateCalls)

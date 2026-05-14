@@ -419,6 +419,14 @@ type PendingCheck struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
+type PendingDdbImport struct {
+	ID          uuid.UUID       `json:"id"`
+	CharacterID uuid.UUID       `json:"character_id"`
+	ParamsJson  json.RawMessage `json:"params_json"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
 type PendingSafe struct {
 	ID          uuid.UUID     `json:"id"`
 	EncounterID uuid.UUID     `json:"encounter_id"`
