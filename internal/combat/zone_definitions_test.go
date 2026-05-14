@@ -76,7 +76,7 @@ func TestZoneDefinition_StinkingCloudHasEnterTrigger(t *testing.T) {
 }
 
 func TestKnownZoneDefinitions_Count(t *testing.T) {
-	assert.Len(t, KnownZoneDefinitions, 8)
+	assert.Len(t, KnownZoneDefinitions, 11)
 }
 
 // E-67-silence-zone-type: Silence definition's ZoneType must match the value

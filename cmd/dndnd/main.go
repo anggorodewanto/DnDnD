@@ -299,6 +299,7 @@ type dmOnlyAPIDeps struct {
 	workspaceStore           combat.WorkspaceStore
 	db                       combat.TxBeginner
 	combatLogPoster          combat.CombatLogPoster
+	mapRegenerator           *mapRegeneratorAdapter // SR-068: DM map PNG endpoint
 }
 
 // mountDMOnlyAPIs registers every DM-mutation route group behind dmAuthMw so
@@ -341,6 +342,11 @@ func mountDMOnlyAPIs(router chi.Router, deps dmOnlyAPIDeps, dmAuthMw func(http.H
 		}
 		if deps.combatSvc != nil {
 			mountCombatDashboardRoutes(r, deps.combatSvc, deps.workspaceStore, deps.db, deps.combatLogPoster)
+		}
+		// SR-068: DM-facing map PNG endpoint so the dashboard shows the
+		// unfogged map (DMSeesAll=true).
+		if deps.mapRegenerator != nil {
+			r.Get("/api/combat/{encounterID}/map.png", handleDMMapPNG(deps.mapRegenerator))
 		}
 	})
 }
@@ -932,6 +938,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			workspaceStore:           workspaceStoreAdapter{queries},
 			db:                       db,
 			combatLogPoster:          combatLogPoster,
+			mapRegenerator:           newMapRegeneratorAdapter(queries),
 		}, dmAuthMw)
 
 		dmQueueDashHandler := dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, dmAuthMw)

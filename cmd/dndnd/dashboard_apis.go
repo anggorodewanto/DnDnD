@@ -436,3 +436,25 @@ func (l *campaignChannelLookup) GetChannelIDsForCampaign(ctx context.Context, ca
 	}
 	return settings.ChannelIDs, nil
 }
+
+// handleDMMapPNG returns an http.HandlerFunc that renders the encounter map
+// with DMSeesAll=true (unfogged) and serves it as image/png. SR-068: gives
+// the DM dashboard a production caller for RegenerateMapForDM.
+func handleDMMapPNG(regen *mapRegeneratorAdapter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		idStr := chi.URLParam(r, "encounterID")
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			http.Error(w, "invalid encounter id", http.StatusBadRequest)
+			return
+		}
+		png, err := regen.RegenerateMapForDM(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(png)
+	}
+}

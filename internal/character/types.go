@@ -105,6 +105,7 @@ type InventoryItem struct {
 	Identified            *bool  `json:"identified,omitempty"` // nil or true = identified; false = unidentified
 	Source                string `json:"source,omitempty"`
 	Homebrew              bool   `json:"homebrew,omitempty"`
+	IsLit                 bool   `json:"is_lit,omitempty"` // SR-068: torch/lantern currently lit (emits light on map)
 }
 
 // ParseInventoryItems unmarshals a character's JSONB inventory field.

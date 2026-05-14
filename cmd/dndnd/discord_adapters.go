@@ -499,13 +499,10 @@ func (a *mapRegeneratorAdapter) renderInternal(ctx context.Context, encounterID 
 	// `len(md.VisionSources) > 0` guard below stays false and the map is
 	// rendered with no fog at all.
 	//
-	// LightSources intentionally stays empty: there is no production data
-	// source for "lit torches" or persisted Light/Daylight/Continual Flame
-	// spell positions today. Wiring those is tracked separately under
-	// SR-008 follow-up (needs a new `light_emitters` service that knows
-	// which inventory torches are currently lit and which Light cantrips
-	// are anchored to which combatant).
+	// SR-068: LightSources populated from lit inventory items (torch/lantern)
+	// and active light-emitting zones (Light/Daylight/Continual Flame).
 	md.VisionSources = buildVisionSources(ctx, a.queries, combatants)
+	md.LightSources = buildLightSources(ctx, a.queries, combatants, zones)
 	md.DMSeesAll = dmView
 
 	// med-27: pre-compute the FoW (so we can layer the explored history
@@ -833,6 +830,100 @@ func buildMagicalDarknessTiles(zones []refdata.EncounterZone) []renderer.GridPos
 		}
 	}
 	return tiles
+}
+
+// buildLightSources produces renderer.LightSource entries from two data sources:
+//  1. Lit inventory items (torch = 4 tiles/20ft, lantern = 6 tiles/30ft) on PC
+//     combatants whose character has is_lit items.
+//  2. Active light-emitting encounter zones (Light cantrip = 4 tiles/20ft,
+//     Daylight = 12 tiles/60ft, Continual Flame = 4 tiles/20ft) identified by
+//     zone_type == "light".
+//
+// SR-068: without this, LightSources stays empty and non-darkvision PCs see
+// 60ft everywhere (the defaultBaseSightTiles fallback), making darkness
+// encounters feel uniformly lit.
+func buildLightSources(ctx context.Context, q buildVisionSourcesQueries, combatants []refdata.Combatant, zones []refdata.EncounterZone) []renderer.LightSource {
+	var out []renderer.LightSource
+
+	// Source 1: lit inventory items on living PC combatants.
+	for _, c := range combatants {
+		if !c.IsAlive || c.IsNpc || !c.CharacterID.Valid || q == nil {
+			continue
+		}
+		col, row, err := renderer.ParseCoordinate(fmt.Sprintf("%s%d", c.PositionCol, c.PositionRow))
+		if err != nil {
+			continue
+		}
+		ch, err := q.GetCharacter(ctx, c.CharacterID.UUID)
+		if err != nil || !ch.Inventory.Valid {
+			continue
+		}
+		out = append(out, lightSourcesFromInventory(ch.Inventory.RawMessage, col, row)...)
+	}
+
+	// Source 2: active light-emitting zones.
+	for _, z := range zones {
+		if z.ZoneType != "light" {
+			continue
+		}
+		col, row, err := renderer.ParseCoordinate(fmt.Sprintf("%s%d", z.OriginCol, z.OriginRow))
+		if err != nil {
+			continue
+		}
+		out = append(out, renderer.LightSource{
+			Col:        col,
+			Row:        row,
+			RangeTiles: lightRadiusForSpell(z.SourceSpell),
+		})
+	}
+
+	return out
+}
+
+// lightSourcesFromInventory scans a character's inventory JSON for items
+// with is_lit=true and returns a LightSource at the given position for each.
+func lightSourcesFromInventory(raw json.RawMessage, col, row int) []renderer.LightSource {
+	var items []struct {
+		Name  string `json:"name"`
+		IsLit bool   `json:"is_lit"`
+	}
+	if json.Unmarshal(raw, &items) != nil {
+		return nil
+	}
+	var out []renderer.LightSource
+	for _, item := range items {
+		if !item.IsLit {
+			continue
+		}
+		out = append(out, renderer.LightSource{
+			Col:        col,
+			Row:        row,
+			RangeTiles: lightRadiusForItem(item.Name),
+		})
+	}
+	return out
+}
+
+// lightRadiusForItem returns the bright-light radius in tiles for a lit item.
+func lightRadiusForItem(name string) int {
+	lower := strings.ToLower(name)
+	switch {
+	case strings.Contains(lower, "lantern"):
+		return 6 // 30ft
+	default:
+		return 4 // 20ft (torch and other light sources)
+	}
+}
+
+// lightRadiusForSpell returns the bright-light radius in tiles for a
+// light-emitting spell zone.
+func lightRadiusForSpell(spellName string) int {
+	switch strings.ToLower(spellName) {
+	case "daylight":
+		return 12 // 60ft
+	default:
+		return 4 // 20ft (Light cantrip, Continual Flame)
+	}
 }
 
 // combatantsToRendererForm projects refdata.Combatant rows into the slimmer

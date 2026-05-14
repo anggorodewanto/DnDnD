@@ -120,6 +120,31 @@ var KnownZoneDefinitions = map[string]ZoneDefinition{
 			{Trigger: "enter", Effect: "save"},
 		},
 	},
+	// SR-068: light-emitting spells feed LightSources in the FoW pipeline.
+	"light": {
+		SpellName:             "Light",
+		OverlayColor:          "#FFFFAA",
+		MarkerIcon:            "\u2600",
+		Shape:                 "circle",
+		ZoneType:              "light",
+		RequiresConcentration: false,
+	},
+	"daylight": {
+		SpellName:             "Daylight",
+		OverlayColor:          "#FFFFDD",
+		MarkerIcon:            "\u2600",
+		Shape:                 "circle",
+		ZoneType:              "light",
+		RequiresConcentration: false,
+	},
+	"continual flame": {
+		SpellName:             "Continual Flame",
+		OverlayColor:          "#FFCC66",
+		MarkerIcon:            "\U0001f525",
+		Shape:                 "circle",
+		ZoneType:              "light",
+		RequiresConcentration: false,
+	},
 }
 
 // LookupZoneDefinition returns the zone definition for a spell name (case-insensitive).
