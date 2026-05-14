@@ -282,6 +282,10 @@ func (s *Service) resetDyingState(ctx context.Context, combatantID uuid.UUID) (r
 		return refdata.Combatant{}, fmt.Errorf("resetting death saves: %w", err)
 	}
 	for _, cond := range ConditionsForDying() {
+		// Spec: "Status → conscious, still prone" — prone persists after heal-from-0.
+		if cond.Condition == "prone" {
+			continue
+		}
 		if !HasCondition(updated.Conditions, cond.Condition) {
 			continue
 		}

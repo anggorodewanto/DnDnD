@@ -317,3 +317,43 @@ func TestLayOnHands_HealsFromZero_ResetsDeathSaves(t *testing.T) {
 	assert.Equal(t, 0, last.Failures, "failures must reset on heal-from-0")
 	assert.Equal(t, 0, last.Successes, "successes must reset on heal-from-0")
 }
+
+// --- SR-051: Heal-from-0 must leave prone condition intact (spec rule) ---
+
+func TestResetDyingState_LeavesProne(t *testing.T) {
+	combatantID := uuid.New()
+
+	conds := json.RawMessage(`[{"condition":"unconscious","duration_rounds":0},{"condition":"prone","duration_rounds":0}]`)
+
+	target := &refdata.Combatant{
+		ID:         combatantID,
+		HpCurrent:  0,
+		HpMax:      20,
+		IsAlive:    true,
+		IsNpc:      false,
+		Conditions: conds,
+		DeathSaves: nullRaw(`{"successes":1,"failures":2}`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return *target, nil
+	}
+	ms.updateCombatantDeathSavesFn = func(ctx context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error) {
+		target.DeathSaves = arg.DeathSaves
+		return *target, nil
+	}
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		target.Conditions = arg.Conditions
+		return *target, nil
+	}
+
+	svc := NewService(ms)
+	updated, err := svc.MaybeResetDeathSavesOnHeal(context.Background(), *target, 5)
+	require.NoError(t, err)
+
+	// Unconscious must be removed.
+	assert.False(t, HasCondition(updated.Conditions, "unconscious"), "unconscious must be removed on heal-from-0")
+	// Prone must remain (spec: "Status → conscious, still prone").
+	assert.True(t, HasCondition(updated.Conditions, "prone"), "prone must remain after heal-from-0 (spec rule)")
+}

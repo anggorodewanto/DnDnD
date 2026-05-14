@@ -1454,10 +1454,10 @@ func TestAutoResolveTurn_DyingCombatant_Nat20_ResetsDeathSavesAndDyingConditions
 	assert.Equal(t, 0, persistedDS.Successes, "successes must reset to 0")
 	assert.Equal(t, 0, persistedDS.Failures, "failures must reset to 0")
 
-	// Dying conditions (unconscious + prone) must be removed.
+	// Dying conditions: unconscious must be removed, prone must remain (spec: "still prone").
 	require.NotNil(t, capturedConds, "conditions must be persisted on Nat-20")
 	assert.False(t, HasCondition(capturedConds, "unconscious"), "unconscious must be removed")
-	assert.False(t, HasCondition(capturedConds, "prone"), "prone must be removed")
+	assert.True(t, HasCondition(capturedConds, "prone"), "prone must remain after Nat-20 heal (spec rule)")
 }
 
 

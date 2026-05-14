@@ -154,3 +154,5 @@ bootstrap complete: 63 items queued
 2026-05-14T18:52:00+07:00 orchestrator checkpoint after SR-048: go test ./... passed (except pre-existing TestIntegration_MigrateDown); cover-check thresholds met
 2026-05-14T18:55:00+07:00 SR-049 implementer done: needs_review
 2026-05-14T18:56:00+07:00 SR-049 reviewer: approved, committed fc63cbf
+2026-05-14T18:58:00+07:00 SR-050 implementer done: needs_review
+2026-05-14T18:59:00+07:00 SR-050 reviewer: approved, committed c2290a5

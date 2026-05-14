@@ -404,6 +404,10 @@ func (t *TurnTimer) resetDyingStateAfterNat20(ctx context.Context, combatant ref
 	}
 	conds := combatant.Conditions
 	for _, cond := range ConditionsForDying() {
+		// Spec: "Nat 20 → regain 1 HP, conscious, still prone."
+		if cond.Condition == "prone" {
+			continue
+		}
 		if !HasCondition(conds, cond.Condition) {
 			continue
 		}
