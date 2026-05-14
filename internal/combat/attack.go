@@ -1695,5 +1695,12 @@ func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd
 	// attack roll / damage. collectMagicItemFeatures degrades to nil on bad
 	// inventory JSON rather than failing the whole attack.
 	input.Features = BuildFeatureDefinitions(classes, feats, collectMagicItemFeatures(*char))
+
+	// SR-058: Sacred Weapon condition → inject CHA mod as modify_attack_roll.
+	if HasCondition(cmd.Attacker.Conditions, "sacred_weapon") {
+		chaMod := max(AbilityModifier(scores.Cha), 1)
+		input.Features = append(input.Features, SacredWeaponFeature(chaMod))
+	}
+
 	return nil
 }

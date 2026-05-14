@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 
@@ -574,6 +575,98 @@ func TestNearestAllyDistanceFt_DeadOrSelfExcluded(t *testing.T) {
 
 	got := nearestAllyDistanceFt(attacker, target, []refdata.Combatant{attacker, target, deadAlly})
 	assert.Greater(t, got, 1000, "dead allies must not count")
+}
+
+// TestServiceAttack_SacredWeapon_AddsCHAModToAttackRoll proves that when
+// the attacker has the sacred_weapon condition, the CHA modifier is added
+// to the attack roll via the Feature Effect System (SR-058).
+//
+// Setup: Paladin with STR 16 (+3), CHA 16 (+3), prof +2, longsword.
+// Attack modifier = STR(+3) + prof(+2) + Sacred Weapon CHA(+3) = +8.
+// With a d20 roll of 10, total = 18, which hits AC 15.
+// Without Sacred Weapon the total would be 15 (barely hits AC 15).
+// We verify the hit happens and the D20Roll.Total includes the +3 bonus.
+func TestServiceAttack_SacredWeapon_AddsCHAModToAttackRoll(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	encounterID := uuid.New()
+
+	classes := []CharacterClass{{Class: "Paladin", Level: 3}}
+	// No mechanical_effect needed for sacred_weapon — it's condition-driven.
+	char := refdata.Character{
+		ID:               charID,
+		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
+		ProficiencyBonus: 2,
+		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
+		EquippedMainHand: sql.NullString{String: "longsword", Valid: true},
+	}
+	_ = classes
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(_ context.Context, _ string) (refdata.Weapon, error) {
+		return makeLongsword(), nil
+	}
+	ms.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+
+	svc := NewService(ms)
+
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Oath",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[{"condition":"sacred_weapon","duration_rounds":10,"started_round":1,"source_combatant_id":"` + attackerID.String() + `","expires_on":"end_of_turn"}]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin",
+		PositionCol: "B",
+		PositionRow: 1,
+		Ac:          18,
+		IsAlive:     true,
+		IsNpc:       true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{
+		ID:               uuid.New(),
+		EncounterID:      encounterID,
+		CombatantID:      attackerID,
+		AttacksRemaining: 1,
+	}
+
+	// d20 roll of 10: base attack mod = STR(+3) + prof(+2) = +5 → total 15.
+	// With Sacred Weapon CHA(+3): total = 10 + 5 + 3 = 18, hits AC 18.
+	// Without Sacred Weapon: total = 10 + 5 = 15, misses AC 18.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 10
+		}
+		return 5
+	})
+
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: attacker,
+		Target:   target,
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit,
+		"Sacred Weapon should add CHA mod (+3) to attack roll, making total 18 vs AC 18")
+	assert.Equal(t, 18, result.D20Roll.Total,
+		"attack roll total should include Sacred Weapon CHA bonus: 10 + STR(3) + prof(2) + CHA(3) = 18")
 }
 
 // _ ensures pqtype is referenced (helper imports stay clean).

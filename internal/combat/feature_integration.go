@@ -155,6 +155,22 @@ func ApplyUncannyDodge(damage int) int {
 	return damage / 2
 }
 
+// SacredWeaponFeature returns a FeatureDefinition for the Sacred Weapon
+// Channel Divinity option. Adds CHA modifier to all weapon attack rolls.
+func SacredWeaponFeature(chaMod int) FeatureDefinition {
+	return FeatureDefinition{
+		Name:   "Sacred Weapon",
+		Source: "channel_divinity",
+		Effects: []Effect{
+			{
+				Type:     EffectModifyAttackRoll,
+				Trigger:  TriggerOnAttackRoll,
+				Modifier: chaMod,
+			},
+		},
+	}
+}
+
 // ArcheryFeature returns the FeatureDefinition for the Archery fighting style.
 // +2 to ranged attack rolls.
 func ArcheryFeature() FeatureDefinition {
