@@ -16,6 +16,7 @@ import (
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/gamemap"
 	"github.com/ab/dndnd/internal/homebrew"
+	"github.com/ab/dndnd/internal/levelup"
 	"github.com/ab/dndnd/internal/messageplayer"
 	"github.com/ab/dndnd/internal/narration"
 	"github.com/ab/dndnd/internal/statblocklibrary"
@@ -210,4 +211,82 @@ func TestMountDMOnlyAPIs_NilFieldsAreSkipped(t *testing.T) {
 	require.NotPanics(t, func() {
 		mountDMOnlyAPIs(r, dmOnlyAPIDeps{}, func(h http.Handler) http.Handler { return h })
 	})
+}
+
+// TestLevelUpRoutes_NonDMReceives403 proves that /api/levelup/* and
+// /dashboard/levelup are gated by dmAuthMw (SR-063). The levelup handler
+// is mounted via router.Group with dmAuthMw in main.go, separate from
+// mountDMOnlyAPIs because it depends on services constructed later.
+func TestLevelUpRoutes_NonDMReceives403(t *testing.T) {
+	denyAll := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, `{"error":"forbidden: DM only"}`, http.StatusForbidden)
+		})
+	}
+
+	router := chi.NewRouter()
+	h := levelup.NewHandler(levelup.NewService(nil, nil, nil), nil)
+	router.Group(func(r chi.Router) {
+		r.Use(denyAll)
+		h.RegisterRoutes(r)
+	})
+
+	routes := []dmOnlyRoute{
+		{http.MethodPost, "/api/levelup/", `{}`},
+		{http.MethodPost, "/api/levelup/asi/approve", `{}`},
+		{http.MethodPost, "/api/levelup/asi/deny", `{}`},
+		{http.MethodPost, "/api/levelup/feat/apply", `{}`},
+		{http.MethodPost, "/api/levelup/feat/check", `{}`},
+		{http.MethodGet, "/dashboard/levelup", ""},
+	}
+
+	for _, rt := range routes {
+		t.Run(rt.method+"_"+rt.path, func(t *testing.T) {
+			req := httptest.NewRequest(rt.method, rt.path, strings.NewReader(rt.body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			assert.Equal(t, http.StatusForbidden, rec.Code,
+				"%s %s must be gated by dmAuthMw and return 403 for non-DM callers",
+				rt.method, rt.path)
+		})
+	}
+}
+
+// TestLevelUpRoutes_DMReachesHandler asserts that with passthrough middleware,
+// the levelup handler is reached (not blocked by middleware).
+func TestLevelUpRoutes_DMReachesHandler(t *testing.T) {
+	passthrough := func(next http.Handler) http.Handler { return next }
+
+	router := chi.NewRouter()
+	router.Use(recoverAsInternalError)
+	h := levelup.NewHandler(levelup.NewService(nil, nil, nil), nil)
+	router.Group(func(r chi.Router) {
+		r.Use(passthrough)
+		h.RegisterRoutes(r)
+	})
+
+	routes := []dmOnlyRoute{
+		{http.MethodPost, "/api/levelup/", `{}`},
+		{http.MethodPost, "/api/levelup/asi/approve", `{}`},
+		{http.MethodPost, "/api/levelup/asi/deny", `{}`},
+		{http.MethodPost, "/api/levelup/feat/apply", `{}`},
+		{http.MethodPost, "/api/levelup/feat/check", `{}`},
+		{http.MethodGet, "/dashboard/levelup", ""},
+	}
+
+	for _, rt := range routes {
+		t.Run(rt.method+"_"+rt.path, func(t *testing.T) {
+			req := httptest.NewRequest(rt.method, rt.path, strings.NewReader(rt.body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			assert.NotEqual(t, http.StatusForbidden, rec.Code,
+				"%s %s must NOT return 403 when middleware passes through",
+				rt.method, rt.path)
+			assert.NotEqual(t, http.StatusNotFound, rec.Code,
+				"%s %s must be registered (got 404)",
+				rt.method, rt.path)
+		})
+	}
 }

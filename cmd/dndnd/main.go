@@ -1141,7 +1141,12 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		if cardSvc != nil {
 			levelUpSvc.SetCardUpdater(cardSvc)
 		}
-		levelup.NewHandler(levelUpSvc, hub).RegisterRoutes(router)
+		// SR-063: gate levelup routes behind dmAuthMw (DM-only mutation).
+		levelupH := levelup.NewHandler(levelUpSvc, hub)
+		router.Group(func(r chi.Router) {
+			r.Use(dmAuthMw)
+			levelupH.RegisterRoutes(r)
+		})
 
 		// B-26b: lifecycle fan-outs on EndCombat. The three notifiers wire
 		// the post-combat hooks the original phase doc called for: a
