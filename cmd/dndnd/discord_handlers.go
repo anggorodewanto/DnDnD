@@ -476,6 +476,11 @@ func attachInventoryAndCharacterHandlers(
 		return
 	}
 
+	// Wire context-specific tips when combat service is available.
+	if deps.combatService != nil && deps.resolver != nil {
+		handlers.help.SetEncounterProvider(newCombatActionLookupAdapter(deps.combatService, deps.queries, deps.resolver))
+	}
+
 	handlers.inventory = discord.NewInventoryHandler(deps.session, checkCampProv, characterLookup)
 	handlers.equip = discord.NewEquipHandler(deps.session, checkCampProv, characterLookup, deps.queries)
 	// SR-004: route /equip through combat.Equip so 2H/shield validation,

@@ -1,10 +1,15 @@
 package discord
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
+
+	"github.com/ab/dndnd/internal/refdata"
 )
 
 // runHelpCommand invokes the help handler with the given topic (empty for no topic)
@@ -192,5 +197,124 @@ func TestHelpHandler_SpecTopics_MatchExactContent(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// mockHelpEncounterProvider implements HelpEncounterProvider for tests.
+type mockHelpEncounterProvider struct {
+	encounterID uuid.UUID
+	encounter   refdata.Encounter
+	err         error
+}
+
+func (m *mockHelpEncounterProvider) ActiveEncounterForUser(_ context.Context, _, _ string) (uuid.UUID, error) {
+	return m.encounterID, m.err
+}
+
+func (m *mockHelpEncounterProvider) GetEncounter(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+	return m.encounter, m.err
+}
+
+func TestHelpHandler_CombatContext_ShowsCombatTips(t *testing.T) {
+	mock := newTestMock()
+	var content string
+	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		content = resp.Data.Content
+		return nil
+	}
+
+	encID := uuid.New()
+	provider := &mockHelpEncounterProvider{
+		encounterID: encID,
+		encounter:   refdata.Encounter{ID: encID, Mode: "combat"},
+	}
+
+	handler := NewHelpHandler(mock)
+	handler.SetEncounterProvider(provider)
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Type:    discordgo.InteractionApplicationCommand,
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user-1"}},
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name:    "help",
+			Options: []*discordgo.ApplicationCommandInteractionDataOption{},
+		},
+	})
+
+	if !strings.Contains(content, "/move") {
+		t.Error("expected combat tips to mention /move")
+	}
+	if !strings.Contains(content, "Context Tips") {
+		t.Error("expected combat context tips section header")
+	}
+	if strings.Contains(content, "exploration") {
+		t.Error("should not contain exploration tips during combat")
+	}
+}
+
+func TestHelpHandler_ExplorationContext_ShowsExplorationTips(t *testing.T) {
+	mock := newTestMock()
+	var content string
+	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		content = resp.Data.Content
+		return nil
+	}
+
+	encID := uuid.New()
+	provider := &mockHelpEncounterProvider{
+		encounterID: encID,
+		encounter:   refdata.Encounter{ID: encID, Mode: "exploration"},
+	}
+
+	handler := NewHelpHandler(mock)
+	handler.SetEncounterProvider(provider)
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Type:    discordgo.InteractionApplicationCommand,
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user-1"}},
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name:    "help",
+			Options: []*discordgo.ApplicationCommandInteractionDataOption{},
+		},
+	})
+
+	if !strings.Contains(content, "Context Tips") {
+		t.Error("expected exploration context tips section header")
+	}
+	if !strings.Contains(content, "/action") {
+		t.Error("expected exploration tips to mention /action")
+	}
+}
+
+func TestHelpHandler_NoEncounter_NoContextTips(t *testing.T) {
+	mock := newTestMock()
+	var content string
+	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		content = resp.Data.Content
+		return nil
+	}
+
+	provider := &mockHelpEncounterProvider{
+		err: errors.New("no active encounter"),
+	}
+
+	handler := NewHelpHandler(mock)
+	handler.SetEncounterProvider(provider)
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Type:    discordgo.InteractionApplicationCommand,
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user-1"}},
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name:    "help",
+			Options: []*discordgo.ApplicationCommandInteractionDataOption{},
+		},
+	})
+
+	if strings.Contains(content, "Context Tips") {
+		t.Error("should not show context tips when no encounter is active")
+	}
+	// Should still show general help
+	if !strings.Contains(content, "Command Reference") {
+		t.Error("expected general help content")
 	}
 }
