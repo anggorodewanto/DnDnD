@@ -66,7 +66,7 @@ Low: 142
 | 54 | C-H03 | High | pending | Crossbow Expert does not waive ranged-with-hostile-adjacent disadvantage | /home/ab/projects/DnDnD/internal/combat/advantage.go:88-91 |
 | 55 | C-H04 | High | pending | Dash adds raw base speed, ignoring exhaustion/condition speed modifiers | /home/ab/projects/DnDnD/internal/combat/standard_actions.go:38-71 (`Dash`), 73-8... |
 | 56 | C-H05 | High | done | Fall damage missing 20d6 cap | /home/ab/projects/DnDnD/internal/combat/altitude.go:101-123 (`FallDamage`) |
-| 57 | C-H06 | High | in_progress | Resistance/vulnerability halving allows damage to go to 0 (RAW says min 1) | /home/ab/projects/DnDnD/internal/combat/damage.go:38-43 (`ApplyDamageResistances... |
+| 57 | C-H06 | High | done | Resistance/vulnerability halving allows damage to go to 0 (RAW says min 1) | /home/ab/projects/DnDnD/internal/combat/damage.go:38-43 (`ApplyDamageResistances... |
 | 58 | C-H07 | High | pending | Pre-clamp HP overflow excludes temp-HP absorbed damage from instant-death check | /home/ab/projects/DnDnD/internal/combat/damage.go:226-247, 330-373 |
 | 59 | C-H08 | High | pending | Off-hand attack accepts non-melee "light" weapons | /home/ab/projects/DnDnD/internal/combat/attack.go:1182-1196 |
 | 60 | C-H09 | High | pending | Diagonal pathfinding ignores wall edges entirely (could allow phasing through a single diagonal wall) | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:242-244 |
