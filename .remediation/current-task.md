@@ -1,11 +1,11 @@
-finding_id: F-C01
+finding_id: F-C02
 severity: Critical
-title: Counterspell trigger is unreachable from the DM dashboard
-location: dashboard/svelte/src/ActiveReactionsPanel.svelte:88-150
-spec_ref: spec §Counterspell resolution lines 1093-1101; phases §Phase 72
+title: Heavy-armor STR speed penalty computed but never applied to combat speed
+location: internal/combat/equip.go:237,478-487; internal/combat/turnresources.go:217-254
+spec_ref: spec §Equipment Enforcement lines 1483-1487; phases §Phase 75b
 problem: |
-  The backend handler TriggerCounterspell exists at POST /{encounterID}/reactions/{reactionID}/counterspell/trigger, but the ActiveReactionsPanel only renders Resolve/Dismiss buttons. There is no "Trigger Counterspell" button that posts to the backend route, so a DM cannot start the counterspell flow from the UI.
+  CheckHeavyArmorPenalty only emits a string in the equipArmor combat log; the returned penalty is discarded. ResolveTurnResources starts every turn from char.SpeedFt and never consults the equipped-armor STR requirement, so an underqualified PC moves at full speed every turn.
 suggested_fix: |
-  Add a "Trigger" button on Counterspell-labelled declarations (detect by checking if reaction.description contains "counterspell" case-insensitively) that calls the TriggerCounterspell endpoint. The button should include inputs for spell name and level (or use defaults/prompts).
+  In ResolveTurnResources, look up the equipped armor and subtract CheckHeavyArmorPenalty from speedFt before exhaustion/condition handling.
 acceptance_criterion: |
-  A reaction declaration containing "counterspell" in its description shows a "Trigger" button in the ActiveReactionsPanel. Clicking it calls the backend endpoint. A test verifies the button renders for counterspell declarations and not for other declarations.
+  A character wearing heavy armor with STR below the requirement has their combat speed reduced by 10ft at turn start. A character meeting the STR requirement has no penalty. Tests demonstrate both.

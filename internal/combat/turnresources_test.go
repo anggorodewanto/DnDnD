@@ -726,3 +726,73 @@ func TestResolveTurnResources_F20_WildShapeUsesBeastSpeed(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int32(40), speed, "wild-shaped combatant should use beast walk speed")
 }
+
+// F-C02: ResolveTurnResources must apply heavy armor speed penalty when STR is below requirement.
+func TestResolveTurnResources_HeavyArmorPenalty_InsufficientSTR(t *testing.T) {
+	charID := uuid.New()
+	combatant := refdata.Combatant{
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsNpc:       false,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	character := refdata.Character{
+		ID:            charID,
+		SpeedFt:       30,
+		Classes:       json.RawMessage(`[]`),
+		AbilityScores: json.RawMessage(`{"str":12,"dex":10,"con":14,"int":10,"wis":10,"cha":10}`),
+		EquippedArmor: sql.NullString{String: "splint", Valid: true},
+	}
+
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return character, nil
+	}
+	store.getArmorFn = func(_ context.Context, id string) (refdata.Armor, error) {
+		assert.Equal(t, "splint", id)
+		return refdata.Armor{
+			ID:          "splint",
+			Name:        "Splint Armor",
+			ArmorType:   "heavy",
+			StrengthReq: sql.NullInt32{Int32: 15, Valid: true},
+		}, nil
+	}
+
+	svc := NewService(store)
+	speed, _, err := svc.ResolveTurnResources(context.Background(), combatant)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(20), speed, "STR 12 < req 15: speed should be 30-10=20")
+}
+
+func TestResolveTurnResources_HeavyArmorPenalty_SufficientSTR(t *testing.T) {
+	charID := uuid.New()
+	combatant := refdata.Combatant{
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		IsNpc:       false,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	character := refdata.Character{
+		ID:            charID,
+		SpeedFt:       30,
+		Classes:       json.RawMessage(`[]`),
+		AbilityScores: json.RawMessage(`{"str":15,"dex":10,"con":14,"int":10,"wis":10,"cha":10}`),
+		EquippedArmor: sql.NullString{String: "splint", Valid: true},
+	}
+
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return character, nil
+	}
+	store.getArmorFn = func(_ context.Context, id string) (refdata.Armor, error) {
+		return refdata.Armor{
+			ID:          "splint",
+			Name:        "Splint Armor",
+			ArmorType:   "heavy",
+			StrengthReq: sql.NullInt32{Int32: 15, Valid: true},
+		}, nil
+	}
+
+	svc := NewService(store)
+	speed, _, err := svc.ResolveTurnResources(context.Background(), combatant)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(30), speed, "STR 15 >= req 15: no penalty")
+}

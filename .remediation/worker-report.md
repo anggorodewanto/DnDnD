@@ -1,12 +1,10 @@
-finding_id: F-C01
+finding_id: F-C02
 status: done
 files_changed:
-  - dashboard/svelte/src/lib/api.js
-  - dashboard/svelte/src/ActiveReactionsPanel.svelte
-  - dashboard/svelte/src/ActiveReactionsPanel.test.js
-test_command_that_validates: cd dashboard/svelte && npx vitest run src/ActiveReactionsPanel.test.js
+  - internal/combat/turnresources.go
+  - internal/combat/turnresources_test.go
+test_command_that_validates: go test ./internal/combat/ -run "TestResolveTurnResources_HeavyArmorPenalty" -v
 acceptance_criterion_met: yes
-notes: Added `isCounterspellReaction` helper and `triggerCounterspell` API function to api.js. The Svelte component now imports these and renders a "Trigger Counterspell" button (purple, matching the readied-badge style) only for reactions whose description contains "counterspell" (case-insensitive). The button POSTs to the backend TriggerCounterspell endpoint with minimal defaults (enemy_spell_name: "Unknown", enemy_cast_level: 1, is_subtle: false). Three tests validate: the helper detects counterspell descriptions correctly, and the API function calls the correct endpoint with the correct method/body.
+notes: Added heavy armor speed penalty application in ResolveTurnResources. After computing base speed and FES turn-start bonuses, the function now looks up the equipped armor via the store and calls CheckHeavyArmorPenalty to subtract 10ft when the character's STR is below the armor's strength_req. Two tests added: one for insufficient STR (expects 20ft) and one for sufficient STR (expects 30ft). Both `make test` and `make cover-check` pass.
 follow_ups:
-  - Consider adding a modal/prompt for DMs to specify spell name and cast level before triggering (instead of hardcoded defaults)
-  - Add component-level rendering test once @testing-library/svelte is added to devDependencies
+  - None identified; the fix is minimal and self-contained.

@@ -248,6 +248,13 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 	// Movement) into the base speed before exhaustion / condition halving.
 	speedFt += int32(turnStartSpeedBonus(char))
 
+	// F-C02: Apply heavy armor speed penalty if STR is below requirement.
+	if char.EquippedArmor.Valid && char.EquippedArmor.String != "" {
+		if armor, err := s.store.GetArmor(ctx, char.EquippedArmor.String); err == nil {
+			speedFt -= int32(CheckHeavyArmorPenalty(char, armor))
+		}
+	}
+
 	// C-42: route through EffectiveSpeedWithExhaustion so exhaustion ladder
 	// (lv2 halves, lv5 zeroes) actually applies at turn start.
 	return int32(EffectiveSpeedWithExhaustion(int(speedFt), conds, exhaustion)), int32(s.resolveAttacksPerAction(ctx, char)), nil

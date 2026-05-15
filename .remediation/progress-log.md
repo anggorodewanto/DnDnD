@@ -114,3 +114,10 @@ Append-only journal of all remediation activity.
 - Commit: 9dfe265
 - Reviewer: approved
 - Notes: Single case added to target-conditions switch in DetectAdvantage
+
+## 2026-05-15T18:17 — F-C01 done
+
+- Finding: Counterspell trigger is unreachable from the DM dashboard
+- Commit: 244105c
+- Reviewer: approved
+- Notes: Added Trigger Counterspell button + isCounterspellReaction helper to Svelte panel
