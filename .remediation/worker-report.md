@@ -1,10 +1,13 @@
-finding_id: D-C01
+finding_id: D-C02
 status: done
 files_changed:
-  - internal/refdata/seed_classes.go
-  - internal/combat/feature_integration_test.go
-test_command_that_validates: go test ./internal/combat/ -run TestBuildFeatureDefinitions_BarbarianSeedRage -v
+  - internal/portal/init_feature_uses.go
+  - internal/portal/builder_store_adapter.go
+  - internal/portal/builder_store_adapter_test.go
+test_command_that_validates: go test ./internal/portal/ -run TestBuilderStoreAdapter_CreateCharacterRecord_InitializesFeatureUses -v
 acceptance_criterion_met: yes
-notes: The barbarian Rage feature in seed_classes.go used a descriptive comma-separated mechanical_effect string ("advantage_str_checks_saves,resistance_bludgeoning_piercing_slashing,bonus_rage_damage") that splitMechanicalEffects split into tokens none of which matched the "rage" case in BuildFeatureDefinitions. Changed the seed to use "rage" which is the token the FES expects. Added an integration test that verifies BuildFeatureDefinitions produces a RageFeature from the barbarian's seed-level features. All tests pass and coverage thresholds are met.
+notes: Created InitFeatureUses helper that computes initial feature uses from class entries and ability scores. Wired it into CreateCharacterRecord so the FeatureUses field is populated at character creation. Covers rage (barbarian), ki (monk 2+), channel-divinity (cleric/paladin), bardic-inspiration (bard), lay-on-hands (paladin), action-surge (fighter 2+), second-wind (fighter 2+), wild-shape (druid 2+), and sorcery-points (sorcerer 2+). All existing tests pass, make test and make cover-check succeed.
 follow_ups:
-  - Consider adding similar seed-integration tests for other classes (e.g. Reckless Attack uses "advantage_str_melee_attacks,attacks_against_have_advantage" which also won't match any switch case)
+  - Verify the dashboard charcreate path also calls InitFeatureUses (or shares the same code path)
+  - Consider adding a migration/backfill script for existing characters with null feature_uses
+  - Unlimited rage at level 20 (RageUsesPerDay returns -1) is stored as -1; verify rest/recharge logic handles this

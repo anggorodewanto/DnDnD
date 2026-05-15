@@ -65,3 +65,10 @@ Append-only journal of all remediation activity.
 - Commit: c3866db
 - Reviewer: approved
 - Notes: HasFlySpeed field + CombatantHasFlySpeed helper checks conditions for fly_speed
+
+## 2026-05-15T17:56 — D-C01 done
+
+- Finding: Rage damage resistance never fires for seed-created barbarians
+- Commit: e5446b1
+- Reviewer: approved
+- Notes: Changed seed mechanical_effect from descriptive tokens to "rage" literal

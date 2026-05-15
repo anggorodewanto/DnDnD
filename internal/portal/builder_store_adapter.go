@@ -92,6 +92,12 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		equippedArmor = sql.NullString{String: p.WornArmor, Valid: true}
 	}
 
+	var featureUsesMsg pqtype.NullRawMessage
+	if fu := InitFeatureUses(classEntries, p.AbilityScores); len(fu) > 0 {
+		fuJSON, _ := json.Marshal(fu)
+		featureUsesMsg = pqtype.NullRawMessage{RawMessage: fuJSON, Valid: true}
+	}
+
 	var featuresMsg pqtype.NullRawMessage
 	if len(p.Features) > 0 {
 		featJSON, _ := json.Marshal(p.Features)
@@ -138,6 +144,7 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 		EquippedMainHand: equippedMainHand,
 		EquippedArmor:    equippedArmor,
 		HitDiceRemaining: hitDiceJSON,
+		FeatureUses:      featureUsesMsg,
 		Features:         featuresMsg,
 		Proficiencies:    pqtype.NullRawMessage{RawMessage: profJSON, Valid: true},
 		Languages:        p.Languages,

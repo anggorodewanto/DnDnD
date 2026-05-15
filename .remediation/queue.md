@@ -18,8 +18,8 @@ Low: 142
 | 6 | C-C02 | Critical | done | Reckless Attack advantage missing on attacks 2+ | /home/ab/projects/DnDnD/internal/combat/attack.go:887-901, advantage.go:36-39 |
 | 7 | C-C03 | Critical | done | Off-hand (TWF) attack lacks Attack-action prerequisite and melee weapon check | /home/ab/projects/DnDnD/internal/combat/attack.go:1147-1200 |
 | 8 | C-C04 | Critical | done | `/fly` performs no fly-speed validation | /home/ab/projects/DnDnD/internal/combat/altitude.go:52-81; /home/ab/projects/DnD... |
-| 9 | D-C01 | Critical | in_progress | Rage damage resistance never fires for seed-created barbarians | /home/ab/projects/DnDnD/internal/combat/feature_integration.go:347 and /home/ab/... |
-| 10 | D-C02 | Critical | pending | Feature uses never initialized at character creation | /home/ab/projects/DnDnD/internal/portal/builder_store_adapter.go:125 (CreateChar... |
+| 9 | D-C01 | Critical | done | Rage damage resistance never fires for seed-created barbarians | /home/ab/projects/DnDnD/internal/combat/feature_integration.go:347 and /home/ab/... |
+| 10 | D-C02 | Critical | in_progress | Feature uses never initialized at character creation | /home/ab/projects/DnDnD/internal/portal/builder_store_adapter.go:125 (CreateChar... |
 | 11 | D-C03 | Critical | pending | Rage advantage on STR ability checks never wired | /home/ab/projects/DnDnD/internal/check/check.go (no FES integration) and /home/a... |
 | 12 | D-C04 | Critical | pending | Save handler never sets IsRaging in EffectContext | /home/ab/projects/DnDnD/internal/discord/save_handler.go:199 |
 | 13 | E-C01 | Critical | pending | Single-target spell casts never apply damage or healing | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:584-598`, `/home/ab/pro... |

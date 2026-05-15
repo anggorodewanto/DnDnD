@@ -437,3 +437,71 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsBackground(t *testing
 	require.NoError(t, json.Unmarshal(creator.capturedParams.CharacterData.RawMessage, &charData))
 	assert.Equal(t, "sage", charData["background"])
 }
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_InitializesFeatureUses_Barbarian(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Grog",
+		Race:          "Half-Orc",
+		Class:         "Barbarian",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 8, WIS: 10, CHA: 10},
+		HPMax:         14,
+		AC:            14,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes:       []character.ClassEntry{{Class: "Barbarian", Level: 3}},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.FeatureUses.Valid, "FeatureUses should be set")
+
+	var featureUses map[string]character.FeatureUse
+	require.NoError(t, json.Unmarshal(creator.capturedParams.FeatureUses.RawMessage, &featureUses))
+
+	rage, ok := featureUses["rage"]
+	require.True(t, ok, "feature_uses should contain 'rage'")
+	assert.Equal(t, 3, rage.Current)
+	assert.Equal(t, 3, rage.Max)
+	assert.Equal(t, "long", rage.Recharge)
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_InitializesFeatureUses_Fighter(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:    uuid.New().String(),
+		Name:          "Knight",
+		Race:          "Human",
+		Class:         "Fighter",
+		AbilityScores: character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		HPMax:         12,
+		AC:            16,
+		SpeedFt:       30,
+		ProfBonus:     2,
+		Classes:       []character.ClassEntry{{Class: "Fighter", Level: 2}},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	require.True(t, creator.capturedParams.FeatureUses.Valid)
+
+	var featureUses map[string]character.FeatureUse
+	require.NoError(t, json.Unmarshal(creator.capturedParams.FeatureUses.RawMessage, &featureUses))
+
+	surge := featureUses["action-surge"]
+	assert.Equal(t, 1, surge.Current)
+	assert.Equal(t, 1, surge.Max)
+	assert.Equal(t, "short", surge.Recharge)
+
+	sw := featureUses["second-wind"]
+	assert.Equal(t, 1, sw.Current)
+	assert.Equal(t, 1, sw.Max)
+	assert.Equal(t, "short", sw.Recharge)
+}
