@@ -1,24 +1,37 @@
-# Worker Report: A-H07
+# Worker Report: A-H08
 
 ## Finding
-
-**HandleGuildMemberAdd** sent a welcome DM to every non-bot user joining any guild, regardless of whether a campaign had been configured via `/setup`.
+Multiple fuzzy matches wrapped in a single `**...**` instead of each being individually bolded. Also used literal `<name>` placeholder instead of the actual suggestion.
 
 ## Fix Applied
 
-Added a `hasCampaign(guildID)` check in `HandleGuildMemberAdd` (bot.go). If no campaign name has been set for the guild, the welcome DM is skipped entirely.
+**File:** `internal/discord/registration_handler.go` (line 97–100)
 
-### Files Changed
+**Before:**
+```go
+suggestions := strings.Join(result.Suggestions, ", ")
+respondEphemeral(h.session, interaction,
+    fmt.Sprintf("❌ No character named \"%s\" found. Did you mean: **%s**? Use /register <name> to confirm.", characterName, suggestions))
+```
 
-- `internal/discord/bot.go` — Added `hasCampaign` method; gated `SendWelcomeDM` call on it.
-- `internal/discord/bot_test.go` — Replaced `TestBot_HandleGuildMemberAdd_DefaultCampaignName` (which asserted a DM was sent without a campaign) with `TestBot_HandleGuildMemberAdd_NoCampaign_SkipsWelcome` (asserts no DM is sent).
+**After:**
+```go
+bolded := make([]string, len(result.Suggestions))
+for i, s := range result.Suggestions {
+    bolded[i] = "**" + s + "**"
+}
+respondEphemeral(h.session, interaction,
+    fmt.Sprintf("❌ No character named \"%s\" found. Did you mean: %s? Use /register %s to confirm.", characterName, strings.Join(bolded, ", "), result.Suggestions[0]))
+```
 
-## TDD Evidence
+## Tests Added
 
-- **Red:** `TestBot_HandleGuildMemberAdd_NoCampaign_SkipsWelcome` failed with "should not send welcome DM when no campaign exists for the guild".
-- **Green:** After adding the `hasCampaign` guard, all tests pass.
+**File:** `internal/discord/registration_handler_test.go`
+
+1. `TestRegisterHandler_FuzzyMatch_MultipleSuggestions_BoldsEachName` — asserts 3 matches render as `**Thorn**, **Thorin**, **Thora**` and first name is used in the `/register` hint.
+2. `TestRegisterHandler_FuzzyMatch_SingleSuggestion_BoldsName` — asserts single match is bolded and actual name replaces `<name>`.
 
 ## Verification
 
-- `make test` — PASS (all packages)
-- `make cover-check` — PASS ("OK: coverage thresholds met")
+- `make test` — PASS (all tests green)
+- `make cover-check` — PASS (all thresholds met)

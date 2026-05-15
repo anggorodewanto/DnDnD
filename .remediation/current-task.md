@@ -1,11 +1,11 @@
-finding_id: A-H07
+finding_id: A-H08
 severity: High
-title: Welcome DM sent to every joining member even when no campaign exists
-location: internal/discord/bot.go:119-131 + internal/discord/welcome.go:6-19
-spec_ref: spec §Player Onboarding (lines 184-200); Phase 9a
+title: Fuzzy match suggestion message renders incorrectly when multiple matches
+location: internal/discord/registration_handler.go:97-100
+spec_ref: spec §Registration name matching (lines 47-48); Phase 14
 problem: |
-  HandleGuildMemberAdd sends the welcome DM regardless of whether /setup has been run or a campaign exists. Confuses users in non-DnDnD servers.
+  When 2-3 fuzzy matches exist, code wraps the entire comma-joined block in a single **…** instead of bolding each name individually. Also shows literal <name> placeholder.
 suggested_fix: |
-  Gate SendWelcomeDM on the existence of a campaign row for the guild.
+  Bold each suggestion individually: "Did you mean: **Thorn**, **Thorin**, **Thora**?"
 acceptance_criterion: |
-  Welcome DM is NOT sent when no campaign exists for the guild. A test demonstrates this.
+  Multiple fuzzy matches are each individually bolded. A test demonstrates the correct format.

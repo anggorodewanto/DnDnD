@@ -214,6 +214,46 @@ func TestRegisterHandler_FuzzyMatch_SuggestsNames(t *testing.T) {
 	}
 }
 
+func TestRegisterHandler_FuzzyMatch_MultipleSuggestions_BoldsEachName(t *testing.T) {
+	mock := newTestMock()
+	rc := captureResponse(mock)
+
+	regService := newMockRegService()
+	regService.RegisterFunc = func(_ context.Context, _ uuid.UUID, _, _ string) (*registration.RegisterResult, error) {
+		return &registration.RegisterResult{
+			Status:      registration.ResultFuzzyMatch,
+			Suggestions: []string{"Thorn", "Thorin", "Thora"},
+		}, nil
+	}
+
+	handler := NewRegisterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc(""), staticDMUserFunc(""))
+	handler.Handle(makeInteraction("register", "player-1", "guild-1", stringOption("name", "Thor")))
+
+	assert.Contains(t, rc.Content, "**Thorn**, **Thorin**, **Thora**")
+	assert.Contains(t, rc.Content, "Use /register Thorn")
+	assert.NotContains(t, rc.Content, "<name>")
+}
+
+func TestRegisterHandler_FuzzyMatch_SingleSuggestion_BoldsName(t *testing.T) {
+	mock := newTestMock()
+	rc := captureResponse(mock)
+
+	regService := newMockRegService()
+	regService.RegisterFunc = func(_ context.Context, _ uuid.UUID, _, _ string) (*registration.RegisterResult, error) {
+		return &registration.RegisterResult{
+			Status:      registration.ResultFuzzyMatch,
+			Suggestions: []string{"Thorn"},
+		}, nil
+	}
+
+	handler := NewRegisterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc(""), staticDMUserFunc(""))
+	handler.Handle(makeInteraction("register", "player-1", "guild-1", stringOption("name", "Thron")))
+
+	assert.Contains(t, rc.Content, "**Thorn**")
+	assert.Contains(t, rc.Content, "Use /register Thorn")
+	assert.NotContains(t, rc.Content, "<name>")
+}
+
 func TestRegisterHandler_NoMatch_ShowsError(t *testing.T) {
 	mock := newTestMock()
 	rc := captureResponse(mock)

@@ -95,9 +95,12 @@ func (h *RegisterHandler) Handle(interaction *discordgo.Interaction) {
 		postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, characterName, userID, "register", nil)
 
 	case registration.ResultFuzzyMatch:
-		suggestions := strings.Join(result.Suggestions, ", ")
+		bolded := make([]string, len(result.Suggestions))
+		for i, s := range result.Suggestions {
+			bolded[i] = "**" + s + "**"
+		}
 		respondEphemeral(h.session, interaction,
-			fmt.Sprintf("❌ No character named \"%s\" found. Did you mean: **%s**? Use /register <name> to confirm.", characterName, suggestions))
+			fmt.Sprintf("❌ No character named \"%s\" found. Did you mean: %s? Use /register %s to confirm.", characterName, strings.Join(bolded, ", "), result.Suggestions[0]))
 
 	case registration.ResultNoMatch:
 		respondEphemeral(h.session, interaction,

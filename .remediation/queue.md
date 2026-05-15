@@ -51,8 +51,8 @@ Low: 142
 | 39 | A-H04 | High | done | OAuth callback handler treats any 4xx error from Discord as a generic 403 | internal/auth/oauth2.go:150-156, 178-182 |
 | 40 | A-H05 | High | done | Portal token redemption has a TOCTOU race | internal/portal/token_service.go:82-90 + internal/portal/token_store.go:81-88 |
 | 41 | A-H06 | High | pending | HP calculation always uses fixed-average; no rolled-HP path | internal/character/stats.go:21-47 |
-| 42 | A-H07 | High | in_progress | Welcome DM sent to every joining member even when no campaign exists | internal/discord/bot.go:119-131 + internal/discord/welcome.go:6-19 |
-| 43 | A-H08 | High | pending | Fuzzy match suggestion message renders incorrectly when multiple matches | internal/discord/registration_handler.go:97-100 |
+| 42 | A-H07 | High | done | Welcome DM sent to every joining member even when no campaign exists | internal/discord/bot.go:119-131 + internal/discord/welcome.go:6-19 |
+| 43 | A-H08 | High | in_progress | Fuzzy match suggestion message renders incorrectly when multiple matches | internal/discord/registration_handler.go:97-100 |
 | 44 | A-H09 | High | pending | Sessions middleware re-issues cookie even when slide TTL fails silently | internal/auth/middleware.go:62-77 |
 | 45 | B-H01 | High | done | Map size limits not enforced when rendering, only at create-time | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:12-16`; |
 | 46 | B-H02 | High | done | `RenderMap` mutates caller-supplied `MapData.TileSize` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:13-16` |
