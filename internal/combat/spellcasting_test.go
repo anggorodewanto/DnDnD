@@ -2592,6 +2592,62 @@ func TestCast_MaterialComponent_NoCostlyComponent(t *testing.T) {
 	assert.Nil(t, result.MaterialComponent) // no costly component
 }
 
+// --- F-09: Material deduction deferred until after all validations ---
+
+// TestCast_F09_MaterialNotConsumedOnRangeFailure proves that consumed material
+// components (gold, inventory items) are NOT deducted when a later validation
+// (target out of range) fails.
+func TestCast_F09_MaterialNotConsumedOnRangeFailure(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	char.Gold = 500
+	char.Inventory = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`[{"name":"a diamond worth 300gp","quantity":1,"type":"component"}]`),
+		Valid:      true,
+	}
+	caster := makeSpellCaster(charID)
+	// Put target far away — Revivify is touch range
+	target := makeSpellTarget()
+	target.PositionRow = 40
+
+	spell := makeRevivify()
+
+	goldUpdated := false
+	inventoryUpdated := false
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateCharacterGoldFn = func(_ context.Context, _ uuid.UUID, _ int32) error {
+		goldUpdated = true
+		return nil
+	}
+	store.updateCharacterInventoryFn = func(_ context.Context, _ uuid.UUID, _ pqtype.NullRawMessage) error {
+		inventoryUpdated = true
+		return nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "revivify",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "out of range")
+	// F-09: materials must NOT be consumed when cast fails validation
+	assert.False(t, goldUpdated, "gold should not be deducted when cast fails range validation")
+	assert.False(t, inventoryUpdated, "inventory should not be modified when cast fails range validation")
+}
+
 // --- Phase 64: Pact Magic ---
 
 // helper to make a warlock character with pact magic slots

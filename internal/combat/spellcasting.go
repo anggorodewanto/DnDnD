@@ -456,7 +456,17 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		}
 	}
 
-	// 6d. Material component check
+	// 6d. Material component check (validation only — deduction deferred until
+	// all later validations pass, see step 12b).
+	type materialDeduction struct {
+		deductGold       bool
+		newGold          int32
+		addItem          bool
+		removeItem       bool
+		inventory        []InventoryItem
+		componentName    string
+	}
+	var matDeduction *materialDeduction
 	if spell.MaterialCostGp.Valid {
 		inventory, err := ParseInventory(char.Inventory.RawMessage)
 		if err != nil {
@@ -484,25 +494,22 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 					},
 				}, nil
 			}
-			// User confirmed: deduct gold
-			newGold := char.Gold - int32(matResult.CostGp)
-			if err := s.store.UpdateCharacterGold(ctx, char.ID, newGold); err != nil {
-				return CastResult{}, fmt.Errorf("deducting gold: %w", err)
-			}
-			// If not consumed, add item to inventory
-			if !matResult.MaterialConsumed {
-				newItems := AddInventoryItem(inventory, matResult.ComponentName)
-				if err := s.persistInventory(ctx, char.ID, newItems); err != nil {
-					return CastResult{}, fmt.Errorf("updating inventory: %w", err)
-				}
+			// User confirmed: record deduction for after validations pass
+			matDeduction = &materialDeduction{
+				deductGold:    true,
+				newGold:       char.Gold - int32(matResult.CostGp),
+				addItem:       !matResult.MaterialConsumed,
+				inventory:     inventory,
+				componentName: matResult.ComponentName,
 			}
 
 		case MaterialCheckProceed:
 			// Component found in inventory — consume if needed after cast succeeds
 			if matResult.MaterialConsumed {
-				newItems := RemoveInventoryItem(inventory, matResult.ComponentName)
-				if err := s.persistInventory(ctx, char.ID, newItems); err != nil {
-					return CastResult{}, fmt.Errorf("updating inventory: %w", err)
+				matDeduction = &materialDeduction{
+					removeItem:    true,
+					inventory:     inventory,
+					componentName: matResult.ComponentName,
 				}
 			}
 		}
@@ -648,6 +655,27 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		result.Teleport = teleResult
 		if teleResult.DMQueueRouted {
 			result.ResolutionMode = "dm_required"
+		}
+	}
+
+	// 12b. Deferred material deduction — all validations have passed.
+	if matDeduction != nil {
+		if matDeduction.deductGold {
+			if err := s.store.UpdateCharacterGold(ctx, char.ID, matDeduction.newGold); err != nil {
+				return CastResult{}, fmt.Errorf("deducting gold: %w", err)
+			}
+			if matDeduction.addItem {
+				newItems := AddInventoryItem(matDeduction.inventory, matDeduction.componentName)
+				if err := s.persistInventory(ctx, char.ID, newItems); err != nil {
+					return CastResult{}, fmt.Errorf("updating inventory: %w", err)
+				}
+			}
+		}
+		if matDeduction.removeItem {
+			newItems := RemoveInventoryItem(matDeduction.inventory, matDeduction.componentName)
+			if err := s.persistInventory(ctx, char.ID, newItems); err != nil {
+				return CastResult{}, fmt.Errorf("updating inventory: %w", err)
+			}
 		}
 	}
 

@@ -37,7 +37,7 @@
 | F-06 | High | Flying movers blocked by ground occupants | review_passed | — | PASS |
 | F-07 | High | Defense fighting style AC bonus ignored | review_passed | — | PASS |
 | F-08 | High | Counterspell accepts invalid low-level slots | review_passed | — | PASS |
-| F-09 | High | Material components consumed before validation fails | pending | — | — |
+| F-09 | High | Material components consumed before validation fails | implemented | PASS | reviewer-f09 |
 | F-10 | High | Expired readied spells leave concentration set | pending | — | — |
 | F-19 | Medium | AoE full cover not used to block targets | pending | — | — |
 | F-20 | Medium | Wild Shape doesn't use beast speed | pending | — | — |
@@ -181,8 +181,9 @@
 - **Source**: agent-03
 - **Files**: `internal/combat/spellcasting.go`
 - **Test plan**: Test that material/gold deduction happens after all validations pass
-- **Implementation notes**: —
-- **Reviewer verdict**: —
+- **Implementation notes**: Split step 6d into validation-only (early) and deduction (deferred). Material validation (rejection, gold confirmation prompt) remains at step 6d. Actual deduction (gold update, inventory add/remove) is captured in a `materialDeduction` struct and executed at new step 12b, after target lookup, range validation, see-target validation, and teleport validation all pass. Test `TestCast_F09_MaterialNotConsumedOnRangeFailure` proves consumed materials are not deducted when range validation fails.
+- **Changed files**: `internal/combat/spellcasting.go`, `internal/combat/spellcasting_test.go`
+- **Reviewer verdict**: PASS (reviewer-f09, 2026-05-15). Validation (availability check, rejection) remains early at step 6d. Deduction (gold update, inventory mutation) is deferred to step 12b, which executes only after target lookup, range validation, and see-target validation all pass. The `materialDeduction` struct cleanly separates intent from execution. Test `TestCast_F09_MaterialNotConsumedOnRangeFailure` asserts that neither `UpdateCharacterGold` nor `updateCharacterInventory` is called when range validation fails. Existing material tests (lines ~2130-2177) remain unaffected since they exercise the happy path where deduction should occur. No regression risk identified.
 
 ### F-10: Expired readied spells leave concentration set
 - **Source**: agent-03
