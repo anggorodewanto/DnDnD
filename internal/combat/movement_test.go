@@ -786,3 +786,96 @@ func TestValidateEndTurnPosition_SelfIgnored(t *testing.T) {
 		t.Errorf("expected empty message when only self, got: %s", msg)
 	}
 }
+
+// --- F-06: Flying movers not blocked by ground occupants ---
+
+func TestValidateMove_F06_FlyingMoverCanLandOnGroundOccupantTile(t *testing.T) {
+	// A flying mover at 30ft should be able to move to a tile occupied by a ground creature.
+	terrain := make([]renderer.TerrainType, 9)
+	grid := &pathfinding.Grid{
+		Width:   3,
+		Height:  3,
+		Terrain: terrain,
+		Occupants: []pathfinding.Occupant{
+			{Col: 2, Row: 0, IsAlly: false, SizeCategory: pathfinding.SizeMedium, AltitudeFt: 0},
+		},
+	}
+
+	req := MoveRequest{
+		DestCol:      2,
+		DestRow:      0,
+		Turn:         refdata.Turn{MovementRemainingFt: 30},
+		Combatant:    refdata.Combatant{PositionCol: "A", PositionRow: 1, AltitudeFt: 30},
+		Grid:         grid,
+		SizeCategory: pathfinding.SizeMedium,
+	}
+
+	result, err := ValidateMove(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Valid {
+		t.Fatalf("F-06: flying mover at 30ft should not be blocked by ground occupant, got: %s", result.Reason)
+	}
+}
+
+func TestValidateMove_F06_FlyingMoverPathThroughGroundOccupant(t *testing.T) {
+	// A flying mover at 30ft should be able to path through a tile with a ground occupant.
+	// Layout: 5x1 grid, mover at A1 (col=0), enemy at B1 (col=1), dest C1 (col=2).
+	terrain := make([]renderer.TerrainType, 5)
+	grid := &pathfinding.Grid{
+		Width:   5,
+		Height:  1,
+		Terrain: terrain,
+		Occupants: []pathfinding.Occupant{
+			{Col: 1, Row: 0, IsAlly: false, SizeCategory: pathfinding.SizeMedium, AltitudeFt: 0},
+		},
+	}
+
+	req := MoveRequest{
+		DestCol:      2,
+		DestRow:      0,
+		Turn:         refdata.Turn{MovementRemainingFt: 30},
+		Combatant:    refdata.Combatant{PositionCol: "A", PositionRow: 1, AltitudeFt: 30},
+		Grid:         grid,
+		SizeCategory: pathfinding.SizeMedium,
+	}
+
+	result, err := ValidateMove(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Valid {
+		t.Fatalf("F-06: flying mover should path through ground occupant, got: %s", result.Reason)
+	}
+}
+
+func TestValidateMove_F06_SameAltitudeStillBlocks(t *testing.T) {
+	// Two flyers at the same altitude should still block each other.
+	terrain := make([]renderer.TerrainType, 4)
+	grid := &pathfinding.Grid{
+		Width:   2,
+		Height:  2,
+		Terrain: terrain,
+		Occupants: []pathfinding.Occupant{
+			{Col: 1, Row: 0, IsAlly: false, SizeCategory: pathfinding.SizeMedium, AltitudeFt: 30},
+		},
+	}
+
+	req := MoveRequest{
+		DestCol:      1,
+		DestRow:      0,
+		Turn:         refdata.Turn{MovementRemainingFt: 30},
+		Combatant:    refdata.Combatant{PositionCol: "A", PositionRow: 1, AltitudeFt: 30},
+		Grid:         grid,
+		SizeCategory: pathfinding.SizeMedium,
+	}
+
+	result, err := ValidateMove(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Valid {
+		t.Fatal("F-06: mover at same altitude as occupant should be blocked")
+	}
+}

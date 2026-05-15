@@ -34,7 +34,7 @@
 | ID | Severity | Finding | Status | Commit | Reviewer |
 |----|----------|---------|--------|--------|----------|
 | F-05 | High | AoE DEX save cover bonuses never applied | review_passed | — | PASS |
-| F-06 | High | Flying movers blocked by ground occupants | pending | — | — |
+| F-06 | High | Flying movers blocked by ground occupants | review_passed | — | PASS |
 | F-07 | High | Defense fighting style AC bonus ignored | pending | — | — |
 | F-08 | High | Counterspell accepts invalid low-level slots | pending | — | — |
 | F-09 | High | Material components consumed before validation fails | pending | — | — |
@@ -149,8 +149,13 @@
 - **Source**: agent-02
 - **Files**: `internal/combat/movement.go`, `internal/pathfinding/pathfinding.go`
 - **Test plan**: Test that flying combatant can move through/to squares with ground occupants
-- **Implementation notes**: —
-- **Reviewer verdict**: —
+- **Implementation notes**: Fixed destination occupancy check in `movement.go` to compare mover's `AltitudeFt` with occupant's `AltitudeFt` instead of only checking `occ.AltitudeFt == 0`. Added `MoverAltitudeFt` field to `PathRequest` struct and updated `buildOccupantMap` to only include occupants at the same altitude as the mover. Updated all `FindPath` call sites (`movement.go`, `move_handler.go` ×2, `turn_builder.go`) to pass mover altitude. Three focused tests added: destination landing, path-through, and same-altitude-still-blocks.
+- **Reviewer verdict**: **PASS** (reviewer-f06, 2026-05-15)
+  - **D&D 5e/SRD correctness**: ✅ Creatures at different altitudes sharing the same x/y tile is consistent with SRD movement/space rules — flying creatures at different elevations do not contest the same space.
+  - **Spec conformance**: ✅ Phase 31 states "Flying tokens don't block ground tiles." The fix correctly implements this bidirectionally: ground occupants don't block flying movers, and flying occupants don't block ground movers.
+  - **Implementation correctness**: ✅ `movement.go:84-86` compares `occ.AltitudeFt == moverAlt` (exact altitude match) for destination blocking. `pathfinding.go:140-148` `buildOccupantMap` filters occupants by `o.AltitudeFt != moverAltitudeFt`, so only same-altitude occupants appear in the A* blocking map. `MoverAltitudeFt` is threaded through `PathRequest` to all `FindPath` call sites.
+  - **Regression risk**: ✅ Ground movers (altitude 0) still blocked by ground occupants (altitude 0) because `0 == 0` matches in both the destination check and `buildOccupantMap`. The pre-existing test `TestValidateMove_FlyingOccupantDoesNotBlock` (line 465) confirms the inverse case still works. `TestValidateMove_F06_SameAltitudeStillBlocks` explicitly guards the same-altitude regression.
+  - **Test adequacy**: ✅ Three focused tests cover: (1) flying mover landing on ground-occupied tile, (2) flying mover pathing through ground occupant, (3) same-altitude still blocks. Combined with the pre-existing inverse test, all four quadrants of the altitude×direction matrix are covered.
 
 ### F-07: Defense fighting style AC bonus ignored
 - **Source**: agent-03

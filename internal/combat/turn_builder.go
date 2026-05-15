@@ -221,10 +221,11 @@ func buildMovementStep(mover refdata.Combatant, target refdata.Combatant, creatu
 	// Use A* to find path
 	sizeCategory := pathfinding.ParseSizeCategory(creature.Size)
 	result, err := pathfinding.FindPath(pathfinding.PathRequest{
-		Start:        pathfinding.Point{Col: startCol, Row: startRow},
-		End:          pathfinding.Point{Col: targetCol, Row: targetRow},
-		SizeCategory: sizeCategory,
-		Grid:         grid,
+		Start:           pathfinding.Point{Col: startCol, Row: startRow},
+		End:             pathfinding.Point{Col: targetCol, Row: targetRow},
+		SizeCategory:    sizeCategory,
+		Grid:            grid,
+		MoverAltitudeFt: int(mover.AltitudeFt),
 	})
 	if err != nil || !result.Found {
 		return nil

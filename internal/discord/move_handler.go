@@ -628,10 +628,11 @@ func (h *MoveHandler) handleExplorationMove(ctx context.Context, interaction *di
 	}
 
 	pathReq := pathfinding.PathRequest{
-		Start:        pathfinding.Point{Col: startCol, Row: startRow},
-		End:          pathfinding.Point{Col: destCol, Row: destRow},
-		SizeCategory: pathfinding.SizeMedium,
-		Grid:         grid,
+		Start:           pathfinding.Point{Col: startCol, Row: startRow},
+		End:             pathfinding.Point{Col: destCol, Row: destRow},
+		SizeCategory:    pathfinding.SizeMedium,
+		Grid:            grid,
+		MoverAltitudeFt: int(mover.AltitudeFt),
 	}
 	result, err := pathfinding.FindPath(pathReq)
 	if err != nil {
@@ -1021,10 +1022,11 @@ func (h *MoveHandler) buildOAPath(ctx context.Context, mover refdata.Combatant, 
 	}
 	sizeCategory, _ := h.resolveSizeAndSpeed(ctx, mover)
 	pathReq := pathfinding.PathRequest{
-		Start:        pathfinding.Point{Col: startCol, Row: startRow},
-		End:          pathfinding.Point{Col: destCol, Row: destRow},
-		SizeCategory: sizeCategory,
-		Grid:         grid,
+		Start:           pathfinding.Point{Col: startCol, Row: startRow},
+		End:             pathfinding.Point{Col: destCol, Row: destRow},
+		SizeCategory:    sizeCategory,
+		Grid:            grid,
+		MoverAltitudeFt: int(mover.AltitudeFt),
 	}
 	result, err := pathfinding.FindPath(pathReq)
 	if err != nil || result == nil || len(result.Path) < 2 {

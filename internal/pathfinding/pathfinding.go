@@ -64,11 +64,12 @@ type Grid struct {
 
 // PathRequest holds everything needed to compute a path.
 type PathRequest struct {
-	Start        Point
-	End          Point
-	IsProne      bool
-	SizeCategory int
-	Grid         *Grid
+	Start          Point
+	End            Point
+	IsProne        bool
+	SizeCategory   int
+	Grid           *Grid
+	MoverAltitudeFt int // mover's altitude; occupants at different altitudes don't block
 }
 
 // PathResult is the output of FindPath.
@@ -135,11 +136,11 @@ func addWallEdges(blocked map[edge]bool, w renderer.WallSegment, width, height i
 }
 
 // buildOccupantMap creates a lookup from (row, col) -> occupant for O(1) checks.
-// Flying occupants (AltitudeFt > 0) are excluded because they don't block ground tiles.
-func buildOccupantMap(occupants []Occupant) map[Point]Occupant {
+// Only occupants at the same altitude as the mover are considered blocking.
+func buildOccupantMap(occupants []Occupant, moverAltitudeFt int) map[Point]Occupant {
 	m := make(map[Point]Occupant, len(occupants))
 	for _, o := range occupants {
-		if o.AltitudeFt > 0 {
+		if o.AltitudeFt != moverAltitudeFt {
 			continue
 		}
 		m[Point{o.Col, o.Row}] = o
@@ -203,7 +204,7 @@ func FindPath(req PathRequest) (*PathResult, error) {
 	}
 
 	blockedEdges := buildBlockedEdges(g.Walls, g.Width, g.Height)
-	occupantMap := buildOccupantMap(g.Occupants)
+	occupantMap := buildOccupantMap(g.Occupants, req.MoverAltitudeFt)
 
 	// A* with priority queue
 	gCosts := make(map[Point]int)

@@ -82,8 +82,9 @@ func ValidateMove(req MoveRequest) (*MoveResult, error) {
 	}
 
 	// Check occupancy at destination - cannot end on any occupied tile at the same altitude
+	moverAlt := int(req.Combatant.AltitudeFt)
 	for _, occ := range req.Grid.Occupants {
-		if occ.Col == req.DestCol && occ.Row == req.DestRow && occ.AltitudeFt == 0 {
+		if occ.Col == req.DestCol && occ.Row == req.DestRow && occ.AltitudeFt == moverAlt {
 			return &MoveResult{
 				Valid:     false,
 				Reason:    fmt.Sprintf("Cannot end movement in an occupied tile (%s)", destLabel),
@@ -94,11 +95,12 @@ func ValidateMove(req MoveRequest) (*MoveResult, error) {
 
 	// Find path using A*
 	pathResult, err := pathfinding.FindPath(pathfinding.PathRequest{
-		Start:        pathfinding.Point{Col: startCol, Row: startRow},
-		End:          pathfinding.Point{Col: req.DestCol, Row: req.DestRow},
-		IsProne:      req.IsProne,
-		SizeCategory: req.SizeCategory,
-		Grid:         req.Grid,
+		Start:           pathfinding.Point{Col: startCol, Row: startRow},
+		End:             pathfinding.Point{Col: req.DestCol, Row: req.DestRow},
+		IsProne:         req.IsProne,
+		SizeCategory:    req.SizeCategory,
+		Grid:            req.Grid,
+		MoverAltitudeFt: moverAlt,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("pathfinding error: %w", err)
