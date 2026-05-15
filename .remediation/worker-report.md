@@ -1,22 +1,27 @@
-# Worker Report: C-H05 — Fall damage missing 20d6 cap
+# Worker Report: C-H06
 
-**Worker:** worker-C-H05
-**Status:** ✅ Complete
-**Date:** 2026-05-16
+**Finding:** Resistance halving can produce 0 damage (RAW says min 1)
+**Status:** ✅ Fixed
 
-## Finding
+## Changes
 
-`FallDamage` in `internal/combat/altitude.go` computed `numDice := int(altitudeFt) / 10` with no upper bound. A 500ft fall produced 50d6 instead of the PHB-specified maximum of 20d6.
+### `internal/combat/damage.go` (line 41)
+Added min-1 clamp after resistance halving:
+```go
+if isResistant {
+    damage := rawDamage / 2
+    if damage < 1 && rawDamage >= 1 {
+        damage = 1
+    }
+    return damage, "resistance to " + dt
+}
+```
 
-## Fix Applied
-
-Added `if numDice > 20 { numDice = 20 }` immediately after computing `numDice` (line 114 of `altitude.go`).
-
-## Test Added
-
-`TestFallDamage_500ft_CappedAt20d6` in `altitude_test.go` — asserts that a 500ft fall yields exactly 20 dice and corresponding capped damage.
+### `internal/combat/damage_test.go`
+Added two tests:
+- `TestApplyDamageResistances_ResistanceMin1` — 1 fire damage with fire resistance returns 1 (not 0).
+- `TestApplyDamageResistances_ResistanceZeroInputStaysZero` — 0 damage with resistance stays 0.
 
 ## Verification
-
-- `make test` — all tests pass (including new test)
-- `make cover-check` — all coverage thresholds met
+- `make test` — all tests pass (no regressions).
+- `make cover-check` — all coverage thresholds met.

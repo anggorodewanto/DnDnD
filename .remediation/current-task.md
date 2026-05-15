@@ -1,11 +1,11 @@
-finding_id: C-H05
+finding_id: C-H06
 severity: High
-title: Fall damage missing 20d6 cap
-location: internal/combat/altitude.go:101-123 (FallDamage)
-spec_ref: Phase 31; PHB p183
+title: Resistance/vulnerability halving allows damage to go to 0 (RAW says min 1)
+location: internal/combat/damage.go:38-43 (ApplyDamageResistances)
+spec_ref: Phase 42; PHB p197
 problem: |
-  numDice := int(altitudeFt) / 10 with no cap. A 500ft fall rolls 50d6.
+  1 fire damage to a fire-resistant target returns 1/2 = 0. Per RAW it should still be 1.
 suggested_fix: |
-  if numDice > 20 { numDice = 20 } before building the expression.
+  After the resistance branch, clamp to max(1, halved) when the raw input was >= 1 (preserve 0 → 0 for immunity).
 acceptance_criterion: |
-  FallDamage for 500ft returns a 20d6 expression, not 50d6. A test demonstrates the cap.
+  1 damage with resistance returns 1 (not 0). 0 damage stays 0. A test demonstrates both.

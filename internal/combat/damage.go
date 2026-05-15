@@ -36,7 +36,11 @@ func ApplyDamageResistances(rawDamage int, damageType string, resistances, immun
 		return rawDamage, "resistance and vulnerability cancel"
 	}
 	if isResistant {
-		return rawDamage / 2, "resistance to " + dt
+		damage := rawDamage / 2
+		if damage < 1 && rawDamage >= 1 {
+			damage = 1
+		}
+		return damage, "resistance to " + dt
 	}
 	if isVulnerable {
 		return rawDamage * 2, "vulnerable to " + dt

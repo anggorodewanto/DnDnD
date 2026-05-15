@@ -24,6 +24,23 @@ func TestApplyDamageResistances_ResistanceHalvesDamage(t *testing.T) {
 	assert.Contains(t, reason, "resistance")
 }
 
+// --- TDD Cycle C-H06: Resistance min 1 (RAW: halving never reduces to 0) ---
+
+func TestApplyDamageResistances_ResistanceMin1(t *testing.T) {
+	// 1 fire damage with fire resistance: 1/2 = 0, but RAW says min 1.
+	dmg, reason := ApplyDamageResistances(1, "fire",
+		[]string{"fire"}, nil, nil, nil)
+	assert.Equal(t, 1, dmg)
+	assert.Contains(t, reason, "resistance")
+}
+
+func TestApplyDamageResistances_ResistanceZeroInputStaysZero(t *testing.T) {
+	// 0 damage with resistance stays 0 (no phantom damage).
+	dmg, _ := ApplyDamageResistances(0, "fire",
+		[]string{"fire"}, nil, nil, nil)
+	assert.Equal(t, 0, dmg)
+}
+
 // --- TDD Cycle 2: Resistance rounds down ---
 
 func TestApplyDamageResistances_ResistanceRoundsDown(t *testing.T) {
