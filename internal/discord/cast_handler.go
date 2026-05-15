@@ -260,36 +260,65 @@ func (h *CastHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	if !combat.IsExemptCommand("cast") && h.turnGate != nil {
-		if _, gateErr := h.turnGate.AcquireAndRelease(ctx, encounterID, userID); gateErr != nil {
-			respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+		doCast := func(ctx context.Context) error {
+			turn, err := h.encounterProvider.GetTurn(ctx, encounter.CurrentTurnID.UUID)
+			if err != nil {
+				respondEphemeral(h.session, interaction, "Failed to load turn.")
+				return errAlreadyResponded
+			}
+
+			caster, err := h.encounterProvider.GetCombatant(ctx, turn.CombatantID)
+			if err != nil {
+				respondEphemeral(h.session, interaction, "Failed to load combatant.")
+				return errAlreadyResponded
+			}
+
+			spell, err := h.encounterProvider.GetSpell(ctx, spellID)
+			if err != nil {
+				respondEphemeral(h.session, interaction, fmt.Sprintf("Spell %q not found.", spellID))
+				return errAlreadyResponded
+			}
+
+			if spell.AreaOfEffect.Valid && len(spell.AreaOfEffect.RawMessage) > 0 {
+				h.dispatchAoE(ctx, interaction, encounter, encounterID, caster, turn, spell, targetStr)
+				return errAlreadyResponded
+			}
+
+			h.dispatchSingleTarget(ctx, interaction, encounter, encounterID, caster, turn, spell, targetStr)
+			return errAlreadyResponded
+		}
+		if _, gateErr := h.turnGate.AcquireAndRun(ctx, encounterID, userID, doCast); gateErr != nil {
+			if gateErr != errAlreadyResponded {
+				respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+			}
 			return
 		}
-	}
+	} else {
+		turn, err := h.encounterProvider.GetTurn(ctx, encounter.CurrentTurnID.UUID)
+		if err != nil {
+			respondEphemeral(h.session, interaction, "Failed to load turn.")
+			return
+		}
 
-	turn, err := h.encounterProvider.GetTurn(ctx, encounter.CurrentTurnID.UUID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to load turn.")
-		return
-	}
+		caster, err := h.encounterProvider.GetCombatant(ctx, turn.CombatantID)
+		if err != nil {
+			respondEphemeral(h.session, interaction, "Failed to load combatant.")
+			return
+		}
 
-	caster, err := h.encounterProvider.GetCombatant(ctx, turn.CombatantID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to load combatant.")
-		return
-	}
+		spell, err := h.encounterProvider.GetSpell(ctx, spellID)
+		if err != nil {
+			respondEphemeral(h.session, interaction, fmt.Sprintf("Spell %q not found.", spellID))
+			return
+		}
 
-	spell, err := h.encounterProvider.GetSpell(ctx, spellID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Spell %q not found.", spellID))
-		return
-	}
+		if spell.AreaOfEffect.Valid && len(spell.AreaOfEffect.RawMessage) > 0 {
+			h.dispatchAoE(ctx, interaction, encounter, encounterID, caster, turn, spell, targetStr)
+			return
+		}
 
-	if spell.AreaOfEffect.Valid && len(spell.AreaOfEffect.RawMessage) > 0 {
-		h.dispatchAoE(ctx, interaction, encounter, encounterID, caster, turn, spell, targetStr)
-		return
+		h.dispatchSingleTarget(ctx, interaction, encounter, encounterID, caster, turn, spell, targetStr)
 	}
-
-	h.dispatchSingleTarget(ctx, interaction, encounter, encounterID, caster, turn, spell, targetStr)
 }
 
 // dispatchSingleTarget runs the single-target /cast path: resolves the named

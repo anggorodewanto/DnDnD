@@ -252,6 +252,10 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			if deps.cardUpdater != nil {
 				h.SetCardUpdater(deps.cardUpdater)
 			}
+			// Finding 9: wire magic-item lookup for dawn recharge.
+			if deps.queries != nil {
+				h.SetMagicItemLookup(deps.queries)
+			}
 			return h
 		}(),
 		summon:   discord.NewSummonCommandHandler(deps.session, summonSvc),
@@ -261,6 +265,10 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 			h := discord.NewUseHandler(deps.session, checkCampProv, characterLookup, useStore, nil, newUseGiveTurnAdapter(deps.queries))
 			if deps.cardUpdater != nil {
 				h.SetCardUpdater(deps.cardUpdater)
+			}
+			// Finding 8: wire magic-item lookup for spell-casting detection.
+			if deps.queries != nil {
+				h.SetMagicItemLookup(deps.queries)
 			}
 			return h
 		}(),
@@ -423,6 +431,19 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 	if deps.campaignSettings != nil {
 		handlers.done.SetCampaignSettingsProvider(deps.campaignSettings)
 	}
+	// Finding 5: wire the remaining /done dependencies so advanceAndRespond
+	// actually calls AdvanceTurn and isAuthorized enforces ownership.
+	if deps.combatService != nil {
+		handlers.done.SetTurnAdvancer(deps.combatService)
+		handlers.done.SetImpactSummaryProvider(deps.combatService)
+	}
+	if checkCampProv != nil {
+		handlers.done.SetCampaignProvider(checkCampProv)
+	}
+	if deps.queries != nil {
+		handlers.done.SetPlayerLookup(deps.queries)
+	}
+	handlers.done.SetTurnNotifier(&discord.DefaultTurnNotifier{})
 
 	// Phase 27 turn-gate: wire the advisory-lock + ownership-validation
 	// gate into the state-mutating /move and /fly handlers. /distance is
@@ -437,6 +458,8 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		// /distance is exempt; setter is wired anyway so the production
 		// graph is symmetric with /move and /fly.
 		handlers.distance.SetTurnGate(gate)
+		// Finding 7: /action combat mutations need the advisory lock.
+		handlers.action.SetTurnGate(gate)
 	}
 
 	// crit-01a: wire the combat-action family of slash commands. Each

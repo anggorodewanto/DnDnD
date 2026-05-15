@@ -13,6 +13,7 @@
     terrainByGid,
     getWalls,
   } from './lib/mapdata.js';
+  import { fetchPartyCharacters } from './lib/messageplayer.js';
   import ItemPicker from './ItemPicker.svelte';
   import DisplayNameEditor from './DisplayNameEditor.svelte';
 
@@ -66,6 +67,10 @@
   let startCombatError = $state(null);
   let startCombatMsg = $state('');
 
+  // Finding 15: PC selection for combat start.
+  let availablePCs = $state([]);
+  let selectedPCIds = $state([]);
+
   // Load existing encounter
   $effect(() => {
     if (encounterId) {
@@ -79,6 +84,7 @@
     if (campaignId) {
       loadMaps();
       loadCreatureLibrary();
+      loadPCs();
     }
   });
 
@@ -129,6 +135,17 @@
     } catch (e) {
       // Creatures may not be available
       availableCreatures = [];
+    }
+  }
+
+  async function loadPCs() {
+    try {
+      const data = await fetchPartyCharacters(campaignId);
+      availablePCs = data.characters || [];
+      // Pre-select all PCs by default
+      selectedPCIds = availablePCs.map((c) => c.id || c.character_id);
+    } catch (e) {
+      availablePCs = [];
     }
   }
 
@@ -364,7 +381,7 @@
     try {
       const payload = {
         template_id: savedEncounterId,
-        character_ids: [],
+        character_ids: selectedPCIds.filter(Boolean),
         character_positions: {},
       };
       const surprisedShortIDs = collectSurprisedShortIDs(creatures, surprisedByIndex);
@@ -514,6 +531,31 @@
               encounterId={savedEncounterId}
               onselect={onLootSelect}
             />
+          {/if}
+        </div>
+
+        <div class="pc-section" data-testid="pc-selection">
+          <h3>Party Members ({selectedPCIds.length}/{availablePCs.length})</h3>
+          {#if availablePCs.length === 0}
+            <p class="no-results">No approved PCs in this campaign.</p>
+          {:else}
+            {#each availablePCs as pc}
+              <label class="pc-option">
+                <input
+                  type="checkbox"
+                  checked={selectedPCIds.includes(pc.id || pc.character_id)}
+                  onchange={(e) => {
+                    const id = pc.id || pc.character_id;
+                    if (e.target.checked) {
+                      selectedPCIds = [...selectedPCIds, id];
+                    } else {
+                      selectedPCIds = selectedPCIds.filter((x) => x !== id);
+                    }
+                  }}
+                />
+                {pc.name || pc.character_name || 'Unknown'}
+              </label>
+            {/each}
           {/if}
         </div>
       </div>
@@ -867,6 +909,28 @@
 
   .loot-toggle:hover {
     background: #0f3460;
+  }
+
+  .pc-section {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    padding: 1rem;
+  }
+
+  .pc-section h3 {
+    color: #e94560;
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+  }
+
+  .pc-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    cursor: pointer;
+    font-size: 0.9rem;
   }
 
   .error {

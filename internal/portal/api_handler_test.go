@@ -44,7 +44,7 @@ func (m *mockRefDataStore) ListSpellsByClass(_ context.Context, class, _ string)
 	return result, nil
 }
 
-func (m *mockRefDataStore) ListEquipment(_ context.Context) ([]portal.EquipmentItem, error) {
+func (m *mockRefDataStore) ListEquipment(_ context.Context, _ string) ([]portal.EquipmentItem, error) {
 	return m.equipment, nil
 }
 

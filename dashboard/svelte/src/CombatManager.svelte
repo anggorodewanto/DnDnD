@@ -112,6 +112,17 @@
         ...pendingByEncounter,
         [encID]: state._pendingFromSnapshot || {},
       };
+      // Finding 14: merge snapshot into encounters so activeEncounter reflects
+      // WebSocket updates immediately without waiting for the next poll.
+      const idx = encounters.findIndex((e) => e.id === encID);
+      if (idx !== -1) {
+        const merged = { ...encounters[idx] };
+        for (const key of Object.keys(state)) {
+          if (key === '_pendingFromSnapshot' || key === 'dirty') continue;
+          merged[key] = state[key];
+        }
+        encounters[idx] = merged;
+      }
     });
 
     return () => {

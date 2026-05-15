@@ -156,49 +156,66 @@ func (h *FlyHandler) HandleFlyConfirm(interaction *discordgo.Interaction, turnID
 		return
 	}
 
-	// Deduct movement
-	updatedTurn, err := combat.UseMovement(turn, int32(costFt))
-	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot fly: %v", err))
+	// F-4: the actual write (turn resource deduction + altitude update)
+	// runs inside AcquireAndRun so the advisory lock is held across the
+	// persistence step.
+	confirmFly := func(ctx context.Context) error {
+		// Deduct movement
+		updatedTurn, err := combat.UseMovement(turn, int32(costFt))
+		if err != nil {
+			respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot fly: %v", err))
+			return errAlreadyResponded
+		}
+
+		// Persist turn resources
+		_, err = h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updatedTurn))
+		if err != nil {
+			respondEphemeral(h.session, interaction, "Failed to update turn resources.")
+			return errAlreadyResponded
+		}
+
+		// Get current combatant for position
+		combatant, err := h.combatService.GetCombatant(ctx, combatantID)
+		if err != nil {
+			respondEphemeral(h.session, interaction, "Failed to get combatant data.")
+			return errAlreadyResponded
+		}
+
+		// Update combatant altitude
+		_, err = h.combatService.UpdateCombatantPosition(ctx, combatantID, combatant.PositionCol, combatant.PositionRow, newAltitude)
+		if err != nil {
+			respondEphemeral(h.session, interaction, "Failed to update position.")
+			return errAlreadyResponded
+		}
+
+		remaining := combat.FormatRemainingResources(updatedTurn, nil)
+		var msg string
+		if newAltitude == 0 {
+			msg = fmt.Sprintf("\U0001f985 Descended to ground level. %s", remaining)
+		} else {
+			msg = fmt.Sprintf("\U0001f985 Flying at %dft altitude. %s", newAltitude, remaining)
+		}
+
+		_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseUpdateMessage,
+			Data: &discordgo.InteractionResponseData{
+				Content:    msg,
+				Components: []discordgo.MessageComponent{},
+			},
+		})
+		return errAlreadyResponded
+	}
+
+	if h.turnGate != nil {
+		if _, gateErr := h.turnGate.AcquireAndRun(ctx, turn.EncounterID, discordUserID(interaction), confirmFly); gateErr != nil {
+			if gateErr != errAlreadyResponded {
+				respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+			}
+			return
+		}
+	} else if runErr := confirmFly(ctx); runErr != nil {
 		return
 	}
-
-	// Persist turn resources
-	_, err = h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updatedTurn))
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to update turn resources.")
-		return
-	}
-
-	// Get current combatant for position
-	combatant, err := h.combatService.GetCombatant(ctx, combatantID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to get combatant data.")
-		return
-	}
-
-	// Update combatant altitude
-	_, err = h.combatService.UpdateCombatantPosition(ctx, combatantID, combatant.PositionCol, combatant.PositionRow, newAltitude)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to update position.")
-		return
-	}
-
-	remaining := combat.FormatRemainingResources(updatedTurn, nil)
-	var msg string
-	if newAltitude == 0 {
-		msg = fmt.Sprintf("\U0001f985 Descended to ground level. %s", remaining)
-	} else {
-		msg = fmt.Sprintf("\U0001f985 Flying at %dft altitude. %s", newAltitude, remaining)
-	}
-
-	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseUpdateMessage,
-		Data: &discordgo.InteractionResponseData{
-			Content:    msg,
-			Components: []discordgo.MessageComponent{},
-		},
-	})
 }
 
 // HandleFlyCancel processes the fly cancel button click.

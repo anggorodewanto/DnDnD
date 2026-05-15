@@ -196,11 +196,21 @@ make playtest-replay TRANSCRIPT=internal/playtest/testdata/transcripts/<name>.js
 | Path | Scenario | Notes |
 | --- | --- | --- |
 | `internal/playtest/testdata/sample.jsonl` | smoke | `/recap` on empty campaign — used as the default for `make playtest-replay` |
+| `internal/playtest/testdata/combat_round.jsonl` | combat round | `/move` → `/attack` → `/done` sequence — exercises a full combat turn |
 
 > Add new rows here as scenarios get captured. The first real playtest
 > session should aim to capture transcripts for #1 (combat OA) and #4
 > (death save) — those exercise the most logic per command and so will
 > catch the most regressions on replay.
+
+## Player-agent CLI note
+
+The `cmd/playtest-player` CLI is a **manual aid**, not an automated player.
+It validates slash-command syntax, prints "PASTE THIS" instructions for the
+human to copy into Discord, and records the resulting transcript. It does
+**not** issue slash commands itself (Discord's interaction model requires a
+real user session). This is by design: the transcript captures real
+bot-to-Discord round-trips, not simulated ones.
 
 ## Transcript capture status (H-121.4)
 

@@ -82,6 +82,21 @@ func run(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, "Run `sqlc generate` and commit the result.")
 		return &driftError{code: 1, msg: "sqlc drift detected"}
 	}
+
+	// Finding 24 note: Phase 118c says CI should run `sqlc generate && git
+	// diff --exit-code` or equivalent. The fingerprint approach (snapshot
+	// before, compare after) is equivalent in CI because the working tree
+	// starts clean from checkout. If sqlc generate changes any file, the
+	// fingerprint comparison catches it. The fingerprint approach is
+	// preferred because:
+	//   1. It works in environments without git (e.g. Docker builds).
+	//   2. It doesn't false-positive when a developer has already run
+	//      sqlc generate locally but hasn't committed yet.
+	//   3. It reports exactly which files changed (not just "something
+	//      under the directory").
+	// A `git diff HEAD` secondary check is intentionally omitted to avoid
+	// breaking local dev workflows where generated files are dirty-but-correct.
+
 	fmt.Fprintf(stdout, "OK: no sqlc drift under %s\n", *target)
 	return nil
 }

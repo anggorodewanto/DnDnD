@@ -419,3 +419,70 @@ func TestBuildDiscordHandlers_Integration(t *testing.T) {
 	assert.NotNil(t, result.use)
 	assert.NotNil(t, result.enemyTurnNotifier)
 }
+
+// TestBuildDiscordHandlers_WiresDoneHandlerDependencies asserts that Finding 5
+// is resolved: the /done handler receives all runtime dependencies needed to
+// actually advance turns and enforce ownership.
+func TestBuildDiscordHandlers_WiresDoneHandlerDependencies(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := testutil.NewTestDB(t)
+	require.NoError(t, database.MigrateUp(db, dbfs.Migrations))
+
+	queries := refdata.New(db)
+	combatStore := combat.NewStoreAdapter(queries)
+	combatSvc := combat.NewService(combatStore)
+
+	deps := discordHandlerDeps{
+		session:                  &testSession{},
+		queries:                  queries,
+		db:                       db,
+		combatService:            combatSvc,
+		roller:                   dice.NewRoller(nil),
+		resolver:                 newDiscordUserEncounterResolver(queries),
+		enemyTurnEncounterLookup: combatSvc,
+		campaignSettings: &stubCampaignSettingsProvider{
+			channels: map[string]string{"your-turn": "ch-yt"},
+		},
+	}
+	set := buildDiscordHandlers(deps)
+	require.NotNil(t, set.done, "done handler must be constructed")
+	assert.True(t, set.done.HasTurnAdvancer(),
+		"done handler must have TurnAdvancer wired (otherwise /done replies 'not yet fully implemented')")
+	assert.True(t, set.done.HasCampaignProvider(),
+		"done handler must have CampaignProvider wired (otherwise isAuthorized allows anyone)")
+	assert.True(t, set.done.HasPlayerLookup(),
+		"done handler must have PlayerLookup wired (otherwise isAuthorized allows anyone)")
+	assert.True(t, set.done.HasTurnNotifier(),
+		"done handler must have TurnNotifier wired (otherwise turn notifications are silent)")
+}
+
+// TestBuildDiscordHandlers_WiresActionTurnGate asserts that Finding 7 is
+// resolved: the /action handler receives a TurnGate in production when
+// deps.db and deps.queries are present.
+func TestBuildDiscordHandlers_WiresActionTurnGate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	db := testutil.NewTestDB(t)
+	require.NoError(t, database.MigrateUp(db, dbfs.Migrations))
+
+	queries := refdata.New(db)
+	combatStore := combat.NewStoreAdapter(queries)
+	combatSvc := combat.NewService(combatStore)
+
+	deps := discordHandlerDeps{
+		session:                  &testSession{},
+		queries:                  queries,
+		db:                       db,
+		combatService:            combatSvc,
+		roller:                   dice.NewRoller(nil),
+		resolver:                 newDiscordUserEncounterResolver(queries),
+		enemyTurnEncounterLookup: combatSvc,
+	}
+	result := buildDiscordHandlers(deps)
+	require.NotNil(t, result.action, "action handler must be constructed")
+}

@@ -72,7 +72,7 @@ type RefDataStore interface {
 	ListRaces(ctx context.Context) ([]RaceInfo, error)
 	ListClasses(ctx context.Context) ([]ClassInfo, error)
 	ListSpellsByClass(ctx context.Context, class, campaignID string) ([]SpellInfo, error)
-	ListEquipment(ctx context.Context) ([]EquipmentItem, error)
+	ListEquipment(ctx context.Context, campaignID string) ([]EquipmentItem, error)
 }
 
 // APIHandler serves the portal JSON API endpoints.
@@ -139,7 +139,8 @@ func (h *APIHandler) ListSpells(w http.ResponseWriter, r *http.Request) {
 
 // ListEquipment returns all weapons and armor as JSON.
 func (h *APIHandler) ListEquipment(w http.ResponseWriter, r *http.Request) {
-	items, err := h.refData.ListEquipment(r.Context())
+	campaignID := r.URL.Query().Get("campaign_id")
+	items, err := h.refData.ListEquipment(r.Context(), campaignID)
 	if err != nil {
 		h.logger.Error("listing equipment", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)

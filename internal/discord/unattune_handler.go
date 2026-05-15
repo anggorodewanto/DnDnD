@@ -19,7 +19,15 @@ type UnattuneHandler struct {
 	campaignProv    InventoryCampaignProvider
 	characterLookup InventoryCharacterLookup
 	store           AttuneCharacterStore
-	cardUpdater     CardUpdater // SR-007
+	publisher       AttunePublisher // Finding 10: refresh dashboard on unattune
+	cardUpdater     CardUpdater     // SR-007
+}
+
+// SetPublisher wires the optional dashboard publisher (Finding 10). Same
+// pattern as AttuneHandler — publishes a fresh encounter snapshot when the
+// character is in combat after unattunement.
+func (h *UnattuneHandler) SetPublisher(p AttunePublisher) {
+	h.publisher = p
 }
 
 // SetCardUpdater wires the SR-007 character-card refresh callback fired
@@ -99,6 +107,12 @@ func (h *UnattuneHandler) Handle(interaction *discordgo.Interaction) {
 	}); err != nil {
 		respondEphemeral(h.session, interaction, "Failed to save attunement changes. Please try again.")
 		return
+	}
+
+	// Finding 10: fan out a fresh encounter snapshot if the character is
+	// currently in combat (publisher silently no-ops otherwise).
+	if h.publisher != nil {
+		h.publisher.PublishForCharacter(ctx, char.ID)
 	}
 
 	// SR-007: refresh #character-cards after the unattune write.

@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -1483,5 +1484,114 @@ func TestRestHandler_AutoApproveRest_DefaultIsTrue(t *testing.T) {
 
 	if !strings.Contains(responded, "Short Rest") {
 		t.Errorf("expected the actual rest prompt when auto-approval defaults to on, got: %s", responded)
+	}
+}
+
+// --- Finding 9 test: dawn recharge supplied and persisted during long rest ---
+
+// mockRestMagicItemLookup returns magic items with charges info.
+type mockRestMagicItemLookup struct {
+	items map[string]refdata.MagicItem
+}
+
+func (m *mockRestMagicItemLookup) GetMagicItem(_ context.Context, id string) (refdata.MagicItem, error) {
+	if mi, ok := m.items[id]; ok {
+		return mi, nil
+	}
+	return refdata.MagicItem{}, fmt.Errorf("not found: %s", id)
+}
+
+func TestRestHandler_LongRest_DawnRechargeSuppliedAndPersisted(t *testing.T) {
+	var capturedParams refdata.UpdateCharacterParams
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		return nil
+	}
+
+	campaignID := uuid.New()
+	charID := uuid.New()
+
+	scores, _ := json.Marshal(character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10})
+	classes, _ := json.Marshal([]character.ClassEntry{{Class: "wizard", Level: 5}})
+	hitDice, _ := json.Marshal(map[string]int{"d6": 5})
+
+	// Inventory with a wand that has 3/7 charges
+	items := []character.InventoryItem{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: "magic_item", IsMagic: true, Charges: 3, MaxCharges: 7},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	char := refdata.Character{
+		ID:               charID,
+		CampaignID:       campaignID,
+		Name:             "Gandalf",
+		Level:            5,
+		HpMax:            30,
+		HpCurrent:        15,
+		AbilityScores:    scores,
+		Classes:          classes,
+		HitDiceRemaining: hitDice,
+		Inventory:        pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+	}
+
+	// Magic item ref data with dawn recharge
+	chargesJSON, _ := json.Marshal(map[string]any{"max": 7, "recharge": "dawn", "recharge_dice": "1d6+1", "destroy_on_zero": true})
+	magicItemLookup := &mockRestMagicItemLookup{
+		items: map[string]refdata.MagicItem{
+			"wand-of-fireballs": {
+				ID:      "wand-of-fireballs",
+				Charges: pqtype.NullRawMessage{RawMessage: chargesJSON, Valid: true},
+			},
+		},
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 4 })
+
+	h := NewRestHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		&mockRestCharacterUpdater{
+			updateCharacterFn: func(_ context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error) {
+				capturedParams = arg
+				return refdata.Character{ID: arg.ID}, nil
+			},
+		},
+		nil,
+		nil,
+	)
+	h.SetMagicItemLookup(magicItemLookup)
+
+	h.Handle(makeRestInteraction("long"))
+
+	// Finding 9: verify inventory was persisted with recharged charges.
+	// The key assertion is that Inventory IS persisted (was previously missing).
+	// The exact charge value depends on the crypto-rand roll inside
+	// inventory.NewService(nil).DawnRecharge, so we assert the charges
+	// increased from the starting value of 3 (any recharge adds at least 2
+	// from 1d6+1 minimum roll of 1+1=2).
+	if !capturedParams.Inventory.Valid {
+		t.Fatal("expected Inventory to be persisted after dawn recharge")
+	}
+	var updatedItems []character.InventoryItem
+	if err := json.Unmarshal(capturedParams.Inventory.RawMessage, &updatedItems); err != nil {
+		t.Fatalf("unmarshal inventory: %v", err)
+	}
+	if len(updatedItems) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(updatedItems))
+	}
+	if updatedItems[0].Charges <= 3 {
+		t.Errorf("expected charges to increase from 3 after dawn recharge, got %d", updatedItems[0].Charges)
+	}
+	if updatedItems[0].Charges > 7 {
+		t.Errorf("expected charges to be capped at max 7, got %d", updatedItems[0].Charges)
 	}
 }

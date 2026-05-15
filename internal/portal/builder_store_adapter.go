@@ -297,6 +297,15 @@ func DeriveHP(class string, scores character.AbilityScores) int {
 	return character.CalculateHP(classes, hitDice, scores)
 }
 
+// DeriveHPMulticlass calculates HP for a multiclass character using all class entries.
+func DeriveHPMulticlass(classes []character.ClassEntry, scores character.AbilityScores) int {
+	hitDice := make(map[string]string, len(classes))
+	for _, c := range classes {
+		hitDice[c.Class] = ClassHitDie(c.Class)
+	}
+	return character.CalculateHP(classes, hitDice, scores)
+}
+
 // DeriveAC calculates AC for a character with no armor.
 func DeriveAC(scores character.AbilityScores) int {
 	return character.CalculateAC(scores, nil, false, "")

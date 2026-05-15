@@ -99,16 +99,17 @@ func TestRun_HealthEndpointFunctional(t *testing.T) {
 	resp := waitForServer(t, addr)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	// Finding 3: without DATABASE_URL, /health reports degraded (503).
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 (degraded without DB), got %d", resp.StatusCode)
 	}
 
 	var body map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode body: %v", err)
 	}
-	if body["status"] != "ok" {
-		t.Fatalf("expected status ok, got %v", body["status"])
+	if body["status"] != "degraded" {
+		t.Fatalf("expected status degraded, got %v", body["status"])
 	}
 
 	cancel()
@@ -381,8 +382,9 @@ func TestRun_DefaultAddr(t *testing.T) {
 	resp := waitForServer(t, addr)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	// Finding 3: without DATABASE_URL, /health reports degraded (503).
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 (degraded without DB), got %d", resp.StatusCode)
 	}
 
 	cancel()

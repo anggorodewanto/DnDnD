@@ -653,3 +653,62 @@ func TestHandleSearch_UnknownCategory_ReturnsEmpty(t *testing.T) {
 	assert.Len(t, results, 0)
 }
 
+
+func TestHandleSearch_CampaignScopedHomebrew(t *testing.T) {
+	campA := uuid.New()
+	campB := uuid.New()
+	store := &stubStore{
+		weapons: []refdata.Weapon{
+			{ID: "longsword", Name: "Longsword"}, // global (no campaign_id)
+			{ID: "hb-a", Name: "Homebrew A", CampaignID: uuid.NullUUID{UUID: campA, Valid: true}, Homebrew: nullBool(true)},
+			{ID: "hb-b", Name: "Homebrew B", CampaignID: uuid.NullUUID{UUID: campB, Valid: true}, Homebrew: nullBool(true)},
+		},
+		magicItems: []refdata.MagicItem{
+			{ID: "mi-global", Name: "Global Ring", Rarity: "common"},
+			{ID: "mi-a", Name: "Ring of A", Rarity: "rare", CampaignID: uuid.NullUUID{UUID: campA, Valid: true}, Homebrew: nullBool(true)},
+		},
+	}
+	h := itempicker.NewHandler(store)
+
+	// Request with campaign A context — should see global + campA homebrew, not campB
+	req := httptest.NewRequest(http.MethodGet, "/api/campaigns/"+campA.String()+"/items/search", nil)
+	req = chiCtx(req, map[string]string{"campaignID": campA.String()})
+	rec := httptest.NewRecorder()
+	h.HandleSearch(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var results []itempicker.SearchResult
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&results))
+
+	ids := map[string]bool{}
+	for _, r := range results {
+		ids[r.ID] = true
+	}
+	assert.True(t, ids["longsword"], "global weapon should be visible")
+	assert.True(t, ids["hb-a"], "campaign A homebrew should be visible")
+	assert.False(t, ids["hb-b"], "campaign B homebrew should NOT be visible")
+	assert.True(t, ids["mi-global"], "global magic item should be visible")
+	assert.True(t, ids["mi-a"], "campaign A magic item should be visible")
+}
+
+func TestHandleSearch_NoCampaignID_HidesAllHomebrew(t *testing.T) {
+	campA := uuid.New()
+	store := &stubStore{
+		weapons: []refdata.Weapon{
+			{ID: "longsword", Name: "Longsword"},
+			{ID: "hb-a", Name: "Homebrew A", CampaignID: uuid.NullUUID{UUID: campA, Valid: true}, Homebrew: nullBool(true)},
+		},
+	}
+	h := itempicker.NewHandler(store)
+
+	// No campaignID in URL params — should only see global
+	req := httptest.NewRequest(http.MethodGet, "/search", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSearch(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var results []itempicker.SearchResult
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&results))
+	require.Len(t, results, 1)
+	assert.Equal(t, "longsword", results[0].ID)
+}

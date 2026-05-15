@@ -8,6 +8,7 @@ import (
 
 	"github.com/ab/dndnd/internal/portal"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -133,7 +134,7 @@ func TestRefDataAdapter_ListEquipment(t *testing.T) {
 	}
 	adapter := portal.NewRefDataAdapter(mq)
 
-	items, err := adapter.ListEquipment(context.Background())
+	items, err := adapter.ListEquipment(context.Background(), "")
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
 	assert.Equal(t, "longsword", items[0].ID)
@@ -148,7 +149,7 @@ func TestRefDataAdapter_ListEquipment(t *testing.T) {
 func TestRefDataAdapter_ListEquipment_WeaponsError(t *testing.T) {
 	mq := &errorQueries{}
 	adapter := portal.NewRefDataAdapter(mq)
-	_, err := adapter.ListEquipment(context.Background())
+	_, err := adapter.ListEquipment(context.Background(), "")
 	assert.Error(t, err)
 }
 
@@ -156,7 +157,7 @@ func TestRefDataAdapter_ListEquipment_ArmorError(t *testing.T) {
 	// Weapons succeed but armor fails
 	mq := &armorErrorQueries{}
 	adapter := portal.NewRefDataAdapter(mq)
-	_, err := adapter.ListEquipment(context.Background())
+	_, err := adapter.ListEquipment(context.Background(), "")
 	assert.Error(t, err)
 }
 
@@ -179,4 +180,55 @@ func TestRefDataAdapter_ListSpellsByClass(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, spells, 1)
 	assert.Equal(t, "Fire Bolt", spells[0].Name)
+}
+
+func TestRefDataAdapter_ListEquipment_CampaignFiltering(t *testing.T) {
+	campA := uuid.New()
+	campB := uuid.New()
+	mq := &mockQueries{
+		weapons: []refdata.Weapon{
+			{ID: "longsword", Name: "Longsword"},
+			{ID: "hb-a", Name: "Homebrew A", CampaignID: uuid.NullUUID{UUID: campA, Valid: true}},
+			{ID: "hb-b", Name: "Homebrew B", CampaignID: uuid.NullUUID{UUID: campB, Valid: true}},
+		},
+		armor: []refdata.Armor{
+			{ID: "chain-mail", Name: "Chain Mail", AcBase: 16, ArmorType: "heavy"},
+		},
+	}
+	adapter := portal.NewRefDataAdapter(mq)
+
+	// With campaign A — should see global + campA, not campB
+	items, err := adapter.ListEquipment(context.Background(), campA.String())
+	require.NoError(t, err)
+	ids := map[string]bool{}
+	for _, item := range items {
+		ids[item.ID] = true
+	}
+	assert.True(t, ids["longsword"])
+	assert.True(t, ids["hb-a"])
+	assert.False(t, ids["hb-b"])
+	assert.True(t, ids["chain-mail"])
+}
+
+func TestRefDataAdapter_ListSpellsByClass_CampaignFiltering(t *testing.T) {
+	campA := uuid.New()
+	campB := uuid.New()
+	mq := &mockQueries{
+		spells: []refdata.Spell{
+			{ID: "fire-bolt", Name: "Fire Bolt", Level: 0, School: "evocation", Classes: []string{"wizard"}},
+			{ID: "hb-spell-a", Name: "Homebrew Spell A", Level: 1, School: "abjuration", Classes: []string{"wizard"}, CampaignID: uuid.NullUUID{UUID: campA, Valid: true}},
+			{ID: "hb-spell-b", Name: "Homebrew Spell B", Level: 1, School: "necromancy", Classes: []string{"wizard"}, CampaignID: uuid.NullUUID{UUID: campB, Valid: true}},
+		},
+	}
+	adapter := portal.NewRefDataAdapter(mq)
+
+	spells, err := adapter.ListSpellsByClass(context.Background(), "wizard", campA.String())
+	require.NoError(t, err)
+	ids := map[string]bool{}
+	for _, s := range spells {
+		ids[s.ID] = true
+	}
+	assert.True(t, ids["fire-bolt"])
+	assert.True(t, ids["hb-spell-a"])
+	assert.False(t, ids["hb-spell-b"])
 }

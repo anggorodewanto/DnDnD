@@ -112,3 +112,32 @@ func TestHealthHandler_ReturnsOKWhenNoSubsystems(t *testing.T) {
 		t.Fatal("expected uptime field in response")
 	}
 }
+
+func TestHealthHandler_DegradedWhenDBNotConfigured(t *testing.T) {
+	// Finding 3: when DATABASE_URL is empty, nil DB checker reports unhealthy.
+	h := NewHealthHandler()
+	h.Register("db", NewDBChecker(nil))
+	h.Register("discord", NewDiscordChecker(nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d", rec.Code)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode JSON body: %v", err)
+	}
+	if body["status"] != "degraded" {
+		t.Fatalf("expected status degraded, got %v", body["status"])
+	}
+	if body["db"] != "disconnected" {
+		t.Fatalf("expected db disconnected, got %v", body["db"])
+	}
+	if body["discord"] != "disconnected" {
+		t.Fatalf("expected discord disconnected, got %v", body["discord"])
+	}
+}

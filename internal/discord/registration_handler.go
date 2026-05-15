@@ -195,7 +195,15 @@ func (h *ImportHandler) handleDDBImport(interaction *discordgo.Interaction, camp
 	}
 
 	respondEphemeral(h.session, interaction, msg)
-	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, importResult.Character.Name, userID, "import", importResult.Warnings)
+
+	// Finding 21: When a re-sync produces a pending import, include the
+	// pending import ID in the DM queue notification so the approval flow
+	// can reference it.
+	if importResult.PendingImportID != uuid.Nil {
+		postDMQueueResyncNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, importResult.Character.Name, userID, importResult.PendingImportID, importResult.Changes)
+	} else {
+		postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, importResult.Character.Name, userID, "import", importResult.Warnings)
+	}
 }
 
 func (h *ImportHandler) handlePlaceholderImport(interaction *discordgo.Interaction, campaign refdata.Campaign, userID, ddbURL string) {
@@ -319,6 +327,29 @@ func postDMQueueNotification(session Session, dmQueueFunc, dmUserFunc func(strin
 		msg = b.String()
 	}
 	_, _ = session.ChannelMessageSend(channelID, msg)
+}
+
+// postDMQueueResyncNotification sends a re-sync notification to the DM queue
+// channel, including the pending import ID so the DM can approve/reject.
+// Finding 21: makes the pending import reachable from the DM approval flow.
+func postDMQueueResyncNotification(session Session, dmQueueFunc, dmUserFunc func(string) string, guildID, characterName, playerUserID string, pendingImportID uuid.UUID, changes []string) {
+	channelID := dmQueueFunc(guildID)
+	if channelID == "" {
+		return
+	}
+	dmUserID := dmUserFunc(guildID)
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("🔄 <@%s> — **%s** re-sync by <@%s> requires approval.\n", dmUserID, characterName, playerUserID))
+	b.WriteString(fmt.Sprintf("**Pending Import ID:** `%s`\n", pendingImportID))
+	if len(changes) > 0 {
+		b.WriteString("\n**Changes:**")
+		for _, c := range changes {
+			b.WriteString("\n• ")
+			b.WriteString(c)
+		}
+	}
+	b.WriteString("\n\nUse the dashboard or `/approve-import` to apply.")
+	_, _ = session.ChannelMessageSend(channelID, b.String())
 }
 
 // StatusCheckResponse returns a status message for a player's current registration state.

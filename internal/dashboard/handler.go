@@ -38,6 +38,12 @@ type CampaignLookup interface {
 	LookupActiveCampaign(ctx context.Context, dmUserID string) (id, status string, err error)
 }
 
+// EncounterLister returns active encounters and saved templates for a campaign.
+type EncounterLister interface {
+	ListActiveEncounterNames(ctx context.Context, campaignID uuid.UUID) ([]string, error)
+	ListSavedEncounterNames(ctx context.Context, campaignID uuid.UUID) ([]string, error)
+}
+
 // NavEntry represents a sidebar navigation entry.
 type NavEntry struct {
 	Label string
@@ -48,13 +54,13 @@ type NavEntry struct {
 // SidebarNav is the list of navigation entries shown in the dashboard sidebar.
 var SidebarNav = []NavEntry{
 	{Label: "Campaign Home", Icon: "🏠", Path: "/dashboard"},
-	{Label: "Character Approval", Icon: "📋", Path: "/dashboard/approvals"},
-	{Label: "Encounter Builder", Icon: "⚔️", Path: "/dashboard/encounters"},
-	{Label: "Stat Block Library", Icon: "📊", Path: "/dashboard/statblocks"},
-	{Label: "Asset Library", Icon: "🖼️", Path: "/dashboard/assets"},
-	{Label: "Map Editor", Icon: "🗺️", Path: "/dashboard/map"},
+	{Label: "Character Approval", Icon: "📋", Path: "/dashboard/app/#approvals"},
+	{Label: "Encounter Builder", Icon: "⚔️", Path: "/dashboard/app/#encounters"},
+	{Label: "Stat Block Library", Icon: "📊", Path: "/dashboard/app/#stat-block-library"},
+	{Label: "Asset Library", Icon: "🖼️", Path: "/dashboard/app/#assets"},
+	{Label: "Map Editor", Icon: "🗺️", Path: "/dashboard/app/#list"},
 	{Label: "Exploration", Icon: "🧭", Path: "/dashboard/exploration"},
-	{Label: "Character Overview", Icon: "👤", Path: "/dashboard/characters"},
+	{Label: "Character Overview", Icon: "👤", Path: "/dashboard/app/#party"},
 	{Label: "Create Character", Icon: "➕", Path: "/dashboard/characters/new"},
 	// Phase 112: error notification badge + panel. The label is rewritten
 	// in-flight to "Errors (N)" by navWithErrorBadge when N > 0.
@@ -99,6 +105,8 @@ type Handler struct {
 	// to 0 (the original placeholder behaviour).
 	approvalsCounter PendingApprovalsCounter
 	dmQueueCounter   DMQueueCounter
+	// Finding 13: optional encounter lister for active/saved encounter data.
+	encounterLister EncounterLister
 	// SR-016: WebSocket origin policy. wsInsecureSkipVerify=true keeps the
 	// historical permissive dev behaviour (any Origin accepted). When false,
 	// ServeWebSocket relies on nhooyr/websocket's built-in same-host check
@@ -124,6 +132,12 @@ func (h *Handler) SetCampaignLookup(lookup CampaignLookup) {
 func (h *Handler) SetCounters(approvals PendingApprovalsCounter, dmQueue DMQueueCounter) {
 	h.approvalsCounter = approvals
 	h.dmQueueCounter = dmQueue
+}
+
+// SetEncounterLister wires the encounter lister for Campaign Home active/saved
+// encounter data. When nil, the cards show empty lists.
+func (h *Handler) SetEncounterLister(lister EncounterLister) {
+	h.encounterLister = lister
 }
 
 // SetErrorReader wires the 24h error count into the Campaign Home sidebar
@@ -226,6 +240,33 @@ func (h *Handler) lookupCampaign(ctx context.Context, dmUserID string) (string, 
 	return id, status
 }
 
+// lookupEncounters resolves active and saved encounter names for the Campaign
+// Home cards. Best-effort: nil lister or errors degrade to empty slices.
+func (h *Handler) lookupEncounters(ctx context.Context, campaignID string) ([]string, []string) {
+	if h.encounterLister == nil || campaignID == "" {
+		return []string{}, []string{}
+	}
+	cid, err := uuid.Parse(campaignID)
+	if err != nil {
+		return []string{}, []string{}
+	}
+	active, err := h.encounterLister.ListActiveEncounterNames(ctx, cid)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("dashboard active encounters lookup failed", "error", err)
+		}
+		active = []string{}
+	}
+	saved, err := h.encounterLister.ListSavedEncounterNames(ctx, cid)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("dashboard saved encounters lookup failed", "error", err)
+		}
+		saved = []string{}
+	}
+	return active, saved
+}
+
 // ServeDashboard serves the dashboard shell with Campaign Home as the default view.
 func (h *Handler) ServeDashboard(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.DiscordUserIDFromContext(r.Context())
@@ -242,12 +283,14 @@ func (h *Handler) ServeDashboard(w http.ResponseWriter, r *http.Request) {
 	campaignID, campaignStatus := h.lookupCampaign(r.Context(), userID)
 	approvals, dmQueue := h.lookupCounts(r.Context(), campaignID)
 
+	activeEnc, savedEnc := h.lookupEncounters(r.Context(), campaignID)
+
 	data := CampaignHomeData{
 		Nav:              navWithErrorBadge(errorCount),
 		DMQueueCount:     dmQueue,
 		PendingApprovals: approvals,
-		ActiveEncounters: []string{},
-		SavedEncounters:  []string{},
+		ActiveEncounters: activeEnc,
+		SavedEncounters:  savedEnc,
 		CampaignID:       campaignID,
 		CampaignStatus:   campaignStatus,
 	}

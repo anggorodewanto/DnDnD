@@ -189,79 +189,88 @@ func (h *AttackHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	// F-4: the entire read-validate-mutate path runs inside AcquireAndRun so
+	// the advisory lock is held across the persistence step.
+	doAttack := func(ctx context.Context) error {
+		turn, err := h.encounterProvider.GetTurn(ctx, encounter.CurrentTurnID.UUID)
+		if err != nil {
+			respondEphemeral(h.session, interaction, "Failed to load turn.")
+			return errAlreadyResponded
+		}
+
+		attacker, err := h.encounterProvider.GetCombatant(ctx, turn.CombatantID)
+		if err != nil {
+			respondEphemeral(h.session, interaction, "Failed to load combatant.")
+			return errAlreadyResponded
+		}
+
+		// C-43-block-commands: a dying or incapacitated combatant cannot
+		// take actions; reject before the service runs.
+		if msg, blocked := incapacitatedRejection(attacker); blocked {
+			respondEphemeral(h.session, interaction, msg)
+			return errAlreadyResponded
+		}
+
+		combatants, err := h.encounterProvider.ListCombatantsByEncounterID(ctx, encounterID)
+		if err != nil {
+			respondEphemeral(h.session, interaction, "Failed to list combatants.")
+			return errAlreadyResponded
+		}
+
+		target, err := combat.ResolveTarget(targetStr, combatants)
+		if err != nil {
+			respondEphemeral(h.session, interaction, fmt.Sprintf("Target %q not found.", targetStr))
+			return errAlreadyResponded
+		}
+
+		walls := h.loadWalls(ctx, encounter)
+
+		if offhand {
+			h.dispatchOffhand(ctx, interaction, encounterID, attacker, *target, turn, walls, encounter)
+			return errAlreadyResponded
+		}
+
+		cmd := combat.AttackCommand{
+			Attacker:       attacker,
+			Target:         *target,
+			Turn:           turn,
+			WeaponOverride: weapon,
+			GWM:            gwm,
+			Sharpshooter:   sharpshooter,
+			Reckless:       reckless,
+			TwoHanded:      twoHanded,
+			Thrown:         thrown,
+			IsImprovised:   improvised,
+			Walls:          walls,
+		}
+
+		result, err := h.combatService.Attack(ctx, cmd, h.roller)
+		if err != nil {
+			respondEphemeral(h.session, interaction, formatAttackError(err))
+			return errAlreadyResponded
+		}
+
+		logLine := combat.FormatAttackLog(result)
+		h.postCombatLog(ctx, encounterID, logLine)
+		respondEphemeral(h.session, interaction, logLine)
+
+		// D-48b/D-49/D-51 follow-up: surface post-hit class-feature prompts
+		// (Stunning Strike / Divine Smite / Bardic Inspiration) when the service
+		// flagged the attacker as eligible. nil-safe: no-op when no poster is wired.
+		h.postClassFeaturePrompts(ctx, interaction, encounterID, attacker, *target, encounter, result)
+		return errAlreadyResponded
+	}
+
 	if !combat.IsExemptCommand("attack") && h.turnGate != nil {
-		if _, gateErr := h.turnGate.AcquireAndRelease(ctx, encounterID, userID); gateErr != nil {
-			respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+		if _, gateErr := h.turnGate.AcquireAndRun(ctx, encounterID, userID, doAttack); gateErr != nil {
+			if gateErr != errAlreadyResponded {
+				respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+			}
 			return
 		}
-	}
-
-	turn, err := h.encounterProvider.GetTurn(ctx, encounter.CurrentTurnID.UUID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to load turn.")
+	} else if err := doAttack(ctx); err != nil {
 		return
 	}
-
-	attacker, err := h.encounterProvider.GetCombatant(ctx, turn.CombatantID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to load combatant.")
-		return
-	}
-
-	// C-43-block-commands: a dying or incapacitated combatant cannot
-	// take actions; reject before the service runs.
-	if msg, blocked := incapacitatedRejection(attacker); blocked {
-		respondEphemeral(h.session, interaction, msg)
-		return
-	}
-
-	combatants, err := h.encounterProvider.ListCombatantsByEncounterID(ctx, encounterID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to list combatants.")
-		return
-	}
-
-	target, err := combat.ResolveTarget(targetStr, combatants)
-	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Target %q not found.", targetStr))
-		return
-	}
-
-	walls := h.loadWalls(ctx, encounter)
-
-	if offhand {
-		h.dispatchOffhand(ctx, interaction, encounterID, attacker, *target, turn, walls, encounter)
-		return
-	}
-
-	cmd := combat.AttackCommand{
-		Attacker:       attacker,
-		Target:         *target,
-		Turn:           turn,
-		WeaponOverride: weapon,
-		GWM:            gwm,
-		Sharpshooter:   sharpshooter,
-		Reckless:       reckless,
-		TwoHanded:      twoHanded,
-		Thrown:         thrown,
-		IsImprovised:   improvised,
-		Walls:          walls,
-	}
-
-	result, err := h.combatService.Attack(ctx, cmd, h.roller)
-	if err != nil {
-		respondEphemeral(h.session, interaction, formatAttackError(err))
-		return
-	}
-
-	logLine := combat.FormatAttackLog(result)
-	h.postCombatLog(ctx, encounterID, logLine)
-	respondEphemeral(h.session, interaction, logLine)
-
-	// D-48b/D-49/D-51 follow-up: surface post-hit class-feature prompts
-	// (Stunning Strike / Divine Smite / Bardic Inspiration) when the service
-	// flagged the attacker as eligible. nil-safe: no-op when no poster is wired.
-	h.postClassFeaturePrompts(ctx, interaction, encounterID, attacker, *target, encounter, result)
 }
 
 // dispatchOffhand routes the off-hand bonus-action attack through the

@@ -1,0 +1,6 @@
+{"ts":"2026-05-03T12:00:00Z","dir":"dispatch","channel_id":"combat-cmd","author":"playtest-player","command":"/move coordinate:B3"}
+{"ts":"2026-05-03T12:00:01Z","dir":"observed","channel_id":"combat-cmd","author":"DnDnD","content":"🏃 Move to B3 — 10ft, 20ft remaining after."}
+{"ts":"2026-05-03T12:00:05Z","dir":"dispatch","channel_id":"combat-cmd","author":"playtest-player","command":"/attack target:Goblin1 weapon:longsword"}
+{"ts":"2026-05-03T12:00:06Z","dir":"observed","channel_id":"combat-cmd","author":"DnDnD","content":"⚔️ Aria attacks Goblin1 with Longsword — 18 vs AC 13 — Hit! 8 slashing damage."}
+{"ts":"2026-05-03T12:00:10Z","dir":"dispatch","channel_id":"combat-cmd","author":"playtest-player","command":"/done"}
+{"ts":"2026-05-03T12:00:11Z","dir":"observed","channel_id":"combat-cmd","author":"DnDnD","content":"✅ Aria's turn is complete. Next up: Goblin1."}

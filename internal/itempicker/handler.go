@@ -51,10 +51,14 @@ func NewHandler(store Store) *Handler {
 // rows, anything else (or unset) returns both. Every result also includes
 // the boolean `homebrew` field in its body so callers can render a badge
 // without a second lookup.
+//
+// Campaign-scoped homebrew isolation: reads the campaign ID from the URL path
+// and filters out homebrew rows belonging to other campaigns.
 func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	q := strings.ToLower(r.URL.Query().Get("q"))
 	category := r.URL.Query().Get("category")
 	homebrewFilter, hasHomebrewFilter := parseHomebrewFilter(r.URL.Query().Get("homebrew"))
+	campaignID := parseCampaignID(chi.URLParam(r, "campaignID"))
 
 	results := []SearchResult{}
 
@@ -65,6 +69,9 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, wp := range weapons {
+			if !campaignVisible(wp.CampaignID, campaignID) {
+				continue
+			}
 			if q != "" && !strings.Contains(strings.ToLower(wp.Name), q) {
 				continue
 			}
@@ -122,6 +129,9 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, mi := range magicItems {
+			if !campaignVisible(mi.CampaignID, campaignID) {
+				continue
+			}
 			if q != "" && !strings.Contains(strings.ToLower(mi.Name), q) {
 				continue
 			}
@@ -288,4 +298,31 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 func jsonOK(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// parseCampaignID parses a campaign ID from the URL path parameter.
+// Returns uuid.Nil on empty/invalid input.
+func parseCampaignID(raw string) uuid.UUID {
+	if raw == "" {
+		return uuid.Nil
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return uuid.Nil
+	}
+	return id
+}
+
+// campaignVisible returns true if a row should be visible to the given campaign.
+// A row is visible if: (a) it has no campaign_id (global/SRD), or (b) its
+// campaign_id matches the requesting campaign. When campaignID is Nil (no
+// campaign context), only global rows are shown.
+func campaignVisible(rowCampaignID uuid.NullUUID, campaignID uuid.UUID) bool {
+	if !rowCampaignID.Valid || rowCampaignID.UUID == uuid.Nil {
+		return true // global/SRD row
+	}
+	if campaignID == uuid.Nil {
+		return false // no campaign context — hide homebrew
+	}
+	return rowCampaignID.UUID == campaignID
 }

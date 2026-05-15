@@ -5,13 +5,16 @@
   import NarratePanel from './NarratePanel.svelte';
   import MessagePlayerPanel from './MessagePlayerPanel.svelte';
   import QuickActionsPanel from './QuickActionsPanel.svelte';
+  import DMQueuePanel from './DMQueuePanel.svelte';
   import { getCombatWorkspace } from './lib/api.js';
 
   let { campaignId } = $props();
 
   let activeTab = $state('dm-queue');
-  let activeEncounterId = $state(null);
-  let combatants = $state([]);
+  let encounters = $state([]);
+  let selectedEncounterIdx = $state(0);
+  let activeEncounterId = $derived(encounters[selectedEncounterIdx]?.id || null);
+  let combatants = $derived(encounters[selectedEncounterIdx]?.combatants || []);
 
   $effect(() => {
     if (campaignId) loadWorkspace();
@@ -20,13 +23,9 @@
   async function loadWorkspace() {
     try {
       const data = await getCombatWorkspace(campaignId);
-      const list = data.encounters || [];
-      if (list.length === 0) return;
-      activeEncounterId = list[0].id;
-      combatants = list[0].combatants || [];
+      encounters = data.encounters || [];
     } catch (e) {
-      // Tabs without an active encounter show a placeholder.
-      activeEncounterId = null;
+      encounters = [];
     }
   }
 </script>
@@ -34,12 +33,17 @@
 <div class="mobile-shell" data-testid="mobile-shell">
   <main class="mobile-main">
     {#if activeTab === 'dm-queue'}
-      {#if activeEncounterId}
-        <ActionResolver encounterId={activeEncounterId} {combatants} />
-      {:else}
-        <p class="placeholder">No active encounter with pending items.</p>
-      {/if}
+      <DMQueuePanel />
     {:else if activeTab === 'turn-queue'}
+      {#if encounters.length > 1}
+        <div class="encounter-select">
+          <select bind:value={selectedEncounterIdx}>
+            {#each encounters as enc, i}
+              <option value={i}>{enc.display_name || enc.name}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
       {#if activeEncounterId}
         <TurnQueue encounterId={activeEncounterId} readOnly={true} />
       {:else}
@@ -48,14 +52,15 @@
     {:else if activeTab === 'narrate'}
       <NarratePanel {campaignId} />
     {:else if activeTab === 'approvals'}
-      <div class="approvals-link">
-        <p>Character Approval Queue</p>
-        <a href="/dashboard/approval" target="_self">Open approvals page</a>
-      </div>
+      {#if activeEncounterId}
+        <ActionResolver encounterId={activeEncounterId} {combatants} />
+      {:else}
+        <p class="placeholder">No active encounter with pending items.</p>
+      {/if}
     {:else if activeTab === 'message-player'}
       <MessagePlayerPanel {campaignId} />
     {:else if activeTab === 'quick-actions'}
-      <QuickActionsPanel {campaignId} />
+      <QuickActionsPanel {campaignId} {encounters} />
     {/if}
   </main>
 
@@ -87,19 +92,15 @@
     color: #a0aec0;
     font-style: italic;
   }
-  .approvals-link {
-    padding: 1rem;
-    background: #16213e;
-    border-radius: 4px;
-    border: 1px solid #0f3460;
+  .encounter-select {
+    margin-bottom: 0.5rem;
   }
-  .approvals-link a {
-    display: inline-block;
-    margin-top: 0.5rem;
-    padding: 0.5rem 1rem;
-    background: #e94560;
-    color: white;
-    text-decoration: none;
+  .encounter-select select {
+    width: 100%;
+    padding: 0.5rem;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
     border-radius: 4px;
   }
   .bottom-tabs {

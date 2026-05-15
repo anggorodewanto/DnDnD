@@ -128,3 +128,35 @@ func BuildSummary(command, userID string, err error) string {
 // behavior in this phase is soft (log-only) so production paths should not
 // propagate this error to players.
 var ErrNoRecorder = errors.New("errorlog: no recorder configured")
+
+// RecorderRef is a thread-safe swappable Recorder. It starts with an initial
+// recorder and can be upgraded later (e.g., from MemoryStore to PgStore).
+type RecorderRef struct {
+	mu  sync.RWMutex
+	rec Recorder
+}
+
+// NewRecorderRef creates a RecorderRef with the given initial recorder.
+func NewRecorderRef(initial Recorder) *RecorderRef {
+	return &RecorderRef{rec: initial}
+}
+
+// Record delegates to the current recorder.
+func (r *RecorderRef) Record(ctx context.Context, entry Entry) error {
+	r.mu.RLock()
+	rec := r.rec
+	r.mu.RUnlock()
+	if rec == nil {
+		return nil
+	}
+	return rec.Record(ctx, entry)
+}
+
+// Swap replaces the underlying recorder and returns the previous one.
+func (r *RecorderRef) Swap(next Recorder) Recorder {
+	r.mu.Lock()
+	prev := r.rec
+	r.rec = next
+	r.mu.Unlock()
+	return prev
+}

@@ -58,6 +58,21 @@ func TestE2E_RegistrationScenario(t *testing.T) {
 	interactionID := h.PlayerCommand(playerID, "register", stringOpt("name", "Aria"))
 	h.AssertEphemeralContains(interactionID, "Registration submitted")
 
+	// Finding 22: assert that the DM queue channel received a notification
+	// (verifies channel output, not just ephemeral responses).
+	dmQueueEntry, err := h.fake.WaitFor(func(e discordfake.Entry) bool {
+		return e.Kind == discordfake.KindChannelMessage &&
+			e.ChannelID == "ch-dmqueue-"+h.guildID &&
+			strings.Contains(e.Content, "Aria") &&
+			strings.Contains(e.Content, "register")
+	}, 5*time.Second)
+	if err != nil {
+		t.Fatalf("expected DM queue notification for registration: %v\nTranscript:\n%s", err, h.RenderTranscript())
+	}
+	if !strings.Contains(dmQueueEntry.Content, playerID) {
+		t.Fatalf("DM queue notification should mention player ID %s; got: %s", playerID, dmQueueEntry.Content)
+	}
+
 	pcs, err := h.queries.ListPlayerCharactersByCampaign(context.Background(), camp.ID)
 	if err != nil {
 		t.Fatalf("ListPlayerCharactersByCampaign: %v", err)

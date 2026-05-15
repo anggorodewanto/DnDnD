@@ -104,3 +104,28 @@ func TestUseCharges_NoChargesOnItem(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no charges")
 }
+
+func TestUseCharges_VariableChargeAmount_ForSpellCasting(t *testing.T) {
+	// Finding 8: spell-casting items like Wand of Fireballs can spend
+	// variable charges (1 charge = 3rd level, 2 = 4th, etc.)
+	items := []character.InventoryItem{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: "magic_item", IsMagic: true, Charges: 7, MaxCharges: 7},
+	}
+	attunement := []character.AttunementSlot{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs"},
+	}
+
+	// Spend 3 charges (upcast to 5th level)
+	result, err := UseCharges(UseChargesInput{
+		Items:      items,
+		Attunement: attunement,
+		ItemID:     "wand-of-fireballs",
+		Amount:     3,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 4, result.UpdatedItems[0].Charges)
+	assert.Equal(t, 3, result.ChargesUsed)
+	assert.Equal(t, 4, result.ChargesLeft)
+	assert.Contains(t, result.Message, "3 charges")
+}

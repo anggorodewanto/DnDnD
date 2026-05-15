@@ -163,6 +163,22 @@ func (h *DoneHandler) SetMapRegenerator(mr MapRegenerator) {
 // silent-no-op (#combat-map gets no PNG when nil).
 func (h *DoneHandler) HasMapRegenerator() bool { return h.mapRegenerator != nil }
 
+// HasTurnAdvancer reports whether a non-nil DoneTurnAdvancer has been wired.
+// Used by production-wiring tests to detect the Finding 5 regression
+// (nil advancer → /done replies "not yet fully implemented").
+func (h *DoneHandler) HasTurnAdvancer() bool { return h.turnAdvancer != nil }
+
+// HasCampaignProvider reports whether a non-nil DoneCampaignProvider has been
+// wired. Used by production-wiring tests to detect the Finding 5 regression
+// (nil providers → isAuthorized allows anyone).
+func (h *DoneHandler) HasCampaignProvider() bool { return h.campaignProvider != nil }
+
+// HasPlayerLookup reports whether a non-nil DonePlayerLookup has been wired.
+func (h *DoneHandler) HasPlayerLookup() bool { return h.playerLookup != nil }
+
+// HasTurnNotifier reports whether a non-nil TurnNotifier has been wired.
+func (h *DoneHandler) HasTurnNotifier() bool { return h.turnNotifier != nil }
+
 // Handle processes the /done command interaction.
 func (h *DoneHandler) Handle(interaction *discordgo.Interaction) {
 	ctx := context.Background()

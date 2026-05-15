@@ -656,3 +656,143 @@ func TestUseHandler_MagicItem_InCombat_ActionAlreadySpent_Rejected(t *testing.T)
 	assert.Empty(t, store.updatedInventory, "rejection must not mutate inventory")
 	assert.Empty(t, combatProv.updates, "rejection must not persist a turn update")
 }
+
+// --- Finding 8 tests: spell-casting magic items route through resolution ---
+
+// mockUseMagicItemLookup returns a magic item with active abilities.
+type mockUseMagicItemLookup struct {
+	item refdata.MagicItem
+	err  error
+}
+
+func (m *mockUseMagicItemLookup) GetMagicItem(_ context.Context, _ string) (refdata.MagicItem, error) {
+	return m.item, m.err
+}
+
+// mockUseMagicItemSpellCaster records spell cast calls.
+type mockUseMagicItemSpellCaster struct {
+	calls  []MagicItemCastInput
+	result MagicItemCastResult
+	err    error
+}
+
+func (m *mockUseMagicItemSpellCaster) CastFromItem(_ context.Context, input MagicItemCastInput) (MagicItemCastResult, error) {
+	m.calls = append(m.calls, input)
+	return m.result, m.err
+}
+
+func TestUseHandler_MagicItem_SpellCasting_RoutesToCombatResolution(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+	turnID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: "magic_item", IsMagic: true, RequiresAttunement: true, Charges: 5, MaxCharges: 7},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	attunement := []character.AttunementSlot{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs"},
+	}
+	attunementJSON, _ := json.Marshal(attunement)
+
+	store := &mockUseCharacterStore{char: refdata.Character{ID: charID}}
+	combatProv := &mockUseCombatProvider{turn: refdata.Turn{ID: turnID}, inCombat: true}
+
+	// Magic item with spell_id in active_abilities
+	activeAbilities, _ := json.Marshal([]map[string]any{
+		{"name": "Fireball", "spell_id": "fireball", "charges_cost": 1, "action_type": "action"},
+	})
+	lookup := &mockUseMagicItemLookup{item: refdata.MagicItem{
+		ActiveAbilities: pqtype.NullRawMessage{RawMessage: activeAbilities, Valid: true},
+	}}
+
+	spellCaster := &mockUseMagicItemSpellCaster{
+		result: MagicItemCastResult{Message: "🔥 Fireball hits 3 targets!", Routed: true},
+	}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:              charID,
+			CampaignID:      campID,
+			Name:            "Aria",
+			Inventory:       pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+			AttunementSlots: pqtype.NullRawMessage{RawMessage: attunementJSON, Valid: true},
+		}},
+		store,
+		nil,
+		combatProv,
+	)
+	handler.SetMagicItemLookup(lookup)
+	handler.SetSpellCaster(spellCaster)
+
+	interaction := makeUseInteraction("guild1", "user1", "wand-of-fireballs")
+	handler.Handle(interaction)
+
+	// Verify spell caster was invoked
+	if assert.Len(t, spellCaster.calls, 1) {
+		assert.Equal(t, "fireball", spellCaster.calls[0].SpellID)
+		assert.Equal(t, charID, spellCaster.calls[0].CharacterID)
+		assert.Equal(t, 1, spellCaster.calls[0].Charges)
+	}
+
+	// Verify response includes both charge message and spell result
+	assert.Contains(t, sess.lastResponse, "Fireball hits 3 targets")
+	assert.Contains(t, sess.lastResponse, "charge")
+
+	// Verify charges were deducted
+	var updatedItems []character.InventoryItem
+	_ = json.Unmarshal(store.updatedInventory, &updatedItems)
+	if assert.Len(t, updatedItems, 1) {
+		assert.Equal(t, 4, updatedItems[0].Charges)
+	}
+}
+
+func TestUseHandler_MagicItem_SpellCasting_OutOfCombat_ReportsSpellName(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: "magic_item", IsMagic: true, RequiresAttunement: true, Charges: 5, MaxCharges: 7},
+	}
+	itemsJSON, _ := json.Marshal(items)
+
+	attunement := []character.AttunementSlot{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs"},
+	}
+	attunementJSON, _ := json.Marshal(attunement)
+
+	store := &mockUseCharacterStore{char: refdata.Character{ID: charID}}
+
+	activeAbilities, _ := json.Marshal([]map[string]any{
+		{"name": "Fireball", "spell_id": "fireball", "charges_cost": 1, "action_type": "action"},
+	})
+	lookup := &mockUseMagicItemLookup{item: refdata.MagicItem{
+		ActiveAbilities: pqtype.NullRawMessage{RawMessage: activeAbilities, Valid: true},
+	}}
+
+	handler := NewUseHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:              charID,
+			CampaignID:      campID,
+			Name:            "Aria",
+			Inventory:       pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+			AttunementSlots: pqtype.NullRawMessage{RawMessage: attunementJSON, Valid: true},
+		}},
+		store,
+		nil,
+		nil, // no combat provider = out of combat
+	)
+	handler.SetMagicItemLookup(lookup)
+
+	interaction := makeUseInteraction("guild1", "user1", "wand-of-fireballs")
+	handler.Handle(interaction)
+
+	// Out of combat: spell name is reported but no combat resolution
+	assert.Contains(t, sess.lastResponse, "fireball")
+	assert.Contains(t, sess.lastResponse, "Casts")
+}

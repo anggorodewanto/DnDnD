@@ -13,7 +13,7 @@ import (
 
 func TestNewRouter_HealthEndpoint(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	r, _ := NewRouter(logger)
+	r, _ := NewRouter(logger, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
@@ -35,7 +35,7 @@ func TestNewRouter_HealthEndpoint(t *testing.T) {
 
 func TestNewRouter_ExposesHealthHandler(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	router, health := NewRouter(logger)
+	router, health := NewRouter(logger, nil)
 
 	// Register a subsystem checker via the returned HealthHandler
 	health.Register("db", func() (string, bool) { return "disconnected", false })
@@ -62,7 +62,7 @@ func TestNewRouter_ExposesHealthHandler(t *testing.T) {
 
 func TestNewRouter_PanicRecoveryIntegrated(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	r, _ := NewRouter(logger)
+	r, _ := NewRouter(logger, nil)
 
 	// We can't easily inject a panicking handler into the existing router,
 	// but we can verify the middleware chain is set up by testing that
@@ -79,7 +79,7 @@ func TestNewRouter_PanicRecoveryIntegrated(t *testing.T) {
 
 func TestNewRouter_ReturnsChiRouter(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	r, _ := NewRouter(logger)
+	r, _ := NewRouter(logger, nil)
 
 	// Verify the returned router implements chi.Router so callers can
 	// register additional route groups (e.g. map API handler).

@@ -111,13 +111,29 @@ func TestRequireDM_RejectsOnVerifierError(t *testing.T) {
 	assert.False(t, next.called)
 }
 
-func TestRequireDM_NilVerifierFallsThrough(t *testing.T) {
-	// A nil verifier disables the gate (matches the existing passthrough
-	// pattern used when DISCORD_CLIENT_ID is not set). This keeps the local
-	// dev path working without OAuth: SessionMiddleware is passthrough, so
-	// RequireDM is also passthrough.
+func TestRequireDM_NilVerifierRejects(t *testing.T) {
+	// A nil verifier rejects all requests (returns 403). This is the
+	// fail-closed production behavior: if a verifier is accidentally
+	// omitted, no request can reach DM-only routes. Local dev uses
+	// DevDMVerifier instead.
 	next := &passthroughHandler{}
 	mw := RequireDM(nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	rec := httptest.NewRecorder()
+
+	mw(next).ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.False(t, next.called)
+}
+
+func TestRequireDM_DevDMVerifierAllowsAll(t *testing.T) {
+	// DevDMVerifier always approves — used in local dev when OAuth is not
+	// configured so the developer is never locked out. No user ID in context
+	// is required (passthrough middleware doesn't inject one).
+	next := &passthroughHandler{}
+	mw := RequireDM(DevDMVerifier{})
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 	rec := httptest.NewRecorder()

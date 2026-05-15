@@ -14,6 +14,7 @@ import (
 	"github.com/ab/dndnd/internal/characteroverview"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/encounter"
 	"github.com/ab/dndnd/internal/gamemap"
 	"github.com/ab/dndnd/internal/homebrew"
 	"github.com/ab/dndnd/internal/levelup"
@@ -177,6 +178,15 @@ func dmOnlyRouteTable() []dmOnlyRoute {
 		{http.MethodPost, "/api/combat/" + encID + "/combatants/" + combID + "/concentration/drop", `{}`},
 		{http.MethodPatch, "/api/combat/" + encID + "/combatants/" + combID + "/hp", `{}`},
 		{http.MethodDelete, "/api/combat/" + encID + "/combatants/" + combID, ""},
+
+		// encounter builder (Finding 2: now behind dmAuthMw).
+		{http.MethodPost, "/api/encounters/", `{"campaign_id":"` + campID + `","name":"test"}`},
+		{http.MethodGet, "/api/encounters/?campaign_id=" + campID, ""},
+		{http.MethodGet, "/api/encounters/" + encID, ""},
+		{http.MethodGet, "/api/creatures", ""},
+
+		// asset upload (Finding 2: now behind dmAuthMw).
+		{http.MethodPost, "/api/assets/upload", ""},
 	}
 }
 
@@ -200,6 +210,10 @@ func buildDMOnlyDepsForTest() dmOnlyAPIDeps {
 		workspaceStore:           stubWorkspaceStore{},
 		db:                       nil,
 		combatLogPoster:          nil,
+		encounterHandler:         encounter.NewHandler(encounter.NewService(nil)),
+		assetUploadHandler: func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "stub", http.StatusBadRequest)
+		},
 	}
 }
 

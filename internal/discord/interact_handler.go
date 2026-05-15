@@ -114,26 +114,43 @@ func (h *InteractHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	if !combat.IsExemptCommand("interact") && h.turnGate != nil {
-		if _, gateErr := h.turnGate.AcquireAndRelease(ctx, encounterID, userID); gateErr != nil {
-			respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+		doInteract := func(ctx context.Context) error {
+			turn, err := h.turnStore.GetTurn(ctx, encounter.CurrentTurnID.UUID)
+			if err != nil {
+				respondEphemeral(h.session, interaction, "Failed to load turn.")
+				return errAlreadyResponded
+			}
+
+			if h.combatSvc != nil {
+				h.handleViaCombat(ctx, interaction, encounterID, turn, desc)
+				return errAlreadyResponded
+			}
+
+			h.handleLegacy(ctx, interaction, encounterID, turn, desc)
+			return errAlreadyResponded
+		}
+		if _, gateErr := h.turnGate.AcquireAndRun(ctx, encounterID, userID, doInteract); gateErr != nil {
+			if gateErr != errAlreadyResponded {
+				respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+			}
 			return
 		}
-	}
+	} else {
+		turn, err := h.turnStore.GetTurn(ctx, encounter.CurrentTurnID.UUID)
+		if err != nil {
+			respondEphemeral(h.session, interaction, "Failed to load turn.")
+			return
+		}
 
-	turn, err := h.turnStore.GetTurn(ctx, encounter.CurrentTurnID.UUID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, "Failed to load turn.")
-		return
-	}
+		// SR-005: route through combat.Interact when wired. The service owns
+		// turn updates + free→action fallback + pending_actions insertion.
+		if h.combatSvc != nil {
+			h.handleViaCombat(ctx, interaction, encounterID, turn, desc)
+			return
+		}
 
-	// SR-005: route through combat.Interact when wired. The service owns
-	// turn updates + free→action fallback + pending_actions insertion.
-	if h.combatSvc != nil {
-		h.handleViaCombat(ctx, interaction, encounterID, turn, desc)
-		return
+		h.handleLegacy(ctx, interaction, encounterID, turn, desc)
 	}
-
-	h.handleLegacy(ctx, interaction, encounterID, turn, desc)
 }
 
 // handleViaCombat is the SR-005 path. combat.Interact owns the resource

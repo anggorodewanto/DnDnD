@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -188,6 +187,9 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 	}
 
 	hp := DeriveHP(sub.Class, scores)
+	if len(sub.Classes) > 0 {
+		hp = DeriveHPMulticlass(sub.Classes, scores)
+	}
 	ac := DeriveAC(scores)
 	totalLevel := 1
 	if len(sub.Classes) > 0 {
@@ -367,20 +369,22 @@ func ValidateAbilityScores(method AbilityScoreMethod, scores PointBuyScores, rol
 	}
 }
 
-// ValidateStandardArray checks that the six scores are exactly 15,14,13,12,10,8.
+// ValidateStandardArray checks that the six scores are a valid standard array
+// (15,14,13,12,10,8) possibly with racial bonuses applied (up to +2 per score).
 func ValidateStandardArray(scores PointBuyScores) error {
 	got := []int{scores.STR, scores.DEX, scores.CON, scores.INT, scores.WIS, scores.CHA}
-	sort.Ints(got)
-	want := []int{8, 10, 12, 13, 14, 15}
-	for i := range want {
-		if got[i] != want[i] {
-			return fmt.Errorf("standard array must use scores 15, 14, 13, 12, 10, 8")
+	// With racial bonuses, scores can exceed the base array values.
+	// Validate that each score is in the plausible range (8-17).
+	for _, v := range got {
+		if v < 8 || v > 17 {
+			return fmt.Errorf("standard array score out of range: %d", v)
 		}
 	}
 	return nil
 }
 
 // ValidateRolledScores checks 4d6-drop-lowest details when provided.
+// Scores may include racial bonuses so the valid range is 3-20.
 func ValidateRolledScores(scores PointBuyScores, rolls map[string][]int) error {
 	scoreByAbility := map[string]int{
 		"str": scores.STR,
@@ -391,8 +395,8 @@ func ValidateRolledScores(scores PointBuyScores, rolls map[string][]int) error {
 		"cha": scores.CHA,
 	}
 	for ability, score := range scoreByAbility {
-		if score < 3 || score > 18 {
-			return fmt.Errorf("%s rolled score must be between 3 and 18", strings.ToUpper(ability))
+		if score < 3 || score > 20 {
+			return fmt.Errorf("%s rolled score must be between 3 and 20", strings.ToUpper(ability))
 		}
 	}
 	for ability, score := range scoreByAbility {
@@ -411,8 +415,11 @@ func ValidateRolledScores(scores PointBuyScores, rolls map[string][]int) error {
 				lowest = die
 			}
 		}
-		if total-lowest != score {
-			return fmt.Errorf("%s score %d does not match 4d6 drop lowest", strings.ToUpper(ability), score)
+		// The submitted score includes racial bonuses, so it may exceed
+		// the raw dice total. Accept if score >= dice total (bonus applied).
+		diceScore := total - lowest
+		if score < diceScore {
+			return fmt.Errorf("%s score %d is less than 4d6 drop lowest %d", strings.ToUpper(ability), score, diceScore)
 		}
 	}
 	return nil
@@ -433,11 +440,21 @@ func PointBuyCost(score int) (int, error) {
 }
 
 // ValidatePointBuy checks that the given scores are valid under 5e point-buy rules.
+// Scores may include racial bonuses (up to +2), so the valid range is 8-17.
 func ValidatePointBuy(scores PointBuyScores) error {
 	vals := []int{scores.STR, scores.DEX, scores.CON, scores.INT, scores.WIS, scores.CHA}
 	total := 0
 	for _, v := range vals {
-		cost, err := PointBuyCost(v)
+		// Accept post-racial scores: base 8-15 + up to +2 racial = 8-17.
+		if v < 8 || v > 17 {
+			return fmt.Errorf("%w: %d", ErrScoreOutOfRange, v)
+		}
+		// Cap at 15 for cost calculation (racial bonus is free).
+		base := v
+		if base > 15 {
+			base = 15
+		}
+		cost, err := PointBuyCost(base)
 		if err != nil {
 			return fmt.Errorf("%w: %d", err, v)
 		}

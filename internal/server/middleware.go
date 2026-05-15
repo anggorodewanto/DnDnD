@@ -1,9 +1,13 @@
 package server
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+
+	"github.com/ab/dndnd/internal/errorlog"
 )
 
 var panicResponseBody = []byte(`{"error":"internal server error"}`)
@@ -11,6 +15,13 @@ var panicResponseBody = []byte(`{"error":"internal server error"}`)
 // PanicRecovery returns middleware that recovers from panics, logs the stack
 // trace at ERROR level, and returns a 500 JSON error response.
 func PanicRecovery(logger *slog.Logger) func(http.Handler) http.Handler {
+	return PanicRecoveryWithRecorder(logger, nil)
+}
+
+// PanicRecoveryWithRecorder returns panic recovery middleware that also records
+// the panic in the given errorlog.Recorder (Finding 4). If recorder is nil,
+// panics are only logged (backwards-compatible with PanicRecovery).
+func PanicRecoveryWithRecorder(logger *slog.Logger, recorder errorlog.Recorder) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
@@ -22,6 +33,12 @@ func PanicRecovery(logger *slog.Logger) func(http.Handler) http.Handler {
 						"method", r.Method,
 						"path", r.URL.Path,
 					)
+					if recorder != nil {
+						_ = recorder.Record(context.Background(), errorlog.Entry{
+							Command: r.Method + " " + r.URL.Path,
+							Summary: fmt.Sprintf("panic: %v", err),
+						})
+					}
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusInternalServerError)
 					w.Write(panicResponseBody)

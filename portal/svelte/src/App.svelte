@@ -314,7 +314,7 @@
         class: selectedClass,
         subclass,
         classes,
-        ability_scores: scores,
+        ability_scores: finalScores(),
         ability_method: abilityMethod,
         ability_rolls: abilityRolls,
         skills,

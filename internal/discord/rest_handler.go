@@ -17,6 +17,7 @@ import (
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/dmqueue"
+	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/ab/dndnd/internal/rest"
 )
@@ -26,6 +27,12 @@ const hitDicePrefix = "rest_hitdice"
 // RestCharacterUpdater persists character updates after a rest.
 type RestCharacterUpdater interface {
 	UpdateCharacter(ctx context.Context, arg refdata.UpdateCharacterParams) (refdata.Character, error)
+}
+
+// RestMagicItemLookup resolves magic-item reference data so the rest handler
+// can build RechargeInfo for dawn recharge (Finding 9).
+type RestMagicItemLookup interface {
+	GetMagicItem(ctx context.Context, id string) (refdata.MagicItem, error)
 }
 
 // RestHandler handles the /rest slash command.
@@ -39,10 +46,17 @@ type RestHandler struct {
 	characterLookup   CheckCharacterLookup
 	encounterProvider CheckEncounterProvider
 	charUpdater       RestCharacterUpdater
+	magicItemLookup   RestMagicItemLookup // Finding 9: dawn recharge
 	rollLogger        dice.RollHistoryLogger
 	dmQueueFunc       func(guildID string) string // reserved for future DM approval flow
 	notifier          dmqueue.Notifier
 	cardUpdater       CardUpdater // SR-007
+}
+
+// SetMagicItemLookup wires the magic-item reference lookup used to build
+// RechargeInfo for dawn recharge during long rests (Finding 9).
+func (h *RestHandler) SetMagicItemLookup(l RestMagicItemLookup) {
+	h.magicItemLookup = l
 }
 
 // SetCardUpdater wires the SR-007 character-card refresh callback fired
@@ -473,6 +487,13 @@ func (h *RestHandler) persistLongRestChanges(ctx context.Context, char refdata.C
 		Valid:      true,
 	}
 
+	// Finding 9: persist dawn-recharged inventory when present.
+	if len(result.UpdatedInventory) > 0 {
+		if invData, err := character.MarshalInventory(result.UpdatedInventory); err == nil {
+			params.Inventory = pqtype.NullRawMessage{RawMessage: invData, Valid: true}
+		}
+	}
+
 	_, _ = h.charUpdater.UpdateCharacter(ctx, params)
 }
 
@@ -582,6 +603,13 @@ func (h *RestHandler) handleLongRest(ctx context.Context, interaction *discordgo
 		ExhaustionLevel:  exhaustionLevel,
 	}
 
+	// Finding 9: supply inventory + recharge info for dawn recharge.
+	items, _ := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
+	if len(items) > 0 && h.magicItemLookup != nil {
+		input.Inventory = items
+		input.RechargeInfo = h.buildRechargeInfo(ctx, items)
+	}
+
 	result := h.restService.LongRest(input)
 
 	// Persist all changes
@@ -636,6 +664,41 @@ func (h *RestHandler) logRestToHistory(charName, restType, msg string) {
 		Roller:  charName,
 		Purpose: restType,
 	})
+}
+
+// buildRechargeInfo looks up each magic item in the inventory that has charges
+// and builds the RechargeInfo map needed by the rest service's dawn recharge
+// logic (Finding 9).
+func (h *RestHandler) buildRechargeInfo(ctx context.Context, items []character.InventoryItem) map[string]inventory.RechargeInfo {
+	info := make(map[string]inventory.RechargeInfo)
+	for _, it := range items {
+		if !it.IsMagic || it.MaxCharges == 0 {
+			continue
+		}
+		mi, err := h.magicItemLookup.GetMagicItem(ctx, it.ItemID)
+		if err != nil {
+			continue
+		}
+		if !mi.Charges.Valid {
+			continue
+		}
+		var charges struct {
+			Recharge      string `json:"recharge"`
+			RechargeDice  string `json:"recharge_dice"`
+			DestroyOnZero bool   `json:"destroy_on_zero"`
+		}
+		if err := json.Unmarshal(mi.Charges.RawMessage, &charges); err != nil {
+			continue
+		}
+		if charges.Recharge != "dawn" || charges.RechargeDice == "" {
+			continue
+		}
+		info[it.ItemID] = inventory.RechargeInfo{
+			Dice:          charges.RechargeDice,
+			DestroyOnZero: charges.DestroyOnZero,
+		}
+	}
+	return info
 }
 
 // parseRestType extracts the rest type from command options.

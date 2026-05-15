@@ -134,6 +134,7 @@ type ActionHandler struct {
 	notifier          dmqueue.Notifier
 	roller            *dice.Roller
 	channelIDProvider CampaignSettingsProvider
+	turnGate          TurnGate
 	// C-43-stabilize: optional store for persisting the dying target's
 	// updated death saves when /action stabilize succeeds. nil-safe — when
 	// unset, the stabilize subcommand reports the roll result but warns
@@ -181,6 +182,10 @@ func NewActionHandler(
 // path. A nil notifier causes exploration posts to be silent no-ops; the
 // pending_actions row still lands in the DB.
 func (h *ActionHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
+
+// SetTurnGate wires the Phase 27 turn-ownership / advisory-lock gate.
+// A nil gate disables the check; production wiring always supplies one.
+func (h *ActionHandler) SetTurnGate(g TurnGate) { h.turnGate = g }
 
 // SetRoller wires the dice roller used by subcommand dispatch (Hide / Escape
 // / TurnUndead). When unset, those dispatches reject with a usage hint so
@@ -277,15 +282,31 @@ func (h *ActionHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	// Combat path: a small number of subcommand names route to dedicated
-	// combat services (D-47..D-57). Everything else falls through to the
-	// freeform / cancel / ready path so the DM-queue surface still works.
-	if h.isDispatchSubcommand(sub) {
-		h.handleCombatSubcommand(ctx, interaction, encounter, encounterID, userID, sub, rawArgs)
-		return
+	// Combat path: F-4 — the entire read-validate-mutate path runs inside
+	// AcquireAndRun so the advisory lock is held across the persistence step.
+	doCombatAction := func(ctx context.Context) error {
+		// Combat path: a small number of subcommand names route to dedicated
+		// combat services (D-47..D-57). Everything else falls through to the
+		// freeform / cancel / ready path so the DM-queue surface still works.
+		if h.isDispatchSubcommand(sub) {
+			h.handleCombatSubcommand(ctx, interaction, encounter, encounterID, userID, sub, rawArgs)
+			return errAlreadyResponded
+		}
+
+		h.handleCombat(ctx, interaction, encounter, userID, actionText, isCancel, isReady, rawArgs)
+		return errAlreadyResponded
 	}
 
-	h.handleCombat(ctx, interaction, encounter, userID, actionText, isCancel, isReady, rawArgs)
+	if h.turnGate != nil {
+		if _, gateErr := h.turnGate.AcquireAndRun(ctx, encounterID, userID, doCombatAction); gateErr != nil {
+			if gateErr != errAlreadyResponded {
+				respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+			}
+			return
+		}
+	} else if err := doCombatAction(ctx); err != nil {
+		return
+	}
 }
 
 // normalizeActionSubcommand lower-cases and de-dashes a raw subcommand name so

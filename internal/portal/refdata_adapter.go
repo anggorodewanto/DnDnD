@@ -98,9 +98,10 @@ func (a *RefDataAdapter) ListClasses(ctx context.Context) ([]ClassInfo, error) {
 }
 
 // ListSpellsByClass converts refdata spells to portal SpellInfo, applying
-// Open5e per-campaign gating. Rows whose source starts with "open5e:" are
-// kept only when their document slug is enabled on the campaign; SRD and
-// homebrew rows are always included.
+// Open5e per-campaign gating and campaign-scoped homebrew filtering. Rows
+// whose source starts with "open5e:" are kept only when their document slug
+// is enabled on the campaign; SRD and homebrew rows are always included
+// (provided the homebrew belongs to this campaign or is global).
 func (a *RefDataAdapter) ListSpellsByClass(ctx context.Context, class, campaignID string) ([]SpellInfo, error) {
 	spells, err := a.q.ListSpellsByClass(ctx, class)
 	if err != nil {
@@ -108,9 +109,13 @@ func (a *RefDataAdapter) ListSpellsByClass(ctx context.Context, class, campaignI
 	}
 	enabled := a.resolveEnabledOpen5eSources(campaignID)
 	spells = open5e.FilterSpellsByOpen5eSources(spells, enabled)
-	result := make([]SpellInfo, len(spells))
-	for i, s := range spells {
-		result[i] = SpellInfo{
+	cid := parseCampaignUUID(campaignID)
+	result := make([]SpellInfo, 0, len(spells))
+	for _, s := range spells {
+		if !campaignVisibleUUID(s.CampaignID, cid) {
+			continue
+		}
+		result = append(result, SpellInfo{
 			ID:          s.ID,
 			Name:        s.Name,
 			Level:       int(s.Level),
@@ -119,7 +124,7 @@ func (a *RefDataAdapter) ListSpellsByClass(ctx context.Context, class, campaignI
 			Duration:    s.Duration,
 			Description: s.Description,
 			Classes:     s.Classes,
-		}
+		})
 	}
 	return result, nil
 }
@@ -139,8 +144,9 @@ func (a *RefDataAdapter) resolveEnabledOpen5eSources(campaignID string) []string
 	return a.lookup.EnabledOpen5eSources(id)
 }
 
-// ListEquipment returns all weapons and armor combined as EquipmentItems.
-func (a *RefDataAdapter) ListEquipment(ctx context.Context) ([]EquipmentItem, error) {
+// ListEquipment returns all weapons and armor combined as EquipmentItems,
+// filtered by campaign_id so homebrew from other campaigns is not exposed.
+func (a *RefDataAdapter) ListEquipment(ctx context.Context, campaignID string) ([]EquipmentItem, error) {
 	weapons, err := a.q.ListWeapons(ctx)
 	if err != nil {
 		return nil, err
@@ -150,8 +156,12 @@ func (a *RefDataAdapter) ListEquipment(ctx context.Context) ([]EquipmentItem, er
 		return nil, err
 	}
 
+	cid := parseCampaignUUID(campaignID)
 	items := make([]EquipmentItem, 0, len(weapons)+len(armors))
 	for _, w := range weapons {
+		if !campaignVisibleUUID(w.CampaignID, cid) {
+			continue
+		}
 		items = append(items, EquipmentItem{
 			ID:         w.ID,
 			Name:       w.Name,
@@ -172,6 +182,30 @@ func (a *RefDataAdapter) ListEquipment(ctx context.Context) ([]EquipmentItem, er
 		})
 	}
 	return items, nil
+}
+
+// parseCampaignUUID parses a campaign ID string into a uuid.UUID.
+// Returns uuid.Nil on empty/invalid input.
+func parseCampaignUUID(campaignID string) uuid.UUID {
+	if campaignID == "" {
+		return uuid.Nil
+	}
+	id, err := uuid.Parse(campaignID)
+	if err != nil {
+		return uuid.Nil
+	}
+	return id
+}
+
+// campaignVisibleUUID returns true if a row should be visible to the given campaign.
+func campaignVisibleUUID(rowCampaignID uuid.NullUUID, campaignID uuid.UUID) bool {
+	if !rowCampaignID.Valid || rowCampaignID.UUID == uuid.Nil {
+		return true
+	}
+	if campaignID == uuid.Nil {
+		return false
+	}
+	return rowCampaignID.UUID == campaignID
 }
 
 func nullRawToJSON(msg pqtype.NullRawMessage) json.RawMessage {

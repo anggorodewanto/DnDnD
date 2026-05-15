@@ -29,13 +29,26 @@ type DMVerifier interface {
 // On reject (no session, verifier error, or "not a DM") the middleware emits
 // a 403 with body {"error": "forbidden: DM only"} and DOES NOT invoke next.
 //
-// A nil verifier disables the gate (passthrough) — the local-dev wiring in
-// main.go uses passthroughMiddleware for auth when DISCORD_CLIENT_ID is unset,
-// and we want RequireDM to follow the same fall-back rather than locking the
-// developer out.
+// devPassthrough is a marker interface implemented by DevDMVerifier to signal
+// that RequireDM should skip user-ID checks (local dev without OAuth).
+type devPassthrough interface {
+	isDevPassthrough()
+}
+
+// A nil verifier rejects all requests (returns 403). Production deploys must
+// always supply a verifier; local-dev wiring should use DevDMVerifier (which
+// approves all requests) so developers are never locked out while still
+// ensuring that a misconfigured production deploy cannot silently skip DM
+// authorization.
 func RequireDM(verifier DMVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		if verifier == nil {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeDMForbidden(w)
+			})
+		}
+		// DevDMVerifier: full passthrough for local dev (no user ID required).
+		if _, ok := verifier.(devPassthrough); ok {
 			return next
 		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -55,6 +68,19 @@ func RequireDM(verifier DMVerifier) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// DevDMVerifier is a DMVerifier that always returns true. It is used in local
+// dev mode (when DISCORD_CLIENT_ID is unset) so the developer is never locked
+// out of DM-only routes while still ensuring RequireDM(nil) rejects in
+// production if a verifier is accidentally omitted.
+type DevDMVerifier struct{}
+
+func (DevDMVerifier) IsDM(_ context.Context, _ string) (bool, error) { return true, nil }
+
+// isDevPassthrough is a marker method that RequireDM checks to skip the
+// user-ID-in-context requirement. In local dev, passthroughMiddleware does
+// not inject a Discord user ID, so RequireDM must not require one.
+func (DevDMVerifier) isDevPassthrough() {}
 
 // writeDMForbidden emits the canonical 403 JSON payload. Centralised so the
 // wire format stays consistent across every gated route.

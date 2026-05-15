@@ -205,6 +205,52 @@ func (d dmQueueCounter) CountPendingDMQueue(ctx context.Context, campaignID uuid
 	return len(items), nil
 }
 
+// encounterListerAdapter adapts refdata.Queries to dashboard.EncounterLister
+// for the Campaign Home active/saved encounter cards (Finding 13).
+type encounterListerAdapter struct {
+	queries *refdata.Queries
+}
+
+func (a encounterListerAdapter) ListActiveEncounterNames(ctx context.Context, campaignID uuid.UUID) ([]string, error) {
+	encounters, err := a.queries.ListEncountersByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, e := range encounters {
+		if e.Status == "active" {
+			name := e.Name
+			if e.DisplayName.Valid && e.DisplayName.String != "" {
+				name = e.DisplayName.String
+			}
+			names = append(names, name)
+		}
+	}
+	if names == nil {
+		names = []string{}
+	}
+	return names, nil
+}
+
+func (a encounterListerAdapter) ListSavedEncounterNames(ctx context.Context, campaignID uuid.UUID) ([]string, error) {
+	templates, err := a.queries.ListEncounterTemplatesByCampaignID(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, t := range templates {
+		name := t.Name
+		if t.DisplayName.Valid && t.DisplayName.String != "" {
+			name = t.DisplayName.String
+		}
+		names = append(names, name)
+	}
+	if names == nil {
+		names = []string{}
+	}
+	return names, nil
+}
+
 // charCreateRefData adapts portal.RefDataAdapter to the narrower
 // dashboard.RefDataForCreate interface (which omits the per-campaign Open5e
 // gating that the portal flow exposes via an extra campaignID arg).
@@ -221,7 +267,7 @@ func (c charCreateRefData) ListClasses(ctx context.Context) ([]portal.ClassInfo,
 }
 
 func (c charCreateRefData) ListEquipment(ctx context.Context) ([]portal.EquipmentItem, error) {
-	return c.a.ListEquipment(ctx)
+	return c.a.ListEquipment(ctx, "")
 }
 
 func (c charCreateRefData) ListSpellsByClass(ctx context.Context, class string) ([]portal.SpellInfo, error) {
@@ -300,6 +346,8 @@ type dmOnlyAPIDeps struct {
 	db                       combat.TxBeginner
 	combatLogPoster          combat.CombatLogPoster
 	mapRegenerator           *mapRegeneratorAdapter // SR-068: DM map PNG endpoint
+	encounterHandler         *encounter.Handler     // Finding 2: encounter builder is DM-only
+	assetUploadHandler       http.HandlerFunc       // Finding 2: asset upload is DM-only
 }
 
 // mountDMOnlyAPIs registers every DM-mutation route group behind dmAuthMw so
@@ -347,6 +395,14 @@ func mountDMOnlyAPIs(router chi.Router, deps dmOnlyAPIDeps, dmAuthMw func(http.H
 		// unfogged map (DMSeesAll=true).
 		if deps.mapRegenerator != nil {
 			r.Get("/api/combat/{encounterID}/map.png", handleDMMapPNG(deps.mapRegenerator))
+		}
+		// Finding 2: encounter builder routes are DM-only.
+		if deps.encounterHandler != nil {
+			deps.encounterHandler.RegisterRoutes(r)
+		}
+		// Finding 2: asset upload is DM-only.
+		if deps.assetUploadHandler != nil {
+			r.Post("/api/assets/upload", deps.assetUploadHandler)
 		}
 	})
 }
@@ -596,12 +652,16 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 	debug := os.Getenv("DEBUG") == "true"
 	logger := server.NewLogger(logOutput, debug)
 
-	router, health := server.NewRouter(logger)
-
 	// Phase 112: error recorder + reader. Starts as an in-memory store so
 	// panic recovery always has somewhere to land; upgraded to a PgStore
 	// backed by error_log once DATABASE_URL is configured below.
 	var errorStore errorlog.Store = errorlog.NewMemoryStore(nil)
+
+	// RecorderRef allows the panic recovery middleware to see the upgraded
+	// PgStore after DB init without re-creating the router.
+	recorderRef := errorlog.NewRecorderRef(errorStore)
+
+	router, health := server.NewRouter(logger, recorderRef)
 
 	// Phase 104: Construct (but do NOT open) the Discord session up-front so
 	// the wiring below can inject it into narration.Service,
@@ -698,6 +758,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// drives the dashboard badge + panel.
 		if pg := errorlog.NewPgStore(db); pg != nil {
 			errorStore = pg
+			recorderRef.Swap(pg)
 		}
 
 		// Phase 112: wire the DB ping into the health endpoint.
@@ -714,7 +775,8 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// Wire encounter API handler
 		encounterSvc := encounter.NewService(queries)
 		encounterHandler := encounter.NewHandler(encounterSvc)
-		encounterHandler.RegisterRoutes(router)
+		// Finding 2 fix: encounter routes are DM-only; registered via
+		// mountDMOnlyAPIs below behind dmAuthMw.
 
 		// Wire asset API handler
 		assetDataDir := os.Getenv("ASSET_DATA_DIR")
@@ -732,7 +794,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		assetStore := asset.NewLocalStore(assetDataDir)
 		assetSvc := asset.NewService(queries, assetStore)
 		assetHandler := asset.NewHandler(assetSvc)
-		assetHandler.RegisterRoutes(router)
+		// Finding 2 fix: upload is DM-only (registered via mountDMOnlyAPIs
+		// below behind dmAuthMw). Serve remains public so players can view
+		// assets.
+		router.Get("/api/assets/{id}", assetHandler.ServeAsset)
 
 		// Wire Stat Block Library API handler (Phase 98).
 		// Phase 111: inject an Open5e campaign-lookup so the library
@@ -912,6 +977,12 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		var dmVerifier dashboard.DMVerifier
 		if authBundle.oauthSvc != nil {
 			dmVerifier = dashboardCampaignLookup{queries: queries}
+		} else {
+			// Local dev without OAuth: use DevDMVerifier so the developer is
+			// never locked out. RequireDM(nil) would reject all requests,
+			// which is the correct production fail-closed behavior but wrong
+			// for local dev where passthroughMiddleware handles sessions.
+			dmVerifier = dashboard.DevDMVerifier{}
 		}
 		dmRequire := dashboard.RequireDM(dmVerifier)
 		dmAuthMw := func(next http.Handler) http.Handler {
@@ -939,6 +1010,8 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			db:                       db,
 			combatLogPoster:          combatLogPoster,
 			mapRegenerator:           newMapRegeneratorAdapter(queries),
+			encounterHandler:         encounterHandler,
+			assetUploadHandler:       assetHandler.UploadAsset,
 		}, dmAuthMw)
 
 		dmQueueDashHandler := dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, dmAuthMw)
@@ -1005,6 +1078,11 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		charCreateStore := portal.NewBuilderStoreAdapter(queries, nil)
 		charCreateSvc := dashboard.NewDMCharCreateService(charCreateStore)
 		charCreateHandler := dashboard.NewCharCreateHandler(logger, charCreateSvc, charCreateRefData{a: charCreateRefAdapter})
+		// Finding 17: wire the feature provider so DM character creation
+		// populates class/race features from the database.
+		featureProvider := dashboard.NewRefDataFeatureProvider(ctx, queries, logger)
+		charCreateSvc.SetFeatureProvider(featureProvider)
+		charCreateHandler.SetFeatureProvider(featureProvider)
 		charCreateHandler.RegisterCharCreateRoutes(router.With(dmAuthMw))
 
 		// Phase 121: character approval queue. SetCampaignLookup reuses the
@@ -1021,6 +1099,8 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			approvalsCounter{store: approvalStore},
 			dmQueueCounter{store: dmQueueStore},
 		)
+		// Finding 13: populate active/saved encounter data on Campaign Home.
+		dashHandler.SetEncounterLister(encounterListerAdapter{queries: queries})
 		var cardPoster dashboard.CharacterCardPoster
 		var cardSvc *charactercard.Service
 		if discordSession != nil {
@@ -1056,7 +1136,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// WithCharacterSheet the /character Discord embed link points to a
 		// 404. buildPortalAPIAndSheetHandlers is the single source of truth
 		// so both endpoints stay in sync with portalTokenSvc.
-		portalAPIHandler, portalSheetHandler := buildPortalAPIAndSheetHandlers(queries, portalTokenSvc)
+		portalAPIHandler, portalSheetHandler := buildPortalAPIAndSheetHandlers(queries, portalTokenSvc, open5eCampaignLookup)
 		if portalAPIHandler != nil {
 			portalOpts = append(portalOpts, portal.WithAPI(portalAPIHandler))
 		}
@@ -1316,6 +1396,11 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			if discordHandlerSet.attune != nil {
 				discordHandlerSet.attune.SetPublisher(magicItemSvc)
 			}
+			// Finding 10: wire the same publisher on /unattune so
+			// deactivating magic-item effects also refreshes the snapshot.
+			if discordHandlerSet.unattune != nil {
+				discordHandlerSet.unattune.SetPublisher(magicItemSvc)
+			}
 
 			// Phase 120a: wire RegistrationDeps so /register submits land in
 			// the database (status=pending) and downstream stub commands
@@ -1438,6 +1523,11 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// reconciling slash commands.
 		timer.Start()
 		defer timer.Stop()
+	} else {
+		// Finding 3: When DATABASE_URL is empty, register "not configured"
+		// health checkers so /health reports degraded/unhealthy instead of ok.
+		health.Register("db", server.NewDBChecker(nil))
+		health.Register("discord", server.NewDiscordChecker(nil))
 	}
 
 	srv := &http.Server{

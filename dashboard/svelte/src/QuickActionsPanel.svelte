@@ -6,26 +6,29 @@
     nextCampaignStatus,
   } from './lib/campaignActions.js';
 
-  let { campaignId } = $props();
+  let { campaignId, encounters: externalEncounters = null } = $props();
 
   let campaignStatus = $state('active');
   let busy = $state(false);
   let error = $state(null);
   let info = $state(null);
-  let activeEncounterId = $state(null);
+  let internalEncounters = $state([]);
+  let selectedEncounterIdx = $state(0);
+
+  // Use externally-provided encounters (from MobileShell) or load our own.
+  let encounterList = $derived(externalEncounters || internalEncounters);
+  let activeEncounterId = $derived(encounterList[selectedEncounterIdx]?.id || null);
 
   $effect(() => {
-    if (campaignId) loadWorkspace();
+    if (campaignId && !externalEncounters) loadWorkspace();
   });
 
   async function loadWorkspace() {
     try {
       const data = await getCombatWorkspace(campaignId);
-      const list = data.encounters || [];
-      if (list.length > 0) activeEncounterId = list[0].id;
+      internalEncounters = data.encounters || [];
     } catch (e) {
-      // non-fatal: End Turn will be disabled
-      activeEncounterId = null;
+      internalEncounters = [];
     }
   }
 
@@ -67,6 +70,13 @@
 
 <div class="quick-actions" data-testid="quick-actions">
   <h3>Quick Actions</h3>
+  {#if encounterList.length > 1}
+    <select class="encounter-select" bind:value={selectedEncounterIdx} data-testid="encounter-select">
+      {#each encounterList as enc, i}
+        <option value={i}>{enc.display_name || enc.name}</option>
+      {/each}
+    </select>
+  {/if}
   <button onclick={handleEndTurn} disabled={busy || !activeEncounterId}>
     End Turn
   </button>
@@ -85,6 +95,15 @@
     border: 1px solid #0f3460;
   }
   .quick-actions h3 { margin: 0 0 0.5rem 0; color: #e94560; }
+  .encounter-select {
+    width: 100%;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+  }
   button {
     display: block;
     width: 100%;

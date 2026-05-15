@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"html/template"
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/ab/dndnd/internal/auth"
 )
@@ -30,13 +32,37 @@ func NewHandler(logger *slog.Logger, validator TokenValidator) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	jsFile, cssFile := resolvePortalAssets()
+	tmplStr := strings.ReplaceAll(createTemplate, "{{.JSFile}}", jsFile)
+	tmplStr = strings.ReplaceAll(tmplStr, "{{.CSSFile}}", cssFile)
 	return &Handler{
 		logger:      logger,
 		validator:   validator,
 		landingTmpl: template.Must(template.New("landing").Parse(landingTemplate)),
-		createTmpl:  template.Must(template.New("create").Parse(createTemplate)),
+		createTmpl:  template.Must(template.New("create").Parse(tmplStr)),
 		errorTmpl:   template.Must(template.New("error").Parse(errorTemplate)),
 	}
+}
+
+// resolvePortalAssets reads the embedded assets/ directory to find the actual
+// hashed .js and .css filenames, avoiding stale hard-coded hashes.
+func resolvePortalAssets() (jsFile, cssFile string) {
+	jsFile = "index.js"
+	cssFile = "index.css"
+	entries, err := fs.ReadDir(Assets, "assets/assets")
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, "index-") && strings.HasSuffix(name, ".js") {
+			jsFile = name
+		}
+		if strings.HasPrefix(name, "index-") && strings.HasSuffix(name, ".css") {
+			cssFile = name
+		}
+	}
+	return
 }
 
 // SetLandingTemplate overrides the landing template (for testing).
@@ -234,8 +260,8 @@ const createTemplate = `<!DOCTYPE html>
             <input type="hidden" id="campaign-id" value="{{.CampaignID}}">
         </div>
     </div>
-    <script type="module" crossorigin src="/portal/app/assets/index-GlbG7cuy.js"></script>
-    <link rel="stylesheet" crossorigin href="/portal/app/assets/index-DwHZaRQb.css">
+    <script type="module" crossorigin src="/portal/app/assets/{{.JSFile}}"></script>
+    <link rel="stylesheet" crossorigin href="/portal/app/assets/{{.CSSFile}}">
 </body>
 </html>`
 

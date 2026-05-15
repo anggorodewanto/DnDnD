@@ -150,44 +150,67 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 	}
 	args := strings.TrimSpace(optionString(interaction, "args"))
 
-	bctx, ok := h.resolveContext(ctx, interaction)
-	if !ok {
+	// F-4: the entire read-validate-mutate path runs inside AcquireAndRun
+	// so the advisory lock is held across the persistence step.
+	doBonus := func(ctx context.Context) error {
+		bctx, ok := h.resolveContextInner(ctx, interaction)
+		if !ok {
+			return errAlreadyResponded
+		}
+
+		switch action {
+		case "rage":
+			h.dispatchRage(ctx, interaction, bctx)
+		case "end-rage", "endrage":
+			h.dispatchEndRage(ctx, interaction, bctx)
+		case "offhand", "off-hand":
+			h.dispatchOffhand(ctx, interaction, bctx, args)
+		case "martial-arts", "martialarts":
+			h.dispatchMartialArts(ctx, interaction, bctx, args)
+		case "step-of-the-wind", "stepofthewind":
+			h.dispatchStepOfTheWind(ctx, interaction, bctx, args)
+		case "patient-defense", "patientdefense":
+			h.dispatchPatientDefense(ctx, interaction, bctx)
+		case "font-of-magic", "fontofmagic":
+			h.dispatchFontOfMagic(ctx, interaction, bctx, args)
+		case "lay-on-hands", "layonhands":
+			h.dispatchLayOnHands(ctx, interaction, bctx, args)
+		case "bardic-inspiration", "bardicinspiration":
+			h.dispatchBardicInspiration(ctx, interaction, bctx, args)
+		case "wild-shape", "wildshape":
+			h.dispatchWildShape(ctx, interaction, bctx, args)
+		case "revert-wild-shape", "revertwildshape":
+			h.dispatchRevertWildShape(ctx, interaction, bctx)
+		case "flurry", "flurry-of-blows", "flurryofblows":
+			h.dispatchFlurryOfBlows(ctx, interaction, bctx, args)
+		case "cunning-action", "cunningaction":
+			h.dispatchCunningAction(ctx, interaction, bctx, args)
+		case "drag":
+			h.dispatchDrag(ctx, interaction, bctx, args)
+		case "release-drag", "releasedrag":
+			h.dispatchReleaseDrag(ctx, interaction, bctx)
+		default:
+			respondEphemeral(h.session, interaction, fmt.Sprintf("Unknown bonus action %q. Try offhand, rage, end-rage, martial-arts, step-of-the-wind, patient-defense, font-of-magic, lay-on-hands, bardic-inspiration, wild-shape, revert-wild-shape, flurry, cunning-action, drag, release-drag.", action))
+		}
+		return errAlreadyResponded
+	}
+
+	userID := discordUserID(interaction)
+	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, userID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "You are not in an active encounter.")
 		return
 	}
 
-	switch action {
-	case "rage":
-		h.dispatchRage(ctx, interaction, bctx)
-	case "end-rage", "endrage":
-		h.dispatchEndRage(ctx, interaction, bctx)
-	case "offhand", "off-hand":
-		h.dispatchOffhand(ctx, interaction, bctx, args)
-	case "martial-arts", "martialarts":
-		h.dispatchMartialArts(ctx, interaction, bctx, args)
-	case "step-of-the-wind", "stepofthewind":
-		h.dispatchStepOfTheWind(ctx, interaction, bctx, args)
-	case "patient-defense", "patientdefense":
-		h.dispatchPatientDefense(ctx, interaction, bctx)
-	case "font-of-magic", "fontofmagic":
-		h.dispatchFontOfMagic(ctx, interaction, bctx, args)
-	case "lay-on-hands", "layonhands":
-		h.dispatchLayOnHands(ctx, interaction, bctx, args)
-	case "bardic-inspiration", "bardicinspiration":
-		h.dispatchBardicInspiration(ctx, interaction, bctx, args)
-	case "wild-shape", "wildshape":
-		h.dispatchWildShape(ctx, interaction, bctx, args)
-	case "revert-wild-shape", "revertwildshape":
-		h.dispatchRevertWildShape(ctx, interaction, bctx)
-	case "flurry", "flurry-of-blows", "flurryofblows":
-		h.dispatchFlurryOfBlows(ctx, interaction, bctx, args)
-	case "cunning-action", "cunningaction":
-		h.dispatchCunningAction(ctx, interaction, bctx, args)
-	case "drag":
-		h.dispatchDrag(ctx, interaction, bctx, args)
-	case "release-drag", "releasedrag":
-		h.dispatchReleaseDrag(ctx, interaction, bctx)
-	default:
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Unknown bonus action %q. Try offhand, rage, end-rage, martial-arts, step-of-the-wind, patient-defense, font-of-magic, lay-on-hands, bardic-inspiration, wild-shape, revert-wild-shape, flurry, cunning-action, drag, release-drag.", action))
+	if !combat.IsExemptCommand("bonus") && h.turnGate != nil {
+		if _, gateErr := h.turnGate.AcquireAndRun(ctx, encounterID, userID, doBonus); gateErr != nil {
+			if gateErr != errAlreadyResponded {
+				respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
+			}
+			return
+		}
+	} else if err := doBonus(ctx); err != nil {
+		return
 	}
 }
 
@@ -195,6 +218,12 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 // and runs the turn-ownership gate. Sends an ephemeral and returns
 // (zero, false) on any failure so callers can early-return.
 func (h *BonusHandler) resolveContext(ctx context.Context, interaction *discordgo.Interaction) (bonusContext, bool) {
+	return h.resolveContextInner(ctx, interaction)
+}
+
+// resolveContextInner loads the encounter / current turn / acting combatant
+// without running the turn-gate (the caller is responsible for gating).
+func (h *BonusHandler) resolveContextInner(ctx context.Context, interaction *discordgo.Interaction) (bonusContext, bool) {
 	userID := discordUserID(interaction)
 	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, userID)
 	if err != nil {
@@ -209,12 +238,6 @@ func (h *BonusHandler) resolveContext(ctx context.Context, interaction *discordg
 	if !encounter.CurrentTurnID.Valid {
 		respondEphemeral(h.session, interaction, "No active turn.")
 		return bonusContext{}, false
-	}
-	if !combat.IsExemptCommand("bonus") && h.turnGate != nil {
-		if _, gateErr := h.turnGate.AcquireAndRelease(ctx, encounterID, userID); gateErr != nil {
-			respondEphemeral(h.session, interaction, formatTurnGateError(gateErr))
-			return bonusContext{}, false
-		}
 	}
 	turn, err := h.encounterProvider.GetTurn(ctx, encounter.CurrentTurnID.UUID)
 	if err != nil {

@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
@@ -32,6 +33,33 @@ type UseCombatProvider interface {
 	UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
 }
 
+// UseMagicItemLookup resolves magic-item reference data so the use handler
+// can read active_abilities and detect spell-casting items (Finding 8).
+type UseMagicItemLookup interface {
+	GetMagicItem(ctx context.Context, id string) (refdata.MagicItem, error)
+}
+
+// UseMagicItemSpellCaster routes a magic-item spell through the combat spell
+// resolution path (Finding 8). Implementations delegate to combat.Service.Cast
+// or combat.Service.CastAoE depending on the spell's area_of_effect.
+type UseMagicItemSpellCaster interface {
+	CastFromItem(ctx context.Context, input MagicItemCastInput) (MagicItemCastResult, error)
+}
+
+// MagicItemCastInput holds the parameters for casting a spell from a magic item.
+type MagicItemCastInput struct {
+	SpellID     string
+	GuildID     string
+	CharacterID uuid.UUID
+	Charges     int // number of charges to spend (determines upcast level)
+}
+
+// MagicItemCastResult holds the result of casting a spell from a magic item.
+type MagicItemCastResult struct {
+	Message string
+	Routed  bool // true if the spell was routed through combat resolution
+}
+
 // UseHandler handles the /use slash command.
 type UseHandler struct {
 	session         Session
@@ -40,6 +68,8 @@ type UseHandler struct {
 	store           UseCharacterStore
 	invService      *inventory.Service
 	combatProv      UseCombatProvider
+	magicItemLookup UseMagicItemLookup      // Finding 8: active ability lookup
+	spellCaster     UseMagicItemSpellCaster // Finding 8: spell resolution routing
 	dmQueueFunc     func(guildID string) string
 	notifier        dmqueue.Notifier
 	cardUpdater     CardUpdater // SR-007
@@ -80,6 +110,18 @@ func (h *UseHandler) SetNotifier(n dmqueue.Notifier) {
 // after a successful /use write (consumable or magic-item charge).
 func (h *UseHandler) SetCardUpdater(u CardUpdater) {
 	h.cardUpdater = u
+}
+
+// SetMagicItemLookup wires the magic-item reference lookup for reading
+// active_abilities (Finding 8).
+func (h *UseHandler) SetMagicItemLookup(l UseMagicItemLookup) {
+	h.magicItemLookup = l
+}
+
+// SetSpellCaster wires the spell resolution adapter so magic items with
+// spell_id route through combat spell resolution (Finding 8).
+func (h *UseHandler) SetSpellCaster(c UseMagicItemSpellCaster) {
+	h.spellCaster = c
 }
 
 // Handle processes the /use command interaction.
@@ -227,6 +269,10 @@ func itemHasActiveCharges(items []character.InventoryItem, itemID string) bool {
 // rules via inventory.UseCharges. The default amount is 1 charge. med-35:
 // when in combat, an action is deducted from the active turn before the
 // charge is spent.
+//
+// Finding 8: when the magic item has an active ability with a spell_id, the
+// handler routes through the spell resolution path (UseMagicItemSpellCaster)
+// instead of just deducting a charge silently.
 func (h *UseHandler) handleMagicItemCharge(
 	ctx context.Context,
 	interaction *discordgo.Interaction,
@@ -252,11 +298,18 @@ func (h *UseHandler) handleMagicItemCharge(
 		}
 	}
 
+	// Finding 8: detect spell-casting active abilities.
+	spellID, chargesCost := h.resolveSpellAbility(ctx, itemID)
+	amount := chargesCost
+	if amount < 1 {
+		amount = 1
+	}
+
 	result, err := inventory.UseCharges(inventory.UseChargesInput{
 		Items:      items,
 		Attunement: attunement,
 		ItemID:     itemID,
-		Amount:     1,
+		Amount:     amount,
 	})
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Cannot use item: %v", err))
@@ -284,7 +337,58 @@ func (h *UseHandler) handleMagicItemCharge(
 		h.spendTurnResource(ctx, turn, combat.ResourceAction)
 	}
 
+	// Finding 8: if the item casts a spell, route through spell resolution.
+	if spellID != "" && h.spellCaster != nil && inCombat {
+		castResult, err := h.spellCaster.CastFromItem(ctx, MagicItemCastInput{
+			SpellID:     spellID,
+			GuildID:     interaction.GuildID,
+			CharacterID: char.ID,
+			Charges:     amount,
+		})
+		if err == nil && castResult.Routed {
+			respondEphemeral(h.session, interaction, fmt.Sprintf("%s\n%s", result.Message, castResult.Message))
+			return
+		}
+	}
+
+	// Fallback: report charge usage (and spell name if applicable).
+	if spellID != "" {
+		msg := fmt.Sprintf("%s\n🔮 Casts **%s** from the item.", result.Message, spellID)
+		respondEphemeral(h.session, interaction, msg)
+		return
+	}
+
 	respondEphemeral(h.session, interaction, result.Message)
+}
+
+// resolveSpellAbility reads the magic item's active_abilities from the ref
+// table and returns the spell_id and charges_cost if a spell-casting ability
+// is found. Returns ("", 0) when no lookup is wired or no spell ability exists.
+func (h *UseHandler) resolveSpellAbility(ctx context.Context, itemID string) (string, int) {
+	if h.magicItemLookup == nil {
+		return "", 0
+	}
+	mi, err := h.magicItemLookup.GetMagicItem(ctx, itemID)
+	if err != nil || !mi.ActiveAbilities.Valid {
+		return "", 0
+	}
+	var abilities []struct {
+		SpellID     string `json:"spell_id"`
+		ChargesCost int    `json:"charges_cost"`
+	}
+	if err := json.Unmarshal(mi.ActiveAbilities.RawMessage, &abilities); err != nil {
+		return "", 0
+	}
+	for _, a := range abilities {
+		if a.SpellID != "" {
+			cost := a.ChargesCost
+			if cost < 1 {
+				cost = 1
+			}
+			return a.SpellID, cost
+		}
+	}
+	return "", 0
 }
 
 // lookupActiveTurn returns the active turn for the invoking character when a

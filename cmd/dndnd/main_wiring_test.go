@@ -904,7 +904,7 @@ func TestQueueingSession_PassesNonSendMethodsThrough(t *testing.T) {
 // and /portal/character/{id} is unreachable (high-17).
 func TestBuildPortalRouteOptions_AppendsAPIAndCharacterSheet(t *testing.T) {
 	q := refdata.New(nil)
-	apiH, sheetH := buildPortalAPIAndSheetHandlers(q, nil)
+	apiH, sheetH := buildPortalAPIAndSheetHandlers(q, nil, nil)
 	require.NotNil(t, apiH, "production wiring must construct portal.APIHandler from queries")
 	require.NotNil(t, sheetH, "production wiring must construct portal.CharacterSheetHandler from queries")
 }

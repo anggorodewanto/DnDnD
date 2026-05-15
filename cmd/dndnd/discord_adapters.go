@@ -1195,11 +1195,19 @@ func (n *firstTurnPingNotifier) NotifyFirstTurn(ctx context.Context, encounterID
 // were never registered in production because main.go only passed WithOAuth.
 // This helper is the single source of truth for both handlers so the wiring
 // stays in sync.
-func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.TokenService) (*portal.APIHandler, *portal.CharacterSheetHandler) {
+//
+// Finding 20: uses NewRefDataAdapterWithOpen5eLookup when a lookup is provided
+// so Open5e spell-list gating is active in production.
+func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.TokenService, open5eLookup portal.Open5eCampaignLookup) (*portal.APIHandler, *portal.CharacterSheetHandler) {
 	if queries == nil {
 		return nil, nil
 	}
-	refDataAdapter := portal.NewRefDataAdapter(queries)
+	var refDataAdapter *portal.RefDataAdapter
+	if open5eLookup != nil {
+		refDataAdapter = portal.NewRefDataAdapterWithOpen5eLookup(queries, open5eLookup)
+	} else {
+		refDataAdapter = portal.NewRefDataAdapter(queries)
+	}
 	builderStore := portal.NewBuilderStoreAdapter(queries, tokenSvc)
 	builderSvc := portal.NewBuilderService(builderStore)
 	apiHandler := portal.NewAPIHandler(nil, refDataAdapter, builderSvc)

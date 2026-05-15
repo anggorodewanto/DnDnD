@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -392,4 +393,438 @@ func TestFormatTurnGateError_AllCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- F-4: /attack uses AcquireAndRun (lock held across mutation) ---
+
+func TestAttackHandler_UsesAcquireAndRun(t *testing.T) {
+	h, sess, _, _ := setupAttackHandler()
+	gate := &stubTurnGate{}
+	h.SetTurnGate(gate)
+
+	h.Handle(makeAttackInteraction(map[string]any{"target": "OS"}))
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire once, got %d", gate.runCalls)
+	}
+	if !gate.ranInsideLock {
+		t.Error("expected fn to run inside AcquireAndRun")
+	}
+	if sess.lastResponse == nil {
+		t.Fatal("expected a response")
+	}
+}
+
+func TestAttackHandler_AcquireAndRun_RejectsWrongOwner(t *testing.T) {
+	h, sess, _, _ := setupAttackHandler()
+	gate := &stubTurnGate{err: &combat.ErrNotYourTurn{
+		CurrentCharacterName: "Goblin",
+		CurrentDiscordUserID: "dm-1",
+	}}
+	h.SetTurnGate(gate)
+
+	h.Handle(makeAttackInteraction(map[string]any{"target": "OS"}))
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire, got %d", gate.runCalls)
+	}
+	if gate.ranInsideLock {
+		t.Error("fn must NOT run when gate rejects")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "not your turn") {
+		t.Errorf("expected not-your-turn message, got: %s", content)
+	}
+}
+
+// --- F-4: /bonus uses AcquireAndRun ---
+
+func TestBonusHandler_UsesAcquireAndRun(t *testing.T) {
+	h, sess, _, _ := setupBonusHandler()
+	gate := &stubTurnGate{}
+	h.SetTurnGate(gate)
+
+	h.Handle(makeBonusInteraction("rage", ""))
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire once, got %d", gate.runCalls)
+	}
+	if !gate.ranInsideLock {
+		t.Error("expected fn to run inside AcquireAndRun")
+	}
+	if sess.lastResponse == nil {
+		t.Fatal("expected a response")
+	}
+}
+
+func TestBonusHandler_AcquireAndRun_RejectsWrongOwner(t *testing.T) {
+	h, sess, _, _ := setupBonusHandler()
+	gate := &stubTurnGate{err: &combat.ErrNotYourTurn{
+		CurrentCharacterName: "Goblin",
+		CurrentDiscordUserID: "dm-1",
+	}}
+	h.SetTurnGate(gate)
+
+	h.Handle(makeBonusInteraction("rage", ""))
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire, got %d", gate.runCalls)
+	}
+	if gate.ranInsideLock {
+		t.Error("fn must NOT run when gate rejects")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "not your turn") {
+		t.Errorf("expected not-your-turn message, got: %s", content)
+	}
+}
+
+// --- F-4: /fly confirm uses AcquireAndRun ---
+
+func TestFlyHandler_HandleFlyConfirm_UsesAcquireAndRun(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupFlyHandler(sess)
+
+	gate := &stubTurnGate{}
+	handler.SetTurnGate(gate)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleFlyConfirm(interaction, turnID, combatantID, 30, 10)
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire once, got %d", gate.runCalls)
+	}
+	if !gate.ranInsideLock {
+		t.Error("expected fn to run inside AcquireAndRun")
+	}
+}
+
+func TestFlyHandler_HandleFlyConfirm_GateRejectsBeforeWrite(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, turnID, combatantID := setupFlyHandler(sess)
+
+	wrapped := &callCountingMoveService{mockMoveService: handler.combatService.(*mockMoveService)}
+	handler.combatService = wrapped
+
+	gate := &stubTurnGate{err: combat.ErrTurnChanged}
+	handler.SetTurnGate(gate)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+	handler.HandleFlyConfirm(interaction, turnID, combatantID, 30, 10)
+
+	if gate.ranInsideLock {
+		t.Error("fn must NOT run when gate rejects")
+	}
+	if wrapped.updatePosCalls != 0 {
+		t.Errorf("expected zero writes when gate rejects, got %d", wrapped.updatePosCalls)
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "no longer your turn") {
+		t.Errorf("expected ErrTurnChanged message, got: %s", content)
+	}
+}
+
+// --- F-4: /interact uses AcquireAndRun ---
+
+func TestInteractHandler_UsesAcquireAndRun(t *testing.T) {
+	h, sess, _, _ := setupInteractHandler()
+	gate := &stubTurnGate{}
+	h.SetTurnGate(gate)
+
+	h.Handle(makeInteractInteraction("draw longsword"))
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire once, got %d", gate.runCalls)
+	}
+	if !gate.ranInsideLock {
+		t.Error("expected fn to run inside AcquireAndRun")
+	}
+	if sess.lastResponse == nil {
+		t.Fatal("expected a response")
+	}
+}
+
+func TestInteractHandler_AcquireAndRun_RejectsWrongOwner(t *testing.T) {
+	h, sess, _, _ := setupInteractHandler()
+	gate := &stubTurnGate{err: &combat.ErrNotYourTurn{
+		CurrentCharacterName: "Goblin",
+		CurrentDiscordUserID: "dm-1",
+	}}
+	h.SetTurnGate(gate)
+
+	h.Handle(makeInteractInteraction("draw longsword"))
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire, got %d", gate.runCalls)
+	}
+	if gate.ranInsideLock {
+		t.Error("fn must NOT run when gate rejects")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "not your turn") {
+		t.Errorf("expected not-your-turn message, got: %s", content)
+	}
+}
+
+// --- F-4: /cast uses AcquireAndRun ---
+
+func TestCastHandler_UsesAcquireAndRun(t *testing.T) {
+	h, sess, _, _ := setupCastHandler()
+	gate := &stubTurnGate{}
+	h.SetTurnGate(gate)
+
+	h.Handle(makeCastInteraction(map[string]any{"spell": "fireball", "target": "OS"}))
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire once, got %d", gate.runCalls)
+	}
+	if !gate.ranInsideLock {
+		t.Error("expected fn to run inside AcquireAndRun")
+	}
+	if sess.lastResponse == nil {
+		t.Fatal("expected a response")
+	}
+}
+
+func TestCastHandler_AcquireAndRun_RejectsWrongOwner(t *testing.T) {
+	h, sess, _, _ := setupCastHandler()
+	gate := &stubTurnGate{err: &combat.ErrNotYourTurn{
+		CurrentCharacterName: "Goblin",
+		CurrentDiscordUserID: "dm-1",
+	}}
+	h.SetTurnGate(gate)
+
+	h.Handle(makeCastInteraction(map[string]any{"spell": "fireball", "target": "OS"}))
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire, got %d", gate.runCalls)
+	}
+	if gate.ranInsideLock {
+		t.Error("fn must NOT run when gate rejects")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "not your turn") {
+		t.Errorf("expected not-your-turn message, got: %s", content)
+	}
+}
+
+// --- Finding 7: /action uses AcquireAndRun in combat mode ---
+
+func TestActionHandler_UsesAcquireAndRun_CombatMode(t *testing.T) {
+	h, sess := setupActionHandlerForGateTest()
+	gate := &stubTurnGate{}
+	h.SetTurnGate(gate)
+
+	h.Handle(makeActionInteraction("g1", "u1", "flip the table", ""))
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire once, got %d", gate.runCalls)
+	}
+	if !gate.ranInsideLock {
+		t.Error("expected fn to run inside AcquireAndRun")
+	}
+	if sess.lastResponse == nil {
+		t.Fatal("expected a response")
+	}
+}
+
+func TestActionHandler_AcquireAndRun_RejectsWrongOwner(t *testing.T) {
+	h, sess := setupActionHandlerForGateTest()
+	gate := &stubTurnGate{err: &combat.ErrNotYourTurn{
+		CurrentCharacterName: "Goblin",
+		CurrentDiscordUserID: "dm-1",
+	}}
+	h.SetTurnGate(gate)
+
+	h.Handle(makeActionInteraction("g1", "u1", "flip the table", ""))
+
+	if gate.runCalls != 1 {
+		t.Fatalf("expected AcquireAndRun to fire, got %d", gate.runCalls)
+	}
+	if gate.ranInsideLock {
+		t.Error("fn must NOT run when gate rejects")
+	}
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "not your turn") {
+		t.Errorf("expected not-your-turn message, got: %s", content)
+	}
+}
+
+func TestActionHandler_NoGate_ExplorationMode_SkipsGate(t *testing.T) {
+	h, _ := setupActionHandlerForGateTest()
+	// Switch to exploration mode
+	h.combatService = &mockActionCombatServiceForGate{
+		encounter: refdata.Encounter{
+			ID:   uuid.New(),
+			Mode: "exploration",
+		},
+	}
+	gate := &stubTurnGate{err: errors.New("gate must not fire")}
+	h.SetTurnGate(gate)
+
+	h.Handle(makeActionInteraction("g1", "u1", "look around", ""))
+
+	if gate.calls != 0 {
+		t.Errorf("expected gate NOT to fire in exploration mode, got %d calls", gate.calls)
+	}
+}
+
+// --- helpers for /action gate tests ---
+
+// mockActionCombatServiceForGate is a minimal ActionCombatService that
+// returns canned data for the gate tests. Only GetEncounter, GetCombatant,
+// ListCombatantsByEncounterID, and FreeformAction are exercised.
+type mockActionCombatServiceForGate struct {
+	encounter refdata.Encounter
+}
+
+func (m *mockActionCombatServiceForGate) GetEncounter(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
+	return m.encounter, nil
+}
+func (m *mockActionCombatServiceForGate) GetCombatant(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+	return refdata.Combatant{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}, nil
+}
+func (m *mockActionCombatServiceForGate) ListCombatantsByEncounterID(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+	return nil, nil
+}
+func (m *mockActionCombatServiceForGate) FreeformAction(_ context.Context, cmd combat.FreeformActionCommand) (combat.FreeformActionResult, error) {
+	return combat.FreeformActionResult{CombatLog: "action queued"}, nil
+}
+func (m *mockActionCombatServiceForGate) CancelFreeformAction(_ context.Context, _ combat.CancelFreeformActionCommand) (combat.CancelFreeformActionResult, error) {
+	return combat.CancelFreeformActionResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) CancelExplorationFreeformAction(_ context.Context, _ uuid.UUID) (combat.CancelFreeformActionResult, error) {
+	return combat.CancelFreeformActionResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) ReadyAction(_ context.Context, _ combat.ReadyActionCommand) (combat.ReadyActionResult, error) {
+	return combat.ReadyActionResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) ActionSurge(_ context.Context, _ combat.ActionSurgeCommand) (combat.ActionSurgeResult, error) {
+	return combat.ActionSurgeResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) Dash(_ context.Context, _ combat.DashCommand) (combat.DashResult, error) {
+	return combat.DashResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) Disengage(_ context.Context, _ combat.DisengageCommand) (combat.DisengageResult, error) {
+	return combat.DisengageResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) Dodge(_ context.Context, _ combat.DodgeCommand) (combat.DodgeResult, error) {
+	return combat.DodgeResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) Help(_ context.Context, _ combat.HelpCommand) (combat.HelpResult, error) {
+	return combat.HelpResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) Hide(_ context.Context, _ combat.HideCommand, _ *dice.Roller) (combat.HideResult, error) {
+	return combat.HideResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) Stand(_ context.Context, _ combat.StandCommand) (combat.StandResult, error) {
+	return combat.StandResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) DropProne(_ context.Context, _ combat.DropProneCommand) (combat.DropProneResult, error) {
+	return combat.DropProneResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) Escape(_ context.Context, _ combat.EscapeCommand, _ *dice.Roller) (combat.EscapeResult, error) {
+	return combat.EscapeResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) Grapple(_ context.Context, _ combat.GrappleCommand, _ *dice.Roller) (combat.GrappleResult, error) {
+	return combat.GrappleResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) TurnUndead(_ context.Context, _ combat.TurnUndeadCommand, _ *dice.Roller) (combat.TurnUndeadResult, error) {
+	return combat.TurnUndeadResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) PreserveLife(_ context.Context, _ combat.PreserveLifeCommand) (combat.PreserveLifeResult, error) {
+	return combat.PreserveLifeResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) SacredWeapon(_ context.Context, _ combat.SacredWeaponCommand) (combat.SacredWeaponResult, error) {
+	return combat.SacredWeaponResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) VowOfEnmity(_ context.Context, _ combat.VowOfEnmityCommand) (combat.VowOfEnmityResult, error) {
+	return combat.VowOfEnmityResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) ChannelDivinityDMQueue(_ context.Context, _ combat.ChannelDivinityDMQueueCommand) (combat.DMQueueResult, error) {
+	return combat.DMQueueResult{}, nil
+}
+func (m *mockActionCombatServiceForGate) LayOnHands(_ context.Context, _ combat.LayOnHandsCommand) (combat.LayOnHandsResult, error) {
+	return combat.LayOnHandsResult{}, nil
+}
+
+type mockActionTurnProviderForGate struct {
+	turn refdata.Turn
+}
+
+func (m *mockActionTurnProviderForGate) GetTurn(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+	return m.turn, nil
+}
+
+type mockActionCampaignProviderForGate struct {
+	campaign refdata.Campaign
+}
+
+func (m *mockActionCampaignProviderForGate) GetCampaignByGuildID(_ context.Context, _ string) (refdata.Campaign, error) {
+	return m.campaign, nil
+}
+
+type mockActionCharacterLookupForGate struct {
+	char refdata.Character
+}
+
+func (m *mockActionCharacterLookupForGate) GetCharacterByCampaignAndDiscord(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+	return m.char, nil
+}
+
+func setupActionHandlerForGateTest() (*ActionHandler, *mockMoveSession) {
+	encID := uuid.New()
+	turnID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+
+	sess := &mockMoveSession{}
+	resolver := &fakeActionEncounterResolver{encounterID: encID}
+	combatSvc := &mockActionCombatServiceForGate{
+		encounter: refdata.Encounter{
+			ID:            encID,
+			CurrentTurnID: uuid.NullUUID{UUID: turnID, Valid: true},
+			Mode:          "combat",
+		},
+	}
+	turnProv := &mockActionTurnProviderForGate{
+		turn: refdata.Turn{ID: turnID, CombatantID: combatantID},
+	}
+	campProv := &mockActionCampaignProviderForGate{
+		campaign: refdata.Campaign{ID: uuid.New()},
+	}
+	charLookup := &mockActionCharacterLookupForGate{
+		char: refdata.Character{ID: charID},
+	}
+
+	// Override GetCombatant to return a combatant with matching CharacterID
+	combatSvc2 := &mockActionCombatServiceForGateWithChar{
+		mockActionCombatServiceForGate: *combatSvc,
+		combatant: refdata.Combatant{
+			ID:          combatantID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		},
+	}
+
+	h := NewActionHandler(sess, resolver, combatSvc2, turnProv, campProv, charLookup, nil)
+	return h, sess
+}
+
+// mockActionCombatServiceForGateWithChar extends the base mock to return
+// a specific combatant with a CharacterID that matches the character lookup.
+type mockActionCombatServiceForGateWithChar struct {
+	mockActionCombatServiceForGate
+	combatant refdata.Combatant
+}
+
+func (m *mockActionCombatServiceForGateWithChar) GetCombatant(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
+	return m.combatant, nil
 }

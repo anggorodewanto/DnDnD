@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -185,4 +186,48 @@ func TestUnattuneHandler_StoreError(t *testing.T) {
 	handler.Handle(interaction)
 
 	assert.Contains(t, sess.lastResponse, "Failed to save")
+}
+
+// --- Finding 10 test: /unattune publishes dashboard snapshot ---
+
+// mockAttunePublisher records PublishForCharacter calls for unattune tests.
+type mockAttunePublisher struct {
+	publishedFor uuid.UUID
+}
+
+func (m *mockAttunePublisher) PublishForCharacter(_ context.Context, characterID uuid.UUID) {
+	m.publishedFor = characterID
+}
+
+func TestUnattuneHandler_PublishesSnapshot(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	slots := []character.AttunementSlot{
+		{ItemID: "cloak-of-protection", Name: "Cloak of Protection"},
+	}
+	slotsJSON, _ := json.Marshal(slots)
+
+	store := &mockAttuneStore{char: refdata.Character{ID: charID}}
+
+	handler := NewUnattuneHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:              charID,
+			CampaignID:      campID,
+			Name:            "Aria",
+			AttunementSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+		}},
+		store,
+	)
+
+	pub := &mockAttunePublisher{}
+	handler.SetPublisher(pub)
+
+	interaction := makeUnattuneInteraction("guild1", "user1", "cloak-of-protection")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "Unattuned")
+	assert.Equal(t, charID, pub.publishedFor, "expected PublishForCharacter to be called with the character ID")
 }

@@ -63,6 +63,9 @@ jobs:
       - name: Run tests and enforce coverage thresholds
         run: make cover-check
 
+      - name: Run E2E scenarios
+        run: make e2e
+
       - name: Generate HTML coverage report
         if: always()
         run: go tool cover -html=coverage.out -o coverage.html

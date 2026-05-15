@@ -55,6 +55,11 @@ func NewDMCharCreateService(store CharCreateStore, opts ...DMCharCreateServiceOp
 	return svc
 }
 
+// SetFeatureProvider wires the feature provider after construction.
+func (svc *DMCharCreateService) SetFeatureProvider(fp FeatureProvider) {
+	svc.featureProvider = fp
+}
+
 // CreateCharacter validates the submission, calculates derived stats,
 // and creates the character + player_character records as pre-approved.
 func (svc *DMCharCreateService) CreateCharacter(ctx context.Context, campaignID string, sub DMCharacterSubmission) (portal.CreateCharacterResult, error) {

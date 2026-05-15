@@ -38,7 +38,7 @@ func TestValidatePointBuy_ScoreTooLow(t *testing.T) {
 }
 
 func TestValidatePointBuy_ScoreTooHigh(t *testing.T) {
-	scores := portal.PointBuyScores{STR: 16, DEX: 8, CON: 8, INT: 8, WIS: 8, CHA: 8}
+	scores := portal.PointBuyScores{STR: 18, DEX: 8, CON: 8, INT: 8, WIS: 8, CHA: 8}
 	err := portal.ValidatePointBuy(scores)
 	assert.ErrorIs(t, err, portal.ErrScoreOutOfRange)
 }
@@ -95,7 +95,7 @@ func TestValidateAbilityScores_MethodRules(t *testing.T) {
 			sub: func() portal.CharacterSubmission {
 				sub := validSubmission()
 				sub.AbilityMethod = portal.AbilityMethodRoll
-				sub.AbilityScores = portal.PointBuyScores{STR: 16, DEX: 13, CON: 12, INT: 12, WIS: 9, CHA: 6}
+				sub.AbilityScores = portal.PointBuyScores{STR: 10, DEX: 13, CON: 12, INT: 12, WIS: 9, CHA: 6}
 				sub.AbilityRolls = map[string][]int{
 					"str": []int{6, 5, 4, 1},
 					"dex": []int{6, 4, 3, 1},
@@ -106,7 +106,7 @@ func TestValidateAbilityScores_MethodRules(t *testing.T) {
 				}
 				return sub
 			}(),
-			wantErr: "does not match 4d6 drop lowest",
+			wantErr: "is less than 4d6 drop lowest",
 		},
 		{
 			name: "roll rejects missing roll details",
@@ -119,14 +119,14 @@ func TestValidateAbilityScores_MethodRules(t *testing.T) {
 			wantErr: "roll must include four d6 results",
 		},
 		{
-			name: "standard array rejects duplicate",
+			name: "standard array rejects out of range",
 			sub: func() portal.CharacterSubmission {
 				sub := validSubmission()
 				sub.AbilityMethod = portal.AbilityMethodStandardArray
-				sub.AbilityScores = portal.PointBuyScores{STR: 15, DEX: 15, CON: 13, INT: 12, WIS: 10, CHA: 8}
+				sub.AbilityScores = portal.PointBuyScores{STR: 20, DEX: 15, CON: 13, INT: 12, WIS: 10, CHA: 8}
 				return sub
 			}(),
-			wantErr: "standard array",
+			wantErr: "standard array score out of range",
 		},
 	}
 
