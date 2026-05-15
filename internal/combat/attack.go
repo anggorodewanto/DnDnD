@@ -1567,13 +1567,17 @@ func (s *Service) creatureCoverOccupants(ctx context.Context, attacker, target r
 	return occupants, nil
 }
 
-// colToIndex converts a column letter (A-Z) to a 0-based index.
+// colToIndex converts column letters (A, B, ..., Z, AA, AB, ...) to a 0-based index.
 func colToIndex(col string) int {
 	if len(col) == 0 {
 		return 0
 	}
-	c := strings.ToUpper(col)[0]
-	return int(c - 'A')
+	col = strings.ToUpper(col)
+	result := 0
+	for _, ch := range col {
+		result = result*26 + int(ch-'A') + 1
+	}
+	return result - 1
 }
 
 // attackAbilityUsed mirrors abilityModForWeapon's selection logic and reports

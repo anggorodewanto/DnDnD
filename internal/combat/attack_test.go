@@ -1009,6 +1009,12 @@ func TestColToIndex(t *testing.T) {
 	assert.Equal(t, 25, colToIndex("Z"))
 	assert.Equal(t, 0, colToIndex("a")) // lowercase
 	assert.Equal(t, 0, colToIndex(""))  // empty
+
+	// Multi-letter columns (base-26)
+	assert.Equal(t, 26, colToIndex("AA"))
+	assert.Equal(t, 27, colToIndex("AB"))
+	assert.Equal(t, 51, colToIndex("AZ"))
+	assert.Equal(t, 52, colToIndex("BA"))
 }
 
 func TestBuildCritDiceDisplay(t *testing.T) {

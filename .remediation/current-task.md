@@ -1,11 +1,11 @@
-finding_id: B-C02
+finding_id: C-C01
 severity: Critical
-title: cryptoRand / RollD20 panic on degenerate dice (Nd0)
-location: internal/dice/roller.go:48-54, internal/dice/dice.go:23
-spec_ref: phases §Phase 18
+title: Multi-letter column labels truncated by colToIndex
+location: internal/combat/attack.go:1571-1577
+spec_ref: spec §Grid Movement (line 285-300, "AA12 valid on maps wider than 26 columns")
 problem: |
-  ParseExpression accepts "1d0", "5d0", etc. (regex `\d+d\d+` does not exclude zero). rollGroups then calls r.randFn(0), which is cryptoRand(0), which calls rand.Int(rand.Reader, big.NewInt(0)) — that panics with "crypto/rand.Int argument must be > 0". Any user-supplied `/roll 1d0` crashes the request goroutine.
+  `colToIndex` takes only `strings.ToUpper(col)[0]`, so "AA" → 0 (same as "A"). Used by combatantDistance, resolveAttackCover, detectHostileNear, and creatureCoverOccupants. On maps with > 26 columns every attacker/target in the AA+ block resolves to column 0 — distances, cover lines, OA reach checks all collapse onto column A.
 suggested_fix: |
-  Validate Count >= 1 && Sides >= 1 in ParseExpression (reject with an error). Also add a defensive guard in rollGroups before calling randFn.
+  Reuse renderer.ParseCoordinate (or extract the column-letter loop from ParseCoordinate into a shared helper). The renderer code already handles AA/AB/... correctly. Alternatively, implement the standard base-26 conversion: iterate all characters, accumulating `result = result*26 + (ch - 'A' + 1)`, then subtract 1 for 0-based index.
 acceptance_criterion: |
-  ParseExpression("1d0") returns an error. ParseExpression("0d6") returns an error. ParseExpression("0d0") returns an error. No panic occurs for any of these inputs.
+  colToIndex("A") == 0, colToIndex("Z") == 25, colToIndex("AA") == 26, colToIndex("AB") == 27, colToIndex("AZ") == 51, colToIndex("BA") == 52. Existing tests still pass.

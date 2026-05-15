@@ -2,21 +2,16 @@ package combat
 
 import (
 	"encoding/json"
-	"strings"
 
 	"github.com/ab/dndnd/internal/dice"
 )
 
-// ColToIndex converts a column letter (A-Z) to a 0-based grid index. Exported
-// helper so consumers outside the combat package (e.g. discord handlers that
-// need to feed CombatantObscurement) can map a combatant's column without
-// duplicating the conversion logic. (E-69)
+// ColToIndex converts column letters (A, B, ..., Z, AA, AB, ...) to a 0-based
+// grid index. Exported helper so consumers outside the combat package (e.g.
+// discord handlers that need to feed CombatantObscurement) can map a
+// combatant's column without duplicating the conversion logic. (E-69)
 func ColToIndex(col string) int {
-	if len(col) == 0 {
-		return 0
-	}
-	c := strings.ToUpper(col)[0]
-	return int(c - 'A')
+	return colToIndex(col)
 }
 
 // ObscurementLevel represents the visibility level in a zone.
