@@ -55,7 +55,7 @@ Low: 142
 | 43 | A-H08 | High | pending | Fuzzy match suggestion message renders incorrectly when multiple matches | internal/discord/registration_handler.go:97-100 |
 | 44 | A-H09 | High | pending | Sessions middleware re-issues cookie even when slide TTL fails silently | internal/auth/middleware.go:62-77 |
 | 45 | B-H01 | High | pending | Map size limits not enforced when rendering, only at create-time | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:12-16`; |
-| 46 | B-H02 | High | pending | `RenderMap` mutates caller-supplied `MapData.TileSize` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:13-16` |
+| 46 | B-H02 | High | in_progress | `RenderMap` mutates caller-supplied `MapData.TileSize` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:13-16` |
 | 47 | B-H03 | High | pending | Asset upload accepts arbitrary MIME types (XSS / file-type abuse risk) | `/home/ab/projects/DnDnD/internal/asset/handler.go:36-83`, |
 | 48 | B-H04 | High | pending | Map renderer never composites the uploaded background image | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go` |
 | 49 | B-H05 | High | pending | `TilesetRefs` request field silently dropped by HTTP handler | `/home/ab/projects/DnDnD/internal/gamemap/handler.go:65-82, |

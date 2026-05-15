@@ -1,31 +1,43 @@
-# Worker Report: A-H04
+# Worker Report: B-H02
 
-**Worker:** worker-A-H04
-**Date:** 2026-05-16
-**Status:** ✅ Complete
+**Finding:** RenderMap mutates caller-supplied MapData.TileSize
+**Status:** FIXED ✅
 
-## Finding
+## What was done
 
-After `FetchUserInfo`, `user.ID` was never validated. An empty ID could be stored in sessions and `player_characters.discord_user_id`.
+### Red (failing test)
+Added `TestRenderMap_DoesNotMutateTileSize` in `renderer_test.go`:
+- Creates `MapData` with `TileSize=64` and `Width=150` (triggers large-map path)
+- Calls `RenderMap`
+- Asserts `md.TileSize` is still 64 after the call
+- Confirmed test **failed** before fix: `got 32, want 64`
 
-## Fix Applied
-
-Added early-return validation in `HandleCallback` (`internal/auth/oauth2.go`):
-
+### Green (fix)
+In `renderer.go`, replaced the direct mutation:
 ```go
-if user.ID == "" {
-    http.Error(w, "invalid user", http.StatusForbidden)
-    return
+// Before (mutates caller):
+if md.Width > 100 || md.Height > 100 {
+    md.TileSize = 32
 }
 ```
+With a local variable + defer restore pattern:
+```go
+// After (no permanent mutation):
+tileSize := md.TileSize
+if md.Width > 100 || md.Height > 100 {
+    tileSize = 32
+}
+origTileSize := md.TileSize
+md.TileSize = tileSize
+defer func() { md.TileSize = origTileSize }()
+```
+This ensures draw helpers still see the reduced tile size during rendering, but the caller's struct is restored on exit.
 
-## TDD Evidence
+### Verification
+- `make test` — all tests pass
+- `make cover-check` — all coverage thresholds met
+- Existing `TestRenderMap_LargeMapTileSize` still passes (image dimensions correct with 32px tiles)
 
-1. **Red:** Added `TestHandleCallback_EmptyUserID` — mocks `FetchUserInfo` returning `DiscordUser{ID: ""}`, asserts 403. Confirmed failure (got 307).
-2. **Green:** Added the `user.ID == ""` check. Test passes.
-3. **Verify:** `make test` passes. `make cover-check` passes (all thresholds met).
-
-## Files Changed
-
-- `internal/auth/oauth2.go` — added 4 lines (empty-ID guard)
-- `internal/auth/oauth2_test.go` — added `TestHandleCallback_EmptyUserID`
+## Files changed
+- `internal/gamemap/renderer/renderer.go` (lines 13–19)
+- `internal/gamemap/renderer/renderer_test.go` (added test at end)

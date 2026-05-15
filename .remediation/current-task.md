@@ -1,11 +1,11 @@
-finding_id: A-H04
+finding_id: B-H02
 severity: High
-title: OAuth callback handler treats any 4xx error from Discord as a generic 403
-location: internal/auth/oauth2.go:150-156, 178-182
-spec_ref: spec §Authentication & Authorization; Phase 10
+title: RenderMap mutates caller-supplied MapData.TileSize
+location: internal/gamemap/renderer/renderer.go:13-16
+spec_ref: spec §Map Size Limits; Phase 22
 problem: |
-  HandleCallback never validates that FetchUserInfo returned a non-empty Discord user ID. If Discord returns an empty body, user.ID could be empty string, which then goes into sessions.Create and player_characters.discord_user_id.
+  RenderMap overwrites md.TileSize in place. The same *MapData pointer is stored in RenderQueue.latest and visible to future enqueues.
 suggested_fix: |
-  After FetchUserInfo, reject the callback if user.ID == "".
+  Use a local variable: tileSize := md.TileSize; if md.Width > 100 || md.Height > 100 { tileSize = 32 }. Pass tileSize everywhere instead of mutating.
 acceptance_criterion: |
-  HandleCallback returns an error/redirect when user.ID is empty. A test demonstrates this.
+  After RenderMap returns, the original MapData.TileSize is unchanged. A test demonstrates this.

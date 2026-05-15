@@ -264,3 +264,27 @@ func TestRenderMap_StackedTokens(t *testing.T) {
 		t.Fatalf("not valid PNG: %v", err)
 	}
 }
+
+func TestRenderMap_DoesNotMutateTileSize(t *testing.T) {
+	md := &MapData{
+		Width:    150,
+		Height:   50,
+		TileSize: 64,
+		TerrainGrid: func() []TerrainType {
+			g := make([]TerrainType, 150*50)
+			for i := range g {
+				g[i] = TerrainOpenGround
+			}
+			return g
+		}(),
+	}
+
+	_, err := RenderMap(md)
+	if err != nil {
+		t.Fatalf("RenderMap error: %v", err)
+	}
+
+	if md.TileSize != 64 {
+		t.Errorf("RenderMap mutated md.TileSize: got %d, want 64", md.TileSize)
+	}
+}

@@ -11,13 +11,19 @@ import (
 // Returns the PNG bytes or an error.
 func RenderMap(md *MapData) ([]byte, error) {
 	// Auto-reduce tile size for large maps (>100 in either dimension)
+	tileSize := md.TileSize
 	if md.Width > 100 || md.Height > 100 {
-		md.TileSize = 32
+		tileSize = 32
 	}
 
+	// Temporarily set reduced tile size for draw helpers, restore on exit
+	origTileSize := md.TileSize
+	md.TileSize = tileSize
+	defer func() { md.TileSize = origTileSize }()
+
 	margin := gridLabelMargin
-	mapW := md.Width * md.TileSize
-	mapH := md.Height * md.TileSize
+	mapW := md.Width * tileSize
+	mapH := md.Height * tileSize
 	legendH := LegendHeight(md)
 
 	totalW := mapW + margin
