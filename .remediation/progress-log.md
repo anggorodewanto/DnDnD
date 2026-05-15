@@ -212,3 +212,10 @@ Append-only journal of all remediation activity.
 - Commit: a40152a
 - Reviewer: approved
 - Notes: Ceiling division (classLevel+1)/2 for single-class half-caster caster level
+
+## 2026-05-15T18:59 — I-C01 done
+
+- Finding: DM-created characters never inherit class/racial features
+- Commit: 9c83278
+- Reviewer: approved
+- Notes: strings.ToLower normalization in CollectFeatures and RacialTraits
