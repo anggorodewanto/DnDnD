@@ -1,37 +1,37 @@
-# Worker Report: A-H08
+# Worker Report: B-H03 — MIME Type Allowlist
 
 ## Finding
-Multiple fuzzy matches wrapped in a single `**...**` instead of each being individually bolded. Also used literal `<name>` placeholder instead of the actual suggestion.
+Asset upload accepted arbitrary MIME types (e.g., `text/html`), enabling stored XSS via `ServeAsset`.
 
 ## Fix Applied
 
-**File:** `internal/discord/registration_handler.go` (line 97–100)
+**File:** `internal/asset/service.go`
 
-**Before:**
-```go
-suggestions := strings.Join(result.Suggestions, ", ")
-respondEphemeral(h.session, interaction,
-    fmt.Sprintf("❌ No character named \"%s\" found. Did you mean: **%s**? Use /register <name> to confirm.", characterName, suggestions))
-```
+Added `allowedMIMETypes` map in `validateUpload`:
+- `map_background`, `token` → `image/png`, `image/jpeg`, `image/webp`
+- `tileset` → `application/json`
 
-**After:**
-```go
-bolded := make([]string, len(result.Suggestions))
-for i, s := range result.Suggestions {
-    bolded[i] = "**" + s + "**"
-}
-respondEphemeral(h.session, interaction,
-    fmt.Sprintf("❌ No character named \"%s\" found. Did you mean: %s? Use /register %s to confirm.", characterName, strings.Join(bolded, ", "), result.Suggestions[0]))
-```
+Uploads with disallowed MIME types are rejected with a 400 error: `"mime type not allowed for asset type <type>"`.
 
 ## Tests Added
 
-**File:** `internal/discord/registration_handler_test.go`
+**File:** `internal/asset/handler_test.go`
 
-1. `TestRegisterHandler_FuzzyMatch_MultipleSuggestions_BoldsEachName` — asserts 3 matches render as `**Thorn**, **Thorin**, **Thora**` and first name is used in the `/register` hint.
-2. `TestRegisterHandler_FuzzyMatch_SingleSuggestion_BoldsName` — asserts single match is bolded and actual name replaces `<name>`.
+| Test | Asserts |
+|------|---------|
+| `TestHandler_UploadAsset_DisallowedMimeType` | `text/html` upload → 400, body contains "mime type not allowed" |
+| `TestHandler_UploadAsset_AllowedMimeType_ImagePNG` | `image/png` for `map_background` → 201 |
+| `TestHandler_UploadAsset_AllowedMimeType_JSONForTileset` | `application/json` for `tileset` → 201 |
+
+Existing tests updated to use explicit valid MIME types via `CreatePart` instead of `CreateFormFile` (which defaults to `application/octet-stream`).
 
 ## Verification
 
-- `make test` — PASS (all tests green)
+- `make test` — PASS
 - `make cover-check` — PASS (all thresholds met)
+
+## TDD Cycle
+
+1. **Red:** Wrote `TestHandler_UploadAsset_DisallowedMimeType` — confirmed 201 (fail).
+2. **Green:** Added `allowedMIMETypes` check in `validateUpload` — all tests pass.
+3. **Refactor:** Updated existing tests to use explicit valid MIME types for correctness.

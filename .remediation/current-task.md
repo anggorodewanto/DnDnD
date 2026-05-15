@@ -1,11 +1,11 @@
-finding_id: A-H08
+finding_id: B-H03
 severity: High
-title: Fuzzy match suggestion message renders incorrectly when multiple matches
-location: internal/discord/registration_handler.go:97-100
-spec_ref: spec §Registration name matching (lines 47-48); Phase 14
+title: Asset upload accepts arbitrary MIME types (XSS / file-type abuse risk)
+location: internal/asset/handler.go:36-83, internal/asset/service.go:121-135
+spec_ref: phases §Phase 20, spec §Asset Storage
 problem: |
-  When 2-3 fuzzy matches exist, code wraps the entire comma-joined block in a single **…** instead of bolding each name individually. Also shows literal <name> placeholder.
+  UploadAsset trusts the multipart Content-Type header verbatim. A DM can upload HTML/JS/SVG as a "map_background" — ServeAsset then sets Content-Type: text/html enabling stored XSS.
 suggested_fix: |
-  Bold each suggestion individually: "Did you mean: **Thorn**, **Thorin**, **Thora**?"
+  Maintain an allowlist per AssetType (map_background/token → image/png|image/jpeg|image/webp, tileset → application/json). Reject everything else.
 acceptance_criterion: |
-  Multiple fuzzy matches are each individually bolded. A test demonstrates the correct format.
+  Upload with Content-Type: text/html is rejected. Upload with image/png is accepted. A test demonstrates both.

@@ -118,6 +118,13 @@ func (s *Service) URL(assetID uuid.UUID) string {
 	return s.store.URL(assetID)
 }
 
+// allowedMIMETypes maps asset types to their permitted MIME types.
+var allowedMIMETypes = map[AssetType][]string{
+	TypeMapBackground: {"image/png", "image/jpeg", "image/webp"},
+	TypeToken:         {"image/png", "image/jpeg", "image/webp"},
+	TypeTileset:       {"application/json"},
+}
+
 // validateUpload checks upload input for validity.
 func validateUpload(input UploadInput) error {
 	if !input.Type.Valid() {
@@ -128,6 +135,18 @@ func validateUpload(input UploadInput) error {
 	}
 	if input.MimeType == "" {
 		return errors.New("mime_type must not be empty")
+	}
+	if allowed, ok := allowedMIMETypes[input.Type]; ok {
+		found := false
+		for _, m := range allowed {
+			if m == input.MimeType {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return errors.New("mime type not allowed for asset type " + string(input.Type))
+		}
 	}
 	if input.Content == nil {
 		return errors.New("content must not be nil")

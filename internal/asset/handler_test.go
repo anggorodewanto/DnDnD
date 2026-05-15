@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"testing"
 
@@ -176,7 +177,10 @@ func TestHandler_UploadAsset_Success(t *testing.T) {
 	writer := multipart.NewWriter(&buf)
 	writer.WriteField("campaign_id", campaignID.String())
 	writer.WriteField("type", "map_background")
-	part, _ := writer.CreateFormFile("file", "map.png")
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="file"; filename="map.png"`)
+	partHeader.Set("Content-Type", "image/png")
+	part, _ := writer.CreatePart(partHeader)
 	part.Write([]byte("fakepngdata"))
 	writer.Close()
 
@@ -287,7 +291,10 @@ func TestHandler_UploadAsset_ServiceError(t *testing.T) {
 	writer := multipart.NewWriter(&buf)
 	writer.WriteField("campaign_id", uuid.New().String())
 	writer.WriteField("type", "map_background")
-	part, _ := writer.CreateFormFile("file", "map.png")
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="file"; filename="map.png"`)
+	partHeader.Set("Content-Type", "image/png")
+	part, _ := writer.CreatePart(partHeader)
 	part.Write([]byte("data"))
 	writer.Close()
 
@@ -310,7 +317,10 @@ func TestHandler_RegisterRoutes(t *testing.T) {
 	writer := multipart.NewWriter(&buf)
 	writer.WriteField("campaign_id", uuid.New().String())
 	writer.WriteField("type", "map_background")
-	part, _ := writer.CreateFormFile("file", "test.png")
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="file"; filename="test.png"`)
+	partHeader.Set("Content-Type", "image/png")
+	part, _ := writer.CreatePart(partHeader)
 	part.Write([]byte("data"))
 	writer.Close()
 
@@ -322,4 +332,106 @@ func TestHandler_RegisterRoutes(t *testing.T) {
 	// Should get 201 (upload works) or 400 (validation) but NOT 404/405
 	assert.NotEqual(t, http.StatusNotFound, rec.Code)
 	assert.NotEqual(t, http.StatusMethodNotAllowed, rec.Code)
+}
+
+func TestHandler_UploadAsset_DisallowedMimeType(t *testing.T) {
+	svc := NewService(&mockDBStore{}, &mockFileStore{})
+	h := NewHandler(svc)
+	router := newTestRouter(h)
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	writer.WriteField("campaign_id", uuid.New().String())
+	writer.WriteField("type", "map_background")
+	// Create a part with text/html content type (disallowed)
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="file"; filename="evil.html"`)
+	partHeader.Set("Content-Type", "text/html")
+	part, _ := writer.CreatePart(partHeader)
+	part.Write([]byte("<script>alert('xss')</script>"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/assets/upload", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "mime type not allowed")
+}
+
+func TestHandler_UploadAsset_AllowedMimeType_ImagePNG(t *testing.T) {
+	campaignID := uuid.New()
+	assetID := uuid.New()
+
+	db := &mockDBStore{
+		createAssetFn: func(ctx context.Context, arg refdata.CreateAssetParams) (refdata.Asset, error) {
+			return refdata.Asset{ID: assetID, CampaignID: arg.CampaignID}, nil
+		},
+	}
+	fs := &mockFileStore{
+		putFn: func(ctx context.Context, cid uuid.UUID, at AssetType, fn string, r io.Reader) (string, error) {
+			return "path", nil
+		},
+		urlFn: func(id uuid.UUID) string { return "/api/assets/" + id.String() },
+	}
+	svc := NewService(db, fs)
+	h := NewHandler(svc)
+	router := newTestRouter(h)
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	writer.WriteField("campaign_id", campaignID.String())
+	writer.WriteField("type", "map_background")
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="file"; filename="map.png"`)
+	partHeader.Set("Content-Type", "image/png")
+	part, _ := writer.CreatePart(partHeader)
+	part.Write([]byte("fakepng"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/assets/upload", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
+}
+
+func TestHandler_UploadAsset_AllowedMimeType_JSONForTileset(t *testing.T) {
+	campaignID := uuid.New()
+	assetID := uuid.New()
+
+	db := &mockDBStore{
+		createAssetFn: func(ctx context.Context, arg refdata.CreateAssetParams) (refdata.Asset, error) {
+			return refdata.Asset{ID: assetID, CampaignID: arg.CampaignID}, nil
+		},
+	}
+	fs := &mockFileStore{
+		putFn: func(ctx context.Context, cid uuid.UUID, at AssetType, fn string, r io.Reader) (string, error) {
+			return "path", nil
+		},
+		urlFn: func(id uuid.UUID) string { return "/api/assets/" + id.String() },
+	}
+	svc := NewService(db, fs)
+	h := NewHandler(svc)
+	router := newTestRouter(h)
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	writer.WriteField("campaign_id", campaignID.String())
+	writer.WriteField("type", "tileset")
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="file"; filename="tiles.json"`)
+	partHeader.Set("Content-Type", "application/json")
+	part, _ := writer.CreatePart(partHeader)
+	part.Write([]byte(`{"tiles":[]}`))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/assets/upload", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
 }
