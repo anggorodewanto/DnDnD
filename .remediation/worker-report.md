@@ -1,26 +1,31 @@
-# Worker Report: A-H05 — Portal token redemption TOCTOU race
+# Worker Report: A-H04
+
+**Worker:** worker-A-H04
+**Date:** 2026-05-16
+**Status:** ✅ Complete
 
 ## Finding
 
-`RedeemToken` performed a SELECT (via `ValidateToken`) then a separate UPDATE (via `MarkUsed`) without atomicity. Two concurrent calls could both pass the `used` check and both succeed.
+After `FetchUserInfo`, `user.ID` was never validated. An empty ID could be stored in sessions and `player_characters.discord_user_id`.
 
 ## Fix Applied
 
-### `internal/portal/token_store.go` — `MarkUsed`
+Added early-return validation in `HandleCallback` (`internal/auth/oauth2.go`):
 
-Changed the UPDATE to include `AND used = false` in the WHERE clause. If zero rows are affected, the function returns `ErrTokenUsed`. This makes the used-check atomic at the database level.
+```go
+if user.ID == "" {
+    http.Error(w, "invalid user", http.StatusForbidden)
+    return
+}
+```
 
-### Test Added
+## TDD Evidence
 
-`TestTokenService_RedeemToken_ConcurrentDoubleRedeem` in `token_service_test.go` — fires two goroutines calling `RedeemToken` on the same token simultaneously. Asserts exactly one succeeds and the other returns `ErrTokenUsed`. Run with `-count=10` to confirm consistency.
-
-## TDD Workflow
-
-1. **Red:** Added concurrent test → failed consistently ("both concurrent RedeemToken calls succeeded").
-2. **Green:** Applied conditional UPDATE fix → test passes on all 10 iterations.
-3. **Verify:** `make test` ✅ | `make cover-check` ✅ (portal package at 87.95%).
+1. **Red:** Added `TestHandleCallback_EmptyUserID` — mocks `FetchUserInfo` returning `DiscordUser{ID: ""}`, asserts 403. Confirmed failure (got 307).
+2. **Green:** Added the `user.ID == ""` check. Test passes.
+3. **Verify:** `make test` passes. `make cover-check` passes (all thresholds met).
 
 ## Files Changed
 
-- `internal/portal/token_store.go` (MarkUsed — 6 lines added)
-- `internal/portal/token_service_test.go` (new test — 30 lines added)
+- `internal/auth/oauth2.go` — added 4 lines (empty-ID guard)
+- `internal/auth/oauth2_test.go` — added `TestHandleCallback_EmptyUserID`

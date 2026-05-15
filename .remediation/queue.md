@@ -48,8 +48,8 @@ Low: 142
 | 36 | A-H01 | High | done | Player can never resubmit after `changes_requested` (broken status flow) | internal/registration/service.go:46-56 + internal/dashboard/approval_store.go:30... |
 | 37 | A-H02 | High | pending | OAuth access/refresh tokens stored in plaintext | internal/auth/session_store.go:50-62 + db/migrations/20260310120001_create_sessi... |
 | 38 | A-H03 | High | done | WebSocket origin verification defaults to `InsecureSkipVerify: true` | internal/dashboard/handler.go:117-170 (default `wsInsecureSkipVerify: true`), in... |
-| 39 | A-H04 | High | pending | OAuth callback handler treats any 4xx error from Discord as a generic 403 | internal/auth/oauth2.go:150-156, 178-182 |
-| 40 | A-H05 | High | in_progress | Portal token redemption has a TOCTOU race | internal/portal/token_service.go:82-90 + internal/portal/token_store.go:81-88 |
+| 39 | A-H04 | High | in_progress | OAuth callback handler treats any 4xx error from Discord as a generic 403 | internal/auth/oauth2.go:150-156, 178-182 |
+| 40 | A-H05 | High | done | Portal token redemption has a TOCTOU race | internal/portal/token_service.go:82-90 + internal/portal/token_store.go:81-88 |
 | 41 | A-H06 | High | pending | HP calculation always uses fixed-average; no rolled-HP path | internal/character/stats.go:21-47 |
 | 42 | A-H07 | High | pending | Welcome DM sent to every joining member even when no campaign exists | internal/discord/bot.go:119-131 + internal/discord/welcome.go:6-19 |
 | 43 | A-H08 | High | pending | Fuzzy match suggestion message renders incorrectly when multiple matches | internal/discord/registration_handler.go:97-100 |

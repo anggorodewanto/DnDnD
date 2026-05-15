@@ -175,6 +175,11 @@ func (s *OAuthService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if user.ID == "" {
+		http.Error(w, "invalid user", http.StatusForbidden)
+		return
+	}
+
 	sess, err := s.sessions.Create(r.Context(), user.ID, token.AccessToken, token.RefreshToken, &token.Expiry)
 	if err != nil {
 		s.logger.Error("failed to create session", "error", err)

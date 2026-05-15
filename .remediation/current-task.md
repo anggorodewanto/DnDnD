@@ -1,11 +1,11 @@
-finding_id: A-H05
+finding_id: A-H04
 severity: High
-title: Portal token redemption has a TOCTOU race
-location: internal/portal/token_service.go:82-90 + internal/portal/token_store.go:81-88
-spec_ref: spec §Discord integration; Phase 14
+title: OAuth callback handler treats any 4xx error from Discord as a generic 403
+location: internal/auth/oauth2.go:150-156, 178-182
+spec_ref: spec §Authentication & Authorization; Phase 10
 problem: |
-  RedeemToken calls ValidateToken (SELECT) then MarkUsed (UPDATE) without a transaction or conditional WHERE. Two concurrent redemptions both pass validate and both succeed at MarkUsed.
+  HandleCallback never validates that FetchUserInfo returned a non-empty Discord user ID. If Discord returns an empty body, user.ID could be empty string, which then goes into sessions.Create and player_characters.discord_user_id.
 suggested_fix: |
-  Make MarkUsed atomic: UPDATE portal_tokens SET used = true WHERE id = $1 AND used = false RETURNING id. Treat "no row" as "already used."
+  After FetchUserInfo, reject the callback if user.ID == "".
 acceptance_criterion: |
-  MarkUsed uses a conditional UPDATE (WHERE used = false) and returns an error when no row is affected (token already used). A test demonstrates the atomic behavior.
+  HandleCallback returns an error/redirect when user.ID is empty. A test demonstrates this.

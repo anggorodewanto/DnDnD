@@ -320,6 +320,29 @@ func TestHandleCallback_FetchUserInfoError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
+func TestHandleCallback_EmptyUserID(t *testing.T) {
+	tokenExpiry := time.Now().Add(7 * 24 * time.Hour)
+	tr := &mockTokenRefresher{
+		token: &oauth2.Token{
+			AccessToken:  "discord_at",
+			RefreshToken: "discord_rt",
+			Expiry:       tokenExpiry,
+		},
+	}
+	fetcher := &mockUserInfoFetcher{
+		user: &auth.DiscordUser{ID: "", Username: "ghost"},
+	}
+	state := "valid_state"
+	svc := auth.NewOAuthService(tr, newMockSessionRepo(), fetcher, slog.Default(), false)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=authcode&state="+state, nil)
+	req.AddCookie(&http.Cookie{Name: auth.StateCookieName, Value: state})
+	rec := httptest.NewRecorder()
+
+	svc.HandleCallback(rec, req)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
 func TestHandleCallback_CreateSessionError(t *testing.T) {
 	tokenExpiry := time.Now().Add(7 * 24 * time.Hour)
 	tr := &mockTokenRefresher{
