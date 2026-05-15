@@ -73,8 +73,8 @@ Low: 142
 | 61 | C-H10 | High | pending | Reach weapon OA detection — PC reach map relies on caller passing it | /home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:80-117, 148-164 (`... |
 | 62 | C-H11 | High | pending | Concentration-on-damage save uses simplified DC formula | /home/ab/projects/DnDnD/internal/combat/concentration.go:422-448 (`MaybeCreateCo... |
 | 63 | C-H12 | High | pending | Surprise: surprised condition removed at start of "skip turn", not end (timing nuance) | /home/ab/projects/DnDnD/internal/combat/initiative.go:582-606 (`skipSurprisedTur... |
-| 64 | D-H01 | High | in_progress | Step of the Wind dash adds remaining movement, not base speed | /home/ab/projects/DnDnD/internal/combat/monk.go:444 |
-| 65 | D-H02 | High | pending | Dodge condition grants no defensive disadvantage to attackers | /home/ab/projects/DnDnD/internal/combat/advantage.go:104 (switch on `c.Condition... |
+| 64 | D-H01 | High | done | Step of the Wind dash adds remaining movement, not base speed | /home/ab/projects/DnDnD/internal/combat/monk.go:444 |
+| 65 | D-H02 | High | superseded | Dodge condition grants no defensive disadvantage to attackers | /home/ab/projects/DnDnD/internal/combat/advantage.go:104 (switch on `c.Condition... |
 | 66 | D-H03 | High | pending | Auto-ability selection for finesse weapons silently disables rage damage | /home/ab/projects/DnDnD/internal/combat/attack.go:1583 (`attackAbilityUsed`) |
 | 67 | D-H04 | High | pending | Monk Unarmored Defense not invalidated by shield | /home/ab/projects/DnDnD/internal/combat/equip.go:416 and /home/ab/projects/DnDnD... |
 | 68 | D-H05 | High | pending | Monk Unarmored Movement not gated on "no shield" | /home/ab/projects/DnDnD/internal/combat/monk.go:487 (`UnarmoredMovementFeature`)... |
