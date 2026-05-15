@@ -343,4 +343,5 @@ func TestUseConsumable_Antitoxin(t *testing.T) {
 	assert.True(t, result.AutoResolved)
 	assert.Contains(t, result.Message, "advantage")
 	assert.Contains(t, result.Message, "poison")
+	assert.Equal(t, "antitoxin", result.AppliedCondition)
 }

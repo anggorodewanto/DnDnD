@@ -156,3 +156,10 @@ Append-only journal of all remediation activity.
 - Commit: 5c8c6c3
 - Reviewer: approved
 - Notes: Combat gate added to attune handler via ActiveEncounterForUser check
+
+## 2026-05-15T18:35 — G-C03 done
+
+- Finding: destroy_on_zero roll happens at dawn, not when last charge spent
+- Commit: d254f1e
+- Reviewer: approved
+- Notes: Moved d20 destroy check from DawnRecharge into UseCharges

@@ -91,12 +91,13 @@ type UseInput struct {
 
 // UseResult holds the result of using a consumable item.
 type UseResult struct {
-	UpdatedItems    []character.InventoryItem
-	HealingDone     int
-	HPAfter         int
-	AutoResolved    bool
-	DMQueueRequired bool
-	Message         string
+	UpdatedItems     []character.InventoryItem
+	HealingDone      int
+	HPAfter          int
+	AutoResolved     bool
+	DMQueueRequired  bool
+	Message          string
+	AppliedCondition string
 }
 
 // autoResolveItems maps item IDs to their dice expressions for auto-resolve.
@@ -136,6 +137,7 @@ func (s *Service) UseConsumable(input UseInput) (UseResult, error) {
 	if item.ItemID == "antitoxin" {
 		result.AutoResolved = true
 		result.HPAfter = input.HPCurrent
+		result.AppliedCondition = "antitoxin"
 		result.Message = fmt.Sprintf("\U0001f9ea %s used **%s** \u2014 grants advantage on saving throws vs poison for 1 hour.", item.Name, item.Name)
 		return result, nil
 	}
