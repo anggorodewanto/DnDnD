@@ -235,3 +235,36 @@ func TestRetireHandler_NoPCStore_NotifierStillFires(t *testing.T) {
 	require.Len(t, notifier.posted, 1)
 	assert.Equal(t, dmqueue.KindRetireRequest, notifier.posted[0].Kind)
 }
+
+// stubRetireCombatChecker simulates active-combat lookup for /retire.
+type stubRetireCombatChecker struct {
+	combatant refdata.Combatant
+	err       error
+}
+
+func (s *stubRetireCombatChecker) GetActiveCombatantByCharacterID(_ context.Context, _ uuid.NullUUID) (refdata.Combatant, error) {
+	return s.combatant, s.err
+}
+
+// F-15: /retire must be blocked when the character is in active combat.
+func TestRetireHandler_F15_BlockedDuringActiveCombat(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	notifier := &stubUndoNotifier{}
+	pcStore := &stubRetirePCStore{}
+
+	handler := NewRetireHandler(
+		sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&stubRetireCharLookup{char: refdata.Character{ID: uuid.New(), Name: "Aria"}},
+		notifier,
+	)
+	handler.SetPCStore(pcStore)
+	handler.SetCombatChecker(&stubRetireCombatChecker{combatant: refdata.Combatant{ID: uuid.New()}})
+
+	handler.Handle(makeRetireInteraction("guild1", "user1", "going to college"))
+
+	assert.Contains(t, sess.lastResponse, "You can't retire mid-combat.")
+	assert.Empty(t, pcStore.calls, "markPC must not be called during active combat")
+	assert.Empty(t, notifier.posted, "DM must not be notified during active combat")
+}

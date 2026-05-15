@@ -48,7 +48,7 @@
 | ID | Severity | Finding | Status | Commit | Reviewer |
 |----|----------|---------|--------|--------|----------|
 | F-13 | Medium | Active encounter membership not DB-enforced | review_passed | — | PASS |
-| F-15 | Medium | /retire doesn't block active-combat retirement | pending | — | — |
+| F-15 | Medium | /retire doesn't block active-combat retirement | implemented | — | — |
 | F-16 | Medium | Retired PC rows satisfy active registration lookups | pending | — | — |
 | F-17 | Medium | /setup doesn't allow bot to post in #the-story | pending | — | — |
 
@@ -247,7 +247,8 @@
 - **Source**: agent-01
 - **Files**: `internal/discord/retire_handler.go`
 - **Test plan**: Test that /retire returns error during active combat
-- **Implementation notes**: —
+- **Implementation notes**: Added `RetireCombatChecker` interface with `GetActiveCombatantByCharacterID`. Added `combatChecker` field to `RetireHandler` with `SetCombatChecker` setter. In `Handle`, after character lookup and before `markPC`, checks if the character is an active combatant; if so, returns ephemeral "❌ You can't retire mid-combat." and short-circuits. Test `TestRetireHandler_F15_BlockedDuringActiveCombat` proves the block.
+- **Changed files**: `internal/discord/retire_handler.go`, `internal/discord/retire_handler_test.go`
 - **Reviewer verdict**: —
 
 ### F-16: Retired PC rows satisfy active registration lookups

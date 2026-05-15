@@ -563,6 +563,7 @@ func attachInventoryAndCharacterHandlers(
 	handlers.retire = discord.NewRetireHandler(deps.session, checkCampProv, characterLookup, deps.notifier)
 	if deps.queries != nil {
 		handlers.retire.SetPCStore(deps.queries)
+		handlers.retire.SetCombatChecker(deps.queries)
 	}
 
 	// /undo needs the encounter resolver, the combatant lookup, and the

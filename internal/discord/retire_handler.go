@@ -11,6 +11,12 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
+// RetireCombatChecker checks whether a character is currently in active combat.
+// Used to block /retire during encounters per spec.
+type RetireCombatChecker interface {
+	GetActiveCombatantByCharacterID(ctx context.Context, characterID uuid.NullUUID) (refdata.Combatant, error)
+}
+
 // RetirePCStore marks an existing player_character row as a retire request
 // (created_via='retire') so the dashboard approval queue surfaces it through
 // the Phase 16 retire branch. The row stays at status='approved' until the DM
@@ -29,6 +35,7 @@ type RetireHandler struct {
 	characterLookup InventoryCharacterLookup
 	pcStore         RetirePCStore
 	notifier        dmqueue.Notifier
+	combatChecker   RetireCombatChecker
 }
 
 // NewRetireHandler constructs a RetireHandler. The player_character store is
@@ -52,6 +59,12 @@ func NewRetireHandler(
 // existing row with created_via='retire'.
 func (h *RetireHandler) SetPCStore(store RetirePCStore) {
 	h.pcStore = store
+}
+
+// SetCombatChecker wires the active-combat lookup so /retire is blocked
+// during encounters.
+func (h *RetireHandler) SetCombatChecker(checker RetireCombatChecker) {
+	h.combatChecker = checker
 }
 
 // Handle processes a /retire interaction.
@@ -81,6 +94,14 @@ func (h *RetireHandler) Handle(interaction *discordgo.Interaction) {
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Could not find your character. Use `/register` first.")
 		return
+	}
+
+	// F-15: Block retirement during active combat.
+	if h.combatChecker != nil {
+		if _, err := h.combatChecker.GetActiveCombatantByCharacterID(ctx, uuid.NullUUID{UUID: char.ID, Valid: true}); err == nil {
+			respondEphemeral(h.session, interaction, "❌ You can't retire mid-combat.")
+			return
+		}
 	}
 
 	if err := h.markPC(ctx, campaign.ID, userID); err != nil {
