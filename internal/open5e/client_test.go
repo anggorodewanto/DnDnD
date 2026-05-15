@@ -259,3 +259,10 @@ func TestClient_BuildURL_HandlesBaseWithoutTrailingSlash(t *testing.T) {
 	_, err := c.SearchMonsters(context.Background(), SearchQuery{})
 	require.NoError(t, err)
 }
+
+// --- Cycle 8: default HTTP client has a timeout (J-C03) ---
+
+func TestNewClient_DefaultHTTPClientHasTimeout(t *testing.T) {
+	c := NewClient("", nil)
+	assert.NotZero(t, c.http.Timeout, "default HTTP client must have a non-zero timeout")
+}

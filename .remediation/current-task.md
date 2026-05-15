@@ -1,11 +1,11 @@
-finding_id: H-C05
+finding_id: J-C03
 severity: Critical
-title: Levelup HTTP handler does not bound newLevel to 20
-location: internal/levelup/handler.go:106
-spec_ref: spec §Internal Character Format / 5e level cap
+title: Open5e HTTP client has no timeout — upstream stall can hang any /search
+location: internal/open5e/client.go:43
+spec_ref: Phase 111
 problem: |
-  HandleLevelUp rejects newLevel < 1 but accepts any positive int. A DM can set Fighter to level 99 and the service will compute nonsense HP/proficiency/spell-slots.
+  NewClient defaults httpClient to http.DefaultClient, which has zero timeout. A slow Open5e API call wedges the goroutine indefinitely.
 suggested_fix: |
-  Reject newLevel < 1 || newLevel > 20 at the handler.
+  Construct a default &http.Client{Timeout: 10*time.Second} instead of using http.DefaultClient.
 acceptance_criterion: |
-  HandleLevelUp returns 400 when newLevel > 20. A test demonstrates this.
+  The Open5e client uses a non-zero timeout by default. A test verifies the client's timeout is set.

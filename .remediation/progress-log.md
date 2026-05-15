@@ -170,3 +170,10 @@ Append-only journal of all remediation activity.
 - Commit: 5819224
 - Reviewer: approved
 - Notes: Added AppliedCondition field to UseResult, set to "antitoxin" on use
+
+## 2026-05-15T18:41 — H-C05 done
+
+- Finding: Levelup HTTP handler does not bound newLevel to 20
+- Commit: c127bc3
+- Reviewer: approved
+- Notes: Single condition change: added || newLevel > 20 to validation

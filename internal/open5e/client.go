@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Client is a thin wrapper around http.Client for the Open5e REST API.
@@ -40,7 +41,7 @@ func NewClient(baseURL string, httpClient *http.Client) *Client {
 		baseURL += "/"
 	}
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = &http.Client{Timeout: 10 * time.Second}
 	}
 	return &Client{http: httpClient, baseURL: baseURL}
 }
