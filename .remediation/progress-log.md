@@ -191,3 +191,10 @@ Append-only journal of all remediation activity.
 - Commit: 8818c60
 - Reviewer: approved
 - Notes: Added EncounterCampaignResolver + ownership check before WS client registration
+
+## 2026-05-15T18:50 — I-C03 done
+
+- Finding: Narration-template endpoints leak across campaigns
+- Commit: 6c05cb0
+- Reviewer: approved
+- Notes: Campaign ownership check added to all 5 template service methods

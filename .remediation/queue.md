@@ -40,7 +40,7 @@ Low: 142
 | 28 | H-C05 | Critical | done | Levelup HTTP handler does not bound newLevel to 20 | /home/ab/projects/DnDnD/internal/levelup/handler.go:106 |
 | 29 | I-C01 | Critical | pending | DM-created characters never inherit class or racial features | /home/ab/projects/DnDnD/internal/dashboard/feature_provider.go:38, 49, 63-65 ; /... |
 | 30 | I-C02 | Critical | pending | Pending #dm-queue badge count is campaign-wide, not per-encounter | /home/ab/projects/DnDnD/internal/combat/workspace_handler.go:173-180, 271 ; quer... |
-| 31 | I-C03 | Critical | in_progress | Narration-template Get/Update/Delete/Duplicate/Apply leak across campaigns | /home/ab/projects/DnDnD/internal/narration/template_handler.go:110-193 ; /home/a... |
+| 31 | I-C03 | Critical | done | Narration-template Get/Update/Delete/Duplicate/Apply leak across campaigns | /home/ab/projects/DnDnD/internal/narration/template_handler.go:110-193 ; /home/a... |
 | 32 | J-C01 | Critical | done | WebSocket subscribes to any encounter without campaign-ownership check | /home/ab/projects/DnDnD/internal/dashboard/ws.go:135 |
 | 33 | J-C02 | Critical | pending | Open5e public search endpoint bypasses per-campaign source gating | /home/ab/projects/DnDnD/internal/open5e/handler.go:37 (`RegisterPublicRoutes`); ... |
 | 34 | J-C03 | Critical | done | Open5e HTTP client has no timeout — upstream stall can hang any /search request | /home/ab/projects/DnDnD/internal/open5e/client.go:43 |
