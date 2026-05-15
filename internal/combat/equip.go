@@ -417,7 +417,33 @@ func RecalculateAC(char refdata.Character, armor *refdata.Armor, hasShield bool)
 		ac += 2
 	}
 
+	// F-07: Defense fighting style grants +1 AC while wearing armor.
+	if armor != nil && hasDefenseFightingStyle(char) {
+		ac += 1
+	}
+
 	return ac
+}
+
+// hasDefenseFightingStyle checks if the character has the Defense fighting style.
+func hasDefenseFightingStyle(char refdata.Character) bool {
+	if !char.Features.Valid || len(char.Features.RawMessage) == 0 {
+		return false
+	}
+	var feats []struct {
+		MechanicalEffect string `json:"mechanical_effect"`
+	}
+	if err := json.Unmarshal(char.Features.RawMessage, &feats); err != nil {
+		return false
+	}
+	for _, f := range feats {
+		for _, effect := range strings.Split(f.MechanicalEffect, ",") {
+			if strings.TrimSpace(effect) == "defense" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // evaluateACFormula parses formulas like "10 + DEX + WIS" against combat ability scores.

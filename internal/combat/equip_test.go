@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1298,6 +1299,36 @@ func TestRecalculateAC_FormulaAllAbilities(t *testing.T) {
 }
 
 // TDD Cycle 75b-9: CheckHeavyArmorPenalty — STR below requirement
+
+// F-07: Defense fighting style adds +1 AC when wearing armor.
+func TestRecalculateAC_F07_DefenseFightingStyle(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":16,"dex":14,"con":12,"int":10,"wis":10,"cha":8}`),
+		Features:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`[{"name":"Defense","mechanical_effect":"defense"}]`), Valid: true},
+	}
+	armor := &refdata.Armor{
+		ID:         "chain-mail",
+		AcBase:     16,
+		AcDexBonus: sql.NullBool{Bool: false, Valid: true},
+		ArmorType:  "heavy",
+	}
+
+	ac := RecalculateAC(char, armor, false)
+	// Chain mail AC 16 + Defense +1 = 17
+	assert.Equal(t, int32(17), ac)
+}
+
+func TestRecalculateAC_F07_DefenseNoArmorNoBonus(t *testing.T) {
+	char := refdata.Character{
+		AbilityScores: json.RawMessage(`{"str":16,"dex":14,"con":12,"int":10,"wis":10,"cha":8}`),
+		Features:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`[{"name":"Defense","mechanical_effect":"defense"}]`), Valid: true},
+	}
+
+	ac := RecalculateAC(char, nil, false)
+	// No armor: 10 + DEX(+2) = 12, Defense does NOT apply without armor
+	assert.Equal(t, int32(12), ac)
+}
+
 func TestCheckHeavyArmorPenalty_BelowReq(t *testing.T) {
 	char := refdata.Character{
 		AbilityScores: json.RawMessage(`{"str":13,"dex":14,"con":12,"int":10,"wis":13,"cha":8}`),

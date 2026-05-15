@@ -35,7 +35,7 @@
 |----|----------|---------|--------|--------|----------|
 | F-05 | High | AoE DEX save cover bonuses never applied | review_passed | — | PASS |
 | F-06 | High | Flying movers blocked by ground occupants | review_passed | — | PASS |
-| F-07 | High | Defense fighting style AC bonus ignored | pending | — | — |
+| F-07 | High | Defense fighting style AC bonus ignored | review_passed | — | PASS |
 | F-08 | High | Counterspell accepts invalid low-level slots | pending | — | — |
 | F-09 | High | Material components consumed before validation fails | pending | — | — |
 | F-10 | High | Expired readied spells leave concentration set | pending | — | — |
@@ -161,8 +161,9 @@
 - **Source**: agent-03
 - **Files**: `internal/combat/attack.go`, `internal/combat/feature_integration.go`
 - **Test plan**: Test that Defense fighting style +1 AC is applied during attack resolution
-- **Implementation notes**: —
-- **Reviewer verdict**: —
+- **Implementation notes**: Defense +1 AC applied via `RecalculateAC` in `equip.go` when armor is equipped and character has "defense" mechanical effect. Bakes bonus into stored AC (correct D&D passive behavior). Incorrect FES-level approach (attacker's ACModifier applied to target's AC) removed per reviewer feedback.
+- **Changed files**: `internal/combat/equip.go`, `internal/combat/equip_test.go`, `internal/combat/attack.go`, `internal/combat/attack_fes_test.go`
+- **Reviewer verdict**: PASS (after rework removing incorrect FES-level fix)
 
 ### F-08: Counterspell accepts invalid low-level slots
 - **Source**: agent-03

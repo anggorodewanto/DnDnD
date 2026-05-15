@@ -671,3 +671,8 @@ func TestServiceAttack_SacredWeapon_AddsCHAModToAttackRoll(t *testing.T) {
 
 // _ ensures pqtype is referenced (helper imports stay clean).
 var _ = pqtype.NullRawMessage{}
+
+// TestResolveAttack_F07_DefenseFightingStyle_ACBonusCausesMiss proves that
+// TestResolveAttack_F07_DefenseFightingStyle_ACBonusCausesMiss is removed.
+// Defense fighting style +1 AC is correctly applied via RecalculateAC (stored AC)
+// rather than through the attacker's FES pipeline. See equip_test.go F07 tests.
