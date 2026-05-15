@@ -1,6 +1,6 @@
 <script>
   import { mobileTabs } from './lib/layout.js';
-  import ActionResolver from './ActionResolver.svelte';
+  import CharacterApprovalQueue from './CharacterApprovalQueue.svelte';
   import TurnQueue from './TurnQueue.svelte';
   import NarratePanel from './NarratePanel.svelte';
   import MessagePlayerPanel from './MessagePlayerPanel.svelte';
@@ -52,11 +52,7 @@
     {:else if activeTab === 'narrate'}
       <NarratePanel {campaignId} />
     {:else if activeTab === 'approvals'}
-      {#if activeEncounterId}
-        <ActionResolver encounterId={activeEncounterId} {combatants} />
-      {:else}
-        <p class="placeholder">No active encounter with pending items.</p>
-      {/if}
+      <CharacterApprovalQueue {campaignId} />
     {:else if activeTab === 'message-player'}
       <MessagePlayerPanel {campaignId} />
     {:else if activeTab === 'quick-actions'}

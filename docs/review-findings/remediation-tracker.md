@@ -58,7 +58,7 @@
 |----|----------|---------|--------|--------|----------|
 | F-18 | Medium | Map background opacity not persisted | implemented | — | — |
 | F-22 | Medium | Turn Builder roll fudging unreachable | implemented | — | — |
-| F-23 | Medium | Mobile Approvals renders wrong component | pending | — | — |
+| F-23 | Medium | Mobile Approvals renders wrong component | implemented | — | — |
 | F-24 | Medium | Phase 120a e2e omits Discord output assertions | pending | — | — |
 | F-25 | Coverage | make cover-check fails: internal/errorlog below 85% | pending | — | — |
 
@@ -311,7 +311,7 @@
 - **Source**: agent-04
 - **Files**: `dashboard/svelte/src/MobileShell.svelte`
 - **Test plan**: Test that mobile approvals tab renders CharacterApprovalQueue
-- **Implementation notes**: —
+- **Implementation notes**: Replaced `ActionResolver` import and rendering in the `approvals` tab with a new `CharacterApprovalQueue.svelte` component that fetches from `/dashboard/api/approvals/` and renders pending character approvals with approve/reject/request-changes actions. No existing CharacterApprovalQueue Svelte component existed (desktop uses a server-rendered HTML page). Test `mobileApprovals.test.js` proves the import and rendering are correct.
 - **Reviewer verdict**: —
 
 ### F-24: Phase 120a e2e omits Discord output assertions
