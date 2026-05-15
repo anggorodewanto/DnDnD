@@ -553,3 +553,16 @@ func TestHandleSetupCommand_SaveError(t *testing.T) {
 	assert.Contains(t, *editContent, "created")
 	assert.Contains(t, *editContent, "failed to save")
 }
+
+func TestSetupChannels_F17_TheStoryAllowsBotSendMessages(t *testing.T) {
+	overwrites := captureOverwrites(t, "the-story")
+	require.NotEmpty(t, overwrites)
+
+	var botAllowed bool
+	for _, ow := range overwrites {
+		if ow.ID == "bot-user-1" && ow.Type == discordgo.PermissionOverwriteTypeMember && ow.Allow&discordgo.PermissionSendMessages != 0 {
+			botAllowed = true
+		}
+	}
+	assert.True(t, botAllowed, "bot should be allowed SendMessages in #the-story for pause/resume announcements")
+}

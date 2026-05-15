@@ -74,9 +74,25 @@ func exclusiveWritePerms(guildID, allowedUserID string) []*discordgo.PermissionO
 	}
 }
 
-// theStoryPerms returns overwrites making #the-story DM-write-only.
-func theStoryPerms(guildID, _, dmUserID string) []*discordgo.PermissionOverwrite {
-	return exclusiveWritePerms(guildID, dmUserID)
+// theStoryPerms returns overwrites making #the-story DM-and-bot-write-only.
+func theStoryPerms(guildID, botUserID, dmUserID string) []*discordgo.PermissionOverwrite {
+	return []*discordgo.PermissionOverwrite{
+		{
+			ID:   guildID,
+			Type: discordgo.PermissionOverwriteTypeRole,
+			Deny: discordgo.PermissionSendMessages,
+		},
+		{
+			ID:    dmUserID,
+			Type:  discordgo.PermissionOverwriteTypeMember,
+			Allow: discordgo.PermissionSendMessages,
+		},
+		{
+			ID:    botUserID,
+			Type:  discordgo.PermissionOverwriteTypeMember,
+			Allow: discordgo.PermissionSendMessages,
+		},
+	}
 }
 
 // combatMapPerms returns overwrites making #combat-map bot-write-only.

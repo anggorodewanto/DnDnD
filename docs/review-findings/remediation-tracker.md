@@ -50,7 +50,7 @@
 | F-13 | Medium | Active encounter membership not DB-enforced | review_passed | — | PASS |
 | F-15 | Medium | /retire doesn't block active-combat retirement | implemented | — | — |
 | F-16 | Medium | Retired PC rows satisfy active registration lookups | implemented | — | — |
-| F-17 | Medium | /setup doesn't allow bot to post in #the-story | pending | — | — |
+| F-17 | Medium | /setup doesn't allow bot to post in #the-story | implemented | — | — |
 
 ### UI/Persistence/Test-Harness/Coverage (Priority 5)
 
@@ -263,7 +263,8 @@
 - **Source**: agent-01
 - **Files**: `internal/discord/setup.go`
 - **Test plan**: Test that #the-story permissions include bot SendMessages
-- **Implementation notes**: —
+- **Implementation notes**: Changed `theStoryPerms` to explicitly include a `PermissionOverwriteTypeMember` entry for `botUserID` with `Allow: SendMessages`, alongside the existing DM allow and @everyone deny. This mirrors how `#dm-queue` grants both DM and bot access. Test `TestSetupChannels_F17_TheStoryAllowsBotSendMessages` proves the bot overwrite is present.
+- **Changed files**: `internal/discord/setup.go`, `internal/discord/setup_test.go`
 - **Reviewer verdict**: —
 
 ### F-18: Map background opacity not persisted
