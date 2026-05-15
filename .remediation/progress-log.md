@@ -205,3 +205,10 @@ Append-only journal of all remediation activity.
 - Commit: 66f2f0f
 - Reviewer: approved
 - Notes: Moved search routes from public to DM-auth router group
+
+## 2026-05-15T18:56 — H-C01 done
+
+- Finding: Single-class half-caster gets wrong slot count
+- Commit: a40152a
+- Reviewer: approved
+- Notes: Ceiling division (classLevel+1)/2 for single-class half-caster caster level
