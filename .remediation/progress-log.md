@@ -37,3 +37,10 @@ Append-only journal of all remediation activity.
 - Commit: 6de7aa2
 - Reviewer: approved
 - Notes: 3-line validation guard in ParseExpression rejects Count<1 or Sides<1
+
+## 2026-05-15T15:27 — C-C01 done
+
+- Finding: Multi-letter column labels truncated by colToIndex
+- Commit: 78488e3
+- Reviewer: approved
+- Notes: Base-26 conversion loop replaces single-byte parsing
