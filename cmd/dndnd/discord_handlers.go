@@ -1136,10 +1136,8 @@ func (a *useGiveTurnAdapter) UpdateTurnActions(ctx context.Context, arg refdata.
 	return a.queries.UpdateTurnActions(ctx, arg)
 }
 
-// asiFeatLister satisfies discord.FeatLister by enumerating all seeded feats
-// (capped at 25, the Discord select-menu maximum). Prerequisite filtering is
-// delegated to the approval flow per the chunk-7 recommendation; the picker
-// surfaces every feat alphabetically for the simplest possible UX.
+// asiFeatLister satisfies discord.FeatLister by enumerating eligible feats
+// after filtering out already-owned feats and those with unmet prerequisites.
 // med-36 / Phase 89.
 type asiFeatLister struct {
 	queries *refdata.Queries
@@ -1152,20 +1150,76 @@ func newASIFeatLister(q *refdata.Queries) *asiFeatLister {
 	return &asiFeatLister{queries: q}
 }
 
-func (a *asiFeatLister) ListEligibleFeats(ctx context.Context, _ uuid.UUID) ([]discord.FeatOption, error) {
+func (a *asiFeatLister) ListEligibleFeats(ctx context.Context, charID uuid.UUID) ([]discord.FeatOption, error) {
 	feats, err := a.queries.ListFeats(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]discord.FeatOption, 0, len(feats))
+
+	char, err := a.queries.GetCharacter(ctx, charID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse ability scores.
+	var scores character.AbilityScores
+	_ = json.Unmarshal(char.AbilityScores, &scores)
+
+	// Parse proficiencies for armor.
+	var profs character.Proficiencies
+	if char.Proficiencies.Valid {
+		_ = json.Unmarshal(char.Proficiencies.RawMessage, &profs)
+	}
+
+	// Determine spellcaster status from classes.
+	var classes []character.ClassEntry
+	_ = json.Unmarshal(char.Classes, &classes)
+	isSpellcaster := false
+	for _, c := range classes {
+		switch c.Class {
+		case "bard", "cleric", "druid", "sorcerer", "warlock", "wizard", "paladin", "ranger":
+			isSpellcaster = true
+		}
+	}
+
+	// Extract owned feat IDs by matching feature names to feat IDs.
+	var features []character.Feature
+	if char.Features.Valid {
+		_ = json.Unmarshal(char.Features.RawMessage, &features)
+	}
+	nameToID := make(map[string]string, len(feats))
 	for _, f := range feats {
+		nameToID[f.Name] = f.ID
+	}
+	var ownedIDs []string
+	for _, feat := range features {
+		if feat.Source == "feat" {
+			if id, ok := nameToID[feat.Name]; ok {
+				ownedIDs = append(ownedIDs, id)
+			}
+		}
+	}
+
+	// Convert refdata feats to levelup.FeatInfo for filtering.
+	allFeats := make([]levelup.FeatInfo, 0, len(feats))
+	for _, f := range feats {
+		fi := levelup.FeatInfo{ID: f.ID, Name: f.Name}
+		if f.Prerequisites.Valid {
+			_ = json.Unmarshal(f.Prerequisites.RawMessage, &fi.Prerequisites)
+		}
+		allFeats = append(allFeats, fi)
+	}
+
+	eligible := levelup.FilterEligibleFeats(allFeats, scores, profs.Armor, isSpellcaster, ownedIDs)
+
+	out := make([]discord.FeatOption, 0, len(eligible))
+	for _, f := range eligible {
 		if len(out) >= 25 {
 			break
 		}
 		out = append(out, discord.FeatOption{
-			ID:          f.ID,
-			Name:        f.Name,
-			Description: f.Description,
+			ID:   f.ID,
+			Name: f.Name,
 		})
 	}
 	return out, nil

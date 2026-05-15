@@ -1,11 +1,11 @@
-finding_id: H-C04
+finding_id: H-C02
 severity: Critical
-title: DDB import bypasses DM approval queue on first import
-location: internal/ddbimport/service.go:139
-spec_ref: spec §"D&D Beyond Import" line 2426
+title: Feat prerequisites and "already-has-feat" exclusion not enforced in live picker
+location: cmd/dndnd/discord_handlers.go:1155 (asiFeatLister.ListEligibleFeats)
+spec_ref: spec §"Feat path" lines 2486-2487
 problem: |
-  On a fresh import (no existing DDB-URL row), Service.Import calls CreateCharacter immediately, mutating the DB before the DM has seen the preview. Re-syncs are correctly staged via pending_ddb_imports, but the first import inserts a live character row.
+  The production FeatLister returns the first 25 feats alphabetically with no prerequisite filtering and no exclusion of feats the character already has. CheckFeatPrerequisites exists but is never called in the player flow.
 suggested_fix: |
-  Mirror the re-sync path for first imports: stage the create-params in pending_ddb_imports keyed by a new id and only call CreateCharacter from ApproveImport. Or at minimum mark the character row inactive (approval_status='pending_ddb') until DM clicks Approve.
+  Implement ListEligibleFeats to load the character's scores/proficiencies, run CheckFeatPrerequisites per feat, and exclude IDs already present in Features (Source=="feat").
 acceptance_criterion: |
-  A first-time DDB import does NOT create a live character row immediately. Instead it stages the import for DM approval. A test demonstrates the character is not created until approval.
+  ListEligibleFeats excludes feats the character already has and feats whose prerequisites aren't met. A test demonstrates both exclusions.
