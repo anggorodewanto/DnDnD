@@ -3,6 +3,7 @@ package combat
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
 )
@@ -221,16 +223,41 @@ func (t *TurnTimer) AutoResolveTurn(ctx context.Context, turnID uuid.UUID, rolle
 	if err != nil {
 		return nil, fmt.Errorf("listing pending saves: %w", err)
 	}
+	// F-21: load character data once so timeout saves include ability mod + proficiency.
+	var charScores character.AbilityScores
+	var charProfSaves []string
+	var charProfBonus int
+	var hasCharData bool
+	if combatant.CharacterID.Valid {
+		if char, err := t.store.GetCharacter(ctx, combatant.CharacterID.UUID); err == nil {
+			if json.Unmarshal(char.AbilityScores, &charScores) == nil {
+				hasCharData = true
+				var profData struct {
+					Saves []string `json:"saves"`
+				}
+				if char.Proficiencies.Valid {
+					_ = json.Unmarshal(char.Proficiencies.RawMessage, &profData)
+				}
+				charProfSaves = profData.Saves
+				charProfBonus = int(char.ProficiencyBonus)
+			}
+		}
+	}
 	for _, ps := range pendingSaves {
 		rollResult, err := roller.Roll("1d20")
 		if err != nil {
 			return nil, fmt.Errorf("rolling pending save: %w", err)
 		}
 		roll := rollResult.Total
-		success := roll >= int(ps.Dc)
+		// F-21: apply save modifier (ability mod + proficiency if proficient)
+		total := roll
+		if hasCharData {
+			total += character.SavingThrowModifier(charScores, strings.ToLower(ps.Ability), charProfSaves, charProfBonus)
+		}
+		success := total >= int(ps.Dc)
 		resolved, err := t.store.UpdatePendingSaveResult(ctx, refdata.UpdatePendingSaveResultParams{
 			ID:         ps.ID,
-			RollResult: sql.NullInt32{Int32: int32(roll), Valid: true},
+			RollResult: sql.NullInt32{Int32: int32(total), Valid: true},
 			Success:    sql.NullBool{Bool: success, Valid: true},
 		})
 		if err != nil {
@@ -252,7 +279,7 @@ func (t *TurnTimer) AutoResolveTurn(ctx context.Context, turnID uuid.UUID, rolle
 			source = "unknown"
 		}
 		actions = append(actions, fmt.Sprintf("%s save vs DC %d (%s): rolled %d — %s",
-			ps.Ability, ps.Dc, source, roll, outcome))
+			ps.Ability, ps.Dc, source, total, outcome))
 	}
 
 	// Explicitly decline on-hit decisions and Bardic Inspiration (best-effort).

@@ -41,7 +41,7 @@
 | F-10 | High | Expired readied spells leave concentration set | review_passed | — | PASS |
 | F-19 | Medium | AoE full cover not used to block targets | implemented | — | — |
 | F-20 | Medium | Wild Shape doesn't use beast speed | implemented | — | — |
-| F-21 | Medium | Timeout saves roll raw 1d20 ignoring modifiers | pending | — | — |
+| F-21 | Medium | Timeout saves roll raw 1d20 ignoring modifiers | implemented | — | — |
 
 ### DB Constraints & Data Integrity (Priority 4)
 
@@ -295,7 +295,8 @@
 - **Source**: agent-03
 - **Files**: `internal/combat/timer_resolution.go`
 - **Test plan**: Test that auto-resolved saves include ability modifier + proficiency
-- **Implementation notes**: —
+- **Implementation notes**: In `AutoResolveTurn`, before the pending-saves loop, load the combatant's character via `GetCharacter` and parse ability scores + proficiencies. For each pending save, compute the save modifier via `character.SavingThrowModifier` (ability mod + proficiency if proficient) and add it to the d20 roll before comparing to DC. Degrades silently to raw roll when character lookup fails (NPC combatants without character_id). Test `TestAutoResolveTurn_F21_SaveIncludesAbilityModifier` proves a WIS-proficient character's +5 modifier turns a raw 10 into a passing 15 vs DC 15.
+- **Changed files**: `internal/combat/timer_resolution.go`, `internal/combat/timer_resolution_f21_test.go`
 - **Reviewer verdict**: —
 
 ### F-22: Turn Builder roll fudging unreachable
