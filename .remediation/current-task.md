@@ -1,11 +1,11 @@
-finding_id: D-H01
+finding_id: cross-cut-H04
 severity: High
-title: Step of the Wind dash adds remaining movement, not base speed
-location: internal/combat/monk.go:444
-spec_ref: Phase 48b; PHB Monk "Step of the Wind"
+title: Paladin Channel Divinity max uses scale to 2 at level 15
+location: internal/combat/channel_divinity.go:31-38
+spec_ref: PHB p.85 Paladin class table
 problem: |
-  case "dash": updatedTurn.MovementRemainingFt += cmd.Turn.MovementRemainingFt adds whatever is currently left, not the monk's speed. A monk who already moved half their speed gets only half the dash bonus.
+  Paladin returns 2 at level >= 15. PHB says Paladin never gains a second CD use (only Cleric scales: 1@L2, 2@L6, 3@L18).
 suggested_fix: |
-  Replace with speed, _ := s.resolveBaseSpeed(ctx, cmd.Combatant); updatedTurn.MovementRemainingFt += speed.
+  Drop the level >= 15 → 2 branch for Paladin (return 1 for level >= 3, 0 otherwise).
 acceptance_criterion: |
-  Step of the Wind dash adds the monk's base speed regardless of how much movement was already used. A test demonstrates this.
+  ChannelDivinityMaxUses("paladin", 15) returns 1, not 2. A test demonstrates this.

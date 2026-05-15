@@ -46,8 +46,8 @@ func TestChannelDivinityMaxUses_Paladin(t *testing.T) {
 		{2, 0}, // below level 3 — not available
 		{3, 1},
 		{14, 1},
-		{15, 2},
-		{20, 2},
+		{15, 1}, // PHB p.85: Paladin never gains a second CD use
+		{20, 1},
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.expected, ChannelDivinityMaxUses("Paladin", tt.level), "Paladin level %d", tt.level)

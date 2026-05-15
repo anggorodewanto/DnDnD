@@ -1,35 +1,21 @@
-# Worker Report: D-H01
+# Worker Report: cross-cut-H04
 
-**Finding:** Step of the Wind dash adds remaining movement, not base speed
-**Status:** ✅ Fixed
+## Finding
 
-## Root Cause
+Paladin branch in `ChannelDivinityMaxUses` incorrectly returned 2 at level >= 15. Per PHB p.85, Paladin never gains a second Channel Divinity use (only Cleric scales).
 
-In `internal/combat/monk.go:444`, the dash case of `StepOfTheWind` used:
-```go
-updatedTurn.MovementRemainingFt += cmd.Turn.MovementRemainingFt
-```
-This added whatever movement was *left* rather than the monk's base speed. A monk who already moved 20ft of their 30ft would only gain +10ft instead of +30ft.
+## Changes
 
-## Fix Applied
+### Test (`internal/combat/channel_divinity_test.go`)
 
-Replaced with `resolveBaseSpeed` lookup, mirroring the standard Dash action in `standard_actions.go`:
-```go
-case "dash":
-    speed, err := s.resolveBaseSpeed(ctx, cmd.Combatant)
-    if err != nil {
-        return KiAbilityResult{}, err
-    }
-    updatedTurn.MovementRemainingFt += speed
-```
+Updated `TestChannelDivinityMaxUses_Paladin` to assert levels 15 and 20 return 1 (not 2).
 
-## TDD Evidence
+### Fix (`internal/combat/channel_divinity.go`)
 
-- **Red:** Added `TestServiceStepOfTheWind_Dash_AddsBaseSpeedNotRemaining` — monk with 30ft speed, 10ft remaining, expects 40ft after dash. Failed with actual=20.
-- **Green:** Applied fix. Test passes with expected=40.
-- **Full suite:** `make test` passes. `make cover-check` passes.
+Removed the `level >= 15 → return 2` branch for paladin. The paladin case now returns 1 for level >= 3, 0 otherwise.
 
-## Files Changed
+## Verification
 
-- `internal/combat/monk.go` — fixed dash case (line ~444)
-- `internal/combat/monk_test.go` — added regression test
+- `make test` — all tests pass ✅
+- `make cover-check` — all coverage thresholds met ✅
+- TDD cycle followed: Red (test failed with actual=2, expected=1) → Green (fix applied, test passes)

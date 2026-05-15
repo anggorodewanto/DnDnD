@@ -29,9 +29,6 @@ func ChannelDivinityMaxUses(className string, level int) int {
 		}
 		return 0
 	case "paladin":
-		if level >= 15 {
-			return 2
-		}
 		if level >= 3 {
 			return 1
 		}
