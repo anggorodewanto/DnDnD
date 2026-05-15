@@ -474,3 +474,31 @@ func TestMagicWeaponEffects_PlusOneWeapon(t *testing.T) {
 	assert.Equal(t, combat.TriggerOnDamageRoll, f.Effects[1].Trigger)
 	assert.Equal(t, 1, f.Effects[1].Modifier)
 }
+
+func TestParsePassiveEffects_ModifySaveAlias(t *testing.T) {
+	canonical := `[{"type": "modify_saving_throw", "modifier": 2}]`
+	alias := `[{"type": "modify_save", "modifier": 2}]`
+
+	canonicalEffects, err := ParsePassiveEffects(canonical)
+	require.NoError(t, err)
+
+	aliasEffects, err := ParsePassiveEffects(alias)
+	require.NoError(t, err)
+	require.Len(t, aliasEffects, 1, `"modify_save" should be recognized`)
+
+	assert.Equal(t, canonicalEffects, aliasEffects)
+}
+
+func TestParsePassiveEffects_GrantResistanceAlias(t *testing.T) {
+	canonical := `[{"type": "resistance", "damage_type": "fire"}]`
+	alias := `[{"type": "grant_resistance", "damage_type": "fire"}]`
+
+	canonicalEffects, err := ParsePassiveEffects(canonical)
+	require.NoError(t, err)
+
+	aliasEffects, err := ParsePassiveEffects(alias)
+	require.NoError(t, err)
+	require.Len(t, aliasEffects, 1, `"grant_resistance" should be recognized`)
+
+	assert.Equal(t, canonicalEffects, aliasEffects)
+}

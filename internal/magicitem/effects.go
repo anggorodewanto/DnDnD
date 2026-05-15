@@ -129,13 +129,13 @@ func convertPassiveEffect(pe passiveEffect) (combat.Effect, bool) {
 			Trigger:  combat.TriggerOnAttackRoll,
 			Modifier: pe.Modifier,
 		}, true
-	case "modify_saving_throw":
+	case "modify_saving_throw", "modify_save":
 		return combat.Effect{
 			Type:     combat.EffectModifySave,
 			Trigger:  combat.TriggerOnSave,
 			Modifier: pe.Modifier,
 		}, true
-	case "resistance":
+	case "resistance", "grant_resistance":
 		return combat.Effect{
 			Type:        combat.EffectGrantResistance,
 			Trigger:     combat.TriggerOnTakeDamage,

@@ -1,11 +1,11 @@
-finding_id: F-C04
+finding_id: G-C01
 severity: Critical
-title: Lair Action placed at head of turn queue instead of "loses ties" with 20
-location: internal/combat/legendary.go:304-348
-spec_ref: spec §Enemy / NPC Turns lines 1916-1918; phases §Phase 78b
+title: Passive-effect vocabulary in spec does not match the code parser
+location: internal/magicitem/effects.go:112-160
+spec_ref: spec §Magic Items lines 2697-2701 (Phase 88a)
 problem: |
-  BuildTurnQueueEntries prepends the Lair Action entry at Initiative: 20 and then appends regular combatants. The function does not sort by initiative descending, and lair actions can fire before legitimate winners at 20. Per DMG p246, lair actions fire on initiative count 20, losing initiative ties.
+  Spec uses "modify_save" and "grant_resistance" but code only recognizes "modify_saving_throw" and "resistance". Any DM authoring passive_effects JSON following the spec verbatim gets no effect.
 suggested_fix: |
-  After building all entries (including lair), sort the slice by initiative descending with a stable secondary key that pushes Lair Action entries after every combatant sharing the same initiative number. Add an IsLairAction bool field to the entry struct and use it as a tiebreaker.
+  Add "modify_save" and "grant_resistance" as accepted aliases in the switch statement.
 acceptance_criterion: |
-  When a combatant has initiative 20 and a lair action also has initiative 20, the combatant acts first (lair action loses ties). A test demonstrates this ordering.
+  Both "modify_save" and "modify_saving_throw" produce the same effect. Both "grant_resistance" and "resistance" produce the same effect. Tests demonstrate the aliases work.
