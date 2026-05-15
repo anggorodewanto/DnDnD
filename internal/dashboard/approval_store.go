@@ -37,6 +37,12 @@ var validApprovalTransitions = map[string]map[string]bool{
 	"approved": {
 		"retired": true,
 	},
+	"changes_requested": {
+		"pending": true,
+	},
+	"rejected": {
+		"pending": true,
+	},
 }
 
 // DBApprovalStore implements ApprovalStore using the database.
@@ -161,6 +167,11 @@ func (s *DBApprovalStore) RetireCharacter(ctx context.Context, id uuid.UUID) err
 // RejectCharacter transitions a player character from pending to rejected.
 func (s *DBApprovalStore) RejectCharacter(ctx context.Context, id uuid.UUID, feedback string) error {
 	return s.transitionStatus(ctx, id, "rejected", feedback)
+}
+
+// ResubmitToPending transitions a player character from changes_requested or rejected back to pending.
+func (s *DBApprovalStore) ResubmitToPending(ctx context.Context, id uuid.UUID) error {
+	return s.transitionStatus(ctx, id, "pending", "")
 }
 
 func (s *DBApprovalStore) transitionStatus(ctx context.Context, id uuid.UUID, newStatus, feedback string) error {

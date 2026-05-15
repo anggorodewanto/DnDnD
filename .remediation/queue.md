@@ -45,7 +45,7 @@ Low: 142
 | 33 | J-C02 | Critical | done | Open5e public search endpoint bypasses per-campaign source gating | /home/ab/projects/DnDnD/internal/open5e/handler.go:37 (`RegisterPublicRoutes`); ... |
 | 34 | J-C03 | Critical | done | Open5e HTTP client has no timeout — upstream stall can hang any /search request | /home/ab/projects/DnDnD/internal/open5e/client.go:43 |
 | 35 | cross-cut-C01 | Critical | done | Channel Divinity recharges on long rest, not short rest | `internal/combat/channel_divinity_integration_test.go:44`, |
-| 36 | A-H01 | High | pending | Player can never resubmit after `changes_requested` (broken status flow) | internal/registration/service.go:46-56 + internal/dashboard/approval_store.go:30... |
+| 36 | A-H01 | High | in_progress | Player can never resubmit after `changes_requested` (broken status flow) | internal/registration/service.go:46-56 + internal/dashboard/approval_store.go:30... |
 | 37 | A-H02 | High | pending | OAuth access/refresh tokens stored in plaintext | internal/auth/session_store.go:50-62 + db/migrations/20260310120001_create_sessi... |
 | 38 | A-H03 | High | pending | WebSocket origin verification defaults to `InsecureSkipVerify: true` | internal/dashboard/handler.go:117-170 (default `wsInsecureSkipVerify: true`), in... |
 | 39 | A-H04 | High | pending | OAuth callback handler treats any 4xx error from Discord as a generic 403 | internal/auth/oauth2.go:150-156, 178-182 |

@@ -53,6 +53,12 @@ var validTransitions = map[string]map[string]bool{
 	"approved": {
 		"retired": true,
 	},
+	"changes_requested": {
+		"pending": true,
+	},
+	"rejected": {
+		"pending": true,
+	},
 }
 
 // Register attempts to register a player for a character by name.
@@ -177,6 +183,11 @@ func (s *Service) RequestChanges(ctx context.Context, id uuid.UUID, feedback str
 // Reject transitions a player_character from pending to rejected.
 func (s *Service) Reject(ctx context.Context, id uuid.UUID, feedback string) (*refdata.PlayerCharacter, error) {
 	return s.transitionStatus(ctx, id, "rejected", feedback)
+}
+
+// Resubmit transitions a player_character from changes_requested or rejected back to pending.
+func (s *Service) Resubmit(ctx context.Context, id uuid.UUID) (*refdata.PlayerCharacter, error) {
+	return s.transitionStatus(ctx, id, "pending", "")
 }
 
 // Retire transitions a player_character to retired. The realistic case is

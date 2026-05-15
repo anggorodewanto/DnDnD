@@ -1,11 +1,11 @@
-finding_id: H-C03
+finding_id: A-H01
 status: done
 files_changed:
-  - internal/levelup/service.go
-  - internal/levelup/service_test.go
-test_command_that_validates: go test ./internal/levelup/ -run "TestService_ApplyLevelUp_AppendsClassFeatures|TestService_ApplyLevelUp_DeduplicatesFeatures" -v
+  - internal/registration/service.go
+  - internal/registration/resubmit_test.go
+  - internal/dashboard/approval_store.go
+  - internal/dashboard/resubmit_test.go
+test_command_that_validates: go test ./internal/registration/ -run "TestValidTransitions" -short && go test ./internal/dashboard/ -run "TestDBApprovalStore_ResubmitToPending" -short
 acceptance_criterion_met: yes
-notes: Added feature-append logic in ApplyLevelUp that reads classRef.FeaturesByLevel[strconv.Itoa(newClassLevel)] after computing the new class level. New features are appended to the character's existing features list with deduplication by name. The updated features are persisted via the StatsUpdate.Features field which the store adapter already handles via pickNullable. Two tests added: one verifying a Fighter leveling to 5 gets "Extra Attack", another verifying no duplicates on re-level.
-follow_ups:
-  - Consider deduping by name+source pair instead of name alone for edge cases where different classes grant identically-named features
-  - Subclass features (from SubclassFeaturesByLevel if it exists) may need similar treatment
+notes: Added "changes_requested" -> "pending" and "rejected" -> "pending" entries to both validTransitions (registration/service.go) and validApprovalTransitions (dashboard/approval_store.go). Added a Resubmit method to Service and ResubmitToPending to DBApprovalStore that invoke the existing transitionStatus with target "pending". Unit tests confirm both transitions are allowed. make test and make cover-check pass cleanly.
+follow_ups: []
