@@ -1,11 +1,11 @@
-finding_id: cross-cut-H05
+finding_id: C-H04
 severity: High
-title: Action Surge max uses never scales to 2 at fighter level 17
-location: internal/combat/action_surge.go (no scaling function exists)
-spec_ref: PHB p.72 Fighter class table
+title: Dash adds raw base speed, ignoring exhaustion/condition speed modifiers
+location: internal/combat/standard_actions.go:38-71 (Dash), 73-87 (resolveBaseSpeed)
+spec_ref: Phase 42 (exhaustion levels 2/5 modify speed); spec §Exhaustion
 problem: |
-  Action Surge has 2 uses at Fighter 17+. No code raises Max to 2 — stays at 1 forever.
+  Dash does updatedTurn.MovementRemainingFt += speed where speed is char.SpeedFt (raw base). An exhaustion-2 PC (speed halved) gets a full base-speed Dash bonus, effectively recovering the halving.
 suggested_fix: |
-  Add ActionSurgeMaxUses(fighterLevel int) int (1 at L2-16, 2 at L17+) and have the level-up service bump feature_uses["action-surge"].Max when a Fighter crosses level 17.
+  Pipe Dash through EffectiveSpeedWithExhaustion/EffectiveSpeed so it adds the effective speed. Also reject Dash when effective speed = 0.
 acceptance_criterion: |
-  ActionSurgeMaxUses(17) returns 2. ActionSurgeMaxUses(16) returns 1. A test demonstrates both.
+  A Dash for an exhaustion-2 character (speed halved) adds half the base speed, not full. A test demonstrates this.

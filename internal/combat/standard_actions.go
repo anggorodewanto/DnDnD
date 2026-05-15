@@ -49,6 +49,7 @@ func (s *Service) Dash(ctx context.Context, cmd DashCommand) (DashResult, error)
 	if err != nil {
 		return DashResult{}, err
 	}
+	speed = int32(ExhaustionEffectiveSpeed(int(speed), int(cmd.Combatant.ExhaustionLevel)))
 
 	updatedTurn, err := UseResource(cmd.Turn, ResourceAction)
 	if err != nil {
@@ -893,6 +894,7 @@ func (s *Service) CunningAction(ctx context.Context, cmd CunningActionCommand, r
 		if err != nil {
 			return CunningActionResult{}, err
 		}
+		speed = int32(ExhaustionEffectiveSpeed(int(speed), int(cmd.Combatant.ExhaustionLevel)))
 		updatedTurn.MovementRemainingFt += speed
 		addedMovement = speed
 		actionLabel = "Dash"

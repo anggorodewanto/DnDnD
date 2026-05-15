@@ -288,6 +288,31 @@ func TestDash_UpdateTurnActionsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "updating turn actions")
 }
 
+// TDD Cycle C-H04: Dash with exhaustion level 2 halves the dash bonus
+func TestDash_ExhaustionLevel2_HalvesDashBonus(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	combatant := makePCCombatant(combatantID, encounterID, charID, "Kael")
+	combatant.ExhaustionLevel = 2
+	char := makeBasicChar(charID, 30)
+	encounter := makeBasicEncounter(encounterID, 1)
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	setupUpdateTurnActions(ms)
+
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+	turn.MovementRemainingFt = 15 // already halved by turn start
+
+	cmd := DashCommand{Combatant: combatant, Turn: turn, Encounter: encounter}
+	result, err := svc.Dash(context.Background(), cmd)
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(15), result.AddedMovement, "exhaustion 2 should halve dash bonus")
+	assert.Equal(t, int32(30), result.Turn.MovementRemainingFt, "15 remaining + 15 dash = 30")
+}
+
 // =====================
 // 2. DISENGAGE
 // =====================

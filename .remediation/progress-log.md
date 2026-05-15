@@ -248,3 +248,22 @@ Append-only journal of all remediation activity.
 - All 35 Critical findings are now resolved
 - Tests green, coverage thresholds met throughout
 - Next: begin High-severity findings (98 total)
+
+## 2026-05-16T05:50 — High-severity batch progress
+
+Findings resolved this session:
+- A-H01: Player resubmit after changes_requested — ad18727
+- A-H03: WS origin default to secure — 6108b4c
+- A-H04: OAuth empty user ID rejection — 3b1fcab
+- A-H05: Portal token atomic redemption — 4134c9e
+- B-H02: RenderMap TileSize mutation — 26f40d9
+- C-H01: Auto-crit melee-only gate — 975caf5
+- C-H03: Crossbow Expert waiver — bc56a4a
+- C-H05: Fall damage 20d6 cap — 57a38ba
+- C-H06: Resistance min-1 clamp — 0d737c4
+- D-H01: Step of the Wind base speed — e825269
+- D-H02: superseded by E-C03
+- cross-cut-H04: Paladin CD always 1 — 633a215
+- cross-cut-H05: Action Surge scales at 17 — 7f24261
+
+Running total: 35 Critical + 14 High = 49 findings resolved (11% of 448)

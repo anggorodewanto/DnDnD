@@ -1,28 +1,19 @@
-# Worker Report: cross-cut-H05
-
-**Status:** ✅ Complete  
-**Worker:** worker-crosscut-H05  
-**Date:** 2026-05-16
+# Worker Report: C-H04
 
 ## Finding
+Dash (and CunningAction Dash) used raw base speed from `resolveBaseSpeed`, ignoring exhaustion level.
 
-Action Surge max uses never scaled to 2 at Fighter level 17+. The logic was inlined in `init_feature_uses.go` but no reusable function existed.
+## Fix Applied
+After resolving base speed, applied `ExhaustionEffectiveSpeed(speed, exhaustionLevel)` to halve the dash bonus at exhaustion ≥ 2 and zero it at exhaustion ≥ 5.
 
-## Changes Made
+### Files Modified
+- `internal/combat/standard_actions.go` — Added exhaustion application after `resolveBaseSpeed` in both `Dash` (line ~53) and `CunningAction` dash case (line ~895).
+- `internal/combat/standard_actions_test.go` — Added `TestDash_ExhaustionLevel2_HalvesDashBonus`.
 
-### 1. `internal/combat/action_surge.go`
-Added `ActionSurgeMaxUses(fighterLevel int) int` — returns 2 at level ≥ 17, 1 otherwise.
+## TDD Cycle
+1. **Red:** `TestDash_ExhaustionLevel2_HalvesDashBonus` — PC with exhaustion 2 and speed 30 dashes; expected +15, got +30. FAIL.
+2. **Green:** Added `speed = int32(ExhaustionEffectiveSpeed(int(speed), int(cmd.Combatant.ExhaustionLevel)))` after `resolveBaseSpeed` in both Dash paths. PASS.
+3. **Verify:** `make test` ✅ | `make cover-check` ✅
 
-### 2. `internal/combat/action_surge_test.go`
-Added `TestActionSurgeMaxUses` with table-driven cases:
-- Level 16 → expects 1
-- Level 17 → expects 2
-
-### 3. `internal/portal/init_feature_uses.go`
-Replaced hardcoded inline logic with a call to `combat.ActionSurgeMaxUses(ce.Level)`.
-
-## Verification
-
-- `make test` — all tests pass
-- `make cover-check` — all coverage thresholds met
-- TDD workflow followed: Red (undefined function) → Green (function implemented) → Refactor (init_feature_uses.go updated)
+## Acceptance Criterion
+A Dash for an exhaustion-2 character (speed halved) adds half the base speed (15), not full (30). Test demonstrates this.
