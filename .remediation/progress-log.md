@@ -86,3 +86,10 @@ Append-only journal of all remediation activity.
 - Commit: 0460fe6
 - Reviewer: approved
 - Notes: Added IsRaging+Ability fields to SingleCheckInput, rage-advantage logic in SingleCheck
+
+## 2026-05-15T18:05 — D-C04 done
+
+- Finding: Save handler never sets IsRaging in EffectContext
+- Commit: 05f8934
+- Reviewer: approved
+- Notes: 4 lines added to populate IsRaging from combatant state in save handler
