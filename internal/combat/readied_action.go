@@ -162,6 +162,9 @@ func (s *Service) ExpireReadiedActions(ctx context.Context, combatantID, encount
 		if decl.SpellName.Valid {
 			notice += fmt.Sprintf("\n   \u2192 Concentration on %s ended. %s spell slot lost.",
 				decl.SpellName.String, formatOrdinalSlotLevel(decl.SpellSlotLevel.Int32))
+			if err := s.store.ClearCombatantConcentration(ctx, combatantID); err != nil {
+				return nil, fmt.Errorf("clearing concentration after readied spell expiry: %w", err)
+			}
 		}
 		notices = append(notices, notice)
 	}

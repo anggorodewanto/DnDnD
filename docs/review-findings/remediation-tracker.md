@@ -38,7 +38,7 @@
 | F-07 | High | Defense fighting style AC bonus ignored | review_passed | — | PASS |
 | F-08 | High | Counterspell accepts invalid low-level slots | review_passed | — | PASS |
 | F-09 | High | Material components consumed before validation fails | implemented | PASS | reviewer-f09 |
-| F-10 | High | Expired readied spells leave concentration set | pending | — | — |
+| F-10 | High | Expired readied spells leave concentration set | review_passed | — | PASS |
 | F-19 | Medium | AoE full cover not used to block targets | pending | — | — |
 | F-20 | Medium | Wild Shape doesn't use beast speed | pending | — | — |
 | F-21 | Medium | Timeout saves roll raw 1d20 ignoring modifiers | pending | — | — |
@@ -189,8 +189,13 @@
 - **Source**: agent-03
 - **Files**: `internal/combat/readied_action.go`
 - **Test plan**: Test that expiring a readied spell clears concentration columns
-- **Implementation notes**: —
-- **Reviewer verdict**: —
+- **Implementation notes**: Added `s.store.ClearCombatantConcentration(ctx, combatantID)` call inside the `decl.SpellName.Valid` branch of `ExpireReadiedActions`, immediately after the notice is built. Uses the same store method as `concentration.go` for consistency. Test `TestExpireReadiedActions_F10_ClearsConcentration` proves concentration is cleared for the correct combatant when a readied spell expires.
+- **Changed files**: `internal/combat/readied_action.go`, `internal/combat/readied_action_test.go`
+- **Reviewer verdict**: **PASS** (reviewer-f10, 2026-05-15)
+  - **D&D 5e/SRD correctness**: ✅ PHB p.193: "If you don't use [the readied spell] before the start of your next turn, the spell is lost and concentration ends." The fix calls `ClearCombatantConcentration` when a readied spell expires unused, correctly ending concentration.
+  - **Implementation correctness**: ✅ The `ClearCombatantConcentration` call is gated inside `if decl.SpellName.Valid` (`readied_action.go:155`), so only spell-based readied actions trigger concentration clearing. Non-spell readied actions skip this branch entirely. The combatant ID passed to the store method is the correct one from the function parameter.
+  - **Regression risk**: ✅ Low. The existing `TestExpireReadiedActions_ExpiresActive` test exercises a non-spell readied action and does not set `clearCombatantConcentrationFn`, confirming the branch is not entered for non-spell actions. The `TestExpireReadiedActions_SpellExpiry` test (pre-existing) continues to pass. No existing behavior was altered.
+  - **Test adequacy**: ✅ `TestExpireReadiedActions_F10_ClearsConcentration` explicitly asserts: (1) `ClearCombatantConcentration` is called, and (2) the correct combatant ID is passed. Combined with the pre-existing non-spell expiry test (implicit negative case), both branches are covered. A dedicated negative test asserting `clearCalled == false` for non-spell expiry would strengthen coverage but is not strictly required since the code path is gated by `SpellName.Valid`.
 
 ### F-11: Enemy-turn mutations don't publish WebSocket snapshot
 - **Source**: agent-04

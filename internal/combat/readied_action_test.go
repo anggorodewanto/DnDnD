@@ -498,3 +498,45 @@ func TestReadyAction_NonSpell_SkipsSlotAndConcentration(t *testing.T) {
 	assert.Zero(t, slotCalls, "non-spell readied action must not deduct any slot")
 	assert.Zero(t, concentrationCalls, "non-spell readied action must not touch concentration")
 }
+
+// --- F-10: Expired readied spells must clear concentration columns ---
+
+func TestExpireReadiedActions_F10_ClearsConcentration(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+	declID := uuid.New()
+
+	store := defaultMockStore()
+	store.listActiveReactionDeclarationsByCombatantFn = func(ctx context.Context, arg refdata.ListActiveReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error) {
+		return []refdata.ReactionDeclaration{
+			{
+				ID:              declID,
+				EncounterID:     encounterID,
+				CombatantID:     combatantID,
+				Description:     "Cast Hold Person if shaman moves",
+				Status:          "active",
+				IsReadiedAction: true,
+				SpellName:       sql.NullString{String: "Hold Person", Valid: true},
+				SpellSlotLevel:  sql.NullInt32{Int32: 2, Valid: true},
+			},
+		}, nil
+	}
+	store.cancelReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID, Status: "cancelled"}, nil
+	}
+
+	var clearedID uuid.UUID
+	clearCalled := false
+	store.clearCombatantConcentrationFn = func(_ context.Context, id uuid.UUID) error {
+		clearCalled = true
+		clearedID = id
+		return nil
+	}
+
+	svc := NewService(store)
+	notices, err := svc.ExpireReadiedActions(context.Background(), combatantID, encounterID)
+	require.NoError(t, err)
+	require.Len(t, notices, 1)
+	assert.True(t, clearCalled, "ClearCombatantConcentration must be called when a readied spell expires")
+	assert.Equal(t, combatantID, clearedID, "concentration must be cleared for the correct combatant")
+}
