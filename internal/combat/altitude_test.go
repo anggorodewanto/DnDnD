@@ -66,6 +66,7 @@ func TestValidateFly_Ascend(t *testing.T) {
 		TargetAltitude:      30,
 		CurrentAltitude:     0,
 		MovementRemainingFt: 30,
+		HasFlySpeed:         true,
 	}
 	result := ValidateFly(req)
 	if !result.Valid {
@@ -84,6 +85,7 @@ func TestValidateFly_Descend(t *testing.T) {
 		TargetAltitude:      0,
 		CurrentAltitude:     30,
 		MovementRemainingFt: 30,
+		HasFlySpeed:         true,
 	}
 	result := ValidateFly(req)
 	if !result.Valid {
@@ -99,6 +101,7 @@ func TestValidateFly_PartialAscend(t *testing.T) {
 		TargetAltitude:      20,
 		CurrentAltitude:     10,
 		MovementRemainingFt: 30,
+		HasFlySpeed:         true,
 	}
 	result := ValidateFly(req)
 	if !result.Valid {
@@ -117,6 +120,7 @@ func TestValidateFly_NotEnoughMovement(t *testing.T) {
 		TargetAltitude:      50,
 		CurrentAltitude:     0,
 		MovementRemainingFt: 30,
+		HasFlySpeed:         true,
 	}
 	result := ValidateFly(req)
 	if result.Valid {
@@ -132,6 +136,7 @@ func TestValidateFly_NegativeAltitude(t *testing.T) {
 		TargetAltitude:      -10,
 		CurrentAltitude:     0,
 		MovementRemainingFt: 30,
+		HasFlySpeed:         true,
 	}
 	result := ValidateFly(req)
 	if result.Valid {
@@ -144,6 +149,7 @@ func TestValidateFly_SameAltitude(t *testing.T) {
 		TargetAltitude:      30,
 		CurrentAltitude:     30,
 		MovementRemainingFt: 30,
+		HasFlySpeed:         true,
 	}
 	result := ValidateFly(req)
 	if result.Valid {
@@ -156,6 +162,7 @@ func TestValidateFly_ZeroMovement(t *testing.T) {
 		TargetAltitude:      30,
 		CurrentAltitude:     0,
 		MovementRemainingFt: 0,
+		HasFlySpeed:         true,
 	}
 	result := ValidateFly(req)
 	if result.Valid {
@@ -277,5 +284,34 @@ func TestFormatFlyConfirmation_Descend(t *testing.T) {
 	msg := FormatFlyConfirmation(result)
 	if msg == "" {
 		t.Error("expected non-empty message")
+	}
+}
+
+func TestValidateFly_NoFlySpeed_Rejected(t *testing.T) {
+	req := FlyRequest{
+		TargetAltitude:      30,
+		CurrentAltitude:     0,
+		MovementRemainingFt: 30,
+		HasFlySpeed:         false,
+	}
+	result := ValidateFly(req)
+	if result.Valid {
+		t.Fatal("expected invalid when combatant has no fly speed")
+	}
+	if result.Reason == "" {
+		t.Error("expected a reason message")
+	}
+}
+
+func TestValidateFly_WithFlySpeed_Allowed(t *testing.T) {
+	req := FlyRequest{
+		TargetAltitude:      30,
+		CurrentAltitude:     0,
+		MovementRemainingFt: 30,
+		HasFlySpeed:         true,
+	}
+	result := ValidateFly(req)
+	if !result.Valid {
+		t.Fatalf("expected valid when combatant has fly speed, got: %s", result.Reason)
 	}
 }

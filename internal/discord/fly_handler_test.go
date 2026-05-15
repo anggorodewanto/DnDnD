@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -47,6 +48,7 @@ func setupFlyHandler(sess *mockMoveSession) (*FlyHandler, uuid.UUID, uuid.UUID, 
 				PositionCol: "A",
 				PositionRow: 1,
 				AltitudeFt:  0,
+				Conditions:  json.RawMessage(`[{"condition":"fly_speed"}]`),
 				IsAlive: true, HpCurrent: 10,
 				IsNpc:       false,
 			}, nil
@@ -561,6 +563,7 @@ func TestFlyHandler_Descend(t *testing.T) {
 				PositionCol: "A",
 				PositionRow: 1,
 				AltitudeFt:  30,
+				Conditions:  json.RawMessage(`[{"condition":"fly_speed"}]`),
 				IsAlive: true, HpCurrent: 10,
 			}, nil
 		},

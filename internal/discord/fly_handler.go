@@ -100,6 +100,7 @@ func (h *FlyHandler) Handle(interaction *discordgo.Interaction) {
 		TargetAltitude:      targetAltitude,
 		CurrentAltitude:     combatant.AltitudeFt,
 		MovementRemainingFt: turn.MovementRemainingFt,
+		HasFlySpeed:         combat.CombatantHasFlySpeed(combatant.Conditions),
 	}
 
 	result := combat.ValidateFly(flyReq)

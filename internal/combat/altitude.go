@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 
@@ -37,6 +38,13 @@ type FlyRequest struct {
 	TargetAltitude      int32
 	CurrentAltitude     int32
 	MovementRemainingFt int32
+	HasFlySpeed         bool
+}
+
+// CombatantHasFlySpeed returns true if the combatant has a fly speed
+// (either from the fly_speed condition or innate creature fly speed).
+func CombatantHasFlySpeed(conditions json.RawMessage) bool {
+	return HasCondition(conditions, FlySpeedCondition)
 }
 
 // FlyResult holds the result of a fly validation.
@@ -50,6 +58,10 @@ type FlyResult struct {
 
 // ValidateFly checks whether a fly altitude change is valid and returns the cost.
 func ValidateFly(req FlyRequest) *FlyResult {
+	if !req.HasFlySpeed {
+		return &FlyResult{Valid: false, Reason: "You don't have a fly speed."}
+	}
+
 	if req.TargetAltitude < 0 {
 		return &FlyResult{Valid: false, Reason: "Altitude cannot be negative."}
 	}
