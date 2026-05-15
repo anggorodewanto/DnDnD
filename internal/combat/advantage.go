@@ -22,6 +22,8 @@ type AdvantageInput struct {
 	TargetHidden        bool
 	AttackerObscurement ObscurementLevel
 	TargetObscurement   ObscurementLevel
+	// AbilityUsed is "str" or "dex" — which ability mod was chosen for this attack.
+	AbilityUsed string
 	// TargetCombatantID is the ID of the combatant currently being attacked.
 	// SR-018: enables target-scoped condition checks (e.g. help_advantage).
 	TargetCombatantID string
@@ -81,6 +83,13 @@ func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 			// is treated as no grant (defensive — never universal advantage).
 			if c.TargetCombatantID != "" && c.TargetCombatantID == input.TargetCombatantID {
 				advReasons = append(advReasons, "help advantage")
+			}
+		case "reckless":
+			// C-C02: Reckless Attack's attacker-side half — the transient
+			// condition grants advantage on melee STR attacks for the rest
+			// of the turn (attacks 2+).
+			if !IsRangedWeapon(input.Weapon) && input.AbilityUsed == "str" {
+				advReasons = append(advReasons, "Reckless Attack (active)")
 			}
 		}
 	}

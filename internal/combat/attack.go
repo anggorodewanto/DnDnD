@@ -532,6 +532,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		TargetHidden:        input.TargetHidden,
 		AttackerObscurement: input.AttackerObscurement,
 		TargetObscurement:   input.TargetObscurement,
+		AbilityUsed:         input.AbilityUsed,
 		TargetCombatantID:   input.TargetCombatantID,
 	}
 	rollMode, advReasons, disadvReasons := DetectAdvantage(advInput)

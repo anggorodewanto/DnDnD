@@ -1,11 +1,11 @@
-finding_id: C-C01
+finding_id: C-C02
 severity: Critical
-title: Multi-letter column labels truncated by colToIndex
-location: internal/combat/attack.go:1571-1577
-spec_ref: spec §Grid Movement (line 285-300, "AA12 valid on maps wider than 26 columns")
+title: Reckless Attack advantage missing on attacks 2+
+location: internal/combat/attack.go:887-901, internal/combat/advantage.go:36-39
+spec_ref: Phase 38; spec line 217 ("advantage on melee STR attacks this turn")
 problem: |
-  `colToIndex` takes only `strings.ToUpper(col)[0]`, so "AA" → 0 (same as "A"). Used by combatantDistance, resolveAttackCover, detectHostileNear, and creatureCoverOccupants. On maps with > 26 columns every attacker/target in the AA+ block resolves to column 0 — distances, cover lines, OA reach checks all collapse onto column A.
+  Reckless Attack grants advantage to ALL melee STR attack rolls for the entire turn. The reckless gate rejects --reckless on any swing other than the first. The transient `reckless` condition applied to the attacker is only consulted on the target-side branch of DetectAdvantage (granting advantage to enemies attacking the reckless attacker). There is no attacker-side branch that re-applies "Reckless Attack" advantage on attack 2/3/4 of the same turn.
 suggested_fix: |
-  Reuse renderer.ParseCoordinate (or extract the column-letter loop from ParseCoordinate into a shared helper). The renderer code already handles AA/AB/... correctly. Alternatively, implement the standard base-26 conversion: iterate all characters, accumulating `result = result*26 + (ch - 'A' + 1)`, then subtract 1 for 0-based index.
+  In DetectAdvantage, also check attackerConditions for "reckless" and, when present, add "Reckless Attack (active)" to advReasons for melee STR attacks. Keep the existing first-attack gate on the --reckless flag itself.
 acceptance_criterion: |
-  colToIndex("A") == 0, colToIndex("Z") == 25, colToIndex("AA") == 26, colToIndex("AB") == 27, colToIndex("AZ") == 51, colToIndex("BA") == 52. Existing tests still pass.
+  A barbarian with the "reckless" condition making a second melee STR attack in the same turn gets advantage from DetectAdvantage. A ranged attack or DEX-based attack does NOT get the advantage even with the reckless condition.

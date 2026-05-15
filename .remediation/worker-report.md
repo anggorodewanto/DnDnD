@@ -1,11 +1,11 @@
-finding_id: C-C01
+finding_id: C-C02
 status: done
 files_changed:
+  - internal/combat/advantage.go
+  - internal/combat/advantage_test.go
   - internal/combat/attack.go
-  - internal/combat/attack_test.go
-  - internal/combat/obscurement.go
-test_command_that_validates: go test ./internal/combat/ -run TestColToIndex -v
+test_command_that_validates: go test ./internal/combat/ -run "TestDetectAdvantage_RecklessCondition" -v
 acceptance_criterion_met: yes
-notes: Fixed colToIndex in attack.go to use proper base-26 conversion (accumulate result*26 + (ch-'A'+1), then subtract 1 for 0-based). Also fixed the exported ColToIndex in obscurement.go which had identical broken logic — it now delegates to colToIndex. Removed the now-unused "strings" import from obscurement.go. All existing tests continue to pass, and multi-letter columns (AA=26, AB=27, AZ=51, BA=52) now resolve correctly.
+notes: Added `AbilityUsed` field to `AdvantageInput` struct and a `"reckless"` case in the attacker-conditions loop of `DetectAdvantage` that grants advantage only when the weapon is melee and the ability used is STR. Passed `AbilityUsed` through from `ResolveAttack`. Three tests added: melee STR gets advantage (positive), ranged does not (negative), melee DEX does not (negative). All existing tests pass, coverage thresholds met.
 follow_ups:
-  - none
+  - Verify that Service.Attack populates `AbilityUsed` on `AttackInput` when building from `AttackCommand` (integration-level confirmation).

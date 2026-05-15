@@ -542,3 +542,38 @@ func TestDetectAdvantage_HelpAdvantage_EmptyTargetScope(t *testing.T) {
 	assert.Equal(t, dice.Normal, mode)
 	assert.Empty(t, advReasons)
 }
+
+// C-C02: Reckless Attack advantage on attacks 2+ via attacker "reckless" condition.
+
+func TestDetectAdvantage_RecklessCondition_MeleeSTR_Advantage(t *testing.T) {
+	input := AdvantageInput{
+		AttackerConditions: []CombatCondition{{Condition: "reckless"}},
+		Weapon:             makeLongsword(),
+		AbilityUsed:        "str",
+	}
+	mode, advReasons, _ := DetectAdvantage(input)
+	assert.Equal(t, dice.Advantage, mode)
+	assert.Contains(t, advReasons, "Reckless Attack (active)")
+}
+
+func TestDetectAdvantage_RecklessCondition_Ranged_NoAdvantage(t *testing.T) {
+	input := AdvantageInput{
+		AttackerConditions: []CombatCondition{{Condition: "reckless"}},
+		Weapon:             makeLongbow(),
+		AbilityUsed:        "dex",
+	}
+	mode, advReasons, _ := DetectAdvantage(input)
+	assert.Equal(t, dice.Normal, mode)
+	assert.Empty(t, advReasons)
+}
+
+func TestDetectAdvantage_RecklessCondition_MeleeDEX_NoAdvantage(t *testing.T) {
+	input := AdvantageInput{
+		AttackerConditions: []CombatCondition{{Condition: "reckless"}},
+		Weapon:             makeLongsword(),
+		AbilityUsed:        "dex",
+	}
+	mode, advReasons, _ := DetectAdvantage(input)
+	assert.Equal(t, dice.Normal, mode)
+	assert.Empty(t, advReasons)
+}
