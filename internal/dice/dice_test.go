@@ -380,3 +380,27 @@ func TestParseExpression_InvalidModifier(t *testing.T) {
 	_, err := ParseExpression("1d6xyz")
 	assert.Error(t, err)
 }
+
+func TestParseExpression_MultipleModifiers(t *testing.T) {
+	tests := []struct {
+		input    string
+		wantMod  int
+		wantErr  bool
+	}{
+		{"1d20+5+5", 10, false},
+		{"1d20-2+3", 1, false},
+		{"1d20-2-3", -5, false},
+		{"1d4+1d6+2+3", 5, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			expr, err := ParseExpression(tt.input)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantMod, expr.Modifier)
+		})
+	}
+}

@@ -1,8 +1,8 @@
-finding_id: A-C02
+finding_id: B-C01
 verdict: approved
 spec_alignment: confirmed
 test_first_discipline: yes
 unrelated_changes: none
 coverage_ok: yes
 new_concerns: []
-notes: Added checkCampaignOwnership helper that resolves the DM's campaign and compares against the approval's CampaignID. Applied to Approve and parseFeedbackRequest (shared by Reject/RequestChanges). CampaignID field added to ApprovalEntry/ApprovalDetail and populated from the store. Cross-campaign test covers all three endpoints. Diff is tight and follows early-return style.
+notes: Replaced the broken modifier parsing (strip all + then Atoi) with a sumSignedTokens helper that regex-tokenizes signed integers and sums them. Full-coverage validation ensures no garbage characters slip through. All 4 acceptance criterion cases pass. Clean early-return style.

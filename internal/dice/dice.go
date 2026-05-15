@@ -44,16 +44,44 @@ func ParseExpression(input string) (Expression, error) {
 		expr.Groups = append(expr.Groups, DiceGroup{Count: count, Sides: sides})
 	}
 
-	// Find trailing modifier (strip out all dice groups, what's left should be a modifier)
-	stripped := diceGroupRe.ReplaceAllString(input, "")
-	stripped = strings.ReplaceAll(stripped, "+", "")
-	if stripped != "" {
-		mod, err := strconv.Atoi(stripped)
+	// Sum signed integer tokens from the residue after removing dice groups.
+	residue := diceGroupRe.ReplaceAllString(input, "")
+	// Remove leading/trailing operators left by dice group removal (e.g. "++2+3" → "+2+3").
+	residue = strings.TrimLeft(residue, "+")
+	if residue != "" {
+		mod, err := sumSignedTokens(residue)
 		if err != nil {
-			return Expression{}, fmt.Errorf("invalid modifier in dice expression: %s", stripped)
+			return Expression{}, fmt.Errorf("invalid modifier in dice expression: %s", residue)
 		}
 		expr.Modifier = mod
 	}
 
 	return expr, nil
+}
+
+var signedTokenRe = regexp.MustCompile(`[+-]\d+`)
+
+// sumSignedTokens parses a string like "+5+5" or "-2+3" into the sum of its signed integers.
+func sumSignedTokens(s string) (int, error) {
+	// Ensure the string starts with a sign for uniform tokenization.
+	if s[0] != '+' && s[0] != '-' {
+		s = "+" + s
+	}
+	tokens := signedTokenRe.FindAllString(s, -1)
+	if len(tokens) == 0 {
+		return 0, fmt.Errorf("no valid tokens")
+	}
+	// Verify full coverage: joined tokens must equal the input.
+	if strings.Join(tokens, "") != s {
+		return 0, fmt.Errorf("unexpected characters")
+	}
+	sum := 0
+	for _, tok := range tokens {
+		n, err := strconv.Atoi(tok)
+		if err != nil {
+			return 0, err
+		}
+		sum += n
+	}
+	return sum, nil
 }
