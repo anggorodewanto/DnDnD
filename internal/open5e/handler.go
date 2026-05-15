@@ -23,6 +23,7 @@ func NewHandler(svc *Service) *Handler {
 }
 
 // RegisterRoutes mounts the Open5e endpoints under /api/open5e.
+// Deprecated: use RegisterPublicRoutes + RegisterProtectedRoutes for proper auth scoping.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/open5e", func(r chi.Router) {
 		r.Get("/monsters", h.SearchMonsters)
@@ -30,6 +31,18 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/spells", h.SearchSpells)
 		r.Post("/spells/{slug}", h.CacheSpell)
 	})
+}
+
+// RegisterPublicRoutes mounts read-only Open5e search endpoints (no auth required).
+func (h *Handler) RegisterPublicRoutes(r chi.Router) {
+	r.Get("/api/open5e/monsters", h.SearchMonsters)
+	r.Get("/api/open5e/spells", h.SearchSpells)
+}
+
+// RegisterProtectedRoutes mounts mutating Open5e cache endpoints (DM auth required).
+func (h *Handler) RegisterProtectedRoutes(r chi.Router) {
+	r.Post("/api/open5e/monsters/{slug}", h.CacheMonster)
+	r.Post("/api/open5e/spells/{slug}", h.CacheSpell)
 }
 
 // SearchMonsters GET /api/open5e/monsters?search=&document=&limit=&offset=.

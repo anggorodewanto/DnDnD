@@ -843,7 +843,9 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		open5eCache := open5e.NewCache(queries)
 		open5eSvc := open5e.NewService(open5eClient, open5eCache)
 		open5eHandler := open5e.NewHandler(open5eSvc)
-		open5eHandler.RegisterRoutes(router)
+		// F-14: GET (search) routes remain public; POST (cache) routes are
+		// mounted behind dmAuthMw further below (search "F-14 cache mount").
+		open5eHandler.RegisterPublicRoutes(router)
 		// F-8: per-campaign Open5e source toggle. The catalog list (no
 		// campaign data) mounts publicly on `router` so the Svelte SPA
 		// can render its checkboxes; the per-campaign GET/PUT pair is
@@ -1097,6 +1099,13 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			r.Use(dmAuthMw)
 			r.Get("/api/open5e/campaigns/{id}/sources", open5eSourcesHandler.GetCampaignSources)
 			r.Put("/api/open5e/campaigns/{id}/sources", open5eSourcesHandler.UpdateCampaignSources)
+		})
+
+		// F-14 cache mount: POST cache endpoints require DM auth so
+		// unauthenticated callers cannot trigger Open5e fetches.
+		router.Group(func(r chi.Router) {
+			r.Use(dmAuthMw)
+			open5eHandler.RegisterProtectedRoutes(r)
 		})
 
 		// Phase 121: DM character-create form. charCreateRefData drops the

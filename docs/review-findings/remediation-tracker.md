@@ -18,7 +18,7 @@
 |----|----------|---------|--------|--------|----------|
 | F-01 | High | DM/dashboard authorization not resource-scoped | committed | 974bfde | PASS |
 | F-02 | High | Map/encounter-template routes not campaign-scoped | review_passed | — | PASS |
-| F-14 | Medium | Open5e cache POST endpoints public/global | pending | — | — |
+| F-14 | Medium | Open5e cache POST endpoints public/global | implemented | — | — |
 
 ### Server-Authoritative Mutation/Publish/Audit (Priority 2)
 
@@ -239,7 +239,8 @@
 - **Source**: agent-05
 - **Files**: `cmd/dndnd/main.go`, `internal/open5e/handler.go`
 - **Test plan**: Test that POST cache endpoints require DM auth
-- **Implementation notes**: —
+- **Implementation notes**: Split `RegisterRoutes` into `RegisterPublicRoutes` (GET search) and `RegisterProtectedRoutes` (POST cache). In `main.go`, public GET routes remain on the bare router; POST cache routes are mounted in a `router.Group` behind `dmAuthMw`. Test `TestOpen5eCachePOST_F14_RequiresDMAuth` proves POST `/api/open5e/monsters/{slug}` and `/api/open5e/spells/{slug}` return 403 without DM auth, while GET search routes remain accessible.
+- **Changed files**: `internal/open5e/handler.go`, `cmd/dndnd/main.go`, `cmd/dndnd/auth_open5e_cache_test.go`
 - **Reviewer verdict**: —
 
 ### F-15: /retire doesn't block active-combat retirement
