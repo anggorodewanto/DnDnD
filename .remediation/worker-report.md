@@ -1,10 +1,10 @@
-finding_id: F-C02
+finding_id: F-C03
 status: done
 files_changed:
-  - internal/combat/turnresources.go
-  - internal/combat/turnresources_test.go
-test_command_that_validates: go test ./internal/combat/ -run "TestResolveTurnResources_HeavyArmorPenalty" -v
+  - cmd/dndnd/discord_adapters.go
+  - cmd/dndnd/main_wiring_test.go
+test_command_that_validates: go test ./cmd/dndnd/ -run TestBuildVisionSources_PCDevilsSight -v
 acceptance_criterion_met: yes
-notes: Added heavy armor speed penalty application in ResolveTurnResources. After computing base speed and FES turn-start bonuses, the function now looks up the equipped armor via the store and calls CheckHeavyArmorPenalty to subtract 10ft when the character's STR is below the armor's strength_req. Two tests added: one for insufficient STR (expects 20ft) and one for sufficient STR (expects 30ft). Both `make test` and `make cover-check` pass.
+notes: Added a case-insensitive check for "Devil's Sight" in the PC branch of buildVisionSources using the existing combat.HasFeatureByName helper. The fix reads the character's Features JSON (already fetched via GetCharacter) and sets src.HasDevilsSight = true when the feature is present. A new test TestBuildVisionSources_PCDevilsSight confirms the behavior. All existing tests continue to pass and coverage thresholds are met.
 follow_ups:
-  - None identified; the fix is minimal and self-contained.
+  - Consider adding a similar test for case variations (e.g., "devil's sight", "DEVIL'S SIGHT") to document the case-insensitive behavior explicitly.

@@ -800,6 +800,9 @@ func buildVisionSources(ctx context.Context, q buildVisionSourcesQueries, in []r
 				src.DarkvisionTiles = tilesFromFeet(int(race.DarkvisionFt))
 			}
 		}
+		if combat.HasFeatureByName(ch.Features.RawMessage, "Devil's Sight") {
+			src.HasDevilsSight = true
+		}
 		out = append(out, src)
 	}
 	return out

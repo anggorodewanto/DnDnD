@@ -496,6 +496,42 @@ func TestBuildVisionSources_SkipsDeadAndUnparseablePositions(t *testing.T) {
 	assert.Empty(t, buildVisionSources(context.Background(), q, combatants))
 }
 
+// TestBuildVisionSources_PCDevilsSight verifies that a character with a
+// "Devil's Sight" feature produces a VisionSource with HasDevilsSight=true.
+func TestBuildVisionSources_PCDevilsSight(t *testing.T) {
+	charID := uuid.New()
+	q := &fakeMapRegenQueries{
+		characters: map[uuid.UUID]refdata.Character{
+			charID: {
+				ID:   charID,
+				Race: "human",
+				Features: pqtype.NullRawMessage{
+					RawMessage: []byte(`[{"name":"Devil's Sight","mechanical_effect":""}]`),
+					Valid:      true,
+				},
+			},
+		},
+		races: map[string]refdata.Race{
+			"human": {ID: "human", DarkvisionFt: 0},
+		},
+	}
+	combatants := []refdata.Combatant{
+		{
+			ID:          uuid.New(),
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			PositionCol: "A",
+			PositionRow: 1,
+			IsNpc:       false,
+			IsAlive:     true,
+		},
+	}
+
+	sources := buildVisionSources(context.Background(), q, combatants)
+
+	require.Len(t, sources, 1)
+	assert.True(t, sources[0].HasDevilsSight, "character with Devil's Sight feature must have HasDevilsSight=true")
+}
+
 // TestBuildMagicalDarknessTiles_FiltersByZoneType covers the magical-darkness
 // projection: only zones with ZoneType="magical_darkness" contribute tiles.
 func TestBuildMagicalDarknessTiles_FiltersByZoneType(t *testing.T) {

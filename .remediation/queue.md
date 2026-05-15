@@ -27,7 +27,7 @@ Low: 142
 | 15 | E-C03 | Critical | done | Dodge condition does not impose disadvantage on attackers | `/home/ab/projects/DnDnD/internal/combat/advantage.go:104-134` (no `dodge` case ... |
 | 16 | F-C01 | Critical | done | Counterspell trigger is unreachable from the DM dashboard | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:88-150 |
 | 17 | F-C02 | Critical | done | Heavy-armor STR speed penalty is computed but never applied to combat speed | /home/ab/projects/DnDnD/internal/combat/equip.go:237,478-487; /home/ab/projects/... |
-| 18 | F-C03 | Critical | pending | Devil's Sight is never wired into the player vision pipeline | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:755-806 |
+| 18 | F-C03 | Critical | in_progress | Devil's Sight is never wired into the player vision pipeline | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:755-806 |
 | 19 | F-C04 | Critical | pending | Lair Action is placed at the head of the turn queue instead of "loses ties" | /home/ab/projects/DnDnD/internal/combat/legendary.go:304-348 |
 | 20 | G-C01 | Critical | pending | Passive-effect vocabulary in spec does not match the code parser | internal/magicitem/effects.go:112-160, internal/combat/feature_integration.go:58... |
 | 21 | G-C02 | Critical | pending | `/attune` does not require a short rest | internal/inventory/attunement.go:33-67, internal/discord/attune_handler.go:68-15... |
