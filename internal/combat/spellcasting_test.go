@@ -3407,3 +3407,118 @@ func TestCast_AllowsNonVerbalInSilence(t *testing.T) {
 	_, err := svc.Cast(context.Background(), cmd, testRoller())
 	require.NoError(t, err, "M-only spell must succeed even inside Silence")
 }
+
+// E-C01: Cast applies damage to target on hit
+func TestCast_AppliesDamageOnHit(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	target.PositionRow = 6
+	target.HpMax = 30
+	target.HpCurrent = 30
+	target.EncounterID = uuid.New()
+
+	// Fire Bolt with damage data
+	spell := makeFireBolt()
+	dmgJSON, _ := json.Marshal(map[string]interface{}{
+		"dice": "1d10", "type": "fire", "cantrip_scaling": true,
+	})
+	spell.Damage = pqtype.NullRawMessage{RawMessage: dmgJSON, Valid: true}
+
+	var capturedHP refdata.UpdateCombatantHPParams
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		capturedHP = arg
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:  "fire-bolt",
+		CasterID: caster.ID,
+		TargetID: target.ID,
+		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	// testRoller always returns 10; attack = 10+7=17 vs AC 13 => hit
+	// Cantrip at level 8 => 2d10 => 10+10 = 20 damage
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, 20, result.DamageTotal)
+	assert.Equal(t, target.ID, capturedHP.ID)
+	assert.Equal(t, int32(10), capturedHP.HpCurrent) // 30 - 20 = 10
+}
+
+// E-C01: Cast applies healing to target
+func TestCast_AppliesHealingOnCast(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	target.PositionRow = 6
+	target.HpMax = 30
+	target.HpCurrent = 10
+	target.EncounterID = uuid.New()
+
+	healJSON, _ := json.Marshal(map[string]interface{}{
+		"dice": "1d8+4", "higher_level_dice": "1d8",
+	})
+	spell := refdata.Spell{
+		ID:             "cure-wounds",
+		Name:           "Cure Wounds",
+		Level:          1,
+		CastingTime:    "1 action",
+		RangeType:      "touch",
+		RangeFt:        sql.NullInt32{Int32: 5, Valid: true},
+		ResolutionMode: "auto",
+		Concentration:  sql.NullBool{Bool: false, Valid: true},
+		Healing:        pqtype.NullRawMessage{RawMessage: healJSON, Valid: true},
+	}
+
+	var capturedHP refdata.UpdateCombatantHPParams
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return spell, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		capturedHP = arg
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, Conditions: json.RawMessage(`[]`)}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:   "cure-wounds",
+		CasterID:  caster.ID,
+		TargetID:  target.ID,
+		SlotLevel: 1,
+		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+	}
+
+	// testRoller returns 10 for all dice; 1d8+4 => 10+4 = 14 healing
+	result, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.NoError(t, err)
+	assert.Equal(t, 14, result.HealingTotal)
+	assert.Equal(t, target.ID, capturedHP.ID)
+	assert.Equal(t, int32(24), capturedHP.HpCurrent) // 10 + 14 = 24
+}

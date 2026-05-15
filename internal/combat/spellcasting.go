@@ -159,7 +159,9 @@ type CastResult struct {
 	IsRitual               bool
 	ScaledDamageDice       string                     // damage dice after upcast/cantrip scaling
 	DamageType             string                     // damage type from spell damage JSON
+	DamageTotal            int                        // rolled damage total (applied on hit)
 	ScaledHealingDice      string                     // healing dice after upcast scaling
+	HealingTotal           int                        // rolled healing total (applied to target)
 	Teleport               *TeleportResult            // teleportation outcome, nil if not a teleport spell
 	MaterialComponent      *CastMaterialComponentInfo // material component outcome, nil if no costly component
 	MetamagicCost          int                        // total sorcery points spent on metamagic
@@ -644,6 +646,47 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		result.AttackTotal = d20Result.Total
 		result.TargetAC = int(target.Ac)
 		result.Hit = d20Result.Total >= int(target.Ac)
+	}
+
+	// 12α. Roll damage dice on hit and apply to target HP.
+	if result.Hit && result.ScaledDamageDice != "" && hasTarget {
+		dmgDice := strings.ReplaceAll(result.ScaledDamageDice, "+mod", fmt.Sprintf("+%d", AbilityModifier(spellAbilityScore)))
+		rollResult, err := roller.Roll(dmgDice)
+		if err != nil {
+			return CastResult{}, fmt.Errorf("rolling spell damage: %w", err)
+		}
+		result.DamageTotal = rollResult.Total
+		_, err = s.ApplyDamage(ctx, ApplyDamageInput{
+			EncounterID: target.EncounterID,
+			Target:      target,
+			RawDamage:   rollResult.Total,
+			DamageType:  result.DamageType,
+		})
+		if err != nil {
+			return CastResult{}, fmt.Errorf("applying spell damage: %w", err)
+		}
+	}
+
+	// 12β. Roll healing dice and apply to target HP.
+	if result.ScaledHealingDice != "" && hasTarget {
+		healDice := strings.ReplaceAll(result.ScaledHealingDice, "+mod", fmt.Sprintf("+%d", AbilityModifier(spellAbilityScore)))
+		rollResult, err := roller.Roll(healDice)
+		if err != nil {
+			return CastResult{}, fmt.Errorf("rolling spell healing: %w", err)
+		}
+		result.HealingTotal = rollResult.Total
+		newHP := target.HpCurrent + int32(rollResult.Total)
+		if newHP > target.HpMax {
+			newHP = target.HpMax
+		}
+		if _, err := s.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
+			ID:        target.ID,
+			HpCurrent: newHP,
+			TempHp:    target.TempHp,
+			IsAlive:   true,
+		}); err != nil {
+			return CastResult{}, fmt.Errorf("applying spell healing: %w", err)
+		}
 	}
 
 	// 12a. Teleportation handling
