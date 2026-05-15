@@ -38,10 +38,7 @@ func InitFeatureUses(classes []character.ClassEntry, scores character.AbilitySco
 			uses[combat.FeatureKeyBardicInspiration] = character.FeatureUse{Current: max, Max: max, Recharge: recharge}
 		case "fighter":
 			if ce.Level >= 2 {
-				surgeMax := 1
-				if ce.Level >= 17 {
-					surgeMax = 2
-				}
+				surgeMax := combat.ActionSurgeMaxUses(ce.Level)
 				uses[combat.FeatureKeyActionSurge] = character.FeatureUse{Current: surgeMax, Max: surgeMax, Recharge: "short"}
 				uses["second-wind"] = character.FeatureUse{Current: 1, Max: 1, Recharge: "short"}
 			}

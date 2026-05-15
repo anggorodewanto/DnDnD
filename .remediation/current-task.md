@@ -1,11 +1,11 @@
-finding_id: cross-cut-H04
+finding_id: cross-cut-H05
 severity: High
-title: Paladin Channel Divinity max uses scale to 2 at level 15
-location: internal/combat/channel_divinity.go:31-38
-spec_ref: PHB p.85 Paladin class table
+title: Action Surge max uses never scales to 2 at fighter level 17
+location: internal/combat/action_surge.go (no scaling function exists)
+spec_ref: PHB p.72 Fighter class table
 problem: |
-  Paladin returns 2 at level >= 15. PHB says Paladin never gains a second CD use (only Cleric scales: 1@L2, 2@L6, 3@L18).
+  Action Surge has 2 uses at Fighter 17+. No code raises Max to 2 — stays at 1 forever.
 suggested_fix: |
-  Drop the level >= 15 → 2 branch for Paladin (return 1 for level >= 3, 0 otherwise).
+  Add ActionSurgeMaxUses(fighterLevel int) int (1 at L2-16, 2 at L17+) and have the level-up service bump feature_uses["action-surge"].Max when a Fighter crosses level 17.
 acceptance_criterion: |
-  ChannelDivinityMaxUses("paladin", 15) returns 1, not 2. A test demonstrates this.
+  ActionSurgeMaxUses(17) returns 2. ActionSurgeMaxUses(16) returns 1. A test demonstrates both.

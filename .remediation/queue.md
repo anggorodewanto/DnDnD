@@ -141,8 +141,8 @@ Low: 142
 | 129 | cross-cut-H01 | High | pending | `routePhase43DeathSave` skips the drop-to-0 instant-death rule when overflow is exactly the limit but damage came from a hit at >0 HP and `adjusted` overshoots | `internal/combat/damage.go:336-346`, |
 | 130 | cross-cut-H02 | High | pending | Multiclass spellcasting ability picks the highest score across classes | `internal/combat/spellcasting.go:1544-1557` |
 | 131 | cross-cut-H03 | High | pending | Attack roll always adds proficiency bonus regardless of weapon proficiency | `internal/combat/attack.go:103-106` (`AttackModifier`). |
-| 132 | cross-cut-H04 | High | in_progress | Paladin Channel Divinity max uses scale to 2 at level 15 | `internal/combat/channel_divinity.go:31-38` |
-| 133 | cross-cut-H05 | High | pending | Action Surge max uses never scales to 2 at fighter level 17 | every `action-surge` feature seed asserts `Max: 1` |
+| 132 | cross-cut-H04 | High | done | Paladin Channel Divinity max uses scale to 2 at level 15 | `internal/combat/channel_divinity.go:31-38` |
+| 133 | cross-cut-H05 | High | in_progress | Action Surge max uses never scales to 2 at fighter level 17 | every `action-surge` feature seed asserts `Max: 1` |
 | 134 | A-M01 | Medium | pending | `MessageQueue.Stop` doesn't preempt long backoff sleeps | internal/discord/queue.go:90-134 |
 | 135 | A-M02 | Medium | pending | `SplitMessage` splits on bytes, can produce invalid UTF-8 mid-codepoint | internal/discord/message.go:67-122 |
 | 136 | A-M03 | Medium | pending | Fuzzy match Levenshtein operates on bytes, not runes | internal/registration/fuzzy.go:10-40 |

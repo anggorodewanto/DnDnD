@@ -71,3 +71,12 @@ func (s *Service) ActionSurge(ctx context.Context, cmd ActionSurgeCommand) (Acti
 		UsesRemaining: newRemaining,
 	}, nil
 }
+
+// ActionSurgeMaxUses returns the maximum number of Action Surge uses for a
+// fighter of the given level. Returns 2 at level 17+, 1 otherwise.
+func ActionSurgeMaxUses(fighterLevel int) int {
+	if fighterLevel >= 17 {
+		return 2
+	}
+	return 1
+}

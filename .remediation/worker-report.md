@@ -1,21 +1,28 @@
-# Worker Report: cross-cut-H04
+# Worker Report: cross-cut-H05
+
+**Status:** ✅ Complete  
+**Worker:** worker-crosscut-H05  
+**Date:** 2026-05-16
 
 ## Finding
 
-Paladin branch in `ChannelDivinityMaxUses` incorrectly returned 2 at level >= 15. Per PHB p.85, Paladin never gains a second Channel Divinity use (only Cleric scales).
+Action Surge max uses never scaled to 2 at Fighter level 17+. The logic was inlined in `init_feature_uses.go` but no reusable function existed.
 
-## Changes
+## Changes Made
 
-### Test (`internal/combat/channel_divinity_test.go`)
+### 1. `internal/combat/action_surge.go`
+Added `ActionSurgeMaxUses(fighterLevel int) int` — returns 2 at level ≥ 17, 1 otherwise.
 
-Updated `TestChannelDivinityMaxUses_Paladin` to assert levels 15 and 20 return 1 (not 2).
+### 2. `internal/combat/action_surge_test.go`
+Added `TestActionSurgeMaxUses` with table-driven cases:
+- Level 16 → expects 1
+- Level 17 → expects 2
 
-### Fix (`internal/combat/channel_divinity.go`)
-
-Removed the `level >= 15 → return 2` branch for paladin. The paladin case now returns 1 for level >= 3, 0 otherwise.
+### 3. `internal/portal/init_feature_uses.go`
+Replaced hardcoded inline logic with a call to `combat.ActionSurgeMaxUses(ce.Level)`.
 
 ## Verification
 
-- `make test` — all tests pass ✅
-- `make cover-check` — all coverage thresholds met ✅
-- TDD cycle followed: Red (test failed with actual=2, expected=1) → Green (fix applied, test passes)
+- `make test` — all tests pass
+- `make cover-check` — all coverage thresholds met
+- TDD workflow followed: Red (undefined function) → Green (function implemented) → Refactor (init_feature_uses.go updated)

@@ -538,3 +538,22 @@ func TestActionSurge_DoesNotResetBonusOrReaction(t *testing.T) {
 	assert.True(t, result.Turn.BonusActionUsed, "bonus action should NOT be reset")
 	assert.True(t, result.Turn.ReactionUsed, "reaction should NOT be reset")
 }
+
+// TDD Cycle 11: ActionSurgeMaxUses scaling
+
+func TestActionSurgeMaxUses(t *testing.T) {
+	tests := []struct {
+		name         string
+		fighterLevel int
+		want         int
+	}{
+		{"level 16 gets 1 use", 16, 1},
+		{"level 17 gets 2 uses", 17, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ActionSurgeMaxUses(tt.fighterLevel)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
