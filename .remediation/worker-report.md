@@ -1,11 +1,12 @@
-finding_id: E-C03
+finding_id: F-C01
 status: done
 files_changed:
-  - internal/combat/advantage.go
-  - internal/combat/advantage_test.go
-test_command_that_validates: go test ./internal/combat/ -run TestDetectAdvantage_TargetDodging_Disadvantage -v
+  - dashboard/svelte/src/lib/api.js
+  - dashboard/svelte/src/ActiveReactionsPanel.svelte
+  - dashboard/svelte/src/ActiveReactionsPanel.test.js
+test_command_that_validates: cd dashboard/svelte && npx vitest run src/ActiveReactionsPanel.test.js
 acceptance_criterion_met: yes
-notes: Added `case "dodge": disadvReasons = append(disadvReasons, "target dodging")` to the target-conditions switch in DetectAdvantage. Wrote a failing test first that asserts DetectAdvantage returns Disadvantage mode with reason "target dodging" when the target has the "dodge" condition. After the fix, all tests pass and coverage thresholds are met. The pattern matches existing target conditions like "restrained" and "stunned".
+notes: Added `isCounterspellReaction` helper and `triggerCounterspell` API function to api.js. The Svelte component now imports these and renders a "Trigger Counterspell" button (purple, matching the readied-badge style) only for reactions whose description contains "counterspell" (case-insensitive). The button POSTs to the backend TriggerCounterspell endpoint with minimal defaults (enemy_spell_name: "Unknown", enemy_cast_level: 1, is_subtle: false). Three tests validate: the helper detects counterspell descriptions correctly, and the API function calls the correct endpoint with the correct method/body.
 follow_ups:
-  - Verify integration with the Dodge action handler that applies the "dodge" condition to combatants.
-  - Consider whether the attacker-can-see-target prerequisite (PHB Dodge rules) needs enforcement here or upstream.
+  - Consider adding a modal/prompt for DMs to specify spell name and cast level before triggering (instead of hardcoded defaults)
+  - Add component-level rendering test once @testing-library/svelte is added to devDependencies

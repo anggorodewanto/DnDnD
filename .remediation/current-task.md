@@ -1,11 +1,11 @@
-finding_id: E-C03
+finding_id: F-C01
 severity: Critical
-title: Dodge condition does not impose disadvantage on attackers
-location: internal/combat/advantage.go:104-134 (no "dodge" case in target conditions loop)
-spec_ref: Phase 54 "Dodge"; spec §1138 ("attacks against the character have disadvantage")
+title: Counterspell trigger is unreachable from the DM dashboard
+location: dashboard/svelte/src/ActiveReactionsPanel.svelte:88-150
+spec_ref: spec §Counterspell resolution lines 1093-1101; phases §Phase 72
 problem: |
-  The "dodge" condition is applied to the dodging combatant and is consulted by CheckSaveConditionEffects for DEX-save advantage, but DetectAdvantage never checks for it. Attacks against a Dodging target proceed at normal advantage.
+  The backend handler TriggerCounterspell exists at POST /{encounterID}/reactions/{reactionID}/counterspell/trigger, but the ActiveReactionsPanel only renders Resolve/Dismiss buttons. There is no "Trigger Counterspell" button that posts to the backend route, so a DM cannot start the counterspell flow from the UI.
 suggested_fix: |
-  Add case "dodge" to the target-conditions switch in DetectAdvantage, emitting disadvReasons = append(disadvReasons, "target dodging").
+  Add a "Trigger" button on Counterspell-labelled declarations (detect by checking if reaction.description contains "counterspell" case-insensitively) that calls the TriggerCounterspell endpoint. The button should include inputs for spell name and level (or use defaults/prompts).
 acceptance_criterion: |
-  An attack against a target with the "dodge" condition results in disadvantage being reported by DetectAdvantage. A test demonstrates this.
+  A reaction declaration containing "counterspell" in its description shows a "Trigger" button in the ActiveReactionsPanel. Clicking it calls the backend endpoint. A test verifies the button renders for counterspell declarations and not for other declarations.

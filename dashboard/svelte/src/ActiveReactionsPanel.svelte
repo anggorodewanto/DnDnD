@@ -1,5 +1,5 @@
 <script>
-  import { listReactionsPanel, resolveReaction, cancelReaction } from './lib/api.js';
+  import { listReactionsPanel, resolveReaction, cancelReaction, triggerCounterspell, isCounterspellReaction } from './lib/api.js';
 
   let { encounterId, activeTurnCombatantId, activeTurnIsNpc, onReactionResolved } = $props();
 
@@ -8,6 +8,7 @@
   let error = $state(null);
   let resolving = $state(null); // reaction ID being resolved
   let cancelling = $state(null); // reaction ID being cancelled
+  let triggering = $state(null); // reaction ID being triggered for counterspell
 
   $effect(() => {
     if (encounterId) {
@@ -53,6 +54,20 @@
       error = e.message;
     } finally {
       cancelling = null;
+    }
+  }
+
+  async function handleTriggerCounterspell(reactionId) {
+    if (triggering) return;
+    triggering = reactionId;
+    try {
+      await triggerCounterspell(encounterId, reactionId);
+      await loadReactions();
+      error = null;
+    } catch (e) {
+      error = e.message;
+    } finally {
+      triggering = null;
     }
   }
 
@@ -139,6 +154,16 @@
                   >
                     {cancelling === reaction.id ? 'Dismissing...' : 'Dismiss'}
                   </button>
+                  {#if isCounterspellReaction(reaction)}
+                    <button
+                      class="trigger-btn"
+                      onclick={() => handleTriggerCounterspell(reaction.id)}
+                      disabled={triggering === reaction.id}
+                      data-testid="trigger-{reaction.id}"
+                    >
+                      {triggering === reaction.id ? 'Triggering...' : 'Trigger Counterspell'}
+                    </button>
+                  {/if}
                 </div>
               {/if}
             </li>
@@ -303,6 +328,26 @@
   }
 
   .dismiss-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .trigger-btn {
+    padding: 0.2rem 0.5rem;
+    background: #8b5cf6;
+    color: #e0e0e0;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: bold;
+  }
+
+  .trigger-btn:hover:not(:disabled) {
+    background: #7c3aed;
+  }
+
+  .trigger-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }

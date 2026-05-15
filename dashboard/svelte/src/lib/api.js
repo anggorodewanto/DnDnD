@@ -753,6 +753,28 @@ export async function cancelReaction(encounterId, reactionId) {
   return res.json();
 }
 
+/**
+ * Returns true if the reaction is a counterspell declaration.
+ */
+export function isCounterspellReaction(reaction) {
+  return /counterspell/i.test(reaction.description || '');
+}
+
+/**
+ * Trigger counterspell for a reaction declaration.
+ * @param {string} encounterId - Encounter UUID.
+ * @param {string} reactionId - Reaction UUID.
+ * @returns {Promise<object>} The counterspell prompt response.
+ */
+export async function triggerCounterspell(encounterId, reactionId) {
+  const res = await apiFetch(`${COMBAT_BASE}/${encounterId}/reactions/${reactionId}/counterspell/trigger`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enemy_spell_name: 'Unknown', enemy_cast_level: 1, is_subtle: false }),
+  });
+  return res.json();
+}
+
 // --- Undo & Manual Override API (Phase 97b) ---
 
 /**
