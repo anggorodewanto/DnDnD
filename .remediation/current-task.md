@@ -1,11 +1,11 @@
-finding_id: I-C03
+finding_id: J-C02
 severity: Critical
-title: Narration-template Get/Update/Delete/Duplicate/Apply leak across campaigns
-location: internal/narration/template_handler.go:110-193; internal/narration/template_service.go:89-143
-spec_ref: Phase 100b "Templates are campaign-scoped"
+title: Open5e public search endpoint bypasses per-campaign source gating
+location: internal/open5e/handler.go:37 (RegisterPublicRoutes); main.go:848
+spec_ref: spec §Extended Content (lines 2541-2546), Phase 111
 problem: |
-  Only Create and List accept campaign_id; Get, Update, Delete, Duplicate, and Apply look the template up purely by UUID and never check that the row's campaign_id matches the requesting DM's campaign.
+  /api/open5e/monsters and /api/open5e/spells are mounted with no auth and no campaign_id filter. The spec says "DM enables/disables third-party sources per campaign", but the live search returns the full upstream catalog.
 suggested_fix: |
-  Require campaign_id on every template endpoint and verify tpl.CampaignID == in.CampaignID before mutating. Return ErrTemplateNotFound on mismatch.
+  Gate the search GETs behind DM auth so only the DM proxies Open5e, or require ?campaign_id= and filter results through CampaignSourceLookup.
 acceptance_criterion: |
-  Get/Update/Delete/Duplicate/Apply return 404 (or 403) when the template belongs to a different campaign than the authenticated DM's. A test demonstrates cross-campaign access is blocked.
+  The Open5e search endpoints require authentication (DM auth). Unauthenticated requests get 401. A test demonstrates this.

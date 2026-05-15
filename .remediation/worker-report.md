@@ -1,13 +1,12 @@
-finding_id: I-C03
+finding_id: J-C02
 status: done
 files_changed:
-  - internal/narration/template_service.go
-  - internal/narration/template_service_test.go
-  - internal/narration/template_handler.go
-  - internal/narration/template_handler_test.go
-test_command_that_validates: go test ./internal/narration/ -run "CrossCampaign" -v
+  - cmd/dndnd/main.go
+  - cmd/dndnd/auth_open5e_cache_test.go
+  - cmd/dndnd/auth_open5e_search_test.go
+test_command_that_validates: go test ./cmd/dndnd/ -run "TestOpen5e(SearchGET_JC02|CachePOST_F14)" -v
 acceptance_criterion_met: yes
-notes: Added campaignID parameter to Get/Update/Delete/Duplicate/Apply service methods. Each method now loads the template by ID, then verifies tpl.CampaignID == campaignID before proceeding; mismatch returns ErrTemplateNotFound (404). The handler extracts campaign_id from a required query parameter (matching the existing List endpoint pattern). Five new cross-campaign tests confirm the fix. All existing tests updated to pass the campaign_id. `make test` and `make cover-check` pass (narration package at 94.52%).
+notes: Moved Open5e search routes (GET /api/open5e/monsters, GET /api/open5e/spells) from the public router to the dmAuthMw-protected group in main.go. The RegisterPublicRoutes call was removed from the bare router and added to the existing dmAuthMw group alongside RegisterProtectedRoutes. Updated the existing F-14 test to assert GET routes are now blocked, and added a new J-C02 test that explicitly verifies unauthenticated GET requests return 401. Both `make test` and `make cover-check` pass.
 follow_ups:
-  - Consider extracting campaign_id from auth middleware/context instead of query param for stronger enforcement
-  - Integration test with real DB to confirm the check works end-to-end
+  - Consider renaming RegisterPublicRoutes to RegisterSearchRoutes since it is no longer public
+  - Frontend (Svelte SPA) must now include auth credentials when calling /api/open5e/monsters and /api/open5e/spells
