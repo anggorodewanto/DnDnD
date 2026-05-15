@@ -111,6 +111,10 @@
       mapWidth = data.width;
       mapHeight = data.height;
       tiledMap = typeof data.tiled_json === 'string' ? JSON.parse(data.tiled_json) : data.tiled_json;
+      // F-18: Restore backgroundOpacity from tiled_json.
+      if (tiledMap.backgroundOpacity != null) {
+        backgroundOpacity = tiledMap.backgroundOpacity;
+      }
       savedMapId = data.id;
       if (data.background_image_id) {
         backgroundImageId = data.background_image_id;
@@ -145,6 +149,8 @@
     error = null;
     statusMsg = '';
     try {
+      // F-18: Persist backgroundOpacity inside tiled_json.
+      tiledMap.backgroundOpacity = backgroundOpacity;
       const payload = {
         name: mapName,
         width: mapWidth,

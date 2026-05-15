@@ -56,7 +56,7 @@
 
 | ID | Severity | Finding | Status | Commit | Reviewer |
 |----|----------|---------|--------|--------|----------|
-| F-18 | Medium | Map background opacity not persisted | pending | — | — |
+| F-18 | Medium | Map background opacity not persisted | implemented | — | — |
 | F-22 | Medium | Turn Builder roll fudging unreachable | pending | — | — |
 | F-23 | Medium | Mobile Approvals renders wrong component | pending | — | — |
 | F-24 | Medium | Phase 120a e2e omits Discord output assertions | pending | — | — |
@@ -271,7 +271,8 @@
 - **Source**: agent-01
 - **Files**: `dashboard/svelte/src/MapEditor.svelte`, `db/queries/maps.sql`
 - **Test plan**: Test that opacity is saved and restored on map load
-- **Implementation notes**: —
+- **Implementation notes**: Stored `backgroundOpacity` as a top-level key inside `tiled_json` (JSONB). In `saveMap()`, `tiledMap.backgroundOpacity = backgroundOpacity` is set before building the payload. In `loadMap()`, `backgroundOpacity` is restored from `tiledMap.backgroundOpacity` if present, otherwise defaults to 0.5. No schema or backend changes needed — `tiled_json` is opaque `json.RawMessage`. Test `mapOpacity.test.js` proves save, restore, default fallback, and JSON round-trip.
+- **Changed files**: `dashboard/svelte/src/MapEditor.svelte`, `dashboard/svelte/src/lib/mapOpacity.test.js`
 - **Reviewer verdict**: —
 
 ### F-19: AoE full cover not used to block targets
