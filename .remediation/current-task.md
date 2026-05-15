@@ -1,11 +1,11 @@
-finding_id: J-C03
+finding_id: cross-cut-C01
 severity: Critical
-title: Open5e HTTP client has no timeout — upstream stall can hang any /search
-location: internal/open5e/client.go:43
-spec_ref: Phase 111
+title: Channel Divinity recharges on long rest, not short rest
+location: internal/combat/channel_divinity_integration_test.go:44
+spec_ref: PHB p.59 (Cleric) / p.85 (Paladin) — "short or long rest"
 problem: |
-  NewClient defaults httpClient to http.DefaultClient, which has zero timeout. A slow Open5e API call wedges the goroutine indefinitely.
+  Every test seed for the channel-divinity feature marks Recharge: "long". The rest service routes recharges by this field, so Channel Divinity only recharges on long rest instead of short rest per PHB.
 suggested_fix: |
-  Construct a default &http.Client{Timeout: 10*time.Second} instead of using http.DefaultClient.
+  Change the Recharge field from "long" to "short" in all channel-divinity fixtures and any character-bootstrap code. Add a regression test asserting CD is recharged after ShortRest.
 acceptance_criterion: |
-  The Open5e client uses a non-zero timeout by default. A test verifies the client's timeout is set.
+  Channel Divinity feature uses have Recharge: "short" in test fixtures. A test confirms ShortRest recharges channel-divinity uses.

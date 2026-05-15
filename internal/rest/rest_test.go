@@ -1156,3 +1156,41 @@ func TestLongRest_NoTempHP_NotCleared(t *testing.T) {
 		t.Error("TempHPCleared = true, want false (no temp HP to clear)")
 	}
 }
+
+// --- Regression: cross-cut-C01 — Channel Divinity recharges on short rest ---
+
+func TestShortRest_ChannelDivinity_RechargesOnShortRest(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int { return 1 })
+	svc := NewService(roller)
+
+	features := map[string]character.FeatureUse{
+		"channel-divinity": {Current: 0, Max: 1, Recharge: "short"},
+	}
+
+	input := ShortRestInput{
+		HPCurrent:        30,
+		HPMax:            40,
+		CONModifier:      2,
+		HitDiceRemaining: map[string]int{"d8": 5},
+		HitDiceSpend:     map[string]int{},
+		FeatureUses:      features,
+		Classes:          []character.ClassEntry{{Class: "cleric", Level: 3}},
+	}
+
+	result, err := svc.ShortRest(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Channel Divinity MUST recharge on short rest per PHB p.59
+	found := false
+	for _, name := range result.FeaturesRecharged {
+		if name == "channel-divinity" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("channel-divinity was NOT recharged on short rest; FeaturesRecharged = %v", result.FeaturesRecharged)
+	}
+}

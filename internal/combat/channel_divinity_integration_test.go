@@ -41,7 +41,7 @@ func setupChannelDivinityFixture(t *testing.T, clericLevel int, featureUses int)
 	// Create cleric character
 	charID := uuid.New()
 	classesJSON, _ := json.Marshal([]map[string]any{{"class": "Cleric", "level": clericLevel}})
-	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{"channel-divinity": {Current: featureUses, Max: featureUses, Recharge: "long"}})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{"channel-divinity": {Current: featureUses, Max: featureUses, Recharge: "short"}})
 	_, err := db.Exec(`INSERT INTO characters (id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, ac, speed_ft, proficiency_bonus, hit_dice_remaining, languages, feature_uses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 		charID, campaignID, "Thorn", "human", classesJSON, clericLevel,
 		`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`,
@@ -376,7 +376,7 @@ func TestIntegration_SacredWeapon(t *testing.T) {
 	// Create paladin character
 	charID := uuid.New()
 	classesJSON, _ := json.Marshal([]map[string]any{{"class": "Paladin", "level": 3}})
-	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{"channel-divinity": {Current: 1, Max: 1, Recharge: "long"}})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{"channel-divinity": {Current: 1, Max: 1, Recharge: "short"}})
 	_, err := db.Exec(`INSERT INTO characters (id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, ac, speed_ft, proficiency_bonus, hit_dice_remaining, languages, feature_uses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 		charID, campaignID, "Oath", "human", classesJSON, 3,
 		`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`,
@@ -476,7 +476,7 @@ func TestIntegration_VowOfEnmity(t *testing.T) {
 	// Create paladin character
 	charID := uuid.New()
 	classesJSON, _ := json.Marshal([]map[string]any{{"class": "Paladin", "level": 3}})
-	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{"channel-divinity": {Current: 1, Max: 1, Recharge: "long"}})
+	featureUsesJSON, _ := json.Marshal(map[string]character.FeatureUse{"channel-divinity": {Current: 1, Max: 1, Recharge: "short"}})
 	_, err := db.Exec(`INSERT INTO characters (id, campaign_id, name, race, classes, level, ability_scores, hp_max, hp_current, ac, speed_ft, proficiency_bonus, hit_dice_remaining, languages, feature_uses) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 		charID, campaignID, "Oath", "human", classesJSON, 3,
 		`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`,

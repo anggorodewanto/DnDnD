@@ -162,7 +162,7 @@ func TestTurnUndead_FailedSave_AppliesTurnedCondition(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -235,7 +235,7 @@ func TestTurnUndead_PassedSave_NoEffect(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -309,7 +309,7 @@ func TestTurnUndead_DestroyUndead_BelowCRThreshold(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":5}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 3,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -389,7 +389,7 @@ func TestPreserveLife_DistributesHP(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":5}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 3,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -472,7 +472,7 @@ func TestPreserveLife_ExceedsBudget(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":2}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -526,7 +526,7 @@ func TestPreserveLife_CapsAtHalfMaxHP(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":5}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 3,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -582,7 +582,7 @@ func TestChannelDivinityDMQueue(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -624,7 +624,7 @@ func TestChannelDivinityDMQueue_PostsDMQueueItem(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -680,7 +680,7 @@ func TestSacredWeapon(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	paladin := refdata.Combatant{
@@ -720,7 +720,7 @@ func TestSacredWeapon_CHAModClampedToMinimum1(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":8}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	paladin := refdata.Combatant{
@@ -809,7 +809,7 @@ func TestSacredWeapon_ValidateChannelDivinityError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":0,"max":0,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":0,"max":0,"recharge":"short"}}`), Valid: true},
 	}
 
 	paladin := refdata.Combatant{
@@ -841,7 +841,7 @@ func TestSacredWeapon_ParseAbilityScoresError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{invalid`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	paladin := refdata.Combatant{
@@ -874,7 +874,7 @@ func TestSacredWeapon_DeductFeatureUseError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	paladin := refdata.Combatant{
@@ -907,7 +907,7 @@ func TestSacredWeapon_UpdateTurnActionsError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	paladin := refdata.Combatant{
@@ -941,7 +941,7 @@ func TestSacredWeapon_ApplyConditionError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	paladin := refdata.Combatant{
@@ -995,7 +995,7 @@ func TestVowOfEnmity(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	paladin := refdata.Combatant{
@@ -1110,7 +1110,7 @@ func TestVowOfEnmity_ValidateChannelDivinityError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":0,"max":0,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":0,"max":0,"recharge":"short"}}`), Valid: true},
 	}
 	paladin := refdata.Combatant{
 		ID:          uuid.New(),
@@ -1152,7 +1152,7 @@ func TestVowOfEnmity_DeductFeatureUseError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 	paladin := refdata.Combatant{
 		ID:          paladinCombatantID,
@@ -1195,7 +1195,7 @@ func TestVowOfEnmity_UpdateTurnActionsError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 	paladin := refdata.Combatant{
 		ID:          paladinCombatantID,
@@ -1239,7 +1239,7 @@ func TestVowOfEnmity_ApplyConditionError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 	paladin := refdata.Combatant{
 		ID:          paladinCombatantID,
@@ -1309,7 +1309,7 @@ func TestVowOfEnmity_OutOfRange(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Paladin","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":16,"dex":10,"con":14,"int":10,"wis":12,"cha":16}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	paladin := refdata.Combatant{
@@ -1369,7 +1369,7 @@ func TestTurnUndead_ActionAlreadyUsed(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -1425,7 +1425,7 @@ func TestTurnUndead_NoUndeadInRange(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -1482,7 +1482,7 @@ func TestTurnUndead_UndeadOutOfRange(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -1540,7 +1540,7 @@ func TestTurnUndead_WisSaveWithCreatureSavingThrows(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
@@ -1680,7 +1680,7 @@ func TestPreserveLife_ValidateChannelDivinityError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":5}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 3,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":0,"max":0,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":0,"max":0,"recharge":"short"}}`), Valid: true},
 	}
 	cleric := refdata.Combatant{
 		ID:          uuid.New(),
@@ -1713,7 +1713,7 @@ func TestPreserveLife_DeductFeatureUseError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":5}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 3,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 	cleric := refdata.Combatant{
 		ID:          clericCombatantID,
@@ -1760,7 +1760,7 @@ func TestPreserveLife_UpdateTurnActionsError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":5}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 3,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 	cleric := refdata.Combatant{
 		ID:          clericCombatantID,
@@ -1903,7 +1903,7 @@ func TestChannelDivinityDMQueue_ValidateChannelDivinityError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":0,"max":0,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":0,"max":0,"recharge":"short"}}`), Valid: true},
 	}
 	caster := refdata.Combatant{
 		ID:          uuid.New(),
@@ -1935,7 +1935,7 @@ func TestChannelDivinityDMQueue_DeductFeatureUseError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 	caster := refdata.Combatant{
 		ID:          clericCombatantID,
@@ -1967,7 +1967,7 @@ func TestChannelDivinityDMQueue_UpdateTurnActionsError(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 2,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 	caster := refdata.Combatant{
 		ID:          clericCombatantID,
@@ -2017,7 +2017,7 @@ func TestTurnUndead_DestroyUndead_HigherCRNotDestroyed(t *testing.T) {
 		Classes:          json.RawMessage(`[{"class":"Cleric","level":5}]`),
 		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
 		ProficiencyBonus: 3,
-		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"long"}}`), Valid: true},
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
 	}
 
 	cleric := refdata.Combatant{
