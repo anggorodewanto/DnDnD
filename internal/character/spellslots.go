@@ -106,6 +106,16 @@ func PactMagicSlotsForLevel(warlockLevel int) PactMagicSlots {
 // For single-class characters, uses own progression (which matches the multiclass table for full casters).
 // For multiclass, sums caster levels and looks up the multiclass table.
 func CalculateSpellSlots(classes []ClassEntry, spellcasting map[string]ClassSpellcasting) map[int]int {
+	if len(classes) == 1 {
+		sc, ok := spellcasting[classes[0].Class]
+		if ok && sc.SlotProgression == "half" {
+			casterLevel := (classes[0].Level + 1) / 2
+			if casterLevel == 0 {
+				return nil
+			}
+			return MulticastSpellSlots(casterLevel)
+		}
+	}
 	casterLevel := CalculateCasterLevel(classes, spellcasting)
 	if casterLevel == 0 {
 		return nil

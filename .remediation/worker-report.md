@@ -1,12 +1,12 @@
-finding_id: J-C02
+finding_id: H-C01
 status: done
 files_changed:
-  - cmd/dndnd/main.go
-  - cmd/dndnd/auth_open5e_cache_test.go
-  - cmd/dndnd/auth_open5e_search_test.go
-test_command_that_validates: go test ./cmd/dndnd/ -run "TestOpen5e(SearchGET_JC02|CachePOST_F14)" -v
+  - internal/character/spellslots.go
+  - internal/character/spellslots_test.go
+test_command_that_validates: go test ./internal/character/ -run TestCalculateSpellSlots_SingleClassHalfCaster -v
 acceptance_criterion_met: yes
-notes: Moved Open5e search routes (GET /api/open5e/monsters, GET /api/open5e/spells) from the public router to the dmAuthMw-protected group in main.go. The RegisterPublicRoutes call was removed from the bare router and added to the existing dmAuthMw group alongside RegisterProtectedRoutes. Updated the existing F-14 test to assert GET routes are now blocked, and added a new J-C02 test that explicitly verifies unauthenticated GET requests return 401. Both `make test` and `make cover-check` pass.
+notes: |
+  The bug was in CalculateSpellSlots which used floor division (classLevel/2) for single-class half-casters, routing them through the multiclass table at the wrong caster level. The fix adds a special case for single-class half-casters that uses ceiling division ((classLevel+1)/2) instead. Tests cover Paladin 3 ({1:3}), Paladin 5 ({1:4,2:2}), and Paladin 9 ({1:4,2:3,3:2}). All existing tests continue to pass. Package coverage is 99.3%.
 follow_ups:
-  - Consider renaming RegisterPublicRoutes to RegisterSearchRoutes since it is no longer public
-  - Frontend (Svelte SPA) must now include auth credentials when calling /api/open5e/monsters and /api/open5e/spells
+  - Consider whether single-class third-casters (Eldritch Knight, Arcane Trickster) have the same floor-vs-ceil issue
+  - Verify Ranger class also benefits from this fix (same "half" progression)

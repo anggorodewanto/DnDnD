@@ -205,3 +205,27 @@ func TestPactMagicSlotsForLevel(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculateSpellSlots_SingleClassHalfCaster(t *testing.T) {
+	tests := []struct {
+		name  string
+		level int
+		want  map[int]int
+	}{
+		{"Paladin 3 gets 3 first-level slots", 3, map[int]int{1: 3}},
+		{"Paladin 5 gets 4/2", 5, map[int]int{1: 4, 2: 2}},
+		{"Paladin 9 gets 4/3/2", 9, map[int]int{1: 4, 2: 3, 3: 2}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			classes := []ClassEntry{{Class: "paladin", Level: tc.level}}
+			spellcasting := map[string]ClassSpellcasting{
+				"paladin": {SlotProgression: "half"},
+			}
+			got := CalculateSpellSlots(classes, spellcasting)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("CalculateSpellSlots(paladin %d) = %v, want %v", tc.level, got, tc.want)
+			}
+		})
+	}
+}
