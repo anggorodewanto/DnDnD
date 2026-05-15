@@ -20,7 +20,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 			SkillChoices: optJSON(map[string]any{"choose": 2, "from": []string{"animal-handling", "athletics", "intimidation", "nature", "perception", "survival"}}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
-					{"name": "Rage", "description": "In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action.", "mechanical_effect": "advantage_str_checks_saves,resistance_bludgeoning_piercing_slashing,bonus_rage_damage"},
+					{"name": "Rage", "description": "In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action.", "mechanical_effect": "rage"},
 					{"name": "Unarmored Defense", "description": "While you are not wearing any armor, your AC equals 10 + your Dexterity modifier + your Constitution modifier.", "mechanical_effect": "ac_10_plus_dex_plus_con"},
 				},
 				"2": []map[string]string{

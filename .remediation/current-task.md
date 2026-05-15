@@ -1,11 +1,11 @@
-finding_id: C-C04
+finding_id: D-C01
 severity: Critical
-title: /fly performs no fly-speed validation
-location: internal/combat/altitude.go:52-81; internal/discord/fly_handler.go:98-109
-spec_ref: Phase 31 (Altitude & Flying); spec §Altitude & Elevation
+title: Rage damage resistance never fires for seed-created barbarians
+location: internal/combat/feature_integration.go:347, internal/refdata/seed_classes.go:23
+spec_ref: spec §Feature Effect System example "Rage (Barbarian)"; Phase 46
 problem: |
-  ValidateFly rejects only negative altitudes, same-altitude moves, and insufficient movement. There is no check for whether the combatant actually possesses a fly speed (character speed_fly, beast Wild Shape with fly speed, Fly spell-applied fly_speed condition, etc.). Any character can /fly 30 despite having no flight source.
+  The Rage class feature is seeded with mechanical_effect: "advantage_str_checks_saves,resistance_bludgeoning_piercing_slashing,bonus_rage_damage", but BuildFeatureDefinitions only emits a RageFeature for the literal token "rage". The two never match, so a barbarian created from the standard class seeds gets IsRaging=true but no RageFeature enters the FES — resistance, +damage, and STR adv are all dropped. Tests use MechanicalEffect: "rage" (rage_test.go:235), masking the bug.
 suggested_fix: |
-  Have Service.Fly (or ValidateFly) consult the character/creature speed and active conditions (e.g., fly_speed, wild_shape w/ beast fly speed) and reject with "You don't have a fly speed" when none apply. The FlySpeedCondition constant already exists but is only used on the cleanup side.
+  Either alias all three seed tokens (resistance_bludgeoning_piercing_slashing, advantage_str_checks_saves, bonus_rage_damage) to the RageFeature builder, or replace the seed mechanical_effect with "rage". The simplest fix: change the seed to use "rage" as the mechanical_effect for the Rage feature, since that's what the FES expects. Add an integration test that runs BuildFeatureDefinitions over real seed features.
 acceptance_criterion: |
-  A combatant without a fly speed (no speed_fly on character, no fly_speed condition) gets an error when attempting /fly. A combatant WITH a fly speed (either innate or from a condition) can fly successfully.
+  A barbarian character created from the standard seed data (seed_classes.go) has its Rage feature recognized by BuildFeatureDefinitions and produces a RageFeature definition. An integration test confirms this.

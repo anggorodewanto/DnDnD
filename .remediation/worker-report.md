@@ -1,13 +1,10 @@
-finding_id: C-C04
+finding_id: D-C01
 status: done
 files_changed:
-  - internal/combat/altitude.go
-  - internal/combat/altitude_test.go
-  - internal/discord/fly_handler.go
-  - internal/discord/fly_handler_test.go
-test_command_that_validates: go test ./internal/combat/ -run "TestValidateFly_NoFlySpeed|TestValidateFly_WithFlySpeed" -count=1
+  - internal/refdata/seed_classes.go
+  - internal/combat/feature_integration_test.go
+test_command_that_validates: go test ./internal/combat/ -run TestBuildFeatureDefinitions_BarbarianSeedRage -v
 acceptance_criterion_met: yes
-notes: Added HasFlySpeed bool field to FlyRequest and a guard clause at the top of ValidateFly that rejects with "You don't have a fly speed." when false. Added CombatantHasFlySpeed helper that checks for the fly_speed condition in the combatant's conditions JSON. Updated the fly handler to pass this check. Existing tests updated to set HasFlySpeed: true where valid flight is expected. Two new unit tests cover the no-fly-speed rejection and the with-fly-speed allowance paths.
+notes: The barbarian Rage feature in seed_classes.go used a descriptive comma-separated mechanical_effect string ("advantage_str_checks_saves,resistance_bludgeoning_piercing_slashing,bonus_rage_damage") that splitMechanicalEffects split into tokens none of which matched the "rage" case in BuildFeatureDefinitions. Changed the seed to use "rage" which is the token the FES expects. Added an integration test that verifies BuildFeatureDefinitions produces a RageFeature from the barbarian's seed-level features. All tests pass and coverage thresholds are met.
 follow_ups:
-  - The CombatantHasFlySpeed helper currently only checks the fly_speed condition. Innate creature fly speed (e.g., wild-shaped into a flying beast) should also grant flight — this requires checking the creature's speed JSON when is_wild_shaped is true.
-  - The handler should also allow descent (target altitude 0) even without fly speed, since a creature already airborne that loses fly speed should be able to descend gracefully (or fall). This edge case may need a separate spec decision.
+  - Consider adding similar seed-integration tests for other classes (e.g. Reckless Attack uses "advantage_str_melee_attacks,attacks_against_have_advantage" which also won't match any switch case)

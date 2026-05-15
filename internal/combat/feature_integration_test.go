@@ -1056,3 +1056,27 @@ func TestSneakAttackDice(t *testing.T) {
 		}
 	}
 }
+
+// D-C01 — Verify that BuildFeatureDefinitions produces a RageFeature when given
+// the barbarian's level-1 features as they appear in seed_classes.go.
+func TestBuildFeatureDefinitions_BarbarianSeedRage(t *testing.T) {
+	classes := []CharacterClass{{Class: "Barbarian", Level: 1}}
+	// These are the exact features from seed_classes.go level 1 barbarian.
+	features := []CharacterFeature{
+		{Name: "Rage", MechanicalEffect: "rage"},
+		{Name: "Unarmored Defense", MechanicalEffect: "ac_10_plus_dex_plus_con"},
+	}
+
+	defs := BuildFeatureDefinitions(classes, features)
+
+	found := false
+	for _, d := range defs {
+		if d.Name == "Rage" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected Rage feature from seed mechanical_effect, got defs: %+v", defs)
+	}
+}
