@@ -583,7 +583,7 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	if hasMetamagic(cmd.Metamagic, "empowered") {
 		empoweredRerolls = EmpoweredRerollCount(scores.Cha)
 	}
-	source := AoEPendingSaveSourceEmpowered(spell.ID, empoweredRerolls)
+	source := AoEPendingSaveSourceFull(spell.ID, effectiveSlotLevel, int(char.Level), empoweredRerolls)
 	for _, ps := range pendingSaves {
 		created, err := s.store.CreatePendingSave(ctx, refdata.CreatePendingSaveParams{
 			EncounterID: cmd.EncounterID,
@@ -756,6 +756,20 @@ func AoEPendingSaveSourceEmpowered(spellID string, rerolls int) string {
 	return fmt.Sprintf("%s%s:e%d", AoEPendingSaveSourcePrefix, spellID, rerolls)
 }
 
+// AoEPendingSaveSourceFull encodes spell ID, effective slot level, character
+// level, and empowered rerolls into the source tag so ResolveAoEPendingSaves
+// can scale damage dice on resolution. Format:
+//
+//	"aoe:<spell-id>:s<slotLevel>c<charLevel>"          (no empowered)
+//	"aoe:<spell-id>:s<slotLevel>c<charLevel>:e<N>"     (with empowered)
+func AoEPendingSaveSourceFull(spellID string, slotLevel, charLevel, rerolls int) string {
+	base := fmt.Sprintf("%s%s:s%dc%d", AoEPendingSaveSourcePrefix, spellID, slotLevel, charLevel)
+	if rerolls > 0 {
+		return fmt.Sprintf("%s:e%d", base, rerolls)
+	}
+	return base
+}
+
 // IsAoEPendingSaveSource reports whether the given pending_saves.source value
 // was produced by CastAoE. The /save handler uses this to detect AoE-tagged
 // rows on the rolling player's combatant.
@@ -764,15 +778,21 @@ func IsAoEPendingSaveSource(source string) bool {
 }
 
 // SpellIDFromAoEPendingSaveSource extracts the spell ID from an
-// "aoe:<spell-id>" or "aoe:<spell-id>:e<N>" source tag. Returns "" when the
-// source is not AoE-tagged. SR-025: trailing `:e<N>` suffix is stripped.
+// "aoe:<spell-id>" or "aoe:<spell-id>:s<N>c<N>" or "aoe:<spell-id>:e<N>"
+// or "aoe:<spell-id>:s<N>c<N>:e<N>" source tag. Returns "" when the
+// source is not AoE-tagged.
 func SpellIDFromAoEPendingSaveSource(source string) string {
 	if !IsAoEPendingSaveSource(source) {
 		return ""
 	}
 	rest := strings.TrimPrefix(source, AoEPendingSaveSourcePrefix)
+	// Strip trailing :e<N>
 	if idx := strings.LastIndex(rest, ":e"); idx >= 0 {
-		return rest[:idx]
+		rest = rest[:idx]
+	}
+	// Strip trailing :s<N>c<N>
+	if idx := strings.LastIndex(rest, ":s"); idx >= 0 {
+		rest = rest[:idx]
 	}
 	return rest
 }
@@ -791,6 +811,62 @@ func EmpoweredRerollsFromAoEPendingSaveSource(source string) int {
 	}
 	n, err := strconv.Atoi(rest[idx+2:])
 	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+// SlotLevelFromAoEPendingSaveSource extracts the effective slot level from
+// an "aoe:<spell-id>:s<slotLevel>c<charLevel>" source tag. Returns 0 when
+// no scaling info is present (legacy tags).
+func SlotLevelFromAoEPendingSaveSource(source string) int {
+	if !IsAoEPendingSaveSource(source) {
+		return 0
+	}
+	rest := strings.TrimPrefix(source, AoEPendingSaveSourcePrefix)
+	// Strip trailing :e<N>
+	if idx := strings.LastIndex(rest, ":e"); idx >= 0 {
+		rest = rest[:idx]
+	}
+	idx := strings.LastIndex(rest, ":s")
+	if idx < 0 {
+		return 0
+	}
+	seg := rest[idx+2:] // e.g. "5c10"
+	cIdx := strings.Index(seg, "c")
+	if cIdx < 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(seg[:cIdx])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// CharLevelFromAoEPendingSaveSource extracts the caster's character level from
+// an "aoe:<spell-id>:s<slotLevel>c<charLevel>" source tag. Returns 0 when
+// no scaling info is present (legacy tags).
+func CharLevelFromAoEPendingSaveSource(source string) int {
+	if !IsAoEPendingSaveSource(source) {
+		return 0
+	}
+	rest := strings.TrimPrefix(source, AoEPendingSaveSourcePrefix)
+	// Strip trailing :e<N>
+	if idx := strings.LastIndex(rest, ":e"); idx >= 0 {
+		rest = rest[:idx]
+	}
+	idx := strings.LastIndex(rest, ":s")
+	if idx < 0 {
+		return 0
+	}
+	seg := rest[idx+2:] // e.g. "5c10"
+	cIdx := strings.Index(seg, "c")
+	if cIdx < 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(seg[cIdx+1:])
+	if err != nil {
 		return 0
 	}
 	return n
@@ -852,6 +928,13 @@ func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.U
 	if err != nil {
 		return nil, fmt.Errorf("parsing AoE damage: %w", err)
 	}
+
+	// E-C02: scale damage dice using slot level and char level encoded in
+	// the source tag. Legacy tags without scaling info fall back to base dice.
+	slotLevel := SlotLevelFromAoEPendingSaveSource(spellRows[0].Source)
+	charLevel := CharLevelFromAoEPendingSaveSource(spellRows[0].Source)
+	scaledDice := ScaleSpellDice(dmgInfo, int(spell.Level), slotLevel, charLevel)
+
 	saveEffect := ""
 	if spell.SaveEffect.Valid {
 		saveEffect = spell.SaveEffect.String
@@ -873,7 +956,7 @@ func (s *Service) ResolveAoEPendingSaves(ctx context.Context, encounterID uuid.U
 	input := AoEDamageInput{
 		EncounterID:      encounterID,
 		SpellName:        spell.Name,
-		DamageDice:       dmgInfo.Dice,
+		DamageDice:       scaledDice,
 		DamageType:       dmgInfo.DamageType,
 		SaveEffect:       saveEffect,
 		SaveResults:      saveResults,

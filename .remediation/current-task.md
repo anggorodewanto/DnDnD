@@ -1,11 +1,11 @@
-finding_id: E-C01
+finding_id: E-C02
 severity: Critical
-title: Single-target spell casts never apply damage or healing
-location: internal/combat/spellcasting.go:584-598, internal/discord/cast_handler.go
-spec_ref: Phase 58 "Spell Casting — Basic"; spec §891-1072
+title: AoE damage path ignores upcasting and cantrip scaling
+location: internal/combat/aoe.go:851 (ResolveAoEPendingSaves reads dmgInfo.Dice raw)
+spec_ref: Phase 60 "Upcasting, Ritual, Cantrip Scaling"; spec §891-1072
 problem: |
-  Cast() computes ScaledDamageDice and ScaledHealingDice as strings and emits them in the combat log but never rolls the dice nor calls UpdateCombatantHP / ApplyDamage. Fire Bolt, Inflict Wounds, Guiding Bolt, Cure Wounds, Healing Word, etc. all just print the dice string with no HP change on the target.
+  CastAoE does compute effectiveSlotLevel but never calls ScaleSpellDice on the damage. The AoE damage pipeline uses the base dmgInfo.Dice string verbatim, so a 5th-level Fireball still rolls 8d6, and Thunderclap stays at 1d6 forever.
 suggested_fix: |
-  After step 12 (spell attack roll) in Cast(), roll the scaled damage dice on hit and route through s.ApplyDamage. For healing spells, roll ScaledHealingDice and call UpdateCombatantHP (clamped to HpMax). Mirror Lay-on-Hands' update path.
+  In the AoE cast path (or when creating pending saves), call ScaleSpellDice(dmgInfo, spellLevel, effectiveSlotLevel, charLevel) and pass the scaled result into the damage dice field. The charLevel must be looked up from the original caster.
 acceptance_criterion: |
-  A successful spell attack (hit) rolls damage dice and reduces target HP. A healing spell rolls healing dice and increases target HP (clamped to max). Tests demonstrate both paths.
+  A Fireball upcast to 5th level rolls 10d6 (base 8d6 + 2d6 for 2 levels above 3rd). A cantrip AoE at character level 5 rolls 2d6 instead of 1d6. Tests demonstrate both.

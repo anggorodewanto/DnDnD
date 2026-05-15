@@ -3015,3 +3015,51 @@ func TestCastAoE_F19_FullCoverExcludesTarget(t *testing.T) {
 	assert.NotContains(t, result.AffectedNames, "Goblin", "target with full cover must not appear in affected names")
 	assert.False(t, createPendingSaveCalled, "no pending save row should be persisted for full-cover target")
 }
+
+// E-C02: ResolveAoEPendingSaves must scale damage dice when the spell was
+// upcast. A Fireball (base 8d6, level 3) cast at slot level 5 should deal
+// 10d6 damage (8d6 + 2d6 for 2 levels above 3rd).
+func TestResolveAoEPendingSaves_UpcastScalesDamageDice(t *testing.T) {
+	encounterID := uuid.New()
+	goblinID := uuid.New()
+	spellID := "fireball"
+	// Source tag encodes slot level 5 and char level 10.
+	source := AoEPendingSaveSourceFull(spellID, 5, 10, 0)
+
+	goblin := refdata.Combatant{
+		ID: goblinID, DisplayName: "Goblin", HpMax: 80, HpCurrent: 80,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	fireball := makeFireball()
+	fireball.SaveEffect = sql.NullString{String: "half_damage", Valid: true}
+	fireball.Damage = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`{"dice":"8d6","type":"fire","higher_level_dice":"1d6"}`),
+		Valid:      true,
+	}
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return fireball, nil }
+	store.listPendingSavesByEncounterFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: uuid.New(), EncounterID: encounterID, CombatantID: goblinID, Source: source, Ability: "dex", Dc: 15, Status: "rolled", RollResult: sql.NullInt32{Int32: 8, Valid: true}, Success: sql.NullBool{Bool: false, Valid: true}},
+		}, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return goblin, nil
+	}
+	store.updateCombatantHPFn = func(_ context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent, IsAlive: arg.IsAlive}, nil
+	}
+
+	// Each die rolls 4: 10d6 = 40 damage (not 8d6 = 32).
+	roller := dice.NewRoller(func(_ int) int { return 4 })
+	svc := NewService(store)
+
+	res, err := svc.ResolveAoEPendingSaves(context.Background(), encounterID, spellID, roller)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Targets, 1)
+	// 10d6 * 4 = 40 (upcast from level 3 to slot 5 adds 2d6)
+	assert.Equal(t, 40, res.Targets[0].DamageDealt, "upcast Fireball at slot 5 must roll 10d6, not 8d6")
+}

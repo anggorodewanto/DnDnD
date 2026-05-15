@@ -22,8 +22,8 @@ Low: 142
 | 10 | D-C02 | Critical | done | Feature uses never initialized at character creation | /home/ab/projects/DnDnD/internal/portal/builder_store_adapter.go:125 (CreateChar... |
 | 11 | D-C03 | Critical | done | Rage advantage on STR ability checks never wired | /home/ab/projects/DnDnD/internal/check/check.go (no FES integration) and /home/a... |
 | 12 | D-C04 | Critical | done | Save handler never sets IsRaging in EffectContext | /home/ab/projects/DnDnD/internal/discord/save_handler.go:199 |
-| 13 | E-C01 | Critical | in_progress | Single-target spell casts never apply damage or healing | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:584-598`, `/home/ab/pro... |
-| 14 | E-C02 | Critical | pending | AoE damage path ignores upcasting and cantrip scaling | `/home/ab/projects/DnDnD/internal/combat/aoe.go:851` (`ResolveAoEPendingSaves` r... |
+| 13 | E-C01 | Critical | done | Single-target spell casts never apply damage or healing | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:584-598`, `/home/ab/pro... |
+| 14 | E-C02 | Critical | in_progress | AoE damage path ignores upcasting and cantrip scaling | `/home/ab/projects/DnDnD/internal/combat/aoe.go:851` (`ResolveAoEPendingSaves` r... |
 | 15 | E-C03 | Critical | pending | Dodge condition does not impose disadvantage on attackers | `/home/ab/projects/DnDnD/internal/combat/advantage.go:104-134` (no `dodge` case ... |
 | 16 | F-C01 | Critical | pending | Counterspell trigger is unreachable from the DM dashboard | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:88-150 |
 | 17 | F-C02 | Critical | pending | Heavy-armor STR speed penalty is computed but never applied to combat speed | /home/ab/projects/DnDnD/internal/combat/equip.go:237,478-487; /home/ab/projects/... |

@@ -93,3 +93,10 @@ Append-only journal of all remediation activity.
 - Commit: 05f8934
 - Reviewer: approved
 - Notes: 4 lines added to populate IsRaging from combatant state in save handler
+
+## 2026-05-15T18:08 — E-C01 done
+
+- Finding: Single-target spell casts never apply damage or healing
+- Commit: 758f247
+- Reviewer: approved
+- Notes: Added damage roll+apply on hit and healing roll+apply paths to Cast()
