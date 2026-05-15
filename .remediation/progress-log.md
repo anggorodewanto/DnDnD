@@ -240,3 +240,11 @@ Append-only journal of all remediation activity.
 - Commit: a74abe4
 - Reviewer: approved
 - Notes: New FilterEligibleFeats function + wired into production lister
+
+## 2026-05-15T19:11 — H-C02, H-C03 done — ALL 35 CRITICALS RESOLVED 🎉
+
+- H-C02: Feat prereqs enforced — Commit: a74abe4
+- H-C03: Level-up auto-adds features — Commit: 14cf763
+- All 35 Critical findings are now resolved
+- Tests green, coverage thresholds met throughout
+- Next: begin High-severity findings (98 total)
