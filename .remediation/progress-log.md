@@ -184,3 +184,10 @@ Append-only journal of all remediation activity.
 - J-C03: Open5e client uses 10s timeout — Commit: f0d590e
 - cross-cut-C01: Channel Divinity recharges on short rest — Commit: 59f09e8
 - All approved
+
+## 2026-05-15T18:47 — J-C01 done
+
+- Finding: WebSocket subscribes to any encounter without campaign-ownership check
+- Commit: 8818c60
+- Reviewer: approved
+- Notes: Added EncounterCampaignResolver + ownership check before WS client registration
