@@ -23,7 +23,7 @@ type Store interface {
 	UpdateEncounterStatus(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error)
 	UpdateEncounterMode(ctx context.Context, arg refdata.UpdateEncounterModeParams) (refdata.Encounter, error)
 
-	GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error)
+	GetMapByIDUnchecked(ctx context.Context, id uuid.UUID) (refdata.Map, error)
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 
 	CreateCombatant(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error)
@@ -68,7 +68,7 @@ type TransitionResult struct {
 // reads spawn zones from the map's tiled_json, and seats each provided PC at
 // a player spawn tile (row-major, deterministic).
 func (s *Service) StartExploration(ctx context.Context, input StartInput) (StartResult, error) {
-	m, err := s.store.GetMapByID(ctx, input.MapID)
+	m, err := s.store.GetMapByIDUnchecked(ctx, input.MapID)
 	if err != nil {
 		return StartResult{}, fmt.Errorf("getting map: %w", err)
 	}

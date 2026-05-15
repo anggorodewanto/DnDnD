@@ -15,10 +15,10 @@ import (
 // Store defines the database operations needed by the encounter service.
 type Store interface {
 	CreateEncounterTemplate(ctx context.Context, arg refdata.CreateEncounterTemplateParams) (refdata.EncounterTemplate, error)
-	GetEncounterTemplate(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error)
+	GetEncounterTemplate(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error)
 	ListEncounterTemplatesByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.EncounterTemplate, error)
 	UpdateEncounterTemplate(ctx context.Context, arg refdata.UpdateEncounterTemplateParams) (refdata.EncounterTemplate, error)
-	DeleteEncounterTemplate(ctx context.Context, id uuid.UUID) error
+	DeleteEncounterTemplate(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error
 	ListCreatures(ctx context.Context) ([]refdata.Creature, error)
 }
 
@@ -61,9 +61,9 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (refdata.Encoun
 	return et, nil
 }
 
-// GetByID retrieves an encounter template by its ID.
-func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
-	return s.store.GetEncounterTemplate(ctx, id)
+// GetByID retrieves an encounter template by its ID, scoped to a campaign.
+func (s *Service) GetByID(ctx context.Context, id uuid.UUID, campaignID uuid.UUID) (refdata.EncounterTemplate, error) {
+	return s.store.GetEncounterTemplate(ctx, refdata.GetEncounterTemplateParams{ID: id, CampaignID: campaignID})
 }
 
 // ListByCampaignID lists all encounter templates for a campaign.
@@ -74,6 +74,7 @@ func (s *Service) ListByCampaignID(ctx context.Context, campaignID uuid.UUID) ([
 // UpdateInput holds the parameters for updating an encounter template.
 type UpdateInput struct {
 	ID          uuid.UUID
+	CampaignID  uuid.UUID
 	MapID       uuid.NullUUID
 	Name        string
 	DisplayName string
@@ -92,6 +93,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (refdata.Encoun
 		Name:        input.Name,
 		DisplayName: nullString(input.DisplayName),
 		Creatures:   defaultCreatures(input.Creatures),
+		CampaignID:  input.CampaignID,
 	})
 	if err != nil {
 		return refdata.EncounterTemplate{}, fmt.Errorf("updating encounter template: %w", err)
@@ -100,9 +102,9 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (refdata.Encoun
 	return et, nil
 }
 
-// Delete deletes an encounter template by its ID.
-func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
-	return s.store.DeleteEncounterTemplate(ctx, id)
+// Delete deletes an encounter template by its ID, scoped to a campaign.
+func (s *Service) Delete(ctx context.Context, id uuid.UUID, campaignID uuid.UUID) error {
+	return s.store.DeleteEncounterTemplate(ctx, refdata.DeleteEncounterTemplateParams{ID: id, CampaignID: campaignID})
 }
 
 // ListCreatures returns all available creatures from the stat block library.
@@ -111,8 +113,8 @@ func (s *Service) ListCreatures(ctx context.Context) ([]refdata.Creature, error)
 }
 
 // Duplicate creates a copy of an encounter template with a new name.
-func (s *Service) Duplicate(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
-	original, err := s.store.GetEncounterTemplate(ctx, id)
+func (s *Service) Duplicate(ctx context.Context, id uuid.UUID, campaignID uuid.UUID) (refdata.EncounterTemplate, error) {
+	original, err := s.store.GetEncounterTemplate(ctx, refdata.GetEncounterTemplateParams{ID: id, CampaignID: campaignID})
 	if err != nil {
 		return refdata.EncounterTemplate{}, fmt.Errorf("getting encounter template to duplicate: %w", err)
 	}

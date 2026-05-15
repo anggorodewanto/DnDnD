@@ -171,7 +171,7 @@ func TestHandler_GetMap_Success(t *testing.T) {
 	mapID := uuid.New()
 	campaignID := uuid.New()
 	store := &mockStore{
-		getMapByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		getMapByIDFn: func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
 			return refdata.Map{
 				ID:            mapID,
 				CampaignID:    campaignID,
@@ -184,7 +184,7 @@ func TestHandler_GetMap_Success(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+mapID.String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+mapID.String()+"?campaign_id="+campaignID.String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -205,7 +205,7 @@ func TestHandler_GetMap_Success(t *testing.T) {
 func TestHandler_GetMap_InvalidID(t *testing.T) {
 	_, r := newTestRouter(&mockStore{})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/maps/not-a-uuid", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/maps/not-a-uuid?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -217,13 +217,13 @@ func TestHandler_GetMap_InvalidID(t *testing.T) {
 
 func TestHandler_GetMap_NotFound(t *testing.T) {
 	store := &mockStore{
-		getMapByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		getMapByIDFn: func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
 			return refdata.Map{}, errors.New("not found")
 		},
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -235,13 +235,13 @@ func TestHandler_GetMap_NotFound(t *testing.T) {
 
 func TestHandler_GetMap_InternalError(t *testing.T) {
 	store := &mockStore{
-		getMapByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		getMapByIDFn: func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
 			return refdata.Map{}, errors.New("database connection lost")
 		},
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -344,7 +344,7 @@ func TestHandler_UpdateMap_Success(t *testing.T) {
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String(), bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String()+"?campaign_id="+campaignID.String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -363,7 +363,7 @@ func TestHandler_UpdateMap_Success(t *testing.T) {
 func TestHandler_UpdateMap_InvalidID(t *testing.T) {
 	_, r := newTestRouter(&mockStore{})
 
-	req := httptest.NewRequest(http.MethodPut, "/api/maps/bad-id", bytes.NewReader([]byte(`{}`)))
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/bad-id?campaign_id="+uuid.New().String(), bytes.NewReader([]byte(`{}`)))
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -377,7 +377,7 @@ func TestHandler_UpdateMap_InvalidJSON(t *testing.T) {
 	_, r := newTestRouter(&mockStore{})
 	mapID := uuid.New()
 
-	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String(), bytes.NewReader([]byte("not json")))
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String()+"?campaign_id="+uuid.New().String(), bytes.NewReader([]byte("not json")))
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -400,7 +400,7 @@ func TestHandler_UpdateMap_ValidationError(t *testing.T) {
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String(), bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String()+"?campaign_id="+campaignID.String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -413,13 +413,13 @@ func TestHandler_UpdateMap_ValidationError(t *testing.T) {
 
 func TestHandler_DeleteMap_Success(t *testing.T) {
 	store := &mockStore{
-		deleteMapFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteMapFn: func(ctx context.Context, arg refdata.DeleteMapParams) error {
 			return nil
 		},
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/maps/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/maps/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -432,7 +432,7 @@ func TestHandler_DeleteMap_Success(t *testing.T) {
 func TestHandler_DeleteMap_InvalidID(t *testing.T) {
 	_, r := newTestRouter(&mockStore{})
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/maps/bad-id", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/maps/bad-id?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -444,13 +444,13 @@ func TestHandler_DeleteMap_InvalidID(t *testing.T) {
 
 func TestHandler_DeleteMap_StoreError(t *testing.T) {
 	store := &mockStore{
-		deleteMapFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteMapFn: func(ctx context.Context, arg refdata.DeleteMapParams) error {
 			return errors.New("db error")
 		},
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/maps/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/maps/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -603,7 +603,7 @@ func TestHandler_UpdateMap_StoreError(t *testing.T) {
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String(), bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String()+"?campaign_id="+uuid.New().String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -688,16 +688,16 @@ func TestHandler_RegisterRoutes_AllEndpoints(t *testing.T) {
 		createMapFn: func(ctx context.Context, arg refdata.CreateMapParams) (refdata.Map, error) {
 			return refdata.Map{ID: uuid.New(), CampaignID: arg.CampaignID, Name: arg.Name, WidthSquares: arg.WidthSquares, HeightSquares: arg.HeightSquares, TiledJson: arg.TiledJson}, nil
 		},
-		getMapByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
-			return refdata.Map{ID: id, Name: "Test", TiledJson: minimalTiledJSON()}, nil
+		getMapByIDFn: func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
+			return refdata.Map{ID: arg.ID, CampaignID: arg.CampaignID, Name: "Test", TiledJson: minimalTiledJSON()}, nil
 		},
 		listMapsByCampaignIDFn: func(ctx context.Context, cid uuid.UUID) ([]refdata.Map, error) {
 			return []refdata.Map{}, nil
 		},
 		updateMapFn: func(ctx context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
-			return refdata.Map{ID: arg.ID, Name: arg.Name, WidthSquares: arg.WidthSquares, HeightSquares: arg.HeightSquares, TiledJson: arg.TiledJson}, nil
+			return refdata.Map{ID: arg.ID, CampaignID: arg.CampaignID, Name: arg.Name, WidthSquares: arg.WidthSquares, HeightSquares: arg.HeightSquares, TiledJson: arg.TiledJson}, nil
 		},
-		deleteMapFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteMapFn: func(ctx context.Context, arg refdata.DeleteMapParams) error {
 			return nil
 		},
 	}
@@ -712,7 +712,7 @@ func TestHandler_RegisterRoutes_AllEndpoints(t *testing.T) {
 
 	// GET by ID
 	rec = httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/maps/"+mapID.String(), nil))
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/maps/"+mapID.String()+"?campaign_id="+campaignID.String(), nil))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// GET list
@@ -724,12 +724,12 @@ func TestHandler_RegisterRoutes_AllEndpoints(t *testing.T) {
 	updateBody := map[string]interface{}{"name": "Updated", "width": 10, "height": 10, "tiled_json": minimalTiledJSON()}
 	ub, _ := json.Marshal(updateBody)
 	rec = httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String(), bytes.NewReader(ub)))
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String()+"?campaign_id="+campaignID.String(), bytes.NewReader(ub)))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// DELETE
 	rec = httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/maps/"+mapID.String(), nil))
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/maps/"+mapID.String()+"?campaign_id="+campaignID.String(), nil))
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
 
@@ -747,10 +747,12 @@ func TestNewHandler_ReturnsHandler(t *testing.T) {
 func TestHandler_GetMap_IncludesBackgroundImageID(t *testing.T) {
 	mapID := uuid.New()
 	bgID := uuid.New()
+	campaignID := uuid.New()
 	store := &mockStore{
-		getMapByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		getMapByIDFn: func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
 			return refdata.Map{
 				ID:                mapID,
+				CampaignID:        campaignID,
 				Name:              "BG Map",
 				WidthSquares:      10,
 				HeightSquares:     10,
@@ -761,7 +763,7 @@ func TestHandler_GetMap_IncludesBackgroundImageID(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+mapID.String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+mapID.String()+"?campaign_id="+campaignID.String(), nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -775,10 +777,12 @@ func TestHandler_GetMap_IncludesBackgroundImageID(t *testing.T) {
 
 func TestHandler_GetMap_NullBackgroundImageID(t *testing.T) {
 	mapID := uuid.New()
+	campaignID := uuid.New()
 	store := &mockStore{
-		getMapByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		getMapByIDFn: func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
 			return refdata.Map{
 				ID:            mapID,
+				CampaignID:    campaignID,
 				Name:          "No BG",
 				WidthSquares:  10,
 				HeightSquares: 10,
@@ -788,7 +792,7 @@ func TestHandler_GetMap_NullBackgroundImageID(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+mapID.String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+mapID.String()+"?campaign_id="+campaignID.String(), nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -897,7 +901,7 @@ func TestHandler_UpdateMap_WithBackgroundImageID(t *testing.T) {
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String(), bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String()+"?campaign_id="+campaignID.String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -919,7 +923,7 @@ func TestHandler_UpdateMap_InvalidBackgroundImageID(t *testing.T) {
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String(), bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String()+"?campaign_id="+uuid.New().String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -1029,4 +1033,85 @@ func TestGenerateDefaultTiledJSON_RoundTrip(t *testing.T) {
 	for i, e := range md.ElevationByTile {
 		assert.Equal(t, 0, e, "elevation[%d]", i)
 	}
+}
+
+// --- F-02: Campaign-scoped access control ---
+
+// TestHandler_GetMap_WrongCampaignID proves that a map belonging to campaign A
+// cannot be retrieved when campaign B's ID is supplied.
+func TestHandler_GetMap_WrongCampaignID(t *testing.T) {
+	mapID := uuid.New()
+	ownerCampaign := uuid.New()
+	attackerCampaign := uuid.New()
+	store := &mockStore{
+		getMapByIDFn: func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
+			// Simulate DB: only return if campaign matches
+			if arg.CampaignID == ownerCampaign {
+				return refdata.Map{ID: mapID, CampaignID: ownerCampaign, Name: "Secret Map", TiledJson: minimalTiledJSON()}, nil
+			}
+			return refdata.Map{}, errors.New("not found")
+		},
+	}
+	_, r := newTestRouter(store)
+
+	// Request with wrong campaign_id should get not-found
+	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+mapID.String()+"?campaign_id="+attackerCampaign.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// TestHandler_UpdateMap_WrongCampaignID proves that updating a map with wrong
+// campaign_id fails.
+func TestHandler_UpdateMap_WrongCampaignID(t *testing.T) {
+	mapID := uuid.New()
+	ownerCampaign := uuid.New()
+	attackerCampaign := uuid.New()
+	store := &mockStore{
+		updateMapFn: func(ctx context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
+			if arg.CampaignID == ownerCampaign {
+				return refdata.Map{ID: mapID, CampaignID: ownerCampaign, Name: arg.Name, WidthSquares: arg.WidthSquares, HeightSquares: arg.HeightSquares, TiledJson: arg.TiledJson}, nil
+			}
+			return refdata.Map{}, errors.New("updating map: no rows")
+		},
+	}
+	_, r := newTestRouter(store)
+
+	body := map[string]interface{}{"name": "Hacked", "width": 10, "height": 10, "tiled_json": minimalTiledJSON()}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String()+"?campaign_id="+attackerCampaign.String(), bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// TestHandler_DeleteMap_WrongCampaignID proves that deleting a map with wrong
+// campaign_id fails.
+func TestHandler_DeleteMap_WrongCampaignID(t *testing.T) {
+	mapID := uuid.New()
+	attackerCampaign := uuid.New()
+	store := &mockStore{
+		deleteMapFn: func(ctx context.Context, arg refdata.DeleteMapParams) error {
+			// Simulate: delete affects 0 rows (wrong campaign)
+			return errors.New("not found")
+		},
+	}
+	_, r := newTestRouter(store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/maps/"+mapID.String()+"?campaign_id="+attackerCampaign.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// TestHandler_GetMap_MissingCampaignID proves that object routes reject
+// requests without campaign_id.
+func TestHandler_GetMap_MissingCampaignID(t *testing.T) {
+	_, r := newTestRouter(&mockStore{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/maps/"+uuid.New().String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "campaign_id")
 }

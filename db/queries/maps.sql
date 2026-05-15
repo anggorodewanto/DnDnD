@@ -4,6 +4,9 @@ VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: GetMapByID :one
+SELECT * FROM maps WHERE id = $1 AND campaign_id = $2;
+
+-- name: GetMapByIDUnchecked :one
 SELECT * FROM maps WHERE id = $1;
 
 -- name: ListMapsByCampaignID :many
@@ -18,8 +21,8 @@ UPDATE maps SET
     background_image_id = $6,
     tileset_refs = $7,
     updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND campaign_id = $8
 RETURNING *;
 
 -- name: DeleteMap :exec
-DELETE FROM maps WHERE id = $1;
+DELETE FROM maps WHERE id = $1 AND campaign_id = $2;

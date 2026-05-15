@@ -89,7 +89,7 @@ func (f *fakeStore) UpdateEncounterMode(ctx context.Context, arg refdata.UpdateE
 	return enc, nil
 }
 
-func (f *fakeStore) GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+func (f *fakeStore) GetMapByIDUnchecked(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
 	m, ok := f.maps[id]
 	if !ok {
 		return refdata.Map{}, errors.New("map not found")

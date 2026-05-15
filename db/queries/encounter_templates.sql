@@ -4,6 +4,9 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: GetEncounterTemplate :one
+SELECT * FROM encounter_templates WHERE id = $1 AND campaign_id = $2;
+
+-- name: GetEncounterTemplateUnchecked :one
 SELECT * FROM encounter_templates WHERE id = $1;
 
 -- name: ListEncounterTemplatesByCampaignID :many
@@ -16,8 +19,8 @@ UPDATE encounter_templates SET
     display_name = $4,
     creatures = $5,
     updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND campaign_id = $6
 RETURNING *;
 
 -- name: DeleteEncounterTemplate :exec
-DELETE FROM encounter_templates WHERE id = $1;
+DELETE FROM encounter_templates WHERE id = $1 AND campaign_id = $2;

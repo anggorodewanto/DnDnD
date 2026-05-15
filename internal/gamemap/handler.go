@@ -226,7 +226,7 @@ func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(newMapResponse(m))
 }
 
-// GetMap handles GET /api/maps/{id}.
+// GetMap handles GET /api/maps/{id}?campaign_id=X.
 func (h *Handler) GetMap(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -235,7 +235,13 @@ func (h *Handler) GetMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, err := h.svc.GetByID(r.Context(), id)
+	campaignID, err := uuid.Parse(r.URL.Query().Get("campaign_id"))
+	if err != nil {
+		http.Error(w, "campaign_id query parameter required", http.StatusBadRequest)
+		return
+	}
+
+	m, err := h.svc.GetByID(r.Context(), id, campaignID)
 	if err != nil {
 		if err.Error() == errNotFound.Error() {
 			http.Error(w, "map not found", http.StatusNotFound)
@@ -278,12 +284,18 @@ func (h *Handler) ListMaps(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// UpdateMap handles PUT /api/maps/{id}.
+// UpdateMap handles PUT /api/maps/{id}?campaign_id=X.
 func (h *Handler) UpdateMap(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid map id", http.StatusBadRequest)
+		return
+	}
+
+	campaignID, err := uuid.Parse(r.URL.Query().Get("campaign_id"))
+	if err != nil {
+		http.Error(w, "campaign_id query parameter required", http.StatusBadRequest)
 		return
 	}
 
@@ -301,6 +313,7 @@ func (h *Handler) UpdateMap(w http.ResponseWriter, r *http.Request) {
 
 	m, _, err := h.svc.UpdateMap(r.Context(), UpdateMapInput{
 		ID:                id,
+		CampaignID:        campaignID,
 		Name:              req.Name,
 		Width:             req.Width,
 		Height:            req.Height,
@@ -316,7 +329,7 @@ func (h *Handler) UpdateMap(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(newMapResponse(m))
 }
 
-// DeleteMap handles DELETE /api/maps/{id}.
+// DeleteMap handles DELETE /api/maps/{id}?campaign_id=X.
 func (h *Handler) DeleteMap(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -325,7 +338,13 @@ func (h *Handler) DeleteMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.DeleteMap(r.Context(), id); err != nil {
+	campaignID, err := uuid.Parse(r.URL.Query().Get("campaign_id"))
+	if err != nil {
+		http.Error(w, "campaign_id query parameter required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.svc.DeleteMap(r.Context(), id, campaignID); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

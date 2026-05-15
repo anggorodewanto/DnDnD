@@ -268,7 +268,7 @@ func (f *fakeMapRegenQueries) GetEncounter(_ context.Context, id uuid.UUID) (ref
 	return enc, nil
 }
 
-func (f *fakeMapRegenQueries) GetMapByID(_ context.Context, id uuid.UUID) (refdata.Map, error) {
+func (f *fakeMapRegenQueries) GetMapByIDUnchecked(_ context.Context, id uuid.UUID) (refdata.Map, error) {
 	m, ok := f.maps[id]
 	if !ok {
 		return refdata.Map{}, errors.New("map not found")

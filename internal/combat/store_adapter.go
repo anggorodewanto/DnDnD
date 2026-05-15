@@ -39,3 +39,10 @@ func (a *storeAdapter) UpdateCharacterGold(ctx context.Context, id uuid.UUID, go
 	})
 	return err
 }
+
+// GetEncounterTemplate bridges the combat Store interface (which takes a plain UUID)
+// to the campaign-scoped sqlc query. Combat lookups use the unchecked variant
+// because the encounter is already validated at session start.
+func (a *storeAdapter) GetEncounterTemplate(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+	return a.Queries.GetEncounterTemplateUnchecked(ctx, id)
+}

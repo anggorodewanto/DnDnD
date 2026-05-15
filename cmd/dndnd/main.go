@@ -339,6 +339,10 @@ func (a workspaceStoreAdapter) GetCombatantByID(ctx context.Context, id uuid.UUI
 	return a.Queries.GetCombatant(ctx, id)
 }
 
+func (a workspaceStoreAdapter) GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+	return a.Queries.GetMapByIDUnchecked(ctx, id)
+}
+
 // dmOnlyAPIDeps groups every HTTP handler whose routes mutate or expose
 // DM-only state. Each field is nil-safe so partially-wired test deploys
 // can call mountDMOnlyAPIs without panicking. The combat workspace + DM

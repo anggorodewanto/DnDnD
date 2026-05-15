@@ -191,9 +191,10 @@ func TestHandler_Create_StoreError(t *testing.T) {
 
 func TestHandler_Get_Success(t *testing.T) {
 	id := uuid.New()
+	campaignID := uuid.New()
 	_, r := newTestRouter(successStore())
 
-	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+id.String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+id.String()+"?campaign_id="+campaignID.String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -209,7 +210,7 @@ func TestHandler_Get_Success(t *testing.T) {
 func TestHandler_Get_InvalidID(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	req := httptest.NewRequest(http.MethodGet, "/api/encounters/not-uuid", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/encounters/not-uuid?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -219,13 +220,13 @@ func TestHandler_Get_InvalidID(t *testing.T) {
 
 func TestHandler_Get_NotFound(t *testing.T) {
 	store := &mockStore{
-		getFn: func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 			return refdata.EncounterTemplate{}, sql.ErrNoRows
 		},
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -235,13 +236,13 @@ func TestHandler_Get_NotFound(t *testing.T) {
 
 func TestHandler_Get_InternalError(t *testing.T) {
 	store := &mockStore{
-		getFn: func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 			return refdata.EncounterTemplate{}, errors.New("db error")
 		},
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -342,7 +343,7 @@ func TestHandler_Update_Success(t *testing.T) {
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+id.String(), bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+id.String()+"?campaign_id="+uuid.New().String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -358,7 +359,7 @@ func TestHandler_Update_Success(t *testing.T) {
 func TestHandler_Update_InvalidID(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	req := httptest.NewRequest(http.MethodPut, "/api/encounters/bad-id", bytes.NewReader([]byte(`{}`)))
+	req := httptest.NewRequest(http.MethodPut, "/api/encounters/bad-id?campaign_id="+uuid.New().String(), bytes.NewReader([]byte(`{}`)))
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -369,7 +370,7 @@ func TestHandler_Update_InvalidID(t *testing.T) {
 func TestHandler_Update_InvalidJSON(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+uuid.New().String(), bytes.NewReader([]byte("not json")))
+	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), bytes.NewReader([]byte("not json")))
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -383,7 +384,7 @@ func TestHandler_Update_EmptyName(t *testing.T) {
 	body := map[string]interface{}{"name": ""}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+uuid.New().String(), bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -402,7 +403,7 @@ func TestHandler_Update_StoreError(t *testing.T) {
 	body := map[string]interface{}{"name": "Test", "creatures": json.RawMessage(`[]`)}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+uuid.New().String(), bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -419,7 +420,7 @@ func TestHandler_Update_InvalidMapID(t *testing.T) {
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+uuid.New().String(), bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -432,7 +433,7 @@ func TestHandler_Update_InvalidMapID(t *testing.T) {
 func TestHandler_Delete_Success(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/encounters/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -443,7 +444,7 @@ func TestHandler_Delete_Success(t *testing.T) {
 func TestHandler_Delete_InvalidID(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/encounters/bad-id", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/encounters/bad-id?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -453,13 +454,13 @@ func TestHandler_Delete_InvalidID(t *testing.T) {
 
 func TestHandler_Delete_StoreError(t *testing.T) {
 	store := &mockStore{
-		deleteFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteFn: func(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error {
 			return errors.New("db error")
 		},
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/encounters/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -473,7 +474,7 @@ func TestHandler_Duplicate_Success(t *testing.T) {
 	store := successStore()
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/encounters/"+uuid.New().String()+"/duplicate", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/encounters/"+uuid.New().String()+"/duplicate?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -489,7 +490,7 @@ func TestHandler_Duplicate_Success(t *testing.T) {
 func TestHandler_Duplicate_InvalidID(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	req := httptest.NewRequest(http.MethodPost, "/api/encounters/bad-id/duplicate", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/encounters/bad-id/duplicate?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -499,13 +500,13 @@ func TestHandler_Duplicate_InvalidID(t *testing.T) {
 
 func TestHandler_Duplicate_NotFound(t *testing.T) {
 	store := &mockStore{
-		getFn: func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 			return refdata.EncounterTemplate{}, sql.ErrNoRows
 		},
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/encounters/"+uuid.New().String()+"/duplicate", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/encounters/"+uuid.New().String()+"/duplicate?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -527,9 +528,9 @@ func TestNewHandler(t *testing.T) {
 func TestHandler_Get_ResponseIncludesMapID(t *testing.T) {
 	mapID := uuid.New()
 	store := &mockStore{
-		getFn: func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 			return refdata.EncounterTemplate{
-				ID:          id,
+				ID:          arg.ID,
 				Name:        "With Map",
 				MapID:       uuid.NullUUID{UUID: mapID, Valid: true},
 				DisplayName: sql.NullString{String: "Player Name", Valid: true},
@@ -539,7 +540,7 @@ func TestHandler_Get_ResponseIncludesMapID(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -555,9 +556,9 @@ func TestHandler_Get_ResponseIncludesMapID(t *testing.T) {
 
 func TestHandler_Get_NullMapID(t *testing.T) {
 	store := &mockStore{
-		getFn: func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 			return refdata.EncounterTemplate{
-				ID:        id,
+				ID:        arg.ID,
 				Name:      "No Map",
 				Creatures: json.RawMessage(`[]`),
 			}, nil
@@ -565,7 +566,7 @@ func TestHandler_Get_NullMapID(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -664,4 +665,93 @@ func TestHandler_List_IncludesCreatureCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp, 1)
 	assert.Equal(t, float64(2), resp[0]["creature_count"])
+}
+
+// --- F-02: Campaign-scoped access control ---
+
+// TestHandler_GetEncounter_WrongCampaignID proves that an encounter template
+// belonging to campaign A cannot be retrieved when campaign B's ID is supplied.
+func TestHandler_GetEncounter_WrongCampaignID(t *testing.T) {
+	templateID := uuid.New()
+	attackerCampaign := uuid.New()
+	store := &mockStore{
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
+			// Simulate DB: wrong campaign returns no rows
+			return refdata.EncounterTemplate{}, sql.ErrNoRows
+		},
+	}
+	_, r := newTestRouter(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+templateID.String()+"?campaign_id="+attackerCampaign.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// TestHandler_UpdateEncounter_WrongCampaignID proves that updating an encounter
+// template with wrong campaign_id fails.
+func TestHandler_UpdateEncounter_WrongCampaignID(t *testing.T) {
+	templateID := uuid.New()
+	attackerCampaign := uuid.New()
+	store := &mockStore{
+		updateFn: func(ctx context.Context, arg refdata.UpdateEncounterTemplateParams) (refdata.EncounterTemplate, error) {
+			return refdata.EncounterTemplate{}, errors.New("updating encounter template: no rows")
+		},
+	}
+	_, r := newTestRouter(store)
+
+	body := map[string]interface{}{"name": "Hacked", "creatures": json.RawMessage(`[]`)}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+templateID.String()+"?campaign_id="+attackerCampaign.String(), bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// TestHandler_DeleteEncounter_WrongCampaignID proves that deleting an encounter
+// template with wrong campaign_id fails.
+func TestHandler_DeleteEncounter_WrongCampaignID(t *testing.T) {
+	templateID := uuid.New()
+	attackerCampaign := uuid.New()
+	store := &mockStore{
+		deleteFn: func(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error {
+			return errors.New("not found")
+		},
+	}
+	_, r := newTestRouter(store)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/encounters/"+templateID.String()+"?campaign_id="+attackerCampaign.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// TestHandler_DuplicateEncounter_WrongCampaignID proves that duplicating an
+// encounter template with wrong campaign_id fails.
+func TestHandler_DuplicateEncounter_WrongCampaignID(t *testing.T) {
+	templateID := uuid.New()
+	attackerCampaign := uuid.New()
+	store := &mockStore{
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
+			return refdata.EncounterTemplate{}, sql.ErrNoRows
+		},
+	}
+	_, r := newTestRouter(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/encounters/"+templateID.String()+"/duplicate?campaign_id="+attackerCampaign.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// TestHandler_GetEncounter_MissingCampaignID proves that object routes reject
+// requests without campaign_id.
+func TestHandler_GetEncounter_MissingCampaignID(t *testing.T) {
+	_, r := newTestRouter(successStore())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/encounters/"+uuid.New().String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "campaign_id")
 }

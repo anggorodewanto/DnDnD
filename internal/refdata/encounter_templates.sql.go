@@ -50,20 +50,50 @@ func (q *Queries) CreateEncounterTemplate(ctx context.Context, arg CreateEncount
 }
 
 const deleteEncounterTemplate = `-- name: DeleteEncounterTemplate :exec
-DELETE FROM encounter_templates WHERE id = $1
+DELETE FROM encounter_templates WHERE id = $1 AND campaign_id = $2
 `
 
-func (q *Queries) DeleteEncounterTemplate(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteEncounterTemplate, id)
+type DeleteEncounterTemplateParams struct {
+	ID         uuid.UUID `json:"id"`
+	CampaignID uuid.UUID `json:"campaign_id"`
+}
+
+func (q *Queries) DeleteEncounterTemplate(ctx context.Context, arg DeleteEncounterTemplateParams) error {
+	_, err := q.db.ExecContext(ctx, deleteEncounterTemplate, arg.ID, arg.CampaignID)
 	return err
 }
 
 const getEncounterTemplate = `-- name: GetEncounterTemplate :one
+SELECT id, campaign_id, map_id, name, display_name, creatures, created_at, updated_at FROM encounter_templates WHERE id = $1 AND campaign_id = $2
+`
+
+type GetEncounterTemplateParams struct {
+	ID         uuid.UUID `json:"id"`
+	CampaignID uuid.UUID `json:"campaign_id"`
+}
+
+func (q *Queries) GetEncounterTemplate(ctx context.Context, arg GetEncounterTemplateParams) (EncounterTemplate, error) {
+	row := q.db.QueryRowContext(ctx, getEncounterTemplate, arg.ID, arg.CampaignID)
+	var i EncounterTemplate
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.MapID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Creatures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getEncounterTemplateUnchecked = `-- name: GetEncounterTemplateUnchecked :one
 SELECT id, campaign_id, map_id, name, display_name, creatures, created_at, updated_at FROM encounter_templates WHERE id = $1
 `
 
-func (q *Queries) GetEncounterTemplate(ctx context.Context, id uuid.UUID) (EncounterTemplate, error) {
-	row := q.db.QueryRowContext(ctx, getEncounterTemplate, id)
+func (q *Queries) GetEncounterTemplateUnchecked(ctx context.Context, id uuid.UUID) (EncounterTemplate, error) {
+	row := q.db.QueryRowContext(ctx, getEncounterTemplateUnchecked, id)
 	var i EncounterTemplate
 	err := row.Scan(
 		&i.ID,
@@ -121,7 +151,7 @@ UPDATE encounter_templates SET
     display_name = $4,
     creatures = $5,
     updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND campaign_id = $6
 RETURNING id, campaign_id, map_id, name, display_name, creatures, created_at, updated_at
 `
 
@@ -131,6 +161,7 @@ type UpdateEncounterTemplateParams struct {
 	Name        string          `json:"name"`
 	DisplayName sql.NullString  `json:"display_name"`
 	Creatures   json.RawMessage `json:"creatures"`
+	CampaignID  uuid.UUID       `json:"campaign_id"`
 }
 
 func (q *Queries) UpdateEncounterTemplate(ctx context.Context, arg UpdateEncounterTemplateParams) (EncounterTemplate, error) {
@@ -140,6 +171,7 @@ func (q *Queries) UpdateEncounterTemplate(ctx context.Context, arg UpdateEncount
 		arg.Name,
 		arg.DisplayName,
 		arg.Creatures,
+		arg.CampaignID,
 	)
 	var i EncounterTemplate
 	err := row.Scan(

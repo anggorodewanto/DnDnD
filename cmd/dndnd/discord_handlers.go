@@ -643,11 +643,13 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 
 	// C-DISCORD follow-up: wire the map provider for /attack so AttackCommand.Walls
 	// is populated and wall-based cover applies (Phase 33).
-	// *refdata.Queries.GetMapByID structurally satisfies AttackMapProvider.
-	handlers.attack.SetMapProvider(deps.queries)
-	// SR-037: /bonus offhand reuses the off-hand attack service path, so it
-	// needs the same wall/full-cover context as legacy /attack offhand:true.
-	handlers.bonus.SetMapProvider(deps.queries)
+	// mapProviderAdapter satisfies AttackMapProvider via GetMapByIDUnchecked.
+	if mp := newMapProviderAdapter(deps.queries); mp != nil {
+		handlers.attack.SetMapProvider(mp)
+		// SR-037: /bonus offhand reuses the off-hand attack service path, so it
+		// needs the same wall/full-cover context as legacy /attack offhand:true.
+		handlers.bonus.SetMapProvider(mp)
+	}
 
 	// AOE-CAST follow-up: wire the shared ReactionPromptStore the cast
 	// handler uses for the gold-fallback Buy & Cast prompt (E-63), and
@@ -914,7 +916,13 @@ func newMapProviderAdapter(q *refdata.Queries) *mapProviderAdapter {
 }
 
 func (a *mapProviderAdapter) GetByID(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
-	return a.queries.GetMapByID(ctx, id)
+	return a.queries.GetMapByIDUnchecked(ctx, id)
+}
+
+// GetMapByID satisfies discord.AttackMapProvider using the unchecked query
+// (game-logic lookups don't need campaign scoping; the encounter is already validated).
+func (a *mapProviderAdapter) GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+	return a.queries.GetMapByIDUnchecked(ctx, id)
 }
 
 // characterByDiscordAdapter chains GetPlayerCharacterByDiscordUser with
@@ -1750,7 +1758,7 @@ func (a *castLookupAdapter) GetSpell(ctx context.Context, id string) (refdata.Sp
 }
 
 func (a *castLookupAdapter) GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
-	return a.queries.GetMapByID(ctx, id)
+	return a.queries.GetMapByIDUnchecked(ctx, id)
 }
 
 // prepareEncounterProviderAdapter satisfies discord.PrepareEncounterProvider

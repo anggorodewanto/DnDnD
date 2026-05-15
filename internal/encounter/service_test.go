@@ -17,18 +17,18 @@ import (
 // mockStore implements Store for unit tests.
 type mockStore struct {
 	createFn       func(ctx context.Context, arg refdata.CreateEncounterTemplateParams) (refdata.EncounterTemplate, error)
-	getFn          func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error)
+	getFn          func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error)
 	listFn         func(ctx context.Context, campaignID uuid.UUID) ([]refdata.EncounterTemplate, error)
 	updateFn       func(ctx context.Context, arg refdata.UpdateEncounterTemplateParams) (refdata.EncounterTemplate, error)
-	deleteFn       func(ctx context.Context, id uuid.UUID) error
+	deleteFn       func(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error
 	listCreaturesFn func(ctx context.Context) ([]refdata.Creature, error)
 }
 
 func (m *mockStore) CreateEncounterTemplate(ctx context.Context, arg refdata.CreateEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 	return m.createFn(ctx, arg)
 }
-func (m *mockStore) GetEncounterTemplate(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
-	return m.getFn(ctx, id)
+func (m *mockStore) GetEncounterTemplate(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
+	return m.getFn(ctx, arg)
 }
 func (m *mockStore) ListEncounterTemplatesByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.EncounterTemplate, error) {
 	return m.listFn(ctx, campaignID)
@@ -36,8 +36,8 @@ func (m *mockStore) ListEncounterTemplatesByCampaignID(ctx context.Context, camp
 func (m *mockStore) UpdateEncounterTemplate(ctx context.Context, arg refdata.UpdateEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 	return m.updateFn(ctx, arg)
 }
-func (m *mockStore) DeleteEncounterTemplate(ctx context.Context, id uuid.UUID) error {
-	return m.deleteFn(ctx, id)
+func (m *mockStore) DeleteEncounterTemplate(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error {
+	return m.deleteFn(ctx, arg)
 }
 func (m *mockStore) ListCreatures(ctx context.Context) ([]refdata.Creature, error) {
 	if m.listCreaturesFn != nil {
@@ -58,10 +58,10 @@ func successStore() *mockStore {
 				Creatures:   arg.Creatures,
 			}, nil
 		},
-		getFn: func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 			return refdata.EncounterTemplate{
-				ID:         id,
-				CampaignID: uuid.New(),
+				ID:         arg.ID,
+				CampaignID: arg.CampaignID,
 				Name:       "Test Encounter",
 				Creatures:  json.RawMessage(`[]`),
 			}, nil
@@ -72,13 +72,14 @@ func successStore() *mockStore {
 		updateFn: func(ctx context.Context, arg refdata.UpdateEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 			return refdata.EncounterTemplate{
 				ID:          arg.ID,
+				CampaignID:  arg.CampaignID,
 				Name:        arg.Name,
 				DisplayName: arg.DisplayName,
 				MapID:       arg.MapID,
 				Creatures:   arg.Creatures,
 			}, nil
 		},
-		deleteFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteFn: func(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error {
 			return nil
 		},
 	}
@@ -181,20 +182,21 @@ func TestService_Create_NoDisplayName(t *testing.T) {
 
 func TestService_GetByID(t *testing.T) {
 	id := uuid.New()
+	campaignID := uuid.New()
 	svc := NewService(successStore())
-	et, err := svc.GetByID(context.Background(), id)
+	et, err := svc.GetByID(context.Background(), id, campaignID)
 	require.NoError(t, err)
 	assert.Equal(t, id, et.ID)
 }
 
 func TestService_GetByID_NotFound(t *testing.T) {
 	store := &mockStore{
-		getFn: func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 			return refdata.EncounterTemplate{}, sql.ErrNoRows
 		},
 	}
 	svc := NewService(store)
-	_, err := svc.GetByID(context.Background(), uuid.New())
+	_, err := svc.GetByID(context.Background(), uuid.New(), uuid.New())
 	require.Error(t, err)
 }
 
@@ -221,8 +223,9 @@ func TestService_ListByCampaignID(t *testing.T) {
 func TestService_Update_RejectsEmptyName(t *testing.T) {
 	svc := NewService(successStore())
 	_, err := svc.Update(context.Background(), UpdateInput{
-		ID:   uuid.New(),
-		Name: "",
+		ID:         uuid.New(),
+		CampaignID: uuid.New(),
+		Name:       "",
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "name must not be empty")
@@ -232,6 +235,7 @@ func TestService_Update_Success(t *testing.T) {
 	svc := NewService(successStore())
 	et, err := svc.Update(context.Background(), UpdateInput{
 		ID:          uuid.New(),
+		CampaignID:  uuid.New(),
 		Name:        "Updated Name",
 		DisplayName: "Updated Display",
 		Creatures:   json.RawMessage(`[{"creature_ref_id":"ogre","short_id":"O1","quantity":1}]`),
@@ -248,8 +252,9 @@ func TestService_Update_StoreError(t *testing.T) {
 	}
 	svc := NewService(store)
 	_, err := svc.Update(context.Background(), UpdateInput{
-		ID:   uuid.New(),
-		Name: "Test",
+		ID:         uuid.New(),
+		CampaignID: uuid.New(),
+		Name:       "Test",
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "updating encounter template")
@@ -259,18 +264,18 @@ func TestService_Update_StoreError(t *testing.T) {
 
 func TestService_Delete(t *testing.T) {
 	svc := NewService(successStore())
-	err := svc.Delete(context.Background(), uuid.New())
+	err := svc.Delete(context.Background(), uuid.New(), uuid.New())
 	require.NoError(t, err)
 }
 
 func TestService_Delete_Error(t *testing.T) {
 	store := &mockStore{
-		deleteFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteFn: func(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error {
 			return errors.New("db error")
 		},
 	}
 	svc := NewService(store)
-	err := svc.Delete(context.Background(), uuid.New())
+	err := svc.Delete(context.Background(), uuid.New(), uuid.New())
 	require.Error(t, err)
 }
 
@@ -281,7 +286,7 @@ func TestService_Duplicate_Success(t *testing.T) {
 	campaignID := uuid.New()
 	var captured refdata.CreateEncounterTemplateParams
 	store := &mockStore{
-		getFn: func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 			return refdata.EncounterTemplate{
 				ID:          originalID,
 				CampaignID:  campaignID,
@@ -302,7 +307,7 @@ func TestService_Duplicate_Success(t *testing.T) {
 		},
 	}
 	svc := NewService(store)
-	et, err := svc.Duplicate(context.Background(), originalID)
+	et, err := svc.Duplicate(context.Background(), originalID, campaignID)
 	require.NoError(t, err)
 	assert.Equal(t, "Original (copy)", et.Name)
 	assert.Equal(t, "Display (copy)", et.DisplayName.String)
@@ -311,21 +316,21 @@ func TestService_Duplicate_Success(t *testing.T) {
 
 func TestService_Duplicate_GetError(t *testing.T) {
 	store := &mockStore{
-		getFn: func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 			return refdata.EncounterTemplate{}, errors.New("not found")
 		},
 	}
 	svc := NewService(store)
-	_, err := svc.Duplicate(context.Background(), uuid.New())
+	_, err := svc.Duplicate(context.Background(), uuid.New(), uuid.New())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting encounter template to duplicate")
 }
 
 func TestService_Duplicate_CreateError(t *testing.T) {
 	store := &mockStore{
-		getFn: func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		getFn: func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error) {
 			return refdata.EncounterTemplate{
-				ID:        id,
+				ID:        arg.ID,
 				Name:      "Original",
 				Creatures: json.RawMessage(`[]`),
 			}, nil
@@ -335,7 +340,7 @@ func TestService_Duplicate_CreateError(t *testing.T) {
 		},
 	}
 	svc := NewService(store)
-	_, err := svc.Duplicate(context.Background(), uuid.New())
+	_, err := svc.Duplicate(context.Background(), uuid.New(), uuid.New())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicating encounter template")
 }

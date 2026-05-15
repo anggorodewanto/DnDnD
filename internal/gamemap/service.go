@@ -52,10 +52,10 @@ type CreateMapInput struct {
 // Store defines the database operations needed by the map service.
 type Store interface {
 	CreateMap(ctx context.Context, arg refdata.CreateMapParams) (refdata.Map, error)
-	GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error)
+	GetMapByID(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error)
 	ListMapsByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Map, error)
 	UpdateMap(ctx context.Context, arg refdata.UpdateMapParams) (refdata.Map, error)
-	DeleteMap(ctx context.Context, id uuid.UUID) error
+	DeleteMap(ctx context.Context, arg refdata.DeleteMapParams) error
 }
 
 // Service manages map CRUD and validation.
@@ -98,9 +98,9 @@ func (s *Service) CreateMap(ctx context.Context, input CreateMapInput) (refdata.
 	return m, category, nil
 }
 
-// GetByID retrieves a map by its ID.
-func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
-	return s.store.GetMapByID(ctx, id)
+// GetByID retrieves a map by its ID, scoped to a campaign.
+func (s *Service) GetByID(ctx context.Context, id uuid.UUID, campaignID uuid.UUID) (refdata.Map, error) {
+	return s.store.GetMapByID(ctx, refdata.GetMapByIDParams{ID: id, CampaignID: campaignID})
 }
 
 // ListByCampaignID lists all maps for a campaign.
@@ -111,6 +111,7 @@ func (s *Service) ListByCampaignID(ctx context.Context, campaignID uuid.UUID) ([
 // UpdateMapInput holds the parameters for updating a map.
 type UpdateMapInput struct {
 	ID                uuid.UUID
+	CampaignID        uuid.UUID
 	Name              string
 	Width             int
 	Height            int
@@ -140,6 +141,7 @@ func (s *Service) UpdateMap(ctx context.Context, input UpdateMapInput) (refdata.
 		TiledJson:         input.TiledJSON,
 		BackgroundImageID: input.BackgroundImageID,
 		TilesetRefs:       tilesetRefsJSON,
+		CampaignID:        input.CampaignID,
 	})
 	if err != nil {
 		return refdata.Map{}, "", fmt.Errorf("updating map: %w", err)
@@ -148,9 +150,9 @@ func (s *Service) UpdateMap(ctx context.Context, input UpdateMapInput) (refdata.
 	return m, category, nil
 }
 
-// DeleteMap deletes a map by its ID.
-func (s *Service) DeleteMap(ctx context.Context, id uuid.UUID) error {
-	return s.store.DeleteMap(ctx, id)
+// DeleteMap deletes a map by its ID, scoped to a campaign.
+func (s *Service) DeleteMap(ctx context.Context, id uuid.UUID, campaignID uuid.UUID) error {
+	return s.store.DeleteMap(ctx, refdata.DeleteMapParams{ID: id, CampaignID: campaignID})
 }
 
 // TileSizeForCategory returns the appropriate tile size for a size category.

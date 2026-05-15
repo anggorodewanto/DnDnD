@@ -56,20 +56,52 @@ func (q *Queries) CreateMap(ctx context.Context, arg CreateMapParams) (Map, erro
 }
 
 const deleteMap = `-- name: DeleteMap :exec
-DELETE FROM maps WHERE id = $1
+DELETE FROM maps WHERE id = $1 AND campaign_id = $2
 `
 
-func (q *Queries) DeleteMap(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteMap, id)
+type DeleteMapParams struct {
+	ID         uuid.UUID `json:"id"`
+	CampaignID uuid.UUID `json:"campaign_id"`
+}
+
+func (q *Queries) DeleteMap(ctx context.Context, arg DeleteMapParams) error {
+	_, err := q.db.ExecContext(ctx, deleteMap, arg.ID, arg.CampaignID)
 	return err
 }
 
 const getMapByID = `-- name: GetMapByID :one
+SELECT id, campaign_id, name, width_squares, height_squares, tiled_json, background_image_id, tileset_refs, created_at, updated_at FROM maps WHERE id = $1 AND campaign_id = $2
+`
+
+type GetMapByIDParams struct {
+	ID         uuid.UUID `json:"id"`
+	CampaignID uuid.UUID `json:"campaign_id"`
+}
+
+func (q *Queries) GetMapByID(ctx context.Context, arg GetMapByIDParams) (Map, error) {
+	row := q.db.QueryRowContext(ctx, getMapByID, arg.ID, arg.CampaignID)
+	var i Map
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.Name,
+		&i.WidthSquares,
+		&i.HeightSquares,
+		&i.TiledJson,
+		&i.BackgroundImageID,
+		&i.TilesetRefs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getMapByIDUnchecked = `-- name: GetMapByIDUnchecked :one
 SELECT id, campaign_id, name, width_squares, height_squares, tiled_json, background_image_id, tileset_refs, created_at, updated_at FROM maps WHERE id = $1
 `
 
-func (q *Queries) GetMapByID(ctx context.Context, id uuid.UUID) (Map, error) {
-	row := q.db.QueryRowContext(ctx, getMapByID, id)
+func (q *Queries) GetMapByIDUnchecked(ctx context.Context, id uuid.UUID) (Map, error) {
+	row := q.db.QueryRowContext(ctx, getMapByIDUnchecked, id)
 	var i Map
 	err := row.Scan(
 		&i.ID,
@@ -133,7 +165,7 @@ UPDATE maps SET
     background_image_id = $6,
     tileset_refs = $7,
     updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND campaign_id = $8
 RETURNING id, campaign_id, name, width_squares, height_squares, tiled_json, background_image_id, tileset_refs, created_at, updated_at
 `
 
@@ -145,6 +177,7 @@ type UpdateMapParams struct {
 	TiledJson         json.RawMessage       `json:"tiled_json"`
 	BackgroundImageID uuid.NullUUID         `json:"background_image_id"`
 	TilesetRefs       pqtype.NullRawMessage `json:"tileset_refs"`
+	CampaignID        uuid.UUID             `json:"campaign_id"`
 }
 
 func (q *Queries) UpdateMap(ctx context.Context, arg UpdateMapParams) (Map, error) {
@@ -156,6 +189,7 @@ func (q *Queries) UpdateMap(ctx context.Context, arg UpdateMapParams) (Map, erro
 		arg.TiledJson,
 		arg.BackgroundImageID,
 		arg.TilesetRefs,
+		arg.CampaignID,
 	)
 	var i Map
 	err := row.Scan(

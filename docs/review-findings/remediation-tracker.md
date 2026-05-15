@@ -16,8 +16,8 @@
 
 | ID | Severity | Finding | Status | Commit | Reviewer |
 |----|----------|---------|--------|--------|----------|
-| F-01 | High | DM/dashboard authorization not resource-scoped | review_passed | — | reviewer-f01 |
-| F-02 | High | Map/encounter-template routes not campaign-scoped | pending | — | — |
+| F-01 | High | DM/dashboard authorization not resource-scoped | committed | 974bfde | PASS |
+| F-02 | High | Map/encounter-template routes not campaign-scoped | review_passed | — | PASS |
 | F-14 | Medium | Open5e cache POST endpoints public/global | pending | — | — |
 
 ### Server-Authoritative Mutation/Publish/Audit (Priority 2)
@@ -83,8 +83,23 @@
 - **Source**: agent-01
 - **Files**: `db/queries/maps.sql`, `db/queries/encounter_templates.sql`, `internal/gamemap/handler.go`, `internal/encounter/handler.go`
 - **Test plan**: Test that get/update/delete by UUID fails without matching campaign ownership
-- **Implementation notes**: —
-- **Reviewer verdict**: —
+- **Implementation notes**: Added `AND campaign_id = $N` to GetMapByID, UpdateMap, DeleteMap, GetEncounterTemplate, UpdateEncounterTemplate, DeleteEncounterTemplate SQL queries. Added `GetMapByIDUnchecked` and `GetEncounterTemplateUnchecked` queries for internal game-logic lookups (combat, pathfinding) that don't need campaign scoping. Updated service interfaces and handlers to require `campaign_id` query parameter on object routes (GET/PUT/DELETE by ID, duplicate). Updated combat `storeAdapter`, `workspaceStoreAdapter`, `mapProviderAdapter`, `castLookupAdapter`, and exploration service to use unchecked variants for internal lookups. Tests prove wrong campaign_id returns not-found/error and missing campaign_id returns 400.
+- **Changed files**: `db/queries/maps.sql`, `db/queries/encounter_templates.sql`, `internal/refdata/maps.sql.go` (generated), `internal/refdata/encounter_templates.sql.go` (generated), `internal/gamemap/service.go`, `internal/gamemap/handler.go`, `internal/gamemap/service_test.go`, `internal/gamemap/handler_test.go`, `internal/encounter/service.go`, `internal/encounter/handler.go`, `internal/encounter/service_test.go`, `internal/encounter/handler_test.go`, `internal/combat/store_adapter.go`, `internal/exploration/service.go`, `internal/exploration/service_test.go`, `cmd/dndnd/main.go`, `cmd/dndnd/discord_handlers.go`, `cmd/dndnd/discord_adapters.go`, `cmd/dndnd/main_wiring_test.go`
+- **Reviewer verdict**: **PASS**
+  - **Spec conformance**: All map and encounter-template object routes (GET/PUT/DELETE by ID, duplicate) now require a `campaign_id` query parameter. The SQL queries (`db/queries/maps.sql:5`, `db/queries/encounter_templates.sql:5`) include `AND campaign_id = $2` on GetByID, UpdateMap includes `AND campaign_id = $8`, DeleteMap includes `AND campaign_id = $2`. Encounter template queries follow the same pattern. This satisfies the spec requirement that "all database queries are scoped by guild_id / campaign_id."
+  - **Tenant scoping/security**: UUID knowledge alone cannot access another campaign's resources. Handlers parse `campaign_id` from the query string and pass it through the service layer to the DB WHERE clause (`internal/gamemap/handler.go:232-235`, `internal/gamemap/handler.go:280-283`, `internal/gamemap/handler.go:318-321`; `internal/encounter/handler.go:163-166`, `internal/encounter/handler.go:213-216`, `internal/encounter/handler.go:248-251`, `internal/encounter/handler.go:268-271`). Missing `campaign_id` returns 400. Wrong `campaign_id` returns not-found/error from the DB.
+  - **Regression risk**: Low. Internal game-logic paths (combat, pathfinding, exploration) use `GetMapByIDUnchecked` / `GetEncounterTemplateUnchecked` variants that don't require campaign scoping, preserving functionality for server-side lookups that already have authorization context. These unchecked variants are not exposed via HTTP handlers.
+  - **Test coverage**: Adequate. Cross-campaign access tests exist for both packages:
+    - `internal/gamemap/handler_test.go:1042` `TestHandler_GetMap_WrongCampaignID` — proves wrong campaign returns 404
+    - `internal/gamemap/handler_test.go:1066` `TestHandler_UpdateMap_WrongCampaignID` — proves wrong campaign update fails
+    - `internal/gamemap/handler_test.go:1088` `TestHandler_DeleteMap_WrongCampaignID` — proves wrong campaign delete fails
+    - `internal/gamemap/handler_test.go:1107` `TestHandler_GetMap_MissingCampaignID` — proves missing param returns 400
+    - `internal/encounter/handler_test.go:674` `TestHandler_GetEncounter_WrongCampaignID` — proves wrong campaign returns 404
+    - `internal/encounter/handler_test.go:691` `TestHandler_UpdateEncounter_WrongCampaignID` — proves wrong campaign update fails
+    - `internal/encounter/handler_test.go:710` `TestHandler_DeleteEncounter_WrongCampaignID` — proves wrong campaign delete fails
+    - `internal/encounter/handler_test.go:725` `TestHandler_DuplicateEncounter_WrongCampaignID` — proves wrong campaign duplicate fails
+    - `internal/encounter/handler_test.go:740` `TestHandler_GetEncounter_MissingCampaignID` — proves missing param returns 400
+  - **Required follow-up**: None.
 
 ### F-03: Combat Workspace PATCH bypasses locked service paths
 - **Source**: agent-05

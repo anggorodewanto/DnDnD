@@ -371,7 +371,7 @@ func formatRollLogEntry(e dice.RollLogEntry) string {
 // adapter unit-testable without a live Postgres instance.
 type mapRegeneratorQueries interface {
 	GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
-	GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error)
+	GetMapByIDUnchecked(ctx context.Context, id uuid.UUID) (refdata.Map, error)
 	ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
 	// E-67-zone-render-on-map: zones are loaded so the renderer can paint
 	// their overlays alongside terrain + combatants.
@@ -469,7 +469,7 @@ func (a *mapRegeneratorAdapter) renderInternal(ctx context.Context, encounterID 
 	if !enc.MapID.Valid {
 		return nil, fmt.Errorf("encounter %s has no map", encounterID)
 	}
-	m, err := a.queries.GetMapByID(ctx, enc.MapID.UUID)
+	m, err := a.queries.GetMapByIDUnchecked(ctx, enc.MapID.UUID)
 	if err != nil {
 		return nil, fmt.Errorf("get map %s: %w", enc.MapID.UUID, err)
 	}

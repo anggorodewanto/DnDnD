@@ -16,17 +16,17 @@ import (
 // mockStore implements Store for unit tests.
 type mockStore struct {
 	createMapFn            func(ctx context.Context, arg refdata.CreateMapParams) (refdata.Map, error)
-	getMapByIDFn           func(ctx context.Context, id uuid.UUID) (refdata.Map, error)
+	getMapByIDFn           func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error)
 	listMapsByCampaignIDFn func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Map, error)
 	updateMapFn            func(ctx context.Context, arg refdata.UpdateMapParams) (refdata.Map, error)
-	deleteMapFn            func(ctx context.Context, id uuid.UUID) error
+	deleteMapFn            func(ctx context.Context, arg refdata.DeleteMapParams) error
 }
 
 func (m *mockStore) CreateMap(ctx context.Context, arg refdata.CreateMapParams) (refdata.Map, error) {
 	return m.createMapFn(ctx, arg)
 }
-func (m *mockStore) GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
-	return m.getMapByIDFn(ctx, id)
+func (m *mockStore) GetMapByID(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
+	return m.getMapByIDFn(ctx, arg)
 }
 func (m *mockStore) ListMapsByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Map, error) {
 	return m.listMapsByCampaignIDFn(ctx, campaignID)
@@ -34,8 +34,8 @@ func (m *mockStore) ListMapsByCampaignID(ctx context.Context, campaignID uuid.UU
 func (m *mockStore) UpdateMap(ctx context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
 	return m.updateMapFn(ctx, arg)
 }
-func (m *mockStore) DeleteMap(ctx context.Context, id uuid.UUID) error {
-	return m.deleteMapFn(ctx, id)
+func (m *mockStore) DeleteMap(ctx context.Context, arg refdata.DeleteMapParams) error {
+	return m.deleteMapFn(ctx, arg)
 }
 
 func minimalTiledJSON() json.RawMessage {
@@ -55,6 +55,16 @@ func successStore(campaignID uuid.UUID) *mockStore {
 				TilesetRefs:   arg.TilesetRefs,
 			}, nil
 		},
+		getMapByIDFn: func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
+			return refdata.Map{
+				ID:            arg.ID,
+				CampaignID:    arg.CampaignID,
+				Name:          "Test Map",
+				WidthSquares:  10,
+				HeightSquares: 10,
+				TiledJson:     minimalTiledJSON(),
+			}, nil
+		},
 		updateMapFn: func(ctx context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
 			return refdata.Map{
 				ID:            arg.ID,
@@ -65,6 +75,9 @@ func successStore(campaignID uuid.UUID) *mockStore {
 				TiledJson:     arg.TiledJson,
 				TilesetRefs:   arg.TilesetRefs,
 			}, nil
+		},
+		deleteMapFn: func(ctx context.Context, arg refdata.DeleteMapParams) error {
+			return nil
 		},
 	}
 }
@@ -332,15 +345,17 @@ func TestCreateMap_StoreError(t *testing.T) {
 
 func TestGetByID_Success(t *testing.T) {
 	id := uuid.New()
-	expected := refdata.Map{ID: id, Name: "Test Map", WidthSquares: 10, HeightSquares: 10}
+	campaignID := uuid.New()
+	expected := refdata.Map{ID: id, CampaignID: campaignID, Name: "Test Map", WidthSquares: 10, HeightSquares: 10}
 	store := &mockStore{
-		getMapByIDFn: func(ctx context.Context, mid uuid.UUID) (refdata.Map, error) {
-			assert.Equal(t, id, mid)
+		getMapByIDFn: func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
+			assert.Equal(t, id, arg.ID)
+			assert.Equal(t, campaignID, arg.CampaignID)
 			return expected, nil
 		},
 	}
 	svc := NewService(store)
-	m, err := svc.GetByID(context.Background(), id)
+	m, err := svc.GetByID(context.Background(), id, campaignID)
 	require.NoError(t, err)
 	assert.Equal(t, id, m.ID)
 	assert.Equal(t, "Test Map", m.Name)
@@ -348,12 +363,12 @@ func TestGetByID_Success(t *testing.T) {
 
 func TestGetByID_NotFound(t *testing.T) {
 	store := &mockStore{
-		getMapByIDFn: func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		getMapByIDFn: func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
 			return refdata.Map{}, errors.New("not found")
 		},
 	}
 	svc := NewService(store)
-	_, err := svc.GetByID(context.Background(), uuid.New())
+	_, err := svc.GetByID(context.Background(), uuid.New(), uuid.New())
 	require.Error(t, err)
 }
 
@@ -536,27 +551,29 @@ func TestUpdateMap_WithTilesetRefs(t *testing.T) {
 
 func TestDeleteMap_Success(t *testing.T) {
 	id := uuid.New()
-	var deletedID uuid.UUID
+	campaignID := uuid.New()
+	var deletedArg refdata.DeleteMapParams
 	store := &mockStore{
-		deleteMapFn: func(ctx context.Context, mid uuid.UUID) error {
-			deletedID = mid
+		deleteMapFn: func(ctx context.Context, arg refdata.DeleteMapParams) error {
+			deletedArg = arg
 			return nil
 		},
 	}
 	svc := NewService(store)
-	err := svc.DeleteMap(context.Background(), id)
+	err := svc.DeleteMap(context.Background(), id, campaignID)
 	require.NoError(t, err)
-	assert.Equal(t, id, deletedID)
+	assert.Equal(t, id, deletedArg.ID)
+	assert.Equal(t, campaignID, deletedArg.CampaignID)
 }
 
 func TestDeleteMap_StoreError(t *testing.T) {
 	store := &mockStore{
-		deleteMapFn: func(ctx context.Context, id uuid.UUID) error {
+		deleteMapFn: func(ctx context.Context, arg refdata.DeleteMapParams) error {
 			return errors.New("db error")
 		},
 	}
 	svc := NewService(store)
-	err := svc.DeleteMap(context.Background(), uuid.New())
+	err := svc.DeleteMap(context.Background(), uuid.New(), uuid.New())
 	require.Error(t, err)
 }
 

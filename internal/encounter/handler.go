@@ -157,7 +157,7 @@ func (h *Handler) CreateEncounter(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, newEncounterResponse(et))
 }
 
-// GetEncounter handles GET /api/encounters/{id}.
+// GetEncounter handles GET /api/encounters/{id}?campaign_id=X.
 func (h *Handler) GetEncounter(w http.ResponseWriter, r *http.Request) {
 	id, err := parseIDParam(r, "id")
 	if err != nil {
@@ -165,7 +165,13 @@ func (h *Handler) GetEncounter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	et, err := h.svc.GetByID(r.Context(), id)
+	campaignID, err := uuid.Parse(r.URL.Query().Get("campaign_id"))
+	if err != nil {
+		http.Error(w, "campaign_id query parameter required", http.StatusBadRequest)
+		return
+	}
+
+	et, err := h.svc.GetByID(r.Context(), id, campaignID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "encounter not found", http.StatusNotFound)
@@ -206,11 +212,17 @@ func (h *Handler) ListEncounters(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// UpdateEncounter handles PUT /api/encounters/{id}.
+// UpdateEncounter handles PUT /api/encounters/{id}?campaign_id=X.
 func (h *Handler) UpdateEncounter(w http.ResponseWriter, r *http.Request) {
 	id, err := parseIDParam(r, "id")
 	if err != nil {
 		http.Error(w, "invalid encounter id", http.StatusBadRequest)
+		return
+	}
+
+	campaignID, err := uuid.Parse(r.URL.Query().Get("campaign_id"))
+	if err != nil {
+		http.Error(w, "campaign_id query parameter required", http.StatusBadRequest)
 		return
 	}
 
@@ -228,6 +240,7 @@ func (h *Handler) UpdateEncounter(w http.ResponseWriter, r *http.Request) {
 
 	et, err := h.svc.Update(r.Context(), UpdateInput{
 		ID:          id,
+		CampaignID:  campaignID,
 		MapID:       mapID,
 		Name:        req.Name,
 		DisplayName: req.DisplayName,
@@ -241,7 +254,7 @@ func (h *Handler) UpdateEncounter(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, newEncounterResponse(et))
 }
 
-// DeleteEncounter handles DELETE /api/encounters/{id}.
+// DeleteEncounter handles DELETE /api/encounters/{id}?campaign_id=X.
 func (h *Handler) DeleteEncounter(w http.ResponseWriter, r *http.Request) {
 	id, err := parseIDParam(r, "id")
 	if err != nil {
@@ -249,7 +262,13 @@ func (h *Handler) DeleteEncounter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.Delete(r.Context(), id); err != nil {
+	campaignID, err := uuid.Parse(r.URL.Query().Get("campaign_id"))
+	if err != nil {
+		http.Error(w, "campaign_id query parameter required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.svc.Delete(r.Context(), id, campaignID); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -257,7 +276,7 @@ func (h *Handler) DeleteEncounter(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// DuplicateEncounter handles POST /api/encounters/{id}/duplicate.
+// DuplicateEncounter handles POST /api/encounters/{id}/duplicate?campaign_id=X.
 func (h *Handler) DuplicateEncounter(w http.ResponseWriter, r *http.Request) {
 	id, err := parseIDParam(r, "id")
 	if err != nil {
@@ -265,7 +284,13 @@ func (h *Handler) DuplicateEncounter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	et, err := h.svc.Duplicate(r.Context(), id)
+	campaignID, err := uuid.Parse(r.URL.Query().Get("campaign_id"))
+	if err != nil {
+		http.Error(w, "campaign_id query parameter required", http.StatusBadRequest)
+		return
+	}
+
+	et, err := h.svc.Duplicate(r.Context(), id, campaignID)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
