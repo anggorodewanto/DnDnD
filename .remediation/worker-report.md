@@ -1,16 +1,11 @@
-finding_id: E-C02
+finding_id: E-C03
 status: done
 files_changed:
-  - internal/combat/aoe.go
-  - internal/combat/aoe_test.go
-test_command_that_validates: go test ./internal/combat/ -run TestResolveAoEPendingSaves_UpcastScalesDamageDice -count=1 -v
+  - internal/combat/advantage.go
+  - internal/combat/advantage_test.go
+test_command_that_validates: go test ./internal/combat/ -run TestDetectAdvantage_TargetDodging_Disadvantage -v
 acceptance_criterion_met: yes
-notes: |
-  The bug was that ResolveAoEPendingSaves read dmgInfo.Dice verbatim without calling ScaleSpellDice.
-  The fix encodes effectiveSlotLevel and charLevel into the pending_saves source tag (format: "aoe:<spell-id>:s<slot>c<charLevel>[:e<N>]")
-  at CastAoE time, then extracts them in ResolveAoEPendingSaves to call ScaleSpellDice before passing dice to the damage pipeline.
-  Legacy source tags (without :s<N>c<N>) gracefully fall back to base dice via the slotLevel=0 path in ScaleSpellDice.
-  The cantrip scaling half of the acceptance criterion (Thunderclap at char level 5 → 2d6) is also fixed by this same mechanism since charLevel is now encoded.
+notes: Added `case "dodge": disadvReasons = append(disadvReasons, "target dodging")` to the target-conditions switch in DetectAdvantage. Wrote a failing test first that asserts DetectAdvantage returns Disadvantage mode with reason "target dodging" when the target has the "dodge" condition. After the fix, all tests pass and coverage thresholds are met. The pattern matches existing target conditions like "restrained" and "stunned".
 follow_ups:
-  - Cantrip AoE scaling test (e.g. Thunderclap at level 5 → 2d6) could be added for completeness
-  - Existing integration tests that use the old source format ("aoe:<spell-id>") still pass via backward-compat path
+  - Verify integration with the Dodge action handler that applies the "dodge" condition to combatants.
+  - Consider whether the attacker-can-see-target prerequisite (PHB Dodge rules) needs enforcement here or upstream.

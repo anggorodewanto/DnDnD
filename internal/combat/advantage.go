@@ -132,6 +132,8 @@ func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 			} else {
 				disadvReasons = append(disadvReasons, "target prone beyond 5ft")
 			}
+		case "dodge":
+			disadvReasons = append(disadvReasons, "target dodging")
 		case "reckless":
 			// C-38: Reckless Attack's target-side half — enemies have
 			// advantage on attack rolls against the reckless attacker

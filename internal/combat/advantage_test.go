@@ -577,3 +577,16 @@ func TestDetectAdvantage_RecklessCondition_MeleeDEX_NoAdvantage(t *testing.T) {
 	assert.Equal(t, dice.Normal, mode)
 	assert.Empty(t, advReasons)
 }
+
+// E-C03: Dodge condition imposes disadvantage on attacks against the dodging target.
+
+func TestDetectAdvantage_TargetDodging_Disadvantage(t *testing.T) {
+	input := AdvantageInput{
+		TargetConditions: []CombatCondition{{Condition: "dodge"}},
+		DistanceFt:       5,
+	}
+	mode, advReasons, disadvReasons := DetectAdvantage(input)
+	assert.Equal(t, dice.Disadvantage, mode)
+	assert.Empty(t, advReasons)
+	assert.Contains(t, disadvReasons, "target dodging")
+}

@@ -100,3 +100,10 @@ Append-only journal of all remediation activity.
 - Commit: 758f247
 - Reviewer: approved
 - Notes: Added damage roll+apply on hit and healing roll+apply paths to Cast()
+
+## 2026-05-15T18:11 — E-C02 done
+
+- Finding: AoE damage path ignores upcasting and cantrip scaling
+- Commit: 85f3ff8
+- Reviewer: approved
+- Notes: Encoded slot/char level in pending save source, ScaleSpellDice called at resolve time
