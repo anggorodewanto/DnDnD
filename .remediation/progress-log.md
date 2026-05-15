@@ -135,3 +135,10 @@ Append-only journal of all remediation activity.
 - Commit: 2e940e6
 - Reviewer: approved
 - Notes: 3 lines in buildVisionSources check features for Devil's Sight
+
+## 2026-05-15T18:26 — F-C04 done
+
+- Finding: Lair Action placed at head of turn queue instead of losing ties
+- Commit: 291875c
+- Reviewer: approved
+- Notes: Added IsLairAction field + sort.SliceStable after building entries
