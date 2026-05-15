@@ -417,9 +417,13 @@ func TestService_Import_CreateError(t *testing.T) {
 		},
 	}
 	svc := NewService(client, store)
-	_, err := svc.Import(context.Background(), uuid.New(), "https://www.dndbeyond.com/characters/12345")
+	result, err := svc.Import(context.Background(), uuid.New(), "https://www.dndbeyond.com/characters/12345")
+	if err != nil {
+		t.Fatalf("Import should succeed (staging); got %v", err)
+	}
+	_, err = svc.ApproveImport(context.Background(), result.PendingImportID)
 	if err == nil {
-		t.Fatal("expected error for create failure")
+		t.Fatal("expected error for create failure in ApproveImport")
 	}
 }
 

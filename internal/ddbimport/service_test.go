@@ -184,14 +184,23 @@ func TestService_Import_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Character.ID != charID {
-		t.Errorf("character ID = %s, want %s", result.Character.ID, charID)
-	}
 	if result.Preview == "" {
 		t.Error("preview should not be empty")
 	}
 	if result.IsResync {
 		t.Error("first import should not be a resync")
+	}
+	if result.PendingImportID == uuid.Nil {
+		t.Fatal("first import must return a PendingImportID")
+	}
+
+	// Approve the import to actually create the character.
+	approved, err := svc.ApproveImport(context.Background(), result.PendingImportID)
+	if err != nil {
+		t.Fatalf("ApproveImport: %v", err)
+	}
+	if approved.ID != charID {
+		t.Errorf("character ID = %s, want %s", approved.ID, charID)
 	}
 }
 
@@ -337,6 +346,11 @@ func TestService_Import_WizardCureWoundsAdvisoryAndPersistedTag(t *testing.T) {
 		t.Fatalf("preview should show off-list advisory:\n%s", result.Preview)
 	}
 
+	// Approve to trigger CreateCharacter.
+	if _, err := svc.ApproveImport(context.Background(), result.PendingImportID); err != nil {
+		t.Fatalf("ApproveImport: %v", err)
+	}
+
 	var charData struct {
 		Spells []SpellEntry `json:"spells"`
 	}
@@ -348,6 +362,44 @@ func TestService_Import_WizardCureWoundsAdvisoryAndPersistedTag(t *testing.T) {
 	}
 	if !charData.Spells[0].Homebrew || !charData.Spells[0].OffList {
 		t.Fatalf("expected persisted spell tagged homebrew/off-list, got %+v", charData.Spells[0])
+	}
+}
+
+// TestService_Import_FirstImportStagesPending verifies that a brand-new import
+// (no existing DDB-URL row) does NOT call CreateCharacter immediately. Instead
+// it stages the import for DM approval, just like re-syncs.
+func TestService_Import_FirstImportStagesPending(t *testing.T) {
+	campaignID := uuid.New()
+	ddbURL := "https://www.dndbeyond.com/characters/12345"
+
+	client := &mockClient{
+		FetchFunc: func(ctx context.Context, id string) ([]byte, error) {
+			return minimalDDBJSON(), nil
+		},
+	}
+
+	createCalls := 0
+	store := &mockCharStore{
+		CreateFunc: func(ctx context.Context, params refdata.CreateCharacterParams) (refdata.Character, error) {
+			createCalls++
+			return refdata.Character{ID: uuid.New(), CampaignID: campaignID, Name: params.Name}, nil
+		},
+		// No GetByDdbURLFunc → returns sql.ErrNoRows (first import)
+	}
+
+	svc := NewService(client, store)
+	result, err := svc.Import(context.Background(), campaignID, ddbURL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if createCalls != 0 {
+		t.Errorf("CreateCharacter must NOT be called on first import (requires DM approval); called %d times", createCalls)
+	}
+	if result.PendingImportID == uuid.Nil {
+		t.Error("first import must return a non-nil PendingImportID for DM approval")
+	}
+	if result.IsResync {
+		t.Error("first import should not be flagged as resync")
 	}
 }
 
@@ -792,9 +844,14 @@ func TestService_Import_CharacterParams(t *testing.T) {
 	}
 
 	svc := NewService(client, store)
-	_, err := svc.Import(context.Background(), campaignID, "https://www.dndbeyond.com/characters/12345")
+	result, err := svc.Import(context.Background(), campaignID, "https://www.dndbeyond.com/characters/12345")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Approve to trigger CreateCharacter and capture params.
+	if _, err := svc.ApproveImport(context.Background(), result.PendingImportID); err != nil {
+		t.Fatalf("ApproveImport: %v", err)
 	}
 
 	if capturedParams.CampaignID != campaignID {

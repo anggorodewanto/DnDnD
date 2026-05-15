@@ -1,14 +1,12 @@
-finding_id: I-C02
+finding_id: H-C04
 status: done
 files_changed:
-  - internal/combat/workspace_handler.go
-  - internal/combat/workspace_handler_test.go
-  - cmd/dndnd/main.go
-  - cmd/dndnd/main_wiring_test.go
-test_command_that_validates: go test ./internal/combat/ -run TestWorkspaceHandler_GetWorkspace_PendingQueueCount_PerEncounter -v
+  - internal/ddbimport/service.go
+  - internal/ddbimport/service_test.go
+  - internal/ddbimport/coverage_test.go
+test_command_that_validates: go test ./internal/ddbimport/ -run TestService_Import_FirstImportStagesPending -v
 acceptance_criterion_met: yes
-notes: |
-  The handler previously called CountPendingDMQueueItemsByCampaign once and assigned the same count to every encounter. Fixed by adding CountPendingDMQueueItemsByEncounter to the WorkspaceStore interface, calling it per-encounter in the loop, and implementing it in the production adapter via a JOIN through pending_actions (which links dm_queue_items to encounters). No DB migration required. The failing test confirmed both encounters received the campaign-wide count (5); after the fix, each gets its own count (3 and 1).
+notes: First-time DDB imports now route through the same pending_ddb_imports staging path that re-syncs use. The pendingImport struct was extended with createParams/isCreate fields. ApproveImport distinguishes create vs update by the isCreate flag (and loadPendingImport uses CharacterID==uuid.Nil when loading from DB). Existing tests were updated to call ApproveImport before asserting on CreateCharacter behavior. All tests pass and coverage thresholds are met.
 follow_ups:
-  - Consider adding a sqlc query for CountPendingDMQueueItemsByEncounter to replace the raw SQL in workspaceStoreAdapter
-  - The unused CountPendingDMQueueItemsByCampaign method remains in the interface; remove if no other consumer needs it
+  - Callers of Import (e.g. Discord handler) may need updating to handle PendingImportID on first imports and surface the approval flow to the DM
+  - Consider adding an integration/e2e test that exercises the full Discord slash-command → staging → DM-approve flow for first imports
