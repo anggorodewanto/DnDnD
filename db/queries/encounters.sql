@@ -47,6 +47,7 @@ WHERE e.id = $1;
 SELECT e.id FROM encounters e
 JOIN combatants cb ON cb.encounter_id = e.id
 WHERE cb.character_id = $1 AND e.status = 'active'
+ORDER BY cb.created_at DESC
 LIMIT 1;
 
 -- name: UpdateEncounterExploredCells :exec
