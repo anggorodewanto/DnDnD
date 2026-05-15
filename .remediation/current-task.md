@@ -1,11 +1,11 @@
-finding_id: A-H01
+finding_id: A-H03
 severity: High
-title: Player can never resubmit after changes_requested (broken status flow)
-location: internal/registration/service.go:46-56 + internal/dashboard/approval_store.go:30-40
-spec_ref: spec §Registration feedback (line 54); Phase 8 / Phase 14
+title: WebSocket origin verification defaults to InsecureSkipVerify: true
+location: internal/dashboard/handler.go:117-170
+spec_ref: spec §Authentication & Authorization (line 73); Phase 15
 problem: |
-  validTransitions/validApprovalTransitions do not allow changes_requested -> pending (or anything else), and the partial unique index only excludes retired. So a player whose registration is in changes_requested is permanently stuck.
+  The dashboard WebSocket upgrade defaults to skipping origin checks. A forgotten config line lets any origin upgrade a session-cookie-authenticated WS connection (Cross-Site WebSocket Hijacking).
 suggested_fix: |
-  Allow changes_requested -> pending and rejected -> pending in both transition maps.
+  Flip the default to InsecureSkipVerify: false and require wsAllowedOrigins to be set explicitly.
 acceptance_criterion: |
-  A player_character in changes_requested status can transition to pending. A test demonstrates this.
+  The default wsInsecureSkipVerify is false. A test confirms the default rejects foreign origins.

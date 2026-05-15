@@ -1073,15 +1073,16 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		dashHandler := dashboard.MountDashboard(router, logger, hub, dmAuthMw)
 		dashboard.MountErrorsRoutes(router, dashHandler, errorStore, time.Now, dmAuthMw)
 
-		// SR-016: tighten the WebSocket upgrade Origin check in production.
-		// Treat the deploy as prod when COOKIE_SECURE=true (the same gate the
-		// session cookie uses at main.go:428). In that mode we derive the
-		// allowed Origin host from BASE_URL and pass insecureSkipVerify=false
-		// so cross-origin upgrade attempts get HTTP 403. Local / dev runs
-		// (COOKIE_SECURE unset) keep the historical permissive default.
+		// SR-016 / A-H03: configure WebSocket upgrade Origin check.
+		// Prod (COOKIE_SECURE=true): derive allowed Origin host from BASE_URL
+		// and enforce strict origin checking (insecureSkipVerify=false).
+		// Local-dev: explicitly opt into permissive mode so cross-origin
+		// upgrades from dev tooling (e.g. Vite HMR) still work.
 		if os.Getenv("COOKIE_SECURE") == "true" {
 			allowed := wsAllowedOriginsFromEnv(os.Getenv("BASE_URL"))
 			dashHandler.SetWebSocketOriginPolicy(allowed, false)
+		} else {
+			dashHandler.SetWebSocketOriginPolicy(nil, true)
 		}
 
 		// Phase 115: drive the Pause/Resume button label + data-campaign-id

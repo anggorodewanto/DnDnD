@@ -1,11 +1,42 @@
-finding_id: A-H01
-status: done
-files_changed:
-  - internal/registration/service.go
-  - internal/registration/resubmit_test.go
-  - internal/dashboard/approval_store.go
-  - internal/dashboard/resubmit_test.go
-test_command_that_validates: go test ./internal/registration/ -run "TestValidTransitions" -short && go test ./internal/dashboard/ -run "TestDBApprovalStore_ResubmitToPending" -short
-acceptance_criterion_met: yes
-notes: Added "changes_requested" -> "pending" and "rejected" -> "pending" entries to both validTransitions (registration/service.go) and validApprovalTransitions (dashboard/approval_store.go). Added a Resubmit method to Service and ResubmitToPending to DBApprovalStore that invoke the existing transitionStatus with target "pending". Unit tests confirm both transitions are allowed. make test and make cover-check pass cleanly.
-follow_ups: []
+# Worker Report: A-H03
+
+**Finding:** WebSocket origin verification defaults to `InsecureSkipVerify: true`
+**Status:** REMEDIATED ✅
+**Worker:** worker-A-H03
+**Date:** 2026-05-16
+
+## Changes Made
+
+### 1. New failing test (Red)
+
+**File:** `internal/dashboard/ws_test.go`
+
+Added `TestWebSocketEndpoint_DefaultRejectsForeignOrigin` — verifies that a
+freshly-constructed `Handler` (no `SetWebSocketOriginPolicy` call) rejects a
+foreign-origin WebSocket upgrade with HTTP 403.
+
+### 2. Default flipped (Green)
+
+**File:** `internal/dashboard/handler.go` (line ~185)
+
+Changed `wsInsecureSkipVerify: true` → `wsInsecureSkipVerify: false` in
+`NewHandler`. Updated struct and constructor comments accordingly.
+
+### 3. Local-dev wiring updated
+
+**File:** `cmd/dndnd/main.go` (line ~1076)
+
+The `else` branch (when `COOKIE_SECURE` is not `"true"`) now explicitly calls
+`dashHandler.SetWebSocketOriginPolicy(nil, true)` so local-dev tooling (Vite
+HMR, etc.) continues to work without origin restrictions.
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| New test fails before fix (Red) | ✅ Got 101, expected 403 |
+| New test passes after fix (Green) | ✅ |
+| `make test` | ✅ All packages pass |
+| `make cover-check` | ✅ All thresholds met |
+| No unrelated code touched | ✅ |
+| No commit created | ✅ |

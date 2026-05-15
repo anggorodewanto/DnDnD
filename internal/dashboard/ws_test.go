@@ -531,3 +531,22 @@ func TestWebSocketEndpoint_SubscribeToEncounter(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(msg), "enc-42")
 }
+
+func TestWebSocketEndpoint_DefaultRejectsForeignOrigin(t *testing.T) {
+	// A-H03: A fresh Handler without SetWebSocketOriginPolicy must default to
+	// rejecting foreign-origin WS upgrades (wsInsecureSkipVerify=false).
+	hub := NewHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	h := NewHandler(nil, hub) // no SetWebSocketOriginPolicy call
+
+	rec := &hijackableRecorder{ResponseRecorder: httptest.NewRecorder()}
+	req := newWSHandshakeRequest(t, "https://evil.example.com", "dashboard.example.com")
+
+	h.ServeWebSocket(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code,
+		"default Handler must reject foreign Origin; got %d (body=%q)",
+		rec.Code, rec.Body.String())
+}

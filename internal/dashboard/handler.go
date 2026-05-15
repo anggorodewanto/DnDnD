@@ -121,8 +121,8 @@ type Handler struct {
 	// ServeWebSocket relies on nhooyr/websocket's built-in same-host check
 	// plus wsAllowedOrigins (matched via filepath.Match against the request
 	// Origin host) to reject cross-origin upgrade attempts with HTTP 403.
-	// Defaults: insecureSkipVerify=true so existing callers/tests keep the
-	// old behaviour until cmd/dndnd/main.go explicitly opts into prod mode.
+	// A-H03: Defaults to false (strict). Local-dev wiring must opt in via
+	// SetWebSocketOriginPolicy(nil, true).
 	wsAllowedOrigins     []string
 	wsInsecureSkipVerify bool
 }
@@ -178,11 +178,10 @@ func NewHandler(logger *slog.Logger, hub *Hub) *Handler {
 		logger: logger,
 		tmpl:   tmpl,
 		hub:    hub,
-		// SR-016: preserve historical dev behaviour by default. Production
-		// wiring in cmd/dndnd/main.go calls SetWebSocketOriginPolicy with the
-		// configured BASE_URL host + insecureSkipVerify=false to switch to
-		// strict origin checking.
-		wsInsecureSkipVerify: true,
+		// A-H03: default to strict origin checking. Local-dev and test
+		// callers that need the permissive behaviour must explicitly call
+		// SetWebSocketOriginPolicy(nil, true).
+		wsInsecureSkipVerify: false,
 	}
 }
 
