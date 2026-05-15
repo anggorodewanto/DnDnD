@@ -51,6 +51,7 @@ type CounterspellResult struct {
 // 948, Subtle Spell suppresses the V/S components — Counterspell cannot be
 // triggered against it. (med-29 / Phase 72)
 var ErrSubtleSpellNotCounterspellable = errors.New("counterspell cannot trigger against a subtle spell")
+var ErrCounterspellSlotTooLow = errors.New("counterspell requires a spell slot of level 3 or higher")
 
 // TriggerCounterspell is called by the DM from the Active Reactions Panel.
 // It validates the declaration, looks up available slots, stores enemy spell info,
@@ -119,6 +120,10 @@ func (s *Service) TriggerCounterspell(ctx context.Context, declarationID uuid.UU
 // - If slot >= enemy cast level: auto-counter (success)
 // - If slot < enemy cast level: needs ability check (DC = 10 + enemy spell level)
 func (s *Service) ResolveCounterspell(ctx context.Context, declarationID uuid.UUID, chosenSlotLevel int) (CounterspellResult, error) {
+	if chosenSlotLevel < 3 {
+		return CounterspellResult{}, ErrCounterspellSlotTooLow
+	}
+
 	decl, err := s.store.GetReactionDeclaration(ctx, declarationID)
 	if err != nil {
 		return CounterspellResult{}, fmt.Errorf("getting reaction declaration: %w", err)

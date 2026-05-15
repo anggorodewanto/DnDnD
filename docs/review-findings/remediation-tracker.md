@@ -36,7 +36,7 @@
 | F-05 | High | AoE DEX save cover bonuses never applied | review_passed | — | PASS |
 | F-06 | High | Flying movers blocked by ground occupants | review_passed | — | PASS |
 | F-07 | High | Defense fighting style AC bonus ignored | review_passed | — | PASS |
-| F-08 | High | Counterspell accepts invalid low-level slots | pending | — | — |
+| F-08 | High | Counterspell accepts invalid low-level slots | review_passed | — | PASS |
 | F-09 | High | Material components consumed before validation fails | pending | — | — |
 | F-10 | High | Expired readied spells leave concentration set | pending | — | — |
 | F-19 | Medium | AoE full cover not used to block targets | pending | — | — |
@@ -169,8 +169,13 @@
 - **Source**: agent-03
 - **Files**: `internal/combat/counterspell.go`
 - **Test plan**: Test that ResolveCounterspell rejects slot levels below 3
-- **Implementation notes**: —
-- **Reviewer verdict**: —
+- **Implementation notes**: Added `ErrCounterspellSlotTooLow` sentinel error and early validation `chosenSlotLevel < 3` at the top of `ResolveCounterspell`, before any store calls or slot deduction. Test `TestResolveCounterspell_F08_RejectsSlotBelow3` proves levels 1 and 2 are rejected.
+- **Changed files**: `internal/combat/counterspell.go`, `internal/combat/counterspell_test.go`
+- **Reviewer verdict**: **PASS** (reviewer-f08, 2026-05-15)
+  - **D&D 5e/SRD correctness**: ✅ Counterspell is a 3rd-level abjuration spell. Slots below 3rd level cannot cast it. The `chosenSlotLevel < 3` guard correctly enforces this minimum.
+  - **Spec conformance**: ✅ Only slots 3+ accepted. Defense-in-depth: `AvailableCounterspellSlots` also filters `level >= 3` on the prompt side, so the UI never offers invalid slots. The server-side guard in `ResolveCounterspell` catches any bypass of the prompt.
+  - **Implementation correctness**: ✅ The validation is the **first statement** in `ResolveCounterspell` (line 108), before any store lookups, slot deductions, reaction consumption, or DB writes. Zero side effects on rejection. Returns the sentinel `ErrCounterspellSlotTooLow`.
+  - **Test adequacy**: ✅ `TestResolveCounterspell_F08_RejectsSlotBelow3` iterates levels 1 and 2, asserts `errors.Is(err, ErrCounterspellSlotTooLow)`. `TestAvailableCounterspellSlots_PactSlotBelow3` covers the prompt-side filter. Combined with existing tests proving level 3 succeeds (`TestResolveCounterspell_AutoCounter`), the boundary is fully covered.
 
 ### F-09: Material components consumed before validation fails
 - **Source**: agent-03

@@ -2087,3 +2087,15 @@ func TestResolveCounterspell_NoRefundForNPCEnemy(t *testing.T) {
 	assert.Equal(t, CounterspellCountered, result.Outcome)
 	assert.False(t, result.EnemySlotRefunded, "NPC enemy should not have slot refunded")
 }
+
+// --- F-08: Counterspell rejects invalid low-level slots ---
+
+func TestResolveCounterspell_F08_RejectsSlotBelow3(t *testing.T) {
+	svc := NewService(defaultMockStore())
+
+	for _, level := range []int{1, 2} {
+		_, err := svc.ResolveCounterspell(context.Background(), uuid.New(), level)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrCounterspellSlotTooLow, "slot level %d should be rejected", level)
+	}
+}
