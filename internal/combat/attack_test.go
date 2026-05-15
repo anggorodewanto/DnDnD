@@ -861,59 +861,78 @@ func TestServiceAttack_UnarmedWhenNoWeaponEquipped(t *testing.T) {
 }
 
 func TestCheckAutoCrit(t *testing.T) {
+	meleeWeapon := refdata.Weapon{WeaponType: "simple_melee"}
+	rangedWeapon := refdata.Weapon{WeaponType: "simple_ranged"}
+	thrownMelee := refdata.Weapon{WeaponType: "simple_melee", Properties: []string{"thrown"}}
+
 	tests := []struct {
 		name       string
 		conditions json.RawMessage
+		weapon     refdata.Weapon
 		distFt     int
 		expectCrit bool
 	}{
 		{
 			name:       "paralyzed within 5ft melee",
 			conditions: json.RawMessage(`[{"condition":"paralyzed"}]`),
+			weapon:     meleeWeapon,
 			distFt:     5,
 			expectCrit: true,
 		},
 		{
 			name:       "unconscious within 5ft melee",
 			conditions: json.RawMessage(`[{"condition":"unconscious"}]`),
+			weapon:     meleeWeapon,
 			distFt:     5,
 			expectCrit: true,
 		},
 		{
-			name:       "paralyzed ranged within 5ft",
+			name:       "paralyzed ranged within 5ft no auto-crit",
 			conditions: json.RawMessage(`[{"condition":"paralyzed"}]`),
+			weapon:     rangedWeapon,
 			distFt:     5,
-			expectCrit: true,
+			expectCrit: false,
 		},
 		{
-			name:       "unconscious ranged within 5ft",
+			name:       "unconscious ranged within 5ft no auto-crit",
 			conditions: json.RawMessage(`[{"condition":"unconscious"}]`),
+			weapon:     rangedWeapon,
 			distFt:     5,
-			expectCrit: true,
+			expectCrit: false,
 		},
 		{
 			name:       "paralyzed ranged beyond 5ft",
 			conditions: json.RawMessage(`[{"condition":"paralyzed"}]`),
+			weapon:     rangedWeapon,
 			distFt:     30,
 			expectCrit: false,
 		},
 		{
 			name:       "paralyzed but beyond 5ft",
 			conditions: json.RawMessage(`[{"condition":"paralyzed"}]`),
+			weapon:     meleeWeapon,
 			distFt:     10,
 			expectCrit: false,
 		},
 		{
 			name:       "no conditions",
 			conditions: json.RawMessage(`[]`),
+			weapon:     meleeWeapon,
 			distFt:     5,
 			expectCrit: false,
+		},
+		{
+			name:       "thrown melee within 5ft paralyzed auto-crits",
+			conditions: json.RawMessage(`[{"condition":"paralyzed"}]`),
+			weapon:     thrownMelee,
+			distFt:     5,
+			expectCrit: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			crit, _ := CheckAutoCrit(tt.conditions, tt.distFt)
+			crit, _ := CheckAutoCrit(tt.conditions, tt.distFt, tt.weapon)
 			assert.Equal(t, tt.expectCrit, crit)
 		})
 	}
@@ -1121,7 +1140,7 @@ func TestResolveAttack_NatOneAlwaysMisses(t *testing.T) {
 }
 
 func TestCheckAutoCrit_BadJSON(t *testing.T) {
-	crit, reason := CheckAutoCrit(json.RawMessage(`invalid`), 5)
+	crit, reason := CheckAutoCrit(json.RawMessage(`invalid`), 5, refdata.Weapon{WeaponType: "simple_melee"})
 	assert.False(t, crit)
 	assert.Equal(t, "", reason)
 }

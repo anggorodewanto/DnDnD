@@ -1,43 +1,30 @@
-# Worker Report: B-H02
+# Worker Report: C-H01
 
-**Finding:** RenderMap mutates caller-supplied MapData.TileSize
-**Status:** FIXED ✅
+## Finding
+**ID:** C-H01  
+**Severity:** High  
+**Title:** Auto-crit applies to ranged attacks within 5ft against paralyzed/unconscious
 
-## What was done
+## Root Cause
+`CheckAutoCrit` only gated on `distFt > 5` without considering weapon type. Any attack (including ranged) within 5ft against a paralyzed/unconscious target would auto-crit, violating RAW (only melee attacks auto-crit).
 
-### Red (failing test)
-Added `TestRenderMap_DoesNotMutateTileSize` in `renderer_test.go`:
-- Creates `MapData` with `TileSize=64` and `Width=150` (triggers large-map path)
-- Calls `RenderMap`
-- Asserts `md.TileSize` is still 64 after the call
-- Confirmed test **failed** before fix: `got 32, want 64`
+## Fix Applied
 
-### Green (fix)
-In `renderer.go`, replaced the direct mutation:
-```go
-// Before (mutates caller):
-if md.Width > 100 || md.Height > 100 {
-    md.TileSize = 32
-}
-```
-With a local variable + defer restore pattern:
-```go
-// After (no permanent mutation):
-tileSize := md.TileSize
-if md.Width > 100 || md.Height > 100 {
-    tileSize = 32
-}
-origTileSize := md.TileSize
-md.TileSize = tileSize
-defer func() { md.TileSize = origTileSize }()
-```
-This ensures draw helpers still see the reduced tile size during rendering, but the caller's struct is restored on exit.
+### `internal/combat/attack.go`
+- Added `weapon refdata.Weapon` parameter to `CheckAutoCrit` signature.
+- Added early return `false` when `IsRangedWeapon(weapon)` is true (before condition checks).
+- Updated the call site in `buildAttackInput` to pass the `weapon` argument.
 
-### Verification
-- `make test` — all tests pass
-- `make cover-check` — all coverage thresholds met
-- Existing `TestRenderMap_LargeMapTileSize` still passes (image dimensions correct with 32px tiles)
+### `internal/combat/attack_test.go`
+- Rewrote `TestCheckAutoCrit` table tests to include a `weapon` field.
+- Changed existing "paralyzed ranged within 5ft" / "unconscious ranged within 5ft" cases from `expectCrit: true` → `expectCrit: false`.
+- Added "thrown melee within 5ft paralyzed auto-crits" case to confirm thrown melee weapons (e.g., handaxe) still auto-crit correctly.
+- Updated `TestCheckAutoCrit_BadJSON` to pass the new weapon parameter.
 
-## Files changed
-- `internal/gamemap/renderer/renderer.go` (lines 13–19)
-- `internal/gamemap/renderer/renderer_test.go` (added test at end)
+## Verification
+- `make test` — PASS (all packages)
+- `make cover-check` — PASS (all thresholds met)
+
+## Notes
+- Darts (`simple_ranged` + `thrown` property) are correctly excluded from auto-crit since `IsRangedWeapon` checks `WeaponType` suffix `_ranged`.
+- Thrown melee weapons (handaxe, javelin — `simple_melee` + `thrown`) still auto-crit as expected since their `WeaponType` is `_melee`.

@@ -1,11 +1,11 @@
-finding_id: B-H02
+finding_id: C-H01
 severity: High
-title: RenderMap mutates caller-supplied MapData.TileSize
-location: internal/gamemap/renderer/renderer.go:13-16
-spec_ref: spec §Map Size Limits; Phase 22
+title: Auto-crit applies to ranged attacks within 5ft against paralyzed/unconscious
+location: internal/combat/attack.go:727-748 (CheckAutoCrit)
+spec_ref: Phase 34; spec line 694
 problem: |
-  RenderMap overwrites md.TileSize in place. The same *MapData pointer is stored in RenderQueue.latest and visible to future enqueues.
+  CheckAutoCrit only gates on distFt > 5 and does not consider weapon type. A point-blank ranged shot against a paralyzed target auto-crits. Per RAW, only melee attacks within 5ft auto-crit.
 suggested_fix: |
-  Use a local variable: tileSize := md.TileSize; if md.Width > 100 || md.Height > 100 { tileSize = 32 }. Pass tileSize everywhere instead of mutating.
+  Add a melee-only gate: if IsRangedWeapon(weapon) && !thrown, return false.
 acceptance_criterion: |
-  After RenderMap returns, the original MapData.TileSize is unchanged. A test demonstrates this.
+  CheckAutoCrit returns false for ranged weapons within 5ft against paralyzed targets. Returns true for melee. Tests demonstrate both.

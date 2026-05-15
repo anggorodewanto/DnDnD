@@ -55,13 +55,13 @@ Low: 142
 | 43 | A-H08 | High | pending | Fuzzy match suggestion message renders incorrectly when multiple matches | internal/discord/registration_handler.go:97-100 |
 | 44 | A-H09 | High | pending | Sessions middleware re-issues cookie even when slide TTL fails silently | internal/auth/middleware.go:62-77 |
 | 45 | B-H01 | High | pending | Map size limits not enforced when rendering, only at create-time | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:12-16`; |
-| 46 | B-H02 | High | in_progress | `RenderMap` mutates caller-supplied `MapData.TileSize` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:13-16` |
+| 46 | B-H02 | High | done | `RenderMap` mutates caller-supplied `MapData.TileSize` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:13-16` |
 | 47 | B-H03 | High | pending | Asset upload accepts arbitrary MIME types (XSS / file-type abuse risk) | `/home/ab/projects/DnDnD/internal/asset/handler.go:36-83`, |
 | 48 | B-H04 | High | pending | Map renderer never composites the uploaded background image | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go` |
 | 49 | B-H05 | High | pending | `TilesetRefs` request field silently dropped by HTTP handler | `/home/ab/projects/DnDnD/internal/gamemap/handler.go:65-82, |
 | 50 | B-H06 | High | pending | DM-view fog-of-war ignores `MapData.DMSeesAll` when caller pre-computed fog *without* setting the flag on `FogOfWar` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:33-47`, |
 | 51 | B-H07 | High | pending | Fog renderer does not preserve "previously seen" cells across renders | `/home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:68-93` |
-| 52 | C-H01 | High | pending | Auto-crit applies to ranged attacks within 5ft against paralyzed/unconscious | /home/ab/projects/DnDnD/internal/combat/attack.go:727-748 (`CheckAutoCrit`) |
+| 52 | C-H01 | High | in_progress | Auto-crit applies to ranged attacks within 5ft against paralyzed/unconscious | /home/ab/projects/DnDnD/internal/combat/attack.go:727-748 (`CheckAutoCrit`) |
 | 53 | C-H02 | High | pending | PC creature size hard-coded to "Medium" — heavy-weapon disadvantage never fires for halflings/gnomes | /home/ab/projects/DnDnD/internal/combat/attack.go:1316-1326 |
 | 54 | C-H03 | High | pending | Crossbow Expert does not waive ranged-with-hostile-adjacent disadvantage | /home/ab/projects/DnDnD/internal/combat/advantage.go:88-91 |
 | 55 | C-H04 | High | pending | Dash adds raw base speed, ignoring exhaustion/condition speed modifiers | /home/ab/projects/DnDnD/internal/combat/standard_actions.go:38-71 (`Dash`), 73-8... |
