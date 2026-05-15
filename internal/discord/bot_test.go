@@ -111,15 +111,12 @@ func TestBot_HandleGuildMemberAdd_IgnoresBotUsers(t *testing.T) {
 	}
 }
 
-func TestBot_HandleGuildMemberAdd_DefaultCampaignName(t *testing.T) {
-	var sentContent string
+func TestBot_HandleGuildMemberAdd_NoCampaign_SkipsWelcome(t *testing.T) {
+	var dmCalled bool
 	mock := newTestMock()
 	mock.UserChannelCreateFunc = func(recipientID string) (*discordgo.Channel, error) {
+		dmCalled = true
 		return &discordgo.Channel{ID: "dm-ch"}, nil
-	}
-	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
-		sentContent = content
-		return &discordgo.Message{}, nil
 	}
 
 	bot := NewBot(mock, "app-1", newTestLogger())
@@ -127,12 +124,12 @@ func TestBot_HandleGuildMemberAdd_DefaultCampaignName(t *testing.T) {
 	bot.HandleGuildMemberAdd(nil, &discordgo.GuildMemberAdd{
 		Member: &discordgo.Member{
 			User:    &discordgo.User{ID: "user-1"},
-			GuildID: "guild-1",
+			GuildID: "guild-no-campaign",
 		},
 	})
 
-	if sentContent == "" {
-		t.Fatal("expected welcome message to be sent")
+	if dmCalled {
+		t.Fatal("should not send welcome DM when no campaign exists for the guild")
 	}
 }
 

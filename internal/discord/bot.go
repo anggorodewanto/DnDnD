@@ -67,6 +67,13 @@ func (b *Bot) campaignName(guildID string) string {
 	return "this campaign"
 }
 
+func (b *Bot) hasCampaign(guildID string) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	_, ok := b.campaignNames[guildID]
+	return ok
+}
+
 // trackAndRegister tracks a guild and registers slash commands for it.
 // Returns an error if command registration fails.
 func (b *Bot) trackAndRegister(guildID string) error {
@@ -115,9 +122,13 @@ func (b *Bot) ValidateGuildPermissions(guildID string, granted int64) {
 }
 
 // HandleGuildMemberAdd is called when a new member joins a guild.
-// It sends a welcome DM to non-bot users.
+// It sends a welcome DM to non-bot users if a campaign exists for the guild.
 func (b *Bot) HandleGuildMemberAdd(_ *discordgo.Session, event *discordgo.GuildMemberAdd) {
 	if event.Member.User.Bot {
+		return
+	}
+
+	if !b.hasCampaign(event.Member.GuildID) {
 		return
 	}
 

@@ -1,11 +1,11 @@
-finding_id: B-H01
+finding_id: A-H07
 severity: High
-title: Map size limits not enforced when rendering, only at create-time
-location: internal/gamemap/renderer/renderer.go:12-16
-spec_ref: spec §Map Size Limits ("rejected: >200 in either dimension")
+title: Welcome DM sent to every joining member even when no campaign exists
+location: internal/discord/bot.go:119-131 + internal/discord/welcome.go:6-19
+spec_ref: spec §Player Onboarding (lines 184-200); Phase 9a
 problem: |
-  RenderMap only checks >100 to downscale tile size but accepts arbitrarily large Width/Height. A stale stored map exceeding 200x200 will OOM the renderer.
+  HandleGuildMemberAdd sends the welcome DM regardless of whether /setup has been run or a campaign exists. Confuses users in non-DnDnD servers.
 suggested_fix: |
-  Add if md.Width > HardLimitDimension || md.Height > HardLimitDimension early-return error in RenderMap.
+  Gate SendWelcomeDM on the existence of a campaign row for the guild.
 acceptance_criterion: |
-  RenderMap returns an error for maps exceeding 200 in either dimension. A test demonstrates this.
+  Welcome DM is NOT sent when no campaign exists for the guild. A test demonstrates this.
