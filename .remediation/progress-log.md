@@ -163,3 +163,10 @@ Append-only journal of all remediation activity.
 - Commit: d254f1e
 - Reviewer: approved
 - Notes: Moved d20 destroy check from DawnRecharge into UseCharges
+
+## 2026-05-15T18:38 — G-C04 done
+
+- Finding: Antitoxin "advantage vs poison" not tracked
+- Commit: 5819224
+- Reviewer: approved
+- Notes: Added AppliedCondition field to UseResult, set to "antitoxin" on use
