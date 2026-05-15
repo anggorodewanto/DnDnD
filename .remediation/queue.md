@@ -29,8 +29,8 @@ Low: 142
 | 17 | F-C02 | Critical | done | Heavy-armor STR speed penalty is computed but never applied to combat speed | /home/ab/projects/DnDnD/internal/combat/equip.go:237,478-487; /home/ab/projects/... |
 | 18 | F-C03 | Critical | done | Devil's Sight is never wired into the player vision pipeline | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:755-806 |
 | 19 | F-C04 | Critical | done | Lair Action is placed at the head of the turn queue instead of "loses ties" | /home/ab/projects/DnDnD/internal/combat/legendary.go:304-348 |
-| 20 | G-C01 | Critical | in_progress | Passive-effect vocabulary in spec does not match the code parser | internal/magicitem/effects.go:112-160, internal/combat/feature_integration.go:58... |
-| 21 | G-C02 | Critical | pending | `/attune` does not require a short rest | internal/inventory/attunement.go:33-67, internal/discord/attune_handler.go:68-15... |
+| 20 | G-C01 | Critical | done | Passive-effect vocabulary in spec does not match the code parser | internal/magicitem/effects.go:112-160, internal/combat/feature_integration.go:58... |
+| 21 | G-C02 | Critical | in_progress | `/attune` does not require a short rest | internal/inventory/attunement.go:33-67, internal/discord/attune_handler.go:68-15... |
 | 22 | G-C03 | Critical | pending | `destroy_on_zero` roll happens at dawn, not when last charge is spent | internal/inventory/recharge.go:38-92, internal/inventory/active_ability.go:28-62 |
 | 23 | G-C04 | Critical | pending | Antitoxin "advantage vs poison" is not actually tracked | internal/inventory/service.go:135-140 |
 | 24 | H-C01 | Critical | pending | Single-class half-caster (Paladin/Ranger) gets the wrong slot count | /home/ab/projects/DnDnD/internal/character/spellslots.go:108 |

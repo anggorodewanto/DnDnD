@@ -1,11 +1,11 @@
-finding_id: G-C01
+finding_id: G-C02
 severity: Critical
-title: Passive-effect vocabulary in spec does not match the code parser
-location: internal/magicitem/effects.go:112-160
-spec_ref: spec §Magic Items lines 2697-2701 (Phase 88a)
+title: /attune does not require a short rest
+location: internal/inventory/attunement.go:33-67, internal/discord/attune_handler.go:68-159
+spec_ref: spec §Magic Items lines 2710-2712 (Phase 88b)
 problem: |
-  Spec uses "modify_save" and "grant_resistance" but code only recognizes "modify_saving_throw" and "resistance". Any DM authoring passive_effects JSON following the spec verbatim gets no effect.
+  Attune validates inventory presence, requires_attunement, slot cap (3), and class restriction, but never checks that the caster is currently in or has just completed a short rest. The Discord handler can be called at any time, immediately granting bonuses.
 suggested_fix: |
-  Add "modify_save" and "grant_resistance" as accepted aliases in the switch statement.
+  Add an OutOfCombat precondition check (reject if the character is in an active encounter) — this is the simplest enforcement that prevents mid-combat attunement. The spec says "can be done during /rest short flow" which implies it should be blocked during combat at minimum.
 acceptance_criterion: |
-  Both "modify_save" and "modify_saving_throw" produce the same effect. Both "grant_resistance" and "resistance" produce the same effect. Tests demonstrate the aliases work.
+  /attune returns an error when the character is in an active encounter. /attune succeeds when the character is not in combat. A test demonstrates both.

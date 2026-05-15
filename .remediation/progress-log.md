@@ -142,3 +142,10 @@ Append-only journal of all remediation activity.
 - Commit: 291875c
 - Reviewer: approved
 - Notes: Added IsLairAction field + sort.SliceStable after building entries
+
+## 2026-05-15T18:29 — G-C01 done
+
+- Finding: Passive-effect vocabulary mismatch between spec and code
+- Commit: 8e310de
+- Reviewer: approved
+- Notes: Added comma-separated aliases in switch cases (2 lines changed)

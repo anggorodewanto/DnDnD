@@ -362,6 +362,50 @@ func TestAttuneHandler_StoreError_DoesNotPublish(t *testing.T) {
 	assert.Empty(t, publisher.calls)
 }
 
+func TestAttuneHandler_RejectsDuringCombat(t *testing.T) {
+	sess := &mockInventorySession{}
+	campID := uuid.New()
+	charID := uuid.New()
+
+	items := []character.InventoryItem{
+		{ItemID: "cloak-of-protection", Name: "Cloak of Protection", Quantity: 1, Type: "magic_item", IsMagic: true, RequiresAttunement: true},
+	}
+	itemsJSON, _ := json.Marshal(items)
+	slotsJSON, _ := json.Marshal([]character.AttunementSlot{})
+
+	handler := NewAttuneHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:              charID,
+			CampaignID:      campID,
+			Name:            "Aria",
+			Inventory:       pqtype.NullRawMessage{RawMessage: itemsJSON, Valid: true},
+			AttunementSlots: pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+		}},
+		&mockAttuneStore{char: refdata.Character{ID: charID}},
+	)
+	// Wire an encounter provider that returns an active encounter.
+	handler.SetEncounterProvider(&mockAttuneEncounterProvider{encounterID: uuid.New()})
+
+	interaction := makeAttuneInteraction("guild1", "user1", "cloak-of-protection")
+	handler.Handle(interaction)
+
+	assert.Contains(t, sess.lastResponse, "cannot attune during combat")
+}
+
+// mockAttuneEncounterProvider implements CheckEncounterProvider for attune tests.
+type mockAttuneEncounterProvider struct {
+	encounterID uuid.UUID
+	err         error
+}
+
+func (m *mockAttuneEncounterProvider) ActiveEncounterForUser(_ context.Context, _, _ string) (uuid.UUID, error) {
+	if m.err != nil {
+		return uuid.Nil, m.err
+	}
+	return m.encounterID, nil
+}
+
 func TestAttuneHandler_ClassRestrictionAllowed(t *testing.T) {
 	sess := &mockInventorySession{}
 	campID := uuid.New()

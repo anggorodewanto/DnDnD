@@ -30,12 +30,13 @@ type AttunePublisher interface {
 
 // AttuneHandler handles the /attune slash command.
 type AttuneHandler struct {
-	session         Session
-	campaignProv    InventoryCampaignProvider
-	characterLookup InventoryCharacterLookup
-	store           AttuneCharacterStore
-	publisher       AttunePublisher
-	cardUpdater     CardUpdater // SR-007
+	session            Session
+	campaignProv       InventoryCampaignProvider
+	characterLookup    InventoryCharacterLookup
+	store              AttuneCharacterStore
+	publisher          AttunePublisher
+	cardUpdater        CardUpdater // SR-007
+	encounterProvider  CheckEncounterProvider
 }
 
 // NewAttuneHandler creates a new AttuneHandler.
@@ -65,6 +66,12 @@ func (h *AttuneHandler) SetCardUpdater(u CardUpdater) {
 	h.cardUpdater = u
 }
 
+// SetEncounterProvider wires the encounter lookup used to block attunement
+// during active combat (G-C02).
+func (h *AttuneHandler) SetEncounterProvider(p CheckEncounterProvider) {
+	h.encounterProvider = p
+}
+
 // Handle processes the /attune command interaction.
 func (h *AttuneHandler) Handle(interaction *discordgo.Interaction) {
 	ctx := context.Background()
@@ -92,6 +99,14 @@ func (h *AttuneHandler) Handle(interaction *discordgo.Interaction) {
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Could not find your character. Use `/register` first.")
 		return
+	}
+
+	// G-C02: block attunement during active combat.
+	if h.encounterProvider != nil {
+		if _, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, userID); err == nil {
+			respondEphemeral(h.session, interaction, "Attunement requires a short rest — you cannot attune during combat.")
+			return
+		}
 	}
 
 	items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
