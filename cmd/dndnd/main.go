@@ -176,6 +176,26 @@ func (l dashboardCampaignLookup) IsDM(ctx context.Context, dmUserID string) (boo
 	return id != "", nil
 }
 
+// IsCampaignDM satisfies dashboard.DMVerifier.IsCampaignDM (F-01): verifies
+// the user is the DM of the specific campaign (non-archived).
+func (l dashboardCampaignLookup) IsCampaignDM(ctx context.Context, dmUserID, campaignID string) (bool, error) {
+	if dmUserID == "" || campaignID == "" {
+		return false, nil
+	}
+	id, err := uuid.Parse(campaignID)
+	if err != nil {
+		return false, nil
+	}
+	c, err := l.queries.GetCampaignByID(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if c.Status == "archived" {
+		return false, nil
+	}
+	return c.DmUserID == dmUserID, nil
+}
+
 // approvalsCounter adapts dashboard.ApprovalStore.ListPendingApprovals to
 // dashboard.PendingApprovalsCounter for the Campaign Home pending-approvals
 // card (med-40 / Phase 15).
@@ -348,6 +368,7 @@ type dmOnlyAPIDeps struct {
 	mapRegenerator           *mapRegeneratorAdapter // SR-068: DM map PNG endpoint
 	encounterHandler         *encounter.Handler     // Finding 2: encounter builder is DM-only
 	assetUploadHandler       http.HandlerFunc       // Finding 2: asset upload is DM-only
+	dmVerifier               dashboard.DMVerifier   // F-01: campaign-scoped authorization
 }
 
 // mountDMOnlyAPIs registers every DM-mutation route group behind dmAuthMw so
@@ -371,7 +392,9 @@ func mountDMOnlyAPIs(router chi.Router, deps dmOnlyAPIDeps, dmAuthMw func(http.H
 			deps.homebrewHandler.RegisterRoutes(r)
 		}
 		if deps.campaignHandler != nil {
-			deps.campaignHandler.RegisterRoutes(r)
+			// F-01: campaign-specific routes use RequireCampaignDM to verify
+			// the authenticated user owns the targeted campaign.
+			deps.campaignHandler.RegisterRoutes(r, dashboard.RequireCampaignDM(deps.dmVerifier))
 		}
 		if deps.narrationHandler != nil {
 			deps.narrationHandler.RegisterRoutes(r)
@@ -1012,6 +1035,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			mapRegenerator:           newMapRegeneratorAdapter(queries),
 			encounterHandler:         encounterHandler,
 			assetUploadHandler:       assetHandler.UploadAsset,
+			dmVerifier:               dmVerifier,
 		}, dmAuthMw)
 
 		dmQueueDashHandler := dashboard.RegisterDMQueueRoutes(router, logger, dmQueueNotifier, dmAuthMw)

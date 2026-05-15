@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -18,9 +19,10 @@ import (
 // when discordUserID matches dmUserID; err short-circuits ahead of either
 // path so we can prove the middleware degrades to 403 on lookup failures.
 type stubDMVerifier struct {
-	dmUserID string
-	err      error
-	calls    int
+	dmUserID    string
+	campaignIDs map[string]string // campaignID -> ownerUserID
+	err         error
+	calls       int
 }
 
 func (s *stubDMVerifier) IsDM(_ context.Context, discordUserID string) (bool, error) {
@@ -29,6 +31,18 @@ func (s *stubDMVerifier) IsDM(_ context.Context, discordUserID string) (bool, er
 		return false, s.err
 	}
 	return discordUserID != "" && discordUserID == s.dmUserID, nil
+}
+
+func (s *stubDMVerifier) IsCampaignDM(_ context.Context, discordUserID, campaignID string) (bool, error) {
+	s.calls++
+	if s.err != nil {
+		return false, s.err
+	}
+	if s.campaignIDs == nil {
+		return false, nil
+	}
+	owner, ok := s.campaignIDs[campaignID]
+	return ok && owner == discordUserID, nil
 }
 
 // passthroughHandler is the downstream handler used by the middleware tests.
@@ -139,6 +153,125 @@ func TestRequireDM_DevDMVerifierAllowsAll(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	mw(next).ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.True(t, next.called)
+}
+
+func TestRequireCampaignDM_AllowsOwner(t *testing.T) {
+	verifier := &stubDMVerifier{
+		dmUserID:    "dm-1",
+		campaignIDs: map[string]string{"campaign-a": "dm-1"},
+	}
+	next := &passthroughHandler{}
+	mw := RequireCampaignDM(verifier)
+
+	r := chi.NewRouter()
+	r.Route("/api/campaigns/{id}", func(r chi.Router) {
+		r.Use(mw)
+		r.Post("/pause", next.ServeHTTP)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/campaign-a/pause", nil)
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.True(t, next.called, "downstream handler must run when user owns the campaign")
+}
+
+func TestRequireCampaignDM_RejectsDMOfDifferentCampaign(t *testing.T) {
+	// F-01 regression test: DM of campaign A must NOT access campaign B.
+	verifier := &stubDMVerifier{
+		dmUserID:    "dm-1",
+		campaignIDs: map[string]string{"campaign-a": "dm-1", "campaign-b": "dm-2"},
+	}
+	next := &passthroughHandler{}
+	mw := RequireCampaignDM(verifier)
+
+	r := chi.NewRouter()
+	r.Route("/api/campaigns/{id}", func(r chi.Router) {
+		r.Use(mw)
+		r.Post("/pause", next.ServeHTTP)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/campaign-b/pause", nil)
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.False(t, next.called, "DM of campaign A must NOT access campaign B")
+
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, "forbidden: DM only", body["error"])
+}
+
+func TestRequireCampaignDM_RejectsMissingCampaignID(t *testing.T) {
+	verifier := &stubDMVerifier{
+		dmUserID:    "dm-1",
+		campaignIDs: map[string]string{"campaign-a": "dm-1"},
+	}
+	next := &passthroughHandler{}
+	mw := RequireCampaignDM(verifier)
+
+	// No chi URL param context — simulates a misconfigured route.
+	req := httptest.NewRequest(http.MethodPost, "/api/campaigns//pause", nil)
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
+	rec := httptest.NewRecorder()
+
+	mw(next).ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.False(t, next.called)
+}
+
+func TestRequireCampaignDM_NilVerifierRejects(t *testing.T) {
+	next := &passthroughHandler{}
+	mw := RequireCampaignDM(nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/campaign-a/pause", nil)
+	rec := httptest.NewRecorder()
+
+	mw(next).ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.False(t, next.called)
+}
+
+func TestRequireCampaignDM_DevPassthrough(t *testing.T) {
+	next := &passthroughHandler{}
+	mw := RequireCampaignDM(DevDMVerifier{})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/any/pause", nil)
+	rec := httptest.NewRecorder()
+
+	mw(next).ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.True(t, next.called)
+}
+
+func TestRequireCampaignDM_FallsBackToCampaignIDParam(t *testing.T) {
+	verifier := &stubDMVerifier{
+		dmUserID:    "dm-1",
+		campaignIDs: map[string]string{"camp-x": "dm-1"},
+	}
+	next := &passthroughHandler{}
+	mw := RequireCampaignDM(verifier)
+
+	r := chi.NewRouter()
+	r.Route("/api/resources/{campaign_id}", func(r chi.Router) {
+		r.Use(mw)
+		r.Get("/", next.ServeHTTP)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/resources/camp-x", nil)
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.True(t, next.called)

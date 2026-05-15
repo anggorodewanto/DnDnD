@@ -23,8 +23,14 @@ func NewHandler(svc *Service) *Handler {
 // Phase 102 introduces pause/resume endpoints for the mobile-lite Quick
 // Actions tab. The service methods and transitions are implemented in
 // service.go; the handler only covers request parsing and status mapping.
-func (h *Handler) RegisterRoutes(r chi.Router) {
+//
+// The optional campaignDMMw middleware is applied inside the {id} route group
+// to enforce campaign-scoped DM authorization (F-01).
+func (h *Handler) RegisterRoutes(r chi.Router, campaignDMMw ...func(http.Handler) http.Handler) {
 	r.Route("/api/campaigns/{id}", func(r chi.Router) {
+		for _, mw := range campaignDMMw {
+			r.Use(mw)
+		}
 		r.Post("/pause", h.Pause)
 		r.Post("/resume", h.Resume)
 	})

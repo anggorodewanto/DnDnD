@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/ab/dndnd/internal/auth"
 )
 
@@ -20,6 +22,9 @@ import (
 // campaign's designated DM."
 type DMVerifier interface {
 	IsDM(ctx context.Context, discordUserID string) (bool, error)
+	// IsCampaignDM checks whether discordUserID is the DM of the specific
+	// campaign identified by campaignID. Returns false for archived campaigns.
+	IsCampaignDM(ctx context.Context, discordUserID, campaignID string) (bool, error)
 }
 
 // RequireDM returns an http middleware that rejects requests whose Discord
@@ -77,10 +82,50 @@ type DevDMVerifier struct{}
 
 func (DevDMVerifier) IsDM(_ context.Context, _ string) (bool, error) { return true, nil }
 
+func (DevDMVerifier) IsCampaignDM(_ context.Context, _, _ string) (bool, error) { return true, nil }
+
 // isDevPassthrough is a marker method that RequireDM checks to skip the
 // user-ID-in-context requirement. In local dev, passthroughMiddleware does
 // not inject a Discord user ID, so RequireDM must not require one.
 func (DevDMVerifier) isDevPassthrough() {}
+
+// RequireCampaignDM returns middleware that verifies the authenticated user
+// is the DM of the specific campaign identified by the chi URL param "id"
+// (falling back to "campaign_id"). It MUST sit downstream of
+// SessionMiddleware. Use this for routes that target a specific campaign.
+func RequireCampaignDM(verifier DMVerifier) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		if verifier == nil {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeDMForbidden(w)
+			})
+		}
+		if _, ok := verifier.(devPassthrough); ok {
+			return next
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID, ok := auth.DiscordUserIDFromContext(r.Context())
+			if !ok || userID == "" {
+				writeDMForbidden(w)
+				return
+			}
+			campaignID := chi.URLParam(r, "id")
+			if campaignID == "" {
+				campaignID = chi.URLParam(r, "campaign_id")
+			}
+			if campaignID == "" {
+				writeDMForbidden(w)
+				return
+			}
+			owns, err := verifier.IsCampaignDM(r.Context(), userID, campaignID)
+			if err != nil || !owns {
+				writeDMForbidden(w)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 // writeDMForbidden emits the canonical 403 JSON payload. Centralised so the
 // wire format stays consistent across every gated route.

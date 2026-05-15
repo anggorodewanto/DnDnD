@@ -13,6 +13,7 @@ import (
 	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/characteroverview"
 	"github.com/ab/dndnd/internal/combat"
+	"github.com/ab/dndnd/internal/dashboard"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/encounter"
 	"github.com/ab/dndnd/internal/gamemap"
@@ -214,6 +215,7 @@ func buildDMOnlyDepsForTest() dmOnlyAPIDeps {
 		assetUploadHandler: func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "stub", http.StatusBadRequest)
 		},
+		dmVerifier: dashboard.DevDMVerifier{},
 	}
 }
 
