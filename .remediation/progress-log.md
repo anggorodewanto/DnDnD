@@ -198,3 +198,10 @@ Append-only journal of all remediation activity.
 - Commit: 6c05cb0
 - Reviewer: approved
 - Notes: Campaign ownership check added to all 5 template service methods
+
+## 2026-05-15T18:53 — J-C02 done
+
+- Finding: Open5e public search endpoint bypasses per-campaign source gating
+- Commit: 66f2f0f
+- Reviewer: approved
+- Notes: Moved search routes from public to DM-auth router group
