@@ -235,6 +235,15 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 		speedFt = 30
 	}
 
+	// F-20: Wild Shape overrides character speed with beast walk speed.
+	if combatant.IsWildShaped && combatant.WildShapeCreatureRef.Valid {
+		if beast, err := s.store.GetCreature(ctx, combatant.WildShapeCreatureRef.String); err == nil {
+			if beastSpeed := getBeastWalkSpeed(beast.Speed); beastSpeed > 0 {
+				speedFt = beastSpeed
+			}
+		}
+	}
+
 	// D-48a — fold turn-start FES speed modifiers (e.g. Monk Unarmored
 	// Movement) into the base speed before exhaustion / condition halving.
 	speedFt += int32(turnStartSpeedBonus(char))

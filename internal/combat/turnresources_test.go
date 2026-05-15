@@ -692,3 +692,37 @@ func TestRefundResource_AlreadyAvailable(t *testing.T) {
 	updated := RefundResource(turn, ResourceAction)
 	assert.False(t, updated.ActionUsed) // no-op, still false
 }
+
+func TestResolveTurnResources_F20_WildShapeUsesBeastSpeed(t *testing.T) {
+	charID := uuid.New()
+	combatant := refdata.Combatant{
+		CharacterID:          uuid.NullUUID{UUID: charID, Valid: true},
+		IsNpc:                false,
+		IsWildShaped:         true,
+		WildShapeCreatureRef: sql.NullString{String: "wolf", Valid: true},
+		Conditions:           json.RawMessage(`[]`),
+	}
+	character := refdata.Character{
+		ID:      charID,
+		SpeedFt: 30,
+		Level:   5,
+		Classes: json.RawMessage(`[{"class":"druid","level":5}]`),
+	}
+
+	store := defaultMockStore()
+	store.getCharacterFn = func(_ context.Context, id uuid.UUID) (refdata.Character, error) {
+		return character, nil
+	}
+	store.getCreatureFn = func(_ context.Context, id string) (refdata.Creature, error) {
+		assert.Equal(t, "wolf", id)
+		return refdata.Creature{
+			ID:    "wolf",
+			Speed: json.RawMessage(`{"walk":40}`),
+		}, nil
+	}
+
+	svc := NewService(store)
+	speed, _, err := svc.ResolveTurnResources(context.Background(), combatant)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(40), speed, "wild-shaped combatant should use beast walk speed")
+}

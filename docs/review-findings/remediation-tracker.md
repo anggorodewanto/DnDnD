@@ -40,7 +40,7 @@
 | F-09 | High | Material components consumed before validation fails | implemented | PASS | reviewer-f09 |
 | F-10 | High | Expired readied spells leave concentration set | review_passed | — | PASS |
 | F-19 | Medium | AoE full cover not used to block targets | implemented | — | — |
-| F-20 | Medium | Wild Shape doesn't use beast speed | pending | — | — |
+| F-20 | Medium | Wild Shape doesn't use beast speed | implemented | — | — |
 | F-21 | Medium | Timeout saves roll raw 1d20 ignoring modifiers | pending | — | — |
 
 ### DB Constraints & Data Integrity (Priority 4)
@@ -287,7 +287,8 @@
 - **Source**: agent-03
 - **Files**: `internal/combat/wildshape.go`, `internal/combat/turnresources.go`
 - **Test plan**: Test that wild-shaped combatant uses beast speed for movement
-- **Implementation notes**: —
+- **Implementation notes**: In `ResolveTurnResources`, after resolving character speed, added a branch: if `combatant.IsWildShaped && combatant.WildShapeCreatureRef.Valid`, look up the creature via `s.store.GetCreature` and use `getBeastWalkSpeed(beast.Speed)` as the base speed. Falls back to character speed silently if creature lookup fails or beast speed is 0. Test `TestResolveTurnResources_F20_WildShapeUsesBeastSpeed` proves a wolf (40ft walk) overrides the druid's 30ft speed.
+- **Changed files**: `internal/combat/turnresources.go`, `internal/combat/turnresources_test.go`
 - **Reviewer verdict**: —
 
 ### F-21: Timeout saves roll raw 1d20 ignoring modifiers
