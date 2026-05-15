@@ -773,6 +773,12 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 		}
 	}
 
+	// F-24: mirror move to #combat-log (best-effort, nil-safe).
+	if moverFetchOK {
+		logMsg := fmt.Sprintf("\U0001f3c3 %s moves to %s%d.", moverCombatant.DisplayName, destLabel, destRow+1)
+		postCombatLogChannel(ctx, h.session, h.oaChannels, turn.EncounterID, logMsg)
+	}
+
 	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{

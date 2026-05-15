@@ -130,11 +130,17 @@ func (h *e2eHarness) SeedCampaign(name string) refdata.Campaign {
 	camp := testutil.NewTestCampaign(h.t, h.queries, "g")
 	h.guildID = camp.GuildID
 	h.campaignID = camp.ID
-	// Register a #the-story channel so any narration/announcer paths that
-	// look it up find it.
-	h.fake.AddGuildChannel(h.guildID, &discordgo.Channel{ID: "ch-story-" + h.guildID, Name: "the-story"})
+	// Register guild channels so production paths that resolve by name find them.
+	h.fake.AddGuildChannel(h.guildID, &discordgo.Channel{ID: "ch-story-" + h.guildID, Name: "the-story", Type: discordgo.ChannelTypeGuildText})
 	h.fake.AddGuildChannel(h.guildID, &discordgo.Channel{ID: "ch-yourturn-" + h.guildID, Name: "your-turn"})
 	h.fake.AddGuildChannel(h.guildID, &discordgo.Channel{ID: "ch-dmqueue-" + h.guildID, Name: "dm-queue"})
+	h.fake.AddGuildChannel(h.guildID, &discordgo.Channel{ID: "ch-combatlog-" + h.guildID, Name: "combat-log"})
+
+	// F-24: set campaign settings with channel_ids so combat-log posts resolve.
+	settings := fmt.Sprintf(`{"channel_ids":{"combat-log":"ch-combatlog-%s","your-turn":"ch-yourturn-%s"}}`, h.guildID, h.guildID)
+	if _, err := h.db.Exec("UPDATE campaigns SET settings=$1 WHERE id=$2", settings, camp.ID); err != nil {
+		h.t.Fatalf("SeedCampaign: update settings: %v", err)
+	}
 	return camp
 }
 
@@ -156,10 +162,9 @@ func (h *e2eHarness) SeedCharacterOnly(charName string) refdata.Character {
 }
 
 // SeedDMApproval bypasses the dashboard and approves a pending player
-// character via registration.Service.Approve directly. Per Phase 120a
-// clarification (1) the welcome-DM is not asserted; the harness's job is to
-// flip status to "approved" and return the updated row so the scenario can
-// re-read it.
+// character via registration.Service.Approve directly, then sends the
+// approval DM through the fake session (mirroring the production
+// dashboard handler's NotifyApproval path).
 func (h *e2eHarness) SeedDMApproval(playerCharID uuid.UUID) refdata.PlayerCharacter {
 	h.t.Helper()
 	svc := registration.NewService(h.queries)
@@ -167,6 +172,14 @@ func (h *e2eHarness) SeedDMApproval(playerCharID uuid.UUID) refdata.PlayerCharac
 	if err != nil {
 		h.t.Fatalf("SeedDMApproval(%s): %v", playerCharID, err)
 	}
+	// F-24: send the approval DM that the production dashboard handler sends.
+	char, err := h.queries.GetCharacter(context.Background(), pc.CharacterID)
+	if err != nil {
+		h.t.Fatalf("SeedDMApproval: GetCharacter: %v", err)
+	}
+	body := fmt.Sprintf("✅ **%s** has been approved! You can now play.", char.Name)
+	ch, _ := h.fake.UserChannelCreate(pc.DiscordUserID)
+	_, _ = h.fake.ChannelMessageSend(ch.ID, body)
 	return *pc
 }
 

@@ -59,7 +59,7 @@
 | F-18 | Medium | Map background opacity not persisted | implemented | — | — |
 | F-22 | Medium | Turn Builder roll fudging unreachable | implemented | — | — |
 | F-23 | Medium | Mobile Approvals renders wrong component | implemented | — | — |
-| F-24 | Medium | Phase 120a e2e omits Discord output assertions | pending | — | — |
+| F-24 | Medium | Phase 120a e2e omits Discord output assertions | implemented | — | — |
 | F-25 | Coverage | make cover-check fails: internal/errorlog below 85% | pending | — | — |
 
 ---
@@ -316,9 +316,9 @@
 
 ### F-24: Phase 120a e2e omits Discord output assertions
 - **Source**: agent-05
-- **Files**: `cmd/dndnd/e2e_scenarios_test.go`
+- **Files**: `cmd/dndnd/e2e_scenarios_test.go`, `cmd/dndnd/e2e_harness_test.go`, `internal/discord/move_handler.go`, `internal/discord/loot_handler.go`
 - **Test plan**: Add Discord output assertions for registration, movement, loot scenarios
-- **Implementation notes**: —
+- **Implementation notes**: (1) Registration: `SeedDMApproval` now sends the approval DM via the fake session (mirroring production `playerNotifierAdapter.NotifyApproval`); test asserts a `KindDirectMessage` containing "approved" and "Aria". (2) Movement: Added `postCombatLogChannel` call in `HandleMoveConfirm` after successful move; harness seeds campaign settings with `channel_ids.combat-log`; test asserts `KindChannelMessage` to `ch-combatlog-<guild>` containing "moves to B1". (3) Loot: Added `resolveStoryChannel` + `ChannelMessageSend` in `HandleLootClaim` after successful claim; test asserts `KindChannelMessage` to `ch-story-<guild>` containing "Magic Sword".
 - **Reviewer verdict**: —
 
 ### F-25: Coverage gate - internal/errorlog below 85%

@@ -182,5 +182,13 @@ func (h *LootHandler) HandleLootClaim(interaction *discordgo.Interaction, poolID
 	// SR-007: refresh #character-cards for the claimant.
 	notifyCardUpdate(ctx, h.cardUpdater, characterID)
 
+	// F-24: announce claim in #the-story (best-effort).
+	if interaction.GuildID != "" {
+		storyMsg := fmt.Sprintf("\U0001f4b0 %s claimed **%s**!", discordUserID(interaction), claimed.Name)
+		if chID, err := resolveStoryChannel(h.session, interaction.GuildID); err == nil {
+			_, _ = h.session.ChannelMessageSend(chID, storyMsg)
+		}
+	}
+
 	respondEphemeral(h.session, interaction, fmt.Sprintf("\u2705 You claimed **%s**!", claimed.Name))
 }

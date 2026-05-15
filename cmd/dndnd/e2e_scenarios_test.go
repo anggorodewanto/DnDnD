@@ -38,11 +38,9 @@ import (
 //    name:"Aria" — the bot responds with a "Registration submitted" ephemeral
 //    and persists a pending player_character row.
 // 2. The harness then stands in for the DM dashboard and calls
-//    registration.Service.Approve directly. Re-reading the row asserts the
-//    status flipped to "approved".
-//
-// Per Phase 120a clarification (1), the welcome-DM assertion is dropped:
-// approval is bypassed via the service, and we assert only DB state.
+//    registration.Service.Approve directly, then sends the approval DM.
+//    Re-reading the row asserts the status flipped to "approved".
+// 3. Assert the approval DM was sent to the player.
 func TestE2E_RegistrationScenario(t *testing.T) {
 	h := startE2EHarness(t)
 	defer h.Stop()
@@ -104,6 +102,15 @@ func TestE2E_RegistrationScenario(t *testing.T) {
 	if got.Status != "approved" {
 		t.Fatalf("expected DB status=approved after SeedDMApproval; got %q", got.Status)
 	}
+
+	// F-24: assert the approval DM was sent to the player.
+	if _, err := h.fake.WaitFor(func(e discordfake.Entry) bool {
+		return e.Kind == discordfake.KindDirectMessage &&
+			strings.Contains(e.Content, "approved") &&
+			strings.Contains(e.Content, "Aria")
+	}, 5*time.Second); err != nil {
+		t.Fatalf("expected approval DM to player: %v\nTranscript:\n%s", err, h.RenderTranscript())
+	}
 }
 
 // TestE2E_MovementScenario covers /move <coord> end-to-end:
@@ -112,10 +119,7 @@ func TestE2E_RegistrationScenario(t *testing.T) {
 // 2. Harness extracts the custom_id and injects a button-click interaction.
 // 3. The handler edits the original message to "Moved to B1." and persists the
 //    new combatant position + decremented turn movement.
-//
-// Per Phase 120a clarification (2), #combat-log is not asserted; verification
-// is DB-only: combatants.position_col/row updated AND
-// turns.movement_remaining_ft decremented.
+// 4. Assert #combat-log received the move line.
 func TestE2E_MovementScenario(t *testing.T) {
 	h := startE2EHarness(t)
 	defer h.Stop()
@@ -179,6 +183,16 @@ func TestE2E_MovementScenario(t *testing.T) {
 	if updatedTurn.MovementRemainingFt >= 30 {
 		t.Fatalf("expected movement_remaining_ft < 30 after move; got %d", updatedTurn.MovementRemainingFt)
 	}
+
+	// F-24: assert #combat-log received the move line.
+	if _, err := h.fake.WaitFor(func(e discordfake.Entry) bool {
+		return e.Kind == discordfake.KindChannelMessage &&
+			e.ChannelID == "ch-combatlog-"+h.guildID &&
+			strings.Contains(e.Content, "Mover") &&
+			strings.Contains(e.Content, "moves to B1")
+	}, 5*time.Second); err != nil {
+		t.Fatalf("expected #combat-log move message: %v\nTranscript:\n%s", err, h.RenderTranscript())
+	}
 }
 
 // TestE2E_LootScenario covers DM-places-loot → /loot → claim flow:
@@ -187,9 +201,7 @@ func TestE2E_MovementScenario(t *testing.T) {
 //    unclaimed item. Custom ID is loot_claim:<pool>:<item>:<char>.
 // 3. Harness injects a click on that Claim button. The handler persists the
 //    claim and updates characters.inventory JSONB.
-//
-// Per Phase 120a clarification (3), #the-story is not asserted; verification
-// is DB inventory + ephemeral "You claimed".
+// 4. Assert #the-story received the loot claim announcement.
 func TestE2E_LootScenario(t *testing.T) {
 	h := startE2EHarness(t)
 	defer h.Stop()
@@ -264,6 +276,15 @@ func TestE2E_LootScenario(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected 'Magic Sword' in inventory after claim; got %+v", items)
+	}
+
+	// F-24: assert #the-story received the loot claim announcement.
+	if _, err := h.fake.WaitFor(func(e discordfake.Entry) bool {
+		return e.Kind == discordfake.KindChannelMessage &&
+			e.ChannelID == "ch-story-"+h.guildID &&
+			strings.Contains(e.Content, "Magic Sword")
+	}, 5*time.Second); err != nil {
+		t.Fatalf("expected #the-story loot claim message: %v\nTranscript:\n%s", err, h.RenderTranscript())
 	}
 }
 
