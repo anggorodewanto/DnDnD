@@ -205,8 +205,18 @@ func (s *Service) GenerateEnemyTurnPlan(ctx context.Context, encounterID, combat
 
 	speedFt := ParseWalkSpeed(creature.Speed)
 
-	// Build a simple grid for pathfinding — use a 20x20 default if no map available
+	// F-12: Load the encounter's actual map for pathfinding; fall back to 20x20 open grid.
 	grid := buildDefaultGrid(20, 20, combatants, combatant.ID)
+	enc, err := s.store.GetEncounter(ctx, encounterID)
+	if err == nil && enc.MapID.Valid {
+		m, merr := s.store.GetMapByIDUnchecked(ctx, enc.MapID.UUID)
+		if merr == nil {
+			md, perr := renderer.ParseTiledJSON(m.TiledJson, nil, nil)
+			if perr == nil && md.Width > 0 && md.Height > 0 {
+				grid = buildMapGrid(md, combatants, combatant.ID)
+			}
+		}
+	}
 
 	return BuildTurnPlan(BuildTurnPlanInput{
 		Combatant:  combatant,
@@ -337,6 +347,30 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 		CombatLog:     combatLog,
 		DamageApplied: damageApplied,
 	}, nil
+}
+
+// buildMapGrid creates a pathfinding grid from parsed map data.
+func buildMapGrid(md *renderer.MapData, combatants []refdata.Combatant, moverID uuid.UUID) *pathfinding.Grid {
+	var occupants []pathfinding.Occupant
+	for _, c := range combatants {
+		if c.ID == moverID || !c.IsAlive {
+			continue
+		}
+		col, row := parsePosition(c)
+		occupants = append(occupants, pathfinding.Occupant{
+			Col:          col,
+			Row:          row,
+			IsAlly:       c.IsNpc,
+			SizeCategory: pathfinding.SizeMedium,
+		})
+	}
+	return &pathfinding.Grid{
+		Width:     md.Width,
+		Height:    md.Height,
+		Terrain:   md.TerrainGrid,
+		Walls:     md.Walls,
+		Occupants: occupants,
+	}
 }
 
 // buildDefaultGrid creates a simple open grid for NPC pathfinding.

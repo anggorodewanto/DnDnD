@@ -440,3 +440,159 @@ func TestExecuteEnemyTurn_F11_PublishesSnapshot(t *testing.T) {
 	require.Equal(t, []uuid.UUID{encounterID}, pub.calls(),
 		"ExecuteEnemyTurn must publish a WebSocket snapshot after mutations")
 }
+
+// --- F-12: GenerateEnemyTurnPlan uses encounter's actual map ---
+
+func TestGenerateEnemyTurnPlan_F12_UsesEncounterMap(t *testing.T) {
+	encounterID := uuid.New()
+	mapID := uuid.New()
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	// Build a 10x8 map with a wall blocking the direct path.
+	// The tiled JSON has a terrain layer (10x8 open) and a walls layer with one wall.
+	tiledJSON := json.RawMessage(`{
+		"width": 10,
+		"height": 8,
+		"tilewidth": 48,
+		"tileheight": 48,
+		"tilesets": [],
+		"layers": [
+			{
+				"name": "terrain",
+				"type": "tilelayer",
+				"width": 10,
+				"height": 8,
+				"data": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+			},
+			{
+				"name": "walls",
+				"type": "objectgroup",
+				"objects": [
+					{"x": 144, "y": 0, "width": 0, "height": 384}
+				]
+			}
+		]
+	}`)
+
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:            npcID,
+				EncounterID:   encounterID,
+				DisplayName:   "Goblin",
+				PositionCol:   "A",
+				PositionRow:   1,
+				IsNpc:         true,
+				IsAlive:       true,
+				HpCurrent:     10,
+				CreatureRefID: sql.NullString{String: "goblin", Valid: true},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{
+				ID:            "goblin",
+				Name:          "Goblin",
+				Size:          "Small",
+				Speed:         json.RawMessage(`{"walk":30}`),
+				Attacks:       json.RawMessage(`[{"name":"Scimitar","to_hit":4,"damage":"1d6+2","damage_type":"slashing","reach_ft":5}]`),
+				AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`),
+			}, nil
+		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: npcID, DisplayName: "Goblin", PositionCol: "A", PositionRow: 1, IsNpc: true, IsAlive: true, HpCurrent: 10},
+				{ID: pcID, DisplayName: "Aragorn", PositionCol: "E", PositionRow: 1, IsNpc: false, IsAlive: true, HpCurrent: 45, Ac: 16},
+			}, nil
+		},
+		listActiveReactionDeclarationsByEncounterFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.ReactionDeclaration, error) {
+			return nil, nil
+		},
+		getEncounterFn: func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{
+				ID:     encounterID,
+				MapID:  uuid.NullUUID{UUID: mapID, Valid: true},
+				Status: "active",
+			}, nil
+		},
+		getMapByIDUncheckedFn: func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+			assert.Equal(t, mapID, id, "should load the encounter's map")
+			return refdata.Map{
+				ID:            mapID,
+				WidthSquares:  10,
+				HeightSquares: 8,
+				TiledJson:     tiledJSON,
+			}, nil
+		},
+	}
+
+	svc := NewService(store)
+	plan, err := svc.GenerateEnemyTurnPlan(context.Background(), encounterID, npcID)
+	require.NoError(t, err)
+	require.NotNil(t, plan)
+
+	// The plan should have a movement step. With a 10x8 map and a wall,
+	// the path should respect the map dimensions (not default 20x20).
+	// Verify the plan was generated (movement + attack).
+	assert.GreaterOrEqual(t, len(plan.Steps), 1)
+
+	// Verify the movement step exists and its path stays within 10x8 bounds.
+	if len(plan.Steps) > 0 && plan.Steps[0].Type == StepTypeMovement && plan.Steps[0].Movement != nil {
+		for _, pt := range plan.Steps[0].Movement.Path {
+			assert.Less(t, pt.Col, 10, "path col must be within map width 10")
+			assert.Less(t, pt.Row, 8, "path row must be within map height 8")
+		}
+	}
+}
+
+func TestGenerateEnemyTurnPlan_F12_FallsBackToDefaultGrid(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:            npcID,
+				EncounterID:   encounterID,
+				DisplayName:   "Goblin",
+				PositionCol:   "C",
+				PositionRow:   3,
+				IsNpc:         true,
+				IsAlive:       true,
+				HpCurrent:     10,
+				CreatureRefID: sql.NullString{String: "goblin", Valid: true},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{
+				ID:            "goblin",
+				Name:          "Goblin",
+				Size:          "Small",
+				Speed:         json.RawMessage(`{"walk":30}`),
+				Attacks:       json.RawMessage(`[{"name":"Scimitar","to_hit":4,"damage":"1d6+2","damage_type":"slashing","reach_ft":5}]`),
+				AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`),
+			}, nil
+		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: npcID, DisplayName: "Goblin", PositionCol: "C", PositionRow: 3, IsNpc: true, IsAlive: true, HpCurrent: 10},
+				{ID: pcID, DisplayName: "Aragorn", PositionCol: "C", PositionRow: 5, IsNpc: false, IsAlive: true, HpCurrent: 45, Ac: 16},
+			}, nil
+		},
+		listActiveReactionDeclarationsByEncounterFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.ReactionDeclaration, error) {
+			return nil, nil
+		},
+		// GetEncounter returns an encounter with no map
+		getEncounterFn: func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+			return refdata.Encounter{ID: encounterID, Status: "active"}, nil
+		},
+	}
+
+	svc := NewService(store)
+	plan, err := svc.GenerateEnemyTurnPlan(context.Background(), encounterID, npcID)
+	require.NoError(t, err)
+	require.NotNil(t, plan)
+	// Should still produce a valid plan using the 20x20 fallback
+	assert.GreaterOrEqual(t, len(plan.Steps), 1)
+}

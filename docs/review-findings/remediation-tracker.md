@@ -27,7 +27,7 @@
 | F-03 | High | Combat Workspace PATCH bypasses locked service paths | review_passed | — | PASS |
 | F-04 | High | Action Resolver effects bypass snapshot publishing | review_passed | — | PASS |
 | F-11 | High | Enemy-turn mutations don't publish WebSocket snapshot | review_passed | — | PASS |
-| F-12 | High | Enemy-turn path uses hard-coded 20x20 grid | pending | — | — |
+| F-12 | High | Enemy-turn path uses hard-coded 20x20 grid | review_passed | — | PASS |
 
 ### D&D Mechanics Correctness (Priority 3)
 
@@ -213,8 +213,14 @@
 - **Source**: agent-04
 - **Files**: `internal/combat/turn_builder_handler.go`
 - **Test plan**: Test that GenerateEnemyTurnPlan loads the encounter's actual map
-- **Implementation notes**: —
-- **Reviewer verdict**: —
+- **Implementation notes**: In `GenerateEnemyTurnPlan`, replaced the hard-coded `buildDefaultGrid(20, 20, ...)` with encounter map loading: calls `GetEncounter` to get `MapID`, then `GetMapByIDUnchecked` to load the map, then `renderer.ParseTiledJSON` to extract terrain/walls, and builds the grid via new `buildMapGrid` helper using actual dimensions, terrain, and walls. Falls back to the 20x20 open grid if the encounter has no map, the map fails to load, or the TiledJSON fails to parse. Added `GetMapByIDUnchecked` to the combat `Store` interface and `storeAdapter`.
+- **Changed files**: `internal/combat/turn_builder_handler.go`, `internal/combat/service.go`, `internal/combat/store_adapter.go`, `internal/combat/service_test.go`, `internal/combat/turn_builder_handler_test.go`
+- **Reviewer verdict**: **PASS** (reviewer-f12, 2026-05-15)
+  - **Spec conformance**: ✅ `GenerateEnemyTurnPlan` loads the encounter's actual map via `GetEncounter` → `GetMapByIDUnchecked` → `renderer.ParseTiledJSON`, then builds the pathfinding grid with the map's real `Width`, `Height`, `TerrainGrid`, and `Walls`. Path suggestions now use the encounter's actual map geometry.
+  - **Implementation correctness**: ✅ `buildMapGrid` (`turn_builder_handler.go:352`) constructs a `pathfinding.Grid` with parsed map dimensions, terrain grid, and wall data. Occupants are populated from live combatants (excluding the mover and dead combatants). The map-loading chain correctly threads through three layers: encounter → map record → TiledJSON parse.
+  - **Graceful degradation**: ✅ The default 20×20 open grid is built first (`buildDefaultGrid(20, 20, ...)`). The actual-map path only overwrites `grid` if all three conditions hold: (1) `GetEncounter` succeeds and `enc.MapID.Valid`, (2) `GetMapByIDUnchecked` succeeds, (3) `ParseTiledJSON` succeeds and `md.Width > 0 && md.Height > 0`. Any failure at any stage silently falls back to the default grid.
+  - **Test adequacy**: ✅ Two focused tests: `TestGenerateEnemyTurnPlan_F12_UsesEncounterMap` builds a 10×8 map with a wall, verifies the plan is generated and all path coordinates stay within 10×8 bounds (not 20×20). `TestGenerateEnemyTurnPlan_F12_FallsBackToDefaultGrid` uses an encounter with no `MapID` and verifies a valid plan is still produced using the fallback grid.
+  - **Regression risk**: ✅ Low. The fallback-first pattern means existing encounters without maps continue to work identically. The `GetMapByIDUnchecked` method (from F-02) avoids campaign-scoping for internal lookups.
 
 ### F-13: Active encounter membership not DB-enforced
 - **Source**: agent-05

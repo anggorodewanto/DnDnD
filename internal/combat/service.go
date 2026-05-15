@@ -209,6 +209,9 @@ type Store interface {
 	// Phase 35 of docs/phases.md.
 	SetCombatantNextAttackAdvOverride(ctx context.Context, arg refdata.SetCombatantNextAttackAdvOverrideParams) error
 	ClearCombatantNextAttackAdvOverride(ctx context.Context, id uuid.UUID) error
+
+	// F-12: Map lookup for enemy turn pathfinding.
+	GetMapByIDUnchecked(ctx context.Context, id uuid.UUID) (refdata.Map, error)
 }
 
 // EncounterPublisher fans out a fresh encounter snapshot over the dashboard

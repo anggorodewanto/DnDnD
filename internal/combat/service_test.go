@@ -157,6 +157,9 @@ type mockStore struct {
 	// C-35 — DM dashboard advantage/disadvantage override (per-attack, single-use)
 	setCombatantNextAttackAdvOverrideFn   func(ctx context.Context, arg refdata.SetCombatantNextAttackAdvOverrideParams) error
 	clearCombatantNextAttackAdvOverrideFn func(ctx context.Context, id uuid.UUID) error
+
+	// F-12 — Map lookup for enemy turn pathfinding
+	getMapByIDUncheckedFn func(ctx context.Context, id uuid.UUID) (refdata.Map, error)
 }
 
 func (m *mockStore) SetCombatantConcentration(ctx context.Context, arg refdata.SetCombatantConcentrationParams) error {
@@ -194,6 +197,13 @@ func (m *mockStore) ClearCombatantNextAttackAdvOverride(ctx context.Context, id 
 	return nil
 }
 
+func (m *mockStore) GetMapByIDUnchecked(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+	if m.getMapByIDUncheckedFn != nil {
+		return m.getMapByIDUncheckedFn(ctx, id)
+	}
+	return refdata.Map{}, fmt.Errorf("no map")
+}
+
 func (m *mockStore) UpdateEncounterDisplayName(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {
 	if m.updateEncounterDisplayNameFn != nil {
 		return m.updateEncounterDisplayNameFn(ctx, arg)
@@ -212,7 +222,10 @@ func (m *mockStore) CreateEncounter(ctx context.Context, arg refdata.CreateEncou
 	return m.createEncounterFn(ctx, arg)
 }
 func (m *mockStore) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
-	return m.getEncounterFn(ctx, id)
+	if m.getEncounterFn != nil {
+		return m.getEncounterFn(ctx, id)
+	}
+	return refdata.Encounter{}, sql.ErrNoRows
 }
 func (m *mockStore) ListEncountersByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error) {
 	return m.listEncountersByCampaignIDFn(ctx, campaignID)

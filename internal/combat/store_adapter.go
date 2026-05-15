@@ -46,3 +46,7 @@ func (a *storeAdapter) UpdateCharacterGold(ctx context.Context, id uuid.UUID, go
 func (a *storeAdapter) GetEncounterTemplate(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
 	return a.Queries.GetEncounterTemplateUnchecked(ctx, id)
 }
+
+func (a *storeAdapter) GetMapByIDUnchecked(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+	return a.Queries.GetMapByIDUnchecked(ctx, id)
+}
