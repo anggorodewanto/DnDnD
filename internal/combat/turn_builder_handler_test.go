@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/pathfinding"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -383,4 +384,59 @@ func TestExecuteEnemyTurn_NoNotifierNoPanic(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// --- F-11: ExecuteEnemyTurn publishes WebSocket snapshot ---
+
+func TestExecuteEnemyTurn_F11_PublishesSnapshot(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	turnID := uuid.New()
+
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:          npcID,
+				EncounterID: encounterID,
+				DisplayName: "Goblin",
+				IsNpc:       true,
+				IsAlive:     true,
+			}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: eid, CombatantID: npcID}, nil
+		},
+		updateCombatantPositionFn: func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: arg.ID, PositionCol: arg.PositionCol, PositionRow: arg.PositionRow}, nil
+		},
+		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+			return refdata.ActionLog{ID: uuid.New()}, nil
+		},
+		updateTurnActionsFn: func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+		},
+	}
+
+	pub := &fakePublisher{}
+	svc := NewService(store)
+	svc.SetPublisher(pub)
+
+	plan := TurnPlan{
+		CombatantID: npcID,
+		Steps: []TurnStep{
+			{
+				Type: StepTypeMovement,
+				Movement: &MovementStep{
+					Path: []pathfinding.Point{{Col: 3, Row: 4}},
+				},
+			},
+		},
+	}
+
+	roller := dice.NewRoller(nil)
+	_, err := svc.ExecuteEnemyTurn(context.Background(), encounterID, plan, roller)
+	require.NoError(t, err)
+
+	require.Equal(t, []uuid.UUID{encounterID}, pub.calls(),
+		"ExecuteEnemyTurn must publish a WebSocket snapshot after mutations")
 }

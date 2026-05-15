@@ -26,7 +26,7 @@
 |----|----------|---------|--------|--------|----------|
 | F-03 | High | Combat Workspace PATCH bypasses locked service paths | review_passed | — | PASS |
 | F-04 | High | Action Resolver effects bypass snapshot publishing | review_passed | — | PASS |
-| F-11 | High | Enemy-turn mutations don't publish WebSocket snapshot | pending | — | — |
+| F-11 | High | Enemy-turn mutations don't publish WebSocket snapshot | review_passed | — | PASS |
 | F-12 | High | Enemy-turn path uses hard-coded 20x20 grid | pending | — | — |
 
 ### D&D Mechanics Correctness (Priority 3)
@@ -201,8 +201,13 @@
 - **Source**: agent-04
 - **Files**: `internal/combat/turn_builder_handler.go`
 - **Test plan**: Test that ExecuteEnemyTurn publishes snapshot after mutations
-- **Implementation notes**: —
-- **Reviewer verdict**: —
+- **Implementation notes**: Added `s.publish(ctx, encounterID)` call at the end of `ExecuteEnemyTurn`, after `UpdateTurnActions` and before the return. The `*Service` receiver already has the `publish` helper method wired via `SetPublisher`. Test `TestExecuteEnemyTurn_F11_PublishesSnapshot` proves a movement-only enemy turn publishes exactly one snapshot with the correct encounter ID.
+- **Changed files**: `internal/combat/turn_builder_handler.go`, `internal/combat/turn_builder_handler_test.go`
+- **Reviewer verdict**: **PASS** (reviewer-f11, 2026-05-15)
+  - **Spec conformance**: ✅ Phase 103 requires snapshot push after state mutation. `s.publish(ctx, encounterID)` is called at the end of `Service.ExecuteEnemyTurn` (`turn_builder_handler.go:247`), after all DB mutations complete (position update, damage application via `ApplyDamage`, action log creation, turn actions update). The comment `// F-11: Publish WebSocket snapshot after all mutations complete.` documents intent.
+  - **Implementation correctness**: ✅ The `publish` call is positioned after the final mutation (`UpdateTurnActions`) and before the return statement. All state changes — movement (`UpdateCombatantPosition`), damage (`ApplyDamage` loop which internally calls `UpdateCombatantHP`), action log (`CreateActionLog`), and turn resource marking (`UpdateTurnActions`) — are committed before the snapshot fires. The `publish` helper (`service.go:597-603`) is nil-safe and swallows errors with a log, so a publisher failure cannot break the HTTP response.
+  - **Test adequacy**: ✅ `TestExecuteEnemyTurn_F11_PublishesSnapshot` (`turn_builder_handler_test.go:406-443`) wires a `fakePublisher`, executes a movement-only enemy turn through the service layer, and asserts `pub.calls()` equals `[]uuid.UUID{encounterID}` — proving exactly one publish with the correct encounter ID. The test exercises the full service path (not the HTTP handler), which is where the fix lives.
+  - **Regression risk**: ✅ None. The `publish` call is additive. Existing tests (`TestExecuteEnemyTurn_Success`, `TestExecuteEnemyTurn_NotifiesOnSuccess`) do not set a publisher and continue to pass since `publish` is nil-safe.
 
 ### F-12: Enemy-turn path uses hard-coded 20x20 grid
 - **Source**: agent-04

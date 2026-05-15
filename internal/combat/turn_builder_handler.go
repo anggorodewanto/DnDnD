@@ -330,6 +330,9 @@ func (s *Service) ExecuteEnemyTurn(ctx context.Context, encounterID uuid.UUID, p
 		return nil, fmt.Errorf("updating turn actions: %w", err)
 	}
 
+	// F-11: Publish WebSocket snapshot after all mutations complete.
+	s.publish(ctx, encounterID)
+
 	return &ExecuteTurnPlanResult{
 		CombatLog:     combatLog,
 		DamageApplied: damageApplied,
