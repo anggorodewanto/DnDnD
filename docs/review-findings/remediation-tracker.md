@@ -60,7 +60,7 @@
 | F-22 | Medium | Turn Builder roll fudging unreachable | implemented | — | — |
 | F-23 | Medium | Mobile Approvals renders wrong component | implemented | — | — |
 | F-24 | Medium | Phase 120a e2e omits Discord output assertions | implemented | — | — |
-| F-25 | Coverage | make cover-check fails: internal/errorlog below 85% | pending | — | — |
+| F-25 | Coverage | make cover-check fails: internal/errorlog below 85% | implemented | — | — |
 
 ---
 
@@ -325,7 +325,8 @@
 - **Source**: 00-summary
 - **Files**: `internal/errorlog/`
 - **Test plan**: Add tests to bring internal/errorlog above 85% coverage
-- **Implementation notes**: —
+- **Implementation notes**: Added `recorder_ref_test.go` with focused tests for `RecorderRef` (NewRecorderRef, Record delegation, nil recorder, Swap), `NewMemoryStore(nil)` clock default, `ListRecent` zero-limit branch, and `BuildSummary` edge cases (empty command, nil error). Added `TestNewPgStore_NonNilDBReturnsStore` to cover the non-nil DB branch. These tests bring `recorder.go` to 100% coverage and `NewPgStore` to 100%. Combined with existing integration tests covering PgStore methods, package coverage rises from ~75.68% to ~96%.
+- **Changed files**: `internal/errorlog/recorder_ref_test.go` (new), `internal/errorlog/pgstore_test.go`
 - **Reviewer verdict**: —
 
 ---

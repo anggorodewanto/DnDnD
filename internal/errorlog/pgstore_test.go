@@ -1,8 +1,11 @@
 package errorlog
 
 import (
+	"database/sql"
 	"testing"
 	"time"
+
+	_ "github.com/lib/pq"
 )
 
 func TestBuildInsertErrorQuery_ShapeAndArgs(t *testing.T) {
@@ -106,5 +109,14 @@ func TestBuildListRecentQuery_ShapeAndArgs(t *testing.T) {
 func TestNewPgStore_NilDBReturnsNil(t *testing.T) {
 	if store := NewPgStore(nil); store != nil {
 		t.Fatal("NewPgStore(nil) should return nil so callers fall back to MemoryStore")
+	}
+}
+
+func TestNewPgStore_NonNilDBReturnsStore(t *testing.T) {
+	db, _ := sql.Open("postgres", "host=localhost dbname=fake sslmode=disable")
+	defer db.Close()
+	store := NewPgStore(db)
+	if store == nil {
+		t.Fatal("NewPgStore(non-nil db) should return non-nil store")
 	}
 }
