@@ -24,6 +24,9 @@ type AdvantageInput struct {
 	TargetObscurement   ObscurementLevel
 	// AbilityUsed is "str" or "dex" — which ability mod was chosen for this attack.
 	AbilityUsed string
+	// HasCrossbowExpert indicates the attacker has the Crossbow Expert feat,
+	// which removes the hostile-near-attacker ranged disadvantage.
+	HasCrossbowExpert bool
 	// TargetCombatantID is the ID of the combatant currently being attacked.
 	// SR-018: enables target-scoped condition checks (e.g. help_advantage).
 	TargetCombatantID string
@@ -95,7 +98,7 @@ func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 	}
 
 	// Combat context: ranged attack with hostile within 5ft
-	if input.HostileNearAttacker && IsRangedWeapon(input.Weapon) {
+	if input.HostileNearAttacker && IsRangedWeapon(input.Weapon) && !input.HasCrossbowExpert {
 		disadvReasons = append(disadvReasons, "hostile within 5ft")
 	}
 

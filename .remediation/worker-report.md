@@ -1,27 +1,24 @@
-# Worker Report: C-H06
+# Worker Report: C-H03
 
-**Finding:** Resistance halving can produce 0 damage (RAW says min 1)
-**Status:** ✅ Fixed
+**Finding:** Crossbow Expert does not waive ranged-with-hostile-adjacent disadvantage  
+**Status:** ✅ Fixed  
+**Worker:** worker-C-H03  
+**Date:** 2026-05-16
 
-## Changes
+## Changes Made
 
-### `internal/combat/damage.go` (line 41)
-Added min-1 clamp after resistance halving:
-```go
-if isResistant {
-    damage := rawDamage / 2
-    if damage < 1 && rawDamage >= 1 {
-        damage = 1
-    }
-    return damage, "resistance to " + dt
-}
-```
+### 1. `internal/combat/advantage.go`
+- Added `HasCrossbowExpert bool` field to `AdvantageInput` struct.
+- Added `&& !input.HasCrossbowExpert` to the hostile-near-attacker ranged disadvantage condition.
 
-### `internal/combat/damage_test.go`
-Added two tests:
-- `TestApplyDamageResistances_ResistanceMin1` — 1 fire damage with fire resistance returns 1 (not 0).
-- `TestApplyDamageResistances_ResistanceZeroInputStaysZero` — 0 damage with resistance stays 0.
+### 2. `internal/combat/attack.go`
+- Wired `HasCrossbowExpert` from `AttackInput` into `AdvantageInput` construction.
+
+### 3. `internal/combat/advantage_test.go`
+- Added `TestDetectAdvantage_RangedWithHostileNearby_CrossbowExpert_NoDisadvantage`: ranged weapon with `HostileNearAttacker=true` and `HasCrossbowExpert=true` gets no disadvantage.
 
 ## Verification
-- `make test` — all tests pass (no regressions).
-- `make cover-check` — all coverage thresholds met.
+
+- `make test` — all tests pass.
+- `make cover-check` — coverage thresholds met.
+- Existing `TestDetectAdvantage_RangedWithHostileNearby` still confirms disadvantage without the feat.

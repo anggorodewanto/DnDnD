@@ -534,6 +534,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		TargetObscurement:   input.TargetObscurement,
 		AbilityUsed:         input.AbilityUsed,
 		TargetCombatantID:   input.TargetCombatantID,
+		HasCrossbowExpert:   input.HasCrossbowExpert,
 	}
 	rollMode, advReasons, disadvReasons := DetectAdvantage(advInput)
 	// Thrown/improvised-thrown in long range: add disadvantage

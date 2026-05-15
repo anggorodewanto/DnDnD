@@ -97,6 +97,17 @@ func TestDetectAdvantage_RangedWithHostileNearby(t *testing.T) {
 	assert.Contains(t, disadvReasons, "hostile within 5ft")
 }
 
+func TestDetectAdvantage_RangedWithHostileNearby_CrossbowExpert_NoDisadvantage(t *testing.T) {
+	input := AdvantageInput{
+		Weapon:              makeLongbow(),
+		HostileNearAttacker: true,
+		HasCrossbowExpert:   true,
+	}
+	mode, _, disadvReasons := DetectAdvantage(input)
+	assert.Equal(t, dice.Normal, mode)
+	assert.Empty(t, disadvReasons)
+}
+
 func TestDetectAdvantage_MeleeWithHostileNearby_NoEffect(t *testing.T) {
 	input := AdvantageInput{
 		Weapon:              makeLongsword(),

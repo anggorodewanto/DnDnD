@@ -1,11 +1,11 @@
-finding_id: C-H06
+finding_id: C-H03
 severity: High
-title: Resistance/vulnerability halving allows damage to go to 0 (RAW says min 1)
-location: internal/combat/damage.go:38-43 (ApplyDamageResistances)
-spec_ref: Phase 42; PHB p197
+title: Crossbow Expert does not waive ranged-with-hostile-adjacent disadvantage
+location: internal/combat/advantage.go:88-91
+spec_ref: Phase 35; spec line 687
 problem: |
-  1 fire damage to a fire-resistant target returns 1/2 = 0. Per RAW it should still be 1.
+  DetectAdvantage adds "hostile within 5ft" disadvantage when HostileNearAttacker && IsRangedWeapon. AttackInput.HasCrossbowExpert is populated but the disadvantage rule never consults it.
 suggested_fix: |
-  After the resistance branch, clamp to max(1, halved) when the raw input was >= 1 (preserve 0 → 0 for immunity).
+  Add && !input.HasCrossbowExpert to the hostile-near-attacker ranged disadvantage branch.
 acceptance_criterion: |
-  1 damage with resistance returns 1 (not 0). 0 damage stays 0. A test demonstrates both.
+  A ranged attack with HasCrossbowExpert=true and HostileNearAttacker=true does NOT get disadvantage. A test demonstrates this.
