@@ -226,3 +226,10 @@ Append-only journal of all remediation activity.
 - Commit: 4506164
 - Reviewer: approved
 - Notes: Added CountPendingDMQueueItemsByEncounter, called per-encounter in GetWorkspace
+
+## 2026-05-15T19:05 — H-C04 done
+
+- Finding: DDB import bypasses DM approval queue on first import
+- Commit: 3a5a838
+- Reviewer: approved
+- Notes: First imports now stage via pending_ddb_imports; ApproveImport handles create
