@@ -99,6 +99,7 @@ func TestApprove_PostsCharacterCard(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterID:   charID,
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
@@ -126,6 +127,7 @@ func TestApprove_CardPosterError_StillSucceeds(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 				CreatedVia:    "import",
@@ -150,6 +152,7 @@ func TestApprove_NilCardPoster_NoPanic(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 				CreatedVia:    "import",
@@ -176,6 +179,7 @@ func TestApprove_RetireSubmission_TransitionsToRetired(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterID:   charID,
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
@@ -207,6 +211,7 @@ func TestApprove_RetireSubmission_ReturnsRetiredStatus(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 				CreatedVia:    "retire",
@@ -295,6 +300,7 @@ func TestApprove_NotificationError_IsLogged(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 				CreatedVia:    "import",
@@ -335,6 +341,7 @@ func TestRequestChanges_NotificationError_IsLogged(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 			},
@@ -376,6 +383,7 @@ func TestReject_NotificationError_IsLogged(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 			},
@@ -417,6 +425,7 @@ func TestApprove_RetireSubmission_StoreError(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 				CreatedVia:    "retire",
@@ -439,6 +448,7 @@ func TestApprove_RetireSubmission_CardUpdateError_StillSucceeds(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 				CreatedVia:    "retire",

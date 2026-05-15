@@ -103,6 +103,20 @@ func (ah *ApprovalHandler) parseID(w http.ResponseWriter, r *http.Request) (uuid
 	return id, true
 }
 
+// checkCampaignOwnership verifies the approval belongs to the DM's campaign.
+// Returns false (and writes 403) if the DM does not own the approval's campaign.
+func (ah *ApprovalHandler) checkCampaignOwnership(w http.ResponseWriter, r *http.Request, dmUserID string, detail *ApprovalDetail) bool {
+	dmCampaign, ok := ah.resolveCampaign(w, r, dmUserID)
+	if !ok {
+		return false
+	}
+	if detail.CampaignID != dmCampaign {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return false
+	}
+	return true
+}
+
 func (ah *ApprovalHandler) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -113,7 +127,8 @@ func (ah *ApprovalHandler) writeJSON(w http.ResponseWriter, status int, v any) {
 // Returns the parsed ID, detail, and feedback string. On failure it writes the
 // HTTP error response and returns ok=false.
 func (ah *ApprovalHandler) parseFeedbackRequest(w http.ResponseWriter, r *http.Request) (detail *ApprovalDetail, feedback string, ok bool) {
-	if _, authOK := ah.requireAuth(r); !authOK {
+	userID, authOK := ah.requireAuth(r)
+	if !authOK {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return nil, "", false
 	}
@@ -137,6 +152,10 @@ func (ah *ApprovalHandler) parseFeedbackRequest(w http.ResponseWriter, r *http.R
 	d, err := ah.store.GetApprovalDetail(r.Context(), id)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
+		return nil, "", false
+	}
+
+	if !ah.checkCampaignOwnership(w, r, userID, d) {
 		return nil, "", false
 	}
 
@@ -228,7 +247,8 @@ type feedbackRequest struct {
 // Approve approves a pending character. For retirement submissions (created_via="retire"),
 // it transitions to "retired" status and updates the character card with a retired badge.
 func (ah *ApprovalHandler) Approve(w http.ResponseWriter, r *http.Request) {
-	if _, ok := ah.requireAuth(r); !ok {
+	userID, ok := ah.requireAuth(r)
+	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -242,6 +262,10 @@ func (ah *ApprovalHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	detail, err := ah.store.GetApprovalDetail(r.Context(), id)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	if !ah.checkCampaignOwnership(w, r, userID, detail) {
 		return
 	}
 

@@ -1,13 +1,16 @@
-finding_id: A-C01
+finding_id: A-C02
 status: done
 files_changed:
-  - internal/discord/setup.go
-  - internal/discord/setup_test.go
-test_command_that_validates: go test ./internal/discord/ -run "TestHandleSetupCommand_Rejects"
+  - internal/dashboard/approval.go
+  - internal/dashboard/approval_store.go
+  - internal/dashboard/approval_handler.go
+  - internal/dashboard/approval_handler_test.go
+  - internal/dashboard/approval_edge_test.go
+  - internal/dashboard/approval_iter2_test.go
+  - internal/dashboard/approval_ws_test.go
+test_command_that_validates: go test ./internal/dashboard/ -run TestApprovalEndpoints_RejectCrossCampaign -v
 acceptance_criterion_met: yes
-notes: Added two server-side authorization guards in SetupHandler.Handle after GetCampaignForSetup returns. (1) When a campaign already exists, the invoker's user ID must match the campaign's DMUserID or the request is rejected. (2) When the campaign is auto-created (no prior row), the invoker must have the Discord Administrator permission bit set. A new helper `setupInvokerIsAdmin` reads `interaction.Member.Permissions` which Discord populates on interaction payloads. Existing tests were updated to supply proper Member context matching the authorization requirements.
-follow_ups: []
-
----
-
-**Summary:** Added two early-return authorization checks to the `/setup` handler in `internal/discord/setup.go`. When a campaign already exists for the guild, only the recorded DM user can invoke `/setup`; when no campaign exists (auto-create path), only a server administrator can claim the DM role. A `setupInvokerIsAdmin` helper inspects the `interaction.Member.Permissions` bitfield for the Administrator flag. Four existing tests were updated to include proper `Member` data, and four new tests validate both the rejection and acceptance paths. All tests pass and coverage remains above thresholds.
+notes: |
+  Added CampaignID field to ApprovalEntry struct and populated it from the DB row in both ListPendingApprovals and GetApprovalDetail. Added a checkCampaignOwnership helper to ApprovalHandler that resolves the DM's campaign (via resolveCampaign, which uses CampaignLookup or the static campaignID) and compares it against the approval's CampaignID, returning 403 on mismatch. The check is called in Approve and parseFeedbackRequest (shared by RequestChanges and Reject). Existing tests needed CampaignID set in their fixtures to match the handler's campaign.
+follow_ups:
+  - "GetApproval (GET /{id}) does not enforce campaign ownership — a DM can read details of approvals in other campaigns. Severity: Low (read-only, no mutation)."

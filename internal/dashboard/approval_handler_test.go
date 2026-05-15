@@ -233,6 +233,7 @@ func TestApproveCharacter_Success(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 				Status:        "pending",
@@ -256,7 +257,7 @@ func TestApproveCharacter_StoreError(t *testing.T) {
 	store := &mockApprovalStore{
 		approveErr: fmt.Errorf("transition failed"),
 		detail: &ApprovalDetail{
-			ApprovalEntry: ApprovalEntry{ID: id, CharacterName: "Gandalf", DiscordUserID: "player1"},
+			ApprovalEntry: ApprovalEntry{ID: id, CampaignID: uuid.MustParse("00000000-0000-0000-0000-000000000001"), CharacterName: "Gandalf", DiscordUserID: "player1"},
 		},
 	}
 	_, r := setupApprovalTest(store, &mockNotifier{})
@@ -274,6 +275,7 @@ func TestRequestChanges_Success(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 			},
@@ -319,6 +321,7 @@ func TestRejectCharacter_Success(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 			},
@@ -465,6 +468,64 @@ func TestApprovalEndpoints_RequireAuth(t *testing.T) {
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, req)
 			assert.Equal(t, http.StatusUnauthorized, rec.Code)
+		})
+	}
+}
+
+func TestApprovalEndpoints_RejectCrossCampaign(t *testing.T) {
+	dmCampaign := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	otherCampaign := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	approvalID := uuid.MustParse("00000000-0000-0000-0000-000000000010")
+
+	store := &mockApprovalStore{
+		detail: &ApprovalDetail{
+			ApprovalEntry: ApprovalEntry{
+				ID:            approvalID,
+				CampaignID:    otherCampaign, // belongs to a different campaign
+				CharacterName: "EvilChar",
+				DiscordUserID: "player1",
+				Status:        "pending",
+			},
+		},
+	}
+
+	hub := NewHub()
+	go hub.Run()
+	defer hub.Stop()
+	ah := NewApprovalHandler(nil, store, &mockNotifier{}, hub, dmCampaign, nil)
+
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(contextWithUser(r.Context(), "dm-user"))
+			next.ServeHTTP(w, r)
+		})
+	})
+	ah.RegisterApprovalRoutes(r)
+
+	endpoints := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{"approve", http.MethodPost, "/dashboard/api/approvals/" + approvalID.String() + "/approve", ""},
+		{"request-changes", http.MethodPost, "/dashboard/api/approvals/" + approvalID.String() + "/request-changes", `{"feedback":"nope"}`},
+		{"reject", http.MethodPost, "/dashboard/api/approvals/" + approvalID.String() + "/reject", `{"feedback":"nope"}`},
+	}
+
+	for _, ep := range endpoints {
+		t.Run(ep.name, func(t *testing.T) {
+			var req *http.Request
+			if ep.body != "" {
+				req = httptest.NewRequest(ep.method, ep.path, strings.NewReader(ep.body))
+				req.Header.Set("Content-Type", "application/json")
+			} else {
+				req = httptest.NewRequest(ep.method, ep.path, nil)
+			}
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+			assert.Equal(t, http.StatusForbidden, rec.Code, "DM of campaign A must not mutate approvals in campaign B")
 		})
 	}
 }

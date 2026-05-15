@@ -39,6 +39,7 @@ func TestApprove_BroadcastsWebSocketMessage(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 			},
@@ -76,6 +77,7 @@ func TestReject_BroadcastsWebSocketMessage(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 			},
@@ -113,6 +115,7 @@ func TestRequestChanges_BroadcastsWebSocketMessage(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 			},

@@ -63,6 +63,7 @@ func (s *DBApprovalStore) ListPendingApprovals(ctx context.Context, campaignID u
 	for i, row := range rows {
 		entries[i] = ApprovalEntry{
 			ID:            row.ID,
+			CampaignID:    row.CampaignID,
 			CharacterID:   row.CharacterID,
 			CharacterName: row.CharacterName,
 			DiscordUserID: row.DiscordUserID,
@@ -84,6 +85,7 @@ func (s *DBApprovalStore) GetApprovalDetail(ctx context.Context, id uuid.UUID) (
 	return &ApprovalDetail{
 		ApprovalEntry: ApprovalEntry{
 			ID:            row.ID,
+			CampaignID:    row.CampaignID,
 			CharacterID:   row.CharacterID,
 			CharacterName: row.CharacterName,
 			DiscordUserID: row.DiscordUserID,

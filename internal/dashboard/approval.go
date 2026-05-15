@@ -9,6 +9,7 @@ import (
 // ApprovalEntry represents a pending player character with character name for the approval list.
 type ApprovalEntry struct {
 	ID            uuid.UUID `json:"id"`
+	CampaignID    uuid.UUID `json:"campaign_id"`
 	CharacterID   uuid.UUID `json:"character_id"`
 	CharacterName string    `json:"character_name"`
 	DiscordUserID string    `json:"discord_user_id"`

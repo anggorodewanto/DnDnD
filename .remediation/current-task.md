@@ -1,13 +1,11 @@
-finding_id: A-C01
+finding_id: A-C02
 severity: Critical
-title: `/setup` lets any guild member silently become the campaign DM
-location: cmd/dndnd/discord_adapters.go:135-163, internal/discord/setup.go:217-249
-spec_ref: spec §Authentication & Authorization (line 65) — "System verifies the authenticated Discord user ID matches the campaign's designated DM"; Phase 12
+title: Dashboard approval endpoints aren't scoped to the DM's own campaign
+location: internal/dashboard/approval_handler.go:230-338 (Approve/Reject/RequestChanges)
+spec_ref: spec §Authentication & Authorization (line 65); Phase 16
 problem: |
-  `GetCampaignForSetup` auto-creates the campaign row with the invoking user as DM whenever no row exists for that guild. The `/setup` slash command has `DefaultMemberPermissions: ManageChannels`, but Discord allows guild admins to override that and the handler itself does no server-side authorization check. The first non-owner who runs `/setup` becomes the permanent DM, which then gates the entire dashboard and player-management surface for that guild.
+  `RequireDM` checks that the user is the DM of *some* campaign, but the handler routes (`/dashboard/api/approvals/{id}/approve|reject|request-changes`) look up the approval row by `id` only — no check that the player_character belongs to a campaign the authenticated DM owns. A DM of campaign A can approve, reject, or retire any character in campaign B by guessing/learning UUIDs. No test covers this.
 suggested_fix: |
-  Make /setup require an explicit DM identity (e.g., compare invoker against the guild owner returned by Discord, or require a pre-provisioned `campaigns` row, or have an admin-only "claim DM" endpoint). At minimum, never let an arbitrary `interaction.Member` user implicitly create the campaign + DM binding.
-  
-  Specifically: after resolving the campaign (when it already exists), reject the interaction if `invokerUserID != info.DMUserID`. For the auto-create case (no campaign exists yet), require the invoker to be the guild owner (check `interaction.Member.Permissions` for Administrator bit, or compare against the guild's OwnerID).
+  Resolve the approval row, get its campaign_id, and verify the authenticated DM owns that campaign (use `IsCampaignDM` or compare `detail.CampaignID` against the DM's campaign) before mutating. Add a regression test for cross-campaign rejection.
 acceptance_criterion: |
-  When a campaign already exists for a guild, only the campaign's DM can run /setup (others get an error). When no campaign exists, only a guild administrator (or owner) can auto-create one.
+  Approve/Reject/RequestChanges endpoints return 403 when the authenticated DM does not own the campaign that the approval row belongs to. A test demonstrates this by having DM-A try to approve a character in DM-B's campaign.

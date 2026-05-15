@@ -58,7 +58,7 @@ func TestRequestChanges_StoreError(t *testing.T) {
 	id := uuid.MustParse("00000000-0000-0000-0000-000000000010")
 	store := &mockApprovalStore{
 		detail: &ApprovalDetail{
-			ApprovalEntry: ApprovalEntry{ID: id, CharacterName: "Gandalf", DiscordUserID: "player1"},
+			ApprovalEntry: ApprovalEntry{ID: id, CampaignID: uuid.MustParse("00000000-0000-0000-0000-000000000001"), CharacterName: "Gandalf", DiscordUserID: "player1"},
 		},
 		requestErr: fmt.Errorf("db error"),
 	}
@@ -117,7 +117,7 @@ func TestRejectCharacter_StoreError(t *testing.T) {
 	id := uuid.MustParse("00000000-0000-0000-0000-000000000010")
 	store := &mockApprovalStore{
 		detail: &ApprovalDetail{
-			ApprovalEntry: ApprovalEntry{ID: id, CharacterName: "Gandalf", DiscordUserID: "player1"},
+			ApprovalEntry: ApprovalEntry{ID: id, CampaignID: uuid.MustParse("00000000-0000-0000-0000-000000000001"), CharacterName: "Gandalf", DiscordUserID: "player1"},
 		},
 		rejectErr: fmt.Errorf("db error"),
 	}
@@ -162,6 +162,7 @@ func TestApproveCharacter_NilNotifier(t *testing.T) {
 		detail: &ApprovalDetail{
 			ApprovalEntry: ApprovalEntry{
 				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
 				CharacterName: "Gandalf",
 				DiscordUserID: "player1",
 			},

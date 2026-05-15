@@ -11,7 +11,7 @@ Low: 142
 | # | ID | Severity | Status | Title | Location |
 |---|---|---|---|---|---|
 | 1 | A-C01 | Critical | done | `/setup` lets any guild member silently become the campaign DM | cmd/dndnd/discord_adapters.go:135-163 |
-| 2 | A-C02 | Critical | pending | Dashboard approval endpoints aren't scoped to the DM's own campaign | internal/dashboard/approval_handler.go:230-338 (Approve/Reject/RequestChanges) |
+| 2 | A-C02 | Critical | in_progress | Dashboard approval endpoints aren't scoped to the DM's own campaign | internal/dashboard/approval_handler.go:230-338 (Approve/Reject/RequestChanges) |
 | 3 | B-C01 | Critical | pending | `ParseExpression` mangles modifiers with multiple `+`/`-` operators | `/home/ab/projects/DnDnD/internal/dice/dice.go:46-58` |
 | 4 | B-C02 | Critical | pending | `cryptoRand` / `RollD20` panic on degenerate dice (`Nd0`) | `/home/ab/projects/DnDnD/internal/dice/roller.go:48-54`, |
 | 5 | C-C01 | Critical | pending | Multi-letter column labels truncated by `colToIndex` | /home/ab/projects/DnDnD/internal/combat/attack.go:1571-1577 |
