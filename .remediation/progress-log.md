@@ -149,3 +149,10 @@ Append-only journal of all remediation activity.
 - Commit: 8e310de
 - Reviewer: approved
 - Notes: Added comma-separated aliases in switch cases (2 lines changed)
+
+## 2026-05-15T18:32 — G-C02 done
+
+- Finding: /attune does not require a short rest
+- Commit: 5c8c6c3
+- Reviewer: approved
+- Notes: Combat gate added to attune handler via ActiveEncounterForUser check
