@@ -51,3 +51,10 @@ Append-only journal of all remediation activity.
 - Commit: 560deac
 - Reviewer: approved
 - Notes: Added "reckless" case to attacker-conditions in DetectAdvantage, gated on melee+STR
+
+## 2026-05-15T15:33 — C-C03 done
+
+- Finding: Off-hand (TWF) attack lacks Attack-action prerequisite and melee weapon check
+- Commit: 9c25f59
+- Reviewer: approved
+- Notes: Added attack-taken prerequisite + IsRangedWeapon checks for both hands
