@@ -37,7 +37,7 @@ Low: 142
 | 25 | H-C02 | Critical | pending | Feat prerequisites and "already-has-feat" exclusion not enforced anywhere in the live picker | /home/ab/projects/DnDnD/cmd/dndnd/discord_handlers.go:1155 (`asiFeatLister.ListE... |
 | 26 | H-C03 | Critical | pending | Level-up does not auto-add new class/subclass features | /home/ab/projects/DnDnD/internal/levelup/service.go:186 (`ApplyLevelUp`) |
 | 27 | H-C04 | Critical | pending | DDB import bypasses DM approval queue on first import | /home/ab/projects/DnDnD/internal/ddbimport/service.go:139 |
-| 28 | H-C05 | Critical | pending | Levelup HTTP handler does not bound newLevel to 20 | /home/ab/projects/DnDnD/internal/levelup/handler.go:106 |
+| 28 | H-C05 | Critical | in_progress | Levelup HTTP handler does not bound newLevel to 20 | /home/ab/projects/DnDnD/internal/levelup/handler.go:106 |
 | 29 | I-C01 | Critical | pending | DM-created characters never inherit class or racial features | /home/ab/projects/DnDnD/internal/dashboard/feature_provider.go:38, 49, 63-65 ; /... |
 | 30 | I-C02 | Critical | pending | Pending #dm-queue badge count is campaign-wide, not per-encounter | /home/ab/projects/DnDnD/internal/combat/workspace_handler.go:173-180, 271 ; quer... |
 | 31 | I-C03 | Critical | pending | Narration-template Get/Update/Delete/Duplicate/Apply leak across campaigns | /home/ab/projects/DnDnD/internal/narration/template_handler.go:110-193 ; /home/a... |

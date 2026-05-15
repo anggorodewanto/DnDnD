@@ -103,8 +103,8 @@ func (h *Handler) HandleLevelUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.CharacterID == uuid.Nil || req.ClassID == "" || req.NewLevel < 1 {
-		http.Error(w, "character_id, class_id, and new_level are required", http.StatusBadRequest)
+	if req.CharacterID == uuid.Nil || req.ClassID == "" || req.NewLevel < 1 || req.NewLevel > 20 {
+		http.Error(w, "character_id, class_id, and new_level (1-20) are required", http.StatusBadRequest)
 		return
 	}
 

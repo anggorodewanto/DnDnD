@@ -1,11 +1,11 @@
-finding_id: G-C04
+finding_id: H-C05
 severity: Critical
-title: Antitoxin "advantage vs poison" is not actually tracked
-location: internal/inventory/service.go:135-140
-spec_ref: spec §Inventory Management lines 2647 (Phase 84)
+title: Levelup HTTP handler does not bound newLevel to 20
+location: internal/levelup/handler.go:106
+spec_ref: spec §Internal Character Format / 5e level cap
 problem: |
-  UseConsumable consumes the antitoxin and posts a flavor message claiming advantage was granted, but no buff/condition is written to the character or combatant. The next poison save is a plain d20.
+  HandleLevelUp rejects newLevel < 1 but accepts any positive int. A DM can set Fighter to level 99 and the service will compute nonsense HP/proficiency/spell-slots.
 suggested_fix: |
-  Apply a timed condition (e.g., "antitoxin" with duration 1 hour / 10 rounds) on the combatant that the save service consults to add advantage when the save is against poison.
+  Reject newLevel < 1 || newLevel > 20 at the handler.
 acceptance_criterion: |
-  After using an antitoxin, the character has an "antitoxin" condition applied. A test demonstrates the condition is written. (The save-side consumption of this condition is a separate concern for the save handler.)
+  HandleLevelUp returns 400 when newLevel > 20. A test demonstrates this.

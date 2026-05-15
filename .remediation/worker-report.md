@@ -1,11 +1,11 @@
-finding_id: G-C04
+finding_id: H-C05
 status: done
 files_changed:
-  - internal/inventory/service.go
-  - internal/inventory/service_test.go
-test_command_that_validates: go test ./internal/inventory/ -run TestUseConsumable_Antitoxin -v
+  - internal/levelup/handler.go
+  - internal/levelup/handler_test.go
+test_command_that_validates: go test ./internal/levelup/ -run TestHandler_HandleLevelUp_RejectsLevelAbove20 -v
 acceptance_criterion_met: yes
-notes: Added `AppliedCondition string` field to `UseResult` struct and set it to "antitoxin" in the antitoxin branch of `UseConsumable`. The existing test was extended to assert `result.AppliedCondition == "antitoxin"`. All tests pass and coverage thresholds are met. The caller (handler) is responsible for persisting this condition on the combatant.
+notes: Added `|| req.NewLevel > 20` to the existing validation guard in HandleLevelUp (line 109). The handler now returns 400 with message "character_id, class_id, and new_level (1-20) are required" for any newLevel outside [1,20]. A new test confirms newLevel=21 is rejected. All existing tests continue to pass, and `make cover-check` reports the levelup package at 90.37%.
 follow_ups:
-  - The save handler should consult the "antitoxin" condition to grant advantage on poison saves
-  - Consider adding duration tracking (1 hour / 10 rounds) for the antitoxin condition
+  - Consider adding an equivalent server-side check in the Discord slash-command path if level-up can be triggered there.
+  - The HTML template already has max="20" on the input, but client-side validation alone is insufficient.

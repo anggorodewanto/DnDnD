@@ -616,3 +616,23 @@ func TestHandler_HandleLevelUp_WithAuthContext(t *testing.T) {
 		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusOK, w.Body.String())
 	}
 }
+
+func TestHandler_HandleLevelUp_RejectsLevelAbove20(t *testing.T) {
+	h, _, _, _ := setupTestHandler(t)
+
+	body, _ := json.Marshal(LevelUpRequest{
+		CharacterID: uuid.New(),
+		ClassID:     "fighter",
+		NewLevel:    21,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/levelup", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.HandleLevelUp(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
