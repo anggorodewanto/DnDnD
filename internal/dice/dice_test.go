@@ -404,3 +404,19 @@ func TestParseExpression_MultipleModifiers(t *testing.T) {
 		})
 	}
 }
+
+func TestParseExpression_RejectsZeroSidesOrCount(t *testing.T) {
+	tests := []struct {
+		input string
+	}{
+		{"1d0"},
+		{"0d6"},
+		{"0d0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			_, err := ParseExpression(tt.input)
+			assert.Error(t, err, "ParseExpression(%q) should return an error", tt.input)
+		})
+	}
+}

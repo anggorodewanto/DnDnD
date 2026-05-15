@@ -1,15 +1,11 @@
-finding_id: B-C01
+finding_id: B-C02
 severity: Critical
-title: ParseExpression mangles modifiers with multiple +/- operators
-location: internal/dice/dice.go:46-58
-spec_ref: phases §Phase 18 ("parse dice expressions (NdM+K)", "modifier stacking")
+title: cryptoRand / RollD20 panic on degenerate dice (Nd0)
+location: internal/dice/roller.go:48-54, internal/dice/dice.go:23
+spec_ref: phases §Phase 18
 problem: |
-  The parser strips every dice group then strips every `+`, leaving the residue to Atoi. As a result:
-  - "1d20+5+5" parses as modifier +55 (not +10).
-  - "1d20-2+3" parses as modifier -23 (instead of +1).
-  - "1d20-2-3" returns an error even though it is valid (meaning -5).
-  - "1d4+1d6+2+3" would similarly collapse to +23.
+  ParseExpression accepts "1d0", "5d0", etc. (regex `\d+d\d+` does not exclude zero). rollGroups then calls r.randFn(0), which is cryptoRand(0), which calls rand.Int(rand.Reader, big.NewInt(0)) — that panics with "crypto/rand.Int argument must be > 0". Any user-supplied `/roll 1d0` crashes the request goroutine.
 suggested_fix: |
-  Walk the post-dice residue token-by-token, summing each signed integer, or replace the regex hack with a proper expression tokenizer that accepts `\s*[+-]\s*\d+` repeatedly.
+  Validate Count >= 1 && Sides >= 1 in ParseExpression (reject with an error). Also add a defensive guard in rollGroups before calling randFn.
 acceptance_criterion: |
-  ParseExpression("1d20+5+5") returns Modifier=10. ParseExpression("1d20-2+3") returns Modifier=1. ParseExpression("1d20-2-3") returns Modifier=-5. ParseExpression("1d4+1d6+2+3") returns Modifier=5.
+  ParseExpression("1d0") returns an error. ParseExpression("0d6") returns an error. ParseExpression("0d0") returns an error. No panic occurs for any of these inputs.

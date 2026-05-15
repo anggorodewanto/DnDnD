@@ -23,3 +23,10 @@ Append-only journal of all remediation activity.
 - Commit: c9e55e9
 - Reviewer: approved
 - Notes: checkCampaignOwnership guard added to all 3 mutation endpoints
+
+## 2026-05-15T15:21 — B-C01 done
+
+- Finding: ParseExpression mangles modifiers with multiple +/- operators
+- Commit: 9790feb
+- Reviewer: approved
+- Notes: sumSignedTokens helper replaces broken strip-and-concat approach

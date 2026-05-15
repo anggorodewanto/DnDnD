@@ -41,6 +41,9 @@ func ParseExpression(input string) (Expression, error) {
 		// Regex guarantees these are digit-only strings, so Atoi cannot fail.
 		count, _ := strconv.Atoi(input[match[2]:match[3]])
 		sides, _ := strconv.Atoi(input[match[4]:match[5]])
+		if count < 1 || sides < 1 {
+			return Expression{}, fmt.Errorf("invalid dice expression: count and sides must be >= 1, got %dd%d", count, sides)
+		}
 		expr.Groups = append(expr.Groups, DiceGroup{Count: count, Sides: sides})
 	}
 
