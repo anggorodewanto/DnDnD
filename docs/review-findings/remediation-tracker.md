@@ -57,7 +57,7 @@
 | ID | Severity | Finding | Status | Commit | Reviewer |
 |----|----------|---------|--------|--------|----------|
 | F-18 | Medium | Map background opacity not persisted | implemented | — | — |
-| F-22 | Medium | Turn Builder roll fudging unreachable | pending | — | — |
+| F-22 | Medium | Turn Builder roll fudging unreachable | implemented | — | — |
 | F-23 | Medium | Mobile Approvals renders wrong component | pending | — | — |
 | F-24 | Medium | Phase 120a e2e omits Discord output assertions | pending | — | — |
 | F-25 | Coverage | make cover-check fails: internal/errorlog below 85% | pending | — | — |
@@ -303,7 +303,8 @@
 - **Source**: agent-04
 - **Files**: `internal/combat/turn_builder_handler.go`, `internal/combat/turn_builder.go`, `dashboard/svelte/src/TurnBuilder.svelte`
 - **Test plan**: Test that rolls are generated at plan time so DM can fudge before confirm
-- **Implementation notes**: —
+- **Implementation notes**: Added `roller *dice.Roller` parameter to `GenerateEnemyTurnPlan`. After `BuildTurnPlan` returns, iterates attack steps and pre-rolls each via `RollAttack`, populating `RollResult` at plan-creation time. The UI already shows roll-fudge inputs when `step.attack.roll_result` exists, and `ExecuteEnemyTurn` already skips rolling when `RollResult != nil`. No frontend or execution-path changes needed. Test `TestGenerateEnemyTurnPlan_F22_AttackStepsHaveRollResult` proves attack steps have `RollResult` populated.
+- **Changed files**: `internal/combat/turn_builder_handler.go`, `internal/combat/turn_builder_handler_test.go`
 - **Reviewer verdict**: —
 
 ### F-23: Mobile Approvals renders wrong component

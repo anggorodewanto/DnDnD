@@ -87,7 +87,7 @@ func (h *Handler) GetEnemyTurnPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan, err := h.svc.GenerateEnemyTurnPlan(r.Context(), encounterID, combatantID)
+	plan, err := h.svc.GenerateEnemyTurnPlan(r.Context(), encounterID, combatantID, h.roller)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -175,7 +175,7 @@ func (h *Handler) ExecuteEnemyTurn(w http.ResponseWriter, r *http.Request) {
 }
 
 // GenerateEnemyTurnPlan generates a suggested turn plan for an NPC combatant.
-func (s *Service) GenerateEnemyTurnPlan(ctx context.Context, encounterID, combatantID uuid.UUID) (*TurnPlan, error) {
+func (s *Service) GenerateEnemyTurnPlan(ctx context.Context, encounterID, combatantID uuid.UUID, roller *dice.Roller) (*TurnPlan, error) {
 	combatant, err := s.store.GetCombatant(ctx, combatantID)
 	if err != nil {
 		return nil, fmt.Errorf("getting combatant: %w", err)
@@ -218,7 +218,7 @@ func (s *Service) GenerateEnemyTurnPlan(ctx context.Context, encounterID, combat
 		}
 	}
 
-	return BuildTurnPlan(BuildTurnPlanInput{
+	plan, err := BuildTurnPlan(BuildTurnPlanInput{
 		Combatant:  combatant,
 		Creature:   creature,
 		Combatants: combatants,
@@ -226,6 +226,24 @@ func (s *Service) GenerateEnemyTurnPlan(ctx context.Context, encounterID, combat
 		Reactions:  reactions,
 		SpeedFt:    speedFt,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	// F-22: Pre-roll attacks so the DM can see and fudge rolls in the review UI.
+	for i := range plan.Steps {
+		step := &plan.Steps[i]
+		if step.Type == StepTypeAttack && step.Attack != nil && step.Attack.RollResult == nil {
+			target, terr := s.store.GetCombatant(ctx, step.Attack.TargetID)
+			if terr != nil {
+				continue
+			}
+			result := RollAttack(*step.Attack, int(target.Ac), roller)
+			step.Attack.RollResult = &result
+		}
+	}
+
+	return plan, nil
 }
 
 // ExecuteEnemyTurn executes a finalized enemy turn plan — applies movement, rolls attacks,

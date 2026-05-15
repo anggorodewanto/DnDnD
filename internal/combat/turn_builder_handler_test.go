@@ -527,7 +527,7 @@ func TestGenerateEnemyTurnPlan_F12_UsesEncounterMap(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	plan, err := svc.GenerateEnemyTurnPlan(context.Background(), encounterID, npcID)
+	plan, err := svc.GenerateEnemyTurnPlan(context.Background(), encounterID, npcID, dice.NewRoller(nil))
 	require.NoError(t, err)
 	require.NotNil(t, plan)
 
@@ -590,9 +590,100 @@ func TestGenerateEnemyTurnPlan_F12_FallsBackToDefaultGrid(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	plan, err := svc.GenerateEnemyTurnPlan(context.Background(), encounterID, npcID)
+	plan, err := svc.GenerateEnemyTurnPlan(context.Background(), encounterID, npcID, dice.NewRoller(nil))
 	require.NoError(t, err)
 	require.NotNil(t, plan)
 	// Should still produce a valid plan using the 20x20 fallback
 	assert.GreaterOrEqual(t, len(plan.Steps), 1)
+}
+
+// --- F-22: GenerateEnemyTurnPlan pre-rolls attacks for DM fudging ---
+
+func TestGenerateEnemyTurnPlan_F22_AttackStepsHaveRollResult(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	pcID := uuid.New()
+
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			if id == npcID {
+				return refdata.Combatant{
+					ID:            npcID,
+					EncounterID:   encounterID,
+					DisplayName:   "Goblin",
+					PositionCol:   "C",
+					PositionRow:   3,
+					IsNpc:         true,
+					IsAlive:       true,
+					HpCurrent:     10,
+					CreatureRefID: sql.NullString{String: "goblin", Valid: true},
+				}, nil
+			}
+			return refdata.Combatant{
+				ID:          pcID,
+				DisplayName: "Aragorn",
+				PositionCol: "C",
+				PositionRow: 5,
+				IsNpc:       false,
+				IsAlive:     true,
+				HpCurrent:   45,
+				Ac:          16,
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{
+				ID:            "goblin",
+				Name:          "Goblin",
+				Size:          "Small",
+				Speed:         json.RawMessage(`{"walk":30}`),
+				Attacks:       json.RawMessage(`[{"name":"Scimitar","to_hit":4,"damage":"1d6+2","damage_type":"slashing","reach_ft":5}]`),
+				AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`),
+			}, nil
+		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{
+					ID:          npcID,
+					DisplayName: "Goblin",
+					PositionCol: "C",
+					PositionRow: 3,
+					IsNpc:       true,
+					IsAlive:     true,
+					HpCurrent:   10,
+				},
+				{
+					ID:          pcID,
+					DisplayName: "Aragorn",
+					PositionCol: "C",
+					PositionRow: 5,
+					IsNpc:       false,
+					IsAlive:     true,
+					HpCurrent:   45,
+					Ac:          16,
+				},
+			}, nil
+		},
+		listActiveReactionDeclarationsByEncounterFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.ReactionDeclaration, error) {
+			return nil, nil
+		},
+	}
+
+	// Deterministic roller: d20 rolls 15, damage rolls 4
+	roller := dice.NewRoller(func(max int) int { return 15 })
+
+	svc := NewService(store)
+	plan, err := svc.GenerateEnemyTurnPlan(context.Background(), encounterID, npcID, roller)
+	require.NoError(t, err)
+	require.NotNil(t, plan)
+
+	// Find attack steps and verify they have pre-rolled results
+	var attackSteps int
+	for _, step := range plan.Steps {
+		if step.Type == StepTypeAttack && step.Attack != nil {
+			attackSteps++
+			require.NotNil(t, step.Attack.RollResult, "attack step should have RollResult pre-populated for DM fudging")
+			assert.Greater(t, step.Attack.RollResult.ToHitTotal, 0)
+		}
+	}
+	assert.Greater(t, attackSteps, 0, "plan should contain at least one attack step")
 }
