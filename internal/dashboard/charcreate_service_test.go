@@ -179,7 +179,7 @@ func TestDMCharCreateService_CreateCharacter_PassesFeatures(t *testing.T) {
 	}
 	featureProvider := &mockFeatureProvider{
 		classFeatures: map[string]map[string][]character.Feature{
-			"Barbarian": {
+			"barbarian": {
 				"1": {
 					{Name: "Rage", Source: "Barbarian", Level: 1, Description: "Enter rage"},
 					{Name: "Unarmored Defense", Source: "Barbarian", Level: 1, Description: "AC formula"},

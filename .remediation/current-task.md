@@ -1,11 +1,11 @@
-finding_id: H-C01
+finding_id: I-C01
 severity: Critical
-title: Single-class half-caster (Paladin/Ranger) gets wrong slot count
-location: internal/character/spellslots.go:108
-spec_ref: spec §"Multiclass spell slots" line 2511
+title: DM-created characters never inherit class or racial features
+location: internal/dashboard/feature_provider.go:38, 49, 63-65; internal/dashboard/charcreate_handler.go:583, 552
+spec_ref: Phase 93b — "features auto-populated from SRD class data by level"
 problem: |
-  CalculateSpellSlots always routes through MulticastSpellSlots(casterLevel) with casterLevel = floor(classLevel/2) for half-casters even for single-class characters. The multiclass table at caster level N is not the same as the half-caster's own table. Example: Paladin 3 → own table gives 3×1st-level slots; current code returns MulticastSpellSlots(1) = {1:2} → only 2 slots.
+  RefDataFeatureProvider indexes class features by cls.ID (slug, e.g. "wizard") and races by r.ID. But the dashboard wizard form sets option value to display names (e.g. "Wizard", "Mountain Dwarf"). CollectFeatures then does classFeatures[c.Class] with the name and gets nothing.
 suggested_fix: |
-  Branch in CalculateSpellSlots: if len(classes)==1 && progression=="half", use a dedicated half-caster table (or compute as MulticastSpellSlots(ceil(level/2))). Add tests covering Paladin 3, 5, 9.
+  Either store the class/race id (slug) as the option's value, or have the feature provider do a normalized lookup (case-fold + slugify) in CollectFeatures/RacialTraits.
 acceptance_criterion: |
-  A single-class Paladin 3 gets {1:3} spell slots (3 first-level slots). A Paladin 5 gets {1:4, 2:2}. Tests demonstrate correct values.
+  CollectFeatures("Barbarian", 1) returns the same features as CollectFeatures("barbarian", 1). A test demonstrates the case-insensitive lookup works.

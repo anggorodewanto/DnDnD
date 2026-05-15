@@ -409,7 +409,7 @@ func TestDMCharacterSubmission_HasEquipmentSpellsLanguages(t *testing.T) {
 func TestCollectFeatures_SingleClassBarbarianLevel3(t *testing.T) {
 	// features_by_level for barbarian (simplified)
 	classFeatures := map[string]map[string][]character.Feature{
-		"Barbarian": {
+		"barbarian": {
 			"1": {
 				{Name: "Rage", Source: "Barbarian", Level: 1, Description: "Enter rage"},
 				{Name: "Unarmored Defense", Source: "Barbarian", Level: 1, Description: "AC formula"},
@@ -423,8 +423,8 @@ func TestCollectFeatures_SingleClassBarbarianLevel3(t *testing.T) {
 		},
 	}
 	subclassFeatures := map[string]map[string]map[string][]character.Feature{
-		"Barbarian": {
-			"Berserker": {
+		"barbarian": {
+			"berserker": {
 				"3": {{Name: "Frenzy", Source: "Barbarian (Berserker)", Level: 3, Description: "Bonus action attack"}},
 			},
 		},
@@ -450,11 +450,11 @@ func TestCollectFeatures_SingleClassBarbarianLevel3(t *testing.T) {
 
 func TestCollectFeatures_MulticlassWithRacialTraits(t *testing.T) {
 	classFeatures := map[string]map[string][]character.Feature{
-		"Fighter": {
+		"fighter": {
 			"1": {{Name: "Fighting Style", Source: "Fighter", Level: 1, Description: "Choose style"}},
 			"2": {{Name: "Action Surge", Source: "Fighter", Level: 2, Description: "Extra action"}},
 		},
-		"Wizard": {
+		"wizard": {
 			"1": {{Name: "Arcane Recovery", Source: "Wizard", Level: 1, Description: "Recover slots"}},
 		},
 	}
@@ -481,7 +481,7 @@ func TestCollectFeatures_EmptyClasses(t *testing.T) {
 
 func TestCollectFeatures_IgnoresHigherLevelFeatures(t *testing.T) {
 	classFeatures := map[string]map[string][]character.Feature{
-		"Fighter": {
+		"fighter": {
 			"1": {{Name: "Fighting Style", Source: "Fighter", Level: 1, Description: "Choose style"}},
 			"5": {{Name: "Extra Attack", Source: "Fighter", Level: 5, Description: "Two attacks"}},
 		},
@@ -498,8 +498,8 @@ func TestCollectFeatures_IgnoresHigherLevelFeatures(t *testing.T) {
 func TestCollectFeatures_SubclassWithNoClassFeatures(t *testing.T) {
 	classFeatures := map[string]map[string][]character.Feature{}
 	subclassFeatures := map[string]map[string]map[string][]character.Feature{
-		"Fighter": {
-			"Champion": {
+		"fighter": {
+			"champion": {
 				"3": {{Name: "Improved Critical", Source: "Fighter (Champion)", Level: 3, Description: "Crit on 19-20"}},
 			},
 		},
@@ -514,14 +514,14 @@ func TestCollectFeatures_SubclassWithNoClassFeatures(t *testing.T) {
 
 func TestCollectFeatures_SubclassNotInMap(t *testing.T) {
 	classFeatures := map[string]map[string][]character.Feature{
-		"Fighter": {
+		"fighter": {
 			"1": {{Name: "Fighting Style", Source: "Fighter", Level: 1, Description: "Choose style"}},
 		},
 	}
 	// subclassFeatures has class but not the specific subclass
 	subclassFeatures := map[string]map[string]map[string][]character.Feature{
-		"Fighter": {
-			"Champion": {
+		"fighter": {
+			"champion": {
 				"3": {{Name: "Improved Critical", Source: "Fighter (Champion)", Level: 3, Description: "Crit on 19-20"}},
 			},
 		},
@@ -535,13 +535,13 @@ func TestCollectFeatures_SubclassNotInMap(t *testing.T) {
 
 func TestCollectFeatures_NoSubclassSelected(t *testing.T) {
 	classFeatures := map[string]map[string][]character.Feature{
-		"Fighter": {
+		"fighter": {
 			"1": {{Name: "Fighting Style", Source: "Fighter", Level: 1, Description: "Choose style"}},
 		},
 	}
 	subclassFeatures := map[string]map[string]map[string][]character.Feature{
-		"Fighter": {
-			"Champion": {
+		"fighter": {
+			"champion": {
 				"3": {{Name: "Improved Critical", Source: "Fighter (Champion)", Level: 3, Description: "Crit on 19-20"}},
 			},
 		},
@@ -555,7 +555,7 @@ func TestCollectFeatures_NoSubclassSelected(t *testing.T) {
 
 func TestCollectFeatures_NilSubclassFeatures(t *testing.T) {
 	classFeatures := map[string]map[string][]character.Feature{
-		"Fighter": {
+		"fighter": {
 			"1": {{Name: "Fighting Style", Source: "Fighter", Level: 1, Description: "Choose style"}},
 		},
 	}

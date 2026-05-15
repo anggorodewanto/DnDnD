@@ -690,7 +690,7 @@ func TestCharCreateHandler_HandleListRefSpells_NullResponse(t *testing.T) {
 func TestCharCreateHandler_HandlePreview_IncludesFeatures(t *testing.T) {
 	featureProvider := &mockFeatureProvider{
 		classFeatures: map[string]map[string][]character.Feature{
-			"Fighter": {
+			"fighter": {
 				"1": {{Name: "Fighting Style", Source: "Fighter", Level: 1, Description: "Choose style"}},
 				"2": {{Name: "Action Surge", Source: "Fighter", Level: 2, Description: "Extra action"}},
 			},

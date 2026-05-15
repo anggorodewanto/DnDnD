@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/refdata"
@@ -61,7 +62,7 @@ func (fp *RefDataFeatureProvider) SubclassFeatures() map[string]map[string]map[s
 }
 
 func (fp *RefDataFeatureProvider) RacialTraits(race string) []character.Feature {
-	return fp.races[race]
+	return fp.races[strings.ToLower(race)]
 }
 
 // parseFeaturesByLevel decodes the JSONB features_by_level column into the

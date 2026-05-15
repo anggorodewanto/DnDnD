@@ -177,7 +177,8 @@ func CollectFeatures(
 	result = append(result, racialTraits...)
 
 	for _, c := range classes {
-		cf := classFeatures[c.Class] // nil map is safe to read from
+		classKey := strings.ToLower(c.Class)
+		cf := classFeatures[classKey] // nil map is safe to read from
 
 		for lvl := 1; lvl <= c.Level; lvl++ {
 			key := fmt.Sprintf("%d", lvl)
@@ -186,11 +187,11 @@ func CollectFeatures(
 			if c.Subclass == "" || subclassFeatures == nil {
 				continue
 			}
-			scMap, ok := subclassFeatures[c.Class]
+			scMap, ok := subclassFeatures[classKey]
 			if !ok {
 				continue
 			}
-			scFeats, ok := scMap[c.Subclass]
+			scFeats, ok := scMap[strings.ToLower(c.Subclass)]
 			if !ok {
 				continue
 			}
