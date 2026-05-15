@@ -356,3 +356,33 @@ func TestLegendaryActionBudget_ZeroCost(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, b2.Remaining)
 }
+
+// --- TDD Cycle F-C04: Lair action loses initiative ties ---
+
+func TestBuildTurnQueueEntries_LairActionLosesTies(t *testing.T) {
+	dragonID := uuid.New()
+	pcID := uuid.New()
+
+	combatants := []refdata.Combatant{
+		{ID: pcID, DisplayName: "Rogue", InitiativeRoll: 20, InitiativeOrder: 1, IsNpc: false, IsAlive: true},
+		{ID: dragonID, DisplayName: "Adult Red Dragon", InitiativeRoll: 15, InitiativeOrder: 2, IsNpc: true, IsAlive: true},
+	}
+
+	lairCreatures := map[uuid.UUID]string{dragonID: "Adult Red Dragon"}
+
+	entries := BuildTurnQueueEntries(combatants, nil, lairCreatures)
+
+	// Find the positions of the combatant at init 20 and the lair action at init 20
+	var rogueIdx, lairIdx int
+	for i, e := range entries {
+		if e.Type == TurnQueueCombatant && e.DisplayName == "Rogue" {
+			rogueIdx = i
+		}
+		if e.Type == TurnQueueLairAction {
+			lairIdx = i
+		}
+	}
+
+	// Lair action must lose ties: combatant at init 20 goes before lair action at init 20
+	assert.Less(t, rogueIdx, lairIdx, "combatant at initiative 20 should appear before lair action (lair loses ties)")
+}

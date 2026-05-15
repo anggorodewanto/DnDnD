@@ -3,6 +3,7 @@ package combat
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -291,11 +292,12 @@ const (
 
 // TurnQueueEntry represents one entry in the turn queue display.
 type TurnQueueEntry struct {
-	Type        string    `json:"type"`
-	CombatantID uuid.UUID `json:"combatant_id,omitempty"`
-	DisplayName string    `json:"display_name"`
-	Initiative  int32     `json:"initiative"`
-	IsNPC       bool      `json:"is_npc"`
+	Type         string    `json:"type"`
+	CombatantID  uuid.UUID `json:"combatant_id,omitempty"`
+	DisplayName  string    `json:"display_name"`
+	Initiative   int32     `json:"initiative"`
+	IsNPC        bool      `json:"is_npc"`
+	IsLairAction bool      `json:"is_lair_action,omitempty"`
 }
 
 // BuildTurnQueueEntries builds the full turn queue including legendary and lair action entries.
@@ -313,9 +315,10 @@ func BuildTurnQueueEntries(combatants []refdata.Combatant, legendaryCreatures ma
 			break
 		}
 		entries = append(entries, TurnQueueEntry{
-			Type:        TurnQueueLairAction,
-			DisplayName: name + " (Lair)",
-			Initiative:  20,
+			Type:         TurnQueueLairAction,
+			DisplayName:  name + " (Lair)",
+			Initiative:   20,
+			IsLairAction: true,
 		})
 	}
 
@@ -343,6 +346,18 @@ func BuildTurnQueueEntries(combatants []refdata.Combatant, legendaryCreatures ma
 			}
 		}
 	}
+
+	// Sort: higher initiative first; lair actions lose ties (go last at same initiative)
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].Initiative != entries[j].Initiative {
+			return entries[i].Initiative > entries[j].Initiative
+		}
+		// Same initiative: lair actions go after non-lair entries
+		if entries[i].IsLairAction != entries[j].IsLairAction {
+			return !entries[i].IsLairAction
+		}
+		return false
+	})
 
 	return entries
 }

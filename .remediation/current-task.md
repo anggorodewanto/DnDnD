@@ -1,11 +1,11 @@
-finding_id: F-C03
+finding_id: F-C04
 severity: Critical
-title: Devil's Sight never wired into player vision pipeline
-location: cmd/dndnd/discord_adapters.go:755-806
-spec_ref: spec §Dynamic Fog of War lines 2204-2208; phases §Phase 68
+title: Lair Action placed at head of turn queue instead of "loses ties" with 20
+location: internal/combat/legendary.go:304-348
+spec_ref: spec §Enemy / NPC Turns lines 1916-1918; phases §Phase 78b
 problem: |
-  renderer.VisionSource exposes HasDevilsSight, the FoW math honors it, and the combat obscurement engine honors it — but buildVisionSources never sets the flag from PC race/class/feature data. A Warlock in Darkness sees only the origin tile.
+  BuildTurnQueueEntries prepends the Lair Action entry at Initiative: 20 and then appends regular combatants. The function does not sort by initiative descending, and lair actions can fire before legitimate winners at 20. Per DMG p246, lair actions fire on initiative count 20, losing initiative ties.
 suggested_fix: |
-  Inspect the character's features JSON for "Devil's Sight" and set src.HasDevilsSight = true in buildVisionSources.
+  After building all entries (including lair), sort the slice by initiative descending with a stable secondary key that pushes Lair Action entries after every combatant sharing the same initiative number. Add an IsLairAction bool field to the entry struct and use it as a tiebreaker.
 acceptance_criterion: |
-  A character with "Devil's Sight" in their features has HasDevilsSight=true in their VisionSource. A test demonstrates this.
+  When a combatant has initiative 20 and a lair action also has initiative 20, the combatant acts first (lair action loses ties). A test demonstrates this ordering.

@@ -128,3 +128,10 @@ Append-only journal of all remediation activity.
 - Commit: 0f37116
 - Reviewer: approved
 - Notes: 5 lines in ResolveTurnResources check armor STR req and subtract 10ft penalty
+
+## 2026-05-15T18:23 — F-C03 done
+
+- Finding: Devil's Sight never wired into player vision pipeline
+- Commit: 2e940e6
+- Reviewer: approved
+- Notes: 3 lines in buildVisionSources check features for Devil's Sight
