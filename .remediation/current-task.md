@@ -1,11 +1,11 @@
-finding_id: H-C02
+finding_id: H-C03
 severity: Critical
-title: Feat prerequisites and "already-has-feat" exclusion not enforced in live picker
-location: cmd/dndnd/discord_handlers.go:1155 (asiFeatLister.ListEligibleFeats)
-spec_ref: spec §"Feat path" lines 2486-2487
+title: Level-up does not auto-add new class/subclass features
+location: internal/levelup/service.go:186 (ApplyLevelUp)
+spec_ref: spec §"Leveling workflow" lines 2453, 2471
 problem: |
-  The production FeatLister returns the first 25 feats alphabetically with no prerequisite filtering and no exclusion of feats the character already has. CheckFeatPrerequisites exists but is never called in the player flow.
+  ClassRefData.FeaturesByLevel is loaded by the store adapter but never read in ApplyLevelUp. No code appends the class's level-N features to character.features on level-up.
 suggested_fix: |
-  Implement ListEligibleFeats to load the character's scores/proficiencies, run CheckFeatPrerequisites per feat, and exclude IDs already present in Features (Source=="feat").
+  After computing newClasses, iterate classRef.FeaturesByLevel for the new level and append to features (deduping by name+source).
 acceptance_criterion: |
-  ListEligibleFeats excludes feats the character already has and feats whose prerequisites aren't met. A test demonstrates both exclusions.
+  A Fighter leveling from 4 to 5 gets "Extra Attack" added to their features. A test demonstrates the feature is appended.

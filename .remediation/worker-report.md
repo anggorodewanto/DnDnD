@@ -1,12 +1,11 @@
-finding_id: H-C02
+finding_id: H-C03
 status: done
 files_changed:
-  - internal/levelup/filter_feats.go
-  - internal/levelup/filter_feats_test.go
-  - cmd/dndnd/discord_handlers.go
-test_command_that_validates: go test ./internal/levelup/ -run TestFilterEligibleFeats -v
+  - internal/levelup/service.go
+  - internal/levelup/service_test.go
+test_command_that_validates: go test ./internal/levelup/ -run "TestService_ApplyLevelUp_AppendsClassFeatures|TestService_ApplyLevelUp_DeduplicatesFeatures" -v
 acceptance_criterion_met: yes
-notes: Added FilterEligibleFeats in the levelup package that excludes feats by owned ID and by unmet prerequisites (delegates to CheckFeatPrerequisites). The production asiFeatLister now fetches the character, parses scores/proficiencies/features, and calls FilterEligibleFeats before returning results. Test confirms both exclusion paths (owned feats and unmet prereqs). Coverage remains above thresholds.
+notes: Added feature-append logic in ApplyLevelUp that reads classRef.FeaturesByLevel[strconv.Itoa(newClassLevel)] after computing the new class level. New features are appended to the character's existing features list with deduplication by name. The updated features are persisted via the StatsUpdate.Features field which the store adapter already handles via pickNullable. Two tests added: one verifying a Fighter leveling to 5 gets "Extra Attack", another verifying no duplicates on re-level.
 follow_ups:
-  - Consider adding the feat description back to FeatOption in the filtered path (currently omitted since refdata.Feat.Description isn't passed through FeatInfo)
-  - The 25-item Discord select-menu cap may hide eligible feats if many exist; consider pagination or search
+  - Consider deduping by name+source pair instead of name alone for edge cases where different classes grant identically-named features
+  - Subclass features (from SubclassFeaturesByLevel if it exists) may need similar treatment

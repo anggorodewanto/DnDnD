@@ -233,3 +233,10 @@ Append-only journal of all remediation activity.
 - Commit: 3a5a838
 - Reviewer: approved
 - Notes: First imports now stage via pending_ddb_imports; ApproveImport handles create
+
+## 2026-05-15T19:08 — H-C02 done
+
+- Finding: Feat prerequisites and already-has-feat exclusion not enforced
+- Commit: a74abe4
+- Reviewer: approved
+- Notes: New FilterEligibleFeats function + wired into production lister

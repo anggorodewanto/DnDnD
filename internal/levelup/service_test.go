@@ -38,6 +38,9 @@ func (m *mockCharacterStore) UpdateCharacterStats(ctx context.Context, id uuid.U
 	c.HPMax = int32(update.HPMax)
 	c.ProficiencyBonus = int32(update.ProficiencyBonus)
 	c.Classes = update.Classes
+	if len(update.Features) > 0 {
+		c.Features = update.Features
+	}
 	return nil
 }
 
@@ -865,6 +868,134 @@ func TestService_DenyASI_NotificationErrorsDoNotFail(t *testing.T) {
 	err := svc.DenyASI(context.Background(), charID, "bad choice")
 	if err != nil {
 		t.Fatalf("DenyASI should not fail when notifications error: %v", err)
+	}
+}
+
+func TestService_ApplyLevelUp_AppendsClassFeatures(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+	notifier := &mockNotifier{}
+
+	classes := []character.ClassEntry{{Class: "fighter", Level: 4}}
+	classesJSON, _ := json.Marshal(classes)
+	existingFeatures := []character.Feature{
+		{Name: "Second Wind", Source: "fighter", Level: 1},
+	}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:               charID,
+		Name:             "Kael",
+		DiscordUserID:    "user999",
+		Level:            4,
+		HPMax:            36,
+		HPCurrent:        36,
+		ProficiencyBonus: 2,
+		Classes:          classesJSON,
+		AbilityScores:    mustJSON(t, character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}),
+		Features:         mustJSON(t, existingFeatures),
+	}
+
+	classStore.classes["fighter"] = &ClassRefData{
+		HitDie:           "d10",
+		AttacksPerAction: map[int]int{1: 1, 5: 2, 11: 3, 20: 4},
+		SubclassLevel:    3,
+		FeaturesByLevel: map[string][]character.Feature{
+			"1": {{Name: "Fighting Style", Source: "fighter", Level: 1, Description: "x", MechanicalEffect: "fighting_style_choice"}},
+			"5": {{Name: "Extra Attack", Source: "fighter", Level: 5, Description: "Attack twice per action", MechanicalEffect: "attacks_per_action_2"}},
+		},
+	}
+
+	svc := NewService(charStore, classStore, notifier)
+
+	_, err := svc.ApplyLevelUp(context.Background(), charID, "fighter", 5)
+	if err != nil {
+		t.Fatalf("ApplyLevelUp error: %v", err)
+	}
+
+	// Verify "Extra Attack" was appended to features
+	var updatedFeatures []character.Feature
+	if err := json.Unmarshal(charStore.chars[charID].Features, &updatedFeatures); err != nil {
+		t.Fatalf("unmarshal features: %v", err)
+	}
+
+	found := false
+	for _, f := range updatedFeatures {
+		if f.Name == "Extra Attack" {
+			found = true
+			if f.Source != "fighter" {
+				t.Errorf("Extra Attack source = %q, want %q", f.Source, "fighter")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'Extra Attack' in features after leveling fighter to 5, got: %+v", updatedFeatures)
+	}
+
+	// Existing features should still be present
+	if len(updatedFeatures) < 2 {
+		t.Errorf("expected at least 2 features (existing + new), got %d", len(updatedFeatures))
+	}
+}
+
+func TestService_ApplyLevelUp_DeduplicatesFeatures(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+	notifier := &mockNotifier{}
+
+	classes := []character.ClassEntry{{Class: "fighter", Level: 4}}
+	classesJSON, _ := json.Marshal(classes)
+	// Character already has Extra Attack (e.g. re-level scenario)
+	existingFeatures := []character.Feature{
+		{Name: "Second Wind", Source: "fighter", Level: 1},
+		{Name: "Extra Attack", Source: "fighter", Level: 5},
+	}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:               charID,
+		Name:             "Kael",
+		DiscordUserID:    "user999",
+		Level:            4,
+		HPMax:            36,
+		HPCurrent:        36,
+		ProficiencyBonus: 2,
+		Classes:          classesJSON,
+		AbilityScores:    mustJSON(t, character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}),
+		Features:         mustJSON(t, existingFeatures),
+	}
+
+	classStore.classes["fighter"] = &ClassRefData{
+		HitDie:           "d10",
+		AttacksPerAction: map[int]int{1: 1, 5: 2, 11: 3, 20: 4},
+		SubclassLevel:    3,
+		FeaturesByLevel: map[string][]character.Feature{
+			"5": {{Name: "Extra Attack", Source: "fighter", Level: 5, Description: "Attack twice", MechanicalEffect: "attacks_per_action_2"}},
+		},
+	}
+
+	svc := NewService(charStore, classStore, notifier)
+
+	_, err := svc.ApplyLevelUp(context.Background(), charID, "fighter", 5)
+	if err != nil {
+		t.Fatalf("ApplyLevelUp error: %v", err)
+	}
+
+	var updatedFeatures []character.Feature
+	if err := json.Unmarshal(charStore.chars[charID].Features, &updatedFeatures); err != nil {
+		t.Fatalf("unmarshal features: %v", err)
+	}
+
+	// Should NOT duplicate Extra Attack
+	count := 0
+	for _, f := range updatedFeatures {
+		if f.Name == "Extra Attack" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 'Extra Attack', got %d in: %+v", count, updatedFeatures)
 	}
 }
 

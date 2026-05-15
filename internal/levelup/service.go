@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -251,6 +252,32 @@ func (s *Service) ApplyLevelUp(ctx context.Context, characterID uuid.UUID, class
 			return nil, fmt.Errorf("marshaling pact slots: %w", err)
 		}
 		update.PactMagicSlots = pactJSON
+	}
+
+	// Append class features for the new level (deduping by name)
+	if newFeatures := classRef.FeaturesByLevel[strconv.Itoa(newClassLevel)]; len(newFeatures) > 0 {
+		var existing []character.Feature
+		if len(char.Features) > 0 {
+			_ = json.Unmarshal(char.Features, &existing)
+		}
+		have := make(map[string]bool, len(existing))
+		for _, f := range existing {
+			have[f.Name] = true
+		}
+		for _, f := range newFeatures {
+			if have[f.Name] {
+				continue
+			}
+			if f.Source == "" {
+				f.Source = classID
+			}
+			existing = append(existing, f)
+		}
+		featJSON, err := json.Marshal(existing)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling features: %w", err)
+		}
+		update.Features = featJSON
 	}
 
 	// Apply update
