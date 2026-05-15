@@ -121,3 +121,10 @@ Append-only journal of all remediation activity.
 - Commit: 244105c
 - Reviewer: approved
 - Notes: Added Trigger Counterspell button + isCounterspellReaction helper to Svelte panel
+
+## 2026-05-15T18:20 — F-C02 done
+
+- Finding: Heavy-armor STR speed penalty computed but never applied
+- Commit: 0f37116
+- Reviewer: approved
+- Notes: 5 lines in ResolveTurnResources check armor STR req and subtract 10ft penalty
