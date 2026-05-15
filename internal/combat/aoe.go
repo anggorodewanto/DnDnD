@@ -183,6 +183,7 @@ type PendingSave struct {
 	IsNPC        bool
 	AutoSuccess  bool
 	Disadvantage bool
+	FullCover    bool
 }
 
 // SaveResult holds the outcome of a saving throw.
@@ -196,12 +197,22 @@ type SaveResult struct {
 
 // CalculateAoECover computes the PendingSave for a combatant affected by an AoE spell.
 // If the save ability is "dex", the cover bonus from the spell origin is applied.
+// If the target has full cover from the origin, FullCover is set to true (target should be excluded).
 func CalculateAoECover(originCol, originRow int, combatant refdata.Combatant, saveAbility string, dc int, walls []renderer.WallSegment) PendingSave {
 	coverBonus := 0
+	targetCol := colToIndex(combatant.PositionCol)
+	targetRow := int(combatant.PositionRow) - 1
+	cover := CalculateCoverFromOrigin(originCol, originRow, targetCol, targetRow, walls)
+	if cover == CoverFull {
+		return PendingSave{
+			CombatantID: combatant.ID,
+			SaveAbility: saveAbility,
+			DC:          dc,
+			IsNPC:       combatant.IsNpc,
+			FullCover:   true,
+		}
+	}
 	if saveAbility == "dex" {
-		targetCol := colToIndex(combatant.PositionCol)
-		targetRow := int(combatant.PositionRow) - 1
-		cover := CalculateCoverFromOrigin(originCol, originRow, targetCol, targetRow, walls)
 		coverBonus = cover.DEXSaveBonus()
 	}
 	return PendingSave{
@@ -530,9 +541,13 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	var affectedNames []string
 	heightenedAssigned := false
 	for _, c := range affected {
-		affectedNames = append(affectedNames, c.DisplayName)
 		if saveAbility != "" {
 			ps := CalculateAoECover(originCol, originRow, c, saveAbility, saveDC, cmd.Walls)
+			// F-19: Full cover from AoE origin excludes the target entirely.
+			if ps.FullCover {
+				continue
+			}
+			affectedNames = append(affectedNames, c.DisplayName)
 			if carefulSet[c.ID] {
 				ps.AutoSuccess = true
 			}
@@ -546,6 +561,8 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 				}
 			}
 			pendingSaves = append(pendingSaves, ps)
+		} else {
+			affectedNames = append(affectedNames, c.DisplayName)
 		}
 	}
 

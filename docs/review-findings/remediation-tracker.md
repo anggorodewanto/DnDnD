@@ -39,7 +39,7 @@
 | F-08 | High | Counterspell accepts invalid low-level slots | review_passed | — | PASS |
 | F-09 | High | Material components consumed before validation fails | implemented | PASS | reviewer-f09 |
 | F-10 | High | Expired readied spells leave concentration set | review_passed | — | PASS |
-| F-19 | Medium | AoE full cover not used to block targets | pending | — | — |
+| F-19 | Medium | AoE full cover not used to block targets | implemented | — | — |
 | F-20 | Medium | Wild Shape doesn't use beast speed | pending | — | — |
 | F-21 | Medium | Timeout saves roll raw 1d20 ignoring modifiers | pending | — | — |
 
@@ -279,7 +279,8 @@
 - **Source**: agent-02
 - **Files**: `internal/combat/aoe.go`, `internal/combat/cover.go`
 - **Test plan**: Test that targets with full cover from AoE origin are excluded
-- **Implementation notes**: —
+- **Implementation notes**: Added `FullCover bool` field to `PendingSave`. Modified `CalculateAoECover` to always compute cover from origin (not just for DEX saves) and set `FullCover = true` when `CoverFull` is returned. In the `CastAoE` pending-save loop, targets with `ps.FullCover` are skipped via `continue`, excluding them from both `pendingSaves` and `affectedNames`. Test `TestCastAoE_F19_FullCoverExcludesTarget` proves a target behind full cover receives no pending save and does not appear in affected names.
+- **Changed files**: `internal/combat/aoe.go`, `internal/combat/aoe_test.go`
 - **Reviewer verdict**: —
 
 ### F-20: Wild Shape doesn't use beast speed

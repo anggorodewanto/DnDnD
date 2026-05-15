@@ -2937,3 +2937,81 @@ func TestRecordAoEPendingSaveRoll_F05_CoverBonusMakesSaveSucceed(t *testing.T) {
 	assert.True(t, updated.Success.Bool, "roll of 14 vs stored DC 13 (original 15 - 2 cover) must succeed")
 	assert.Equal(t, int32(14), updated.RollResult.Int32)
 }
+
+// F-19: A target with full cover from the AoE origin is excluded from pending saves entirely.
+func TestCastAoE_F19_FullCoverExcludesTarget(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "A"
+	caster.PositionRow = 1
+
+	// Target at I8 (col index 8, row index 7) — behind full cover from AoE origin
+	goblin := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin",
+		PositionCol: "I", PositionRow: 8,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	fireball := makeFireball()
+	fireball.AreaOfEffect = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`{"shape":"sphere","radius_ft":20}`),
+		Valid:      true,
+	}
+	fireball.SaveEffect = sql.NullString{String: "half_damage", Valid: true}
+
+	// AoE origin will be at F6 (col 5, row 5). A vertical wall at x=7.5
+	// spanning y=6.5 to y=8.5 blocks all 4 lines from the closest origin
+	// corner to the target corners, producing full cover.
+	walls := []renderer.WallSegment{
+		{X1: 7.5, Y1: 6.5, X2: 7.5, Y2: 8.5},
+	}
+
+	// Verify this wall setup produces full cover from origin (5,5) to target (8,7)
+	cover := CalculateCoverFromOrigin(5, 5, 8, 7, walls)
+	require.Equal(t, CoverFull, cover, "wall setup must produce full cover")
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return fireball, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster, goblin}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	createPendingSaveCalled := false
+	store.createPendingSaveFn = func(_ context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+		createPendingSaveCalled = true
+		return refdata.PendingSafe{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, Source: arg.Source}, nil
+	}
+
+	svc := NewService(store)
+	cmd := AoECastCommand{
+		SpellID:     "fireball",
+		CasterID:    caster.ID,
+		EncounterID: uuid.New(),
+		TargetCol:   "F",
+		TargetRow:   6,
+		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		Walls:       walls,
+	}
+
+	result, err := svc.CastAoE(context.Background(), cmd)
+	require.NoError(t, err)
+
+	// Target with full cover must be excluded from pending saves
+	assert.Empty(t, result.PendingSaves, "target with full cover must not receive a pending save")
+	assert.NotContains(t, result.AffectedNames, "Goblin", "target with full cover must not appear in affected names")
+	assert.False(t, createPendingSaveCalled, "no pending save row should be persisted for full-cover target")
+}
