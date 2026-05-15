@@ -333,6 +333,7 @@ type combatDashboardWiring struct {
 // GetCombatant. Every other method is structurally compatible.
 type workspaceStoreAdapter struct {
 	*refdata.Queries
+	db refdata.DBTX
 }
 
 func (a workspaceStoreAdapter) GetCombatantByID(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
@@ -341,6 +342,16 @@ func (a workspaceStoreAdapter) GetCombatantByID(ctx context.Context, id uuid.UUI
 
 func (a workspaceStoreAdapter) GetMapByID(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
 	return a.Queries.GetMapByIDUnchecked(ctx, id)
+}
+
+func (a workspaceStoreAdapter) CountPendingDMQueueItemsByEncounter(ctx context.Context, encounterID uuid.UUID) (int64, error) {
+	row := a.db.QueryRowContext(ctx,
+		`SELECT count(*)::BIGINT FROM dm_queue_items dq
+		 JOIN pending_actions pa ON pa.dm_queue_item_id = dq.id
+		 WHERE pa.encounter_id = $1 AND dq.status = 'pending'`, encounterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 // dmOnlyAPIDeps groups every HTTP handler whose routes mutate or expose
@@ -1036,7 +1047,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			messagePlayerHandler:     messagePlayerHandler,
 			combatHandler:            combatHandler,
 			combatSvc:                combatSvc,
-			workspaceStore:           workspaceStoreAdapter{queries},
+			workspaceStore:           workspaceStoreAdapter{queries, db},
 			db:                       db,
 			combatLogPoster:          combatLogPoster,
 			mapRegenerator:           newMapRegeneratorAdapter(queries),

@@ -1054,6 +1054,9 @@ func (stubWorkspaceStore) GetCreature(context.Context, string) (refdata.Creature
 func (stubWorkspaceStore) CountPendingDMQueueItemsByCampaign(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }
+func (stubWorkspaceStore) CountPendingDMQueueItemsByEncounter(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
 
 type recordingCombatLogPoster struct {
 	calls int

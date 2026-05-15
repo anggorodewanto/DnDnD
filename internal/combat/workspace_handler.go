@@ -29,6 +29,7 @@ type WorkspaceStore interface {
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
 	CountPendingDMQueueItemsByCampaign(ctx context.Context, campaignID uuid.UUID) (int64, error)
+	CountPendingDMQueueItemsByEncounter(ctx context.Context, encounterID uuid.UUID) (int64, error)
 }
 
 // WorkspaceCombatService defines the service-layer operations used by
@@ -170,20 +171,20 @@ func (h *WorkspaceHandler) GetWorkspace(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	pendingQueueCount, err := h.store.CountPendingDMQueueItemsByCampaign(r.Context(), campaignID)
-	if err != nil {
-		http.Error(w, "failed to count pending queue items", http.StatusInternalServerError)
-		return
-	}
-	if pendingQueueCount > math.MaxInt32 {
-		pendingQueueCount = math.MaxInt32
-	}
-
 	resp := workspaceResponse{
 		Encounters: make([]workspaceEncounterResponse, 0, len(activeEncounters)),
 	}
 
 	for _, enc := range activeEncounters {
+		pendingQueueCount, err := h.store.CountPendingDMQueueItemsByEncounter(r.Context(), enc.ID)
+		if err != nil {
+			http.Error(w, "failed to count pending queue items", http.StatusInternalServerError)
+			return
+		}
+		if pendingQueueCount > math.MaxInt32 {
+			pendingQueueCount = math.MaxInt32
+		}
+
 		encResp, err := h.buildEncounterResponse(r.Context(), enc, int32(pendingQueueCount))
 		if err != nil {
 			http.Error(w, "failed to build encounter data", http.StatusInternalServerError)

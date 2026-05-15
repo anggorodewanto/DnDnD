@@ -33,6 +33,7 @@ type mockWorkspaceStore struct {
 	getCharacterFn                    func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	getCreatureFn                     func(ctx context.Context, id string) (refdata.Creature, error)
 	countPendingDMQueueByCampaignFn   func(ctx context.Context, campaignID uuid.UUID) (int64, error)
+	countPendingDMQueueByEncounterFn  func(ctx context.Context, encounterID uuid.UUID) (int64, error)
 }
 
 // mockWorkspaceSvc implements WorkspaceCombatService for tests.
@@ -103,6 +104,12 @@ func (m *mockWorkspaceStore) CountPendingDMQueueItemsByCampaign(ctx context.Cont
 		return 0, nil
 	}
 	return m.countPendingDMQueueByCampaignFn(ctx, campaignID)
+}
+func (m *mockWorkspaceStore) CountPendingDMQueueItemsByEncounter(ctx context.Context, encounterID uuid.UUID) (int64, error) {
+	if m.countPendingDMQueueByEncounterFn == nil {
+		return 0, nil
+	}
+	return m.countPendingDMQueueByEncounterFn(ctx, encounterID)
 }
 
 // --- TDD Cycle: parseCreatureWalkSpeed ---
@@ -1074,8 +1081,7 @@ func TestWorkspaceHandler_GetWorkspace_PopulatesPendingQueueCount(t *testing.T) 
 			}
 			return refdata.Turn{ID: turnB, CombatantID: combB}, nil
 		},
-		countPendingDMQueueByCampaignFn: func(ctx context.Context, cid uuid.UUID) (int64, error) {
-			assert.Equal(t, campaignID, cid)
+		countPendingDMQueueByEncounterFn: func(ctx context.Context, encounterID uuid.UUID) (int64, error) {
 			return 2, nil
 		},
 	}
@@ -1102,6 +1108,62 @@ func TestWorkspaceHandler_GetWorkspace_PopulatesPendingQueueCount(t *testing.T) 
 		require.Truef(t, ok, "encounter %d missing pending_queue_count JSON field", i)
 		assert.Equal(t, float64(2), val, "encounter %d pending_queue_count", i)
 	}
+}
+
+func TestWorkspaceHandler_GetWorkspace_PendingQueueCount_PerEncounter(t *testing.T) {
+	campaignID := uuid.New()
+	encA := uuid.New()
+	encB := uuid.New()
+	combA := uuid.New()
+	combB := uuid.New()
+
+	store := &mockWorkspaceStore{
+		listEncountersByCampaignIDFn: func(ctx context.Context, cid uuid.UUID) ([]refdata.Encounter, error) {
+			return []refdata.Encounter{
+				{ID: encA, CampaignID: campaignID, Name: "Goblin Fight", Status: "active", RoundNumber: 1},
+				{ID: encB, CampaignID: campaignID, Name: "Rooftop Chase", Status: "active", RoundNumber: 2},
+			}, nil
+		},
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			if eid == encA {
+				return []refdata.Combatant{{ID: combA, EncounterID: encA, ShortID: "PC1", DisplayName: "Aragorn", HpMax: 30, HpCurrent: 30, IsAlive: true, Conditions: json.RawMessage(`[]`)}}, nil
+			}
+			return []refdata.Combatant{{ID: combB, EncounterID: encB, ShortID: "PC2", DisplayName: "Gimli", HpMax: 28, HpCurrent: 28, IsAlive: true, Conditions: json.RawMessage(`[]`)}}, nil
+		},
+		listEncounterZonesByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.EncounterZone, error) {
+			return []refdata.EncounterZone{}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{}, sql.ErrNoRows
+		},
+		countPendingDMQueueByCampaignFn: func(ctx context.Context, cid uuid.UUID) (int64, error) {
+			return 5, nil // campaign-wide total (should NOT be used per-encounter)
+		},
+		countPendingDMQueueByEncounterFn: func(ctx context.Context, encounterID uuid.UUID) (int64, error) {
+			if encounterID == encA {
+				return 3, nil
+			}
+			return 1, nil
+		},
+	}
+
+	h := NewWorkspaceHandler(store, nil)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/combat/workspace?campaign_id="+campaignID.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp workspaceResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Encounters, 2)
+
+	// Each encounter must have its own count, NOT the campaign-wide total.
+	assert.Equal(t, int32(3), resp.Encounters[0].PendingQueueCount, "encA should have 3 pending items")
+	assert.Equal(t, int32(1), resp.Encounters[1].PendingQueueCount, "encB should have 1 pending item")
 }
 
 func TestWorkspaceHandler_GetWorkspace_PendingQueueCount_ZeroWhenNoPending(t *testing.T) {
@@ -1151,6 +1213,7 @@ func TestWorkspaceHandler_GetWorkspace_PendingQueueCount_ZeroWhenNoPending(t *te
 func TestWorkspaceHandler_GetWorkspace_PendingQueueCount_StoreError(t *testing.T) {
 	campaignID := uuid.New()
 	encounterID := uuid.New()
+	combatantID := uuid.New()
 
 	store := &mockWorkspaceStore{
 		listEncountersByCampaignIDFn: func(ctx context.Context, cid uuid.UUID) ([]refdata.Encounter, error) {
@@ -1158,7 +1221,10 @@ func TestWorkspaceHandler_GetWorkspace_PendingQueueCount_StoreError(t *testing.T
 				{ID: encounterID, CampaignID: campaignID, Name: "Anywhere", Status: "active"},
 			}, nil
 		},
-		countPendingDMQueueByCampaignFn: func(ctx context.Context, cid uuid.UUID) (int64, error) {
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{{ID: combatantID, EncounterID: eid, ShortID: "PC", DisplayName: "X", HpMax: 10, HpCurrent: 10, IsAlive: true, Conditions: json.RawMessage(`[]`)}}, nil
+		},
+		countPendingDMQueueByEncounterFn: func(ctx context.Context, eid uuid.UUID) (int64, error) {
 			return 0, errors.New("db down")
 		},
 	}
