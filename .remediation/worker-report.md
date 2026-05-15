@@ -1,11 +1,10 @@
-finding_id: C-C02
+finding_id: C-C03
 status: done
 files_changed:
-  - internal/combat/advantage.go
-  - internal/combat/advantage_test.go
   - internal/combat/attack.go
-test_command_that_validates: go test ./internal/combat/ -run "TestDetectAdvantage_RecklessCondition" -v
+  - internal/combat/attack_test.go
+test_command_that_validates: go test ./internal/combat/ -run "TestServiceOffhandAttack_NoAttackMadeThisTurn|TestServiceOffhandAttack_RangedMainHand|TestServiceOffhandAttack_RangedOffHand" -v
 acceptance_criterion_met: yes
-notes: Added `AbilityUsed` field to `AdvantageInput` struct and a `"reckless"` case in the attacker-conditions loop of `DetectAdvantage` that grants advantage only when the weapon is melee and the ability used is STR. Passed `AbilityUsed` through from `ResolveAttack`. Three tests added: melee STR gets advantage (positive), ranged does not (negative), melee DEX does not (negative). All existing tests pass, coverage thresholds met.
+notes: Added two validation checks to OffhandAttack: (1) rejects if no attack has been made this turn by comparing AttacksRemaining against resolveAttacksPerAction max, and (2) rejects if either the main-hand or off-hand weapon is ranged via IsRangedWeapon. Three new tests were written (red-first TDD), and two existing happy-path tests were updated to set AttacksRemaining: 0 to reflect that an attack was already made. All tests pass including make test and make cover-check.
 follow_ups:
-  - Verify that Service.Attack populates `AbilityUsed` on `AttackInput` when building from `AttackCommand` (integration-level confirmation).
+  - Consider whether thrown melee weapons (e.g., dagger with "thrown" property) should be allowed for off-hand TWF when used in melee range — current implementation allows them since WeaponType is "simple_melee".

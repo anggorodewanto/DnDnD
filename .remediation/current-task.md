@@ -1,11 +1,13 @@
-finding_id: C-C02
+finding_id: C-C03
 severity: Critical
-title: Reckless Attack advantage missing on attacks 2+
-location: internal/combat/attack.go:887-901, internal/combat/advantage.go:36-39
-spec_ref: Phase 38; spec line 217 ("advantage on melee STR attacks this turn")
+title: Off-hand (TWF) attack lacks Attack-action prerequisite and melee weapon check
+location: internal/combat/attack.go:1147-1200
+spec_ref: Phase 36; spec line 463 ("when a character attacks with a light melee weapon in their main hand... use bonus action to attack with a different light melee weapon")
 problem: |
-  Reckless Attack grants advantage to ALL melee STR attack rolls for the entire turn. The reckless gate rejects --reckless on any swing other than the first. The transient `reckless` condition applied to the attacker is only consulted on the target-side branch of DetectAdvantage (granting advantage to enemies attacking the reckless attacker). There is no attacker-side branch that re-applies "Reckless Attack" advantage on attack 2/3/4 of the same turn.
+  OffhandAttack only validates ResourceBonusAction available, that both weapons exist and that both have the "light" property. It does NOT (a) verify the Attack action has been taken this turn (no AttacksRemaining < maxAttacks check), and (b) does not check the "melee" weapon type — a "light crossbow" or "dart" (light ranged) off-hand currently passes.
 suggested_fix: |
-  In DetectAdvantage, also check attackerConditions for "reckless" and, when present, add "Reckless Attack (active)" to advReasons for melee STR attacks. Keep the existing first-attack gate on the --reckless flag itself.
+  Reject the command if no attack has been made this turn (e.g., cmd.Turn.AttacksRemaining == initialMaxAttacks or check that ActionUsed is true). Also gate on !IsRangedWeapon(mainWeapon) && !IsRangedWeapon(offWeapon).
 acceptance_criterion: |
-  A barbarian with the "reckless" condition making a second melee STR attack in the same turn gets advantage from DetectAdvantage. A ranged attack or DEX-based attack does NOT get the advantage even with the reckless condition.
+  1. OffhandAttack fails with an error when no attack has been made this turn (AttacksRemaining == max).
+  2. OffhandAttack fails when either weapon is ranged (e.g., light crossbow).
+  3. OffhandAttack succeeds when both weapons are light melee and an attack has been made.

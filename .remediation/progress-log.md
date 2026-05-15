@@ -44,3 +44,10 @@ Append-only journal of all remediation activity.
 - Commit: 78488e3
 - Reviewer: approved
 - Notes: Base-26 conversion loop replaces single-byte parsing
+
+## 2026-05-15T15:30 — C-C02 done
+
+- Finding: Reckless Attack advantage missing on attacks 2+
+- Commit: 560deac
+- Reviewer: approved
+- Notes: Added "reckless" case to attacker-conditions in DetectAdvantage, gated on melee+STR

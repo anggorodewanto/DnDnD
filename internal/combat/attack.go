@@ -1164,6 +1164,12 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 		return AttackResult{}, fmt.Errorf("getting character: %w", err)
 	}
 
+	// C-C03: off-hand attack requires the Attack action to have been taken this turn.
+	maxAttacks := int32(s.resolveAttacksPerAction(ctx, char))
+	if cmd.Turn.AttacksRemaining >= maxAttacks {
+		return AttackResult{}, fmt.Errorf("off-hand attack requires an attack must be made this turn first")
+	}
+
 	parsed, err := ParseAbilityScores(char.AbilityScores)
 	if err != nil {
 		return AttackResult{}, fmt.Errorf("parsing ability scores: %w", err)
@@ -1183,6 +1189,9 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	if !HasProperty(mainWeapon, "light") {
 		return AttackResult{}, fmt.Errorf("main hand weapon %q is not light", mainWeapon.Name)
 	}
+	if IsRangedWeapon(mainWeapon) {
+		return AttackResult{}, fmt.Errorf("main hand weapon %q is ranged; off-hand attack requires melee weapons", mainWeapon.Name)
+	}
 
 	// Validate off-hand weapon exists and is light
 	if !char.EquippedOffHand.Valid || char.EquippedOffHand.String == "" {
@@ -1194,6 +1203,9 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	}
 	if !HasProperty(offWeapon, "light") {
 		return AttackResult{}, fmt.Errorf("off-hand weapon %q is not light", offWeapon.Name)
+	}
+	if IsRangedWeapon(offWeapon) {
+		return AttackResult{}, fmt.Errorf("off-hand weapon %q is ranged; off-hand attack requires melee weapons", offWeapon.Name)
 	}
 
 	// Off-hand attacks use 0 damage modifier unless the character has TWF fighting style
