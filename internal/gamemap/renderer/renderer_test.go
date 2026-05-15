@@ -265,6 +265,27 @@ func TestRenderMap_StackedTokens(t *testing.T) {
 	}
 }
 
+func TestRenderMap_RejectsExceedingHardLimit(t *testing.T) {
+	tests := []struct {
+		name   string
+		width  int
+		height int
+	}{
+		{"width exceeds", 201, 100},
+		{"height exceeds", 100, 201},
+		{"both exceed", 201, 201},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			md := &MapData{Width: tc.width, Height: tc.height, TileSize: 48}
+			_, err := RenderMap(md)
+			if err == nil {
+				t.Fatalf("expected error for %dx%d map, got nil", tc.width, tc.height)
+			}
+		})
+	}
+}
+
 func TestRenderMap_DoesNotMutateTileSize(t *testing.T) {
 	md := &MapData{
 		Width:    150,

@@ -1,11 +1,11 @@
-finding_id: C-H04
+finding_id: B-H01
 severity: High
-title: Dash adds raw base speed, ignoring exhaustion/condition speed modifiers
-location: internal/combat/standard_actions.go:38-71 (Dash), 73-87 (resolveBaseSpeed)
-spec_ref: Phase 42 (exhaustion levels 2/5 modify speed); spec §Exhaustion
+title: Map size limits not enforced when rendering, only at create-time
+location: internal/gamemap/renderer/renderer.go:12-16
+spec_ref: spec §Map Size Limits ("rejected: >200 in either dimension")
 problem: |
-  Dash does updatedTurn.MovementRemainingFt += speed where speed is char.SpeedFt (raw base). An exhaustion-2 PC (speed halved) gets a full base-speed Dash bonus, effectively recovering the halving.
+  RenderMap only checks >100 to downscale tile size but accepts arbitrarily large Width/Height. A stale stored map exceeding 200x200 will OOM the renderer.
 suggested_fix: |
-  Pipe Dash through EffectiveSpeedWithExhaustion/EffectiveSpeed so it adds the effective speed. Also reject Dash when effective speed = 0.
+  Add if md.Width > HardLimitDimension || md.Height > HardLimitDimension early-return error in RenderMap.
 acceptance_criterion: |
-  A Dash for an exhaustion-2 character (speed halved) adds half the base speed, not full. A test demonstrates this.
+  RenderMap returns an error for maps exceeding 200 in either dimension. A test demonstrates this.

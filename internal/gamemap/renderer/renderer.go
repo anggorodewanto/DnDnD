@@ -2,14 +2,22 @@ package renderer
 
 import (
 	"bytes"
+	"fmt"
 	"image/png"
 
 	"github.com/fogleman/gg"
 )
 
+// hardLimitDimension is the absolute max dimension for rendering.
+const hardLimitDimension = 200
+
 // RenderMap generates a PNG image from the given map data.
 // Returns the PNG bytes or an error.
 func RenderMap(md *MapData) ([]byte, error) {
+	if md.Width > hardLimitDimension || md.Height > hardLimitDimension {
+		return nil, fmt.Errorf("map dimensions %dx%d exceed hard limit of %d", md.Width, md.Height, hardLimitDimension)
+	}
+
 	// Auto-reduce tile size for large maps (>100 in either dimension)
 	tileSize := md.TileSize
 	if md.Width > 100 || md.Height > 100 {

@@ -1,19 +1,26 @@
-# Worker Report: C-H04
+# Worker Report: B-H01
 
-## Finding
-Dash (and CunningAction Dash) used raw base speed from `resolveBaseSpeed`, ignoring exhaustion level.
+**Worker:** worker-B-H01
+**Finding:** B-H01 — Map size limits not enforced when rendering
+**Status:** ✅ FIXED
 
-## Fix Applied
-After resolving base speed, applied `ExhaustionEffectiveSpeed(speed, exhaustionLevel)` to halve the dash bonus at exhaustion ≥ 2 and zero it at exhaustion ≥ 5.
+## Changes
 
-### Files Modified
-- `internal/combat/standard_actions.go` — Added exhaustion application after `resolveBaseSpeed` in both `Dash` (line ~53) and `CunningAction` dash case (line ~895).
-- `internal/combat/standard_actions_test.go` — Added `TestDash_ExhaustionLevel2_HalvesDashBonus`.
+### 1. `internal/gamemap/renderer/renderer.go`
+- Added `hardLimitDimension = 200` constant (local to avoid circular import with parent `gamemap` package).
+- Added early-return guard at top of `RenderMap`: rejects maps where Width or Height > 200 with a descriptive error.
+- Added `"fmt"` to imports.
 
-## TDD Cycle
-1. **Red:** `TestDash_ExhaustionLevel2_HalvesDashBonus` — PC with exhaustion 2 and speed 30 dashes; expected +15, got +30. FAIL.
-2. **Green:** Added `speed = int32(ExhaustionEffectiveSpeed(int(speed), int(cmd.Combatant.ExhaustionLevel)))` after `resolveBaseSpeed` in both Dash paths. PASS.
-3. **Verify:** `make test` ✅ | `make cover-check` ✅
+### 2. `internal/gamemap/renderer/renderer_test.go`
+- Added `TestRenderMap_RejectsExceedingHardLimit` with subtests for width-exceeds, height-exceeds, and both-exceed cases.
 
-## Acceptance Criterion
-A Dash for an exhaustion-2 character (speed halved) adds half the base speed (15), not full (30). Test demonstrates this.
+## Verification
+
+- **Red:** Test failed as expected before the guard was added.
+- **Green:** Test passes after adding the guard.
+- **`make test`:** All tests pass.
+- **`make cover-check`:** All coverage thresholds met.
+
+## Notes
+- The `HardLimitDimension` constant exists in `internal/gamemap/service.go`, but importing the parent package from the renderer sub-package would create a circular dependency. A local `hardLimitDimension` constant was defined instead, matching the same value (200).
+- No unrelated code was touched. No commit was made.
