@@ -447,7 +447,10 @@ func TestHandleSetupCommand_Success(t *testing.T) {
 
 	bot := NewBot(mock, "app-1", newTestLogger())
 	handler := NewSetupHandler(bot, campaignLookup)
-	handler.Handle(&discordgo.Interaction{GuildID: "guild-1"})
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "dm-user-1"}},
+	})
 
 	assert.True(t, deferredResponse, "should send deferred response")
 	assert.Contains(t, editContent, "created")
@@ -503,7 +506,7 @@ func TestHandleSetupCommand_AutoCreatedCampaign(t *testing.T) {
 	handler := NewSetupHandler(bot, campaignLookup)
 	handler.Handle(&discordgo.Interaction{
 		GuildID: "guild-1",
-		Member:  &discordgo.Member{User: &discordgo.User{ID: "dm-99"}},
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "dm-99"}, Permissions: int64(discordgo.PermissionAdministrator)},
 	})
 
 	assert.Equal(t, "dm-99", gotInvoker, "invoker user id should propagate to lookup")
@@ -519,7 +522,10 @@ func TestHandleSetupCommand_SetupError(t *testing.T) {
 
 	bot := NewBot(mock, "app-1", newTestLogger())
 	handler := NewSetupHandler(bot, &mockCampaignLookup{})
-	handler.Handle(&discordgo.Interaction{GuildID: "guild-1"})
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "dm-user-1"}},
+	})
 
 	assert.Contains(t, *editContent, "Failed")
 }
@@ -548,7 +554,10 @@ func TestHandleSetupCommand_SaveError(t *testing.T) {
 
 	bot := NewBot(mock, "app-1", newTestLogger())
 	handler := NewSetupHandler(bot, campaignLookup)
-	handler.Handle(&discordgo.Interaction{GuildID: "guild-1"})
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "dm-user-1"}},
+	})
 
 	assert.Contains(t, *editContent, "created")
 	assert.Contains(t, *editContent, "failed to save")
@@ -565,4 +574,124 @@ func TestSetupChannels_F17_TheStoryAllowsBotSendMessages(t *testing.T) {
 		}
 	}
 	assert.True(t, botAllowed, "bot should be allowed SendMessages in #the-story for pause/resume announcements")
+}
+
+func TestHandleSetupCommand_RejectsNonDMWhenCampaignExists(t *testing.T) {
+	mock := newTestMock()
+	editContent := setupMockResponder(mock)
+
+	campaignLookup := &mockCampaignLookup{
+		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
+			// Campaign exists, DM is "dm-user-1" but invoker is "random-user"
+			return SetupCampaignInfo{DMUserID: "dm-user-1"}, nil
+		},
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	handler := NewSetupHandler(bot, campaignLookup)
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Member: &discordgo.Member{
+			User:        &discordgo.User{ID: "random-user"},
+			Permissions: int64(discordgo.PermissionManageChannels), // has manage channels but is NOT the DM
+		},
+	})
+
+	assert.Contains(t, *editContent, "Only the campaign DM")
+}
+
+func TestHandleSetupCommand_RejectsNonAdminAutoCreate(t *testing.T) {
+	mock := newTestMock()
+	editContent := setupMockResponder(mock)
+
+	campaignLookup := &mockCampaignLookup{
+		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
+			// Auto-created: invoker would become DM
+			return SetupCampaignInfo{DMUserID: invokerUserID, AutoCreated: true}, nil
+		},
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	handler := NewSetupHandler(bot, campaignLookup)
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Member: &discordgo.Member{
+			User:        &discordgo.User{ID: "non-admin-user"},
+			Permissions: int64(discordgo.PermissionManageChannels), // manage channels but NOT admin
+		},
+	})
+
+	assert.Contains(t, *editContent, "administrator")
+}
+
+func TestHandleSetupCommand_AllowsDMWhenCampaignExists(t *testing.T) {
+	mock := newTestMock()
+	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
+		return nil, nil
+	}
+	channelIDCounter := 0
+	mock.GuildChannelCreateComplexFunc = func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
+		channelIDCounter++
+		return &discordgo.Channel{
+			ID:   fmt.Sprintf("chan-%d", channelIDCounter),
+			Name: data.Name,
+			Type: data.Type,
+		}, nil
+	}
+	editContent := setupMockResponder(mock)
+
+	campaignLookup := &mockCampaignLookup{
+		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
+			return SetupCampaignInfo{DMUserID: "dm-user-1"}, nil
+		},
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	handler := NewSetupHandler(bot, campaignLookup)
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Member: &discordgo.Member{
+			User:        &discordgo.User{ID: "dm-user-1"},
+			Permissions: int64(discordgo.PermissionManageChannels),
+		},
+	})
+
+	assert.Contains(t, *editContent, "created")
+	assert.NotContains(t, *editContent, "Only the campaign DM")
+}
+
+func TestHandleSetupCommand_AllowsAdminAutoCreate(t *testing.T) {
+	mock := newTestMock()
+	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
+		return nil, nil
+	}
+	channelIDCounter := 0
+	mock.GuildChannelCreateComplexFunc = func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
+		channelIDCounter++
+		return &discordgo.Channel{
+			ID:   fmt.Sprintf("chan-%d", channelIDCounter),
+			Name: data.Name,
+			Type: data.Type,
+		}, nil
+	}
+	editContent := setupMockResponder(mock)
+
+	campaignLookup := &mockCampaignLookup{
+		getCampaignFunc: func(guildID, invokerUserID string) (SetupCampaignInfo, error) {
+			return SetupCampaignInfo{DMUserID: invokerUserID, AutoCreated: true}, nil
+		},
+	}
+
+	bot := NewBot(mock, "app-1", newTestLogger())
+	handler := NewSetupHandler(bot, campaignLookup)
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Member: &discordgo.Member{
+			User:        &discordgo.User{ID: "admin-user"},
+			Permissions: int64(discordgo.PermissionAdministrator),
+		},
+	})
+
+	assert.Contains(t, *editContent, "Campaign created")
+	assert.NotContains(t, *editContent, "administrator")
 }

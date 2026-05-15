@@ -229,6 +229,15 @@ func (h *SetupHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	if !info.AutoCreated && invokerUserID != info.DMUserID {
+		h.editResponse(interaction, "⛔ Only the campaign DM can run /setup for this server.")
+		return
+	}
+	if info.AutoCreated && !setupInvokerIsAdmin(interaction) {
+		h.editResponse(interaction, "⛔ Only a server administrator can create a new campaign via /setup.")
+		return
+	}
+
 	channelIDs, err := SetupChannels(s, guildID, botUserIDFromState(s), info.DMUserID)
 	if err != nil {
 		h.editResponse(interaction, fmt.Sprintf("Failed to create channels: %s", err))
@@ -246,6 +255,15 @@ func (h *SetupHandler) Handle(interaction *discordgo.Interaction) {
 		prefix = "Campaign created and channel structure set up!"
 	}
 	h.editResponse(interaction, fmt.Sprintf("%s %d channels set up.", prefix, len(channelIDs)))
+}
+
+// setupInvokerIsAdmin returns true when the invoker has the Administrator
+// permission bit set in the interaction's resolved member permissions.
+func setupInvokerIsAdmin(interaction *discordgo.Interaction) bool {
+	if interaction.Member == nil {
+		return false
+	}
+	return interaction.Member.Permissions&int64(discordgo.PermissionAdministrator) != 0
 }
 
 // setupInvokerUserID extracts the Discord user ID of the user who invoked
