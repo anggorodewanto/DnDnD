@@ -91,6 +91,12 @@ type SingleCheckInput struct {
 	Conditions       []combat.CombatCondition
 	ConditionCtx     combat.AbilityCheckContext
 	ExhaustionLevel  int
+	// Ability is the ability abbreviation driving this check (e.g. "str", "dex").
+	// Callers set this so condition/feature logic can key off the ability used.
+	Ability string
+	// IsRaging indicates the character is currently raging (Barbarian Rage).
+	// When true and Ability is "str", advantage is applied to the roll.
+	IsRaging bool
 	// Target is optional: when nil, SingleCheck preserves legacy behavior.
 	// When set, SingleCheck enforces adjacency and (when InCombat)
 	// action-availability before rolling. (F-15)
@@ -139,6 +145,11 @@ func (s *Service) SingleCheck(input SingleCheckInput) (SingleCheckResult, error)
 
 	// Combine requested roll mode with condition-imposed mode
 	finalMode := dice.CombineRollModes(input.RollMode, condMode)
+
+	// Rage grants advantage on STR ability checks
+	if input.IsRaging && strings.EqualFold(input.Ability, "str") {
+		finalMode = dice.CombineRollModes(finalMode, dice.Advantage)
+	}
 
 	d20, err := s.roller.RollD20(modifier, finalMode)
 	if err != nil {

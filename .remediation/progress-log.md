@@ -72,3 +72,10 @@ Append-only journal of all remediation activity.
 - Commit: e5446b1
 - Reviewer: approved
 - Notes: Changed seed mechanical_effect from descriptive tokens to "rage" literal
+
+## 2026-05-15T17:59 — D-C02 done
+
+- Finding: Feature uses never initialized at character creation
+- Commit: c3fc75c
+- Reviewer: approved
+- Notes: New InitFeatureUses helper computes all class feature pools at creation time

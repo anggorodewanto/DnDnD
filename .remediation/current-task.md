@@ -1,11 +1,11 @@
-finding_id: D-C02
+finding_id: D-C03
 severity: Critical
-title: Feature uses never initialized at character creation
-location: internal/portal/builder_store_adapter.go:125 (CreateCharacterParams omits FeatureUses)
-spec_ref: spec §Channel Divinity recharge "short"; Phase 46/48b/49/50/52/53
+title: Rage advantage on STR ability checks never wired
+location: internal/check/check.go (no FES integration) and internal/combat/rage.go:71
+spec_ref: spec §Feature Effect System "Rage … conditional_advantage on str_check on_check"; Phase 46
 problem: |
-  Neither the portal builder nor the dashboard charcreate path writes any feature_uses JSON when creating a character. ParseFeatureUses then returns Current=0 for every key, so a freshly built barbarian fails with "no rage uses remaining (0/0)", monks have 0 ki, paladins can't lay on hands or channel divinity, and fighters can't action surge. Worse, when something does eventually write a value through SetFeaturePool, it preserves the existing (empty) Max and Recharge fields — so even after the value is set manually, short/long rests can never recharge them.
+  RageFeature emits a TriggerOnCheck conditional-advantage effect, but the check service never builds a FeatureDefinition list, never builds an EffectContext, and never calls ProcessEffects with TriggerOnCheck. A grep confirms no consumer of TriggerOnCheck anywhere in the repo. Result: a raging barbarian shoves an enemy with no rage advantage on the athletics check.
 suggested_fix: |
-  Populate FeatureUses in BuilderStoreAdapter.CreateCharacterRecord by walking the character's classes/level and seeding {Current, Max, Recharge} for every limited-use feature (rage, ki, channel-divinity, bardic-inspiration, lay-on-hands, action-surge, second-wind, sorcery-points, wild-shape). Create a helper function InitFeatureUses(classes []ClassEntry) map[string]FeatureUse that computes the correct values based on class and level.
+  Mirror the save handler pattern — add FeatureEffects + EffectContext (with IsRaging, AbilityUsed) to check.SingleCheckInput, then call combat.ProcessEffects(_, TriggerOnCheck, _) and fold the resulting RollMode into the check's d20 mode. The simplest approach: add an optional RollMode override field to SingleCheckInput that callers can set when the character is raging and the ability is STR.
 acceptance_criterion: |
-  A barbarian level 3 created via the portal builder has feature_uses containing {"rage": {Current: 3, Max: 3, Recharge: "long"}}. A fighter level 2 has {"action-surge": {Current: 1, Max: 1, Recharge: "short"}, "second-wind": {Current: 1, Max: 1, Recharge: "short"}}.
+  A raging barbarian making a STR ability check (e.g., Athletics for grapple) gets advantage applied to the roll. A non-STR check while raging does NOT get advantage.

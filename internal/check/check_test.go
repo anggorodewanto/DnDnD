@@ -786,6 +786,57 @@ func TestSingleCheck_TargetContext_ReachCheckBeforeAction(t *testing.T) {
 	}
 }
 
+func TestSingleCheck_RageAdvantageOnSTR(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+
+	result, err := svc.SingleCheck(SingleCheckInput{
+		Scores:   character.AbilityScores{STR: 16},
+		Skill:    "athletics",
+		Ability:  "str",
+		IsRaging: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.D20Result.Mode != dice.Advantage {
+		t.Errorf("expected advantage from rage on STR check, got %v", result.D20Result.Mode)
+	}
+}
+
+func TestSingleCheck_RageNoAdvantageOnNonSTR(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+
+	result, err := svc.SingleCheck(SingleCheckInput{
+		Scores:   character.AbilityScores{WIS: 10},
+		Skill:    "perception",
+		Ability:  "wis",
+		IsRaging: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.D20Result.Mode != dice.Normal {
+		t.Errorf("expected normal for rage on non-STR check, got %v", result.D20Result.Mode)
+	}
+}
+
+func TestSingleCheck_RageAdvantageRawSTR(t *testing.T) {
+	svc := NewService(fixedRoller(10))
+
+	result, err := svc.SingleCheck(SingleCheckInput{
+		Scores:   character.AbilityScores{STR: 18},
+		Skill:    "str",
+		Ability:  "str",
+		IsRaging: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.D20Result.Mode != dice.Advantage {
+		t.Errorf("expected advantage from rage on raw STR check, got %v", result.D20Result.Mode)
+	}
+}
+
 func TestFormatGroupCheckResult_Failure(t *testing.T) {
 	result := GroupCheckResult{
 		DC:      20,
