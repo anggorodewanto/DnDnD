@@ -46,22 +46,6 @@ func (s *Service) DawnRecharge(input DawnRechargeInput) (DawnRechargeResult, err
 			continue
 		}
 
-		// Check destroy-on-zero before recharging
-		if info.DestroyOnZero && item.Charges == 0 {
-			destroyRoll, err := s.roller.Roll("1d20")
-			if err != nil {
-				return DawnRechargeResult{}, fmt.Errorf("rolling destroy check for %s: %w", item.Name, err)
-			}
-			if destroyRoll.Total == 1 {
-				recharged = append(recharged, RechargedItem{
-					ItemID:    item.ItemID,
-					Name:      item.Name,
-					Destroyed: true,
-				})
-				continue // item destroyed, skip adding to result
-			}
-		}
-
 		// Roll recharge dice
 		roll, err := s.roller.Roll(info.Dice)
 		if err != nil {

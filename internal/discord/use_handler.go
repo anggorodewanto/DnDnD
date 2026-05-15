@@ -305,7 +305,7 @@ func (h *UseHandler) handleMagicItemCharge(
 		amount = 1
 	}
 
-	result, err := inventory.UseCharges(inventory.UseChargesInput{
+	result, err := h.invService.UseCharges(inventory.UseChargesInput{
 		Items:      items,
 		Attunement: attunement,
 		ItemID:     itemID,

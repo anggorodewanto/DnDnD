@@ -65,30 +65,9 @@ func TestDawnRecharge_CapsAtMax(t *testing.T) {
 }
 
 func TestDawnRecharge_DestroyOnZero(t *testing.T) {
-	// Item at 0 charges: first roll is d20 destroy check (returns 1 → destroyed)
-	svc := NewService(sequentialRoller([]int{1}))
-
-	items := []character.InventoryItem{
-		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: "magic_item", IsMagic: true, Charges: 0, MaxCharges: 7},
-	}
-
-	result, err := svc.DawnRecharge(DawnRechargeInput{
-		Items:        items,
-		RechargeInfo: map[string]RechargeInfo{
-			"wand-of-fireballs": {Dice: "1d6+1", DestroyOnZero: true},
-		},
-	})
-
-	require.NoError(t, err)
-	assert.Empty(t, result.UpdatedItems) // item destroyed and removed
-	require.Len(t, result.Recharged, 1)
-	assert.True(t, result.Recharged[0].Destroyed)
-}
-
-func TestDawnRecharge_ZeroChargesNotDestroyed(t *testing.T) {
-	// Item at 0 charges: first roll is d20 destroy check (returns 10 → survives),
-	// second roll is recharge dice 1d6 (returns 5 → 5+1=6 charges)
-	svc := NewService(sequentialRoller([]int{10, 5}))
+	// Destroy-on-zero check no longer happens at dawn (moved to UseCharges).
+	// Item at 0 charges should simply recharge.
+	svc := NewService(func(max int) int { return 1 })
 
 	items := []character.InventoryItem{
 		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: "magic_item", IsMagic: true, Charges: 0, MaxCharges: 7},
@@ -103,7 +82,29 @@ func TestDawnRecharge_ZeroChargesNotDestroyed(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, result.UpdatedItems, 1)
-	assert.Equal(t, 6, result.UpdatedItems[0].Charges) // recharged
+	assert.Equal(t, 2, result.UpdatedItems[0].Charges) // 0 + (1+1) = 2
+	require.Len(t, result.Recharged, 1)
+	assert.False(t, result.Recharged[0].Destroyed)
+}
+
+func TestDawnRecharge_ZeroChargesNotDestroyed(t *testing.T) {
+	// Destroy-on-zero check no longer happens at dawn. Item at 0 charges just recharges.
+	svc := NewService(func(max int) int { return 5 })
+
+	items := []character.InventoryItem{
+		{ItemID: "wand-of-fireballs", Name: "Wand of Fireballs", Quantity: 1, Type: "magic_item", IsMagic: true, Charges: 0, MaxCharges: 7},
+	}
+
+	result, err := svc.DawnRecharge(DawnRechargeInput{
+		Items:        items,
+		RechargeInfo: map[string]RechargeInfo{
+			"wand-of-fireballs": {Dice: "1d6+1", DestroyOnZero: true},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.UpdatedItems, 1)
+	assert.Equal(t, 6, result.UpdatedItems[0].Charges) // 0 + (5+1) = 6
 	assert.False(t, result.Recharged[0].Destroyed)
 }
 

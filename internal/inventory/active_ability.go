@@ -8,24 +8,27 @@ import (
 
 // UseChargesInput holds parameters for using charges from a magic item.
 type UseChargesInput struct {
-	Items      []character.InventoryItem
-	Attunement []character.AttunementSlot
-	ItemID     string
-	Amount     int
+	Items         []character.InventoryItem
+	Attunement    []character.AttunementSlot
+	ItemID        string
+	Amount        int
+	DestroyOnZero bool // if true and charges reach 0, roll d20 — on 1, item is destroyed
 }
 
 // UseChargesResult holds the result of using charges.
 type UseChargesResult struct {
-	UpdatedItems   []character.InventoryItem
-	ItemName       string
-	ChargesUsed    int
-	ChargesLeft    int
-	Message        string
+	UpdatedItems []character.InventoryItem
+	ItemName     string
+	ChargesUsed  int
+	ChargesLeft  int
+	Destroyed    bool
+	Message      string
 }
 
 // UseCharges deducts charges from a magic item in the inventory.
 // Validates the item exists, is magic, has charges, attunement is met, and sufficient charges remain.
-func UseCharges(input UseChargesInput) (UseChargesResult, error) {
+// If DestroyOnZero is set and charges reach 0, rolls a d20 — on a 1 the item is destroyed.
+func (s *Service) UseCharges(input UseChargesInput) (UseChargesResult, error) {
 	idx := findItemIndex(input.Items, input.ItemID)
 	if idx == -1 {
 		return UseChargesResult{}, fmt.Errorf("item %q not found in inventory", input.ItemID)
@@ -52,11 +55,32 @@ func UseCharges(input UseChargesInput) (UseChargesResult, error) {
 	copy(updated, input.Items)
 	updated[idx].Charges -= input.Amount
 
-	return UseChargesResult{
+	result := UseChargesResult{
 		UpdatedItems: updated,
 		ItemName:     item.Name,
 		ChargesUsed:  input.Amount,
 		ChargesLeft:  updated[idx].Charges,
 		Message:      fmt.Sprintf("⚡ Used %d charges from **%s** (%d/%d remaining)", input.Amount, item.Name, updated[idx].Charges, item.MaxCharges),
-	}, nil
+	}
+
+	// Destroy-on-zero check: when last charge is spent, roll d20. On a 1, item is destroyed.
+	if input.DestroyOnZero && updated[idx].Charges == 0 {
+		roll, err := s.roller.Roll("1d20")
+		if err != nil {
+			return UseChargesResult{}, fmt.Errorf("rolling destroy check for %s: %w", item.Name, err)
+		}
+		if roll.Total == 1 {
+			result.Destroyed = true
+			result.Message = fmt.Sprintf("⚡ Used %d charges from **%s** — 💥 rolled a 1 on d20, the item crumbles to dust!", input.Amount, item.Name)
+		}
+	}
+
+	return result, nil
+}
+
+// UseCharges is a package-level convenience that calls UseCharges without destroy-on-zero logic.
+// Deprecated: prefer calling (*Service).UseCharges directly.
+func UseCharges(input UseChargesInput) (UseChargesResult, error) {
+	svc := NewService(nil)
+	return svc.UseCharges(input)
 }

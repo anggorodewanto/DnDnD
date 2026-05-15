@@ -107,9 +107,10 @@ func TestIntegration_UnattuneSuppressionAndIdentification(t *testing.T) {
 	assert.NotContains(t, result, "Ring of Invisibility")
 }
 
-// TestIntegration_DawnRechargeWithDestruction tests dawn recharge with destroy-on-zero.
+// TestIntegration_DawnRechargeWithDestruction tests dawn recharge no longer destroys items.
+// Destroy-on-zero check is now in UseCharges (at time of last charge spent).
 func TestIntegration_DawnRechargeWithDestruction(t *testing.T) {
-	// Roller: d20=1 (destroy), then for second item: d6=4 → recharge=4+1=5
+	// Roller: d6=1 → recharge=1+1=2 for wand, d6=4 → recharge=4+1=5 for staff
 	svc := NewService(sequentialRoller([]int{1, 4}))
 
 	items := []character.InventoryItem{
@@ -126,13 +127,15 @@ func TestIntegration_DawnRechargeWithDestruction(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	// Wand should be destroyed
-	assert.Len(t, result.UpdatedItems, 1)
-	assert.Equal(t, "staff-of-healing", result.UpdatedItems[0].ItemID)
-	assert.Equal(t, 10, result.UpdatedItems[0].Charges) // 5 + 5 = 10 (capped at 10)
+	// Both items survive — no destroy check at dawn anymore
+	assert.Len(t, result.UpdatedItems, 2)
+	assert.Equal(t, "wand-of-fireballs", result.UpdatedItems[0].ItemID)
+	assert.Equal(t, 2, result.UpdatedItems[0].Charges) // 0 + (1+1) = 2
+	assert.Equal(t, "staff-of-healing", result.UpdatedItems[1].ItemID)
+	assert.Equal(t, 10, result.UpdatedItems[1].Charges) // 5 + (4+1) = 9, capped at 10
 
 	// Check recharged info
 	require.Len(t, result.Recharged, 2)
-	assert.True(t, result.Recharged[0].Destroyed)
+	assert.False(t, result.Recharged[0].Destroyed)
 	assert.False(t, result.Recharged[1].Destroyed)
 }

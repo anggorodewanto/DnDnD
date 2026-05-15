@@ -1,11 +1,15 @@
-finding_id: G-C02
+finding_id: G-C03
 status: done
 files_changed:
-  - internal/discord/attune_handler.go
-  - internal/discord/attune_handler_test.go
-test_command_that_validates: go test ./internal/discord/ -run TestAttuneHandler_RejectsDuringCombat -count=1
+  - internal/inventory/active_ability.go
+  - internal/inventory/active_ability_test.go
+  - internal/inventory/recharge.go
+  - internal/inventory/recharge_test.go
+  - internal/inventory/phase88b_integration_test.go
+  - internal/discord/use_handler.go
+test_command_that_validates: go test ./internal/inventory/ -run "TestUseCharges_DestroyOnZero" -v
 acceptance_criterion_met: yes
-notes: Added an optional CheckEncounterProvider to AttuneHandler with a SetEncounterProvider setter. The Handle method now checks ActiveEncounterForUser before proceeding; if the user is in an active encounter, it responds with "Attunement requires a short rest — you cannot attune during combat." and returns early. The pattern mirrors rest_handler.go's combat gate. All existing tests continue to pass because the encounterProvider is nil by default (no-op).
+notes: Moved the d20 destroy-on-zero check from DawnRecharge into UseCharges (now a method on *Service). When charges reach 0 and DestroyOnZero is true, a d20 is rolled; on a 1, result.Destroyed is set to true. Added a backward-compatible package-level UseCharges wrapper for callers that don't need destroy logic. Updated the discord handler to call the service method directly. All existing tests updated to reflect the new timing.
 follow_ups:
-  - Wire SetEncounterProvider in the bot's main setup (where handlers are constructed) so the check is active in production.
-  - Consider also gating /attune behind the /rest short flow for full spec compliance (currently only blocks during combat, does not require an active rest session).
+  - Handler should pass DestroyOnZero from item's recharge metadata when calling UseCharges (currently not wired from DB charges JSON)
+  - If Destroyed=true, handler should remove the item from inventory and notify the channel
