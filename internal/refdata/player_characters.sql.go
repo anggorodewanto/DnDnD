@@ -158,7 +158,7 @@ func (q *Queries) GetPlayerCharacterByCharacter(ctx context.Context, arg GetPlay
 
 const getPlayerCharacterByDiscordUser = `-- name: GetPlayerCharacterByDiscordUser :one
 SELECT id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at FROM player_characters
-WHERE campaign_id = $1 AND discord_user_id = $2
+WHERE campaign_id = $1 AND discord_user_id = $2 AND status != 'retired'
 `
 
 type GetPlayerCharacterByDiscordUserParams struct {

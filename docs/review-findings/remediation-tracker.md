@@ -49,7 +49,7 @@
 |----|----------|---------|--------|--------|----------|
 | F-13 | Medium | Active encounter membership not DB-enforced | review_passed | — | PASS |
 | F-15 | Medium | /retire doesn't block active-combat retirement | implemented | — | — |
-| F-16 | Medium | Retired PC rows satisfy active registration lookups | pending | — | — |
+| F-16 | Medium | Retired PC rows satisfy active registration lookups | implemented | — | — |
 | F-17 | Medium | /setup doesn't allow bot to post in #the-story | pending | — | — |
 
 ### UI/Persistence/Test-Harness/Coverage (Priority 5)
@@ -255,7 +255,8 @@
 - **Source**: agent-01
 - **Files**: `db/queries/player_characters.sql`
 - **Test plan**: Test that registration lookup excludes retired rows
-- **Implementation notes**: —
+- **Implementation notes**: Added `AND status != 'retired'` to the `GetPlayerCharacterByDiscordUser` WHERE clause in `db/queries/player_characters.sql`. Regenerated sqlc. Test `TestGetStatus_F16_ExcludesRetiredRow` inserts a retired row and an approved row for the same player/campaign, then asserts `GetStatus` returns the approved row.
+- **Changed files**: `db/queries/player_characters.sql`, `internal/refdata/player_characters.sql.go` (generated), `internal/registration/f16_retired_lookup_test.go`
 - **Reviewer verdict**: —
 
 ### F-17: /setup doesn't allow bot to post in #the-story

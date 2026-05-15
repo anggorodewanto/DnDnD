@@ -10,7 +10,7 @@ SELECT * FROM player_characters WHERE id = $1;
 
 -- name: GetPlayerCharacterByDiscordUser :one
 SELECT * FROM player_characters
-WHERE campaign_id = $1 AND discord_user_id = $2;
+WHERE campaign_id = $1 AND discord_user_id = $2 AND status != 'retired';
 
 -- name: GetPlayerCharacterByCharacter :one
 SELECT * FROM player_characters
