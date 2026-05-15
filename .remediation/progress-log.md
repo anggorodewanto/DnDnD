@@ -58,3 +58,10 @@ Append-only journal of all remediation activity.
 - Commit: 9c25f59
 - Reviewer: approved
 - Notes: Added attack-taken prerequisite + IsRangedWeapon checks for both hands
+
+## 2026-05-15T15:36 — C-C04 done
+
+- Finding: /fly performs no fly-speed validation
+- Commit: c3866db
+- Reviewer: approved
+- Notes: HasFlySpeed field + CombatantHasFlySpeed helper checks conditions for fly_speed
