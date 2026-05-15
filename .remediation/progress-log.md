@@ -79,3 +79,10 @@ Append-only journal of all remediation activity.
 - Commit: c3fc75c
 - Reviewer: approved
 - Notes: New InitFeatureUses helper computes all class feature pools at creation time
+
+## 2026-05-15T18:02 — D-C03 done
+
+- Finding: Rage advantage on STR ability checks never wired
+- Commit: 0460fe6
+- Reviewer: approved
+- Notes: Added IsRaging+Ability fields to SingleCheckInput, rage-advantage logic in SingleCheck

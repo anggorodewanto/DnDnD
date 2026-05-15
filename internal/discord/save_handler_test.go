@@ -709,3 +709,63 @@ func TestSaveHandler_NotWildShaped_StrSaveUsesDruidStr(t *testing.T) {
 		t.Fatalf("expected druid STR save total 9, got: %s", responded)
 	}
 }
+
+// TestSaveHandler_RagingCombatantGetsAdvantageOnSTRSave verifies that when a
+// raging barbarian makes a STR save, the EffectContext.IsRaging is set to true
+// so the rage FES grants advantage. (D-C04)
+func TestSaveHandler_RagingCombatantGetsAdvantageOnSTRSave(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	charID := uuid.New()
+	encounterID := uuid.New()
+
+	// Build a barbarian character with rage feature.
+	char := makeTestCharacterWithSaves()
+	char.ID = charID
+	char.CampaignID = campaignID
+	classes, _ := json.Marshal([]map[string]interface{}{
+		{"class": "Barbarian", "level": 5},
+	})
+	char.Classes = classes
+	feats, _ := json.Marshal([]map[string]interface{}{
+		{"name": "Rage", "mechanical_effect": "rage"},
+	})
+	char.Features = pqtype.NullRawMessage{RawMessage: feats, Valid: true}
+
+	roller := dice.NewRoller(func(_ int) int { return 10 })
+	h := NewSaveHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return encounterID, nil
+		}},
+		&mockCheckCombatantLookup{listFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{
+					CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+					IsRaging:    true,
+					Conditions:  json.RawMessage(`[]`),
+				},
+			}, nil
+		}},
+		&mockCheckRollLogger{},
+	)
+
+	h.Handle(makeSaveInteraction("str", false, false))
+
+	if !strings.Contains(responded, "advantage") {
+		t.Errorf("D-C04: expected rage advantage on STR save for raging combatant, got: %s", responded)
+	}
+}

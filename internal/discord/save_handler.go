@@ -200,6 +200,10 @@ func (h *SaveHandler) Handle(interaction *discordgo.Interaction) {
 		AbilityUsed:  strings.ToLower(ability),
 		WearingArmor: char.EquippedArmor.Valid && char.EquippedArmor.String != "",
 	}
+	// D-C04: populate IsRaging from the combatant's state so rage save-advantage applies.
+	if comb, ok := lookupInvokerCombatant(ctx, h.encounterProvider, h.combatantLookup, interaction.GuildID, userID, char.ID); ok {
+		input.EffectCtx.IsRaging = comb.IsRaging
+	}
 
 	// Apply condition effects if in combat
 	if condInfo, ok := lookupCombatConditions(ctx, h.encounterProvider, h.combatantLookup, interaction.GuildID, userID, char.ID); ok {

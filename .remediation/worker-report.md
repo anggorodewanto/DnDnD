@@ -1,11 +1,10 @@
-finding_id: D-C03
+finding_id: D-C04
 status: done
 files_changed:
-  - internal/check/check.go
-  - internal/check/check_test.go
-test_command_that_validates: go test ./internal/check/ -run "TestSingleCheck_Rage" -v
+  - internal/discord/save_handler.go
+  - internal/discord/save_handler_test.go
+test_command_that_validates: go test ./internal/discord/ -run TestSaveHandler_RagingCombatantGetsAdvantageOnSTRSave -v
 acceptance_criterion_met: yes
-notes: Added `IsRaging bool` and `Ability string` fields to `SingleCheckInput`. When `IsRaging` is true and `Ability` equals "str" (case-insensitive), the roll mode is combined with Advantage using the existing `dice.CombineRollModes` function, matching the pattern used for exhaustion/condition effects. Three tests cover: rage+STR skill check gets advantage, rage+non-STR gets no advantage, and rage+raw STR check gets advantage. All existing tests continue to pass, `make test` and `make cover-check` succeed.
+notes: The EffectContext constructed in save_handler.go never set IsRaging, so the rage save-advantage effect (WhenRaging condition) was always filtered out. Fixed by calling lookupInvokerCombatant before building the EffectContext and copying comb.IsRaging into it. The fix degrades silently (IsRaging stays false) when no encounter/combatant is found, matching the SR-006 convention used throughout the handler. Test confirms a raging barbarian making a STR save now gets advantage via the FES.
 follow_ups:
-  - Wire `IsRaging` and `Ability` population in the Discord handler that calls SingleCheck (separate concern per task brief)
-  - Consider whether the FES/ProcessEffects path should eventually replace this direct field check for consistency
+  - Consider also populating IsConcentrating in the EffectContext from the combatant state (same pattern, same location)
