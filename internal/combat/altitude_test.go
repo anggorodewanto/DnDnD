@@ -261,6 +261,21 @@ func TestFallDamage_100ft(t *testing.T) {
 	}
 }
 
+func TestFallDamage_500ft_CappedAt20d6(t *testing.T) {
+	// 500ft fall should cap at 20d6, not 50d6 (PHB p183)
+	roller := dice.NewRoller(func(max int) int { return 3 })
+	result, err := FallDamage(500, roller)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.NumDice != 20 {
+		t.Errorf("expected 20 dice (capped), got %d", result.NumDice)
+	}
+	if result.TotalDamage != 60 { // 20 dice * 3 each
+		t.Errorf("expected 60 damage, got %d", result.TotalDamage)
+	}
+}
+
 func TestFormatFlyConfirmation_Ascend(t *testing.T) {
 	result := &FlyResult{
 		Valid:       true,

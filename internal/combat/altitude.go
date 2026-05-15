@@ -112,6 +112,9 @@ type FallDamageResult struct {
 // Returns zero damage for falls < 10ft.
 func FallDamage(altitudeFt int32, roller *dice.Roller) (*FallDamageResult, error) {
 	numDice := int(altitudeFt) / 10
+	if numDice > 20 {
+		numDice = 20
+	}
 	if numDice <= 0 {
 		return &FallDamageResult{
 			AltitudeFt:  altitudeFt,
