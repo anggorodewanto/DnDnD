@@ -1156,3 +1156,144 @@ func TestDropConcentration_InvalidIDs(t *testing.T) {
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+// --- F-04: Action Resolver effects publish snapshot and record before/after state ---
+
+func TestResolvePendingAction_F04_PublishesSnapshot(t *testing.T) {
+	encounterID := uuid.New()
+	actionID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+
+	store := &mockStore{
+		getPendingActionFn: func(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error) {
+			return refdata.PendingAction{
+				ID:          actionID,
+				EncounterID: encounterID,
+				CombatantID: combatantID,
+				Status:      "pending",
+			}, nil
+		},
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:          combatantID,
+				EncounterID: encounterID,
+				HpCurrent:   30,
+				Conditions:  json.RawMessage(`[]`),
+				PositionCol: "B",
+				PositionRow: 3,
+			}, nil
+		},
+		updatePendingActionStatusFn: func(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
+			return refdata.PendingAction{ID: actionID, Status: "resolved"}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID}, nil
+		},
+		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+			return refdata.ActionLog{}, nil
+		},
+	}
+
+	pub := &fakePublisher{}
+	svc := NewService(store)
+	svc.SetPublisher(pub)
+	handler := NewDMDashboardHandler(svc)
+	r := chi.NewRouter()
+	handler.RegisterRoutes(r)
+
+	body := `{"outcome":"Moved","effects":[]}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	calls := pub.calls()
+	require.Len(t, calls, 1, "expected exactly one snapshot publish")
+	assert.Equal(t, encounterID, calls[0])
+}
+
+func TestResolvePendingAction_F04_BeforeAfterState(t *testing.T) {
+	encounterID := uuid.New()
+	actionID := uuid.New()
+	combatantID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+
+	hpBefore := int32(30)
+	hpAfter := int32(30) // condition effect doesn't change HP
+
+	getCalls := 0
+	store := &mockStore{
+		getPendingActionFn: func(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error) {
+			return refdata.PendingAction{
+				ID:          actionID,
+				EncounterID: encounterID,
+				CombatantID: combatantID,
+				Status:      "pending",
+			}, nil
+		},
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			getCalls++
+			// First two calls are for before-state capture and condition effect lookup
+			// After condition is applied, the third call (after-state) returns updated conditions
+			if id == combatantID && getCalls <= 2 {
+				return refdata.Combatant{
+					ID:          combatantID,
+					EncounterID: encounterID,
+					HpCurrent:   hpBefore,
+					Conditions:  json.RawMessage(`[]`),
+					PositionCol: "A",
+					PositionRow: 1,
+				}, nil
+			}
+			// After effects applied - combatant now has condition
+			return refdata.Combatant{
+				ID:          combatantID,
+				EncounterID: encounterID,
+				HpCurrent:   hpAfter,
+				Conditions:  json.RawMessage(`[{"condition":"poisoned"}]`),
+				PositionCol: "A",
+				PositionRow: 1,
+			}, nil
+		},
+		updateCombatantConditionsFn: func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+			return refdata.Combatant{ID: targetID}, nil
+		},
+		updatePendingActionStatusFn: func(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
+			return refdata.PendingAction{ID: actionID, Status: "resolved"}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID}, nil
+		},
+		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+			// Verify before/after state are populated
+			assert.NotNil(t, arg.BeforeState, "BeforeState should be populated")
+			assert.NotNil(t, arg.AfterState, "AfterState should be populated")
+
+			var before, after resolverStateSnapshot
+			require.NoError(t, json.Unmarshal(arg.BeforeState, &before))
+			require.NoError(t, json.Unmarshal(arg.AfterState, &after))
+
+			assert.Equal(t, hpBefore, before.HP)
+			assert.JSONEq(t, `[]`, string(before.Conditions))
+			assert.Equal(t, "A1", before.Position)
+
+			assert.JSONEq(t, `[{"condition":"poisoned"}]`, string(after.Conditions))
+			return refdata.ActionLog{}, nil
+		},
+	}
+
+	svc := NewService(store)
+	handler := NewDMDashboardHandler(svc)
+	r := chi.NewRouter()
+	handler.RegisterRoutes(r)
+
+	// Apply a condition_add effect targeting the combatant
+	body := `{"outcome":"Poisoned","effects":[{"type":"condition_add","target_id":"` + combatantID.String() + `","value":{"condition":"poisoned"}}]}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+}

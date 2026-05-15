@@ -3,6 +3,7 @@ package combat
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -245,6 +246,14 @@ func (h *DMDashboardHandler) ResolvePendingAction(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Capture before-state for audit diff
+	beforeCombatant, err := h.svc.store.GetCombatant(r.Context(), action.CombatantID)
+	if err != nil {
+		http.Error(w, "failed to get combatant", http.StatusInternalServerError)
+		return
+	}
+	beforeState := captureResolverState(beforeCombatant)
+
 	// Apply effects
 	if len(req.Effects) > 0 {
 		var effects []resolveEffect
@@ -261,6 +270,14 @@ func (h *DMDashboardHandler) ResolvePendingAction(w http.ResponseWriter, r *http
 		}
 	}
 
+	// Capture after-state for audit diff
+	afterCombatant, err := h.svc.store.GetCombatant(r.Context(), action.CombatantID)
+	if err != nil {
+		http.Error(w, "failed to get combatant after effects", http.StatusInternalServerError)
+		return
+	}
+	afterState := captureResolverState(afterCombatant)
+
 	// Mark action as resolved
 	resolved, err := h.svc.store.UpdatePendingActionStatus(r.Context(), refdata.UpdatePendingActionStatusParams{
 		ID:     actionID,
@@ -271,7 +288,7 @@ func (h *DMDashboardHandler) ResolvePendingAction(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Log to action_log
+	// Log to action_log with before/after state
 	turn, turnErr := h.svc.store.GetActiveTurnByEncounterID(r.Context(), encounterID)
 	if turnErr == nil {
 		h.svc.store.CreateActionLog(r.Context(), refdata.CreateActionLogParams{
@@ -280,8 +297,13 @@ func (h *DMDashboardHandler) ResolvePendingAction(w http.ResponseWriter, r *http
 			ActionType:  "resolve_pending_action",
 			ActorID:     action.CombatantID,
 			Description: nullString(req.Outcome),
+			BeforeState: beforeState,
+			AfterState:  afterState,
 		})
 	}
+
+	// Publish snapshot so dashboards update in real-time
+	h.svc.publish(r.Context(), encounterID)
 
 	writeJSON(w, http.StatusOK, resolvePendingActionResponse{
 		ID:      resolved.ID.String(),
@@ -396,4 +418,24 @@ func (h *DMDashboardHandler) applyMoveEffect(r *http.Request, targetID uuid.UUID
 		AltitudeFt:  c.AltitudeFt,
 	})
 	return err
+}
+
+// resolverStateSnapshot holds the fields tracked for before/after audit diffs.
+type resolverStateSnapshot struct {
+	HP         int32           `json:"hp"`
+	TempHP     int32           `json:"temp_hp"`
+	Conditions json.RawMessage `json:"conditions"`
+	Position   string          `json:"position"`
+}
+
+// captureResolverState serializes the combatant's auditable fields as JSON.
+func captureResolverState(c refdata.Combatant) json.RawMessage {
+	s := resolverStateSnapshot{
+		HP:         c.HpCurrent,
+		TempHP:     c.TempHp,
+		Conditions: c.Conditions,
+		Position:   fmt.Sprintf("%s%d", c.PositionCol, c.PositionRow),
+	}
+	b, _ := json.Marshal(s)
+	return b
 }

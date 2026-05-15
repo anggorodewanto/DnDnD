@@ -25,7 +25,7 @@
 | ID | Severity | Finding | Status | Commit | Reviewer |
 |----|----------|---------|--------|--------|----------|
 | F-03 | High | Combat Workspace PATCH bypasses locked service paths | review_passed | — | PASS |
-| F-04 | High | Action Resolver effects bypass snapshot publishing | pending | — | — |
+| F-04 | High | Action Resolver effects bypass snapshot publishing | review_passed | — | PASS |
 | F-11 | High | Enemy-turn mutations don't publish WebSocket snapshot | pending | — | — |
 | F-12 | High | Enemy-turn path uses hard-coded 20x20 grid | pending | — | — |
 
@@ -120,8 +120,17 @@
 - **Source**: agent-04
 - **Files**: `internal/combat/dm_dashboard_handler.go`, `dashboard/svelte/src/ActionResolver.svelte`
 - **Test plan**: Test that ResolvePendingAction publishes snapshot and records before/after state
-- **Implementation notes**: —
-- **Reviewer verdict**: —
+- **Implementation notes**: In `ResolvePendingAction`, added before-state capture (HP, temp_hp, conditions, position) via `captureResolverState` before effects are applied, and after-state capture after all effects complete. Both are stored as JSON in the `CreateActionLog` call's `BeforeState`/`AfterState` fields. Added `h.svc.publish(r.Context(), encounterID)` after the action log write so dashboards receive a WebSocket snapshot. Added `resolverStateSnapshot` struct and `captureResolverState` helper.
+- **Changed files**: `internal/combat/dm_dashboard_handler.go`, `internal/combat/dm_dashboard_handler_test.go`
+- **Reviewer verdict**: **PASS**
+  - **Spec conformance**: Phase 103 requires snapshot push after state mutation — `h.svc.publish(r.Context(), encounterID)` is called at line 305 after all effects are applied and the action log is written (`dm_dashboard_handler.go:305`). Phase 97a requires before/after state diff — `captureResolverState` captures HP, temp_hp, conditions, and position before effects (line 255) and after effects (line 279), both stored as JSON in `CreateActionLog`'s `BeforeState`/`AfterState` fields (lines 296-297).
+  - **Snapshot publishing**: `publish` is called exactly once, after all effects and the action log write, ensuring dashboards receive the final resolved state. Verified by `TestResolvePendingAction_F04_PublishesSnapshot` which asserts exactly one publish call with the correct encounter ID.
+  - **Audit trail**: `resolverStateSnapshot` struct captures `hp`, `temp_hp`, `conditions`, `position`. Before-state is captured from `GetCombatant` before any `applyEffect` calls; after-state is captured from a fresh `GetCombatant` after all effects complete. Both are marshaled to JSON and passed to `CreateActionLog`. The action log viewer can now render field-level diffs.
+  - **Regression risk**: Low. The change is additive — two `GetCombatant` calls (before/after) and one `publish` call were added to the existing flow. No existing behavior was removed or reordered.
+  - **Test coverage**: Two focused tests prove the fix:
+    - `TestResolvePendingAction_F04_PublishesSnapshot` — asserts exactly one snapshot publish after resolution with no effects.
+    - `TestResolvePendingAction_F04_BeforeAfterState` — applies a `condition_add` effect, asserts `BeforeState` has empty conditions and `AfterState` has `[{"condition":"poisoned"}]`, proving the diff is captured.
+  - **Both tests pass** (`go test ./internal/combat/ -run F04` → PASS).
 
 ### F-05: AoE DEX save cover bonuses never applied
 - **Source**: agent-02
