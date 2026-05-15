@@ -106,13 +106,17 @@ func (h *TemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, templates)
 }
 
-// Get handles GET /api/narration/templates/{id}.
+// Get handles GET /api/narration/templates/{id}?campaign_id=...
 func (h *TemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseTemplateID(w, r)
 	if !ok {
 		return
 	}
-	tpl, err := h.svc.Get(r.Context(), id)
+	campID, ok := parseCampaignIDParam(w, r)
+	if !ok {
+		return
+	}
+	tpl, err := h.svc.Get(r.Context(), id, campID)
 	if err != nil {
 		writeTemplateError(w, err)
 		return
@@ -120,9 +124,13 @@ func (h *TemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tpl)
 }
 
-// Update handles PUT /api/narration/templates/{id}.
+// Update handles PUT /api/narration/templates/{id}?campaign_id=...
 func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseTemplateID(w, r)
+	if !ok {
+		return
+	}
+	campID, ok := parseCampaignIDParam(w, r)
 	if !ok {
 		return
 	}
@@ -131,7 +139,7 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	tpl, err := h.svc.Update(r.Context(), id, UpdateTemplateInput{
+	tpl, err := h.svc.Update(r.Context(), id, campID, UpdateTemplateInput{
 		Name:     req.Name,
 		Category: req.Category,
 		Body:     req.Body,
@@ -143,26 +151,34 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tpl)
 }
 
-// Delete handles DELETE /api/narration/templates/{id}.
+// Delete handles DELETE /api/narration/templates/{id}?campaign_id=...
 func (h *TemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseTemplateID(w, r)
 	if !ok {
 		return
 	}
-	if err := h.svc.Delete(r.Context(), id); err != nil {
+	campID, ok := parseCampaignIDParam(w, r)
+	if !ok {
+		return
+	}
+	if err := h.svc.Delete(r.Context(), id, campID); err != nil {
 		writeTemplateError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Duplicate handles POST /api/narration/templates/{id}/duplicate.
+// Duplicate handles POST /api/narration/templates/{id}/duplicate?campaign_id=...
 func (h *TemplateHandler) Duplicate(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseTemplateID(w, r)
 	if !ok {
 		return
 	}
-	tpl, err := h.svc.Duplicate(r.Context(), id)
+	campID, ok := parseCampaignIDParam(w, r)
+	if !ok {
+		return
+	}
+	tpl, err := h.svc.Duplicate(r.Context(), id, campID)
 	if err != nil {
 		writeTemplateError(w, err)
 		return
@@ -170,9 +186,13 @@ func (h *TemplateHandler) Duplicate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, tpl)
 }
 
-// Apply handles POST /api/narration/templates/{id}/apply.
+// Apply handles POST /api/narration/templates/{id}/apply?campaign_id=...
 func (h *TemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	id, ok := parseTemplateID(w, r)
+	if !ok {
+		return
+	}
+	campID, ok := parseCampaignIDParam(w, r)
 	if !ok {
 		return
 	}
@@ -181,7 +201,7 @@ func (h *TemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	body, err := h.svc.Apply(r.Context(), id, req.Values)
+	body, err := h.svc.Apply(r.Context(), id, campID, req.Values)
 	if err != nil {
 		writeTemplateError(w, err)
 		return
@@ -201,6 +221,21 @@ func parseTemplateID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// parseCampaignIDParam extracts and validates the campaign_id query parameter.
+func parseCampaignIDParam(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	campStr := r.URL.Query().Get("campaign_id")
+	if campStr == "" {
+		http.Error(w, "campaign_id required", http.StatusBadRequest)
+		return uuid.Nil, false
+	}
+	campID, err := uuid.Parse(campStr)
+	if err != nil {
+		http.Error(w, "invalid campaign_id", http.StatusBadRequest)
+		return uuid.Nil, false
+	}
+	return campID, true
 }
 
 // writeTemplateError maps known errors to status codes.

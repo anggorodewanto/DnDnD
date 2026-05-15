@@ -85,9 +85,16 @@ func (s *TemplateService) Create(ctx context.Context, in CreateTemplateInput) (T
 	})
 }
 
-// Get fetches a template by id.
-func (s *TemplateService) Get(ctx context.Context, id uuid.UUID) (Template, error) {
-	return s.store.GetNarrationTemplate(ctx, id)
+// Get fetches a template by id, scoped to the given campaign.
+func (s *TemplateService) Get(ctx context.Context, id uuid.UUID, campaignID uuid.UUID) (Template, error) {
+	tpl, err := s.store.GetNarrationTemplate(ctx, id)
+	if err != nil {
+		return Template{}, err
+	}
+	if tpl.CampaignID != campaignID {
+		return Template{}, ErrTemplateNotFound
+	}
+	return tpl, nil
 }
 
 // List returns templates for a campaign filtered by category/search.
@@ -101,10 +108,17 @@ func (s *TemplateService) List(ctx context.Context, filter TemplateFilter) ([]Te
 }
 
 // Update validates and applies changes to an existing template.
-func (s *TemplateService) Update(ctx context.Context, id uuid.UUID, in UpdateTemplateInput) (Template, error) {
+func (s *TemplateService) Update(ctx context.Context, id uuid.UUID, campaignID uuid.UUID, in UpdateTemplateInput) (Template, error) {
 	name, category, err := validateNameBody(in.Name, in.Category, in.Body)
 	if err != nil {
 		return Template{}, err
+	}
+	tpl, err := s.store.GetNarrationTemplate(ctx, id)
+	if err != nil {
+		return Template{}, err
+	}
+	if tpl.CampaignID != campaignID {
+		return Template{}, ErrTemplateNotFound
 	}
 	return s.store.UpdateNarrationTemplate(ctx, id, UpdateTemplateParams{
 		Name:     name,
@@ -113,16 +127,26 @@ func (s *TemplateService) Update(ctx context.Context, id uuid.UUID, in UpdateTem
 	})
 }
 
-// Delete removes a template by id.
-func (s *TemplateService) Delete(ctx context.Context, id uuid.UUID) error {
+// Delete removes a template by id, scoped to the given campaign.
+func (s *TemplateService) Delete(ctx context.Context, id uuid.UUID, campaignID uuid.UUID) error {
+	tpl, err := s.store.GetNarrationTemplate(ctx, id)
+	if err != nil {
+		return err
+	}
+	if tpl.CampaignID != campaignID {
+		return ErrTemplateNotFound
+	}
 	return s.store.DeleteNarrationTemplate(ctx, id)
 }
 
 // Duplicate copies a template into a new row whose name has " (copy)" appended.
-func (s *TemplateService) Duplicate(ctx context.Context, id uuid.UUID) (Template, error) {
+func (s *TemplateService) Duplicate(ctx context.Context, id uuid.UUID, campaignID uuid.UUID) (Template, error) {
 	src, err := s.store.GetNarrationTemplate(ctx, id)
 	if err != nil {
 		return Template{}, err
+	}
+	if src.CampaignID != campaignID {
+		return Template{}, ErrTemplateNotFound
 	}
 	return s.store.InsertNarrationTemplate(ctx, InsertTemplateParams{
 		CampaignID: src.CampaignID,
@@ -135,10 +159,13 @@ func (s *TemplateService) Duplicate(ctx context.Context, id uuid.UUID) (Template
 // Apply fetches the template and substitutes its placeholders with values.
 // Tokens missing from values are left as `{name}` so the caller can spot
 // omissions in the rendered preview.
-func (s *TemplateService) Apply(ctx context.Context, id uuid.UUID, values map[string]string) (string, error) {
+func (s *TemplateService) Apply(ctx context.Context, id uuid.UUID, campaignID uuid.UUID, values map[string]string) (string, error) {
 	tpl, err := s.store.GetNarrationTemplate(ctx, id)
 	if err != nil {
 		return "", err
+	}
+	if tpl.CampaignID != campaignID {
+		return "", ErrTemplateNotFound
 	}
 	return SubstitutePlaceholders(tpl.Body, values), nil
 }

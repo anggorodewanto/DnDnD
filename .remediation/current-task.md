@@ -1,11 +1,11 @@
-finding_id: J-C01
+finding_id: I-C03
 severity: Critical
-title: WebSocket subscribes to any encounter without campaign-ownership check
-location: internal/dashboard/ws.go:135
-spec_ref: Phase 103 (WS state sync), spec §DM Dashboard
+title: Narration-template Get/Update/Delete/Duplicate/Apply leak across campaigns
+location: internal/narration/template_handler.go:110-193; internal/narration/template_service.go:89-143
+spec_ref: Phase 100b "Templates are campaign-scoped"
 problem: |
-  ServeWebSocket takes encounter_id from the query string and registers the client without verifying the authenticated DM owns that encounter's campaign. A DM of campaign A can stream full snapshots from campaign B's encounters.
+  Only Create and List accept campaign_id; Get, Update, Delete, Duplicate, and Apply look the template up purely by UUID and never check that the row's campaign_id matches the requesting DM's campaign.
 suggested_fix: |
-  In ServeWebSocket, parse the encounter_id UUID, load the encounter, resolve its campaign, and verify the authenticated user is that campaign's DM before registering the client. Reject mismatch with 403.
+  Require campaign_id on every template endpoint and verify tpl.CampaignID == in.CampaignID before mutating. Return ErrTemplateNotFound on mismatch.
 acceptance_criterion: |
-  A DM connecting to a WebSocket with an encounter_id from another campaign gets rejected (403 or connection refused). A DM connecting to their own campaign's encounter succeeds. A test demonstrates both.
+  Get/Update/Delete/Duplicate/Apply return 404 (or 403) when the template belongs to a different campaign than the authenticated DM's. A test demonstrates cross-campaign access is blocked.

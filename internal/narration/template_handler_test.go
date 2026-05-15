@@ -143,11 +143,12 @@ func TestTemplateHandler_List_InvalidCampaignID(t *testing.T) {
 func TestTemplateHandler_Get_Success(t *testing.T) {
 	h, store := newTestTemplateHandler(t)
 	id := uuid.New()
-	store.templates[id] = Template{ID: id, Name: "x", Body: "b"}
+	camp := uuid.New()
+	store.templates[id] = Template{ID: id, CampaignID: camp, Name: "x", Body: "b"}
 
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
-	req := httptest.NewRequest(http.MethodGet, "/api/narration/templates/"+id.String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/narration/templates/"+id.String()+"?campaign_id="+camp.String(), nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -159,7 +160,7 @@ func TestTemplateHandler_Get_NotFound(t *testing.T) {
 	h, _ := newTestTemplateHandler(t)
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
-	req := httptest.NewRequest(http.MethodGet, "/api/narration/templates/"+uuid.New().String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/narration/templates/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusNotFound {
@@ -182,12 +183,13 @@ func TestTemplateHandler_Get_InvalidID(t *testing.T) {
 func TestTemplateHandler_Update_Success(t *testing.T) {
 	h, store := newTestTemplateHandler(t)
 	id := uuid.New()
-	store.templates[id] = Template{ID: id, CampaignID: uuid.New(), Name: "old", Body: "b"}
+	camp := uuid.New()
+	store.templates[id] = Template{ID: id, CampaignID: camp, Name: "old", Body: "b"}
 
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 	body := `{"name":"new","category":"c","body":"new body"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/narration/templates/"+id.String(), strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/narration/templates/"+id.String()+"?campaign_id="+camp.String(), strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -203,7 +205,7 @@ func TestTemplateHandler_Update_BadJSON(t *testing.T) {
 	h, _ := newTestTemplateHandler(t)
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
-	req := httptest.NewRequest(http.MethodPut, "/api/narration/templates/"+uuid.New().String(), strings.NewReader("{bad"))
+	req := httptest.NewRequest(http.MethodPut, "/api/narration/templates/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), strings.NewReader("{bad"))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -229,7 +231,7 @@ func TestTemplateHandler_Update_NotFound(t *testing.T) {
 	h, _ := newTestTemplateHandler(t)
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
-	req := httptest.NewRequest(http.MethodPut, "/api/narration/templates/"+uuid.New().String(), strings.NewReader(`{"name":"n","body":"b"}`))
+	req := httptest.NewRequest(http.MethodPut, "/api/narration/templates/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), strings.NewReader(`{"name":"n","body":"b"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -242,7 +244,7 @@ func TestTemplateHandler_Update_ValidationError(t *testing.T) {
 	h, _ := newTestTemplateHandler(t)
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
-	req := httptest.NewRequest(http.MethodPut, "/api/narration/templates/"+uuid.New().String(), strings.NewReader(`{"name":"","body":"b"}`))
+	req := httptest.NewRequest(http.MethodPut, "/api/narration/templates/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), strings.NewReader(`{"name":"","body":"b"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -254,11 +256,12 @@ func TestTemplateHandler_Update_ValidationError(t *testing.T) {
 func TestTemplateHandler_Delete_Success(t *testing.T) {
 	h, store := newTestTemplateHandler(t)
 	id := uuid.New()
-	store.templates[id] = Template{ID: id}
+	camp := uuid.New()
+	store.templates[id] = Template{ID: id, CampaignID: camp}
 
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
-	req := httptest.NewRequest(http.MethodDelete, "/api/narration/templates/"+id.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/narration/templates/"+id.String()+"?campaign_id="+camp.String(), nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusNoContent {
@@ -284,11 +287,12 @@ func TestTemplateHandler_Delete_InvalidID(t *testing.T) {
 func TestTemplateHandler_Duplicate_Success(t *testing.T) {
 	h, store := newTestTemplateHandler(t)
 	id := uuid.New()
-	store.templates[id] = Template{ID: id, CampaignID: uuid.New(), Name: "Tavern", Body: "hi"}
+	camp := uuid.New()
+	store.templates[id] = Template{ID: id, CampaignID: camp, Name: "Tavern", Body: "hi"}
 
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
-	req := httptest.NewRequest(http.MethodPost, "/api/narration/templates/"+id.String()+"/duplicate", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/narration/templates/"+id.String()+"/duplicate?campaign_id="+camp.String(), nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusCreated {
@@ -303,7 +307,7 @@ func TestTemplateHandler_Duplicate_NotFound(t *testing.T) {
 	h, _ := newTestTemplateHandler(t)
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
-	req := httptest.NewRequest(http.MethodPost, "/api/narration/templates/"+uuid.New().String()+"/duplicate", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/narration/templates/"+uuid.New().String()+"/duplicate?campaign_id="+uuid.New().String(), nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusNotFound {
@@ -326,12 +330,13 @@ func TestTemplateHandler_Duplicate_InvalidID(t *testing.T) {
 func TestTemplateHandler_Apply_Success(t *testing.T) {
 	h, store := newTestTemplateHandler(t)
 	id := uuid.New()
-	store.templates[id] = Template{ID: id, Name: "n", Body: "Hello {p}, in {l}."}
+	camp := uuid.New()
+	store.templates[id] = Template{ID: id, CampaignID: camp, Name: "n", Body: "Hello {p}, in {l}."}
 
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 	body := `{"values":{"p":"Aragorn","l":"Bree"}}`
-	req := httptest.NewRequest(http.MethodPost, "/api/narration/templates/"+id.String()+"/apply", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/narration/templates/"+id.String()+"/apply?campaign_id="+camp.String(), strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -351,7 +356,7 @@ func TestTemplateHandler_Apply_BadJSON(t *testing.T) {
 	h, _ := newTestTemplateHandler(t)
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
-	req := httptest.NewRequest(http.MethodPost, "/api/narration/templates/"+uuid.New().String()+"/apply", strings.NewReader("{bad"))
+	req := httptest.NewRequest(http.MethodPost, "/api/narration/templates/"+uuid.New().String()+"/apply?campaign_id="+uuid.New().String(), strings.NewReader("{bad"))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -377,7 +382,7 @@ func TestTemplateHandler_Apply_NotFound(t *testing.T) {
 	h, _ := newTestTemplateHandler(t)
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
-	req := httptest.NewRequest(http.MethodPost, "/api/narration/templates/"+uuid.New().String()+"/apply", strings.NewReader(`{}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/narration/templates/"+uuid.New().String()+"/apply?campaign_id="+uuid.New().String(), strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)

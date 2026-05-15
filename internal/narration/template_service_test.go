@@ -179,7 +179,7 @@ func TestTemplateService_Update_Success(t *testing.T) {
 		CampaignID: camp, Name: "n", Body: "b",
 	})
 
-	updated, err := svc.Update(context.Background(), created.ID, UpdateTemplateInput{
+	updated, err := svc.Update(context.Background(), created.ID, camp, UpdateTemplateInput{
 		Name:     "renamed",
 		Category: "Cat",
 		Body:     "new body",
@@ -194,7 +194,7 @@ func TestTemplateService_Update_Success(t *testing.T) {
 
 func TestTemplateService_Update_ValidatesInput(t *testing.T) {
 	svc := NewTemplateService(newFakeTemplateStore())
-	_, err := svc.Update(context.Background(), uuid.New(), UpdateTemplateInput{Name: "", Body: "b"})
+	_, err := svc.Update(context.Background(), uuid.New(), uuid.New(), UpdateTemplateInput{Name: "", Body: "b"})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput, got %v", err)
 	}
@@ -203,10 +203,11 @@ func TestTemplateService_Update_ValidatesInput(t *testing.T) {
 func TestTemplateService_Delete_Success(t *testing.T) {
 	store := newFakeTemplateStore()
 	svc := NewTemplateService(store)
+	camp := uuid.New()
 	created, _ := svc.Create(context.Background(), CreateTemplateInput{
-		CampaignID: uuid.New(), Name: "n", Body: "b",
+		CampaignID: camp, Name: "n", Body: "b",
 	})
-	if err := svc.Delete(context.Background(), created.ID); err != nil {
+	if err := svc.Delete(context.Background(), created.ID, camp); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 	if _, exists := store.templates[created.ID]; exists {
@@ -217,10 +218,11 @@ func TestTemplateService_Delete_Success(t *testing.T) {
 func TestTemplateService_Get_Success(t *testing.T) {
 	store := newFakeTemplateStore()
 	svc := NewTemplateService(store)
+	camp := uuid.New()
 	created, _ := svc.Create(context.Background(), CreateTemplateInput{
-		CampaignID: uuid.New(), Name: "n", Body: "b",
+		CampaignID: camp, Name: "n", Body: "b",
 	})
-	got, err := svc.Get(context.Background(), created.ID)
+	got, err := svc.Get(context.Background(), created.ID, camp)
 	if err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
@@ -236,7 +238,7 @@ func TestTemplateService_Duplicate_AppendsCopySuffix(t *testing.T) {
 	created, _ := svc.Create(context.Background(), CreateTemplateInput{
 		CampaignID: camp, Name: "Tavern", Category: "Loc", Body: "hi {x}",
 	})
-	dup, err := svc.Duplicate(context.Background(), created.ID)
+	dup, err := svc.Duplicate(context.Background(), created.ID, camp)
 	if err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
@@ -256,7 +258,7 @@ func TestTemplateService_Duplicate_AppendsCopySuffix(t *testing.T) {
 
 func TestTemplateService_Duplicate_NotFound(t *testing.T) {
 	svc := NewTemplateService(newFakeTemplateStore())
-	_, err := svc.Duplicate(context.Background(), uuid.New())
+	_, err := svc.Duplicate(context.Background(), uuid.New(), uuid.New())
 	if !errors.Is(err, ErrTemplateNotFound) {
 		t.Fatalf("expected ErrTemplateNotFound, got %v", err)
 	}
@@ -265,12 +267,13 @@ func TestTemplateService_Duplicate_NotFound(t *testing.T) {
 func TestTemplateService_ApplyTemplate_SubstitutesTokens(t *testing.T) {
 	store := newFakeTemplateStore()
 	svc := NewTemplateService(store)
+	camp := uuid.New()
 	created, _ := svc.Create(context.Background(), CreateTemplateInput{
-		CampaignID: uuid.New(),
+		CampaignID: camp,
 		Name:       "Greeting",
 		Body:       "Hello {player}, welcome to {place}.",
 	})
-	out, err := svc.Apply(context.Background(), created.ID, map[string]string{
+	out, err := svc.Apply(context.Background(), created.ID, camp, map[string]string{
 		"player": "Aragorn",
 		"place":  "Bree",
 	})
@@ -284,8 +287,80 @@ func TestTemplateService_ApplyTemplate_SubstitutesTokens(t *testing.T) {
 
 func TestTemplateService_ApplyTemplate_NotFound(t *testing.T) {
 	svc := NewTemplateService(newFakeTemplateStore())
-	_, err := svc.Apply(context.Background(), uuid.New(), nil)
+	_, err := svc.Apply(context.Background(), uuid.New(), uuid.New(), nil)
 	if !errors.Is(err, ErrTemplateNotFound) {
 		t.Fatalf("expected ErrTemplateNotFound, got %v", err)
+	}
+}
+
+func TestTemplateService_Get_CrossCampaign_ReturnsNotFound(t *testing.T) {
+	store := newFakeTemplateStore()
+	svc := NewTemplateService(store)
+	campA := uuid.New()
+	campB := uuid.New()
+	created, _ := svc.Create(context.Background(), CreateTemplateInput{
+		CampaignID: campA, Name: "n", Body: "b",
+	})
+	_, err := svc.Get(context.Background(), created.ID, campB)
+	if !errors.Is(err, ErrTemplateNotFound) {
+		t.Fatalf("expected ErrTemplateNotFound for cross-campaign Get, got %v", err)
+	}
+}
+
+func TestTemplateService_Delete_CrossCampaign_ReturnsNotFound(t *testing.T) {
+	store := newFakeTemplateStore()
+	svc := NewTemplateService(store)
+	campA := uuid.New()
+	campB := uuid.New()
+	created, _ := svc.Create(context.Background(), CreateTemplateInput{
+		CampaignID: campA, Name: "n", Body: "b",
+	})
+	err := svc.Delete(context.Background(), created.ID, campB)
+	if !errors.Is(err, ErrTemplateNotFound) {
+		t.Fatalf("expected ErrTemplateNotFound for cross-campaign Delete, got %v", err)
+	}
+}
+
+func TestTemplateService_Update_CrossCampaign_ReturnsNotFound(t *testing.T) {
+	store := newFakeTemplateStore()
+	svc := NewTemplateService(store)
+	campA := uuid.New()
+	campB := uuid.New()
+	created, _ := svc.Create(context.Background(), CreateTemplateInput{
+		CampaignID: campA, Name: "n", Body: "b",
+	})
+	_, err := svc.Update(context.Background(), created.ID, campB, UpdateTemplateInput{
+		Name: "new", Body: "new body",
+	})
+	if !errors.Is(err, ErrTemplateNotFound) {
+		t.Fatalf("expected ErrTemplateNotFound for cross-campaign Update, got %v", err)
+	}
+}
+
+func TestTemplateService_Duplicate_CrossCampaign_ReturnsNotFound(t *testing.T) {
+	store := newFakeTemplateStore()
+	svc := NewTemplateService(store)
+	campA := uuid.New()
+	campB := uuid.New()
+	created, _ := svc.Create(context.Background(), CreateTemplateInput{
+		CampaignID: campA, Name: "n", Body: "b",
+	})
+	_, err := svc.Duplicate(context.Background(), created.ID, campB)
+	if !errors.Is(err, ErrTemplateNotFound) {
+		t.Fatalf("expected ErrTemplateNotFound for cross-campaign Duplicate, got %v", err)
+	}
+}
+
+func TestTemplateService_Apply_CrossCampaign_ReturnsNotFound(t *testing.T) {
+	store := newFakeTemplateStore()
+	svc := NewTemplateService(store)
+	campA := uuid.New()
+	campB := uuid.New()
+	created, _ := svc.Create(context.Background(), CreateTemplateInput{
+		CampaignID: campA, Name: "n", Body: "Hello {x}.",
+	})
+	_, err := svc.Apply(context.Background(), created.ID, campB, nil)
+	if !errors.Is(err, ErrTemplateNotFound) {
+		t.Fatalf("expected ErrTemplateNotFound for cross-campaign Apply, got %v", err)
 	}
 }

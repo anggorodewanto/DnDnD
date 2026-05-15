@@ -1,13 +1,13 @@
-finding_id: J-C01
+finding_id: I-C03
 status: done
 files_changed:
-  - internal/dashboard/ws.go
-  - internal/dashboard/ws_test.go
-  - internal/dashboard/handler.go
-test_command_that_validates: go test ./internal/dashboard/ -run "TestWebSocketEndpoint_RejectsEncounterFromOtherCampaign|TestWebSocketEndpoint_AcceptsEncounterFromOwnCampaign" -v -count=1
+  - internal/narration/template_service.go
+  - internal/narration/template_service_test.go
+  - internal/narration/template_handler.go
+  - internal/narration/template_handler_test.go
+test_command_that_validates: go test ./internal/narration/ -run "CrossCampaign" -v
 acceptance_criterion_met: yes
-notes: Added EncounterCampaignResolver interface and ownership check in ServeWebSocket. When encounter_id is provided and both CampaignLookup and EncounterCampaignResolver are wired, the handler parses the encounter UUID, resolves its campaign, compares against the DM's active campaign, and rejects with HTTP 403 on mismatch. The check is a no-op when resolvers are not wired, preserving backward compatibility with existing tests and deployments.
+notes: Added campaignID parameter to Get/Update/Delete/Duplicate/Apply service methods. Each method now loads the template by ID, then verifies tpl.CampaignID == campaignID before proceeding; mismatch returns ErrTemplateNotFound (404). The handler extracts campaign_id from a required query parameter (matching the existing List endpoint pattern). Five new cross-campaign tests confirm the fix. All existing tests updated to pass the campaign_id. `make test` and `make cover-check` pass (narration package at 94.52%).
 follow_ups:
-  - Wire EncounterCampaignResolver in cmd/dndnd/main.go (implement adapter over the existing store's GetEncounter method)
-  - Consider adding a test for invalid encounter_id UUID format (400 response)
-  - Consider adding a test for encounter not found (404 response)
+  - Consider extracting campaign_id from auth middleware/context instead of query param for stronger enforcement
+  - Integration test with real DB to confirm the check works end-to-end
