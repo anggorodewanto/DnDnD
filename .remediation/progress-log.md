@@ -107,3 +107,10 @@ Append-only journal of all remediation activity.
 - Commit: 85f3ff8
 - Reviewer: approved
 - Notes: Encoded slot/char level in pending save source, ScaleSpellDice called at resolve time
+
+## 2026-05-15T18:14 — E-C03 done
+
+- Finding: Dodge condition does not impose disadvantage on attackers
+- Commit: 9dfe265
+- Reviewer: approved
+- Notes: Single case added to target-conditions switch in DetectAdvantage

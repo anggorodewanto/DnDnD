@@ -24,7 +24,7 @@ Low: 142
 | 12 | D-C04 | Critical | done | Save handler never sets IsRaging in EffectContext | /home/ab/projects/DnDnD/internal/discord/save_handler.go:199 |
 | 13 | E-C01 | Critical | done | Single-target spell casts never apply damage or healing | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:584-598`, `/home/ab/pro... |
 | 14 | E-C02 | Critical | done | AoE damage path ignores upcasting and cantrip scaling | `/home/ab/projects/DnDnD/internal/combat/aoe.go:851` (`ResolveAoEPendingSaves` r... |
-| 15 | E-C03 | Critical | in_progress | Dodge condition does not impose disadvantage on attackers | `/home/ab/projects/DnDnD/internal/combat/advantage.go:104-134` (no `dodge` case ... |
+| 15 | E-C03 | Critical | done | Dodge condition does not impose disadvantage on attackers | `/home/ab/projects/DnDnD/internal/combat/advantage.go:104-134` (no `dodge` case ... |
 | 16 | F-C01 | Critical | pending | Counterspell trigger is unreachable from the DM dashboard | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:88-150 |
 | 17 | F-C02 | Critical | pending | Heavy-armor STR speed penalty is computed but never applied to combat speed | /home/ab/projects/DnDnD/internal/combat/equip.go:237,478-487; /home/ab/projects/... |
 | 18 | F-C03 | Critical | pending | Devil's Sight is never wired into the player vision pipeline | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:755-806 |
