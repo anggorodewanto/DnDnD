@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"nhooyr.io/websocket"
 
 	"github.com/ab/dndnd/internal/auth"
@@ -113,6 +114,27 @@ func (h *Handler) ServeWebSocket(w http.ResponseWriter, r *http.Request) {
 	if !ok || userID == "" {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
+	}
+
+	// J-C01: validate encounter ownership before upgrading.
+	encounterIDStr := r.URL.Query().Get("encounter_id")
+	if encounterIDStr != "" && h.encounterCampaignResolver != nil && h.campaignLookup != nil {
+		encID, err := uuid.Parse(encounterIDStr)
+		if err != nil {
+			http.Error(w, "invalid encounter_id", http.StatusBadRequest)
+			return
+		}
+		encCampaignID, err := h.encounterCampaignResolver.GetEncounterCampaignID(r.Context(), encID)
+		if err != nil {
+			http.Error(w, "encounter not found", http.StatusNotFound)
+			return
+		}
+		dmCampaignIDStr, _, _ := h.campaignLookup.LookupActiveCampaign(r.Context(), userID)
+		dmCampaignID, err := uuid.Parse(dmCampaignIDStr)
+		if err != nil || dmCampaignID != encCampaignID {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 	}
 
 	// SR-016: origin check is governed by SetWebSocketOriginPolicy. Default

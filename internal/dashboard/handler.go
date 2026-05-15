@@ -44,6 +44,13 @@ type EncounterLister interface {
 	ListSavedEncounterNames(ctx context.Context, campaignID uuid.UUID) ([]string, error)
 }
 
+// EncounterCampaignResolver resolves the campaign that owns a given encounter.
+// Used by ServeWebSocket to verify the authenticated DM owns the encounter's
+// campaign before subscribing.
+type EncounterCampaignResolver interface {
+	GetEncounterCampaignID(ctx context.Context, encounterID uuid.UUID) (uuid.UUID, error)
+}
+
 // NavEntry represents a sidebar navigation entry.
 type NavEntry struct {
 	Label string
@@ -107,6 +114,8 @@ type Handler struct {
 	dmQueueCounter   DMQueueCounter
 	// Finding 13: optional encounter lister for active/saved encounter data.
 	encounterLister EncounterLister
+	// J-C01: optional encounter-campaign resolver for WebSocket ownership check.
+	encounterCampaignResolver EncounterCampaignResolver
 	// SR-016: WebSocket origin policy. wsInsecureSkipVerify=true keeps the
 	// historical permissive dev behaviour (any Origin accepted). When false,
 	// ServeWebSocket relies on nhooyr/websocket's built-in same-host check
@@ -138,6 +147,12 @@ func (h *Handler) SetCounters(approvals PendingApprovalsCounter, dmQueue DMQueue
 // encounter data. When nil, the cards show empty lists.
 func (h *Handler) SetEncounterLister(lister EncounterLister) {
 	h.encounterLister = lister
+}
+
+// SetEncounterCampaignResolver wires the encounter-campaign ownership resolver
+// used by ServeWebSocket to reject connections to encounters the DM does not own.
+func (h *Handler) SetEncounterCampaignResolver(resolver EncounterCampaignResolver) {
+	h.encounterCampaignResolver = resolver
 }
 
 // SetErrorReader wires the 24h error count into the Campaign Home sidebar

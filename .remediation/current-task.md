@@ -1,11 +1,11 @@
-finding_id: cross-cut-C01
+finding_id: J-C01
 severity: Critical
-title: Channel Divinity recharges on long rest, not short rest
-location: internal/combat/channel_divinity_integration_test.go:44
-spec_ref: PHB p.59 (Cleric) / p.85 (Paladin) — "short or long rest"
+title: WebSocket subscribes to any encounter without campaign-ownership check
+location: internal/dashboard/ws.go:135
+spec_ref: Phase 103 (WS state sync), spec §DM Dashboard
 problem: |
-  Every test seed for the channel-divinity feature marks Recharge: "long". The rest service routes recharges by this field, so Channel Divinity only recharges on long rest instead of short rest per PHB.
+  ServeWebSocket takes encounter_id from the query string and registers the client without verifying the authenticated DM owns that encounter's campaign. A DM of campaign A can stream full snapshots from campaign B's encounters.
 suggested_fix: |
-  Change the Recharge field from "long" to "short" in all channel-divinity fixtures and any character-bootstrap code. Add a regression test asserting CD is recharged after ShortRest.
+  In ServeWebSocket, parse the encounter_id UUID, load the encounter, resolve its campaign, and verify the authenticated user is that campaign's DM before registering the client. Reject mismatch with 403.
 acceptance_criterion: |
-  Channel Divinity feature uses have Recharge: "short" in test fixtures. A test confirms ShortRest recharges channel-divinity uses.
+  A DM connecting to a WebSocket with an encounter_id from another campaign gets rejected (403 or connection refused). A DM connecting to their own campaign's encounter succeeds. A test demonstrates both.

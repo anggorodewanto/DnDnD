@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"nhooyr.io/websocket"
@@ -433,6 +434,71 @@ func TestWebSocketEndpoint_SameOriginAccepted_BothModes(t *testing.T) {
 				tc.name, rec.Code)
 		})
 	}
+}
+
+func TestWebSocketEndpoint_RejectsEncounterFromOtherCampaign(t *testing.T) {
+	hub := NewHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	// DM's active campaign is campaign-A.
+	dmCampaignID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+	otherCampaignID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+	encounterID := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc")
+
+	lookup := &stubCampaignLookup{id: dmCampaignID.String(), status: "active"}
+	resolver := &stubEncounterCampaignResolver{
+		campaignID: otherCampaignID, // encounter belongs to a different campaign
+	}
+
+	h := NewHandler(nil, hub)
+	h.SetCampaignLookup(lookup)
+	h.SetEncounterCampaignResolver(resolver)
+
+	rec := &hijackableRecorder{ResponseRecorder: httptest.NewRecorder()}
+	req := newWSHandshakeRequest(t, "", "localhost")
+	req.URL.RawQuery = "encounter_id=" + encounterID.String()
+
+	h.ServeWebSocket(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code,
+		"DM connecting with encounter from another campaign must get 403")
+}
+
+func TestWebSocketEndpoint_AcceptsEncounterFromOwnCampaign(t *testing.T) {
+	hub := NewHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	campaignID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+	encounterID := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc")
+
+	lookup := &stubCampaignLookup{id: campaignID.String(), status: "active"}
+	resolver := &stubEncounterCampaignResolver{campaignID: campaignID}
+
+	h := NewHandler(nil, hub)
+	h.SetCampaignLookup(lookup)
+	h.SetEncounterCampaignResolver(resolver)
+
+	rec := &hijackableRecorder{ResponseRecorder: httptest.NewRecorder()}
+	req := newWSHandshakeRequest(t, "", "localhost")
+	req.URL.RawQuery = "encounter_id=" + encounterID.String()
+
+	h.ServeWebSocket(rec, req)
+
+	// Should NOT get 403 — the encounter belongs to the DM's campaign.
+	assert.NotEqual(t, http.StatusForbidden, rec.Code,
+		"DM connecting with own campaign's encounter must not get 403")
+}
+
+// stubEncounterCampaignResolver satisfies EncounterCampaignResolver for tests.
+type stubEncounterCampaignResolver struct {
+	campaignID uuid.UUID
+	err        error
+}
+
+func (s *stubEncounterCampaignResolver) GetEncounterCampaignID(_ context.Context, _ uuid.UUID) (uuid.UUID, error) {
+	return s.campaignID, s.err
 }
 
 func TestWebSocketEndpoint_SubscribeToEncounter(t *testing.T) {
