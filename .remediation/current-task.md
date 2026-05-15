@@ -1,11 +1,11 @@
-finding_id: C-H03
+finding_id: D-H01
 severity: High
-title: Crossbow Expert does not waive ranged-with-hostile-adjacent disadvantage
-location: internal/combat/advantage.go:88-91
-spec_ref: Phase 35; spec line 687
+title: Step of the Wind dash adds remaining movement, not base speed
+location: internal/combat/monk.go:444
+spec_ref: Phase 48b; PHB Monk "Step of the Wind"
 problem: |
-  DetectAdvantage adds "hostile within 5ft" disadvantage when HostileNearAttacker && IsRangedWeapon. AttackInput.HasCrossbowExpert is populated but the disadvantage rule never consults it.
+  case "dash": updatedTurn.MovementRemainingFt += cmd.Turn.MovementRemainingFt adds whatever is currently left, not the monk's speed. A monk who already moved half their speed gets only half the dash bonus.
 suggested_fix: |
-  Add && !input.HasCrossbowExpert to the hostile-near-attacker ranged disadvantage branch.
+  Replace with speed, _ := s.resolveBaseSpeed(ctx, cmd.Combatant); updatedTurn.MovementRemainingFt += speed.
 acceptance_criterion: |
-  A ranged attack with HasCrossbowExpert=true and HostileNearAttacker=true does NOT get disadvantage. A test demonstrates this.
+  Step of the Wind dash adds the monk's base speed regardless of how much movement was already used. A test demonstrates this.

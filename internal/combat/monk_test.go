@@ -2414,5 +2414,47 @@ func TestServiceStepOfTheWind_UpdateTurnError(t *testing.T) {
 	assert.Contains(t, err.Error(), "updating turn actions")
 }
 
+func TestServiceStepOfTheWind_Dash_AddsBaseSpeedNotRemaining(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+
+	char := makeMonkCharacterWithKi(10, 16, 16, 5, 5)
+	char.ID = charID
+	// Base speed defaults to 30 (SpeedFt unset => resolveBaseSpeed returns 30)
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{
+			ID:                  arg.ID,
+			BonusActionUsed:     arg.BonusActionUsed,
+			MovementRemainingFt: arg.MovementRemainingFt,
+		}, nil
+	}
+
+	svc := NewService(ms)
+
+	// Monk has 30ft base speed, already moved 20ft, so 10ft remaining.
+	// Step of the Wind dash should add base speed (30), not remaining (10).
+	// Expected: 10 + 30 = 40, NOT 10 + 10 = 20.
+	result, err := svc.StepOfTheWind(ctx, StepOfTheWindCommand{
+		KiAbilityCommand: KiAbilityCommand{
+			Combatant: refdata.Combatant{
+				ID:          attackerID,
+				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+				DisplayName: "Kira",
+				Conditions:  json.RawMessage(`[]`),
+			},
+			Turn: refdata.Turn{ID: uuid.New(), CombatantID: attackerID, MovementRemainingFt: 10},
+		},
+		Mode: "dash",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int32(40), result.Turn.MovementRemainingFt, "dash should add base speed (30), not remaining movement (10)")
+}
+
 // Suppress unused imports
 var _ = sql.ErrNoRows

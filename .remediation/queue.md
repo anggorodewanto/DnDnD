@@ -63,7 +63,7 @@ Low: 142
 | 51 | B-H07 | High | pending | Fog renderer does not preserve "previously seen" cells across renders | `/home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:68-93` |
 | 52 | C-H01 | High | done | Auto-crit applies to ranged attacks within 5ft against paralyzed/unconscious | /home/ab/projects/DnDnD/internal/combat/attack.go:727-748 (`CheckAutoCrit`) |
 | 53 | C-H02 | High | pending | PC creature size hard-coded to "Medium" — heavy-weapon disadvantage never fires for halflings/gnomes | /home/ab/projects/DnDnD/internal/combat/attack.go:1316-1326 |
-| 54 | C-H03 | High | in_progress | Crossbow Expert does not waive ranged-with-hostile-adjacent disadvantage | /home/ab/projects/DnDnD/internal/combat/advantage.go:88-91 |
+| 54 | C-H03 | High | done | Crossbow Expert does not waive ranged-with-hostile-adjacent disadvantage | /home/ab/projects/DnDnD/internal/combat/advantage.go:88-91 |
 | 55 | C-H04 | High | pending | Dash adds raw base speed, ignoring exhaustion/condition speed modifiers | /home/ab/projects/DnDnD/internal/combat/standard_actions.go:38-71 (`Dash`), 73-8... |
 | 56 | C-H05 | High | done | Fall damage missing 20d6 cap | /home/ab/projects/DnDnD/internal/combat/altitude.go:101-123 (`FallDamage`) |
 | 57 | C-H06 | High | done | Resistance/vulnerability halving allows damage to go to 0 (RAW says min 1) | /home/ab/projects/DnDnD/internal/combat/damage.go:38-43 (`ApplyDamageResistances... |
@@ -73,7 +73,7 @@ Low: 142
 | 61 | C-H10 | High | pending | Reach weapon OA detection — PC reach map relies on caller passing it | /home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:80-117, 148-164 (`... |
 | 62 | C-H11 | High | pending | Concentration-on-damage save uses simplified DC formula | /home/ab/projects/DnDnD/internal/combat/concentration.go:422-448 (`MaybeCreateCo... |
 | 63 | C-H12 | High | pending | Surprise: surprised condition removed at start of "skip turn", not end (timing nuance) | /home/ab/projects/DnDnD/internal/combat/initiative.go:582-606 (`skipSurprisedTur... |
-| 64 | D-H01 | High | pending | Step of the Wind dash adds remaining movement, not base speed | /home/ab/projects/DnDnD/internal/combat/monk.go:444 |
+| 64 | D-H01 | High | in_progress | Step of the Wind dash adds remaining movement, not base speed | /home/ab/projects/DnDnD/internal/combat/monk.go:444 |
 | 65 | D-H02 | High | pending | Dodge condition grants no defensive disadvantage to attackers | /home/ab/projects/DnDnD/internal/combat/advantage.go:104 (switch on `c.Condition... |
 | 66 | D-H03 | High | pending | Auto-ability selection for finesse weapons silently disables rage damage | /home/ab/projects/DnDnD/internal/combat/attack.go:1583 (`attackAbilityUsed`) |
 | 67 | D-H04 | High | pending | Monk Unarmored Defense not invalidated by shield | /home/ab/projects/DnDnD/internal/combat/equip.go:416 and /home/ab/projects/DnDnD... |

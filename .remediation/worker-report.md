@@ -1,24 +1,35 @@
-# Worker Report: C-H03
+# Worker Report: D-H01
 
-**Finding:** Crossbow Expert does not waive ranged-with-hostile-adjacent disadvantage  
-**Status:** ✅ Fixed  
-**Worker:** worker-C-H03  
-**Date:** 2026-05-16
+**Finding:** Step of the Wind dash adds remaining movement, not base speed
+**Status:** ✅ Fixed
 
-## Changes Made
+## Root Cause
 
-### 1. `internal/combat/advantage.go`
-- Added `HasCrossbowExpert bool` field to `AdvantageInput` struct.
-- Added `&& !input.HasCrossbowExpert` to the hostile-near-attacker ranged disadvantage condition.
+In `internal/combat/monk.go:444`, the dash case of `StepOfTheWind` used:
+```go
+updatedTurn.MovementRemainingFt += cmd.Turn.MovementRemainingFt
+```
+This added whatever movement was *left* rather than the monk's base speed. A monk who already moved 20ft of their 30ft would only gain +10ft instead of +30ft.
 
-### 2. `internal/combat/attack.go`
-- Wired `HasCrossbowExpert` from `AttackInput` into `AdvantageInput` construction.
+## Fix Applied
 
-### 3. `internal/combat/advantage_test.go`
-- Added `TestDetectAdvantage_RangedWithHostileNearby_CrossbowExpert_NoDisadvantage`: ranged weapon with `HostileNearAttacker=true` and `HasCrossbowExpert=true` gets no disadvantage.
+Replaced with `resolveBaseSpeed` lookup, mirroring the standard Dash action in `standard_actions.go`:
+```go
+case "dash":
+    speed, err := s.resolveBaseSpeed(ctx, cmd.Combatant)
+    if err != nil {
+        return KiAbilityResult{}, err
+    }
+    updatedTurn.MovementRemainingFt += speed
+```
 
-## Verification
+## TDD Evidence
 
-- `make test` — all tests pass.
-- `make cover-check` — coverage thresholds met.
-- Existing `TestDetectAdvantage_RangedWithHostileNearby` still confirms disadvantage without the feat.
+- **Red:** Added `TestServiceStepOfTheWind_Dash_AddsBaseSpeedNotRemaining` — monk with 30ft speed, 10ft remaining, expects 40ft after dash. Failed with actual=20.
+- **Green:** Applied fix. Test passes with expected=40.
+- **Full suite:** `make test` passes. `make cover-check` passes.
+
+## Files Changed
+
+- `internal/combat/monk.go` — fixed dash case (line ~444)
+- `internal/combat/monk_test.go` — added regression test

@@ -442,7 +442,11 @@ func (s *Service) StepOfTheWind(ctx context.Context, cmd StepOfTheWindCommand) (
 
 	switch cmd.Mode {
 	case "dash":
-		updatedTurn.MovementRemainingFt += cmd.Turn.MovementRemainingFt
+		speed, err := s.resolveBaseSpeed(ctx, cmd.Combatant)
+		if err != nil {
+			return KiAbilityResult{}, err
+		}
+		updatedTurn.MovementRemainingFt += speed
 	case "disengage":
 		updatedTurn.HasDisengaged = true
 	}
