@@ -30,3 +30,10 @@ Append-only journal of all remediation activity.
 - Commit: 9790feb
 - Reviewer: approved
 - Notes: sumSignedTokens helper replaces broken strip-and-concat approach
+
+## 2026-05-15T15:24 — B-C02 done
+
+- Finding: cryptoRand / RollD20 panic on degenerate dice (Nd0)
+- Commit: 6de7aa2
+- Reviewer: approved
+- Notes: 3-line validation guard in ParseExpression rejects Count<1 or Sides<1
