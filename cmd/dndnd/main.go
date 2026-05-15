@@ -456,7 +456,7 @@ func mountCombatDashboardRoutes(
 	poster combat.CombatLogPoster,
 ) combatDashboardWiring {
 	if workspaceStore != nil {
-		wh := combat.NewWorkspaceHandler(workspaceStore)
+		wh := combat.NewWorkspaceHandler(workspaceStore, svc)
 		router.Get("/api/combat/workspace", wh.GetWorkspace)
 		router.Patch("/api/combat/{encounterID}/combatants/{combatantID}/hp", wh.UpdateCombatantHP)
 		router.Patch("/api/combat/{encounterID}/combatants/{combatantID}/conditions", wh.UpdateCombatantConditions)

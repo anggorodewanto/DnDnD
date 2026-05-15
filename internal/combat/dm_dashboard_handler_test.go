@@ -487,7 +487,7 @@ func TestWorkspaceResponse_IncludesInitiativeRoll(t *testing.T) {
 		},
 	}
 
-	handler := NewWorkspaceHandler(store)
+	handler := NewWorkspaceHandler(store, nil)
 
 	r := chi.NewRouter()
 	handler.RegisterRoutes(r)

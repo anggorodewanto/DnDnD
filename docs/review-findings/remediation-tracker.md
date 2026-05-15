@@ -24,7 +24,7 @@
 
 | ID | Severity | Finding | Status | Commit | Reviewer |
 |----|----------|---------|--------|--------|----------|
-| F-03 | High | Combat Workspace PATCH bypasses locked service paths | pending | — | — |
+| F-03 | High | Combat Workspace PATCH bypasses locked service paths | review_passed | — | PASS |
 | F-04 | High | Action Resolver effects bypass snapshot publishing | pending | — | — |
 | F-11 | High | Enemy-turn mutations don't publish WebSocket snapshot | pending | — | — |
 | F-12 | High | Enemy-turn path uses hard-coded 20x20 grid | pending | — | — |
@@ -105,8 +105,16 @@
 - **Source**: agent-05
 - **Files**: `internal/combat/workspace_handler.go`, `cmd/dndnd/main.go`
 - **Test plan**: Test that workspace PATCH routes go through service layer with lock acquisition and snapshot publish
-- **Implementation notes**: —
-- **Reviewer verdict**: —
+- **Implementation notes**: Added `WorkspaceCombatService` interface to `WorkspaceHandler` exposing `UpdateCombatantHP`, `UpdateCombatantConditions`, `UpdateCombatantPosition`, and `GetCombatant`. Routed all three PATCH handlers through the service instead of raw store writes. The service methods internally publish WebSocket snapshots and run domain hooks (concentration saves, silence-zone checks, incapacitation breaks). Updated `NewWorkspaceHandler` signature to accept the service; wired `*combat.Service` in `mountCombatDashboardRoutes`. Added 3 focused tests (`TestWorkspaceHandler_F03_*`) proving service routing.
+- **Changed files**: `internal/combat/workspace_handler.go`, `internal/combat/workspace_handler_test.go`, `internal/combat/dm_dashboard_handler_test.go`, `cmd/dndnd/main.go`
+- **Reviewer verdict**: **PASS**
+  - **Spec conformance**: All three workspace PATCH routes (HP, conditions, position) now call through the `WorkspaceCombatService` interface (`internal/combat/workspace_handler.go:318-343` → `h.svc.UpdateCombatantHP`, `:346-382` → `h.svc.UpdateCombatantConditions`, `:385-421` → `h.svc.UpdateCombatantPosition`). The handler no longer calls raw store methods for mutations. The `NewWorkspaceHandler` constructor requires the service (`workspace_handler.go:60`), and production wiring passes `*combat.Service` at `cmd/dndnd/main.go:459`.
+  - **Server-authoritative correctness**: `Service.UpdateCombatantHP` (`service.go:757-770`) persists and publishes. `Service.UpdateCombatantConditions` (`service.go:842-855`) persists and publishes. `Service.UpdateCombatantPosition` (`service.go:785-792`) delegates to `UpdateCombatantPositionWithTriggers` (`service.go:794-840`) which runs zone-anchor follow, silence-zone concentration break, zone enter triggers, and zone damage application before publishing. All domain hooks are triggered.
+  - **Snapshot publishing**: Each service method calls `s.publish(ctx, c.EncounterID)` which invokes `publisher.PublishEncounterSnapshot` (`service.go:597-603`), satisfying the WebSocket state-sync spec requirement.
+  - **Regression risk**: Low. All 19 `TestWorkspaceHandler_*` tests pass (verified via `go test`). The `WorkspaceStore` interface still exists for read-only operations (GET workspace, delete combatant). Only the three PATCH mutation paths were rerouted.
+  - **Test coverage**: Three focused tests (`workspace_handler_test.go:1179-1286`) prove service routing: `TestWorkspaceHandler_F03_HPPatchRoutesViaService`, `TestWorkspaceHandler_F03_ConditionsPatchRoutesViaService`, `TestWorkspaceHandler_F03_PositionPatchRoutesViaService`. Each uses a mock `WorkspaceCombatService`, asserts the service method is called with correct arguments, and verifies HTTP 200 response.
+  - **Minor note**: `DeleteCombatant` still calls `h.store.DeleteCombatant` directly (`workspace_handler.go:424-434`) and does not publish a snapshot. This is outside the original F-03 finding scope (which targeted HP/conditions/position PATCH) but could be a follow-up item.
+  - **Required follow-up**: None for F-03 scope. Optional: route `DeleteCombatant` through service for snapshot publish consistency.
 
 ### F-04: Action Resolver effects bypass snapshot publishing
 - **Source**: agent-04

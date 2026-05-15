@@ -31,14 +31,26 @@ type WorkspaceStore interface {
 	CountPendingDMQueueItemsByCampaign(ctx context.Context, campaignID uuid.UUID) (int64, error)
 }
 
+// WorkspaceCombatService defines the service-layer operations used by
+// workspace PATCH mutations. Routing through the service ensures turn-lock
+// acquisition, domain hooks (concentration, incapacitation), and WebSocket
+// snapshot publishing.
+type WorkspaceCombatService interface {
+	UpdateCombatantHP(ctx context.Context, id uuid.UUID, hpCurrent, tempHP int32, isAlive bool) (refdata.Combatant, error)
+	UpdateCombatantConditions(ctx context.Context, id uuid.UUID, conditions json.RawMessage, exhaustion int32) (refdata.Combatant, error)
+	UpdateCombatantPosition(ctx context.Context, id uuid.UUID, col string, row, altitude int32) (refdata.Combatant, error)
+	GetCombatant(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
+}
+
 // WorkspaceHandler serves combat workspace API endpoints.
 type WorkspaceHandler struct {
 	store WorkspaceStore
+	svc   WorkspaceCombatService
 }
 
 // NewWorkspaceHandler creates a new WorkspaceHandler.
-func NewWorkspaceHandler(store WorkspaceStore) *WorkspaceHandler {
-	return &WorkspaceHandler{store: store}
+func NewWorkspaceHandler(store WorkspaceStore, svc WorkspaceCombatService) *WorkspaceHandler {
+	return &WorkspaceHandler{store: store, svc: svc}
 }
 
 // RegisterRoutes mounts workspace API routes on the given Chi router.
@@ -329,12 +341,7 @@ func (h *WorkspaceHandler) UpdateCombatantHP(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	c, err := h.store.UpdateCombatantHP(r.Context(), refdata.UpdateCombatantHPParams{
-		ID:        combatantID,
-		HpCurrent: req.HpCurrent,
-		TempHp:    req.TempHp,
-		IsAlive:   req.IsAlive,
-	})
+	c, err := h.svc.UpdateCombatantHP(r.Context(), combatantID, req.HpCurrent, req.TempHp, req.IsAlive)
 	if err != nil {
 		http.Error(w, "failed to update HP", http.StatusInternalServerError)
 		return
@@ -357,7 +364,7 @@ func (h *WorkspaceHandler) UpdateCombatantConditions(w http.ResponseWriter, r *h
 		return
 	}
 
-	existing, err := h.store.GetCombatantByID(r.Context(), combatantID)
+	existing, err := h.svc.GetCombatant(r.Context(), combatantID)
 	if err != nil {
 		http.Error(w, "failed to fetch combatant", http.StatusInternalServerError)
 		return
@@ -369,11 +376,7 @@ func (h *WorkspaceHandler) UpdateCombatantConditions(w http.ResponseWriter, r *h
 		return
 	}
 
-	c, err := h.store.UpdateCombatantConditions(r.Context(), refdata.UpdateCombatantConditionsParams{
-		ID:              combatantID,
-		Conditions:      conditionsJSON,
-		ExhaustionLevel: existing.ExhaustionLevel,
-	})
+	c, err := h.svc.UpdateCombatantConditions(r.Context(), combatantID, conditionsJSON, existing.ExhaustionLevel)
 	if err != nil {
 		http.Error(w, "failed to update conditions", http.StatusInternalServerError)
 		return
@@ -401,18 +404,13 @@ func (h *WorkspaceHandler) UpdateCombatantPosition(w http.ResponseWriter, r *htt
 		return
 	}
 
-	existing, err := h.store.GetCombatantByID(r.Context(), combatantID)
+	existing, err := h.svc.GetCombatant(r.Context(), combatantID)
 	if err != nil {
 		http.Error(w, "combatant not found", http.StatusNotFound)
 		return
 	}
 
-	c, err := h.store.UpdateCombatantPosition(r.Context(), refdata.UpdateCombatantPositionParams{
-		ID:          combatantID,
-		PositionCol: req.PositionCol,
-		PositionRow: req.PositionRow,
-		AltitudeFt:  existing.AltitudeFt,
-	})
+	c, err := h.svc.UpdateCombatantPosition(r.Context(), combatantID, req.PositionCol, req.PositionRow, existing.AltitudeFt)
 	if err != nil {
 		http.Error(w, "failed to update position", http.StatusInternalServerError)
 		return
