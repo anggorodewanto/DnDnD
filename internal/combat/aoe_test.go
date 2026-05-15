@@ -12,6 +12,7 @@ import (
 	"github.com/sqlc-dev/pqtype"
 
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/gamemap/renderer"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2823,4 +2824,116 @@ func TestCastAoE_Empowered_SetsFlag(t *testing.T) {
 	assert.True(t, result.IsEmpowered)
 	assert.Equal(t, 4, result.EmpoweredRerolls) // CHA mod 4
 	assert.Equal(t, 1, result.MetamagicCost)
+}
+
+// F-05: AoE DEX save cover bonus is applied by reducing the stored DC.
+// A target with half cover (+2 DEX save bonus) should succeed on a roll that
+// would otherwise fail against the unadjusted DC.
+func TestCastAoE_F05_CoverBonusReducesStoredDC(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	caster.PositionCol = "A"
+	caster.PositionRow = 1
+
+	// Target at I8 (col index 8, row index 7) — one tile east of AoE origin
+	goblin := refdata.Combatant{
+		ID: uuid.New(), DisplayName: "Goblin",
+		PositionCol: "I", PositionRow: 8,
+		IsAlive: true, IsNpc: true, Conditions: json.RawMessage(`[]`),
+	}
+
+	fireball := makeFireball()
+	fireball.AreaOfEffect = pqtype.NullRawMessage{
+		RawMessage: json.RawMessage(`{"shape":"sphere","radius_ft":20}`),
+		Valid:      true,
+	}
+	fireball.SaveEffect = sql.NullString{String: "half_damage", Valid: true}
+
+	// Wall that produces half cover from the AoE origin (H8 = col 7, row 7)
+	// to the goblin at I8 (col 8, row 7).
+	// A vertical wall at x=8.5 from y=7 to y=7.5 blocks 1-2 target corners.
+	walls := []renderer.WallSegment{{X1: 8.5, Y1: 7, X2: 8.5, Y2: 7.5}}
+
+	// Verify this wall setup produces half cover
+	cover := CalculateCoverFromOrigin(7, 7, 8, 7, walls)
+	require.Equal(t, CoverHalf, cover, "wall setup must produce half cover")
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) { return fireball, nil }
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return refdata.Combatant{}, fmt.Errorf("not found")
+	}
+	store.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{caster, goblin}, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+	store.updateCharacterSpellSlotsFn = func(_ context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error) {
+		return refdata.Character{ID: arg.ID, SpellSlots: arg.SpellSlots}, nil
+	}
+
+	var capturedDC int32
+	store.createPendingSaveFn = func(_ context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+		capturedDC = arg.Dc
+		return refdata.PendingSafe{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, Source: arg.Source}, nil
+	}
+
+	svc := NewService(store)
+	cmd := AoECastCommand{
+		SpellID:     "fireball",
+		CasterID:    caster.ID,
+		EncounterID: uuid.New(),
+		TargetCol:   "H",
+		TargetRow:   8,
+		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		Walls:       walls,
+	}
+
+	result, err := svc.CastAoE(context.Background(), cmd)
+	require.NoError(t, err)
+	require.Len(t, result.PendingSaves, 1)
+
+	// The PendingSave struct still has the original DC and cover bonus for display
+	assert.Equal(t, 15, result.PendingSaves[0].DC)
+	assert.Equal(t, 2, result.PendingSaves[0].CoverBonus)
+
+	// But the stored DC in the DB is reduced by the cover bonus
+	assert.Equal(t, int32(13), capturedDC, "stored DC must be original DC (15) minus cover bonus (2)")
+}
+
+// F-05: End-to-end test proving that a target with half cover succeeds on a
+// save roll that would fail without the cover bonus adjustment.
+func TestRecordAoEPendingSaveRoll_F05_CoverBonusMakesSaveSucceed(t *testing.T) {
+	combatantID := uuid.New()
+	rowID := uuid.New()
+
+	store := defaultMockStore()
+	// Simulate a pending save with DC already reduced by cover bonus:
+	// Original DC 15, cover bonus +2, stored DC = 13
+	store.listPendingSavesByCombatantFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: rowID, CombatantID: combatantID, Ability: "dex", Dc: 13, Source: AoEPendingSaveSource("fireball"), Status: "pending"},
+		}, nil
+	}
+	var updated refdata.UpdatePendingSaveResultParams
+	store.updatePendingSaveResultFn = func(_ context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+		updated = arg
+		return refdata.PendingSafe{ID: arg.ID, Source: AoEPendingSaveSource("fireball"), Status: "rolled"}, nil
+	}
+
+	svc := NewService(store)
+
+	// Roll total of 14: without cover adjustment (DC 15), this would fail.
+	// With cover adjustment (stored DC 13), 14 >= 13 → success.
+	_, resolved, err := svc.RecordAoEPendingSaveRoll(context.Background(), combatantID, "dex", 14, false)
+	require.NoError(t, err)
+	assert.True(t, resolved)
+	assert.True(t, updated.Success.Bool, "roll of 14 vs stored DC 13 (original 15 - 2 cover) must succeed")
+	assert.Equal(t, int32(14), updated.RollResult.Int32)
 }

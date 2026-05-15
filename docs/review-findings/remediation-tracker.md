@@ -33,7 +33,7 @@
 
 | ID | Severity | Finding | Status | Commit | Reviewer |
 |----|----------|---------|--------|--------|----------|
-| F-05 | High | AoE DEX save cover bonuses never applied | pending | — | — |
+| F-05 | High | AoE DEX save cover bonuses never applied | review_passed | — | PASS |
 | F-06 | High | Flying movers blocked by ground occupants | pending | — | — |
 | F-07 | High | Defense fighting style AC bonus ignored | pending | — | — |
 | F-08 | High | Counterspell accepts invalid low-level slots | pending | — | — |
@@ -136,8 +136,14 @@
 - **Source**: agent-02
 - **Files**: `internal/combat/aoe.go`, `db/queries/pending_saves.sql`
 - **Test plan**: Test that cover bonus is applied to save total during resolution
-- **Implementation notes**: —
-- **Reviewer verdict**: —
+- **Implementation notes**: Applied Option B: when persisting pending saves, the DC stored is `dc - coverBonus` (line ~572 in aoe.go). This means the existing resolution logic (`total >= dc`) automatically accounts for cover without schema changes. A DC 15 save with +2 half-cover bonus stores DC 13, so a roll of 14 succeeds. Two focused tests added: `TestCastAoE_F05_CoverBonusReducesStoredDC` (verifies stored DC is reduced) and `TestRecordAoEPendingSaveRoll_F05_CoverBonusMakesSaveSucceed` (proves a roll that would fail without cover now succeeds).
+- **Reviewer verdict**: **PASS**
+  - **D&D 5e/SRD correctness**: `CoverLevel.DEXSaveBonus()` delegates to `ACBonus()` which returns +2 for half cover and +5 for three-quarters cover (`internal/combat/cover.go:45-47`). These match SRD 5.1 exactly. The bonus is only applied when `saveAbility == "dex"` (`aoe.go:201`), correctly scoping it to DEX saves only.
+  - **Spec conformance**: Phase 33 requires "cover integration with saves" and lists half (+2 DEX save) and three-quarters (+5 DEX save). The fix computes cover via `CalculateCoverFromOrigin` at `aoe.go:197-213` and applies it at `aoe.go:576` (`Dc: int32(ps.DC - ps.CoverBonus)`). This satisfies the phase 33 requirement.
+  - **Implementation correctness**: Subtracting cover bonus from DC before storage is mathematically equivalent to adding it to the roll at resolution time: `(total + bonus >= dc)` ⟺ `(total >= dc - bonus)`. The approach avoids schema changes and works transparently with the existing `total >= int(r.Dc)` resolution logic at `aoe.go:897`.
+  - **Regression risk**: None observed. All 20 existing AoE-related tests pass alongside the two new F-05 tests. The `PendingSave` struct retains the original `DC` and `CoverBonus` fields for display/logging purposes; only the persisted DB value is adjusted.
+  - **Test coverage**: Adequate. `TestCastAoE_F05_CoverBonusReducesStoredDC` proves the stored DC is reduced (15 → 13 with half cover +2) and the struct retains original values. `TestRecordAoEPendingSaveRoll_F05_CoverBonusMakesSaveSucceed` proves end-to-end that a roll of 14 succeeds against stored DC 13 (original 15 minus 2 cover), which would have failed without the fix.
+  - **Minor note**: Three-quarters cover (+5) is not explicitly tested, only half cover (+2). This is acceptable since `DEXSaveBonus()` delegates to `ACBonus()` which is separately tested for both levels in `cover_test.go:44-56`.
 
 ### F-06: Flying movers blocked by ground occupants
 - **Source**: agent-02

@@ -572,7 +572,7 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 			EncounterID: cmd.EncounterID,
 			CombatantID: ps.CombatantID,
 			Ability:     ps.SaveAbility,
-			Dc:          int32(ps.DC),
+			Dc:          int32(ps.DC - ps.CoverBonus),
 			Source:      source,
 		})
 		if err != nil {
