@@ -177,3 +177,10 @@ Append-only journal of all remediation activity.
 - Commit: c127bc3
 - Reviewer: approved
 - Notes: Single condition change: added || newLevel > 20 to validation
+
+## 2026-05-15T18:44 — H-C05, J-C03, cross-cut-C01 done
+
+- H-C05: Levelup handler bounds newLevel to 20 — Commit: c127bc3
+- J-C03: Open5e client uses 10s timeout — Commit: f0d590e
+- cross-cut-C01: Channel Divinity recharges on short rest — Commit: 59f09e8
+- All approved
