@@ -219,3 +219,10 @@ Append-only journal of all remediation activity.
 - Commit: 9c83278
 - Reviewer: approved
 - Notes: strings.ToLower normalization in CollectFeatures and RacialTraits
+
+## 2026-05-15T19:02 — I-C02 done
+
+- Finding: dm-queue badge count is campaign-wide, not per-encounter
+- Commit: 4506164
+- Reviewer: approved
+- Notes: Added CountPendingDMQueueItemsByEncounter, called per-encounter in GetWorkspace
