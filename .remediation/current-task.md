@@ -1,11 +1,11 @@
-finding_id: A-H03
+finding_id: A-H05
 severity: High
-title: WebSocket origin verification defaults to InsecureSkipVerify: true
-location: internal/dashboard/handler.go:117-170
-spec_ref: spec §Authentication & Authorization (line 73); Phase 15
+title: Portal token redemption has a TOCTOU race
+location: internal/portal/token_service.go:82-90 + internal/portal/token_store.go:81-88
+spec_ref: spec §Discord integration; Phase 14
 problem: |
-  The dashboard WebSocket upgrade defaults to skipping origin checks. A forgotten config line lets any origin upgrade a session-cookie-authenticated WS connection (Cross-Site WebSocket Hijacking).
+  RedeemToken calls ValidateToken (SELECT) then MarkUsed (UPDATE) without a transaction or conditional WHERE. Two concurrent redemptions both pass validate and both succeed at MarkUsed.
 suggested_fix: |
-  Flip the default to InsecureSkipVerify: false and require wsAllowedOrigins to be set explicitly.
+  Make MarkUsed atomic: UPDATE portal_tokens SET used = true WHERE id = $1 AND used = false RETURNING id. Treat "no row" as "already used."
 acceptance_criterion: |
-  The default wsInsecureSkipVerify is false. A test confirms the default rejects foreign origins.
+  MarkUsed uses a conditional UPDATE (WHERE used = false) and returns an error when no row is affected (token already used). A test demonstrates the atomic behavior.

@@ -128,3 +128,38 @@ func TestTokenService_RedeemToken_NotFound(t *testing.T) {
 	err := svc.RedeemToken(ctx, "nonexistent-redeem")
 	assert.ErrorIs(t, err, portal.ErrTokenNotFound)
 }
+
+func TestTokenService_RedeemToken_ConcurrentDoubleRedeem(t *testing.T) {
+	svc, _ := newTestTokenService(t)
+	ctx := context.Background()
+	campaignID := seedCampaignForService(t)
+
+	token, err := svc.CreateToken(ctx, campaignID, "user-race", "create_character", 24*time.Hour)
+	require.NoError(t, err)
+
+	// Run two concurrent redemptions — exactly one must fail with ErrTokenUsed.
+	errs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			errs <- svc.RedeemToken(ctx, token)
+		}()
+	}
+
+	err1 := <-errs
+	err2 := <-errs
+
+	// One succeeds, one fails
+	if err1 == nil && err2 == nil {
+		t.Fatal("both concurrent RedeemToken calls succeeded; expected one to fail with ErrTokenUsed")
+	}
+	if err1 != nil && err2 != nil {
+		t.Fatalf("both concurrent RedeemToken calls failed: err1=%v, err2=%v", err1, err2)
+	}
+
+	// The failing one must be ErrTokenUsed
+	failing := err1
+	if failing == nil {
+		failing = err2
+	}
+	assert.ErrorIs(t, failing, portal.ErrTokenUsed)
+}

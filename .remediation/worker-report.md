@@ -1,42 +1,26 @@
-# Worker Report: A-H03
+# Worker Report: A-H05 — Portal token redemption TOCTOU race
 
-**Finding:** WebSocket origin verification defaults to `InsecureSkipVerify: true`
-**Status:** REMEDIATED ✅
-**Worker:** worker-A-H03
-**Date:** 2026-05-16
+## Finding
 
-## Changes Made
+`RedeemToken` performed a SELECT (via `ValidateToken`) then a separate UPDATE (via `MarkUsed`) without atomicity. Two concurrent calls could both pass the `used` check and both succeed.
 
-### 1. New failing test (Red)
+## Fix Applied
 
-**File:** `internal/dashboard/ws_test.go`
+### `internal/portal/token_store.go` — `MarkUsed`
 
-Added `TestWebSocketEndpoint_DefaultRejectsForeignOrigin` — verifies that a
-freshly-constructed `Handler` (no `SetWebSocketOriginPolicy` call) rejects a
-foreign-origin WebSocket upgrade with HTTP 403.
+Changed the UPDATE to include `AND used = false` in the WHERE clause. If zero rows are affected, the function returns `ErrTokenUsed`. This makes the used-check atomic at the database level.
 
-### 2. Default flipped (Green)
+### Test Added
 
-**File:** `internal/dashboard/handler.go` (line ~185)
+`TestTokenService_RedeemToken_ConcurrentDoubleRedeem` in `token_service_test.go` — fires two goroutines calling `RedeemToken` on the same token simultaneously. Asserts exactly one succeeds and the other returns `ErrTokenUsed`. Run with `-count=10` to confirm consistency.
 
-Changed `wsInsecureSkipVerify: true` → `wsInsecureSkipVerify: false` in
-`NewHandler`. Updated struct and constructor comments accordingly.
+## TDD Workflow
 
-### 3. Local-dev wiring updated
+1. **Red:** Added concurrent test → failed consistently ("both concurrent RedeemToken calls succeeded").
+2. **Green:** Applied conditional UPDATE fix → test passes on all 10 iterations.
+3. **Verify:** `make test` ✅ | `make cover-check` ✅ (portal package at 87.95%).
 
-**File:** `cmd/dndnd/main.go` (line ~1076)
+## Files Changed
 
-The `else` branch (when `COOKIE_SECURE` is not `"true"`) now explicitly calls
-`dashHandler.SetWebSocketOriginPolicy(nil, true)` so local-dev tooling (Vite
-HMR, etc.) continues to work without origin restrictions.
-
-## Verification
-
-| Check | Result |
-|-------|--------|
-| New test fails before fix (Red) | ✅ Got 101, expected 403 |
-| New test passes after fix (Green) | ✅ |
-| `make test` | ✅ All packages pass |
-| `make cover-check` | ✅ All thresholds met |
-| No unrelated code touched | ✅ |
-| No commit created | ✅ |
+- `internal/portal/token_store.go` (MarkUsed — 6 lines added)
+- `internal/portal/token_service_test.go` (new test — 30 lines added)

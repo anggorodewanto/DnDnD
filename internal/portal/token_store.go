@@ -77,12 +77,20 @@ func (s *TokenStore) GetByToken(ctx context.Context, token string) (*PortalToken
 	return tok, nil
 }
 
-// MarkUsed sets the token's used flag to true.
+// MarkUsed atomically sets the token's used flag to true.
+// Returns ErrTokenUsed if the token was already used.
 func (s *TokenStore) MarkUsed(ctx context.Context, id uuid.UUID) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE portal_tokens SET used = true WHERE id = $1`, id)
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE portal_tokens SET used = true WHERE id = $1 AND used = false`, id)
 	if err != nil {
 		return fmt.Errorf("marking portal token used: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("marking portal token used: %w", err)
+	}
+	if n == 0 {
+		return ErrTokenUsed
 	}
 	return nil
 }
