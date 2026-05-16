@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/ab/dndnd/internal/auth"
 	"github.com/ab/dndnd/internal/character"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -634,5 +636,96 @@ func TestHandler_HandleLevelUp_RejectsLevelAbove20(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+// mockOwnershipChecker implements CampaignOwnershipChecker for tests.
+type mockOwnershipChecker struct {
+	// charToDM maps character ID to the DM user ID of that character's campaign.
+	charToDM map[uuid.UUID]string
+}
+
+func (m *mockOwnershipChecker) GetCampaignDMUserID(_ context.Context, characterID uuid.UUID) (string, error) {
+	dm, ok := m.charToDM[characterID]
+	if !ok {
+		return "", fmt.Errorf("character not found")
+	}
+	return dm, nil
+}
+
+func TestHandler_HandleApproveASI_Forbidden_WrongCampaignDM(t *testing.T) {
+	h, charStore, _, _ := setupTestHandler(t)
+
+	charID := uuid.New()
+	classes := []character.ClassEntry{{Class: "fighter", Level: 4}}
+	classesJSON, _ := json.Marshal(classes)
+	scores := character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Aria",
+		DiscordUserID: "player-1",
+		Level:         4,
+		Classes:       classesJSON,
+		AbilityScores: mustJSON(t, scores),
+	}
+
+	// Character belongs to campaign A whose DM is "dm-campaign-a"
+	oc := &mockOwnershipChecker{charToDM: map[uuid.UUID]string{charID: "dm-campaign-a"}}
+	h.SetOwnershipChecker(oc)
+
+	body, _ := json.Marshal(ASIApprovalRequest{
+		CharacterID: charID,
+		Choice:      ASIChoice{Type: ASIPlus2, Ability: "str"},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/levelup/asi/approve", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	// Authenticated as DM of campaign B — should be forbidden
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-campaign-b"))
+	w := httptest.NewRecorder()
+
+	h.HandleApproveASI(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestHandler_HandleApproveASI_Allowed_CorrectCampaignDM(t *testing.T) {
+	h, charStore, _, _ := setupTestHandler(t)
+
+	charID := uuid.New()
+	classes := []character.ClassEntry{{Class: "fighter", Level: 4}}
+	classesJSON, _ := json.Marshal(classes)
+	scores := character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Aria",
+		DiscordUserID: "player-1",
+		Level:         4,
+		Classes:       classesJSON,
+		AbilityScores: mustJSON(t, scores),
+	}
+
+	oc := &mockOwnershipChecker{charToDM: map[uuid.UUID]string{charID: "dm-campaign-a"}}
+	h.SetOwnershipChecker(oc)
+
+	body, _ := json.Marshal(ASIApprovalRequest{
+		CharacterID: charID,
+		Choice:      ASIChoice{Type: ASIPlus2, Ability: "str"},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/levelup/asi/approve", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	// Authenticated as the correct DM
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-campaign-a"))
+	w := httptest.NewRecorder()
+
+	h.HandleApproveASI(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusOK, w.Body.String())
 	}
 }

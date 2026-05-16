@@ -117,7 +117,7 @@ Low: 142
 | 105 | H-H10 | High | done | DeriveSpeed ignores race | /home/ab/projects/DnDnD/internal/portal/builder_store_adapter.go:275 |
 | 106 | H-H11 | High | done | DDB class names not normalised to internal IDs | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:177; /home/ab/projects/DnDn... |
 | 107 | H-H12 | High | done | Plus-2 ASI silently truncates at cap (loses 1 point) without warning | /home/ab/projects/DnDnD/internal/levelup/asi.go:81 (`applyPlus2`) |
-| 108 | H-H13 | High | pending | /api/levelup/asi/approve endpoint has no character-owner / DM check | /home/ab/projects/DnDnD/internal/levelup/handler.go:129 (`HandleApproveASI`) |
+| 108 | H-H13 | High | in_progress | /api/levelup/asi/approve endpoint has no character-owner / DM check | /home/ab/projects/DnDnD/internal/levelup/handler.go:129 (`HandleApproveASI`) |
 | 109 | I-H01 | High | pending | Dashboard DM-created chars miss background skill proficiencies | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:221-253, 117 ; compare ... |
 | 110 | I-H02 | High | pending | DM character form doesn't pass campaign_id to spell/equipment refdata | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go:30-34, 281-318,... |
 | 111 | I-H03 | High | pending | Encounter Builder doesn't place PC tokens at combat start | /home/ab/projects/DnDnD/dashboard/svelte/src/EncounterBuilder.svelte:368-389 |
@@ -137,7 +137,7 @@ Low: 142
 | 125 | J-H06 | High | done | /whisper accepts empty message and spams a dm-queue item | /home/ab/projects/DnDnD/internal/discord/whisper_handler.go:61-80 |
 | 126 | J-H07 | High | pending | dm-queue Sender bypasses the per-channel MessageQueue (rate-limit ordering) | /home/ab/projects/DnDnD/internal/dmqueue/sender.go:19-41 |
 | 127 | J-H08 | High | pending | WS reader/writer can race on slow-client drop | /home/ab/projects/DnDnD/internal/dashboard/ws.go:77-101 (`Hub.Run` broadcast blo... |
-| 128 | J-H09 | High | in_progress | Encounter snapshot publisher does NOT trigger on /move position writes | /home/ab/projects/DnDnD/internal/discord/move_handler.go:686-735; combat.Service... |
+| 128 | J-H09 | High | done | Encounter snapshot publisher does NOT trigger on /move position writes | /home/ab/projects/DnDnD/internal/discord/move_handler.go:686-735; combat.Service... |
 | 129 | cross-cut-H01 | High | pending | `routePhase43DeathSave` skips the drop-to-0 instant-death rule when overflow is exactly the limit but damage came from a hit at >0 HP and `adjusted` overshoots | `internal/combat/damage.go:336-346`, |
 | 130 | cross-cut-H02 | High | pending | Multiclass spellcasting ability picks the highest score across classes | `internal/combat/spellcasting.go:1544-1557` |
 | 131 | cross-cut-H03 | High | done | Attack roll always adds proficiency bonus regardless of weapon proficiency | `internal/combat/attack.go:103-106` (`AttackModifier`). |

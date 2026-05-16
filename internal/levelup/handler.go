@@ -2,17 +2,24 @@ package levelup
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"html/template"
 	"log/slog"
 	"net/http"
 
+	"github.com/ab/dndnd/internal/auth"
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dashboard"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+// CampaignOwnershipChecker resolves the DM user ID for a character's campaign.
+type CampaignOwnershipChecker interface {
+	GetCampaignDMUserID(ctx context.Context, characterID uuid.UUID) (string, error)
+}
 
 // LevelUpRequest is the JSON body for the level-up API.
 type LevelUpRequest struct {
@@ -66,10 +73,11 @@ type FeatPrereqCheckResponse struct {
 
 // Handler serves the level-up API endpoints and dashboard page.
 type Handler struct {
-	service *Service
-	logger  *slog.Logger
-	hub     *dashboard.Hub
-	tmpl    *template.Template
+	service          *Service
+	logger           *slog.Logger
+	hub              *dashboard.Hub
+	tmpl             *template.Template
+	ownershipChecker CampaignOwnershipChecker
 }
 
 // NewHandler creates a new level-up Handler.
@@ -81,6 +89,11 @@ func NewHandler(service *Service, hub *dashboard.Hub) *Handler {
 		hub:     hub,
 		tmpl:    tmpl,
 	}
+}
+
+// SetOwnershipChecker wires a CampaignOwnershipChecker onto the handler.
+func (h *Handler) SetOwnershipChecker(oc CampaignOwnershipChecker) {
+	h.ownershipChecker = oc
 }
 
 // RegisterRoutes mounts level-up API routes and the dashboard page on the given Chi router.
@@ -132,6 +145,23 @@ func (h *Handler) HandleApproveASI(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	if h.ownershipChecker != nil {
+		userID, ok := auth.DiscordUserIDFromContext(r.Context())
+		if !ok || userID == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		dmUserID, err := h.ownershipChecker.GetCampaignDMUserID(r.Context(), req.CharacterID)
+		if err != nil {
+			http.Error(w, "character not found", http.StatusNotFound)
+			return
+		}
+		if dmUserID != userID {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 	}
 
 	if err := h.service.ApproveASI(r.Context(), req.CharacterID, req.Choice); err != nil {

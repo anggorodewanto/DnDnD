@@ -1,11 +1,11 @@
-finding_id: J-H09
+finding_id: H-H13
 severity: High
-title: Encounter snapshot publisher does NOT trigger on /move position writes
-location: internal/discord/move_handler.go:686-735
-spec_ref: Phase 104b
+title: /api/levelup/asi/approve endpoint has no character-owner / DM check
+location: internal/levelup/handler.go:129 (HandleApproveASI)
+spec_ref: spec §"DM approval" line 2497
 problem: |
-  HandleMoveConfirm calls UpdateCombatantPosition directly via refdata.Queries, bypassing the service that has SetPublisher. The dashboard doesn't receive a fresh snapshot after a player moves.
+  The handler takes CharacterID from the JSON body without verifying the DM session is authorised for that character's campaign. A DM of campaign A can approve an ASI for a character in campaign B.
 suggested_fix: |
-  Add an explicit publisher.PublishEncounterSnapshot call inside HandleMoveConfirm's post-write path.
+  Resolve campaign from the character row and verify the authenticated DM's discord_user_id matches.
 acceptance_criterion: |
-  After a move is confirmed, the encounter snapshot is published. A test demonstrates the publish call is made.
+  HandleApproveASI returns 403 when the DM doesn't own the character's campaign. A test demonstrates this.

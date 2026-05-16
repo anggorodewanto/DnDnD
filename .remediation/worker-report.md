@@ -1,26 +1,20 @@
-# Worker Report: J-H09
+# Worker Report: H-H13
 
-**Finding:** HandleMoveConfirm doesn't publish an encounter snapshot after updating position.
+## Finding
+HandleApproveASI did not verify the authenticated DM owns the character's campaign, allowing a DM of campaign A to approve ASI for a character in campaign B.
 
-## Changes Made
+## Fix Applied
 
-### `internal/discord/move_handler.go`
-1. Added `MoveEncounterPublisher` interface with `PublishEncounterSnapshot(ctx, encounterID)` method.
-2. Added `publisher MoveEncounterPublisher` field to `MoveHandler` struct.
-3. Added `SetPublisher(p MoveEncounterPublisher)` setter method.
-4. Added publish call after the confirmMove gate/no-gate block succeeds:
-   ```go
-   if h.publisher != nil {
-       _ = h.publisher.PublishEncounterSnapshot(ctx, turn.EncounterID)
-   }
-   ```
+### `internal/levelup/handler.go`
+1. Added `CampaignOwnershipChecker` interface with `GetCampaignDMUserID(ctx, characterID) (string, error)`.
+2. Added `ownershipChecker` field to `Handler` struct and `SetOwnershipChecker` setter.
+3. In `HandleApproveASI`: when `ownershipChecker` is set, extracts the authenticated user via `auth.DiscordUserIDFromContext`, resolves the character's campaign DM, and returns 403 if they don't match.
 
-### `internal/discord/move_handler_test.go`
-- Added `mockMovePublisher` (records calls with mutex for concurrency safety).
-- Added `TestMoveHandler_HandleMoveConfirm_PublishesSnapshot` — asserts the publisher is called exactly once with the correct encounter ID after a successful move confirm.
+### `internal/levelup/handler_test.go`
+Added two tests:
+- `TestHandler_HandleApproveASI_Forbidden_WrongCampaignDM` — DM of campaign B tries to approve ASI for character in campaign A → 403.
+- `TestHandler_HandleApproveASI_Allowed_CorrectCampaignDM` — correct DM approves → 200.
 
 ## Verification
-
 - `make test` — all tests pass.
-- `make cover-check` — all coverage thresholds met.
-- TDD workflow followed: test written first (failed on missing `SetPublisher`), then implementation added to make it green.
+- `make cover-check` — all thresholds met (levelup package at 90.00%).
