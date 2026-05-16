@@ -81,7 +81,7 @@ Low: 142
 | 69 | D-H06 | High | pending | Wild Shape on-revert does not restore the druid's speed snapshot | /home/ab/projects/DnDnD/internal/combat/wildshape.go:181 (`RevertWildShape`) |
 | 70 | D-H07 | High | superseded | Wild Shape activation does not block druid spellcasting | /home/ab/projects/DnDnD/internal/combat/spellcasting.go:381 and /home/ab/project... |
 | 71 | D-H08 | High | pending | Channel Divinity action validation is duplicated and racy across DM-queue + auto-resolved paths | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:160, :366, :446, :52... |
-| 72 | E-H01 | High | in_progress | Help action grants advantage only on attacks, not on ability checks | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261`; `advantag... |
+| 72 | E-H01 | High | done | Help action grants advantage only on attacks, not on ability checks | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261`; `advantag... |
 | 73 | E-H02 | High | done | AoE pending save DC subtraction loses cover information | `/home/ab/projects/DnDnD/internal/combat/aoe.go:592` (`Dc: int32(ps.DC - ps.Cove... |
 | 74 | E-H03 | High | done | Pact-magic upcast respects pact level but silently ignores `--slot` requests | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:446-457` |
 | 75 | E-H04 | High | pending | Multiclass spellcasting ability picks highest score, not class-of-spell | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:1542-1557` (`resolveSpe... |
