@@ -180,6 +180,12 @@ func TestCreateLootPool_CreateLootPoolItemFailure(t *testing.T) {
 				Inventory: pqtype.NullRawMessage{RawMessage: []byte(`[{"name":"Sword","quantity":1,"type":"weapon"}]`), Valid: true},
 			}, nil
 		},
+		updateCharacterGoldFn: func(_ context.Context, _ refdata.UpdateCharacterGoldParams) (refdata.Character, error) {
+			return refdata.Character{}, nil
+		},
+		updateCharacterInventoryFn: func(_ context.Context, _ refdata.UpdateCharacterInventoryParams) (refdata.Character, error) {
+			return refdata.Character{}, nil
+		},
 		createLootPoolFn: func(_ context.Context, _ refdata.CreateLootPoolParams) (refdata.LootPool, error) {
 			return refdata.LootPool{ID: uuid.New(), EncounterID: encID, CampaignID: campID, GoldTotal: 10, Status: "open"}, nil
 		},
@@ -424,6 +430,12 @@ func TestCreateLootPool_SkipsInvalidInventory(t *testing.T) {
 		},
 		createLootPoolFn: func(_ context.Context, _ refdata.CreateLootPoolParams) (refdata.LootPool, error) {
 			return refdata.LootPool{ID: uuid.New(), EncounterID: encID, CampaignID: campID, GoldTotal: 5, Status: "open"}, nil
+		},
+		updateCharacterGoldFn: func(_ context.Context, _ refdata.UpdateCharacterGoldParams) (refdata.Character, error) {
+			return refdata.Character{}, nil
+		},
+		updateCharacterInventoryFn: func(_ context.Context, _ refdata.UpdateCharacterInventoryParams) (refdata.Character, error) {
+			return refdata.Character{}, nil
 		},
 	}
 

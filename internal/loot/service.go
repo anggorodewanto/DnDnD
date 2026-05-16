@@ -108,6 +108,24 @@ func (s *Service) CreateLootPool(ctx context.Context, encounterID uuid.UUID) (Lo
 		allItems = append(allItems, items...)
 	}
 
+	// Clear gold and inventory from defeated NPCs
+	for _, c := range combatants {
+		if !c.IsNpc || c.IsAlive || !c.CharacterID.Valid {
+			continue
+		}
+		if _, err := s.store.UpdateCharacterGold(ctx, refdata.UpdateCharacterGoldParams{
+			ID: c.CharacterID.UUID, Gold: 0,
+		}); err != nil {
+			return LootPoolResult{}, fmt.Errorf("clearing NPC gold: %w", err)
+		}
+		if _, err := s.store.UpdateCharacterInventory(ctx, refdata.UpdateCharacterInventoryParams{
+			ID:        c.CharacterID.UUID,
+			Inventory: pqtype.NullRawMessage{Valid: false},
+		}); err != nil {
+			return LootPoolResult{}, fmt.Errorf("clearing NPC inventory: %w", err)
+		}
+	}
+
 	pool, err := s.store.CreateLootPool(ctx, refdata.CreateLootPoolParams{
 		EncounterID: enc.ID,
 		CampaignID:  enc.CampaignID,

@@ -1,23 +1,30 @@
-# Worker Report: B-H05 — TilesetRefs request field silently dropped by HTTP handler
+# Worker Report: G-H05
 
-## Status: ✅ FIXED
-
-## Problem
-`createMapRequest` and `updateMapRequest` in `internal/gamemap/handler.go` had no `TilesetRefs` field. The DB column and service layer supported it, but no API caller could populate it because the HTTP handler never decoded the field from the request body.
+## Finding
+**G-H05**: `CreateLootPool` reads NPC inventory/gold into the loot pool but never clears them from the NPC character, allowing duplicate loot on re-invocation.
 
 ## Fix Applied
 
-### Files Modified
-- `internal/gamemap/handler.go` — Added `TilesetRefs []TilesetRef \`json:"tileset_refs,omitempty"\`` to both `createMapRequest` and `updateMapRequest` structs; wired `req.TilesetRefs` through to `CreateMapInput` and `UpdateMapInput`.
-- `internal/gamemap/handler_test.go` — Added two TDD tests (`TestHandler_CreateMap_TilesetRefs`, `TestHandler_UpdateMap_TilesetRefs`) that send `tileset_refs` in the request body and assert the field reaches the store layer.
+**File:** `internal/loot/service.go` (CreateLootPool, after item/gold collection loop)
 
-### TDD Cycle
-1. **Red:** Wrote failing tests asserting `capturedRefs.Valid == true` after POST/PUT with `tileset_refs`. Both failed with "tileset_refs should be populated".
-2. **Green:** Added the field to both request structs and wired it into the service input construction. Both tests pass.
-3. **Verify:** `make test` — all tests pass. `make cover-check` — all coverage thresholds met.
+Added a second loop over defeated NPC combatants that calls:
+- `UpdateCharacterGold(ctx, {ID: npcCharID, Gold: 0})`
+- `UpdateCharacterInventory(ctx, {ID: npcCharID, Inventory: {Valid: false}})`
+
+This zeroes gold and clears inventory for each defeated NPC whose items were moved into the pool.
+
+## TDD Workflow
+
+1. **Red:** Added `TestCreateLootPool_ClearsNPCGoldAndInventory` — asserts NPC gold == 0 and inventory is invalid after pool creation. Confirmed failure.
+2. **Green:** Added clearing calls in `service.go`. Test passes.
+3. **Mock fixes:** Updated two existing mock-based tests (`TestCreateLootPool_CreateLootPoolItemFailure`, `TestCreateLootPool_SkipsInvalidInventory`) to provide stubs for the new store calls.
 
 ## Verification
-```
-$ make test        → PASS (all packages)
-$ make cover-check → OK: coverage thresholds met
-```
+
+- `make test` — all packages pass.
+- `make cover-check` — all coverage thresholds met.
+
+## Files Modified
+- `internal/loot/service.go` — added NPC clearing logic
+- `internal/loot/service_test.go` — added integration test
+- `internal/loot/service_mock_test.go` — added mock stubs to 2 existing tests

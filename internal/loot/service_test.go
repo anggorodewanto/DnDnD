@@ -776,6 +776,36 @@ func TestFormatLootAnnouncement_Empty(t *testing.T) {
 	assert.Contains(t, msg, "No loot available")
 }
 
+func TestCreateLootPool_ClearsNPCGoldAndInventory(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	_, q := setupTestDB(t)
+	camp := createCampaign(t, q)
+	enc := createEncounter(t, q, camp.ID, "completed")
+
+	npcItems := []character.InventoryItem{
+		{ItemID: "shortsword", Name: "Shortsword", Quantity: 1, Type: "weapon"},
+	}
+	npcChar := createCharWithInventory(t, q, camp.ID, "Goblin", 25, npcItems)
+	createCombatant(t, q, enc.ID,
+		uuid.NullUUID{UUID: npcChar.ID, Valid: true},
+		sql.NullString{}, "Goblin", true, false)
+
+	svc := loot.NewService(q)
+	ctx := context.Background()
+
+	_, err := svc.CreateLootPool(ctx, enc.ID)
+	require.NoError(t, err)
+
+	// NPC gold and inventory must be cleared after pool creation
+	updatedNPC, err := q.GetCharacter(ctx, npcChar.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), updatedNPC.Gold)
+	assert.False(t, updatedNPC.Inventory.Valid, "NPC inventory should be cleared")
+}
+
 func TestCreateLootPool_DuplicateRejected(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
