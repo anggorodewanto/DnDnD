@@ -134,6 +134,11 @@ type MoveOAReactionRecorder interface {
 	RecordPendingOA(encounterID uuid.UUID, itemID string)
 }
 
+// MoveEncounterPublisher pushes an encounter snapshot after a mutation.
+type MoveEncounterPublisher interface {
+	PublishEncounterSnapshot(ctx context.Context, encounterID uuid.UUID) error
+}
+
 // MoveHandler handles the /move slash command.
 type MoveHandler struct {
 	session           Session
@@ -174,6 +179,8 @@ type MoveHandler struct {
 	// F-20: optional structured logger. nil falls back to slog.Default()
 	// so legacy tests built before logger wiring keep working.
 	logger *slog.Logger
+	// J-H09: optional encounter snapshot publisher. nil-safe.
+	publisher MoveEncounterPublisher
 }
 
 // SetLogger wires the structured logger used to emit per-command
@@ -198,6 +205,10 @@ func (h *MoveHandler) SetPassiveCheckResolver(r MovePassiveCheckResolver) { h.pa
 func (h *MoveHandler) SetCharacterLookup(lookup MoveCharacterLookup) {
 	h.characterLookup = lookup
 }
+
+// SetPublisher wires the optional encounter snapshot publisher (J-H09).
+// nil-safe: when unset, no snapshot is published after a move.
+func (h *MoveHandler) SetPublisher(p MoveEncounterPublisher) { h.publisher = p }
 
 // SetTurnGate wires the Phase 27 turn-ownership / advisory-lock gate.
 // A nil gate disables the check (preserves backwards-compatibility for
@@ -747,6 +758,11 @@ func (h *MoveHandler) HandleMoveConfirm(interaction *discordgo.Interaction, turn
 	} else if runErr := confirmMove(ctx); runErr != nil {
 		// Unit-test path with no gate wired. confirmMove already responded.
 		return
+	}
+
+	// J-H09: publish encounter snapshot after position write.
+	if h.publisher != nil {
+		_ = h.publisher.PublishEncounterSnapshot(ctx, turn.EncounterID)
 	}
 
 	// D-56-followup: when the mover is dragging grappled targets, sync

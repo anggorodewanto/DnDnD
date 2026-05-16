@@ -1,11 +1,11 @@
-finding_id: I-H11
+finding_id: J-H09
 severity: High
-title: DM character creation handler is not protected by DM auth
-location: internal/dashboard/charcreate_handler.go:83-103, 112-138
-spec_ref: Spec §DM Dashboard; phases 93a/93b
+title: Encounter snapshot publisher does NOT trigger on /move position writes
+location: internal/discord/move_handler.go:686-735
+spec_ref: Phase 104b
 problem: |
-  requireAuthHelper only asserts the request has a Discord user ID. Combined with campaign_id from the body, any DM can create a character in another DM's campaign.
+  HandleMoveConfirm calls UpdateCombatantPosition directly via refdata.Queries, bypassing the service that has SetPublisher. The dashboard doesn't receive a fresh snapshot after a player moves.
 suggested_fix: |
-  Verify the authenticated DM owns the campaign_id before creating the character.
+  Add an explicit publisher.PublishEncounterSnapshot call inside HandleMoveConfirm's post-write path.
 acceptance_criterion: |
-  A DM creating a character in another DM's campaign gets 403. A test demonstrates this.
+  After a move is confirmed, the encounter snapshot is published. A test demonstrates the publish call is made.

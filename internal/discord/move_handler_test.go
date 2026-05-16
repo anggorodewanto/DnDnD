@@ -2366,3 +2366,53 @@ func TestMoveHandler_OAFallsBackToYourTurnWhenNotifierUnwired(t *testing.T) {
 	require.Len(t, sess.channelSends, 1, "without notifier wiring, DM-controlled OA falls back to #your-turn")
 	assert.Equal(t, "your-turn-ch", sess.channelSends[0].ChannelID)
 }
+
+// --- J-H09: publisher fires after move confirm ---
+
+type mockMovePublisher struct {
+	mu    sync.Mutex
+	calls []uuid.UUID
+}
+
+func (m *mockMovePublisher) PublishEncounterSnapshot(_ context.Context, encounterID uuid.UUID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls = append(m.calls, encounterID)
+	return nil
+}
+
+func TestMoveHandler_HandleMoveConfirm_PublishesSnapshot(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, encounterID, turnID, combatantID := setupMoveHandler(sess)
+
+	// Override turn provider to include EncounterID.
+	handler.turnProvider = &mockMoveTurnProvider{
+		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{
+				ID:                  turnID,
+				CombatantID:         combatantID,
+				EncounterID:        encounterID,
+				MovementRemainingFt: 30,
+			}, nil
+		},
+		updateTurnActions: func(_ context.Context, _ refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+			return refdata.Turn{}, nil
+		},
+	}
+
+	pub := &mockMovePublisher{}
+	handler.SetPublisher(pub)
+
+	interaction := &discordgo.Interaction{
+		Type:    discordgo.InteractionMessageComponent,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user1"}},
+	}
+
+	handler.HandleMoveConfirm(interaction, turnID, combatantID, 3, 0, 15)
+
+	pub.mu.Lock()
+	defer pub.mu.Unlock()
+	require.Len(t, pub.calls, 1, "expected publisher to be called once after move confirm")
+	assert.Equal(t, encounterID, pub.calls[0], "publisher should receive the encounter ID from the turn")
+}

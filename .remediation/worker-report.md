@@ -1,27 +1,26 @@
-# Worker Report: I-H11
+# Worker Report: J-H09
 
-## Finding
-DM character creation handler (`HandleCreate`) did not verify the authenticated user owns the `campaign_id` from the request body. Any authenticated DM could create characters in another DM's campaign.
+**Finding:** HandleMoveConfirm doesn't publish an encounter snapshot after updating position.
 
-## Fix Applied
+## Changes Made
 
-### Files Modified
-1. **internal/dashboard/charcreate_handler.go**
-   - Added `dmVerifier DMVerifier` field to `CharCreateHandler`
-   - Added `SetDMVerifier(v DMVerifier)` method
-   - In `HandleCreate`: after parsing the request body, calls `h.dmVerifier.IsCampaignDM(ctx, userID, campaignID)` and returns 403 if the user doesn't own the campaign
+### `internal/discord/move_handler.go`
+1. Added `MoveEncounterPublisher` interface with `PublishEncounterSnapshot(ctx, encounterID)` method.
+2. Added `publisher MoveEncounterPublisher` field to `MoveHandler` struct.
+3. Added `SetPublisher(p MoveEncounterPublisher)` setter method.
+4. Added publish call after the confirmMove gate/no-gate block succeeds:
+   ```go
+   if h.publisher != nil {
+       _ = h.publisher.PublishEncounterSnapshot(ctx, turn.EncounterID)
+   }
+   ```
 
-2. **internal/dashboard/charcreate_handler_test.go**
-   - Added `TestCharCreateHandler_HandleCreate_ForbiddenWhenNotCampaignDM`: DM of campaign A tries to create a character in campaign B → gets 403, service is never called
-   - Added `mockDMVerifierForCreate` test helper implementing `DMVerifier`
+### `internal/discord/move_handler_test.go`
+- Added `mockMovePublisher` (records calls with mutex for concurrency safety).
+- Added `TestMoveHandler_HandleMoveConfirm_PublishesSnapshot` — asserts the publisher is called exactly once with the correct encounter ID after a successful move confirm.
 
-3. **cmd/dndnd/main.go**
-   - Wired `charCreateHandler.SetDMVerifier(dmVerifier)` so production uses the real campaign ownership check
+## Verification
 
-## TDD Cycle
-- **Red:** Test compiled but failed (method `SetDMVerifier` did not exist)
-- **Green:** Added field, setter, and ownership check → test passes
-- **Verify:** `make test` ✅ | `make cover-check` ✅
-
-## Acceptance Criterion
-✅ A DM creating a character in another DM's campaign gets 403. A test demonstrates this.
+- `make test` — all tests pass.
+- `make cover-check` — all coverage thresholds met.
+- TDD workflow followed: test written first (failed on missing `SetPublisher`), then implementation added to make it green.
