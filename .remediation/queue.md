@@ -117,7 +117,7 @@ Low: 142
 | 105 | H-H10 | High | done | DeriveSpeed ignores race | /home/ab/projects/DnDnD/internal/portal/builder_store_adapter.go:275 |
 | 106 | H-H11 | High | done | DDB class names not normalised to internal IDs | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:177; /home/ab/projects/DnDn... |
 | 107 | H-H12 | High | done | Plus-2 ASI silently truncates at cap (loses 1 point) without warning | /home/ab/projects/DnDnD/internal/levelup/asi.go:81 (`applyPlus2`) |
-| 108 | H-H13 | High | in_progress | /api/levelup/asi/approve endpoint has no character-owner / DM check | /home/ab/projects/DnDnD/internal/levelup/handler.go:129 (`HandleApproveASI`) |
+| 108 | H-H13 | High | done | /api/levelup/asi/approve endpoint has no character-owner / DM check | /home/ab/projects/DnDnD/internal/levelup/handler.go:129 (`HandleApproveASI`) |
 | 109 | I-H01 | High | pending | Dashboard DM-created chars miss background skill proficiencies | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:221-253, 117 ; compare ... |
 | 110 | I-H02 | High | pending | DM character form doesn't pass campaign_id to spell/equipment refdata | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go:30-34, 281-318,... |
 | 111 | I-H03 | High | pending | Encounter Builder doesn't place PC tokens at combat start | /home/ab/projects/DnDnD/dashboard/svelte/src/EncounterBuilder.svelte:368-389 |
