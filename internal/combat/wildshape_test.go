@@ -514,6 +514,49 @@ func TestService_RevertWildShape_Success(t *testing.T) {
 	assert.Contains(t, result.CombatLog, "reverts from Wild Shape")
 }
 
+func TestService_RevertWildShape_RestoresSpeed(t *testing.T) {
+	original := WildShapeSnapshot{
+		HpMax: 28, HpCurrent: 28, Ac: 16, SpeedFt: 30,
+		AbilityScores: map[string]int{"str": 10},
+	}
+	snapJSON, _ := json.Marshal(original)
+
+	store := defaultMockStore()
+	store.updateCombatantWildShapeFn = func(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:           arg.ID,
+			DisplayName:  "Elara",
+			IsWildShaped: arg.IsWildShaped,
+			HpMax:        arg.HpMax,
+			HpCurrent:    arg.HpCurrent,
+			Ac:           arg.Ac,
+			Conditions:   json.RawMessage(`[]`),
+		}, nil
+	}
+	store.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, BonusActionUsed: true, MovementRemainingFt: arg.MovementRemainingFt}, nil
+	}
+
+	svc := NewService(store)
+	result, err := svc.RevertWildShapeService(context.Background(), RevertWildShapeCommand{
+		Combatant: refdata.Combatant{
+			ID:                   uuid.New(),
+			DisplayName:          "Elara",
+			IsWildShaped:         true,
+			WildShapeOriginal:    pqtype.NullRawMessage{RawMessage: snapJSON, Valid: true},
+			WildShapeCreatureRef: sql.NullString{String: "wolf", Valid: true},
+			HpMax:                11,
+			HpCurrent:            5,
+			Ac:                   13,
+		},
+		Turn: refdata.Turn{ID: uuid.New(), MovementRemainingFt: 40}, // beast speed
+	})
+
+	require.NoError(t, err)
+	// After revert, movement should be restored to druid's original speed from snapshot
+	assert.Equal(t, int32(30), result.Turn.MovementRemainingFt)
+}
+
 func TestService_RevertWildShape_NotWildShaped(t *testing.T) {
 	store := defaultMockStore()
 	svc := NewService(store)

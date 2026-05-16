@@ -46,7 +46,7 @@ Low: 142
 | 34 | J-C03 | Critical | done | Open5e HTTP client has no timeout — upstream stall can hang any /search request | /home/ab/projects/DnDnD/internal/open5e/client.go:43 |
 | 35 | cross-cut-C01 | Critical | done | Channel Divinity recharges on long rest, not short rest | `internal/combat/channel_divinity_integration_test.go:44`, |
 | 36 | A-H01 | High | done | Player can never resubmit after `changes_requested` (broken status flow) | internal/registration/service.go:46-56 + internal/dashboard/approval_store.go:30... |
-| 37 | A-H02 | High | pending | OAuth access/refresh tokens stored in plaintext | internal/auth/session_store.go:50-62 + db/migrations/20260310120001_create_sessi... |
+| 37 | A-H02 | High | skipped | OAuth access/refresh tokens stored in plaintext | internal/auth/session_store.go:50-62 + db/migrations/20260310120001_create_sessi... |
 | 38 | A-H03 | High | done | WebSocket origin verification defaults to `InsecureSkipVerify: true` | internal/dashboard/handler.go:117-170 (default `wsInsecureSkipVerify: true`), in... |
 | 39 | A-H04 | High | done | OAuth callback handler treats any 4xx error from Discord as a generic 403 | internal/auth/oauth2.go:150-156, 178-182 |
 | 40 | A-H05 | High | done | Portal token redemption has a TOCTOU race | internal/portal/token_service.go:82-90 + internal/portal/token_store.go:81-88 |
@@ -78,7 +78,7 @@ Low: 142
 | 66 | D-H03 | High | done | Auto-ability selection for finesse weapons silently disables rage damage | /home/ab/projects/DnDnD/internal/combat/attack.go:1583 (`attackAbilityUsed`) |
 | 67 | D-H04 | High | done | Monk Unarmored Defense not invalidated by shield | /home/ab/projects/DnDnD/internal/combat/equip.go:416 and /home/ab/projects/DnDnD... |
 | 68 | D-H05 | High | done | Monk Unarmored Movement not gated on "no shield" | /home/ab/projects/DnDnD/internal/combat/monk.go:487 (`UnarmoredMovementFeature`)... |
-| 69 | D-H06 | High | pending | Wild Shape on-revert does not restore the druid's speed snapshot | /home/ab/projects/DnDnD/internal/combat/wildshape.go:181 (`RevertWildShape`) |
+| 69 | D-H06 | High | in_progress | Wild Shape on-revert does not restore the druid's speed snapshot | /home/ab/projects/DnDnD/internal/combat/wildshape.go:181 (`RevertWildShape`) |
 | 70 | D-H07 | High | superseded | Wild Shape activation does not block druid spellcasting | /home/ab/projects/DnDnD/internal/combat/spellcasting.go:381 and /home/ab/project... |
 | 71 | D-H08 | High | pending | Channel Divinity action validation is duplicated and racy across DM-queue + auto-resolved paths | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:160, :366, :446, :52... |
 | 72 | E-H01 | High | done | Help action grants advantage only on attacks, not on ability checks | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261`; `advantag... |

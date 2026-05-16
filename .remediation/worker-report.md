@@ -1,25 +1,33 @@
-# Worker Report: E-H04
+# Worker Report: D-H06
 
 ## Finding
-`resolveSpellcastingAbilityScore` returned the maximum spellcasting ability score across all classes, causing a Wizard/Cleric with INT 16 and WIS 18 to use WIS for wizard spells.
+RevertWildShape doesn't restore SpeedFt from the snapshot.
+
+## Root Cause
+`RevertWildShapeService` restored HP/AC from the wild shape snapshot but did not update the turn's `MovementRemainingFt` to the druid's original speed. After revert, the turn retained the beast's movement budget.
 
 ## Fix Applied
 
-**Files modified:**
-- `internal/combat/spellcasting.go` — Added `spellClasses []string` parameter to `resolveSpellcastingAbilityScore`. The function now intersects `spellClasses` with the character's classes and uses the first matching class's spellcasting ability. Falls back to max-across-all-classes when no intersection exists (feat-granted spells) or when `spellClasses` is nil.
-- `internal/combat/aoe.go` — Updated call site to pass `spell.Classes`.
-- `internal/combat/spellcasting_test.go` — Added `TestResolveSpellcastingAbilityScore_MulticlassUsesSpellClass` covering: wizard spell uses INT, cleric spell uses WIS, non-intersecting class falls back to max, nil spellClasses falls back to max. Updated existing test to pass `nil` for the new parameter.
+**File:** `internal/combat/wildshape.go` (RevertWildShapeService, ~line 455)
 
-## TDD Workflow
-1. **Red:** Wrote test with new 3-arg signature → compile error (expected).
-2. **Green:** Implemented class-intersection logic, updated call sites → all tests pass.
-3. **Verify:** Full test suite (excluding `internal/database`) passes with no regressions.
+Added snapshot parsing before the turn persist to restore `MovementRemainingFt` from `snap.SpeedFt`:
 
-## Test Results
+```go
+if cmd.Combatant.WildShapeOriginal.Valid {
+    var snap WildShapeSnapshot
+    if err := json.Unmarshal(cmd.Combatant.WildShapeOriginal.RawMessage, &snap); err == nil && snap.SpeedFt > 0 {
+        updatedTurn.MovementRemainingFt = snap.SpeedFt
+    }
+}
 ```
-=== RUN   TestResolveSpellcastingAbilityScore_NoSpellcaster
---- PASS
-=== RUN   TestResolveSpellcastingAbilityScore_MulticlassUsesSpellClass
---- PASS
-```
-Full suite: all packages OK.
+
+## Test Added
+
+**File:** `internal/combat/wildshape_test.go`
+
+`TestService_RevertWildShape_RestoresSpeed` — sets up a turn with beast movement (40ft), reverts wild shape, asserts `result.Turn.MovementRemainingFt == 30` (druid's snapshot speed).
+
+## Verification
+- Red: test failed with `expected: 30, actual: 40`
+- Green: test passes after fix
+- All tests pass (`go test ./... -short` excluding `internal/database`)

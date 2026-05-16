@@ -457,6 +457,15 @@ func (s *Service) RevertWildShapeService(ctx context.Context, cmd RevertWildShap
 	if err != nil {
 		return RevertWildShapeResult{}, fmt.Errorf("using bonus action: %w", err)
 	}
+
+	// Restore movement to druid's original speed from snapshot.
+	if cmd.Combatant.WildShapeOriginal.Valid {
+		var snap WildShapeSnapshot
+		if err := json.Unmarshal(cmd.Combatant.WildShapeOriginal.RawMessage, &snap); err == nil && snap.SpeedFt > 0 {
+			updatedTurn.MovementRemainingFt = snap.SpeedFt
+		}
+	}
+
 	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
 		return RevertWildShapeResult{}, fmt.Errorf("updating turn actions: %w", err)
 	}
