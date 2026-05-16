@@ -133,7 +133,7 @@ Low: 142
 | 121 | J-H02 | High | pending | Reaction-declaration → dm-queue itemID mapping is in-memory only; lost on restart breaks /reaction cancel | /home/ab/projects/DnDnD/internal/discord/reaction_handler.go:51-86 (`itemIDs map... |
 | 122 | J-H03 | High | done | DM dashboard error panel cannot render stack trace / structured detail — error_detail column never written | /home/ab/projects/DnDnD/internal/errorlog/recorder.go:18-29 (`Entry`); /home/ab/... |
 | 123 | J-H04 | High | pending | /help "Context Tips" shows hardcoded text, not actual remaining resources | /home/ab/projects/DnDnD/internal/discord/help_handler.go:80-96 |
-| 124 | J-H05 | High | in_progress | One character can be in two active encounters (no DB constraint; LIMIT 1 in query masks the bug) | /home/ab/projects/DnDnD/db/queries/encounters.sql:46-51 (`GetActiveEncounterIDBy... |
+| 124 | J-H05 | High | done | One character can be in two active encounters (no DB constraint; LIMIT 1 in query masks the bug) | /home/ab/projects/DnDnD/db/queries/encounters.sql:46-51 (`GetActiveEncounterIDBy... |
 | 125 | J-H06 | High | done | /whisper accepts empty message and spams a dm-queue item | /home/ab/projects/DnDnD/internal/discord/whisper_handler.go:61-80 |
 | 126 | J-H07 | High | pending | dm-queue Sender bypasses the per-channel MessageQueue (rate-limit ordering) | /home/ab/projects/DnDnD/internal/dmqueue/sender.go:19-41 |
 | 127 | J-H08 | High | pending | WS reader/writer can race on slow-client drop | /home/ab/projects/DnDnD/internal/dashboard/ws.go:77-101 (`Hub.Run` broadcast blo... |
