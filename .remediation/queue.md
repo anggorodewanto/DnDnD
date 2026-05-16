@@ -123,8 +123,8 @@ Low: 142
 | 111 | I-H03 | High | pending | Encounter Builder doesn't place PC tokens at combat start | /home/ab/projects/DnDnD/dashboard/svelte/src/EncounterBuilder.svelte:368-389 |
 | 112 | I-H04 | High | pending | Action Resolver `move` effect bypasses turn lock, walls, and concentration hooks | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_handler.go:215-313, 400-421 |
 | 113 | I-H05 | High | pending | Active reactions panel highlights every active reaction on enemy turns | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:65-68 |
-| 114 | I-H06 | High | in_progress | Cross-tenant reads on character overview / narration history / message history | /home/ab/projects/DnDnD/internal/characteroverview/handler.go:35-47 ; /home/ab/p... |
-| 115 | I-H07 | High | pending | Narration & message-player handlers trust author_user_id from request body | /home/ab/projects/DnDnD/internal/narration/handler.go:49-91 ; /home/ab/projects/... |
+| 114 | I-H06 | High | done | Cross-tenant reads on character overview / narration history / message history | /home/ab/projects/DnDnD/internal/characteroverview/handler.go:35-47 ; /home/ab/p... |
+| 115 | I-H07 | High | in_progress | Narration & message-player handlers trust author_user_id from request body | /home/ab/projects/DnDnD/internal/narration/handler.go:49-91 ; /home/ab/projects/... |
 | 116 | I-H08 | High | pending | Movement-validation rules differ between drag-and-drop UI and DM Override | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:691-717 ; /hom... |
 | 117 | I-H09 | High | pending | Manual character creation skips ability-score method validation | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:72-77 |
 | 118 | I-H10 | High | pending | Race speed table is hard-coded; ignores DB and homebrew races | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:204-217 |

@@ -76,10 +76,12 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	authorUserID, _ := auth.DiscordUserIDFromContext(r.Context())
+
 	msg, err := h.svc.SendMessage(r.Context(), SendMessageInput{
 		CampaignID:        campaignID,
 		PlayerCharacterID: playerCharacterID,
-		AuthorUserID:      req.AuthorUserID,
+		AuthorUserID:      authorUserID,
 		Body:              req.Body,
 	})
 	if err != nil {

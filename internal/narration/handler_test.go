@@ -72,6 +72,7 @@ func TestHandler_Post_Success(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/narration/post", bytes.NewReader(buf))
 	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
 	rr := httptest.NewRecorder()
 
 	h.Post(rr, req)
@@ -167,6 +168,7 @@ func TestHandler_Post_WithAttachments(t *testing.T) {
 	body := `{"campaign_id":"` + uuid.New().String() + `","author_user_id":"u","body":"b","attachment_asset_ids":["` + assetID.String() + `"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/narration/post", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "u"))
 	rr := httptest.NewRecorder()
 	h.Post(rr, req)
 	if rr.Code != http.StatusCreated {
@@ -261,6 +263,35 @@ func TestHandler_History_AllowedWhenCampaignDM(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandler_Post_UsesContextUserIDNotBody(t *testing.T) {
+	h, store, _ := newTestHandler(t)
+	campID := uuid.New()
+
+	payload := map[string]any{
+		"campaign_id":    campID.String(),
+		"author_user_id": "fake-user",
+		"body":           "hello",
+	}
+	buf, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/narration/post", bytes.NewReader(buf))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "real-user"))
+	rr := httptest.NewRecorder()
+
+	h.Post(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body=%s", rr.Code, rr.Body.String())
+	}
+	if len(store.inserted) != 1 {
+		t.Fatalf("expected 1 insert, got %d", len(store.inserted))
+	}
+	if store.inserted[0].AuthorUserID != "real-user" {
+		t.Fatalf("expected author_user_id='real-user', got %q", store.inserted[0].AuthorUserID)
 	}
 }
 

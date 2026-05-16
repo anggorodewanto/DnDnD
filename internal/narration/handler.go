@@ -94,9 +94,11 @@ func (h *Handler) Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	authorUserID, _ := auth.DiscordUserIDFromContext(r.Context())
+
 	post, err := h.svc.Post(r.Context(), PostInput{
 		CampaignID:         campaignID,
-		AuthorUserID:       req.AuthorUserID,
+		AuthorUserID:       authorUserID,
 		Body:               req.Body,
 		AttachmentAssetIDs: attachmentIDs,
 	})

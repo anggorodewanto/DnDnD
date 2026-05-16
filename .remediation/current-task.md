@@ -1,11 +1,11 @@
-finding_id: I-H06
+finding_id: I-H07
 severity: High
-title: Cross-tenant reads on character overview / narration history / message history
-location: internal/characteroverview/handler.go:35-47; internal/narration/handler.go:95-118; internal/messageplayer/handler.go:74-108
-spec_ref: Spec §65 "System verifies the authenticated Discord user ID matches the campaign's designated DM."
+title: Narration & message-player handlers trust author_user_id from request body
+location: internal/narration/handler.go:49-91; internal/messageplayer/handler.go:32-71
+spec_ref: Phase 100a / Phase 101 — author attribution
 problem: |
-  RequireDM only verifies the caller is a DM. These handlers accept campaign_id as a query arg and return data without checking the caller is the DM of that specific campaign.
+  The request payload includes author_user_id and the service stores it blindly. A DM could post in another DM's name.
 suggested_fix: |
-  Verify campaign ownership against the authenticated user before returning rows.
+  Drop author_user_id from the request body and populate it from the request context (auth.DiscordUserIDFromContext).
 acceptance_criterion: |
-  A DM requesting data for another campaign's characters/narration/messages gets 403. A test demonstrates this.
+  The stored author_user_id always matches the authenticated user, regardless of what the request body says. A test demonstrates this.

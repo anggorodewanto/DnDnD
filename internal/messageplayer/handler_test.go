@@ -37,6 +37,7 @@ func TestHandler_Send_Success(t *testing.T) {
 	buf, _ := json.Marshal(payload)
 	req := httptest.NewRequest(http.MethodPost, "/api/message-player", bytes.NewReader(buf))
 	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
 	rr := httptest.NewRecorder()
 
 	h.Send(rr, req)
@@ -111,6 +112,7 @@ func TestHandler_Send_NotFound(t *testing.T) {
 
 	body := `{"campaign_id":"` + uuid.New().String() + `","player_character_id":"` + uuid.New().String() + `","author_user_id":"dm","body":"hi"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/message-player", strings.NewReader(body))
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm"))
 	rr := httptest.NewRecorder()
 	h.Send(rr, req)
 	if rr.Code != http.StatusNotFound {
@@ -154,6 +156,7 @@ func TestHandler_Send_MessengerFailureExplicit(t *testing.T) {
 
 	body := `{"campaign_id":"` + campID.String() + `","player_character_id":"` + uuid.New().String() + `","author_user_id":"dm","body":"hi"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/message-player", strings.NewReader(body))
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm"))
 	rr := httptest.NewRecorder()
 	h.Send(rr, req)
 	if rr.Code != http.StatusInternalServerError {
@@ -303,6 +306,33 @@ func TestHandler_History_AllowedWhenCampaignDM(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandler_Send_UsesContextUserIDNotBody(t *testing.T) {
+	h, store, lookup, _ := newTestHandler(t)
+	payload := map[string]any{
+		"campaign_id":         lookup.campaignID.String(),
+		"player_character_id": uuid.New().String(),
+		"author_user_id":      "fake-user",
+		"body":                "psst",
+	}
+	buf, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/message-player", bytes.NewReader(buf))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "real-user"))
+	rr := httptest.NewRecorder()
+
+	h.Send(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body=%s", rr.Code, rr.Body.String())
+	}
+	if len(store.inserted) != 1 {
+		t.Fatalf("expected 1 insert, got %d", len(store.inserted))
+	}
+	if store.inserted[0].AuthorUserID != "real-user" {
+		t.Fatalf("expected author_user_id='real-user', got %q", store.inserted[0].AuthorUserID)
 	}
 }
 
