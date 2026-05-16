@@ -267,3 +267,26 @@ Findings resolved this session:
 - cross-cut-H05: Action Surge scales at 17 — 7f24261
 
 Running total: 35 Critical + 14 High = 49 findings resolved (11% of 448)
+
+## 2026-05-16T08:41 — Session progress update
+
+High-severity findings resolved this session:
+- A-H09: SlideTTL fail-closed — 4051f50
+- C-H02: PC race size for heavy weapons — e1c04db
+- G-H01: Gold split remainder retained — 5ad0c27
+- E-H05: Spell attack roll mode — 65bb779
+- H-H01: ASI player identity check — 39fb16c
+- H-H02: DM approve/deny role check — 6aad352
+- I-H06: Cross-tenant read protection — 5980b8f
+- I-H07: Author from context not body — 48038af
+- J-H01: Internal name on dashboard — 6ddb297
+- J-H06: Empty whisper rejection — da8f4f4
+- H-H10: DeriveSpeed race lookup — c6f4114
+- F-H03: Hidden combatants excluded — e744e78
+- H-H11: DDB class name lowercase — 0a2474d
+- H-H12: ASI +2 cap rejection — 0c10005
+- cross-cut-H03: Attack proficiency gate — 425a0ba
+- D-H07: superseded (already fixed)
+- D-H04: Monk shield invalidates UD — bd4248b
+
+Running total: 35 Critical + 37 High = 72 findings resolved (16% of 448)
