@@ -305,6 +305,20 @@ func TestUnarmoredMovementApplies(t *testing.T) {
 	}
 }
 
+func TestUnarmoredMovement_ShieldBlocksBonus(t *testing.T) {
+	features := []FeatureDefinition{UnarmoredMovementFeature(2)}
+	// Shield equipped, no armor: should NOT get speed bonus
+	result := ProcessEffects(features, TriggerOnTurnStart, EffectContext{WearingArmor: false, HasShield: true})
+	if result.SpeedModifier != 0 {
+		t.Errorf("with shield: SpeedModifier = %d, want 0", result.SpeedModifier)
+	}
+	// No shield, no armor: should get speed bonus
+	result = ProcessEffects(features, TriggerOnTurnStart, EffectContext{WearingArmor: false, HasShield: false})
+	if result.SpeedModifier != 10 {
+		t.Errorf("no shield no armor: SpeedModifier = %d, want 10", result.SpeedModifier)
+	}
+}
+
 // TDD Cycle 6: BuildFeatureDefinitions for monk
 
 func TestBuildFeatureDefinitions_Monk(t *testing.T) {

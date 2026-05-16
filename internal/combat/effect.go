@@ -88,6 +88,7 @@ type EffectConditions struct {
 	AdvantageOrAllyWithin  int      `json:"advantage_or_ally_within,omitempty"`
 	WearingArmor           bool     `json:"wearing_armor,omitempty"`
 	NotWearingArmor        bool     `json:"not_wearing_armor,omitempty"`
+	NotUsingShield         bool     `json:"not_using_shield,omitempty"`
 	OneHandedMeleeOnly     bool     `json:"one_handed_melee_only,omitempty"`
 	AuraRadius             int      `json:"aura_radius,omitempty"`
 	Target                 string   `json:"target,omitempty"`
@@ -164,6 +165,7 @@ type EffectContext struct {
 	AllyWithinFt       int
 	HasAdvantage       bool
 	WearingArmor       bool
+	HasShield          bool
 	OneHandedMeleeOnly bool
 	UsedThisTurn       map[string]bool
 	UsesRemaining      map[string]int
@@ -228,6 +230,9 @@ func EvaluateConditions(e Effect, ctx EffectContext) bool {
 		return false
 	}
 	if c.NotWearingArmor && ctx.WearingArmor {
+		return false
+	}
+	if c.NotUsingShield && ctx.HasShield {
 		return false
 	}
 	if c.OneHandedMeleeOnly && !ctx.OneHandedMeleeOnly {

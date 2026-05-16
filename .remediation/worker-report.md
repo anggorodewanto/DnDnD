@@ -1,20 +1,30 @@
-# Worker Report: C-H07
+# Worker Report: D-H05 — Monk Unarmored Movement not gated on "no shield"
 
-**Finding:** Pre-clamp HP overflow excludes temp-HP absorbed damage from instant-death check  
-**Verdict:** Code is correct; test added to lock the invariant.
+## Status: FIXED ✅
 
-## What was done
+## Summary
 
-Added `TestApplyDamage_AtZeroHP_TempHPAbsorbedStillInstantDeath` to `internal/combat/deathsave_integration_test.go`.
+Monk's Unarmored Movement feature now correctly denies the speed bonus when a shield is equipped, matching PHB rules.
 
-The test asserts: a PC at 0 HP with 5 temp HP taking 25 slashing damage (maxHP 18) results in instant death. Temp HP absorbs 5, leaving 20 adjusted damage which is passed to `CheckInstantDeath(20, 18)` → true.
+## Changes Made
 
-## Results
+### 1. `internal/combat/effect.go`
+- Added `NotUsingShield bool` field to `EffectConditions` struct.
+- Added `HasShield bool` field to `EffectContext` struct.
+- Added condition check in `EvaluateConditions`: if `NotUsingShield` is required and `ctx.HasShield` is true, the effect is blocked.
 
-- **Test:** PASS on first run — code already handles this correctly.
-- **`make test`:** PASS (all packages).
-- **`make cover-check`:** PASS (all thresholds met).
+### 2. `internal/combat/monk.go`
+- Added `NotUsingShield: true` to the `UnarmoredMovementFeature` conditions (alongside existing `NotWearingArmor: true`).
 
-## File changed
+### 3. `internal/combat/turnresources.go`
+- Changed `turnStartSpeedBonus` signature to accept a `hasShield bool` parameter.
+- Populated `HasShield` in the `EffectContext` from the new parameter.
+- Updated the caller to pass `s.hasEquippedShield(ctx, char)`.
 
-- `internal/combat/deathsave_integration_test.go` — appended one test function (26 lines).
+### 4. `internal/combat/monk_test.go`
+- Added `TestUnarmoredMovement_ShieldBlocksBonus`: verifies that a monk with `HasShield: true` gets 0 speed bonus, and without shield still gets +10.
+
+## Verification
+
+- `make test` — all tests pass.
+- `make cover-check` — all coverage thresholds met.

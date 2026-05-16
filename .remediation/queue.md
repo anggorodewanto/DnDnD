@@ -67,7 +67,7 @@ Low: 142
 | 55 | C-H04 | High | done | Dash adds raw base speed, ignoring exhaustion/condition speed modifiers | /home/ab/projects/DnDnD/internal/combat/standard_actions.go:38-71 (`Dash`), 73-8... |
 | 56 | C-H05 | High | done | Fall damage missing 20d6 cap | /home/ab/projects/DnDnD/internal/combat/altitude.go:101-123 (`FallDamage`) |
 | 57 | C-H06 | High | done | Resistance/vulnerability halving allows damage to go to 0 (RAW says min 1) | /home/ab/projects/DnDnD/internal/combat/damage.go:38-43 (`ApplyDamageResistances... |
-| 58 | C-H07 | High | in_progress | Pre-clamp HP overflow excludes temp-HP absorbed damage from instant-death check | /home/ab/projects/DnDnD/internal/combat/damage.go:226-247, 330-373 |
+| 58 | C-H07 | High | done | Pre-clamp HP overflow excludes temp-HP absorbed damage from instant-death check | /home/ab/projects/DnDnD/internal/combat/damage.go:226-247, 330-373 |
 | 59 | C-H08 | High | superseded | Off-hand attack accepts non-melee "light" weapons | /home/ab/projects/DnDnD/internal/combat/attack.go:1182-1196 |
 | 60 | C-H09 | High | pending | Diagonal pathfinding ignores wall edges entirely (could allow phasing through a single diagonal wall) | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:242-244 |
 | 61 | C-H10 | High | pending | Reach weapon OA detection — PC reach map relies on caller passing it | /home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:80-117, 148-164 (`... |
@@ -77,7 +77,7 @@ Low: 142
 | 65 | D-H02 | High | superseded | Dodge condition grants no defensive disadvantage to attackers | /home/ab/projects/DnDnD/internal/combat/advantage.go:104 (switch on `c.Condition... |
 | 66 | D-H03 | High | pending | Auto-ability selection for finesse weapons silently disables rage damage | /home/ab/projects/DnDnD/internal/combat/attack.go:1583 (`attackAbilityUsed`) |
 | 67 | D-H04 | High | done | Monk Unarmored Defense not invalidated by shield | /home/ab/projects/DnDnD/internal/combat/equip.go:416 and /home/ab/projects/DnDnD... |
-| 68 | D-H05 | High | pending | Monk Unarmored Movement not gated on "no shield" | /home/ab/projects/DnDnD/internal/combat/monk.go:487 (`UnarmoredMovementFeature`)... |
+| 68 | D-H05 | High | in_progress | Monk Unarmored Movement not gated on "no shield" | /home/ab/projects/DnDnD/internal/combat/monk.go:487 (`UnarmoredMovementFeature`)... |
 | 69 | D-H06 | High | pending | Wild Shape on-revert does not restore the druid's speed snapshot | /home/ab/projects/DnDnD/internal/combat/wildshape.go:181 (`RevertWildShape`) |
 | 70 | D-H07 | High | superseded | Wild Shape activation does not block druid spellcasting | /home/ab/projects/DnDnD/internal/combat/spellcasting.go:381 and /home/ab/project... |
 | 71 | D-H08 | High | pending | Channel Divinity action validation is duplicated and racy across DM-queue + auto-resolved paths | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:160, :366, :446, :52... |

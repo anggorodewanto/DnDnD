@@ -1,11 +1,11 @@
-finding_id: C-H07
+finding_id: D-H05
 severity: High
-title: Pre-clamp HP overflow excludes temp-HP absorbed damage from instant-death check
-location: internal/combat/damage.go:226-247, 330-373
-spec_ref: Phase 43; spec line 2096
+title: Monk Unarmored Movement not gated on "no shield"
+location: internal/combat/monk.go:487 (UnarmoredMovementFeature)
+spec_ref: Phase 48a; PHB Monk
 problem: |
-  The finding says the code is actually correct but needs a test to lock the invariant: "PC at 0 HP with 5 temp HP takes 25 damage; max HP 18" should result in instant death (25-5=20 >= 18).
+  UnarmoredMovementFeature only filters on NotWearingArmor. A monk with a shield still gets the +10-30ft speed bonus.
 suggested_fix: |
-  Add an explicit test for "damage-at-0 with temp HP" to lock the invariant.
+  Add a HasShield/NotUsingShield condition to the feature filter.
 acceptance_criterion: |
-  A test demonstrates that a PC at 0 HP with 5 temp HP taking 25 damage (max HP 18) results in instant death.
+  A monk with a shield does NOT get the Unarmored Movement speed bonus. A test demonstrates this.

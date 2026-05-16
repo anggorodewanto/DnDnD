@@ -246,7 +246,7 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 
 	// D-48a — fold turn-start FES speed modifiers (e.g. Monk Unarmored
 	// Movement) into the base speed before exhaustion / condition halving.
-	speedFt += int32(turnStartSpeedBonus(char))
+	speedFt += int32(turnStartSpeedBonus(char, s.hasEquippedShield(ctx, char)))
 
 	// F-C02: Apply heavy armor speed penalty if STR is below requirement.
 	if char.EquippedArmor.Valid && char.EquippedArmor.String != "" {
@@ -266,7 +266,7 @@ func (s *Service) ResolveTurnResources(ctx context.Context, combatant refdata.Co
 // so per-class turn-start effects (Monk Unarmored Movement gated on
 // NotWearingArmor, etc.) fire correctly. Returns 0 when the character has
 // no parseable classes / features.
-func turnStartSpeedBonus(char refdata.Character) int {
+func turnStartSpeedBonus(char refdata.Character, hasShield bool) int {
 	var classes []CharacterClass
 	if len(char.Classes) > 0 {
 		_ = json.Unmarshal(char.Classes, &classes)
@@ -281,6 +281,7 @@ func turnStartSpeedBonus(char refdata.Character) int {
 	defs := BuildFeatureDefinitions(classes, feats, collectMagicItemFeatures(char))
 	ctx := EffectContext{
 		WearingArmor: char.EquippedArmor.Valid && char.EquippedArmor.String != "",
+		HasShield:    hasShield,
 	}
 	result := ProcessEffects(defs, TriggerOnTurnStart, ctx)
 	return result.SpeedModifier

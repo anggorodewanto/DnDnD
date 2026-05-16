@@ -499,6 +499,7 @@ func UnarmoredMovementFeature(monkLevel int) FeatureDefinition {
 				Modifier: UnarmoredMovementBonus(monkLevel),
 				Conditions: EffectConditions{
 					NotWearingArmor: true,
+					NotUsingShield:  true,
 				},
 			},
 		},
