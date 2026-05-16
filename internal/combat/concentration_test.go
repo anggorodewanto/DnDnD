@@ -579,6 +579,40 @@ func TestMaybeCreateConcentrationSaveOnDamage(t *testing.T) {
 	assert.Equal(t, "concentration", captured.Source)
 }
 
+// C-H11 regression: two separate damage hits must produce two independent
+// concentration saves (each call to MaybeCreateConcentrationSaveOnDamage
+// enqueues its own pending save row).
+func TestMaybeCreateConcentrationSaveOnDamage_TwoHitsTwoSaves(t *testing.T) {
+	encounterID := uuid.New()
+	combatantID := uuid.New()
+
+	var saveCount int
+	ms := &mockStore{
+		getCombatantConcentrationFn: func(ctx context.Context, id uuid.UUID) (refdata.GetCombatantConcentrationRow, error) {
+			return refdata.GetCombatantConcentrationRow{
+				ConcentrationSpellID:   sql.NullString{String: "bless", Valid: true},
+				ConcentrationSpellName: sql.NullString{String: "Bless", Valid: true},
+			}, nil
+		},
+		createPendingSaveFn: func(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
+			saveCount++
+			return refdata.PendingSafe{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, Source: arg.Source}, nil
+		},
+	}
+	svc := NewService(ms)
+	ctx := context.Background()
+
+	ps1, err := svc.MaybeCreateConcentrationSaveOnDamage(ctx, encounterID, combatantID, 12)
+	require.NoError(t, err)
+	require.NotNil(t, ps1)
+
+	ps2, err := svc.MaybeCreateConcentrationSaveOnDamage(ctx, encounterID, combatantID, 18)
+	require.NoError(t, err)
+	require.NotNil(t, ps2)
+
+	assert.Equal(t, 2, saveCount, "two damage hits must produce two pending concentration saves")
+}
+
 func TestMaybeCreateConcentrationSaveOnDamage_NotConcentrating(t *testing.T) {
 	called := false
 	ms := &mockStore{
