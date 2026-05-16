@@ -76,7 +76,7 @@ Low: 142
 | 64 | D-H01 | High | done | Step of the Wind dash adds remaining movement, not base speed | /home/ab/projects/DnDnD/internal/combat/monk.go:444 |
 | 65 | D-H02 | High | superseded | Dodge condition grants no defensive disadvantage to attackers | /home/ab/projects/DnDnD/internal/combat/advantage.go:104 (switch on `c.Condition... |
 | 66 | D-H03 | High | pending | Auto-ability selection for finesse weapons silently disables rage damage | /home/ab/projects/DnDnD/internal/combat/attack.go:1583 (`attackAbilityUsed`) |
-| 67 | D-H04 | High | in_progress | Monk Unarmored Defense not invalidated by shield | /home/ab/projects/DnDnD/internal/combat/equip.go:416 and /home/ab/projects/DnDnD... |
+| 67 | D-H04 | High | done | Monk Unarmored Defense not invalidated by shield | /home/ab/projects/DnDnD/internal/combat/equip.go:416 and /home/ab/projects/DnDnD... |
 | 68 | D-H05 | High | pending | Monk Unarmored Movement not gated on "no shield" | /home/ab/projects/DnDnD/internal/combat/monk.go:487 (`UnarmoredMovementFeature`)... |
 | 69 | D-H06 | High | pending | Wild Shape on-revert does not restore the druid's speed snapshot | /home/ab/projects/DnDnD/internal/combat/wildshape.go:181 (`RevertWildShape`) |
 | 70 | D-H07 | High | superseded | Wild Shape activation does not block druid spellcasting | /home/ab/projects/DnDnD/internal/combat/spellcasting.go:381 and /home/ab/project... |
