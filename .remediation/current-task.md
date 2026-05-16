@@ -1,11 +1,11 @@
-finding_id: J-H01
+finding_id: J-H06
 severity: High
-title: Campaign Home cards show player-facing display_name, not the spoilery internal name
-location: cmd/dndnd/main.go:243-246 and 261-265
-spec_ref: spec lines 1694, 2840, 3094-3095
+title: /whisper accepts empty message and spams a dm-queue item
+location: internal/discord/whisper_handler.go:61-80
+spec_ref: Phase 109
 problem: |
-  Both adapters prefer e.DisplayName over e.Name and surface the result into the DM's Campaign Home cards. Spec says the internal name is the dashboard-only spoiler-safe name.
+  The handler never checks for empty/whitespace message before posting to dm-queue.
 suggested_fix: |
-  Return e.Name unconditionally for the dashboard cards.
+  Reject strings.TrimSpace(message) == "" with an ephemeral hint.
 acceptance_criterion: |
-  The encounter lister adapters return e.Name (internal name) for dashboard display. A test demonstrates this.
+  /whisper with empty or whitespace-only message returns an error. A test demonstrates this.

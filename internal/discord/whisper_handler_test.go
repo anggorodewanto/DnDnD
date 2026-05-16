@@ -204,3 +204,31 @@ func TestWhisperHandler_NoCharacter(t *testing.T) {
 		t.Errorf("unexpected response: %q", resp)
 	}
 }
+
+func TestWhisperHandler_EmptyMessage(t *testing.T) {
+	sess := &MockSession{}
+	campID := uuid.New()
+	poster := &mockWhisperPoster{returnID: "item-1"}
+	h := NewWhisperHandler(
+		sess,
+		&mockWhisperCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockWhisperCharacterLookup{char: refdata.Character{Name: "Aria"}},
+	)
+	h.SetNotifier(poster)
+
+	tests := []struct {
+		name string
+		msg  string
+	}{
+		{"empty", ""},
+		{"whitespace only", "   "},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := runWhisperHandler(t, h, whisperInteraction("guild-1", "user-1", tc.msg))
+			if resp != "Please provide a message." {
+				t.Errorf("response = %q want %q", resp, "Please provide a message.")
+			}
+		})
+	}
+}

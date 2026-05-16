@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -59,6 +60,10 @@ func (h *WhisperHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	message := optionString(interaction, "message")
+	if strings.TrimSpace(message) == "" {
+		respondEphemeral(h.session, interaction, "Please provide a message.")
+		return
+	}
 	userID := discordUserID(interaction)
 	char, err := h.characterLookup.GetCharacterByCampaignAndDiscord(ctx, campaign.ID, userID)
 	if err != nil {
