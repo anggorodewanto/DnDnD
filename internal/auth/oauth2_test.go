@@ -48,8 +48,9 @@ func (m *mockUserInfoFetcher) FetchUserInfo(_ context.Context, _ string) (*auth.
 }
 
 type mockSessionRepo struct {
-	sessions map[uuid.UUID]*auth.Session
-	createFn func(ctx context.Context, discordUserID, accessToken, refreshToken string, tokenExpiresAt *time.Time) (*auth.Session, error)
+	sessions    map[uuid.UUID]*auth.Session
+	createFn    func(ctx context.Context, discordUserID, accessToken, refreshToken string, tokenExpiresAt *time.Time) (*auth.Session, error)
+	slideTTLErr error
 }
 
 func newMockSessionRepo() *mockSessionRepo {
@@ -92,6 +93,9 @@ func (m *mockSessionRepo) Delete(_ context.Context, id uuid.UUID) error {
 }
 
 func (m *mockSessionRepo) SlideTTL(_ context.Context, id uuid.UUID) error {
+	if m.slideTTLErr != nil {
+		return m.slideTTLErr
+	}
 	if sess, ok := m.sessions[id]; ok {
 		sess.ExpiresAt = time.Now().Add(30 * 24 * time.Hour)
 		sess.UpdatedAt = time.Now()

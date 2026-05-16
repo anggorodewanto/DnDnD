@@ -273,3 +273,22 @@ func TestContextWithDiscordUserID(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "test-user-123", id)
 }
+
+func TestSessionMiddleware_SlideTTLError_Returns500(t *testing.T) {
+	repo := newMockSessionRepo()
+	tokenExp := time.Now().Add(time.Hour)
+	sess, _ := repo.Create(context.Background(), "user42", "at", "rt", &tokenExp)
+	repo.slideTTLErr = fmt.Errorf("db connection lost")
+
+	middleware := auth.SessionMiddleware(repo, &mockTokenRefresher{}, slog.Default(), false)
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called when SlideTTL fails")
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: sess.ID.String()})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}

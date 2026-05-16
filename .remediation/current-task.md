@@ -1,11 +1,11 @@
-finding_id: B-H03
+finding_id: A-H09
 severity: High
-title: Asset upload accepts arbitrary MIME types (XSS / file-type abuse risk)
-location: internal/asset/handler.go:36-83, internal/asset/service.go:121-135
-spec_ref: phases §Phase 20, spec §Asset Storage
+title: Sessions middleware re-issues cookie even when slide TTL fails silently
+location: internal/auth/middleware.go:62-77
+spec_ref: spec §Session management (line 72); Phase 10
 problem: |
-  UploadAsset trusts the multipart Content-Type header verbatim. A DM can upload HTML/JS/SVG as a "map_background" — ServeAsset then sets Content-Type: text/html enabling stored XSS.
+  When SlideTTL fails the middleware logs and continues without re-issuing the cookie and without aborting the request. The session in the DB still has its old expires_at. This silently lets sessions expire mid-traffic.
 suggested_fix: |
-  Maintain an allowlist per AssetType (map_background/token → image/png|image/jpeg|image/webp, tileset → application/json). Reject everything else.
+  Either fail the request on slide error (consistent with fail-closed auth) or, at minimum, always re-issue the cookie since the DB state already lets this request through.
 acceptance_criterion: |
-  Upload with Content-Type: text/html is rejected. Upload with image/png is accepted. A test demonstrates both.
+  When SlideTTL fails, the request is aborted with 500 (fail-closed). A test demonstrates this.
