@@ -337,11 +337,11 @@ func (s *Service) routePhase43DeathSave(ctx context.Context, target refdata.Comb
 	}
 	maxHP := int(target.HpMax)
 
-	// Drop-to-0: overflow is the pre-clamp HP deficit.
+	// Drop-to-0: overflow is damage remaining after HP drops to 0 (PHB p.197).
 	if target.HpCurrent > 0 && newHP <= 0 {
-		overflow := 0
-		if rawNewHP < 0 {
-			overflow = -rawNewHP
+		overflow := adjusted - int(target.HpCurrent)
+		if overflow < 0 {
+			overflow = 0
 		}
 		outcome := ProcessDropToZeroHP(target.DisplayName, overflow, maxHP)
 		return phase43DeathSaveResult{

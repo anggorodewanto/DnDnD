@@ -1,11 +1,11 @@
-finding_id: G-H06
+finding_id: cross-cut-H01
 severity: High
-title: Item picker only searches weapons/armor/magic items
-location: internal/itempicker/handler.go:57-156
-spec_ref: spec §Item Picker line 2674 (Phase 86)
+title: routePhase43DeathSave skips instant-death when rawNewHP == 0
+location: internal/combat/damage.go:336-346
+spec_ref: PHB p.197 Massive Damage
 problem: |
-  HandleSearch only iterates ListWeapons, ListArmor, ListMagicItems. Adventuring gear and potions/consumables are not searchable.
+  The helper computes overflow only when rawNewHP < 0. If the hit takes the PC from >0 directly to exactly 0 (rawNewHP == 0), overflow is 0 even when actual damage was massive. A 1-HP creature taking 200 damage enters dying instead of instant death.
 suggested_fix: |
-  Add ListAdventuringGear / ListConsumables to the search and branch on category.
+  Compute overflow := adjusted - int(target.HpCurrent) whenever target.HpCurrent > 0 (clamp to >= 0).
 acceptance_criterion: |
-  Searching for "rope" or "healing potion" returns results. A test demonstrates this.
+  A 1-HP creature with maxHP 10 taking 15 damage (adjusted after temp HP) results in instant death (overflow 14 >= maxHP 10). A test demonstrates this.

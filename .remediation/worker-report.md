@@ -1,29 +1,51 @@
-# Worker Report: G-H06
+# Worker Report: cross-cut-H01
 
 ## Finding
-HandleSearch only searched weapons, armor, and magic items. Adventuring gear and consumables were not searchable.
 
-## Fix Applied
+**Title:** routePhase43DeathSave skips instant-death when rawNewHP == 0  
+**Location:** `internal/combat/damage.go:340-344`
 
-### Files Modified
-- `internal/itempicker/handler.go` — Added `ListGear` and `ListConsumables` to the `Store` interface; added `GearItem` and `ConsumableItem` types; added gear/consumable search blocks in `HandleSearch` (categories: `gear`, `consumables`).
-- `internal/itempicker/handler_test.go` — Added `TestHandleSearch_ReturnsGear` and `TestHandleSearch_ReturnsConsumables` tests; updated `stubStore` mock with gear/consumable fields and methods.
-- `cmd/dndnd/dashboard_apis.go` — Wrapped `*refdata.Queries` in `itemPickerStore` adapter to satisfy the expanded `Store` interface, delegating gear/consumables to static SRD data.
+## Changes Made
 
-### Files Created
-- `internal/itempicker/gear.go` — `StaticGear()` and `StaticConsumables()` functions providing built-in SRD adventuring gear and consumable items.
+### Fix: `internal/combat/damage.go`
 
-## TDD Workflow
-1. **Red:** Added tests for searching "rope" (gear) and "healing" (consumable). Confirmed compile failure due to missing types.
-2. **Green:** Defined `GearItem`/`ConsumableItem` types, added `ListGear`/`ListConsumables` to Store interface, implemented search blocks, created static data, and wired adapter in `cmd/dndnd`.
-3. **Verify:** All itempicker tests pass. Coverage at 92.3% (above 85% threshold).
+Replaced the conditional overflow computation:
 
-## Test Results
-- `go test ./internal/itempicker/` — PASS (92.3% coverage)
-- `go build ./cmd/dndnd/` — PASS
-- Pre-existing `TestIntegration_MigrateDown` failure in `internal/database` (Docker-dependent, unrelated to this change).
+```go
+// OLD (buggy):
+overflow := 0
+if rawNewHP < 0 {
+    overflow = -rawNewHP
+}
+```
 
-## Acceptance Criteria
-- ✅ Searching for "rope" returns a gear result
-- ✅ Searching for "healing" returns a consumable result (potion of healing)
-- ✅ Tests demonstrate this
+With a direct PHB-compliant formula:
+
+```go
+// NEW (fixed):
+overflow := adjusted - int(target.HpCurrent)
+if overflow < 0 {
+    overflow = 0
+}
+```
+
+This computes overflow as "damage remaining after HP drops to 0" per PHB p.197, regardless of whether `rawNewHP` is exactly 0 or negative. The old code only computed overflow when `rawNewHP < 0`, leaving the `rawNewHP == 0` boundary unhandled.
+
+### Test: `internal/combat/deathsave_integration_test.go`
+
+Added `TestApplyDamage_InstantDeath_LowHPMassiveDamage`:
+- PC at 1 HP, maxHP 10, takes 15 slashing damage
+- Overflow = 15 − 1 = 14 ≥ 10 maxHP → instant death
+- Asserts: `NewHP == 0`, `IsAlive == false`, `Killed == true`, `InstantDeath == true`
+
+## Verification
+
+- `go test ./internal/combat/ -cover` → PASS, 92.4% coverage (above 85% threshold)
+- `make test` → only pre-existing failure in `TestIntegration_MigrateDown` (database migration test, unrelated)
+- `make cover-check` → same pre-existing failure only
+- All 17 instant-death / overflow / drop-to-zero tests pass
+
+## Not Touched
+
+- No unrelated code modified
+- No commits made

@@ -138,7 +138,7 @@ Low: 142
 | 126 | J-H07 | High | pending | dm-queue Sender bypasses the per-channel MessageQueue (rate-limit ordering) | /home/ab/projects/DnDnD/internal/dmqueue/sender.go:19-41 |
 | 127 | J-H08 | High | pending | WS reader/writer can race on slow-client drop | /home/ab/projects/DnDnD/internal/dashboard/ws.go:77-101 (`Hub.Run` broadcast blo... |
 | 128 | J-H09 | High | done | Encounter snapshot publisher does NOT trigger on /move position writes | /home/ab/projects/DnDnD/internal/discord/move_handler.go:686-735; combat.Service... |
-| 129 | cross-cut-H01 | High | pending | `routePhase43DeathSave` skips the drop-to-0 instant-death rule when overflow is exactly the limit but damage came from a hit at >0 HP and `adjusted` overshoots | `internal/combat/damage.go:336-346`, |
+| 129 | cross-cut-H01 | High | in_progress | `routePhase43DeathSave` skips the drop-to-0 instant-death rule when overflow is exactly the limit but damage came from a hit at >0 HP and `adjusted` overshoots | `internal/combat/damage.go:336-346`, |
 | 130 | cross-cut-H02 | High | pending | Multiclass spellcasting ability picks the highest score across classes | `internal/combat/spellcasting.go:1544-1557` |
 | 131 | cross-cut-H03 | High | done | Attack roll always adds proficiency bonus regardless of weapon proficiency | `internal/combat/attack.go:103-106` (`AttackModifier`). |
 | 132 | cross-cut-H04 | High | done | Paladin Channel Divinity max uses scale to 2 at level 15 | `internal/combat/channel_divinity.go:31-38` |

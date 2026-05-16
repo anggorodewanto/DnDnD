@@ -383,3 +383,28 @@ func TestApplyDamage_AtZeroHP_TempHPAbsorbedStillInstantDeath(t *testing.T) {
 	assert.True(t, res.InstantDeath)
 	assert.Empty(t, store.deathSaveWrites, "instant death must skip death save tally")
 }
+
+
+// C-H01: Instant death must trigger when massive damage drops PC from low HP.
+// PC at 1 HP, maxHP 10, takes 15 damage → overflow = 14 >= 10 → instant death.
+func TestApplyDamage_InstantDeath_LowHPMassiveDamage(t *testing.T) {
+	combatantID := uuid.New()
+	encID := uuid.New()
+	target := &refdata.Combatant{
+		ID: combatantID, EncounterID: encID,
+		HpMax: 10, HpCurrent: 1, IsAlive: true, IsNpc: false,
+		DisplayName: "Aria", Conditions: json.RawMessage(`[]`),
+	}
+	store := newDeathSaveDamageStore(target)
+	svc := NewService(store.mockStore)
+
+	// 15 damage on 1 HP: overflow = 15 - 1 = 14 >= 10 maxHP → instant death.
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encID, Target: *target, RawDamage: 15, DamageType: "slashing",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), res.NewHP)
+	assert.False(t, res.IsAlive, "overflow (14) >= maxHP (10) must be instant death")
+	assert.True(t, res.Killed)
+	assert.True(t, res.InstantDeath)
+}
