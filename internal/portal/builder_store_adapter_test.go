@@ -272,6 +272,15 @@ func TestDeriveCharacterSpeed_Default(t *testing.T) {
 	assert.Equal(t, 30, portal.DeriveSpeed("human"))
 }
 
+func TestDeriveSpeed_RaceLookup(t *testing.T) {
+	assert.Equal(t, 25, portal.DeriveSpeed("dwarf"))
+	assert.Equal(t, 25, portal.DeriveSpeed("halfling"))
+	assert.Equal(t, 25, portal.DeriveSpeed("gnome"))
+	assert.Equal(t, 30, portal.DeriveSpeed("elf"))
+	assert.Equal(t, 30, portal.DeriveSpeed("human"))
+	assert.Equal(t, 30, portal.DeriveSpeed("unknown-race"))
+}
+
 func TestClassHitDie(t *testing.T) {
 	tests := []struct {
 		class  string

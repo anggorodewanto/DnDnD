@@ -1,11 +1,11 @@
-finding_id: J-H06
+finding_id: H-H10
 severity: High
-title: /whisper accepts empty message and spams a dm-queue item
-location: internal/discord/whisper_handler.go:61-80
-spec_ref: Phase 109
+title: DeriveSpeed ignores race
+location: internal/portal/builder_store_adapter.go:275
+spec_ref: spec §"Player Portal" line 2392; SRD races
 problem: |
-  The handler never checks for empty/whitespace message before posting to dm-queue.
+  DeriveSpeed(_ string) int { return 30 } always returns 30. Dwarf/Halfling/Gnome should be 25ft.
 suggested_fix: |
-  Reject strings.TrimSpace(message) == "" with an ephemeral hint.
+  Look up the race by ID and use its speed_ft. Fall back to 30 if unknown.
 acceptance_criterion: |
-  /whisper with empty or whitespace-only message returns an error. A test demonstrates this.
+  DeriveSpeed("dwarf") returns 25. DeriveSpeed("human") returns 30. A test demonstrates both.

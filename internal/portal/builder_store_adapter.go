@@ -278,8 +278,18 @@ func EquipmentToInventoryWithEquipped(equipment []string, equippedWeapon, wornAr
 	return items
 }
 
-// DeriveSpeed returns the default speed for a race (30 ft default).
-func DeriveSpeed(_ string) int {
+// raceSpeed maps race IDs to their base walking speed in feet.
+var raceSpeed = map[string]int{
+	"dwarf":    25,
+	"halfling": 25,
+	"gnome":    25,
+}
+
+// DeriveSpeed returns the base walking speed for a race (30 ft default).
+func DeriveSpeed(race string) int {
+	if spd, ok := raceSpeed[strings.ToLower(race)]; ok {
+		return spd
+	}
 	return 30
 }
 
