@@ -1,11 +1,11 @@
-finding_id: G-H09
+finding_id: F-H04
 severity: High
-title: Encounter-active check on rest can be bypassed for party rest
-location: internal/discord/rest_handler.go:159-164
-spec_ref: spec §Rest Constraints line 2630 (Phase 83a)
+title: Free-object interaction whitelist is too permissive / English-only
+location: internal/combat/interact.go:13-52
+spec_ref: spec §Free Object Interaction lines 1198-1201; Phase 74
 problem: |
-  Individual /rest calls ActiveEncounterForUser and rejects if the caller is a combatant. But the rest is still permitted for users not registered as combatants in an active encounter. A bystander could /rest long while their party is mid-fight.
+  autoResolvablePatterns matches by prefix on "open", "grab", etc. A player typing "/interact open the locked treasure chest" auto-resolves even though the lock state matters.
 suggested_fix: |
-  Use PartyEncounterChecker.HasActiveEncounter in the individual handler too so any active encounter in the campaign blocks rests.
+  Reject auto-resolve if the description contains "lock", "trap", "stuck", "barred" — route to DM queue instead.
 acceptance_criterion: |
-  /rest is rejected when any active encounter exists in the campaign, not just when the caller is a combatant. A test demonstrates this.
+  An interaction containing "locked" is NOT auto-resolved (routes to DM queue). An interaction "open the door" IS auto-resolved. Tests demonstrate both.

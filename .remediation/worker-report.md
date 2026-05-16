@@ -1,21 +1,23 @@
-# Worker Report: G-H09
+# Worker Report: F-H04
 
-**Finding:** Individual /rest only checks if the caller is a combatant (`ActiveEncounterForUser`), not if any encounter is active in the campaign. A bystander could /rest while their party is mid-fight.
+**Worker:** worker-F-H04
+**Status:** ✅ Complete
+**Date:** 2026-05-16
 
-**Fix applied:**
+## Finding
 
-1. Added `campaignEncounterChecker rest.PartyEncounterChecker` field to `RestHandler` struct.
-2. Added `SetCampaignEncounterChecker` setter method.
-3. Added campaign-level guard in `Handle()` — after the per-user check, calls `HasActiveEncounter(ctx, campaign.ID)` and rejects with the same message if any encounter is active.
+Auto-resolve fired on prefix match (e.g. "open") even when the description contained words implying DM adjudication ("locked", "trapped", "stuck", "barred", "sealed").
 
-**Files changed:**
-- `internal/discord/rest_handler.go` — struct field, setter, and campaign-level check in Handle.
-- `internal/discord/rest_handler_test.go` — new test `TestRestHandler_BlockedWhenCampaignHasActiveEncounter` (user NOT a combatant, but campaign has active encounter → rejected).
+## Fix Applied
 
-**TDD cycle:**
-- Red: test compiled but `SetCampaignEncounterChecker` undefined → build failure.
-- Green: added field, setter, and check → test passes.
-- `make test` ✅ all pass.
-- `make cover-check` ✅ thresholds met.
+Added a `dmRequiredKeywords` blocklist in `internal/combat/interact.go`. After a prefix match succeeds, the description is checked for any DM-required keyword. If found, `isAutoResolvable` returns `false`, routing the interaction to the DM queue.
 
-**No commits made.**
+## Files Changed
+
+- `internal/combat/interact.go` — added `dmRequiredKeywords` slice and blocklist check inside `isAutoResolvable`.
+- `internal/combat/interact_test.go` — added 5 test cases to `TestInteract_AutoResolvablePatterns` covering blocked keywords ("locked chest", "barred gate", "trapped handle", "sealed vault", "stuck door").
+
+## Verification
+
+- `make test` — all tests pass.
+- `make cover-check` — all coverage thresholds met.

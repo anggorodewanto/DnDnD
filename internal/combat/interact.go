@@ -39,12 +39,21 @@ type InteractResult struct {
 	AutoResolved   bool
 }
 
+// dmRequiredKeywords are words that indicate DM adjudication is needed,
+// even if the description matches an auto-resolvable prefix.
+var dmRequiredKeywords = []string{"lock", "trap", "stuck", "barred", "sealed"}
+
 // isAutoResolvable checks whether the interaction description matches
 // a pattern that can be resolved without DM intervention.
 func isAutoResolvable(description string) bool {
 	lower := strings.ToLower(description)
 	for _, pattern := range autoResolvablePatterns {
 		if strings.HasPrefix(lower, pattern) {
+			for _, kw := range dmRequiredKeywords {
+				if strings.Contains(lower, kw) {
+					return false
+				}
+			}
 			return true
 		}
 	}
