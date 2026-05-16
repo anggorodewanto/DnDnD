@@ -1614,11 +1614,14 @@ func colToIndex(col string) int {
 // the human-readable ability label ("str" or "dex") that was used for the
 // attack roll. Used to populate EffectContext.AbilityUsed so FES filters
 // like Rage's `ability_used: str` actually evaluate correctly.
-func attackAbilityUsed(scores AbilityScores, weapon refdata.Weapon, monkLevel int) string {
+func attackAbilityUsed(scores AbilityScores, weapon refdata.Weapon, monkLevel int, isRaging bool) string {
 	strMod := AbilityModifier(scores.Str)
 	dexMod := AbilityModifier(scores.Dex)
 
 	if HasProperty(weapon, "finesse") {
+		if isRaging {
+			return "str"
+		}
 		if dexMod > strMod {
 			return "dex"
 		}
@@ -1691,7 +1694,7 @@ func nearestAllyDistanceFt(attacker, target refdata.Combatant, all []refdata.Com
 // fields (IsRaging, ally distance) are populated and Features stays empty.
 func (s *Service) populateAttackFES(ctx context.Context, input *AttackInput, cmd AttackCommand, char *refdata.Character, weapon refdata.Weapon, scores AbilityScores) error {
 	input.IsRaging = cmd.Attacker.IsRaging
-	input.AbilityUsed = attackAbilityUsed(scores, weapon, input.MonkLevel)
+	input.AbilityUsed = attackAbilityUsed(scores, weapon, input.MonkLevel, input.IsRaging)
 	input.OneHandedMeleeOnly = !IsRangedWeapon(weapon) &&
 		!HasProperty(weapon, "two-handed") &&
 		!input.TwoHanded &&

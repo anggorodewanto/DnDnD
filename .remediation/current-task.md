@@ -1,11 +1,11 @@
-finding_id: J-H05
+finding_id: D-H03
 severity: High
-title: One character can be in two active encounters (no DB constraint)
-location: db/queries/encounters.sql:46-51
-spec_ref: Phase 105 ("Character limited to one active encounter")
+title: Auto-ability selection for finesse weapons silently disables rage damage
+location: internal/combat/attack.go:1583 (attackAbilityUsed)
+spec_ref: spec §Feature Effect System "Rage" ability_used: str; Phase 46
 problem: |
-  GetActiveEncounterIDByCharacterID uses LIMIT 1 which silently picks the newest and hides duplicates. No DB constraint prevents the bug.
+  attackAbilityUsed picks the higher of STR/DEX for finesse weapons. A raging barbarian with STR 14/DEX 16 wielding a rapier is force-assigned "dex", and the rage ability_used: str filter fails, dropping the +2/+3/+4 rage damage.
 suggested_fix: |
-  Make the query return an error when more than one row matches (change to :many and check count), or add a partial unique index.
+  When the attacker is raging and the weapon is finesse, prefer STR (since rage damage only applies on STR attacks).
 acceptance_criterion: |
-  GetActiveEncounterIDByCharacterID returns an error when a character is in multiple active encounters. A test demonstrates this.
+  A raging barbarian with higher DEX than STR using a finesse weapon gets "str" as the ability used. A test demonstrates this.

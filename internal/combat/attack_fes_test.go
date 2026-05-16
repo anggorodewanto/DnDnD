@@ -482,17 +482,17 @@ func TestBuildAttackEffectContext_WiresAllRequestedFields(t *testing.T) {
 func TestAttackAbilityUsed_AllPaths(t *testing.T) {
 	t.Run("finesse picks higher ability", func(t *testing.T) {
 		assert.Equal(t, "dex",
-			attackAbilityUsed(AbilityScores{Str: 10, Dex: 16}, makeRapier(), 0))
+			attackAbilityUsed(AbilityScores{Str: 10, Dex: 16}, makeRapier(), 0, false))
 		assert.Equal(t, "str",
-			attackAbilityUsed(AbilityScores{Str: 16, Dex: 10}, makeRapier(), 0))
+			attackAbilityUsed(AbilityScores{Str: 16, Dex: 10}, makeRapier(), 0, false))
 	})
 	t.Run("ranged uses dex", func(t *testing.T) {
 		assert.Equal(t, "dex",
-			attackAbilityUsed(AbilityScores{Str: 18, Dex: 10}, makeLongbow(), 0))
+			attackAbilityUsed(AbilityScores{Str: 18, Dex: 10}, makeLongbow(), 0, false))
 	})
 	t.Run("melee non-finesse uses str", func(t *testing.T) {
 		assert.Equal(t, "str",
-			attackAbilityUsed(AbilityScores{Str: 16, Dex: 14}, makeLongsword(), 0))
+			attackAbilityUsed(AbilityScores{Str: 16, Dex: 14}, makeLongsword(), 0, false))
 	})
 	t.Run("monk weapon picks higher ability", func(t *testing.T) {
 		// shortsword is a monk weapon; with DEX>STR, returns dex
@@ -502,7 +502,11 @@ func TestAttackAbilityUsed_AllPaths(t *testing.T) {
 			Properties: []string{"finesse", "light"},
 		}
 		assert.Equal(t, "dex",
-			attackAbilityUsed(AbilityScores{Str: 12, Dex: 16}, ss, 5))
+			attackAbilityUsed(AbilityScores{Str: 12, Dex: 16}, ss, 5, false))
+	})
+	t.Run("raging finesse forces str even with higher dex", func(t *testing.T) {
+		assert.Equal(t, "str",
+			attackAbilityUsed(AbilityScores{Str: 14, Dex: 16}, makeRapier(), 0, true))
 	})
 }
 
