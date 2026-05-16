@@ -1,37 +1,40 @@
-# Worker Report: F-H07
+# Worker Report: J-H03
 
-**Finding:** TriggerCounterspell doesn't validate distance between declarant and enemy caster.
+**Worker:** worker-J-H03  
+**Date:** 2026-05-16  
+**Status:** ✅ Complete
 
-**Status:** ✅ Fixed
+## Finding
+
+Entry struct lacked a `Detail` field and the INSERT query omitted the `error_detail` column, causing stack traces to be silently discarded.
 
 ## Changes Made
 
-### 1. `internal/combat/counterspell.go`
-- Added `ErrCounterspellOutOfRange` sentinel error.
-- Added `distanceFt int` parameter to `TriggerCounterspell`.
-- Added range check: rejects with `ErrCounterspellOutOfRange` if `distanceFt > 60`.
+### 1. `internal/errorlog/recorder.go`
+- Added `encoding/json` import.
+- Added `Detail json.RawMessage` field to `Entry` struct.
 
-### 2. `internal/combat/counterspell_test.go`
-- Added `TestTriggerCounterspell_RejectsDistanceOver60` — verifies 65ft returns error (RED→GREEN).
-- Added `TestTriggerCounterspell_AllowsDistanceAt60` — verifies 60ft succeeds (boundary).
-- Updated all existing `TriggerCounterspell` calls to pass `distanceFt: 30` (valid distance).
-- Updated handler test JSON bodies to include `"distance_ft": 30`.
+### 2. `internal/errorlog/pgstore.go`
+- `buildInsertErrorQuery`: added `error_detail` to column list and `$4` parameter bound to `entry.Detail`.
+- `buildListRecentQuery`: added `error_detail` to SELECT column list.
+- `ListRecent`: added `detail []byte` scan variable and populates `Entry.Detail`.
 
-### 3. `internal/combat/handler.go`
-- Added `DistanceFt int` field to `triggerCounterspellRequest`.
-- Passes `req.DistanceFt` to `TriggerCounterspell`.
-
-### 4. `internal/discord/counterspell_prompt.go`
-- Added `DistanceFt int` to `CounterspellPromptArgs` struct.
-- Updated `CounterspellService` interface signature.
-- Passes `args.DistanceFt` to `TriggerCounterspell`.
-
-### 5. `internal/discord/counterspell_prompt_test.go`
-- Updated mock to match new interface signature.
+### 3. `internal/errorlog/recorder_test.go`
+- Added `encoding/json` import.
+- Added `TestMemoryStore_DetailFieldStoredAndReturned` — records an entry with Detail set, asserts it round-trips through ListRecent.
 
 ## Verification
 
-- `go test -count=1 ./internal/combat/` — PASS
-- `go test ./internal/discord/...` — PASS
-- `make cover-check` — only pre-existing unrelated failure (`TestIntegration_MigrateDown` in `internal/database`)
-- New tests confirm: 65ft → error, 60ft → success
+| Check | Result |
+|-------|--------|
+| New test fails before fix (Red) | ✅ `unknown field Detail in struct literal` |
+| New test passes after fix (Green) | ✅ PASS |
+| `go test ./internal/errorlog/` | ✅ All 19 tests pass (including PgStore integration) |
+| `make test` | ✅ errorlog passes; only pre-existing `TestIntegration_MigrateDown` failure in `internal/database` (unrelated) |
+| `make cover-check` | ✅ errorlog at 95.9% (threshold: 85%) |
+
+## Acceptance Criteria Met
+
+- ✅ Entry struct has a Detail field (`json.RawMessage`).
+- ✅ The INSERT includes `error_detail`.
+- ✅ A test demonstrates Detail is stored and returned.

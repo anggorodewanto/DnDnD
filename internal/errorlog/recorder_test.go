@@ -2,6 +2,7 @@ package errorlog
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -159,4 +160,30 @@ func containsCI(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestMemoryStore_DetailFieldStoredAndReturned(t *testing.T) {
+	store := NewMemoryStore(time.Now)
+	detail := json.RawMessage(`{"stack":"goroutine 1 [running]:\nmain.main()"}`)
+
+	err := store.Record(context.Background(), Entry{
+		Command: "cast",
+		UserID:  "user-1",
+		Summary: "panic on /cast",
+		Detail:  detail,
+	})
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	entries, err := store.ListRecent(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("ListRecent: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if string(entries[0].Detail) != string(detail) {
+		t.Fatalf("Detail mismatch: got %q, want %q", entries[0].Detail, detail)
+	}
 }

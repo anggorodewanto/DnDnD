@@ -58,15 +58,17 @@ func (p *PgStore) ListRecent(ctx context.Context, limit int) ([]Entry, error) {
 			command string
 			userID  string
 			summary string
+			detail  []byte
 			created time.Time
 		)
-		if err := rows.Scan(&command, &userID, &summary, &created); err != nil {
+		if err := rows.Scan(&command, &userID, &summary, &detail, &created); err != nil {
 			return nil, err
 		}
 		out = append(out, Entry{
 			Command:   command,
 			UserID:    userID,
 			Summary:   summary,
+			Detail:    detail,
 			CreatedAt: created,
 		})
 	}
@@ -77,9 +79,9 @@ func (p *PgStore) ListRecent(ctx context.Context, limit int) ([]Entry, error) {
 // single error Entry. user_id is stored as NULL when empty so the column's
 // "nullable: system-context errors have no user" semantics hold.
 func buildInsertErrorQuery(entry Entry) (string, []any) {
-	q := `INSERT INTO error_log (command, user_id, summary)
-VALUES ($1, NULLIF($2, ''), $3)`
-	return q, []any{entry.Command, entry.UserID, entry.Summary}
+	q := `INSERT INTO error_log (command, user_id, summary, error_detail)
+VALUES ($1, NULLIF($2, ''), $3, $4)`
+	return q, []any{entry.Command, entry.UserID, entry.Summary, entry.Detail}
 }
 
 // buildCountSinceQuery returns the COUNT SQL for errors since the given time.
@@ -91,7 +93,7 @@ func buildCountSinceQuery(since time.Time) (string, []any) {
 // buildListRecentQuery returns the SELECT SQL for the most-recent errors.
 // user_id is COALESCEd to '' so the Go side can scan into a plain string.
 func buildListRecentQuery(limit int) (string, []any) {
-	q := `SELECT command, COALESCE(user_id, '') AS user_id, summary, created_at
+	q := `SELECT command, COALESCE(user_id, '') AS user_id, summary, error_detail, created_at
 FROM error_log
 ORDER BY created_at DESC
 LIMIT $1`

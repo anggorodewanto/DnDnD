@@ -7,6 +7,7 @@ package errorlog
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -26,6 +27,9 @@ type Entry struct {
 	// Summary is a short human-readable description suitable for the DM
 	// panel. Use BuildSummary to produce it from (command, user, err).
 	Summary string
+	// Detail holds optional structured data (e.g. stack trace) as JSON,
+	// stored in the error_detail JSONB column.
+	Detail json.RawMessage
 }
 
 // Recorder is the minimum surface callers (panic recovery, /command error
