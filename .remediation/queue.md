@@ -115,7 +115,7 @@ Low: 142
 | 103 | H-H08 | High | pending | Starting equipment retains `any-martial` placeholder IDs in inventory | /home/ab/projects/DnDnD/internal/portal/starting_equipment.go:33 + /home/ab/proj... |
 | 104 | H-H09 | High | pending | Starting equipment ignores background packs | /home/ab/projects/DnDnD/internal/portal/starting_equipment.go (only class packs ... |
 | 105 | H-H10 | High | done | DeriveSpeed ignores race | /home/ab/projects/DnDnD/internal/portal/builder_store_adapter.go:275 |
-| 106 | H-H11 | High | in_progress | DDB class names not normalised to internal IDs | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:177; /home/ab/projects/DnDn... |
+| 106 | H-H11 | High | done | DDB class names not normalised to internal IDs | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:177; /home/ab/projects/DnDn... |
 | 107 | H-H12 | High | pending | Plus-2 ASI silently truncates at cap (loses 1 point) without warning | /home/ab/projects/DnDnD/internal/levelup/asi.go:81 (`applyPlus2`) |
 | 108 | H-H13 | High | pending | /api/levelup/asi/approve endpoint has no character-owner / DM check | /home/ab/projects/DnDnD/internal/levelup/handler.go:129 (`HandleApproveASI`) |
 | 109 | I-H01 | High | pending | Dashboard DM-created chars miss background skill proficiencies | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:221-253, 117 ; compare ... |
