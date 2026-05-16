@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/inventory"
 	"github.com/google/uuid"
 )
 
@@ -25,6 +26,8 @@ type PartyCharacterInfo struct {
 	PactMagicSlots   *character.PactMagicSlots
 	DeathSaves       int // successes + failures combined (nonzero means needs reset)
 	ExhaustionLevel  int
+	Inventory        []character.InventoryItem
+	RechargeInfo     map[string]inventory.RechargeInfo
 }
 
 // CharacterRestUpdate holds the data to persist after a rest.
@@ -37,6 +40,7 @@ type CharacterRestUpdate struct {
 	SpellSlots       map[string]character.SlotInfo
 	PactMagicSlots   *character.PactMagicSlots
 	ExhaustionLevel  int
+	UpdatedInventory []character.InventoryItem
 }
 
 // PlayerNotification holds data for a notification to a player.
@@ -189,6 +193,8 @@ func (h *PartyRestHandler) applyPartyLongRest(ctx context.Context, chars []Party
 			SpellSlots:       c.SpellSlots,
 			PactMagicSlots:   c.PactMagicSlots,
 			ExhaustionLevel:  c.ExhaustionLevel,
+			Inventory:        c.Inventory,
+			RechargeInfo:     c.RechargeInfo,
 		}
 
 		result := h.restService.LongRest(input)
@@ -202,6 +208,7 @@ func (h *PartyRestHandler) applyPartyLongRest(ctx context.Context, chars []Party
 			SpellSlots:       result.SpellSlots,
 			PactMagicSlots:   c.PactMagicSlots,
 			ExhaustionLevel:  result.ExhaustionLevelAfter,
+			UpdatedInventory: result.UpdatedInventory,
 		}
 		_ = h.updater.ApplyRestUpdate(ctx, update)
 		h.restService.PersistLongRestExhaustion(ctx, c.ID, result)

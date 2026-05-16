@@ -1,32 +1,27 @@
-# F-H06 Remediation Report
+# Worker Report: G-H08 — Party long rest dawn recharge
 
 ## Finding
-Legendary-action budget round-trips through the URL/request body — no server persistence. Two dashboards can desync the budget.
+
+`applyPartyLongRest` in `internal/rest/party_handler.go` built `LongRestInput` without `Inventory` or `RechargeInfo`, so the dawn-recharge logic in `LongRest()` never fired for party rests.
 
 ## Fix Applied
 
-Added server-side legendary budget tracking via `GetLegendaryBudget(ctx, combatantID) (int, error)` and `DecrementLegendaryBudget(ctx, combatantID) error` on the `Store` interface.
+1. Added `Inventory []character.InventoryItem` and `RechargeInfo map[string]inventory.RechargeInfo` fields to `PartyCharacterInfo`.
+2. Added `UpdatedInventory []character.InventoryItem` field to `CharacterRestUpdate`.
+3. Wired both fields into `LongRestInput` construction and propagated `result.UpdatedInventory` into the `CharacterRestUpdate`.
 
-### Files Modified
-1. **internal/combat/service.go** — Added `GetLegendaryBudget` and `DecrementLegendaryBudget` to the `Store` interface.
-2. **internal/combat/legendary_handler.go** — `ExecuteLegendaryAction` now reads budget from store; rejects with 400 if budget is 0; decrements on success. Falls back to client-supplied budget when store returns -1 (uninitialized).
-3. **internal/combat/store_adapter.go** — In-memory implementation with `sync.Mutex`-protected map (same pattern as `SetLastLairAction`).
-4. **internal/combat/service_test.go** — Added mock fields and method implementations.
-5. **internal/combat/legendary_handler_test.go** — Added two TDD tests:
-   - `TestExecuteLegendaryAction_ServerSideBudgetExhausted` — budget=0 returns 400.
-   - `TestExecuteLegendaryAction_ServerSideBudgetDecremented` — successful action decrements store.
+## Files Modified
+
+- `internal/rest/party_handler.go` — added fields + wiring
+- `internal/rest/party_handler_test.go` — added `TestPartyRestHandler_LongRest_DawnRecharge`
+
+## Test Result
+
+- New test: `TestPartyRestHandler_LongRest_DawnRecharge` — PASS
+- Full suite (excluding `internal/database`): ALL PASS (38 packages)
 
 ## TDD Cycle
-- **Red:** Wrote failing tests referencing `getLegendaryBudgetFn` / `decrementLegendaryBudgetFn` before implementation.
-- **Green:** Added interface methods, mock, store_adapter, and handler logic.
-- **Verify:** All tests pass (`go test ./internal/combat/...` — 16.8s, 0 failures). Full project builds cleanly.
 
-## Test Results
-```
-=== RUN   TestExecuteLegendaryAction_ServerSideBudgetExhausted
---- PASS: TestExecuteLegendaryAction_ServerSideBudgetExhausted (0.00s)
-=== RUN   TestExecuteLegendaryAction_ServerSideBudgetDecremented
---- PASS: TestExecuteLegendaryAction_ServerSideBudgetDecremented (0.00s)
-```
-
-All 12 `TestExecuteLegendaryAction_*` tests pass. No regressions.
+- **Red:** Test failed to compile (fields didn't exist on structs).
+- **Green:** Added fields and wiring; test passes.
+- **Refactor:** No refactoring needed — minimal change.

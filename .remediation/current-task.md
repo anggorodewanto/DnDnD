@@ -1,11 +1,11 @@
-finding_id: F-H06
+finding_id: G-H08
 severity: High
-title: Legendary-action budget round-trips through the URL — no server persistence
-location: internal/combat/legendary_handler.go:73-78,170-180
-spec_ref: spec §Enemy / NPC Turns line 1916; Phase 78b
+title: Long rest does not propagate dawn recharge to party rest persistence
+location: internal/rest/party_handler.go:180-216
+spec_ref: spec §Long Rest + §Magic Items recharge line 2707 (Phase 83b)
 problem: |
-  The dashboard sends budget_remaining as a query param and the server trusts it. Two dashboards can desync the budget.
+  applyPartyLongRest builds LongRestInput without Inventory or RechargeInfo, so dawn-recharge never fires for party rests.
 suggested_fix: |
-  Add a legendary_action_budget field persisted server-side. Decrement on ExecuteLegendaryAction, reset on creature's turn start.
+  Extend PartyCharacterInfo to carry Inventory + RechargeInfo, pass them through.
 acceptance_criterion: |
-  ExecuteLegendaryAction decrements a server-side budget. A test demonstrates the budget decreases and rejects when exhausted.
+  A party long rest triggers dawn recharge for magic items. A test demonstrates charges are restored.

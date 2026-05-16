@@ -10,6 +10,7 @@ import (
 
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/inventory"
 	"github.com/google/uuid"
 )
 
@@ -856,5 +857,58 @@ func TestInterruptRestHandler_LongRest_OneHourElapsed_ShortRestError(t *testing.
 	}
 	if len(notifier.notifications) != 1 {
 		t.Errorf("notification count = %d, want 1", len(notifier.notifications))
+	}
+}
+
+// --- TDD Cycle G-H08: Party long rest triggers dawn recharge for magic items ---
+
+func TestPartyRestHandler_LongRest_DawnRecharge(t *testing.T) {
+	id := uuid.New()
+	char := newTestCharInfo("Kael", id, "user1")
+	char.Inventory = []character.InventoryItem{
+		{ItemID: "wand-of-magic", Name: "Wand of Magic", Charges: 2, MaxCharges: 7, IsMagic: true},
+	}
+	char.RechargeInfo = map[string]inventory.RechargeInfo{
+		"wand-of-magic": {Dice: "1d6+1", DestroyOnZero: false},
+	}
+
+	updater := &mockCharacterUpdater{}
+	// Use a deterministic roller that always returns max (ensures charges restored).
+	roller := dice.NewRoller(func(max int) int { return max })
+	h := NewPartyRestHandler(
+		NewService(roller),
+		&mockCharacterLister{characters: []PartyCharacterInfo{char}},
+		updater,
+		&mockEncounterChecker{active: false},
+		&mockNotifier{},
+		&mockSummaryPoster{},
+	)
+
+	body := PartyRestRequest{
+		RestType:     "long",
+		CharacterIDs: []uuid.UUID{id},
+		CampaignID:   uuid.New(),
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/party-rest", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	h.HandlePartyRest(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if len(updater.updates) != 1 {
+		t.Fatalf("update count = %d, want 1", len(updater.updates))
+	}
+	// Dawn recharge should have restored charges (1d6+1 with max roller = 7, capped at MaxCharges=7)
+	if updater.updates[0].UpdatedInventory == nil {
+		t.Fatal("expected UpdatedInventory to be populated after dawn recharge")
+	}
+	if len(updater.updates[0].UpdatedInventory) != 1 {
+		t.Fatalf("expected 1 item in UpdatedInventory, got %d", len(updater.updates[0].UpdatedInventory))
+	}
+	if updater.updates[0].UpdatedInventory[0].Charges != 7 {
+		t.Errorf("charges = %d, want 7 (fully recharged)", updater.updates[0].UpdatedInventory[0].Charges)
 	}
 }
