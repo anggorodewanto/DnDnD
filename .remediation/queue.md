@@ -62,7 +62,7 @@ Low: 142
 | 50 | B-H06 | High | pending | DM-view fog-of-war ignores `MapData.DMSeesAll` when caller pre-computed fog *without* setting the flag on `FogOfWar` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:33-47`, |
 | 51 | B-H07 | High | pending | Fog renderer does not preserve "previously seen" cells across renders | `/home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:68-93` |
 | 52 | C-H01 | High | done | Auto-crit applies to ranged attacks within 5ft against paralyzed/unconscious | /home/ab/projects/DnDnD/internal/combat/attack.go:727-748 (`CheckAutoCrit`) |
-| 53 | C-H02 | High | in_progress | PC creature size hard-coded to "Medium" — heavy-weapon disadvantage never fires for halflings/gnomes | /home/ab/projects/DnDnD/internal/combat/attack.go:1316-1326 |
+| 53 | C-H02 | High | done | PC creature size hard-coded to "Medium" — heavy-weapon disadvantage never fires for halflings/gnomes | /home/ab/projects/DnDnD/internal/combat/attack.go:1316-1326 |
 | 54 | C-H03 | High | done | Crossbow Expert does not waive ranged-with-hostile-adjacent disadvantage | /home/ab/projects/DnDnD/internal/combat/advantage.go:88-91 |
 | 55 | C-H04 | High | done | Dash adds raw base speed, ignoring exhaustion/condition speed modifiers | /home/ab/projects/DnDnD/internal/combat/standard_actions.go:38-71 (`Dash`), 73-8... |
 | 56 | C-H05 | High | done | Fall damage missing 20d6 cap | /home/ab/projects/DnDnD/internal/combat/altitude.go:101-123 (`FallDamage`) |
@@ -96,7 +96,7 @@ Low: 142
 | 84 | F-H06 | High | pending | Legendary-action budget round-trips through the URL — no server persistence | /home/ab/projects/DnDnD/internal/combat/legendary_handler.go:73-78,170-180 |
 | 85 | F-H07 | High | pending | Counterspell trigger does not validate spell range / line-of-sight | /home/ab/projects/DnDnD/internal/combat/counterspell.go:65-116 |
 | 86 | F-H08 | High | pending | Reaction declarations not validated for the type's prerequisites | /home/ab/projects/DnDnD/internal/combat/reaction.go:27-46 |
-| 87 | G-H01 | High | pending | Gold split silently discards remainder | internal/loot/service.go:289-329 |
+| 87 | G-H01 | High | in_progress | Gold split silently discards remainder | internal/loot/service.go:289-329 |
 | 88 | G-H02 | High | pending | Long-rest hit-dice restoration order is non-deterministic for multiclass | internal/rest/rest.go:409-441 |
 | 89 | G-H03 | High | pending | No combat-resumed long-rest auto-resume | internal/rest/party.go:17-22, internal/rest/party_handler.go:269-308 |
 | 90 | G-H04 | High | pending | `/check medicine target:AR` does not validate target is dying and does not auto-stabilize | internal/discord/check_handler.go:286-320, internal/check/check.go:111-151 |

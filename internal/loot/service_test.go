@@ -178,6 +178,51 @@ func TestClearPool_PoolNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, loot.ErrPoolNotFound)
 }
 
+func TestSplitGold_RemainderRetained(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	_, q := setupTestDB(t)
+	camp := createCampaign(t, q)
+	enc := createEncounter(t, q, camp.ID, "completed")
+
+	npcChar := createCharWithInventory(t, q, camp.ID, "Goblin", 7, nil)
+	createCombatant(t, q, enc.ID,
+		uuid.NullUUID{UUID: npcChar.ID, Valid: true},
+		sql.NullString{}, "Goblin", true, false)
+
+	pc1 := createCharWithInventory(t, q, camp.ID, "Aria", 0, nil)
+	pc2 := createCharWithInventory(t, q, camp.ID, "Gorak", 0, nil)
+	pc3 := createCharWithInventory(t, q, camp.ID, "Zed", 0, nil)
+	createPlayerCharacter(t, q, camp.ID, pc1.ID, "discord-r1")
+	createPlayerCharacter(t, q, camp.ID, pc2.ID, "discord-r2")
+	createPlayerCharacter(t, q, camp.ID, pc3.ID, "discord-r3")
+
+	svc := loot.NewService(q)
+	ctx := context.Background()
+
+	pool, err := svc.CreateLootPool(ctx, enc.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(7), pool.Pool.GoldTotal)
+
+	share, err := svc.SplitGold(ctx, pool.Pool.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), share)
+
+	// Each PC gets 2gp
+	for _, pcID := range []uuid.UUID{pc1.ID, pc2.ID, pc3.ID} {
+		ch, err := q.GetCharacter(ctx, pcID)
+		require.NoError(t, err)
+		assert.Equal(t, int32(2), ch.Gold)
+	}
+
+	// Pool retains remainder: 7 % 3 = 1
+	updPool, err := q.GetLootPool(ctx, pool.Pool.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), updPool.GoldTotal)
+}
+
 func TestSplitGold_ZeroGold(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

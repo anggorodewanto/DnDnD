@@ -315,7 +315,7 @@ func TestSplitGold_ZeroPoolGoldFailure(t *testing.T) {
 	svc := loot.NewService(store)
 	_, err := svc.SplitGold(context.Background(), pool.ID)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "zeroing pool gold")
+	assert.Contains(t, err.Error(), "updating pool gold remainder")
 }
 
 // --- CreateLootPool: combatant listing failure ---

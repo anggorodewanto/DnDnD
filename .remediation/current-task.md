@@ -1,11 +1,11 @@
-finding_id: C-H02
+finding_id: G-H01
 severity: High
-title: PC creature size hard-coded to "Medium" — heavy-weapon disadvantage never fires
-location: internal/combat/attack.go:1316-1326
-spec_ref: Phase 35; spec line 687
+title: Gold split silently discards remainder
+location: internal/loot/service.go:289-329
+spec_ref: spec §Inventory Management line 2661 (Phase 85)
 problem: |
-  resolveAttackerSize returns the creature row's size for NPCs but falls through to "Medium" for every PC. Halfling/gnome PCs wielding heavy weapons never get disadvantage.
+  SplitGold computes share := pool.GoldTotal / len(pcs) then zeros the pool. For 7gp / 3 players, each gets 2gp and 1gp evaporates.
 suggested_fix: |
-  Look up the PC's race and read races.size. Pass it through the attack input.
+  Leave GoldTotal % len(pcs) in the pool for the DM to dispense manually.
 acceptance_criterion: |
-  A Small PC (halfling/gnome) attacking with a heavy weapon gets disadvantage. A Medium PC does not. Tests demonstrate both.
+  After splitting 7gp among 3 players, each gets 2gp and the pool retains 1gp. A test demonstrates this.

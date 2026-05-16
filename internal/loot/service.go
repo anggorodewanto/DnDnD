@@ -318,12 +318,13 @@ func (s *Service) SplitGold(ctx context.Context, poolID uuid.UUID) (int32, error
 		}
 	}
 
-	// Zero out pool gold
+	// Retain remainder in pool
+	remainder := pool.GoldTotal % int32(len(pcs))
 	if _, err := s.store.UpdateLootPoolGold(ctx, refdata.UpdateLootPoolGoldParams{
 		ID:        poolID,
-		GoldTotal: 0,
+		GoldTotal: remainder,
 	}); err != nil {
-		return 0, fmt.Errorf("zeroing pool gold: %w", err)
+		return 0, fmt.Errorf("updating pool gold remainder: %w", err)
 	}
 
 	return share, nil

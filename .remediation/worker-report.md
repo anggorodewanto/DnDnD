@@ -1,31 +1,26 @@
-# Worker Report: C-H02
+# Worker Report: G-H01 — Gold split silently discards remainder
 
-## Finding
-**PC creature size hard-coded to "Medium" — heavy-weapon disadvantage never fires**
+## Status: ✅ FIXED
 
-`resolveAttackerSize` in `internal/combat/attack.go` returned `"Medium"` for all PCs regardless of race. Halfling/gnome PCs wielding heavy weapons never got disadvantage.
+## Summary
 
-## Fix Applied
+`SplitGold` in `internal/loot/service.go` zeroed the pool's `GoldTotal` after distributing shares. When the total was not evenly divisible (e.g., 7gp / 3 players), the remainder was lost.
 
-### Files Changed
-1. **internal/combat/service.go** — Added `GetRace(ctx context.Context, id string) (refdata.Race, error)` to the `Store` interface (reference data lookups section).
-2. **internal/combat/attack.go** — Updated `resolveAttackerSize` to look up the PC's character record, then resolve the race's size via `GetRace`. Falls back to `"Medium"` if either lookup fails (backward compat).
-3. **internal/combat/service_test.go** — Added `getRaceFn` field to `mockStore` struct and `GetRace` method implementation.
-4. **internal/combat/bundle3_test.go** — Added two tests:
-   - `TestPopulateAttackContext_ResolvesPCRaceSize`: verifies a halfling PC resolves to "Small".
-   - `TestSmallPC_HeavyWeapon_GetsDisadvantage`: verifies DetectAdvantage produces disadvantage for a Small creature with a heavy weapon.
+## Changes
 
-### TDD Cycle
-- **Red:** `TestPopulateAttackContext_ResolvesPCRaceSize` failed with `expected: "Small"`, `actual: "Medium"`.
-- **Green:** After wiring `GetRace` through the Store interface and updating `resolveAttackerSize`, all tests pass.
+### 1. Test added (Red)
 
-### Verification
-- `make test` — ✅ all tests pass
-- `make cover-check` — ✅ coverage thresholds met
+`internal/loot/service_test.go` — `TestSplitGold_RemainderRetained`: splits 7gp among 3 players, asserts each gets 2gp and pool retains 1gp.
 
-### Backward Compatibility
-- If `GetRace` returns an error (e.g., race not in DB), falls back to `"Medium"`.
-- If `GetCharacter` fails (no character linked), falls back to `"Medium"`.
-- Existing `TestPopulateAttackContext_DefaultsPCSizeToMedium` still passes (default mock returns `sql.ErrNoRows` for character lookup).
-- Existing `TestPopulateAttackContext_CommandOverrideWins` still passes (explicit `AttackerSize` is never overwritten).
-- `storeAdapter` (wrapping `*refdata.Queries`) automatically satisfies the new interface method since `refdata.Queries` already has `GetRace`.
+### 2. Fix applied (Green)
+
+`internal/loot/service.go` line ~321: replaced `GoldTotal: 0` with `GoldTotal: pool.GoldTotal % int32(len(pcs))`.
+
+### 3. Mock test updated
+
+`internal/loot/service_mock_test.go` — `TestSplitGold_ZeroPoolGoldFailure`: updated error string assertion from `"zeroing pool gold"` to `"updating pool gold remainder"`.
+
+## Verification
+
+- `make test` — all tests pass
+- `make cover-check` — all coverage thresholds met
