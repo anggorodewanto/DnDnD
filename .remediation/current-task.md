@@ -1,11 +1,11 @@
-finding_id: cross-cut-H03
+finding_id: D-H04
 severity: High
-title: Attack roll always adds proficiency bonus regardless of weapon proficiency
-location: internal/combat/attack.go:103-106 (AttackModifier)
-spec_ref: PHB p.194 Attack Rolls
+title: Monk Unarmored Defense not invalidated by shield
+location: internal/combat/equip.go:416; internal/character/stats.go:63
+spec_ref: Phase 48a; PHB Monk "Unarmored Defense"
 problem: |
-  AttackModifier returns ability + profBonus unconditionally. A wizard wielding a longsword still gets +PB.
+  Monk's Unarmored Defense (AC = 10 + DEX + WIS) requires no armor AND no shield. The code adds +2 for shield on top of any ac_formula-derived AC with no class check.
 suggested_fix: |
-  Add a proficient bool parameter and gate the proficiency add on it.
+  When ac_formula is the monk variant (contains WIS), skip the shield bonus.
 acceptance_criterion: |
-  AttackModifier with proficient=false returns only the ability modifier. A test demonstrates this.
+  A monk with a shield does NOT get the shield +2 added to their Unarmored Defense AC. A test demonstrates this.

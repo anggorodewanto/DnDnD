@@ -281,12 +281,14 @@ func TestCalculateAC_UnarmoredDefense_Barbarian(t *testing.T) {
 }
 
 func TestCalculateAC_UnarmoredDefense_WithShield(t *testing.T) {
-	// Monk unarmored defense + shield
+	// Monk unarmored defense + shield: shield invalidates monk Unarmored Defense (PHB).
+	// Shield should NOT add +2 when ac_formula contains WIS.
 	scores := AbilityScores{DEX: 16, WIS: 14}
 	got := CalculateAC(scores, nil, true, "10 + DEX + WIS")
-	// 10 + 3 + 2 + 2 = 17
-	if got != 17 {
-		t.Errorf("CalculateAC monk + shield = %d, want 17", got)
+	// Monk Unarmored Defense requires no shield; shield bonus skipped.
+	// AC = 10 + 3 + 2 = 15 (same as without shield)
+	if got != 15 {
+		t.Errorf("CalculateAC monk + shield = %d, want 15", got)
 	}
 }
 

@@ -60,7 +60,7 @@ func CalculateAC(scores AbilityScores, armor *ArmorInfo, hasShield bool, acFormu
 		ac = max(ac, evaluateACFormula(scores, acFormula))
 	}
 
-	if hasShield {
+	if hasShield && !strings.Contains(acFormula, "WIS") {
 		ac += 2
 	}
 

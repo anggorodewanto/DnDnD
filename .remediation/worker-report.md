@@ -1,24 +1,46 @@
-# Worker Report: cross-cut-H03
+# Worker Report: D-H04 — Monk Unarmored Defense not invalidated by shield
 
-## Finding
-AttackModifier always adds proficiency bonus regardless of weapon proficiency.
+## Status: ✅ FIXED
 
-## Fix Applied
-Added `proficient bool` parameter to `AttackModifier`. The function now only adds `profBonus` when `proficient` is true.
+## Summary
 
-### Files Changed
-1. **internal/combat/attack.go** (line 104): Changed signature from `AttackModifier(scores AbilityScores, weapon refdata.Weapon, profBonus int, monkLevel ...int)` to `AttackModifier(scores AbilityScores, weapon refdata.Weapon, profBonus int, proficient bool, monkLevel ...int)`. Body gates `profBonus` addition on `proficient`.
-2. **internal/combat/attack.go** (line ~490): Updated caller in `ResolveAttack` to pass `true` for backward compat.
-3. **internal/combat/attack_test.go**: Added `proficient bool` field to all existing test cases (set to `true`) and added new test case `"not proficient omits proficiency bonus"` that asserts only ability mod is returned when `proficient=false`.
+Monk's Unarmored Defense (AC = 10 + DEX + WIS) requires no armor AND no shield per PHB. The code was unconditionally adding +2 for shield in both `CalculateAC` (internal/character/stats.go) and `RecalculateAC` (internal/combat/equip.go).
 
-### TDD Workflow
-- **Red**: Added test with `proficient=false` expecting only ability mod → compile error (bool passed where int expected).
-- **Green**: Added `proficient bool` parameter, gated addition, updated caller → all tests pass.
-- **Verify**: `make test` ✅ | `make cover-check` ✅
+## Changes
 
-### Callers Updated
-- `internal/combat/attack.go:ResolveAttack` — passes `true` (proficiency gating already handled upstream via `IsImprovised`/`HasTavernBrawler` zeroing `profBonus`).
+### 1. internal/character/stats.go (line ~63)
+```go
+// Before:
+if hasShield {
+    ac += 2
+}
 
-No other production callers of `AttackModifier` exist (only `SpellAttackModifier` which is a separate function).
+// After:
+if hasShield && !strings.Contains(acFormula, "WIS") {
+    ac += 2
+}
+```
 
-## Status: COMPLETE
+### 2. internal/combat/equip.go (line ~415)
+```go
+// Before:
+if hasShield {
+    ac += 2
+}
+
+// After:
+if hasShield && !(char.AcFormula.Valid && strings.Contains(char.AcFormula.String, "WIS")) {
+    ac += 2
+}
+```
+
+### 3. internal/character/stats_test.go
+Updated `TestCalculateAC_UnarmoredDefense_WithShield` to expect AC 15 (no shield bonus) instead of 17.
+
+### 4. internal/combat/equip_test.go
+Updated `TestRecalculateAC_WithShield`, `TestEquip_Shield_WithACFormula`, and `TestEquip_DoffShield_WithACFormula` to reflect correct monk behavior (shield bonus skipped for WIS formula).
+
+## Verification
+
+- `make test` — all packages pass
+- `make cover-check` — all coverage thresholds met ("OK: coverage thresholds met")

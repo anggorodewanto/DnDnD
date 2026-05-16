@@ -413,7 +413,7 @@ func RecalculateAC(char refdata.Character, armor *refdata.Armor, hasShield bool)
 		}
 	}
 
-	if hasShield {
+	if hasShield && !(char.AcFormula.Valid && strings.Contains(char.AcFormula.String, "WIS")) {
 		ac += 2
 	}
 

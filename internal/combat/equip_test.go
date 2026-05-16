@@ -1183,7 +1183,7 @@ func TestRecalculateAC_ArmorIgnoresFormula(t *testing.T) {
 	assert.Equal(t, int32(16), ac)
 }
 
-// TDD Cycle 75b-4: RecalculateAC with shield adds +2
+// TDD Cycle 75b-4: RecalculateAC with shield — monk WIS formula skips shield bonus
 func TestRecalculateAC_WithShield(t *testing.T) {
 	char := refdata.Character{
 		AbilityScores: json.RawMessage(`{"str":10,"dex":18,"con":12,"int":10,"wis":16,"cha":8}`),
@@ -1191,8 +1191,8 @@ func TestRecalculateAC_WithShield(t *testing.T) {
 	}
 
 	ac := RecalculateAC(char, nil, true)
-	// Formula: 10 + 4 + 3 = 17, + 2 shield = 19
-	assert.Equal(t, int32(19), ac)
+	// Formula: 10 + 4 + 3 = 17, shield skipped for monk (WIS formula)
+	assert.Equal(t, int32(17), ac)
 }
 
 // TDD Cycle 75b-5: RecalculateAC medium armor caps DEX at +2
@@ -1528,19 +1528,19 @@ func TestEquip_Shield_WithACFormula(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	// 17 (unarmored) + 2 (shield) = 19
-	assert.Equal(t, int32(19), result.NewAC)
+	// Monk WIS formula: shield bonus skipped. AC stays 17.
+	assert.Equal(t, int32(17), result.NewAC)
 }
 
 // TDD Cycle 75b-17: Shield unequip uses RecalculateAC with formula
 func TestEquip_DoffShield_WithACFormula(t *testing.T) {
 	_, _, charID, ms := makeStdTestSetup()
 
-	// Monk with shield: AC = 19 (17 unarmored + 2 shield)
+	// Monk with shield: AC = 17 (shield bonus skipped for WIS formula)
 	char := makeEquipChar(charID)
 	char.AbilityScores = json.RawMessage(`{"str":10,"dex":18,"con":12,"int":10,"wis":16,"cha":8}`)
 	char.AcFormula = sql.NullString{String: "10 + DEX + WIS", Valid: true}
-	char.Ac = 19
+	char.Ac = 17
 	char.EquippedOffHand = sql.NullString{String: "shield", Valid: true}
 
 	ms.getArmorFn = func(ctx context.Context, id string) (refdata.Armor, error) {
