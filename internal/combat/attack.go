@@ -100,9 +100,13 @@ func abilityModForWeapon(scores AbilityScores, weapon refdata.Weapon, monkLevel 
 	return strMod
 }
 
-// AttackModifier returns the total attack modifier: ability mod + proficiency bonus.
-func AttackModifier(scores AbilityScores, weapon refdata.Weapon, profBonus int, monkLevel ...int) int {
-	return abilityModForWeapon(scores, weapon, monkLevel...) + profBonus
+// AttackModifier returns the total attack modifier: ability mod + proficiency bonus (if proficient).
+func AttackModifier(scores AbilityScores, weapon refdata.Weapon, profBonus int, proficient bool, monkLevel ...int) int {
+	mod := abilityModForWeapon(scores, weapon, monkLevel...)
+	if proficient {
+		mod += profBonus
+	}
+	return mod
 }
 
 // DamageModifier returns the ability modifier added to damage rolls.
@@ -487,7 +491,7 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		return AttackResult{}, fmt.Errorf("Reckless Attack requires a STR-based attack (finesse weapon using DEX)")
 	}
 
-	atkMod := AttackModifier(input.Scores, input.Weapon, profBonus, input.MonkLevel)
+	atkMod := AttackModifier(input.Scores, input.Weapon, profBonus, true, input.MonkLevel)
 	dmgMod := DamageModifier(input.Scores, input.Weapon, input.MonkLevel)
 	if input.OverrideDmgMod != nil {
 		dmgMod = *input.OverrideDmgMod

@@ -71,45 +71,58 @@ func TestIsRangedWeapon(t *testing.T) {
 
 func TestAttackModifier(t *testing.T) {
 	tests := []struct {
-		name      string
-		scores    AbilityScores
-		weapon    refdata.Weapon
-		profBonus int
-		expected  int
+		name       string
+		scores     AbilityScores
+		weapon     refdata.Weapon
+		profBonus  int
+		proficient bool
+		expected   int
 	}{
 		{
-			name:      "melee weapon uses STR",
-			scores:    AbilityScores{Str: 16, Dex: 14},
-			weapon:    refdata.Weapon{WeaponType: "simple_melee"},
-			profBonus: 2,
-			expected:  5, // STR mod 3 + prof 2
+			name:       "melee weapon uses STR",
+			scores:     AbilityScores{Str: 16, Dex: 14},
+			weapon:     refdata.Weapon{WeaponType: "simple_melee"},
+			profBonus:  2,
+			proficient: true,
+			expected:   5, // STR mod 3 + prof 2
 		},
 		{
-			name:      "ranged weapon uses DEX",
-			scores:    AbilityScores{Str: 10, Dex: 18},
-			weapon:    refdata.Weapon{WeaponType: "simple_ranged"},
-			profBonus: 2,
-			expected:  6, // DEX mod 4 + prof 2
+			name:       "ranged weapon uses DEX",
+			scores:     AbilityScores{Str: 10, Dex: 18},
+			weapon:     refdata.Weapon{WeaponType: "simple_ranged"},
+			profBonus:  2,
+			proficient: true,
+			expected:   6, // DEX mod 4 + prof 2
 		},
 		{
-			name:      "finesse weapon uses higher of STR/DEX (DEX higher)",
-			scores:    AbilityScores{Str: 10, Dex: 18},
-			weapon:    refdata.Weapon{WeaponType: "simple_melee", Properties: []string{"finesse"}},
-			profBonus: 2,
-			expected:  6, // DEX mod 4 + prof 2
+			name:       "finesse weapon uses higher of STR/DEX (DEX higher)",
+			scores:     AbilityScores{Str: 10, Dex: 18},
+			weapon:     refdata.Weapon{WeaponType: "simple_melee", Properties: []string{"finesse"}},
+			profBonus:  2,
+			proficient: true,
+			expected:   6, // DEX mod 4 + prof 2
 		},
 		{
-			name:      "finesse weapon uses higher of STR/DEX (STR higher)",
-			scores:    AbilityScores{Str: 20, Dex: 14},
-			weapon:    refdata.Weapon{WeaponType: "simple_melee", Properties: []string{"finesse"}},
-			profBonus: 3,
-			expected:  8, // STR mod 5 + prof 3
+			name:       "finesse weapon uses higher of STR/DEX (STR higher)",
+			scores:     AbilityScores{Str: 20, Dex: 14},
+			weapon:     refdata.Weapon{WeaponType: "simple_melee", Properties: []string{"finesse"}},
+			profBonus:  3,
+			proficient: true,
+			expected:   8, // STR mod 5 + prof 3
+		},
+		{
+			name:       "not proficient omits proficiency bonus",
+			scores:     AbilityScores{Str: 16, Dex: 14},
+			weapon:     refdata.Weapon{WeaponType: "simple_melee"},
+			profBonus:  2,
+			proficient: false,
+			expected:   3, // STR mod 3 only, no prof
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := AttackModifier(tt.scores, tt.weapon, tt.profBonus)
+			got := AttackModifier(tt.scores, tt.weapon, tt.profBonus, tt.proficient)
 			if got != tt.expected {
 				t.Errorf("AttackModifier() = %d, want %d", got, tt.expected)
 			}

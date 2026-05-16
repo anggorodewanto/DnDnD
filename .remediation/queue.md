@@ -116,7 +116,7 @@ Low: 142
 | 104 | H-H09 | High | pending | Starting equipment ignores background packs | /home/ab/projects/DnDnD/internal/portal/starting_equipment.go (only class packs ... |
 | 105 | H-H10 | High | done | DeriveSpeed ignores race | /home/ab/projects/DnDnD/internal/portal/builder_store_adapter.go:275 |
 | 106 | H-H11 | High | done | DDB class names not normalised to internal IDs | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:177; /home/ab/projects/DnDn... |
-| 107 | H-H12 | High | in_progress | Plus-2 ASI silently truncates at cap (loses 1 point) without warning | /home/ab/projects/DnDnD/internal/levelup/asi.go:81 (`applyPlus2`) |
+| 107 | H-H12 | High | done | Plus-2 ASI silently truncates at cap (loses 1 point) without warning | /home/ab/projects/DnDnD/internal/levelup/asi.go:81 (`applyPlus2`) |
 | 108 | H-H13 | High | pending | /api/levelup/asi/approve endpoint has no character-owner / DM check | /home/ab/projects/DnDnD/internal/levelup/handler.go:129 (`HandleApproveASI`) |
 | 109 | I-H01 | High | pending | Dashboard DM-created chars miss background skill proficiencies | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:221-253, 117 ; compare ... |
 | 110 | I-H02 | High | pending | DM character form doesn't pass campaign_id to spell/equipment refdata | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go:30-34, 281-318,... |
@@ -140,7 +140,7 @@ Low: 142
 | 128 | J-H09 | High | pending | Encounter snapshot publisher does NOT trigger on /move position writes | /home/ab/projects/DnDnD/internal/discord/move_handler.go:686-735; combat.Service... |
 | 129 | cross-cut-H01 | High | pending | `routePhase43DeathSave` skips the drop-to-0 instant-death rule when overflow is exactly the limit but damage came from a hit at >0 HP and `adjusted` overshoots | `internal/combat/damage.go:336-346`, |
 | 130 | cross-cut-H02 | High | pending | Multiclass spellcasting ability picks the highest score across classes | `internal/combat/spellcasting.go:1544-1557` |
-| 131 | cross-cut-H03 | High | pending | Attack roll always adds proficiency bonus regardless of weapon proficiency | `internal/combat/attack.go:103-106` (`AttackModifier`). |
+| 131 | cross-cut-H03 | High | in_progress | Attack roll always adds proficiency bonus regardless of weapon proficiency | `internal/combat/attack.go:103-106` (`AttackModifier`). |
 | 132 | cross-cut-H04 | High | done | Paladin Channel Divinity max uses scale to 2 at level 15 | `internal/combat/channel_divinity.go:31-38` |
 | 133 | cross-cut-H05 | High | done | Action Surge max uses never scales to 2 at fighter level 17 | every `action-surge` feature seed asserts `Max: 1` |
 | 134 | A-M01 | Medium | pending | `MessageQueue.Stop` doesn't preempt long backoff sleeps | internal/discord/queue.go:90-134 |
