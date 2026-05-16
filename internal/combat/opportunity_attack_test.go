@@ -366,7 +366,7 @@ func TestChebyshevDist(t *testing.T) {
 
 func TestResolveHostileReach_Default5ft(t *testing.T) {
 	hostile := makeCombatant("Goblin", "A", 1, true)
-	assert.Equal(t, 5, resolveHostileReach(hostile, nil))
+	assert.Equal(t, 5, resolveHostileReach(hostile, nil, nil))
 }
 
 func TestResolveHostileReach_NPCWithReachWeapon(t *testing.T) {
@@ -380,12 +380,48 @@ func TestResolveHostileReach_NPCWithReachWeapon(t *testing.T) {
 			{Name: "Greatclub", ReachFt: 10},
 		},
 	}
-	assert.Equal(t, 10, resolveHostileReach(hostile, attacks))
+	assert.Equal(t, 10, resolveHostileReach(hostile, attacks, nil))
 }
 
 func TestResolveHostileReach_PCDefault(t *testing.T) {
 	hostile := makeCombatant("Fighter", "A", 1, false)
-	assert.Equal(t, 5, resolveHostileReach(hostile, nil))
+	assert.Equal(t, 5, resolveHostileReach(hostile, nil, nil))
+}
+
+// C-H10: PC with a reach weapon (glaive) should get 10ft reach without
+// the caller needing to pass a pcReachByID override map.
+func TestResolveHostileReach_PCWithReachWeapon(t *testing.T) {
+	hostile := makeCombatant("Fighter", "A", 1, false)
+	pcWeaponProps := map[uuid.UUID][]string{
+		hostile.ID: {"two-handed", "heavy", "reach"},
+	}
+	assert.Equal(t, 10, resolveHostileReach(hostile, nil, pcWeaponProps))
+}
+
+func TestDetectOA_PCWithReachWeapon_NoOverrideMap(t *testing.T) {
+	// NPC mover at C2, hostile PC with glaive (reach) at A2.
+	// 10ft reach = 2 squares. Mover starts at dist 2 (in reach), moves to dist 3 (out).
+	mover := makeCombatant("Goblin", "C", 2, true)
+	hostile := makeCombatant("Fighter", "A", 2, false)
+
+	turn := refdata.Turn{HasDisengaged: false}
+	hostileTurn := refdata.Turn{ReactionUsed: false}
+
+	path := []pathfinding.Point{
+		{Col: 2, Row: 1}, // C2 (dist 2 from A2, in 10ft reach)
+		{Col: 3, Row: 1}, // D2 (dist 3, out of reach)
+		{Col: 4, Row: 1}, // E2
+	}
+
+	pcWeaponProps := map[uuid.UUID][]string{
+		hostile.ID: {"two-handed", "heavy", "reach"},
+	}
+	triggers := DetectOpportunityAttacksWithReach(
+		mover, path, []refdata.Combatant{mover, hostile}, turn,
+		map[uuid.UUID]refdata.Turn{hostile.ID: hostileTurn}, nil, nil, pcWeaponProps,
+	)
+	require.Len(t, triggers, 1)
+	assert.Equal(t, hostile.ID, triggers[0].HostileID)
 }
 
 // --- TDD Cycle 18: findReachExit edge cases ---
@@ -482,7 +518,7 @@ func TestResolveHostileReach_NPCNoReachInAttacks(t *testing.T) {
 		},
 	}
 	// Should still return 5 since 0 < 5
-	assert.Equal(t, 5, resolveHostileReach(hostile, attacks))
+	assert.Equal(t, 5, resolveHostileReach(hostile, attacks, nil))
 }
 
 // --- TDD Cycle 22: NPC creature ref not found in attacks map ---
@@ -531,7 +567,7 @@ func TestDetectOpportunityAttacksWithReach_PCReachWeaponOverride(t *testing.T) {
 	pcReach := map[uuid.UUID]int{hostile.ID: 10}
 	triggers := DetectOpportunityAttacksWithReach(
 		mover, path, []refdata.Combatant{mover, hostile}, turn,
-		map[uuid.UUID]refdata.Turn{hostile.ID: hostileTurn}, nil, pcReach,
+		map[uuid.UUID]refdata.Turn{hostile.ID: hostileTurn}, nil, pcReach, nil,
 	)
 	if assert.Len(t, triggers, 1) {
 		assert.Equal(t, hostile.ID, triggers[0].HostileID)
@@ -541,7 +577,7 @@ func TestDetectOpportunityAttacksWithReach_PCReachWeaponOverride(t *testing.T) {
 	// 5ft (1 square) reach means the mover started outside reach.
 	noReachTriggers := DetectOpportunityAttacksWithReach(
 		mover, path, []refdata.Combatant{mover, hostile}, turn,
-		map[uuid.UUID]refdata.Turn{hostile.ID: hostileTurn}, nil, nil,
+		map[uuid.UUID]refdata.Turn{hostile.ID: hostileTurn}, nil, nil, nil,
 	)
 	assert.Empty(t, noReachTriggers, "without reach override the start tile is outside reach")
 }
@@ -554,7 +590,7 @@ func TestResolveHostileReach_NPCNotInMap(t *testing.T) {
 	attacks := map[string][]CreatureAttackEntry{
 		"goblin": {{Name: "Scimitar", ReachFt: 5}},
 	}
-	assert.Equal(t, 5, resolveHostileReach(hostile, attacks))
+	assert.Equal(t, 5, resolveHostileReach(hostile, attacks, nil))
 }
 
 // --- SR-028: pending OA tracker + end-of-round forfeit sweep ---

@@ -69,7 +69,7 @@ func DetectOpportunityAttacks(
 	hostileTurns map[uuid.UUID]refdata.Turn,
 	creatureAttacks map[string][]CreatureAttackEntry,
 ) []OATrigger {
-	return DetectOpportunityAttacksWithReach(mover, path, allCombatants, moverTurn, hostileTurns, creatureAttacks, nil)
+	return DetectOpportunityAttacksWithReach(mover, path, allCombatants, moverTurn, hostileTurns, creatureAttacks, nil, nil)
 }
 
 // DetectOpportunityAttacksWithReach is the same as DetectOpportunityAttacks but
@@ -77,6 +77,9 @@ func DetectOpportunityAttacks(
 // PC hostiles holding reach weapons (glaive, halberd, lance, pike, whip) get
 // 10ft reach instead of the default 5ft. NPC reach still flows through
 // creatureAttacks as before; an explicit override in pcReachByID always wins.
+// pcWeaponProps maps combatant ID → weapon property list; resolveHostileReach
+// uses it to detect the "reach" property for PCs without a caller-supplied
+// reach map (C-H10).
 func DetectOpportunityAttacksWithReach(
 	mover refdata.Combatant,
 	path []pathfinding.Point,
@@ -85,6 +88,7 @@ func DetectOpportunityAttacksWithReach(
 	hostileTurns map[uuid.UUID]refdata.Turn,
 	creatureAttacks map[string][]CreatureAttackEntry,
 	pcReachByID map[uuid.UUID]int,
+	pcWeaponProps map[uuid.UUID][]string,
 ) []OATrigger {
 	if moverTurn.HasDisengaged {
 		return nil
@@ -111,7 +115,7 @@ func DetectOpportunityAttacksWithReach(
 			continue
 		}
 
-		reachFt := resolveHostileReach(hostile, creatureAttacks)
+		reachFt := resolveHostileReach(hostile, creatureAttacks, pcWeaponProps)
 		if override, ok := pcReachByID[hostile.ID]; ok && override > 0 {
 			reachFt = override
 		}
@@ -146,8 +150,9 @@ func DetectOpportunityAttacksWithReach(
 }
 
 // resolveHostileReach determines the melee reach of a hostile combatant in feet.
-// For NPCs with creature attacks, uses the max reach_ft found. Default is 5ft.
-func resolveHostileReach(hostile refdata.Combatant, creatureAttacks map[string][]CreatureAttackEntry) int {
+// For NPCs with creature attacks, uses the max reach_ft found.
+// For PCs, checks pcWeaponProps for the "reach" property. Default is 5ft.
+func resolveHostileReach(hostile refdata.Combatant, creatureAttacks map[string][]CreatureAttackEntry, pcWeaponProps map[uuid.UUID][]string) int {
 	// For NPCs, check creature attacks
 	if hostile.IsNpc && hostile.CreatureRefID.Valid && creatureAttacks != nil {
 		if attacks, ok := creatureAttacks[hostile.CreatureRefID.String]; ok {
@@ -158,6 +163,16 @@ func resolveHostileReach(hostile refdata.Combatant, creatureAttacks map[string][
 				}
 			}
 			return maxReach
+		}
+	}
+	// For PCs, check weapon properties for "reach"
+	if !hostile.IsNpc && pcWeaponProps != nil {
+		if props, ok := pcWeaponProps[hostile.ID]; ok {
+			for _, p := range props {
+				if strings.EqualFold(p, "reach") {
+					return 10
+				}
+			}
 		}
 	}
 	return 5

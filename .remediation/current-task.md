@@ -1,11 +1,11 @@
-finding_id: G-H08
+finding_id: C-H10
 severity: High
-title: Long rest does not propagate dawn recharge to party rest persistence
-location: internal/rest/party_handler.go:180-216
-spec_ref: spec §Long Rest + §Magic Items recharge line 2707 (Phase 83b)
+title: Reach weapon OA detection — PC reach map relies on caller passing it
+location: internal/combat/opportunity_attack.go:80-117, 148-164
+spec_ref: Phase 39 / OA detection; spec line 1414-1416
 problem: |
-  applyPartyLongRest builds LongRestInput without Inventory or RechargeInfo, so dawn-recharge never fires for party rests.
+  resolveHostileReach returns 5ft for any PC by default. The override map pcReachByID must be supplied by the caller. If the move handler forgets, PCs with glaives don't threaten 10ft.
 suggested_fix: |
-  Extend PartyCharacterInfo to carry Inventory + RechargeInfo, pass them through.
+  Move the PC reach computation into resolveHostileReach by looking up the PC's equipped_main_hand weapon properties.
 acceptance_criterion: |
-  A party long rest triggers dawn recharge for magic items. A test demonstrates charges are restored.
+  A PC with a reach weapon (glaive) threatens 10ft without the caller needing to pass a reach map. A test demonstrates this.
