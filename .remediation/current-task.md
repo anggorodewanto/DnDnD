@@ -1,11 +1,11 @@
-finding_id: F-H04
+finding_id: E-H03
 severity: High
-title: Free-object interaction whitelist is too permissive / English-only
-location: internal/combat/interact.go:13-52
-spec_ref: spec §Free Object Interaction lines 1198-1201; Phase 74
+title: Pact-magic upcast respects pact level but silently ignores --slot requests
+location: internal/combat/spellcasting.go:446-457
+spec_ref: Phase 64 "Pact Magic (Warlock)"
 problem: |
-  autoResolvablePatterns matches by prefix on "open", "grab", etc. A player typing "/interact open the locked treasure chest" auto-resolves even though the lock state matters.
+  If a multiclass warlock passes --slot 2 but their pact slot is level 3, the code uses pact slot at level 3 regardless. Players cannot intentionally downcast below pact level.
 suggested_fix: |
-  Reject auto-resolve if the description contains "lock", "trap", "stuck", "barred" — route to DM queue instead.
+  When cmd.SlotLevel > 0 and falling into the pact path, reject with error if cmd.SlotLevel > pactSlots.SlotLevel. If cmd.SlotLevel < pactSlots.SlotLevel, also reject (can't downcast pact slots).
 acceptance_criterion: |
-  An interaction containing "locked" is NOT auto-resolved (routes to DM queue). An interaction "open the door" IS auto-resolved. Tests demonstrate both.
+  A warlock with pact slot level 3 requesting --slot 5 gets an error. A test demonstrates this.

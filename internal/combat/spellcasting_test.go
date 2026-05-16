@@ -3574,3 +3574,38 @@ func TestCast_SpellAttackRollMode_Advantage(t *testing.T) {
 	assert.Equal(t, 15, result.AttackRoll)
 	assert.Equal(t, 22, result.AttackTotal)
 }
+
+// TDD Cycle E-H03: Pact slot rejects mismatched --slot level
+func TestCast_PactSlot_RejectsSlotLevelMismatch(t *testing.T) {
+	charID := uuid.New()
+	char := makeWarlockCharacter(charID) // pact slots are level 3
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeHexSpell(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:   "hex",
+		CasterID:  caster.ID,
+		TargetID:  target.ID,
+		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		SlotLevel: 5, // pact slots are level 3; this should be rejected
+	}
+
+	_, err := svc.Cast(context.Background(), cmd, testRoller())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Pact slots always cast at level 3; cannot use --slot 5")
+}

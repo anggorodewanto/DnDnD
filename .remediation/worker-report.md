@@ -1,23 +1,29 @@
-# Worker Report: F-H04
+# Worker Report: E-H03
 
-**Worker:** worker-F-H04
-**Status:** ✅ Complete
+**Finding:** Pact-magic upcast respects pact level but silently ignores --slot requests  
+**Status:** ✅ Fixed  
+**Worker:** worker-E-H03  
 **Date:** 2026-05-16
 
-## Finding
+## Summary
 
-Auto-resolve fired on prefix match (e.g. "open") even when the description contained words implying DM adjudication ("locked", "trapped", "stuck", "barred", "sealed").
+When `cmd.SlotLevel` was set and the pact path was taken, the requested slot level was silently overridden to the pact slot level. Players could not detect that their `--slot` flag was being ignored.
 
-## Fix Applied
+## Changes
 
-Added a `dmRequiredKeywords` blocklist in `internal/combat/interact.go`. After a prefix match succeeds, the description is checked for any DM-required keyword. If found, `isAutoResolvable` returns `false`, routing the interaction to the DM queue.
+### `internal/combat/spellcasting.go` (line ~451)
 
-## Files Changed
+Added validation in the pact-magic branch: if `cmd.SlotLevel > 0 && cmd.SlotLevel != pactSlots.SlotLevel`, return an error:
 
-- `internal/combat/interact.go` — added `dmRequiredKeywords` slice and blocklist check inside `isAutoResolvable`.
-- `internal/combat/interact_test.go` — added 5 test cases to `TestInteract_AutoResolvablePatterns` covering blocked keywords ("locked chest", "barred gate", "trapped handle", "sealed vault", "stuck door").
+```
+"Pact slots always cast at level %d; cannot use --slot %d"
+```
+
+### `internal/combat/spellcasting_test.go`
+
+Added `TestCast_PactSlot_RejectsSlotLevelMismatch`: a warlock with pact level 3 requests `--slot 5`, expects an error containing the descriptive message.
 
 ## Verification
 
-- `make test` — all tests pass.
-- `make cover-check` — all coverage thresholds met.
+- `make test` — all tests pass
+- `make cover-check` — all coverage thresholds met

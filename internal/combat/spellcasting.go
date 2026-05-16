@@ -449,6 +449,9 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	if spellLevel > 0 && !cmd.IsRitual {
 		// Use pact slot if available, spell fits, and not forced to regular slots
 		if !cmd.UseSpellSlot && pactSlots.Current > 0 && spellLevel <= pactSlots.SlotLevel {
+			if cmd.SlotLevel > 0 && cmd.SlotLevel != pactSlots.SlotLevel {
+				return CastResult{}, fmt.Errorf("Pact slots always cast at level %d; cannot use --slot %d", pactSlots.SlotLevel, cmd.SlotLevel)
+			}
 			effectiveSlotLevel = pactSlots.SlotLevel
 			usePactSlot = true
 		} else {
