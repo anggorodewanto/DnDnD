@@ -106,7 +106,7 @@ Low: 142
 | 94 | G-H08 | High | pending | Long rest does not propagate dawn recharge to party rest persistence | internal/rest/party_handler.go:180-216 |
 | 95 | G-H09 | High | pending | Encounter-active check on rest can be bypassed for party rest if `HasActiveEncounter` returns false | internal/discord/rest_handler.go:159-164 |
 | 96 | H-H01 | High | done | Player-identity not validated on ASI button / select interactions | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:354,391,647,731 |
-| 97 | H-H02 | High | in_progress | DM approve/deny buttons have no role check | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:456 (`HandleDMApprove`),... |
+| 97 | H-H02 | High | done | DM approve/deny buttons have no role check | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:456 (`HandleDMApprove`),... |
 | 98 | H-H03 | High | pending | ASI ApproveASI silently rejects feat type instead of routing | /home/ab/projects/DnDnD/internal/levelup/asi.go:35 (`ApplyASI`) |
 | 99 | H-H04 | High | pending | DDB "off-list spell" detection only covers wizard with 16 spells | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:382 (`classSpellLists`) |
 | 100 | H-H05 | High | pending | Builder service: token redeem races and isn't user-bound | /home/ab/projects/DnDnD/internal/portal/builder_service.go:219-238 (`CreateChara... |
