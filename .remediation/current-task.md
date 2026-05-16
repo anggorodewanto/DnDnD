@@ -1,11 +1,11 @@
-finding_id: B-H06
+finding_id: C-H07
 severity: High
-title: DM-view fog-of-war ignores MapData.DMSeesAll when caller pre-computed fog
-location: internal/gamemap/renderer/renderer.go:33-47, fog.go:14-20, fog_types.go:32-40
-spec_ref: spec §Dynamic Fog of War; Phase 22
+title: Pre-clamp HP overflow excludes temp-HP absorbed damage from instant-death check
+location: internal/combat/damage.go:226-247, 330-373
+spec_ref: Phase 43; spec line 2096
 problem: |
-  RenderMap only propagates md.DMSeesAll into md.FogOfWar.DMSeesAll when fog is non-nil at call time. filterCombatantsForFog checks only fow.DMSeesAll, never md.DMSeesAll. Result: enemies on Unexplored tiles disappear from the DM's map even with MapData.DMSeesAll = true.
+  The finding says the code is actually correct but needs a test to lock the invariant: "PC at 0 HP with 5 temp HP takes 25 damage; max HP 18" should result in instant death (25-5=20 >= 18).
 suggested_fix: |
-  Read md.DMSeesAll || (md.FogOfWar != nil && md.FogOfWar.DMSeesAll) in both DrawFogOfWar and filterCombatantsForFog.
+  Add an explicit test for "damage-at-0 with temp HP" to lock the invariant.
 acceptance_criterion: |
-  When md.DMSeesAll=true but FogOfWar.DMSeesAll=false, the DM still sees all combatants. A test demonstrates this.
+  A test demonstrates that a PC at 0 HP with 5 temp HP taking 25 damage (max HP 18) results in instant death.

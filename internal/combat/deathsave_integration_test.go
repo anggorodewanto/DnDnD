@@ -357,3 +357,29 @@ func TestResetDyingState_LeavesProne(t *testing.T) {
 	// Prone must remain (spec: "Status → conscious, still prone").
 	assert.True(t, HasCondition(updated.Conditions, "prone"), "prone must remain after heal-from-0 (spec rule)")
 }
+
+// --- C-H07: Damage-at-0 with temp HP still triggers instant death when
+// remaining damage (after temp HP absorption) >= maxHP.
+func TestApplyDamage_AtZeroHP_TempHPAbsorbedStillInstantDeath(t *testing.T) {
+	combatantID := uuid.New()
+	encID := uuid.New()
+	target := &refdata.Combatant{
+		ID: combatantID, EncounterID: encID,
+		HpMax: 18, HpCurrent: 0, TempHp: 5, IsAlive: true, IsNpc: false,
+		DisplayName: "Aria",
+		Conditions:  json.RawMessage(`[{"condition":"unconscious"},{"condition":"prone"}]`),
+		DeathSaves:  nullRaw(`{"successes":0,"failures":0}`),
+	}
+	store := newDeathSaveDamageStore(target)
+	svc := NewService(store.mockStore)
+
+	// 25 damage, 5 absorbed by temp HP -> 20 adjusted >= 18 maxHP -> instant death.
+	res, err := svc.ApplyDamage(context.Background(), ApplyDamageInput{
+		EncounterID: encID, Target: *target, RawDamage: 25, DamageType: "slashing",
+	})
+	require.NoError(t, err)
+	assert.False(t, res.IsAlive, "remaining damage after temp HP (20) >= maxHP (18) must be instant death")
+	assert.True(t, res.Killed)
+	assert.True(t, res.InstantDeath)
+	assert.Empty(t, store.deathSaveWrites, "instant death must skip death save tally")
+}

@@ -1,38 +1,20 @@
-# Worker Report: B-H06
+# Worker Report: C-H07
 
-## Finding
+**Finding:** Pre-clamp HP overflow excludes temp-HP absorbed damage from instant-death check  
+**Verdict:** Code is correct; test added to lock the invariant.
 
-**B-H06:** DM-view fog-of-war ignores `MapData.DMSeesAll` when caller pre-computed fog.
+## What was done
 
-## Status: Already Fixed — Test Added
+Added `TestApplyDamage_AtZeroHP_TempHPAbsorbedStillInstantDeath` to `internal/combat/deathsave_integration_test.go`.
 
-The propagation code already exists in `renderer.go:53-54`:
+The test asserts: a PC at 0 HP with 5 temp HP taking 25 slashing damage (maxHP 18) results in instant death. Temp HP absorbs 5, leaving 20 adjusted damage which is passed to `CheckInstantDeath(20, 18)` → true.
 
-```go
-if md.FogOfWar != nil && md.DMSeesAll {
-    md.FogOfWar.DMSeesAll = true
-}
-```
+## Results
 
-This was introduced in a prior commit (likely `dbb1464` batch 4). However, no test covered the **pre-computed fog** scenario specifically (existing test `TestRenderMap_DMSeesAll_RendersEnemyOnUnexplored` only tests auto-computed fog via VisionSources).
+- **Test:** PASS on first run — code already handles this correctly.
+- **`make test`:** PASS (all packages).
+- **`make cover-check`:** PASS (all thresholds met).
 
-## What Was Done
+## File changed
 
-1. **Red:** Wrote `TestRenderMap_PreComputedFog_DMSeesAll_ShowsAllCombatants` in `fog_extra_test.go`. Temporarily disabled the propagation to confirm the test fails (enemy on Unexplored tile is filtered out when `md.DMSeesAll=true` but `fow.DMSeesAll=false`).
-2. **Green:** Restored the propagation. Test passes.
-3. **Verify:** `make test` ✅ | `make cover-check` ✅
-
-## Test Added
-
-**File:** `internal/gamemap/renderer/fog_extra_test.go`
-
-**Test:** `TestRenderMap_PreComputedFog_DMSeesAll_ShowsAllCombatants`
-
-Scenario: Caller passes pre-computed `FogOfWar` with all tiles Unexplored and `DMSeesAll=false`, but sets `md.DMSeesAll=true`. Asserts that:
-- `md.FogOfWar.DMSeesAll` is propagated to `true`
-- Enemy combatant on Unexplored tile is NOT filtered out
-
-## Files Modified
-
-- `internal/gamemap/renderer/fog_extra_test.go` — added 1 test function (29 lines)
-- `internal/gamemap/renderer/renderer.go` — **no changes** (fix already present)
+- `internal/combat/deathsave_integration_test.go` — appended one test function (26 lines).

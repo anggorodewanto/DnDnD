@@ -59,7 +59,7 @@ Low: 142
 | 47 | B-H03 | High | done | Asset upload accepts arbitrary MIME types (XSS / file-type abuse risk) | `/home/ab/projects/DnDnD/internal/asset/handler.go:36-83`, |
 | 48 | B-H04 | High | pending | Map renderer never composites the uploaded background image | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go` |
 | 49 | B-H05 | High | pending | `TilesetRefs` request field silently dropped by HTTP handler | `/home/ab/projects/DnDnD/internal/gamemap/handler.go:65-82, |
-| 50 | B-H06 | High | in_progress | DM-view fog-of-war ignores `MapData.DMSeesAll` when caller pre-computed fog *without* setting the flag on `FogOfWar` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:33-47`, |
+| 50 | B-H06 | High | done | DM-view fog-of-war ignores `MapData.DMSeesAll` when caller pre-computed fog *without* setting the flag on `FogOfWar` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:33-47`, |
 | 51 | B-H07 | High | pending | Fog renderer does not preserve "previously seen" cells across renders | `/home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:68-93` |
 | 52 | C-H01 | High | done | Auto-crit applies to ranged attacks within 5ft against paralyzed/unconscious | /home/ab/projects/DnDnD/internal/combat/attack.go:727-748 (`CheckAutoCrit`) |
 | 53 | C-H02 | High | done | PC creature size hard-coded to "Medium" — heavy-weapon disadvantage never fires for halflings/gnomes | /home/ab/projects/DnDnD/internal/combat/attack.go:1316-1326 |
@@ -67,7 +67,7 @@ Low: 142
 | 55 | C-H04 | High | done | Dash adds raw base speed, ignoring exhaustion/condition speed modifiers | /home/ab/projects/DnDnD/internal/combat/standard_actions.go:38-71 (`Dash`), 73-8... |
 | 56 | C-H05 | High | done | Fall damage missing 20d6 cap | /home/ab/projects/DnDnD/internal/combat/altitude.go:101-123 (`FallDamage`) |
 | 57 | C-H06 | High | done | Resistance/vulnerability halving allows damage to go to 0 (RAW says min 1) | /home/ab/projects/DnDnD/internal/combat/damage.go:38-43 (`ApplyDamageResistances... |
-| 58 | C-H07 | High | pending | Pre-clamp HP overflow excludes temp-HP absorbed damage from instant-death check | /home/ab/projects/DnDnD/internal/combat/damage.go:226-247, 330-373 |
+| 58 | C-H07 | High | in_progress | Pre-clamp HP overflow excludes temp-HP absorbed damage from instant-death check | /home/ab/projects/DnDnD/internal/combat/damage.go:226-247, 330-373 |
 | 59 | C-H08 | High | superseded | Off-hand attack accepts non-melee "light" weapons | /home/ab/projects/DnDnD/internal/combat/attack.go:1182-1196 |
 | 60 | C-H09 | High | pending | Diagonal pathfinding ignores wall edges entirely (could allow phasing through a single diagonal wall) | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:242-244 |
 | 61 | C-H10 | High | pending | Reach weapon OA detection — PC reach map relies on caller passing it | /home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:80-117, 148-164 (`... |
