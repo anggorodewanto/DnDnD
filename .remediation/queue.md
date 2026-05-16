@@ -59,7 +59,7 @@ Low: 142
 | 47 | B-H03 | High | done | Asset upload accepts arbitrary MIME types (XSS / file-type abuse risk) | `/home/ab/projects/DnDnD/internal/asset/handler.go:36-83`, |
 | 48 | B-H04 | High | pending | Map renderer never composites the uploaded background image | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go` |
 | 49 | B-H05 | High | pending | `TilesetRefs` request field silently dropped by HTTP handler | `/home/ab/projects/DnDnD/internal/gamemap/handler.go:65-82, |
-| 50 | B-H06 | High | pending | DM-view fog-of-war ignores `MapData.DMSeesAll` when caller pre-computed fog *without* setting the flag on `FogOfWar` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:33-47`, |
+| 50 | B-H06 | High | in_progress | DM-view fog-of-war ignores `MapData.DMSeesAll` when caller pre-computed fog *without* setting the flag on `FogOfWar` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:33-47`, |
 | 51 | B-H07 | High | pending | Fog renderer does not preserve "previously seen" cells across renders | `/home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:68-93` |
 | 52 | C-H01 | High | done | Auto-crit applies to ranged attacks within 5ft against paralyzed/unconscious | /home/ab/projects/DnDnD/internal/combat/attack.go:727-748 (`CheckAutoCrit`) |
 | 53 | C-H02 | High | done | PC creature size hard-coded to "Medium" — heavy-weapon disadvantage never fires for halflings/gnomes | /home/ab/projects/DnDnD/internal/combat/attack.go:1316-1326 |

@@ -219,3 +219,32 @@ func TestRenderMap_DMSeesAll_RendersEnemyOnUnexplored(t *testing.T) {
 	require.NotNil(t, md.FogOfWar)
 	assert.True(t, md.FogOfWar.DMSeesAll, "RenderMap must propagate DMSeesAll into FogOfWar")
 }
+
+// B-H06: Pre-computed FogOfWar with DMSeesAll=false + MapData.DMSeesAll=true
+// must still show all combatants (propagation into pre-computed fog).
+func TestRenderMap_PreComputedFog_DMSeesAll_ShowsAllCombatants(t *testing.T) {
+	fow := &FogOfWar{
+		Width:     5,
+		Height:    5,
+		States:    make([]VisibilityState, 25), // all Unexplored
+		DMSeesAll: false,
+	}
+	md := &MapData{
+		Width: 5, Height: 5, TileSize: 48,
+		TerrainGrid: make([]TerrainType, 25),
+		FogOfWar:    fow,
+		Combatants: []Combatant{
+			{ShortID: "E1", Col: 4, Row: 4, HPMax: 10, HPCurrent: 10, IsPlayer: false, IsVisible: true},
+		},
+		DMSeesAll: true,
+	}
+
+	data, err := RenderMap(md)
+	require.NoError(t, err)
+	assert.NotEmpty(t, data)
+	// The propagation must have set fow.DMSeesAll = true
+	assert.True(t, md.FogOfWar.DMSeesAll, "RenderMap must propagate md.DMSeesAll into pre-computed FogOfWar")
+	// Combatant must not have been filtered out
+	assert.Len(t, md.Combatants, 1, "enemy on Unexplored tile must be visible when md.DMSeesAll=true")
+	assert.Equal(t, "E1", md.Combatants[0].ShortID)
+}

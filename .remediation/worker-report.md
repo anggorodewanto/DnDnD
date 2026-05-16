@@ -1,46 +1,38 @@
-# Worker Report: D-H04 — Monk Unarmored Defense not invalidated by shield
+# Worker Report: B-H06
 
-## Status: ✅ FIXED
+## Finding
 
-## Summary
+**B-H06:** DM-view fog-of-war ignores `MapData.DMSeesAll` when caller pre-computed fog.
 
-Monk's Unarmored Defense (AC = 10 + DEX + WIS) requires no armor AND no shield per PHB. The code was unconditionally adding +2 for shield in both `CalculateAC` (internal/character/stats.go) and `RecalculateAC` (internal/combat/equip.go).
+## Status: Already Fixed — Test Added
 
-## Changes
+The propagation code already exists in `renderer.go:53-54`:
 
-### 1. internal/character/stats.go (line ~63)
 ```go
-// Before:
-if hasShield {
-    ac += 2
-}
-
-// After:
-if hasShield && !strings.Contains(acFormula, "WIS") {
-    ac += 2
+if md.FogOfWar != nil && md.DMSeesAll {
+    md.FogOfWar.DMSeesAll = true
 }
 ```
 
-### 2. internal/combat/equip.go (line ~415)
-```go
-// Before:
-if hasShield {
-    ac += 2
-}
+This was introduced in a prior commit (likely `dbb1464` batch 4). However, no test covered the **pre-computed fog** scenario specifically (existing test `TestRenderMap_DMSeesAll_RendersEnemyOnUnexplored` only tests auto-computed fog via VisionSources).
 
-// After:
-if hasShield && !(char.AcFormula.Valid && strings.Contains(char.AcFormula.String, "WIS")) {
-    ac += 2
-}
-```
+## What Was Done
 
-### 3. internal/character/stats_test.go
-Updated `TestCalculateAC_UnarmoredDefense_WithShield` to expect AC 15 (no shield bonus) instead of 17.
+1. **Red:** Wrote `TestRenderMap_PreComputedFog_DMSeesAll_ShowsAllCombatants` in `fog_extra_test.go`. Temporarily disabled the propagation to confirm the test fails (enemy on Unexplored tile is filtered out when `md.DMSeesAll=true` but `fow.DMSeesAll=false`).
+2. **Green:** Restored the propagation. Test passes.
+3. **Verify:** `make test` ✅ | `make cover-check` ✅
 
-### 4. internal/combat/equip_test.go
-Updated `TestRecalculateAC_WithShield`, `TestEquip_Shield_WithACFormula`, and `TestEquip_DoffShield_WithACFormula` to reflect correct monk behavior (shield bonus skipped for WIS formula).
+## Test Added
 
-## Verification
+**File:** `internal/gamemap/renderer/fog_extra_test.go`
 
-- `make test` — all packages pass
-- `make cover-check` — all coverage thresholds met ("OK: coverage thresholds met")
+**Test:** `TestRenderMap_PreComputedFog_DMSeesAll_ShowsAllCombatants`
+
+Scenario: Caller passes pre-computed `FogOfWar` with all tiles Unexplored and `DMSeesAll=false`, but sets `md.DMSeesAll=true`. Asserts that:
+- `md.FogOfWar.DMSeesAll` is propagated to `true`
+- Enemy combatant on Unexplored tile is NOT filtered out
+
+## Files Modified
+
+- `internal/gamemap/renderer/fog_extra_test.go` — added 1 test function (29 lines)
+- `internal/gamemap/renderer/renderer.go` — **no changes** (fix already present)
