@@ -84,7 +84,7 @@ Low: 142
 | 72 | E-H01 | High | done | Help action grants advantage only on attacks, not on ability checks | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261`; `advantag... |
 | 73 | E-H02 | High | done | AoE pending save DC subtraction loses cover information | `/home/ab/projects/DnDnD/internal/combat/aoe.go:592` (`Dc: int32(ps.DC - ps.Cove... |
 | 74 | E-H03 | High | done | Pact-magic upcast respects pact level but silently ignores `--slot` requests | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:446-457` |
-| 75 | E-H04 | High | pending | Multiclass spellcasting ability picks highest score, not class-of-spell | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:1542-1557` (`resolveSpe... |
+| 75 | E-H04 | High | in_progress | Multiclass spellcasting ability picks highest score, not class-of-spell | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:1542-1557` (`resolveSpe... |
 | 76 | E-H05 | High | done | Spell attack rolls never apply advantage/disadvantage | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:638` (`roller.RollD20(a... |
 | 77 | E-H06 | High | superseded | Concentration check DC always fires "max(10, dmg/2)" but DC=10 isn't max with damage 19 | `/home/ab/projects/DnDnD/internal/combat/concentration.go:18-24` |
 | 78 | E-H07 | High | superseded | AoE damage applies `int(float64(baseDamage)*0.5)` truncates instead of rounding | `/home/ab/projects/DnDnD/internal/combat/aoe.go:1024` |

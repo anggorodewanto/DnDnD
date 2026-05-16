@@ -498,7 +498,7 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	if err != nil {
 		return AoECastResult{}, fmt.Errorf("parsing ability scores: %w", err)
 	}
-	spellAbilityScore := resolveSpellcastingAbilityScore(classes, scores)
+	spellAbilityScore := resolveSpellcastingAbilityScore(classes, scores, spell.Classes)
 
 	saveDC := 0
 	saveAbility := ""

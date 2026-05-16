@@ -570,7 +570,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		return CastResult{}, fmt.Errorf("parsing ability scores: %w", err)
 	}
 
-	spellAbilityScore := resolveSpellcastingAbilityScore(classes, scores)
+	spellAbilityScore := resolveSpellcastingAbilityScore(classes, scores, spell.Classes)
 
 	// 9. Build result
 	result := CastResult{
@@ -1586,9 +1586,25 @@ func druidLevelFromClasses(classes []CharacterClass) int {
 	return 0
 }
 
-// resolveSpellcastingAbilityScore determines the highest applicable spellcasting
-// ability score from the character's classes.
-func resolveSpellcastingAbilityScore(classes []CharacterClass, scores AbilityScores) int {
+// resolveSpellcastingAbilityScore determines the spellcasting ability score
+// for a spell. When spellClasses is provided, it intersects with the caster's
+// classes and uses the first match's ability. Falls back to max across all
+// classes when there is no intersection (e.g. feat-granted spells) or when
+// spellClasses is nil.
+func resolveSpellcastingAbilityScore(classes []CharacterClass, scores AbilityScores, spellClasses []string) int {
+	if len(spellClasses) > 0 {
+		for _, sc := range spellClasses {
+			for _, cc := range classes {
+				if strings.EqualFold(sc, cc.Class) {
+					ability := SpellcastingAbilityForClass(cc.Class)
+					if ability != "" {
+						return scores.ScoreByName(ability)
+					}
+				}
+			}
+		}
+	}
+	// Fallback: max across all classes
 	best := 0
 	for _, cc := range classes {
 		ability := SpellcastingAbilityForClass(cc.Class)

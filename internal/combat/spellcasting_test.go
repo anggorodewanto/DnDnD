@@ -1225,7 +1225,32 @@ func TestAbilityScores_ScoreByName(t *testing.T) {
 func TestResolveSpellcastingAbilityScore_NoSpellcaster(t *testing.T) {
 	classes := []CharacterClass{{Class: "barbarian", Level: 5}}
 	scores := AbilityScores{Str: 18, Int: 8}
-	assert.Equal(t, 0, resolveSpellcastingAbilityScore(classes, scores))
+	assert.Equal(t, 0, resolveSpellcastingAbilityScore(classes, scores, nil))
+}
+
+// E-H04: Multiclass spellcasting uses spell's source class ability, not max.
+func TestResolveSpellcastingAbilityScore_MulticlassUsesSpellClass(t *testing.T) {
+	classes := []CharacterClass{
+		{Class: "wizard", Level: 5},
+		{Class: "cleric", Level: 1},
+	}
+	scores := AbilityScores{Int: 16, Wis: 18}
+
+	// Wizard spell should use INT (16), not WIS (18)
+	got := resolveSpellcastingAbilityScore(classes, scores, []string{"wizard", "sorcerer"})
+	assert.Equal(t, 16, got)
+
+	// Cleric spell should use WIS (18)
+	got = resolveSpellcastingAbilityScore(classes, scores, []string{"cleric", "druid"})
+	assert.Equal(t, 18, got)
+
+	// Feat-granted spell (no class intersection) falls back to max
+	got = resolveSpellcastingAbilityScore(classes, scores, []string{"bard"})
+	assert.Equal(t, 18, got)
+
+	// Nil spellClasses falls back to max (backward compat)
+	got = resolveSpellcastingAbilityScore(classes, scores, nil)
+	assert.Equal(t, 18, got)
 }
 
 // Edge case: parseIntKeyedSlots with non-numeric keys

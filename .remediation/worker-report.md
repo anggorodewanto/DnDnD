@@ -1,20 +1,25 @@
-# Worker Report: E-H01
+# Worker Report: E-H04
 
-**Finding:** Help action grants advantage only on attacks, not on ability checks  
-**Status:** ✅ Fixed  
+## Finding
+`resolveSpellcastingAbilityScore` returned the maximum spellcasting ability score across all classes, causing a Wizard/Cleric with INT 16 and WIS 18 to use WIS for wizard spells.
 
-## Changes
+## Fix Applied
 
-### 1. `internal/combat/standard_actions.go`
-- Added `github.com/google/uuid` import.
-- When `cmd.Target.ID == uuid.Nil` (no enemy target), the Help action now applies a `help_check_advantage` condition on the ally instead of `help_advantage` scoped to an enemy.
-- Adjacency check is skipped when no target is specified.
-- Combat log message adapts to the no-target case.
+**Files modified:**
+- `internal/combat/spellcasting.go` — Added `spellClasses []string` parameter to `resolveSpellcastingAbilityScore`. The function now intersects `spellClasses` with the character's classes and uses the first matching class's spellcasting ability. Falls back to max-across-all-classes when no intersection exists (feat-granted spells) or when `spellClasses` is nil.
+- `internal/combat/aoe.go` — Updated call site to pass `spell.Classes`.
+- `internal/combat/spellcasting_test.go` — Added `TestResolveSpellcastingAbilityScore_MulticlassUsesSpellClass` covering: wizard spell uses INT, cleric spell uses WIS, non-intersecting class falls back to max, nil spellClasses falls back to max. Updated existing test to pass `nil` for the new parameter.
 
-### 2. `internal/combat/standard_actions_test.go`
-- Added `TestHelp_NoTarget_AppliesCheckAdvantageOnAlly` — verifies that Help with a zero-value Target applies `help_check_advantage` on the ally, consumes the action, and does NOT apply `help_advantage`.
+## TDD Workflow
+1. **Red:** Wrote test with new 3-arg signature → compile error (expected).
+2. **Green:** Implemented class-intersection logic, updated call sites → all tests pass.
+3. **Verify:** Full test suite (excluding `internal/database`) passes with no regressions.
 
 ## Test Results
-
-- New test: PASS
-- Full suite (excluding `internal/database`): ALL PASS (38 packages)
+```
+=== RUN   TestResolveSpellcastingAbilityScore_NoSpellcaster
+--- PASS
+=== RUN   TestResolveSpellcastingAbilityScore_MulticlassUsesSpellClass
+--- PASS
+```
+Full suite: all packages OK.
