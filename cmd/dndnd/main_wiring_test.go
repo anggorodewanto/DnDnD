@@ -1555,3 +1555,56 @@ func TestHandleDMMapPNG_InvalidID(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+// --- J-H01: encounterListerAdapter must return Name, not DisplayName ---
+
+// stubEncounterListerQueries satisfies encounterListerQueries for unit tests.
+type stubEncounterListerQueries struct {
+	encounters []refdata.Encounter
+	templates  []refdata.EncounterTemplate
+}
+
+func (s *stubEncounterListerQueries) ListEncountersByCampaignID(_ context.Context, _ uuid.UUID) ([]refdata.Encounter, error) {
+	return s.encounters, nil
+}
+
+func (s *stubEncounterListerQueries) ListEncounterTemplatesByCampaignID(_ context.Context, _ uuid.UUID) ([]refdata.EncounterTemplate, error) {
+	return s.templates, nil
+}
+
+// TestEncounterListerAdapter_ReturnsInternalName_NotDisplayName asserts that
+// the dashboard cards show the internal Name (which may contain spoilers for
+// the DM) rather than the player-facing DisplayName.
+func TestEncounterListerAdapter_ReturnsInternalName_NotDisplayName(t *testing.T) {
+	stub := &stubEncounterListerQueries{
+		encounters: []refdata.Encounter{
+			{
+				ID:          uuid.New(),
+				Name:        "Dragon's Lair (spoiler)",
+				DisplayName: sql.NullString{String: "Mysterious Cave", Valid: true},
+				Status:      "active",
+			},
+		},
+		templates: []refdata.EncounterTemplate{
+			{
+				ID:          uuid.New(),
+				Name:        "Dragon's Lair (spoiler)",
+				DisplayName: sql.NullString{String: "Mysterious Cave", Valid: true},
+			},
+		},
+	}
+	adapter := encounterListerAdapter{queries: stub}
+	campID := uuid.New()
+
+	active, err := adapter.ListActiveEncounterNames(context.Background(), campID)
+	require.NoError(t, err)
+	require.Len(t, active, 1)
+	assert.Equal(t, "Dragon's Lair (spoiler)", active[0],
+		"dashboard must show internal Name, not player-facing DisplayName")
+
+	saved, err := adapter.ListSavedEncounterNames(context.Background(), campID)
+	require.NoError(t, err)
+	require.Len(t, saved, 1)
+	assert.Equal(t, "Dragon's Lair (spoiler)", saved[0],
+		"dashboard must show internal Name, not player-facing DisplayName")
+}

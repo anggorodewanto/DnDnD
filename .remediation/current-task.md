@@ -1,11 +1,11 @@
-finding_id: I-H07
+finding_id: J-H01
 severity: High
-title: Narration & message-player handlers trust author_user_id from request body
-location: internal/narration/handler.go:49-91; internal/messageplayer/handler.go:32-71
-spec_ref: Phase 100a / Phase 101 — author attribution
+title: Campaign Home cards show player-facing display_name, not the spoilery internal name
+location: cmd/dndnd/main.go:243-246 and 261-265
+spec_ref: spec lines 1694, 2840, 3094-3095
 problem: |
-  The request payload includes author_user_id and the service stores it blindly. A DM could post in another DM's name.
+  Both adapters prefer e.DisplayName over e.Name and surface the result into the DM's Campaign Home cards. Spec says the internal name is the dashboard-only spoiler-safe name.
 suggested_fix: |
-  Drop author_user_id from the request body and populate it from the request context (auth.DiscordUserIDFromContext).
+  Return e.Name unconditionally for the dashboard cards.
 acceptance_criterion: |
-  The stored author_user_id always matches the authenticated user, regardless of what the request body says. A test demonstrates this.
+  The encounter lister adapters return e.Name (internal name) for dashboard display. A test demonstrates this.

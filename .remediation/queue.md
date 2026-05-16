@@ -129,7 +129,7 @@ Low: 142
 | 117 | I-H09 | High | pending | Manual character creation skips ability-score method validation | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:72-77 |
 | 118 | I-H10 | High | pending | Race speed table is hard-coded; ignores DB and homebrew races | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:204-217 |
 | 119 | I-H11 | High | pending | DM character creation handler is not protected by DM auth | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go:83-103, 112-138... |
-| 120 | J-H01 | High | pending | Saved/Active encounter Campaign Home cards show player-facing display_name, not the spoilery internal name | /home/ab/projects/DnDnD/cmd/dndnd/main.go:243-246 and 261-265 (`encounterListerA... |
+| 120 | J-H01 | High | in_progress | Saved/Active encounter Campaign Home cards show player-facing display_name, not the spoilery internal name | /home/ab/projects/DnDnD/cmd/dndnd/main.go:243-246 and 261-265 (`encounterListerA... |
 | 121 | J-H02 | High | pending | Reaction-declaration → dm-queue itemID mapping is in-memory only; lost on restart breaks /reaction cancel | /home/ab/projects/DnDnD/internal/discord/reaction_handler.go:51-86 (`itemIDs map... |
 | 122 | J-H03 | High | pending | DM dashboard error panel cannot render stack trace / structured detail — error_detail column never written | /home/ab/projects/DnDnD/internal/errorlog/recorder.go:18-29 (`Entry`); /home/ab/... |
 | 123 | J-H04 | High | pending | /help "Context Tips" shows hardcoded text, not actual remaining resources | /home/ab/projects/DnDnD/internal/discord/help_handler.go:80-96 |

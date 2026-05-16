@@ -1,26 +1,29 @@
-# Worker Report: I-H07
+# Worker Report: J-H01
 
-## Finding
+**Finding:** Campaign Home cards show player-facing display_name, not the spoilery internal name  
+**Status:** FIXED  
+**Worker:** worker-J-H01  
 
-Narration and message-player handlers trusted `author_user_id` from the JSON request body, allowing a DM to impersonate another user.
+## Changes Made
 
-## Fix Applied
+### 1. `cmd/dndnd/main.go`
 
-Both handlers now ignore the body's `author_user_id` and instead use the authenticated user from the request context via `auth.DiscordUserIDFromContext(r.Context())`.
+- Introduced `encounterListerQueries` interface (narrow, 2 methods) to decouple the adapter from `*refdata.Queries` — enables unit testing without a live DB.
+- Changed `encounterListerAdapter.queries` field type from `*refdata.Queries` to `encounterListerQueries`. Production wiring is unchanged (`*refdata.Queries` satisfies the interface).
+- `ListActiveEncounterNames`: removed the `if e.DisplayName.Valid` preference logic; now returns `e.Name` unconditionally.
+- `ListSavedEncounterNames`: same fix for templates.
 
-### Files Modified
+### 2. `cmd/dndnd/main_wiring_test.go`
 
-- `internal/narration/handler.go` — `Post` handler now extracts user ID from context
-- `internal/narration/handler_test.go` — Added `TestHandler_Post_UsesContextUserIDNotBody`; updated existing tests to set context user
-- `internal/messageplayer/handler.go` — `Send` handler now extracts user ID from context
-- `internal/messageplayer/handler_test.go` — Added `TestHandler_Send_UsesContextUserIDNotBody`; updated existing tests to set context user
+- Added `stubEncounterListerQueries` (implements the new interface with canned data).
+- Added `TestEncounterListerAdapter_ReturnsInternalName_NotDisplayName`: an encounter with `Name="Dragon's Lair (spoiler)"` and `DisplayName="Mysterious Cave"` must return `"Dragon's Lair (spoiler)"` for both active and saved lists.
 
-## TDD Evidence
+## TDD Sequence
 
-1. **Red:** Both new tests failed with `expected author_user_id='real-user', got "fake-user"`
-2. **Green:** After overriding body field with context user, both new tests pass
-3. **Verify:** `make test` passes (all packages), `make cover-check` passes (narration 94.68%, messageplayer 97.69%)
+1. **Red:** Test written asserting `Name` is returned. Test failed — adapter returned `"Mysterious Cave"` (DisplayName).
+2. **Green:** Removed DisplayName-preference logic in both methods. Test passed.
+3. **Verify:** `make test` — all tests pass. `make cover-check` — all coverage thresholds met.
 
-## Acceptance Criterion
+## No Commit
 
-✅ The stored `author_user_id` always matches the authenticated user, regardless of what the request body says. Tests `TestHandler_Post_UsesContextUserIDNotBody` and `TestHandler_Send_UsesContextUserIDNotBody` demonstrate this by sending `author_user_id="fake-user"` in the body while authenticated as `"real-user"`, and asserting the stored record uses `"real-user"`.
+Per instructions, no commit was made.

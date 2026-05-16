@@ -225,10 +225,17 @@ func (d dmQueueCounter) CountPendingDMQueue(ctx context.Context, campaignID uuid
 	return len(items), nil
 }
 
+// encounterListerQueries is the narrow interface the encounterListerAdapter
+// needs from refdata.Queries — enables unit testing without a live DB.
+type encounterListerQueries interface {
+	ListEncountersByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
+	ListEncounterTemplatesByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.EncounterTemplate, error)
+}
+
 // encounterListerAdapter adapts refdata.Queries to dashboard.EncounterLister
 // for the Campaign Home active/saved encounter cards (Finding 13).
 type encounterListerAdapter struct {
-	queries *refdata.Queries
+	queries encounterListerQueries
 }
 
 func (a encounterListerAdapter) ListActiveEncounterNames(ctx context.Context, campaignID uuid.UUID) ([]string, error) {
@@ -239,11 +246,7 @@ func (a encounterListerAdapter) ListActiveEncounterNames(ctx context.Context, ca
 	var names []string
 	for _, e := range encounters {
 		if e.Status == "active" {
-			name := e.Name
-			if e.DisplayName.Valid && e.DisplayName.String != "" {
-				name = e.DisplayName.String
-			}
-			names = append(names, name)
+			names = append(names, e.Name)
 		}
 	}
 	if names == nil {
@@ -259,11 +262,7 @@ func (a encounterListerAdapter) ListSavedEncounterNames(ctx context.Context, cam
 	}
 	var names []string
 	for _, t := range templates {
-		name := t.Name
-		if t.DisplayName.Valid && t.DisplayName.String != "" {
-			name = t.DisplayName.String
-		}
-		names = append(names, name)
+		names = append(names, t.Name)
 	}
 	if names == nil {
 		names = []string{}
