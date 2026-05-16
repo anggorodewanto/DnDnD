@@ -92,7 +92,7 @@ Low: 142
 | 80 | F-H02 | High | pending | Hide action ignores the actor's vision when computing zone obscurement | /home/ab/projects/DnDnD/internal/discord/action_handler.go:794-805 |
 | 81 | F-H03 | High | done | Hidden combatants (`is_visible = false`) still render on the map | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog.go:52-78; /home/ab/project... |
 | 82 | F-H04 | High | done | Free-object interaction whitelist is too permissive / English-only | /home/ab/projects/DnDnD/internal/combat/interact.go:13-52 |
-| 83 | F-H05 | High | in_progress | Lair-action "no consecutive repeats" tracker is in-memory only | /home/ab/projects/DnDnD/internal/combat/legendary.go:198-263 |
+| 83 | F-H05 | High | done | Lair-action "no consecutive repeats" tracker is in-memory only | /home/ab/projects/DnDnD/internal/combat/legendary.go:198-263 |
 | 84 | F-H06 | High | pending | Legendary-action budget round-trips through the URL — no server persistence | /home/ab/projects/DnDnD/internal/combat/legendary_handler.go:73-78,170-180 |
 | 85 | F-H07 | High | done | Counterspell trigger does not validate spell range / line-of-sight | /home/ab/projects/DnDnD/internal/combat/counterspell.go:65-116 |
 | 86 | F-H08 | High | pending | Reaction declarations not validated for the type's prerequisites | /home/ab/projects/DnDnD/internal/combat/reaction.go:27-46 |
