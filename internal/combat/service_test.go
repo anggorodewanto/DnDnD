@@ -160,6 +160,9 @@ type mockStore struct {
 
 	// F-12 — Map lookup for enemy turn pathfinding
 	getMapByIDUncheckedFn func(ctx context.Context, id uuid.UUID) (refdata.Map, error)
+
+	// C-H02 — Race lookup for PC size resolution
+	getRaceFn func(ctx context.Context, id string) (refdata.Race, error)
 }
 
 func (m *mockStore) SetCombatantConcentration(ctx context.Context, arg refdata.SetCombatantConcentrationParams) error {
@@ -202,6 +205,13 @@ func (m *mockStore) GetMapByIDUnchecked(ctx context.Context, id uuid.UUID) (refd
 		return m.getMapByIDUncheckedFn(ctx, id)
 	}
 	return refdata.Map{}, fmt.Errorf("no map")
+}
+
+func (m *mockStore) GetRace(ctx context.Context, id string) (refdata.Race, error) {
+	if m.getRaceFn != nil {
+		return m.getRaceFn(ctx, id)
+	}
+	return refdata.Race{}, sql.ErrNoRows
 }
 
 func (m *mockStore) UpdateEncounterDisplayName(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {

@@ -1338,7 +1338,16 @@ func (s *Service) resolveAttackerSize(ctx context.Context, attacker refdata.Comb
 		}
 		return creature.Size
 	}
-	// PCs default to Medium. A future race-aware lookup can refine this.
+	// PCs: look up race size from character record.
+	if attacker.CharacterID.Valid {
+		char, err := s.store.GetCharacter(ctx, attacker.CharacterID.UUID)
+		if err == nil && char.Race != "" {
+			race, err := s.store.GetRace(ctx, char.Race)
+			if err == nil {
+				return race.Size
+			}
+		}
+	}
 	return "Medium"
 }
 

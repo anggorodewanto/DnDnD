@@ -89,6 +89,7 @@ type Store interface {
 	GetClass(ctx context.Context, id string) (refdata.Class, error)
 	GetWeapon(ctx context.Context, id string) (refdata.Weapon, error)
 	GetArmor(ctx context.Context, id string) (refdata.Armor, error)
+	GetRace(ctx context.Context, id string) (refdata.Race, error)
 	ListCharactersByCampaign(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
 
 	// Character inventory

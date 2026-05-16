@@ -1,11 +1,11 @@
-finding_id: A-H09
+finding_id: C-H02
 severity: High
-title: Sessions middleware re-issues cookie even when slide TTL fails silently
-location: internal/auth/middleware.go:62-77
-spec_ref: spec §Session management (line 72); Phase 10
+title: PC creature size hard-coded to "Medium" — heavy-weapon disadvantage never fires
+location: internal/combat/attack.go:1316-1326
+spec_ref: Phase 35; spec line 687
 problem: |
-  When SlideTTL fails the middleware logs and continues without re-issuing the cookie and without aborting the request. The session in the DB still has its old expires_at. This silently lets sessions expire mid-traffic.
+  resolveAttackerSize returns the creature row's size for NPCs but falls through to "Medium" for every PC. Halfling/gnome PCs wielding heavy weapons never get disadvantage.
 suggested_fix: |
-  Either fail the request on slide error (consistent with fail-closed auth) or, at minimum, always re-issue the cookie since the DB state already lets this request through.
+  Look up the PC's race and read races.size. Pass it through the attack input.
 acceptance_criterion: |
-  When SlideTTL fails, the request is aborted with 500 (fail-closed). A test demonstrates this.
+  A Small PC (halfling/gnome) attacking with a heavy weapon gets disadvantage. A Medium PC does not. Tests demonstrate both.

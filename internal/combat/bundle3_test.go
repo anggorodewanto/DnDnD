@@ -236,6 +236,48 @@ func TestPopulateAttackContext_CommandOverrideWins(t *testing.T) {
 	assert.Equal(t, "Tiny", input.AttackerSize, "explicit AttackerSize must not be overwritten")
 }
 
+// --- C-H02: Small PC race size resolves from character race lookup ---
+
+func TestPopulateAttackContext_ResolvesPCRaceSize(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(_ context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: charID, Race: "halfling"}, nil
+	}
+	ms.getRaceFn = func(_ context.Context, id string) (refdata.Race, error) {
+		return refdata.Race{ID: "halfling", Size: "Small"}, nil
+	}
+
+	svc := NewService(ms)
+
+	attacker := refdata.Combatant{
+		ID:          uuid.New(),
+		DisplayName: "Bilbo",
+		IsNpc:       false,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		PositionCol: "A", PositionRow: 1,
+		IsAlive: true, IsVisible: true,
+		Conditions: json.RawMessage(`[]`),
+	}
+	input := AttackInput{}
+	svc.populateAttackContext(ctx, &input, attacker)
+	assert.Equal(t, "Small", input.AttackerSize, "PC attacker size should resolve from race")
+}
+
+func TestSmallPC_HeavyWeapon_GetsDisadvantage(t *testing.T) {
+	// End-to-end: a Small PC wielding a heavy weapon must get disadvantage
+	// from DetectAdvantage via the resolved AttackerSize.
+	input := AdvantageInput{
+		Weapon:       refdata.Weapon{ID: "greataxe", Name: "Greataxe", Properties: []string{"heavy", "two-handed"}},
+		AttackerSize: "Small",
+	}
+	mode, _, disadvReasons := DetectAdvantage(input)
+	assert.Equal(t, dice.Disadvantage, mode)
+	assert.Contains(t, disadvReasons, "heavy weapon, Small creature")
+}
+
 // --- C-35-hostile-near: auto-detect hostile within 5ft for ranged attacks ---
 
 func TestServiceAttack_AutoPopulatesHostileNear_RangedWithAdjacentHostile(t *testing.T) {
