@@ -96,9 +96,37 @@ func mountItemPickerRoutes(r chi.Router, authMw func(http.Handler) http.Handler,
 		if q == nil {
 			return
 		}
-		h = itempicker.NewHandler(q)
+		h = itempicker.NewHandler(&itemPickerStore{q: q})
 	}
 	itempicker.RegisterRoutes(r, h, authMw)
+}
+
+// itemPickerStore wraps refdata.Queries to satisfy itempicker.Store,
+// adding static gear and consumable data (G-H06).
+type itemPickerStore struct {
+	q *refdata.Queries
+}
+
+func (s *itemPickerStore) ListWeapons(ctx context.Context) ([]refdata.Weapon, error) {
+	return s.q.ListWeapons(ctx)
+}
+func (s *itemPickerStore) ListArmor(ctx context.Context) ([]refdata.Armor, error) {
+	return s.q.ListArmor(ctx)
+}
+func (s *itemPickerStore) ListMagicItems(ctx context.Context) ([]refdata.MagicItem, error) {
+	return s.q.ListMagicItems(ctx)
+}
+func (s *itemPickerStore) ListGear(_ context.Context) ([]itempicker.GearItem, error) {
+	return itempicker.StaticGear(), nil
+}
+func (s *itemPickerStore) ListConsumables(_ context.Context) ([]itempicker.ConsumableItem, error) {
+	return itempicker.StaticConsumables(), nil
+}
+func (s *itemPickerStore) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
+	return s.q.ListCombatantsByEncounterID(ctx, encounterID)
+}
+func (s *itemPickerStore) GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+	return s.q.GetCharacter(ctx, id)
 }
 
 // mountShopsRoutes delegates to shops.RegisterRoutes.

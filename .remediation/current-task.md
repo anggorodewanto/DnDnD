@@ -1,11 +1,11 @@
-finding_id: E-H02
+finding_id: G-H06
 severity: High
-title: AoE pending save DC subtraction loses cover information
-location: internal/combat/aoe.go:592
-spec_ref: Phase 59; spec §891
+title: Item picker only searches weapons/armor/magic items
+location: internal/itempicker/handler.go:57-156
+spec_ref: spec §Item Picker line 2674 (Phase 86)
 problem: |
-  Storing DC - CoverBonus means the saver never sees the bonus in their roll log, and the DC displayed is artificially lowered. Cover bonus should be added to the saver's roll, not subtracted from DC.
+  HandleSearch only iterates ListWeapons, ListArmor, ListMagicItems. Adventuring gear and potions/consumables are not searchable.
 suggested_fix: |
-  Keep DC = original spell DC. At resolution time add the cover bonus to the player's d20 total before comparing to DC.
+  Add ListAdventuringGear / ListConsumables to the search and branch on category.
 acceptance_criterion: |
-  The pending save stores the original DC (not DC-cover). At resolution, cover bonus is added to the roll total. A test demonstrates this.
+  Searching for "rope" or "healing potion" returns results. A test demonstrates this.

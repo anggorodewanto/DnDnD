@@ -82,7 +82,7 @@ Low: 142
 | 70 | D-H07 | High | superseded | Wild Shape activation does not block druid spellcasting | /home/ab/projects/DnDnD/internal/combat/spellcasting.go:381 and /home/ab/project... |
 | 71 | D-H08 | High | pending | Channel Divinity action validation is duplicated and racy across DM-queue + auto-resolved paths | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:160, :366, :446, :52... |
 | 72 | E-H01 | High | pending | Help action grants advantage only on attacks, not on ability checks | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261`; `advantag... |
-| 73 | E-H02 | High | in_progress | AoE pending save DC subtraction loses cover information | `/home/ab/projects/DnDnD/internal/combat/aoe.go:592` (`Dc: int32(ps.DC - ps.Cove... |
+| 73 | E-H02 | High | done | AoE pending save DC subtraction loses cover information | `/home/ab/projects/DnDnD/internal/combat/aoe.go:592` (`Dc: int32(ps.DC - ps.Cove... |
 | 74 | E-H03 | High | done | Pact-magic upcast respects pact level but silently ignores `--slot` requests | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:446-457` |
 | 75 | E-H04 | High | pending | Multiclass spellcasting ability picks highest score, not class-of-spell | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:1542-1557` (`resolveSpe... |
 | 76 | E-H05 | High | done | Spell attack rolls never apply advantage/disadvantage | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:638` (`roller.RollD20(a... |
@@ -101,7 +101,7 @@ Low: 142
 | 89 | G-H03 | High | pending | No combat-resumed long-rest auto-resume | internal/rest/party.go:17-22, internal/rest/party_handler.go:269-308 |
 | 90 | G-H04 | High | pending | `/check medicine target:AR` does not validate target is dying and does not auto-stabilize | internal/discord/check_handler.go:286-320, internal/check/check.go:111-151 |
 | 91 | G-H05 | High | done | Items auto-populated from defeated NPCs are not removed from NPC inventory | internal/loot/service.go:67-142 |
-| 92 | G-H06 | High | pending | Item picker only searches weapons/armor/magic items | internal/itempicker/handler.go:57-156 |
+| 92 | G-H06 | High | in_progress | Item picker only searches weapons/armor/magic items | internal/itempicker/handler.go:57-156 |
 | 93 | G-H07 | High | pending | No way to edit description / name of an existing loot pool item | internal/loot/service.go (no Update), internal/loot/api_handler.go |
 | 94 | G-H08 | High | pending | Long rest does not propagate dawn recharge to party rest persistence | internal/rest/party_handler.go:180-216 |
 | 95 | G-H09 | High | done | Encounter-active check on rest can be bypassed for party rest if `HasActiveEncounter` returns false | internal/discord/rest_handler.go:159-164 |

@@ -26,11 +26,15 @@ type stubStore struct {
 	weapons      []refdata.Weapon
 	armor        []refdata.Armor
 	magicItems   []refdata.MagicItem
+	gear         []itempicker.GearItem
+	consumables  []itempicker.ConsumableItem
 	combatants   []refdata.Combatant
 	characters   map[uuid.UUID]refdata.Character
 	weaponErr    error
 	armorErr     error
 	magicErr     error
+	gearErr      error
+	consumableErr error
 	combatantErr error
 	characterErr error
 }
@@ -45,6 +49,14 @@ func (s *stubStore) ListArmor(ctx context.Context) ([]refdata.Armor, error) {
 
 func (s *stubStore) ListMagicItems(ctx context.Context) ([]refdata.MagicItem, error) {
 	return s.magicItems, s.magicErr
+}
+
+func (s *stubStore) ListGear(ctx context.Context) ([]itempicker.GearItem, error) {
+	return s.gear, s.gearErr
+}
+
+func (s *stubStore) ListConsumables(ctx context.Context) ([]itempicker.ConsumableItem, error) {
+	return s.consumables, s.consumableErr
 }
 
 func (s *stubStore) ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error) {
@@ -689,6 +701,49 @@ func TestHandleSearch_CampaignScopedHomebrew(t *testing.T) {
 	assert.False(t, ids["hb-b"], "campaign B homebrew should NOT be visible")
 	assert.True(t, ids["mi-global"], "global magic item should be visible")
 	assert.True(t, ids["mi-a"], "campaign A magic item should be visible")
+}
+
+func TestHandleSearch_ReturnsGear(t *testing.T) {
+	store := &stubStore{
+		gear: []itempicker.GearItem{
+			{ID: "rope-50ft", Name: "Rope, 50ft", Description: "Hempen rope", CostGP: 1},
+			{ID: "torch", Name: "Torch", Description: "A torch", CostGP: 0},
+		},
+	}
+	h := itempicker.NewHandler(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/search?q=rope", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSearch(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var results []itempicker.SearchResult
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&results))
+	require.Len(t, results, 1)
+	assert.Equal(t, "rope-50ft", results[0].ID)
+	assert.Equal(t, "gear", results[0].Type)
+}
+
+func TestHandleSearch_ReturnsConsumables(t *testing.T) {
+	store := &stubStore{
+		consumables: []itempicker.ConsumableItem{
+			{ID: "potion-healing", Name: "Potion of Healing", Description: "Heals 2d4+2", CostGP: 50},
+		},
+	}
+	h := itempicker.NewHandler(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/search?q=healing", nil)
+	rec := httptest.NewRecorder()
+	h.HandleSearch(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var results []itempicker.SearchResult
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&results))
+	require.Len(t, results, 1)
+	assert.Equal(t, "potion-healing", results[0].ID)
+	assert.Equal(t, "consumable", results[0].Type)
 }
 
 func TestHandleSearch_NoCampaignID_HidesAllHomebrew(t *testing.T) {

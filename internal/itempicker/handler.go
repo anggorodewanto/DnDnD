@@ -18,8 +18,26 @@ type Store interface {
 	ListWeapons(ctx context.Context) ([]refdata.Weapon, error)
 	ListArmor(ctx context.Context) ([]refdata.Armor, error)
 	ListMagicItems(ctx context.Context) ([]refdata.MagicItem, error)
+	ListGear(ctx context.Context) ([]GearItem, error)
+	ListConsumables(ctx context.Context) ([]ConsumableItem, error)
 	ListCombatantsByEncounterID(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+}
+
+// GearItem represents an adventuring gear item.
+type GearItem struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	CostGP      int    `json:"cost_gp"`
+}
+
+// ConsumableItem represents a consumable item (potions, scrolls, etc.).
+type ConsumableItem struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	CostGP      int    `json:"cost_gp"`
 }
 
 // SearchResult is a unified item representation returned by the search endpoint.
@@ -149,6 +167,46 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 					"rarity":              mi.Rarity,
 					"requires_attunement": mi.RequiresAttunement.Bool,
 				},
+			})
+		}
+	}
+
+	if category == "" || category == "gear" {
+		gear, err := h.store.ListGear(r.Context())
+		if err != nil {
+			jsonError(w, "failed to list gear", http.StatusInternalServerError)
+			return
+		}
+		for _, g := range gear {
+			if q != "" && !strings.Contains(strings.ToLower(g.Name), q) {
+				continue
+			}
+			results = append(results, SearchResult{
+				ID:          g.ID,
+				Name:        g.Name,
+				Type:        "gear",
+				Description: g.Description,
+				CostGP:      g.CostGP,
+			})
+		}
+	}
+
+	if category == "" || category == "consumables" {
+		consumables, err := h.store.ListConsumables(r.Context())
+		if err != nil {
+			jsonError(w, "failed to list consumables", http.StatusInternalServerError)
+			return
+		}
+		for _, c := range consumables {
+			if q != "" && !strings.Contains(strings.ToLower(c.Name), q) {
+				continue
+			}
+			results = append(results, SearchResult{
+				ID:          c.ID,
+				Name:        c.Name,
+				Type:        "consumable",
+				Description: c.Description,
+				CostGP:      c.CostGP,
 			})
 		}
 	}
