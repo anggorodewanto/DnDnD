@@ -589,8 +589,9 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 			EncounterID: cmd.EncounterID,
 			CombatantID: ps.CombatantID,
 			Ability:     ps.SaveAbility,
-			Dc:          int32(ps.DC - ps.CoverBonus),
+			Dc:          int32(ps.DC),
 			Source:      source,
+			CoverBonus:  int32(ps.CoverBonus),
 		})
 		if err != nil {
 			return AoECastResult{}, fmt.Errorf("creating pending AoE save for %s: %w", ps.CombatantID, err)
@@ -995,10 +996,10 @@ func (s *Service) RecordAoEPendingSaveRoll(ctx context.Context, combatantID uuid
 		if r.Ability != ability {
 			continue
 		}
-		success := !autoFail && total >= int(r.Dc)
+		success := !autoFail && total+int(r.CoverBonus) >= int(r.Dc)
 		updated, err := s.store.UpdatePendingSaveResult(ctx, refdata.UpdatePendingSaveResultParams{
 			ID:         r.ID,
-			RollResult: sql.NullInt32{Int32: int32(total), Valid: true},
+			RollResult: sql.NullInt32{Int32: int32(total + int(r.CoverBonus)), Valid: true},
 			Success:    sql.NullBool{Bool: success, Valid: true},
 		})
 		if err != nil {

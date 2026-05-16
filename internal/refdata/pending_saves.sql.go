@@ -29,9 +29,9 @@ func (q *Queries) CancelAllPendingSavesByCombatant(ctx context.Context, arg Canc
 }
 
 const createPendingSave = `-- name: CreatePendingSave :one
-INSERT INTO pending_saves (encounter_id, combatant_id, ability, dc, source, status)
-VALUES ($1, $2, $3, $4, $5, 'pending')
-RETURNING id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at
+INSERT INTO pending_saves (encounter_id, combatant_id, ability, dc, source, cover_bonus, status)
+VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+RETURNING id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at, cover_bonus
 `
 
 type CreatePendingSaveParams struct {
@@ -40,6 +40,7 @@ type CreatePendingSaveParams struct {
 	Ability     string    `json:"ability"`
 	Dc          int32     `json:"dc"`
 	Source      string    `json:"source"`
+	CoverBonus  int32     `json:"cover_bonus"`
 }
 
 func (q *Queries) CreatePendingSave(ctx context.Context, arg CreatePendingSaveParams) (PendingSafe, error) {
@@ -49,6 +50,7 @@ func (q *Queries) CreatePendingSave(ctx context.Context, arg CreatePendingSavePa
 		arg.Ability,
 		arg.Dc,
 		arg.Source,
+		arg.CoverBonus,
 	)
 	var i PendingSafe
 	err := row.Scan(
@@ -63,6 +65,7 @@ func (q *Queries) CreatePendingSave(ctx context.Context, arg CreatePendingSavePa
 		&i.Success,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CoverBonus,
 	)
 	return i, err
 }
@@ -71,7 +74,7 @@ const forfeitPendingSave = `-- name: ForfeitPendingSave :one
 UPDATE pending_saves
 SET status = 'forfeited', updated_at = now()
 WHERE id = $1
-RETURNING id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at
+RETURNING id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at, cover_bonus
 `
 
 func (q *Queries) ForfeitPendingSave(ctx context.Context, id uuid.UUID) (PendingSafe, error) {
@@ -89,12 +92,13 @@ func (q *Queries) ForfeitPendingSave(ctx context.Context, id uuid.UUID) (Pending
 		&i.Success,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CoverBonus,
 	)
 	return i, err
 }
 
 const getPendingSave = `-- name: GetPendingSave :one
-SELECT id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at FROM pending_saves WHERE id = $1
+SELECT id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at, cover_bonus FROM pending_saves WHERE id = $1
 `
 
 func (q *Queries) GetPendingSave(ctx context.Context, id uuid.UUID) (PendingSafe, error) {
@@ -112,12 +116,13 @@ func (q *Queries) GetPendingSave(ctx context.Context, id uuid.UUID) (PendingSafe
 		&i.Success,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CoverBonus,
 	)
 	return i, err
 }
 
 const listPendingSavesByCombatant = `-- name: ListPendingSavesByCombatant :many
-SELECT id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at FROM pending_saves
+SELECT id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at, cover_bonus FROM pending_saves
 WHERE combatant_id = $1 AND status = 'pending'
 ORDER BY created_at ASC
 `
@@ -143,6 +148,7 @@ func (q *Queries) ListPendingSavesByCombatant(ctx context.Context, combatantID u
 			&i.Success,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CoverBonus,
 		); err != nil {
 			return nil, err
 		}
@@ -158,7 +164,7 @@ func (q *Queries) ListPendingSavesByCombatant(ctx context.Context, combatantID u
 }
 
 const listPendingSavesByEncounter = `-- name: ListPendingSavesByEncounter :many
-SELECT id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at FROM pending_saves
+SELECT id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at, cover_bonus FROM pending_saves
 WHERE encounter_id = $1 AND status = 'pending'
 ORDER BY created_at ASC
 `
@@ -184,6 +190,7 @@ func (q *Queries) ListPendingSavesByEncounter(ctx context.Context, encounterID u
 			&i.Success,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CoverBonus,
 		); err != nil {
 			return nil, err
 		}
@@ -202,7 +209,7 @@ const updatePendingSaveResult = `-- name: UpdatePendingSaveResult :one
 UPDATE pending_saves
 SET roll_result = $2, success = $3, status = 'rolled', updated_at = now()
 WHERE id = $1
-RETURNING id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at
+RETURNING id, encounter_id, combatant_id, ability, dc, source, status, roll_result, success, created_at, updated_at, cover_bonus
 `
 
 type UpdatePendingSaveResultParams struct {
@@ -226,6 +233,7 @@ func (q *Queries) UpdatePendingSaveResult(ctx context.Context, arg UpdatePending
 		&i.Success,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CoverBonus,
 	)
 	return i, err
 }

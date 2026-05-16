@@ -439,6 +439,7 @@ type PendingSafe struct {
 	Success     sql.NullBool  `json:"success"`
 	CreatedAt   time.Time     `json:"created_at"`
 	UpdatedAt   time.Time     `json:"updated_at"`
+	CoverBonus  int32         `json:"cover_bonus"`
 }
 
 type PlayerCharacter struct {

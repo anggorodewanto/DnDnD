@@ -1,6 +1,6 @@
 -- name: CreatePendingSave :one
-INSERT INTO pending_saves (encounter_id, combatant_id, ability, dc, source, status)
-VALUES ($1, $2, $3, $4, $5, 'pending')
+INSERT INTO pending_saves (encounter_id, combatant_id, ability, dc, source, cover_bonus, status)
+VALUES ($1, $2, $3, $4, $5, $6, 'pending')
 RETURNING *;
 
 -- name: GetPendingSave :one

@@ -2879,8 +2879,10 @@ func TestCastAoE_F05_CoverBonusReducesStoredDC(t *testing.T) {
 	}
 
 	var capturedDC int32
+	var capturedCoverBonus int32
 	store.createPendingSaveFn = func(_ context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error) {
 		capturedDC = arg.Dc
+		capturedCoverBonus = arg.CoverBonus
 		return refdata.PendingSafe{ID: uuid.New(), EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, Source: arg.Source}, nil
 	}
 
@@ -2903,8 +2905,9 @@ func TestCastAoE_F05_CoverBonusReducesStoredDC(t *testing.T) {
 	assert.Equal(t, 15, result.PendingSaves[0].DC)
 	assert.Equal(t, 2, result.PendingSaves[0].CoverBonus)
 
-	// But the stored DC in the DB is reduced by the cover bonus
-	assert.Equal(t, int32(13), capturedDC, "stored DC must be original DC (15) minus cover bonus (2)")
+	// E-H02: stored DC is the original DC; cover bonus stored separately
+	assert.Equal(t, int32(15), capturedDC, "stored DC must be original DC (15), not reduced")
+	assert.Equal(t, int32(2), capturedCoverBonus, "stored cover_bonus must be 2")
 }
 
 // F-05: End-to-end test proving that a target with half cover succeeds on a
@@ -2914,11 +2917,10 @@ func TestRecordAoEPendingSaveRoll_F05_CoverBonusMakesSaveSucceed(t *testing.T) {
 	rowID := uuid.New()
 
 	store := defaultMockStore()
-	// Simulate a pending save with DC already reduced by cover bonus:
-	// Original DC 15, cover bonus +2, stored DC = 13
+	// Pending save stores original DC=15 and cover_bonus=2 (E-H02 fix).
 	store.listPendingSavesByCombatantFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
 		return []refdata.PendingSafe{
-			{ID: rowID, CombatantID: combatantID, Ability: "dex", Dc: 13, Source: AoEPendingSaveSource("fireball"), Status: "pending"},
+			{ID: rowID, CombatantID: combatantID, Ability: "dex", Dc: 15, CoverBonus: 2, Source: AoEPendingSaveSource("fireball"), Status: "pending"},
 		}, nil
 	}
 	var updated refdata.UpdatePendingSaveResultParams
@@ -2929,13 +2931,13 @@ func TestRecordAoEPendingSaveRoll_F05_CoverBonusMakesSaveSucceed(t *testing.T) {
 
 	svc := NewService(store)
 
-	// Roll total of 14: without cover adjustment (DC 15), this would fail.
-	// With cover adjustment (stored DC 13), 14 >= 13 → success.
+	// Roll total of 14: without cover bonus this would fail (14 < 15).
+	// With cover bonus +2 added to roll: 14+2=16 >= 15 → success.
 	_, resolved, err := svc.RecordAoEPendingSaveRoll(context.Background(), combatantID, "dex", 14, false)
 	require.NoError(t, err)
 	assert.True(t, resolved)
-	assert.True(t, updated.Success.Bool, "roll of 14 vs stored DC 13 (original 15 - 2 cover) must succeed")
-	assert.Equal(t, int32(14), updated.RollResult.Int32)
+	assert.True(t, updated.Success.Bool, "roll 14 + cover bonus 2 = 16 >= DC 15 must succeed")
+	assert.Equal(t, int32(16), updated.RollResult.Int32, "stored roll_result should include cover bonus")
 }
 
 // F-19: A target with full cover from the AoE origin is excluded from pending saves entirely.
@@ -3062,4 +3064,35 @@ func TestResolveAoEPendingSaves_UpcastScalesDamageDice(t *testing.T) {
 	require.Len(t, res.Targets, 1)
 	// 10d6 * 4 = 40 (upcast from level 3 to slot 5 adds 2d6)
 	assert.Equal(t, 40, res.Targets[0].DamageDealt, "upcast Fireball at slot 5 must roll 10d6, not 8d6")
+}
+
+// E-H02 TDD: Cover bonus must be added to roll total at resolution, not
+// subtracted from DC at storage time. DC 15 with half cover (+2) means the
+// stored DC is 15 and the roll gets +2 (so a roll of 13 becomes 15, passing).
+func TestRecordAoEPendingSaveRoll_EH02_CoverBonusAddedToRoll(t *testing.T) {
+	combatantID := uuid.New()
+	rowID := uuid.New()
+
+	store := defaultMockStore()
+	// Pending save stores original DC=15 and cover_bonus=2.
+	store.listPendingSavesByCombatantFn = func(_ context.Context, _ uuid.UUID) ([]refdata.PendingSafe, error) {
+		return []refdata.PendingSafe{
+			{ID: rowID, CombatantID: combatantID, Ability: "dex", Dc: 15, CoverBonus: 2, Source: AoEPendingSaveSource("fireball"), Status: "pending"},
+		}, nil
+	}
+	var updated refdata.UpdatePendingSaveResultParams
+	store.updatePendingSaveResultFn = func(_ context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error) {
+		updated = arg
+		return refdata.PendingSafe{ID: arg.ID, Source: AoEPendingSaveSource("fireball"), Status: "rolled"}, nil
+	}
+
+	svc := NewService(store)
+
+	// Roll total of 13: without cover bonus this would fail (13 < 15).
+	// With cover bonus +2 added to roll: 13+2=15 >= 15 → success.
+	_, resolved, err := svc.RecordAoEPendingSaveRoll(context.Background(), combatantID, "dex", 13, false)
+	require.NoError(t, err)
+	assert.True(t, resolved)
+	assert.True(t, updated.Success.Bool, "roll 13 + cover bonus 2 = 15 >= DC 15 must succeed")
+	assert.Equal(t, int32(15), updated.RollResult.Int32, "stored roll_result should include cover bonus")
 }
