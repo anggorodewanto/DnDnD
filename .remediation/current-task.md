@@ -1,11 +1,11 @@
-finding_id: J-H03
+finding_id: J-H05
 severity: High
-title: DM dashboard error panel cannot render stack trace — error_detail column never written
-location: internal/errorlog/recorder.go:18-29; internal/errorlog/pgstore.go:79-83
-spec_ref: spec §Error Log (lines 3176-3194); Phase 119
+title: One character can be in two active encounters (no DB constraint)
+location: db/queries/encounters.sql:46-51
+spec_ref: Phase 105 ("Character limited to one active encounter")
 problem: |
-  The migration defines error_detail JSONB but Entry has no Detail field and the INSERT only writes command, user_id, summary. Stack traces are discarded.
+  GetActiveEncounterIDByCharacterID uses LIMIT 1 which silently picks the newest and hides duplicates. No DB constraint prevents the bug.
 suggested_fix: |
-  Add Detail json.RawMessage to Entry, populate from debug.Stack() in the panic middleware, include in INSERT.
+  Make the query return an error when more than one row matches (change to :many and check count), or add a partial unique index.
 acceptance_criterion: |
-  Entry struct has a Detail field. The INSERT includes it. A test demonstrates Detail is stored.
+  GetActiveEncounterIDByCharacterID returns an error when a character is in multiple active encounters. A test demonstrates this.

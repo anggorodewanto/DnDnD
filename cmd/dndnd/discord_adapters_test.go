@@ -21,13 +21,14 @@ import (
 // discordUserEncounterResolver so we can unit test the guild->character->
 // encounter chain without spinning up Postgres.
 type fakeResolverQueries struct {
-	campaignsByGuild  map[string]refdata.Campaign
-	campaignErr       error
-	playerByCampUser  map[string]refdata.PlayerCharacter
-	playerErr         error
-	activeEncByChar   map[uuid.UUID]uuid.UUID
-	activeEncErr      error
-	activeEncNotFound bool
+	campaignsByGuild    map[string]refdata.Campaign
+	campaignErr         error
+	playerByCampUser    map[string]refdata.PlayerCharacter
+	playerErr           error
+	activeEncByChar     map[uuid.UUID]uuid.UUID
+	activeEncErr        error
+	activeEncNotFound   bool
+	activeEncCountByChar map[uuid.UUID]int64
 }
 
 func (f *fakeResolverQueries) GetCampaignByGuildID(ctx context.Context, guildID string) (refdata.Campaign, error) {
@@ -65,6 +66,17 @@ func (f *fakeResolverQueries) GetActiveEncounterIDByCharacterID(ctx context.Cont
 		return uuid.Nil, sql.ErrNoRows
 	}
 	return encID, nil
+}
+
+func (f *fakeResolverQueries) CountActiveEncountersByCharacterID(ctx context.Context, characterID uuid.NullUUID) (int64, error) {
+	if f.activeEncCountByChar == nil {
+		return 1, nil
+	}
+	count, ok := f.activeEncCountByChar[characterID.UUID]
+	if !ok {
+		return 0, nil
+	}
+	return count, nil
 }
 
 func TestDiscordUserEncounterResolver_HappyPath(t *testing.T) {
@@ -148,6 +160,36 @@ func TestDiscordUserEncounterResolver_PropagatesUnexpectedError(t *testing.T) {
 	r := newDiscordUserEncounterResolver(q)
 	_, err := r.ActiveEncounterForUser(context.Background(), "guild-42", "user-7")
 	require.ErrorIs(t, err, boom)
+}
+
+func TestDiscordUserEncounterResolver_AmbiguousEncounter(t *testing.T) {
+	campaignID := uuid.New()
+	characterID := uuid.New()
+	encounterID := uuid.New()
+
+	q := &fakeResolverQueries{
+		campaignsByGuild: map[string]refdata.Campaign{
+			"guild-42": {ID: campaignID, GuildID: "guild-42"},
+		},
+		playerByCampUser: map[string]refdata.PlayerCharacter{
+			campaignID.String() + "|user-7": {
+				ID:            uuid.New(),
+				CampaignID:    campaignID,
+				CharacterID:   characterID,
+				DiscordUserID: "user-7",
+			},
+		},
+		activeEncByChar: map[uuid.UUID]uuid.UUID{
+			characterID: encounterID,
+		},
+		activeEncCountByChar: map[uuid.UUID]int64{
+			characterID: 2, // two active encounters — corrupt state
+		},
+	}
+
+	r := newDiscordUserEncounterResolver(q)
+	_, err := r.ActiveEncounterForUser(context.Background(), "guild-42", "user-7")
+	require.ErrorIs(t, err, ErrAmbiguousEncounter)
 }
 
 // fakeSetupQueries mocks the subset of refdata.Queries used by

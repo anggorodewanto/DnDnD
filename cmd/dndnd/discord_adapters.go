@@ -47,6 +47,10 @@ func newPortalTokenIssuer(ctx context.Context, svc *portal.TokenService) func(ca
 	}
 }
 
+// ErrAmbiguousEncounter is returned when a character is a combatant in more
+// than one active encounter — a corrupt state that LIMIT 1 would silently mask.
+var ErrAmbiguousEncounter = errors.New("character is in multiple active encounters")
+
 // resolverQueries is the subset of refdata.Queries used by
 // discordUserEncounterResolver. Declaring it as an interface keeps the
 // resolver unit-testable without a live Postgres instance.
@@ -54,6 +58,7 @@ type resolverQueries interface {
 	GetCampaignByGuildID(ctx context.Context, guildID string) (refdata.Campaign, error)
 	GetPlayerCharacterByDiscordUser(ctx context.Context, arg refdata.GetPlayerCharacterByDiscordUserParams) (refdata.PlayerCharacter, error)
 	GetActiveEncounterIDByCharacterID(ctx context.Context, characterID uuid.NullUUID) (uuid.UUID, error)
+	CountActiveEncountersByCharacterID(ctx context.Context, characterID uuid.NullUUID) (int64, error)
 }
 
 // discordUserEncounterResolver implements the Phase 105 per-user encounter
@@ -88,6 +93,12 @@ func (r *discordUserEncounterResolver) ActiveEncounterForUser(ctx context.Contex
 	encID, err := r.queries.GetActiveEncounterIDByCharacterID(ctx, uuid.NullUUID{UUID: pc.CharacterID, Valid: true})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("active encounter lookup for character %s: %w", pc.CharacterID, err)
+	}
+
+	charID := uuid.NullUUID{UUID: pc.CharacterID, Valid: true}
+	count, err := r.queries.CountActiveEncountersByCharacterID(ctx, charID)
+	if err == nil && count > 1 {
+		return uuid.Nil, fmt.Errorf("character %s: %w", pc.CharacterID, ErrAmbiguousEncounter)
 	}
 
 	return encID, nil
