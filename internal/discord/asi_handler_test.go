@@ -1097,7 +1097,7 @@ func TestASIHandler_HandleASIChoiceButton_Feat_WithLister_PostsSelectMenu(t *tes
 func TestASIHandler_HandleASIChoiceButton_Feat_NoLister_FallsBackToStub(t *testing.T) {
 	charID := uuid.New()
 	svc := &mockASIService{
-		character: &ASICharacterData{ID: charID, Name: "Aria"},
+		character: &ASICharacterData{ID: charID, Name: "Aria", DiscordUserID: "user123"},
 	}
 
 	var respondedContent string
@@ -1245,7 +1245,7 @@ func TestBuildFeatSubChoiceMenu_ElementalAdeptDamageTypeChoice(t *testing.T) {
 
 func TestASIHandler_HandleASIFeatSelect_SubChoiceRespondsWithFollowUpMenu(t *testing.T) {
 	charID := uuid.New()
-	svc := &mockASIService{character: &ASICharacterData{ID: charID, Name: "Aria", ClassInfo: "Fighter 8"}}
+	svc := &mockASIService{character: &ASICharacterData{ID: charID, Name: "Aria", DiscordUserID: "user123", ClassInfo: "Fighter 8"}}
 
 	var respondedComponents []discordgo.MessageComponent
 	session := &MockSession{
@@ -1281,7 +1281,7 @@ func TestASIHandler_HandleASIFeatSelect_SubChoiceRespondsWithFollowUpMenu(t *tes
 
 func TestASIHandler_HandleFeatSubChoiceSelect_PostsToDMQueue(t *testing.T) {
 	charID := uuid.New()
-	svc := &mockASIService{character: &ASICharacterData{ID: charID, Name: "Aria", ClassInfo: "Fighter 8"}}
+	svc := &mockASIService{character: &ASICharacterData{ID: charID, Name: "Aria", DiscordUserID: "user123", ClassInfo: "Fighter 8"}}
 
 	var sentMessage *discordgo.MessageSend
 	session := &MockSession{
@@ -1625,5 +1625,156 @@ func TestMarshalUnmarshalPendingASIChoice_RoundTrip(t *testing.T) {
 	}
 	if out.CharID != in.CharID || out.ASIType != in.ASIType || out.FeatID != in.FeatID {
 		t.Errorf("round-trip mismatch: in=%+v out=%+v", in, out)
+	}
+}
+
+func TestASIHandler_HandleASIChoice_RejectsNonOwner(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{
+		character: &ASICharacterData{
+			ID:            charID,
+			Name:          "Aria",
+			DiscordUserID: "owner-user",
+			Scores:        character.AbilityScores{STR: 16},
+		},
+	}
+
+	var respondedContent string
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+			if resp.Data != nil {
+				respondedContent = resp.Data.Content
+			}
+			return nil
+		},
+	}
+
+	handler := NewASIHandler(session, svc, nil)
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_choice:" + charID.String() + ":plus2",
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "other-user"}},
+	}
+
+	handler.HandleASIChoice(interaction)
+
+	if !strings.Contains(respondedContent, "not your character") {
+		t.Errorf("expected ownership rejection, got: %q", respondedContent)
+	}
+}
+
+func TestASIHandler_HandleASISelect_RejectsNonOwner(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{
+		character: &ASICharacterData{
+			ID:            charID,
+			Name:          "Aria",
+			DiscordUserID: "owner-user",
+			Scores:        character.AbilityScores{STR: 16},
+		},
+	}
+
+	var respondedContent string
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+			if resp.Data != nil {
+				respondedContent = resp.Data.Content
+			}
+			return nil
+		},
+	}
+
+	handler := NewASIHandler(session, svc, nil)
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_select:" + charID.String() + ":plus2",
+			Values:   []string{"str"},
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "other-user"}},
+	}
+
+	handler.HandleASISelect(interaction)
+
+	if !strings.Contains(respondedContent, "not your character") {
+		t.Errorf("expected ownership rejection, got: %q", respondedContent)
+	}
+}
+
+func TestASIHandler_HandleASIFeatSelect_RejectsNonOwner(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{
+		character: &ASICharacterData{
+			ID:            charID,
+			Name:          "Aria",
+			DiscordUserID: "owner-user",
+			Scores:        character.AbilityScores{STR: 16},
+		},
+	}
+
+	var respondedContent string
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+			if resp.Data != nil {
+				respondedContent = resp.Data.Content
+			}
+			return nil
+		},
+	}
+
+	handler := NewASIHandler(session, svc, nil)
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_feat_select:" + charID.String(),
+			Values:   []string{"alert"},
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "other-user"}},
+	}
+
+	handler.HandleASIFeatSelect(interaction)
+
+	if !strings.Contains(respondedContent, "not your character") {
+		t.Errorf("expected ownership rejection, got: %q", respondedContent)
+	}
+}
+
+func TestASIHandler_HandleASIFeatSubChoiceSelect_RejectsNonOwner(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{
+		character: &ASICharacterData{
+			ID:            charID,
+			Name:          "Aria",
+			DiscordUserID: "owner-user",
+			Scores:        character.AbilityScores{STR: 16},
+		},
+	}
+
+	var respondedContent string
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+			if resp.Data != nil {
+				respondedContent = resp.Data.Content
+			}
+			return nil
+		},
+	}
+
+	handler := NewASIHandler(session, svc, nil)
+	interaction := &discordgo.Interaction{
+		Type: discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_feat_choice:" + charID.String() + ":alert:ability",
+			Values:   []string{"str"},
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "other-user"}},
+	}
+
+	handler.HandleASIFeatSubChoiceSelect(interaction)
+
+	if !strings.Contains(respondedContent, "not your character") {
+		t.Errorf("expected ownership rejection, got: %q", respondedContent)
 	}
 }

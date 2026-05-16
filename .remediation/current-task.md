@@ -1,11 +1,11 @@
-finding_id: E-H05
+finding_id: H-H01
 severity: High
-title: Spell attack rolls never apply advantage/disadvantage
-location: internal/combat/spellcasting.go:638
-spec_ref: Phase 58; spec §989
+title: Player-identity not validated on ASI button / select interactions
+location: internal/discord/asi_handler.go:354,391,647,731
+spec_ref: spec §"ASI path" line 2484; Phase 89d
 problem: |
-  Cast hard-codes dice.Normal for the d20 roll. Hidden caster, invisible target, target prone, attacker restrained/poisoned — none adjust the spell attack roll.
+  HandleASIChoice, HandleASISelect, HandleASIFeatSelect, HandleASIFeatSubChoiceSelect extract discordUserID but never check that the interacting user is the character owner. Any guild member can press the buttons.
 suggested_fix: |
-  Pass a RollMode parameter to the spell attack roll. The simplest fix: add a RollMode field to CastCommand that callers can set based on conditions. Default to Normal for backward compat.
+  Resolve ASICharacterData.DiscordUserID and reject if interaction.Member.User.ID != charData.DiscordUserID.
 acceptance_criterion: |
-  A spell attack with RollMode=Advantage rolls with advantage. A test demonstrates this.
+  ASI handlers reject interactions from users who don't own the character. A test demonstrates this.

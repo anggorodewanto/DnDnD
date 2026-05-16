@@ -350,6 +350,15 @@ func UnmarshalPendingASIChoice(raw []byte) (PendingASIChoice, error) {
 	return c, err
 }
 
+// validateASIOwner checks that the interacting user owns the character.
+func (h *ASIHandler) validateASIOwner(interaction *discordgo.Interaction, charData *ASICharacterData) error {
+	if discordUserID(interaction) != charData.DiscordUserID {
+		respondEphemeral(h.session, interaction, "⛔ This is not your character.")
+		return fmt.Errorf("owner mismatch")
+	}
+	return nil
+}
+
 // HandleASIChoice handles a button click for +2/+1+1/feat selection.
 func (h *ASIHandler) HandleASIChoice(interaction *discordgo.Interaction) {
 	data := interaction.Data.(discordgo.MessageComponentInteractionData)
@@ -362,6 +371,10 @@ func (h *ASIHandler) HandleASIChoice(interaction *discordgo.Interaction) {
 	charData, err := h.service.GetCharacterForASI(context.Background(), charID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Could not load character data.")
+		return
+	}
+
+	if h.validateASIOwner(interaction, charData) != nil {
 		return
 	}
 
@@ -405,6 +418,10 @@ func (h *ASIHandler) HandleASISelect(interaction *discordgo.Interaction) {
 	charData, err := h.service.GetCharacterForASI(context.Background(), charID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Could not load character data.")
+		return
+	}
+
+	if h.validateASIOwner(interaction, charData) != nil {
 		return
 	}
 
@@ -663,6 +680,10 @@ func (h *ASIHandler) HandleASIFeatSelect(interaction *discordgo.Interaction) {
 		return
 	}
 
+	if h.validateASIOwner(interaction, charData) != nil {
+		return
+	}
+
 	// Resolve the feat name for the description; default to the ID when
 	// the lister is missing or doesn't surface the chosen feat.
 	featName := featID
@@ -743,6 +764,10 @@ func (h *ASIHandler) HandleASIFeatSubChoiceSelect(interaction *discordgo.Interac
 	charData, err := h.service.GetCharacterForASI(context.Background(), charID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Could not load character data.")
+		return
+	}
+
+	if h.validateASIOwner(interaction, charData) != nil {
 		return
 	}
 

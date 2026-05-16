@@ -1,20 +1,30 @@
-# Worker Report: E-H05
+# Worker Report: H-H01
 
-**Finding:** Spell attack rolls never apply advantage/disadvantage  
-**Status:** ✅ Fixed  
-**Worker:** worker-E-H05  
-**Date:** 2026-05-16
+## Finding
+ASI handlers (`HandleASIChoice`, `HandleASISelect`, `HandleASIFeatSelect`, `HandleASIFeatSubChoiceSelect`) did not verify that the interacting Discord user owns the character. Any guild member could press ASI buttons/menus for another player's character.
 
-## Changes
+## Fix Applied
 
-### `internal/combat/spellcasting.go`
-1. Added `SpellAttackRollMode dice.RollMode` field to `CastCommand` struct (line 339).
-2. Changed `roller.RollD20(attackMod, dice.Normal)` → `roller.RollD20(attackMod, cmd.SpellAttackRollMode)` (line 640). Zero-value of `dice.RollMode` is `dice.Normal` (0), so backward compatibility is preserved.
+Added `validateASIOwner(interaction, charData) error` helper to `ASIHandler` in `internal/discord/asi_handler.go`. It compares `discordUserID(interaction)` with `charData.DiscordUserID` and responds with an ephemeral "⛔ This is not your character." message on mismatch.
 
-### `internal/combat/spellcasting_test.go`
-Added `TestCast_SpellAttackRollMode_Advantage` — casts Fire Bolt with `SpellAttackRollMode: dice.Advantage`, uses a roller returning 8 then 15, asserts the higher roll (15) is chosen and attack total = 22 (15 + 7 modifier).
+Called at the top of all four handlers, immediately after `charData` is loaded:
+- `HandleASIChoice` (line ~380)
+- `HandleASISelect` (line ~425)
+- `HandleASIFeatSelect` (line ~680)
+- `HandleASIFeatSubChoiceSelect` (line ~770)
+
+## Tests Added
+
+Four new tests in `internal/discord/asi_handler_test.go`:
+- `TestASIHandler_HandleASIChoice_RejectsNonOwner`
+- `TestASIHandler_HandleASISelect_RejectsNonOwner`
+- `TestASIHandler_HandleASIFeatSelect_RejectsNonOwner`
+- `TestASIHandler_HandleASIFeatSubChoiceSelect_RejectsNonOwner`
+
+Each creates an interaction from `"other-user"` on a character owned by `"owner-user"` and asserts the response contains "not your character".
+
+Three existing tests were updated to include `DiscordUserID` in their mock character data (they previously omitted it, which now correctly triggers the rejection).
 
 ## Verification
-
-- `make test` — all tests pass
-- `make cover-check` — all coverage thresholds met
+- `make test` — PASS
+- `make cover-check` — PASS (all thresholds met)
