@@ -2,6 +2,7 @@ package messageplayer
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/ab/dndnd/internal/auth"
 )
 
 func newTestHandler(t *testing.T) (*Handler, *fakeStore, *fakeLookup, *fakeMessenger) {
@@ -265,3 +268,48 @@ var errAny = errAnyType("test err")
 type errAnyType string
 
 func (e errAnyType) Error() string { return string(e) }
+
+func TestHandler_History_ForbiddenWhenNotCampaignDM(t *testing.T) {
+	campA := uuid.New()
+	campB := uuid.New()
+
+	verifier := &fakeCampaignVerifierMP{ownedCampaign: campA.String()}
+	store := &fakeStore{list: []Message{{ID: uuid.New(), Body: "hi", SentAt: time.Now(), DiscordMessageIDs: []string{"x"}}}}
+	svc := NewService(store, &fakeLookup{}, &fakeMessenger{})
+	h := NewHandler(svc, WithCampaignVerifier(verifier))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/message-player/history?campaign_id="+campB.String()+"&player_character_id="+uuid.New().String(), nil)
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
+	rr := httptest.NewRecorder()
+	h.History(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandler_History_AllowedWhenCampaignDM(t *testing.T) {
+	campA := uuid.New()
+
+	verifier := &fakeCampaignVerifierMP{ownedCampaign: campA.String()}
+	store := &fakeStore{list: []Message{{ID: uuid.New(), Body: "hi", SentAt: time.Now(), DiscordMessageIDs: []string{"x"}}}}
+	svc := NewService(store, &fakeLookup{}, &fakeMessenger{})
+	h := NewHandler(svc, WithCampaignVerifier(verifier))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/message-player/history?campaign_id="+campA.String()+"&player_character_id="+uuid.New().String(), nil)
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
+	rr := httptest.NewRecorder()
+	h.History(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+type fakeCampaignVerifierMP struct {
+	ownedCampaign string
+}
+
+func (f *fakeCampaignVerifierMP) IsCampaignDM(_ context.Context, _, campaignID string) (bool, error) {
+	return f.ownedCampaign == campaignID, nil
+}

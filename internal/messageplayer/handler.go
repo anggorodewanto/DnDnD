@@ -1,6 +1,7 @@
 package messageplayer
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -8,16 +9,36 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/ab/dndnd/internal/auth"
 )
+
+// CampaignVerifier checks whether a user owns a specific campaign.
+type CampaignVerifier interface {
+	IsCampaignDM(ctx context.Context, discordUserID, campaignID string) (bool, error)
+}
+
+// HandlerOption configures optional Handler dependencies.
+type HandlerOption func(*Handler)
+
+// WithCampaignVerifier injects a campaign ownership verifier.
+func WithCampaignVerifier(v CampaignVerifier) HandlerOption {
+	return func(h *Handler) { h.campaignVerifier = v }
+}
 
 // Handler exposes the message-player HTTP API on the dashboard router.
 type Handler struct {
-	svc *Service
+	svc              *Service
+	campaignVerifier CampaignVerifier
 }
 
 // NewHandler constructs a Handler wrapping the given service.
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, opts ...HandlerOption) *Handler {
+	h := &Handler{svc: svc}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
 }
 
 // RegisterRoutes mounts the message-player routes on the given router.
@@ -91,6 +112,15 @@ func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "invalid player_character_id", http.StatusBadRequest)
 		return
+	}
+
+	if h.campaignVerifier != nil {
+		userID, _ := auth.DiscordUserIDFromContext(r.Context())
+		owns, verErr := h.campaignVerifier.IsCampaignDM(r.Context(), userID, campaignID.String())
+		if verErr != nil || !owns {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 	}
 
 	limit := parseIntDefault(r.URL.Query().Get("limit"), 20)

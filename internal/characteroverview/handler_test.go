@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/ab/dndnd/internal/auth"
 )
 
 func newTestHandler(store Store) *Handler {
@@ -109,6 +111,47 @@ func TestHandler_RegisterRoutes_Mounts(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
+}
+
+func TestHandler_Get_ForbiddenWhenNotCampaignDM(t *testing.T) {
+	campA := uuid.New() // DM owns this
+	campB := uuid.New() // DM does NOT own this
+
+	verifier := &fakeCampaignVerifier{ownedCampaign: campA.String()}
+	h := NewHandler(NewService(&fakeStore{sheets: []CharacterSheet{{Name: "X"}}}), WithCampaignVerifier(verifier))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/character-overview?campaign_id="+campB.String(), nil)
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
+	rr := httptest.NewRecorder()
+	h.Get(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandler_Get_AllowedWhenCampaignDM(t *testing.T) {
+	campA := uuid.New()
+
+	verifier := &fakeCampaignVerifier{ownedCampaign: campA.String()}
+	h := NewHandler(NewService(&fakeStore{sheets: []CharacterSheet{{Name: "X"}}}), WithCampaignVerifier(verifier))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/character-overview?campaign_id="+campA.String(), nil)
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
+	rr := httptest.NewRecorder()
+	h.Get(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+type fakeCampaignVerifier struct {
+	ownedCampaign string
+}
+
+func (f *fakeCampaignVerifier) IsCampaignDM(_ context.Context, _, campaignID string) (bool, error) {
+	return f.ownedCampaign == campaignID, nil
 }
 
 // silence unused import

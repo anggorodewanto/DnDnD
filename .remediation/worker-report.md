@@ -1,33 +1,37 @@
-# Worker Report: H-H02 — DM approve/deny buttons have no role check
+# Worker Report: I-H06 — Cross-tenant reads on character overview / narration history / message history
 
-## Status: ✅ FIXED
+## Status: FIXED
 
-## Summary
+## Problem
+The `characteroverview.Handler.Get`, `narration.Handler.History`, and `messageplayer.Handler.History` endpoints accepted `campaign_id` from query params without verifying the authenticated DM owns that campaign. A DM of campaign A could read data belonging to campaign B.
 
-`HandleDMApprove` and `HandleDMDeny` in `internal/discord/asi_handler.go` now verify that the interacting user is the campaign's DM before processing the action. Non-DM users receive an ephemeral rejection message.
+## Fix Applied
 
-## Changes
+### Approach
+Added a `CampaignVerifier` interface to each handler package with a single method:
+```go
+type CampaignVerifier interface {
+    IsCampaignDM(ctx context.Context, discordUserID, campaignID string) (bool, error)
+}
+```
 
-### `internal/discord/asi_handler.go`
-- Added `dmUserFunc func(guildID string) string` field to `ASIHandler` struct.
-- Added `SetDMUserFunc` setter method (nil-safe; nil skips the check for backwards compat).
-- Added `isDMUser` helper: returns true if `dmUserFunc` is nil, or if the DM user ID is empty, or if the interacting user matches the DM.
-- Added DM identity guard at the top of `HandleDMApprove` and `HandleDMDeny`.
+Injected via functional options (`WithCampaignVerifier`) to maintain backward compatibility with existing callers. Each handler checks ownership after parsing `campaign_id` and before querying data. Returns 403 if the check fails.
 
-### `internal/discord/asi_handler_test.go`
-- Added `TestASIHandler_HandleDMApprove_RejectsNonDM`: verifies a non-DM user gets an ephemeral rejection and `ApproveASI` is never called.
-- Added `TestASIHandler_HandleDMDeny_RejectsNonDM`: same for deny path.
+### Files Modified
+- `internal/characteroverview/handler.go` — Added `CampaignVerifier` interface, `HandlerOption`, ownership check in `Get`
+- `internal/characteroverview/handler_test.go` — Added `TestHandler_Get_ForbiddenWhenNotCampaignDM`, `TestHandler_Get_AllowedWhenCampaignDM`
+- `internal/narration/handler.go` — Added `CampaignVerifier` interface, `HandlerOption`, ownership check in `History`
+- `internal/narration/handler_test.go` — Added `TestHandler_History_ForbiddenWhenNotCampaignDM`, `TestHandler_History_AllowedWhenCampaignDM`
+- `internal/messageplayer/handler.go` — Added `CampaignVerifier` interface, `HandlerOption`, ownership check in `History`
+- `internal/messageplayer/handler_test.go` — Added `TestHandler_History_ForbiddenWhenNotCampaignDM`, `TestHandler_History_AllowedWhenCampaignDM`
+- `cmd/dndnd/main.go` — Wired `dashboardCampaignLookup{queries}` as the verifier for all three handlers
 
-### `cmd/dndnd/discord_handlers.go`
-- Added `dmUserFunc` field to `discordHandlerDeps`.
-- Wired `SetDMUserFunc` on the ASI handler after construction.
+### Verification
+- `make test` — all tests pass
+- `make cover-check` — all coverage thresholds met
+- `go build ./...` — compiles cleanly
 
-### `cmd/dndnd/main.go`
-- Extracted `dmUserFunc` closure to a local variable (reused by both `buildDiscordHandlers` and `buildRegistrationDeps`).
-- Passed `dmUserFunc` into `discordHandlerDeps`.
-
-## TDD Workflow
-
-1. **Red:** Wrote two failing tests (`RejectsNonDM` for approve and deny). Compilation failed because `SetDMUserFunc` didn't exist.
-2. **Green:** Implemented `dmUserFunc` field, `SetDMUserFunc`, `isDMUser`, and the guards. Tests pass.
-3. **Verify:** `make test` ✅ — all tests pass. `make cover-check` ✅ — coverage thresholds met.
+### TDD Sequence
+1. **Red:** Wrote 6 new tests (2 per package) asserting 403 for cross-campaign access and 200 for legitimate access. Tests failed to compile (undefined symbols).
+2. **Green:** Implemented `CampaignVerifier` interface + `WithCampaignVerifier` option + ownership check in each handler. All tests pass.
+3. **Wiring:** Connected `dashboardCampaignLookup` (which already implements `IsCampaignDM`) to each handler in `main.go`.

@@ -13,6 +13,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/ab/dndnd/internal/auth"
 )
 
 func newTestHandler(t *testing.T) (*Handler, *fakeStore, *fakePoster) {
@@ -224,3 +226,48 @@ func TestHandler_RegisterRoutes_Mounts(t *testing.T) {
 
 // sanity check unused import
 var _ = context.Background
+
+func TestHandler_History_ForbiddenWhenNotCampaignDM(t *testing.T) {
+	campA := uuid.New()
+	campB := uuid.New()
+
+	verifier := &fakeCampaignVerifierN{ownedCampaign: campA.String()}
+	store := &fakeStore{list: []Post{{ID: uuid.New(), Body: "x", PostedAt: time.Now(), AttachmentAssetIDs: []uuid.UUID{}, DiscordMessageIDs: []string{"m"}}}}
+	svc := NewService(store, &fakePoster{}, &fakeAttachments{}, &fakeCampaigns{})
+	h := NewHandler(svc, WithCampaignVerifier(verifier))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/narration/history?campaign_id="+campB.String(), nil)
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
+	rr := httptest.NewRecorder()
+	h.History(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandler_History_AllowedWhenCampaignDM(t *testing.T) {
+	campA := uuid.New()
+
+	verifier := &fakeCampaignVerifierN{ownedCampaign: campA.String()}
+	store := &fakeStore{list: []Post{{ID: uuid.New(), Body: "x", PostedAt: time.Now(), AttachmentAssetIDs: []uuid.UUID{}, DiscordMessageIDs: []string{"m"}}}}
+	svc := NewService(store, &fakePoster{}, &fakeAttachments{}, &fakeCampaigns{})
+	h := NewHandler(svc, WithCampaignVerifier(verifier))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/narration/history?campaign_id="+campA.String(), nil)
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
+	rr := httptest.NewRecorder()
+	h.History(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+type fakeCampaignVerifierN struct {
+	ownedCampaign string
+}
+
+func (f *fakeCampaignVerifierN) IsCampaignDM(_ context.Context, _, campaignID string) (bool, error) {
+	return f.ownedCampaign == campaignID, nil
+}

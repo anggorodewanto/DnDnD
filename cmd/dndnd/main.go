@@ -901,7 +901,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		narrationAssets := narration.NewAssetAttachmentResolver(assetSvc)
 		narrationCampaigns := narration.NewCampaignResolverAdapter(campaignSvc)
 		narrationSvc := narration.NewService(narrationStore, narrationPoster, narrationAssets, narrationCampaigns)
-		narrationHandler := narration.NewHandler(narrationSvc)
+		narrationHandler := narration.NewHandler(narrationSvc, narration.WithCampaignVerifier(dashboardCampaignLookup{queries: queries}))
 
 		// Wire Narration Template API handler (Phase 100b).
 		narrationTemplateStore := narration.NewTemplateDBStore(queries)
@@ -911,7 +911,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// Wire Character Overview API handler (Phase 101).
 		characterOverviewStore := characteroverview.NewDBStore(queries)
 		characterOverviewSvc := characteroverview.NewService(characterOverviewStore)
-		characterOverviewHandler := characteroverview.NewHandler(characterOverviewSvc)
+		characterOverviewHandler := characteroverview.NewHandler(characterOverviewSvc, characteroverview.WithCampaignVerifier(dashboardCampaignLookup{queries: queries}))
 
 		// Wire Message Player API handler (Phase 101). Phase 104: inject a
 		// real Discord direct messenger when a session is available.
@@ -922,7 +922,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		messagePlayerStore := messageplayer.NewDBStore(queries)
 		messagePlayerLookup := messageplayer.NewPlayerLookupAdapter(queries)
 		messagePlayerSvc := messageplayer.NewService(messagePlayerStore, messagePlayerLookup, directMessenger)
-		messagePlayerHandler := messageplayer.NewHandler(messagePlayerSvc)
+		messagePlayerHandler := messageplayer.NewHandler(messagePlayerSvc, messageplayer.WithCampaignVerifier(dashboardCampaignLookup{queries: queries}))
 
 		// Phase 104: Dashboard publisher + combat service wiring.
 		// The publisher is injected into combat.Service so every HP /

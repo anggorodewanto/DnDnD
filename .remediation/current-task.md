@@ -1,11 +1,11 @@
-finding_id: H-H02
+finding_id: I-H06
 severity: High
-title: DM approve/deny buttons have no role check
-location: internal/discord/asi_handler.go:456 (HandleDMApprove), 524 (HandleDMDeny)
-spec_ref: spec §"DM approval" line 2497
+title: Cross-tenant reads on character overview / narration history / message history
+location: internal/characteroverview/handler.go:35-47; internal/narration/handler.go:95-118; internal/messageplayer/handler.go:74-108
+spec_ref: Spec §65 "System verifies the authenticated Discord user ID matches the campaign's designated DM."
 problem: |
-  Anyone who can see #dm-queue can click Approve or Deny — no check that the interacting user is the campaign's DM.
+  RequireDM only verifies the caller is a DM. These handlers accept campaign_id as a query arg and return data without checking the caller is the DM of that specific campaign.
 suggested_fix: |
-  Look up the campaign for the guild and verify interaction.Member.User.ID matches the campaign's DM Discord ID.
+  Verify campaign ownership against the authenticated user before returning rows.
 acceptance_criterion: |
-  HandleDMApprove/HandleDMDeny reject interactions from non-DM users. A test demonstrates this.
+  A DM requesting data for another campaign's characters/narration/messages gets 403. A test demonstrates this.
