@@ -20,13 +20,17 @@ type storeAdapter struct {
 	// F-H05: in-process lair action persistence until a DB column is added.
 	lairMu          sync.Mutex
 	lastLairActions map[uuid.UUID]string
+
+	// F-H06: in-process legendary budget persistence.
+	legendaryMu      sync.Mutex
+	legendaryBudgets map[uuid.UUID]int
 }
 
 // NewStoreAdapter returns a Store backed by *refdata.Queries. Both the main
 // binary and integration tests should use this helper so the bridging code
 // lives in exactly one place.
 func NewStoreAdapter(q *refdata.Queries) Store {
-	return &storeAdapter{Queries: q, lastLairActions: make(map[uuid.UUID]string)}
+	return &storeAdapter{Queries: q, lastLairActions: make(map[uuid.UUID]string), legendaryBudgets: make(map[uuid.UUID]int)}
 }
 
 func (a *storeAdapter) UpdateCharacterInventory(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error {
@@ -67,4 +71,21 @@ func (a *storeAdapter) GetLastLairAction(_ context.Context, encounterID uuid.UUI
 	a.lairMu.Lock()
 	defer a.lairMu.Unlock()
 	return a.lastLairActions[encounterID], nil
+}
+
+func (a *storeAdapter) GetLegendaryBudget(_ context.Context, combatantID uuid.UUID) (int, error) {
+	a.legendaryMu.Lock()
+	defer a.legendaryMu.Unlock()
+	budget, ok := a.legendaryBudgets[combatantID]
+	if !ok {
+		return -1, nil // -1 signals uninitialized; handler will use creature's default
+	}
+	return budget, nil
+}
+
+func (a *storeAdapter) DecrementLegendaryBudget(_ context.Context, combatantID uuid.UUID) error {
+	a.legendaryMu.Lock()
+	defer a.legendaryMu.Unlock()
+	a.legendaryBudgets[combatantID]--
+	return nil
 }

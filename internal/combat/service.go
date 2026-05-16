@@ -217,6 +217,10 @@ type Store interface {
 	// F-H05: Lair action tracker persistence.
 	SetLastLairAction(ctx context.Context, encounterID uuid.UUID, action string) error
 	GetLastLairAction(ctx context.Context, encounterID uuid.UUID) (string, error)
+
+	// F-H06: Server-side legendary action budget.
+	GetLegendaryBudget(ctx context.Context, combatantID uuid.UUID) (int, error)
+	DecrementLegendaryBudget(ctx context.Context, combatantID uuid.UUID) error
 }
 
 // EncounterPublisher fans out a fresh encounter snapshot over the dashboard

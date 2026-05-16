@@ -1169,6 +1169,106 @@ func TestFindLairCreature_GetCreatureError(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
+// --- TDD Cycle F-H06: Server-side legendary budget enforcement ---
+
+func TestExecuteLegendaryAction_ServerSideBudgetExhausted(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:            npcID,
+				DisplayName:   "Dragon",
+				IsNpc:         true,
+				IsAlive:       true,
+				CreatureRefID: sql.NullString{String: "dragon", Valid: true},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{
+				ID: "dragon", Name: "Dragon",
+				Abilities: pqtype.NullRawMessage{Valid: true, RawMessage: json.RawMessage(`[
+					{"name":"Legendary Actions","description":"The dragon can take 3 legendary actions."},
+					{"name":"Detect","description":"Check."}
+				]`)},
+			}, nil
+		},
+		getLegendaryBudgetFn: func(ctx context.Context, combatantID uuid.UUID) (int, error) {
+			return 0, nil
+		},
+	}
+
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	body := `{"combatant_id": "` + npcID.String() + `", "action_name": "Detect", "budget_remaining": 3}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/legendary", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "legendary action budget exhausted")
+}
+
+func TestExecuteLegendaryAction_ServerSideBudgetDecremented(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	turnID := uuid.New()
+
+	decremented := false
+	store := &mockStore{
+		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			return refdata.Combatant{
+				ID:            npcID,
+				DisplayName:   "Dragon",
+				IsNpc:         true,
+				IsAlive:       true,
+				CreatureRefID: sql.NullString{String: "dragon", Valid: true},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{
+				ID: "dragon", Name: "Dragon",
+				Abilities: pqtype.NullRawMessage{Valid: true, RawMessage: json.RawMessage(`[
+					{"name":"Legendary Actions","description":"The dragon can take 3 legendary actions."},
+					{"name":"Detect","description":"Check."}
+				]`)},
+			}, nil
+		},
+		getLegendaryBudgetFn: func(ctx context.Context, combatantID uuid.UUID) (int, error) {
+			return 2, nil
+		},
+		decrementLegendaryBudgetFn: func(ctx context.Context, combatantID uuid.UUID) error {
+			decremented = true
+			return nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: eid, CombatantID: uuid.New()}, nil
+		},
+		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+			return refdata.ActionLog{ID: uuid.New()}, nil
+		},
+	}
+
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	body := `{"combatant_id": "` + npcID.String() + `", "action_name": "Detect", "budget_remaining": 2}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/legendary", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, decremented)
+}
+
 // --- TDD Cycle F-H05: Lair action persistence across restarts ---
 
 func TestExecuteLairAction_PersistsLastUsedAction(t *testing.T) {

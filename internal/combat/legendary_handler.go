@@ -170,11 +170,26 @@ func (h *Handler) ExecuteLegendaryAction(w http.ResponseWriter, r *http.Request)
 
 	// Check budget
 	budget := LegendaryActionBudget{Total: info.Budget, Remaining: req.BudgetRemaining}
+
+	// F-H06: Server-side budget enforcement
+	serverBudget, _ := h.svc.store.GetLegendaryBudget(r.Context(), combatantID)
+	if serverBudget >= 0 {
+		// Server has tracked budget; use it instead of client-supplied value
+		if serverBudget == 0 {
+			http.Error(w, "legendary action budget exhausted", http.StatusBadRequest)
+			return
+		}
+		budget.Remaining = serverBudget
+	}
+
 	newBudget, err := budget.Spend(selectedAction.Cost)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	// Decrement server-side budget
+	h.svc.store.DecrementLegendaryBudget(r.Context(), combatantID)
 
 	// Format combat log
 	budgetSpent := budget.Total - newBudget.Remaining

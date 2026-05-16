@@ -167,6 +167,10 @@ type mockStore struct {
 	// F-H05 — Lair action tracker persistence
 	setLastLairActionFn func(ctx context.Context, encounterID uuid.UUID, action string) error
 	getLastLairActionFn func(ctx context.Context, encounterID uuid.UUID) (string, error)
+
+	// F-H06 — Server-side legendary action budget
+	getLegendaryBudgetFn      func(ctx context.Context, combatantID uuid.UUID) (int, error)
+	decrementLegendaryBudgetFn func(ctx context.Context, combatantID uuid.UUID) error
 }
 
 func (m *mockStore) SetCombatantConcentration(ctx context.Context, arg refdata.SetCombatantConcentrationParams) error {
@@ -230,6 +234,20 @@ func (m *mockStore) GetLastLairAction(ctx context.Context, encounterID uuid.UUID
 		return m.getLastLairActionFn(ctx, encounterID)
 	}
 	return "", nil
+}
+
+func (m *mockStore) GetLegendaryBudget(ctx context.Context, combatantID uuid.UUID) (int, error) {
+	if m.getLegendaryBudgetFn != nil {
+		return m.getLegendaryBudgetFn(ctx, combatantID)
+	}
+	return -1, nil
+}
+
+func (m *mockStore) DecrementLegendaryBudget(ctx context.Context, combatantID uuid.UUID) error {
+	if m.decrementLegendaryBudgetFn != nil {
+		return m.decrementLegendaryBudgetFn(ctx, combatantID)
+	}
+	return nil
 }
 
 func (m *mockStore) UpdateEncounterDisplayName(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {

@@ -1,11 +1,11 @@
-finding_id: F-H05
+finding_id: F-H06
 severity: High
-title: Lair-action "no consecutive repeats" tracker is in-memory only
-location: internal/combat/legendary.go:198-263
-spec_ref: spec §Enemy / NPC Turns line 1918; Phase 78b
+title: Legendary-action budget round-trips through the URL — no server persistence
+location: internal/combat/legendary_handler.go:73-78,170-180
+spec_ref: spec §Enemy / NPC Turns line 1916; Phase 78b
 problem: |
-  LairActionTracker is a value type with no DB persistence. After a bot restart the tracker resets and the "no repeats" rule lapses.
+  The dashboard sends budget_remaining as a query param and the server trusts it. Two dashboards can desync the budget.
 suggested_fix: |
-  Persist last_used_lair_action on the encounter row and hydrate LairActionTracker from it.
+  Add a legendary_action_budget field persisted server-side. Decrement on ExecuteLegendaryAction, reset on creature's turn start.
 acceptance_criterion: |
-  After setting a lair action, the tracker persists the choice. A test demonstrates the value survives a "reload" (re-hydration from stored state).
+  ExecuteLegendaryAction decrements a server-side budget. A test demonstrates the budget decreases and rejects when exhausted.
