@@ -1,24 +1,18 @@
-# Worker Report: G-H01 — Gold split silently discards remainder
+# Worker Report: E-H05
 
-## Status: ✅ FIXED
-
-## Summary
-
-`SplitGold` in `internal/loot/service.go` zeroed the pool's `GoldTotal` after distributing shares. When the total was not evenly divisible (e.g., 7gp / 3 players), the remainder was lost.
+**Finding:** Spell attack rolls never apply advantage/disadvantage  
+**Status:** ✅ Fixed  
+**Worker:** worker-E-H05  
+**Date:** 2026-05-16
 
 ## Changes
 
-### 1. Test added (Red)
+### `internal/combat/spellcasting.go`
+1. Added `SpellAttackRollMode dice.RollMode` field to `CastCommand` struct (line 339).
+2. Changed `roller.RollD20(attackMod, dice.Normal)` → `roller.RollD20(attackMod, cmd.SpellAttackRollMode)` (line 640). Zero-value of `dice.RollMode` is `dice.Normal` (0), so backward compatibility is preserved.
 
-`internal/loot/service_test.go` — `TestSplitGold_RemainderRetained`: splits 7gp among 3 players, asserts each gets 2gp and pool retains 1gp.
-
-### 2. Fix applied (Green)
-
-`internal/loot/service.go` line ~321: replaced `GoldTotal: 0` with `GoldTotal: pool.GoldTotal % int32(len(pcs))`.
-
-### 3. Mock test updated
-
-`internal/loot/service_mock_test.go` — `TestSplitGold_ZeroPoolGoldFailure`: updated error string assertion from `"zeroing pool gold"` to `"updating pool gold remainder"`.
+### `internal/combat/spellcasting_test.go`
+Added `TestCast_SpellAttackRollMode_Advantage` — casts Fire Bolt with `SpellAttackRollMode: dice.Advantage`, uses a roller returning 8 then 15, asserts the higher roll (15) is chosen and attack total = 22 (15 + 7 modifier).
 
 ## Verification
 

@@ -3522,3 +3522,55 @@ func TestCast_AppliesHealingOnCast(t *testing.T) {
 	assert.Equal(t, target.ID, capturedHP.ID)
 	assert.Equal(t, int32(24), capturedHP.HpCurrent) // 10 + 14 = 24
 }
+
+// TDD: E-H05 — Spell attack roll respects SpellAttackRollMode
+func TestCast_SpellAttackRollMode_Advantage(t *testing.T) {
+	charID := uuid.New()
+	char := makeWizardCharacter(charID)
+	caster := makeSpellCaster(charID)
+	target := makeSpellTarget()
+	target.PositionRow = 6
+
+	store := defaultMockStore()
+	store.getSpellFn = func(_ context.Context, _ string) (refdata.Spell, error) {
+		return makeFireBolt(), nil
+	}
+	store.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.getCombatantFn = func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		if id == caster.ID {
+			return caster, nil
+		}
+		return target, nil
+	}
+	store.updateTurnActionsFn = func(_ context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, ActionUsed: arg.ActionUsed}, nil
+	}
+
+	svc := NewService(store)
+	cmd := CastCommand{
+		SpellID:            "fire-bolt",
+		CasterID:           caster.ID,
+		TargetID:           target.ID,
+		Turn:               refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		SpellAttackRollMode: dice.Advantage,
+	}
+
+	// Use a roller that returns different values per call to distinguish advantage.
+	callCount := 0
+	roller := dice.NewRoller(func(n int) int {
+		callCount++
+		if callCount == 1 {
+			return 8
+		}
+		return 15
+	})
+
+	result, err := svc.Cast(context.Background(), cmd, roller)
+	require.NoError(t, err)
+	assert.True(t, result.IsAttack)
+	// Advantage picks the higher roll (15), attack mod = 7
+	assert.Equal(t, 15, result.AttackRoll)
+	assert.Equal(t, 22, result.AttackTotal)
+}

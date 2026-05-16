@@ -1,11 +1,11 @@
-finding_id: G-H01
+finding_id: E-H05
 severity: High
-title: Gold split silently discards remainder
-location: internal/loot/service.go:289-329
-spec_ref: spec §Inventory Management line 2661 (Phase 85)
+title: Spell attack rolls never apply advantage/disadvantage
+location: internal/combat/spellcasting.go:638
+spec_ref: Phase 58; spec §989
 problem: |
-  SplitGold computes share := pool.GoldTotal / len(pcs) then zeros the pool. For 7gp / 3 players, each gets 2gp and 1gp evaporates.
+  Cast hard-codes dice.Normal for the d20 roll. Hidden caster, invisible target, target prone, attacker restrained/poisoned — none adjust the spell attack roll.
 suggested_fix: |
-  Leave GoldTotal % len(pcs) in the pool for the DM to dispense manually.
+  Pass a RollMode parameter to the spell attack roll. The simplest fix: add a RollMode field to CastCommand that callers can set based on conditions. Default to Normal for backward compat.
 acceptance_criterion: |
-  After splitting 7gp among 3 players, each gets 2gp and the pool retains 1gp. A test demonstrates this.
+  A spell attack with RollMode=Advantage rolls with advantage. A test demonstrates this.
