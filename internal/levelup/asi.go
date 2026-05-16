@@ -75,8 +75,8 @@ func applyPlus2(scores character.AbilityScores, ability string) (character.Abili
 	if err != nil {
 		return scores, err
 	}
-	if current >= maxAbilityScore {
-		return scores, fmt.Errorf("ability %s is already at %d", ability, maxAbilityScore)
+	if current+2 > maxAbilityScore {
+		return scores, fmt.Errorf("%s is already %d — +2 would exceed 20", ability, current)
 	}
 	setScore(&scores, ability, current+2)
 	return scores, nil

@@ -1,11 +1,11 @@
-finding_id: H-H11
+finding_id: H-H12
 severity: High
-title: DDB class names not normalised to internal IDs
-location: internal/ddbimport/parser.go:177
-spec_ref: Phase 90 "Parser converts DDB JSON into internal format"
+title: Plus-2 ASI silently truncates at cap (loses 1 point) without warning
+location: internal/levelup/asi.go:81 (applyPlus2)
+spec_ref: spec §"ASI path" line 2484
 problem: |
-  DDB returns capitalised class names ("Fighter", "Wizard"). The parser stores them verbatim, while the rest of the system uses lowercase slugs ("fighter"). Imported characters can't level up via the dashboard.
+  The spec wants the bot to reject when a single score would exceed 20. The code accepts and silently caps at 20, so a STR-19 player picking +2 STR ends up with STR 20 and loses the second point.
 suggested_fix: |
-  Lowercase/slugify DDB class names before storing.
+  Reject the choice if current + bonus > 20 (return error so user picks again).
 acceptance_criterion: |
-  Parsed class names from DDB are lowercased. A test demonstrates "Fighter" becomes "fighter".
+  applyPlus2 returns an error when the chosen ability is at 19 (19+2=21 > 20). A test demonstrates this.

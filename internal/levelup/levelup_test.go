@@ -171,17 +171,14 @@ func TestApplyASI_Plus1Plus1(t *testing.T) {
 	}
 }
 
-func TestApplyASI_CapAt20(t *testing.T) {
+func TestApplyASI_RejectsWhenPlus2Exceeds20(t *testing.T) {
 	scores := character.AbilityScores{STR: 19, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}
-	result, err := ApplyASI(scores, ASIChoice{
+	_, err := ApplyASI(scores, ASIChoice{
 		Type:    ASIPlus2,
 		Ability: "str",
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.STR != 20 {
-		t.Errorf("STR = %d, want 20 (capped)", result.STR)
+	if err == nil {
+		t.Fatal("expected error when +2 would exceed 20")
 	}
 }
 
