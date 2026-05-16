@@ -78,7 +78,7 @@ Low: 142
 | 66 | D-H03 | High | done | Auto-ability selection for finesse weapons silently disables rage damage | /home/ab/projects/DnDnD/internal/combat/attack.go:1583 (`attackAbilityUsed`) |
 | 67 | D-H04 | High | done | Monk Unarmored Defense not invalidated by shield | /home/ab/projects/DnDnD/internal/combat/equip.go:416 and /home/ab/projects/DnDnD... |
 | 68 | D-H05 | High | done | Monk Unarmored Movement not gated on "no shield" | /home/ab/projects/DnDnD/internal/combat/monk.go:487 (`UnarmoredMovementFeature`)... |
-| 69 | D-H06 | High | in_progress | Wild Shape on-revert does not restore the druid's speed snapshot | /home/ab/projects/DnDnD/internal/combat/wildshape.go:181 (`RevertWildShape`) |
+| 69 | D-H06 | High | done | Wild Shape on-revert does not restore the druid's speed snapshot | /home/ab/projects/DnDnD/internal/combat/wildshape.go:181 (`RevertWildShape`) |
 | 70 | D-H07 | High | superseded | Wild Shape activation does not block druid spellcasting | /home/ab/projects/DnDnD/internal/combat/spellcasting.go:381 and /home/ab/project... |
 | 71 | D-H08 | High | pending | Channel Divinity action validation is duplicated and racy across DM-queue + auto-resolved paths | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:160, :366, :446, :52... |
 | 72 | E-H01 | High | done | Help action grants advantage only on attacks, not on ability checks | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261`; `advantag... |
@@ -92,7 +92,7 @@ Low: 142
 | 80 | F-H02 | High | pending | Hide action ignores the actor's vision when computing zone obscurement | /home/ab/projects/DnDnD/internal/discord/action_handler.go:794-805 |
 | 81 | F-H03 | High | done | Hidden combatants (`is_visible = false`) still render on the map | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog.go:52-78; /home/ab/project... |
 | 82 | F-H04 | High | done | Free-object interaction whitelist is too permissive / English-only | /home/ab/projects/DnDnD/internal/combat/interact.go:13-52 |
-| 83 | F-H05 | High | pending | Lair-action "no consecutive repeats" tracker is in-memory only | /home/ab/projects/DnDnD/internal/combat/legendary.go:198-263 |
+| 83 | F-H05 | High | in_progress | Lair-action "no consecutive repeats" tracker is in-memory only | /home/ab/projects/DnDnD/internal/combat/legendary.go:198-263 |
 | 84 | F-H06 | High | pending | Legendary-action budget round-trips through the URL — no server persistence | /home/ab/projects/DnDnD/internal/combat/legendary_handler.go:73-78,170-180 |
 | 85 | F-H07 | High | done | Counterspell trigger does not validate spell range / line-of-sight | /home/ab/projects/DnDnD/internal/combat/counterspell.go:65-116 |
 | 86 | F-H08 | High | pending | Reaction declarations not validated for the type's prerequisites | /home/ab/projects/DnDnD/internal/combat/reaction.go:27-46 |

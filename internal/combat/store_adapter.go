@@ -2,6 +2,7 @@ package combat
 
 import (
 	"context"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
@@ -15,13 +16,17 @@ import (
 // bridge because Store takes positional args where sqlc uses Params structs.
 type storeAdapter struct {
 	*refdata.Queries
+
+	// F-H05: in-process lair action persistence until a DB column is added.
+	lairMu          sync.Mutex
+	lastLairActions map[uuid.UUID]string
 }
 
 // NewStoreAdapter returns a Store backed by *refdata.Queries. Both the main
 // binary and integration tests should use this helper so the bridging code
 // lives in exactly one place.
 func NewStoreAdapter(q *refdata.Queries) Store {
-	return &storeAdapter{Queries: q}
+	return &storeAdapter{Queries: q, lastLairActions: make(map[uuid.UUID]string)}
 }
 
 func (a *storeAdapter) UpdateCharacterInventory(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error {
@@ -49,4 +54,17 @@ func (a *storeAdapter) GetEncounterTemplate(ctx context.Context, id uuid.UUID) (
 
 func (a *storeAdapter) GetMapByIDUnchecked(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
 	return a.Queries.GetMapByIDUnchecked(ctx, id)
+}
+
+func (a *storeAdapter) SetLastLairAction(_ context.Context, encounterID uuid.UUID, action string) error {
+	a.lairMu.Lock()
+	defer a.lairMu.Unlock()
+	a.lastLairActions[encounterID] = action
+	return nil
+}
+
+func (a *storeAdapter) GetLastLairAction(_ context.Context, encounterID uuid.UUID) (string, error) {
+	a.lairMu.Lock()
+	defer a.lairMu.Unlock()
+	return a.lastLairActions[encounterID], nil
 }

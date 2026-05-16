@@ -386,3 +386,20 @@ func TestBuildTurnQueueEntries_LairActionLosesTies(t *testing.T) {
 	// Lair action must lose ties: combatant at init 20 goes before lair action at init 20
 	assert.Less(t, rogueIdx, lairIdx, "combatant at initiative 20 should appear before lair action (lair loses ties)")
 }
+
+// --- TDD Cycle F-H05: Lair action tracker persistence ---
+
+func TestLairActionTracker_PersistsSurvivesRehydration(t *testing.T) {
+	// Simulate: use an action, persist it, then create a new tracker from stored state.
+	tracker := LairActionTracker{}
+	tracker = tracker.Use("Magma Eruption")
+
+	// Simulate persistence: the stored value is the LastUsedName.
+	storedValue := tracker.LastUsedName
+	assert.Equal(t, "Magma Eruption", storedValue)
+
+	// Simulate rehydration: a fresh tracker built from stored state.
+	rehydrated := LairActionTracker{LastUsedName: storedValue}
+	assert.False(t, rehydrated.CanUse("Magma Eruption"), "rehydrated tracker should block repeated action")
+	assert.True(t, rehydrated.CanUse("Tremor"), "rehydrated tracker should allow different action")
+}

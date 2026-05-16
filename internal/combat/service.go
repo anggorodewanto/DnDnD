@@ -213,6 +213,10 @@ type Store interface {
 
 	// F-12: Map lookup for enemy turn pathfinding.
 	GetMapByIDUnchecked(ctx context.Context, id uuid.UUID) (refdata.Map, error)
+
+	// F-H05: Lair action tracker persistence.
+	SetLastLairAction(ctx context.Context, encounterID uuid.UUID, action string) error
+	GetLastLairAction(ctx context.Context, encounterID uuid.UUID) (string, error)
 }
 
 // EncounterPublisher fans out a fresh encounter snapshot over the dashboard

@@ -1,11 +1,11 @@
-finding_id: D-H06
+finding_id: F-H05
 severity: High
-title: Wild Shape on-revert does not restore the druid's speed snapshot
-location: internal/combat/wildshape.go:181 (RevertWildShape)
-spec_ref: Phase 47
+title: Lair-action "no consecutive repeats" tracker is in-memory only
+location: internal/combat/legendary.go:198-263
+spec_ref: spec §Enemy / NPC Turns line 1918; Phase 78b
 problem: |
-  WildShapeSnapshot stores SpeedFt but RevertWildShape only writes HpMax/HpCurrent/Ac. The snapshot's speed field is never read on revert.
+  LairActionTracker is a value type with no DB persistence. After a bot restart the tracker resets and the "no repeats" rule lapses.
 suggested_fix: |
-  In RevertWildShape, also restore SpeedFt from the snapshot.
+  Persist last_used_lair_action on the encounter row and hydrate LairActionTracker from it.
 acceptance_criterion: |
-  After reverting wild shape, the combatant's speed matches the snapshot. A test demonstrates this.
+  After setting a lair action, the tracker persists the choice. A test demonstrates the value survives a "reload" (re-hydration from stored state).

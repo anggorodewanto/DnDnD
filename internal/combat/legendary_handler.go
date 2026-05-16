@@ -215,7 +215,10 @@ func (h *Handler) GetLairActionPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lastUsed := r.URL.Query().Get("last_used")
+	lastUsed, _ := h.svc.store.GetLastLairAction(r.Context(), encounterID)
+	if q := r.URL.Query().Get("last_used"); q != "" {
+		lastUsed = q
+	}
 	tracker := LairActionTracker{LastUsedName: lastUsed}
 	plan := BuildLairActionPlan(info, tracker)
 
@@ -293,6 +296,7 @@ func (h *Handler) ExecuteLairAction(w http.ResponseWriter, r *http.Request) {
 
 	combatLog := FormatLairActionLog(*selectedAction)
 
+	h.svc.store.SetLastLairAction(r.Context(), encounterID, req.ActionName)
 	h.logActionAndNotify(r.Context(), encounterID, combatant.ID, "lair_action", combatLog)
 
 	writeJSON(w, http.StatusOK, executeLairActionResponse{

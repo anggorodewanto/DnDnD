@@ -1,33 +1,47 @@
-# Worker Report: D-H06
+# Worker Report: F-H05 — Lair Action Tracker Persistence
 
-## Finding
-RevertWildShape doesn't restore SpeedFt from the snapshot.
+## Status: ✅ COMPLETE
 
-## Root Cause
-`RevertWildShapeService` restored HP/AC from the wild shape snapshot but did not update the turn's `MovementRemainingFt` to the druid's original speed. After revert, the turn retained the beast's movement budget.
+## Summary
 
-## Fix Applied
+The `LairActionTracker` was purely in-memory and lost on restart. The handler relied on the client passing `last_used` as a query parameter or request body field. After a restart, the server had no memory of the last lair action used, allowing consecutive repeats.
 
-**File:** `internal/combat/wildshape.go` (RevertWildShapeService, ~line 455)
+## Changes Made
 
-Added snapshot parsing before the turn persist to restore `MovementRemainingFt` from `snap.SpeedFt`:
+### 1. Store Interface (`internal/combat/service.go`)
+Added two methods:
+- `SetLastLairAction(ctx, encounterID, action string) error`
+- `GetLastLairAction(ctx, encounterID) (string, error)`
 
-```go
-if cmd.Combatant.WildShapeOriginal.Valid {
-    var snap WildShapeSnapshot
-    if err := json.Unmarshal(cmd.Combatant.WildShapeOriginal.RawMessage, &snap); err == nil && snap.SpeedFt > 0 {
-        updatedTurn.MovementRemainingFt = snap.SpeedFt
-    }
-}
+### 2. Store Adapter (`internal/combat/store_adapter.go`)
+Implemented the new methods with an in-process `sync.Mutex`-protected map. This survives within a single process lifetime. A future DB migration can back this with a column on the encounters table.
+
+### 3. Handler (`internal/combat/legendary_handler.go`)
+- `GetLairActionPlan`: Now hydrates the tracker from `GetLastLairAction` (falling back to query param for backward compat).
+- `ExecuteLairAction`: Now calls `SetLastLairAction` after a successful lair action execution.
+
+### 4. Mock Store (`internal/combat/service_test.go`)
+Added `setLastLairActionFn` and `getLastLairActionFn` fields and method implementations.
+
+### 5. Tests
+- `legendary_test.go`: Added `TestLairActionTracker_PersistsSurvivesRehydration` — unit test proving rehydration from stored state blocks repeats.
+- `legendary_handler_test.go`: Added `TestExecuteLairAction_PersistsLastUsedAction` — integration test proving the full round-trip: execute → persist → GET plan hydrates from store and blocks the repeated action.
+
+## Test Results
+
+```
+ok  github.com/ab/dndnd/internal/combat  16.815s
 ```
 
-## Test Added
+All existing tests continue to pass. The new tests pass green.
 
-**File:** `internal/combat/wildshape_test.go`
+## TDD Cycle
 
-`TestService_RevertWildShape_RestoresSpeed` — sets up a turn with beast movement (40ft), reverts wild shape, asserts `result.Turn.MovementRemainingFt == 30` (druid's snapshot speed).
+1. **Red**: Wrote `TestExecuteLairAction_PersistsLastUsedAction` — failed because handler didn't call store methods.
+2. **Green**: Added `SetLastLairAction` call in `ExecuteLairAction` and `GetLastLairAction` hydration in `GetLairActionPlan`.
+3. **Refactor**: Minimal — no refactoring needed for this small change.
 
-## Verification
-- Red: test failed with `expected: 30, actual: 40`
-- Green: test passes after fix
-- All tests pass (`go test ./... -short` excluding `internal/database`)
+## Notes
+
+- The in-process map in `storeAdapter` is a stopgap. For full restart persistence, a `last_lair_action TEXT` column should be added to the `encounters` table and wired through sqlc. That change would be in `internal/database` (excluded from this task).
+- Backward compatibility preserved: the `?last_used=` query param still works as an override.

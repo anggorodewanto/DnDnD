@@ -163,6 +163,10 @@ type mockStore struct {
 
 	// C-H02 — Race lookup for PC size resolution
 	getRaceFn func(ctx context.Context, id string) (refdata.Race, error)
+
+	// F-H05 — Lair action tracker persistence
+	setLastLairActionFn func(ctx context.Context, encounterID uuid.UUID, action string) error
+	getLastLairActionFn func(ctx context.Context, encounterID uuid.UUID) (string, error)
 }
 
 func (m *mockStore) SetCombatantConcentration(ctx context.Context, arg refdata.SetCombatantConcentrationParams) error {
@@ -212,6 +216,20 @@ func (m *mockStore) GetRace(ctx context.Context, id string) (refdata.Race, error
 		return m.getRaceFn(ctx, id)
 	}
 	return refdata.Race{}, sql.ErrNoRows
+}
+
+func (m *mockStore) SetLastLairAction(ctx context.Context, encounterID uuid.UUID, action string) error {
+	if m.setLastLairActionFn != nil {
+		return m.setLastLairActionFn(ctx, encounterID, action)
+	}
+	return nil
+}
+
+func (m *mockStore) GetLastLairAction(ctx context.Context, encounterID uuid.UUID) (string, error) {
+	if m.getLastLairActionFn != nil {
+		return m.getLastLairActionFn(ctx, encounterID)
+	}
+	return "", nil
 }
 
 func (m *mockStore) UpdateEncounterDisplayName(ctx context.Context, arg refdata.UpdateEncounterDisplayNameParams) (refdata.Encounter, error) {

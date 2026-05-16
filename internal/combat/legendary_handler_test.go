@@ -1168,3 +1168,73 @@ func TestFindLairCreature_GetCreatureError(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
+
+// --- TDD Cycle F-H05: Lair action persistence across restarts ---
+
+func TestExecuteLairAction_PersistsLastUsedAction(t *testing.T) {
+	encounterID := uuid.New()
+	npcID := uuid.New()
+	turnID := uuid.New()
+
+	var persisted string
+	store := &mockStore{
+		listCombatantsByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{
+				{ID: npcID, DisplayName: "Dragon", IsNpc: true, IsAlive: true, CreatureRefID: sql.NullString{String: "dragon", Valid: true}},
+			}, nil
+		},
+		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
+			return refdata.Creature{
+				ID: "dragon", Name: "Dragon",
+				Abilities: pqtype.NullRawMessage{Valid: true, RawMessage: json.RawMessage(`[
+					{"name":"Lair Actions","description":"On init 20..."},
+					{"name":"Magma Eruption","description":"Magma erupts."},
+					{"name":"Tremor","description":"shakes."}
+				]`)},
+			}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: eid}, nil
+		},
+		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {
+			return refdata.ActionLog{ID: uuid.New()}, nil
+		},
+		setLastLairActionFn: func(ctx context.Context, eid uuid.UUID, action string) error {
+			persisted = action
+			return nil
+		},
+		getLastLairActionFn: func(ctx context.Context, eid uuid.UUID) (string, error) {
+			return persisted, nil
+		},
+	}
+
+	svc := NewService(store)
+	handler := NewHandler(svc, dice.NewRoller(nil))
+	r := chi.NewRouter()
+	r.Route("/api/combat", func(r chi.Router) { handler.RegisterLegendaryRoutes(r) })
+
+	// Execute a lair action
+	body := `{"action_name": "Magma Eruption", "last_used_action": ""}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/lair-action", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	// Verify it was persisted
+	assert.Equal(t, "Magma Eruption", persisted)
+
+	// Now GET the plan — should hydrate from store and block the repeated action
+	req2 := httptest.NewRequest("GET", "/api/combat/"+encounterID.String()+"/lair-action/plan", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	require.Equal(t, http.StatusOK, w2.Code)
+
+	var resp lairActionPlanResponse
+	require.NoError(t, json.NewDecoder(w2.Body).Decode(&resp))
+	// Magma Eruption should be disabled (in DisabledActions), Tremor should be available
+	require.Len(t, resp.AvailableActions, 1)
+	assert.Equal(t, "Tremor", resp.AvailableActions[0].Name)
+	require.Len(t, resp.DisabledActions, 1)
+	assert.Equal(t, "Magma Eruption", resp.DisabledActions[0].Name)
+}
