@@ -100,7 +100,7 @@ Low: 142
 | 88 | G-H02 | High | done | Long-rest hit-dice restoration order is non-deterministic for multiclass | internal/rest/rest.go:409-441 |
 | 89 | G-H03 | High | pending | No combat-resumed long-rest auto-resume | internal/rest/party.go:17-22, internal/rest/party_handler.go:269-308 |
 | 90 | G-H04 | High | pending | `/check medicine target:AR` does not validate target is dying and does not auto-stabilize | internal/discord/check_handler.go:286-320, internal/check/check.go:111-151 |
-| 91 | G-H05 | High | in_progress | Items auto-populated from defeated NPCs are not removed from NPC inventory | internal/loot/service.go:67-142 |
+| 91 | G-H05 | High | done | Items auto-populated from defeated NPCs are not removed from NPC inventory | internal/loot/service.go:67-142 |
 | 92 | G-H06 | High | pending | Item picker only searches weapons/armor/magic items | internal/itempicker/handler.go:57-156 |
 | 93 | G-H07 | High | pending | No way to edit description / name of an existing loot pool item | internal/loot/service.go (no Update), internal/loot/api_handler.go |
 | 94 | G-H08 | High | pending | Long rest does not propagate dawn recharge to party rest persistence | internal/rest/party_handler.go:180-216 |
