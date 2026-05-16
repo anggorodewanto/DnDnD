@@ -39,6 +39,12 @@ type CharCreateHandler struct {
 	refData         RefDataForCreate
 	tmpl            *template.Template
 	featureProvider FeatureProvider
+	dmVerifier      DMVerifier
+}
+
+// SetDMVerifier sets the verifier used to check campaign ownership.
+func (h *CharCreateHandler) SetDMVerifier(v DMVerifier) {
+	h.dmVerifier = v
 }
 
 // SetFeatureProvider sets the feature provider for preview/features endpoints.
@@ -110,7 +116,8 @@ type dmCreateRequest struct {
 
 // HandleCreate creates a new DM character.
 func (h *CharCreateHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireAuthHelper(r); !ok {
+	userID, ok := requireAuthHelper(r)
+	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -119,6 +126,14 @@ func (h *CharCreateHandler) HandleCreate(w http.ResponseWriter, r *http.Request)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
+	}
+
+	if h.dmVerifier != nil && req.CampaignID != "" {
+		owns, err := h.dmVerifier.IsCampaignDM(r.Context(), userID, req.CampaignID)
+		if err != nil || !owns {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 	}
 
 	result, err := h.svc.CreateCharacter(r.Context(), req.CampaignID, req.DMCharacterSubmission)

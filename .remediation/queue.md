@@ -77,7 +77,7 @@ Low: 142
 | 65 | D-H02 | High | superseded | Dodge condition grants no defensive disadvantage to attackers | /home/ab/projects/DnDnD/internal/combat/advantage.go:104 (switch on `c.Condition... |
 | 66 | D-H03 | High | pending | Auto-ability selection for finesse weapons silently disables rage damage | /home/ab/projects/DnDnD/internal/combat/attack.go:1583 (`attackAbilityUsed`) |
 | 67 | D-H04 | High | done | Monk Unarmored Defense not invalidated by shield | /home/ab/projects/DnDnD/internal/combat/equip.go:416 and /home/ab/projects/DnDnD... |
-| 68 | D-H05 | High | in_progress | Monk Unarmored Movement not gated on "no shield" | /home/ab/projects/DnDnD/internal/combat/monk.go:487 (`UnarmoredMovementFeature`)... |
+| 68 | D-H05 | High | done | Monk Unarmored Movement not gated on "no shield" | /home/ab/projects/DnDnD/internal/combat/monk.go:487 (`UnarmoredMovementFeature`)... |
 | 69 | D-H06 | High | pending | Wild Shape on-revert does not restore the druid's speed snapshot | /home/ab/projects/DnDnD/internal/combat/wildshape.go:181 (`RevertWildShape`) |
 | 70 | D-H07 | High | superseded | Wild Shape activation does not block druid spellcasting | /home/ab/projects/DnDnD/internal/combat/spellcasting.go:381 and /home/ab/project... |
 | 71 | D-H08 | High | pending | Channel Divinity action validation is duplicated and racy across DM-queue + auto-resolved paths | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:160, :366, :446, :52... |
@@ -128,7 +128,7 @@ Low: 142
 | 116 | I-H08 | High | pending | Movement-validation rules differ between drag-and-drop UI and DM Override | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:691-717 ; /hom... |
 | 117 | I-H09 | High | pending | Manual character creation skips ability-score method validation | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:72-77 |
 | 118 | I-H10 | High | pending | Race speed table is hard-coded; ignores DB and homebrew races | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:204-217 |
-| 119 | I-H11 | High | pending | DM character creation handler is not protected by DM auth | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go:83-103, 112-138... |
+| 119 | I-H11 | High | in_progress | DM character creation handler is not protected by DM auth | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go:83-103, 112-138... |
 | 120 | J-H01 | High | done | Saved/Active encounter Campaign Home cards show player-facing display_name, not the spoilery internal name | /home/ab/projects/DnDnD/cmd/dndnd/main.go:243-246 and 261-265 (`encounterListerA... |
 | 121 | J-H02 | High | pending | Reaction-declaration → dm-queue itemID mapping is in-memory only; lost on restart breaks /reaction cancel | /home/ab/projects/DnDnD/internal/discord/reaction_handler.go:51-86 (`itemIDs map... |
 | 122 | J-H03 | High | pending | DM dashboard error panel cannot render stack trace / structured detail — error_detail column never written | /home/ab/projects/DnDnD/internal/errorlog/recorder.go:18-29 (`Entry`); /home/ab/... |

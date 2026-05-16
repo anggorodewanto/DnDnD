@@ -1,11 +1,11 @@
-finding_id: D-H05
+finding_id: I-H11
 severity: High
-title: Monk Unarmored Movement not gated on "no shield"
-location: internal/combat/monk.go:487 (UnarmoredMovementFeature)
-spec_ref: Phase 48a; PHB Monk
+title: DM character creation handler is not protected by DM auth
+location: internal/dashboard/charcreate_handler.go:83-103, 112-138
+spec_ref: Spec §DM Dashboard; phases 93a/93b
 problem: |
-  UnarmoredMovementFeature only filters on NotWearingArmor. A monk with a shield still gets the +10-30ft speed bonus.
+  requireAuthHelper only asserts the request has a Discord user ID. Combined with campaign_id from the body, any DM can create a character in another DM's campaign.
 suggested_fix: |
-  Add a HasShield/NotUsingShield condition to the feature filter.
+  Verify the authenticated DM owns the campaign_id before creating the character.
 acceptance_criterion: |
-  A monk with a shield does NOT get the Unarmored Movement speed bonus. A test demonstrates this.
+  A DM creating a character in another DM's campaign gets 403. A test demonstrates this.

@@ -828,6 +828,51 @@ func TestCharCreateHandler_HandleListRefStartingEquipment_RequiresAuth(t *testin
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
+func TestCharCreateHandler_HandleCreate_ForbiddenWhenNotCampaignDM(t *testing.T) {
+	mockSvc := &mockDMCharCreateService{
+		result: portal.CreateCharacterResult{CharacterID: "c1", PlayerCharacterID: "pc1"},
+	}
+	verifier := &mockDMVerifierForCreate{
+		ownedCampaigns: map[string]string{"dm-user-A": "campaign-A"},
+	}
+	h := NewCharCreateHandler(nil, mockSvc, nil)
+	h.SetDMVerifier(verifier)
+
+	sub := dmCreateRequest{
+		CampaignID: "campaign-B",
+		DMCharacterSubmission: DMCharacterSubmission{
+			Name: "Evil",
+			Race: "Elf",
+			Classes: []character.ClassEntry{{Class: "Rogue", Level: 1}},
+			AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		},
+	}
+	body, _ := json.Marshal(sub)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters", bytes.NewBuffer(body))
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user-A"))
+	rec := httptest.NewRecorder()
+
+	h.HandleCreate(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.False(t, mockSvc.called, "service should not be called for non-owner")
+}
+
+// mockDMVerifierForCreate implements DMVerifier for char create tests.
+type mockDMVerifierForCreate struct {
+	ownedCampaigns map[string]string // userID -> campaignID they own
+}
+
+func (m *mockDMVerifierForCreate) IsDM(_ context.Context, discordUserID string) (bool, error) {
+	_, ok := m.ownedCampaigns[discordUserID]
+	return ok, nil
+}
+
+func (m *mockDMVerifierForCreate) IsCampaignDM(_ context.Context, discordUserID, campaignID string) (bool, error) {
+	owned, ok := m.ownedCampaigns[discordUserID]
+	return ok && owned == campaignID, nil
+}
+
 func TestCharCreateHandler_HandleListRefSpells_Error(t *testing.T) {
 	mockRef := &mockRefDataForCreate{
 		spellsErr: errors.New("db error"),

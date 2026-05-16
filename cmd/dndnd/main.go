@@ -1144,6 +1144,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		featureProvider := dashboard.NewRefDataFeatureProvider(ctx, queries, logger)
 		charCreateSvc.SetFeatureProvider(featureProvider)
 		charCreateHandler.SetFeatureProvider(featureProvider)
+		charCreateHandler.SetDMVerifier(dmVerifier)
 		charCreateHandler.RegisterCharCreateRoutes(router.With(dmAuthMw))
 
 		// Phase 121: character approval queue. SetCampaignLookup reuses the
