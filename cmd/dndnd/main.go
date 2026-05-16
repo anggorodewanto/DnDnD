@@ -983,6 +983,16 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		dmQueueStore := dmqueue.NewPgStore(queries)
 		var dmQueueSender dmqueue.Sender
 		dmQueueChannel := func(string) string { return "" }
+		dmUserFunc := func(guildID string) string {
+			if queries == nil {
+				return ""
+			}
+			camp, err := queries.GetCampaignByGuildID(context.Background(), guildID)
+			if err != nil {
+				return ""
+			}
+			return camp.DmUserID
+		}
 		if discordSession != nil {
 			dmQueueSender = dmqueue.NewSessionSender(discordSession)
 			dmQueueChannel = newDMQueueChannelResolver(discordSession)
@@ -1433,6 +1443,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				// router falls back to the status-aware stub.
 				levelUpService:  levelUpSvc,
 				dmQueueFunc:     dmQueueChannel,
+				dmUserFunc:      dmUserFunc,
 				notifier:        dmQueueNotifier,
 				portalBaseURL:   os.Getenv("BASE_URL"),
 				reactionPrompts: reactionPrompts,
@@ -1469,13 +1480,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				campaignProv: queries,
 				charCreator:  regSvc,
 				dmQueueFunc:  newDMQueueChannelResolver(discordSession),
-				dmUserFunc: func(guildID string) string {
-					camp, err := queries.GetCampaignByGuildID(context.Background(), guildID)
-					if err != nil {
-						return ""
-					}
-					return camp.DmUserID
-				},
+				dmUserFunc:   dmUserFunc,
 				// Phase 91a: mint real one-time portal tokens via the
 				// shared TokenService. The same service instance is the
 				// validator on portal.NewHandler so issue / redeem stays

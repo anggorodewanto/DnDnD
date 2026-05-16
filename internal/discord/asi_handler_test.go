@@ -490,6 +490,89 @@ func TestASIHandler_HandleDMDeny_NoPending(t *testing.T) {
 	}
 }
 
+func TestASIHandler_HandleDMApprove_RejectsNonDM(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{}
+
+	var respondedContent string
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+			if resp.Data != nil {
+				respondedContent = resp.Data.Content
+			}
+			return nil
+		},
+	}
+
+	handler := NewASIHandler(session, svc, nil)
+	handler.SetDMUserFunc(func(_ string) string { return "dm-user-99" })
+	handler.storePendingChoice(charID, PendingASIChoice{
+		CharID:   charID,
+		ASIType:  "plus2",
+		PlayerID: "player-1",
+	})
+
+	interaction := &discordgo.Interaction{
+		GuildID: "guild1",
+		Type:    discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_approve:" + charID.String(),
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "not-the-dm"}},
+	}
+
+	handler.HandleDMApprove(interaction)
+
+	if !strings.Contains(respondedContent, "Only the DM") {
+		t.Errorf("expected DM rejection message, got: %q", respondedContent)
+	}
+	if svc.approveASICalled {
+		t.Error("ApproveASI should not be called for non-DM user")
+	}
+}
+
+func TestASIHandler_HandleDMDeny_RejectsNonDM(t *testing.T) {
+	charID := uuid.New()
+	svc := &mockASIService{}
+
+	var respondedContent string
+	session := &MockSession{
+		InteractionRespondFunc: func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+			if resp.Data != nil {
+				respondedContent = resp.Data.Content
+			}
+			return nil
+		},
+	}
+
+	handler := NewASIHandler(session, svc, nil)
+	handler.SetDMUserFunc(func(_ string) string { return "dm-user-99" })
+	handler.storePendingChoice(charID, PendingASIChoice{
+		CharID:   charID,
+		ASIType:  "plus2",
+		PlayerID: "player-1",
+	})
+
+	interaction := &discordgo.Interaction{
+		GuildID: "guild1",
+		Type:    discordgo.InteractionMessageComponent,
+		Data: discordgo.MessageComponentInteractionData{
+			CustomID: "asi_deny:" + charID.String(),
+		},
+		Member: &discordgo.Member{User: &discordgo.User{ID: "not-the-dm"}},
+	}
+
+	handler.HandleDMDeny(interaction)
+
+	if !strings.Contains(respondedContent, "Only the DM") {
+		t.Errorf("expected DM rejection message, got: %q", respondedContent)
+	}
+	if svc.denyASICalled {
+		t.Error("DenyASI should not be called for non-DM user")
+	}
+}
+
+
 func TestRouter_RoutesASISelectToHandler(t *testing.T) {
 	mock := newTestMock()
 	var responded bool

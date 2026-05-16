@@ -247,6 +247,7 @@ type ASIHandler struct {
 	session     Session
 	service     ASIService
 	dmQueueFunc func(guildID string) string
+	dmUserFunc  func(guildID string) string
 	// med-36 / Phase 89: optional feat lister so the "Choose a Feat"
 	// button posts a real Discord SelectMenu populated with eligible
 	// feats. Nil falls back to the historical "not yet available" stub.
@@ -264,6 +265,20 @@ type ASIHandler struct {
 // SetFeatLister wires the eligible-feats source so the "Choose a Feat" button
 // posts a select menu instead of the placeholder stub. Nil keeps the stub.
 func (h *ASIHandler) SetFeatLister(l FeatLister) { h.featLister = l }
+
+// SetDMUserFunc wires the DM user lookup so HandleDMApprove/HandleDMDeny
+// reject interactions from non-DM users. Nil skips the check (backwards compat).
+func (h *ASIHandler) SetDMUserFunc(f func(guildID string) string) { h.dmUserFunc = f }
+
+// isDMUser returns true if dmUserFunc is nil (backwards compat) or the
+// interacting user matches the campaign's DM for the guild.
+func (h *ASIHandler) isDMUser(interaction *discordgo.Interaction) bool {
+	if h.dmUserFunc == nil {
+		return true
+	}
+	dmID := h.dmUserFunc(interaction.GuildID)
+	return dmID == "" || discordUserID(interaction) == dmID
+}
 
 // SetPendingStore wires the durable pending-choice store. F-89d: when wired,
 // every pending choice is upserted to the store on accept and deleted on
@@ -471,6 +486,11 @@ func (h *ASIHandler) HandleASISelect(interaction *discordgo.Interaction) {
 
 // HandleDMApprove handles the DM clicking the Approve button.
 func (h *ASIHandler) HandleDMApprove(interaction *discordgo.Interaction) {
+	if !h.isDMUser(interaction) {
+		respondEphemeral(h.session, interaction, "Only the DM can approve ASI choices.")
+		return
+	}
+
 	data := interaction.Data.(discordgo.MessageComponentInteractionData)
 	charID, err := ParseDMApprovalCustomID(data.CustomID)
 	if err != nil {
@@ -539,6 +559,11 @@ func (h *ASIHandler) HandleDMApprove(interaction *discordgo.Interaction) {
 
 // HandleDMDeny handles the DM clicking the Deny button.
 func (h *ASIHandler) HandleDMDeny(interaction *discordgo.Interaction) {
+	if !h.isDMUser(interaction) {
+		respondEphemeral(h.session, interaction, "Only the DM can deny ASI choices.")
+		return
+	}
+
 	data := interaction.Data.(discordgo.MessageComponentInteractionData)
 	charID, err := ParseDMApprovalCustomID(data.CustomID)
 	if err != nil {

@@ -120,6 +120,7 @@ type discordHandlerDeps struct {
 	// + undo + retire wiring. Each field is nil-safe in buildDiscordHandlers.
 	levelUpService *levelup.Service
 	dmQueueFunc    func(guildID string) string
+	dmUserFunc     func(guildID string) string
 	notifier       dmqueue.Notifier
 	portalBaseURL  string
 	// reactionPrompts is the shared button-prompt store. When nil, the
@@ -546,6 +547,7 @@ func attachInventoryAndCharacterHandlers(
 
 	if deps.levelUpService != nil {
 		handlers.asi = discord.NewASIHandler(deps.session, newASIServiceAdapter(deps.levelUpService, deps.queries), deps.dmQueueFunc)
+		handlers.asi.SetDMUserFunc(deps.dmUserFunc)
 		// med-36 / Phase 89: wire feat lister so the "Choose a Feat"
 		// button posts a real select-menu instead of the stub.
 		if deps.queries != nil {

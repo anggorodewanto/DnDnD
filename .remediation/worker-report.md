@@ -1,30 +1,33 @@
-# Worker Report: H-H01
+# Worker Report: H-H02 — DM approve/deny buttons have no role check
 
-## Finding
-ASI handlers (`HandleASIChoice`, `HandleASISelect`, `HandleASIFeatSelect`, `HandleASIFeatSubChoiceSelect`) did not verify that the interacting Discord user owns the character. Any guild member could press ASI buttons/menus for another player's character.
+## Status: ✅ FIXED
 
-## Fix Applied
+## Summary
 
-Added `validateASIOwner(interaction, charData) error` helper to `ASIHandler` in `internal/discord/asi_handler.go`. It compares `discordUserID(interaction)` with `charData.DiscordUserID` and responds with an ephemeral "⛔ This is not your character." message on mismatch.
+`HandleDMApprove` and `HandleDMDeny` in `internal/discord/asi_handler.go` now verify that the interacting user is the campaign's DM before processing the action. Non-DM users receive an ephemeral rejection message.
 
-Called at the top of all four handlers, immediately after `charData` is loaded:
-- `HandleASIChoice` (line ~380)
-- `HandleASISelect` (line ~425)
-- `HandleASIFeatSelect` (line ~680)
-- `HandleASIFeatSubChoiceSelect` (line ~770)
+## Changes
 
-## Tests Added
+### `internal/discord/asi_handler.go`
+- Added `dmUserFunc func(guildID string) string` field to `ASIHandler` struct.
+- Added `SetDMUserFunc` setter method (nil-safe; nil skips the check for backwards compat).
+- Added `isDMUser` helper: returns true if `dmUserFunc` is nil, or if the DM user ID is empty, or if the interacting user matches the DM.
+- Added DM identity guard at the top of `HandleDMApprove` and `HandleDMDeny`.
 
-Four new tests in `internal/discord/asi_handler_test.go`:
-- `TestASIHandler_HandleASIChoice_RejectsNonOwner`
-- `TestASIHandler_HandleASISelect_RejectsNonOwner`
-- `TestASIHandler_HandleASIFeatSelect_RejectsNonOwner`
-- `TestASIHandler_HandleASIFeatSubChoiceSelect_RejectsNonOwner`
+### `internal/discord/asi_handler_test.go`
+- Added `TestASIHandler_HandleDMApprove_RejectsNonDM`: verifies a non-DM user gets an ephemeral rejection and `ApproveASI` is never called.
+- Added `TestASIHandler_HandleDMDeny_RejectsNonDM`: same for deny path.
 
-Each creates an interaction from `"other-user"` on a character owned by `"owner-user"` and asserts the response contains "not your character".
+### `cmd/dndnd/discord_handlers.go`
+- Added `dmUserFunc` field to `discordHandlerDeps`.
+- Wired `SetDMUserFunc` on the ASI handler after construction.
 
-Three existing tests were updated to include `DiscordUserID` in their mock character data (they previously omitted it, which now correctly triggers the rejection).
+### `cmd/dndnd/main.go`
+- Extracted `dmUserFunc` closure to a local variable (reused by both `buildDiscordHandlers` and `buildRegistrationDeps`).
+- Passed `dmUserFunc` into `discordHandlerDeps`.
 
-## Verification
-- `make test` — PASS
-- `make cover-check` — PASS (all thresholds met)
+## TDD Workflow
+
+1. **Red:** Wrote two failing tests (`RejectsNonDM` for approve and deny). Compilation failed because `SetDMUserFunc` didn't exist.
+2. **Green:** Implemented `dmUserFunc` field, `SetDMUserFunc`, `isDMUser`, and the guards. Tests pass.
+3. **Verify:** `make test` ✅ — all tests pass. `make cover-check` ✅ — coverage thresholds met.

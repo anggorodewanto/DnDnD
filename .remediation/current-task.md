@@ -1,11 +1,11 @@
-finding_id: H-H01
+finding_id: H-H02
 severity: High
-title: Player-identity not validated on ASI button / select interactions
-location: internal/discord/asi_handler.go:354,391,647,731
-spec_ref: spec §"ASI path" line 2484; Phase 89d
+title: DM approve/deny buttons have no role check
+location: internal/discord/asi_handler.go:456 (HandleDMApprove), 524 (HandleDMDeny)
+spec_ref: spec §"DM approval" line 2497
 problem: |
-  HandleASIChoice, HandleASISelect, HandleASIFeatSelect, HandleASIFeatSubChoiceSelect extract discordUserID but never check that the interacting user is the character owner. Any guild member can press the buttons.
+  Anyone who can see #dm-queue can click Approve or Deny — no check that the interacting user is the campaign's DM.
 suggested_fix: |
-  Resolve ASICharacterData.DiscordUserID and reject if interaction.Member.User.ID != charData.DiscordUserID.
+  Look up the campaign for the guild and verify interaction.Member.User.ID matches the campaign's DM Discord ID.
 acceptance_criterion: |
-  ASI handlers reject interactions from users who don't own the character. A test demonstrates this.
+  HandleDMApprove/HandleDMDeny reject interactions from non-DM users. A test demonstrates this.
