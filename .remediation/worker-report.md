@@ -1,35 +1,20 @@
-# Worker Report: G-H04
+# Worker Report: E-H01
 
-## Finding
-Medicine check with target doesn't validate dying state or auto-stabilize.
+**Finding:** Help action grants advantage only on attacks, not on ability checks  
+**Status:** ✅ Fixed  
 
-## Fix Applied
+## Changes
 
-### Files Modified
-1. **internal/discord/check_handler.go**
-   - Added `CheckStabilizeStore` interface (mirrors `ActionStabilizeStore`)
-   - Added `stabilizeStore` field to `CheckHandler` struct
-   - Added `SetStabilizeStore` setter method
-   - Modified `buildTargetContext` to return the target `refdata.Combatant` (5th return value)
-   - Added dying-state validation: when `skill == "medicine"`, target is resolved, and `stabilizeStore` is wired, rejects with "not dying" if `combat.IsDying()` returns false
-   - Added auto-stabilize path: on success (Total >= 10), calls `combat.StabilizeTarget` and persists via `stabilizeStore.UpdateCombatantDeathSaves`
+### 1. `internal/combat/standard_actions.go`
+- Added `github.com/google/uuid` import.
+- When `cmd.Target.ID == uuid.Nil` (no enemy target), the Help action now applies a `help_check_advantage` condition on the ally instead of `help_advantage` scoped to an enemy.
+- Adjacency check is skipped when no target is specified.
+- Combat log message adapts to the no-target case.
 
-2. **internal/discord/check_handler_test.go**
-   - Added `stubCheckStabilizeStore` mock
-   - Added `TestCheckHandler_MedicineTarget_DyingTarget_Stabilizes`: verifies successful medicine check (DC 10) against dying target (HP=0, IsAlive=true) stabilizes them
-   - Added `TestCheckHandler_MedicineTarget_NotDying_Rejects`: verifies medicine check against non-dying target (HP=15) returns "not dying" error
-
-## Design Decisions
-- Dying validation and stabilization are gated on `h.stabilizeStore != nil` so existing tests that use medicine as a skill for adjacency/action-cost testing (without wiring the store) continue to pass unchanged.
-- Reuses existing `combat.StabilizeTarget`, `combat.IsDying`, `combat.ParseDeathSaves`, and `combat.MarshalDeathSaves` — no new combat logic.
-- The stabilize response appends the stabilization message to the normal check result format.
+### 2. `internal/combat/standard_actions_test.go`
+- Added `TestHelp_NoTarget_AppliesCheckAdvantageOnAlly` — verifies that Help with a zero-value Target applies `help_check_advantage` on the ally, consumes the action, and does NOT apply `help_advantage`.
 
 ## Test Results
-```
-=== RUN   TestCheckHandler_MedicineTarget_DyingTarget_Stabilizes
---- PASS: TestCheckHandler_MedicineTarget_DyingTarget_Stabilizes (0.00s)
-=== RUN   TestCheckHandler_MedicineTarget_NotDying_Rejects
---- PASS: TestCheckHandler_MedicineTarget_NotDying_Rejects (0.00s)
-```
 
-Full suite (excluding internal/database): **ALL PASS**
+- New test: PASS
+- Full suite (excluding `internal/database`): ALL PASS (38 packages)

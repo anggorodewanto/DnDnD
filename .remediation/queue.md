@@ -81,7 +81,7 @@ Low: 142
 | 69 | D-H06 | High | pending | Wild Shape on-revert does not restore the druid's speed snapshot | /home/ab/projects/DnDnD/internal/combat/wildshape.go:181 (`RevertWildShape`) |
 | 70 | D-H07 | High | superseded | Wild Shape activation does not block druid spellcasting | /home/ab/projects/DnDnD/internal/combat/spellcasting.go:381 and /home/ab/project... |
 | 71 | D-H08 | High | pending | Channel Divinity action validation is duplicated and racy across DM-queue + auto-resolved paths | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:160, :366, :446, :52... |
-| 72 | E-H01 | High | pending | Help action grants advantage only on attacks, not on ability checks | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261`; `advantag... |
+| 72 | E-H01 | High | in_progress | Help action grants advantage only on attacks, not on ability checks | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261`; `advantag... |
 | 73 | E-H02 | High | done | AoE pending save DC subtraction loses cover information | `/home/ab/projects/DnDnD/internal/combat/aoe.go:592` (`Dc: int32(ps.DC - ps.Cove... |
 | 74 | E-H03 | High | done | Pact-magic upcast respects pact level but silently ignores `--slot` requests | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:446-457` |
 | 75 | E-H04 | High | pending | Multiclass spellcasting ability picks highest score, not class-of-spell | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:1542-1557` (`resolveSpe... |
@@ -99,7 +99,7 @@ Low: 142
 | 87 | G-H01 | High | done | Gold split silently discards remainder | internal/loot/service.go:289-329 |
 | 88 | G-H02 | High | done | Long-rest hit-dice restoration order is non-deterministic for multiclass | internal/rest/rest.go:409-441 |
 | 89 | G-H03 | High | pending | No combat-resumed long-rest auto-resume | internal/rest/party.go:17-22, internal/rest/party_handler.go:269-308 |
-| 90 | G-H04 | High | in_progress | `/check medicine target:AR` does not validate target is dying and does not auto-stabilize | internal/discord/check_handler.go:286-320, internal/check/check.go:111-151 |
+| 90 | G-H04 | High | done | `/check medicine target:AR` does not validate target is dying and does not auto-stabilize | internal/discord/check_handler.go:286-320, internal/check/check.go:111-151 |
 | 91 | G-H05 | High | done | Items auto-populated from defeated NPCs are not removed from NPC inventory | internal/loot/service.go:67-142 |
 | 92 | G-H06 | High | done | Item picker only searches weapons/armor/magic items | internal/itempicker/handler.go:57-156 |
 | 93 | G-H07 | High | pending | No way to edit description / name of an existing loot pool item | internal/loot/service.go (no Update), internal/loot/api_handler.go |
@@ -127,7 +127,7 @@ Low: 142
 | 115 | I-H07 | High | done | Narration & message-player handlers trust author_user_id from request body | /home/ab/projects/DnDnD/internal/narration/handler.go:49-91 ; /home/ab/projects/... |
 | 116 | I-H08 | High | pending | Movement-validation rules differ between drag-and-drop UI and DM Override | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:691-717 ; /hom... |
 | 117 | I-H09 | High | pending | Manual character creation skips ability-score method validation | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:72-77 |
-| 118 | I-H10 | High | pending | Race speed table is hard-coded; ignores DB and homebrew races | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:204-217 |
+| 118 | I-H10 | High | skipped | Race speed table is hard-coded; ignores DB and homebrew races | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:204-217 |
 | 119 | I-H11 | High | done | DM character creation handler is not protected by DM auth | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go:83-103, 112-138... |
 | 120 | J-H01 | High | done | Saved/Active encounter Campaign Home cards show player-facing display_name, not the spoilery internal name | /home/ab/projects/DnDnD/cmd/dndnd/main.go:243-246 and 261-265 (`encounterListerA... |
 | 121 | J-H02 | High | pending | Reaction-declaration → dm-queue itemID mapping is in-memory only; lost on restart breaks /reaction cancel | /home/ab/projects/DnDnD/internal/discord/reaction_handler.go:51-86 (`itemIDs map... |

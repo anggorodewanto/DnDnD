@@ -2440,3 +2440,37 @@ func TestCunningAction_Hide_TieGoesToSpotter(t *testing.T) {
 	assert.False(t, result.HideResult.Success, "tie should go to spotter, hide should fail")
 	assert.Contains(t, result.CombatLog, "Failed (spotted by")
 }
+
+// TDD Cycle E-H01: Help with no target enemy applies help_check_advantage on ally
+func TestHelp_NoTarget_AppliesCheckAdvantageOnAlly(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	helper := makePCCombatant(combatantID, encounterID, charID, "Kael")
+	helper.PositionCol = "C"
+	helper.PositionRow = 3
+
+	allyID := uuid.New()
+	ally := makePCCombatant(allyID, encounterID, uuid.New(), "Aria")
+	ally.PositionCol = "C"
+	ally.PositionRow = 4
+
+	encounter := makeBasicEncounter(encounterID, 1)
+	setupUpdateTurnActions(ms)
+
+	svc := NewService(ms)
+	turn := makeBasicTurn()
+
+	// No target enemy — helping with an ability check
+	cmd := HelpCommand{
+		Helper: helper, Ally: ally,
+		Turn: turn, Encounter: encounter,
+	}
+	result, err := svc.Help(context.Background(), cmd)
+	require.NoError(t, err)
+
+	assert.True(t, result.Turn.ActionUsed)
+	assert.True(t, HasCondition(result.Ally.Conditions, "help_check_advantage"))
+	assert.False(t, HasCondition(result.Ally.Conditions, "help_advantage"))
+	assert.Contains(t, result.CombatLog, "Kael")
+	assert.Contains(t, result.CombatLog, "Help")
+	assert.Contains(t, result.CombatLog, "Aria")
+}

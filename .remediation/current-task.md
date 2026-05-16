@@ -1,11 +1,11 @@
-finding_id: G-H04
+finding_id: E-H01
 severity: High
-title: /check medicine target:AR does not validate target is dying and does not auto-stabilize
-location: internal/discord/check_handler.go:286-320
-spec_ref: spec §Death Saves line 2116 (Phase 81)
+title: Help action grants advantage only on attacks, not on ability checks
+location: internal/combat/standard_actions.go:254-261
+spec_ref: Phase 54 "Help"; spec §1140
 problem: |
-  The check handler's TargetContext doesn't verify the target is at 0 HP, and on a successful Medicine roll it doesn't stabilize the target.
+  The implementation always sets help_advantage scoped to a TargetCombatantID (enemy). Ability-check Help (helping a teammate) cannot be modelled.
 suggested_fix: |
-  When skill == "medicine" and a target is supplied, require target.HpCurrent == 0, and on success (Total >= 10) persist stabilization.
+  Make target optional. When omitted, set a help_check_advantage condition on the ally consumed by the next non-attack d20 roll.
 acceptance_criterion: |
-  A successful medicine check (DC 10) against a dying target stabilizes them. A medicine check against a non-dying target returns an error. Tests demonstrate both.
+  Help action without a target enemy sets a help_check_advantage condition on the ally. A test demonstrates this.

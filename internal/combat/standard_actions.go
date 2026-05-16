@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
@@ -233,14 +235,18 @@ func (s *Service) Help(ctx context.Context, cmd HelpCommand) (HelpResult, error)
 		return HelpResult{}, err
 	}
 
-	// Adjacency check: helper must be within 5ft of target
-	dist := GridDistanceFt(
-		cmd.Helper.PositionCol, int(cmd.Helper.PositionRow),
-		cmd.Target.PositionCol, int(cmd.Target.PositionRow),
-	)
-	if dist > 5 {
-		return HelpResult{}, fmt.Errorf("Help requires being within 5ft of %s (currently %dft away)",
-			cmd.Target.DisplayName, dist)
+	noTarget := cmd.Target.ID == uuid.Nil
+
+	if !noTarget {
+		// Adjacency check: helper must be within 5ft of target
+		dist := GridDistanceFt(
+			cmd.Helper.PositionCol, int(cmd.Helper.PositionRow),
+			cmd.Target.PositionCol, int(cmd.Target.PositionRow),
+		)
+		if dist > 5 {
+			return HelpResult{}, fmt.Errorf("Help requires being within 5ft of %s (currently %dft away)",
+				cmd.Target.DisplayName, dist)
+		}
 	}
 
 	updatedTurn, err := UseResource(cmd.Turn, ResourceAction)
@@ -248,17 +254,26 @@ func (s *Service) Help(ctx context.Context, cmd HelpCommand) (HelpResult, error)
 		return HelpResult{}, err
 	}
 
-	// Apply help_advantage condition on the ally. SR-018: TargetCombatantID
-	// scopes the grant to the named target — DetectAdvantage only fires the
-	// "help advantage" reason when the attack is against this combatant, and
-	// Service.Attack clears the condition after a single attack vs that target.
-	helpCond := CombatCondition{
-		Condition:         "help_advantage",
-		DurationRounds:    1,
-		StartedRound:      int(cmd.Encounter.RoundNumber),
-		SourceCombatantID: cmd.Helper.ID.String(),
-		TargetCombatantID: cmd.Target.ID.String(),
-		ExpiresOn:         "start_of_turn",
+	var helpCond CombatCondition
+	if noTarget {
+		// Ability-check help: grant advantage on ally's next ability check.
+		helpCond = CombatCondition{
+			Condition:         "help_check_advantage",
+			DurationRounds:    1,
+			StartedRound:      int(cmd.Encounter.RoundNumber),
+			SourceCombatantID: cmd.Helper.ID.String(),
+			ExpiresOn:         "start_of_turn",
+		}
+	} else {
+		// Attack help: SR-018 scoped to the named target.
+		helpCond = CombatCondition{
+			Condition:         "help_advantage",
+			DurationRounds:    1,
+			StartedRound:      int(cmd.Encounter.RoundNumber),
+			SourceCombatantID: cmd.Helper.ID.String(),
+			TargetCombatantID: cmd.Target.ID.String(),
+			ExpiresOn:         "start_of_turn",
+		}
 	}
 
 	newConds, err := AddCondition(cmd.Ally.Conditions, helpCond)
@@ -279,8 +294,14 @@ func (s *Service) Help(ctx context.Context, cmd HelpCommand) (HelpResult, error)
 		return HelpResult{}, fmt.Errorf("updating turn actions: %w", err)
 	}
 
-	log := fmt.Sprintf("\U0001f91d %s uses Help! %s gains advantage on next attack against %s",
-		cmd.Helper.DisplayName, cmd.Ally.DisplayName, cmd.Target.DisplayName)
+	var log string
+	if noTarget {
+		log = fmt.Sprintf("\U0001f91d %s uses Help! %s gains advantage on next ability check",
+			cmd.Helper.DisplayName, cmd.Ally.DisplayName)
+	} else {
+		log = fmt.Sprintf("\U0001f91d %s uses Help! %s gains advantage on next attack against %s",
+			cmd.Helper.DisplayName, cmd.Ally.DisplayName, cmd.Target.DisplayName)
+	}
 
 	return HelpResult{
 		Turn:      updatedTurn,
