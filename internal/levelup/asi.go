@@ -17,10 +17,11 @@ const (
 
 // ASIChoice represents a player's ASI/Feat selection.
 type ASIChoice struct {
-	Type     ASIType `json:"type"`
-	Ability  string  `json:"ability,omitempty"`
-	Ability2 string  `json:"ability2,omitempty"`
-	FeatID   string  `json:"feat_id,omitempty"`
+	Type     ASIType  `json:"type"`
+	Ability  string   `json:"ability,omitempty"`
+	Ability2 string   `json:"ability2,omitempty"`
+	FeatID   string   `json:"feat_id,omitempty"`
+	Feat     FeatInfo `json:"feat,omitempty"`
 }
 
 const maxAbilityScore = 20

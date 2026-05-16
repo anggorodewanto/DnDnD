@@ -360,6 +360,48 @@ func TestService_ApproveASI_InvalidChoice(t *testing.T) {
 	}
 }
 
+func TestService_ApproveASI_FeatType_RoutesToApplyFeat(t *testing.T) {
+	charID := uuid.New()
+	charStore := newMockCharacterStore()
+	classStore := newMockClassStore()
+	notifier := &mockNotifier{}
+
+	classes := []character.ClassEntry{{Class: "fighter", Level: 4}}
+	classesJSON, _ := json.Marshal(classes)
+	scores := character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 8}
+
+	charStore.chars[charID] = &StoredCharacter{
+		ID:            charID,
+		Name:          "Aria",
+		DiscordUserID: "user123",
+		Level:         4,
+		Classes:       classesJSON,
+		AbilityScores: mustJSON(t, scores),
+		Features:      mustJSON(t, []character.Feature{}),
+	}
+
+	svc := NewService(charStore, classStore, notifier)
+
+	choice := ASIChoice{
+		Type: ASIFeat,
+		Feat: FeatInfo{ID: "alert", Name: "Alert"},
+	}
+	err := svc.ApproveASI(context.Background(), charID, choice)
+	if err != nil {
+		t.Fatalf("ApproveASI with feat type should succeed, got: %v", err)
+	}
+
+	// Verify feat was added to features
+	var features []character.Feature
+	json.Unmarshal(charStore.chars[charID].Features, &features)
+	if len(features) != 1 {
+		t.Fatalf("features count = %d, want 1", len(features))
+	}
+	if features[0].Name != "Alert" {
+		t.Errorf("feature name = %s, want Alert", features[0].Name)
+	}
+}
+
 func TestService_DenyASI(t *testing.T) {
 	charID := uuid.New()
 	charStore := newMockCharacterStore()

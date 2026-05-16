@@ -340,6 +340,10 @@ func (s *Service) ApproveASI(ctx context.Context, characterID uuid.UUID, choice 
 		return fmt.Errorf("parsing ability scores: %w", err)
 	}
 
+	if choice.Type == ASIFeat {
+		return s.ApplyFeat(ctx, characterID, choice.Feat)
+	}
+
 	newScores, err := ApplyASI(scores, choice)
 	if err != nil {
 		return fmt.Errorf("applying ASI: %w", err)

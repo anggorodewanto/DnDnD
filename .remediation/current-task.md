@@ -1,11 +1,11 @@
-finding_id: C-H10
+finding_id: H-H03
 severity: High
-title: Reach weapon OA detection — PC reach map relies on caller passing it
-location: internal/combat/opportunity_attack.go:80-117, 148-164
-spec_ref: Phase 39 / OA detection; spec line 1414-1416
+title: ASI ApproveASI silently rejects feat type instead of routing
+location: internal/levelup/asi.go:35 (ApplyASI)
+spec_ref: spec §"Feat path" line 2499
 problem: |
-  resolveHostileReach returns 5ft for any PC by default. The override map pcReachByID must be supplied by the caller. If the move handler forgets, PCs with glaives don't threaten 10ft.
+  ApplyASI returns "unsupported ASI type" error when choice.Type == ASIFeat. The HTTP handler's /api/levelup/asi/approve passes feat-typed payloads straight into ApplyASI which errors.
 suggested_fix: |
-  Move the PC reach computation into resolveHostileReach by looking up the PC's equipped_main_hand weapon properties.
+  In Service.ApproveASI, branch on choice.Type == ASIFeat and route to ApplyFeat.
 acceptance_criterion: |
-  A PC with a reach weapon (glaive) threatens 10ft without the caller needing to pass a reach map. A test demonstrates this.
+  ApproveASI with a feat-type choice routes to ApplyFeat instead of erroring. A test demonstrates this.
