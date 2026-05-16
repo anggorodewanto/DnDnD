@@ -86,8 +86,8 @@ Low: 142
 | 74 | E-H03 | High | pending | Pact-magic upcast respects pact level but silently ignores `--slot` requests | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:446-457` |
 | 75 | E-H04 | High | pending | Multiclass spellcasting ability picks highest score, not class-of-spell | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:1542-1557` (`resolveSpe... |
 | 76 | E-H05 | High | done | Spell attack rolls never apply advantage/disadvantage | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:638` (`roller.RollD20(a... |
-| 77 | E-H06 | High | pending | Concentration check DC always fires "max(10, dmg/2)" but DC=10 isn't max with damage 19 | `/home/ab/projects/DnDnD/internal/combat/concentration.go:18-24` |
-| 78 | E-H07 | High | pending | AoE damage applies `int(float64(baseDamage)*0.5)` truncates instead of rounding | `/home/ab/projects/DnDnD/internal/combat/aoe.go:1024` |
+| 77 | E-H06 | High | superseded | Concentration check DC always fires "max(10, dmg/2)" but DC=10 isn't max with damage 19 | `/home/ab/projects/DnDnD/internal/combat/concentration.go:18-24` |
+| 78 | E-H07 | High | superseded | AoE damage applies `int(float64(baseDamage)*0.5)` truncates instead of rounding | `/home/ab/projects/DnDnD/internal/combat/aoe.go:1024` |
 | 79 | F-H01 | High | pending | No light-source dim radius — 5e torches grant 20ft bright + 20ft dim | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:907-927 |
 | 80 | F-H02 | High | pending | Hide action ignores the actor's vision when computing zone obscurement | /home/ab/projects/DnDnD/internal/discord/action_handler.go:794-805 |
 | 81 | F-H03 | High | done | Hidden combatants (`is_visible = false`) still render on the map | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog.go:52-78; /home/ab/project... |
@@ -97,7 +97,7 @@ Low: 142
 | 85 | F-H07 | High | pending | Counterspell trigger does not validate spell range / line-of-sight | /home/ab/projects/DnDnD/internal/combat/counterspell.go:65-116 |
 | 86 | F-H08 | High | pending | Reaction declarations not validated for the type's prerequisites | /home/ab/projects/DnDnD/internal/combat/reaction.go:27-46 |
 | 87 | G-H01 | High | done | Gold split silently discards remainder | internal/loot/service.go:289-329 |
-| 88 | G-H02 | High | pending | Long-rest hit-dice restoration order is non-deterministic for multiclass | internal/rest/rest.go:409-441 |
+| 88 | G-H02 | High | in_progress | Long-rest hit-dice restoration order is non-deterministic for multiclass | internal/rest/rest.go:409-441 |
 | 89 | G-H03 | High | pending | No combat-resumed long-rest auto-resume | internal/rest/party.go:17-22, internal/rest/party_handler.go:269-308 |
 | 90 | G-H04 | High | pending | `/check medicine target:AR` does not validate target is dying and does not auto-stabilize | internal/discord/check_handler.go:286-320, internal/check/check.go:111-151 |
 | 91 | G-H05 | High | pending | Items auto-populated from defeated NPCs are not removed from NPC inventory | internal/loot/service.go:67-142 |

@@ -1,11 +1,11 @@
-finding_id: H-H13
+finding_id: G-H02
 severity: High
-title: /api/levelup/asi/approve endpoint has no character-owner / DM check
-location: internal/levelup/handler.go:129 (HandleApproveASI)
-spec_ref: spec §"DM approval" line 2497
+title: Long-rest hit-dice restoration order is non-deterministic for multiclass
+location: internal/rest/rest.go:409-441
+spec_ref: spec §Long Rest line 2609 (Phase 83a)
 problem: |
-  The handler takes CharacterID from the JSON body without verifying the DM session is authorised for that character's campaign. A DM of campaign A can approve an ASI for a character in campaign B.
+  LongRest iterates over maxHitDice (a map[string]int) to allocate the half-level restoration budget. Map iteration order in Go is randomized.
 suggested_fix: |
-  Resolve campaign from the character row and verify the authenticated DM's discord_user_id matches.
+  Sort the die types before iterating (e.g., largest die first: d12, d10, d8, d6).
 acceptance_criterion: |
-  HandleApproveASI returns 403 when the DM doesn't own the character's campaign. A test demonstrates this.
+  Hit dice restoration is deterministic (largest die first). A test with a multiclass character demonstrates consistent ordering.

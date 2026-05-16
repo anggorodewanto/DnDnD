@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"sort"
+	"strconv"
 
 	"github.com/google/uuid"
 
@@ -420,9 +422,18 @@ func (s *Service) LongRest(input LongRestInput) LongRestResult {
 		maxHitDice[die] += c.Level
 	}
 
-	// Distribute restoration proportionally across die types
+	// Distribute restoration proportionally across die types (largest die first)
+	dieKeys := make([]string, 0, len(maxHitDice))
+	for k := range maxHitDice {
+		dieKeys = append(dieKeys, k)
+	}
+	sort.Slice(dieKeys, func(i, j int) bool {
+		return dieValue(dieKeys[i]) > dieValue(dieKeys[j])
+	})
+
 	restored := 0
-	for die, maxCount := range maxHitDice {
+	for _, die := range dieKeys {
+		maxCount := maxHitDice[die]
 		current := result.HitDiceRemaining[die]
 		canRestore := maxCount - current
 		if canRestore <= 0 {
@@ -496,4 +507,13 @@ func classHitDie(class string) string {
 	default:
 		return "d8"
 	}
+}
+
+// dieValue extracts the numeric value from a die string like "d10".
+func dieValue(die string) int {
+	if len(die) > 1 {
+		v, _ := strconv.Atoi(die[1:])
+		return v
+	}
+	return 0
 }

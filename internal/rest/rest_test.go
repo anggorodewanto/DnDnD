@@ -1194,3 +1194,35 @@ func TestShortRest_ChannelDivinity_RechargesOnShortRest(t *testing.T) {
 		t.Errorf("channel-divinity was NOT recharged on short rest; FeaturesRecharged = %v", result.FeaturesRecharged)
 	}
 }
+
+// --- G-H02: Long rest hit dice restoration is deterministic (largest die first) ---
+
+func TestLongRest_HitDiceRestore_MulticlassDeterministic(t *testing.T) {
+	svc := NewService(nil)
+
+	// Fighter 3 / Wizard 2: total level 5, half = 2 budget.
+	// All hit dice spent. Should always restore d10 first (2 of them),
+	// leaving d6 untouched.
+	for i := 0; i < 100; i++ {
+		input := LongRestInput{
+			HPCurrent:        30,
+			HPMax:            30,
+			HitDiceRemaining: map[string]int{"d10": 0, "d6": 0},
+			Classes: []character.ClassEntry{
+				{Class: "fighter", Level: 3},
+				{Class: "wizard", Level: 2},
+			},
+			FeatureUses: map[string]character.FeatureUse{},
+			SpellSlots:  map[string]character.SlotInfo{},
+		}
+
+		result := svc.LongRest(input)
+
+		if result.HitDiceRemaining["d10"] != 2 {
+			t.Fatalf("iteration %d: HitDiceRemaining[d10] = %d, want 2 (largest die restored first)", i, result.HitDiceRemaining["d10"])
+		}
+		if result.HitDiceRemaining["d6"] != 0 {
+			t.Fatalf("iteration %d: HitDiceRemaining[d6] = %d, want 0 (budget exhausted on d10)", i, result.HitDiceRemaining["d6"])
+		}
+	}
+}

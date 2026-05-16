@@ -1,20 +1,33 @@
-# Worker Report: H-H13
+# Worker Report: G-H02
 
-## Finding
-HandleApproveASI did not verify the authenticated DM owns the character's campaign, allowing a DM of campaign A to approve ASI for a character in campaign B.
+**Finding:** Long-rest hit-dice restoration order is non-deterministic for multiclass  
+**Status:** ✅ Fixed  
+**Worker:** worker-G-H02  
+**Date:** 2026-05-16
 
-## Fix Applied
+## What was done
 
-### `internal/levelup/handler.go`
-1. Added `CampaignOwnershipChecker` interface with `GetCampaignDMUserID(ctx, characterID) (string, error)`.
-2. Added `ownershipChecker` field to `Handler` struct and `SetOwnershipChecker` setter.
-3. In `HandleApproveASI`: when `ownershipChecker` is set, extracts the authenticated user via `auth.DiscordUserIDFromContext`, resolves the character's campaign DM, and returns 403 if they don't match.
+### 1. Red — Failing test added
 
-### `internal/levelup/handler_test.go`
-Added two tests:
-- `TestHandler_HandleApproveASI_Forbidden_WrongCampaignDM` — DM of campaign B tries to approve ASI for character in campaign A → 403.
-- `TestHandler_HandleApproveASI_Allowed_CorrectCampaignDM` — correct DM approves → 200.
+`TestLongRest_HitDiceRestore_MulticlassDeterministic` in `internal/rest/rest_test.go`:
+- Fighter 3 / Wizard 2 (d10 + d6), all hit dice spent, budget = 2.
+- Runs 100 iterations to detect non-determinism.
+- Asserts d10 is always restored first (2 dice), d6 stays at 0.
+- Confirmed failure before fix (failed at iteration 10).
 
-## Verification
+### 2. Green — Fix applied
+
+`internal/rest/rest.go` (hit dice restoration loop ~line 422):
+- Extracted map keys into a sorted slice (largest die value first: d12 > d10 > d8 > d6 > d4).
+- Added `dieValue()` helper to parse numeric value from die string.
+- Added `"sort"` and `"strconv"` imports.
+
+### 3. Verification
+
 - `make test` — all tests pass.
-- `make cover-check` — all thresholds met (levelup package at 90.00%).
+- `make cover-check` — all coverage thresholds met (rest package: 93.46%).
+
+## Files modified
+
+- `internal/rest/rest.go` — sorted die keys before iteration; added `dieValue` helper.
+- `internal/rest/rest_test.go` — added determinism test.
