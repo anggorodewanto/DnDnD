@@ -132,7 +132,7 @@ func TestTriggerCounterspell_Success(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	prompt, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5, false, uuid.Nil)
+	prompt, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5, false, uuid.Nil, 30)
 	require.NoError(t, err)
 	assert.Equal(t, "Fireball", prompt.EnemySpellName)
 	assert.Equal(t, []int{3, 4, 5}, prompt.AvailableSlots)
@@ -150,7 +150,7 @@ func TestTriggerCounterspell_SubtleSpellBypass(t *testing.T) {
 		return refdata.ReactionDeclaration{}, nil
 	}
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, true, uuid.Nil)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, true, uuid.Nil, 30)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrSubtleSpellNotCounterspellable)
 	assert.False(t, called, "Subtle bypass must short-circuit before any store lookup")
@@ -163,7 +163,7 @@ func TestTriggerCounterspell_DeclarationNotActive(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil, 30)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not active")
 }
@@ -204,7 +204,7 @@ func TestTriggerCounterspell_NoSlotsAvailable(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5, false, uuid.Nil)
+	_, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5, false, uuid.Nil, 30)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no spell slots")
 }
@@ -631,6 +631,7 @@ func TestHandler_TriggerCounterspell_Success(t *testing.T) {
 	body, _ := json.Marshal(map[string]interface{}{
 		"enemy_spell_name": "Fireball",
 		"enemy_cast_level": 5,
+		"distance_ft":      30,
 	})
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/reactions/"+declID.String()+"/counterspell/trigger", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
@@ -850,7 +851,7 @@ func TestTriggerCounterspell_GetDeclarationError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil, 30)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting reaction declaration")
 }
@@ -865,7 +866,7 @@ func TestTriggerCounterspell_NPCCannotCounterspell(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil, 30)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only player characters")
 }
@@ -880,7 +881,7 @@ func TestTriggerCounterspell_GetCombatantError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil, 30)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting combatant")
 }
@@ -899,7 +900,7 @@ func TestTriggerCounterspell_GetCharacterError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil, 30)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "getting character")
 }
@@ -924,7 +925,7 @@ func TestTriggerCounterspell_UpdatePromptError(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil, 30)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "updating counterspell prompt")
 }
@@ -1621,7 +1622,7 @@ func TestTriggerCounterspell_InvalidSpellSlots(t *testing.T) {
 	}
 
 	svc := NewService(store)
-	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil, 30)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing spell slots")
 }
@@ -1687,7 +1688,7 @@ func TestHandler_TriggerCounterspell_ServiceError(t *testing.T) {
 	}
 
 	_, r := newTestCombatRouter(store)
-	body, _ := json.Marshal(map[string]interface{}{"enemy_spell_name": "Fireball", "enemy_cast_level": 5})
+	body, _ := json.Marshal(map[string]interface{}{"enemy_spell_name": "Fireball", "enemy_cast_level": 5, "distance_ft": 30})
 	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/reactions/"+uuid.New().String()+"/counterspell/trigger", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
@@ -2086,6 +2087,51 @@ func TestResolveCounterspell_NoRefundForNPCEnemy(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, CounterspellCountered, result.Outcome)
 	assert.False(t, result.EnemySlotRefunded, "NPC enemy should not have slot refunded")
+}
+
+// --- F-H07: Counterspell rejects out-of-range distance ---
+
+func TestTriggerCounterspell_RejectsDistanceOver60(t *testing.T) {
+	store := defaultMockStore()
+	svc := NewService(store)
+	_, err := svc.TriggerCounterspell(context.Background(), uuid.New(), "Fireball", 5, false, uuid.Nil, 65)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrCounterspellOutOfRange)
+}
+
+func TestTriggerCounterspell_AllowsDistanceAt60(t *testing.T) {
+	declID := uuid.New()
+	combatantID := uuid.New()
+	charID := uuid.New()
+	char := testWizardCharacter()
+	char.ID = charID
+
+	store := defaultMockStore()
+	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{
+			ID:          declID,
+			CombatantID: combatantID,
+			Status:      "active",
+		}, nil
+	}
+	store.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{
+			ID:          combatantID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			DisplayName: "Gandalf",
+			Conditions:  json.RawMessage(`[]`),
+		}, nil
+	}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	store.updateReactionDeclarationCounterspellPromptFn = func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellPromptParams) (refdata.ReactionDeclaration, error) {
+		return refdata.ReactionDeclaration{ID: declID}, nil
+	}
+
+	svc := NewService(store)
+	_, err := svc.TriggerCounterspell(context.Background(), declID, "Fireball", 5, false, uuid.Nil, 60)
+	require.NoError(t, err)
 }
 
 // --- F-08: Counterspell rejects invalid low-level slots ---

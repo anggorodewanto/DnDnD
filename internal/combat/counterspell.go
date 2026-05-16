@@ -52,6 +52,7 @@ type CounterspellResult struct {
 // triggered against it. (med-29 / Phase 72)
 var ErrSubtleSpellNotCounterspellable = errors.New("counterspell cannot trigger against a subtle spell")
 var ErrCounterspellSlotTooLow = errors.New("counterspell requires a spell slot of level 3 or higher")
+var ErrCounterspellOutOfRange = errors.New("counterspell target is out of range (max 60 ft)")
 
 // TriggerCounterspell is called by the DM from the Active Reactions Panel.
 // It validates the declaration, looks up available slots, stores enemy spell info,
@@ -62,7 +63,10 @@ var ErrCounterspellSlotTooLow = errors.New("counterspell requires a spell slot o
 //
 // med-29 / Phase 72: when isSubtle is true, return ErrSubtleSpellNotCounterspellable
 // without prompting — the Subtle Spell metamagic bypasses Counterspell.
-func (s *Service) TriggerCounterspell(ctx context.Context, declarationID uuid.UUID, enemySpellName string, enemyCastLevel int, isSubtle bool, enemyCasterID uuid.UUID) (CounterspellPrompt, error) {
+func (s *Service) TriggerCounterspell(ctx context.Context, declarationID uuid.UUID, enemySpellName string, enemyCastLevel int, isSubtle bool, enemyCasterID uuid.UUID, distanceFt int) (CounterspellPrompt, error) {
+	if distanceFt > 60 {
+		return CounterspellPrompt{}, ErrCounterspellOutOfRange
+	}
 	if isSubtle {
 		return CounterspellPrompt{}, ErrSubtleSpellNotCounterspellable
 	}

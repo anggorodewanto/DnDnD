@@ -1,51 +1,37 @@
-# Worker Report: cross-cut-H01
+# Worker Report: F-H07
 
-## Finding
+**Finding:** TriggerCounterspell doesn't validate distance between declarant and enemy caster.
 
-**Title:** routePhase43DeathSave skips instant-death when rawNewHP == 0  
-**Location:** `internal/combat/damage.go:340-344`
+**Status:** ✅ Fixed
 
 ## Changes Made
 
-### Fix: `internal/combat/damage.go`
+### 1. `internal/combat/counterspell.go`
+- Added `ErrCounterspellOutOfRange` sentinel error.
+- Added `distanceFt int` parameter to `TriggerCounterspell`.
+- Added range check: rejects with `ErrCounterspellOutOfRange` if `distanceFt > 60`.
 
-Replaced the conditional overflow computation:
+### 2. `internal/combat/counterspell_test.go`
+- Added `TestTriggerCounterspell_RejectsDistanceOver60` — verifies 65ft returns error (RED→GREEN).
+- Added `TestTriggerCounterspell_AllowsDistanceAt60` — verifies 60ft succeeds (boundary).
+- Updated all existing `TriggerCounterspell` calls to pass `distanceFt: 30` (valid distance).
+- Updated handler test JSON bodies to include `"distance_ft": 30`.
 
-```go
-// OLD (buggy):
-overflow := 0
-if rawNewHP < 0 {
-    overflow = -rawNewHP
-}
-```
+### 3. `internal/combat/handler.go`
+- Added `DistanceFt int` field to `triggerCounterspellRequest`.
+- Passes `req.DistanceFt` to `TriggerCounterspell`.
 
-With a direct PHB-compliant formula:
+### 4. `internal/discord/counterspell_prompt.go`
+- Added `DistanceFt int` to `CounterspellPromptArgs` struct.
+- Updated `CounterspellService` interface signature.
+- Passes `args.DistanceFt` to `TriggerCounterspell`.
 
-```go
-// NEW (fixed):
-overflow := adjusted - int(target.HpCurrent)
-if overflow < 0 {
-    overflow = 0
-}
-```
-
-This computes overflow as "damage remaining after HP drops to 0" per PHB p.197, regardless of whether `rawNewHP` is exactly 0 or negative. The old code only computed overflow when `rawNewHP < 0`, leaving the `rawNewHP == 0` boundary unhandled.
-
-### Test: `internal/combat/deathsave_integration_test.go`
-
-Added `TestApplyDamage_InstantDeath_LowHPMassiveDamage`:
-- PC at 1 HP, maxHP 10, takes 15 slashing damage
-- Overflow = 15 − 1 = 14 ≥ 10 maxHP → instant death
-- Asserts: `NewHP == 0`, `IsAlive == false`, `Killed == true`, `InstantDeath == true`
+### 5. `internal/discord/counterspell_prompt_test.go`
+- Updated mock to match new interface signature.
 
 ## Verification
 
-- `go test ./internal/combat/ -cover` → PASS, 92.4% coverage (above 85% threshold)
-- `make test` → only pre-existing failure in `TestIntegration_MigrateDown` (database migration test, unrelated)
-- `make cover-check` → same pre-existing failure only
-- All 17 instant-death / overflow / drop-to-zero tests pass
-
-## Not Touched
-
-- No unrelated code modified
-- No commits made
+- `go test -count=1 ./internal/combat/` — PASS
+- `go test ./internal/discord/...` — PASS
+- `make cover-check` — only pre-existing unrelated failure (`TestIntegration_MigrateDown` in `internal/database`)
+- New tests confirm: 65ft → error, 60ft → success

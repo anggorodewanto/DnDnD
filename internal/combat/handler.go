@@ -640,6 +640,7 @@ type triggerCounterspellRequest struct {
 	EnemyCastLevel int    `json:"enemy_cast_level"`
 	EnemyCasterID  string `json:"enemy_caster_id,omitempty"` // SR-046: combatant ID of the caster being counterspelled
 	IsSubtle       bool   `json:"is_subtle,omitempty"`       // med-29 / Phase 72
+	DistanceFt     int    `json:"distance_ft"`               // F-H07: distance between declarant and enemy caster
 }
 
 type counterspellPromptResponse struct {
@@ -693,7 +694,7 @@ func (h *Handler) TriggerCounterspell(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prompt, err := h.svc.TriggerCounterspell(r.Context(), reactionID, req.EnemySpellName, req.EnemyCastLevel, req.IsSubtle, parseUUIDOrNil(req.EnemyCasterID))
+	prompt, err := h.svc.TriggerCounterspell(r.Context(), reactionID, req.EnemySpellName, req.EnemyCastLevel, req.IsSubtle, parseUUIDOrNil(req.EnemyCasterID), req.DistanceFt)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
