@@ -70,6 +70,7 @@ type createMapRequest struct {
 	Height            int             `json:"height"`
 	TiledJSON         json.RawMessage `json:"tiled_json,omitempty"`
 	BackgroundImageID *string         `json:"background_image_id,omitempty"`
+	TilesetRefs       []TilesetRef    `json:"tileset_refs,omitempty"`
 }
 
 // updateMapRequest is the JSON request body for updating a map.
@@ -79,6 +80,7 @@ type updateMapRequest struct {
 	Height            int             `json:"height"`
 	TiledJSON         json.RawMessage `json:"tiled_json"`
 	BackgroundImageID *string         `json:"background_image_id,omitempty"`
+	TilesetRefs       []TilesetRef    `json:"tileset_refs,omitempty"`
 }
 
 // generateDefaultTiledJSON creates a default Tiled-compatible JSON for a blank map.
@@ -215,6 +217,7 @@ func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 		Height:            req.Height,
 		TiledJSON:         tiledJSON,
 		BackgroundImageID: bgImageID,
+		TilesetRefs:       req.TilesetRefs,
 	})
 	if err != nil {
 		handleServiceError(w, err)
@@ -319,6 +322,7 @@ func (h *Handler) UpdateMap(w http.ResponseWriter, r *http.Request) {
 		Height:            req.Height,
 		TiledJSON:         req.TiledJSON,
 		BackgroundImageID: bgImageID,
+		TilesetRefs:       req.TilesetRefs,
 	})
 	if err != nil {
 		handleServiceError(w, err)

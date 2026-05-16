@@ -1,17 +1,23 @@
-# Worker Report: C-H11
+# Worker Report: B-H05 — TilesetRefs request field silently dropped by HTTP handler
 
-**Finding:** Two separate damage hits must produce two concentration saves.
+## Status: ✅ FIXED
 
-**Status:** ✅ PASS — code is correct; regression test added.
+## Problem
+`createMapRequest` and `updateMapRequest` in `internal/gamemap/handler.go` had no `TilesetRefs` field. The DB column and service layer supported it, but no API caller could populate it because the HTTP handler never decoded the field from the request body.
 
-**What was done:**
-- Added `TestMaybeCreateConcentrationSaveOnDamage_TwoHitsTwoSaves` to `internal/combat/concentration_test.go`.
-- The test calls `MaybeCreateConcentrationSaveOnDamage` twice on the same concentrating combatant (simulating two hits with different damage values) and asserts that `CreatePendingSave` is invoked exactly twice.
-- Test passes immediately — the existing implementation correctly creates independent saves per call.
+## Fix Applied
 
-**Verification:**
-- `make test` — all tests pass.
-- `make cover-check` — all coverage thresholds met.
+### Files Modified
+- `internal/gamemap/handler.go` — Added `TilesetRefs []TilesetRef \`json:"tileset_refs,omitempty"\`` to both `createMapRequest` and `updateMapRequest` structs; wired `req.TilesetRefs` through to `CreateMapInput` and `UpdateMapInput`.
+- `internal/gamemap/handler_test.go` — Added two TDD tests (`TestHandler_CreateMap_TilesetRefs`, `TestHandler_UpdateMap_TilesetRefs`) that send `tileset_refs` in the request body and assert the field reaches the store layer.
 
-**Files modified:**
-- `internal/combat/concentration_test.go` (added one test function)
+### TDD Cycle
+1. **Red:** Wrote failing tests asserting `capturedRefs.Valid == true` after POST/PUT with `tileset_refs`. Both failed with "tileset_refs should be populated".
+2. **Green:** Added the field to both request structs and wired it into the service input construction. Both tests pass.
+3. **Verify:** `make test` — all tests pass. `make cover-check` — all coverage thresholds met.
+
+## Verification
+```
+$ make test        → PASS (all packages)
+$ make cover-check → OK: coverage thresholds met
+```

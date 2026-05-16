@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1114,4 +1115,90 @@ func TestHandler_GetMap_MissingCampaignID(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Contains(t, rec.Body.String(), "campaign_id")
+}
+
+// --- B-H05: POST /api/maps with tileset_refs passes them to service ---
+
+func TestHandler_CreateMap_TilesetRefs(t *testing.T) {
+	campaignID := uuid.New()
+	var capturedRefs pqtype.NullRawMessage
+	store := &mockStore{
+		createMapFn: func(ctx context.Context, arg refdata.CreateMapParams) (refdata.Map, error) {
+			capturedRefs = arg.TilesetRefs
+			return refdata.Map{
+				ID:            uuid.New(),
+				CampaignID:    arg.CampaignID,
+				Name:          arg.Name,
+				WidthSquares:  arg.WidthSquares,
+				HeightSquares: arg.HeightSquares,
+				TiledJson:     arg.TiledJson,
+				TilesetRefs:   arg.TilesetRefs,
+			}, nil
+		},
+	}
+	_, r := newTestRouter(store)
+
+	body := map[string]interface{}{
+		"campaign_id": campaignID.String(),
+		"name":        "Tileset Map",
+		"width":       10,
+		"height":      10,
+		"tileset_refs": []map[string]interface{}{
+			{"name": "terrain", "source_url": "https://example.com/terrain.tsx", "first_gid": 1},
+		},
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/maps", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	require.True(t, capturedRefs.Valid, "tileset_refs should be populated")
+	assert.Contains(t, string(capturedRefs.RawMessage), "terrain")
+}
+
+// --- B-H05: PUT /api/maps/{id} with tileset_refs passes them to service ---
+
+func TestHandler_UpdateMap_TilesetRefs(t *testing.T) {
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	var capturedRefs pqtype.NullRawMessage
+	store := &mockStore{
+		createMapFn: func(ctx context.Context, arg refdata.CreateMapParams) (refdata.Map, error) {
+			return refdata.Map{}, nil
+		},
+		updateMapFn: func(ctx context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
+			capturedRefs = arg.TilesetRefs
+			return refdata.Map{
+				ID:            arg.ID,
+				CampaignID:    campaignID,
+				Name:          arg.Name,
+				WidthSquares:  arg.WidthSquares,
+				HeightSquares: arg.HeightSquares,
+				TiledJson:     arg.TiledJson,
+				TilesetRefs:   arg.TilesetRefs,
+			}, nil
+		},
+	}
+	_, r := newTestRouter(store)
+
+	body := map[string]interface{}{
+		"name":       "Updated Map",
+		"width":      10,
+		"height":     10,
+		"tiled_json": minimalTiledJSON(),
+		"tileset_refs": []map[string]interface{}{
+			{"name": "walls", "source_url": "https://example.com/walls.tsx", "first_gid": 100},
+		},
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String()+"?campaign_id="+campaignID.String(), bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.True(t, capturedRefs.Valid, "tileset_refs should be populated")
+	assert.Contains(t, string(capturedRefs.RawMessage), "walls")
 }
