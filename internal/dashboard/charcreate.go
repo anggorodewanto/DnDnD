@@ -123,8 +123,9 @@ func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
 		saves[ab] = character.SavingThrowModifier(sub.AbilityScores, ab, saveProficiencies, profBonus)
 	}
 
-	// Skill proficiencies from primary class
+	// Skill proficiencies from primary class and background
 	skillProfs := classSkillProficiencies(sub.Classes)
+	skillProfs = append(skillProfs, backgroundSkillProficiencies(sub.Background)...)
 
 	// Calculate skill modifiers for all 18 skills
 	skills := make(map[string]int, len(character.SkillAbilityMap))
@@ -248,6 +249,38 @@ func classSkillProficiencies(classes []character.ClassEntry) []string {
 		return []string{"arcana", "deception"}
 	case "wizard":
 		return []string{"arcana", "investigation"}
+	default:
+		return nil
+	}
+}
+
+// backgroundSkillProficiencies returns the skill proficiencies granted by a background.
+func backgroundSkillProficiencies(background string) []string {
+	switch strings.ToLower(background) {
+	case "acolyte":
+		return []string{"insight", "religion"}
+	case "criminal":
+		return []string{"deception", "stealth"}
+	case "folk hero":
+		return []string{"animal-handling", "survival"}
+	case "noble":
+		return []string{"history", "persuasion"}
+	case "sage":
+		return []string{"arcana", "history"}
+	case "soldier":
+		return []string{"athletics", "intimidation"}
+	case "charlatan":
+		return []string{"deception", "sleight-of-hand"}
+	case "entertainer":
+		return []string{"acrobatics", "performance"}
+	case "hermit":
+		return []string{"medicine", "religion"}
+	case "outlander":
+		return []string{"athletics", "survival"}
+	case "sailor":
+		return []string{"athletics", "perception"}
+	case "urchin":
+		return []string{"sleight-of-hand", "stealth"}
 	default:
 		return nil
 	}

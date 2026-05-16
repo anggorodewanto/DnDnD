@@ -925,3 +925,52 @@ func TestDeriveDMStats_HitDiceRemaining(t *testing.T) {
 	assert.Equal(t, 5, stats.HitDiceRemaining["Fighter"])
 	assert.Equal(t, 3, stats.HitDiceRemaining["Rogue"])
 }
+
+func TestDeriveDMStats_BackgroundSkillProficiencies_Acolyte(t *testing.T) {
+	sub := DMCharacterSubmission{
+		Race:       "Human",
+		Background: "Acolyte",
+		Classes: []character.ClassEntry{
+			{Class: "Fighter", Level: 1},
+		},
+		AbilityScores: character.AbilityScores{
+			STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 14, CHA: 10,
+		},
+	}
+	stats := DeriveDMStats(sub)
+
+	// Fighter class skills: athletics, perception
+	// Acolyte background skills: insight, religion
+	// insight: WIS mod(+2) + prof(+2) = +4
+	assert.Equal(t, 4, stats.Skills["insight"])
+	// religion: INT mod(+0) + prof(+2) = +2
+	assert.Equal(t, 2, stats.Skills["religion"])
+}
+
+func TestBackgroundSkillProficiencies(t *testing.T) {
+	tests := []struct {
+		bg     string
+		skills []string
+	}{
+		{"Acolyte", []string{"insight", "religion"}},
+		{"Criminal", []string{"deception", "stealth"}},
+		{"Folk Hero", []string{"animal-handling", "survival"}},
+		{"Noble", []string{"history", "persuasion"}},
+		{"Sage", []string{"arcana", "history"}},
+		{"Soldier", []string{"athletics", "intimidation"}},
+		{"Charlatan", []string{"deception", "sleight-of-hand"}},
+		{"Entertainer", []string{"acrobatics", "performance"}},
+		{"Hermit", []string{"medicine", "religion"}},
+		{"Outlander", []string{"athletics", "survival"}},
+		{"Sailor", []string{"athletics", "perception"}},
+		{"Urchin", []string{"sleight-of-hand", "stealth"}},
+		{"Unknown", nil},
+		{"", nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.bg, func(t *testing.T) {
+			result := backgroundSkillProficiencies(tc.bg)
+			assert.Equal(t, tc.skills, result)
+		})
+	}
+}
