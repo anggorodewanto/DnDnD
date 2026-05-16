@@ -1389,3 +1389,101 @@ func TestCheckHandler_WildShaped_BeastLookupFails_FallsBackToDruid(t *testing.T)
 		t.Fatalf("expected druid fallback total 9 on lookup error, got: %s", responded)
 	}
 }
+
+// --- G-H04: medicine check validates dying state and auto-stabilizes ---
+
+type stubCheckStabilizeStore struct {
+	called bool
+	arg    refdata.UpdateCombatantDeathSavesParams
+}
+
+func (s *stubCheckStabilizeStore) UpdateCombatantDeathSaves(_ context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error) {
+	s.called = true
+	s.arg = arg
+	return refdata.Combatant{}, nil
+}
+
+func TestCheckHandler_MedicineTarget_DyingTarget_Stabilizes(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	// Roller returns 12 → total = 12 + WIS(4) + prof(3) = 19 >= 10 → success
+	h, _ := setupCheckHandler(sess)
+	encID := uuid.New()
+	h.encounterProvider = &mockCheckEncounterProvider{fnUser: func(_ context.Context, _, _ string) (uuid.UUID, error) {
+		return encID, nil
+	}}
+	h.SetOpponentResolver(&stubOpponentResolver{ok: false})
+
+	targetID := uuid.New()
+	deathSaves, _ := json.Marshal(combat.DeathSaves{Successes: 0, Failures: 1})
+	h.SetTargetResolver(&stubCheckTargetResolver{
+		caster: refdata.Combatant{PositionCol: "B", PositionRow: 2},
+		target: refdata.Combatant{
+			ID:          targetID,
+			PositionCol: "B", PositionRow: 3,
+			DisplayName: "Bjorn",
+			HpCurrent:   0,
+			IsAlive:     true,
+			DeathSaves:  pqtype.NullRawMessage{RawMessage: deathSaves, Valid: true},
+		},
+		ok: true,
+	})
+
+	store := &stubCheckStabilizeStore{}
+	h.SetStabilizeStore(store)
+
+	h.Handle(makeCheckInteraction("medicine", false, false, "BJ"))
+
+	if !store.called {
+		t.Fatal("expected stabilize store to be called on successful medicine check against dying target")
+	}
+	if store.arg.ID != targetID {
+		t.Errorf("expected stabilize for target %v, got %v", targetID, store.arg.ID)
+	}
+	if !strings.Contains(responded, "stabilize") && !strings.Contains(responded, "stabilized") {
+		t.Errorf("expected stabilization message in response, got: %s", responded)
+	}
+}
+
+func TestCheckHandler_MedicineTarget_NotDying_Rejects(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	h, _ := setupCheckHandler(sess)
+	encID := uuid.New()
+	h.encounterProvider = &mockCheckEncounterProvider{fnUser: func(_ context.Context, _, _ string) (uuid.UUID, error) {
+		return encID, nil
+	}}
+	h.SetOpponentResolver(&stubOpponentResolver{ok: false})
+	h.SetTargetResolver(&stubCheckTargetResolver{
+		caster: refdata.Combatant{PositionCol: "B", PositionRow: 2},
+		target: refdata.Combatant{
+			PositionCol: "B", PositionRow: 3,
+			DisplayName: "Bjorn",
+			HpCurrent:   15, // not dying
+			IsAlive:     true,
+		},
+		ok: true,
+	})
+
+	store := &stubCheckStabilizeStore{}
+	h.SetStabilizeStore(store)
+
+	h.Handle(makeCheckInteraction("medicine", false, false, "BJ"))
+
+	if store.called {
+		t.Fatal("stabilize store should NOT be called for non-dying target")
+	}
+	if !strings.Contains(responded, "not dying") {
+		t.Errorf("expected 'not dying' rejection, got: %s", responded)
+	}
+}

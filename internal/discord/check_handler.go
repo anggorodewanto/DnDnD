@@ -99,6 +99,12 @@ type CheckCreatureLookup interface {
 	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
 }
 
+// CheckStabilizeStore persists death-save updates when a medicine check
+// stabilizes a dying target. G-H04.
+type CheckStabilizeStore interface {
+	UpdateCombatantDeathSaves(ctx context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error)
+}
+
 // CheckHandler handles the /check slash command.
 type CheckHandler struct {
 	session           Session
@@ -133,6 +139,9 @@ type CheckHandler struct {
 	// STR/DEX/CON instead of their own. Nil keeps the historical behaviour
 	// (druid scores always used — the gameplay bug SR-022 fixes).
 	creatureLookup CheckCreatureLookup
+	// G-H04: stabilize store so /check medicine on a dying target persists
+	// stabilization. Nil disables the auto-stabilize path.
+	stabilizeStore CheckStabilizeStore
 }
 
 // SetArmorLookup wires the equipped-armor lookup so /check stealth honors the
@@ -168,6 +177,10 @@ func (h *CheckHandler) SetZoneLookup(z CheckZoneLookup) { h.zoneLookup = z }
 // uses the beast's physical scores. Nil keeps the historical behaviour
 // (druid scores always used). (SR-022)
 func (h *CheckHandler) SetCreatureLookup(l CheckCreatureLookup) { h.creatureLookup = l }
+
+// SetStabilizeStore wires death-save persistence so /check medicine on a
+// dying target auto-stabilizes on success (DC 10). G-H04.
+func (h *CheckHandler) SetStabilizeStore(s CheckStabilizeStore) { h.stabilizeStore = s }
 
 // HasZoneLookup reports whether a non-nil CheckZoneLookup has been wired.
 // Production-wiring tests use this to detect the COMBAT-MISC-followup
@@ -283,6 +296,8 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 	// the target cannot be resolved (no encounter / unknown short id).
 	var pendingTurnDeduct *refdata.Turn // set when service validation passes and we owe an UpdateTurnActions
 	var pendingTargetName string
+	var pendingTargetComb refdata.Combatant
+	var targetResolved bool
 	if target != "" {
 		if h.handleContestedCheck(ctx, interaction, char, input, target) {
 			return
@@ -293,10 +308,23 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 		// regardless of caller. When resolution fails (no resolver wired
 		// / target not in encounter), Target stays nil and we fall
 		// through to a plain single check unchanged.
-		if tc, turn, targetName, ok := h.buildTargetContext(ctx, interaction, char, target); ok {
+		if tc, turn, targetName, targetComb, ok := h.buildTargetContext(ctx, interaction, char, target); ok {
 			input.Target = tc
 			pendingTurnDeduct = turn
 			pendingTargetName = targetName
+			pendingTargetComb = targetComb
+			targetResolved = true
+		}
+	}
+
+	// G-H04: when skill is medicine, a target was resolved, and the
+	// stabilize store is wired, validate the target is dying (HP == 0).
+	// Reject otherwise.
+	if skillKey == "medicine" && targetResolved && h.stabilizeStore != nil {
+		ds, dsErr := combat.ParseDeathSaves(pendingTargetComb.DeathSaves.RawMessage)
+		if dsErr != nil || !combat.IsDying(pendingTargetComb.IsAlive, int(pendingTargetComb.HpCurrent), ds) {
+			respondEphemeral(h.session, interaction, fmt.Sprintf("❌ %s is not dying — medicine check requires a target at 0 HP.", pendingTargetName))
+			return
 		}
 	}
 
@@ -317,6 +345,24 @@ func (h *CheckHandler) Handle(interaction *discordgo.Interaction) {
 		} else if _, perr := h.turnProvider.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updated)); perr != nil {
 			log.Printf("check: UpdateTurnActions for targeted check failed: %v", perr)
 		}
+	}
+
+	// G-H04: on successful medicine check (Total >= 10) against a dying
+	// target, auto-stabilize and respond with stabilization message.
+	if skillKey == "medicine" && targetResolved && result.Total >= 10 && h.stabilizeStore != nil {
+		ds, _ := combat.ParseDeathSaves(pendingTargetComb.DeathSaves.RawMessage)
+		outcome := combat.StabilizeTarget(pendingTargetName, ds, fmt.Sprintf("%s's Medicine check (%d)", char.Name, result.Total))
+		if _, serr := h.stabilizeStore.UpdateCombatantDeathSaves(ctx, refdata.UpdateCombatantDeathSavesParams{
+			ID:         pendingTargetComb.ID,
+			DeathSaves: combat.MarshalDeathSaves(outcome.DeathSaves),
+		}); serr != nil {
+			log.Printf("check: medicine stabilize persist failed: %v", serr)
+		}
+		msg := check.FormatSingleCheckResult(char.Name, result)
+		msg += "\n" + strings.Join(outcome.Messages, "\n")
+		respondEphemeral(h.session, interaction, msg)
+		h.logRollIfWanted(char, result)
+		return
 	}
 
 	// Phase 106d: gate non-trivial outcomes through #dm-queue. AutoFail
@@ -399,22 +445,22 @@ func (h *CheckHandler) handleContestedCheck(ctx context.Context, interaction *di
 // SingleCheck directly — they go through the Discord /check command. When
 // a future dashboard route lands (TODO), it should build a TargetContext
 // the same way so it picks up the same service-layer enforcement.
-func (h *CheckHandler) buildTargetContext(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, target string) (*check.TargetContext, *refdata.Turn, string, bool) {
+func (h *CheckHandler) buildTargetContext(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, target string) (*check.TargetContext, *refdata.Turn, string, refdata.Combatant, bool) {
 	if h.targetResolver == nil || h.encounterProvider == nil {
-		return nil, nil, "", false
+		return nil, nil, "", refdata.Combatant{}, false
 	}
 	encounterID, err := h.encounterProvider.ActiveEncounterForUser(ctx, interaction.GuildID, discordUserID(interaction))
 	if err != nil {
-		return nil, nil, "", false
+		return nil, nil, "", refdata.Combatant{}, false
 	}
 	caster, targetComb, ok := h.targetResolver.ResolveTargetCombatant(ctx, encounterID, discordUserID(interaction), target)
 	if !ok {
-		return nil, nil, "", false
+		return nil, nil, "", refdata.Combatant{}, false
 	}
 	casterCol, casterRow, okA := parseCombatantCoord(caster)
 	targetCol, targetRow, okB := parseCombatantCoord(targetComb)
 	if !okA || !okB {
-		return nil, nil, "", false
+		return nil, nil, "", refdata.Combatant{}, false
 	}
 	tc := &check.TargetContext{
 		AttackerPosition: [3]int{casterCol, casterRow, 0},
@@ -434,7 +480,7 @@ func (h *CheckHandler) buildTargetContext(ctx context.Context, interaction *disc
 			pendingTurn = &turnCopy
 		}
 	}
-	return tc, pendingTurn, targetComb.DisplayName, true
+	return tc, pendingTurn, targetComb.DisplayName, targetComb, true
 }
 
 // formatTargetedCheckError maps service-layer F-15 errors to the same

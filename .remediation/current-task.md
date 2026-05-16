@@ -1,11 +1,11 @@
-finding_id: D-H03
+finding_id: G-H04
 severity: High
-title: Auto-ability selection for finesse weapons silently disables rage damage
-location: internal/combat/attack.go:1583 (attackAbilityUsed)
-spec_ref: spec §Feature Effect System "Rage" ability_used: str; Phase 46
+title: /check medicine target:AR does not validate target is dying and does not auto-stabilize
+location: internal/discord/check_handler.go:286-320
+spec_ref: spec §Death Saves line 2116 (Phase 81)
 problem: |
-  attackAbilityUsed picks the higher of STR/DEX for finesse weapons. A raging barbarian with STR 14/DEX 16 wielding a rapier is force-assigned "dex", and the rage ability_used: str filter fails, dropping the +2/+3/+4 rage damage.
+  The check handler's TargetContext doesn't verify the target is at 0 HP, and on a successful Medicine roll it doesn't stabilize the target.
 suggested_fix: |
-  When the attacker is raging and the weapon is finesse, prefer STR (since rage damage only applies on STR attacks).
+  When skill == "medicine" and a target is supplied, require target.HpCurrent == 0, and on success (Total >= 10) persist stabilization.
 acceptance_criterion: |
-  A raging barbarian with higher DEX than STR using a finesse weapon gets "str" as the ability used. A test demonstrates this.
+  A successful medicine check (DC 10) against a dying target stabilizes them. A medicine check against a non-dying target returns an error. Tests demonstrate both.
