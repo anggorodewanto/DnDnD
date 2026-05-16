@@ -238,8 +238,8 @@ func TestParseDDBJSON_Classes(t *testing.T) {
 		t.Fatalf("expected 1 class, got %d", len(result.Classes))
 	}
 	c := result.Classes[0]
-	if c.Class != "Fighter" {
-		t.Errorf("Class = %q, want %q", c.Class, "Fighter")
+	if c.Class != "fighter" {
+		t.Errorf("Class = %q, want %q", c.Class, "fighter")
 	}
 	if c.Subclass != "Champion" {
 		t.Errorf("Subclass = %q, want %q", c.Subclass, "Champion")
@@ -804,5 +804,18 @@ func TestParseDDBJSON_SliceMutationSafety(t *testing.T) {
 	}
 	if len(result.Proficiencies.Skills) != 1 || result.Proficiencies.Skills[0] != "Athletics" {
 		t.Errorf("Skills = %v, want [Athletics]", result.Proficiencies.Skills)
+	}
+}
+
+func TestParseDDBJSON_ClassNameLowercased(t *testing.T) {
+	result, err := ParseDDBJSON(testDDBJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Classes) == 0 {
+		t.Fatal("expected at least one class")
+	}
+	if result.Classes[0].Class != "fighter" {
+		t.Errorf("Class = %q, want %q (lowercased)", result.Classes[0].Class, "fighter")
 	}
 }

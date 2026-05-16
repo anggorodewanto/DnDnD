@@ -174,7 +174,7 @@ func ParseDDBJSON(data []byte) (*ParsedCharacter, error) {
 	// Parse classes and compute total level
 	for _, c := range d.Classes {
 		entry := character.ClassEntry{
-			Class: c.Definition.Name,
+			Class: strings.ToLower(c.Definition.Name),
 			Level: c.Level,
 		}
 		if c.SubclassDefinition != nil {

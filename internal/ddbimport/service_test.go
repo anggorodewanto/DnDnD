@@ -342,7 +342,7 @@ func TestService_Import_WizardCureWoundsAdvisoryAndPersistedTag(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(result.Preview, "Wizard spell list includes Cure Wounds") {
+	if !strings.Contains(result.Preview, "wizard spell list includes Cure Wounds") {
 		t.Fatalf("preview should show off-list advisory:\n%s", result.Preview)
 	}
 
