@@ -120,6 +120,7 @@ type Combatant struct {
 	IsPlayer    bool
 	IsDying     bool // 0 HP, making death saves
 	IsStable    bool // 0 HP, stabilized
+	IsVisible   bool // false when hidden (Hide action); excluded from player view
 	InFog       bool // true when on an explored (dim) tile — rendered greyed out
 }
 

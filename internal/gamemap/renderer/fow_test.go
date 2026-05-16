@@ -231,9 +231,9 @@ func TestFilterCombatantsForFog(t *testing.T) {
 	combatants := []Combatant{
 		{ShortID: "P1", Col: 2, Row: 2, IsPlayer: true},  // player in visible
 		{ShortID: "P2", Col: 4, Row: 4, IsPlayer: true},  // player in fog
-		{ShortID: "E1", Col: 2, Row: 2, IsPlayer: false}, // enemy in visible
-		{ShortID: "E2", Col: 4, Row: 4, IsPlayer: false}, // enemy in unexplored fog
-		{ShortID: "E3", Col: 3, Row: 3, IsPlayer: false}, // enemy in explored tile
+		{ShortID: "E1", Col: 2, Row: 2, IsPlayer: false, IsVisible: true}, // enemy in visible
+		{ShortID: "E2", Col: 4, Row: 4, IsPlayer: false, IsVisible: true}, // enemy in unexplored fog
+		{ShortID: "E3", Col: 3, Row: 3, IsPlayer: false, IsVisible: true}, // enemy in explored tile
 	}
 
 	filtered := filterCombatantsForFog(combatants, fow)

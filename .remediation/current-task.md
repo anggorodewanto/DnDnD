@@ -1,11 +1,11 @@
-finding_id: H-H10
+finding_id: F-H03
 severity: High
-title: DeriveSpeed ignores race
-location: internal/portal/builder_store_adapter.go:275
-spec_ref: spec §"Player Portal" line 2392; SRD races
+title: Hidden combatants (is_visible = false) still render on the map
+location: internal/gamemap/renderer/fog.go:52-78; internal/gamemap/renderer/token.go:38
+spec_ref: spec §Dynamic Fog of War lines 2202-2203; spec §Standard Actions (Hide)
 problem: |
-  DeriveSpeed(_ string) int { return 30 } always returns 30. Dwarf/Halfling/Gnome should be 25ft.
+  filterCombatantsForFog only considers tile visibility state. The Combatant.IsVisible field (set to false by Hide) is never consulted. A hidden rogue still renders on every player map.
 suggested_fix: |
-  Look up the race by ID and use its speed_ft. Fall back to 30 if unknown.
+  In filterCombatantsForFog, drop combatants whose IsVisible is false for the player audience. Hidden combatants should still render in the DM view.
 acceptance_criterion: |
-  DeriveSpeed("dwarf") returns 25. DeriveSpeed("human") returns 30. A test demonstrates both.
+  A combatant with IsVisible=false is excluded from the filtered list when DMSeesAll=false. Included when DMSeesAll=true. A test demonstrates both.

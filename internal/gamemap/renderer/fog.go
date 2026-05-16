@@ -64,6 +64,10 @@ func filterCombatantsForFog(combatants []Combatant, fow *FogOfWar) []Combatant {
 			continue
 		}
 
+		if !c.IsVisible {
+			continue
+		}
+
 		state := fow.StateAt(c.Col, c.Row)
 		if state == Unexplored {
 			continue
