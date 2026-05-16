@@ -290,3 +290,23 @@ High-severity findings resolved this session:
 - D-H04: Monk shield invalidates UD — bd4248b
 
 Running total: 35 Critical + 37 High = 72 findings resolved (16% of 448)
+
+## 2026-05-16T14:55 — Session progress update
+
+Findings resolved this session:
+- C-H11: Concentration two-hit test (already correct) — ca65d3c
+- B-H05: TilesetRefs wired through handlers — e98373c
+- G-H05: NPC inventory cleared after loot pool — f5833a9
+- E-H02: AoE cover bonus on roll not DC — f21c323
+- G-H06: Item picker searches gear/consumables — e020bd5
+- cross-cut-H01: Massive damage instant-death fix — e06ff7f
+- cross-cut-H02: superseded (duplicate of E-H04)
+- F-H07: Counterspell 60ft range validation — 6e6cd73
+- J-H03: error_detail column written — f05ba7a
+- J-H05: Ambiguous encounter detection — 9e498e4
+
+Running total: 94/448 resolved (21%)
+- Critical: 35/35 ✅
+- High: 59/98 (60%)
+- Medium: 0/173
+- Low: 0/142
