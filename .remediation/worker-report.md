@@ -1,33 +1,21 @@
-# Worker Report: G-H02
+# Worker Report: G-H09
 
-**Finding:** Long-rest hit-dice restoration order is non-deterministic for multiclass  
-**Status:** ✅ Fixed  
-**Worker:** worker-G-H02  
-**Date:** 2026-05-16
+**Finding:** Individual /rest only checks if the caller is a combatant (`ActiveEncounterForUser`), not if any encounter is active in the campaign. A bystander could /rest while their party is mid-fight.
 
-## What was done
+**Fix applied:**
 
-### 1. Red — Failing test added
+1. Added `campaignEncounterChecker rest.PartyEncounterChecker` field to `RestHandler` struct.
+2. Added `SetCampaignEncounterChecker` setter method.
+3. Added campaign-level guard in `Handle()` — after the per-user check, calls `HasActiveEncounter(ctx, campaign.ID)` and rejects with the same message if any encounter is active.
 
-`TestLongRest_HitDiceRestore_MulticlassDeterministic` in `internal/rest/rest_test.go`:
-- Fighter 3 / Wizard 2 (d10 + d6), all hit dice spent, budget = 2.
-- Runs 100 iterations to detect non-determinism.
-- Asserts d10 is always restored first (2 dice), d6 stays at 0.
-- Confirmed failure before fix (failed at iteration 10).
+**Files changed:**
+- `internal/discord/rest_handler.go` — struct field, setter, and campaign-level check in Handle.
+- `internal/discord/rest_handler_test.go` — new test `TestRestHandler_BlockedWhenCampaignHasActiveEncounter` (user NOT a combatant, but campaign has active encounter → rejected).
 
-### 2. Green — Fix applied
+**TDD cycle:**
+- Red: test compiled but `SetCampaignEncounterChecker` undefined → build failure.
+- Green: added field, setter, and check → test passes.
+- `make test` ✅ all pass.
+- `make cover-check` ✅ thresholds met.
 
-`internal/rest/rest.go` (hit dice restoration loop ~line 422):
-- Extracted map keys into a sorted slice (largest die value first: d12 > d10 > d8 > d6 > d4).
-- Added `dieValue()` helper to parse numeric value from die string.
-- Added `"sort"` and `"strconv"` imports.
-
-### 3. Verification
-
-- `make test` — all tests pass.
-- `make cover-check` — all coverage thresholds met (rest package: 93.46%).
-
-## Files modified
-
-- `internal/rest/rest.go` — sorted die keys before iteration; added `dieValue` helper.
-- `internal/rest/rest_test.go` — added determinism test.
+**No commits made.**

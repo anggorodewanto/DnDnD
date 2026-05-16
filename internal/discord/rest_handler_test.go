@@ -1595,3 +1595,53 @@ func TestRestHandler_LongRest_DawnRechargeSuppliedAndPersisted(t *testing.T) {
 		t.Errorf("expected charges to be capped at max 7, got %d", updatedItems[0].Charges)
 	}
 }
+
+// --- TDD Cycle G-H09: Individual rest blocked when campaign has active encounter ---
+
+type mockCampaignEncounterChecker struct {
+	hasActive bool
+}
+
+func (m *mockCampaignEncounterChecker) HasActiveEncounter(_ context.Context, _ uuid.UUID) bool {
+	return m.hasActive
+}
+
+func TestRestHandler_BlockedWhenCampaignHasActiveEncounter(t *testing.T) {
+	var responded string
+	sess := newTestMock()
+	sess.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		responded = resp.Data.Content
+		return nil
+	}
+
+	campaignID := uuid.New()
+	char := makeRestTestCharacter()
+	char.CampaignID = campaignID
+	roller := dice.NewRoller(func(max int) int { return 6 })
+
+	h := NewRestHandler(
+		sess,
+		roller,
+		&mockCheckCampaignProvider{fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: campaignID}, nil
+		}},
+		&mockCheckCharacterLookup{fn: func(_ context.Context, _ uuid.UUID, _ string) (refdata.Character, error) {
+			return char, nil
+		}},
+		// User is NOT a combatant — ActiveEncounterForUser returns error
+		&mockCheckEncounterProvider{fn: func(_ context.Context, _ string) (uuid.UUID, error) {
+			return uuid.Nil, errNoEncounter
+		}},
+		&mockRestCharacterUpdater{},
+		nil,
+		nil,
+	)
+	// Campaign HAS an active encounter (another party member is fighting)
+	h.SetCampaignEncounterChecker(&mockCampaignEncounterChecker{hasActive: true})
+
+	h.Handle(makeRestInteraction("short"))
+
+	if !strings.Contains(responded, "cannot rest during active combat") {
+		t.Errorf("expected combat-blocked message, got: %s", responded)
+	}
+}

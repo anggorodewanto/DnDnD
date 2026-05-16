@@ -45,12 +45,13 @@ type RestHandler struct {
 	campaignProvider  CheckCampaignProvider
 	characterLookup   CheckCharacterLookup
 	encounterProvider CheckEncounterProvider
-	charUpdater       RestCharacterUpdater
-	magicItemLookup   RestMagicItemLookup // Finding 9: dawn recharge
-	rollLogger        dice.RollHistoryLogger
-	dmQueueFunc       func(guildID string) string // reserved for future DM approval flow
-	notifier          dmqueue.Notifier
-	cardUpdater       CardUpdater // SR-007
+	charUpdater              RestCharacterUpdater
+	magicItemLookup          RestMagicItemLookup // Finding 9: dawn recharge
+	rollLogger               dice.RollHistoryLogger
+	dmQueueFunc              func(guildID string) string // reserved for future DM approval flow
+	notifier                 dmqueue.Notifier
+	cardUpdater              CardUpdater // SR-007
+	campaignEncounterChecker rest.PartyEncounterChecker  // G-H09
 }
 
 // SetMagicItemLookup wires the magic-item reference lookup used to build
@@ -68,6 +69,12 @@ func (h *RestHandler) SetCardUpdater(u CardUpdater) {
 // SetNotifier wires the dm-queue Notifier. When set, /rest posts a rest
 // request notification to #dm-queue before running the rest flow.
 func (h *RestHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
+
+// SetCampaignEncounterChecker wires the campaign-level active-encounter
+// guard so /rest is blocked when any encounter is active (G-H09).
+func (h *RestHandler) SetCampaignEncounterChecker(c rest.PartyEncounterChecker) {
+	h.campaignEncounterChecker = c
+}
 
 // SetPublisher forwards the encounter publisher + lookup down into the
 // underlying rest.Service so /rest publishes a fresh dashboard snapshot
@@ -161,6 +168,12 @@ func (h *RestHandler) Handle(interaction *discordgo.Interaction) {
 			respondEphemeral(h.session, interaction, "You cannot rest during active combat.")
 			return
 		}
+	}
+	// G-H09: campaign-level guard — block rest when ANY encounter is active,
+	// even if the caller is not a combatant.
+	if h.campaignEncounterChecker != nil && h.campaignEncounterChecker.HasActiveEncounter(ctx, campaign.ID) {
+		respondEphemeral(h.session, interaction, "You cannot rest during active combat.")
+		return
 	}
 	char, err := h.characterLookup.GetCharacterByCampaignAndDiscord(ctx, campaign.ID, userID)
 	if err != nil {

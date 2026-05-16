@@ -1,11 +1,11 @@
-finding_id: G-H02
+finding_id: G-H09
 severity: High
-title: Long-rest hit-dice restoration order is non-deterministic for multiclass
-location: internal/rest/rest.go:409-441
-spec_ref: spec §Long Rest line 2609 (Phase 83a)
+title: Encounter-active check on rest can be bypassed for party rest
+location: internal/discord/rest_handler.go:159-164
+spec_ref: spec §Rest Constraints line 2630 (Phase 83a)
 problem: |
-  LongRest iterates over maxHitDice (a map[string]int) to allocate the half-level restoration budget. Map iteration order in Go is randomized.
+  Individual /rest calls ActiveEncounterForUser and rejects if the caller is a combatant. But the rest is still permitted for users not registered as combatants in an active encounter. A bystander could /rest long while their party is mid-fight.
 suggested_fix: |
-  Sort the die types before iterating (e.g., largest die first: d12, d10, d8, d6).
+  Use PartyEncounterChecker.HasActiveEncounter in the individual handler too so any active encounter in the campaign blocks rests.
 acceptance_criterion: |
-  Hit dice restoration is deterministic (largest die first). A test with a multiclass character demonstrates consistent ordering.
+  /rest is rejected when any active encounter exists in the campaign, not just when the caller is a combatant. A test demonstrates this.

@@ -97,14 +97,14 @@ Low: 142
 | 85 | F-H07 | High | pending | Counterspell trigger does not validate spell range / line-of-sight | /home/ab/projects/DnDnD/internal/combat/counterspell.go:65-116 |
 | 86 | F-H08 | High | pending | Reaction declarations not validated for the type's prerequisites | /home/ab/projects/DnDnD/internal/combat/reaction.go:27-46 |
 | 87 | G-H01 | High | done | Gold split silently discards remainder | internal/loot/service.go:289-329 |
-| 88 | G-H02 | High | in_progress | Long-rest hit-dice restoration order is non-deterministic for multiclass | internal/rest/rest.go:409-441 |
+| 88 | G-H02 | High | done | Long-rest hit-dice restoration order is non-deterministic for multiclass | internal/rest/rest.go:409-441 |
 | 89 | G-H03 | High | pending | No combat-resumed long-rest auto-resume | internal/rest/party.go:17-22, internal/rest/party_handler.go:269-308 |
 | 90 | G-H04 | High | pending | `/check medicine target:AR` does not validate target is dying and does not auto-stabilize | internal/discord/check_handler.go:286-320, internal/check/check.go:111-151 |
 | 91 | G-H05 | High | pending | Items auto-populated from defeated NPCs are not removed from NPC inventory | internal/loot/service.go:67-142 |
 | 92 | G-H06 | High | pending | Item picker only searches weapons/armor/magic items | internal/itempicker/handler.go:57-156 |
 | 93 | G-H07 | High | pending | No way to edit description / name of an existing loot pool item | internal/loot/service.go (no Update), internal/loot/api_handler.go |
 | 94 | G-H08 | High | pending | Long rest does not propagate dawn recharge to party rest persistence | internal/rest/party_handler.go:180-216 |
-| 95 | G-H09 | High | pending | Encounter-active check on rest can be bypassed for party rest if `HasActiveEncounter` returns false | internal/discord/rest_handler.go:159-164 |
+| 95 | G-H09 | High | in_progress | Encounter-active check on rest can be bypassed for party rest if `HasActiveEncounter` returns false | internal/discord/rest_handler.go:159-164 |
 | 96 | H-H01 | High | done | Player-identity not validated on ASI button / select interactions | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:354,391,647,731 |
 | 97 | H-H02 | High | done | DM approve/deny buttons have no role check | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:456 (`HandleDMApprove`),... |
 | 98 | H-H03 | High | pending | ASI ApproveASI silently rejects feat type instead of routing | /home/ab/projects/DnDnD/internal/levelup/asi.go:35 (`ApplyASI`) |
