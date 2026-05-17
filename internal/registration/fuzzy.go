@@ -6,27 +6,30 @@ import (
 	"strings"
 )
 
-// levenshteinDistance computes the edit distance between two strings.
+// levenshteinDistance computes the edit distance between two strings using runes
+// so multi-byte characters (accented names, emoji) count as single edits.
 func levenshteinDistance(a, b string) int {
-	if len(a) == 0 {
-		return len(b)
+	ra := []rune(a)
+	rb := []rune(b)
+	if len(ra) == 0 {
+		return len(rb)
 	}
-	if len(b) == 0 {
-		return len(a)
+	if len(rb) == 0 {
+		return len(ra)
 	}
 
-	prev := make([]int, len(b)+1)
-	curr := make([]int, len(b)+1)
+	prev := make([]int, len(rb)+1)
+	curr := make([]int, len(rb)+1)
 
 	for j := range prev {
 		prev[j] = j
 	}
 
-	for i := 1; i <= len(a); i++ {
+	for i := 1; i <= len(ra); i++ {
 		curr[0] = i
-		for j := 1; j <= len(b); j++ {
+		for j := 1; j <= len(rb); j++ {
 			cost := 1
-			if a[i-1] == b[j-1] {
+			if ra[i-1] == rb[j-1] {
 				cost = 0
 			}
 			ins := curr[j-1] + 1
@@ -36,7 +39,7 @@ func levenshteinDistance(a, b string) int {
 		}
 		prev, curr = curr, prev
 	}
-	return prev[len(b)]
+	return prev[len(rb)]
 }
 
 // FuzzyMatch holds a candidate name and its distance from the query.
@@ -49,7 +52,7 @@ type FuzzyMatch struct {
 // close to query (case-insensitive comparison). Results are sorted by distance.
 func FindFuzzyMatches(query string, candidates []string, maxResults int) []FuzzyMatch {
 	queryLower := strings.ToLower(query)
-	maxDist := max(len(queryLower)/2, 3)
+	maxDist := max(len([]rune(queryLower))/2, 3)
 
 	var matches []FuzzyMatch
 	for _, name := range candidates {
