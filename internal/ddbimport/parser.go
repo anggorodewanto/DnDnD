@@ -379,26 +379,12 @@ func parseSpells(spells *ddbSpells, classes []character.ClassEntry) []SpellEntry
 	return result
 }
 
-var classSpellLists = map[string]map[string]struct{}{
-	"wizard": {
-		"acid splash":      {},
-		"burning hands":    {},
-		"charm person":     {},
-		"detect magic":     {},
-		"fire bolt":        {},
-		"fireball":         {},
-		"light":            {},
-		"mage armor":       {},
-		"magic missile":    {},
-		"prestidigitation": {},
-		"ray of frost":     {},
-		"shield":           {},
-		"shocking grasp":   {},
-		"sleep":            {},
-		"thunderwave":      {},
-		"true strike":      {},
-	},
-}
+// classSpellLists is intentionally empty. The previous hard-coded wizard-only
+// list of 16 spells produced false positives for legitimate SRD spells and
+// covered no other class. Off-list detection should be driven from the seeded
+// spells.classes reference data (H-H04 follow-up). Until then, no off-list
+// warnings are emitted.
+var classSpellLists = map[string]map[string]struct{}{}
 
 func isOffListClassSpell(name string, classes []character.ClassEntry) bool {
 	normalized := strings.ToLower(strings.TrimSpace(name))

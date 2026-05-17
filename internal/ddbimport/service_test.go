@@ -342,9 +342,8 @@ func TestService_Import_WizardCureWoundsAdvisoryAndPersistedTag(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(result.Preview, "wizard spell list includes Cure Wounds") {
-		t.Fatalf("preview should show off-list advisory:\n%s", result.Preview)
-	}
+	// H-H04: Off-list detection is disabled (was producing false positives).
+	// Cure Wounds is no longer flagged as off-list for wizards.
 
 	// Approve to trigger CreateCharacter.
 	if _, err := svc.ApproveImport(context.Background(), result.PendingImportID); err != nil {
@@ -360,8 +359,9 @@ func TestService_Import_WizardCureWoundsAdvisoryAndPersistedTag(t *testing.T) {
 	if len(charData.Spells) != 1 {
 		t.Fatalf("expected 1 persisted spell, got %d", len(charData.Spells))
 	}
-	if !charData.Spells[0].Homebrew || !charData.Spells[0].OffList {
-		t.Fatalf("expected persisted spell tagged homebrew/off-list, got %+v", charData.Spells[0])
+	// With detection disabled, spell should NOT be tagged
+	if charData.Spells[0].OffList {
+		t.Fatalf("expected spell NOT tagged off-list (detection disabled), got %+v", charData.Spells[0])
 	}
 }
 

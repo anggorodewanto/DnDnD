@@ -102,7 +102,7 @@ Low: 142
 | 90 | G-H04 | High | done | `/check medicine target:AR` does not validate target is dying and does not auto-stabilize | internal/discord/check_handler.go:286-320, internal/check/check.go:111-151 |
 | 91 | G-H05 | High | done | Items auto-populated from defeated NPCs are not removed from NPC inventory | internal/loot/service.go:67-142 |
 | 92 | G-H06 | High | done | Item picker only searches weapons/armor/magic items | internal/itempicker/handler.go:57-156 |
-| 93 | G-H07 | High | pending | No way to edit description / name of an existing loot pool item | internal/loot/service.go (no Update), internal/loot/api_handler.go |
+| 93 | G-H07 | High | done | No way to edit description / name of an existing loot pool item | internal/loot/service.go (no Update), internal/loot/api_handler.go |
 | 94 | G-H08 | High | done | Long rest does not propagate dawn recharge to party rest persistence | internal/rest/party_handler.go:180-216 |
 | 95 | G-H09 | High | done | Encounter-active check on rest can be bypassed for party rest if `HasActiveEncounter` returns false | internal/discord/rest_handler.go:159-164 |
 | 96 | H-H01 | High | done | Player-identity not validated on ASI button / select interactions | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:354,391,647,731 |

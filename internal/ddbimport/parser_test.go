@@ -299,11 +299,14 @@ func TestParseDDBJSON_MarksWizardCureWoundsOffListHomebrew(t *testing.T) {
 		t.Fatalf("expected 1 spell, got %d", len(result.Spells))
 	}
 	spell := result.Spells[0]
-	if !spell.OffList {
-		t.Fatalf("expected Cure Wounds to be marked off-list: %+v", spell)
+	// H-H04: Off-list detection is disabled (was producing false positives
+	// with only 16 hard-coded wizard spells). Cure Wounds is no longer
+	// marked off-list until refdata-driven detection is implemented.
+	if spell.OffList {
+		t.Fatalf("expected Cure Wounds NOT to be marked off-list (detection disabled): %+v", spell)
 	}
-	if !spell.Homebrew {
-		t.Fatalf("expected off-list Cure Wounds to be tagged homebrew: %+v", spell)
+	if spell.Homebrew {
+		t.Fatalf("expected Cure Wounds NOT to be tagged homebrew (detection disabled): %+v", spell)
 	}
 }
 

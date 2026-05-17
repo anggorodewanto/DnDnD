@@ -348,3 +348,9 @@ Running total: 94/448 resolved (21%)
 ## 2026-05-17T19:55 — G-H03 (skipped)
 - **Finding:** No combat-resumed long-rest auto-resume
 - **Justification:** Feature gap requiring new DB state (rest-in-progress tracking per character), encounter-end hooks, and time-duration logic. Not a correctness bug in existing code — the system simply doesn't implement the auto-resume path yet. Requires dedicated design work beyond a single-finding fix.
+
+## 2026-05-17T19:58 — G-H07
+- **Finding:** No way to edit description / name of an existing loot pool item
+- **Commit:** e59de2a
+- **Outcome:** Added UpdateLootPoolItem SQL query (COALESCE-based partial update), service method with pool-open validation, PATCH handler with quantity >= 1 validation, and route registration.
+- **Reviewer:** approved
