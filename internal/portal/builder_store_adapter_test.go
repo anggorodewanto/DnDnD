@@ -108,6 +108,13 @@ func TestBuilderStoreAdapter_EquipmentToInventory_UnknownItems(t *testing.T) {
 	assert.Equal(t, "gear", items[0].Type)
 }
 
+func TestBuilderStoreAdapter_EquipmentToInventory_SkipsPlaceholders(t *testing.T) {
+	items := portal.EquipmentToInventory([]string{"longsword", "any-martial", "shield", "any-simple-melee"})
+	assert.Len(t, items, 2)
+	assert.Equal(t, "longsword", items[0].ItemID)
+	assert.Equal(t, "shield", items[1].ItemID)
+}
+
 func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSpells(t *testing.T) {
 	creator := &captureCharacterCreator{}
 	adapter := portal.NewBuilderStoreAdapter(creator, nil)

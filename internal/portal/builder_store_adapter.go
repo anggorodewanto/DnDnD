@@ -256,13 +256,18 @@ func EquipmentToInventory(equipment []string) []character.InventoryItem {
 }
 
 // EquipmentToInventoryWithEquipped converts equipment IDs to InventoryItems,
-// marking the equipped weapon and worn armor items.
+// marking the equipped weapon and worn armor items. Unresolved placeholder IDs
+// (e.g. "any-martial", "any-simple-melee") are skipped — the client must
+// resolve these to concrete item IDs before submission.
 func EquipmentToInventoryWithEquipped(equipment []string, equippedWeapon, wornArmor string) []character.InventoryItem {
 	if len(equipment) == 0 {
 		return nil
 	}
-	items := make([]character.InventoryItem, len(equipment))
-	for i, id := range equipment {
+	items := make([]character.InventoryItem, 0, len(equipment))
+	for _, id := range equipment {
+		if strings.HasPrefix(id, "any-") {
+			continue // skip unresolved placeholder
+		}
 		item := character.InventoryItem{
 			ItemID:   id,
 			Name:     id,
@@ -281,7 +286,7 @@ func EquipmentToInventoryWithEquipped(equipment []string, equippedWeapon, wornAr
 			item.Equipped = true
 			item.EquipSlot = "off_hand"
 		}
-		items[i] = item
+		items = append(items, item)
 	}
 	return items
 }
