@@ -9,12 +9,21 @@ import (
 	"github.com/ab/dndnd/internal/character"
 	"github.com/ab/dndnd/internal/combat"
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// integrationFakeDMNotifier is a no-op DMNotifier for integration tests.
+type integrationFakeDMNotifier struct{}
+
+func (integrationFakeDMNotifier) Post(_ context.Context, _ dmqueue.Event) (string, error) {
+	return "fake-item-id", nil
+}
+func (integrationFakeDMNotifier) Cancel(_ context.Context, _, _ string) error { return nil }
 
 type channelDivinityFixture struct {
 	db        *sql.DB
@@ -330,6 +339,7 @@ func TestIntegration_ChannelDivinityDMQueue(t *testing.T) {
 	}
 
 	f := setupChannelDivinityFixture(t, 3, 1)
+	f.svc.SetDMNotifier(&integrationFakeDMNotifier{})
 	ctx := context.Background()
 
 	result, err := f.svc.ChannelDivinityDMQueue(ctx, combat.ChannelDivinityDMQueueCommand{

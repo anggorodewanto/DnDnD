@@ -1,32 +1,36 @@
-# Worker Report: I-H04
+# Worker Report: D-H08
 
-## Finding
-**ResolvePendingAction** did not use `withTurnLock`, allowing concurrent mutations without advisory lock protection. **applyMoveEffect** called `store.UpdateCombatantPosition` directly, bypassing the service layer (which handles zone triggers, wall checks, etc.).
+**Worker:** worker-D-H08
+**Finding:** D-H08 — ChannelDivinityDMQueue deducts a use even when dmNotifier is nil
+**Status:** ✅ Fixed
 
-## Changes Made
+## Summary
 
-### 1. `internal/combat/dm_dashboard_handler.go`
+Added a nil-check for `s.dmNotifier` at the top of `ChannelDivinityDMQueue`. When no DM notifier is wired, the method now returns an error immediately — before deducting a Channel Divinity use or consuming the action resource.
 
-**ResolvePendingAction** — wrapped mutation logic in `withTurnLock`:
-- Fetch active turn before mutations (returns 404 if no active turn)
-- Parse effects JSON before the lock (preserves 400 for validation errors)
-- All state reads, effect applications, status updates, and action logging now run inside `withTurnLock`
+## Changes
 
-**applyMoveEffect** — replaced raw store call:
-- `h.svc.store.UpdateCombatantPosition(...)` → `h.svc.UpdateCombatantPosition(...)`
-- This routes through the service layer, enabling zone triggers and wall validation
+### `internal/combat/channel_divinity.go`
+- Added `if s.dmNotifier == nil { return DMQueueResult{}, fmt.Errorf(...) }` as the first check in `ChannelDivinityDMQueue`.
 
-### 2. `internal/combat/dm_dashboard_handler_test.go`
+### `internal/combat/channel_divinity_test.go`
+- Added `TestChannelDivinityDMQueue_NilNotifier_ReturnsError`: calls `ChannelDivinityDMQueue` with no notifier wired, asserts error containing "no DM notifier".
+- Updated existing DMQueue error-path tests to wire `&fakeDMNotifier{}` so they exercise the intended error paths (downstream of the new nil check).
 
-- Added `TestResolvePendingAction_AcquiresTurnLock`: uses `fakeTxBeginner` (always-fail `BeginTx`) to prove the handler acquires the lock — expects 500 when lock acquisition fails.
-- Updated `TestResolvePendingAction_NoActiveTurn`: now expects 404 (turn is required for lock).
-- Added `getActiveTurnByEncounterIDFn` mock to 10 existing tests that now reach the turn-fetch step.
+### `internal/combat/channel_divinity_integration_test.go`
+- Added `integrationFakeDMNotifier` (no-op implementation of `DMNotifier`) for the external test package.
+- Wired it in `TestIntegration_ChannelDivinityDMQueue`.
 
-## Behavior Change
-`ResolvePendingAction` now requires an active turn. Previously it would resolve without logging if no turn existed; now it returns 404. This is consistent with the spec requirement that mutations must be lock-protected.
+## TDD Cycle
+
+1. **Red:** `TestChannelDivinityDMQueue_NilNotifier_ReturnsError` failed — function returned nil error.
+2. **Green:** Added nil guard; test passes.
+3. **Refactor:** Updated existing tests that now hit the guard before their intended error path.
 
 ## Test Results
+
 ```
-ok  github.com/ab/dndnd/internal/combat  17.160s
+ok  github.com/ab/dndnd/internal/combat  16.691s
 ```
-All 28 `TestResolvePendingAction_*` tests pass. Full package passes.
+
+All packages pass (`go test ./... -short`, excluding `internal/database`).

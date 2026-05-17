@@ -597,6 +597,7 @@ func TestChannelDivinityDMQueue(t *testing.T) {
 
 	ms := newChannelDivinityMockStore(char, []refdata.Combatant{cleric}, nil)
 	svc := NewService(ms)
+	svc.SetDMNotifier(&fakeDMNotifier{})
 
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: clericCombatantID}
 
@@ -1831,6 +1832,43 @@ func TestVowOfEnmity_NotACharacter(t *testing.T) {
 	assert.Contains(t, err.Error(), "character (not NPC)")
 }
 
+func TestChannelDivinityDMQueue_NilNotifier_ReturnsError(t *testing.T) {
+	clericID := uuid.New()
+	clericCombatantID := uuid.New()
+	encounterID := uuid.New()
+
+	char := refdata.Character{
+		ID:               clericID,
+		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
+	}
+
+	caster := refdata.Combatant{
+		ID:          clericCombatantID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: clericID, Valid: true},
+		DisplayName: "Thorn",
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	ms := newChannelDivinityMockStore(char, []refdata.Combatant{caster}, nil)
+	svc := NewService(ms)
+	// Deliberately do NOT call svc.SetDMNotifier — dmNotifier is nil.
+
+	turn := refdata.Turn{EncounterID: encounterID, CombatantID: clericCombatantID}
+
+	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
+		Caster:     caster,
+		Turn:       turn,
+		OptionName: "Knowledge of the Ages",
+		ClassName:  "Cleric",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no DM notifier")
+}
+
 func TestChannelDivinityDMQueue_ActionAlreadyUsed(t *testing.T) {
 	caster := refdata.Combatant{
 		ID:          uuid.New(),
@@ -1841,6 +1879,7 @@ func TestChannelDivinityDMQueue_ActionAlreadyUsed(t *testing.T) {
 
 	ms := defaultMockStore()
 	svc := NewService(ms)
+	svc.SetDMNotifier(&fakeDMNotifier{})
 
 	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
 		Caster: caster, Turn: refdata.Turn{ActionUsed: true}, OptionName: "test", ClassName: "Cleric",
@@ -1862,6 +1901,7 @@ func TestChannelDivinityDMQueue_GetCharacterError(t *testing.T) {
 		return refdata.Character{}, fmt.Errorf("db error")
 	}
 	svc := NewService(ms)
+	svc.SetDMNotifier(&fakeDMNotifier{})
 
 	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
 		Caster: caster, Turn: refdata.Turn{}, OptionName: "test", ClassName: "Cleric",
@@ -1889,6 +1929,7 @@ func TestChannelDivinityDMQueue_ParseFeatureUsesError(t *testing.T) {
 		return char, nil
 	}
 	svc := NewService(ms)
+	svc.SetDMNotifier(&fakeDMNotifier{})
 
 	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
 		Caster: caster, Turn: refdata.Turn{}, OptionName: "test", ClassName: "Cleric",
@@ -1917,6 +1958,7 @@ func TestChannelDivinityDMQueue_ValidateChannelDivinityError(t *testing.T) {
 		return char, nil
 	}
 	svc := NewService(ms)
+	svc.SetDMNotifier(&fakeDMNotifier{})
 
 	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
 		Caster: caster, Turn: refdata.Turn{}, OptionName: "test", ClassName: "Cleric",
@@ -1950,6 +1992,7 @@ func TestChannelDivinityDMQueue_DeductFeatureUseError(t *testing.T) {
 		return refdata.Character{}, fmt.Errorf("db error")
 	}
 	svc := NewService(ms)
+	svc.SetDMNotifier(&fakeDMNotifier{})
 
 	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
 		Caster: caster, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: clericCombatantID}, OptionName: "test", ClassName: "Cleric",
@@ -1982,6 +2025,7 @@ func TestChannelDivinityDMQueue_UpdateTurnActionsError(t *testing.T) {
 		return refdata.Turn{}, fmt.Errorf("db error")
 	}
 	svc := NewService(ms)
+	svc.SetDMNotifier(&fakeDMNotifier{})
 
 	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
 		Caster: caster, Turn: refdata.Turn{EncounterID: encounterID, CombatantID: clericCombatantID}, OptionName: "test", ClassName: "Cleric",
@@ -1999,6 +2043,7 @@ func TestChannelDivinityDMQueue_NotACharacter(t *testing.T) {
 
 	ms := defaultMockStore()
 	svc := NewService(ms)
+	svc.SetDMNotifier(&fakeDMNotifier{})
 
 	_, err := svc.ChannelDivinityDMQueue(ctx, ChannelDivinityDMQueueCommand{
 		Caster: npc, Turn: refdata.Turn{}, OptionName: "test", ClassName: "Cleric",

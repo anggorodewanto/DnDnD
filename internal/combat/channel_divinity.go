@@ -515,6 +515,9 @@ type ChannelDivinityDMQueueCommand struct {
 // ChannelDivinityDMQueue handles DM-resolved Channel Divinity options by routing to #dm-queue.
 // Deducts a use and the action, then returns a log message directing the DM to resolve.
 func (s *Service) ChannelDivinityDMQueue(ctx context.Context, cmd ChannelDivinityDMQueueCommand) (DMQueueResult, error) {
+	if s.dmNotifier == nil {
+		return DMQueueResult{}, fmt.Errorf("no DM notifier configured — cannot route Channel Divinity to DM queue")
+	}
 	if err := ValidateResource(cmd.Turn, ResourceAction); err != nil {
 		return DMQueueResult{}, err
 	}
