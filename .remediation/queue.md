@@ -145,7 +145,7 @@ Low: 142
 | 133 | cross-cut-H05 | High | done | Action Surge max uses never scales to 2 at fighter level 17 | every `action-surge` feature seed asserts `Max: 1` |
 | 134 | A-M01 | Medium | done | `MessageQueue.Stop` doesn't preempt long backoff sleeps | internal/discord/queue.go:90-134 |
 | 135 | A-M02 | Medium | done | `SplitMessage` splits on bytes, can produce invalid UTF-8 mid-codepoint | internal/discord/message.go:67-122 |
-| 136 | A-M03 | Medium | pending | Fuzzy match Levenshtein operates on bytes, not runes | internal/registration/fuzzy.go:10-40 |
+| 136 | A-M03 | Medium | done | Fuzzy match Levenshtein operates on bytes, not runes | internal/registration/fuzzy.go:10-40 |
 | 137 | A-M04 | Medium | pending | `ShortID` operates on bytes, may produce invalid UTF-8 for non-ASCII names | internal/charactercard/shortid.go:21-29 |
 | 138 | A-M05 | Medium | pending | WebSocket hub channels are unbuffered and synchronous | internal/dashboard/ws.go:31-103 |
 | 139 | A-M06 | Medium | pending | Approval POST endpoints accept POST without CSRF protection | internal/dashboard/approval_handler.go:50-58, 230-338 |

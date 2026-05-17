@@ -15,15 +15,23 @@ func ShortID(name string, existing []string) string {
 
 	words := strings.Fields(name)
 
-	// For single-word names with 2+ chars, use first two letters;
-	// otherwise use the first letter of each word.
+	// For single-word names with 2+ runes, use first two runes;
+	// otherwise use the first rune of each word.
 	var base string
-	if len(words) == 1 && len(words[0]) >= 2 {
-		base = words[0][:2]
+	if len(words) == 1 {
+		runes := []rune(words[0])
+		if len(runes) >= 2 {
+			base = string(runes[:2])
+		} else {
+			base = string(runes)
+		}
 	} else {
 		var b strings.Builder
 		for _, w := range words {
-			b.WriteByte(w[0])
+			r := []rune(w)
+			if len(r) > 0 {
+				b.WriteRune(r[0])
+			}
 		}
 		base = b.String()
 	}
