@@ -54,3 +54,9 @@ RETURNING *;
 
 -- name: DeleteReactionDeclarationsByEncounter :exec
 DELETE FROM reaction_declarations WHERE encounter_id = $1;
+
+-- name: SetReactionDeclarationDMQueueItemID :exec
+UPDATE reaction_declarations SET dm_queue_item_id = $2 WHERE id = $1;
+
+-- name: GetReactionDeclarationDMQueueItemID :one
+SELECT dm_queue_item_id FROM reaction_declarations WHERE id = $1;

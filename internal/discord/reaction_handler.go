@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"sync"
@@ -26,6 +27,13 @@ type ReactionService interface {
 // ReactionEncounterResolver is the per-user encounter lookup.
 type ReactionEncounterResolver interface {
 	ActiveEncounterForUser(ctx context.Context, guildID, discordUserID string) (uuid.UUID, error)
+}
+
+// ReactionDMQueueStore persists the dm-queue item ID on reaction declarations
+// so the mapping survives bot restarts (J-H02).
+type ReactionDMQueueStore interface {
+	SetReactionDeclarationDMQueueItemID(ctx context.Context, arg refdata.SetReactionDeclarationDMQueueItemIDParams) error
+	GetReactionDeclarationDMQueueItemID(ctx context.Context, id uuid.UUID) (sql.NullString, error)
 }
 
 // ReactionCombatantLookup resolves a Discord user to their combatant in a
@@ -55,6 +63,7 @@ type ReactionHandler struct {
 	lookup       ReactionCombatantLookup
 	notifier     dmqueue.Notifier
 	campaignProv CheckCampaignProvider
+	dmQueueStore ReactionDMQueueStore
 
 	mu      sync.Mutex
 	itemIDs map[uuid.UUID]stashedItem // declarationID → stashed dm-queue item
@@ -85,6 +94,11 @@ func NewReactionHandler(session Session, service ReactionService, resolver React
 // still persist reaction_declarations rows but skip the #dm-queue post/edit.
 func (h *ReactionHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
 
+// SetDMQueueStore wires the persistence layer for dm-queue item IDs on
+// reaction declarations. When set, the handler persists the mapping to DB
+// so it survives bot restarts (J-H02).
+func (h *ReactionHandler) SetDMQueueStore(s ReactionDMQueueStore) { h.dmQueueStore = s }
+
 // SetCampaignProvider wires the campaign-by-guild lookup so dm-queue posts
 // carry the campaign UUID required by PgStore.Insert (SR-002). When nil or
 // unwired, declaration posts still go through but include an empty
@@ -98,8 +112,19 @@ func (h *ReactionHandler) SetCampaignProvider(p CheckCampaignProvider) {
 // diagnostics.
 func (h *ReactionHandler) ItemIDForDeclaration(declID uuid.UUID) string {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.itemIDs[declID].itemID
+	id := h.itemIDs[declID].itemID
+	h.mu.Unlock()
+	if id != "" {
+		return id
+	}
+	// J-H02: fall back to DB when not in memory (e.g. after restart).
+	if h.dmQueueStore != nil {
+		val, err := h.dmQueueStore.GetReactionDeclarationDMQueueItemID(context.Background(), declID)
+		if err == nil && val.Valid {
+			return val.String
+		}
+	}
+	return ""
 }
 
 // Handle routes the /reaction interaction to the matching subcommand.
@@ -182,6 +207,14 @@ func (h *ReactionHandler) postReactionDeclaration(ctx context.Context, decl refd
 	h.mu.Lock()
 	h.itemIDs[decl.ID] = stashedItem{combatantID: combatantID, itemID: itemID}
 	h.mu.Unlock()
+
+	// J-H02: persist to DB so the mapping survives bot restarts.
+	if h.dmQueueStore != nil {
+		_ = h.dmQueueStore.SetReactionDeclarationDMQueueItemID(ctx, refdata.SetReactionDeclarationDMQueueItemIDParams{
+			ID:             decl.ID,
+			DmQueueItemID: sql.NullString{String: itemID, Valid: true},
+		})
+	}
 }
 
 // resolveCampaignID looks up the campaign for the guild and returns its UUID

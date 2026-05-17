@@ -32,7 +32,7 @@ const cancelReactionDeclaration = `-- name: CancelReactionDeclaration :one
 UPDATE reaction_declarations
 SET status = 'cancelled'
 WHERE id = $1 AND status = 'active'
-RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id
+RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id, dm_queue_item_id
 `
 
 func (q *Queries) CancelReactionDeclaration(ctx context.Context, id uuid.UUID) (ReactionDeclaration, error) {
@@ -56,6 +56,7 @@ func (q *Queries) CancelReactionDeclaration(ctx context.Context, id uuid.UUID) (
 		&i.CounterspellStatus,
 		&i.CounterspellDc,
 		&i.CounterspellEnemyCasterID,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }
@@ -63,7 +64,7 @@ func (q *Queries) CancelReactionDeclaration(ctx context.Context, id uuid.UUID) (
 const createReactionDeclaration = `-- name: CreateReactionDeclaration :one
 INSERT INTO reaction_declarations (encounter_id, combatant_id, description)
 VALUES ($1, $2, $3)
-RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id
+RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id, dm_queue_item_id
 `
 
 type CreateReactionDeclarationParams struct {
@@ -93,6 +94,7 @@ func (q *Queries) CreateReactionDeclaration(ctx context.Context, arg CreateReact
 		&i.CounterspellStatus,
 		&i.CounterspellDc,
 		&i.CounterspellEnemyCasterID,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }
@@ -100,7 +102,7 @@ func (q *Queries) CreateReactionDeclaration(ctx context.Context, arg CreateReact
 const createReadiedActionDeclaration = `-- name: CreateReadiedActionDeclaration :one
 INSERT INTO reaction_declarations (encounter_id, combatant_id, description, is_readied_action, spell_name, spell_slot_level)
 VALUES ($1, $2, $3, true, $4, $5)
-RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id
+RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id, dm_queue_item_id
 `
 
 type CreateReadiedActionDeclarationParams struct {
@@ -138,6 +140,7 @@ func (q *Queries) CreateReadiedActionDeclaration(ctx context.Context, arg Create
 		&i.CounterspellStatus,
 		&i.CounterspellDc,
 		&i.CounterspellEnemyCasterID,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }
@@ -152,7 +155,7 @@ func (q *Queries) DeleteReactionDeclarationsByEncounter(ctx context.Context, enc
 }
 
 const getReactionDeclaration = `-- name: GetReactionDeclaration :one
-SELECT id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id FROM reaction_declarations WHERE id = $1
+SELECT id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id, dm_queue_item_id FROM reaction_declarations WHERE id = $1
 `
 
 func (q *Queries) GetReactionDeclaration(ctx context.Context, id uuid.UUID) (ReactionDeclaration, error) {
@@ -176,12 +179,24 @@ func (q *Queries) GetReactionDeclaration(ctx context.Context, id uuid.UUID) (Rea
 		&i.CounterspellStatus,
 		&i.CounterspellDc,
 		&i.CounterspellEnemyCasterID,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }
 
+const getReactionDeclarationDMQueueItemID = `-- name: GetReactionDeclarationDMQueueItemID :one
+SELECT dm_queue_item_id FROM reaction_declarations WHERE id = $1
+`
+
+func (q *Queries) GetReactionDeclarationDMQueueItemID(ctx context.Context, id uuid.UUID) (sql.NullString, error) {
+	row := q.db.QueryRowContext(ctx, getReactionDeclarationDMQueueItemID, id)
+	var dm_queue_item_id sql.NullString
+	err := row.Scan(&dm_queue_item_id)
+	return dm_queue_item_id, err
+}
+
 const listActiveReactionDeclarationsByCombatant = `-- name: ListActiveReactionDeclarationsByCombatant :many
-SELECT id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id FROM reaction_declarations WHERE combatant_id = $1 AND encounter_id = $2 AND status = 'active' ORDER BY created_at ASC
+SELECT id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id, dm_queue_item_id FROM reaction_declarations WHERE combatant_id = $1 AND encounter_id = $2 AND status = 'active' ORDER BY created_at ASC
 `
 
 type ListActiveReactionDeclarationsByCombatantParams struct {
@@ -216,6 +231,7 @@ func (q *Queries) ListActiveReactionDeclarationsByCombatant(ctx context.Context,
 			&i.CounterspellStatus,
 			&i.CounterspellDc,
 			&i.CounterspellEnemyCasterID,
+			&i.DmQueueItemID,
 		); err != nil {
 			return nil, err
 		}
@@ -231,7 +247,7 @@ func (q *Queries) ListActiveReactionDeclarationsByCombatant(ctx context.Context,
 }
 
 const listActiveReactionDeclarationsByEncounter = `-- name: ListActiveReactionDeclarationsByEncounter :many
-SELECT id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id FROM reaction_declarations WHERE encounter_id = $1 AND status = 'active' ORDER BY created_at ASC
+SELECT id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id, dm_queue_item_id FROM reaction_declarations WHERE encounter_id = $1 AND status = 'active' ORDER BY created_at ASC
 `
 
 func (q *Queries) ListActiveReactionDeclarationsByEncounter(ctx context.Context, encounterID uuid.UUID) ([]ReactionDeclaration, error) {
@@ -261,6 +277,7 @@ func (q *Queries) ListActiveReactionDeclarationsByEncounter(ctx context.Context,
 			&i.CounterspellStatus,
 			&i.CounterspellDc,
 			&i.CounterspellEnemyCasterID,
+			&i.DmQueueItemID,
 		); err != nil {
 			return nil, err
 		}
@@ -276,7 +293,7 @@ func (q *Queries) ListActiveReactionDeclarationsByEncounter(ctx context.Context,
 }
 
 const listReactionDeclarationsByCombatant = `-- name: ListReactionDeclarationsByCombatant :many
-SELECT id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id FROM reaction_declarations WHERE combatant_id = $1 AND encounter_id = $2 ORDER BY created_at ASC
+SELECT id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id, dm_queue_item_id FROM reaction_declarations WHERE combatant_id = $1 AND encounter_id = $2 ORDER BY created_at ASC
 `
 
 type ListReactionDeclarationsByCombatantParams struct {
@@ -311,6 +328,7 @@ func (q *Queries) ListReactionDeclarationsByCombatant(ctx context.Context, arg L
 			&i.CounterspellStatus,
 			&i.CounterspellDc,
 			&i.CounterspellEnemyCasterID,
+			&i.DmQueueItemID,
 		); err != nil {
 			return nil, err
 		}
@@ -326,7 +344,7 @@ func (q *Queries) ListReactionDeclarationsByCombatant(ctx context.Context, arg L
 }
 
 const listReactionDeclarationsByEncounter = `-- name: ListReactionDeclarationsByEncounter :many
-SELECT id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id FROM reaction_declarations WHERE encounter_id = $1 ORDER BY created_at ASC
+SELECT id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id, dm_queue_item_id FROM reaction_declarations WHERE encounter_id = $1 ORDER BY created_at ASC
 `
 
 func (q *Queries) ListReactionDeclarationsByEncounter(ctx context.Context, encounterID uuid.UUID) ([]ReactionDeclaration, error) {
@@ -356,6 +374,7 @@ func (q *Queries) ListReactionDeclarationsByEncounter(ctx context.Context, encou
 			&i.CounterspellStatus,
 			&i.CounterspellDc,
 			&i.CounterspellEnemyCasterID,
+			&i.DmQueueItemID,
 		); err != nil {
 			return nil, err
 		}
@@ -370,11 +389,25 @@ func (q *Queries) ListReactionDeclarationsByEncounter(ctx context.Context, encou
 	return items, nil
 }
 
+const setReactionDeclarationDMQueueItemID = `-- name: SetReactionDeclarationDMQueueItemID :exec
+UPDATE reaction_declarations SET dm_queue_item_id = $2 WHERE id = $1
+`
+
+type SetReactionDeclarationDMQueueItemIDParams struct {
+	ID            uuid.UUID      `json:"id"`
+	DmQueueItemID sql.NullString `json:"dm_queue_item_id"`
+}
+
+func (q *Queries) SetReactionDeclarationDMQueueItemID(ctx context.Context, arg SetReactionDeclarationDMQueueItemIDParams) error {
+	_, err := q.db.ExecContext(ctx, setReactionDeclarationDMQueueItemID, arg.ID, arg.DmQueueItemID)
+	return err
+}
+
 const updateReactionDeclarationCounterspellPrompt = `-- name: UpdateReactionDeclarationCounterspellPrompt :one
 UPDATE reaction_declarations
 SET counterspell_enemy_spell = $2, counterspell_enemy_level = $3, counterspell_enemy_caster_id = $4, counterspell_status = 'prompted'
 WHERE id = $1
-RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id
+RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id, dm_queue_item_id
 `
 
 type UpdateReactionDeclarationCounterspellPromptParams struct {
@@ -410,6 +443,7 @@ func (q *Queries) UpdateReactionDeclarationCounterspellPrompt(ctx context.Contex
 		&i.CounterspellStatus,
 		&i.CounterspellDc,
 		&i.CounterspellEnemyCasterID,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }
@@ -418,7 +452,7 @@ const updateReactionDeclarationCounterspellResolved = `-- name: UpdateReactionDe
 UPDATE reaction_declarations
 SET counterspell_slot_used = $2, counterspell_status = $3, counterspell_dc = $4
 WHERE id = $1
-RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id
+RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id, dm_queue_item_id
 `
 
 type UpdateReactionDeclarationCounterspellResolvedParams struct {
@@ -454,6 +488,7 @@ func (q *Queries) UpdateReactionDeclarationCounterspellResolved(ctx context.Cont
 		&i.CounterspellStatus,
 		&i.CounterspellDc,
 		&i.CounterspellEnemyCasterID,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }
@@ -462,7 +497,7 @@ const updateReactionDeclarationStatusUsed = `-- name: UpdateReactionDeclarationS
 UPDATE reaction_declarations
 SET status = 'used', used_at = now(), used_on_round = $2
 WHERE id = $1
-RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id
+RETURNING id, encounter_id, combatant_id, description, status, created_at, used_at, used_on_round, is_readied_action, spell_name, spell_slot_level, counterspell_enemy_spell, counterspell_enemy_level, counterspell_slot_used, counterspell_status, counterspell_dc, counterspell_enemy_caster_id, dm_queue_item_id
 `
 
 type UpdateReactionDeclarationStatusUsedParams struct {
@@ -491,6 +526,7 @@ func (q *Queries) UpdateReactionDeclarationStatusUsed(ctx context.Context, arg U
 		&i.CounterspellStatus,
 		&i.CounterspellDc,
 		&i.CounterspellEnemyCasterID,
+		&i.DmQueueItemID,
 	)
 	return i, err
 }

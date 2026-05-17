@@ -500,6 +500,7 @@ type ReactionDeclaration struct {
 	CounterspellStatus        sql.NullString `json:"counterspell_status"`
 	CounterspellDc            sql.NullInt32  `json:"counterspell_dc"`
 	CounterspellEnemyCasterID uuid.NullUUID  `json:"counterspell_enemy_caster_id"`
+	DmQueueItemID             sql.NullString `json:"dm_queue_item_id"`
 }
 
 type Session struct {
