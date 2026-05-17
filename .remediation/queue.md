@@ -158,7 +158,7 @@ Low: 142
 | 146 | A-M13 | Medium | pending | HP recompute on multiclassing assumes secondary classes never reach level 1 with max die | internal/character/stats.go:30-42 |
 | 147 | A-M14 | Medium | pending | `setup` channel creation has no rollback on partial failure | internal/discord/setup.go:128-182 |
 | 148 | B-M01 | Medium | done | Initiative DEX-tie alphabetical sort is byte-wise, not D&D-aware | `/home/ab/projects/DnDnD/internal/combat/initiative.go:166-177` |
-| 149 | B-M02 | Medium | pending | PNG renderer renders zero-cost / oversized canvas for invalid `MapData` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:18-30`. |
+| 149 | B-M02 | Medium | done | PNG renderer renders zero-cost / oversized canvas for invalid `MapData` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:18-30`. |
 | 150 | B-M03 | Medium | pending | Encounter map_id is nullable in the schema but Phase 22/23/26 assume it | `/home/ab/projects/DnDnD/db/migrations/20260312120001_create_encounter_templates... |
 | 151 | B-M04 | Medium | pending | Encounter template `Duplicate` does not generate fresh `short_id`s | `/home/ab/projects/DnDnD/internal/encounter/service.go:115-139`. |
 | 152 | B-M05 | Medium | pending | No validation that `position_col` / `position_row` are inside the map bounds | `/home/ab/projects/DnDnD/internal/combat/service.go:863-913` |

@@ -85,9 +85,13 @@ func ValidateMove(req MoveRequest) (*MoveResult, error) {
 	moverAlt := int(req.Combatant.AltitudeFt)
 	for _, occ := range req.Grid.Occupants {
 		if occ.Col == req.DestCol && occ.Row == req.DestRow && occ.AltitudeFt == moverAlt {
+			reason := fmt.Sprintf("Cannot end movement in an occupied tile (%s)", destLabel)
+			if occ.IsAlly {
+				reason = fmt.Sprintf("You can move through allies but cannot end your turn in their tile (%s)", destLabel)
+			}
 			return &MoveResult{
 				Valid:     false,
-				Reason:    fmt.Sprintf("Cannot end movement in an occupied tile (%s)", destLabel),
+				Reason:    reason,
 				DestLabel: destLabel,
 			}, nil
 		}
