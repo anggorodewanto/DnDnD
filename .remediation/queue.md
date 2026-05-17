@@ -148,7 +148,7 @@ Low: 142
 | 136 | A-M03 | Medium | done | Fuzzy match Levenshtein operates on bytes, not runes | internal/registration/fuzzy.go:10-40 |
 | 137 | A-M04 | Medium | done | `ShortID` operates on bytes, may produce invalid UTF-8 for non-ASCII names | internal/charactercard/shortid.go:21-29 |
 | 138 | A-M05 | Medium | superseded | WebSocket hub channels are unbuffered and synchronous | internal/dashboard/ws.go:31-103 |
-| 139 | A-M06 | Medium | pending | Approval POST endpoints accept POST without CSRF protection | internal/dashboard/approval_handler.go:50-58, 230-338 |
+| 139 | A-M06 | Medium | done | Approval POST endpoints accept POST without CSRF protection | internal/dashboard/approval_handler.go:50-58, 230-338 |
 | 140 | A-M07 | Medium | pending | Expertise grants double-prof bonus even when not proficient | internal/character/modifiers.go:18-35 |
 | 141 | A-M08 | Medium | pending | `error_log.error_detail` column written by no Go code | internal/errorlog/pgstore.go:79-83 + db/migrations/20260427120001_create_error_l... |
 | 142 | A-M09 | Medium | pending | Spell-slots map sorted lexicographically — slot "10" would precede "2" | internal/charactercard/format.go:152-170 |

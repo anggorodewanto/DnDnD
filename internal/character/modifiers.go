@@ -22,7 +22,7 @@ func SkillModifier(scores AbilityScores, skill string, profSkills []string, expe
 	}
 	mod := AbilityModifier(scores.Get(ability))
 
-	if slices.Contains(expertiseSkills, skill) {
+	if slices.Contains(expertiseSkills, skill) && slices.Contains(profSkills, skill) {
 		return mod + profBonus*2
 	}
 	if slices.Contains(profSkills, skill) {
