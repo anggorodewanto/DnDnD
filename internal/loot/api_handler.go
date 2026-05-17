@@ -196,6 +196,56 @@ func (h *APIHandler) HandleRemoveItem(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
+// UpdateItemRequest is the request body for updating a loot pool item.
+type UpdateItemRequest struct {
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+	Quantity    *int32  `json:"quantity"`
+}
+
+// HandleUpdateItem handles PATCH /api/campaigns/:id/encounters/:eid/loot/items/:itemID.
+func (h *APIHandler) HandleUpdateItem(w http.ResponseWriter, r *http.Request) {
+	itemID, err := uuid.Parse(chi.URLParam(r, "itemID"))
+	if err != nil {
+		jsonError(w, "invalid item_id", http.StatusBadRequest)
+		return
+	}
+
+	result, ok := h.resolvePool(w, r)
+	if !ok {
+		return
+	}
+
+	var req UpdateItemRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	arg := refdata.UpdateLootPoolItemParams{ID: itemID}
+	if req.Name != nil {
+		arg.Name = sql.NullString{String: *req.Name, Valid: true}
+	}
+	if req.Description != nil {
+		arg.Description = sql.NullString{String: *req.Description, Valid: true}
+	}
+	if req.Quantity != nil {
+		if *req.Quantity < 1 {
+			jsonError(w, "quantity must be >= 1", http.StatusBadRequest)
+			return
+		}
+		arg.Quantity = sql.NullInt32{Int32: *req.Quantity, Valid: true}
+	}
+
+	item, err := h.svc.UpdateItem(r.Context(), result.Pool.ID, itemID, arg)
+	if err != nil {
+		jsonError(w, "failed to update item", http.StatusInternalServerError)
+		return
+	}
+
+	jsonOK(w, item)
+}
+
 // SetGoldRequest is the request body for setting gold.
 type SetGoldRequest struct {
 	Gold int `json:"gold"`

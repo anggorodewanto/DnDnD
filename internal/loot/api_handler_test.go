@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -578,4 +579,57 @@ func TestAPI_ListEligibleEncounters_BadCampaignID(t *testing.T) {
 	handler.HandleListEligibleEncounters(rec, req)
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestAPI_UpdateItem(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q, handler, _, enc := setupAPITest(t)
+
+	// Create pool
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req = chiCtx(req, map[string]string{"encounterID": enc.ID.String()})
+	rec := httptest.NewRecorder()
+	handler.HandleCreateLootPool(rec, req)
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	// Add item
+	body := strings.NewReader(`{"name":"Rusty Sword","description":"","quantity":1,"type":"weapon"}`)
+	req = httptest.NewRequest(http.MethodPost, "/", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = chiCtx(req, map[string]string{"encounterID": enc.ID.String()})
+	rec = httptest.NewRecorder()
+	handler.HandleAddItem(rec, req)
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	var addResp map[string]interface{}
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&addResp))
+	itemID := addResp["id"].(string)
+
+	// Update item name and description
+	body = strings.NewReader(`{"name":"Enchanted Sword","description":"Etched with dwarven runes"}`)
+	req = httptest.NewRequest(http.MethodPatch, "/", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = chiCtx(req, map[string]string{
+		"encounterID": enc.ID.String(),
+		"itemID":      itemID,
+	})
+	rec = httptest.NewRecorder()
+	handler.HandleUpdateItem(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify the update
+	var updated map[string]interface{}
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&updated))
+	assert.Equal(t, "Enchanted Sword", updated["name"])
+	assert.Equal(t, "Etched with dwarven runes", updated["description"])
+
+	// Verify via list
+	items, err := q.ListLootPoolItems(context.Background(), uuid.MustParse(addResp["loot_pool_id"].(string)))
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, "Enchanted Sword", items[0].Name)
+	assert.Equal(t, "Etched with dwarven runes", items[0].Description)
 }

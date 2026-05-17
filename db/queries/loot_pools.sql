@@ -43,6 +43,15 @@ RETURNING *;
 -- name: DeleteLootPoolItem :exec
 DELETE FROM loot_pool_items WHERE id = $1;
 
+-- name: UpdateLootPoolItem :one
+UPDATE loot_pool_items SET
+    name = COALESCE(sqlc.narg('name'), name),
+    description = COALESCE(sqlc.narg('description'), description),
+    quantity = COALESCE(sqlc.narg('quantity'), quantity),
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteUnclaimedLootPoolItems :exec
 DELETE FROM loot_pool_items WHERE loot_pool_id = $1 AND claimed_by IS NULL;
 

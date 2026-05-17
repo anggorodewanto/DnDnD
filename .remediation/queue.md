@@ -88,17 +88,17 @@ Low: 142
 | 76 | E-H05 | High | done | Spell attack rolls never apply advantage/disadvantage | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:638` (`roller.RollD20(a... |
 | 77 | E-H06 | High | superseded | Concentration check DC always fires "max(10, dmg/2)" but DC=10 isn't max with damage 19 | `/home/ab/projects/DnDnD/internal/combat/concentration.go:18-24` |
 | 78 | E-H07 | High | superseded | AoE damage applies `int(float64(baseDamage)*0.5)` truncates instead of rounding | `/home/ab/projects/DnDnD/internal/combat/aoe.go:1024` |
-| 79 | F-H01 | High | in_progress | No light-source dim radius — 5e torches grant 20ft bright + 20ft dim | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:907-927 |
-| 80 | F-H02 | High | pending | Hide action ignores the actor's vision when computing zone obscurement | /home/ab/projects/DnDnD/internal/discord/action_handler.go:794-805 |
+| 79 | F-H01 | High | done | No light-source dim radius — 5e torches grant 20ft bright + 20ft dim | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:907-927 |
+| 80 | F-H02 | High | superseded | Hide action ignores the actor's vision when computing zone obscurement | /home/ab/projects/DnDnD/internal/discord/action_handler.go:794-805 |
 | 81 | F-H03 | High | done | Hidden combatants (`is_visible = false`) still render on the map | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog.go:52-78; /home/ab/project... |
 | 82 | F-H04 | High | done | Free-object interaction whitelist is too permissive / English-only | /home/ab/projects/DnDnD/internal/combat/interact.go:13-52 |
 | 83 | F-H05 | High | done | Lair-action "no consecutive repeats" tracker is in-memory only | /home/ab/projects/DnDnD/internal/combat/legendary.go:198-263 |
 | 84 | F-H06 | High | done | Legendary-action budget round-trips through the URL — no server persistence | /home/ab/projects/DnDnD/internal/combat/legendary_handler.go:73-78,170-180 |
 | 85 | F-H07 | High | done | Counterspell trigger does not validate spell range / line-of-sight | /home/ab/projects/DnDnD/internal/combat/counterspell.go:65-116 |
-| 86 | F-H08 | High | pending | Reaction declarations not validated for the type's prerequisites | /home/ab/projects/DnDnD/internal/combat/reaction.go:27-46 |
+| 86 | F-H08 | High | skipped | Reaction declarations not validated for the type's prerequisites | /home/ab/projects/DnDnD/internal/combat/reaction.go:27-46 |
 | 87 | G-H01 | High | done | Gold split silently discards remainder | internal/loot/service.go:289-329 |
 | 88 | G-H02 | High | done | Long-rest hit-dice restoration order is non-deterministic for multiclass | internal/rest/rest.go:409-441 |
-| 89 | G-H03 | High | pending | No combat-resumed long-rest auto-resume | internal/rest/party.go:17-22, internal/rest/party_handler.go:269-308 |
+| 89 | G-H03 | High | skipped | No combat-resumed long-rest auto-resume | internal/rest/party.go:17-22, internal/rest/party_handler.go:269-308 |
 | 90 | G-H04 | High | done | `/check medicine target:AR` does not validate target is dying and does not auto-stabilize | internal/discord/check_handler.go:286-320, internal/check/check.go:111-151 |
 | 91 | G-H05 | High | done | Items auto-populated from defeated NPCs are not removed from NPC inventory | internal/loot/service.go:67-142 |
 | 92 | G-H06 | High | done | Item picker only searches weapons/armor/magic items | internal/itempicker/handler.go:57-156 |

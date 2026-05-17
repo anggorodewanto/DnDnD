@@ -81,6 +81,7 @@ func mountLootRoutes(r chi.Router, authMw func(http.Handler) http.Handler, h *lo
 		r.Delete("/", h.HandleClearPool)
 		r.Post("/items", h.HandleAddItem)
 		r.Delete("/items/{itemID}", h.HandleRemoveItem)
+		r.Patch("/items/{itemID}", h.HandleUpdateItem)
 		r.Post("/split-gold", h.HandleSplitGold)
 		r.Post("/post", h.HandlePostAnnouncement)
 		r.Put("/gold", h.HandleSetGold)

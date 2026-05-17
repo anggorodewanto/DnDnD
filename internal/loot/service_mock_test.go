@@ -81,6 +81,9 @@ func (m *mockStore) DeleteLootPoolItem(ctx context.Context, id uuid.UUID) error 
 func (m *mockStore) DeleteUnclaimedLootPoolItems(ctx context.Context, lootPoolID uuid.UUID) error {
 	return m.deleteUnclaimedLootPoolItemsFn(ctx, lootPoolID)
 }
+func (m *mockStore) UpdateLootPoolItem(_ context.Context, arg refdata.UpdateLootPoolItemParams) (refdata.LootPoolItem, error) {
+	return refdata.LootPoolItem{ID: arg.ID, Name: arg.Name.String}, nil
+}
 func (m *mockStore) DeleteLootPool(ctx context.Context, id uuid.UUID) error {
 	return m.deleteLootPoolFn(ctx, id)
 }
@@ -444,4 +447,43 @@ func TestCreateLootPool_SkipsInvalidInventory(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int32(5), result.Pool.GoldTotal) // gold still collected
 	assert.Empty(t, result.Items)                    // but no items because JSON was bad
+}
+
+// --- UpdateItem ---
+
+func TestUpdateItem_PoolNotFound(t *testing.T) {
+	store := &mockStore{
+		getLootPoolFn: func(_ context.Context, _ uuid.UUID) (refdata.LootPool, error) {
+			return refdata.LootPool{}, sql.ErrNoRows
+		},
+	}
+	svc := loot.NewService(store)
+	_, err := svc.UpdateItem(context.Background(), uuid.New(), uuid.New(), refdata.UpdateLootPoolItemParams{})
+	assert.ErrorIs(t, err, loot.ErrPoolNotFound)
+}
+
+func TestUpdateItem_PoolClosed(t *testing.T) {
+	store := &mockStore{
+		getLootPoolFn: func(_ context.Context, _ uuid.UUID) (refdata.LootPool, error) {
+			return refdata.LootPool{Status: "closed"}, nil
+		},
+	}
+	svc := loot.NewService(store)
+	_, err := svc.UpdateItem(context.Background(), uuid.New(), uuid.New(), refdata.UpdateLootPoolItemParams{})
+	assert.ErrorIs(t, err, loot.ErrPoolClosed)
+}
+
+func TestUpdateItem_Success(t *testing.T) {
+	itemID := uuid.New()
+	store := &mockStore{
+		getLootPoolFn: func(_ context.Context, _ uuid.UUID) (refdata.LootPool, error) {
+			return refdata.LootPool{Status: "open"}, nil
+		},
+	}
+	svc := loot.NewService(store)
+	item, err := svc.UpdateItem(context.Background(), uuid.New(), itemID, refdata.UpdateLootPoolItemParams{
+		Name: sql.NullString{String: "Updated Name", Valid: true},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, itemID, item.ID)
 }

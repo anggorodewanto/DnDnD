@@ -353,6 +353,52 @@ func (q *Queries) UpdateLootPoolGold(ctx context.Context, arg UpdateLootPoolGold
 	return i, err
 }
 
+const updateLootPoolItem = `-- name: UpdateLootPoolItem :one
+UPDATE loot_pool_items SET
+    name = COALESCE($2, name),
+    description = COALESCE($3, description),
+    quantity = COALESCE($4, quantity),
+    updated_at = now()
+WHERE id = $1
+RETURNING id, loot_pool_id, item_id, name, description, quantity, type, claimed_by, claimed_at, is_magic, magic_bonus, magic_properties, requires_attunement, rarity, created_at, updated_at
+`
+
+type UpdateLootPoolItemParams struct {
+	ID          uuid.UUID      `json:"id"`
+	Name        sql.NullString `json:"name"`
+	Description sql.NullString `json:"description"`
+	Quantity    sql.NullInt32  `json:"quantity"`
+}
+
+func (q *Queries) UpdateLootPoolItem(ctx context.Context, arg UpdateLootPoolItemParams) (LootPoolItem, error) {
+	row := q.db.QueryRowContext(ctx, updateLootPoolItem,
+		arg.ID,
+		arg.Name,
+		arg.Description,
+		arg.Quantity,
+	)
+	var i LootPoolItem
+	err := row.Scan(
+		&i.ID,
+		&i.LootPoolID,
+		&i.ItemID,
+		&i.Name,
+		&i.Description,
+		&i.Quantity,
+		&i.Type,
+		&i.ClaimedBy,
+		&i.ClaimedAt,
+		&i.IsMagic,
+		&i.MagicBonus,
+		&i.MagicProperties,
+		&i.RequiresAttunement,
+		&i.Rarity,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateLootPoolStatus = `-- name: UpdateLootPoolStatus :one
 UPDATE loot_pools SET status = $2, updated_at = now()
 WHERE id = $1

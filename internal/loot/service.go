@@ -39,6 +39,7 @@ type Store interface {
 	UpdateLootPoolGold(ctx context.Context, arg refdata.UpdateLootPoolGoldParams) (refdata.LootPool, error)
 	UpdateLootPoolStatus(ctx context.Context, arg refdata.UpdateLootPoolStatusParams) (refdata.LootPool, error)
 	DeleteLootPoolItem(ctx context.Context, id uuid.UUID) error
+	UpdateLootPoolItem(ctx context.Context, arg refdata.UpdateLootPoolItemParams) (refdata.LootPoolItem, error)
 	DeleteUnclaimedLootPoolItems(ctx context.Context, lootPoolID uuid.UUID) error
 	DeleteLootPool(ctx context.Context, id uuid.UUID) error
 	ListPlayerCharactersByCampaignApproved(ctx context.Context, campaignID uuid.UUID) ([]refdata.ListPlayerCharactersByCampaignApprovedRow, error)
@@ -232,6 +233,19 @@ func (s *Service) RemoveItem(ctx context.Context, poolID uuid.UUID, itemID uuid.
 		return ErrPoolClosed
 	}
 	return s.store.DeleteLootPoolItem(ctx, itemID)
+}
+
+// UpdateItem updates a loot pool item's name, description, or quantity.
+func (s *Service) UpdateItem(ctx context.Context, poolID uuid.UUID, itemID uuid.UUID, arg refdata.UpdateLootPoolItemParams) (refdata.LootPoolItem, error) {
+	pool, err := s.store.GetLootPool(ctx, poolID)
+	if err != nil {
+		return refdata.LootPoolItem{}, ErrPoolNotFound
+	}
+	if pool.Status != "open" {
+		return refdata.LootPoolItem{}, ErrPoolClosed
+	}
+	arg.ID = itemID
+	return s.store.UpdateLootPoolItem(ctx, arg)
 }
 
 // ClaimItem claims a loot pool item for a character. Adds the item to the character's inventory.

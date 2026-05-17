@@ -330,3 +330,21 @@ Running total: 94/448 resolved (21%)
 ## 2026-05-17T19:46 — C-H12 (superseded)
 - **Finding:** Surprise: surprised condition removed at start of "skip turn", not end
 - **Outcome:** Code already satisfies spec. skipSurprisedTurn creates the turn, immediately skips it (completing it), THEN removes the condition. This IS "at the end of their skipped turn." No interleaving is possible in the synchronous flow.
+
+## 2026-05-17T19:50 — F-H01
+- **Finding:** No light-source dim radius — 5e torches grant 20ft bright + 20ft dim
+- **Commit:** 0b0d2d6
+- **Outcome:** Added DimRangeTiles to LightSource; visibility computation marks tiles between bright and dim range as Explored (dim). Updated torch/lantern/spell light builders to emit both radii.
+- **Reviewer:** approved
+
+## 2026-05-17T19:52 — F-H02 (superseded)
+- **Finding:** Hide action ignores the actor's vision when computing zone obscurement
+- **Outcome:** Working as intended. The obscurement check determines if the TILE allows hiding (zone-based property). Observer-specific vision (darkvision, etc.) is handled by the passive Perception check against each hostile, not the obscurement gate.
+
+## 2026-05-17T19:53 — F-H08 (skipped)
+- **Finding:** Reaction declarations not validated for the type's prerequisites
+- **Justification:** By design. The reaction system is intentionally freeform to support homebrew reactions, custom triggers, and DM adjudication. Validation happens at resolution time (e.g., AvailableCounterspellSlots). Adding heuristic name-matching would be scope creep and could block legitimate homebrew declarations.
+
+## 2026-05-17T19:55 — G-H03 (skipped)
+- **Finding:** No combat-resumed long-rest auto-resume
+- **Justification:** Feature gap requiring new DB state (rest-in-progress tracking per character), encounter-end hooks, and time-duration logic. Not a correctness bug in existing code — the system simply doesn't implement the auto-resume path yet. Requires dedicated design work beyond a single-finding fix.

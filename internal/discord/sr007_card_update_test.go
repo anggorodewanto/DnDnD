@@ -184,6 +184,9 @@ func (m *minimalLootStore) DeleteUnclaimedLootPoolItems(context.Context, uuid.UU
 	return nil
 }
 func (m *minimalLootStore) DeleteLootPool(context.Context, uuid.UUID) error { return nil }
+func (m *minimalLootStore) UpdateLootPoolItem(_ context.Context, arg refdata.UpdateLootPoolItemParams) (refdata.LootPoolItem, error) {
+	return refdata.LootPoolItem{ID: arg.ID}, nil
+}
 func (m *minimalLootStore) ListPlayerCharactersByCampaignApproved(context.Context, uuid.UUID) ([]refdata.ListPlayerCharactersByCampaignApprovedRow, error) {
 	return nil, nil
 }
