@@ -89,7 +89,7 @@ func ValidateSpellRange(spell refdata.Spell, distanceFt int) error {
 		}
 		return nil
 	default:
-		return nil
+		return fmt.Errorf("unknown spell range type %q for %s", spell.RangeType, spell.Name)
 	}
 }
 
