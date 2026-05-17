@@ -473,7 +473,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		componentName    string
 	}
 	var matDeduction *materialDeduction
-	if spell.MaterialCostGp.Valid {
+	if spell.MaterialCostGp.Valid && spell.MaterialCostGp.Float64 > 0 {
 		inventory, err := ParseInventory(char.Inventory.RawMessage)
 		if err != nil {
 			return CastResult{}, fmt.Errorf("parsing inventory: %w", err)
