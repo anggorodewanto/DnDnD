@@ -3,6 +3,7 @@ package charactercard
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -154,12 +155,16 @@ func formatSpellSlots(slots map[string]character.SlotInfo) string {
 		return "—"
 	}
 
-	// Sort by level
+	// Sort by level numerically (not lexicographically)
 	keys := make([]string, 0, len(slots))
 	for k := range slots {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	sort.Slice(keys, func(i, j int) bool {
+		a, _ := strconv.Atoi(keys[i])
+		b, _ := strconv.Atoi(keys[j])
+		return a < b
+	})
 
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
