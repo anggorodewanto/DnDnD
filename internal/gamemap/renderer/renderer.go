@@ -14,6 +14,9 @@ const hardLimitDimension = 200
 // RenderMap generates a PNG image from the given map data.
 // Returns the PNG bytes or an error.
 func RenderMap(md *MapData) ([]byte, error) {
+	if md.Width <= 0 || md.Height <= 0 || md.TileSize <= 0 {
+		return nil, fmt.Errorf("invalid map dimensions: width=%d height=%d tileSize=%d (all must be > 0)", md.Width, md.Height, md.TileSize)
+	}
 	if md.Width > hardLimitDimension || md.Height > hardLimitDimension {
 		return nil, fmt.Errorf("map dimensions %dx%d exceed hard limit of %d", md.Width, md.Height, hardLimitDimension)
 	}

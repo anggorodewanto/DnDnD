@@ -157,7 +157,7 @@ Low: 142
 | 145 | A-M12 | Medium | superseded | `/setup` handler runs no authorization check beyond Discord's default-perms hint | internal/discord/setup.go:217-249 |
 | 146 | A-M13 | Medium | pending | HP recompute on multiclassing assumes secondary classes never reach level 1 with max die | internal/character/stats.go:30-42 |
 | 147 | A-M14 | Medium | pending | `setup` channel creation has no rollback on partial failure | internal/discord/setup.go:128-182 |
-| 148 | B-M01 | Medium | pending | Initiative DEX-tie alphabetical sort is byte-wise, not D&D-aware | `/home/ab/projects/DnDnD/internal/combat/initiative.go:166-177` |
+| 148 | B-M01 | Medium | done | Initiative DEX-tie alphabetical sort is byte-wise, not D&D-aware | `/home/ab/projects/DnDnD/internal/combat/initiative.go:166-177` |
 | 149 | B-M02 | Medium | pending | PNG renderer renders zero-cost / oversized canvas for invalid `MapData` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:18-30`. |
 | 150 | B-M03 | Medium | pending | Encounter map_id is nullable in the schema but Phase 22/23/26 assume it | `/home/ab/projects/DnDnD/db/migrations/20260312120001_create_encounter_templates... |
 | 151 | B-M04 | Medium | pending | Encounter template `Duplicate` does not generate fresh `short_id`s | `/home/ab/projects/DnDnD/internal/encounter/service.go:115-139`. |
