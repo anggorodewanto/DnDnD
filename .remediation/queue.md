@@ -202,7 +202,7 @@ Low: 142
 | 190 | E-M02 | Medium | pending | Pact slot deduction does not refuse when `effectiveSlotLevel == 0` and damage path requires upcast | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:444-457` |
 | 191 | E-M03 | Medium | pending | Hide: success comparison ties go to perceiver, but spec says "meets or exceeds" | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:361` |
 | 192 | E-M04 | Medium | pending | Help action duration tied to ally's turn, not helper's turn | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261` (`SourceCo... |
-| 193 | E-M05 | Medium | pending | Material component check treats `material_cost_gp = 0` as costly when `Valid = true` | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:470` (`if spell.Materia... |
+| 193 | E-M05 | Medium | done | Material component check treats `material_cost_gp = 0` as costly when `Valid = true` | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:470` (`if spell.Materia... |
 | 194 | E-M06 | Medium | pending | Stand from prone uses integer half (12 for speed 25) — matches Sage Advice but no rounding-direction test | `/home/ab/projects/DnDnD/internal/combat/condition_effects.go:254-257` |
 | 195 | E-M07 | Medium | done | Spell range validation accepts unrecognized `range_type` values silently | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:77-94` (`ValidateSpellR... |
 | 196 | E-M08 | Medium | pending | Ritual casting only validates primary class, ignoring multiclass | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:432-438` |

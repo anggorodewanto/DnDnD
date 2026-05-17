@@ -278,6 +278,14 @@ func (h *Handler) HandleCustomEntry(w http.ResponseWriter, r *http.Request) {
 	if qty <= 0 {
 		qty = 1
 	}
+	if req.GoldGP < 0 {
+		jsonError(w, "gold_gp must be >= 0", http.StatusBadRequest)
+		return
+	}
+	if req.PriceGP < 0 {
+		jsonError(w, "price_gp must be >= 0", http.StatusBadRequest)
+		return
+	}
 	itemType := strings.TrimSpace(req.Type)
 	if itemType == "" {
 		itemType = "custom"
