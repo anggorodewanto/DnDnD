@@ -38,6 +38,10 @@ func (m *mockCharacterQuerier) GetSpellsByIDs(_ context.Context, ids []string) (
 	return m.spells, m.spellsErr
 }
 
+func (m *mockCharacterQuerier) GetActiveCombatantByCharacterID(_ context.Context, _ uuid.NullUUID) (refdata.Combatant, error) {
+	return refdata.Combatant{}, sql.ErrNoRows // default: not in combat
+}
+
 func TestCharacterSheetStoreAdapter_GetCharacterOwner(t *testing.T) {
 	charID := uuid.New()
 	campID := uuid.New()

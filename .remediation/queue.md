@@ -110,7 +110,7 @@ Low: 142
 | 98 | H-H03 | High | done | ASI ApproveASI silently rejects feat type instead of routing | /home/ab/projects/DnDnD/internal/levelup/asi.go:35 (`ApplyASI`) |
 | 99 | H-H04 | High | done | DDB "off-list spell" detection only covers wizard with 16 spells | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:382 (`classSpellLists`) |
 | 100 | H-H05 | High | done | Builder service: token redeem races and isn't user-bound | /home/ab/projects/DnDnD/internal/portal/builder_service.go:219-238 (`CreateChara... |
-| 101 | H-H06 | High | pending | DDB import attunement-limit warning uses wrong signal | /home/ab/projects/DnDnD/internal/ddbimport/validator.go:102-112 |
+| 101 | H-H06 | High | done | DDB import attunement-limit warning uses wrong signal | /home/ab/projects/DnDnD/internal/ddbimport/validator.go:102-112 |
 | 102 | H-H07 | High | pending | Character sheet does not render conditions / active status effects | /home/ab/projects/DnDnD/internal/portal/character_sheet.go:20 (struct `Character... |
 | 103 | H-H08 | High | pending | Starting equipment retains `any-martial` placeholder IDs in inventory | /home/ab/projects/DnDnD/internal/portal/starting_equipment.go:33 + /home/ab/proj... |
 | 104 | H-H09 | High | pending | Starting equipment ignores background packs | /home/ab/projects/DnDnD/internal/portal/starting_equipment.go (only class packs ... |

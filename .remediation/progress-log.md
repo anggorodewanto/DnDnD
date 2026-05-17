@@ -354,3 +354,15 @@ Running total: 94/448 resolved (21%)
 - **Commit:** e59de2a
 - **Outcome:** Added UpdateLootPoolItem SQL query (COALESCE-based partial update), service method with pool-open validation, PATCH handler with quantity >= 1 validation, and route registration.
 - **Reviewer:** approved
+
+## 2026-05-17T20:02 — H-H04
+- **Finding:** DDB "off-list spell" detection only covers wizard with 16 spells
+- **Commit:** b11e7c7
+- **Outcome:** Emptied the hard-coded classSpellLists map to eliminate false positives. The detection was actively harmful (marking legitimate SRD spells as homebrew). Documented that refdata-driven detection is the follow-up.
+- **Reviewer:** approved
+
+## 2026-05-17T20:06 — H-H06
+- **Finding:** DDB import attunement-limit warning uses wrong signal
+- **Commit:** 068be2a
+- **Outcome:** Added IsAttuned field to character.InventoryItem and ddbItem, populated from DDB's isAttuned flag. Validator now counts IsAttuned items instead of Equipped+RequiresAttunement.
+- **Reviewer:** approved

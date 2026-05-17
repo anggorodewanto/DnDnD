@@ -45,6 +45,9 @@ type CharacterSheetData struct {
 	AttunementSlots  []character.AttunementSlot
 	Languages        []string
 	Inventory        []character.InventoryItem
+	Conditions       []string // active conditions (poisoned, frightened, etc.)
+	ExhaustionLevel  int
+	ConcentrationOn  string // spell name if concentrating, empty otherwise
 
 	Spells []SpellDisplayEntry
 

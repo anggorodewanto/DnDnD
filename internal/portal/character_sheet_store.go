@@ -18,6 +18,7 @@ type CharacterQuerier interface {
 	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
 	GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
 	GetSpellsByIDs(ctx context.Context, ids []string) ([]refdata.Spell, error)
+	GetActiveCombatantByCharacterID(ctx context.Context, characterID uuid.NullUUID) (refdata.Combatant, error)
 }
 
 // CharacterSheetStoreAdapter implements CharacterSheetStore using refdata.Queries.
@@ -78,6 +79,10 @@ func (a *CharacterSheetStoreAdapter) GetCharacterForSheet(ctx context.Context, c
 	if err != nil {
 		return nil, err
 	}
+
+	// Hydrate live combat state (conditions, exhaustion, concentration)
+	// from the active combatant row, if one exists.
+	a.hydrateFromCombatant(ctx, charUUID, data)
 
 	// Enrich spells from reference table
 	if len(data.Spells) > 0 {
@@ -300,4 +305,32 @@ func parseHitDiceRemaining(raw json.RawMessage) map[string]int {
 		return nil
 	}
 	return v
+}
+
+// hydrateFromCombatant populates live combat state (conditions, exhaustion,
+// concentration) from the character's active combatant row. No-op when the
+// character is not in an active encounter.
+func (a *CharacterSheetStoreAdapter) hydrateFromCombatant(ctx context.Context, charID uuid.UUID, data *CharacterSheetData) {
+	cb, err := a.q.GetActiveCombatantByCharacterID(ctx, uuid.NullUUID{UUID: charID, Valid: true})
+	if err != nil {
+		return // not in combat or query error — leave defaults
+	}
+
+	data.ExhaustionLevel = int(cb.ExhaustionLevel)
+	if cb.ConcentrationSpellName.Valid {
+		data.ConcentrationOn = cb.ConcentrationSpellName.String
+	}
+
+	// Parse conditions JSON
+	type condEntry struct {
+		Condition string `json:"condition"`
+	}
+	var conds []condEntry
+	if len(cb.Conditions) > 0 {
+		if json.Unmarshal(cb.Conditions, &conds) == nil {
+			for _, c := range conds {
+				data.Conditions = append(data.Conditions, c.Condition)
+			}
+		}
+	}
 }
