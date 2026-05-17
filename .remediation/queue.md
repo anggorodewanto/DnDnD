@@ -146,8 +146,8 @@ Low: 142
 | 134 | A-M01 | Medium | done | `MessageQueue.Stop` doesn't preempt long backoff sleeps | internal/discord/queue.go:90-134 |
 | 135 | A-M02 | Medium | done | `SplitMessage` splits on bytes, can produce invalid UTF-8 mid-codepoint | internal/discord/message.go:67-122 |
 | 136 | A-M03 | Medium | done | Fuzzy match Levenshtein operates on bytes, not runes | internal/registration/fuzzy.go:10-40 |
-| 137 | A-M04 | Medium | pending | `ShortID` operates on bytes, may produce invalid UTF-8 for non-ASCII names | internal/charactercard/shortid.go:21-29 |
-| 138 | A-M05 | Medium | pending | WebSocket hub channels are unbuffered and synchronous | internal/dashboard/ws.go:31-103 |
+| 137 | A-M04 | Medium | done | `ShortID` operates on bytes, may produce invalid UTF-8 for non-ASCII names | internal/charactercard/shortid.go:21-29 |
+| 138 | A-M05 | Medium | superseded | WebSocket hub channels are unbuffered and synchronous | internal/dashboard/ws.go:31-103 |
 | 139 | A-M06 | Medium | pending | Approval POST endpoints accept POST without CSRF protection | internal/dashboard/approval_handler.go:50-58, 230-338 |
 | 140 | A-M07 | Medium | pending | Expertise grants double-prof bonus even when not proficient | internal/character/modifiers.go:18-35 |
 | 141 | A-M08 | Medium | pending | `error_log.error_detail` column written by no Go code | internal/errorlog/pgstore.go:79-83 + db/migrations/20260427120001_create_error_l... |
