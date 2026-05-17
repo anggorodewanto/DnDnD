@@ -69,7 +69,7 @@ Low: 142
 | 57 | C-H06 | High | done | Resistance/vulnerability halving allows damage to go to 0 (RAW says min 1) | /home/ab/projects/DnDnD/internal/combat/damage.go:38-43 (`ApplyDamageResistances... |
 | 58 | C-H07 | High | done | Pre-clamp HP overflow excludes temp-HP absorbed damage from instant-death check | /home/ab/projects/DnDnD/internal/combat/damage.go:226-247, 330-373 |
 | 59 | C-H08 | High | superseded | Off-hand attack accepts non-melee "light" weapons | /home/ab/projects/DnDnD/internal/combat/attack.go:1182-1196 |
-| 60 | C-H09 | High | in_progress | Diagonal pathfinding ignores wall edges entirely (could allow phasing through a single diagonal wall) | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:242-244 |
+| 60 | C-H09 | High | done | Diagonal pathfinding ignores wall edges entirely (could allow phasing through a single diagonal wall) | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:242-244 |
 | 61 | C-H10 | High | done | Reach weapon OA detection — PC reach map relies on caller passing it | /home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:80-117, 148-164 (`... |
 | 62 | C-H11 | High | done | Concentration-on-damage save uses simplified DC formula | /home/ab/projects/DnDnD/internal/combat/concentration.go:422-448 (`MaybeCreateCo... |
 | 63 | C-H12 | High | pending | Surprise: surprised condition removed at start of "skip turn", not end (timing nuance) | /home/ab/projects/DnDnD/internal/combat/initiative.go:582-606 (`skipSurprisedTur... |
@@ -109,7 +109,7 @@ Low: 142
 | 97 | H-H02 | High | done | DM approve/deny buttons have no role check | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:456 (`HandleDMApprove`),... |
 | 98 | H-H03 | High | done | ASI ApproveASI silently rejects feat type instead of routing | /home/ab/projects/DnDnD/internal/levelup/asi.go:35 (`ApplyASI`) |
 | 99 | H-H04 | High | pending | DDB "off-list spell" detection only covers wizard with 16 spells | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:382 (`classSpellLists`) |
-| 100 | H-H05 | High | pending | Builder service: token redeem races and isn't user-bound | /home/ab/projects/DnDnD/internal/portal/builder_service.go:219-238 (`CreateChara... |
+| 100 | H-H05 | High | in_progress | Builder service: token redeem races and isn't user-bound | /home/ab/projects/DnDnD/internal/portal/builder_service.go:219-238 (`CreateChara... |
 | 101 | H-H06 | High | pending | DDB import attunement-limit warning uses wrong signal | /home/ab/projects/DnDnD/internal/ddbimport/validator.go:102-112 |
 | 102 | H-H07 | High | pending | Character sheet does not render conditions / active status effects | /home/ab/projects/DnDnD/internal/portal/character_sheet.go:20 (struct `Character... |
 | 103 | H-H08 | High | pending | Starting equipment retains `any-martial` placeholder IDs in inventory | /home/ab/projects/DnDnD/internal/portal/starting_equipment.go:33 + /home/ab/proj... |

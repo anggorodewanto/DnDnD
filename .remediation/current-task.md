@@ -1,11 +1,11 @@
-finding_id: C-H09
+finding_id: H-H05
 severity: High
-title: Diagonal pathfinding ignores wall edges entirely
-location: internal/pathfinding/pathfinding.go:242-244
-spec_ref: Phase 29; spec line 1391
+title: Builder service: token redeem races and isn't user-bound
+location: internal/portal/builder_service.go:219-238 (CreateCharacter)
+spec_ref: Phase 91a "one-time link generation … single-use token"
 problem: |
-  The code only checks blockedEdges for cardinal moves. For diagonals it never tests walls. The spec permits corner-cutting (two perpendicular walls meeting at a corner) but a diagonal move through a wall segment should be blocked.
+  RedeemToken is called AFTER CreateCharacterRecord succeeds, so concurrent double-submit can produce two characters. Also the token's discord_user_id is never compared against the session userID.
 suggested_fix: |
-  For diagonal moves, check that at least one of the two perpendicular edges is NOT blocked. If both are blocked, the diagonal is impassable.
+  Validate token first, compare tok.DiscordUserID == userID, then atomically mark-used before inserting the character.
 acceptance_criterion: |
-  A diagonal move through two perpendicular walls (L-shaped corner) is blocked. A diagonal through only one wall (corner-cutting) is allowed. Tests demonstrate both.
+  CreateCharacter validates token ownership (rejects mismatched user) and redeems before creating. A test demonstrates both.

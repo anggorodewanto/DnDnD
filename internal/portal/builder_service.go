@@ -16,6 +16,8 @@ var (
 	ErrPointBuyOverspent = errors.New("point buy: spent more than 27 points")
 	// ErrScoreOutOfRange is returned when a score is below 8 or above 15.
 	ErrScoreOutOfRange = errors.New("point buy: score out of range (must be 8-15)")
+	// ErrTokenOwnership is returned when the token does not belong to the user.
+	ErrTokenOwnership = errors.New("token does not belong to this user")
 )
 
 // CharacterSubmission is the payload sent by the character builder form.
@@ -104,6 +106,7 @@ type CreateCharacterResult struct {
 type BuilderStore interface {
 	CreateCharacterRecord(ctx context.Context, p CreateCharacterParams) (string, error)
 	CreatePlayerCharacterRecord(ctx context.Context, p CreatePlayerCharacterParams) (string, error)
+	ValidateToken(ctx context.Context, token string) (*PortalToken, error)
 	RedeemToken(ctx context.Context, token string) error
 }
 
@@ -216,6 +219,18 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 		Spells:        sub.Spells,
 	}
 
+	// Validate token ownership and redeem before creating character.
+	tok, err := svc.store.ValidateToken(ctx, token)
+	if err != nil {
+		return CreateCharacterResult{}, fmt.Errorf("validating token: %w", err)
+	}
+	if tok != nil && tok.DiscordUserID != discordUserID {
+		return CreateCharacterResult{}, ErrTokenOwnership
+	}
+	if err := svc.store.RedeemToken(ctx, token); err != nil {
+		return CreateCharacterResult{}, fmt.Errorf("redeeming token: %w", err)
+	}
+
 	charID, err := svc.store.CreateCharacterRecord(ctx, charParams)
 	if err != nil {
 		return CreateCharacterResult{}, fmt.Errorf("creating character: %w", err)
@@ -232,10 +247,6 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 	pcID, err := svc.store.CreatePlayerCharacterRecord(ctx, pcParams)
 	if err != nil {
 		return CreateCharacterResult{}, fmt.Errorf("creating player character: %w", err)
-	}
-
-	if err := svc.store.RedeemToken(ctx, token); err != nil && svc.logger != nil {
-		svc.logger.Warn("redeeming token after character creation", "token", token, "error", err)
 	}
 
 	if svc.notifier != nil {

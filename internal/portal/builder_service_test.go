@@ -268,10 +268,47 @@ func TestBuilderService_RedeemTokenError_WithLogger(t *testing.T) {
 	svc := portal.NewBuilderService(store, portal.WithLogger(logger))
 
 	sub := validSubmission()
-	result, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "u1", "tok", sub)
-	// Should succeed even though redeem failed
-	assert.NoError(t, err)
-	assert.Equal(t, "c-1", result.CharacterID)
+	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "u1", "tok", sub)
+	// Redeem failure now prevents character creation
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "redeeming token")
+}
+
+func TestBuilderService_CreateCharacter_RejectsMismatchedTokenUser(t *testing.T) {
+	store := &mockBuilderStore{
+		charID: "c-1",
+		pcID:   "pc-1",
+		validateToken: &portal.PortalToken{
+			DiscordUserID: "other-user",
+		},
+	}
+	svc := portal.NewBuilderService(store)
+
+	sub := validSubmission()
+	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, portal.ErrTokenOwnership)
+	// Character should NOT have been created
+	assert.Empty(t, store.lastCharName)
+}
+
+func TestBuilderService_CreateCharacter_RedeemFailsPreventsCreation(t *testing.T) {
+	store := &mockBuilderStore{
+		charID: "c-1",
+		pcID:   "pc-1",
+		validateToken: &portal.PortalToken{
+			DiscordUserID: "discord-user-1",
+		},
+		redeemTokenErr: errors.New("already redeemed"),
+	}
+	svc := portal.NewBuilderService(store)
+
+	sub := validSubmission()
+	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "redeeming token")
+	// Character should NOT have been created
+	assert.Empty(t, store.lastCharName)
 }
 
 func TestBuilderService_CreateCharacter_InvalidSubmission(t *testing.T) {
@@ -330,6 +367,8 @@ type mockBuilderStore struct {
 	createCharErr  error
 	createPCErr    error
 	redeemTokenErr error
+	validateToken  *portal.PortalToken
+	validateTokenErr error
 
 	lastCharName        string
 	lastCharClass       string
@@ -369,6 +408,13 @@ func (m *mockBuilderStore) CreatePlayerCharacterRecord(_ context.Context, p port
 func (m *mockBuilderStore) RedeemToken(_ context.Context, token string) error {
 	m.lastRedeemedToken = token
 	return m.redeemTokenErr
+}
+
+func (m *mockBuilderStore) ValidateToken(_ context.Context, _ string) (*portal.PortalToken, error) {
+	if m.validateTokenErr != nil {
+		return nil, m.validateTokenErr
+	}
+	return m.validateToken, nil
 }
 
 // mockDMQueueNotifier implements portal.DMQueueNotifier for testing.

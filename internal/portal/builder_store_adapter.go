@@ -183,6 +183,14 @@ func (a *BuilderStoreAdapter) CreatePlayerCharacterRecord(ctx context.Context, p
 	return pc.ID.String(), nil
 }
 
+// ValidateToken checks that the token is valid and returns the token record.
+func (a *BuilderStoreAdapter) ValidateToken(ctx context.Context, token string) (*PortalToken, error) {
+	if a.tokenSvc == nil {
+		return nil, nil
+	}
+	return a.tokenSvc.ValidateToken(ctx, token)
+}
+
 // RedeemToken marks the token as used.
 func (a *BuilderStoreAdapter) RedeemToken(ctx context.Context, token string) error {
 	if a.tokenSvc == nil {

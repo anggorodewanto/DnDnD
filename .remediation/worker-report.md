@@ -1,34 +1,38 @@
-# Worker Report: C-H09 — Diagonal pathfinding ignores wall edges
+# Worker Report: H-H05 — Builder service token redeem race & ownership check
 
-## Status: FIXED ✅
+## Status: FIXED
 
 ## Summary
 
-Diagonal moves in the A* pathfinder never checked `blockedEdges`, allowing movement through L-shaped wall corners. Fixed by checking both perpendicular edges for diagonal moves; if both are blocked, the diagonal is impassable.
+Token validation and redemption now happen BEFORE character creation, and token ownership is enforced.
 
-## Changes
+## Changes Made
 
-### `internal/pathfinding/pathfinding.go` (line ~242)
+### `internal/portal/builder_service.go`
+1. Added `ErrTokenOwnership` sentinel error.
+2. Added `ValidateToken(ctx, token) (*PortalToken, error)` to the `BuilderStore` interface.
+3. Reordered `CreateCharacter`: validate token → check ownership → redeem token → create character/player_character records.
+4. `RedeemToken` failure is now a hard error (no longer a warning-only path).
 
-Added diagonal wall check after the existing cardinal wall check:
+### `internal/portal/builder_store_adapter.go`
+- Added `ValidateToken` method delegating to `tokenSvc.ValidateToken`.
 
-```go
-// Diagonal: blocked if BOTH perpendicular edges are walled (L-corner)
-if isDiagonal(dr, dc) {
-    e1 := blockedEdges[makeEdge(cur.Row, cur.Col, cur.Row+dr, cur.Col)]
-    e2 := blockedEdges[makeEdge(cur.Row, cur.Col, cur.Row, cur.Col+dc)]
-    if e1 && e2 {
-        continue
-    }
-}
-```
-
-### `internal/pathfinding/pathfinding_test.go`
-
-1. **Added** `TestFindPath_DiagonalBlockedByBothPerpendicularWalls` — 2×2 grid with both perpendicular walls; asserts diagonal is blocked (`res.Found == false`).
-
-2. **Fixed** `TestFindPath_DiagonalCornerCuttingAllowed` — previously tested with TWO walls (incorrectly expecting diagonal to pass). Updated to use only ONE wall, which is the actual corner-cutting scenario per spec.
+### `internal/portal/builder_service_test.go`
+- Added `validateToken` and `validateTokenErr` fields to `mockBuilderStore`.
+- Added `ValidateToken` method to mock.
+- **New test:** `TestBuilderService_CreateCharacter_RejectsMismatchedTokenUser` — verifies mismatched `DiscordUserID` returns `ErrTokenOwnership` and no character is created.
+- **New test:** `TestBuilderService_CreateCharacter_RedeemFailsPreventsCreation` — verifies redeem failure prevents character creation.
+- Updated `TestBuilderService_RedeemTokenError_WithLogger` to expect error (behavior change).
 
 ## Test Results
 
-All tests pass (`go test ./...` excluding `internal/database`): 29 packages OK.
+```
+=== RUN   TestBuilderService_CreateCharacter_RejectsMismatchedTokenUser
+--- PASS
+=== RUN   TestBuilderService_CreateCharacter_RedeemFailsPreventsCreation
+--- PASS
+```
+
+Full `./internal/portal/...` suite: **PASS** (all tests green).
+
+One pre-existing failure in `internal/rest` (unrelated: `TestPartyRestHandler_LongRest_DawnRecharge`).
