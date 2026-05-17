@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -41,7 +42,7 @@ func (h *HelpHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	text, ok := helpTopics[topic]
+	text, ok := helpTopics[strings.ToLower(strings.TrimSpace(topic))]
 	if !ok {
 		respondEphemeral(h.session, interaction, "Unknown help topic: `"+topic+"`. Use `/help` to see all commands.")
 		return

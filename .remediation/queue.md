@@ -321,7 +321,7 @@ Low: 142
 | 309 | A-L03 | Low | pending | Race "Half-Elf" referenced in character card example not seeded | internal/refdata/seed_races.go:1-* (only 9 races as `RaceCount = 9`) |
 | 310 | A-L04 | Low | pending | Class entries don't expose Eldritch Knight / Arcane Trickster as third-caster subclasses | internal/refdata/seed_classes.go (Fighter & Rogue blocks) |
 | 311 | A-L05 | Low | pending | `Settings.AutoApproveRestEnabled` defaults differ from spec | internal/campaign/service.go:36-42 |
-| 312 | A-L06 | Low | pending | CookieSecure defaults to false when `COOKIE_SECURE` is unset | cmd/dndnd/main.go:564 |
+| 312 | A-L06 | Low | done | CookieSecure defaults to false when `COOKIE_SECURE` is unset | cmd/dndnd/main.go:564 |
 | 313 | A-L07 | Low | pending | `RequiredPermissions` omits `Manage Channels` though `/setup` needs it | internal/discord/permissions.go:11-17 |
 | 314 | A-L08 | Low | pending | Bot session race in `Bot.HandleGuildCreate` | internal/discord/bot.go:86-90 |
 | 315 | A-L09 | Low | pending | Character `level` column not indexed despite spec | db/migrations/20260310120006_create_characters.sql:8-37 |
