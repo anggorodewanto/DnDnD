@@ -243,9 +243,9 @@ func TestValidate_Warning_SingleClass_NoMulticlassWarning(t *testing.T) {
 func TestValidate_AttunementLimit_UnderLimit(t *testing.T) {
 	c := validCharacter()
 	c.Inventory = []character.InventoryItem{
-		{Name: "Ring 1", Equipped: true, RequiresAttunement: true},
-		{Name: "Ring 2", Equipped: true, RequiresAttunement: true},
-		{Name: "Ring 3", Equipped: true, RequiresAttunement: true},
+		{Name: "Ring 1", IsAttuned: true, RequiresAttunement: true},
+		{Name: "Ring 2", IsAttuned: true, RequiresAttunement: true},
+		{Name: "Ring 3", IsAttuned: true, RequiresAttunement: true},
 	}
 	warnings, err := Validate(c)
 	if err != nil {

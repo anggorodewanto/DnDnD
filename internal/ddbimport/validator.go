@@ -98,10 +98,10 @@ func Validate(pc *ParsedCharacter) ([]Warning, error) {
 		}
 	}
 
-	// Attunement limit check
+	// Attunement limit check — count items actually attuned (not just equipped+attuneable).
 	attunedCount := 0
 	for _, item := range pc.Inventory {
-		if item.Equipped && item.RequiresAttunement {
+		if item.IsAttuned {
 			attunedCount++
 		}
 	}

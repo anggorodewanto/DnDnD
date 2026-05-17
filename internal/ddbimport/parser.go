@@ -97,6 +97,7 @@ type ddbItem struct {
 	ID         int        `json:"id"`
 	Definition ddbItemDef `json:"definition"`
 	Equipped   bool       `json:"equipped"`
+	IsAttuned  bool       `json:"isAttuned"`
 	Quantity   int        `json:"quantity"`
 }
 
@@ -267,6 +268,7 @@ func parseInventory(items []ddbItem) []character.InventoryItem {
 			Type:               item.Definition.FilterType,
 			IsMagic:            item.Definition.Magic,
 			RequiresAttunement: item.Definition.CanAttune,
+			IsAttuned:          item.IsAttuned,
 			Rarity:             item.Definition.Rarity,
 			Source:             item.Definition.SourceName,
 			Homebrew:           isDDBItemHomebrew(item.Definition),

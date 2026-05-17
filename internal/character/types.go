@@ -98,6 +98,7 @@ type InventoryItem struct {
 	MagicBonus            int    `json:"magic_bonus,omitempty"`
 	MagicProperties       string `json:"magic_properties,omitempty"`
 	RequiresAttunement    bool   `json:"requires_attunement,omitempty"`
+	IsAttuned             bool   `json:"is_attuned,omitempty"`
 	AttunementRestriction string `json:"attunement_restriction,omitempty"`
 	Rarity                string `json:"rarity,omitempty"`
 	Charges               int    `json:"charges,omitempty"`

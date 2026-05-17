@@ -108,7 +108,7 @@ Low: 142
 | 96 | H-H01 | High | done | Player-identity not validated on ASI button / select interactions | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:354,391,647,731 |
 | 97 | H-H02 | High | done | DM approve/deny buttons have no role check | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:456 (`HandleDMApprove`),... |
 | 98 | H-H03 | High | done | ASI ApproveASI silently rejects feat type instead of routing | /home/ab/projects/DnDnD/internal/levelup/asi.go:35 (`ApplyASI`) |
-| 99 | H-H04 | High | pending | DDB "off-list spell" detection only covers wizard with 16 spells | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:382 (`classSpellLists`) |
+| 99 | H-H04 | High | done | DDB "off-list spell" detection only covers wizard with 16 spells | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:382 (`classSpellLists`) |
 | 100 | H-H05 | High | done | Builder service: token redeem races and isn't user-bound | /home/ab/projects/DnDnD/internal/portal/builder_service.go:219-238 (`CreateChara... |
 | 101 | H-H06 | High | pending | DDB import attunement-limit warning uses wrong signal | /home/ab/projects/DnDnD/internal/ddbimport/validator.go:102-112 |
 | 102 | H-H07 | High | pending | Character sheet does not render conditions / active status effects | /home/ab/projects/DnDnD/internal/portal/character_sheet.go:20 (struct `Character... |
