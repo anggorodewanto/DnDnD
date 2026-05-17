@@ -1,20 +1,34 @@
-# Worker Report: H-H03
+# Worker Report: C-H09 — Diagonal pathfinding ignores wall edges
 
-## Finding
-ApproveASI passes feat-type choices to ApplyASI which rejects them with "unsupported ASI type: feat".
+## Status: FIXED ✅
 
-## Fix Applied
+## Summary
 
-### 1. Added `Feat` field to `ASIChoice` (`internal/levelup/asi.go`)
-Added `Feat FeatInfo` field so feat-type ASI choices can carry the full feat info needed by `ApplyFeat`.
+Diagonal moves in the A* pathfinder never checked `blockedEdges`, allowing movement through L-shaped wall corners. Fixed by checking both perpendicular edges for diagonal moves; if both are blocked, the diagonal is impassable.
 
-### 2. Added feat-type branch in `ApproveASI` (`internal/levelup/service.go`)
-Before calling `ApplyASI`, check if `choice.Type == ASIFeat`. If so, route to `s.ApplyFeat(ctx, characterID, choice.Feat)` instead.
+## Changes
 
-### 3. Test added (`internal/levelup/service_test.go`)
-`TestService_ApproveASI_FeatType_RoutesToApplyFeat` — verifies that `ApproveASI` with `Type=ASIFeat` succeeds and the feat is added to the character's features.
+### `internal/pathfinding/pathfinding.go` (line ~242)
 
-## Verification
-- Red: test failed with `applying ASI: unsupported ASI type: feat`
-- Green: test passes after adding the branch
-- All tests pass (excluding `internal/database`)
+Added diagonal wall check after the existing cardinal wall check:
+
+```go
+// Diagonal: blocked if BOTH perpendicular edges are walled (L-corner)
+if isDiagonal(dr, dc) {
+    e1 := blockedEdges[makeEdge(cur.Row, cur.Col, cur.Row+dr, cur.Col)]
+    e2 := blockedEdges[makeEdge(cur.Row, cur.Col, cur.Row, cur.Col+dc)]
+    if e1 && e2 {
+        continue
+    }
+}
+```
+
+### `internal/pathfinding/pathfinding_test.go`
+
+1. **Added** `TestFindPath_DiagonalBlockedByBothPerpendicularWalls` — 2×2 grid with both perpendicular walls; asserts diagonal is blocked (`res.Found == false`).
+
+2. **Fixed** `TestFindPath_DiagonalCornerCuttingAllowed` — previously tested with TWO walls (incorrectly expecting diagonal to pass). Updated to use only ONE wall, which is the actual corner-cutting scenario per spec.
+
+## Test Results
+
+All tests pass (`go test ./...` excluding `internal/database`): 29 packages OK.

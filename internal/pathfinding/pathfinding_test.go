@@ -124,14 +124,12 @@ func TestFindPath_WallBlockedPathAround(t *testing.T) {
 }
 
 func TestFindPath_DiagonalCornerCuttingAllowed(t *testing.T) {
-	// Walls at a corner should NOT block diagonal movement
+	// Single wall at a corner should NOT block diagonal movement (corner-cutting allowed)
 	g := openGrid(3, 3)
-	// Vertical wall at x=1 from y=0 to y=1 (blocks col 0→1 at row 0)
-	// Horizontal wall at y=1 from x=0 to x=1 (blocks row 0→1 at col 0)
-	// Both meet at corner (1,1) — diagonal from (0,0) to (1,1) should still be allowed
+	// Only one perpendicular wall: vertical wall at x=1 from y=0 to y=1 (blocks col 0→1 at row 0)
+	// Diagonal from (0,0) to (1,1) has only one perpendicular edge blocked → allowed
 	g.Walls = []renderer.WallSegment{
 		{X1: 1, Y1: 0, X2: 1, Y2: 1},
-		{X1: 0, Y1: 1, X2: 1, Y2: 1},
 	}
 	req := PathRequest{
 		Start: Point{0, 0},
@@ -532,4 +530,24 @@ func TestFindPath_GroundOccupantStillBlocks(t *testing.T) {
 	res, err := FindPath(req)
 	require.NoError(t, err)
 	assert.False(t, res.Found, "ground occupant should still block")
+}
+
+func TestFindPath_DiagonalBlockedByBothPerpendicularWalls(t *testing.T) {
+	// 2×2 grid: diagonal from (0,0) to (1,1)
+	// Vertical wall at x=1, y=0→1 blocks (0,0)→(0,1) [horizontal edge]
+	// Horizontal wall at y=1, x=0→1 blocks (0,0)→(1,0) [vertical edge]
+	// Both perpendicular edges blocked → diagonal must be impassable
+	g := openGrid(2, 2)
+	g.Walls = []renderer.WallSegment{
+		{X1: 1, Y1: 0, X2: 1, Y2: 1}, // blocks col 0→1 at row 0
+		{X1: 0, Y1: 1, X2: 1, Y2: 1}, // blocks row 0→1 at col 0
+	}
+	req := PathRequest{
+		Start: Point{0, 0},
+		End:   Point{1, 1},
+		Grid:  g,
+	}
+	res, err := FindPath(req)
+	require.NoError(t, err)
+	assert.False(t, res.Found, "diagonal through two perpendicular walls should be blocked")
 }

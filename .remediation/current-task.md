@@ -1,11 +1,11 @@
-finding_id: H-H03
+finding_id: C-H09
 severity: High
-title: ASI ApproveASI silently rejects feat type instead of routing
-location: internal/levelup/asi.go:35 (ApplyASI)
-spec_ref: spec §"Feat path" line 2499
+title: Diagonal pathfinding ignores wall edges entirely
+location: internal/pathfinding/pathfinding.go:242-244
+spec_ref: Phase 29; spec line 1391
 problem: |
-  ApplyASI returns "unsupported ASI type" error when choice.Type == ASIFeat. The HTTP handler's /api/levelup/asi/approve passes feat-typed payloads straight into ApplyASI which errors.
+  The code only checks blockedEdges for cardinal moves. For diagonals it never tests walls. The spec permits corner-cutting (two perpendicular walls meeting at a corner) but a diagonal move through a wall segment should be blocked.
 suggested_fix: |
-  In Service.ApproveASI, branch on choice.Type == ASIFeat and route to ApplyFeat.
+  For diagonal moves, check that at least one of the two perpendicular edges is NOT blocked. If both are blocked, the diagonal is impassable.
 acceptance_criterion: |
-  ApproveASI with a feat-type choice routes to ApplyFeat instead of erroring. A test demonstrates this.
+  A diagonal move through two perpendicular walls (L-shaped corner) is blocked. A diagonal through only one wall (corner-cutting) is allowed. Tests demonstrate both.

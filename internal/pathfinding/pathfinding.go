@@ -239,9 +239,18 @@ func FindPath(req PathRequest) (*PathResult, error) {
 				continue
 			}
 
-			// Walls block cardinal moves only (diagonal corner-cutting allowed)
+			// Walls block cardinal moves
 			if !isDiagonal(dr, dc) && blockedEdges[makeEdge(cur.Row, cur.Col, next.Row, next.Col)] {
 				continue
+			}
+
+			// Diagonal: blocked if BOTH perpendicular edges are walled (L-corner)
+			if isDiagonal(dr, dc) {
+				e1 := blockedEdges[makeEdge(cur.Row, cur.Col, cur.Row+dr, cur.Col)]
+				e2 := blockedEdges[makeEdge(cur.Row, cur.Col, cur.Row, cur.Col+dc)]
+				if e1 && e2 {
+					continue
+				}
 			}
 
 			// Enemies block unless size difference >= 2
