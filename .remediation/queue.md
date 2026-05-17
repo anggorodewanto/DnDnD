@@ -307,12 +307,12 @@ Low: 142
 | 295 | J-M18 | Medium | pending | /distance handler not visible in scope but several Phase-105 handler tests use a typed-nil interface trap | /home/ab/projects/DnDnD/cmd/dndnd/discord_handlers.go:186-200 (the `if deps.quer... |
 | 296 | cross-cut-M01 | Medium | pending | `CalculateHP` only awards the level-1 max die to `classes[0]` | `internal/character/stats.go:21-47`. |
 | 297 | cross-cut-M02 | Medium | pending | Duplicate `AbilityModifier` implementations across packages | - `internal/character/stats.go:124-130` (`character.AbilityModifier`) |
-| 298 | cross-cut-M03 | Medium | pending | `combatant.AbilityScores` JSON keys are not normalized — `Get` only handles two cases per ability | `internal/character/types.go:20-36` |
+| 298 | cross-cut-M03 | Medium | done | `combatant.AbilityScores` JSON keys are not normalized — `Get` only handles two cases per ability | `internal/character/types.go:20-36` |
 | 299 | cross-cut-M04 | Medium | pending | `evaluateACFormula` silently drops unknown tokens (DEX/DEX cap of medium armor not enforced) | `internal/character/stats.go:91-115` |
-| 300 | cross-cut-M05 | Medium | pending | Pact magic slot table: levels 11-20 cap at slot level 5 — correct, but `Max` and `Current` are both updated even when the level didn't change | `internal/character/spellslots.go:67-103`. Verified |
+| 300 | cross-cut-M05 | Medium | superseded | Pact magic slot table: levels 11-20 cap at slot level 5 — correct, but `Max` and `Current` are both updated even when the level didn't change | `internal/character/spellslots.go:67-103`. Verified |
 | 301 | cross-cut-M06 | Medium | pending | `classHitDie` in rest service hard-codes class IDs; mis-named or homebrew classes fall through to d8 | `internal/rest/rest.go:486-499`. |
-| 302 | cross-cut-M07 | Medium | pending | Divine Smite undead/fiend bonus on crit doubles to +2d8 — RAW reading is ambiguous | `internal/combat/divine_smite.go:59-68` |
-| 303 | cross-cut-M08 | Medium | pending | `SneakAttack` extra dice list never validated "once per turn" | `internal/combat/feature_integration.go:86-106` |
+| 302 | cross-cut-M07 | Medium | superseded | Divine Smite undead/fiend bonus on crit doubles to +2d8 — RAW reading is ambiguous | `internal/combat/divine_smite.go:59-68` |
+| 303 | cross-cut-M08 | Medium | superseded | `SneakAttack` extra dice list never validated "once per turn" | `internal/combat/feature_integration.go:86-106` |
 | 304 | cross-cut-M09 | Medium | pending | Initiative tiebreak does not use DEX score (just DEX modifier) | `internal/combat/initiative.go:166-177` |
 | 305 | cross-cut-M10 | Medium | pending | Pact magic slot recovery on short rest restores slot count but not slot level | `internal/rest/rest.go:235-241`. |
 | 306 | cross-cut-M11 | Medium | pending | `ApplyDamageAtZeroHP` does not itself enforce the Massive Damage rule | `internal/combat/deathsave.go:157-192` |
