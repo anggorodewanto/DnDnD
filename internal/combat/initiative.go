@@ -163,7 +163,7 @@ func RemoveSurprisedCondition(conditions json.RawMessage) (json.RawMessage, erro
 	return RemoveCondition(conditions, "surprised")
 }
 
-// SortByInitiative sorts entries by: roll DESC, DEX modifier DESC, display name ASC.
+// SortByInitiative sorts entries by: roll DESC, DEX modifier DESC, display name ASC (case-insensitive).
 func SortByInitiative(entries []InitiativeEntry) {
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].Roll != entries[j].Roll {
@@ -172,7 +172,7 @@ func SortByInitiative(entries []InitiativeEntry) {
 		if entries[i].DexMod != entries[j].DexMod {
 			return entries[i].DexMod > entries[j].DexMod
 		}
-		return entries[i].DisplayName < entries[j].DisplayName
+		return strings.ToLower(entries[i].DisplayName) < strings.ToLower(entries[j].DisplayName)
 	})
 }
 
