@@ -246,51 +246,53 @@ func (h *DMDashboardHandler) ResolvePendingAction(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Capture before-state for audit diff
-	beforeCombatant, err := h.svc.store.GetCombatant(r.Context(), action.CombatantID)
-	if err != nil {
-		http.Error(w, "failed to get combatant", http.StatusInternalServerError)
-		return
-	}
-	beforeState := captureResolverState(beforeCombatant)
-
-	// Apply effects
+	// Parse effects early (validation only, before acquiring lock)
+	var effects []resolveEffect
 	if len(req.Effects) > 0 {
-		var effects []resolveEffect
 		if err := json.Unmarshal(req.Effects, &effects); err != nil {
 			http.Error(w, "invalid effects format", http.StatusBadRequest)
 			return
 		}
+	}
 
+	turn, err := h.svc.store.GetActiveTurnByEncounterID(r.Context(), encounterID)
+	if err != nil {
+		http.Error(w, "no active turn", http.StatusNotFound)
+		return
+	}
+	var resolved refdata.PendingAction
+	if err := h.withTurnLock(r.Context(), turn.ID, func() error {
+		// Capture before-state for audit diff
+		beforeCombatant, err := h.svc.store.GetCombatant(r.Context(), action.CombatantID)
+		if err != nil {
+			return fmt.Errorf("failed to get combatant: %w", err)
+		}
+		beforeState := captureResolverState(beforeCombatant)
+
+		// Apply effects
 		for _, eff := range effects {
 			if err := h.applyEffect(r, eff); err != nil {
-				http.Error(w, "failed to apply effect: "+err.Error(), http.StatusInternalServerError)
-				return
+				return fmt.Errorf("failed to apply effect: %w", err)
 			}
 		}
-	}
 
-	// Capture after-state for audit diff
-	afterCombatant, err := h.svc.store.GetCombatant(r.Context(), action.CombatantID)
-	if err != nil {
-		http.Error(w, "failed to get combatant after effects", http.StatusInternalServerError)
-		return
-	}
-	afterState := captureResolverState(afterCombatant)
+		// Capture after-state for audit diff
+		afterCombatant, err := h.svc.store.GetCombatant(r.Context(), action.CombatantID)
+		if err != nil {
+			return fmt.Errorf("failed to get combatant after effects: %w", err)
+		}
+		afterState := captureResolverState(afterCombatant)
 
-	// Mark action as resolved
-	resolved, err := h.svc.store.UpdatePendingActionStatus(r.Context(), refdata.UpdatePendingActionStatusParams{
-		ID:     actionID,
-		Status: "resolved",
-	})
-	if err != nil {
-		http.Error(w, "failed to resolve action", http.StatusInternalServerError)
-		return
-	}
+		// Mark action as resolved
+		resolved, err = h.svc.store.UpdatePendingActionStatus(r.Context(), refdata.UpdatePendingActionStatusParams{
+			ID:     actionID,
+			Status: "resolved",
+		})
+		if err != nil {
+			return fmt.Errorf("failed to resolve action: %w", err)
+		}
 
-	// Log to action_log with before/after state
-	turn, turnErr := h.svc.store.GetActiveTurnByEncounterID(r.Context(), encounterID)
-	if turnErr == nil {
+		// Log to action_log with before/after state
 		h.svc.store.CreateActionLog(r.Context(), refdata.CreateActionLogParams{
 			TurnID:      turn.ID,
 			EncounterID: encounterID,
@@ -300,6 +302,11 @@ func (h *DMDashboardHandler) ResolvePendingAction(w http.ResponseWriter, r *http
 			BeforeState: beforeState,
 			AfterState:  afterState,
 		})
+
+		return nil
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	// Publish snapshot so dashboards update in real-time
@@ -411,12 +418,7 @@ func (h *DMDashboardHandler) applyMoveEffect(r *http.Request, targetID uuid.UUID
 		return err
 	}
 
-	_, err = h.svc.store.UpdateCombatantPosition(r.Context(), refdata.UpdateCombatantPositionParams{
-		ID:          targetID,
-		PositionCol: pos.Col,
-		PositionRow: pos.Row,
-		AltitudeFt:  c.AltitudeFt,
-	})
+	_, err = h.svc.UpdateCombatantPosition(r.Context(), targetID, pos.Col, pos.Row, c.AltitudeFt)
 	return err
 }
 

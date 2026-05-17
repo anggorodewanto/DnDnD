@@ -1,38 +1,32 @@
-# Worker Report: H-H05 — Builder service token redeem race & ownership check
+# Worker Report: I-H04
 
-## Status: FIXED
-
-## Summary
-
-Token validation and redemption now happen BEFORE character creation, and token ownership is enforced.
+## Finding
+**ResolvePendingAction** did not use `withTurnLock`, allowing concurrent mutations without advisory lock protection. **applyMoveEffect** called `store.UpdateCombatantPosition` directly, bypassing the service layer (which handles zone triggers, wall checks, etc.).
 
 ## Changes Made
 
-### `internal/portal/builder_service.go`
-1. Added `ErrTokenOwnership` sentinel error.
-2. Added `ValidateToken(ctx, token) (*PortalToken, error)` to the `BuilderStore` interface.
-3. Reordered `CreateCharacter`: validate token → check ownership → redeem token → create character/player_character records.
-4. `RedeemToken` failure is now a hard error (no longer a warning-only path).
+### 1. `internal/combat/dm_dashboard_handler.go`
 
-### `internal/portal/builder_store_adapter.go`
-- Added `ValidateToken` method delegating to `tokenSvc.ValidateToken`.
+**ResolvePendingAction** — wrapped mutation logic in `withTurnLock`:
+- Fetch active turn before mutations (returns 404 if no active turn)
+- Parse effects JSON before the lock (preserves 400 for validation errors)
+- All state reads, effect applications, status updates, and action logging now run inside `withTurnLock`
 
-### `internal/portal/builder_service_test.go`
-- Added `validateToken` and `validateTokenErr` fields to `mockBuilderStore`.
-- Added `ValidateToken` method to mock.
-- **New test:** `TestBuilderService_CreateCharacter_RejectsMismatchedTokenUser` — verifies mismatched `DiscordUserID` returns `ErrTokenOwnership` and no character is created.
-- **New test:** `TestBuilderService_CreateCharacter_RedeemFailsPreventsCreation` — verifies redeem failure prevents character creation.
-- Updated `TestBuilderService_RedeemTokenError_WithLogger` to expect error (behavior change).
+**applyMoveEffect** — replaced raw store call:
+- `h.svc.store.UpdateCombatantPosition(...)` → `h.svc.UpdateCombatantPosition(...)`
+- This routes through the service layer, enabling zone triggers and wall validation
+
+### 2. `internal/combat/dm_dashboard_handler_test.go`
+
+- Added `TestResolvePendingAction_AcquiresTurnLock`: uses `fakeTxBeginner` (always-fail `BeginTx`) to prove the handler acquires the lock — expects 500 when lock acquisition fails.
+- Updated `TestResolvePendingAction_NoActiveTurn`: now expects 404 (turn is required for lock).
+- Added `getActiveTurnByEncounterIDFn` mock to 10 existing tests that now reach the turn-fetch step.
+
+## Behavior Change
+`ResolvePendingAction` now requires an active turn. Previously it would resolve without logging if no turn existed; now it returns 404. This is consistent with the spec requirement that mutations must be lock-protected.
 
 ## Test Results
-
 ```
-=== RUN   TestBuilderService_CreateCharacter_RejectsMismatchedTokenUser
---- PASS
-=== RUN   TestBuilderService_CreateCharacter_RedeemFailsPreventsCreation
---- PASS
+ok  github.com/ab/dndnd/internal/combat  17.160s
 ```
-
-Full `./internal/portal/...` suite: **PASS** (all tests green).
-
-One pre-existing failure in `internal/rest` (unrelated: `TestPartyRestHandler_LongRest_DawnRecharge`).
+All 28 `TestResolvePendingAction_*` tests pass. Full package passes.

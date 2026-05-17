@@ -608,6 +608,9 @@ func TestResolvePendingAction_InvalidTargetID(t *testing.T) {
 				Status:      "pending",
 			}, nil
 		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: uuid.New()}, nil
+		},
 	}
 
 	r := newDMDashboardRouter(store)
@@ -620,7 +623,7 @@ func TestResolvePendingAction_InvalidTargetID(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-// --- TDD Cycle: Resolve no active turn (log gracefully skipped) ---
+// --- TDD Cycle: Resolve no active turn returns 404 ---
 
 func TestResolvePendingAction_NoActiveTurn(t *testing.T) {
 	encounterID := uuid.New()
@@ -636,9 +639,6 @@ func TestResolvePendingAction_NoActiveTurn(t *testing.T) {
 				Status:      "pending",
 			}, nil
 		},
-		updatePendingActionStatusFn: func(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
-			return refdata.PendingAction{ID: actionID, Status: "resolved"}, nil
-		},
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{}, errors.New("no active turn")
 		},
@@ -651,7 +651,7 @@ func TestResolvePendingAction_NoActiveTurn(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 // --- TDD Cycle: Resolve with unknown effect type (ignored) ---
@@ -779,6 +779,9 @@ func TestResolvePendingAction_DamageEffectGetCombatantError(t *testing.T) {
 				Status:      "pending",
 			}, nil
 		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: uuid.New()}, nil
+		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
 			return refdata.Combatant{}, errors.New("not found")
 		},
@@ -808,6 +811,9 @@ func TestResolvePendingAction_ConditionAddGetCombatantError(t *testing.T) {
 				EncounterID: encounterID,
 				Status:      "pending",
 			}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: uuid.New()}, nil
 		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
 			return refdata.Combatant{}, errors.New("not found")
@@ -839,6 +845,9 @@ func TestResolvePendingAction_MoveEffectGetCombatantError(t *testing.T) {
 				Status:      "pending",
 			}, nil
 		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: uuid.New()}, nil
+		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
 			return refdata.Combatant{}, errors.New("not found")
 		},
@@ -869,6 +878,9 @@ func TestResolvePendingAction_DamageEffectInvalidValue(t *testing.T) {
 				Status:      "pending",
 			}, nil
 		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: uuid.New()}, nil
+		},
 	}
 
 	r := newDMDashboardRouter(store)
@@ -895,6 +907,9 @@ func TestResolvePendingAction_ConditionAddInvalidValue(t *testing.T) {
 				EncounterID: encounterID,
 				Status:      "pending",
 			}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: uuid.New()}, nil
 		},
 	}
 
@@ -923,6 +938,9 @@ func TestResolvePendingAction_MoveEffectInvalidValue(t *testing.T) {
 				Status:      "pending",
 			}, nil
 		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: uuid.New()}, nil
+		},
 	}
 
 	r := newDMDashboardRouter(store)
@@ -948,6 +966,9 @@ func TestResolvePendingAction_UpdateStatusError(t *testing.T) {
 				EncounterID: encounterID,
 				Status:      "pending",
 			}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: uuid.New()}, nil
 		},
 		updatePendingActionStatusFn: func(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error) {
 			return refdata.PendingAction{}, errors.New("db error")
@@ -979,6 +1000,9 @@ func TestResolvePendingAction_ConditionRemoveGetCombatantError(t *testing.T) {
 				Status:      "pending",
 			}, nil
 		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: uuid.New()}, nil
+		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
 			return refdata.Combatant{}, errors.New("not found")
 		},
@@ -1008,6 +1032,9 @@ func TestResolvePendingAction_ConditionRemoveInvalidValue(t *testing.T) {
 				EncounterID: encounterID,
 				Status:      "pending",
 			}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: uuid.New()}, nil
 		},
 	}
 
@@ -1296,4 +1323,38 @@ func TestResolvePendingAction_F04_BeforeAfterState(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
+}
+
+// --- TDD Cycle: ResolvePendingAction acquires turn lock (I-H04) ---
+
+func TestResolvePendingAction_AcquiresTurnLock(t *testing.T) {
+	encounterID := uuid.New()
+	actionID := uuid.New()
+	combatantID := uuid.New()
+	turnID := uuid.New()
+
+	store := &mockStore{
+		getPendingActionFn: func(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error) {
+			return refdata.PendingAction{
+				ID:          actionID,
+				EncounterID: encounterID,
+				CombatantID: combatantID,
+				Status:      "pending",
+			}, nil
+		},
+		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {
+			return refdata.Turn{ID: turnID, EncounterID: encounterID}, nil
+		},
+	}
+
+	// fakeTxBeginner always fails → if the handler acquires the lock, we get 500.
+	r := newDMDashboardRouterWithDB(store, &fakeCombatLogPoster{}, fakeTxBeginner{})
+
+	body := `{"outcome":"test","effects":[]}`
+	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/pending-actions/"+actionID.String()+"/resolve", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// If the handler uses withTurnLock, the fake BeginTx error causes a 500.
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }

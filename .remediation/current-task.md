@@ -1,11 +1,11 @@
-finding_id: H-H05
+finding_id: I-H04
 severity: High
-title: Builder service: token redeem races and isn't user-bound
-location: internal/portal/builder_service.go:219-238 (CreateCharacter)
-spec_ref: Phase 91a "one-time link generation … single-use token"
+title: Action Resolver move effect bypasses turn lock, walls, and concentration hooks
+location: internal/combat/dm_dashboard_handler.go:215-313, 400-421
+spec_ref: Spec §Undo & Corrections; Phase 94b
 problem: |
-  RedeemToken is called AFTER CreateCharacterRecord succeeds, so concurrent double-submit can produce two characters. Also the token's discord_user_id is never compared against the session userID.
+  ResolvePendingAction is not wrapped in withTurnLock, and applyMoveEffect writes directly to store.UpdateCombatantPosition rather than going through the service.
 suggested_fix: |
-  Validate token first, compare tok.DiscordUserID == userID, then atomically mark-used before inserting the character.
+  Wrap ResolvePendingAction in withTurnLock, and replace the raw store call with svc.UpdateCombatantPosition.
 acceptance_criterion: |
-  CreateCharacter validates token ownership (rejects mismatched user) and redeems before creating. A test demonstrates both.
+  ResolvePendingAction acquires the turn lock before mutating. A test demonstrates the lock is acquired.

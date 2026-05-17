@@ -109,7 +109,7 @@ Low: 142
 | 97 | H-H02 | High | done | DM approve/deny buttons have no role check | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:456 (`HandleDMApprove`),... |
 | 98 | H-H03 | High | done | ASI ApproveASI silently rejects feat type instead of routing | /home/ab/projects/DnDnD/internal/levelup/asi.go:35 (`ApplyASI`) |
 | 99 | H-H04 | High | pending | DDB "off-list spell" detection only covers wizard with 16 spells | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:382 (`classSpellLists`) |
-| 100 | H-H05 | High | in_progress | Builder service: token redeem races and isn't user-bound | /home/ab/projects/DnDnD/internal/portal/builder_service.go:219-238 (`CreateChara... |
+| 100 | H-H05 | High | done | Builder service: token redeem races and isn't user-bound | /home/ab/projects/DnDnD/internal/portal/builder_service.go:219-238 (`CreateChara... |
 | 101 | H-H06 | High | pending | DDB import attunement-limit warning uses wrong signal | /home/ab/projects/DnDnD/internal/ddbimport/validator.go:102-112 |
 | 102 | H-H07 | High | pending | Character sheet does not render conditions / active status effects | /home/ab/projects/DnDnD/internal/portal/character_sheet.go:20 (struct `Character... |
 | 103 | H-H08 | High | pending | Starting equipment retains `any-martial` placeholder IDs in inventory | /home/ab/projects/DnDnD/internal/portal/starting_equipment.go:33 + /home/ab/proj... |
@@ -121,7 +121,7 @@ Low: 142
 | 109 | I-H01 | High | done | Dashboard DM-created chars miss background skill proficiencies | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:221-253, 117 ; compare ... |
 | 110 | I-H02 | High | pending | DM character form doesn't pass campaign_id to spell/equipment refdata | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go:30-34, 281-318,... |
 | 111 | I-H03 | High | pending | Encounter Builder doesn't place PC tokens at combat start | /home/ab/projects/DnDnD/dashboard/svelte/src/EncounterBuilder.svelte:368-389 |
-| 112 | I-H04 | High | pending | Action Resolver `move` effect bypasses turn lock, walls, and concentration hooks | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_handler.go:215-313, 400-421 |
+| 112 | I-H04 | High | in_progress | Action Resolver `move` effect bypasses turn lock, walls, and concentration hooks | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_handler.go:215-313, 400-421 |
 | 113 | I-H05 | High | pending | Active reactions panel highlights every active reaction on enemy turns | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:65-68 |
 | 114 | I-H06 | High | done | Cross-tenant reads on character overview / narration history / message history | /home/ab/projects/DnDnD/internal/characteroverview/handler.go:35-47 ; /home/ab/p... |
 | 115 | I-H07 | High | done | Narration & message-player handlers trust author_user_id from request body | /home/ab/projects/DnDnD/internal/narration/handler.go:49-91 ; /home/ab/projects/... |
