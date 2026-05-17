@@ -147,3 +147,30 @@ var classStartingEquipment = map[string][]EquipmentPack{
 		},
 	},
 }
+
+
+// BackgroundEquipmentPack returns the guaranteed starting equipment for a background.
+func BackgroundEquipmentPack(background string) []string {
+	items, ok := backgroundStartingEquipment[strings.ToLower(background)]
+	if !ok {
+		return nil
+	}
+	return items
+}
+
+// backgroundStartingEquipment defines SRD starting equipment per background.
+var backgroundStartingEquipment = map[string][]string{
+	"acolyte":          {"holy-symbol", "prayer-book", "incense:5", "vestments", "common-clothes"},
+	"charlatan":        {"fine-clothes", "disguise-kit", "con-tools"},
+	"criminal":         {"crowbar", "dark-common-clothes", "thieves-tools"},
+	"entertainer":      {"musical-instrument", "costume", "common-clothes"},
+	"folk hero":        {"artisans-tools", "shovel", "iron-pot", "common-clothes"},
+	"guild artisan":    {"artisans-tools", "letter-of-introduction", "travelers-clothes"},
+	"hermit":           {"scroll-case", "winter-blanket", "herbalism-kit", "common-clothes"},
+	"noble":            {"fine-clothes", "signet-ring", "scroll-of-pedigree"},
+	"outlander":        {"staff", "hunting-trap", "trophy", "travelers-clothes"},
+	"sage":             {"ink-bottle", "quill", "small-knife", "letter", "common-clothes"},
+	"sailor":           {"belaying-pin", "silk-rope-50ft", "common-clothes"},
+	"soldier":          {"insignia-of-rank", "trophy", "dice-set", "common-clothes"},
+	"urchin":           {"small-knife", "map-of-city", "pet-mouse", "token", "common-clothes"},
+}

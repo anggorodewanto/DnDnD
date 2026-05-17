@@ -78,7 +78,11 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 	})
 
 	var inventoryMsg pqtype.NullRawMessage
-	if items := EquipmentToInventoryWithEquipped(p.Equipment, p.EquippedWeapon, p.WornArmor); len(items) > 0 {
+	allEquipment := p.Equipment
+	if bgItems := BackgroundEquipmentPack(p.Background); len(bgItems) > 0 {
+		allEquipment = append(allEquipment, bgItems...)
+	}
+	if items := EquipmentToInventoryWithEquipped(allEquipment, p.EquippedWeapon, p.WornArmor); len(items) > 0 {
 		invJSON, _ := json.Marshal(items)
 		inventoryMsg = pqtype.NullRawMessage{RawMessage: invJSON, Valid: true}
 	}
