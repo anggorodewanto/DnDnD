@@ -417,7 +417,7 @@ Low: 142
 | 405 | J-L04 | Low | pending | dm-queue PgStore.ListPending uses `context.Background()` from `Notifier.ListPending`/`Get` | /home/ab/projects/DnDnD/internal/dmqueue/notifier.go:222-229, 320-327 |
 | 406 | J-L05 | Low | pending | E2E `SeedDMApproval` bypasses dashboard approval HTTP endpoint | /home/ab/projects/DnDnD/cmd/dndnd/e2e_harness_test.go:168-184 |
 | 407 | J-L06 | Low | pending | Tiled import silently coerces `tilesets` field to `[]any` even when caller supplies an object | /home/ab/projects/DnDnD/internal/gamemap/import.go:69-72 |
-| 408 | J-L07 | Low | pending | HelpHandler topic table is case-sensitive but spec advertises class names "rogue", "cleric" | /home/ab/projects/DnDnD/internal/discord/help_handler.go:44-48 (`helpTopics[topi... |
+| 408 | J-L07 | Low | done | HelpHandler topic table is case-sensitive but spec advertises class names "rogue", "cleric" | /home/ab/projects/DnDnD/internal/discord/help_handler.go:44-48 (`helpTopics[topi... |
 | 409 | J-L08 | Low | pending | Exploration `EndExploration` doesn't notify dashboard / clear PCs | /home/ab/projects/DnDnD/internal/exploration/service.go:172-185 |
 | 410 | J-L09 | Low | pending | Reaction handler doesn't return `ErrItemNotFound` from `cancelDMQueueItem` for missing entries | /home/ab/projects/DnDnD/internal/discord/reaction_handler.go:257-269 |
 | 411 | J-L10 | Low | pending | Combat enemy-turn notifier label fallback when SetEncounterLookup is unset | /home/ab/projects/DnDnD/internal/discord/enemy_turn_notifier.go (SetEncounterLoo... |
