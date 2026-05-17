@@ -840,7 +840,7 @@ func (h *MoveHandler) fireOpportunityAttacks(ctx context.Context, mover refdata.
 	pcReach := h.lookupPCReach(ctx, allCombatants, mover)
 
 	triggers := combat.DetectOpportunityAttacksWithReach(
-		mover, path, allCombatants, moverTurn, hostileTurns, creatureAttacks, pcReach,
+		mover, path, allCombatants, moverTurn, hostileTurns, creatureAttacks, pcReach, nil,
 	)
 	if len(triggers) == 0 {
 		return
