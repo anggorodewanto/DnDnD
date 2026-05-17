@@ -2,6 +2,7 @@ package discord
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -107,7 +108,7 @@ func splitAtNewlines(content string) []string {
 }
 
 // splitHardCut splits content into up to 3 parts using hard-cuts at MaxMessageLen.
-// The last part may be up to MaxMessageLen chars.
+// Cuts are backed up to a valid UTF-8 rune boundary to avoid producing broken codepoints.
 func splitHardCut(content string) []string {
 	var parts []string
 	for len(content) > 0 {
@@ -115,8 +116,16 @@ func splitHardCut(content string) []string {
 			parts = append(parts, content)
 			break
 		}
-		parts = append(parts, content[:MaxMessageLen])
-		content = content[MaxMessageLen:]
+		cut := MaxMessageLen
+		// Back up to a valid rune start if we're mid-codepoint.
+		for cut > 0 && !utf8.RuneStart(content[cut]) {
+			cut--
+		}
+		if cut == 0 {
+			cut = MaxMessageLen // degenerate: all continuation bytes, just cut
+		}
+		parts = append(parts, content[:cut])
+		content = content[cut:]
 	}
 	return parts
 }
