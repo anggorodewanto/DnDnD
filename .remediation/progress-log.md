@@ -366,3 +366,14 @@ Running total: 94/448 resolved (21%)
 - **Commit:** 068be2a
 - **Outcome:** Added IsAttuned field to character.InventoryItem and ddbItem, populated from DDB's isAttuned flag. Validator now counts IsAttuned items instead of Equipped+RequiresAttunement.
 - **Reviewer:** approved
+
+## 2026-05-17T20:10 — H-H07
+- **Finding:** Character sheet does not render conditions / active status effects
+- **Commit:** afedee9
+- **Outcome:** Added Conditions/ExhaustionLevel/ConcentrationOn to CharacterSheetData. hydrateFromCombatant() looks up the active combatant and populates live combat state.
+- **Reviewer:** approved
+
+## 2026-05-17T20:32 — H-H08
+- **Finding:** Starting equipment retains `any-martial` placeholder IDs in inventory
+- **Commit:** 69a45de
+- **Reviewer:** approved

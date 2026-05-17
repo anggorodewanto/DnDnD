@@ -204,7 +204,7 @@ Low: 142
 | 192 | E-M04 | Medium | pending | Help action duration tied to ally's turn, not helper's turn | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261` (`SourceCo... |
 | 193 | E-M05 | Medium | pending | Material component check treats `material_cost_gp = 0` as costly when `Valid = true` | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:470` (`if spell.Materia... |
 | 194 | E-M06 | Medium | pending | Stand from prone uses integer half (12 for speed 25) — matches Sage Advice but no rounding-direction test | `/home/ab/projects/DnDnD/internal/combat/condition_effects.go:254-257` |
-| 195 | E-M07 | Medium | pending | Spell range validation accepts unrecognized `range_type` values silently | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:77-94` (`ValidateSpellR... |
+| 195 | E-M07 | Medium | done | Spell range validation accepts unrecognized `range_type` values silently | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:77-94` (`ValidateSpellR... |
 | 196 | E-M08 | Medium | pending | Ritual casting only validates primary class, ignoring multiclass | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:432-438` |
 | 197 | E-M09 | Medium | pending | AoE save DC pre-subtracts cover bonus but stores no roll-side trace for full cover exclusion | `/home/ab/projects/DnDnD/internal/combat/aoe.go:545-562` |
 | 198 | E-M10 | Medium | pending | OA detection uses `IsNpc` faction check, breaks for PC-vs-PC combat | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:106-108` |
