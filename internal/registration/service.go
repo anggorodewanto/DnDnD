@@ -134,6 +134,7 @@ func (s *Service) CreatePlaceholder(ctx context.Context, campaignID uuid.UUID, n
 		AbilityScores:    []byte(`{}`),
 		HpMax:            1,
 		HpCurrent:        1,
+		Ac:               10,
 		SpeedFt:          30,
 		ProficiencyBonus: 2,
 		HitDiceRemaining: []byte(`{}`),
