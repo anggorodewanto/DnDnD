@@ -111,6 +111,13 @@ func (mq *MessageQueue) drain(channelID string) {
 			// Add jitter: 0-100ms
 			jitter := time.Duration(rand.Int64N(100)) * time.Millisecond
 			mq.sleepFunc(wait + jitter)
+			// Re-check done after sleep so Stop() preempts long backoffs.
+			select {
+			case <-mq.done:
+				mq.flushErrors(channelID, ErrQueueStopped)
+				return
+			default:
+			}
 			continue
 		}
 

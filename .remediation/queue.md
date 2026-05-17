@@ -136,7 +136,7 @@ Low: 142
 | 124 | J-H05 | High | done | One character can be in two active encounters (no DB constraint; LIMIT 1 in query masks the bug) | /home/ab/projects/DnDnD/db/queries/encounters.sql:46-51 (`GetActiveEncounterIDBy... |
 | 125 | J-H06 | High | done | /whisper accepts empty message and spams a dm-queue item | /home/ab/projects/DnDnD/internal/discord/whisper_handler.go:61-80 |
 | 126 | J-H07 | High | skipped | dm-queue Sender bypasses the per-channel MessageQueue (rate-limit ordering) | /home/ab/projects/DnDnD/internal/dmqueue/sender.go:19-41 |
-| 127 | J-H08 | High | pending | WS reader/writer can race on slow-client drop | /home/ab/projects/DnDnD/internal/dashboard/ws.go:77-101 (`Hub.Run` broadcast blo... |
+| 127 | J-H08 | High | done | WS reader/writer can race on slow-client drop | /home/ab/projects/DnDnD/internal/dashboard/ws.go:77-101 (`Hub.Run` broadcast blo... |
 | 128 | J-H09 | High | done | Encounter snapshot publisher does NOT trigger on /move position writes | /home/ab/projects/DnDnD/internal/discord/move_handler.go:686-735; combat.Service... |
 | 129 | cross-cut-H01 | High | done | `routePhase43DeathSave` skips the drop-to-0 instant-death rule when overflow is exactly the limit but damage came from a hit at >0 HP and `adjusted` overshoots | `internal/combat/damage.go:336-346`, |
 | 130 | cross-cut-H02 | High | superseded | Multiclass spellcasting ability picks the highest score across classes | `internal/combat/spellcasting.go:1544-1557` |
