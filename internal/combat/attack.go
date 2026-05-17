@@ -1216,10 +1216,16 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 		return AttackResult{}, fmt.Errorf("off-hand weapon %q is ranged; off-hand attack requires melee weapons", offWeapon.Name)
 	}
 
-	// Off-hand attacks use 0 damage modifier unless the character has TWF fighting style
+	// Off-hand attacks: no ability modifier unless TWF fighting style,
+	// but negative modifiers still apply per RAW (PHB p195).
 	dmgMod := 0
 	if HasFightingStyle(char.Features, "two_weapon_fighting") {
 		dmgMod = DamageModifier(scores, offWeapon)
+	} else {
+		mod := DamageModifier(scores, offWeapon)
+		if mod < 0 {
+			dmgMod = mod
+		}
 	}
 
 	// Phase 33 / C-33: cover gate runs BEFORE consuming the bonus action so

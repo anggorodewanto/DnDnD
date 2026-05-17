@@ -237,7 +237,7 @@ Low: 142
 | 225 | G-M01 | Medium | pending | LongRest reports HPHealed even when no healing occurred | internal/rest/rest.go:377-384 |
 | 226 | G-M02 | Medium | pending | Gold split distributes to ALL approved players, not just encounter participants | internal/loot/service.go:301 |
 | 227 | G-M03 | Medium | pending | Long rest does not zero death-save tallies when both are zero | internal/rest/rest.go:444-446 |
-| 228 | G-M04 | Medium | pending | Item Picker custom-entry endpoint accepts negative gold/quantity silently | internal/itempicker/handler.go:208-239 |
+| 228 | G-M04 | Medium | done | Item Picker custom-entry endpoint accepts negative gold/quantity silently | internal/itempicker/handler.go:208-239 |
 | 229 | G-M05 | Medium | pending | CastIdentify accepts ritual without 10-minute delay enforcement | internal/inventory/identification.go:81-110 |
 | 230 | G-M06 | Medium | pending | CastIdentify silently allows identifying items that aren't magic | internal/inventory/identification.go:24-44 |
 | 231 | G-M07 | Medium | pending | Combat recap truncation cuts mid-line and may produce orphan round headers | internal/combat/recap.go:71-78, 93-116 |
