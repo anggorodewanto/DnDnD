@@ -884,10 +884,12 @@ func buildLightSources(ctx context.Context, q buildVisionSourcesQueries, combata
 		if err != nil {
 			continue
 		}
+		bright, dim := lightRadiiForSpell(z.SourceSpell)
 		out = append(out, renderer.LightSource{
-			Col:        col,
-			Row:        row,
-			RangeTiles: lightRadiusForSpell(z.SourceSpell),
+			Col:           col,
+			Row:           row,
+			RangeTiles:    bright,
+			DimRangeTiles: dim,
 		})
 	}
 
@@ -909,34 +911,36 @@ func lightSourcesFromInventory(raw json.RawMessage, col, row int) []renderer.Lig
 		if !item.IsLit {
 			continue
 		}
+		bright, dim := lightRadiiForItem(item.Name)
 		out = append(out, renderer.LightSource{
-			Col:        col,
-			Row:        row,
-			RangeTiles: lightRadiusForItem(item.Name),
+			Col:           col,
+			Row:           row,
+			RangeTiles:    bright,
+			DimRangeTiles: dim,
 		})
 	}
 	return out
 }
 
-// lightRadiusForItem returns the bright-light radius in tiles for a lit item.
-func lightRadiusForItem(name string) int {
+// lightRadiiForItem returns the bright and dim light radii in tiles for a lit item.
+func lightRadiiForItem(name string) (bright, dim int) {
 	lower := strings.ToLower(name)
 	switch {
 	case strings.Contains(lower, "lantern"):
-		return 6 // 30ft
+		return 6, 12 // 30ft bright + 30ft dim
 	default:
-		return 4 // 20ft (torch and other light sources)
+		return 4, 8 // 20ft bright + 20ft dim (torch and other light sources)
 	}
 }
 
-// lightRadiusForSpell returns the bright-light radius in tiles for a
+// lightRadiiForSpell returns the bright and dim light radii in tiles for a
 // light-emitting spell zone.
-func lightRadiusForSpell(spellName string) int {
+func lightRadiiForSpell(spellName string) (bright, dim int) {
 	switch strings.ToLower(spellName) {
 	case "daylight":
-		return 12 // 60ft
+		return 12, 24 // 60ft bright + 60ft dim
 	default:
-		return 4 // 20ft (Light cantrip, Continual Flame)
+		return 4, 8 // 20ft bright + 20ft dim (Light cantrip, Continual Flame)
 	}
 }
 

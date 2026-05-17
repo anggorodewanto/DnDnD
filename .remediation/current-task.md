@@ -1,17 +1,16 @@
-finding_id: B-H04
+finding_id: F-H01
 severity: High
-title: Map renderer never composites the uploaded background image
-location: /home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go
-spec_ref: phases §Phase 21b ("Background renders beneath terrain layer", with opacity)
+title: No light-source dim radius — 5e torches grant 20ft bright + 20ft dim
+location: /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:907-927
+spec_ref: spec §Vision sources & modifiers lines 2206-2207; phases §Phase 68
 problem: |
-  The server-side PNG renderer has no awareness of maps.background_image_id at all.
-  ParseTiledJSON parses only terrain, walls, lighting, elevation, and spawn zones.
-  Phase 21b only delivers the background-image rendering inside the Svelte editor preview.
-  Any map that uses a battle-map image as backdrop will render as plain beige terrain in Discord.
+  lightRadiusForItem/lightRadiusForSpell return a single RangeTiles and the FoW union
+  promotes everything in that radius to Visible. No tiles get demoted to "dim light"
+  obscurement. Players carrying a torch in pitch-black always see crisp 20ft bright
+  and no dim halo.
 suggested_fix: |
-  Draw the bg image (looked up via AssetStore) in RenderMap before terrain, with an opacity
-  slider value plumbed from the Tiled JSON or a dedicated MapData.BackgroundOpacity field.
+  Add DimRangeTiles to LightSource. In the visibility computation, mark tiles between
+  bright range and dim range as Explored (dim/greyed) rather than Visible.
 acceptance_criterion: |
-  When MapData includes a BackgroundImage ([]byte PNG) and BackgroundOpacity (float64),
-  RenderMap composites the image beneath the terrain layer at the specified opacity.
-  A test demonstrates a non-white pixel at a position where the background image has color.
+  A LightSource with RangeTiles=4 and DimRangeTiles=8 marks tiles at distance 5-8
+  as Explored (not Visible). A test demonstrates this.

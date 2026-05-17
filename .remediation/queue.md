@@ -57,10 +57,10 @@ Low: 142
 | 45 | B-H01 | High | done | Map size limits not enforced when rendering, only at create-time | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:12-16`; |
 | 46 | B-H02 | High | done | `RenderMap` mutates caller-supplied `MapData.TileSize` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:13-16` |
 | 47 | B-H03 | High | done | Asset upload accepts arbitrary MIME types (XSS / file-type abuse risk) | `/home/ab/projects/DnDnD/internal/asset/handler.go:36-83`, |
-| 48 | B-H04 | High | in_progress | Map renderer never composites the uploaded background image | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go` |
+| 48 | B-H04 | High | done | Map renderer never composites the uploaded background image | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go` |
 | 49 | B-H05 | High | done | `TilesetRefs` request field silently dropped by HTTP handler | `/home/ab/projects/DnDnD/internal/gamemap/handler.go:65-82, |
 | 50 | B-H06 | High | done | DM-view fog-of-war ignores `MapData.DMSeesAll` when caller pre-computed fog *without* setting the flag on `FogOfWar` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:33-47`, |
-| 51 | B-H07 | High | pending | Fog renderer does not preserve "previously seen" cells across renders | `/home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:68-93` |
+| 51 | B-H07 | High | superseded | Fog renderer does not preserve "previously seen" cells across renders | `/home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:68-93` |
 | 52 | C-H01 | High | done | Auto-crit applies to ranged attacks within 5ft against paralyzed/unconscious | /home/ab/projects/DnDnD/internal/combat/attack.go:727-748 (`CheckAutoCrit`) |
 | 53 | C-H02 | High | done | PC creature size hard-coded to "Medium" — heavy-weapon disadvantage never fires for halflings/gnomes | /home/ab/projects/DnDnD/internal/combat/attack.go:1316-1326 |
 | 54 | C-H03 | High | done | Crossbow Expert does not waive ranged-with-hostile-adjacent disadvantage | /home/ab/projects/DnDnD/internal/combat/advantage.go:88-91 |
@@ -72,7 +72,7 @@ Low: 142
 | 60 | C-H09 | High | done | Diagonal pathfinding ignores wall edges entirely (could allow phasing through a single diagonal wall) | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:242-244 |
 | 61 | C-H10 | High | done | Reach weapon OA detection — PC reach map relies on caller passing it | /home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:80-117, 148-164 (`... |
 | 62 | C-H11 | High | done | Concentration-on-damage save uses simplified DC formula | /home/ab/projects/DnDnD/internal/combat/concentration.go:422-448 (`MaybeCreateCo... |
-| 63 | C-H12 | High | pending | Surprise: surprised condition removed at start of "skip turn", not end (timing nuance) | /home/ab/projects/DnDnD/internal/combat/initiative.go:582-606 (`skipSurprisedTur... |
+| 63 | C-H12 | High | superseded | Surprise: surprised condition removed at start of "skip turn", not end (timing nuance) | /home/ab/projects/DnDnD/internal/combat/initiative.go:582-606 (`skipSurprisedTur... |
 | 64 | D-H01 | High | done | Step of the Wind dash adds remaining movement, not base speed | /home/ab/projects/DnDnD/internal/combat/monk.go:444 |
 | 65 | D-H02 | High | superseded | Dodge condition grants no defensive disadvantage to attackers | /home/ab/projects/DnDnD/internal/combat/advantage.go:104 (switch on `c.Condition... |
 | 66 | D-H03 | High | done | Auto-ability selection for finesse weapons silently disables rage damage | /home/ab/projects/DnDnD/internal/combat/attack.go:1583 (`attackAbilityUsed`) |
@@ -88,7 +88,7 @@ Low: 142
 | 76 | E-H05 | High | done | Spell attack rolls never apply advantage/disadvantage | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:638` (`roller.RollD20(a... |
 | 77 | E-H06 | High | superseded | Concentration check DC always fires "max(10, dmg/2)" but DC=10 isn't max with damage 19 | `/home/ab/projects/DnDnD/internal/combat/concentration.go:18-24` |
 | 78 | E-H07 | High | superseded | AoE damage applies `int(float64(baseDamage)*0.5)` truncates instead of rounding | `/home/ab/projects/DnDnD/internal/combat/aoe.go:1024` |
-| 79 | F-H01 | High | pending | No light-source dim radius — 5e torches grant 20ft bright + 20ft dim | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:907-927 |
+| 79 | F-H01 | High | in_progress | No light-source dim radius — 5e torches grant 20ft bright + 20ft dim | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:907-927 |
 | 80 | F-H02 | High | pending | Hide action ignores the actor's vision when computing zone obscurement | /home/ab/projects/DnDnD/internal/discord/action_handler.go:794-805 |
 | 81 | F-H03 | High | done | Hidden combatants (`is_visible = false`) still render on the map | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog.go:52-78; /home/ab/project... |
 | 82 | F-H04 | High | done | Free-object interaction whitelist is too permissive / English-only | /home/ab/projects/DnDnD/internal/combat/interact.go:13-52 |

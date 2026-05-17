@@ -184,9 +184,10 @@ type ZoneOverlay struct {
 // Light sources contribute additional visible tiles, acting like vision sources
 // without a specific viewer.
 type LightSource struct {
-	Col        int // zero-based column
-	Row        int // zero-based row
-	RangeTiles int // illumination range in tiles
+	Col           int // zero-based column
+	Row           int // zero-based row
+	RangeTiles    int // bright illumination range in tiles
+	DimRangeTiles int // dim light range in tiles (0 = no dim halo; tiles beyond bright but within dim are marked Explored)
 }
 
 // LightingType represents the painted lighting/obscurement classification of a

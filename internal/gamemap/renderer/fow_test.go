@@ -495,3 +495,25 @@ func TestDrawTokens_InFogEnemyGreyed(t *testing.T) {
 	DrawTokens(dc, md)
 }
 
+
+// F-H01: Light sources with DimRangeTiles mark outer ring as Explored (dim).
+func TestComputeVisibility_LightDimRadius(t *testing.T) {
+	lights := []LightSource{
+		{Col: 5, Row: 5, RangeTiles: 2, DimRangeTiles: 4},
+	}
+
+	fow := ComputeVisibilityWithLights(nil, lights, nil, 11, 11)
+	require.NotNil(t, fow)
+
+	// Origin: visible
+	assert.Equal(t, Visible, fow.StateAt(5, 5))
+	// Within bright range (dist 2): visible
+	assert.Equal(t, Visible, fow.StateAt(5, 3))
+	assert.Equal(t, Visible, fow.StateAt(4, 4))
+	// Within dim range but outside bright (dist 3): explored (dim)
+	assert.Equal(t, Explored, fow.StateAt(5, 2))
+	assert.Equal(t, Explored, fow.StateAt(2, 5))
+	// Beyond dim range (dist 5+): unexplored
+	assert.Equal(t, Unexplored, fow.StateAt(0, 0))
+	assert.Equal(t, Unexplored, fow.StateAt(5, 0))
+}

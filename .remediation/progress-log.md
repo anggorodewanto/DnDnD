@@ -310,3 +310,23 @@ Running total: 94/448 resolved (21%)
 - High: 59/98 (60%)
 - Medium: 0/173
 - Low: 0/142
+
+## 2026-05-17T19:38 — D-H08
+- **Finding:** Channel Divinity action validation is duplicated and racy across DM-queue + auto-resolved paths
+- **Commit:** 51e4646
+- **Outcome:** Added nil-guard for dmNotifier in ChannelDivinityDMQueue; prevents burning a use when no notifier is wired.
+- **Reviewer:** approved
+
+## 2026-05-17T19:42 — B-H04
+- **Finding:** Map renderer never composites the uploaded background image
+- **Commit:** 68a37ac
+- **Outcome:** Added BackgroundImage/BackgroundOpacity to MapData, created drawBackgroundImage() that composites beneath terrain layer with opacity support.
+- **Reviewer:** approved
+
+## 2026-05-17T19:44 — B-H07 (superseded)
+- **Finding:** Fog renderer does not preserve "previously seen" cells across renders
+- **Outcome:** Already fixed in SR-031. `discord_adapters.go` reads/writes `explored_cells` from DB, applies history via `applyExploredHistoryToFow`, and persists the union after each render.
+
+## 2026-05-17T19:46 — C-H12 (superseded)
+- **Finding:** Surprise: surprised condition removed at start of "skip turn", not end
+- **Outcome:** Code already satisfies spec. skipSurprisedTurn creates the turn, immediately skips it (completing it), THEN removes the condition. This IS "at the end of their skipped turn." No interleaving is possible in the synchronous flow.

@@ -79,13 +79,22 @@ func ComputeVisibilityWithZones(sources []VisionSource, lights []LightSource, wa
 	}
 
 	for _, light := range lights {
-		visible := shadowcast(light.Col, light.Row, light.RangeTiles, walls, width, height)
+		effectiveRange := light.RangeTiles
+		if light.DimRangeTiles > effectiveRange {
+			effectiveRange = light.DimRangeTiles
+		}
+		visible := shadowcast(light.Col, light.Row, effectiveRange, walls, width, height)
 		for pos := range visible {
 			idx := pos.Row*width + pos.Col
 			if idx < 0 || idx >= len(fow.States) {
 				continue
 			}
-			fow.States[idx] = Visible
+			dist := chebyshevDistance(light.Col, light.Row, pos.Col, pos.Row)
+			if dist <= light.RangeTiles {
+				fow.States[idx] = Visible
+			} else if light.DimRangeTiles > 0 && dist <= light.DimRangeTiles && fow.States[idx] < Explored {
+				fow.States[idx] = Explored
+			}
 		}
 	}
 
