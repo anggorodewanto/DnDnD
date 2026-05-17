@@ -28,8 +28,8 @@ type abilityMethodLister interface {
 type RefDataForCreate interface {
 	ListRaces(ctx context.Context) ([]portal.RaceInfo, error)
 	ListClasses(ctx context.Context) ([]portal.ClassInfo, error)
-	ListEquipment(ctx context.Context) ([]portal.EquipmentItem, error)
-	ListSpellsByClass(ctx context.Context, class string) ([]portal.SpellInfo, error)
+	ListEquipment(ctx context.Context, campaignID string) ([]portal.EquipmentItem, error)
+	ListSpellsByClass(ctx context.Context, class string, campaignID string) ([]portal.SpellInfo, error)
 }
 
 // CharCreateHandler serves the DM character creation page and API.
@@ -259,7 +259,7 @@ func (h *CharCreateHandler) HandleListRefEquipment(w http.ResponseWriter, r *htt
 		return
 	}
 
-	equipment, err := h.refData.ListEquipment(r.Context())
+	equipment, err := h.refData.ListEquipment(r.Context(), r.URL.Query().Get("campaign_id"))
 	if err != nil {
 		h.logger.Error("listing equipment for char creation", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -310,7 +310,7 @@ func (h *CharCreateHandler) HandleListRefSpells(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	spells, err := h.refData.ListSpellsByClass(r.Context(), class)
+	spells, err := h.refData.ListSpellsByClass(r.Context(), class, r.URL.Query().Get("campaign_id"))
 	if err != nil {
 		h.logger.Error("listing spells for char creation", "error", err, "class", class)
 		http.Error(w, "internal server error", http.StatusInternalServerError)

@@ -358,11 +358,11 @@ func (m *mockRefDataForCreate) ListClasses(ctx context.Context) ([]portal.ClassI
 	return m.classes, m.classErr
 }
 
-func (m *mockRefDataForCreate) ListEquipment(ctx context.Context) ([]portal.EquipmentItem, error) {
+func (m *mockRefDataForCreate) ListEquipment(ctx context.Context, campaignID string) ([]portal.EquipmentItem, error) {
 	return m.equipment, m.equipmentErr
 }
 
-func (m *mockRefDataForCreate) ListSpellsByClass(ctx context.Context, class string) ([]portal.SpellInfo, error) {
+func (m *mockRefDataForCreate) ListSpellsByClass(ctx context.Context, class string, campaignID string) ([]portal.SpellInfo, error) {
 	return m.spells, m.spellsErr
 }
 

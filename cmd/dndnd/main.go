@@ -285,12 +285,12 @@ func (c charCreateRefData) ListClasses(ctx context.Context) ([]portal.ClassInfo,
 	return c.a.ListClasses(ctx)
 }
 
-func (c charCreateRefData) ListEquipment(ctx context.Context) ([]portal.EquipmentItem, error) {
-	return c.a.ListEquipment(ctx, "")
+func (c charCreateRefData) ListEquipment(ctx context.Context, campaignID string) ([]portal.EquipmentItem, error) {
+	return c.a.ListEquipment(ctx, campaignID)
 }
 
-func (c charCreateRefData) ListSpellsByClass(ctx context.Context, class string) ([]portal.SpellInfo, error) {
-	return c.a.ListSpellsByClass(ctx, class, "")
+func (c charCreateRefData) ListSpellsByClass(ctx context.Context, class string, campaignID string) ([]portal.SpellInfo, error) {
+	return c.a.ListSpellsByClass(ctx, class, campaignID)
 }
 
 // newDMQueueChannelResolver returns a closure that resolves a guild ID to
