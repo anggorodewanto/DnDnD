@@ -64,6 +64,9 @@ func RenderMap(md *MapData) ([]byte, error) {
 	dc.Push()
 	dc.Translate(float64(margin), float64(margin))
 
+	// 0.5. Background image layer (beneath terrain)
+	drawBackgroundImage(dc, md)
+
 	// 1. Terrain layer
 	DrawTerrain(dc, md)
 

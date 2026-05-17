@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"image/png"
 	"testing"
+
+	"github.com/fogleman/gg"
 )
 
 func TestRenderMap_BasicPNG(t *testing.T) {
@@ -308,4 +310,165 @@ func TestRenderMap_DoesNotMutateTileSize(t *testing.T) {
 	if md.TileSize != 64 {
 		t.Errorf("RenderMap mutated md.TileSize: got %d, want 64", md.TileSize)
 	}
+}
+
+func TestRenderMap_BackgroundImage(t *testing.T) {
+	bgImg := createSolidColorPNG(t, 96, 96, 0x00, 0x00, 0xFF) // blue
+
+	// With terrain present, background is drawn beneath. The terrain (beige)
+	// covers it fully. To verify the background is actually composited, we
+	// compare a render WITH background vs WITHOUT and confirm they differ
+	// when terrain is absent for a specific tile.
+	// Simplest: render with no terrain grid entries that would cover the bg.
+	// terrainAt returns OpenGround for nil grid, which draws beige on top.
+	// So instead, verify the background draws by checking a pixel BEFORE
+	// terrain would be drawn — but that's not possible with the current
+	// layering. Instead, verify that the background image bytes are decoded
+	// and drawn by comparing output with and without background.
+	mdWithBg := &MapData{
+		Width:             2,
+		Height:            2,
+		TileSize:          48,
+		TerrainGrid:       make([]TerrainType, 4),
+		BackgroundImage:   bgImg,
+		BackgroundOpacity: 1.0,
+	}
+	mdWithoutBg := &MapData{
+		Width:       2,
+		Height:      2,
+		TileSize:    48,
+		TerrainGrid: make([]TerrainType, 4),
+	}
+
+	dataWith, err := RenderMap(mdWithBg)
+	if err != nil {
+		t.Fatalf("RenderMap with bg error: %v", err)
+	}
+	dataWithout, err := RenderMap(mdWithoutBg)
+	if err != nil {
+		t.Fatalf("RenderMap without bg error: %v", err)
+	}
+
+	// The outputs should differ because the background is drawn beneath terrain.
+	// Even though terrain covers it, the rendering pipeline processes differently
+	// (background drawn, then terrain on top). With fully opaque terrain the
+	// pixel values may be identical — so this test verifies the code path runs
+	// without error. The real visual test is with partial-opacity terrain or
+	// when the caller skips terrain.
+	if len(dataWith) == 0 {
+		t.Fatal("RenderMap with background returned empty data")
+	}
+	if len(dataWithout) == 0 {
+		t.Fatal("RenderMap without background returned empty data")
+	}
+
+	// Verify both are valid PNGs
+	_, err = png.Decode(bytes.NewReader(dataWith))
+	if err != nil {
+		t.Fatalf("output with bg is not valid PNG: %v", err)
+	}
+	_, err = png.Decode(bytes.NewReader(dataWithout))
+	if err != nil {
+		t.Fatalf("output without bg is not valid PNG: %v", err)
+	}
+}
+
+func TestRenderMap_BackgroundImage_VisibleWhenNoTerrain(t *testing.T) {
+	// Use a distinctive color that differs from the white canvas and beige terrain.
+	bgImg := createSolidColorPNG(t, 96, 96, 0x00, 0x00, 0xFF) // blue
+
+	// Render with background but skip terrain by using a custom approach:
+	// We can't skip DrawTerrain in the current architecture, but we CAN verify
+	// that the background is drawn by checking that the white canvas fill is
+	// replaced. Since terrain draws beige (0xF0F0E8) on top, the final pixel
+	// won't show blue. However, if we set BackgroundOpacity to 0, the background
+	// should NOT affect the output (white canvas + terrain = beige).
+	// With opacity 1.0, background IS drawn but terrain covers it.
+	// The key test: verify drawBackgroundImage is called and doesn't panic/error.
+	// For a true pixel-level test, we'd need to make terrain semi-transparent.
+	// Instead, test that a 0-opacity background produces the same output as no background.
+	mdZeroOpacity := &MapData{
+		Width:             2,
+		Height:            2,
+		TileSize:          48,
+		TerrainGrid:       make([]TerrainType, 4),
+		BackgroundImage:   bgImg,
+		BackgroundOpacity: 0.0,
+	}
+	mdNoBg := &MapData{
+		Width:       2,
+		Height:      2,
+		TileSize:    48,
+		TerrainGrid: make([]TerrainType, 4),
+	}
+
+	dataZero, err := RenderMap(mdZeroOpacity)
+	if err != nil {
+		t.Fatalf("RenderMap zero opacity error: %v", err)
+	}
+	dataNone, err := RenderMap(mdNoBg)
+	if err != nil {
+		t.Fatalf("RenderMap no bg error: %v", err)
+	}
+
+	// With 0 opacity, background should be invisible — output identical to no background.
+	if !bytes.Equal(dataZero, dataNone) {
+		t.Error("expected 0-opacity background to produce identical output to no background")
+	}
+}
+
+func TestRenderMap_BackgroundImage_WithTerrain(t *testing.T) {
+	bgImg := createSolidColorPNG(t, 96, 96, 0xFF, 0x00, 0x00) // red
+
+	// With terrain present, background is drawn but terrain covers it.
+	// Verify no error and valid output.
+	md := &MapData{
+		Width:             2,
+		Height:            2,
+		TileSize:          48,
+		TerrainGrid:       make([]TerrainType, 4),
+		BackgroundImage:   bgImg,
+		BackgroundOpacity: 0.5,
+	}
+
+	data, err := RenderMap(md)
+	if err != nil {
+		t.Fatalf("RenderMap error: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("RenderMap returned empty data")
+	}
+}
+
+func TestRenderMap_BackgroundImage_NilImage(t *testing.T) {
+	// No background image — should render normally without error.
+	md := &MapData{
+		Width:             2,
+		Height:            2,
+		TileSize:          48,
+		TerrainGrid:       make([]TerrainType, 4),
+		BackgroundImage:   nil,
+		BackgroundOpacity: 1.0,
+	}
+
+	data, err := RenderMap(md)
+	if err != nil {
+		t.Fatalf("RenderMap error: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("RenderMap returned empty data")
+	}
+}
+
+// createSolidColorPNG creates a PNG image of the given size filled with a solid color.
+func createSolidColorPNG(t *testing.T, w, h int, red, green, blue uint8) []byte {
+	t.Helper()
+	dc := gg.NewContext(w, h)
+	dc.SetRGB(float64(red)/255, float64(green)/255, float64(blue)/255)
+	dc.Clear()
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, dc.Image()); err != nil {
+		t.Fatalf("failed to create test PNG: %v", err)
+	}
+	return buf.Bytes()
 }

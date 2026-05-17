@@ -57,7 +57,7 @@ Low: 142
 | 45 | B-H01 | High | done | Map size limits not enforced when rendering, only at create-time | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:12-16`; |
 | 46 | B-H02 | High | done | `RenderMap` mutates caller-supplied `MapData.TileSize` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:13-16` |
 | 47 | B-H03 | High | done | Asset upload accepts arbitrary MIME types (XSS / file-type abuse risk) | `/home/ab/projects/DnDnD/internal/asset/handler.go:36-83`, |
-| 48 | B-H04 | High | pending | Map renderer never composites the uploaded background image | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go` |
+| 48 | B-H04 | High | in_progress | Map renderer never composites the uploaded background image | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go` |
 | 49 | B-H05 | High | done | `TilesetRefs` request field silently dropped by HTTP handler | `/home/ab/projects/DnDnD/internal/gamemap/handler.go:65-82, |
 | 50 | B-H06 | High | done | DM-view fog-of-war ignores `MapData.DMSeesAll` when caller pre-computed fog *without* setting the flag on `FogOfWar` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:33-47`, |
 | 51 | B-H07 | High | pending | Fog renderer does not preserve "previously seen" cells across renders | `/home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:68-93` |
@@ -80,7 +80,7 @@ Low: 142
 | 68 | D-H05 | High | done | Monk Unarmored Movement not gated on "no shield" | /home/ab/projects/DnDnD/internal/combat/monk.go:487 (`UnarmoredMovementFeature`)... |
 | 69 | D-H06 | High | done | Wild Shape on-revert does not restore the druid's speed snapshot | /home/ab/projects/DnDnD/internal/combat/wildshape.go:181 (`RevertWildShape`) |
 | 70 | D-H07 | High | superseded | Wild Shape activation does not block druid spellcasting | /home/ab/projects/DnDnD/internal/combat/spellcasting.go:381 and /home/ab/project... |
-| 71 | D-H08 | High | in_progress | Channel Divinity action validation is duplicated and racy across DM-queue + auto-resolved paths | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:160, :366, :446, :52... |
+| 71 | D-H08 | High | done | Channel Divinity action validation is duplicated and racy across DM-queue + auto-resolved paths | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:160, :366, :446, :52... |
 | 72 | E-H01 | High | done | Help action grants advantage only on attacks, not on ability checks | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261`; `advantag... |
 | 73 | E-H02 | High | done | AoE pending save DC subtraction loses cover information | `/home/ab/projects/DnDnD/internal/combat/aoe.go:592` (`Dc: int32(ps.DC - ps.Cove... |
 | 74 | E-H03 | High | done | Pact-magic upcast respects pact level but silently ignores `--slot` requests | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:446-457` |

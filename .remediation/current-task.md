@@ -1,11 +1,17 @@
-finding_id: D-H08
+finding_id: B-H04
 severity: High
-title: Channel Divinity action validation duplicated and racy across DM-queue + auto-resolved paths
-location: internal/combat/channel_divinity.go:160, :366, :446, :520, :590
-spec_ref: spec §744-848; Phase 50
+title: Map renderer never composites the uploaded background image
+location: /home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go
+spec_ref: phases §Phase 21b ("Background renders beneath terrain layer", with opacity)
 problem: |
-  The DM-queue path (ChannelDivinityDMQueue) deducts the use even if the DM later rejects the effect. When s.dmNotifier == nil, a use is burned silently with no follow-up.
+  The server-side PNG renderer has no awareness of maps.background_image_id at all.
+  ParseTiledJSON parses only terrain, walls, lighting, elevation, and spawn zones.
+  Phase 21b only delivers the background-image rendering inside the Svelte editor preview.
+  Any map that uses a battle-map image as backdrop will render as plain beige terrain in Discord.
 suggested_fix: |
-  Require a notifier to be wired before allowing the deduction (return error if s.dmNotifier == nil).
+  Draw the bg image (looked up via AssetStore) in RenderMap before terrain, with an opacity
+  slider value plumbed from the Tiled JSON or a dedicated MapData.BackgroundOpacity field.
 acceptance_criterion: |
-  ChannelDivinityDMQueue returns an error when dmNotifier is nil. A test demonstrates this.
+  When MapData includes a BackgroundImage ([]byte PNG) and BackgroundOpacity (float64),
+  RenderMap composites the image beneath the terrain layer at the specified opacity.
+  A test demonstrates a non-white pixel at a position where the background image has color.

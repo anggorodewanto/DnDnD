@@ -255,4 +255,14 @@ type MapData struct {
 	// DM-view PNG renders every tile at full brightness regardless of
 	// player vision. Caller may also set FogOfWar.DMSeesAll directly.
 	DMSeesAll bool
+
+	// BackgroundImage is the raw PNG bytes of the map's background image
+	// (looked up via AssetStore from maps.background_image_id). When non-nil,
+	// the image is composited beneath the terrain layer at BackgroundOpacity.
+	BackgroundImage []byte
+
+	// BackgroundOpacity controls the opacity of the background image layer
+	// (0.0 = fully transparent, 1.0 = fully opaque). Only used when
+	// BackgroundImage is non-nil.
+	BackgroundOpacity float64
 }
