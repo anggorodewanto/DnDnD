@@ -130,12 +130,12 @@ Low: 142
 | 118 | I-H10 | High | skipped | Race speed table is hard-coded; ignores DB and homebrew races | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:204-217 |
 | 119 | I-H11 | High | done | DM character creation handler is not protected by DM auth | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go:83-103, 112-138... |
 | 120 | J-H01 | High | done | Saved/Active encounter Campaign Home cards show player-facing display_name, not the spoilery internal name | /home/ab/projects/DnDnD/cmd/dndnd/main.go:243-246 and 261-265 (`encounterListerA... |
-| 121 | J-H02 | High | pending | Reaction-declaration → dm-queue itemID mapping is in-memory only; lost on restart breaks /reaction cancel | /home/ab/projects/DnDnD/internal/discord/reaction_handler.go:51-86 (`itemIDs map... |
+| 121 | J-H02 | High | done | Reaction-declaration → dm-queue itemID mapping is in-memory only; lost on restart breaks /reaction cancel | /home/ab/projects/DnDnD/internal/discord/reaction_handler.go:51-86 (`itemIDs map... |
 | 122 | J-H03 | High | done | DM dashboard error panel cannot render stack trace / structured detail — error_detail column never written | /home/ab/projects/DnDnD/internal/errorlog/recorder.go:18-29 (`Entry`); /home/ab/... |
-| 123 | J-H04 | High | pending | /help "Context Tips" shows hardcoded text, not actual remaining resources | /home/ab/projects/DnDnD/internal/discord/help_handler.go:80-96 |
+| 123 | J-H04 | High | skipped | /help "Context Tips" shows hardcoded text, not actual remaining resources | /home/ab/projects/DnDnD/internal/discord/help_handler.go:80-96 |
 | 124 | J-H05 | High | done | One character can be in two active encounters (no DB constraint; LIMIT 1 in query masks the bug) | /home/ab/projects/DnDnD/db/queries/encounters.sql:46-51 (`GetActiveEncounterIDBy... |
 | 125 | J-H06 | High | done | /whisper accepts empty message and spams a dm-queue item | /home/ab/projects/DnDnD/internal/discord/whisper_handler.go:61-80 |
-| 126 | J-H07 | High | pending | dm-queue Sender bypasses the per-channel MessageQueue (rate-limit ordering) | /home/ab/projects/DnDnD/internal/dmqueue/sender.go:19-41 |
+| 126 | J-H07 | High | skipped | dm-queue Sender bypasses the per-channel MessageQueue (rate-limit ordering) | /home/ab/projects/DnDnD/internal/dmqueue/sender.go:19-41 |
 | 127 | J-H08 | High | pending | WS reader/writer can race on slow-client drop | /home/ab/projects/DnDnD/internal/dashboard/ws.go:77-101 (`Hub.Run` broadcast blo... |
 | 128 | J-H09 | High | done | Encounter snapshot publisher does NOT trigger on /move position writes | /home/ab/projects/DnDnD/internal/discord/move_handler.go:686-735; combat.Service... |
 | 129 | cross-cut-H01 | High | done | `routePhase43DeathSave` skips the drop-to-0 instant-death rule when overflow is exactly the limit but damage came from a hit at >0 HP and `adjusted` overshoots | `internal/combat/damage.go:336-346`, |

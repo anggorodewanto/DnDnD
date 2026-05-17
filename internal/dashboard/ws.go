@@ -42,10 +42,10 @@ type Hub struct {
 // NewHub creates a new Hub.
 func NewHub() *Hub {
 	return &Hub{
-		Register:     make(chan *Client),
-		Unregister:   make(chan *Client),
-		Broadcast:    make(chan []byte),
-		encBroadcast: make(chan encounterBroadcast),
+		Register:     make(chan *Client, 64),
+		Unregister:   make(chan *Client, 64),
+		Broadcast:    make(chan []byte, 64),
+		encBroadcast: make(chan encounterBroadcast, 64),
 		clients:      make(map[*Client]bool),
 		stop:         make(chan struct{}),
 	}
