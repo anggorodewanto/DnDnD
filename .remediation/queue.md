@@ -121,7 +121,7 @@ Low: 142
 | 109 | I-H01 | High | done | Dashboard DM-created chars miss background skill proficiencies | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:221-253, 117 ; compare ... |
 | 110 | I-H02 | High | pending | DM character form doesn't pass campaign_id to spell/equipment refdata | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go:30-34, 281-318,... |
 | 111 | I-H03 | High | pending | Encounter Builder doesn't place PC tokens at combat start | /home/ab/projects/DnDnD/dashboard/svelte/src/EncounterBuilder.svelte:368-389 |
-| 112 | I-H04 | High | in_progress | Action Resolver `move` effect bypasses turn lock, walls, and concentration hooks | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_handler.go:215-313, 400-421 |
+| 112 | I-H04 | High | done | Action Resolver `move` effect bypasses turn lock, walls, and concentration hooks | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_handler.go:215-313, 400-421 |
 | 113 | I-H05 | High | pending | Active reactions panel highlights every active reaction on enemy turns | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:65-68 |
 | 114 | I-H06 | High | done | Cross-tenant reads on character overview / narration history / message history | /home/ab/projects/DnDnD/internal/characteroverview/handler.go:35-47 ; /home/ab/p... |
 | 115 | I-H07 | High | done | Narration & message-player handlers trust author_user_id from request body | /home/ab/projects/DnDnD/internal/narration/handler.go:49-91 ; /home/ab/projects/... |
