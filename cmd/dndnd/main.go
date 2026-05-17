@@ -571,7 +571,8 @@ func buildAuth(db *sql.DB, logger *slog.Logger) authBundle {
 	// secure=false locally so the session cookie works over plain HTTP.
 	// Production should front the bot with TLS (BASE_URL=https://…) and set
 	// COOKIE_SECURE=true.
-	secure := os.Getenv("COOKIE_SECURE") == "true"
+	// Default to secure cookies; local dev must explicitly set COOKIE_SECURE=false.
+	secure := os.Getenv("COOKIE_SECURE") != "false"
 	userFetcher := &auth.DiscordUserInfoFetcher{}
 	oauthSvc := auth.NewOAuthService(oauthCfg, sessionStore, userFetcher, logger, secure)
 	return authBundle{
