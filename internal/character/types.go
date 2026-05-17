@@ -18,18 +18,18 @@ type AbilityScores struct {
 
 // Get returns the ability score for the given abbreviation (case-insensitive).
 func (a AbilityScores) Get(ability string) int {
-	switch ability {
-	case "str", "STR":
+	switch strings.ToLower(ability) {
+	case "str":
 		return a.STR
-	case "dex", "DEX":
+	case "dex":
 		return a.DEX
-	case "con", "CON":
+	case "con":
 		return a.CON
-	case "int", "INT":
+	case "int":
 		return a.INT
-	case "wis", "WIS":
+	case "wis":
 		return a.WIS
-	case "cha", "CHA":
+	case "cha":
 		return a.CHA
 	}
 	return 0

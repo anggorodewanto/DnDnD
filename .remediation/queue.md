@@ -170,7 +170,7 @@ Low: 142
 | 158 | B-M11 | Medium | pending | Map `UpdateMap` allows shrinking width/height without re-clipping `tiled_json` | `/home/ab/projects/DnDnD/internal/gamemap/service.go:124-151`. |
 | 159 | B-M12 | Medium | pending | `RenderQueue` never times-out or drops requests on render failure | `/home/ab/projects/DnDnD/internal/gamemap/renderer/queue.go:76-93`. |
 | 160 | C-M01 | Medium | pending | Unarmed strike crit doubles the flat "1", not RAW dice | /home/ab/projects/DnDnD/internal/combat/attack.go:674-681 |
-| 161 | C-M02 | Medium | pending | TWF "negative ability modifier still applies" RAW edge missed | /home/ab/projects/DnDnD/internal/combat/attack.go:1199-1202 |
+| 161 | C-M02 | Medium | done | TWF "negative ability modifier still applies" RAW edge missed | /home/ab/projects/DnDnD/internal/combat/attack.go:1199-1202 |
 | 162 | C-M03 | Medium | pending | Cover bonus to DEX save uses single closest-corner instead of best-of-4 | /home/ab/projects/DnDnD/internal/combat/cover.go:106-136 (`CalculateCoverFromOri... |
 | 163 | C-M04 | Medium | pending | `lineBlockedByWalls` allows zero-determinant case to slip through | /home/ab/projects/DnDnD/internal/combat/cover.go:212-233 (`segmentsIntersect`) |
 | 164 | C-M05 | Medium | pending | Off-hand TWF doesn't track on AttackerHidden / invisible attacker single-shot reveal | /home/ab/projects/DnDnD/internal/combat/attack.go:1238-1247 (`OffhandAttack`) |
