@@ -3,7 +3,19 @@ package discord
 import "fmt"
 
 // WelcomeMessage returns the welcome DM text for a given campaign name.
-func WelcomeMessage(campaignName string) string {
+// If channelIDs are provided, channel references use Discord's <#id> format
+// so they render as clickable links and survive renames.
+func WelcomeMessage(campaignName string, channelIDs ...map[string]string) string {
+	cardsRef := "#character-cards"
+	storyRef := "#the-story"
+	if len(channelIDs) > 0 && channelIDs[0] != nil {
+		if id, ok := channelIDs[0]["character_cards"]; ok && id != "" {
+			cardsRef = fmt.Sprintf("<#%s>", id)
+		}
+		if id, ok := channelIDs[0]["the_story"]; ok && id != "" {
+			storyRef = fmt.Sprintf("<#%s>", id)
+		}
+	}
 	return fmt.Sprintf(`Welcome to %s! Here's how to get started:
 
 1. Create or import your character:
@@ -13,9 +25,9 @@ func WelcomeMessage(campaignName string) string {
 
 2. Wait for DM approval (you'll be pinged when approved)
 
-3. Once approved, check #character-cards for your sheet and #the-story to catch up
+3. Once approved, check %s for your sheet and %s to catch up
 
-Type /help for a full command list.`, campaignName)
+Type /help in the server for a full command list.`, campaignName, cardsRef, storyRef)
 }
 
 // SendWelcomeDM sends the welcome message to a user via DM.
