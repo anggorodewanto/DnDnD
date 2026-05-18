@@ -164,7 +164,7 @@ func TestListConditions_Empty(t *testing.T) {
 func TestListConditions_Nil(t *testing.T) {
 	conds, err := ListConditions(nil)
 	require.NoError(t, err)
-	assert.Nil(t, conds)
+	assert.Empty(t, conds)
 }
 
 func TestListConditions_InvalidJSON(t *testing.T) {

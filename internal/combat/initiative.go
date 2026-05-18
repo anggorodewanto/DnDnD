@@ -111,7 +111,7 @@ func IsSurprised(conditions json.RawMessage) bool {
 // parseConditions unmarshals a conditions JSONB array, treating empty/nil as an empty slice.
 func parseConditions(raw json.RawMessage) ([]CombatCondition, error) {
 	if len(raw) == 0 {
-		return nil, nil
+		return []CombatCondition{}, nil
 	}
 	var conds []CombatCondition
 	if err := json.Unmarshal(raw, &conds); err != nil {
