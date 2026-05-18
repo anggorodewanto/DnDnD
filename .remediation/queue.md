@@ -196,8 +196,8 @@ Low: 142
 | 184 | D-M11 | Medium | pending | Resolution priority places `EffectModifyAttackRoll` and `EffectModifySave` at the same priority as immunities-after — but advantage cancellation is a later step | /home/ab/projects/DnDnD/internal/combat/effect.go:134 (`EffectPriority`) |
 | 185 | D-M12 | Medium | pending | EffectGrantImmunity stores condition immunities in the same slice as damage immunities | /home/ab/projects/DnDnD/internal/combat/effect.go:322 |
 | 186 | D-M13 | Medium | pending | Resource_on_hit prompt only fired by Divine Smite, not by feature declarations | /home/ab/projects/DnDnD/internal/combat/class_feature_prompt.go and /home/ab/pro... |
-| 187 | D-M14 | Medium | pending | Lay on Hands self-targeting can heal undead/construct PCs without rejection | /home/ab/projects/DnDnD/internal/combat/lay_on_hands.go:58 |
-| 188 | D-M15 | Medium | pending | Channel Divinity DC uses WIS for both Cleric and Paladin | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:186 |
+| 187 | D-M14 | Medium | skipped | Lay on Hands self-targeting can heal undead/construct PCs without rejection | /home/ab/projects/DnDnD/internal/combat/lay_on_hands.go:58 |
+| 188 | D-M15 | Medium | skipped | Channel Divinity DC uses WIS for both Cleric and Paladin | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:186 |
 | 189 | E-M01 | Medium | pending | Twinned Spell does not enforce "single creature target" beyond AoE/self check | `/home/ab/projects/DnDnD/internal/combat/metamagic.go:108-116` |
 | 190 | E-M02 | Medium | pending | Pact slot deduction does not refuse when `effectiveSlotLevel == 0` and damage path requires upcast | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:444-457` |
 | 191 | E-M03 | Medium | superseded | Hide: success comparison ties go to perceiver, but spec says "meets or exceeds" | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:361` |
@@ -243,7 +243,7 @@ Low: 142
 | 231 | G-M07 | Medium | done | Combat recap truncation cuts mid-line and may produce orphan round headers | internal/combat/recap.go:71-78, 93-116 |
 | 232 | G-M08 | Medium | pending | PartyShortRest never auto-spends hit dice (always spends 0) | internal/rest/party_handler.go:218-260 |
 | 233 | G-M09 | Medium | pending | Loot pool created from "completed" encounter — combatants gold lost if encounter status mismatch | internal/loot/service.go:67-118 |
-| 234 | G-M10 | Medium | pending | Loot pool item ItemID null when claimed from custom entries breaks downstream `/use` | internal/loot/service.go:243-256 |
+| 234 | G-M10 | Medium | done | Loot pool item ItemID null when claimed from custom entries breaks downstream `/use` | internal/loot/service.go:243-256 |
 | 235 | G-M11 | Medium | done | `Equip` blocks re-equipping the same item but silently allows two main-hand items via `OffHand=false` | internal/inventory/equip.go:27-62 |
 | 236 | G-M12 | Medium | done | LongRest doesn't recharge `recharge: "dawn"` features distinct from `"long"` | internal/rest/rest.go:401-407 |
 | 237 | G-M13 | Medium | done | LongRest never zeroes the input.PactMagicSlots when it does mutate them | internal/rest/rest.go:392-398 |
