@@ -399,3 +399,18 @@ func TestIdentifyItem_Success(t *testing.T) {
 	assert.Contains(t, result.Message, "Ring of Invisibility")
 	assert.Contains(t, result.Message, "identified")
 }
+
+func TestCastIdentify_RitualRejectedInCombat(t *testing.T) {
+	items := []character.InventoryItem{
+		{ItemID: "wand-1", Name: "Wand", IsMagic: true},
+	}
+	_, err := CastIdentify(CastIdentifyInput{
+		Items:      items,
+		ItemID:     "wand-1",
+		KnowsSpell: true,
+		IsRitual:   true,
+		InCombat:   true,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot ritual cast during combat")
+}

@@ -66,6 +66,7 @@ type CastIdentifyInput struct {
 	SpellSlots map[int]int       // slot level -> remaining slots
 	SlotLevel  int               // which slot level to use (ignored if ritual)
 	IsRitual   bool              // cast as ritual (no slot consumed, extra 10 min)
+	InCombat   bool              // whether the caster is in an active encounter
 }
 
 // CastIdentifyResult holds the result of casting Identify.
@@ -81,6 +82,10 @@ type CastIdentifyResult struct {
 func CastIdentify(input CastIdentifyInput) (CastIdentifyResult, error) {
 	if !input.KnowsSpell {
 		return CastIdentifyResult{}, fmt.Errorf("caster does not know the Identify spell")
+	}
+
+	if input.IsRitual && input.InCombat {
+		return CastIdentifyResult{}, fmt.Errorf("cannot ritual cast during combat")
 	}
 
 	if !input.IsRitual {
