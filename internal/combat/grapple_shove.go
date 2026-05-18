@@ -69,11 +69,8 @@ func (s *Service) Grapple(ctx context.Context, cmd GrappleCommand, roller *dice.
 		return GrappleResult{}, fmt.Errorf("target is too large to grapple (size difference exceeds 1)")
 	}
 
-	// Adjacency check: must be within 5ft
-	dist := GridDistanceFt(
-		cmd.Grappler.PositionCol, int(cmd.Grappler.PositionRow),
-		cmd.Target.PositionCol, int(cmd.Target.PositionRow),
-	)
+	// Adjacency check: must be within 5ft (3D distance including altitude)
+	dist := combatantDistance(cmd.Grappler, cmd.Target)
 	if dist > 5 {
 		return GrappleResult{}, fmt.Errorf("grapple requires being within 5ft of %s (currently %dft away)",
 			cmd.Target.DisplayName, dist)
@@ -197,11 +194,8 @@ func (s *Service) Shove(ctx context.Context, cmd ShoveCommand, roller *dice.Roll
 		return ShoveResult{}, fmt.Errorf("target is too large to shove (size difference exceeds 1)")
 	}
 
-	// Adjacency check
-	dist := GridDistanceFt(
-		cmd.Shover.PositionCol, int(cmd.Shover.PositionRow),
-		cmd.Target.PositionCol, int(cmd.Target.PositionRow),
-	)
+	// Adjacency check (3D distance including altitude)
+	dist := combatantDistance(cmd.Shover, cmd.Target)
 	if dist > 5 {
 		return ShoveResult{}, fmt.Errorf("shove requires being within 5ft of %s (currently %dft away)",
 			cmd.Target.DisplayName, dist)
