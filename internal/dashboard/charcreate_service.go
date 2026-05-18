@@ -107,6 +107,7 @@ func (svc *DMCharCreateService) CreateCharacter(ctx context.Context, campaignID 
 		SpeedFt:        stats.SpeedFt,
 		ProfBonus:      stats.ProficiencyBonus,
 		Saves:          stats.SaveProficiencies,
+		Skills:         append(classSkillProficiencies(sub.Classes), backgroundSkillProficiencies(sub.Background)...),
 		Equipment:      sub.Equipment,
 		Spells:         sub.Spells,
 		Languages:      sub.Languages,
