@@ -162,7 +162,7 @@ Low: 142
 | 150 | B-M03 | Medium | pending | Encounter map_id is nullable in the schema but Phase 22/23/26 assume it | `/home/ab/projects/DnDnD/db/migrations/20260312120001_create_encounter_templates... |
 | 151 | B-M04 | Medium | pending | Encounter template `Duplicate` does not generate fresh `short_id`s | `/home/ab/projects/DnDnD/internal/encounter/service.go:115-139`. |
 | 152 | B-M05 | Medium | pending | No validation that `position_col` / `position_row` are inside the map bounds | `/home/ab/projects/DnDnD/internal/combat/service.go:863-913` |
-| 153 | B-M06 | Medium | pending | DB does not enforce the map-dimension hard limit | `/home/ab/projects/DnDnD/db/migrations/20260310120009_create_maps.sql:6-7`. |
+| 153 | B-M06 | Medium | done | DB does not enforce the map-dimension hard limit | `/home/ab/projects/DnDnD/db/migrations/20260310120009_create_maps.sql:6-7`. |
 | 154 | B-M07 | Medium | pending | Tiled import accepts a `width=0, height=0` map if it's not `infinite` | `/home/ab/projects/DnDnD/internal/gamemap/import.go:88-103`. |
 | 155 | B-M08 | Medium | pending | Stacked-token offset can place tokens outside their grid cell | `/home/ab/projects/DnDnD/internal/gamemap/renderer/token.go:28-36`. |
 | 156 | B-M09 | Medium | pending | `/api/assets/upload` response sets headers after potentially writing body | `/home/ab/projects/DnDnD/internal/asset/handler.go:103-111` |
@@ -177,7 +177,7 @@ Low: 142
 | 165 | C-M06 | Medium | pending | Damage-at-0 crit gives +2 failures regardless of attacker distance | /home/ab/projects/DnDnD/internal/combat/deathsave.go:159-192 (`ApplyDamageAtZero... |
 | 166 | C-M07 | Medium | done | `ValidateMove` rejects ending on ally's tile (spec says ally pass-through allowed; ending forbidden — fine — but message) | /home/ab/projects/DnDnD/internal/combat/movement.go:84-94 |
 | 167 | C-M08 | Medium | pending | `tileCost` adds +5 for prone, conceptually using +5 not ×2 | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:284-294 |
-| 168 | C-M09 | Medium | pending | Action consumption not flagged for /attack — features keying off ActionUsed misbehave | /home/ab/projects/DnDnD/internal/combat/attack.go:925 (UseAttack only decrements... |
+| 168 | C-M09 | Medium | done | Action consumption not flagged for /attack — features keying off ActionUsed misbehave | /home/ab/projects/DnDnD/internal/combat/attack.go:925 (UseAttack only decrements... |
 | 169 | C-M10 | Medium | pending | Initiative tiebreak ignores DEX modifier ordering for surprised + tie cases | /home/ab/projects/DnDnD/internal/combat/initiative.go:167-177 |
 | 170 | C-M11 | Medium | pending | Distance3D rounding-to-5 can flip cover/range edges | /home/ab/projects/DnDnD/internal/combat/altitude.go:22-33 (`Distance3D`, `roundT... |
 | 171 | C-M12 | Medium | pending | Concentration save DC formula not capped (some house rules cap at DC 30) | /home/ab/projects/DnDnD/internal/combat/concentration.go ~ `CheckConcentrationOn... |
@@ -192,7 +192,7 @@ Low: 142
 | 180 | D-M07 | Medium | pending | Turn Undead does not differentiate "can see or hear" requirement | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:213 |
 | 181 | D-M08 | Medium | pending | Wild Shape concentration retention not implemented | /home/ab/projects/DnDnD/internal/combat/wildshape.go:333 (`ActivateWildShape`) |
 | 182 | D-M09 | Medium | pending | Stunning Strike duration uses `"end_of_turn"` with `DurationRounds: 1` | /home/ab/projects/DnDnD/internal/combat/monk.go:398 |
-| 183 | D-M10 | Medium | pending | Rage rounds counter underflows below 0 | /home/ab/projects/DnDnD/internal/combat/rage.go:158 (`DecrementRageRound`) |
+| 183 | D-M10 | Medium | done | Rage rounds counter underflows below 0 | /home/ab/projects/DnDnD/internal/combat/rage.go:158 (`DecrementRageRound`) |
 | 184 | D-M11 | Medium | pending | Resolution priority places `EffectModifyAttackRoll` and `EffectModifySave` at the same priority as immunities-after — but advantage cancellation is a later step | /home/ab/projects/DnDnD/internal/combat/effect.go:134 (`EffectPriority`) |
 | 185 | D-M12 | Medium | pending | EffectGrantImmunity stores condition immunities in the same slice as damage immunities | /home/ab/projects/DnDnD/internal/combat/effect.go:322 |
 | 186 | D-M13 | Medium | pending | Resource_on_hit prompt only fired by Divine Smite, not by feature declarations | /home/ab/projects/DnDnD/internal/combat/class_feature_prompt.go and /home/ab/pro... |
@@ -272,7 +272,7 @@ Low: 142
 | 260 | I-M04 | Medium | pending | Character Overview lacks live HP/condition snapshots | /home/ab/projects/DnDnD/internal/characteroverview/service.go:24-39 ; dashboard/... |
 | 261 | I-M05 | Medium | pending | DM action-resolver "move" effect doesn't write to action log even via effects | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_handler.go:400-421 |
 | 262 | I-M06 | Medium | pending | DM character creation does not store skill proficiencies | /home/ab/projects/DnDnD/internal/dashboard/charcreate_service.go:93-116 |
-| 263 | I-M07 | Medium | pending | DM character submission allows duplicate class entries | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:28-79 |
+| 263 | I-M07 | Medium | done | DM character submission allows duplicate class entries | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:28-79 |
 | 264 | I-M08 | Medium | pending | Spell selection isn't filtered by class or capped at max spell level on submit | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:11-25 ; charcreate_hand... |
 | 265 | I-M09 | Medium | pending | Combat workspace omits character_id when emitting combatant for spell-slot override | /home/ab/projects/DnDnD/internal/combat/workspace_handler.go:87-106 |
 | 266 | I-M10 | Medium | pending | Reaction panel resolve/cancel calls aren't atomic with turn-lock | /home/ab/projects/DnDnD/internal/combat/handler.go:461-498 (ResolveReaction/Canc... |
