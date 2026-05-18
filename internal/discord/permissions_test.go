@@ -10,10 +10,11 @@ import (
 
 func TestRequiredPermissions_Value(t *testing.T) {
 	perms := RequiredPermissions()
-	// Must include all five required permissions.
+	// Must include all six required permissions.
 	expected := discordgo.PermissionSendMessages |
 		discordgo.PermissionAttachFiles |
 		discordgo.PermissionManageMessages |
+		discordgo.PermissionManageChannels |
 		discordgo.PermissionUseSlashCommands |
 		discordgo.PermissionMentionEveryone
 
@@ -34,15 +35,15 @@ func TestValidatePermissions_SomeMissing(t *testing.T) {
 	// Only send messages permission.
 	granted := int64(discordgo.PermissionSendMessages)
 	missing := ValidatePermissions(granted)
-	if len(missing) != 4 {
-		t.Fatalf("expected 4 missing, got %d: %v", len(missing), missing)
+	if len(missing) != 5 {
+		t.Fatalf("expected 5 missing, got %d: %v", len(missing), missing)
 	}
 }
 
 func TestValidatePermissions_NonePresent(t *testing.T) {
 	missing := ValidatePermissions(0)
-	if len(missing) != 5 {
-		t.Fatalf("expected 5 missing, got %d: %v", len(missing), missing)
+	if len(missing) != 6 {
+		t.Fatalf("expected 6 missing, got %d: %v", len(missing), missing)
 	}
 }
 

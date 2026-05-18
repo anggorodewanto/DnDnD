@@ -12,6 +12,7 @@ var requiredPerms = []permissionEntry{
 	{discordgo.PermissionSendMessages, "Send Messages"},
 	{discordgo.PermissionAttachFiles, "Attach Files"},
 	{discordgo.PermissionManageMessages, "Manage Messages"},
+	{discordgo.PermissionManageChannels, "Manage Channels"},
 	{int64(discordgo.PermissionUseSlashCommands), "Use Application Commands"},
 	{discordgo.PermissionMentionEveryone, "Mention Everyone"},
 }
