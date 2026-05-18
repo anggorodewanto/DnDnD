@@ -184,14 +184,14 @@ Low: 142
 | 172 | C-M13 | Medium | superseded | Off-hand attack uses `combatantDistance` 3D — would auto-crit against airborne paralyzed | /home/ab/projects/DnDnD/internal/combat/attack.go:1216, 953 |
 | 173 | C-M14 | Medium | skipped | Spec calls for "ammo recovery PROMPT" post-combat; code auto-recovers in EndCombat | /home/ab/projects/DnDnD/internal/combat/service.go:1145-1161 |
 | 174 | D-M01 | Medium | done | Divine Smite crit bonus computed twice when target is undead and crit | /home/ab/projects/DnDnD/internal/combat/divine_smite.go:59 (`SmiteDamageFormula`... |
-| 175 | D-M02 | Medium | pending | Divine Smite eligibility doesn't enforce "weapon attack" | /home/ab/projects/DnDnD/internal/combat/divine_smite.go:52 (`IsSmiteEligible`) a... |
+| 175 | D-M02 | Medium | done | Divine Smite eligibility doesn't enforce "weapon attack" | /home/ab/projects/DnDnD/internal/combat/divine_smite.go:52 (`IsSmiteEligible`) a... |
 | 176 | D-M03 | Medium | done | Action Surge resets `AttacksRemaining` from current character data instead of remembering the action's attack count | /home/ab/projects/DnDnD/internal/combat/action_surge.go:58 |
 | 177 | D-M04 | Medium | done | Bardic Inspiration self-grant rejected even when out of combat | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:151 |
 | 178 | D-M05 | Medium | done | Bardic Inspiration: no 60ft range validation | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go (no distance check... |
-| 179 | D-M06 | Medium | pending | PreserveLife heal target validation can mutate map iteration order under errors | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:625 |
+| 179 | D-M06 | Medium | skipped | PreserveLife heal target validation can mutate map iteration order under errors | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:625 |
 | 180 | D-M07 | Medium | pending | Turn Undead does not differentiate "can see or hear" requirement | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:213 |
-| 181 | D-M08 | Medium | pending | Wild Shape concentration retention not implemented | /home/ab/projects/DnDnD/internal/combat/wildshape.go:333 (`ActivateWildShape`) |
-| 182 | D-M09 | Medium | pending | Stunning Strike duration uses `"end_of_turn"` with `DurationRounds: 1` | /home/ab/projects/DnDnD/internal/combat/monk.go:398 |
+| 181 | D-M08 | Medium | superseded | Wild Shape concentration retention not implemented | /home/ab/projects/DnDnD/internal/combat/wildshape.go:333 (`ActivateWildShape`) |
+| 182 | D-M09 | Medium | skipped | Stunning Strike duration uses `"end_of_turn"` with `DurationRounds: 1` | /home/ab/projects/DnDnD/internal/combat/monk.go:398 |
 | 183 | D-M10 | Medium | done | Rage rounds counter underflows below 0 | /home/ab/projects/DnDnD/internal/combat/rage.go:158 (`DecrementRageRound`) |
 | 184 | D-M11 | Medium | pending | Resolution priority places `EffectModifyAttackRoll` and `EffectModifySave` at the same priority as immunities-after — but advantage cancellation is a later step | /home/ab/projects/DnDnD/internal/combat/effect.go:134 (`EffectPriority`) |
 | 185 | D-M12 | Medium | pending | EffectGrantImmunity stores condition immunities in the same slice as damage immunities | /home/ab/projects/DnDnD/internal/combat/effect.go:322 |

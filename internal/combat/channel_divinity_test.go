@@ -2180,3 +2180,63 @@ func TestDestroyUndeadCRThreshold(t *testing.T) {
 		}
 	}
 }
+
+func TestTurnUndead_SkipsBlindedAndDeafenedTarget(t *testing.T) {
+	ctx := context.Background()
+	clericID := uuid.New()
+	encounterID := uuid.New()
+
+	char := refdata.Character{
+		ID:               clericID,
+		Classes:          json.RawMessage(`[{"class":"Cleric","level":3}]`),
+		AbilityScores:    json.RawMessage(`{"str":10,"dex":10,"con":14,"int":10,"wis":16,"cha":10}`),
+		ProficiencyBonus: 2,
+		FeatureUses:      pqtype.NullRawMessage{RawMessage: json.RawMessage(`{"channel-divinity":{"current":1,"max":1,"recharge":"short"}}`), Valid: true},
+	}
+
+	cleric := refdata.Combatant{
+		ID:          uuid.New(),
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: clericID, Valid: true},
+		DisplayName: "Thorn",
+		PositionCol: "A",
+		PositionRow: 1,
+		Conditions:  json.RawMessage(`[]`),
+	}
+
+	// Skeleton that is both blinded and deafened — cannot see or hear the cleric
+	skeleton := refdata.Combatant{
+		ID:            uuid.New(),
+		EncounterID:   encounterID,
+		CreatureRefID: sql.NullString{String: "skeleton", Valid: true},
+		DisplayName:   "Skeleton #1",
+		PositionCol:   "A",
+		PositionRow:   3,
+		HpCurrent:     13,
+		HpMax:         13,
+		IsNpc:         true,
+		IsAlive:       true,
+		Conditions:    json.RawMessage(`[{"condition":"blinded"},{"condition":"deafened"}]`),
+	}
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(_ context.Context, _ uuid.UUID) (refdata.Character, error) { return char, nil }
+	ms.listCombatantsByEncounterIDFn = func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{cleric, skeleton}, nil
+	}
+	ms.getCreatureFn = func(_ context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "skeleton", Type: "undead", Cr: "0.25"}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return 1 }) // would fail save
+
+	result, err := svc.TurnUndead(ctx, TurnUndeadCommand{
+		Cleric:       cleric,
+		Turn:         refdata.Turn{ID: uuid.New(), EncounterID: encounterID},
+		CurrentRound: 1,
+	}, roller)
+	require.NoError(t, err)
+	// Skeleton should be skipped (blinded+deafened), so no targets affected
+	assert.Empty(t, result.Targets, "blinded+deafened undead should be skipped")
+}

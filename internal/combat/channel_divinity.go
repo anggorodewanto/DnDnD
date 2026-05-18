@@ -231,6 +231,12 @@ func (s *Service) TurnUndead(ctx context.Context, cmd TurnUndeadCommand, roller 
 			continue
 		}
 
+		// RAW: target must be able to see or hear the cleric.
+		// Skip if target is both blinded and deafened.
+		if HasCondition(c.Conditions, "blinded") && HasCondition(c.Conditions, "deafened") {
+			continue
+		}
+
 		// Resolve WIS save
 		wisBonus, err := s.resolveTargetWisSave(ctx, c)
 		if err != nil {
