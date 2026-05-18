@@ -881,6 +881,20 @@ func (s *Service) CreateEncounterFromTemplate(ctx context.Context, templateID uu
 		return refdata.Encounter{}, nil, fmt.Errorf("parsing template creatures: %w", err)
 	}
 
+	// Validate creature positions against map bounds.
+	if tmpl.MapID.Valid {
+		m, err := s.store.GetMapByIDUnchecked(ctx, tmpl.MapID.UUID)
+		if err == nil {
+			for _, tc := range templateCreatures {
+				col := colToIndex(tc.PositionCol)
+				if col < 0 || col >= int(m.WidthSquares) || tc.PositionRow < 0 || tc.PositionRow >= int(m.HeightSquares) {
+					return refdata.Encounter{}, nil, fmt.Errorf("creature %s position (%s,%d) is outside map bounds (%dx%d)",
+						tc.ShortID, tc.PositionCol, tc.PositionRow, m.WidthSquares, m.HeightSquares)
+				}
+			}
+		}
+	}
+
 	enc, err := s.store.CreateEncounter(ctx, refdata.CreateEncounterParams{
 		CampaignID:  tmpl.CampaignID,
 		MapID:       tmpl.MapID,

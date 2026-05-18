@@ -1248,6 +1248,33 @@ func TestService_CreateEncounterFromTemplate_InvalidCreaturesJSON(t *testing.T) 
 	assert.Contains(t, err.Error(), "parsing template creatures")
 }
 
+// --- TDD Cycle B-M05: CreateEncounterFromTemplate rejects out-of-bounds positions ---
+
+func TestService_CreateEncounterFromTemplate_OutOfBoundsPosition(t *testing.T) {
+	mapID := uuid.New()
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID:         uuid.New(),
+			CampaignID: uuid.New(),
+			MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
+			Name:       "Test",
+			// Position "Z" col=25 is out of bounds for a 10-wide map; row 15 is out of bounds for 10-tall
+			Creatures: json.RawMessage(`[{"creature_ref_id":"goblin","short_id":"G1","display_name":"Goblin","position_col":"Z","position_row":15,"quantity":1}]`),
+		}, nil
+	}
+	store.getMapByIDUncheckedFn = func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		return refdata.Map{ID: mapID, WidthSquares: 10, HeightSquares: 10}, nil
+	}
+	store.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "goblin", Ac: 15, HpAverage: 7, Speed: json.RawMessage(`{"walk":30}`)}, nil
+	}
+	svc := NewService(store)
+	_, _, err := svc.CreateEncounterFromTemplate(context.Background(), uuid.New())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "outside map bounds")
+}
+
 // --- TDD Cycle 21: ListActionLog ---
 
 func TestService_ListActionLogByEncounterID(t *testing.T) {
