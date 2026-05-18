@@ -241,7 +241,7 @@ Low: 142
 | 229 | G-M05 | Medium | done | CastIdentify accepts ritual without 10-minute delay enforcement | internal/inventory/identification.go:81-110 |
 | 230 | G-M06 | Medium | superseded | CastIdentify silently allows identifying items that aren't magic | internal/inventory/identification.go:24-44 |
 | 231 | G-M07 | Medium | done | Combat recap truncation cuts mid-line and may produce orphan round headers | internal/combat/recap.go:71-78, 93-116 |
-| 232 | G-M08 | Medium | pending | PartyShortRest never auto-spends hit dice (always spends 0) | internal/rest/party_handler.go:218-260 |
+| 232 | G-M08 | Medium | skipped | PartyShortRest never auto-spends hit dice (always spends 0) | internal/rest/party_handler.go:218-260 |
 | 233 | G-M09 | Medium | pending | Loot pool created from "completed" encounter — combatants gold lost if encounter status mismatch | internal/loot/service.go:67-118 |
 | 234 | G-M10 | Medium | done | Loot pool item ItemID null when claimed from custom entries breaks downstream `/use` | internal/loot/service.go:243-256 |
 | 235 | G-M11 | Medium | done | `Equip` blocks re-equipping the same item but silently allows two main-hand items via `OffHand=false` | internal/inventory/equip.go:27-62 |
@@ -249,20 +249,20 @@ Low: 142
 | 237 | G-M13 | Medium | done | LongRest never zeroes the input.PactMagicSlots when it does mutate them | internal/rest/rest.go:392-398 |
 | 238 | G-M14 | Medium | superseded | `/rest` doesn't enforce one-long-rest-per-24h even narratively (no warning to DM) | internal/discord/rest_handler.go (no 24h check) |
 | 239 | G-M15 | Medium | superseded | ShortRest hit-die roll: minimum healing of 0 vs spec's "minimum 1 per HD" framing | internal/rest/rest.go:200-204 |
-| 240 | G-M16 | Medium | pending | Item picker custom entry returns `Homebrew: true` but doesn't persist anywhere | internal/itempicker/handler.go:227-238 |
-| 241 | H-M01 | Medium | pending | Level-up notification omits new features, spell slots, and class/old→new line | /home/ab/projects/DnDnD/internal/levelup/notify.go:14 (`FormatPrivateLevelUpMess... |
-| 242 | H-M02 | Medium | pending | DDB diff is shallow — misses inventory, features, spells, proficiencies | /home/ab/projects/DnDnD/internal/ddbimport/diff.go:9 (`GenerateDiff`) |
+| 240 | G-M16 | Medium | skipped | Item picker custom entry returns `Homebrew: true` but doesn't persist anywhere | internal/itempicker/handler.go:227-238 |
+| 241 | H-M01 | Medium | skipped | Level-up notification omits new features, spell slots, and class/old→new line | /home/ab/projects/DnDnD/internal/levelup/notify.go:14 (`FormatPrivateLevelUpMess... |
+| 242 | H-M02 | Medium | skipped | DDB diff is shallow — misses inventory, features, spells, proficiencies | /home/ab/projects/DnDnD/internal/ddbimport/diff.go:9 (`GenerateDiff`) |
 | 243 | H-M03 | Medium | done | DDB AC computation treats any ArmorClass<=3 as a shield | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:285 (`computeAC`) |
 | 244 | H-M04 | Medium | superseded | DDB import doesn't validate ability scores were generated within 1-30 of submission's "stats" (no override sanity) | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:228 (`parseAbilityScores`) |
 | 245 | H-M05 | Medium | superseded | DDB import: features below `RequiredLevel` filtered, but subclass features filtered against parent class level (not subclass level) | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:332-345 (`parseFeatures`) |
-| 246 | H-M06 | Medium | pending | Token redemption isn't atomic with character creation (race window) | /home/ab/projects/DnDnD/internal/portal/builder_service.go:237 |
+| 246 | H-M06 | Medium | skipped | Token redemption isn't atomic with character creation (race window) | /home/ab/projects/DnDnD/internal/portal/builder_service.go:237 |
 | 247 | H-M07 | Medium | pending | No CSRF protection on portal POST /portal/api/characters | /home/ab/projects/DnDnD/internal/portal/api_handler.go:193 (`SubmitCharacter`) |
 | 248 | H-M08 | Medium | done | Multiclass spell-slot table check requires both classes to be casters; Eldritch Knight/Arcane Trickster ignored | /home/ab/projects/DnDnD/internal/character/spellslots.go:54 (`CalculateCasterLev... |
 | 249 | H-M09 | Medium | done | Char sheet template renders `{$level}` for spell slots from `map[string]SlotInfo` | /home/ab/projects/DnDnD/internal/portal/character_sheet_handler.go:374 |
-| 250 | H-M10 | Medium | pending | DM denial reason is hard-coded; spec wants DM-supplied message | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:543 |
+| 250 | H-M10 | Medium | skipped | DM denial reason is hard-coded; spec wants DM-supplied message | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:543 |
 | 251 | H-M11 | Medium | superseded | Builder service does not enforce racial ability cap (no score > 20 at creation) | /home/ab/projects/DnDnD/internal/portal/builder_service.go:444 (`ValidatePointBu... |
 | 252 | H-M12 | Medium | superseded | HP recalculation on level-up assumes the standard "average+1" formula but spec also offers rolling option (not implemented) | /home/ab/projects/DnDnD/internal/character/stats.go:30 (avg formula) |
-| 253 | H-M13 | Medium | pending | Pending ASI choices: storePendingChoice writes to DB asynchronously in background goroutine pattern but uses `context.Background()` | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:314,328 |
+| 253 | H-M13 | Medium | skipped | Pending ASI choices: storePendingChoice writes to DB asynchronously in background goroutine pattern but uses `context.Background()` | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:314,328 |
 | 254 | H-M14 | Medium | skipped | Portal Svelte builder doesn't expose subclass selection at the right level | /home/ab/projects/DnDnD/portal/svelte/src/App.svelte (subclass section); /home/a... |
 | 255 | H-M15 | Medium | skipped | Portal builder calculates HP only for level-1 single-class case; ignores multiclass at submit | /home/ab/projects/DnDnD/portal/svelte/src/App.svelte:281-286 (`derivedHP`) |
 | 256 | H-M16 | Medium | done | DDB import: TempHP can become negative when HPMax overridden lower than removed HP | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:191-198 |
@@ -316,7 +316,7 @@ Low: 142
 | 304 | cross-cut-M09 | Medium | skipped | Initiative tiebreak does not use DEX score (just DEX modifier) | `internal/combat/initiative.go:166-177` |
 | 305 | cross-cut-M10 | Medium | pending | Pact magic slot recovery on short rest restores slot count but not slot level | `internal/rest/rest.go:235-241`. |
 | 306 | cross-cut-M11 | Medium | pending | `ApplyDamageAtZeroHP` does not itself enforce the Massive Damage rule | `internal/combat/deathsave.go:157-192` |
-| 307 | A-L01 | Low | pending | `SidebarNav` "Errors" path may render before error badge wiring is loaded | internal/dashboard/handler.go:55-68 |
+| 307 | A-L01 | Low | skipped | `SidebarNav` "Errors" path may render before error badge wiring is loaded | internal/dashboard/handler.go:55-68 |
 | 308 | A-L02 | Low | superseded | `WelcomeMessage` says "Type /help for a full command list" but /help requires the user to be in the guild | internal/discord/welcome.go:18 |
 | 309 | A-L03 | Low | superseded | Race "Half-Elf" referenced in character card example not seeded | internal/refdata/seed_races.go:1-* (only 9 races as `RaceCount = 9`) |
 | 310 | A-L04 | Low | pending | Class entries don't expose Eldritch Knight / Arcane Trickster as third-caster subclasses | internal/refdata/seed_classes.go (Fighter & Rogue blocks) |
@@ -339,19 +339,19 @@ Low: 142
 | 327 | C-L04 | Low | pending | `ApplyDamageResistances` reason string lowercase-mixed | /home/ab/projects/DnDnD/internal/combat/damage.go:24-46 |
 | 328 | C-L05 | Low | superseded | Free interaction not tracked across /move + /attack flow boundary | /home/ab/projects/DnDnD/internal/combat/turnresources.go:51-54 |
 | 329 | C-L06 | Low | superseded | Pathfinding heuristic doesn't account for prone or terrain multipliers (still admissible) | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:165-172 |
-| 330 | C-L07 | Low | pending | Condition immunity skips application but doesn't surface to action_log persistently | /home/ab/projects/DnDnD/internal/combat/condition.go:149-152 |
+| 330 | C-L07 | Low | skipped | Condition immunity skips application but doesn't surface to action_log persistently | /home/ab/projects/DnDnD/internal/combat/condition.go:149-152 |
 | 331 | C-L08 | Low | superseded | Held concentration spells: pre-applied conditions don't auto-end when concentration breaks via crash recovery | /home/ab/projects/DnDnD/internal/combat/concentration.go (general) |
-| 332 | C-L09 | Low | pending | `RemoveConditionWithLog` doesn't differentiate "removed by action" vs "expired" | /home/ab/projects/DnDnD/internal/combat/condition.go:297-307 |
+| 332 | C-L09 | Low | skipped | `RemoveConditionWithLog` doesn't differentiate "removed by action" vs "expired" | /home/ab/projects/DnDnD/internal/combat/condition.go:297-307 |
 | 333 | D-L01 | Low | superseded | PaladinAuraRadiusFt = 30 only at L18+, spec says L18 | /home/ab/projects/DnDnD/internal/combat/feature_integration.go:290 |
 | 334 | D-L02 | Low | superseded | Bardic Inspiration uses CHA mod min 1 — correct, but doesn't account for negative CHA | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:33 |
 | 335 | D-L03 | Low | superseded | FormatBardicInspirationUse hardcodes the `+` sign | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:75 |
 | 336 | D-L04 | Low | pending | WildShape CR limit returns float64 — comparisons against parsed CR strings are exact | /home/ab/projects/DnDnD/internal/combat/wildshape.go:59 |
-| 337 | D-L05 | Low | pending | Channel Divinity DM-queue routes class name as `cmd.ClassName` without normalization | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:533 |
+| 337 | D-L05 | Low | skipped | Channel Divinity DM-queue routes class name as `cmd.ClassName` without normalization | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:533 |
 | 338 | D-L06 | Low | superseded | Action Surge `ResourceBonusAction` not checked | /home/ab/projects/DnDnD/internal/combat/action_surge.go:25 |
 | 339 | E-L01 | Low | superseded | OA detection's faction check fails for charm/dominate scenarios | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:106-108` |
 | 340 | E-L02 | Low | pending | Stand from prone does not require movement to be available beyond cost | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:592-595` |
-| 341 | E-L03 | Low | pending | Drop Prone ApplyCondition runs immunity check unnecessarily | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:651-674` |
-| 342 | E-L04 | Low | pending | FormatOAPrompt uses target's display name as the slash arg, which can contain spaces/diacritics | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:218-221` |
+| 341 | E-L03 | Low | skipped | Drop Prone ApplyCondition runs immunity check unnecessarily | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:651-674` |
+| 342 | E-L04 | Low | skipped | FormatOAPrompt uses target's display name as the slash arg, which can contain spaces/diacritics | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:218-221` |
 | 343 | E-L05 | Low | pending | `IsBonusActionSpell` uses substring match — fragile against locale/whitespace | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:23-25` |
 | 344 | E-L06 | Low | pending | `applyMetamagicEffects` swallows unknown metamagic option silently | `/home/ab/projects/DnDnD/internal/combat/metamagic.go:196-214` |
 | 345 | E-L07 | Low | pending | CarefulSpellCreatureCount minimum-1 ignores negative CHA mod gracefully | `/home/ab/projects/DnDnD/internal/combat/metamagic.go:217-228` |
@@ -363,7 +363,7 @@ Low: 142
 | 351 | E-L13 | Low | pending | Ritual casting allows any class with feature; Bard requires "Ritual Caster" (Lore subclass) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:1235-1242` (`HasRitualC... |
 | 352 | E-L14 | Low | superseded | Spell preparation max calculation uses character.level instead of class.level | `/home/ab/projects/DnDnD/internal/combat/preparation.go:236-240` |
 | 353 | E-L15 | Low | pending | AlwaysPreparedSpells subclass list omits Cleric Light, Tempest, etc. and Druid Moon/Stars | `/home/ab/projects/DnDnD/internal/combat/preparation.go:69-93` |
-| 354 | E-L16 | Low | pending | OA prompt does not display the OA target's tile or the reach distance | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:218-221` |
+| 354 | E-L16 | Low | skipped | OA prompt does not display the OA target's tile or the reach distance | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:218-221` |
 | 355 | E-L17 | Low | pending | Empowered + Twinned combo applies Empowered to both targets but only one reroll budget | `/home/ab/projects/DnDnD/internal/combat/aoe.go:980-1010` |
 | 356 | E-L18 | Low | superseded | Pact Magic check does not respect Sorcerer's slot pool (no cross-pool override) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:446-456` |
 | 357 | E-L19 | Low | pending | DragMovementCost is always ×2 regardless of number of grappled targets | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:373-375` |
@@ -376,21 +376,21 @@ Low: 142
 | 364 | F-L04 | Low | pending | Bonus action parsing misses fully-structured `bonus_actions` rows containing only descriptions | /home/ab/projects/DnDnD/internal/combat/turn_builder.go:473-499 |
 | 365 | F-L05 | Low | pending | Summoned-creature short-ID collisions are not detected | /home/ab/projects/DnDnD/internal/combat/summon.go:117-150 |
 | 366 | F-L06 | Low | superseded | Concentration on readied spell never sets ConcentrationSpellID, breaking spell-ID lookups | /home/ab/projects/DnDnD/internal/combat/readied_action.go:132-141 |
-| 367 | F-L07 | Low | pending | `LightSource` and `VisionSource` deduplicate by position but not vision type — flickers | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:52-93 |
+| 367 | F-L07 | Low | skipped | `LightSource` and `VisionSource` deduplicate by position but not vision type — flickers | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:52-93 |
 | 368 | F-L08 | Low | skipped | `/action ready` doesn't differentiate readying a Spell vs. a non-Spell action in the panel badge | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:120-122 |
-| 369 | F-L09 | Low | pending | FoW `chebyshevDistance` is correct for square grids but doesn't match the canonical 5e diagonal rule | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:160-173 |
+| 369 | F-L09 | Low | skipped | FoW `chebyshevDistance` is correct for square grids but doesn't match the canonical 5e diagonal rule | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:160-173 |
 | 370 | G-L01 | Low | superseded | Save handler combines roll modes via two `CombineRollModes` calls — order-sensitive | internal/save/save.go:90-92 |
 | 371 | G-L02 | Low | superseded | Group-check success threshold rounds in 5e's favor only for even counts | internal/check/check.go:282-306 |
 | 372 | G-L03 | Low | superseded | Contested check is "status quo" on tie — initiator's choice not surfaced | internal/check/check.go:332-352 |
-| 373 | G-L04 | Low | pending | Equip slot warning text references `/attune cloak-of-protection` even for items already attuned to a different name | internal/inventory/equip.go:51-54 |
-| 374 | G-L05 | Low | pending | FormatLootAnnouncement doesn't include item descriptions | internal/loot/service.go:357-380 |
+| 373 | G-L04 | Low | skipped | Equip slot warning text references `/attune cloak-of-protection` even for items already attuned to a different name | internal/inventory/equip.go:51-54 |
+| 374 | G-L05 | Low | skipped | FormatLootAnnouncement doesn't include item descriptions | internal/loot/service.go:357-380 |
 | 375 | G-L06 | Low | pending | `/check` group-check participant modifier accepts raw int — no validation | internal/check/check.go:254-306 |
-| 376 | G-L07 | Low | pending | `Attune` error string mixes emoji + format verb prefix | internal/inventory/attunement.go:35 |
+| 376 | G-L07 | Low | skipped | `Attune` error string mixes emoji + format verb prefix | internal/inventory/attunement.go:35 |
 | 377 | G-L08 | Low | pending | Inventory `IsPotion` only knows about healing-potion / greater-healing-potion | internal/inventory/service.go:108-114 |
 | 378 | G-L09 | Low | pending | SplitGold zeros pool even if no players found (defensive check exists but bug-prone) | internal/loot/service.go:301-329 |
 | 379 | G-L10 | Low | pending | Shop announcement doesn't show stock counts when present | internal/shops/service.go:131-155 |
 | 380 | G-L11 | Low | pending | Combat recap doesn't tag "[Round X, Turn Y]" inside lines | internal/combat/recap.go:93-116 |
-| 381 | H-L01 | Low | pending | DDB import discards spell `Source` for non-class spells; warning text wrong | /home/ab/projects/DnDnD/internal/ddbimport/validator.go:114-125 |
+| 381 | H-L01 | Low | skipped | DDB import discards spell `Source` for non-class spells; warning text wrong | /home/ab/projects/DnDnD/internal/ddbimport/validator.go:114-125 |
 | 382 | H-L02 | Low | pending | LevelUpDetails.NewSpellSlots not surfaced in API response | /home/ab/projects/DnDnD/internal/levelup/handler.go:25 (`LevelUpResponse`) |
 | 383 | H-L03 | Low | pending | Pending DDB import map cache not consulted before durable lookup | /home/ab/projects/DnDnD/internal/ddbimport/service.go:222 (`loadPendingImport`) |
 | 384 | H-L04 | Low | pending | DiscordUserID race-case in HandleASIFeatSelect: lookupFeatName re-lists all feats | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:668-679,792 |
@@ -401,16 +401,16 @@ Low: 142
 | 389 | I-L02 | Low | pending | DMCharacterSubmission missing subrace / SubraceID | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:12-25 |
 | 390 | I-L03 | Low | skipped | Mobile view always renders TurnQueue as read-only — no quick-action to End Turn | /home/ab/projects/DnDnD/dashboard/svelte/src/MobileShell.svelte:47-49 ; QuickAct... |
 | 391 | I-L04 | Low | pending | Stat block library handler ignores ?homebrew param | /home/ab/projects/DnDnD/internal/statblocklibrary/handler.go:53-66 |
-| 392 | I-L05 | Low | pending | DM display name change for active encounter persists without re-pinning to current turn | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:178-186 ; upda... |
-| 393 | I-L06 | Low | pending | Damage input doesn't allow damage types in HP & Condition Tracker | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:815-830 |
-| 394 | I-L07 | Low | pending | Action Resolver "move" target field uses col+row only — no altitude | /home/ab/projects/DnDnD/dashboard/svelte/src/ActionResolver.svelte:209-217 |
-| 395 | I-L08 | Low | pending | ActionLogViewer formatValue stringifies arrays/objects as JSON — hard to read | /home/ab/projects/DnDnD/dashboard/svelte/src/ActionLogViewer.svelte:81-86 |
-| 396 | I-L09 | Low | pending | No "Resolve →" deep link inserted into #dm-queue messages | /home/ab/projects/DnDnD/internal/dmqueue/ — not audited line-by-line |
-| 397 | I-L10 | Low | pending | Reactions panel doesn't fade once-per-round used reactions until creature's next turn | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:59-63 |
+| 392 | I-L05 | Low | skipped | DM display name change for active encounter persists without re-pinning to current turn | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:178-186 ; upda... |
+| 393 | I-L06 | Low | skipped | Damage input doesn't allow damage types in HP & Condition Tracker | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:815-830 |
+| 394 | I-L07 | Low | skipped | Action Resolver "move" target field uses col+row only — no altitude | /home/ab/projects/DnDnD/dashboard/svelte/src/ActionResolver.svelte:209-217 |
+| 395 | I-L08 | Low | skipped | ActionLogViewer formatValue stringifies arrays/objects as JSON — hard to read | /home/ab/projects/DnDnD/dashboard/svelte/src/ActionLogViewer.svelte:81-86 |
+| 396 | I-L09 | Low | skipped | No "Resolve →" deep link inserted into #dm-queue messages | /home/ab/projects/DnDnD/internal/dmqueue/ — not audited line-by-line |
+| 397 | I-L10 | Low | skipped | Reactions panel doesn't fade once-per-round used reactions until creature's next turn | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:59-63 |
 | 398 | I-L11 | Low | pending | Encounter Builder list query doesn't return display_name in some responses | /home/ab/projects/DnDnD/internal/encounter/handler.go:58-82 |
 | 399 | I-L12 | Low | pending | Narration history endpoint accepts unbounded offset | /home/ab/projects/DnDnD/internal/narration/handler.go:107 |
 | 400 | I-L13 | Low | pending | Message-player history endpoint similarly unbounded | /home/ab/projects/DnDnD/internal/messageplayer/handler.go:96-101 |
-| 401 | I-L14 | Low | pending | CharacterOverview message panel embeds full MessagePlayerPanel — leaks history across cards | /home/ab/projects/DnDnD/dashboard/svelte/src/CharacterOverview.svelte:97-103 |
+| 401 | I-L14 | Low | skipped | CharacterOverview message panel embeds full MessagePlayerPanel — leaks history across cards | /home/ab/projects/DnDnD/dashboard/svelte/src/CharacterOverview.svelte:97-103 |
 | 402 | J-L01 | Low | pending | Open5e cache `idPrefix` (`open5e_`) is checked in only one place; no enforcement on stat-block readers | /home/ab/projects/DnDnD/internal/open5e/cache.go:51 |
 | 403 | J-L02 | Low | pending | EncounterListerAdapter returns `[]string{}` instead of nil for "no campaign", masking the no-active-campaign distinction | /home/ab/projects/DnDnD/cmd/dndnd/main.go:248-251 + 268-272 |
 | 404 | J-L03 | Low | pending | WS client EncounterID query param is not UUID-validated | /home/ab/projects/DnDnD/internal/dashboard/ws.go:135 |

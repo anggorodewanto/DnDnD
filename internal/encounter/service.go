@@ -46,6 +46,12 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (refdata.Encoun
 	if input.Name == "" {
 		return refdata.EncounterTemplate{}, errors.New("name must not be empty")
 	}
+	if len(input.Name) > 200 {
+		return refdata.EncounterTemplate{}, errors.New("name must not exceed 200 characters")
+	}
+	if len(input.DisplayName) > 200 {
+		return refdata.EncounterTemplate{}, errors.New("display_name must not exceed 200 characters")
+	}
 	if !input.MapID.Valid {
 		return refdata.EncounterTemplate{}, errors.New("map_id is required for encounter templates")
 	}
