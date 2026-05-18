@@ -149,7 +149,7 @@ func (s *Service) GrantBardicInspiration(ctx context.Context, cmd BardicInspirat
 		return BardicInspirationResult{}, fmt.Errorf("Bardic Inspiration requires a character (not NPC)")
 	}
 	if cmd.Bard.ID == cmd.Target.ID {
-		return BardicInspirationResult{}, fmt.Errorf("cannot grant Bardic Inspiration to yourself")
+		return BardicInspirationResult{}, fmt.Errorf("Bardic Inspiration must target another creature (not yourself)")
 	}
 
 	// PHB: target must be within 60 feet.
