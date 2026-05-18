@@ -39,9 +39,14 @@ func ValidateDMSubmission(s DMCharacterSubmission) []string {
 	}
 
 	totalLevel := 0
+	seenClasses := make(map[string]bool)
 	for i, c := range s.Classes {
 		if c.Class == "" {
 			errs = append(errs, fmt.Sprintf("class entry %d: class name is required", i+1))
+		} else if seenClasses[strings.ToLower(c.Class)] {
+			errs = append(errs, fmt.Sprintf("class entry %d: duplicate class %q", i+1, c.Class))
+		} else {
+			seenClasses[strings.ToLower(c.Class)] = true
 		}
 		if c.Level < 1 {
 			errs = append(errs, fmt.Sprintf("class entry %d: level must be at least 1", i+1))
