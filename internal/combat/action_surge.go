@@ -55,7 +55,7 @@ func (s *Service) ActionSurge(ctx context.Context, cmd ActionSurgeCommand) (Acti
 
 	updatedTurn := cmd.Turn
 	updatedTurn.ActionUsed = false
-	updatedTurn.AttacksRemaining = int32(s.resolveAttacksPerAction(ctx, char))
+	updatedTurn.AttacksRemaining += int32(s.resolveAttacksPerAction(ctx, char))
 	updatedTurn.ActionSurged = true
 
 	if _, err := s.store.UpdateTurnActions(ctx, TurnToUpdateParams(updatedTurn)); err != nil {
