@@ -141,7 +141,7 @@ func enrichActionLogRow(row refdata.ListActionLogWithRoundsRow, infoByID map[uui
 		AfterState:       row.AfterState,
 		CreatedAt:        row.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		RoundNumber:      row.RoundNumber,
-		IsOverride:       row.ActionType == "dm_override",
+		IsOverride:       row.ActionType == "dm_override" || row.ActionType == "dm_override_undo",
 	}
 	if row.TargetID.Valid {
 		tid := row.TargetID.UUID
