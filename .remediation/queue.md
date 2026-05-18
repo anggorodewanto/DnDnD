@@ -252,7 +252,7 @@ Low: 142
 | 240 | G-M16 | Medium | pending | Item picker custom entry returns `Homebrew: true` but doesn't persist anywhere | internal/itempicker/handler.go:227-238 |
 | 241 | H-M01 | Medium | pending | Level-up notification omits new features, spell slots, and class/old→new line | /home/ab/projects/DnDnD/internal/levelup/notify.go:14 (`FormatPrivateLevelUpMess... |
 | 242 | H-M02 | Medium | pending | DDB diff is shallow — misses inventory, features, spells, proficiencies | /home/ab/projects/DnDnD/internal/ddbimport/diff.go:9 (`GenerateDiff`) |
-| 243 | H-M03 | Medium | pending | DDB AC computation treats any ArmorClass<=3 as a shield | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:285 (`computeAC`) |
+| 243 | H-M03 | Medium | done | DDB AC computation treats any ArmorClass<=3 as a shield | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:285 (`computeAC`) |
 | 244 | H-M04 | Medium | superseded | DDB import doesn't validate ability scores were generated within 1-30 of submission's "stats" (no override sanity) | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:228 (`parseAbilityScores`) |
 | 245 | H-M05 | Medium | superseded | DDB import: features below `RequiredLevel` filtered, but subclass features filtered against parent class level (not subclass level) | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:332-345 (`parseFeatures`) |
 | 246 | H-M06 | Medium | pending | Token redemption isn't atomic with character creation (race window) | /home/ab/projects/DnDnD/internal/portal/builder_service.go:237 |

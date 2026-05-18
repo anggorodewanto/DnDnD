@@ -451,3 +451,11 @@ Running total: 94/448 resolved (21%)
 - **Commit:** 024870e
 - **Verdict:** approved (self-verified)
 - **Notes:** Turn Undead now checks if target is both blinded and deafened before forcing a save. Uses HasCondition on the combatant's conditions JSON.
+
+## 2026-05-18T11:55 — G-M13
+- **Commit:** 1215cd8
+- **Notes:** Added PactSlotsCurrent to LongRestResult.
+
+## 2026-05-18T11:57 — H-M03
+- **Commit:** 7e751cd
+- **Notes:** computeAC now uses Type=="Shield" for shield detection instead of ArmorClass<=3 heuristic.
