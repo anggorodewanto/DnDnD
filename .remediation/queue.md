@@ -155,8 +155,8 @@ Low: 142
 | 143 | A-M10 | Medium | done | `CreatePlaceholder` inserts `ac = 0` for new characters | internal/registration/service.go:122-141 |
 | 144 | A-M11 | Medium | done | Welcome DM message hardcodes channel names that may not exist | internal/discord/welcome.go:6-19 |
 | 145 | A-M12 | Medium | superseded | `/setup` handler runs no authorization check beyond Discord's default-perms hint | internal/discord/setup.go:217-249 |
-| 146 | A-M13 | Medium | in_progress | HP recompute on multiclassing assumes secondary classes never reach level 1 with max die | internal/character/stats.go:30-42 |
-| 147 | A-M14 | Medium | pending | `setup` channel creation has no rollback on partial failure | internal/discord/setup.go:128-182 |
+| 146 | A-M13 | Medium | done | HP recompute on multiclassing assumes secondary classes never reach level 1 with max die | internal/character/stats.go:30-42 |
+| 147 | A-M14 | Medium | in_progress | `setup` channel creation has no rollback on partial failure | internal/discord/setup.go:128-182 |
 | 148 | B-M01 | Medium | done | Initiative DEX-tie alphabetical sort is byte-wise, not D&D-aware | `/home/ab/projects/DnDnD/internal/combat/initiative.go:166-177` |
 | 149 | B-M02 | Medium | done | PNG renderer renders zero-cost / oversized canvas for invalid `MapData` | `/home/ab/projects/DnDnD/internal/gamemap/renderer/renderer.go:18-30`. |
 | 150 | B-M03 | Medium | pending | Encounter map_id is nullable in the schema but Phase 22/23/26 assume it | `/home/ab/projects/DnDnD/db/migrations/20260312120001_create_encounter_templates... |

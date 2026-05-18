@@ -125,6 +125,7 @@ func dmQueuePerms(guildID, botUserID, dmUserID string) []*discordgo.PermissionOv
 // SetupChannels creates the full category/channel structure for a guild.
 // It skips categories and channels that already exist (matched by name).
 // Returns a map of channel name -> channel ID for storage in campaign settings.
+// On partial failure, returns channels created so far alongside the error.
 func SetupChannels(s Session, guildID, botUserID, dmUserID string) (map[string]string, error) {
 	existing, err := s.GuildChannels(guildID)
 	if err != nil {
@@ -150,7 +151,7 @@ func SetupChannels(s Session, guildID, botUserID, dmUserID string) (map[string]s
 	for _, catDef := range structure {
 		catID, err := ensureCategory(s, guildID, catDef.Name, existingCategories)
 		if err != nil {
-			return nil, err
+			return result, err
 		}
 
 		for _, chDef := range catDef.Channels {
@@ -172,7 +173,7 @@ func SetupChannels(s Session, guildID, botUserID, dmUserID string) (map[string]s
 				PermissionOverwrites: overwrites,
 			})
 			if err != nil {
-				return nil, fmt.Errorf("creating channel %s: %w", chDef.Name, err)
+				return result, fmt.Errorf("creating channel %s: %w", chDef.Name, err)
 			}
 			result[chDef.Name] = ch.ID
 		}
@@ -240,6 +241,11 @@ func (h *SetupHandler) Handle(interaction *discordgo.Interaction) {
 
 	channelIDs, err := SetupChannels(s, guildID, botUserIDFromState(s), info.DMUserID)
 	if err != nil {
+		// Persist any channels that were created before the failure so
+		// a re-run of /setup can reconcile without orphaned channels.
+		if len(channelIDs) > 0 {
+			_ = h.campaignLookup.SaveChannelIDs(guildID, channelIDs)
+		}
 		h.editResponse(interaction, fmt.Sprintf("Failed to create channels: %s", err))
 		return
 	}

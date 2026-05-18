@@ -695,3 +695,29 @@ func TestHandleSetupCommand_AllowsAdminAutoCreate(t *testing.T) {
 	assert.Contains(t, *editContent, "Campaign created")
 	assert.NotContains(t, *editContent, "administrator")
 }
+
+func TestSetupChannels_PartialFailureReturnsCreatedChannels(t *testing.T) {
+	mock := newTestMock()
+	mock.GuildChannelsFunc = func(guildID string) ([]*discordgo.Channel, error) {
+		return nil, nil
+	}
+
+	channelIDCounter := 0
+	mock.GuildChannelCreateComplexFunc = func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
+		channelIDCounter++
+		// Fail on the 3rd channel creation
+		if channelIDCounter == 3 {
+			return nil, fmt.Errorf("rate limited")
+		}
+		return &discordgo.Channel{
+			ID:   fmt.Sprintf("chan-%d", channelIDCounter),
+			Name: data.Name,
+			Type: data.Type,
+		}, nil
+	}
+
+	result, err := SetupChannels(mock, "guild-1", "bot-user-1", "dm-user-1")
+	require.Error(t, err, "should return error on partial failure")
+	// Even on error, partial results should be returned so caller can persist them
+	assert.NotEmpty(t, result, "partial result should contain channels created before the failure")
+}
