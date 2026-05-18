@@ -822,3 +822,38 @@ func TestParseDDBJSON_ClassNameLowercased(t *testing.T) {
 		t.Errorf("Class = %q, want %q (lowercased)", result.Classes[0].Class, "fighter")
 	}
 }
+
+func TestParseDDBJSON_HPOverrideClampsCurrentToMax(t *testing.T) {
+	// overrideHitPoints=10, removedHitPoints=0 → HPMax=10, HPCurrent=10
+	// But if removedHitPoints were negative (impossible) or HPMax < HPCurrent somehow,
+	// we clamp. Test: override lower than base-removed.
+	data := []byte(`{
+		"data": {
+			"name": "Test",
+			"race": {"fullName": "Human"},
+			"classes": [{"definition": {"name": "Fighter", "hitDice": 10}, "level": 5}],
+			"stats": [{"id":1,"value":10},{"id":2,"value":10},{"id":3,"value":10},{"id":4,"value":10},{"id":5,"value":10},{"id":6,"value":10}],
+			"bonusStats": [null,null,null,null,null,null],
+			"overrideStats": [null,null,null,null,null,null],
+			"baseHitPoints": 44,
+			"bonusHitPoints": 0,
+			"overrideHitPoints": 10,
+			"removedHitPoints": 0,
+			"temporaryHitPoints": 0,
+			"inventory": [],
+			"modifiers": {"race": [], "class": [], "background": [], "item": [], "feat": [], "condition": []},
+			"spells": {"class": [], "race": [], "item": [], "feat": []},
+			"currencies": {"gp": 0, "sp": 0, "cp": 0, "ep": 0, "pp": 0}
+		}
+	}`)
+	result, err := ParseDDBJSON(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.HPMax != 10 {
+		t.Errorf("HPMax = %d, want 10", result.HPMax)
+	}
+	if result.HPCurrent != 10 {
+		t.Errorf("HPCurrent = %d, want 10 (clamped to HPMax)", result.HPCurrent)
+	}
+}
