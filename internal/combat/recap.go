@@ -68,13 +68,18 @@ func FilterLogsLastNRounds(logs []refdata.ListActionLogWithRoundsRow, n int) []r
 	return FilterLogsSinceRound(logs, cutoff)
 }
 
-// TruncateRecap truncates a recap message to fit within the given maxLen (e.g., Discord's 2000 char limit).
+// TruncateRecap truncates a recap message to fit within the given maxLen.
+// Cuts at the last newline before the limit to avoid orphan lines and broken UTF-8.
 func TruncateRecap(msg string, maxLen int) string {
 	if len(msg) <= maxLen {
 		return msg
 	}
 	suffix := "\n... (truncated)"
-	return msg[:maxLen-len(suffix)] + suffix
+	cutoff := maxLen - len(suffix)
+	if idx := strings.LastIndex(msg[:cutoff], "\n"); idx > 0 {
+		cutoff = idx
+	}
+	return msg[:cutoff] + suffix
 }
 
 // RecapRoundRange returns a human-readable round range string like "Rounds 3–5" or "Round 2".
