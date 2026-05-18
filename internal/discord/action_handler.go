@@ -313,7 +313,8 @@ func (h *ActionHandler) Handle(interaction *discordgo.Interaction) {
 // /action Channel-Divinity, /action channeldivinity, and /action channel-divinity
 // all map to the same canonical key.
 func normalizeActionSubcommand(raw string) string {
-	return strings.ToLower(strings.TrimSpace(raw))
+	s := strings.ToLower(strings.TrimSpace(raw))
+	return strings.ReplaceAll(s, "_", "-")
 }
 
 // isDispatchSubcommand reports whether the subcommand name routes to a
