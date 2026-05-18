@@ -172,7 +172,10 @@ func SortByInitiative(entries []InitiativeEntry) {
 		if entries[i].DexMod != entries[j].DexMod {
 			return entries[i].DexMod > entries[j].DexMod
 		}
-		return strings.ToLower(entries[i].DisplayName) < strings.ToLower(entries[j].DisplayName)
+		if ni, nj := strings.ToLower(entries[i].DisplayName), strings.ToLower(entries[j].DisplayName); ni != nj {
+			return ni < nj
+		}
+		return entries[i].CombatantID.String() < entries[j].CombatantID.String()
 	})
 }
 
