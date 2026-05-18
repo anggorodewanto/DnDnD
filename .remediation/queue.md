@@ -324,16 +324,16 @@ Low: 142
 | 312 | A-L06 | Low | done | CookieSecure defaults to false when `COOKIE_SECURE` is unset | cmd/dndnd/main.go:564 |
 | 313 | A-L07 | Low | pending | `RequiredPermissions` omits `Manage Channels` though `/setup` needs it | internal/discord/permissions.go:11-17 |
 | 314 | A-L08 | Low | pending | Bot session race in `Bot.HandleGuildCreate` | internal/discord/bot.go:86-90 |
-| 315 | A-L09 | Low | pending | Character `level` column not indexed despite spec | db/migrations/20260310120006_create_characters.sql:8-37 |
+| 315 | A-L09 | Low | done | Character `level` column not indexed despite spec | db/migrations/20260310120006_create_characters.sql:8-37 |
 | 316 | A-L10 | Low | pending | Welcome DM is sent for every guild-join, including bots | internal/discord/bot.go:119-131 |
 | 317 | B-L01 | Low | pending | `RollDamage` does not double the modifier-side dice for spells that allow it (e.g. Sneak Attack crit) | `/home/ab/projects/DnDnD/internal/dice/roller.go:100-124`. |
 | 318 | B-L02 | Low | pending | D20 result `Total` ignores the "min 1 / max 20" sometimes referenced for nat-1 crits with negative DEX | `/home/ab/projects/DnDnD/internal/dice/d20.go:75-82`. |
-| 319 | B-L03 | Low | pending | `ColumnLabel` past column 701 (`ZZ`) becomes 3-letter (`AAA`) | `/home/ab/projects/DnDnD/internal/gamemap/renderer/grid.go:65-75`. |
+| 319 | B-L03 | Low | superseded | `ColumnLabel` past column 701 (`ZZ`) becomes 3-letter (`AAA`) | `/home/ab/projects/DnDnD/internal/gamemap/renderer/grid.go:65-75`. |
 | 320 | B-L04 | Low | pending | Encounter `display_name` not validated against length / control characters | `/home/ab/projects/DnDnD/internal/encounter/service.go:44-62`. |
 | 321 | B-L05 | Low | pending | Asset uploads have no per-campaign quota or count cap | `/home/ab/projects/DnDnD/internal/asset/handler.go:31-83`, |
 | 322 | B-L06 | Low | pending | `extractRegion` clipping silently truncates non-aligned wall objects | `/home/ab/projects/DnDnD/dashboard/svelte/src/lib/mapdata.js:193-201, |
 | 323 | B-L07 | Low | pending | `UndoStack` push happens *after* mutation, but does not capture the post-paste state for redo correctly | `/home/ab/projects/DnDnD/dashboard/svelte/src/lib/mapdata.js:516-557`, |
-| 324 | C-L01 | Low | pending | `colToIndex` is silent on lowercase / empty input | /home/ab/projects/DnDnD/internal/combat/attack.go:1571-1577 |
+| 324 | C-L01 | Low | superseded | `colToIndex` is silent on lowercase / empty input | /home/ab/projects/DnDnD/internal/combat/attack.go:1571-1577 |
 | 325 | C-L02 | Low | pending | `IsInLongRange` always returns false for melee weapons — but thrown melee in long range handled separately | /home/ab/projects/DnDnD/internal/combat/attack.go:148-155, 538-542 |
 | 326 | C-L03 | Low | pending | Conditions JSON empty array marshaling inconsistency | /home/ab/projects/DnDnD/internal/combat/condition.go:122-126 |
 | 327 | C-L04 | Low | pending | `ApplyDamageResistances` reason string lowercase-mixed | /home/ab/projects/DnDnD/internal/combat/damage.go:24-46 |
@@ -342,12 +342,12 @@ Low: 142
 | 330 | C-L07 | Low | pending | Condition immunity skips application but doesn't surface to action_log persistently | /home/ab/projects/DnDnD/internal/combat/condition.go:149-152 |
 | 331 | C-L08 | Low | pending | Held concentration spells: pre-applied conditions don't auto-end when concentration breaks via crash recovery | /home/ab/projects/DnDnD/internal/combat/concentration.go (general) |
 | 332 | C-L09 | Low | pending | `RemoveConditionWithLog` doesn't differentiate "removed by action" vs "expired" | /home/ab/projects/DnDnD/internal/combat/condition.go:297-307 |
-| 333 | D-L01 | Low | pending | PaladinAuraRadiusFt = 30 only at L18+, spec says L18 | /home/ab/projects/DnDnD/internal/combat/feature_integration.go:290 |
-| 334 | D-L02 | Low | pending | Bardic Inspiration uses CHA mod min 1 — correct, but doesn't account for negative CHA | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:33 |
-| 335 | D-L03 | Low | pending | FormatBardicInspirationUse hardcodes the `+` sign | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:75 |
+| 333 | D-L01 | Low | superseded | PaladinAuraRadiusFt = 30 only at L18+, spec says L18 | /home/ab/projects/DnDnD/internal/combat/feature_integration.go:290 |
+| 334 | D-L02 | Low | superseded | Bardic Inspiration uses CHA mod min 1 — correct, but doesn't account for negative CHA | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:33 |
+| 335 | D-L03 | Low | superseded | FormatBardicInspirationUse hardcodes the `+` sign | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:75 |
 | 336 | D-L04 | Low | pending | WildShape CR limit returns float64 — comparisons against parsed CR strings are exact | /home/ab/projects/DnDnD/internal/combat/wildshape.go:59 |
 | 337 | D-L05 | Low | pending | Channel Divinity DM-queue routes class name as `cmd.ClassName` without normalization | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:533 |
-| 338 | D-L06 | Low | pending | Action Surge `ResourceBonusAction` not checked | /home/ab/projects/DnDnD/internal/combat/action_surge.go:25 |
+| 338 | D-L06 | Low | superseded | Action Surge `ResourceBonusAction` not checked | /home/ab/projects/DnDnD/internal/combat/action_surge.go:25 |
 | 339 | E-L01 | Low | pending | OA detection's faction check fails for charm/dominate scenarios | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:106-108` |
 | 340 | E-L02 | Low | pending | Stand from prone does not require movement to be available beyond cost | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:592-595` |
 | 341 | E-L03 | Low | pending | Drop Prone ApplyCondition runs immunity check unnecessarily | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:651-674` |
@@ -361,11 +361,11 @@ Low: 142
 | 349 | E-L11 | Low | pending | Twin Spell consumes (spell_level) sorcery points — but spec says "1 for cantrips" | `/home/ab/projects/DnDnD/internal/combat/sorcery.go:38-50` |
 | 350 | E-L12 | Low | pending | FontOfMagic conversion cap check uses `sorcLevel` as max, not feature_uses.max | `/home/ab/projects/DnDnD/internal/combat/sorcery.go:208-211` |
 | 351 | E-L13 | Low | pending | Ritual casting allows any class with feature; Bard requires "Ritual Caster" (Lore subclass) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:1235-1242` (`HasRitualC... |
-| 352 | E-L14 | Low | pending | Spell preparation max calculation uses character.level instead of class.level | `/home/ab/projects/DnDnD/internal/combat/preparation.go:236-240` |
+| 352 | E-L14 | Low | superseded | Spell preparation max calculation uses character.level instead of class.level | `/home/ab/projects/DnDnD/internal/combat/preparation.go:236-240` |
 | 353 | E-L15 | Low | pending | AlwaysPreparedSpells subclass list omits Cleric Light, Tempest, etc. and Druid Moon/Stars | `/home/ab/projects/DnDnD/internal/combat/preparation.go:69-93` |
 | 354 | E-L16 | Low | pending | OA prompt does not display the OA target's tile or the reach distance | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:218-221` |
 | 355 | E-L17 | Low | pending | Empowered + Twinned combo applies Empowered to both targets but only one reroll budget | `/home/ab/projects/DnDnD/internal/combat/aoe.go:980-1010` |
-| 356 | E-L18 | Low | pending | Pact Magic check does not respect Sorcerer's slot pool (no cross-pool override) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:446-456` |
+| 356 | E-L18 | Low | superseded | Pact Magic check does not respect Sorcerer's slot pool (no cross-pool override) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:446-456` |
 | 357 | E-L19 | Low | pending | DragMovementCost is always ×2 regardless of number of grappled targets | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:373-375` |
 | 358 | E-L20 | Low | pending | Concentration save not enqueued for self-damage from spells like Wrathful Smite | `/home/ab/projects/DnDnD/internal/combat/concentration.go:422-448` (`MaybeCreate... |
 | 359 | E-L21 | Low | pending | Spell DC calculation uses `ProficiencyBonus` from character row without class-progression check | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:631` |
@@ -379,9 +379,9 @@ Low: 142
 | 367 | F-L07 | Low | pending | `LightSource` and `VisionSource` deduplicate by position but not vision type — flickers | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:52-93 |
 | 368 | F-L08 | Low | pending | `/action ready` doesn't differentiate readying a Spell vs. a non-Spell action in the panel badge | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:120-122 |
 | 369 | F-L09 | Low | pending | FoW `chebyshevDistance` is correct for square grids but doesn't match the canonical 5e diagonal rule | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:160-173 |
-| 370 | G-L01 | Low | pending | Save handler combines roll modes via two `CombineRollModes` calls — order-sensitive | internal/save/save.go:90-92 |
-| 371 | G-L02 | Low | pending | Group-check success threshold rounds in 5e's favor only for even counts | internal/check/check.go:282-306 |
-| 372 | G-L03 | Low | pending | Contested check is "status quo" on tie — initiator's choice not surfaced | internal/check/check.go:332-352 |
+| 370 | G-L01 | Low | superseded | Save handler combines roll modes via two `CombineRollModes` calls — order-sensitive | internal/save/save.go:90-92 |
+| 371 | G-L02 | Low | superseded | Group-check success threshold rounds in 5e's favor only for even counts | internal/check/check.go:282-306 |
+| 372 | G-L03 | Low | superseded | Contested check is "status quo" on tie — initiator's choice not surfaced | internal/check/check.go:332-352 |
 | 373 | G-L04 | Low | pending | Equip slot warning text references `/attune cloak-of-protection` even for items already attuned to a different name | internal/inventory/equip.go:51-54 |
 | 374 | G-L05 | Low | pending | FormatLootAnnouncement doesn't include item descriptions | internal/loot/service.go:357-380 |
 | 375 | G-L06 | Low | pending | `/check` group-check participant modifier accepts raw int — no validation | internal/check/check.go:254-306 |
@@ -439,22 +439,22 @@ Low: 142
 | 427 | cross-cut-L01 | Low | pending | `ProficiencyBonus(0)` returns 0; `ProficiencyBonus(21)` also returns 0 | `internal/character/stats.go:134-139`. |
 | 428 | cross-cut-L02 | Low | pending | `RollDeathSave` returns no `DeathSaves` on nat-20 (relies on caller resetting) | `internal/combat/deathsave.go:88-98` returns an |
 | 429 | cross-cut-L03 | Low | pending | Twinned Spell cost for cantrips is 1 SP but no AOE / single-target restriction is enforced | `internal/combat/sorcery.go:38-50` |
-| 430 | cross-cut-L04 | Low | pending | Diagonal-move cost uses PHB default (5 ft per diagonal) | `internal/pathfinding/pathfinding.go:151-172` — |
-| 431 | cross-cut-L05 | Low | pending | Bardic Inspiration die scaling — confirmed correct | `internal/combat/bardic_inspiration.go:14-29`. |
-| 432 | cross-cut-L06 | Low | pending | Wild Shape CR cap (standard + Circle of the Moon) — confirmed correct | `internal/combat/wildshape.go:56-73`. |
-| 433 | cross-cut-L07 | Low | pending | Cover bonuses match PHB | `internal/combat/cover.go:31-47`. |
-| 434 | cross-cut-L08 | Low | pending | Critical hit dice doubling correctly excludes the static modifier | `internal/dice/roller.go:98-124` (`RollDamage`) — |
-| 435 | cross-cut-L09 | Low | pending | Concentration save DC = max(10, floor(damage/2)) | `internal/combat/concentration.go:16-24`. |
-| 436 | cross-cut-L10 | Low | pending | Cantrip dice multiplier (×2 at L5, ×3 at L11, ×4 at L17) | `internal/combat/spellcasting.go:1258-1271`. |
-| 437 | cross-cut-L11 | Low | pending | Class save proficiencies match PHB | `internal/refdata/seed_classes.go` — every class's |
-| 438 | cross-cut-L12 | Low | pending | 18-skill list and ability mapping | `internal/character/types.go:203-222` |
-| 439 | cross-cut-L13 | Low | pending | Rage damage bonus and uses/day match PHB | `internal/combat/rage.go:13-43`. |
-| 440 | cross-cut-L14 | Low | pending | Monk martial-arts die scaling matches PHB | `internal/combat/monk.go:504-523`. |
-| 441 | cross-cut-L15 | Low | pending | Sneak attack dice count `(rogueLevel+1)/2` rounds up correctly | `internal/combat/feature_integration.go:466-471`. |
-| 442 | cross-cut-L16 | Low | pending | Sorcery point slot creation costs match PHB | `internal/combat/sorcery.go:29-35` |
-| 443 | cross-cut-L17 | Low | pending | Armor seed data matches PHB | `internal/refdata/seeder.go:135-152`. |
-| 444 | cross-cut-L18 | Low | pending | Unarmored Defense formulas evaluated at runtime via `evaluateACFormula` | seeded as strings in feature `mechanical_effect` |
-| 445 | cross-cut-L19 | Low | pending | Exhaustion level effects align with PHB | `internal/combat/damage.go:75-112`. |
-| 446 | cross-cut-L20 | Low | pending | Spell save DC and spell attack bonus formulas | `internal/combat/channel_divinity.go:85-89` |
-| 447 | cross-cut-L21 | Low | pending | Multiclass caster level uses `level/2` for half / `level/3` for third casters | `internal/character/spellslots.go:47-64`. |
-| 448 | cross-cut-L22 | Low | pending | ASI levels include the Fighter (6, 14) and Rogue (10) extras | `internal/levelup/levelup.go:72-79`. |
+| 430 | cross-cut-L04 | Low | superseded | Diagonal-move cost uses PHB default (5 ft per diagonal) | `internal/pathfinding/pathfinding.go:151-172` — |
+| 431 | cross-cut-L05 | Low | superseded | Bardic Inspiration die scaling — confirmed correct | `internal/combat/bardic_inspiration.go:14-29`. |
+| 432 | cross-cut-L06 | Low | superseded | Wild Shape CR cap (standard + Circle of the Moon) — confirmed correct | `internal/combat/wildshape.go:56-73`. |
+| 433 | cross-cut-L07 | Low | superseded | Cover bonuses match PHB | `internal/combat/cover.go:31-47`. |
+| 434 | cross-cut-L08 | Low | superseded | Critical hit dice doubling correctly excludes the static modifier | `internal/dice/roller.go:98-124` (`RollDamage`) — |
+| 435 | cross-cut-L09 | Low | superseded | Concentration save DC = max(10, floor(damage/2)) | `internal/combat/concentration.go:16-24`. |
+| 436 | cross-cut-L10 | Low | superseded | Cantrip dice multiplier (×2 at L5, ×3 at L11, ×4 at L17) | `internal/combat/spellcasting.go:1258-1271`. |
+| 437 | cross-cut-L11 | Low | superseded | Class save proficiencies match PHB | `internal/refdata/seed_classes.go` — every class's |
+| 438 | cross-cut-L12 | Low | superseded | 18-skill list and ability mapping | `internal/character/types.go:203-222` |
+| 439 | cross-cut-L13 | Low | superseded | Rage damage bonus and uses/day match PHB | `internal/combat/rage.go:13-43`. |
+| 440 | cross-cut-L14 | Low | superseded | Monk martial-arts die scaling matches PHB | `internal/combat/monk.go:504-523`. |
+| 441 | cross-cut-L15 | Low | superseded | Sneak attack dice count `(rogueLevel+1)/2` rounds up correctly | `internal/combat/feature_integration.go:466-471`. |
+| 442 | cross-cut-L16 | Low | superseded | Sorcery point slot creation costs match PHB | `internal/combat/sorcery.go:29-35` |
+| 443 | cross-cut-L17 | Low | superseded | Armor seed data matches PHB | `internal/refdata/seeder.go:135-152`. |
+| 444 | cross-cut-L18 | Low | superseded | Unarmored Defense formulas evaluated at runtime via `evaluateACFormula` | seeded as strings in feature `mechanical_effect` |
+| 445 | cross-cut-L19 | Low | superseded | Exhaustion level effects align with PHB | `internal/combat/damage.go:75-112`. |
+| 446 | cross-cut-L20 | Low | superseded | Spell save DC and spell attack bonus formulas | `internal/combat/channel_divinity.go:85-89` |
+| 447 | cross-cut-L21 | Low | superseded | Multiclass caster level uses `level/2` for half / `level/3` for third casters | `internal/character/spellslots.go:47-64`. |
+| 448 | cross-cut-L22 | Low | superseded | ASI levels include the Fighter (6, 14) and Rogue (10) extras | `internal/levelup/levelup.go:72-79`. |
