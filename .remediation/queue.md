@@ -163,7 +163,7 @@ Low: 142
 | 151 | B-M04 | Medium | pending | Encounter template `Duplicate` does not generate fresh `short_id`s | `/home/ab/projects/DnDnD/internal/encounter/service.go:115-139`. |
 | 152 | B-M05 | Medium | pending | No validation that `position_col` / `position_row` are inside the map bounds | `/home/ab/projects/DnDnD/internal/combat/service.go:863-913` |
 | 153 | B-M06 | Medium | done | DB does not enforce the map-dimension hard limit | `/home/ab/projects/DnDnD/db/migrations/20260310120009_create_maps.sql:6-7`. |
-| 154 | B-M07 | Medium | pending | Tiled import accepts a `width=0, height=0` map if it's not `infinite` | `/home/ab/projects/DnDnD/internal/gamemap/import.go:88-103`. |
+| 154 | B-M07 | Medium | superseded | Tiled import accepts a `width=0, height=0` map if it's not `infinite` | `/home/ab/projects/DnDnD/internal/gamemap/import.go:88-103`. |
 | 155 | B-M08 | Medium | done | Stacked-token offset can place tokens outside their grid cell | `/home/ab/projects/DnDnD/internal/gamemap/renderer/token.go:28-36`. |
 | 156 | B-M09 | Medium | pending | `/api/assets/upload` response sets headers after potentially writing body | `/home/ab/projects/DnDnD/internal/asset/handler.go:103-111` |
 | 157 | B-M10 | Medium | pending | Local asset storage path-traversal: filename is discarded, but campaign UUID isn't validated | `/home/ab/projects/DnDnD/internal/asset/local_store.go:32-46`. |
@@ -310,7 +310,7 @@ Low: 142
 | 298 | cross-cut-M03 | Medium | done | `combatant.AbilityScores` JSON keys are not normalized — `Get` only handles two cases per ability | `internal/character/types.go:20-36` |
 | 299 | cross-cut-M04 | Medium | pending | `evaluateACFormula` silently drops unknown tokens (DEX/DEX cap of medium armor not enforced) | `internal/character/stats.go:91-115` |
 | 300 | cross-cut-M05 | Medium | superseded | Pact magic slot table: levels 11-20 cap at slot level 5 — correct, but `Max` and `Current` are both updated even when the level didn't change | `internal/character/spellslots.go:67-103`. Verified |
-| 301 | cross-cut-M06 | Medium | pending | `classHitDie` in rest service hard-codes class IDs; mis-named or homebrew classes fall through to d8 | `internal/rest/rest.go:486-499`. |
+| 301 | cross-cut-M06 | Medium | superseded | `classHitDie` in rest service hard-codes class IDs; mis-named or homebrew classes fall through to d8 | `internal/rest/rest.go:486-499`. |
 | 302 | cross-cut-M07 | Medium | superseded | Divine Smite undead/fiend bonus on crit doubles to +2d8 — RAW reading is ambiguous | `internal/combat/divine_smite.go:59-68` |
 | 303 | cross-cut-M08 | Medium | superseded | `SneakAttack` extra dice list never validated "once per turn" | `internal/combat/feature_integration.go:86-106` |
 | 304 | cross-cut-M09 | Medium | skipped | Initiative tiebreak does not use DEX score (just DEX modifier) | `internal/combat/initiative.go:166-177` |
