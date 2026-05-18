@@ -377,3 +377,77 @@ Running total: 94/448 resolved (21%)
 - **Finding:** Starting equipment retains `any-martial` placeholder IDs in inventory
 - **Commit:** 69a45de
 - **Reviewer:** approved
+
+## 2026-05-18T10:47 — A-M13
+- **Commit:** e36edb5
+- **Verdict:** approved (self-verified)
+- **Notes:** Added IsPrimary field to ClassEntry; CalculateHP uses it instead of array index. Updated DDB import and builder store adapter to set IsPrimary on first class. Backward-compatible fallback to index 0 if no flag set.
+
+## 2026-05-18T10:52 — A-M14
+- **Commit:** 87b3af6
+- **Verdict:** approved (self-verified)
+- **Notes:** SetupChannels now returns partial result map on error. Handler persists partial channel IDs before reporting failure. Re-run reconciles via skip-existing logic.
+
+## 2026-05-18T10:58 — B-M03
+- **Commit:** f8d28d4
+- **Verdict:** approved (self-verified)
+- **Notes:** Added map_id validation to encounter template Service.Create. Templates now require a valid map_id per spec. Encounters (ad-hoc) remain nullable.
+
+## 2026-05-18T11:00 — B-M04 (superseded)
+- **Notes:** Short IDs are scoped per encounter at the combatant layer. ResolveTarget always operates within a single encounter's combatant list. Duplicate templates sharing short_ids is harmless since targeting is encounter-scoped.
+
+## 2026-05-18T11:05 — B-M05
+- **Commit:** 94b10ee
+- **Verdict:** approved (self-verified)
+- **Notes:** Added bounds validation in CreateEncounterFromTemplate. Checks each creature's col/row against map dimensions. Gracefully skips validation if map can't be loaded.
+
+## 2026-05-18T11:10 — B-M09
+- **Commit:** 42f9abd
+- **Verdict:** approved (self-verified)
+- **Notes:** ServeAsset now buffers file content via io.ReadAll and sets Content-Length from actual byte count. Prevents stale DB record from causing Content-Length mismatch.
+
+## 2026-05-18T11:18 — B-M10
+- **Commit:** 70d0c83
+- **Verdict:** approved (self-verified)
+- **Notes:** Added CampaignChecker interface to asset handler. Upload now validates the authenticated user is the DM of the specified campaign. Wired dashboardCampaignLookup in main.go.
+
+## 2026-05-18T11:25 — B-M11
+- **Commit:** 938810f
+- **Verdict:** approved (self-verified)
+- **Notes:** validateMapFields now parses tiled_json width/height and rejects mismatches with declared dimensions. Updated 8 tests to use matching tiled JSON dimensions.
+
+## 2026-05-18T11:30 — B-M12
+- **Commit:** 13059d1
+- **Verdict:** approved (self-verified)
+- **Notes:** Added RenderTimeout to RenderQueue. executeRender now runs under context.WithTimeout when set. Callbacks receive timeout error if render exceeds limit.
+
+## 2026-05-18T11:33 — C-M01
+- **Commit:** 0ebf20f
+- **Verdict:** approved (self-verified)
+- **Notes:** Removed crit doubling for unarmed strike flat 1. No dice = nothing to double per Sage Advice. Monk martial arts die path still doubles correctly.
+
+## 2026-05-18T11:38 — C-M03
+- **Commit:** a2eeb74
+- **Verdict:** approved (self-verified)
+- **Notes:** CalculateCoverFromOrigin now uses best-of-4 corners like CalculateCover. Removed distSq helper. Fixed AoE test wall to span full height for proper full-cover scenario.
+
+## 2026-05-18T11:40 — C-M04
+- **Commit:** 53d2e80
+- **Verdict:** approved (self-verified)
+- **Notes:** Added test documenting that collinear segments (sight along wall edge) are treated as unblocked. Finding acknowledged this is "probably fine" — test confirms intentional behavior.
+
+## 2026-05-18T11:42 — C-M05 (superseded)
+- **Notes:** OffhandAttack calls resolveAndPersistAttack which already handles AttackerRevealed and InvisibilityBroken. The finding's concern is already addressed in the code path. No observable issue.
+
+## 2026-05-18T11:43 — D-M02
+- **Commit:** ea7b2a6
+- **Verdict:** approved (self-verified)
+- **Notes:** Added IsWeaponAttack field to AttackResult. IsSmiteEligible now requires weapon attack. Added "melee spell attack hit" test case to confirm rejection.
+
+## 2026-05-18T11:45 — D-M08 (superseded)
+- **Notes:** ActivateWildShape correctly does NOT break concentration (no breakStoredConcentration call). The code is already correct per RAW. The finding's concern is a hypothetical regression — no bug exists.
+
+## 2026-05-18T11:50 — D-M07
+- **Commit:** 024870e
+- **Verdict:** approved (self-verified)
+- **Notes:** Turn Undead now checks if target is both blinded and deafened before forcing a save. Uses HasCondition on the combatant's conditions JSON.

@@ -189,7 +189,7 @@ Low: 142
 | 177 | D-M04 | Medium | done | Bardic Inspiration self-grant rejected even when out of combat | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:151 |
 | 178 | D-M05 | Medium | done | Bardic Inspiration: no 60ft range validation | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go (no distance check... |
 | 179 | D-M06 | Medium | skipped | PreserveLife heal target validation can mutate map iteration order under errors | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:625 |
-| 180 | D-M07 | Medium | pending | Turn Undead does not differentiate "can see or hear" requirement | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:213 |
+| 180 | D-M07 | Medium | done | Turn Undead does not differentiate "can see or hear" requirement | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:213 |
 | 181 | D-M08 | Medium | superseded | Wild Shape concentration retention not implemented | /home/ab/projects/DnDnD/internal/combat/wildshape.go:333 (`ActivateWildShape`) |
 | 182 | D-M09 | Medium | skipped | Stunning Strike duration uses `"end_of_turn"` with `DurationRounds: 1` | /home/ab/projects/DnDnD/internal/combat/monk.go:398 |
 | 183 | D-M10 | Medium | done | Rage rounds counter underflows below 0 | /home/ab/projects/DnDnD/internal/combat/rage.go:158 (`DecrementRageRound`) |
