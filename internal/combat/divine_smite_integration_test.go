@@ -168,7 +168,7 @@ func TestIntegration_DivineSmite_BasicSlotDeduction(t *testing.T) {
 		Target:       f.target,
 		SlotLevel:    1,
 		IsCritical:   false,
-		AttackResult: combat.AttackResult{Hit: true, IsMelee: true},
+		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true},
 	}, roller)
 	require.NoError(t, err)
 
@@ -213,7 +213,7 @@ func TestIntegration_DivineSmite_2ndLevelSlot(t *testing.T) {
 		Target:       f.target,
 		SlotLevel:    2,
 		IsCritical:   false,
-		AttackResult: combat.AttackResult{Hit: true, IsMelee: true},
+		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true},
 	}, roller)
 	require.NoError(t, err)
 
@@ -248,7 +248,7 @@ func TestIntegration_DivineSmite_UndeadBonus(t *testing.T) {
 		Target:       f.target,
 		SlotLevel:    1,
 		IsCritical:   false,
-		AttackResult: combat.AttackResult{Hit: true, IsMelee: true},
+		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true},
 	}, roller)
 	require.NoError(t, err)
 
@@ -280,7 +280,7 @@ func TestIntegration_DivineSmite_FiendBonus(t *testing.T) {
 		Target:       f.target,
 		SlotLevel:    1,
 		IsCritical:   false,
-		AttackResult: combat.AttackResult{Hit: true, IsMelee: true},
+		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true},
 	}, roller)
 	require.NoError(t, err)
 
@@ -306,7 +306,7 @@ func TestIntegration_DivineSmite_CritDoubling(t *testing.T) {
 		Target:       f.target,
 		SlotLevel:    1,
 		IsCritical:   true,
-		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, CriticalHit: true},
+		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true, CriticalHit: true},
 	}, roller)
 	require.NoError(t, err)
 
@@ -339,7 +339,7 @@ func TestIntegration_DivineSmite_UndeadCrit(t *testing.T) {
 		Target:       f.target,
 		SlotLevel:    1,
 		IsCritical:   true,
-		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, CriticalHit: true},
+		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true, CriticalHit: true},
 	}, roller)
 	require.NoError(t, err)
 
@@ -433,7 +433,7 @@ func TestIntegration_DivineSmite_NoSlotsNotEligible(t *testing.T) {
 		Target:       f.target,
 		SlotLevel:    1,
 		IsCritical:   false,
-		AttackResult: combat.AttackResult{Hit: true, IsMelee: true},
+		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true},
 	}, roller)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no 1st-level spell slots remaining")
@@ -459,7 +459,7 @@ func TestIntegration_DivineSmite_Max5d8Cap(t *testing.T) {
 		Target:       f.target,
 		SlotLevel:    4,
 		IsCritical:   false,
-		AttackResult: combat.AttackResult{Hit: true, IsMelee: true},
+		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true},
 	}, roller)
 	require.NoError(t, err)
 	assert.Equal(t, "5d8", result4.SmiteDice)
@@ -471,7 +471,7 @@ func TestIntegration_DivineSmite_Max5d8Cap(t *testing.T) {
 		Target:       f.target,
 		SlotLevel:    5,
 		IsCritical:   false,
-		AttackResult: combat.AttackResult{Hit: true, IsMelee: true},
+		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true},
 	}, roller)
 	require.NoError(t, err)
 	assert.Equal(t, "5d8", result5.SmiteDice)
@@ -564,7 +564,7 @@ func TestIntegration_DivineSmite_NoDivineSmiteFeature(t *testing.T) {
 		Attacker:     fighter,
 		Target:       target,
 		SlotLevel:    1,
-		AttackResult: combat.AttackResult{Hit: true, IsMelee: true},
+		AttackResult: combat.AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true},
 	}, roller)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not have Divine Smite")

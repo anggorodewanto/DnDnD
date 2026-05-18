@@ -51,7 +51,7 @@ func AvailableSmiteSlots(slots map[string]SlotInfo) []int {
 
 // IsSmiteEligible returns true if the attack result is a melee weapon hit.
 func IsSmiteEligible(result AttackResult) bool {
-	return result.Hit && result.IsMelee
+	return result.Hit && result.IsMelee && result.IsWeaponAttack
 }
 
 // SmiteDamageFormula returns the total dice count and formatted dice string for Divine Smite.

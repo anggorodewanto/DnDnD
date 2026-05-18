@@ -355,6 +355,7 @@ type AttackResult struct {
 	WeaponName          string
 	DistanceFt          int
 	IsMelee             bool
+	IsWeaponAttack      bool // True for weapon attacks (not spell attacks)
 	Hit                 bool
 	CriticalHit         bool
 	AutoCrit            bool
@@ -505,18 +506,19 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 
 	result := AttackResult{
-		AttackerName: input.AttackerName,
-		TargetName:   input.TargetName,
-		WeaponName:   input.Weapon.Name,
-		DistanceFt:   input.DistanceFt,
-		IsMelee:      isMelee,
-		EffectiveAC:  effectiveAC,
-		DamageType:   input.Weapon.DamageType,
-		Cover:        input.Cover,
-		InLongRange:  resolveInLongRange(input),
-		GWM:          input.GWM,
-		Sharpshooter: input.Sharpshooter,
-		Reckless:     input.Reckless,
+		AttackerName:   input.AttackerName,
+		TargetName:     input.TargetName,
+		WeaponName:     input.Weapon.Name,
+		DistanceFt:     input.DistanceFt,
+		IsMelee:        isMelee,
+		IsWeaponAttack: true,
+		EffectiveAC:    effectiveAC,
+		DamageType:     input.Weapon.DamageType,
+		Cover:          input.Cover,
+		InLongRange:    resolveInLongRange(input),
+		GWM:            input.GWM,
+		Sharpshooter:   input.Sharpshooter,
+		Reckless:       input.Reckless,
 	}
 
 	// Detect advantage/disadvantage BEFORE the Feature Effect System runs so

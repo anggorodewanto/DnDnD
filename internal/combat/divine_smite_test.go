@@ -78,11 +78,12 @@ func TestIsSmiteEligible(t *testing.T) {
 		result  AttackResult
 		want    bool
 	}{
-		{"melee hit", AttackResult{Hit: true, IsMelee: true}, true},
-		{"melee miss", AttackResult{Hit: false, IsMelee: true}, false},
-		{"ranged hit", AttackResult{Hit: true, IsMelee: false}, false},
+		{"melee weapon hit", AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true}, true},
+		{"melee weapon miss", AttackResult{Hit: false, IsMelee: true, IsWeaponAttack: true}, false},
+		{"ranged weapon hit", AttackResult{Hit: true, IsMelee: false, IsWeaponAttack: true}, false},
 		{"ranged miss", AttackResult{Hit: false, IsMelee: false}, false},
-		{"melee crit", AttackResult{Hit: true, IsMelee: true, CriticalHit: true}, true},
+		{"melee weapon crit", AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true, CriticalHit: true}, true},
+		{"melee spell attack hit", AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: false}, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -178,7 +179,7 @@ func TestDivineSmite_NPCAttacker(t *testing.T) {
 	svc := NewService(nil)
 	_, err := svc.DivineSmite(context.Background(), DivineSmiteCommand{
 		Attacker:     refdata.Combatant{}, // no CharacterID
-		AttackResult: AttackResult{Hit: true, IsMelee: true},
+		AttackResult: AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true},
 	}, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "character (not NPC)")
