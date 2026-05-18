@@ -452,9 +452,8 @@ func (s *Service) LongRest(input LongRestInput) LongRestResult {
 	result.HitDiceRestored = restored
 
 	// Death saves reset
-	if input.DeathSaveSuccesses > 0 || input.DeathSaveFailures > 0 {
-		result.DeathSavesReset = true
-	}
+	// Spec: death save tallies always reset to 0/0 on long rest.
+	result.DeathSavesReset = true
 
 	// SR-019: long rest decreases exhaustion by 1 (floor 0). Decreased
 	// flag drives the format/Discord message — already-at-zero rests
