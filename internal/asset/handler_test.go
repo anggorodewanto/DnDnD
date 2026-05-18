@@ -138,7 +138,8 @@ func TestHandler_ServeAsset_ContentLength(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "42", rec.Header().Get("Content-Length"))
+	// Content-Length reflects actual served bytes, not stale DB record.
+	assert.Equal(t, "2", rec.Header().Get("Content-Length"))
 }
 
 // --- TDD Cycle 1: POST /api/assets/upload with multipart form ---
@@ -434,4 +435,36 @@ func TestHandler_UploadAsset_AllowedMimeType_JSONForTileset(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusCreated, rec.Code)
+}
+
+func TestHandler_ServeAsset_ContentLengthMatchesActualBody(t *testing.T) {
+	// ByteSize in DB says 100, but actual file is only 5 bytes.
+	// Content-Length should reflect actual served bytes, not stale DB value.
+	assetID := uuid.New()
+	db := &mockDBStore{
+		getAssetFn: func(ctx context.Context, id uuid.UUID) (refdata.Asset, error) {
+			return refdata.Asset{
+				ID:          assetID,
+				MimeType:    "image/png",
+				StoragePath: "a/b/c",
+				ByteSize:    100, // stale/wrong value
+			}, nil
+		},
+	}
+	fs := &mockFileStore{
+		getFn: func(ctx context.Context, sp string) (io.ReadCloser, error) {
+			return io.NopCloser(strings.NewReader("short")), nil // only 5 bytes
+		},
+	}
+	svc := NewService(db, fs)
+	h := NewHandler(svc)
+	router := newTestRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/assets/"+assetID.String(), nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "5", rec.Header().Get("Content-Length"))
+	assert.Equal(t, "short", rec.Body.String())
 }

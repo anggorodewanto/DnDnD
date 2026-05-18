@@ -102,11 +102,13 @@ func (h *Handler) ServeAsset(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rc.Close()
 
-	w.Header().Set("Content-Type", asset.MimeType)
-	if asset.ByteSize > 0 {
-		w.Header().Set("Content-Length", strconv.FormatInt(asset.ByteSize, 10))
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
 	}
 
-	// Response already started; best-effort copy.
-	_, _ = io.Copy(w, rc)
+	w.Header().Set("Content-Type", asset.MimeType)
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Write(data)
 }
