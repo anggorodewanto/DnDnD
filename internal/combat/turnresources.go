@@ -160,6 +160,10 @@ func UseAttack(turn refdata.Turn) (refdata.Turn, error) {
 		return turn, fmt.Errorf("%s: %w", ResourceAttack, ErrResourceSpent)
 	}
 	turn.AttacksRemaining--
+	// Mark the action as used on the first attack of the turn.
+	if !turn.ActionUsed {
+		turn.ActionUsed = true
+	}
 	return turn, nil
 }
 
