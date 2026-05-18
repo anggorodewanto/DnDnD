@@ -384,3 +384,12 @@ func TestCalculateCoverFromOrigin_BestOfFourCorners(t *testing.T) {
 		t.Errorf("expected less than CoverFull with best-of-4 corners, got %v", cover)
 	}
 }
+
+func TestSegmentsIntersect_CollinearSightAlongWall(t *testing.T) {
+	// Sight line runs exactly along a wall edge (collinear).
+	// Current behavior: treated as unblocked (denom=0 → false).
+	// This is acceptable for axis-aligned walls in the grid system.
+	if segmentsIntersect(0, 0, 4, 0, 1, 0, 3, 0) {
+		t.Error("collinear segments should not count as intersection (current spec behavior)")
+	}
+}

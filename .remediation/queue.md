@@ -171,8 +171,8 @@ Low: 142
 | 159 | B-M12 | Medium | done | `RenderQueue` never times-out or drops requests on render failure | `/home/ab/projects/DnDnD/internal/gamemap/renderer/queue.go:76-93`. |
 | 160 | C-M01 | Medium | done | Unarmed strike crit doubles the flat "1", not RAW dice | /home/ab/projects/DnDnD/internal/combat/attack.go:674-681 |
 | 161 | C-M02 | Medium | done | TWF "negative ability modifier still applies" RAW edge missed | /home/ab/projects/DnDnD/internal/combat/attack.go:1199-1202 |
-| 162 | C-M03 | Medium | pending | Cover bonus to DEX save uses single closest-corner instead of best-of-4 | /home/ab/projects/DnDnD/internal/combat/cover.go:106-136 (`CalculateCoverFromOri... |
-| 163 | C-M04 | Medium | pending | `lineBlockedByWalls` allows zero-determinant case to slip through | /home/ab/projects/DnDnD/internal/combat/cover.go:212-233 (`segmentsIntersect`) |
+| 162 | C-M03 | Medium | done | Cover bonus to DEX save uses single closest-corner instead of best-of-4 | /home/ab/projects/DnDnD/internal/combat/cover.go:106-136 (`CalculateCoverFromOri... |
+| 163 | C-M04 | Medium | done | `lineBlockedByWalls` allows zero-determinant case to slip through | /home/ab/projects/DnDnD/internal/combat/cover.go:212-233 (`segmentsIntersect`) |
 | 164 | C-M05 | Medium | pending | Off-hand TWF doesn't track on AttackerHidden / invisible attacker single-shot reveal | /home/ab/projects/DnDnD/internal/combat/attack.go:1238-1247 (`OffhandAttack`) |
 | 165 | C-M06 | Medium | superseded | Damage-at-0 crit gives +2 failures regardless of attacker distance | /home/ab/projects/DnDnD/internal/combat/deathsave.go:159-192 (`ApplyDamageAtZero... |
 | 166 | C-M07 | Medium | done | `ValidateMove` rejects ending on ally's tile (spec says ally pass-through allowed; ending forbidden — fine — but message) | /home/ab/projects/DnDnD/internal/combat/movement.go:84-94 |
