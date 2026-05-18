@@ -13,7 +13,7 @@ import (
 func CheckUnusedResources(turn refdata.Turn) []string {
 	var unused []string
 
-	if !turn.ActionUsed && turn.AttacksRemaining == 0 {
+	if !turn.ActionUsed {
 		unused = append(unused, "\U0001f4a5 Action")
 	}
 
