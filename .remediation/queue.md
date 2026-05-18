@@ -244,7 +244,7 @@ Low: 142
 | 232 | G-M08 | Medium | pending | PartyShortRest never auto-spends hit dice (always spends 0) | internal/rest/party_handler.go:218-260 |
 | 233 | G-M09 | Medium | pending | Loot pool created from "completed" encounter — combatants gold lost if encounter status mismatch | internal/loot/service.go:67-118 |
 | 234 | G-M10 | Medium | pending | Loot pool item ItemID null when claimed from custom entries breaks downstream `/use` | internal/loot/service.go:243-256 |
-| 235 | G-M11 | Medium | pending | `Equip` blocks re-equipping the same item but silently allows two main-hand items via `OffHand=false` | internal/inventory/equip.go:27-62 |
+| 235 | G-M11 | Medium | done | `Equip` blocks re-equipping the same item but silently allows two main-hand items via `OffHand=false` | internal/inventory/equip.go:27-62 |
 | 236 | G-M12 | Medium | pending | LongRest doesn't recharge `recharge: "dawn"` features distinct from `"long"` | internal/rest/rest.go:401-407 |
 | 237 | G-M13 | Medium | pending | LongRest never zeroes the input.PactMagicSlots when it does mutate them | internal/rest/rest.go:392-398 |
 | 238 | G-M14 | Medium | pending | `/rest` doesn't enforce one-long-rest-per-24h even narratively (no warning to DM) | internal/discord/rest_handler.go (no 24h check) |
@@ -288,7 +288,7 @@ Low: 142
 | 276 | I-M20 | Medium | pending | Combat Manager polls every 5s in addition to WebSocket | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:101-109 |
 | 277 | I-M21 | Medium | pending | HomebrewEditor list endpoint includes `?homebrew=true` but services don't filter by that query param | /home/ab/projects/DnDnD/dashboard/svelte/src/HomebrewEditor.svelte:60-72 ; statb... |
 | 278 | J-M01 | Medium | pending | Open5e service caches into globally-visible rows (`campaign_id NULL`) on any auth'd POST | /home/ab/projects/DnDnD/internal/open5e/cache.go:54-66 (`CacheMonster` uses `Cam... |
-| 279 | J-M02 | Medium | pending | WS Hub.Register / Unregister channels can deadlock under sustained slow-client traffic | /home/ab/projects/DnDnD/internal/dashboard/ws.go:42-51 (unbuffered channels) |
+| 279 | J-M02 | Medium | superseded | WS Hub.Register / Unregister channels can deadlock under sustained slow-client traffic | /home/ab/projects/DnDnD/internal/dashboard/ws.go:42-51 (unbuffered channels) |
 | 280 | J-M03 | Medium | pending | Crash-recovery loses in-memory once-per-turn slot tracker (Sneak Attack double-use risk) | /home/ab/projects/DnDnD/internal/combat/service.go:323-324 (`usedEffects map`) |
 | 281 | J-M04 | Medium | pending | Hub broadcast drops slow clients but never closes their writer goroutine's conn | /home/ab/projects/DnDnD/internal/dashboard/ws.go:77-101 |
 | 282 | J-M05 | Medium | pending | Campaign #the-story announcer resolves channel by name on every announce (drift if renamed) | /home/ab/projects/DnDnD/internal/discord/narration_poster.go:71-82 (`resolveStor... |
