@@ -176,7 +176,7 @@ Low: 142
 | 164 | C-M05 | Medium | pending | Off-hand TWF doesn't track on AttackerHidden / invisible attacker single-shot reveal | /home/ab/projects/DnDnD/internal/combat/attack.go:1238-1247 (`OffhandAttack`) |
 | 165 | C-M06 | Medium | pending | Damage-at-0 crit gives +2 failures regardless of attacker distance | /home/ab/projects/DnDnD/internal/combat/deathsave.go:159-192 (`ApplyDamageAtZero... |
 | 166 | C-M07 | Medium | done | `ValidateMove` rejects ending on ally's tile (spec says ally pass-through allowed; ending forbidden — fine — but message) | /home/ab/projects/DnDnD/internal/combat/movement.go:84-94 |
-| 167 | C-M08 | Medium | pending | `tileCost` adds +5 for prone, conceptually using +5 not ×2 | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:284-294 |
+| 167 | C-M08 | Medium | superseded | `tileCost` adds +5 for prone, conceptually using +5 not ×2 | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:284-294 |
 | 168 | C-M09 | Medium | done | Action consumption not flagged for /attack — features keying off ActionUsed misbehave | /home/ab/projects/DnDnD/internal/combat/attack.go:925 (UseAttack only decrements... |
 | 169 | C-M10 | Medium | pending | Initiative tiebreak ignores DEX modifier ordering for surprised + tie cases | /home/ab/projects/DnDnD/internal/combat/initiative.go:167-177 |
 | 170 | C-M11 | Medium | pending | Distance3D rounding-to-5 can flip cover/range edges | /home/ab/projects/DnDnD/internal/combat/altitude.go:22-33 (`Distance3D`, `roundT... |
@@ -185,9 +185,9 @@ Low: 142
 | 173 | C-M14 | Medium | pending | Spec calls for "ammo recovery PROMPT" post-combat; code auto-recovers in EndCombat | /home/ab/projects/DnDnD/internal/combat/service.go:1145-1161 |
 | 174 | D-M01 | Medium | pending | Divine Smite crit bonus computed twice when target is undead and crit | /home/ab/projects/DnDnD/internal/combat/divine_smite.go:59 (`SmiteDamageFormula`... |
 | 175 | D-M02 | Medium | pending | Divine Smite eligibility doesn't enforce "weapon attack" | /home/ab/projects/DnDnD/internal/combat/divine_smite.go:52 (`IsSmiteEligible`) a... |
-| 176 | D-M03 | Medium | pending | Action Surge resets `AttacksRemaining` from current character data instead of remembering the action's attack count | /home/ab/projects/DnDnD/internal/combat/action_surge.go:58 |
+| 176 | D-M03 | Medium | done | Action Surge resets `AttacksRemaining` from current character data instead of remembering the action's attack count | /home/ab/projects/DnDnD/internal/combat/action_surge.go:58 |
 | 177 | D-M04 | Medium | pending | Bardic Inspiration self-grant rejected even when out of combat | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:151 |
-| 178 | D-M05 | Medium | pending | Bardic Inspiration: no 60ft range validation | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go (no distance check... |
+| 178 | D-M05 | Medium | done | Bardic Inspiration: no 60ft range validation | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go (no distance check... |
 | 179 | D-M06 | Medium | pending | PreserveLife heal target validation can mutate map iteration order under errors | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:625 |
 | 180 | D-M07 | Medium | pending | Turn Undead does not differentiate "can see or hear" requirement | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:213 |
 | 181 | D-M08 | Medium | pending | Wild Shape concentration retention not implemented | /home/ab/projects/DnDnD/internal/combat/wildshape.go:333 (`ActivateWildShape`) |
@@ -220,7 +220,7 @@ Low: 142
 | 208 | E-M20 | Medium | pending | Cunning Action passes stale `cmd.Turn` to `resolveHide` after consuming bonus action | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:856-872` |
 | 209 | F-M01 | Medium | pending | Readied-spell concentration written with empty SpellID | /home/ab/projects/DnDnD/internal/combat/readied_action.go:126-141 |
 | 210 | F-M02 | Medium | pending | Counterspell ability check uses character.ProficiencyBonus on the wrong side | /home/ab/projects/DnDnD/internal/combat/counterspell.go:209-260 |
-| 211 | F-M03 | Medium | pending | `/done` unused-resource warning's "Action" branch is logically dead | /home/ab/projects/DnDnD/internal/combat/unused_resources.go:13-33 |
+| 211 | F-M03 | Medium | done | `/done` unused-resource warning's "Action" branch is logically dead | /home/ab/projects/DnDnD/internal/combat/unused_resources.go:13-33 |
 | 212 | F-M04 | Medium | pending | Magical-darkness zone affected-tiles ignore concentration-anchored zone movement | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:819-833 |
 | 213 | F-M05 | Medium | pending | Light cantrip / Continual Flame zones get 20ft uniform — but Daylight is 60ft bright + 60ft dim | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:918-927 |
 | 214 | F-M06 | Medium | pending | Hide-success token visibility doesn't propagate to enemy renders | /home/ab/projects/DnDnD/internal/combat/standard_actions.go:363-371 |
