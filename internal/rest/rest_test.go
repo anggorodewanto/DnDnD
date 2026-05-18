@@ -391,6 +391,9 @@ func TestLongRest_PactMagicRestored(t *testing.T) {
 	if !result.PactSlotsRestored {
 		t.Error("PactSlotsRestored = false, want true")
 	}
+	if result.PactSlotsCurrent != 2 {
+		t.Errorf("PactSlotsCurrent = %d, want 2", result.PactSlotsCurrent)
+	}
 }
 
 // --- TDD Cycle 14: Long rest hit dice restore minimum 1 ---

@@ -303,6 +303,7 @@ type LongRestResult struct {
 	FeaturesRecharged      []string
 	SpellSlots             map[string]character.SlotInfo
 	PactSlotsRestored      bool
+	PactSlotsCurrent       int
 	DeathSavesReset        bool
 	PreparedCasterReminder bool
 
@@ -397,6 +398,7 @@ func (s *Service) LongRest(input LongRestInput) LongRestResult {
 			input.PactMagicSlots.Current = input.PactMagicSlots.Max
 			result.PactSlotsRestored = true
 		}
+		result.PactSlotsCurrent = input.PactMagicSlots.Current
 	}
 
 	// Recharge all short, long, dawn, and daily rest features

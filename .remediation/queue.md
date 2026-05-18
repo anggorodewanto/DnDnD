@@ -239,7 +239,7 @@ Low: 142
 | 227 | G-M03 | Medium | done | Long rest does not zero death-save tallies when both are zero | internal/rest/rest.go:444-446 |
 | 228 | G-M04 | Medium | done | Item Picker custom-entry endpoint accepts negative gold/quantity silently | internal/itempicker/handler.go:208-239 |
 | 229 | G-M05 | Medium | pending | CastIdentify accepts ritual without 10-minute delay enforcement | internal/inventory/identification.go:81-110 |
-| 230 | G-M06 | Medium | pending | CastIdentify silently allows identifying items that aren't magic | internal/inventory/identification.go:24-44 |
+| 230 | G-M06 | Medium | superseded | CastIdentify silently allows identifying items that aren't magic | internal/inventory/identification.go:24-44 |
 | 231 | G-M07 | Medium | done | Combat recap truncation cuts mid-line and may produce orphan round headers | internal/combat/recap.go:71-78, 93-116 |
 | 232 | G-M08 | Medium | pending | PartyShortRest never auto-spends hit dice (always spends 0) | internal/rest/party_handler.go:218-260 |
 | 233 | G-M09 | Medium | pending | Loot pool created from "completed" encounter — combatants gold lost if encounter status mismatch | internal/loot/service.go:67-118 |
