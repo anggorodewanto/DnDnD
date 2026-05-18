@@ -38,11 +38,82 @@ func (s *Service) DeclareReaction(ctx context.Context, encounterID, combatantID 
 		return refdata.ReactionDeclaration{}, ErrReactionSurprised
 	}
 
+	// Validate known reaction spells against character's spell list.
+	if spellID := detectReactionSpell(description); spellID != "" {
+		if err := s.validateReactionSpellKnown(ctx, combatantID, spellID); err != nil {
+			return refdata.ReactionDeclaration{}, err
+		}
+	}
+
 	return s.store.CreateReactionDeclaration(ctx, refdata.CreateReactionDeclarationParams{
 		EncounterID: encounterID,
 		CombatantID: combatantID,
 		Description: description,
 	})
+}
+
+// detectReactionSpell checks if the description mentions a known reaction spell.
+func detectReactionSpell(desc string) string {
+	lower := strings.ToLower(desc)
+	switch {
+	case strings.Contains(lower, "counterspell"):
+		return "counterspell"
+	case strings.Contains(lower, "shield") && !strings.Contains(lower, "shield of faith"):
+		return "shield"
+	case strings.Contains(lower, "hellish rebuke"):
+		return "hellish-rebuke"
+	case strings.Contains(lower, "absorb elements"):
+		return "absorb-elements"
+	}
+	return ""
+}
+
+// validateReactionSpellKnown checks if the combatant's character has the
+// capability to cast the reaction spell (has spell slots at the required level).
+func (s *Service) validateReactionSpellKnown(ctx context.Context, combatantID uuid.UUID, spellID string) error {
+	combatant, err := s.store.GetCombatant(ctx, combatantID)
+	if err != nil {
+		return nil // can't validate NPC reactions
+	}
+	if !combatant.CharacterID.Valid {
+		return nil // NPCs don't need spell validation
+	}
+	char, err := s.store.GetCharacter(ctx, combatant.CharacterID.UUID)
+	if err != nil {
+		return nil // graceful fallback
+	}
+
+	// Check if character has any spell slots (indicates spellcaster).
+	// Reaction spells require at least level-1 slots (Shield) or level-3 (Counterspell).
+	minLevel := reactionSpellMinLevel(spellID)
+	slots, _ := parseIntKeyedSlots(char.SpellSlots.RawMessage)
+	pact, _ := parsePactMagicSlots(char.PactMagicSlots.RawMessage)
+
+	hasSlot := false
+	for level, info := range slots {
+		if level >= minLevel && info.Max > 0 {
+			hasSlot = true
+			break
+		}
+	}
+	if !hasSlot && pact.SlotLevel >= minLevel && pact.Max > 0 {
+		hasSlot = true
+	}
+	if !hasSlot {
+		return fmt.Errorf("cannot declare %s reaction: no spell slots at level %d+", spellID, minLevel)
+	}
+	return nil
+}
+
+// reactionSpellMinLevel returns the minimum spell slot level needed for a reaction spell.
+func reactionSpellMinLevel(spellID string) int {
+	switch spellID {
+	case "counterspell":
+		return 3
+	case "shield", "absorb-elements", "hellish-rebuke":
+		return 1
+	}
+	return 1
 }
 
 // combatantIsSurprised fetches the combatant and reports whether the
