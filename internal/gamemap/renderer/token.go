@@ -28,9 +28,13 @@ func DrawTokens(dc *gg.Context, md *MapData) {
 			cx := float64(pos.Col)*ts + ts/2
 			cy := float64(pos.Row)*ts + ts/2
 
-			// Offset for stacked tokens: shift up-right by altitude order
+			// Offset for stacked tokens: shift up-right, clamped to stay within the cell.
 			if i > 0 {
 				offset := float64(i) * ts * 0.2
+				maxOffset := ts * 0.45
+				if offset > maxOffset {
+					offset = maxOffset
+				}
 				cx += offset
 				cy -= offset
 			}
