@@ -80,6 +80,19 @@ func (h *CharacterSheetHandler) handleSheetError(w http.ResponseWriter, err erro
 }
 
 func (h *CharacterSheetHandler) renderSheet(w http.ResponseWriter, data *CharacterSheetData) {
+	// Pre-sort spell slot levels numerically for deterministic template rendering.
+	if len(data.SpellSlots) > 0 && len(data.SortedSlotLevels) == 0 {
+		levels := make([]string, 0, len(data.SpellSlots))
+		for k := range data.SpellSlots {
+			levels = append(levels, k)
+		}
+		sort.Slice(levels, func(i, j int) bool {
+			a, _ := strconv.Atoi(levels[i])
+			b, _ := strconv.Atoi(levels[j])
+			return a < b
+		})
+		data.SortedSlotLevels = levels
+	}
 	var buf bytes.Buffer
 	if err := h.sheetTmpl.Execute(&buf, data); err != nil {
 		h.logger.Error("failed to render character sheet template", "error", err)
@@ -371,10 +384,10 @@ const characterSheetTemplate = `<!DOCTYPE html>
         {{if .SpellSlots}}
         <div class="section">
             <h3>Spell Slots</h3>
-            {{range $level, $slot := .SpellSlots}}
+            {{range .SortedSlotLevels}}
             <div class="slot-row">
-                <span>Level {{$level}}</span>
-                <span>{{$slot.Current}}/{{$slot.Max}}</span>
+                <span>Level {{.}}</span>
+                <span>{{(index $.SpellSlots .).Current}}/{{(index $.SpellSlots .).Max}}</span>
             </div>
             {{end}}
         </div>

@@ -36,6 +36,7 @@ type CharacterSheetData struct {
 	EquippedOffHand  string
 	EquippedArmor    string
 	SpellSlots       map[string]character.SlotInfo
+	SortedSlotLevels []string // numerically sorted keys of SpellSlots
 	PactMagicSlots   *character.PactMagicSlots
 	HitDiceRemaining map[string]int
 	FeatureUses      map[string]character.FeatureUse
