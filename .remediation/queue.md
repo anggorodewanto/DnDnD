@@ -214,7 +214,7 @@ Low: 142
 | 202 | E-M14 | Medium | pending | `applyConcentrationOnCast` clears prior concentration even on cast failure later (no rollback) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:620-627` |
 | 203 | E-M15 | Medium | superseded | Cone shape projects from caster center, not tile edge | `/home/ab/projects/DnDnD/internal/combat/aoe.go:113-117` (`ConeAffectedTiles`) |
 | 204 | E-M16 | Medium | pending | Concentration save uses `currentConcentration` name-string only (no spell ID) | `/home/ab/projects/DnDnD/internal/combat/concentration.go:36-45` (`CheckConcentr... |
-| 205 | E-M17 | Medium | pending | Passive Perception for creatures lacks proficiency when Skills JSONB is empty | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:516-530` |
+| 205 | E-M17 | Medium | done | Passive Perception for creatures lacks proficiency when Skills JSONB is empty | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:516-530` |
 | 206 | E-M18 | Medium | superseded | Hide's "spotted by" picks highest-PP enemy, but losing tied roll vs second-highest is hidden | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:347-360` |
 | 207 | E-M19 | Medium | pending | Subtle Spell does not actually suppress concentration-break-in-silence | `/home/ab/projects/DnDnD/internal/combat/concentration.go:126-135` (`CheckConcen... |
 | 208 | E-M20 | Medium | pending | Cunning Action passes stale `cmd.Turn` to `resolveHide` after consuming bonus action | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:856-872` |
