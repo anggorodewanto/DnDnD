@@ -678,11 +678,9 @@ func resolveWeaponDamage(weapon refdata.Weapon, dmgMod int, critical bool, twoHa
 	}
 
 	if weapon.ID == "unarmed-strike" {
-		base := 1
-		if critical {
-			base = 2
-		}
-		total := max(base+dmgMod, 0)
+		// Unarmed strikes have no dice — the flat 1 is not doubled on crit
+		// per Sage Advice (no dice to double).
+		total := max(1+dmgMod, 0)
 		return total, fmt.Sprintf("%d", total), nil
 	}
 

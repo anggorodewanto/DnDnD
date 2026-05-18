@@ -525,7 +525,7 @@ func TestResolveAttack_UnarmedStrike(t *testing.T) {
 }
 
 func TestResolveAttack_UnarmedStrikeCrit(t *testing.T) {
-	// Unarmed crit: 2*(1) + STR mod = 2 + 3 = 5 damage
+	// Unarmed crit: flat 1 (not doubled per Sage Advice) + STR mod = 1 + 3 = 4 damage
 	roller := dice.NewRoller(func(max int) int {
 		return 20
 	})
@@ -544,7 +544,7 @@ func TestResolveAttack_UnarmedStrikeCrit(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.Hit)
 	assert.True(t, result.CriticalHit)
-	assert.Equal(t, 5, result.DamageTotal) // 2*(1) + 3
+	assert.Equal(t, 4, result.DamageTotal) // 1 + 3 (flat 1 not doubled)
 }
 
 func TestResolveAttack_FinesseAutoSelect(t *testing.T) {
@@ -1253,7 +1253,7 @@ func TestResolveWeaponDamage_UnarmedCrit(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 1 })
 	weapon := UnarmedStrike()
 	dmg, _, _ := resolveWeaponDamage(weapon, 3, true, false, roller)
-	assert.Equal(t, 5, dmg) // 2 + 3
+	assert.Equal(t, 4, dmg) // 1 + 3 (flat 1 not doubled on crit)
 }
 
 func TestResolveWeaponDamage_UnarmedNegativeMod(t *testing.T) {
