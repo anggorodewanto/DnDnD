@@ -1,6 +1,9 @@
 package character
 
-import "maps"
+import (
+	"maps"
+	"strings"
+)
 
 // multiclassSpellSlotTable is the standard 5e multiclass spellcasting table.
 // Index 0 is unused; index 1-20 correspond to caster levels 1-20.
@@ -49,6 +52,10 @@ func CalculateCasterLevel(classes []ClassEntry, spellcasting map[string]ClassSpe
 	for _, c := range classes {
 		sc, ok := spellcasting[c.Class]
 		if !ok {
+			// Check if subclass is a known third-caster
+			if isThirdCasterSubclass(c.Subclass) {
+				total += c.Level / 3
+			}
 			continue
 		}
 		switch sc.SlotProgression {
@@ -58,9 +65,23 @@ func CalculateCasterLevel(classes []ClassEntry, spellcasting map[string]ClassSpe
 			total += c.Level / 2
 		case "third":
 			total += c.Level / 3
+		case "none", "pact":
+			// Check subclass override for third-casters
+			if isThirdCasterSubclass(c.Subclass) {
+				total += c.Level / 3
+			}
 		}
 	}
 	return total
+}
+
+// isThirdCasterSubclass returns true for subclasses that grant third-caster progression.
+func isThirdCasterSubclass(subclass string) bool {
+	switch strings.ToLower(subclass) {
+	case "eldritch-knight", "eldritch knight", "arcane-trickster", "arcane trickster":
+		return true
+	}
+	return false
 }
 
 // pactMagicTable maps warlock level (1-20) to {slotCount, slotLevel}.

@@ -229,3 +229,33 @@ func TestCalculateSpellSlots_SingleClassHalfCaster(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculateCasterLevel_ThirdCasterSubclass(t *testing.T) {
+	// Fighter 7 (Eldritch Knight) / Wizard 3 should contribute floor(7/3)=2 + 3 = 5
+	classes := []ClassEntry{
+		{Class: "fighter", Subclass: "eldritch-knight", Level: 7},
+		{Class: "wizard", Level: 3},
+	}
+	spellcasting := map[string]ClassSpellcasting{
+		"fighter": {SlotProgression: "none"},
+		"wizard":  {SlotProgression: "full"},
+	}
+	got := CalculateCasterLevel(classes, spellcasting)
+	if got != 5 {
+		t.Errorf("CalculateCasterLevel EK7/Wiz3 = %d, want 5", got)
+	}
+}
+
+func TestCalculateCasterLevel_ArcaneTrickster(t *testing.T) {
+	// Rogue 9 (Arcane Trickster) alone: floor(9/3)=3
+	classes := []ClassEntry{
+		{Class: "rogue", Subclass: "arcane-trickster", Level: 9},
+	}
+	spellcasting := map[string]ClassSpellcasting{
+		"rogue": {SlotProgression: "none"},
+	}
+	got := CalculateCasterLevel(classes, spellcasting)
+	if got != 3 {
+		t.Errorf("CalculateCasterLevel AT9 = %d, want 3", got)
+	}
+}
