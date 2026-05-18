@@ -2963,10 +2963,10 @@ func TestCastAoE_F19_FullCoverExcludesTarget(t *testing.T) {
 	fireball.SaveEffect = sql.NullString{String: "half_damage", Valid: true}
 
 	// AoE origin will be at F6 (col 5, row 5). A vertical wall at x=7.5
-	// spanning y=6.5 to y=8.5 blocks all 4 lines from the closest origin
-	// corner to the target corners, producing full cover.
+	// spanning y=4 to y=10 blocks all lines from every origin corner
+	// to every target corner, producing full cover with best-of-4.
 	walls := []renderer.WallSegment{
-		{X1: 7.5, Y1: 6.5, X2: 7.5, Y2: 8.5},
+		{X1: 7.5, Y1: 4, X2: 7.5, Y2: 10},
 	}
 
 	// Verify this wall setup produces full cover from origin (5,5) to target (8,7)

@@ -101,44 +101,31 @@ func CalculateCover(attackerCol, attackerRow, targetCol, targetRow int, walls []
 	return bestCover
 }
 
-// CalculateCoverFromOrigin computes cover from a specific origin point (for AoE spells).
-// Unlike CalculateCover, this uses a single origin corner, not best-of-4.
+// CalculateCoverFromOrigin computes cover from a specific origin tile (for AoE spells).
+// Tests all 4 origin corners and picks the one giving least cover (best for source).
 func CalculateCoverFromOrigin(originCol, originRow, targetCol, targetRow int, walls []renderer.WallSegment) CoverLevel {
 	if originCol == targetCol && originRow == targetRow {
 		return CoverNone
 	}
 
-	tcx := float64(targetCol) + 0.5
-	tcy := float64(targetRow) + 0.5
-
-	// Pick the origin corner closest to target
 	oc := tileCorners(originCol, originRow)
-	bestCorner := oc[0]
-	bestDist := distSq(oc[0][0], oc[0][1], tcx, tcy)
-	for _, c := range oc[1:] {
-		d := distSq(c[0], c[1], tcx, tcy)
-		if d < bestDist {
-			bestDist = d
-			bestCorner = c
-		}
-	}
-
 	tc := tileCorners(targetCol, targetRow)
 
-	blocked := 0
-	for _, tgt := range tc {
-		if lineBlockedByWalls(bestCorner[0], bestCorner[1], tgt[0], tgt[1], walls) {
-			blocked++
+	bestCover := CoverFull
+	for _, a := range oc {
+		blocked := 0
+		for _, tgt := range tc {
+			if lineBlockedByWalls(a[0], a[1], tgt[0], tgt[1], walls) {
+				blocked++
+			}
+		}
+		cover := blockedToCover(blocked)
+		if cover < bestCover {
+			bestCover = cover
 		}
 	}
 
-	return blockedToCover(blocked)
-}
-
-func distSq(x1, y1, x2, y2 float64) float64 {
-	dx := x2 - x1
-	dy := y2 - y1
-	return dx*dx + dy*dy
+	return bestCover
 }
 
 // lineBlockedByWalls returns true if the line from (ax,ay) to (bx,by) is blocked by any wall.

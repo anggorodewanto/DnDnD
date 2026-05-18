@@ -364,16 +364,23 @@ func TestSegmentsIntersect_Collinear(t *testing.T) {
 	}
 }
 
-func TestDistSq(t *testing.T) {
-	got := distSq(0, 0, 3, 4)
-	if got != 25 {
-		t.Errorf("distSq(0,0,3,4) = %v, want 25", got)
-	}
-}
-
 func TestSegmentsIntersect_EndpointOnWall(t *testing.T) {
 	// Line that starts exactly on the wall endpoint should NOT count as blocked
 	if segmentsIntersect(2, 0, 3, 1, 2, 0, 2, 2) {
 		t.Error("line starting at wall endpoint should not count as intersection")
+	}
+}
+
+func TestCalculateCoverFromOrigin_BestOfFourCorners(t *testing.T) {
+	// Wall at x=1 from y=0 to y=1. Origin at (0,0), target at (2,0).
+	// The closest corner (top-right of origin = 1,0) is ON the wall,
+	// but the bottom-right corner (1,1) has a clear line to target corners.
+	// Best-of-4 should find the corner giving least cover.
+	walls := []renderer.WallSegment{{X1: 1, Y1: 0, X2: 1, Y2: 1}}
+	cover := CalculateCoverFromOrigin(0, 0, 2, 0, walls)
+	// With best-of-4, at least one corner (bottom corners of origin tile)
+	// should have clear lines to target, giving less than full cover.
+	if cover == CoverFull {
+		t.Errorf("expected less than CoverFull with best-of-4 corners, got %v", cover)
 	}
 }
