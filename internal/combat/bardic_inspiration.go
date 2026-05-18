@@ -152,6 +152,11 @@ func (s *Service) GrantBardicInspiration(ctx context.Context, cmd BardicInspirat
 		return BardicInspirationResult{}, fmt.Errorf("cannot grant Bardic Inspiration to yourself")
 	}
 
+	// PHB: target must be within 60 feet.
+	if dist := combatantDistance(cmd.Bard, cmd.Target); dist > 60 {
+		return BardicInspirationResult{}, fmt.Errorf("target is %dft away — Bardic Inspiration requires within 60ft", dist)
+	}
+
 	char, err := s.store.GetCharacter(ctx, cmd.Bard.CharacterID.UUID)
 	if err != nil {
 		return BardicInspirationResult{}, fmt.Errorf("getting character: %w", err)
