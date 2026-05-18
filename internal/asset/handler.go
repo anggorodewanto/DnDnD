@@ -1,6 +1,7 @@
 package asset
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -8,18 +9,35 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ab/dndnd/internal/auth"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
+// CampaignChecker validates that a user is the DM of a campaign.
+// If nil, campaign ownership is not checked (backward compat for tests).
+type CampaignChecker interface {
+	IsCampaignDM(ctx context.Context, userID, campaignID string) (bool, error)
+}
+
 // Handler serves asset files over HTTP.
 type Handler struct {
-	svc *Service
+	svc             *Service
+	campaignChecker CampaignChecker
 }
 
 // NewHandler creates a new asset Handler.
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, opts ...func(*Handler)) *Handler {
+	h := &Handler{svc: svc}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
+}
+
+// WithCampaignChecker sets the campaign ownership checker.
+func WithCampaignChecker(cc CampaignChecker) func(*Handler) {
+	return func(h *Handler) { h.campaignChecker = cc }
 }
 
 // RegisterRoutes mounts asset API routes on the given Chi router.
@@ -45,6 +63,15 @@ func (h *Handler) UploadAsset(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "invalid campaign_id", http.StatusBadRequest)
 		return
+	}
+
+	if h.campaignChecker != nil {
+		userID, _ := auth.DiscordUserIDFromContext(r.Context())
+		isDM, err := h.campaignChecker.IsCampaignDM(r.Context(), userID, campaignID.String())
+		if err != nil || !isDM {
+			http.Error(w, "forbidden: not the DM of this campaign", http.StatusForbidden)
+			return
+		}
 	}
 
 	assetType := AssetType(r.FormValue("type"))

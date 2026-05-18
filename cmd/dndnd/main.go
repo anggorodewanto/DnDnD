@@ -831,7 +831,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		}
 		assetStore := asset.NewLocalStore(assetDataDir)
 		assetSvc := asset.NewService(queries, assetStore)
-		assetHandler := asset.NewHandler(assetSvc)
+		assetHandler := asset.NewHandler(assetSvc, asset.WithCampaignChecker(dashboardCampaignLookup{queries: queries}))
 		// Finding 2 fix: upload is DM-only (registered via mountDMOnlyAPIs
 		// below behind dmAuthMw). Serve remains public so players can view
 		// assets.

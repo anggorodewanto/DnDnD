@@ -165,7 +165,7 @@ Low: 142
 | 153 | B-M06 | Medium | done | DB does not enforce the map-dimension hard limit | `/home/ab/projects/DnDnD/db/migrations/20260310120009_create_maps.sql:6-7`. |
 | 154 | B-M07 | Medium | superseded | Tiled import accepts a `width=0, height=0` map if it's not `infinite` | `/home/ab/projects/DnDnD/internal/gamemap/import.go:88-103`. |
 | 155 | B-M08 | Medium | done | Stacked-token offset can place tokens outside their grid cell | `/home/ab/projects/DnDnD/internal/gamemap/renderer/token.go:28-36`. |
-| 156 | B-M09 | Medium | in_progress | `/api/assets/upload` response sets headers after potentially writing body | `/home/ab/projects/DnDnD/internal/asset/handler.go:103-111` |
+| 156 | B-M09 | Medium | done | `/api/assets/upload` response sets headers after potentially writing body | `/home/ab/projects/DnDnD/internal/asset/handler.go:103-111` |
 | 157 | B-M10 | Medium | pending | Local asset storage path-traversal: filename is discarded, but campaign UUID isn't validated | `/home/ab/projects/DnDnD/internal/asset/local_store.go:32-46`. |
 | 158 | B-M11 | Medium | pending | Map `UpdateMap` allows shrinking width/height without re-clipping `tiled_json` | `/home/ab/projects/DnDnD/internal/gamemap/service.go:124-151`. |
 | 159 | B-M12 | Medium | pending | `RenderQueue` never times-out or drops requests on render failure | `/home/ab/projects/DnDnD/internal/gamemap/renderer/queue.go:76-93`. |

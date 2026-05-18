@@ -468,3 +468,48 @@ func TestHandler_ServeAsset_ContentLengthMatchesActualBody(t *testing.T) {
 	assert.Equal(t, "5", rec.Header().Get("Content-Length"))
 	assert.Equal(t, "short", rec.Body.String())
 }
+
+type mockCampaignChecker struct {
+	isDMFn func(ctx context.Context, userID, campaignID string) (bool, error)
+}
+
+func (m *mockCampaignChecker) IsCampaignDM(ctx context.Context, userID, campaignID string) (bool, error) {
+	return m.isDMFn(ctx, userID, campaignID)
+}
+
+func TestHandler_UploadAsset_RejectsCrossTenanCampaign(t *testing.T) {
+	db := &mockDBStore{
+		createAssetFn: func(ctx context.Context, arg refdata.CreateAssetParams) (refdata.Asset, error) {
+			return refdata.Asset{ID: uuid.New()}, nil
+		},
+	}
+	fs := &mockFileStore{
+		putFn: func(ctx context.Context, cid uuid.UUID, at AssetType, fn string, r io.Reader) (string, error) {
+			return "path", nil
+		},
+	}
+	svc := NewService(db, fs)
+	checker := &mockCampaignChecker{
+		isDMFn: func(ctx context.Context, userID, campaignID string) (bool, error) {
+			return false, nil // not the DM
+		},
+	}
+	h := NewHandler(svc, WithCampaignChecker(checker))
+	router := newTestRouter(h)
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	writer.WriteField("campaign_id", uuid.New().String())
+	writer.WriteField("type", "map-background")
+	part, _ := writer.CreateFormFile("file", "test.png")
+	part.Write([]byte("PNG"))
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/assets/upload", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Contains(t, rec.Body.String(), "forbidden")
+}
