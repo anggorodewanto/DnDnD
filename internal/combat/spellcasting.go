@@ -623,14 +623,9 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		result.TwinTargetID = twinTarget.ID.String()
 	}
 
-	// 10. Resolve concentration: clean up any dropped spell, persist the new
-	// concentration to the authoritative columns when applicable.
+	// 10. Resolve concentration metadata (actual DB write deferred to step 15a
+	// so a failed slot deduction doesn't orphan the old concentration).
 	result.Concentration = ResolveConcentration(cmd.CurrentConcentration, spell)
-	cleanup, err := s.applyConcentrationOnCast(ctx, caster, spell, result.Concentration)
-	if err != nil {
-		return CastResult{}, err
-	}
-	result.ConcentrationCleanup = cleanup
 
 	// 11. Save DC for save-based spells
 	if hasSavingThrow(spell) {
@@ -770,6 +765,15 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 		result.MetamagicCost = metamagicCost
 		result.SorceryPointsRemaining = newPoints
 	}
+
+	// 16a. Now that all may-error resource deductions have passed, apply
+	// concentration (drop old, persist new). This ordering ensures a failed
+	// slot/sorcery deduction doesn't orphan the previous concentration.
+	cleanup, err := s.applyConcentrationOnCast(ctx, caster, spell, result.Concentration)
+	if err != nil {
+		return CastResult{}, err
+	}
+	result.ConcentrationCleanup = cleanup
 
 	// 17. Apply invisibility condition when casting Invisibility / Greater Invisibility.
 	if spell.ID == InvisibilitySpellID || spell.ID == GreaterInvisibilitySpellID {
