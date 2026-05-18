@@ -200,15 +200,15 @@ Low: 142
 | 188 | D-M15 | Medium | pending | Channel Divinity DC uses WIS for both Cleric and Paladin | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:186 |
 | 189 | E-M01 | Medium | pending | Twinned Spell does not enforce "single creature target" beyond AoE/self check | `/home/ab/projects/DnDnD/internal/combat/metamagic.go:108-116` |
 | 190 | E-M02 | Medium | pending | Pact slot deduction does not refuse when `effectiveSlotLevel == 0` and damage path requires upcast | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:444-457` |
-| 191 | E-M03 | Medium | pending | Hide: success comparison ties go to perceiver, but spec says "meets or exceeds" | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:361` |
+| 191 | E-M03 | Medium | superseded | Hide: success comparison ties go to perceiver, but spec says "meets or exceeds" | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:361` |
 | 192 | E-M04 | Medium | pending | Help action duration tied to ally's turn, not helper's turn | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261` (`SourceCo... |
 | 193 | E-M05 | Medium | done | Material component check treats `material_cost_gp = 0` as costly when `Valid = true` | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:470` (`if spell.Materia... |
-| 194 | E-M06 | Medium | pending | Stand from prone uses integer half (12 for speed 25) — matches Sage Advice but no rounding-direction test | `/home/ab/projects/DnDnD/internal/combat/condition_effects.go:254-257` |
+| 194 | E-M06 | Medium | superseded | Stand from prone uses integer half (12 for speed 25) — matches Sage Advice but no rounding-direction test | `/home/ab/projects/DnDnD/internal/combat/condition_effects.go:254-257` |
 | 195 | E-M07 | Medium | done | Spell range validation accepts unrecognized `range_type` values silently | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:77-94` (`ValidateSpellR... |
 | 196 | E-M08 | Medium | pending | Ritual casting only validates primary class, ignoring multiclass | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:432-438` |
 | 197 | E-M09 | Medium | pending | AoE save DC pre-subtracts cover bonus but stores no roll-side trace for full cover exclusion | `/home/ab/projects/DnDnD/internal/combat/aoe.go:545-562` |
 | 198 | E-M10 | Medium | pending | OA detection uses `IsNpc` faction check, breaks for PC-vs-PC combat | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:106-108` |
-| 199 | E-M11 | Medium | pending | Hide's auto-reveal-on-attack does not strip prior hide condition records | `/home/ab/projects/DnDnD/internal/combat/attack.go:830-839` |
+| 199 | E-M11 | Medium | superseded | Hide's auto-reveal-on-attack does not strip prior hide condition records | `/home/ab/projects/DnDnD/internal/combat/attack.go:830-839` |
 | 200 | E-M12 | Medium | done | Grapple/shove adjacency uses Chebyshev distance only — no altitude check | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:73-80, 201-208` |
 | 201 | E-M13 | Medium | pending | Push destination unoccupied-check ignores dead bodies and altitude | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:221-233` |
 | 202 | E-M14 | Medium | pending | `applyConcentrationOnCast` clears prior concentration even on cast failure later (no rollback) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:620-627` |
@@ -236,7 +236,7 @@ Low: 142
 | 224 | F-M16 | Medium | pending | Free interaction matches "open" prefix → routes "open the heavy chest" away from DM | /home/ab/projects/DnDnD/internal/combat/interact.go:11-24 |
 | 225 | G-M01 | Medium | done | LongRest reports HPHealed even when no healing occurred | internal/rest/rest.go:377-384 |
 | 226 | G-M02 | Medium | pending | Gold split distributes to ALL approved players, not just encounter participants | internal/loot/service.go:301 |
-| 227 | G-M03 | Medium | pending | Long rest does not zero death-save tallies when both are zero | internal/rest/rest.go:444-446 |
+| 227 | G-M03 | Medium | done | Long rest does not zero death-save tallies when both are zero | internal/rest/rest.go:444-446 |
 | 228 | G-M04 | Medium | done | Item Picker custom-entry endpoint accepts negative gold/quantity silently | internal/itempicker/handler.go:208-239 |
 | 229 | G-M05 | Medium | pending | CastIdentify accepts ritual without 10-minute delay enforcement | internal/inventory/identification.go:81-110 |
 | 230 | G-M06 | Medium | pending | CastIdentify silently allows identifying items that aren't magic | internal/inventory/identification.go:24-44 |
@@ -245,10 +245,10 @@ Low: 142
 | 233 | G-M09 | Medium | pending | Loot pool created from "completed" encounter — combatants gold lost if encounter status mismatch | internal/loot/service.go:67-118 |
 | 234 | G-M10 | Medium | pending | Loot pool item ItemID null when claimed from custom entries breaks downstream `/use` | internal/loot/service.go:243-256 |
 | 235 | G-M11 | Medium | done | `Equip` blocks re-equipping the same item but silently allows two main-hand items via `OffHand=false` | internal/inventory/equip.go:27-62 |
-| 236 | G-M12 | Medium | pending | LongRest doesn't recharge `recharge: "dawn"` features distinct from `"long"` | internal/rest/rest.go:401-407 |
+| 236 | G-M12 | Medium | done | LongRest doesn't recharge `recharge: "dawn"` features distinct from `"long"` | internal/rest/rest.go:401-407 |
 | 237 | G-M13 | Medium | pending | LongRest never zeroes the input.PactMagicSlots when it does mutate them | internal/rest/rest.go:392-398 |
-| 238 | G-M14 | Medium | pending | `/rest` doesn't enforce one-long-rest-per-24h even narratively (no warning to DM) | internal/discord/rest_handler.go (no 24h check) |
-| 239 | G-M15 | Medium | pending | ShortRest hit-die roll: minimum healing of 0 vs spec's "minimum 1 per HD" framing | internal/rest/rest.go:200-204 |
+| 238 | G-M14 | Medium | superseded | `/rest` doesn't enforce one-long-rest-per-24h even narratively (no warning to DM) | internal/discord/rest_handler.go (no 24h check) |
+| 239 | G-M15 | Medium | superseded | ShortRest hit-die roll: minimum healing of 0 vs spec's "minimum 1 per HD" framing | internal/rest/rest.go:200-204 |
 | 240 | G-M16 | Medium | pending | Item picker custom entry returns `Homebrew: true` but doesn't persist anywhere | internal/itempicker/handler.go:227-238 |
 | 241 | H-M01 | Medium | pending | Level-up notification omits new features, spell slots, and class/old→new line | /home/ab/projects/DnDnD/internal/levelup/notify.go:14 (`FormatPrivateLevelUpMess... |
 | 242 | H-M02 | Medium | pending | DDB diff is shallow — misses inventory, features, spells, proficiencies | /home/ab/projects/DnDnD/internal/ddbimport/diff.go:9 (`GenerateDiff`) |
