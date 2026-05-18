@@ -265,6 +265,13 @@ func TestValidateMetamagicOptions_TwinnedSpell(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "area of effect")
 	})
+
+	t.Run("rejected: multi-target spell", func(t *testing.T) {
+		spell := refdata.Spell{ID: "scorching-ray", Name: "Scorching Ray", RangeType: "ranged"}
+		err := ValidateMetamagicOptions([]string{"twinned"}, spell)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "multi-target")
+	})
 }
 
 // TDD Cycle 9: CastResult has new metamagic fields

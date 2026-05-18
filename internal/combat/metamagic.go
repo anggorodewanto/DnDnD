@@ -112,7 +112,20 @@ func validateTwinnedSpell(spell refdata.Spell) error {
 	if hasAreaOfEffect(spell) {
 		return fmt.Errorf("Twinned Spell cannot target a spell with an area of effect")
 	}
+	if isMultiTargetSpell(spell.ID) {
+		return fmt.Errorf("Twinned Spell cannot target a multi-target spell (%s)", spell.Name)
+	}
 	return nil
+}
+
+// isMultiTargetSpell returns true for spells that inherently target multiple
+// creatures and thus cannot be Twinned per Sage Advice.
+func isMultiTargetSpell(spellID string) bool {
+	switch spellID {
+	case "magic-missile", "scorching-ray", "eldritch-blast", "chain-lightning":
+		return true
+	}
+	return false
 }
 
 // durationRegex matches duration strings like "1 minute", "10 minutes", "1 hour", "8 hours", "7 days"
