@@ -261,10 +261,10 @@ Low: 142
 | 249 | H-M09 | Medium | done | Char sheet template renders `{$level}` for spell slots from `map[string]SlotInfo` | /home/ab/projects/DnDnD/internal/portal/character_sheet_handler.go:374 |
 | 250 | H-M10 | Medium | pending | DM denial reason is hard-coded; spec wants DM-supplied message | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:543 |
 | 251 | H-M11 | Medium | superseded | Builder service does not enforce racial ability cap (no score > 20 at creation) | /home/ab/projects/DnDnD/internal/portal/builder_service.go:444 (`ValidatePointBu... |
-| 252 | H-M12 | Medium | pending | HP recalculation on level-up assumes the standard "average+1" formula but spec also offers rolling option (not implemented) | /home/ab/projects/DnDnD/internal/character/stats.go:30 (avg formula) |
+| 252 | H-M12 | Medium | superseded | HP recalculation on level-up assumes the standard "average+1" formula but spec also offers rolling option (not implemented) | /home/ab/projects/DnDnD/internal/character/stats.go:30 (avg formula) |
 | 253 | H-M13 | Medium | pending | Pending ASI choices: storePendingChoice writes to DB asynchronously in background goroutine pattern but uses `context.Background()` | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:314,328 |
-| 254 | H-M14 | Medium | pending | Portal Svelte builder doesn't expose subclass selection at the right level | /home/ab/projects/DnDnD/portal/svelte/src/App.svelte (subclass section); /home/a... |
-| 255 | H-M15 | Medium | pending | Portal builder calculates HP only for level-1 single-class case; ignores multiclass at submit | /home/ab/projects/DnDnD/portal/svelte/src/App.svelte:281-286 (`derivedHP`) |
+| 254 | H-M14 | Medium | skipped | Portal Svelte builder doesn't expose subclass selection at the right level | /home/ab/projects/DnDnD/portal/svelte/src/App.svelte (subclass section); /home/a... |
+| 255 | H-M15 | Medium | skipped | Portal builder calculates HP only for level-1 single-class case; ignores multiclass at submit | /home/ab/projects/DnDnD/portal/svelte/src/App.svelte:281-286 (`derivedHP`) |
 | 256 | H-M16 | Medium | pending | DDB import: TempHP can become negative when HPMax overridden lower than removed HP | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:191-198 |
 | 257 | I-M01 | Medium | done | Action Log viewer doesn't flag dm_override_undo entries | /home/ab/projects/DnDnD/internal/combat/action_log_viewer.go:144 |
 | 258 | I-M02 | Medium | pending | Undo-of-undo re-applies the same undo instead of redoing | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_undo.go:103-113 |
@@ -280,12 +280,12 @@ Low: 142
 | 268 | I-M12 | Medium | pending | Homebrew create/update has no structural validation beyond name | /home/ab/projects/DnDnD/internal/homebrew/service.go:99-145 |
 | 269 | I-M13 | Medium | pending | DM Override "spell slots" endpoint does not log per-character before-state for audit diff | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_undo.go:594-659 |
 | 270 | I-M14 | Medium | superseded | Race lookup is case-sensitive in raceSpeed and feature provider | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:206-216 ; feature_provi... |
-| 271 | I-M15 | Medium | pending | HP/condition tracker doesn't validate damage doesn't go negative for healing path | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:832-847 |
-| 272 | I-M16 | Medium | pending | Encounter Builder does not respect spec's "Auto-generated short ID" uniqueness | /home/ab/projects/DnDnD/dashboard/svelte/src/EncounterBuilder.svelte (lines arou... |
+| 271 | I-M15 | Medium | skipped | HP/condition tracker doesn't validate damage doesn't go negative for healing path | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:832-847 |
+| 272 | I-M16 | Medium | skipped | Encounter Builder does not respect spec's "Auto-generated short ID" uniqueness | /home/ab/projects/DnDnD/dashboard/svelte/src/EncounterBuilder.svelte (lines arou... |
 | 273 | I-M17 | Medium | pending | Manual char creation handler ignores starting-equipment "guaranteed:N" quantity | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go (loadStartingEq... |
 | 274 | I-M18 | Medium | pending | Manual character creation can submit ability scores violating point-buy without method gating | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:67-77 |
 | 275 | I-M19 | Medium | pending | Reactions panel resolve flow doesn't post correction to #combat-log | /home/ab/projects/DnDnD/internal/combat/handler.go:461-498 |
-| 276 | I-M20 | Medium | pending | Combat Manager polls every 5s in addition to WebSocket | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:101-109 |
+| 276 | I-M20 | Medium | skipped | Combat Manager polls every 5s in addition to WebSocket | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:101-109 |
 | 277 | I-M21 | Medium | pending | HomebrewEditor list endpoint includes `?homebrew=true` but services don't filter by that query param | /home/ab/projects/DnDnD/dashboard/svelte/src/HomebrewEditor.svelte:60-72 ; statb... |
 | 278 | J-M01 | Medium | superseded | Open5e service caches into globally-visible rows (`campaign_id NULL`) on any auth'd POST | /home/ab/projects/DnDnD/internal/open5e/cache.go:54-66 (`CacheMonster` uses `Cam... |
 | 279 | J-M02 | Medium | superseded | WS Hub.Register / Unregister channels can deadlock under sustained slow-client traffic | /home/ab/projects/DnDnD/internal/dashboard/ws.go:42-51 (unbuffered channels) |
@@ -331,8 +331,8 @@ Low: 142
 | 319 | B-L03 | Low | superseded | `ColumnLabel` past column 701 (`ZZ`) becomes 3-letter (`AAA`) | `/home/ab/projects/DnDnD/internal/gamemap/renderer/grid.go:65-75`. |
 | 320 | B-L04 | Low | pending | Encounter `display_name` not validated against length / control characters | `/home/ab/projects/DnDnD/internal/encounter/service.go:44-62`. |
 | 321 | B-L05 | Low | pending | Asset uploads have no per-campaign quota or count cap | `/home/ab/projects/DnDnD/internal/asset/handler.go:31-83`, |
-| 322 | B-L06 | Low | pending | `extractRegion` clipping silently truncates non-aligned wall objects | `/home/ab/projects/DnDnD/dashboard/svelte/src/lib/mapdata.js:193-201, |
-| 323 | B-L07 | Low | pending | `UndoStack` push happens *after* mutation, but does not capture the post-paste state for redo correctly | `/home/ab/projects/DnDnD/dashboard/svelte/src/lib/mapdata.js:516-557`, |
+| 322 | B-L06 | Low | skipped | `extractRegion` clipping silently truncates non-aligned wall objects | `/home/ab/projects/DnDnD/dashboard/svelte/src/lib/mapdata.js:193-201, |
+| 323 | B-L07 | Low | skipped | `UndoStack` push happens *after* mutation, but does not capture the post-paste state for redo correctly | `/home/ab/projects/DnDnD/dashboard/svelte/src/lib/mapdata.js:516-557`, |
 | 324 | C-L01 | Low | superseded | `colToIndex` is silent on lowercase / empty input | /home/ab/projects/DnDnD/internal/combat/attack.go:1571-1577 |
 | 325 | C-L02 | Low | pending | `IsInLongRange` always returns false for melee weapons — but thrown melee in long range handled separately | /home/ab/projects/DnDnD/internal/combat/attack.go:148-155, 538-542 |
 | 326 | C-L03 | Low | done | Conditions JSON empty array marshaling inconsistency | /home/ab/projects/DnDnD/internal/combat/condition.go:122-126 |
@@ -377,7 +377,7 @@ Low: 142
 | 365 | F-L05 | Low | pending | Summoned-creature short-ID collisions are not detected | /home/ab/projects/DnDnD/internal/combat/summon.go:117-150 |
 | 366 | F-L06 | Low | superseded | Concentration on readied spell never sets ConcentrationSpellID, breaking spell-ID lookups | /home/ab/projects/DnDnD/internal/combat/readied_action.go:132-141 |
 | 367 | F-L07 | Low | pending | `LightSource` and `VisionSource` deduplicate by position but not vision type — flickers | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:52-93 |
-| 368 | F-L08 | Low | pending | `/action ready` doesn't differentiate readying a Spell vs. a non-Spell action in the panel badge | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:120-122 |
+| 368 | F-L08 | Low | skipped | `/action ready` doesn't differentiate readying a Spell vs. a non-Spell action in the panel badge | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:120-122 |
 | 369 | F-L09 | Low | pending | FoW `chebyshevDistance` is correct for square grids but doesn't match the canonical 5e diagonal rule | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:160-173 |
 | 370 | G-L01 | Low | superseded | Save handler combines roll modes via two `CombineRollModes` calls — order-sensitive | internal/save/save.go:90-92 |
 | 371 | G-L02 | Low | superseded | Group-check success threshold rounds in 5e's favor only for even counts | internal/check/check.go:282-306 |
@@ -399,7 +399,7 @@ Low: 142
 | 387 | H-L07 | Low | pending | `applyFeatProficiencyChoices` saves proficiencies even when caller didn't change them | /home/ab/projects/DnDnD/internal/levelup/service.go:461-491 |
 | 388 | I-L01 | Low | pending | CharCreateHandler accepts campaign_id from request body, not URL | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go:106-138 |
 | 389 | I-L02 | Low | pending | DMCharacterSubmission missing subrace / SubraceID | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:12-25 |
-| 390 | I-L03 | Low | pending | Mobile view always renders TurnQueue as read-only — no quick-action to End Turn | /home/ab/projects/DnDnD/dashboard/svelte/src/MobileShell.svelte:47-49 ; QuickAct... |
+| 390 | I-L03 | Low | skipped | Mobile view always renders TurnQueue as read-only — no quick-action to End Turn | /home/ab/projects/DnDnD/dashboard/svelte/src/MobileShell.svelte:47-49 ; QuickAct... |
 | 391 | I-L04 | Low | pending | Stat block library handler ignores ?homebrew param | /home/ab/projects/DnDnD/internal/statblocklibrary/handler.go:53-66 |
 | 392 | I-L05 | Low | pending | DM display name change for active encounter persists without re-pinning to current turn | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:178-186 ; upda... |
 | 393 | I-L06 | Low | pending | Damage input doesn't allow damage types in HP & Condition Tracker | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:815-830 |
