@@ -298,12 +298,10 @@ func computeAC(items []ddbItem, scores character.AbilityScores) int {
 		if item.Definition.FilterType != "Armor" {
 			continue
 		}
-		ac := item.Definition.ArmorClass
-		if ac <= 3 {
-			// Shield
-			shieldBonus += ac
+		if strings.EqualFold(item.Definition.Type, "Shield") {
+			shieldBonus += item.Definition.ArmorClass
 		} else {
-			baseAC = ac
+			baseAC = item.Definition.ArmorClass
 		}
 	}
 

@@ -246,7 +246,7 @@ Low: 142
 | 234 | G-M10 | Medium | pending | Loot pool item ItemID null when claimed from custom entries breaks downstream `/use` | internal/loot/service.go:243-256 |
 | 235 | G-M11 | Medium | done | `Equip` blocks re-equipping the same item but silently allows two main-hand items via `OffHand=false` | internal/inventory/equip.go:27-62 |
 | 236 | G-M12 | Medium | done | LongRest doesn't recharge `recharge: "dawn"` features distinct from `"long"` | internal/rest/rest.go:401-407 |
-| 237 | G-M13 | Medium | pending | LongRest never zeroes the input.PactMagicSlots when it does mutate them | internal/rest/rest.go:392-398 |
+| 237 | G-M13 | Medium | done | LongRest never zeroes the input.PactMagicSlots when it does mutate them | internal/rest/rest.go:392-398 |
 | 238 | G-M14 | Medium | superseded | `/rest` doesn't enforce one-long-rest-per-24h even narratively (no warning to DM) | internal/discord/rest_handler.go (no 24h check) |
 | 239 | G-M15 | Medium | superseded | ShortRest hit-die roll: minimum healing of 0 vs spec's "minimum 1 per HD" framing | internal/rest/rest.go:200-204 |
 | 240 | G-M16 | Medium | pending | Item picker custom entry returns `Homebrew: true` but doesn't persist anywhere | internal/itempicker/handler.go:227-238 |

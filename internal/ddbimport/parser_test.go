@@ -92,7 +92,7 @@ var testDDBJSON = []byte(`{
 				"id": 1003,
 				"definition": {
 					"name": "Shield",
-					"type": "Armor",
+					"type": "Shield",
 					"filterType": "Armor",
 					"armorClass": 2,
 					"canAttune": false,

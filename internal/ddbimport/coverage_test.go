@@ -482,3 +482,50 @@ func TestBuildCreateParams_ProfBonusByLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestComputeAC_ShieldDetectedByType(t *testing.T) {
+	// A +3 magic shield (armorClass=5) should be detected as shield via Type field
+	items := []ddbItem{
+		{
+			Equipped: true,
+			Definition: ddbItemDef{
+				FilterType: "Armor",
+				Type:       "Heavy Armor",
+				ArmorClass: 18, // plate
+			},
+		},
+		{
+			Equipped: true,
+			Definition: ddbItemDef{
+				FilterType: "Armor",
+				Type:       "Shield",
+				ArmorClass: 5, // +3 magic shield
+			},
+		},
+	}
+	scores := character.AbilityScores{DEX: 10}
+	ac := computeAC(items, scores)
+	// plate (18) + shield (5) = 23
+	if ac != 23 {
+		t.Errorf("computeAC = %d, want 23 (plate 18 + magic shield 5)", ac)
+	}
+}
+
+func TestComputeAC_UnequippedIgnored(t *testing.T) {
+	items := []ddbItem{
+		{
+			Equipped: false,
+			Definition: ddbItemDef{
+				FilterType: "Armor",
+				Type:       "Heavy Armor",
+				ArmorClass: 18,
+			},
+		},
+	}
+	scores := character.AbilityScores{DEX: 14} // +2
+	ac := computeAC(items, scores)
+	// No armor equipped: 10 + 2 = 12
+	if ac != 12 {
+		t.Errorf("computeAC = %d, want 12 (unarmored 10+DEX)", ac)
+	}
+}
