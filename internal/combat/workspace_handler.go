@@ -87,6 +87,7 @@ type workspaceEncounterResponse struct {
 
 type workspaceCombatantResponse struct {
 	ID              string          `json:"id"`
+	CharacterID     *string         `json:"character_id,omitempty"`
 	ShortID         string          `json:"short_id"`
 	DisplayName     string          `json:"display_name"`
 	HpMax           int32           `json:"hp_max"`
@@ -307,7 +308,7 @@ func parseCreatureWalkSpeed(speedJSON json.RawMessage) int32 {
 }
 
 func toWorkspaceCombatantResponse(c refdata.Combatant) workspaceCombatantResponse {
-	return workspaceCombatantResponse{
+	resp := workspaceCombatantResponse{
 		ID:              c.ID.String(),
 		ShortID:         c.ShortID,
 		DisplayName:     c.DisplayName,
@@ -326,6 +327,11 @@ func toWorkspaceCombatantResponse(c refdata.Combatant) workspaceCombatantRespons
 		InitiativeRoll:  c.InitiativeRoll,
 		InitiativeOrder: c.InitiativeOrder,
 	}
+	if c.CharacterID.Valid {
+		s := c.CharacterID.UUID.String()
+		resp.CharacterID = &s
+	}
+	return resp
 }
 
 // UpdateCombatantHP handles PATCH /api/combat/{encounterID}/combatants/{combatantID}/hp.
