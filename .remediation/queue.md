@@ -234,13 +234,13 @@ Low: 142
 | 222 | F-M14 | Medium | pending | Reaction one-per-round resets between rounds but not at "creature's turn start" exactly | /home/ab/projects/DnDnD/internal/combat/reactions_panel.go:79-104 |
 | 223 | F-M15 | Medium | pending | No range / 60ft check for Counterspell when generating its prompt | /home/ab/projects/DnDnD/internal/combat/counterspell.go (entire file) |
 | 224 | F-M16 | Medium | pending | Free interaction matches "open" prefix → routes "open the heavy chest" away from DM | /home/ab/projects/DnDnD/internal/combat/interact.go:11-24 |
-| 225 | G-M01 | Medium | pending | LongRest reports HPHealed even when no healing occurred | internal/rest/rest.go:377-384 |
+| 225 | G-M01 | Medium | done | LongRest reports HPHealed even when no healing occurred | internal/rest/rest.go:377-384 |
 | 226 | G-M02 | Medium | pending | Gold split distributes to ALL approved players, not just encounter participants | internal/loot/service.go:301 |
 | 227 | G-M03 | Medium | pending | Long rest does not zero death-save tallies when both are zero | internal/rest/rest.go:444-446 |
 | 228 | G-M04 | Medium | done | Item Picker custom-entry endpoint accepts negative gold/quantity silently | internal/itempicker/handler.go:208-239 |
 | 229 | G-M05 | Medium | pending | CastIdentify accepts ritual without 10-minute delay enforcement | internal/inventory/identification.go:81-110 |
 | 230 | G-M06 | Medium | pending | CastIdentify silently allows identifying items that aren't magic | internal/inventory/identification.go:24-44 |
-| 231 | G-M07 | Medium | pending | Combat recap truncation cuts mid-line and may produce orphan round headers | internal/combat/recap.go:71-78, 93-116 |
+| 231 | G-M07 | Medium | done | Combat recap truncation cuts mid-line and may produce orphan round headers | internal/combat/recap.go:71-78, 93-116 |
 | 232 | G-M08 | Medium | pending | PartyShortRest never auto-spends hit dice (always spends 0) | internal/rest/party_handler.go:218-260 |
 | 233 | G-M09 | Medium | pending | Loot pool created from "completed" encounter — combatants gold lost if encounter status mismatch | internal/loot/service.go:67-118 |
 | 234 | G-M10 | Medium | pending | Loot pool item ItemID null when claimed from custom entries breaks downstream `/use` | internal/loot/service.go:243-256 |
