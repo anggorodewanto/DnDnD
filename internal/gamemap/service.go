@@ -174,6 +174,19 @@ func validateMapFields(name string, width, height int, tiledJSON json.RawMessage
 	if len(tiledJSON) == 0 {
 		return errors.New("tiled_json must not be empty")
 	}
+
+	// Validate tiled_json dimensions match declared width/height.
+	var header struct {
+		Width  int `json:"width"`
+		Height int `json:"height"`
+	}
+	if json.Unmarshal(tiledJSON, &header) == nil && (header.Width > 0 || header.Height > 0) {
+		if header.Width != width || header.Height != height {
+			return fmt.Errorf("tiled_json dimensions (%dx%d) do not match declared dimensions (%dx%d)",
+				header.Width, header.Height, width, height)
+		}
+	}
+
 	return nil
 }
 

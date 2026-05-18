@@ -341,7 +341,7 @@ func TestHandler_UpdateMap_Success(t *testing.T) {
 		"name":       "Updated Map",
 		"width":      15,
 		"height":     15,
-		"tiled_json": minimalTiledJSON(),
+		"tiled_json": tiledJSONWithSize(15, 15),
 	}
 	b, _ := json.Marshal(body)
 

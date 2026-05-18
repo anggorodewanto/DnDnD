@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -40,6 +41,10 @@ func (m *mockStore) DeleteMap(ctx context.Context, arg refdata.DeleteMapParams) 
 
 func minimalTiledJSON() json.RawMessage {
 	return json.RawMessage(`{"version":"1.10","tiledversion":"1.10.0","type":"map","orientation":"orthogonal","width":10,"height":10,"tilewidth":48,"tileheight":48,"layers":[]}`)
+}
+
+func tiledJSONWithSize(w, h int) json.RawMessage {
+	return json.RawMessage(fmt.Sprintf(`{"width":%d,"height":%d,"tilewidth":48,"tileheight":48,"layers":[]}`, w, h))
 }
 
 func successStore(campaignID uuid.UUID) *mockStore {
@@ -147,7 +152,7 @@ func TestCreateMap_StandardSize(t *testing.T) {
 		Name:       "Standard Map",
 		Width:      50,
 		Height:     50,
-		TiledJSON:  minimalTiledJSON(),
+		TiledJSON:  tiledJSONWithSize(50, 50),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, SizeCategoryStandard, cat)
@@ -164,7 +169,7 @@ func TestCreateMap_Standard100x100(t *testing.T) {
 		Name:       "Boundary Map",
 		Width:      100,
 		Height:     100,
-		TiledJSON:  minimalTiledJSON(),
+		TiledJSON:  tiledJSONWithSize(100, 100),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, SizeCategoryStandard, cat)
@@ -180,7 +185,7 @@ func TestCreateMap_LargeWidth101(t *testing.T) {
 		Name:       "Large Map",
 		Width:      101,
 		Height:     100,
-		TiledJSON:  minimalTiledJSON(),
+		TiledJSON:  tiledJSONWithSize(101, 100),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, SizeCategoryLarge, cat)
@@ -194,7 +199,7 @@ func TestCreateMap_LargeHeight101(t *testing.T) {
 		Name:       "Large Map",
 		Width:      100,
 		Height:     101,
-		TiledJSON:  minimalTiledJSON(),
+		TiledJSON:  tiledJSONWithSize(100, 101),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, SizeCategoryLarge, cat)
@@ -208,7 +213,7 @@ func TestCreateMap_Large200x200(t *testing.T) {
 		Name:       "Max Map",
 		Width:      200,
 		Height:     200,
-		TiledJSON:  minimalTiledJSON(),
+		TiledJSON:  tiledJSONWithSize(200, 200),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, SizeCategoryLarge, cat)
@@ -426,7 +431,7 @@ func TestUpdateMap_Success(t *testing.T) {
 		Name:      "Updated Map",
 		Width:     50,
 		Height:    50,
-		TiledJSON: minimalTiledJSON(),
+		TiledJSON: tiledJSONWithSize(50, 50),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, SizeCategoryStandard, cat)
@@ -494,7 +499,7 @@ func TestUpdateMap_LargeCategory(t *testing.T) {
 		Name:      "Large Update",
 		Width:     150,
 		Height:    150,
-		TiledJSON: minimalTiledJSON(),
+		TiledJSON: tiledJSONWithSize(150, 150),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, SizeCategoryLarge, cat)
@@ -692,7 +697,7 @@ func TestCreateMap_1x1(t *testing.T) {
 		Name:       "Tiny Map",
 		Width:      1,
 		Height:     1,
-		TiledJSON:  minimalTiledJSON(),
+		TiledJSON:  tiledJSONWithSize(1, 1),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, SizeCategoryStandard, cat)
@@ -785,3 +790,22 @@ func TestTilesetRef_JSONRoundTrip(t *testing.T) {
 
 
 
+
+func TestUpdateMap_RejectDimensionMismatchWithTiledJSON(t *testing.T) {
+	// tiled_json says 10x10 but declared dimensions are 30x30
+	tiledJSON := json.RawMessage(`{"width":10,"height":10,"tilewidth":48,"tileheight":48,"layers":[]}`)
+	svc := NewService(&mockStore{
+		updateMapFn: func(ctx context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
+			return refdata.Map{ID: arg.ID}, nil
+		},
+	})
+	_, _, err := svc.UpdateMap(context.Background(), UpdateMapInput{
+		ID:        uuid.New(),
+		Name:      "Shrunk Map",
+		Width:     30,
+		Height:    30,
+		TiledJSON: tiledJSON,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "dimensions")
+}
