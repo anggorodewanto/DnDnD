@@ -273,8 +273,12 @@ func (s *Service) ClaimItem(ctx context.Context, poolID uuid.UUID, itemID uuid.U
 	}
 
 	items, _ := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
+	itemIDStr := claimed.ItemID.String
+	if itemIDStr == "" {
+		itemIDStr = "custom-" + itemID.String()
+	}
 	newItem := character.InventoryItem{
-		ItemID:             claimed.ItemID.String,
+		ItemID:             itemIDStr,
 		Name:               claimed.Name,
 		Quantity:           int(claimed.Quantity),
 		Type:               claimed.Type,

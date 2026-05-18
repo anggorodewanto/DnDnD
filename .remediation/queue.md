@@ -235,7 +235,7 @@ Low: 142
 | 223 | F-M15 | Medium | pending | No range / 60ft check for Counterspell when generating its prompt | /home/ab/projects/DnDnD/internal/combat/counterspell.go (entire file) |
 | 224 | F-M16 | Medium | pending | Free interaction matches "open" prefix → routes "open the heavy chest" away from DM | /home/ab/projects/DnDnD/internal/combat/interact.go:11-24 |
 | 225 | G-M01 | Medium | done | LongRest reports HPHealed even when no healing occurred | internal/rest/rest.go:377-384 |
-| 226 | G-M02 | Medium | pending | Gold split distributes to ALL approved players, not just encounter participants | internal/loot/service.go:301 |
+| 226 | G-M02 | Medium | skipped | Gold split distributes to ALL approved players, not just encounter participants | internal/loot/service.go:301 |
 | 227 | G-M03 | Medium | done | Long rest does not zero death-save tallies when both are zero | internal/rest/rest.go:444-446 |
 | 228 | G-M04 | Medium | done | Item Picker custom-entry endpoint accepts negative gold/quantity silently | internal/itempicker/handler.go:208-239 |
 | 229 | G-M05 | Medium | pending | CastIdentify accepts ritual without 10-minute delay enforcement | internal/inventory/identification.go:81-110 |
@@ -322,10 +322,10 @@ Low: 142
 | 310 | A-L04 | Low | pending | Class entries don't expose Eldritch Knight / Arcane Trickster as third-caster subclasses | internal/refdata/seed_classes.go (Fighter & Rogue blocks) |
 | 311 | A-L05 | Low | done | `Settings.AutoApproveRestEnabled` defaults differ from spec | internal/campaign/service.go:36-42 |
 | 312 | A-L06 | Low | done | CookieSecure defaults to false when `COOKIE_SECURE` is unset | cmd/dndnd/main.go:564 |
-| 313 | A-L07 | Low | pending | `RequiredPermissions` omits `Manage Channels` though `/setup` needs it | internal/discord/permissions.go:11-17 |
+| 313 | A-L07 | Low | done | `RequiredPermissions` omits `Manage Channels` though `/setup` needs it | internal/discord/permissions.go:11-17 |
 | 314 | A-L08 | Low | pending | Bot session race in `Bot.HandleGuildCreate` | internal/discord/bot.go:86-90 |
 | 315 | A-L09 | Low | done | Character `level` column not indexed despite spec | db/migrations/20260310120006_create_characters.sql:8-37 |
-| 316 | A-L10 | Low | pending | Welcome DM is sent for every guild-join, including bots | internal/discord/bot.go:119-131 |
+| 316 | A-L10 | Low | superseded | Welcome DM is sent for every guild-join, including bots | internal/discord/bot.go:119-131 |
 | 317 | B-L01 | Low | superseded | `RollDamage` does not double the modifier-side dice for spells that allow it (e.g. Sneak Attack crit) | `/home/ab/projects/DnDnD/internal/dice/roller.go:100-124`. |
 | 318 | B-L02 | Low | superseded | D20 result `Total` ignores the "min 1 / max 20" sometimes referenced for nat-1 crits with negative DEX | `/home/ab/projects/DnDnD/internal/dice/d20.go:75-82`. |
 | 319 | B-L03 | Low | superseded | `ColumnLabel` past column 701 (`ZZ`) becomes 3-letter (`AAA`) | `/home/ab/projects/DnDnD/internal/gamemap/renderer/grid.go:65-75`. |
