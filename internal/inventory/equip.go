@@ -45,6 +45,15 @@ func Equip(input EquipInput) (EquipResult, error) {
 
 	updated := make([]character.InventoryItem, len(input.Items))
 	copy(updated, input.Items)
+
+	// Unequip any item already in the target slot.
+	for i := range updated {
+		if updated[i].Equipped && updated[i].EquipSlot == slot && i != idx {
+			updated[i].Equipped = false
+			updated[i].EquipSlot = ""
+		}
+	}
+
 	updated[idx].Equipped = true
 	updated[idx].EquipSlot = slot
 
