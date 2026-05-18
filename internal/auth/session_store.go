@@ -24,12 +24,22 @@ type Session struct {
 
 // SessionStore manages session persistence in PostgreSQL.
 type SessionStore struct {
-	db *sql.DB
+	db        *sql.DB
+	encryptor *TokenEncryptor
 }
 
 // NewSessionStore creates a new SessionStore.
-func NewSessionStore(db *sql.DB) *SessionStore {
-	return &SessionStore{db: db}
+func NewSessionStore(db *sql.DB, opts ...func(*SessionStore)) *SessionStore {
+	s := &SessionStore{db: db, encryptor: &TokenEncryptor{}}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// WithTokenEncryptor sets the token encryptor for at-rest encryption.
+func WithTokenEncryptor(enc *TokenEncryptor) func(*SessionStore) {
+	return func(s *SessionStore) { s.encryptor = enc }
 }
 
 // sessionColumns is the column list shared by Create and GetByID.
@@ -48,16 +58,26 @@ func scanSession(row interface{ Scan(dest ...any) error }) (*Session, error) {
 
 // Create inserts a new session and returns it.
 func (s *SessionStore) Create(ctx context.Context, discordUserID, accessToken, refreshToken string, tokenExpiresAt *time.Time) (*Session, error) {
+	encAccess, err := s.encryptor.Encrypt(accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("encrypting access token: %w", err)
+	}
+	encRefresh, err := s.encryptor.Encrypt(refreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("encrypting refresh token: %w", err)
+	}
 	row := s.db.QueryRowContext(ctx,
 		`INSERT INTO sessions (discord_user_id, access_token, refresh_token, token_expires_at)
 		 VALUES ($1, $2, $3, $4)
 		 RETURNING `+sessionColumns,
-		discordUserID, accessToken, refreshToken, tokenExpiresAt,
+		discordUserID, encAccess, encRefresh, tokenExpiresAt,
 	)
 	sess, err := scanSession(row)
 	if err != nil {
 		return nil, fmt.Errorf("creating session: %w", err)
 	}
+	sess.AccessToken, _ = s.encryptor.Decrypt(sess.AccessToken)
+	sess.RefreshToken, _ = s.encryptor.Decrypt(sess.RefreshToken)
 	return sess, nil
 }
 
@@ -79,6 +99,8 @@ func (s *SessionStore) GetByID(ctx context.Context, id uuid.UUID) (*Session, err
 	if err != nil {
 		return nil, fmt.Errorf("getting session: %w", err)
 	}
+	sess.AccessToken, _ = s.encryptor.Decrypt(sess.AccessToken)
+	sess.RefreshToken, _ = s.encryptor.Decrypt(sess.RefreshToken)
 	return sess, nil
 }
 

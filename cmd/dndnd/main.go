@@ -559,7 +559,16 @@ func buildAuth(db *sql.DB, logger *slog.Logger) authBundle {
 		redirectURL = baseURL + "/portal/auth/callback"
 	}
 
-	sessionStore := auth.NewSessionStore(db)
+	var sessionOpts []func(*auth.SessionStore)
+	if tokenKey := os.Getenv("TOKEN_ENCRYPTION_KEY"); tokenKey != "" {
+		enc, err := auth.NewTokenEncryptor([]byte(tokenKey))
+		if err != nil {
+			logger.Error("invalid TOKEN_ENCRYPTION_KEY, tokens will be stored unencrypted", "error", err)
+		} else {
+			sessionOpts = append(sessionOpts, auth.WithTokenEncryptor(enc))
+		}
+	}
+	sessionStore := auth.NewSessionStore(db, sessionOpts...)
 	oauthCfg := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
