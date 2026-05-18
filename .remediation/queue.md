@@ -212,10 +212,10 @@ Low: 142
 | 200 | E-M12 | Medium | done | Grapple/shove adjacency uses Chebyshev distance only — no altitude check | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:73-80, 201-208` |
 | 201 | E-M13 | Medium | pending | Push destination unoccupied-check ignores dead bodies and altitude | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:221-233` |
 | 202 | E-M14 | Medium | pending | `applyConcentrationOnCast` clears prior concentration even on cast failure later (no rollback) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:620-627` |
-| 203 | E-M15 | Medium | pending | Cone shape projects from caster center, not tile edge | `/home/ab/projects/DnDnD/internal/combat/aoe.go:113-117` (`ConeAffectedTiles`) |
+| 203 | E-M15 | Medium | superseded | Cone shape projects from caster center, not tile edge | `/home/ab/projects/DnDnD/internal/combat/aoe.go:113-117` (`ConeAffectedTiles`) |
 | 204 | E-M16 | Medium | pending | Concentration save uses `currentConcentration` name-string only (no spell ID) | `/home/ab/projects/DnDnD/internal/combat/concentration.go:36-45` (`CheckConcentr... |
 | 205 | E-M17 | Medium | pending | Passive Perception for creatures lacks proficiency when Skills JSONB is empty | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:516-530` |
-| 206 | E-M18 | Medium | pending | Hide's "spotted by" picks highest-PP enemy, but losing tied roll vs second-highest is hidden | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:347-360` |
+| 206 | E-M18 | Medium | superseded | Hide's "spotted by" picks highest-PP enemy, but losing tied roll vs second-highest is hidden | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:347-360` |
 | 207 | E-M19 | Medium | pending | Subtle Spell does not actually suppress concentration-break-in-silence | `/home/ab/projects/DnDnD/internal/combat/concentration.go:126-135` (`CheckConcen... |
 | 208 | E-M20 | Medium | pending | Cunning Action passes stale `cmd.Turn` to `resolveHide` after consuming bonus action | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:856-872` |
 | 209 | F-M01 | Medium | pending | Readied-spell concentration written with empty SpellID | /home/ab/projects/DnDnD/internal/combat/readied_action.go:126-141 |
@@ -253,8 +253,8 @@ Low: 142
 | 241 | H-M01 | Medium | pending | Level-up notification omits new features, spell slots, and class/old→new line | /home/ab/projects/DnDnD/internal/levelup/notify.go:14 (`FormatPrivateLevelUpMess... |
 | 242 | H-M02 | Medium | pending | DDB diff is shallow — misses inventory, features, spells, proficiencies | /home/ab/projects/DnDnD/internal/ddbimport/diff.go:9 (`GenerateDiff`) |
 | 243 | H-M03 | Medium | pending | DDB AC computation treats any ArmorClass<=3 as a shield | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:285 (`computeAC`) |
-| 244 | H-M04 | Medium | pending | DDB import doesn't validate ability scores were generated within 1-30 of submission's "stats" (no override sanity) | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:228 (`parseAbilityScores`) |
-| 245 | H-M05 | Medium | pending | DDB import: features below `RequiredLevel` filtered, but subclass features filtered against parent class level (not subclass level) | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:332-345 (`parseFeatures`) |
+| 244 | H-M04 | Medium | superseded | DDB import doesn't validate ability scores were generated within 1-30 of submission's "stats" (no override sanity) | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:228 (`parseAbilityScores`) |
+| 245 | H-M05 | Medium | superseded | DDB import: features below `RequiredLevel` filtered, but subclass features filtered against parent class level (not subclass level) | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:332-345 (`parseFeatures`) |
 | 246 | H-M06 | Medium | pending | Token redemption isn't atomic with character creation (race window) | /home/ab/projects/DnDnD/internal/portal/builder_service.go:237 |
 | 247 | H-M07 | Medium | pending | No CSRF protection on portal POST /portal/api/characters | /home/ab/projects/DnDnD/internal/portal/api_handler.go:193 (`SubmitCharacter`) |
 | 248 | H-M08 | Medium | pending | Multiclass spell-slot table check requires both classes to be casters; Eldritch Knight/Arcane Trickster ignored | /home/ab/projects/DnDnD/internal/character/spellslots.go:54 (`CalculateCasterLev... |
@@ -287,7 +287,7 @@ Low: 142
 | 275 | I-M19 | Medium | pending | Reactions panel resolve flow doesn't post correction to #combat-log | /home/ab/projects/DnDnD/internal/combat/handler.go:461-498 |
 | 276 | I-M20 | Medium | pending | Combat Manager polls every 5s in addition to WebSocket | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:101-109 |
 | 277 | I-M21 | Medium | pending | HomebrewEditor list endpoint includes `?homebrew=true` but services don't filter by that query param | /home/ab/projects/DnDnD/dashboard/svelte/src/HomebrewEditor.svelte:60-72 ; statb... |
-| 278 | J-M01 | Medium | pending | Open5e service caches into globally-visible rows (`campaign_id NULL`) on any auth'd POST | /home/ab/projects/DnDnD/internal/open5e/cache.go:54-66 (`CacheMonster` uses `Cam... |
+| 278 | J-M01 | Medium | superseded | Open5e service caches into globally-visible rows (`campaign_id NULL`) on any auth'd POST | /home/ab/projects/DnDnD/internal/open5e/cache.go:54-66 (`CacheMonster` uses `Cam... |
 | 279 | J-M02 | Medium | superseded | WS Hub.Register / Unregister channels can deadlock under sustained slow-client traffic | /home/ab/projects/DnDnD/internal/dashboard/ws.go:42-51 (unbuffered channels) |
 | 280 | J-M03 | Medium | pending | Crash-recovery loses in-memory once-per-turn slot tracker (Sneak Attack double-use risk) | /home/ab/projects/DnDnD/internal/combat/service.go:323-324 (`usedEffects map`) |
 | 281 | J-M04 | Medium | pending | Hub broadcast drops slow clients but never closes their writer goroutine's conn | /home/ab/projects/DnDnD/internal/dashboard/ws.go:77-101 |
