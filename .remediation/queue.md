@@ -258,7 +258,7 @@ Low: 142
 | 246 | H-M06 | Medium | pending | Token redemption isn't atomic with character creation (race window) | /home/ab/projects/DnDnD/internal/portal/builder_service.go:237 |
 | 247 | H-M07 | Medium | pending | No CSRF protection on portal POST /portal/api/characters | /home/ab/projects/DnDnD/internal/portal/api_handler.go:193 (`SubmitCharacter`) |
 | 248 | H-M08 | Medium | pending | Multiclass spell-slot table check requires both classes to be casters; Eldritch Knight/Arcane Trickster ignored | /home/ab/projects/DnDnD/internal/character/spellslots.go:54 (`CalculateCasterLev... |
-| 249 | H-M09 | Medium | pending | Char sheet template renders `{$level}` for spell slots from `map[string]SlotInfo` | /home/ab/projects/DnDnD/internal/portal/character_sheet_handler.go:374 |
+| 249 | H-M09 | Medium | done | Char sheet template renders `{$level}` for spell slots from `map[string]SlotInfo` | /home/ab/projects/DnDnD/internal/portal/character_sheet_handler.go:374 |
 | 250 | H-M10 | Medium | pending | DM denial reason is hard-coded; spec wants DM-supplied message | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:543 |
 | 251 | H-M11 | Medium | pending | Builder service does not enforce racial ability cap (no score > 20 at creation) | /home/ab/projects/DnDnD/internal/portal/builder_service.go:444 (`ValidatePointBu... |
 | 252 | H-M12 | Medium | pending | HP recalculation on level-up assumes the standard "average+1" formula but spec also offers rolling option (not implemented) | /home/ab/projects/DnDnD/internal/character/stats.go:30 (avg formula) |
