@@ -136,6 +136,7 @@ func TestService_Create_DefaultsCreatures(t *testing.T) {
 	svc := NewService(store)
 	_, err := svc.Create(context.Background(), CreateInput{
 		CampaignID: uuid.New(),
+		MapID:      uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		Name:       "Empty Encounter",
 	})
 	require.NoError(t, err)
@@ -153,6 +154,7 @@ func TestService_Create_StoreError(t *testing.T) {
 	svc := NewService(store)
 	_, err := svc.Create(context.Background(), CreateInput{
 		CampaignID: uuid.New(),
+		MapID:      uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		Name:       "Test",
 	})
 	require.Error(t, err)
@@ -172,6 +174,7 @@ func TestService_Create_NoDisplayName(t *testing.T) {
 	svc := NewService(store)
 	_, err := svc.Create(context.Background(), CreateInput{
 		CampaignID: uuid.New(),
+		MapID:      uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		Name:       "Internal Only",
 	})
 	require.NoError(t, err)
@@ -366,4 +369,15 @@ func TestService_ListCreatures(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, creatures, 1)
 	assert.Equal(t, "Goblin", creatures[0].Name)
+}
+
+func TestService_Create_RejectsNullMapID(t *testing.T) {
+	svc := NewService(successStore())
+	_, err := svc.Create(context.Background(), CreateInput{
+		CampaignID: uuid.New(),
+		Name:       "No Map Encounter",
+		MapID:      uuid.NullUUID{}, // null map_id
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "map_id is required")
 }

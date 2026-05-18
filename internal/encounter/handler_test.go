@@ -33,6 +33,7 @@ func TestHandler_Create_Success(t *testing.T) {
 
 	body := map[string]interface{}{
 		"campaign_id":  uuid.New().String(),
+		"map_id":       uuid.New().String(),
 		"name":         "Goblin Ambush",
 		"display_name": "The Dark Forest",
 		"creatures":    []map[string]interface{}{{"creature_ref_id": "goblin", "short_id": "G1", "quantity": 3}},
