@@ -399,9 +399,9 @@ func (s *Service) LongRest(input LongRestInput) LongRestResult {
 		}
 	}
 
-	// Recharge all short and long rest features
+	// Recharge all short, long, dawn, and daily rest features
 	for name, fu := range input.FeatureUses {
-		if (fu.Recharge == "short" || fu.Recharge == "long") && fu.Current < fu.Max {
+		if (fu.Recharge == "short" || fu.Recharge == "long" || fu.Recharge == "dawn" || fu.Recharge == "daily") && fu.Current < fu.Max {
 			fu.Current = fu.Max
 			input.FeatureUses[name] = fu
 			result.FeaturesRecharged = append(result.FeaturesRecharged, name)
