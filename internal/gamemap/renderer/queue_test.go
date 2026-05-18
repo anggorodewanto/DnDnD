@@ -133,3 +133,39 @@ func TestRenderQueue_Stop(t *testing.T) {
 	// Enqueue after stop should not panic
 	q.Enqueue("enc1", &MapData{Width: 3, Height: 3, TileSize: 48})
 }
+
+func TestRenderQueue_TimeoutCancelsSlowRender(t *testing.T) {
+	// A render function that blocks for 2 seconds
+	renderFn := func(md *MapData) ([]byte, error) {
+		time.Sleep(2 * time.Second)
+		return []byte("done"), nil
+	}
+
+	q := NewRenderQueue(10*time.Millisecond, renderFn)
+	q.RenderTimeout = 100 * time.Millisecond
+
+	var callbackErr error
+	var mu sync.Mutex
+	done := make(chan struct{})
+
+	q.OnComplete("enc-1", func(data []byte, err error) {
+		mu.Lock()
+		callbackErr = err
+		mu.Unlock()
+		close(done)
+	})
+
+	q.Enqueue("enc-1", &MapData{})
+
+	select {
+	case <-done:
+	case <-time.After(1 * time.Second):
+		t.Fatal("callback not called within 1s — render was not timed out")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if callbackErr == nil {
+		t.Error("expected timeout error, got nil")
+	}
+}

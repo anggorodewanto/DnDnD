@@ -1,6 +1,8 @@
 package renderer
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -13,13 +15,14 @@ type CompletionCallback func(data []byte, err error)
 
 // RenderQueue manages per-encounter render requests with debouncing.
 type RenderQueue struct {
-	debounce  time.Duration
-	renderFn  RenderFunc
-	mu        sync.Mutex
-	timers    map[string]*time.Timer
-	latest    map[string]*MapData
-	callbacks map[string][]CompletionCallback
-	stopped   bool
+	debounce      time.Duration
+	renderFn      RenderFunc
+	RenderTimeout time.Duration // 0 means no timeout
+	mu            sync.Mutex
+	timers        map[string]*time.Timer
+	latest        map[string]*MapData
+	callbacks     map[string][]CompletionCallback
+	stopped       bool
 }
 
 // NewRenderQueue creates a new render queue with the given debounce duration.
@@ -85,8 +88,35 @@ func (q *RenderQueue) executeRender(encounterID string) {
 		return
 	}
 
-	data, err := q.renderFn(md)
+	type result struct {
+		data []byte
+		err  error
+	}
 
+	if q.RenderTimeout > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), q.RenderTimeout)
+		defer cancel()
+
+		ch := make(chan result, 1)
+		go func() {
+			d, e := q.renderFn(md)
+			ch <- result{d, e}
+		}()
+
+		select {
+		case r := <-ch:
+			for _, cb := range cbs {
+				cb(r.data, r.err)
+			}
+		case <-ctx.Done():
+			for _, cb := range cbs {
+				cb(nil, fmt.Errorf("render timeout after %v", q.RenderTimeout))
+			}
+		}
+		return
+	}
+
+	data, err := q.renderFn(md)
 	for _, cb := range cbs {
 		cb(data, err)
 	}
