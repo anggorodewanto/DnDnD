@@ -120,9 +120,9 @@ func FormatSmiteCombatLog(slotLevel int, isUndead bool, isCrit bool, diceStr str
 
 	suffix := ""
 	if isUndead && isCrit {
-		suffix = " (doubled) +2d8 vs undead"
+		suffix = " (doubled) +2d8 vs undead/fiend"
 	} else if isUndead {
-		suffix = " +1d8 vs undead"
+		suffix = " +1d8 vs undead/fiend"
 	} else if isCrit {
 		suffix = " (doubled)"
 	}

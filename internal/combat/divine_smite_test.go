@@ -115,11 +115,11 @@ func TestFormatSmiteCombatLog(t *testing.T) {
 	})
 	t.Run("undead crit", func(t *testing.T) {
 		log := FormatSmiteCombatLog(1, true, true, "6d8", 28)
-		assert.Equal(t, "⚡ Divine Smite (1st-level slot, crit) — 6d8 radiant (doubled) +2d8 vs undead: 28", log)
+		assert.Equal(t, "⚡ Divine Smite (1st-level slot, crit) — 6d8 radiant (doubled) +2d8 vs undead/fiend: 28", log)
 	})
 	t.Run("undead no crit", func(t *testing.T) {
 		log := FormatSmiteCombatLog(1, true, false, "3d8", 15)
-		assert.Equal(t, "⚡ Divine Smite (1st-level slot) — 3d8 radiant +1d8 vs undead: 15", log)
+		assert.Equal(t, "⚡ Divine Smite (1st-level slot) — 3d8 radiant +1d8 vs undead/fiend: 15", log)
 	})
 }
 

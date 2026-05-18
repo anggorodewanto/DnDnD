@@ -256,7 +256,7 @@ func TestIntegration_DivineSmite_UndeadBonus(t *testing.T) {
 	assert.Equal(t, 9, result.SmiteDamage)
 	assert.Equal(t, "3d8", result.SmiteDice)
 	assert.True(t, result.IsUndead)
-	assert.Contains(t, result.CombatLog, "vs undead")
+	assert.Contains(t, result.CombatLog, "vs undead/fiend")
 }
 
 func TestIntegration_DivineSmite_FiendBonus(t *testing.T) {
@@ -287,7 +287,7 @@ func TestIntegration_DivineSmite_FiendBonus(t *testing.T) {
 	// 2d8 + 1d8 fiend = 3d8; 3*4=12
 	assert.Equal(t, 12, result.SmiteDamage)
 	assert.True(t, result.IsUndead) // IsUndead covers both undead and fiend
-	assert.Contains(t, result.CombatLog, "vs undead")
+	assert.Contains(t, result.CombatLog, "vs undead/fiend")
 }
 
 func TestIntegration_DivineSmite_CritDoubling(t *testing.T) {
@@ -349,7 +349,7 @@ func TestIntegration_DivineSmite_UndeadCrit(t *testing.T) {
 	assert.True(t, result.IsUndead)
 	assert.True(t, result.IsCritical)
 	assert.Contains(t, result.CombatLog, "doubled")
-	assert.Contains(t, result.CombatLog, "vs undead")
+	assert.Contains(t, result.CombatLog, "vs undead/fiend")
 }
 
 func TestIntegration_DivineSmite_DeclineNoSlotDeducted(t *testing.T) {
