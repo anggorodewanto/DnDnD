@@ -266,15 +266,15 @@ Low: 142
 | 254 | H-M14 | Medium | pending | Portal Svelte builder doesn't expose subclass selection at the right level | /home/ab/projects/DnDnD/portal/svelte/src/App.svelte (subclass section); /home/a... |
 | 255 | H-M15 | Medium | pending | Portal builder calculates HP only for level-1 single-class case; ignores multiclass at submit | /home/ab/projects/DnDnD/portal/svelte/src/App.svelte:281-286 (`derivedHP`) |
 | 256 | H-M16 | Medium | pending | DDB import: TempHP can become negative when HPMax overridden lower than removed HP | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:191-198 |
-| 257 | I-M01 | Medium | pending | Action Log viewer doesn't flag dm_override_undo entries | /home/ab/projects/DnDnD/internal/combat/action_log_viewer.go:144 |
+| 257 | I-M01 | Medium | done | Action Log viewer doesn't flag dm_override_undo entries | /home/ab/projects/DnDnD/internal/combat/action_log_viewer.go:144 |
 | 258 | I-M02 | Medium | pending | Undo-of-undo re-applies the same undo instead of redoing | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_undo.go:103-113 |
 | 259 | I-M03 | Medium | pending | Pending-action resolve effect: no audit row per effect, after-state misses post-damage hooks | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_handler.go:255-303, 423-441 |
 | 260 | I-M04 | Medium | pending | Character Overview lacks live HP/condition snapshots | /home/ab/projects/DnDnD/internal/characteroverview/service.go:24-39 ; dashboard/... |
 | 261 | I-M05 | Medium | pending | DM action-resolver "move" effect doesn't write to action log even via effects | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_handler.go:400-421 |
-| 262 | I-M06 | Medium | pending | DM character creation does not store skill proficiencies | /home/ab/projects/DnDnD/internal/dashboard/charcreate_service.go:93-116 |
+| 262 | I-M06 | Medium | done | DM character creation does not store skill proficiencies | /home/ab/projects/DnDnD/internal/dashboard/charcreate_service.go:93-116 |
 | 263 | I-M07 | Medium | done | DM character submission allows duplicate class entries | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:28-79 |
 | 264 | I-M08 | Medium | pending | Spell selection isn't filtered by class or capped at max spell level on submit | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:11-25 ; charcreate_hand... |
-| 265 | I-M09 | Medium | pending | Combat workspace omits character_id when emitting combatant for spell-slot override | /home/ab/projects/DnDnD/internal/combat/workspace_handler.go:87-106 |
+| 265 | I-M09 | Medium | done | Combat workspace omits character_id when emitting combatant for spell-slot override | /home/ab/projects/DnDnD/internal/combat/workspace_handler.go:87-106 |
 | 266 | I-M10 | Medium | pending | Reaction panel resolve/cancel calls aren't atomic with turn-lock | /home/ab/projects/DnDnD/internal/combat/handler.go:461-498 (ResolveReaction/Canc... |
 | 267 | I-M11 | Medium | pending | Stat block library Get returns SRD entries even when ?source=homebrew | /home/ab/projects/DnDnD/internal/statblocklibrary/service.go:101-119, 147-166 |
 | 268 | I-M12 | Medium | pending | Homebrew create/update has no structural validation beyond name | /home/ab/projects/DnDnD/internal/homebrew/service.go:99-145 |
