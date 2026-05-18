@@ -940,3 +940,39 @@ func fixedRand(values ...int) dice.RandSource {
 		return v
 	}
 }
+
+func TestShove_Push_OutOfBounds(t *testing.T) {
+	encounterID, combatantID, charID, ms := makeStdTestSetup()
+	// Shover at A1, target at A1 row 1 — push west would go to col 0 (out of bounds)
+	shover := makePCCombatant(combatantID, encounterID, charID, "Aria")
+	shover.PositionCol = "B"
+	shover.PositionRow = 1
+
+	targetID := uuid.New()
+	target := makeNPCCombatantWithCreature(targetID, encounterID, "Goblin", "goblin")
+	target.PositionCol = "A"
+	target.PositionRow = 1
+
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return makeBasicChar(charID, 30), nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: "goblin", Size: "Small", AbilityScores: json.RawMessage(`{"str":8,"dex":14,"con":10,"int":10,"wis":8,"cha":8}`)}, nil
+	}
+	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{shover, target}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int { return max })
+
+	_, err := svc.Shove(context.Background(), ShoveCommand{
+		Shover:    shover,
+		Target:    target,
+		Mode:      ShovePush,
+		Turn:      makeBasicTurn(),
+		Encounter: refdata.Encounter{ID: encounterID},
+	}, roller)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "outside map bounds")
+}

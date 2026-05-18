@@ -209,6 +209,9 @@ func (s *Service) Shove(ctx context.Context, cmd ShoveCommand, roller *dice.Roll
 			cmd.Shover.PositionCol, int(cmd.Shover.PositionRow),
 			cmd.Target.PositionCol, int(cmd.Target.PositionRow),
 		)
+		if pushCol < 1 || pushRow < 1 {
+			return ShoveResult{}, fmt.Errorf("push destination is outside map bounds")
+		}
 		pushColLabel := colIntToLabel(pushCol)
 		pushLabel = fmt.Sprintf("%s%d", pushColLabel, pushRow)
 

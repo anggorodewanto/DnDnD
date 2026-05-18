@@ -198,7 +198,7 @@ Low: 142
 | 186 | D-M13 | Medium | pending | Resource_on_hit prompt only fired by Divine Smite, not by feature declarations | /home/ab/projects/DnDnD/internal/combat/class_feature_prompt.go and /home/ab/pro... |
 | 187 | D-M14 | Medium | skipped | Lay on Hands self-targeting can heal undead/construct PCs without rejection | /home/ab/projects/DnDnD/internal/combat/lay_on_hands.go:58 |
 | 188 | D-M15 | Medium | skipped | Channel Divinity DC uses WIS for both Cleric and Paladin | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:186 |
-| 189 | E-M01 | Medium | pending | Twinned Spell does not enforce "single creature target" beyond AoE/self check | `/home/ab/projects/DnDnD/internal/combat/metamagic.go:108-116` |
+| 189 | E-M01 | Medium | done | Twinned Spell does not enforce "single creature target" beyond AoE/self check | `/home/ab/projects/DnDnD/internal/combat/metamagic.go:108-116` |
 | 190 | E-M02 | Medium | done | Pact slot deduction does not refuse when `effectiveSlotLevel == 0` and damage path requires upcast | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:444-457` |
 | 191 | E-M03 | Medium | superseded | Hide: success comparison ties go to perceiver, but spec says "meets or exceeds" | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:361` |
 | 192 | E-M04 | Medium | pending | Help action duration tied to ally's turn, not helper's turn | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:254-261` (`SourceCo... |
