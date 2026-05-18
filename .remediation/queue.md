@@ -174,19 +174,19 @@ Low: 142
 | 162 | C-M03 | Medium | pending | Cover bonus to DEX save uses single closest-corner instead of best-of-4 | /home/ab/projects/DnDnD/internal/combat/cover.go:106-136 (`CalculateCoverFromOri... |
 | 163 | C-M04 | Medium | pending | `lineBlockedByWalls` allows zero-determinant case to slip through | /home/ab/projects/DnDnD/internal/combat/cover.go:212-233 (`segmentsIntersect`) |
 | 164 | C-M05 | Medium | pending | Off-hand TWF doesn't track on AttackerHidden / invisible attacker single-shot reveal | /home/ab/projects/DnDnD/internal/combat/attack.go:1238-1247 (`OffhandAttack`) |
-| 165 | C-M06 | Medium | pending | Damage-at-0 crit gives +2 failures regardless of attacker distance | /home/ab/projects/DnDnD/internal/combat/deathsave.go:159-192 (`ApplyDamageAtZero... |
+| 165 | C-M06 | Medium | superseded | Damage-at-0 crit gives +2 failures regardless of attacker distance | /home/ab/projects/DnDnD/internal/combat/deathsave.go:159-192 (`ApplyDamageAtZero... |
 | 166 | C-M07 | Medium | done | `ValidateMove` rejects ending on ally's tile (spec says ally pass-through allowed; ending forbidden — fine — but message) | /home/ab/projects/DnDnD/internal/combat/movement.go:84-94 |
 | 167 | C-M08 | Medium | superseded | `tileCost` adds +5 for prone, conceptually using +5 not ×2 | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:284-294 |
 | 168 | C-M09 | Medium | done | Action consumption not flagged for /attack — features keying off ActionUsed misbehave | /home/ab/projects/DnDnD/internal/combat/attack.go:925 (UseAttack only decrements... |
-| 169 | C-M10 | Medium | pending | Initiative tiebreak ignores DEX modifier ordering for surprised + tie cases | /home/ab/projects/DnDnD/internal/combat/initiative.go:167-177 |
-| 170 | C-M11 | Medium | pending | Distance3D rounding-to-5 can flip cover/range edges | /home/ab/projects/DnDnD/internal/combat/altitude.go:22-33 (`Distance3D`, `roundT... |
-| 171 | C-M12 | Medium | pending | Concentration save DC formula not capped (some house rules cap at DC 30) | /home/ab/projects/DnDnD/internal/combat/concentration.go ~ `CheckConcentrationOn... |
-| 172 | C-M13 | Medium | pending | Off-hand attack uses `combatantDistance` 3D — would auto-crit against airborne paralyzed | /home/ab/projects/DnDnD/internal/combat/attack.go:1216, 953 |
-| 173 | C-M14 | Medium | pending | Spec calls for "ammo recovery PROMPT" post-combat; code auto-recovers in EndCombat | /home/ab/projects/DnDnD/internal/combat/service.go:1145-1161 |
-| 174 | D-M01 | Medium | pending | Divine Smite crit bonus computed twice when target is undead and crit | /home/ab/projects/DnDnD/internal/combat/divine_smite.go:59 (`SmiteDamageFormula`... |
+| 169 | C-M10 | Medium | done | Initiative tiebreak ignores DEX modifier ordering for surprised + tie cases | /home/ab/projects/DnDnD/internal/combat/initiative.go:167-177 |
+| 170 | C-M11 | Medium | superseded | Distance3D rounding-to-5 can flip cover/range edges | /home/ab/projects/DnDnD/internal/combat/altitude.go:22-33 (`Distance3D`, `roundT... |
+| 171 | C-M12 | Medium | superseded | Concentration save DC formula not capped (some house rules cap at DC 30) | /home/ab/projects/DnDnD/internal/combat/concentration.go ~ `CheckConcentrationOn... |
+| 172 | C-M13 | Medium | superseded | Off-hand attack uses `combatantDistance` 3D — would auto-crit against airborne paralyzed | /home/ab/projects/DnDnD/internal/combat/attack.go:1216, 953 |
+| 173 | C-M14 | Medium | skipped | Spec calls for "ammo recovery PROMPT" post-combat; code auto-recovers in EndCombat | /home/ab/projects/DnDnD/internal/combat/service.go:1145-1161 |
+| 174 | D-M01 | Medium | done | Divine Smite crit bonus computed twice when target is undead and crit | /home/ab/projects/DnDnD/internal/combat/divine_smite.go:59 (`SmiteDamageFormula`... |
 | 175 | D-M02 | Medium | pending | Divine Smite eligibility doesn't enforce "weapon attack" | /home/ab/projects/DnDnD/internal/combat/divine_smite.go:52 (`IsSmiteEligible`) a... |
 | 176 | D-M03 | Medium | done | Action Surge resets `AttacksRemaining` from current character data instead of remembering the action's attack count | /home/ab/projects/DnDnD/internal/combat/action_surge.go:58 |
-| 177 | D-M04 | Medium | pending | Bardic Inspiration self-grant rejected even when out of combat | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:151 |
+| 177 | D-M04 | Medium | done | Bardic Inspiration self-grant rejected even when out of combat | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:151 |
 | 178 | D-M05 | Medium | done | Bardic Inspiration: no 60ft range validation | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go (no distance check... |
 | 179 | D-M06 | Medium | pending | PreserveLife heal target validation can mutate map iteration order under errors | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:625 |
 | 180 | D-M07 | Medium | pending | Turn Undead does not differentiate "can see or hear" requirement | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:213 |
