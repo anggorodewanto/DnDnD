@@ -157,7 +157,7 @@ func ShouldRageEndOnTurnStart(c refdata.Combatant) bool {
 
 // DecrementRageRound decrements the rage round counter and resets per-round tracking.
 func DecrementRageRound(c refdata.Combatant) refdata.Combatant {
-	if c.IsRaging && c.RageRoundsRemaining.Valid {
+	if c.IsRaging && c.RageRoundsRemaining.Valid && c.RageRoundsRemaining.Int32 > 0 {
 		c.RageRoundsRemaining.Int32--
 	}
 	c.RageAttackedThisRound = false
