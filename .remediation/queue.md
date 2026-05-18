@@ -164,7 +164,7 @@ Low: 142
 | 152 | B-M05 | Medium | pending | No validation that `position_col` / `position_row` are inside the map bounds | `/home/ab/projects/DnDnD/internal/combat/service.go:863-913` |
 | 153 | B-M06 | Medium | done | DB does not enforce the map-dimension hard limit | `/home/ab/projects/DnDnD/db/migrations/20260310120009_create_maps.sql:6-7`. |
 | 154 | B-M07 | Medium | pending | Tiled import accepts a `width=0, height=0` map if it's not `infinite` | `/home/ab/projects/DnDnD/internal/gamemap/import.go:88-103`. |
-| 155 | B-M08 | Medium | pending | Stacked-token offset can place tokens outside their grid cell | `/home/ab/projects/DnDnD/internal/gamemap/renderer/token.go:28-36`. |
+| 155 | B-M08 | Medium | done | Stacked-token offset can place tokens outside their grid cell | `/home/ab/projects/DnDnD/internal/gamemap/renderer/token.go:28-36`. |
 | 156 | B-M09 | Medium | pending | `/api/assets/upload` response sets headers after potentially writing body | `/home/ab/projects/DnDnD/internal/asset/handler.go:103-111` |
 | 157 | B-M10 | Medium | pending | Local asset storage path-traversal: filename is discarded, but campaign UUID isn't validated | `/home/ab/projects/DnDnD/internal/asset/local_store.go:32-46`. |
 | 158 | B-M11 | Medium | pending | Map `UpdateMap` allows shrinking width/height without re-clipping `tiled_json` | `/home/ab/projects/DnDnD/internal/gamemap/service.go:124-151`. |
@@ -279,7 +279,7 @@ Low: 142
 | 267 | I-M11 | Medium | pending | Stat block library Get returns SRD entries even when ?source=homebrew | /home/ab/projects/DnDnD/internal/statblocklibrary/service.go:101-119, 147-166 |
 | 268 | I-M12 | Medium | pending | Homebrew create/update has no structural validation beyond name | /home/ab/projects/DnDnD/internal/homebrew/service.go:99-145 |
 | 269 | I-M13 | Medium | pending | DM Override "spell slots" endpoint does not log per-character before-state for audit diff | /home/ab/projects/DnDnD/internal/combat/dm_dashboard_undo.go:594-659 |
-| 270 | I-M14 | Medium | pending | Race lookup is case-sensitive in raceSpeed and feature provider | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:206-216 ; feature_provi... |
+| 270 | I-M14 | Medium | superseded | Race lookup is case-sensitive in raceSpeed and feature provider | /home/ab/projects/DnDnD/internal/dashboard/charcreate.go:206-216 ; feature_provi... |
 | 271 | I-M15 | Medium | pending | HP/condition tracker doesn't validate damage doesn't go negative for healing path | /home/ab/projects/DnDnD/dashboard/svelte/src/CombatManager.svelte:832-847 |
 | 272 | I-M16 | Medium | pending | Encounter Builder does not respect spec's "Auto-generated short ID" uniqueness | /home/ab/projects/DnDnD/dashboard/svelte/src/EncounterBuilder.svelte (lines arou... |
 | 273 | I-M17 | Medium | pending | Manual char creation handler ignores starting-equipment "guaranteed:N" quantity | /home/ab/projects/DnDnD/internal/dashboard/charcreate_handler.go (loadStartingEq... |
@@ -335,7 +335,7 @@ Low: 142
 | 323 | B-L07 | Low | pending | `UndoStack` push happens *after* mutation, but does not capture the post-paste state for redo correctly | `/home/ab/projects/DnDnD/dashboard/svelte/src/lib/mapdata.js:516-557`, |
 | 324 | C-L01 | Low | superseded | `colToIndex` is silent on lowercase / empty input | /home/ab/projects/DnDnD/internal/combat/attack.go:1571-1577 |
 | 325 | C-L02 | Low | pending | `IsInLongRange` always returns false for melee weapons — but thrown melee in long range handled separately | /home/ab/projects/DnDnD/internal/combat/attack.go:148-155, 538-542 |
-| 326 | C-L03 | Low | pending | Conditions JSON empty array marshaling inconsistency | /home/ab/projects/DnDnD/internal/combat/condition.go:122-126 |
+| 326 | C-L03 | Low | done | Conditions JSON empty array marshaling inconsistency | /home/ab/projects/DnDnD/internal/combat/condition.go:122-126 |
 | 327 | C-L04 | Low | pending | `ApplyDamageResistances` reason string lowercase-mixed | /home/ab/projects/DnDnD/internal/combat/damage.go:24-46 |
 | 328 | C-L05 | Low | pending | Free interaction not tracked across /move + /attack flow boundary | /home/ab/projects/DnDnD/internal/combat/turnresources.go:51-54 |
 | 329 | C-L06 | Low | pending | Pathfinding heuristic doesn't account for prone or terrain multipliers (still admissible) | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:165-172 |
@@ -424,7 +424,7 @@ Low: 142
 | 412 | J-L11 | Low | pending | Health endpoint `/health` only reports two subsystems (db, discord); spec implies more | /home/ab/projects/DnDnD/cmd/dndnd/main.go:1336 (`health.Register("discord", …)`) |
 | 413 | J-L12 | Low | pending | Errorlog Entry has no Severity field; spec asks for severity | /home/ab/projects/DnDnD/internal/errorlog/recorder.go:18-29 |
 | 414 | J-L13 | Low | pending | `dmqueue.Sender` doesn't wrap message-too-long; long whispers will fail at Discord's 2000-char limit | /home/ab/projects/DnDnD/internal/dmqueue/sender.go (no splitting) |
-| 415 | J-L14 | Low | pending | /action subcommand normalisation misses underscore variants | /home/ab/projects/DnDnD/internal/discord/action_handler.go:315-317 + 321-333 |
+| 415 | J-L14 | Low | done | /action subcommand normalisation misses underscore variants | /home/ab/projects/DnDnD/internal/discord/action_handler.go:315-317 + 321-333 |
 | 416 | J-L15 | Low | pending | Snapshot.Build does GetEncounter + ListCombatants + GetTurn in three trips per publish | /home/ab/projects/DnDnD/internal/dashboard/snapshot.go:52-83 |
 | 417 | J-L16 | Low | pending | WS writer uses `r.Context()` for write deadlines, but request context is cancelled on disconnect | /home/ab/projects/DnDnD/internal/dashboard/ws.go:146-148 |
 | 418 | J-L17 | Low | pending | CampaignAnnouncer announcement is best-effort with no logging | /home/ab/projects/DnDnD/internal/campaign/service.go:192-195 |
