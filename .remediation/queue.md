@@ -209,7 +209,7 @@ Low: 142
 | 197 | E-M09 | Medium | pending | AoE save DC pre-subtracts cover bonus but stores no roll-side trace for full cover exclusion | `/home/ab/projects/DnDnD/internal/combat/aoe.go:545-562` |
 | 198 | E-M10 | Medium | pending | OA detection uses `IsNpc` faction check, breaks for PC-vs-PC combat | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:106-108` |
 | 199 | E-M11 | Medium | pending | Hide's auto-reveal-on-attack does not strip prior hide condition records | `/home/ab/projects/DnDnD/internal/combat/attack.go:830-839` |
-| 200 | E-M12 | Medium | pending | Grapple/shove adjacency uses Chebyshev distance only — no altitude check | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:73-80, 201-208` |
+| 200 | E-M12 | Medium | done | Grapple/shove adjacency uses Chebyshev distance only — no altitude check | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:73-80, 201-208` |
 | 201 | E-M13 | Medium | pending | Push destination unoccupied-check ignores dead bodies and altitude | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:221-233` |
 | 202 | E-M14 | Medium | pending | `applyConcentrationOnCast` clears prior concentration even on cast failure later (no rollback) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:620-627` |
 | 203 | E-M15 | Medium | pending | Cone shape projects from caster center, not tile edge | `/home/ab/projects/DnDnD/internal/combat/aoe.go:113-117` (`ConeAffectedTiles`) |
@@ -306,14 +306,14 @@ Low: 142
 | 294 | J-M17 | Medium | pending | /action freeform combat-mode skips turnGate when no gate is wired (tests-only path leaks to prod) | /home/ab/projects/DnDnD/internal/discord/action_handler.go:300-309 (the `else if... |
 | 295 | J-M18 | Medium | pending | /distance handler not visible in scope but several Phase-105 handler tests use a typed-nil interface trap | /home/ab/projects/DnDnD/cmd/dndnd/discord_handlers.go:186-200 (the `if deps.quer... |
 | 296 | cross-cut-M01 | Medium | pending | `CalculateHP` only awards the level-1 max die to `classes[0]` | `internal/character/stats.go:21-47`. |
-| 297 | cross-cut-M02 | Medium | pending | Duplicate `AbilityModifier` implementations across packages | - `internal/character/stats.go:124-130` (`character.AbilityModifier`) |
+| 297 | cross-cut-M02 | Medium | skipped | Duplicate `AbilityModifier` implementations across packages | - `internal/character/stats.go:124-130` (`character.AbilityModifier`) |
 | 298 | cross-cut-M03 | Medium | done | `combatant.AbilityScores` JSON keys are not normalized — `Get` only handles two cases per ability | `internal/character/types.go:20-36` |
 | 299 | cross-cut-M04 | Medium | pending | `evaluateACFormula` silently drops unknown tokens (DEX/DEX cap of medium armor not enforced) | `internal/character/stats.go:91-115` |
 | 300 | cross-cut-M05 | Medium | superseded | Pact magic slot table: levels 11-20 cap at slot level 5 — correct, but `Max` and `Current` are both updated even when the level didn't change | `internal/character/spellslots.go:67-103`. Verified |
 | 301 | cross-cut-M06 | Medium | pending | `classHitDie` in rest service hard-codes class IDs; mis-named or homebrew classes fall through to d8 | `internal/rest/rest.go:486-499`. |
 | 302 | cross-cut-M07 | Medium | superseded | Divine Smite undead/fiend bonus on crit doubles to +2d8 — RAW reading is ambiguous | `internal/combat/divine_smite.go:59-68` |
 | 303 | cross-cut-M08 | Medium | superseded | `SneakAttack` extra dice list never validated "once per turn" | `internal/combat/feature_integration.go:86-106` |
-| 304 | cross-cut-M09 | Medium | pending | Initiative tiebreak does not use DEX score (just DEX modifier) | `internal/combat/initiative.go:166-177` |
+| 304 | cross-cut-M09 | Medium | skipped | Initiative tiebreak does not use DEX score (just DEX modifier) | `internal/combat/initiative.go:166-177` |
 | 305 | cross-cut-M10 | Medium | pending | Pact magic slot recovery on short rest restores slot count but not slot level | `internal/rest/rest.go:235-241`. |
 | 306 | cross-cut-M11 | Medium | pending | `ApplyDamageAtZeroHP` does not itself enforce the Massive Damage rule | `internal/combat/deathsave.go:157-192` |
 | 307 | A-L01 | Low | pending | `SidebarNav` "Errors" path may render before error badge wiring is loaded | internal/dashboard/handler.go:55-68 |
