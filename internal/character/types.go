@@ -37,9 +37,10 @@ func (a AbilityScores) Get(ability string) int {
 
 // ClassEntry represents a single class (and optional subclass) with a level.
 type ClassEntry struct {
-	Class    string `json:"class"`
-	Subclass string `json:"subclass,omitempty"`
-	Level    int    `json:"level"`
+	Class     string `json:"class"`
+	Subclass  string `json:"subclass,omitempty"`
+	Level     int    `json:"level"`
+	IsPrimary bool   `json:"is_primary,omitempty"`
 }
 
 // Proficiencies represents all character proficiencies.

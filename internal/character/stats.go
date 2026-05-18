@@ -15,7 +15,8 @@ func TotalLevel(classes []ClassEntry) int {
 }
 
 // CalculateHP computes max HP from class hit dice and CON modifier.
-// First class gets max hit die at level 1, all subsequent levels use average+1.
+// The primary class (IsPrimary=true) gets max hit die at level 1; all other
+// levels use average+1. If no class has IsPrimary set, the first entry is used.
 // hitDice maps class name to hit die string (e.g. "fighter" -> "d10").
 // Result is at least 1.
 func CalculateHP(classes []ClassEntry, hitDice map[string]string, scores AbilityScores) int {
@@ -27,16 +28,22 @@ func CalculateHP(classes []ClassEntry, hitDice map[string]string, scores Ability
 	totalLevel := TotalLevel(classes)
 	hp := 0
 
+	primaryIdx := 0
+	for i, c := range classes {
+		if c.IsPrimary {
+			primaryIdx = i
+			break
+		}
+	}
+
 	for i, c := range classes {
 		die := HitDieValue(hitDice[c.Class])
 		avg := die/2 + 1
 
-		if i == 0 {
-			// First class: level 1 gets max die
+		if i == primaryIdx {
 			hp += die
 			hp += (c.Level - 1) * avg
 		} else {
-			// Subsequent classes: all levels use average
 			hp += c.Level * avg
 		}
 	}

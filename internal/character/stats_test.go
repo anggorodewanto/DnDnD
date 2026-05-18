@@ -201,6 +201,42 @@ func TestCalculateHP_MinimumHP_Floor(t *testing.T) {
 	}
 }
 
+func TestCalculateHP_MulticlassReorderedUsesPrimary(t *testing.T) {
+	// Fighter 3 (primary) / Wizard 2, CON 12 (+1)
+	// Even though wizard is listed first in the array, fighter is IsPrimary
+	// so fighter gets max die at level 1.
+	// Fighter: level 1 = max d10 = 10, levels 2-3 = 6 each = 12
+	// Wizard: levels 1-2 = avg d6 = 4 each = 8
+	// CON: +1 * 5 = 5
+	// Total: 10 + 12 + 8 + 5 = 35
+	classes := []ClassEntry{
+		{Class: "wizard", Level: 2},
+		{Class: "fighter", Level: 3, IsPrimary: true},
+	}
+	hitDice := map[string]string{"fighter": "d10", "wizard": "d6"}
+	scores := AbilityScores{CON: 12}
+
+	got := CalculateHP(classes, hitDice, scores)
+	if got != 35 {
+		t.Errorf("CalculateHP reordered multiclass = %d, want 35", got)
+	}
+}
+
+func TestCalculateHP_NoPrimaryFlagFallsBackToFirst(t *testing.T) {
+	// Backward compat: if no IsPrimary is set, first entry gets max die
+	classes := []ClassEntry{
+		{Class: "fighter", Level: 3},
+		{Class: "wizard", Level: 2},
+	}
+	hitDice := map[string]string{"fighter": "d10", "wizard": "d6"}
+	scores := AbilityScores{CON: 12}
+
+	got := CalculateHP(classes, hitDice, scores)
+	if got != 35 {
+		t.Errorf("CalculateHP no-primary fallback = %d, want 35", got)
+	}
+}
+
 func TestCalculateAC_NoArmor(t *testing.T) {
 	// No armor, no formula: 10 + DEX mod
 	scores := AbilityScores{DEX: 14}

@@ -43,13 +43,24 @@ func resolveClassEntries(p CreateCharacterParams) []character.ClassEntry {
 			if lvl < 1 {
 				lvl = 1
 			}
-			out = append(out, character.ClassEntry{Class: c.Class, Subclass: c.Subclass, Level: lvl})
+			out = append(out, character.ClassEntry{Class: c.Class, Subclass: c.Subclass, Level: lvl, IsPrimary: c.IsPrimary})
 		}
 		if len(out) > 0 {
+			ensurePrimary(out)
 			return out
 		}
 	}
-	return []character.ClassEntry{{Class: p.Class, Subclass: p.Subclass, Level: 1}}
+	return []character.ClassEntry{{Class: p.Class, Subclass: p.Subclass, Level: 1, IsPrimary: true}}
+}
+
+// ensurePrimary sets IsPrimary on the first entry if no entry has it set.
+func ensurePrimary(classes []character.ClassEntry) {
+	for _, c := range classes {
+		if c.IsPrimary {
+			return
+		}
+	}
+	classes[0].IsPrimary = true
 }
 
 // NewBuilderStoreAdapter creates a new BuilderStoreAdapter.

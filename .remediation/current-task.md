@@ -1,15 +1,13 @@
-finding_id: H-H04
-severity: High
-title: DDB "off-list spell" detection only covers wizard with 16 spells
-location: /home/ab/projects/DnDnD/internal/ddbimport/parser.go:382
-spec_ref: spec §"Import validation" line 2434
-problem: |
-  classSpellLists only has "wizard" with 16 spells. Other classes have no entry.
-  Even for wizard, the list omits 120+ SRD spells, producing false positives.
-suggested_fix: |
-  Drive isOffListClassSpell from the seeded spells.classes reference data rather
-  than a hand-maintained map.
-acceptance_criterion: |
-  The off-list detection no longer produces false positives for legitimate SRD spells.
-  Either the hard-coded list is removed (disabling the feature until refdata-driven)
-  or expanded to cover all SRD wizard spells.
+# Current Task
+
+finding_id: A-M13
+severity: Medium
+title: HP recompute on multiclassing assumes secondary classes never reach level 1 with max die
+location: internal/character/stats.go:30-42
+spec_ref: spec §Character Leveling (line 2453); Phase 7
+problem: CalculateHP uses array index `i == 0` to determine which class gets max hit die at level 1. If the classes array is ever reordered (DM dashboard edit, alphabetical sort), HP computes wrong. PHB says only the very first character level gets max die.
+suggested_fix: Add an `IsPrimary` field to ClassEntry and use it in CalculateHP instead of relying on array position.
+
+## Acceptance Criterion
+
+`CalculateHP` produces correct HP regardless of class array order, using an explicit `IsPrimary` flag rather than positional index.

@@ -173,10 +173,11 @@ func ParseDDBJSON(data []byte) (*ParsedCharacter, error) {
 	}
 
 	// Parse classes and compute total level
-	for _, c := range d.Classes {
+	for i, c := range d.Classes {
 		entry := character.ClassEntry{
-			Class: strings.ToLower(c.Definition.Name),
-			Level: c.Level,
+			Class:     strings.ToLower(c.Definition.Name),
+			Level:     c.Level,
+			IsPrimary: i == 0,
 		}
 		if c.SubclassDefinition != nil {
 			entry.Subclass = c.SubclassDefinition.Name
