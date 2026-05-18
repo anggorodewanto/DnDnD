@@ -317,8 +317,8 @@ Low: 142
 | 305 | cross-cut-M10 | Medium | pending | Pact magic slot recovery on short rest restores slot count but not slot level | `internal/rest/rest.go:235-241`. |
 | 306 | cross-cut-M11 | Medium | pending | `ApplyDamageAtZeroHP` does not itself enforce the Massive Damage rule | `internal/combat/deathsave.go:157-192` |
 | 307 | A-L01 | Low | pending | `SidebarNav` "Errors" path may render before error badge wiring is loaded | internal/dashboard/handler.go:55-68 |
-| 308 | A-L02 | Low | pending | `WelcomeMessage` says "Type /help for a full command list" but /help requires the user to be in the guild | internal/discord/welcome.go:18 |
-| 309 | A-L03 | Low | pending | Race "Half-Elf" referenced in character card example not seeded | internal/refdata/seed_races.go:1-* (only 9 races as `RaceCount = 9`) |
+| 308 | A-L02 | Low | superseded | `WelcomeMessage` says "Type /help for a full command list" but /help requires the user to be in the guild | internal/discord/welcome.go:18 |
+| 309 | A-L03 | Low | superseded | Race "Half-Elf" referenced in character card example not seeded | internal/refdata/seed_races.go:1-* (only 9 races as `RaceCount = 9`) |
 | 310 | A-L04 | Low | pending | Class entries don't expose Eldritch Knight / Arcane Trickster as third-caster subclasses | internal/refdata/seed_classes.go (Fighter & Rogue blocks) |
 | 311 | A-L05 | Low | done | `Settings.AutoApproveRestEnabled` defaults differ from spec | internal/campaign/service.go:36-42 |
 | 312 | A-L06 | Low | done | CookieSecure defaults to false when `COOKIE_SECURE` is unset | cmd/dndnd/main.go:564 |
@@ -326,8 +326,8 @@ Low: 142
 | 314 | A-L08 | Low | pending | Bot session race in `Bot.HandleGuildCreate` | internal/discord/bot.go:86-90 |
 | 315 | A-L09 | Low | done | Character `level` column not indexed despite spec | db/migrations/20260310120006_create_characters.sql:8-37 |
 | 316 | A-L10 | Low | pending | Welcome DM is sent for every guild-join, including bots | internal/discord/bot.go:119-131 |
-| 317 | B-L01 | Low | pending | `RollDamage` does not double the modifier-side dice for spells that allow it (e.g. Sneak Attack crit) | `/home/ab/projects/DnDnD/internal/dice/roller.go:100-124`. |
-| 318 | B-L02 | Low | pending | D20 result `Total` ignores the "min 1 / max 20" sometimes referenced for nat-1 crits with negative DEX | `/home/ab/projects/DnDnD/internal/dice/d20.go:75-82`. |
+| 317 | B-L01 | Low | superseded | `RollDamage` does not double the modifier-side dice for spells that allow it (e.g. Sneak Attack crit) | `/home/ab/projects/DnDnD/internal/dice/roller.go:100-124`. |
+| 318 | B-L02 | Low | superseded | D20 result `Total` ignores the "min 1 / max 20" sometimes referenced for nat-1 crits with negative DEX | `/home/ab/projects/DnDnD/internal/dice/d20.go:75-82`. |
 | 319 | B-L03 | Low | superseded | `ColumnLabel` past column 701 (`ZZ`) becomes 3-letter (`AAA`) | `/home/ab/projects/DnDnD/internal/gamemap/renderer/grid.go:65-75`. |
 | 320 | B-L04 | Low | pending | Encounter `display_name` not validated against length / control characters | `/home/ab/projects/DnDnD/internal/encounter/service.go:44-62`. |
 | 321 | B-L05 | Low | pending | Asset uploads have no per-campaign quota or count cap | `/home/ab/projects/DnDnD/internal/asset/handler.go:31-83`, |
@@ -337,10 +337,10 @@ Low: 142
 | 325 | C-L02 | Low | pending | `IsInLongRange` always returns false for melee weapons — but thrown melee in long range handled separately | /home/ab/projects/DnDnD/internal/combat/attack.go:148-155, 538-542 |
 | 326 | C-L03 | Low | done | Conditions JSON empty array marshaling inconsistency | /home/ab/projects/DnDnD/internal/combat/condition.go:122-126 |
 | 327 | C-L04 | Low | pending | `ApplyDamageResistances` reason string lowercase-mixed | /home/ab/projects/DnDnD/internal/combat/damage.go:24-46 |
-| 328 | C-L05 | Low | pending | Free interaction not tracked across /move + /attack flow boundary | /home/ab/projects/DnDnD/internal/combat/turnresources.go:51-54 |
-| 329 | C-L06 | Low | pending | Pathfinding heuristic doesn't account for prone or terrain multipliers (still admissible) | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:165-172 |
+| 328 | C-L05 | Low | superseded | Free interaction not tracked across /move + /attack flow boundary | /home/ab/projects/DnDnD/internal/combat/turnresources.go:51-54 |
+| 329 | C-L06 | Low | superseded | Pathfinding heuristic doesn't account for prone or terrain multipliers (still admissible) | /home/ab/projects/DnDnD/internal/pathfinding/pathfinding.go:165-172 |
 | 330 | C-L07 | Low | pending | Condition immunity skips application but doesn't surface to action_log persistently | /home/ab/projects/DnDnD/internal/combat/condition.go:149-152 |
-| 331 | C-L08 | Low | pending | Held concentration spells: pre-applied conditions don't auto-end when concentration breaks via crash recovery | /home/ab/projects/DnDnD/internal/combat/concentration.go (general) |
+| 331 | C-L08 | Low | superseded | Held concentration spells: pre-applied conditions don't auto-end when concentration breaks via crash recovery | /home/ab/projects/DnDnD/internal/combat/concentration.go (general) |
 | 332 | C-L09 | Low | pending | `RemoveConditionWithLog` doesn't differentiate "removed by action" vs "expired" | /home/ab/projects/DnDnD/internal/combat/condition.go:297-307 |
 | 333 | D-L01 | Low | superseded | PaladinAuraRadiusFt = 30 only at L18+, spec says L18 | /home/ab/projects/DnDnD/internal/combat/feature_integration.go:290 |
 | 334 | D-L02 | Low | superseded | Bardic Inspiration uses CHA mod min 1 — correct, but doesn't account for negative CHA | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:33 |
@@ -348,7 +348,7 @@ Low: 142
 | 336 | D-L04 | Low | pending | WildShape CR limit returns float64 — comparisons against parsed CR strings are exact | /home/ab/projects/DnDnD/internal/combat/wildshape.go:59 |
 | 337 | D-L05 | Low | pending | Channel Divinity DM-queue routes class name as `cmd.ClassName` without normalization | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:533 |
 | 338 | D-L06 | Low | superseded | Action Surge `ResourceBonusAction` not checked | /home/ab/projects/DnDnD/internal/combat/action_surge.go:25 |
-| 339 | E-L01 | Low | pending | OA detection's faction check fails for charm/dominate scenarios | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:106-108` |
+| 339 | E-L01 | Low | superseded | OA detection's faction check fails for charm/dominate scenarios | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:106-108` |
 | 340 | E-L02 | Low | pending | Stand from prone does not require movement to be available beyond cost | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:592-595` |
 | 341 | E-L03 | Low | pending | Drop Prone ApplyCondition runs immunity check unnecessarily | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:651-674` |
 | 342 | E-L04 | Low | pending | FormatOAPrompt uses target's display name as the slash arg, which can contain spaces/diacritics | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:218-221` |
@@ -371,11 +371,11 @@ Low: 142
 | 359 | E-L21 | Low | pending | Spell DC calculation uses `ProficiencyBonus` from character row without class-progression check | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:631` |
 | 360 | E-L22 | Low | pending | CastAoE never enforces ValidateSeeTarget on AoE single-creature anchors | `/home/ab/projects/DnDnD/internal/combat/aoe.go:466-468` |
 | 361 | F-L01 | Low | pending | `equipShield` auto-stows off-hand weapon at no cost | /home/ab/projects/DnDnD/internal/combat/equip.go:197-200 |
-| 362 | F-L02 | Low | pending | DrawFogOfWar uses solid black for Unexplored even on DM render before DMSeesAll check | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog.go:14-45 |
+| 362 | F-L02 | Low | superseded | DrawFogOfWar uses solid black for Unexplored even on DM render before DMSeesAll check | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog.go:14-45 |
 | 363 | F-L03 | Low | pending | `RecalculateAC` evaluates `ac_formula` parts via Sscanf without error handling | /home/ab/projects/DnDnD/internal/combat/equip.go:467-474 |
 | 364 | F-L04 | Low | pending | Bonus action parsing misses fully-structured `bonus_actions` rows containing only descriptions | /home/ab/projects/DnDnD/internal/combat/turn_builder.go:473-499 |
 | 365 | F-L05 | Low | pending | Summoned-creature short-ID collisions are not detected | /home/ab/projects/DnDnD/internal/combat/summon.go:117-150 |
-| 366 | F-L06 | Low | pending | Concentration on readied spell never sets ConcentrationSpellID, breaking spell-ID lookups | /home/ab/projects/DnDnD/internal/combat/readied_action.go:132-141 |
+| 366 | F-L06 | Low | superseded | Concentration on readied spell never sets ConcentrationSpellID, breaking spell-ID lookups | /home/ab/projects/DnDnD/internal/combat/readied_action.go:132-141 |
 | 367 | F-L07 | Low | pending | `LightSource` and `VisionSource` deduplicate by position but not vision type — flickers | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:52-93 |
 | 368 | F-L08 | Low | pending | `/action ready` doesn't differentiate readying a Spell vs. a non-Spell action in the panel badge | /home/ab/projects/DnDnD/dashboard/svelte/src/ActiveReactionsPanel.svelte:120-122 |
 | 369 | F-L09 | Low | pending | FoW `chebyshevDistance` is correct for square grids but doesn't match the canonical 5e diagonal rule | /home/ab/projects/DnDnD/internal/gamemap/renderer/fog_types.go:160-173 |
