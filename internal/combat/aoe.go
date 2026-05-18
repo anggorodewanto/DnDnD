@@ -285,6 +285,8 @@ type AoECastResult struct {
 	Concentration  ConcentrationResult
 	SlotUsed       int
 	SlotsRemaining int
+	UsedPactSlot       bool
+	PactSlotsRemaining int
 	OriginCol      int
 	OriginRow      int
 	// SR-013: AoE pipeline now consumes Metamagic. Mirrors CastResult's fields.
@@ -364,6 +366,7 @@ type AoECastCommand struct {
 	// combatant" so Heightened still works from non-interactive code paths
 	// (DM dashboard, replays). SR-025.
 	HeightenedTargetID uuid.UUID
+	UseSpellSlot       bool // true = force regular spell slots instead of pact slots
 }
 
 // CastAoE orchestrates the AoE spell casting flow:
@@ -425,11 +428,22 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	if err != nil {
 		return AoECastResult{}, err
 	}
+	pactSlots, _ := parsePactMagicSlots(char.PactMagicSlots.RawMessage)
+
 	effectiveSlotLevel := 0
+	usePactSlot := false
 	if spellLevel > 0 {
-		effectiveSlotLevel, err = SelectSpellSlot(slots, spellLevel, cmd.SlotLevel)
-		if err != nil {
-			return AoECastResult{}, err
+		if !cmd.UseSpellSlot && pactSlots.Current > 0 && spellLevel <= pactSlots.SlotLevel {
+			if cmd.SlotLevel > 0 && cmd.SlotLevel != pactSlots.SlotLevel {
+				return AoECastResult{}, fmt.Errorf("Pact slots always cast at level %d; cannot use --slot %d", pactSlots.SlotLevel, cmd.SlotLevel)
+			}
+			effectiveSlotLevel = pactSlots.SlotLevel
+			usePactSlot = true
+		} else {
+			effectiveSlotLevel, err = SelectSpellSlot(slots, spellLevel, cmd.SlotLevel)
+			if err != nil {
+				return AoECastResult{}, err
+			}
 		}
 	}
 
@@ -633,9 +647,24 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 	}
 
 	// 16. Deduct spell slot and persist
-	deduction, err := s.deductAndPersistSlot(ctx, char.ID, slots, effectiveSlotLevel)
-	if err != nil {
-		return AoECastResult{}, err
+	var slotUsed, slotsRemaining int
+	var usedPactSlotResult bool
+	var pactSlotsRemainingResult int
+	if usePactSlot {
+		deduction, err := s.deductAndPersistPactSlot(ctx, char.ID, pactSlots)
+		if err != nil {
+			return AoECastResult{}, err
+		}
+		slotUsed = effectiveSlotLevel
+		usedPactSlotResult = true
+		pactSlotsRemainingResult = deduction.SlotsRemaining
+	} else {
+		deduction, err := s.deductAndPersistSlot(ctx, char.ID, slots, effectiveSlotLevel)
+		if err != nil {
+			return AoECastResult{}, err
+		}
+		slotUsed = deduction.SlotUsed
+		slotsRemaining = deduction.SlotsRemaining
 	}
 
 	// 16a. SR-013: deduct sorcery points for metamagic.
@@ -696,8 +725,10 @@ func (s *Service) CastAoE(ctx context.Context, cmd AoECastCommand) (AoECastResul
 		AffectedNames:        affectedNames,
 		PendingSaves:         pendingSaves,
 		Concentration:        concentration,
-		SlotUsed:             deduction.SlotUsed,
-		SlotsRemaining:       deduction.SlotsRemaining,
+		SlotUsed:             slotUsed,
+		SlotsRemaining:       slotsRemaining,
+		UsedPactSlot:         usedPactSlotResult,
+		PactSlotsRemaining:   pactSlotsRemainingResult,
 		OriginCol:            originCol,
 		OriginRow:            originRow,
 		ConcentrationCleanup: cleanupResult,
