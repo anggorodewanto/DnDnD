@@ -210,7 +210,7 @@ Low: 142
 | 198 | E-M10 | Medium | pending | OA detection uses `IsNpc` faction check, breaks for PC-vs-PC combat | `/home/ab/projects/DnDnD/internal/combat/opportunity_attack.go:106-108` |
 | 199 | E-M11 | Medium | superseded | Hide's auto-reveal-on-attack does not strip prior hide condition records | `/home/ab/projects/DnDnD/internal/combat/attack.go:830-839` |
 | 200 | E-M12 | Medium | done | Grapple/shove adjacency uses Chebyshev distance only — no altitude check | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:73-80, 201-208` |
-| 201 | E-M13 | Medium | pending | Push destination unoccupied-check ignores dead bodies and altitude | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:221-233` |
+| 201 | E-M13 | Medium | done | Push destination unoccupied-check ignores dead bodies and altitude | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:221-233` |
 | 202 | E-M14 | Medium | pending | `applyConcentrationOnCast` clears prior concentration even on cast failure later (no rollback) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:620-627` |
 | 203 | E-M15 | Medium | superseded | Cone shape projects from caster center, not tile edge | `/home/ab/projects/DnDnD/internal/combat/aoe.go:113-117` (`ConeAffectedTiles`) |
 | 204 | E-M16 | Medium | pending | Concentration save uses `currentConcentration` name-string only (no spell ID) | `/home/ab/projects/DnDnD/internal/combat/concentration.go:36-45` (`CheckConcentr... |
