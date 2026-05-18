@@ -222,9 +222,9 @@ Low: 142
 | 210 | F-M02 | Medium | pending | Counterspell ability check uses character.ProficiencyBonus on the wrong side | /home/ab/projects/DnDnD/internal/combat/counterspell.go:209-260 |
 | 211 | F-M03 | Medium | done | `/done` unused-resource warning's "Action" branch is logically dead | /home/ab/projects/DnDnD/internal/combat/unused_resources.go:13-33 |
 | 212 | F-M04 | Medium | pending | Magical-darkness zone affected-tiles ignore concentration-anchored zone movement | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:819-833 |
-| 213 | F-M05 | Medium | pending | Light cantrip / Continual Flame zones get 20ft uniform — but Daylight is 60ft bright + 60ft dim | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:918-927 |
+| 213 | F-M05 | Medium | superseded | Light cantrip / Continual Flame zones get 20ft uniform — but Daylight is 60ft bright + 60ft dim | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:918-927 |
 | 214 | F-M06 | Medium | pending | Hide-success token visibility doesn't propagate to enemy renders | /home/ab/projects/DnDnD/internal/combat/standard_actions.go:363-371 |
-| 215 | F-M07 | Medium | pending | Surprised combatants — round 1 turn skip removes condition immediately, losing reaction-end-of-turn rule | /home/ab/projects/DnDnD/internal/combat/initiative.go:569-593 |
+| 215 | F-M07 | Medium | superseded | Surprised combatants — round 1 turn skip removes condition immediately, losing reaction-end-of-turn rule | /home/ab/projects/DnDnD/internal/combat/initiative.go:569-593 |
 | 216 | F-M08 | Medium | pending | `equipWeapon` accidentally drops the Defense fighting style AC bonus when re-equipping | /home/ab/projects/DnDnD/internal/combat/equip.go:141-184 |
 | 217 | F-M09 | Medium | pending | Spell-slot deduction for readied actions runs even when the spell needs no slot | /home/ab/projects/DnDnD/internal/combat/readied_action.go:68-75 |
 | 218 | F-M10 | Medium | pending | No reaction-used reset for legendary actions / lair actions in cross-turn sequencing | /home/ab/projects/DnDnD/internal/combat/legendary.go (entire file) |
@@ -260,7 +260,7 @@ Low: 142
 | 248 | H-M08 | Medium | pending | Multiclass spell-slot table check requires both classes to be casters; Eldritch Knight/Arcane Trickster ignored | /home/ab/projects/DnDnD/internal/character/spellslots.go:54 (`CalculateCasterLev... |
 | 249 | H-M09 | Medium | done | Char sheet template renders `{$level}` for spell slots from `map[string]SlotInfo` | /home/ab/projects/DnDnD/internal/portal/character_sheet_handler.go:374 |
 | 250 | H-M10 | Medium | pending | DM denial reason is hard-coded; spec wants DM-supplied message | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:543 |
-| 251 | H-M11 | Medium | pending | Builder service does not enforce racial ability cap (no score > 20 at creation) | /home/ab/projects/DnDnD/internal/portal/builder_service.go:444 (`ValidatePointBu... |
+| 251 | H-M11 | Medium | superseded | Builder service does not enforce racial ability cap (no score > 20 at creation) | /home/ab/projects/DnDnD/internal/portal/builder_service.go:444 (`ValidatePointBu... |
 | 252 | H-M12 | Medium | pending | HP recalculation on level-up assumes the standard "average+1" formula but spec also offers rolling option (not implemented) | /home/ab/projects/DnDnD/internal/character/stats.go:30 (avg formula) |
 | 253 | H-M13 | Medium | pending | Pending ASI choices: storePendingChoice writes to DB asynchronously in background goroutine pattern but uses `context.Background()` | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:314,328 |
 | 254 | H-M14 | Medium | pending | Portal Svelte builder doesn't expose subclass selection at the right level | /home/ab/projects/DnDnD/portal/svelte/src/App.svelte (subclass section); /home/a... |
@@ -292,7 +292,7 @@ Low: 142
 | 280 | J-M03 | Medium | pending | Crash-recovery loses in-memory once-per-turn slot tracker (Sneak Attack double-use risk) | /home/ab/projects/DnDnD/internal/combat/service.go:323-324 (`usedEffects map`) |
 | 281 | J-M04 | Medium | pending | Hub broadcast drops slow clients but never closes their writer goroutine's conn | /home/ab/projects/DnDnD/internal/dashboard/ws.go:77-101 |
 | 282 | J-M05 | Medium | pending | Campaign #the-story announcer resolves channel by name on every announce (drift if renamed) | /home/ab/projects/DnDnD/internal/discord/narration_poster.go:71-82 (`resolveStor... |
-| 283 | J-M06 | Medium | pending | `LIMIT 1` masks duplicate active-encounter rows for a character (no error) | /home/ab/projects/DnDnD/db/queries/encounters.sql:46-51 (same query) |
+| 283 | J-M06 | Medium | superseded | `LIMIT 1` masks duplicate active-encounter rows for a character (no error) | /home/ab/projects/DnDnD/db/queries/encounters.sql:46-51 (same query) |
 | 284 | J-M07 | Medium | pending | Tiled import accepts massive maps up to `HardLimitDimension` with no tile-count guard | /home/ab/projects/DnDnD/internal/gamemap/import.go:88-103 (`checkHardRejections`... |
 | 285 | J-M08 | Medium | pending | Tiled `version`/`tiledversion` not validated | /home/ab/projects/DnDnD/internal/gamemap/import.go:55-84 (`ImportTiledJSON`) |
 | 286 | J-M09 | Medium | pending | Open5e cache silently rewrites partial monster data with defaults instead of skipping | /home/ab/projects/DnDnD/internal/open5e/cache.go:110-156 (`monsterToParams`) |
