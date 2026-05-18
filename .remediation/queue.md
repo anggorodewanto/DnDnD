@@ -188,7 +188,7 @@ Low: 142
 | 176 | D-M03 | Medium | done | Action Surge resets `AttacksRemaining` from current character data instead of remembering the action's attack count | /home/ab/projects/DnDnD/internal/combat/action_surge.go:58 |
 | 177 | D-M04 | Medium | done | Bardic Inspiration self-grant rejected even when out of combat | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go:151 |
 | 178 | D-M05 | Medium | done | Bardic Inspiration: no 60ft range validation | /home/ab/projects/DnDnD/internal/combat/bardic_inspiration.go (no distance check... |
-| 179 | D-M06 | Medium | pending | PreserveLife heal target validation can mutate map iteration order under errors | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:625 |
+| 179 | D-M06 | Medium | skipped | PreserveLife heal target validation can mutate map iteration order under errors | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:625 |
 | 180 | D-M07 | Medium | done | Turn Undead does not differentiate "can see or hear" requirement | /home/ab/projects/DnDnD/internal/combat/channel_divinity.go:213 |
 | 181 | D-M08 | Medium | superseded | Wild Shape concentration retention not implemented | /home/ab/projects/DnDnD/internal/combat/wildshape.go:333 (`ActivateWildShape`) |
 | 182 | D-M09 | Medium | pending | Stunning Strike duration uses `"end_of_turn"` with `DurationRounds: 1` | /home/ab/projects/DnDnD/internal/combat/monk.go:398 |
@@ -211,15 +211,15 @@ Low: 142
 | 199 | E-M11 | Medium | superseded | Hide's auto-reveal-on-attack does not strip prior hide condition records | `/home/ab/projects/DnDnD/internal/combat/attack.go:830-839` |
 | 200 | E-M12 | Medium | done | Grapple/shove adjacency uses Chebyshev distance only — no altitude check | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:73-80, 201-208` |
 | 201 | E-M13 | Medium | done | Push destination unoccupied-check ignores dead bodies and altitude | `/home/ab/projects/DnDnD/internal/combat/grapple_shove.go:221-233` |
-| 202 | E-M14 | Medium | pending | `applyConcentrationOnCast` clears prior concentration even on cast failure later (no rollback) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:620-627` |
+| 202 | E-M14 | Medium | done | `applyConcentrationOnCast` clears prior concentration even on cast failure later (no rollback) | `/home/ab/projects/DnDnD/internal/combat/spellcasting.go:620-627` |
 | 203 | E-M15 | Medium | superseded | Cone shape projects from caster center, not tile edge | `/home/ab/projects/DnDnD/internal/combat/aoe.go:113-117` (`ConeAffectedTiles`) |
 | 204 | E-M16 | Medium | pending | Concentration save uses `currentConcentration` name-string only (no spell ID) | `/home/ab/projects/DnDnD/internal/combat/concentration.go:36-45` (`CheckConcentr... |
 | 205 | E-M17 | Medium | done | Passive Perception for creatures lacks proficiency when Skills JSONB is empty | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:516-530` |
 | 206 | E-M18 | Medium | superseded | Hide's "spotted by" picks highest-PP enemy, but losing tied roll vs second-highest is hidden | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:347-360` |
 | 207 | E-M19 | Medium | pending | Subtle Spell does not actually suppress concentration-break-in-silence | `/home/ab/projects/DnDnD/internal/combat/concentration.go:126-135` (`CheckConcen... |
-| 208 | E-M20 | Medium | pending | Cunning Action passes stale `cmd.Turn` to `resolveHide` after consuming bonus action | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:856-872` |
+| 208 | E-M20 | Medium | superseded | Cunning Action passes stale `cmd.Turn` to `resolveHide` after consuming bonus action | `/home/ab/projects/DnDnD/internal/combat/standard_actions.go:856-872` |
 | 209 | F-M01 | Medium | pending | Readied-spell concentration written with empty SpellID | /home/ab/projects/DnDnD/internal/combat/readied_action.go:126-141 |
-| 210 | F-M02 | Medium | pending | Counterspell ability check uses character.ProficiencyBonus on the wrong side | /home/ab/projects/DnDnD/internal/combat/counterspell.go:209-260 |
+| 210 | F-M02 | Medium | skipped | Counterspell ability check uses character.ProficiencyBonus on the wrong side | /home/ab/projects/DnDnD/internal/combat/counterspell.go:209-260 |
 | 211 | F-M03 | Medium | done | `/done` unused-resource warning's "Action" branch is logically dead | /home/ab/projects/DnDnD/internal/combat/unused_resources.go:13-33 |
 | 212 | F-M04 | Medium | pending | Magical-darkness zone affected-tiles ignore concentration-anchored zone movement | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:819-833 |
 | 213 | F-M05 | Medium | superseded | Light cantrip / Continual Flame zones get 20ft uniform — but Daylight is 60ft bright + 60ft dim | /home/ab/projects/DnDnD/cmd/dndnd/discord_adapters.go:918-927 |
@@ -229,7 +229,7 @@ Low: 142
 | 217 | F-M09 | Medium | pending | Spell-slot deduction for readied actions runs even when the spell needs no slot | /home/ab/projects/DnDnD/internal/combat/readied_action.go:68-75 |
 | 218 | F-M10 | Medium | pending | No reaction-used reset for legendary actions / lair actions in cross-turn sequencing | /home/ab/projects/DnDnD/internal/combat/legendary.go (entire file) |
 | 219 | F-M11 | Medium | pending | Auto-resolve cancels reaction declarations instead of marking specific Counterspell/OA as forfeited | /home/ab/projects/DnDnD/internal/combat/timer_resolution.go:314-321 |
-| 220 | F-M12 | Medium | pending | `findAdjacentEnemies` uses 0-based row from `int(PositionRow)` directly — off-by-one risk | /home/ab/projects/DnDnD/internal/combat/timer.go:212-230 |
+| 220 | F-M12 | Medium | superseded | `findAdjacentEnemies` uses 0-based row from `int(PositionRow)` directly — off-by-one risk | /home/ab/projects/DnDnD/internal/combat/timer.go:212-230 |
 | 221 | F-M13 | Medium | pending | Multiattack parser falls back to "use every attack once" — wrong for skirmishers | /home/ab/projects/DnDnD/internal/combat/turn_builder.go:309-395 |
 | 222 | F-M14 | Medium | pending | Reaction one-per-round resets between rounds but not at "creature's turn start" exactly | /home/ab/projects/DnDnD/internal/combat/reactions_panel.go:79-104 |
 | 223 | F-M15 | Medium | pending | No range / 60ft check for Counterspell when generating its prompt | /home/ab/projects/DnDnD/internal/combat/counterspell.go (entire file) |
@@ -256,7 +256,7 @@ Low: 142
 | 244 | H-M04 | Medium | superseded | DDB import doesn't validate ability scores were generated within 1-30 of submission's "stats" (no override sanity) | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:228 (`parseAbilityScores`) |
 | 245 | H-M05 | Medium | superseded | DDB import: features below `RequiredLevel` filtered, but subclass features filtered against parent class level (not subclass level) | /home/ab/projects/DnDnD/internal/ddbimport/parser.go:332-345 (`parseFeatures`) |
 | 246 | H-M06 | Medium | pending | Token redemption isn't atomic with character creation (race window) | /home/ab/projects/DnDnD/internal/portal/builder_service.go:237 |
-| 247 | H-M07 | Medium | pending | No CSRF protection on portal POST /portal/api/characters | /home/ab/projects/DnDnD/internal/portal/api_handler.go:193 (`SubmitCharacter`) |
+| 247 | H-M07 | Medium | skipped | No CSRF protection on portal POST /portal/api/characters | /home/ab/projects/DnDnD/internal/portal/api_handler.go:193 (`SubmitCharacter`) |
 | 248 | H-M08 | Medium | done | Multiclass spell-slot table check requires both classes to be casters; Eldritch Knight/Arcane Trickster ignored | /home/ab/projects/DnDnD/internal/character/spellslots.go:54 (`CalculateCasterLev... |
 | 249 | H-M09 | Medium | done | Char sheet template renders `{$level}` for spell slots from `map[string]SlotInfo` | /home/ab/projects/DnDnD/internal/portal/character_sheet_handler.go:374 |
 | 250 | H-M10 | Medium | pending | DM denial reason is hard-coded; spec wants DM-supplied message | /home/ab/projects/DnDnD/internal/discord/asi_handler.go:543 |
