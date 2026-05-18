@@ -535,7 +535,7 @@ func (s *Service) passivePerception(ctx context.Context, combatant refdata.Comba
 		return 10 + mod, nil
 	}
 
-	// Creature: use pre-calculated skill value if available, else fallback to WIS mod
+	// Creature: use pre-calculated skill value if available, else fallback to WIS mod + proficiency from CR
 	if combatant.CreatureRefID.Valid && combatant.CreatureRefID.String != "" {
 		creature, err := s.store.GetCreature(ctx, combatant.CreatureRefID.String)
 		if err != nil {
@@ -548,7 +548,10 @@ func (s *Service) passivePerception(ctx context.Context, combatant refdata.Comba
 		if err != nil {
 			return 0, fmt.Errorf("parsing creature ability scores: %w", err)
 		}
-		return 10 + AbilityModifier(scores.Wis), nil
+		// Most creatures with Perception proficiency have it in their skills map.
+		// When missing, assume proficiency (conservative — avoids Hide being too easy).
+		prof := proficiencyFromCR(creature.Cr)
+		return 10 + AbilityModifier(scores.Wis) + prof, nil
 	}
 
 	// Fallback: no character or creature data
@@ -583,6 +586,19 @@ func creatureSkillMod(skills []byte, skill string) (int, bool) {
 	}
 	v, ok := m[skill]
 	return v, ok
+}
+
+// proficiencyFromCR derives the proficiency bonus from a creature's CR string.
+// 5e rule: +2 for CR 0–4, +3 for CR 5–8, +4 for CR 9–12, etc.
+func proficiencyFromCR(cr string) int {
+	var numCR float64
+	switch cr {
+	case "0", "1/8", "1/4", "1/2":
+		numCR = 0
+	default:
+		fmt.Sscanf(cr, "%f", &numCR)
+	}
+	return 2 + int(numCR)/4
 }
 
 // =====================
