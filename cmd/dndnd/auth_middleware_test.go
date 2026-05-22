@@ -12,13 +12,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ab/dndnd/internal/auth"
 	"github.com/ab/dndnd/internal/testutil"
 )
 
-func TestPassthroughMiddleware_ForwardsRequestUnchanged(t *testing.T) {
+func TestPassthroughMiddleware_InjectsDevUserAndForwardsRequest(t *testing.T) {
+	t.Setenv("DEV_DISCORD_USER_ID", "")
+
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
+		userID, ok := auth.DiscordUserIDFromContext(r.Context())
+		require.True(t, ok)
+		assert.Equal(t, "local-dev", userID)
 		w.WriteHeader(http.StatusTeapot)
 	})
 
@@ -29,6 +35,23 @@ func TestPassthroughMiddleware_ForwardsRequestUnchanged(t *testing.T) {
 	wrapped.ServeHTTP(w, req)
 
 	require.True(t, called, "passthroughMiddleware must call the inner handler")
+	assert.Equal(t, http.StatusTeapot, w.Code)
+}
+
+func TestPassthroughMiddleware_UsesConfiguredDevUser(t *testing.T) {
+	t.Setenv("DEV_DISCORD_USER_ID", "12345")
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := auth.DiscordUserIDFromContext(r.Context())
+		require.True(t, ok)
+		assert.Equal(t, "12345", userID)
+		w.WriteHeader(http.StatusTeapot)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/whatever", nil)
+	w := httptest.NewRecorder()
+	passthroughMiddleware(next).ServeHTTP(w, req)
+
 	assert.Equal(t, http.StatusTeapot, w.Code)
 }
 

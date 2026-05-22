@@ -19,6 +19,11 @@ DISCORD_CLIENT_ID=...
 DISCORD_CLIENT_SECRET=...
 ```
 
+If `DISCORD_CLIENT_ID` or `DISCORD_CLIENT_SECRET` is blank, the app uses local
+passthrough auth and opens the dashboard as `DEV_DISCORD_USER_ID` instead of
+requiring login. Set `DEV_DISCORD_USER_ID` to your Discord user ID if you want
+local campaign ownership checks to match real Discord data.
+
 For local OAuth, add this redirect URL in the Discord developer portal:
 
 ```text

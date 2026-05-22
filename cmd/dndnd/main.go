@@ -313,9 +313,17 @@ func newDMQueueChannelResolver(session discord.Session) func(string) string {
 	}
 }
 
-// passthroughMiddleware is a no-op HTTP middleware used as a fallback when
+// passthroughMiddleware injects a deterministic local dev Discord user ID when
 // Discord OAuth2 env vars are not configured (local dev without OAuth).
-func passthroughMiddleware(next http.Handler) http.Handler { return next }
+func passthroughMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := os.Getenv("DEV_DISCORD_USER_ID")
+		if userID == "" {
+			userID = "local-dev"
+		}
+		next.ServeHTTP(w, r.WithContext(auth.ContextWithDiscordUserID(r.Context(), userID)))
+	})
+}
 
 // combatDashboardWiring is the constructed router-mount surface for the combat
 // dashboard route block (G-94a workspace + G-95/97a/97b DM dashboard). The
@@ -709,6 +717,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 	recorderRef := errorlog.NewRecorderRef(errorStore)
 
 	router, health := server.NewRouter(logger, recorderRef)
+	registerRootRoutes(router)
 
 	// Phase 104: Construct (but do NOT open) the Discord session up-front so
 	// the wiring below can inject it into narration.Service,
@@ -1632,4 +1641,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 	// Wait for ListenAndServe goroutine to finish
 	<-errCh
 	return nil
+}
+
+func registerRootRoutes(r chi.Router) {
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/dashboard/", http.StatusTemporaryRedirect)
+	})
 }

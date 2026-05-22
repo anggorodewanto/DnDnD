@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/ab/dndnd/internal/testutil"
+	"github.com/go-chi/chi/v5"
 )
 
 // getFreePort asks the OS for a free port and returns it as a "host:port" string.
@@ -116,6 +118,23 @@ func TestRun_HealthEndpointFunctional(t *testing.T) {
 	err := <-errCh
 	if err != nil {
 		t.Fatalf("run returned error: %v", err)
+	}
+}
+
+func TestRegisterRootRoutes_RedirectsToDashboard(t *testing.T) {
+	r := chi.NewRouter()
+	registerRootRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("expected 307, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/dashboard/" {
+		t.Fatalf("expected Location /dashboard/, got %q", got)
 	}
 }
 
