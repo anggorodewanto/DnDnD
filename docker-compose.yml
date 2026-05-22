@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dndnd}
+      POSTGRES_USER: ${POSTGRES_USER:-dndnd}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dndnd}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ADDR: ":8080"
+      DATABASE_URL: postgres://${POSTGRES_USER:-dndnd}:${POSTGRES_PASSWORD:-dndnd}@db:5432/${POSTGRES_DB:-dndnd}?sslmode=disable
+      ASSET_DATA_DIR: /data/assets
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DEBUG: ${DEBUG:-true}
+      SKIP_SRD_SEED: ${SKIP_SRD_SEED:-false}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
+      DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      OAUTH_REDIRECT_URL: ${OAUTH_REDIRECT_URL:-}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    volumes:
+      - dndnd_assets:/data/assets
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  dndnd_assets:

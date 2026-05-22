@@ -1,4 +1,4 @@
-.PHONY: build test cover cover-check cover-html run docker-build clean e2e playtest-replay sqlc-check
+.PHONY: build test cover cover-check cover-html run docker-build clean e2e playtest-replay sqlc-check local-env local-up local-down local-logs local-reset
 
 # Excludes sqlc-generated query files, the cmd/dndnd main wiring, the thin
 # discordgo *Adapter delegations, and the coverage_check tool itself —
@@ -35,6 +35,23 @@ run:
 
 docker-build:
 	docker build -t dndnd .
+
+local-env:
+	@test -f .env || cp .env.example .env
+	@echo "Local env ready: .env"
+
+local-up: local-env
+	docker compose up --build
+
+local-down:
+	docker compose down
+
+local-logs:
+	docker compose logs -f app
+
+local-reset: local-env
+	docker compose down -v
+	docker compose up --build
 
 clean:
 	rm -rf bin/ coverage.out coverage.html

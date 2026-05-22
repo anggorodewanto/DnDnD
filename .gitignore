@@ -1,4 +1,5 @@
 bin/
+.env
 *.out
 *.exe
 node_modules/
