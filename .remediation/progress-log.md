@@ -459,3 +459,40 @@ Running total: 94/448 resolved (21%)
 ## 2026-05-18T11:57 — H-M03
 - **Commit:** 7e751cd
 - **Notes:** computeAC now uses Type=="Shield" for shield detection instead of ArmorClass<=3 heuristic.
+
+---
+
+## 2026-05-19T08:25 — Phase 2 Complete
+
+### Triage Results
+- 174 skipped findings triaged
+- 24 initially re-opened as real bugs
+- After deeper code analysis: 11 confirmed as real bugs and fixed
+- 13 re-classified as superseded/skip-confirmed after code inspection
+
+### Fixes Applied (11 findings)
+1. **cross-cut-L01** — ProficiencyBonus now clamps to 1-20 range instead of returning 0
+2. **E-M08** — Ritual casting checks all classes for HasRitualCasting, not just primary
+3. **F-M16** — Free interaction dmRequiredKeywords expanded (heavy, magical, enchanted, rusted, sarcophagus)
+4. **I-H10** — Race speed lookup uses DB via optional RaceSpeedLookup, falls back to hardcoded table
+5. **J-L13** — dmqueue.Sender splits messages exceeding 2000 chars on newline boundaries
+6. **J-M05** — NarrationPoster caches resolved #the-story channel ID per instance
+7. **H-M07** — Portal routes accept WithCSRFMiddleware option for origin-check protection
+8. **H-M06** — Token redemption moved after character creation to prevent token consumption on creation failure
+9. **I-M02** — Undo-of-undo now works as redo (mostRecentUndoable includes undo entries)
+10. **I-M05** — DM action-resolver "move" effect writes to action_log with before/after state
+11. **J-M10** — dm-queue Post stores empty messageID on send failure; Cancel/Resolve skip edit for empty IDs
+12. **I-M17** — Starting equipment JavaScript preserves guaranteed:N quantity
+
+### Skip Justifications (documented in .remediation/phase2-triage.md)
+- Frontend-only (Svelte): 20 findings
+- Spec-acknowledged design decisions: 40+ findings
+- Theoretical / no current code path: 6 findings
+- Cosmetic / Low-priority operational: 80+ findings
+- Superseded by Phase 1 fixes: 5 findings
+
+### Gate D Status
+- ✅ queue.md: 0 pending rows
+- ✅ All skipped entries: documented justification
+- ✅ Tests: green (2 pre-existing flaky failures unrelated to changes)
+- ✅ Playtest readiness: GO

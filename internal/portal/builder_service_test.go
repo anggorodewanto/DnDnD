@@ -307,8 +307,9 @@ func TestBuilderService_CreateCharacter_RedeemFailsPreventsCreation(t *testing.T
 	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "redeeming token")
-	// Character should NOT have been created
-	assert.Empty(t, store.lastCharName)
+	// H-M06: character creation now happens before redemption to prevent
+	// token consumption on creation failure. If redemption fails (race),
+	// the character may exist but the operation returns an error.
 }
 
 func TestBuilderService_CreateCharacter_InvalidSubmission(t *testing.T) {

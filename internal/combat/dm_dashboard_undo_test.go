@@ -208,14 +208,16 @@ func TestUndoLastAction_SkipsPreviousUndoEntries(t *testing.T) {
 			ActorID:     actorID,
 			BeforeState: beforeState,
 		},
-		// most recent is itself a previous undo
+		// most recent is itself a previous undo — its before_state is the
+		// post-damage state (what was current when the undo was applied).
+		// Undoing this undo = redo = restore to post-damage state.
 		{
 			ID:          uuid.New(),
 			TurnID:      turnID,
 			EncounterID: encounterID,
 			ActionType:  "dm_override_undo",
 			ActorID:     actorID,
-			BeforeState: json.RawMessage(`{}`),
+			BeforeState: json.RawMessage(`{"hp_current":5,"temp_hp":0,"is_alive":true}`),
 		},
 	}
 
@@ -228,10 +230,11 @@ func TestUndoLastAction_SkipsPreviousUndoEntries(t *testing.T) {
 			return logs, nil
 		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
-			return refdata.Combatant{ID: id, DisplayName: "Goblin", HpCurrent: 5, IsAlive: true}, nil
+			return refdata.Combatant{ID: id, DisplayName: "Goblin", HpCurrent: 15, IsAlive: true}, nil
 		},
 		updateCombatantHPFn: func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error) {
 			hpCalled = true
+			assert.Equal(t, int32(5), arg.HpCurrent, "undo-of-undo should restore to post-damage HP")
 			return refdata.Combatant{ID: arg.ID, HpCurrent: arg.HpCurrent}, nil
 		},
 		createActionLogFn: func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error) {

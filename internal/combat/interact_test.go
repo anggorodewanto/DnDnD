@@ -208,6 +208,7 @@ func TestInteract_AutoResolvablePatterns(t *testing.T) {
 		{"grab the trapped handle", false},
 		{"close the sealed vault", false},
 		{"open the stuck door", false},
+		{"open the heavy chest", false},
 		{"search the chest for traps", false},
 		{"disarm the trap", false},
 		{"light a torch", false},

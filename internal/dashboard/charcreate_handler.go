@@ -166,7 +166,7 @@ func (h *CharCreateHandler) HandlePreview(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	stats := DeriveDMStats(sub)
+	stats := DeriveDMStats(sub, h.buildRaceSpeedMap(r.Context()))
 	if h.featureProvider != nil {
 		stats.Features = CollectFeatures(
 			sub.Classes,
@@ -351,6 +351,23 @@ func requireAuthHelper(r *http.Request) (string, bool) {
 		return "", false
 	}
 	return userID, true
+}
+
+// buildRaceSpeedMap builds a lowercase race name → speed map from the DB.
+// Returns nil if refData is unavailable (callers fall back to hardcoded table).
+func (h *CharCreateHandler) buildRaceSpeedMap(ctx context.Context) map[string]int {
+	if h.refData == nil {
+		return nil
+	}
+	races, err := h.refData.ListRaces(ctx)
+	if err != nil {
+		return nil
+	}
+	m := make(map[string]int, len(races))
+	for _, r := range races {
+		m[strings.ToLower(r.Name)] = r.SpeedFt
+	}
+	return m
 }
 
 // writeJSONResponse writes a JSON response with the given status code.
@@ -716,8 +733,13 @@ function loadStartingEquipment() {
             if (!packs || packs.length === 0) return;
             var pack = packs[0];
             (pack.guaranteed || []).forEach(function(item) {
-                var id = item.split(':')[0];
-                if (selectedEquipment.indexOf(id) < 0) selectedEquipment.push(id);
+                var parts = item.split(':');
+                var id = parts[0];
+                var qty = parts.length > 1 ? parseInt(parts[1], 10) : 1;
+                for (var i = 0; i < qty; i++) {
+                    if (qty === 1 && selectedEquipment.indexOf(id) >= 0) break;
+                    selectedEquipment.push(id);
+                }
             });
             (pack.choices || []).forEach(function(choice) {
                 if (choice.options && choice.options.length > 0) {

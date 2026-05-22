@@ -39,11 +39,19 @@ func WithDMAbilityMethodProvider(p portal.AbilityMethodProvider) DMCharCreateSer
 	}
 }
 
+// WithRaceSpeedLookup adds a function that returns race→speed from the DB.
+func WithRaceSpeedLookup(fn func(ctx context.Context) map[string]int) DMCharCreateServiceOption {
+	return func(svc *DMCharCreateService) {
+		svc.raceSpeedFn = fn
+	}
+}
+
 // DMCharCreateService handles DM character creation.
 type DMCharCreateService struct {
 	store           CharCreateStore
 	featureProvider FeatureProvider
 	abilityMethods  portal.AbilityMethodProvider
+	raceSpeedFn     func(ctx context.Context) map[string]int
 }
 
 // NewDMCharCreateService creates a new DMCharCreateService.
@@ -74,7 +82,7 @@ func (svc *DMCharCreateService) CreateCharacter(ctx context.Context, campaignID 
 		return portal.CreateCharacterResult{}, fmt.Errorf("validation failed: %s", strings.Join(errs, "; "))
 	}
 
-	stats := DeriveDMStats(sub)
+	stats := DeriveDMStats(sub, svc.lookupRaceSpeeds(ctx))
 
 	// Collect features from provider if available
 	var features []character.Feature
@@ -186,4 +194,12 @@ func (svc *DMCharCreateService) AllowedAbilityScoreMethods(ctx context.Context, 
 		return allowed, nil
 	}
 	return portal.DefaultAbilityScoreMethods(), nil
+}
+
+// lookupRaceSpeeds returns the race→speed map from the DB, or nil if unavailable.
+func (svc *DMCharCreateService) lookupRaceSpeeds(ctx context.Context) map[string]int {
+	if svc.raceSpeedFn == nil {
+		return nil
+	}
+	return svc.raceSpeedFn(ctx)
 }

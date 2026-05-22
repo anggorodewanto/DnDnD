@@ -170,7 +170,7 @@ func (n *DefaultNotifier) Post(ctx context.Context, e Event) (string, error) {
 	e.ResolvePath = n.pathBldr(itemID)
 	content := FormatEvent(e)
 
-	if _, err := n.store.Insert(ctx, itemID, e, channelID, itemID, content); err != nil {
+	if _, err := n.store.Insert(ctx, itemID, e, channelID, "", content); err != nil {
 		return "", err
 	}
 
@@ -198,6 +198,9 @@ func (n *DefaultNotifier) Cancel(ctx context.Context, itemID, reason string) err
 	if _, err := n.store.MarkCancelled(ctx, itemID, reason); err != nil {
 		return err
 	}
+	if item.MessageID == "" {
+		return nil // Send failed; no Discord message to edit
+	}
 	return n.sender.Edit(item.ChannelID, item.MessageID, FormatCancelled(item.PostedText))
 }
 
@@ -213,6 +216,9 @@ func (n *DefaultNotifier) Resolve(ctx context.Context, itemID, outcome string) e
 	}
 	if _, err := n.store.MarkResolved(ctx, itemID, outcome); err != nil {
 		return err
+	}
+	if item.MessageID == "" {
+		return nil // Send failed; no Discord message to edit
 	}
 	return n.sender.Edit(item.ChannelID, item.MessageID, FormatResolved(item.PostedText, outcome))
 }

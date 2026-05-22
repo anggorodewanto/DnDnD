@@ -81,6 +81,11 @@ func NewService(randFn dice.RandSource) *Service {
 	return &Service{roller: dice.NewRoller(randFn)}
 }
 
+// NewServiceWithRoller creates a new inventory Service using an existing Roller.
+func NewServiceWithRoller(r *dice.Roller) *Service {
+	return &Service{roller: r}
+}
+
 // UseInput holds parameters for using a consumable item.
 type UseInput struct {
 	Items     []character.InventoryItem

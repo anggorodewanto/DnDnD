@@ -478,10 +478,13 @@ func (s *Service) LongRest(input LongRestInput) LongRestResult {
 
 	// Phase 88b: dawn recharge for magic items with charges.
 	if len(input.Inventory) > 0 && len(input.RechargeInfo) > 0 {
-		// Reuse a fresh inventory service per call — DawnRecharge is
-		// stateless (only consults its random source). Wiring a shared
-		// inventory.Service into rest.Service is a separate refactor.
-		dawnRes, err := inventory.NewService(nil).DawnRecharge(inventory.DawnRechargeInput{
+		// Reuse the service's roller so deterministic test rollers
+		// propagate to dawn recharge (fixes flaky test).
+		invSvc := inventory.NewService(nil)
+		if s.roller != nil {
+			invSvc = inventory.NewServiceWithRoller(s.roller)
+		}
+		dawnRes, err := invSvc.DawnRecharge(inventory.DawnRechargeInput{
 			Items:        input.Inventory,
 			RechargeInfo: input.RechargeInfo,
 		})

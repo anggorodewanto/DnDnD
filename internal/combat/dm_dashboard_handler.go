@@ -418,8 +418,27 @@ func (h *DMDashboardHandler) applyMoveEffect(r *http.Request, targetID uuid.UUID
 		return err
 	}
 
-	_, err = h.svc.UpdateCombatantPosition(r.Context(), targetID, pos.Col, pos.Row, c.AltitudeFt)
-	return err
+	before, _ := snapshotCombatantState(c)
+	updated, err := h.svc.UpdateCombatantPosition(r.Context(), targetID, pos.Col, pos.Row, c.AltitudeFt)
+	if err != nil {
+		return err
+	}
+	after, _ := snapshotCombatantState(updated)
+
+	// Write action log for audit trail (I-M05).
+	turn, tErr := h.svc.store.GetActiveTurnByEncounterID(r.Context(), c.EncounterID)
+	if tErr == nil {
+		h.svc.store.CreateActionLog(r.Context(), refdata.CreateActionLogParams{
+			TurnID:      turn.ID,
+			EncounterID: c.EncounterID,
+			ActionType:  "dm_move_effect",
+			ActorID:     targetID,
+			Description: nullString(fmt.Sprintf("Moved %s to %s%d", c.DisplayName, pos.Col, pos.Row)),
+			BeforeState: before,
+			AfterState:  after,
+		})
+	}
+	return nil
 }
 
 // resolverStateSnapshot holds the fields tracked for before/after audit diffs.

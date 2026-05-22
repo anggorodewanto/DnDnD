@@ -100,16 +100,14 @@ func (h *DMDashboardHandler) UndoLastAction(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]string{"status": "undone", "action_type": target.ActionType})
 }
 
-// mostRecentUndoable returns a pointer to the latest non-undo log entry, or nil.
+// mostRecentUndoable returns a pointer to the latest log entry, or nil.
 // logs are assumed sorted ascending by created_at.
+// Undo entries are themselves undoable (undo-of-undo = redo).
 func mostRecentUndoable(logs []refdata.ActionLog) *refdata.ActionLog {
-	for i := len(logs) - 1; i >= 0; i-- {
-		if logs[i].ActionType == "dm_override_undo" {
-			continue
-		}
-		return &logs[i]
+	if len(logs) == 0 {
+		return nil
 	}
-	return nil
+	return &logs[len(logs)-1]
 }
 
 // undoBeforeState describes the recognized fields in action_log.before_state.

@@ -101,7 +101,8 @@ type DMDerivedStats struct {
 }
 
 // DeriveDMStats calculates derived stats from a DM character submission.
-func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
+// An optional raceSpeeds map (from DB) can be passed to override the hardcoded table.
+func DeriveDMStats(sub DMCharacterSubmission, raceSpeeds ...map[string]int) DMDerivedStats {
 	totalLevel := character.TotalLevel(sub.Classes)
 	profBonus := character.ProficiencyBonus(totalLevel)
 
@@ -154,10 +155,15 @@ func DeriveDMStats(sub DMCharacterSubmission) DMDerivedStats {
 		}
 	}
 
+	var dbSpeeds map[string]int
+	if len(raceSpeeds) > 0 {
+		dbSpeeds = raceSpeeds[0]
+	}
+
 	return DMDerivedStats{
 		HPMax:             hp,
 		AC:                ac,
-		SpeedFt:           raceSpeed(sub.Race),
+		SpeedFt:           raceSpeedWithLookup(sub.Race, dbSpeeds),
 		TotalLevel:        totalLevel,
 		ProficiencyBonus:  profBonus,
 		SaveProficiencies: saveProficiencies,
@@ -209,9 +215,21 @@ func CollectFeatures(
 }
 
 // raceSpeed returns the base walking speed in feet for a race name.
+// If a DB lookup map is provided, it takes precedence over the hardcoded table.
 // Defaults to 30 ft for unknown races.
 func raceSpeed(race string) int {
-	switch strings.ToLower(race) {
+	return raceSpeedWithLookup(race, nil)
+}
+
+// raceSpeedWithLookup returns the base walking speed using an optional DB-sourced map.
+func raceSpeedWithLookup(race string, dbSpeeds map[string]int) int {
+	lower := strings.ToLower(race)
+	if dbSpeeds != nil {
+		if speed, ok := dbSpeeds[lower]; ok {
+			return speed
+		}
+	}
+	switch lower {
 	case "dwarf", "hill dwarf", "mountain dwarf",
 		"halfling", "lightfoot halfling", "stout halfling",
 		"gnome", "forest gnome", "rock gnome":

@@ -41,7 +41,11 @@ type InteractResult struct {
 
 // dmRequiredKeywords are words that indicate DM adjudication is needed,
 // even if the description matches an auto-resolvable prefix.
-var dmRequiredKeywords = []string{"lock", "trap", "stuck", "barred", "sealed"}
+var dmRequiredKeywords = []string{
+	"lock", "trap", "stuck", "barred", "sealed",
+	"heavy", "magical", "enchanted", "rusted",
+	"sarcophagus",
+}
 
 // isAutoResolvable checks whether the interaction description matches
 // a pattern that can be resolved without DM intervention.

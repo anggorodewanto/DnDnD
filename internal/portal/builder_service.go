@@ -219,7 +219,7 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 		Spells:        sub.Spells,
 	}
 
-	// Validate token ownership and redeem before creating character.
+	// Validate token ownership before creating character.
 	tok, err := svc.store.ValidateToken(ctx, token)
 	if err != nil {
 		return CreateCharacterResult{}, fmt.Errorf("validating token: %w", err)
@@ -227,13 +227,16 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 	if tok != nil && tok.DiscordUserID != discordUserID {
 		return CreateCharacterResult{}, ErrTokenOwnership
 	}
-	if err := svc.store.RedeemToken(ctx, token); err != nil {
-		return CreateCharacterResult{}, fmt.Errorf("redeeming token: %w", err)
-	}
 
 	charID, err := svc.store.CreateCharacterRecord(ctx, charParams)
 	if err != nil {
 		return CreateCharacterResult{}, fmt.Errorf("creating character: %w", err)
+	}
+
+	// Redeem token AFTER character creation succeeds to avoid consuming
+	// the token when creation fails (H-M06).
+	if err := svc.store.RedeemToken(ctx, token); err != nil {
+		return CreateCharacterResult{}, fmt.Errorf("redeeming token: %w", err)
 	}
 
 	pcParams := CreatePlayerCharacterParams{

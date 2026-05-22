@@ -432,11 +432,14 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 
 	// 6b. Ritual validation
 	if cmd.IsRitual {
-		primaryClass := ""
-		if len(classes) > 0 {
-			primaryClass = classes[0].Class
+		ritualClass := ""
+		for _, c := range classes {
+			if HasRitualCasting(c.Class) {
+				ritualClass = c.Class
+				break
+			}
 		}
-		if err := ValidateRitual(spell.Ritual.Valid && spell.Ritual.Bool, cmd.EncounterStatus, primaryClass); err != nil {
+		if err := ValidateRitual(spell.Ritual.Valid && spell.Ritual.Bool, cmd.EncounterStatus, ritualClass); err != nil {
 			return CastResult{}, err
 		}
 	}

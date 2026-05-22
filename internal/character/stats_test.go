@@ -78,14 +78,16 @@ func TestAbilityModifier(t *testing.T) {
 }
 
 func TestProficiencyBonus_InvalidLevel(t *testing.T) {
-	if got := ProficiencyBonus(0); got != 0 {
-		t.Errorf("ProficiencyBonus(0) = %d, want 0", got)
+	// Clamped to level 1 → +2
+	if got := ProficiencyBonus(0); got != 2 {
+		t.Errorf("ProficiencyBonus(0) = %d, want 2", got)
 	}
-	if got := ProficiencyBonus(-1); got != 0 {
-		t.Errorf("ProficiencyBonus(-1) = %d, want 0", got)
+	if got := ProficiencyBonus(-1); got != 2 {
+		t.Errorf("ProficiencyBonus(-1) = %d, want 2", got)
 	}
-	if got := ProficiencyBonus(21); got != 0 {
-		t.Errorf("ProficiencyBonus(21) = %d, want 0", got)
+	// Clamped to level 20 → +6
+	if got := ProficiencyBonus(21); got != 6 {
+		t.Errorf("ProficiencyBonus(21) = %d, want 6", got)
 	}
 }
 

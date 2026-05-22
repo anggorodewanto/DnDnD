@@ -3,6 +3,7 @@ package discord
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/bwmarrin/discordgo"
 
@@ -18,7 +19,8 @@ const theStoryChannelName = "the-story"
 // are split using the existing message splitter. Attachment URLs are
 // appended so Discord auto-embeds them as images.
 type NarrationPoster struct {
-	session Session
+	session      Session
+	channelCache sync.Map
 }
 
 // NewNarrationPoster constructs a NarrationPoster using the given session.
@@ -36,7 +38,7 @@ func NewNarrationPoster(session Session) *NarrationPoster {
 // error is returned and the IDs collected so far are NOT returned, so that
 // the caller can treat the post as failed and skip recording it.
 func (p *NarrationPoster) PostToStory(guildID, body string, embeds []narration.DiscordEmbed, attachmentURLs []string) ([]string, error) {
-	channelID, err := resolveStoryChannel(p.session, guildID)
+	channelID, err := p.resolveStoryChannel(guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +69,26 @@ func (p *NarrationPoster) PostToStory(guildID, body string, embeds []narration.D
 }
 
 // resolveStoryChannel returns the channel ID for #the-story in the given guild.
-// Shared by NarrationPoster and CampaignAnnouncer.
+// Results are cached per instance to avoid repeated API calls.
+func (p *NarrationPoster) resolveStoryChannel(guildID string) (string, error) {
+	if cached, ok := p.channelCache.Load(guildID); ok {
+		return cached.(string), nil
+	}
+	id, err := resolveStoryChannelUncached(p.session, guildID)
+	if err != nil {
+		return "", err
+	}
+	p.channelCache.Store(guildID, id)
+	return id, nil
+}
+
+// resolveStoryChannel is the package-level helper used by CampaignAnnouncer
+// and other callers that don't have a NarrationPoster instance.
 func resolveStoryChannel(session Session, guildID string) (string, error) {
+	return resolveStoryChannelUncached(session, guildID)
+}
+
+func resolveStoryChannelUncached(session Session, guildID string) (string, error) {
 	channels, err := session.GuildChannels(guildID)
 	if err != nil {
 		return "", fmt.Errorf("fetching guild channels: %w", err)

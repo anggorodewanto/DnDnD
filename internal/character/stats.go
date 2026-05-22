@@ -137,10 +137,13 @@ func AbilityModifier(score int) int {
 }
 
 // ProficiencyBonus returns the proficiency bonus for a given total character level.
-// Returns 0 for invalid levels (outside 1-20).
+// Clamps to the valid 1-20 range: levels below 1 are treated as 1 (+2),
+// levels above 20 are treated as 20 (+6).
 func ProficiencyBonus(level int) int {
-	if level < 1 || level > 20 {
-		return 0
+	if level < 1 {
+		level = 1
+	} else if level > 20 {
+		level = 20
 	}
 	return (level-1)/4 + 2
 }

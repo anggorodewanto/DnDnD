@@ -12,9 +12,10 @@ import (
 type RouteOption func(*routeConfig)
 
 type routeConfig struct {
-	oauthSvc *auth.OAuthService
-	apiH     *APIHandler
-	sheetH   *CharacterSheetHandler
+	oauthSvc       *auth.OAuthService
+	apiH           *APIHandler
+	sheetH         *CharacterSheetHandler
+	csrfMiddleware func(http.Handler) http.Handler
 }
 
 // WithOAuth adds OAuth2 login/callback/logout routes to the portal.
@@ -35,6 +36,13 @@ func WithAPI(h *APIHandler) RouteOption {
 func WithCharacterSheet(h *CharacterSheetHandler) RouteOption {
 	return func(cfg *routeConfig) {
 		cfg.sheetH = h
+	}
+}
+
+// WithCSRFMiddleware adds origin-check CSRF protection to mutating API routes.
+func WithCSRFMiddleware(mw func(http.Handler) http.Handler) RouteOption {
+	return func(cfg *routeConfig) {
+		cfg.csrfMiddleware = mw
 	}
 }
 
@@ -68,6 +76,9 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(handler http.H
 			// API routes
 			if cfg.apiH != nil {
 				r.Route("/api", func(r chi.Router) {
+					if cfg.csrfMiddleware != nil {
+						r.Use(cfg.csrfMiddleware)
+					}
 					r.Get("/races", cfg.apiH.ListRaces)
 					r.Get("/classes", cfg.apiH.ListClasses)
 					r.Get("/spells", cfg.apiH.ListSpells)

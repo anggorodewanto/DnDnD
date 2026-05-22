@@ -120,17 +120,17 @@ func TestNotifier_Post_SendErrorReturned(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error")
 	}
-	// SR-002: with insert-then-send ordering, a send failure leaves the row
+	// J-M10: with insert-then-send ordering, a send failure leaves the row
 	// pending so the DM can still see + resolve it from the dashboard. The
-	// row's MessageID retains the itemID placeholder set at Insert time
-	// (the real Discord message id is only written on Send success).
+	// row's MessageID is empty (not a placeholder) so Cancel/Resolve skip
+	// the Discord edit rather than 404ing.
 	pending := n.ListPending()
 	if len(pending) != 1 {
 		t.Fatalf("expected 1 pending row after send failure, got %d", len(pending))
 	}
-	if pending[0].MessageID != pending[0].ID {
-		t.Errorf("expected placeholder message id == item id, got message_id=%q id=%q",
-			pending[0].MessageID, pending[0].ID)
+	if pending[0].MessageID != "" {
+		t.Errorf("expected empty message id on send failure, got message_id=%q",
+			pending[0].MessageID)
 	}
 }
 
