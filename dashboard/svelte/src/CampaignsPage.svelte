@@ -229,4 +229,10 @@
     color: #bbf7d0;
     background: #14351f;
   }
+
+  @media (max-width: 768px) {
+    .campaign-grid {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
