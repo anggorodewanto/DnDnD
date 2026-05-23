@@ -21,6 +21,11 @@
   import CharacterApprovalQueue from './CharacterApprovalQueue.svelte';
   import { isMobileViewport, isDesktopOnly } from './lib/layout.js';
   import { resolveDashboardViewFromHash } from './lib/dashboardRouter.js';
+  import {
+    dashboardNavItems,
+    dashboardViewTitle,
+    isDashboardNavItemActive,
+  } from './lib/dashboardNavigation.js';
 
   let innerWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1920);
   let currentView = $state('list');
@@ -140,10 +145,6 @@
     turnBuilderCombatantName = null;
   }
 
-  function onShowShops() {
-    currentView = 'shop-list';
-  }
-
   function onCreateShop() {
     editingShopId = null;
     currentView = 'shop-editor';
@@ -159,48 +160,21 @@
     editingShopId = null;
   }
 
-  function onShowCombat() {
-    currentView = 'combat';
-  }
+  function navigateTo(item) {
+    currentView = item.view;
 
-  function onShowNarrate() {
-    currentView = 'narrate';
-  }
+    if (item.view !== 'editor') editingMapId = null;
+    if (item.view !== 'encounter-editor') editingEncounterId = null;
+    if (item.view !== 'shop-editor') editingShopId = null;
+    if (item.view !== 'turn-builder') {
+      turnBuilderEncounterId = null;
+      turnBuilderCombatantId = null;
+      turnBuilderCombatantName = null;
+    }
 
-  function onShowHomebrew() {
-    currentView = 'homebrew';
-  }
-
-  function onShowParty() {
-    currentView = 'party';
-  }
-
-  function onShowStatBlockLibrary() {
-    currentView = 'stat-block-library';
-  }
-
-  function onShowMessagePlayer() {
-    currentView = 'message-player';
-  }
-
-  function onShowOpen5eSources() {
-    currentView = 'open5e-sources';
-  }
-
-  function onShowDMQueue() {
-    currentView = 'dm-queue';
-  }
-
-  function onShowLoot() {
-    currentView = 'loot';
-  }
-
-  function onShowLevelUp() {
-    currentView = 'levelup';
-  }
-
-  function onShowApprovals() {
-    currentView = 'approvals';
+    if (typeof window !== 'undefined' && item.hash && window.location.hash !== item.hash) {
+      window.location.hash = item.hash;
+    }
   }
 </script>
 
@@ -210,110 +184,86 @@
   {/if}
   <MobileShell {campaignId} />
 {:else}
-<main>
-  <header>
-    {#if currentView === 'combat'}
-      <h1>Combat Manager</h1>
-    {:else if currentView === 'list' || currentView === 'editor'}
-      <h1>Map Editor</h1>
-    {:else if currentView === 'shop-list' || currentView === 'shop-editor'}
-      <h1>Shops & Merchants</h1>
-    {:else if currentView === 'narrate'}
-      <h1>Narrate</h1>
-    {:else if currentView === 'homebrew'}
-      <h1>Homebrew Editor</h1>
-    {:else if currentView === 'party'}
-      <h1>Party Overview</h1>
-    {:else if currentView === 'stat-block-library'}
-      <h1>Stat Block Library</h1>
-    {:else if currentView === 'message-player'}
-      <h1>Message Player</h1>
-    {:else if currentView === 'open5e-sources'}
-      <h1>Open5e Sources</h1>
-    {:else if currentView === 'dm-queue'}
-      <h1>DM Queue</h1>
-    {:else if currentView === 'loot'}
-      <h1>Loot Pool</h1>
-    {:else if currentView === 'levelup'}
-      <h1>Level Up</h1>
-    {:else if currentView === 'approvals'}
-      <h1>Character Approvals</h1>
-    {:else}
-      <h1>Encounter Builder</h1>
-    {/if}
-
-    <nav class="view-nav">
-      <button class:active={currentView === 'combat'} onclick={onShowCombat}>Combat</button>
-      <button class:active={currentView === 'list' || currentView === 'editor'} onclick={onShowMaps}>Maps</button>
-      <button class:active={currentView === 'encounter-list' || currentView === 'encounter-editor'} onclick={onShowEncounters}>Encounters</button>
-      <button class:active={currentView === 'turn-builder'} onclick={() => currentView = 'turn-builder'}>Turn Builder</button>
-      <button class:active={currentView === 'shop-list' || currentView === 'shop-editor'} onclick={onShowShops}>Shops</button>
-      <button class:active={currentView === 'narrate'} onclick={onShowNarrate}>Narrate</button>
-      <button class:active={currentView === 'homebrew'} onclick={onShowHomebrew}>Homebrew</button>
-      <button class:active={currentView === 'party'} onclick={onShowParty}>Party</button>
-      <button class:active={currentView === 'stat-block-library'} onclick={onShowStatBlockLibrary}>Stat Block Library</button>
-      <button class:active={currentView === 'message-player'} onclick={onShowMessagePlayer}>Message Player</button>
-      <button class:active={currentView === 'open5e-sources'} onclick={onShowOpen5eSources}>Open5e Sources</button>
-      <button class:active={currentView === 'dm-queue'} onclick={onShowDMQueue}>DM Queue</button>
-      <button class:active={currentView === 'approvals'} onclick={onShowApprovals}>Approvals</button>
-      <button class:active={currentView === 'loot'} onclick={onShowLoot}>Loot</button>
-      <button class:active={currentView === 'levelup'} onclick={onShowLevelUp}>Level Up</button>
+<div class="desktop-shell">
+  <aside class="sidebar" aria-label="Dashboard navigation">
+    <a class="brand" href="#maps" onclick={(event) => { event.preventDefault(); navigateTo(dashboardNavItems[0]); }}>
+      <span class="brand-mark">D</span>
+      <span>DnDnD</span>
+    </a>
+    <nav class="sidebar-nav">
+      {#each dashboardNavItems as item}
+        <a
+          href={item.hash}
+          class:active={isDashboardNavItemActive(item, currentView)}
+          onclick={(event) => { event.preventDefault(); navigateTo(item); }}
+        >
+          {item.label}
+        </a>
+      {/each}
     </nav>
+  </aside>
 
-    {#if currentView === 'editor'}
-      <button class="back-btn" onclick={onBack}>Back to Map List</button>
-    {/if}
-    {#if currentView === 'encounter-editor'}
-      <button class="back-btn" onclick={onBackFromEncounter}>Back to Encounter List</button>
-    {/if}
-    {#if currentView === 'shop-editor'}
-      <button class="back-btn" onclick={onBackFromShop}>Back to Shop List</button>
-    {/if}
-  </header>
+  <main>
+    <header>
+      <h1>{dashboardViewTitle(currentView)}</h1>
 
-  {#if currentView === 'combat'}
-    <CombatManager {campaignId} />
-  {:else if currentView === 'list'}
-    <MapList {campaignId} oncreate={onCreateNew} onedit={onEditMap} />
-  {:else if currentView === 'editor'}
-    <MapEditor {campaignId} mapId={editingMapId} onback={onBack} />
-  {:else if currentView === 'encounter-list'}
-    <EncounterList {campaignId} oncreate={onCreateEncounter} onedit={onEditEncounter} />
-  {:else if currentView === 'encounter-editor'}
-    <EncounterBuilder {campaignId} encounterId={editingEncounterId} onback={onBackFromEncounter} />
-  {:else if currentView === 'turn-builder'}
-    <TurnBuilder
-      encounterId={turnBuilderEncounterId}
-      combatantId={turnBuilderCombatantId}
-      combatantName={turnBuilderCombatantName}
-      onclose={onCloseTurnBuilder}
-    />
-  {:else if currentView === 'shop-list'}
-    <ShopList {campaignId} oncreate={onCreateShop} onedit={onEditShop} />
-  {:else if currentView === 'shop-editor'}
-    <ShopBuilder {campaignId} shopId={editingShopId} onback={onBackFromShop} />
-  {:else if currentView === 'narrate'}
-    <NarratePanel {campaignId} />
-  {:else if currentView === 'homebrew'}
-    <HomebrewEditor {campaignId} />
-  {:else if currentView === 'party'}
-    <CharacterOverview {campaignId} />
-  {:else if currentView === 'stat-block-library'}
-    <StatBlockLibrary {campaignId} />
-  {:else if currentView === 'message-player'}
-    <MessagePlayerPanel {campaignId} />
-  {:else if currentView === 'open5e-sources'}
-    <Open5eSourcesPanel {campaignId} />
-  {:else if currentView === 'dm-queue'}
-    <DMQueuePanel />
-  {:else if currentView === 'loot'}
-    <LootPoolPanel {campaignId} />
-  {:else if currentView === 'levelup'}
-    <LevelUpPanel />
-  {:else if currentView === 'approvals'}
-    <CharacterApprovalQueue {campaignId} />
-  {/if}
-</main>
+      <div class="page-actions">
+        {#if currentView === 'editor'}
+          <button class="back-btn" onclick={onBack}>Back to Map List</button>
+        {/if}
+        {#if currentView === 'encounter-editor'}
+          <button class="back-btn" onclick={onBackFromEncounter}>Back to Encounter List</button>
+        {/if}
+        {#if currentView === 'shop-editor'}
+          <button class="back-btn" onclick={onBackFromShop}>Back to Shop List</button>
+        {/if}
+      </div>
+    </header>
+
+    {#if currentView === 'combat'}
+      <CombatManager {campaignId} />
+    {:else if currentView === 'list'}
+      <MapList {campaignId} oncreate={onCreateNew} onedit={onEditMap} />
+    {:else if currentView === 'editor'}
+      <MapEditor {campaignId} mapId={editingMapId} onback={onBack} />
+    {:else if currentView === 'encounter-list'}
+      <EncounterList {campaignId} oncreate={onCreateEncounter} onedit={onEditEncounter} />
+    {:else if currentView === 'encounter-editor'}
+      <EncounterBuilder {campaignId} encounterId={editingEncounterId} onback={onBackFromEncounter} />
+    {:else if currentView === 'turn-builder'}
+      <TurnBuilder
+        encounterId={turnBuilderEncounterId}
+        combatantId={turnBuilderCombatantId}
+        combatantName={turnBuilderCombatantName}
+        onclose={onCloseTurnBuilder}
+      />
+    {:else if currentView === 'shop-list'}
+      <ShopList {campaignId} oncreate={onCreateShop} onedit={onEditShop} />
+    {:else if currentView === 'shop-editor'}
+      <ShopBuilder {campaignId} shopId={editingShopId} onback={onBackFromShop} />
+    {:else if currentView === 'narrate'}
+      <NarratePanel {campaignId} />
+    {:else if currentView === 'homebrew'}
+      <HomebrewEditor {campaignId} />
+    {:else if currentView === 'party'}
+      <CharacterOverview {campaignId} />
+    {:else if currentView === 'stat-block-library'}
+      <StatBlockLibrary {campaignId} />
+    {:else if currentView === 'message-player'}
+      <MessagePlayerPanel {campaignId} />
+    {:else if currentView === 'open5e-sources'}
+      <Open5eSourcesPanel {campaignId} />
+    {:else if currentView === 'dm-queue'}
+      <DMQueuePanel />
+    {:else if currentView === 'loot'}
+      <LootPoolPanel {campaignId} />
+    {:else if currentView === 'levelup'}
+      <LevelUpPanel />
+    {:else if currentView === 'approvals'}
+      <CharacterApprovalQueue {campaignId} />
+    {/if}
+  </main>
+</div>
 {/if}
 
 <style>
@@ -324,7 +274,78 @@
     color: #e0e0e0;
   }
 
+  .desktop-shell {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    height: 100vh;
+    padding: 1rem;
+    background: #0f1a2e;
+    border-right: 1px solid #0f3460;
+    box-sizing: border-box;
+    overflow-y: auto;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 2.5rem;
+    color: #f7f7fb;
+    font-size: 1rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .brand-mark {
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 6px;
+    background: #e94560;
+    color: #ffffff;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .sidebar-nav a {
+    display: flex;
+    align-items: center;
+    min-height: 2.25rem;
+    padding: 0 0.75rem;
+    color: #cbd5e1;
+    border-radius: 6px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .sidebar-nav a:hover {
+    background: #16213e;
+    color: #ffffff;
+  }
+
+  .sidebar-nav a.active {
+    background: #e94560;
+    color: #ffffff;
+    font-weight: 700;
+  }
+
   main {
+    min-width: 0;
     padding: 1rem;
     max-width: 100%;
   }
@@ -332,37 +353,22 @@
   header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 1rem;
     margin-bottom: 1rem;
+    min-height: 2.5rem;
   }
 
   header h1 {
     color: #e94560;
     margin: 0;
+    font-size: 1.75rem;
   }
 
-  .view-nav {
+  .page-actions {
     display: flex;
-    gap: 0.25rem;
-  }
-
-  .view-nav button {
-    padding: 0.5rem 1rem;
-    background: #16213e;
-    color: #e0e0e0;
-    border: 1px solid #0f3460;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  .view-nav button:hover {
-    background: #0f3460;
-  }
-
-  .view-nav button.active {
-    background: #e94560;
-    border-color: #e94560;
-    color: white;
+    justify-content: flex-end;
+    min-width: 12rem;
   }
 
   .back-btn {
