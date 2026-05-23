@@ -10,7 +10,6 @@ export const dashboardNavItems = Object.freeze([
     hash: '#encounters',
     group: ['encounter-list', 'encounter-editor'],
   },
-  { id: 'turn-builder', label: 'Turn Builder', view: 'turn-builder', hash: '#turn-builder', group: ['turn-builder'] },
   {
     id: 'shops',
     label: 'Shops',

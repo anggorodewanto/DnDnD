@@ -4,7 +4,7 @@
   let { encounterId, combatantId, combatantName, onclose } = $props();
 
   let plan = $state(null);
-  let loading = $state(true);
+  let loading = $state(false);
   let error = $state(null);
   let currentStep = $state(0);
   let executing = $state(false);
@@ -106,7 +106,9 @@
     <button class="close-btn" onclick={onclose}>Close</button>
   </div>
 
-  {#if loading}
+  {#if !encounterId || !combatantId}
+    <div class="tb-loading">Open a combatant from the Encounter list to plan its turn.</div>
+  {:else if loading}
     <div class="tb-loading">Loading turn plan...</div>
   {:else if error}
     <div class="tb-error">{error}</div>
