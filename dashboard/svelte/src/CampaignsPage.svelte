@@ -267,6 +267,7 @@
     position: absolute;
     top: calc(100% + 0.35rem);
     left: 0;
+    width: max-content;
     max-width: 18rem;
     padding: 0.5rem 0.75rem;
     background: #0f1a2e;
