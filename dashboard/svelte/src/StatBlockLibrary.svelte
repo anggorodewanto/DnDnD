@@ -1,18 +1,8 @@
 <script>
-  // Phase 98 (G-98): Stat Block Library panel.
-  //
-  // Browses the SRD + per-campaign homebrew creatures exposed by
-  // `internal/statblocklibrary/handler.go` (mounted at `/api/statblocks`).
-  // Provides client-side controls for search, type, size, CR range, and
-  // source (SRD/homebrew/any), all of which map onto the backend's query
-  // string contract.
   import { listStatBlocks } from './lib/statblockLibrary.js';
 
   let { campaignId } = $props();
 
-  // Filter inputs. Bound to form controls. Source defaults to "any" so
-  // the panel mirrors the spec's "browse everything visible to me" intent
-  // until the DM narrows it down.
   let search = $state('');
   let typeFilter = $state('');
   let sizeFilter = $state('');
@@ -25,9 +15,6 @@
   let error = $state(null);
   let selected = $state(null);
 
-  // Common creature type / size enumerations sourced from the SRD vocabulary.
-  // Hard-coded rather than fetched because the backend filter takes free
-  // strings and the SRD set is stable.
   const CREATURE_TYPES = [
     'aberration', 'beast', 'celestial', 'construct', 'dragon', 'elemental',
     'fey', 'fiend', 'giant', 'humanoid', 'monstrosity', 'ooze', 'plant', 'undead',
@@ -80,7 +67,6 @@
   }
 
   $effect(() => {
-    // Initial load whenever the campaign id resolves.
     if (campaignId !== undefined) {
       load();
     }
@@ -140,41 +126,57 @@
     <button type="button" onclick={handleReset}>Reset</button>
   </form>
 
-  {#if loading}
-    <p>Loading stat blocks...</p>
-  {:else if error}
-    <p class="error">{error}</p>
-  {:else if entries.length === 0}
-    <p>No stat blocks match these filters.</p>
-  {:else}
-    <ul class="entry-list" data-testid="statblock-results">
-      {#each entries as entry (entry.id)}
-        <li>
-          <button class="entry-row" onclick={() => selectEntry(entry)}>
-            <strong>{entry.name}</strong>
-            <span class="meta">
-              {entry.size || ''} {entry.type || ''}
-              {#if entry.cr !== undefined && entry.cr !== ''} · CR {entry.cr}{/if}
-              {#if entry.homebrew} · Homebrew{/if}
-            </span>
-          </button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
+  <div class="body">
+    <div class="list-col">
+      {#if loading}
+        <p>Loading stat blocks...</p>
+      {:else if error}
+        <p class="error">{error}</p>
+      {:else if entries.length === 0}
+        <p>No stat blocks match these filters.</p>
+      {:else}
+        <ul class="entry-list" data-testid="statblock-results">
+          {#each entries as entry (entry.id)}
+            <li>
+              <button class="entry-row" onclick={() => selectEntry(entry)}>
+                <strong>{entry.name}</strong>
+                <span class="meta">
+                  {entry.size || ''} {entry.type || ''}
+                  {#if entry.cr !== undefined && entry.cr !== ''} · CR {entry.cr}{/if}
+                  {#if entry.homebrew} · Homebrew{/if}
+                </span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+
+    <div class="detail-col">
+      {#if selected}
+        <div class="detail open" data-testid="statblock-detail">
+          <header>
+            <h3>{selected.name}</h3>
+            <button class="close" onclick={closeDetail}>x</button>
+          </header>
+          <p class="meta">
+            {selected.size || ''} {selected.type || ''}
+            {#if selected.cr !== undefined && selected.cr !== ''} · CR {selected.cr}{/if}
+          </p>
+          <pre>{JSON.stringify(selected, null, 2)}</pre>
+        </div>
+      {:else}
+        <p class="empty detail-placeholder">Select a stat block to view its details.</p>
+      {/if}
+    </div>
+  </div>
 
   {#if selected}
-    <div class="detail" data-testid="statblock-detail">
-      <header>
-        <h3>{selected.name}</h3>
-        <button class="close" onclick={closeDetail}>x</button>
-      </header>
-      <p class="meta">
-        {selected.size || ''} {selected.type || ''}
-        {#if selected.cr !== undefined && selected.cr !== ''} · CR {selected.cr}{/if}
-      </p>
-      <pre>{JSON.stringify(selected, null, 2)}</pre>
-    </div>
+    <button
+      class="detail-backdrop"
+      aria-label="Close detail"
+      onclick={closeDetail}
+    ></button>
   {/if}
 </div>
 
@@ -210,9 +212,20 @@
   .filters button[type='button'] {
     background: #0f3460;
   }
+  .body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem);
+    gap: 1rem;
+    align-items: start;
+  }
+  .detail-col {
+    position: sticky;
+    top: 1rem;
+  }
   .entry-list {
     list-style: none;
     padding: 0;
+    margin: 0;
   }
   .entry-list li {
     margin-bottom: 0.25rem;
@@ -237,8 +250,10 @@
     color: #b0b0c0;
     font-size: 0.85rem;
   }
+  .empty {
+    color: #7a7a8f;
+  }
   .detail {
-    margin-top: 1rem;
     background: #16213e;
     border-radius: 6px;
     border: 1px solid #0f3460;
@@ -271,5 +286,40 @@
   }
   .error {
     color: #ff6b6b;
+  }
+  .detail-backdrop {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .body {
+      grid-template-columns: 1fr;
+    }
+    .detail-placeholder {
+      display: none;
+    }
+    .detail {
+      position: fixed;
+      top: 0;
+      right: 0;
+      z-index: 30;
+      width: min(20rem, 90vw);
+      height: 100vh;
+      transform: translateX(100%);
+      transition: transform 0.2s ease;
+      overflow-y: auto;
+    }
+    .detail.open {
+      transform: translateX(0);
+    }
+    .detail-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      background: rgba(0, 0, 0, 0.5);
+      border: none;
+      padding: 0;
+    }
   }
 </style>
