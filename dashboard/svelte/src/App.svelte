@@ -20,6 +20,10 @@
   import LevelUpPanel from './LevelUpPanel.svelte';
   import CharacterApprovalQueue from './CharacterApprovalQueue.svelte';
   import CampaignsPage from './CampaignsPage.svelte';
+  import HomePanel from './HomePanel.svelte';
+  import ErrorsPanel from './ErrorsPanel.svelte';
+  import ExplorationPanel from './ExplorationPanel.svelte';
+  import CharCreatePanel from './CharCreatePanel.svelte';
   import { isMobileViewport, isDesktopOnly } from './lib/layout.js';
   import { resolveDashboardViewFromHash } from './lib/dashboardRouter.js';
   import { getCurrentUser } from './lib/api.js';
@@ -30,7 +34,7 @@
   } from './lib/dashboardNavigation.js';
 
   let innerWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1920);
-  let currentView = $state('list');
+  let currentView = $state('home');
   let editingMapId = $state(null);
   let editingEncounterId = $state(null);
   let editingShopId = $state(null);
@@ -222,7 +226,9 @@
       </div>
     </header>
 
-    {#if currentView === 'combat'}
+    {#if currentView === 'home'}
+      <HomePanel {campaignId} />
+    {:else if currentView === 'combat'}
       <CombatManager {campaignId} />
     {:else if currentView === 'campaigns'}
       <CampaignsPage activeCampaignId={campaignId} oncreated={refreshCurrentCampaign} />
@@ -265,6 +271,12 @@
       <LevelUpPanel />
     {:else if currentView === 'approvals'}
       <CharacterApprovalQueue {campaignId} />
+    {:else if currentView === 'errors'}
+      <ErrorsPanel {campaignId} />
+    {:else if currentView === 'exploration'}
+      <ExplorationPanel {campaignId} />
+    {:else if currentView === 'characters-new'}
+      <CharCreatePanel {campaignId} />
     {/if}
   </main>
 </div>

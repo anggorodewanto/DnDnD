@@ -124,8 +124,8 @@ The bot creates the campaign channel structure (`#the-story`, `#combat-log`,
 URL above already grants it.
 
 Then, as the DM, create the character record. Open
-http://localhost:8080/dashboard/characters/new in a browser and fill in
-name (e.g. `Aria`), class, race, and background. Save.
+http://localhost:8080/dashboard/app/#characters-new in a browser and fill
+in name (e.g. `Aria`), class, race, and background. Save.
 
 Now, as a player on the server, claim the character:
 

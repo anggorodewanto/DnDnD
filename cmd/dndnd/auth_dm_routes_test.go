@@ -229,10 +229,10 @@ func TestMountDMOnlyAPIs_NilFieldsAreSkipped(t *testing.T) {
 	})
 }
 
-// TestLevelUpRoutes_NonDMReceives403 proves that /api/levelup/* and
-// /dashboard/levelup are gated by dmAuthMw (SR-063). The levelup handler
-// is mounted via router.Group with dmAuthMw in main.go, separate from
-// mountDMOnlyAPIs because it depends on services constructed later.
+// TestLevelUpRoutes_NonDMReceives403 proves that /api/levelup/* is gated by
+// dmAuthMw (SR-063). The levelup handler is mounted via router.Group with
+// dmAuthMw in main.go, separate from mountDMOnlyAPIs because it depends on
+// services constructed later.
 func TestLevelUpRoutes_NonDMReceives403(t *testing.T) {
 	denyAll := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -253,7 +253,6 @@ func TestLevelUpRoutes_NonDMReceives403(t *testing.T) {
 		{http.MethodPost, "/api/levelup/asi/deny", `{}`},
 		{http.MethodPost, "/api/levelup/feat/apply", `{}`},
 		{http.MethodPost, "/api/levelup/feat/check", `{}`},
-		{http.MethodGet, "/dashboard/levelup", ""},
 	}
 
 	for _, rt := range routes {
@@ -288,7 +287,6 @@ func TestLevelUpRoutes_DMReachesHandler(t *testing.T) {
 		{http.MethodPost, "/api/levelup/asi/deny", `{}`},
 		{http.MethodPost, "/api/levelup/feat/apply", `{}`},
 		{http.MethodPost, "/api/levelup/feat/check", `{}`},
-		{http.MethodGet, "/dashboard/levelup", ""},
 	}
 
 	for _, rt := range routes {

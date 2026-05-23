@@ -1,15 +1,6 @@
 <script>
-  // F-16 — SPA migration of the Phase 89 server-rendered level-up widget
-  // (internal/levelup/handler.go). Mirrors that page's functionality:
-  //   * Character ID + Class + New Level inputs
-  //   * POST /api/levelup -> result card (level / HP / prof bonus / attacks)
-  //   * ASI prompt + subclass alert when the response flags them.
-  //
-  // The legacy /dashboard/levelup HTML page is preserved as a fallback for
-  // now; this panel is the canonical UI going forward.
-  //
-  // NOTE: DDB-imported characters should re-import via Phase 90 rather than
-  // leveling here (same caveat as the legacy widget).
+  // Level-up panel: applies a class level and surfaces ASI / subclass prompts.
+  // DDB-imported characters should re-import via Phase 90 instead.
   import { applyLevelUp } from './lib/api.js';
 
   let characterId = $state('');

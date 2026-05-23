@@ -30,34 +30,6 @@ func (m *mockDMCharCreateService) CreateCharacter(ctx context.Context, campaignI
 	return m.result, m.err
 }
 
-func TestCharCreateHandler_ServeCreatePage_RequiresAuth(t *testing.T) {
-	h := NewCharCreateHandler(nil, nil, nil)
-	req := httptest.NewRequest(http.MethodGet, "/dashboard/characters/new", nil)
-	rec := httptest.NewRecorder()
-
-	h.ServeCreatePage(rec, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-}
-
-func TestCharCreateHandler_ServeCreatePage_ReturnsHTML(t *testing.T) {
-	h := NewCharCreateHandler(nil, nil, nil)
-	req := httptest.NewRequest(http.MethodGet, "/dashboard/characters/new", nil)
-	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
-	rec := httptest.NewRecorder()
-
-	h.ServeCreatePage(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Header().Get("Content-Type"), "text/html")
-	assert.Contains(t, rec.Body.String(), "Create Character")
-	// Verify new wizard steps exist
-	assert.Contains(t, rec.Body.String(), "4. Equipment")
-	assert.Contains(t, rec.Body.String(), "5. Spells")
-	assert.Contains(t, rec.Body.String(), "6. Features")
-	assert.Contains(t, rec.Body.String(), "7. Review")
-}
-
 func TestCharCreateHandler_HandleCreate_RequiresAuth(t *testing.T) {
 	h := NewCharCreateHandler(nil, nil, nil)
 	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters", nil)
@@ -364,25 +336,6 @@ func (m *mockRefDataForCreate) ListEquipment(ctx context.Context, campaignID str
 
 func (m *mockRefDataForCreate) ListSpellsByClass(ctx context.Context, class string, campaignID string) ([]portal.SpellInfo, error) {
 	return m.spells, m.spellsErr
-}
-
-func TestCharCreateHandler_RegisterRoutes_CreatePageEndpoint(t *testing.T) {
-	hub := NewHub()
-	go hub.Run()
-	t.Cleanup(hub.Stop)
-
-	h := NewHandler(nil, hub)
-	ch := NewCharCreateHandler(nil, nil, nil)
-	r := chi.NewRouter()
-	RegisterRoutes(r, h, mockAuthMiddleware)
-	ch.RegisterCharCreateRoutes(r.With(mockAuthMiddleware))
-
-	req := httptest.NewRequest(http.MethodGet, "/dashboard/characters/new", nil)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "Create Character")
 }
 
 func TestCharCreateHandler_RegisterRoutes_PreviewEndpoint(t *testing.T) {

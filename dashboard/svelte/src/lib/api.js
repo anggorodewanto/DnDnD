@@ -1020,12 +1020,8 @@ export async function listActionLog(encounterId, filters = {}) {
   return res.json();
 }
 
-// --- Level-up API (F-16 / Phase 89) ---
-//
-// Mirrors the JSON request/response in internal/levelup/handler.go
-// (LevelUpRequest / LevelUpResponse). The Svelte LevelUpPanel uses this
-// helper; the legacy server-rendered /dashboard/levelup page also POSTs
-// to the same endpoint via inline JS.
+// --- Level-up API ---
+// Mirrors LevelUpRequest / LevelUpResponse in internal/levelup/handler.go.
 
 /**
  * Apply a level-up for a character.

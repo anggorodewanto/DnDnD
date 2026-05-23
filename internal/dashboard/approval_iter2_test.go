@@ -3,7 +3,6 @@ package dashboard
 import (
 	"context"
 	"errors"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -262,34 +261,6 @@ func (m *mockRetireApprovalStore) RejectCharacter(_ context.Context, _ uuid.UUID
 func (m *mockRetireApprovalStore) RetireCharacter(_ context.Context, id uuid.UUID) error {
 	m.retiredID = id
 	return m.retireErr
-}
-
-// ===== Must-Fix 4: ServeApprovalPage template error branch =====
-
-func TestServeApprovalPage_TemplateError(t *testing.T) {
-	hub := NewHub()
-	go hub.Run()
-	defer hub.Stop()
-	campaignID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-
-	ah := NewApprovalHandler(nil, &mockApprovalStore{}, &mockNotifier{}, hub, campaignID, nil)
-	// Inject a broken template that will always fail
-	ah.approvalTmpl = template.Must(template.New("broken").Parse("{{ .NonExistent.Method }}"))
-
-	r := chi.NewRouter()
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r = r.WithContext(contextWithUser(r.Context(), "dm-user"))
-			next.ServeHTTP(w, r)
-		})
-	})
-	ah.RegisterApprovalRoutes(r)
-
-	req := httptest.NewRequest(http.MethodGet, "/dashboard/approvals", nil)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
 // ===== Must-Fix 5: Notification errors are logged =====

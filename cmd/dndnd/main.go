@@ -1125,6 +1125,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// itself carries the empty campaign_id that the UI uses to detect
 		// the "not a DM" state.
 		dashboard.RegisterMeRoute(router, dashboard.NewMeHandler(logger, dashboardCampaignLookup{queries: queries}), authMw)
+		dashboard.RegisterHomeRoute(router, dashboard.NewHomeHandler(logger, dashHandler), authMw)
 		dashboard.RegisterCampaignsRoutes(router, dashboard.NewCampaignsHandler(logger, queries), authMw)
 
 		// Phase 110: exploration dashboard (Q4a). Mount behind dmAuthMw

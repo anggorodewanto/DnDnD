@@ -1,12 +1,12 @@
 package exploration_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -17,7 +17,7 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// dashboardStore bundles the store plus a map lister for the dashboard page.
+// dashboardStore bundles the store plus a map lister for the dashboard endpoints.
 type dashboardStore struct {
 	*fakeStore
 	mapsByCampaign map[uuid.UUID][]refdata.Map
@@ -34,51 +34,95 @@ func newDashboardStore() *dashboardStore {
 	}
 }
 
-func TestDashboardHandler_RendersMapSelector(t *testing.T) {
+func newDashboardServer(t *testing.T, store *dashboardStore) *httptest.Server {
+	t.Helper()
+	svc := exploration.NewService(store.fakeStore)
+	h := exploration.NewDashboardHandler(svc, store)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func postJSON(t *testing.T, url string, body any) *http.Response {
+	t.Helper()
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	resp, err := http.Post(url, "application/json", bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return resp
+}
+
+func TestDashboardHandler_GetData_ReturnsMapsAsJSON(t *testing.T) {
 	store := newDashboardStore()
 	campaignID := uuid.New()
 	mapID := uuid.New()
 	store.maps[mapID] = refdata.Map{ID: mapID, Name: "Forest", TiledJson: buildMapWithPlayerZone(t)}
 	store.mapsByCampaign[campaignID] = []refdata.Map{{ID: mapID, Name: "Forest"}}
 
-	svc := exploration.NewService(store.fakeStore)
-	h := exploration.NewDashboardHandler(svc, store)
+	srv := newDashboardServer(t, store)
 
-	r := chi.NewRouter()
-	h.RegisterRoutes(r)
-
-	srv := httptest.NewServer(r)
-	defer srv.Close()
-
-	resp, err := http.Get(srv.URL + "/dashboard/exploration?campaign_id=" + campaignID.String())
+	resp, err := http.Get(srv.URL + "/api/exploration?campaign_id=" + campaignID.String())
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", resp.StatusCode, body)
 	}
-	if !strings.Contains(string(body), "Forest") {
-		t.Errorf("expected map name in output, got: %s", body)
+	ctype := resp.Header.Get("Content-Type")
+	if !strings.Contains(ctype, "application/json") {
+		t.Errorf("Content-Type = %q, want application/json", ctype)
 	}
-	if !strings.Contains(string(body), "Start Exploration") {
-		t.Errorf("expected Start Exploration button, got: %s", body)
+	var out struct {
+		CampaignID string `json:"campaign_id"`
+		Maps       []struct {
+			ID   uuid.UUID `json:"id"`
+			Name string    `json:"name"`
+		} `json:"maps"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("bad JSON: %v body=%s", err, body)
+	}
+	if out.CampaignID != campaignID.String() {
+		t.Errorf("campaign_id = %q, want %q", out.CampaignID, campaignID.String())
+	}
+	if len(out.Maps) != 1 || out.Maps[0].Name != "Forest" {
+		t.Errorf("maps = %+v, want one Forest map", out.Maps)
 	}
 }
 
-func TestDashboardHandler_MissingCampaignID(t *testing.T) {
+func TestDashboardHandler_GetData_EmptyMapList(t *testing.T) {
 	store := newDashboardStore()
-	svc := exploration.NewService(store.fakeStore)
-	h := exploration.NewDashboardHandler(svc, store)
+	campaignID := uuid.New()
+	srv := newDashboardServer(t, store)
 
-	r := chi.NewRouter()
-	h.RegisterRoutes(r)
+	resp, err := http.Get(srv.URL + "/api/exploration?campaign_id=" + campaignID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, body)
+	}
+	// Should be a JSON object with maps: [] (not null) so the SPA can iterate.
+	if !bytes.Contains(body, []byte(`"maps":[]`)) {
+		t.Errorf("expected maps:[] in body, got %s", body)
+	}
+}
 
-	srv := httptest.NewServer(r)
-	defer srv.Close()
+func TestDashboardHandler_GetData_MissingCampaignID(t *testing.T) {
+	store := newDashboardStore()
+	srv := newDashboardServer(t, store)
 
-	resp, err := http.Get(srv.URL + "/dashboard/exploration")
+	resp, err := http.Get(srv.URL + "/api/exploration")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,38 +132,39 @@ func TestDashboardHandler_MissingCampaignID(t *testing.T) {
 	}
 }
 
-func TestDashboardHandler_StartExplorationPost(t *testing.T) {
+func TestDashboardHandler_GetData_InvalidCampaignID(t *testing.T) {
+	store := newDashboardStore()
+	srv := newDashboardServer(t, store)
+
+	resp, err := http.Get(srv.URL + "/api/exploration?campaign_id=not-a-uuid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestDashboardHandler_StartExploration_JSONPost(t *testing.T) {
 	store := newDashboardStore()
 	campaignID := uuid.New()
 	mapID := uuid.New()
 	store.maps[mapID] = refdata.Map{ID: mapID, Name: "Forest", TiledJson: buildMapWithPlayerZone(t)}
 	store.mapsByCampaign[campaignID] = []refdata.Map{{ID: mapID, Name: "Forest"}}
 
-	svc := exploration.NewService(store.fakeStore)
-	h := exploration.NewDashboardHandler(svc, store)
+	srv := newDashboardServer(t, store)
 
-	r := chi.NewRouter()
-	h.RegisterRoutes(r)
-
-	srv := httptest.NewServer(r)
-	defer srv.Close()
-
-	form := url.Values{}
-	form.Set("campaign_id", campaignID.String())
-	form.Set("map_id", mapID.String())
-	form.Set("name", "Forest Exploration")
-
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
-	if err != nil {
-		t.Fatalf("POST: %v", err)
-	}
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id": campaignID.String(),
+		"map_id":      mapID.String(),
+		"name":        "Forest Exploration",
+	})
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", resp.StatusCode, body)
 	}
-
-	// Response should be JSON with the encounter ID.
 	var out map[string]any
 	if err := json.Unmarshal(body, &out); err != nil {
 		t.Fatalf("bad JSON: %v body=%s", err, body)
@@ -132,17 +177,148 @@ func TestDashboardHandler_StartExplorationPost(t *testing.T) {
 	}
 }
 
-// TestDashboardHandler_TransitionToCombat_AppliesOverrides verifies Phase 110
-// it2 clarification Q3/Q4: the combat-transition endpoint captures current
-// exploration positions AND accepts per-PC override_<characterID>=<coord>
-// form fields that override spawn placement before combat starts.
+func TestDashboardHandler_StartExploration_DefaultsName(t *testing.T) {
+	store := newDashboardStore()
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	store.maps[mapID] = refdata.Map{ID: mapID, Name: "Forest", TiledJson: buildMapWithPlayerZone(t)}
+	srv := newDashboardServer(t, store)
+
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id": campaignID.String(),
+		"map_id":      mapID.String(),
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, body)
+	}
+	enc := store.createdEncounter
+	if enc.Name != "Exploration" {
+		t.Errorf("encounter name = %q, want default %q", enc.Name, "Exploration")
+	}
+}
+
+func TestDashboardHandler_StartExploration_AcceptsCharacterIDs(t *testing.T) {
+	store := newDashboardStore()
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	store.maps[mapID] = refdata.Map{ID: mapID, Name: "Forest", TiledJson: buildMapWithPlayerZone(t)}
+	charID := uuid.New()
+	store.characters[charID] = refdata.Character{ID: charID, Name: "Alice"}
+	srv := newDashboardServer(t, store)
+
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id":   campaignID.String(),
+		"map_id":        mapID.String(),
+		"character_ids": []string{charID.String()},
+	})
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, body)
+	}
+	var out struct {
+		PCs map[string]any `json:"pcs"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("bad JSON: %v body=%s", err, body)
+	}
+	if _, ok := out.PCs[charID.String()]; !ok {
+		t.Errorf("expected PC %s in response.pcs, got %+v", charID, out.PCs)
+	}
+}
+
+func TestDashboardHandler_StartExploration_RejectsInvalidJSON(t *testing.T) {
+	store := newDashboardStore()
+	srv := newDashboardServer(t, store)
+
+	resp, err := http.Post(srv.URL+"/dashboard/exploration/start", "application/json",
+		strings.NewReader("not json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestDashboardHandler_StartExploration_RejectsMissingFields(t *testing.T) {
+	store := newDashboardStore()
+	srv := newDashboardServer(t, store)
+
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestDashboardHandler_StartExploration_RejectsInvalidCampaignID(t *testing.T) {
+	store := newDashboardStore()
+	srv := newDashboardServer(t, store)
+
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id": "nope",
+		"map_id":      uuid.New().String(),
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestDashboardHandler_StartExploration_RejectsInvalidMapID(t *testing.T) {
+	store := newDashboardStore()
+	srv := newDashboardServer(t, store)
+
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id": uuid.New().String(),
+		"map_id":      "nope",
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestDashboardHandler_StartExploration_RejectsInvalidCharacterID(t *testing.T) {
+	store := newDashboardStore()
+	srv := newDashboardServer(t, store)
+
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id":   uuid.New().String(),
+		"map_id":        uuid.New().String(),
+		"character_ids": []string{"not-a-uuid"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestDashboardHandler_StartExploration_PropagatesServiceError(t *testing.T) {
+	// Unknown map id -> service errors -> 400.
+	store := newDashboardStore()
+	srv := newDashboardServer(t, store)
+
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id": uuid.New().String(),
+		"map_id":      uuid.New().String(),
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
 func TestDashboardHandler_TransitionToCombat_AppliesOverrides(t *testing.T) {
 	store := newDashboardStore()
 	campaignID := uuid.New()
 	mapID := uuid.New()
 	store.maps[mapID] = refdata.Map{ID: mapID, Name: "Forest", TiledJson: buildMapWithPlayerZone(t)}
 
-	// Seed one exploration encounter with one PC at A1.
 	charID := uuid.New()
 	store.characters[charID] = refdata.Character{ID: charID, Name: "Alice"}
 	encID := uuid.New()
@@ -162,23 +338,12 @@ func TestDashboardHandler_TransitionToCombat_AppliesOverrides(t *testing.T) {
 		},
 	}
 
-	svc := exploration.NewService(store.fakeStore)
-	h := exploration.NewDashboardHandler(svc, store)
+	srv := newDashboardServer(t, store)
 
-	r := chi.NewRouter()
-	h.RegisterRoutes(r)
-	srv := httptest.NewServer(r)
-	defer srv.Close()
-
-	// Override this PC's position to D5.
-	form := url.Values{}
-	form.Set("encounter_id", encID.String())
-	form.Set("override_"+charID.String(), "D5")
-
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/transition-to-combat", form)
-	if err != nil {
-		t.Fatalf("POST: %v", err)
-	}
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/transition-to-combat", map[string]any{
+		"encounter_id": encID.String(),
+		"overrides":    map[string]string{charID.String(): "D5"},
+	})
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
@@ -225,26 +390,16 @@ func TestDashboardHandler_TransitionToCombat_NoOverrides_UsesCapturedPositions(t
 		},
 	}
 
-	svc := exploration.NewService(store.fakeStore)
-	h := exploration.NewDashboardHandler(svc, store)
-	r := chi.NewRouter()
-	h.RegisterRoutes(r)
-	srv := httptest.NewServer(r)
-	defer srv.Close()
+	srv := newDashboardServer(t, store)
 
-	form := url.Values{}
-	form.Set("encounter_id", encID.String())
-
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/transition-to-combat", form)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/transition-to-combat", map[string]any{
+		"encounter_id": encID.String(),
+	})
 	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d, body = %s", resp.StatusCode, body)
 	}
-	body, _ := io.ReadAll(resp.Body)
 	var out struct {
 		Positions map[string]struct {
 			Col string `json:"col"`
@@ -280,19 +435,11 @@ func TestDashboardHandler_TransitionToCombat_FlipsEncounterMode(t *testing.T) {
 		},
 	}
 
-	svc := exploration.NewService(store.fakeStore)
-	h := exploration.NewDashboardHandler(svc, store)
-	r := chi.NewRouter()
-	h.RegisterRoutes(r)
-	srv := httptest.NewServer(r)
-	defer srv.Close()
+	srv := newDashboardServer(t, store)
 
-	form := url.Values{}
-	form.Set("encounter_id", encID.String())
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/transition-to-combat", form)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/transition-to-combat", map[string]any{
+		"encounter_id": encID.String(),
+	})
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
@@ -319,21 +466,62 @@ func TestDashboardHandler_TransitionToCombat_FlipsEncounterMode(t *testing.T) {
 	}
 }
 
-func TestDashboardHandler_TransitionToCombat_InvalidEncounterID(t *testing.T) {
+func TestDashboardHandler_TransitionToCombat_RejectsInvalidJSON(t *testing.T) {
 	store := newDashboardStore()
-	svc := exploration.NewService(store.fakeStore)
-	h := exploration.NewDashboardHandler(svc, store)
-	r := chi.NewRouter()
-	h.RegisterRoutes(r)
-	srv := httptest.NewServer(r)
-	defer srv.Close()
+	srv := newDashboardServer(t, store)
 
-	form := url.Values{}
-	form.Set("encounter_id", "not-a-uuid")
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/transition-to-combat", form)
+	resp, err := http.Post(srv.URL+"/dashboard/exploration/transition-to-combat",
+		"application/json", strings.NewReader("not json"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestDashboardHandler_TransitionToCombat_MissingEncounterID(t *testing.T) {
+	store := newDashboardStore()
+	srv := newDashboardServer(t, store)
+
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/transition-to-combat", map[string]any{})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestDashboardHandler_TransitionToCombat_InvalidEncounterID(t *testing.T) {
+	store := newDashboardStore()
+	srv := newDashboardServer(t, store)
+
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/transition-to-combat", map[string]any{
+		"encounter_id": "not-a-uuid",
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestDashboardHandler_TransitionToCombat_InvalidOverrideCharID(t *testing.T) {
+	store := newDashboardStore()
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	store.maps[mapID] = refdata.Map{ID: mapID, TiledJson: buildMapWithPlayerZone(t)}
+	encID := uuid.New()
+	store.encounters[encID] = refdata.Encounter{
+		ID: encID, CampaignID: campaignID,
+		MapID: uuid.NullUUID{UUID: mapID, Valid: true},
+		Mode:  "exploration", Status: "active",
+	}
+	srv := newDashboardServer(t, store)
+
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/transition-to-combat", map[string]any{
+		"encounter_id": encID.String(),
+		"overrides":    map[string]string{"not-a-uuid": "D5"},
+	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
@@ -353,23 +541,59 @@ func TestDashboardHandler_TransitionToCombat_InvalidOverrideCoord(t *testing.T) 
 		MapID: uuid.NullUUID{UUID: mapID, Valid: true},
 		Mode:  "exploration", Status: "active",
 	}
-	svc := exploration.NewService(store.fakeStore)
-	h := exploration.NewDashboardHandler(svc, store)
-	r := chi.NewRouter()
-	h.RegisterRoutes(r)
-	srv := httptest.NewServer(r)
-	defer srv.Close()
+	srv := newDashboardServer(t, store)
 
-	form := url.Values{}
-	form.Set("encounter_id", encID.String())
-	form.Set("override_"+charID.String(), "ZZ")
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/transition-to-combat", form)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/transition-to-combat", map[string]any{
+		"encounter_id": encID.String(),
+		"overrides":    map[string]string{charID.String(): "ZZ"},
+	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestDashboardHandler_TransitionToCombat_IgnoresBlankOverrideCoord(t *testing.T) {
+	store := newDashboardStore()
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	store.maps[mapID] = refdata.Map{ID: mapID, TiledJson: buildMapWithPlayerZone(t)}
+	charID := uuid.New()
+	store.characters[charID] = refdata.Character{ID: charID, Name: "Bob"}
+	encID := uuid.New()
+	store.encounters[encID] = refdata.Encounter{
+		ID: encID, CampaignID: campaignID,
+		MapID: uuid.NullUUID{UUID: mapID, Valid: true},
+		Mode:  "exploration", Status: "active",
+	}
+	store.combatants[encID] = []refdata.Combatant{
+		{
+			ID: uuid.New(), EncounterID: encID,
+			CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+			PositionCol: "C", PositionRow: 3, IsAlive: true,
+		},
+	}
+	srv := newDashboardServer(t, store)
+
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/transition-to-combat", map[string]any{
+		"encounter_id": encID.String(),
+		"overrides":    map[string]string{charID.String(): "   "},
+	})
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, body)
+	}
+	var out struct {
+		Positions map[string]struct {
+			Col string `json:"col"`
+			Row int32  `json:"row"`
+		} `json:"positions"`
+	}
+	_ = json.Unmarshal(body, &out)
+	pos := out.Positions[charID.String()]
+	if pos.Col != "C" || pos.Row != 3 {
+		t.Errorf("blank override should be ignored; got %s%d, want C3", pos.Col, pos.Row)
 	}
 }
 
@@ -385,38 +609,11 @@ func TestDashboardHandler_TransitionToCombat_CapturePositionsError(t *testing.T)
 		MapID: uuid.NullUUID{UUID: mapID, Valid: true},
 		Mode:  "combat", Status: "active",
 	}
-	svc := exploration.NewService(store.fakeStore)
-	h := exploration.NewDashboardHandler(svc, store)
-	r := chi.NewRouter()
-	h.RegisterRoutes(r)
-	srv := httptest.NewServer(r)
-	defer srv.Close()
+	srv := newDashboardServer(t, store)
 
-	form := url.Values{}
-	form.Set("encounter_id", encID.String())
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/transition-to-combat", form)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", resp.StatusCode)
-	}
-}
-
-func TestDashboardHandler_StartExplorationPost_MissingFields(t *testing.T) {
-	store := newDashboardStore()
-	svc := exploration.NewService(store.fakeStore)
-	h := exploration.NewDashboardHandler(svc, store)
-	r := chi.NewRouter()
-	h.RegisterRoutes(r)
-	srv := httptest.NewServer(r)
-	defer srv.Close()
-
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/start", url.Values{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := postJSON(t, srv.URL+"/dashboard/exploration/transition-to-combat", map[string]any{
+		"encounter_id": encID.String(),
+	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)

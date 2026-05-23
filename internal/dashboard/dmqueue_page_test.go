@@ -2,10 +2,10 @@ package dashboard
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -122,18 +122,20 @@ func (s *stubNotifier) ListPending() []dmqueue.Item {
 func newDMQueueTestRouter(n dmqueue.Notifier) chi.Router {
 	r := chi.NewRouter()
 	h := NewDMQueueHandler(nil, n)
-	r.Get("/dashboard/queue/{itemID}", h.ServeItem)
+	r.Get("/dashboard/queue/{itemID}", h.GetItemJSON)
 	r.Post("/dashboard/queue/{itemID}/resolve", h.HandleResolve)
 	r.Post("/dashboard/queue/{itemID}/reply", h.HandleWhisperReply)
 	r.Post("/dashboard/queue/{itemID}/narrate", h.HandleSkillCheckNarration)
 	return r
 }
 
+// requestWithUser builds an authenticated request. body is sent verbatim
+// with Content-Type: application/json; pass "" for GET requests.
 func requestWithUser(method, path string, body string) *http.Request {
 	var req *http.Request
 	if body != "" {
 		req = httptest.NewRequest(method, path, strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Content-Type", "application/json")
 	} else {
 		req = httptest.NewRequest(method, path, nil)
 	}
@@ -141,7 +143,14 @@ func requestWithUser(method, path string, body string) *http.Request {
 	return req
 }
 
-func TestDMQueuePage_RendersPendingItem(t *testing.T) {
+func jsonBody(t *testing.T, payload any) string {
+	t.Helper()
+	b, err := json.Marshal(payload)
+	require.NoError(t, err)
+	return string(b)
+}
+
+func TestDMQueueItem_ReturnsPendingItemAsJSON(t *testing.T) {
 	n := newStubNotifier()
 	n.items["abc"] = dmqueue.Item{
 		ID: "abc",
@@ -159,14 +168,22 @@ func TestDMQueuePage_RendersPendingItem(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, "Thorn")
-	assert.Contains(t, body, "flip the table")
-	assert.Contains(t, body, "Resolve")
-	assert.Contains(t, body, `action="/dashboard/queue/abc/resolve"`)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+	var got dmqueueItemDetail
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, "abc", got.ID)
+	assert.Equal(t, "Thorn", got.PlayerName)
+	assert.Equal(t, `"flip the table"`, got.Summary)
+	assert.Equal(t, "Freeform Action", got.KindLabel)
+	assert.Equal(t, "pending", got.Status)
+	assert.True(t, got.IsPending)
+	assert.False(t, got.IsResolved)
+	assert.False(t, got.IsWhisper)
+	assert.False(t, got.IsSkillCheckNarration)
 }
 
-func TestDMQueuePage_NotFound(t *testing.T) {
+func TestDMQueueItem_NotFound(t *testing.T) {
 	n := newStubNotifier()
 	r := newDMQueueTestRouter(n)
 	req := requestWithUser(http.MethodGet, "/dashboard/queue/missing", "")
@@ -175,7 +192,7 @@ func TestDMQueuePage_NotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
-func TestDMQueuePage_RequiresAuth(t *testing.T) {
+func TestDMQueueItem_RequiresAuth(t *testing.T) {
 	n := newStubNotifier()
 	n.items["abc"] = dmqueue.Item{ID: "abc", Status: dmqueue.StatusPending}
 	r := newDMQueueTestRouter(n)
@@ -185,53 +202,143 @@ func TestDMQueuePage_RequiresAuth(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestDMQueuePage_ResolveMarksItemResolved(t *testing.T) {
+func TestDMQueueItem_WhisperFlagsSet(t *testing.T) {
+	n := newStubNotifier()
+	n.items["w1"] = dmqueue.Item{
+		ID: "w1",
+		Event: dmqueue.Event{
+			Kind:       dmqueue.KindPlayerWhisper,
+			PlayerName: "Aria",
+			Summary:    `"pickpocket"`,
+		},
+		Status: dmqueue.StatusPending,
+	}
+	r := newDMQueueTestRouter(n)
+	req := requestWithUser(http.MethodGet, "/dashboard/queue/w1", "")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got dmqueueItemDetail
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.True(t, got.IsWhisper)
+	assert.False(t, got.IsSkillCheckNarration)
+}
+
+func TestDMQueueItem_SkillCheckNarrationFlagsSet(t *testing.T) {
+	n := newStubNotifier()
+	n.items["sc1"] = dmqueue.Item{
+		ID:     "sc1",
+		Event:  dmqueue.Event{Kind: dmqueue.KindSkillCheckNarration, PlayerName: "Aria", Summary: "Perception 17"},
+		Status: dmqueue.StatusPending,
+	}
+	r := newDMQueueTestRouter(n)
+	req := requestWithUser(http.MethodGet, "/dashboard/queue/sc1", "")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got dmqueueItemDetail
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.True(t, got.IsSkillCheckNarration)
+	assert.False(t, got.IsWhisper)
+}
+
+func TestDMQueueItem_ResolvedItemSurfacesOutcome(t *testing.T) {
+	n := newStubNotifier()
+	n.items["xyz"] = dmqueue.Item{
+		ID:      "xyz",
+		Event:   dmqueue.Event{Kind: dmqueue.KindSkillCheckNarration, PlayerName: "Aria", Summary: "Athletics 18"},
+		Status:  dmqueue.StatusResolved,
+		Outcome: "climbs cliff",
+	}
+	r := newDMQueueTestRouter(n)
+	req := requestWithUser(http.MethodGet, "/dashboard/queue/xyz", "")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got dmqueueItemDetail
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, "resolved", got.Status)
+	assert.Equal(t, "climbs cliff", got.Outcome)
+	assert.True(t, got.IsResolved)
+	assert.False(t, got.IsPending)
+}
+
+func TestDMQueueItem_CancelledItemFlagged(t *testing.T) {
+	n := newStubNotifier()
+	n.items["c1"] = dmqueue.Item{
+		ID:     "c1",
+		Event:  dmqueue.Event{Kind: dmqueue.KindFreeformAction},
+		Status: dmqueue.StatusCancelled,
+	}
+	r := newDMQueueTestRouter(n)
+	req := requestWithUser(http.MethodGet, "/dashboard/queue/c1", "")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got dmqueueItemDetail
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.True(t, got.IsCancelled)
+	assert.False(t, got.IsPending)
+}
+
+func TestDMQueueResolve_AcceptsJSONAndMarksResolved(t *testing.T) {
 	n := newStubNotifier()
 	n.items["abc"] = dmqueue.Item{ID: "abc", Status: dmqueue.StatusPending}
 	r := newDMQueueTestRouter(n)
 
-	form := url.Values{}
-	form.Set("outcome", "table flipped")
-	req := requestWithUser(http.MethodPost, "/dashboard/queue/abc/resolve", form.Encode())
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/abc/resolve", jsonBody(t, map[string]string{"outcome": "table flipped"}))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusSeeOther, rec.Code)
+	require.Equal(t, http.StatusNoContent, rec.Code)
 	assert.Equal(t, []string{"abc"}, n.resolvedIDs)
 	it, _ := n.Get("abc")
 	assert.Equal(t, dmqueue.StatusResolved, it.Status)
 	assert.Equal(t, "table flipped", it.Outcome)
 }
 
-func TestDMQueuePage_ResolveUnknownItem(t *testing.T) {
+func TestDMQueueResolve_RejectsInvalidJSON(t *testing.T) {
+	n := newStubNotifier()
+	n.items["abc"] = dmqueue.Item{ID: "abc", Status: dmqueue.StatusPending}
+	r := newDMQueueTestRouter(n)
+
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/abc/resolve", "{not json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Empty(t, n.resolvedIDs)
+}
+
+func TestDMQueueResolve_UnknownItem(t *testing.T) {
 	n := newStubNotifier()
 	r := newDMQueueTestRouter(n)
-	form := url.Values{}
-	form.Set("outcome", "x")
-	req := requestWithUser(http.MethodPost, "/dashboard/queue/missing/resolve", form.Encode())
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/missing/resolve", jsonBody(t, map[string]string{"outcome": "x"}))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
-func TestDMQueuePage_ResolveRequiresAuth(t *testing.T) {
+func TestDMQueueResolve_RequiresAuth(t *testing.T) {
 	n := newStubNotifier()
 	r := newDMQueueTestRouter(n)
-	req := httptest.NewRequest(http.MethodPost, "/dashboard/queue/x/resolve", strings.NewReader("outcome=x"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/queue/x/resolve", strings.NewReader(`{"outcome":"x"}`))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestDMQueuePage_ResolveBackendError(t *testing.T) {
+func TestDMQueueResolve_BackendError(t *testing.T) {
 	n := newStubNotifier()
 	n.items["x"] = dmqueue.Item{ID: "x", Status: dmqueue.StatusPending}
 	n.resolveErr = errors.New("boom")
 	r := newDMQueueTestRouter(n)
-	form := url.Values{}
-	form.Set("outcome", "x")
-	req := requestWithUser(http.MethodPost, "/dashboard/queue/x/resolve", form.Encode())
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/x/resolve", jsonBody(t, map[string]string{"outcome": "x"}))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
@@ -259,35 +366,7 @@ func TestKindLabelFor_AllKinds(t *testing.T) {
 	}
 }
 
-func TestDMQueuePage_WhisperItemShowsReplyForm(t *testing.T) {
-	n := newStubNotifier()
-	n.items["w1"] = dmqueue.Item{
-		ID: "w1",
-		Event: dmqueue.Event{
-			Kind:       dmqueue.KindPlayerWhisper,
-			PlayerName: "Aria",
-			Summary:    `"pickpocket the merchant"`,
-			ExtraMetadata: map[string]string{
-				dmqueue.WhisperTargetDiscordUserIDKey: "user-42",
-			},
-		},
-		Status: dmqueue.StatusPending,
-	}
-
-	r := newDMQueueTestRouter(n)
-	req := requestWithUser(http.MethodGet, "/dashboard/queue/w1", "")
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, `action="/dashboard/queue/w1/reply"`)
-	assert.Contains(t, body, `name="reply"`)
-	// The generic resolve form must not be rendered for whisper items.
-	assert.NotContains(t, body, `action="/dashboard/queue/w1/resolve"`)
-}
-
-func TestDMQueuePage_HandleWhisperReply_Success(t *testing.T) {
+func TestDMQueueWhisperReply_AcceptsJSON(t *testing.T) {
 	n := newStubNotifier()
 	n.items["w1"] = dmqueue.Item{
 		ID: "w1",
@@ -301,30 +380,28 @@ func TestDMQueuePage_HandleWhisperReply_Success(t *testing.T) {
 	}
 	r := newDMQueueTestRouter(n)
 
-	form := url.Values{}
-	form.Set("reply", "You succeed.")
-	req := requestWithUser(http.MethodPost, "/dashboard/queue/w1/reply", form.Encode())
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/w1/reply", jsonBody(t, map[string]string{"reply": "You succeed."}))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusSeeOther, rec.Code)
+	require.Equal(t, http.StatusNoContent, rec.Code)
 	assert.Equal(t, "You succeed.", n.whisperReplies["w1"])
 	it, _ := n.Get("w1")
 	assert.Equal(t, dmqueue.StatusResolved, it.Status)
 	assert.Equal(t, "You succeed.", it.Outcome)
 }
 
-func TestDMQueuePage_HandleWhisperReply_RequiresAuth(t *testing.T) {
+func TestDMQueueWhisperReply_RequiresAuth(t *testing.T) {
 	n := newStubNotifier()
 	r := newDMQueueTestRouter(n)
-	req := httptest.NewRequest(http.MethodPost, "/dashboard/queue/w1/reply", strings.NewReader("reply=hi"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/queue/w1/reply", strings.NewReader(`{"reply":"hi"}`))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestDMQueuePage_HandleWhisperReply_WrongKind(t *testing.T) {
+func TestDMQueueWhisperReply_WrongKind(t *testing.T) {
 	n := newStubNotifier()
 	n.items["a1"] = dmqueue.Item{
 		ID:     "a1",
@@ -333,15 +410,13 @@ func TestDMQueuePage_HandleWhisperReply_WrongKind(t *testing.T) {
 	}
 	r := newDMQueueTestRouter(n)
 
-	form := url.Values{}
-	form.Set("reply", "nope")
-	req := requestWithUser(http.MethodPost, "/dashboard/queue/a1/reply", form.Encode())
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/a1/reply", jsonBody(t, map[string]string{"reply": "nope"}))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-func TestDMQueuePage_HandleWhisperReply_MissingDeliverer(t *testing.T) {
+func TestDMQueueWhisperReply_MissingDeliverer(t *testing.T) {
 	n := newStubNotifier()
 	n.items["w1"] = dmqueue.Item{
 		ID: "w1",
@@ -355,42 +430,26 @@ func TestDMQueuePage_HandleWhisperReply_MissingDeliverer(t *testing.T) {
 	n.resolveWhisperErr = dmqueue.ErrWhisperDelivererMissing
 	r := newDMQueueTestRouter(n)
 
-	form := url.Values{}
-	form.Set("reply", "hi")
-	req := requestWithUser(http.MethodPost, "/dashboard/queue/w1/reply", form.Encode())
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/w1/reply", jsonBody(t, map[string]string{"reply": "hi"}))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
-func TestDMQueuePage_HandleWhisperReply_UnknownItem(t *testing.T) {
+func TestDMQueueWhisperReply_UnknownItem(t *testing.T) {
 	n := newStubNotifier()
 	r := newDMQueueTestRouter(n)
-	form := url.Values{}
-	form.Set("reply", "hi")
-	req := requestWithUser(http.MethodPost, "/dashboard/queue/missing/reply", form.Encode())
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/missing/reply", jsonBody(t, map[string]string{"reply": "hi"}))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
-func TestDMQueuePage_RendersResolvedItem(t *testing.T) {
+func TestDMQueueWhisperReply_RejectsInvalidJSON(t *testing.T) {
 	n := newStubNotifier()
-	n.items["xyz"] = dmqueue.Item{
-		ID:      "xyz",
-		Event:   dmqueue.Event{Kind: dmqueue.KindSkillCheckNarration, PlayerName: "Aria", Summary: "Athletics 18"},
-		Status:  dmqueue.StatusResolved,
-		Outcome: "climbs cliff",
-	}
 	r := newDMQueueTestRouter(n)
-	req := requestWithUser(http.MethodGet, "/dashboard/queue/xyz", "")
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/w1/reply", "garbage")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, "Resolved")
-	assert.Contains(t, body, "climbs cliff")
-	// Resolve form should NOT be rendered for already-resolved items.
-	assert.NotContains(t, body, "/resolve\"")
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }

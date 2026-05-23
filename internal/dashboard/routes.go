@@ -30,17 +30,18 @@ func RegisterRoutes(r chi.Router, h *Handler, authMiddleware func(http.Handler) 
 	})
 }
 
-// RegisterDMQueueRoutes mounts the dm-queue resolver pages.
-// Phase 106a: minimal viable — list pending items, view one, mark it resolved.
-// F-12: also mounts GET /dashboard/queue/ (list aggregator).
-// Returns the constructed handler so callers can wire optional dependencies
-// (CampaignLister + CampaignLookup) for the list endpoint.
+// RegisterDMQueueRoutes mounts the dm-queue resolver endpoints.
+// GET /dashboard/queue/ returns the JSON list aggregator (F-12).
+// GET /dashboard/queue/{itemID} returns a single item as JSON for the SPA;
+// the resolve/reply/narrate POSTs accept JSON bodies.
+// Returns the constructed handler so callers can wire optional
+// dependencies (CampaignLister + CampaignLookup) for the list endpoint.
 func RegisterDMQueueRoutes(r chi.Router, logger *slog.Logger, notifier dmqueue.Notifier, authMiddleware func(http.Handler) http.Handler) *DMQueueHandler {
 	h := NewDMQueueHandler(logger, notifier)
 	r.Route("/dashboard/queue", func(r chi.Router) {
 		r.Use(authMiddleware)
 		r.Get("/", h.ServeList)
-		r.Get("/{itemID}", h.ServeItem)
+		r.Get("/{itemID}", h.GetItemJSON)
 		r.Post("/{itemID}/resolve", h.HandleResolve)
 		r.Post("/{itemID}/reply", h.HandleWhisperReply)
 		r.Post("/{itemID}/narrate", h.HandleSkillCheckNarration)
@@ -50,20 +51,20 @@ func RegisterDMQueueRoutes(r chi.Router, logger *slog.Logger, notifier dmqueue.N
 
 // ExplorationHandler is the narrow surface of the exploration dashboard
 // handler consumed by RegisterExplorationRoutes. Keeping the dependency a
-// pair of http.Handler methods avoids a circular import on exploration.
+// set of http.Handler methods avoids a circular import on exploration.
 type ExplorationHandler interface {
-	ServePage(w http.ResponseWriter, r *http.Request)
+	HandleGetData(w http.ResponseWriter, r *http.Request)
 	HandleStart(w http.ResponseWriter, r *http.Request)
 	HandleTransitionToCombat(w http.ResponseWriter, r *http.Request)
 }
 
-// RegisterExplorationRoutes mounts the Phase 110 exploration dashboard pages
-// (Q4a: reachable from DM dashboard) behind authMiddleware so they are not
-// publicly reachable.
+// RegisterExplorationRoutes mounts the exploration dashboard JSON endpoints
+// behind authMiddleware so they are not publicly reachable. The dashboard UI
+// itself is served by the Svelte SPA at /dashboard/app/#exploration.
 func RegisterExplorationRoutes(r chi.Router, h ExplorationHandler, authMiddleware func(http.Handler) http.Handler) {
 	r.Group(func(r chi.Router) {
 		r.Use(authMiddleware)
-		r.Get("/dashboard/exploration", h.ServePage)
+		r.Get("/api/exploration", h.HandleGetData)
 		r.Post("/dashboard/exploration/start", h.HandleStart)
 		r.Post("/dashboard/exploration/transition-to-combat", h.HandleTransitionToCombat)
 	})

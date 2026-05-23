@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/ab/dndnd/internal/auth"
@@ -480,29 +479,6 @@ func TestHandler_HandleCheckFeatPrereqs_InvalidBody(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
-}
-
-func TestHandler_ServeLevelUpPage(t *testing.T) {
-	h, _, _, _ := setupTestHandler(t)
-
-	r := chi.NewRouter()
-	h.RegisterRoutes(r)
-
-	req := httptest.NewRequest(http.MethodGet, "/dashboard/levelup", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
-	}
-
-	body := w.Body.String()
-	if !strings.Contains(body, "Level Up") {
-		t.Error("expected 'Level Up' in page body")
-	}
-	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
-		t.Errorf("Content-Type = %q, want text/html", ct)
 	}
 }
 

@@ -42,8 +42,9 @@ func TestRegisterRoutes_DashboardEndpoint(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "Campaign Home")
+	// /dashboard redirects to the Svelte SPA Campaign Home view.
+	assert.Equal(t, http.StatusFound, rec.Code)
+	assert.Equal(t, "/dashboard/app/#home", rec.Header().Get("Location"))
 }
 
 func TestRegisterRoutes_SvelteAppStub(t *testing.T) {
@@ -68,16 +69,16 @@ func TestRegisterRoutes_WebSocketEndpoint(t *testing.T) {
 	assert.NotEqual(t, http.StatusNotFound, rec.Code)
 }
 
-func TestRegisterRoutes_DashboardIncludesWSScript(t *testing.T) {
+func TestRegisterRoutes_WebSocketRouteRegistered(t *testing.T) {
+	// The WebSocket route is the only non-redirect endpoint left under
+	// /dashboard/*; the inline bootstrap lives in the Svelte SPA shell.
 	r := setupRoutesTest(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/ws", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	body := rec.Body.String()
-	require.Contains(t, body, "WebSocket")
-	require.Contains(t, body, "/dashboard/ws")
+	require.NotEqual(t, http.StatusNotFound, rec.Code)
 }
 
 func TestRegisterInventoryAPI_IdentifyEndpoint(t *testing.T) {
@@ -95,9 +96,9 @@ func TestRegisterInventoryAPI_IdentifyEndpoint(t *testing.T) {
 	assert.NotEqual(t, http.StatusMethodNotAllowed, rec.Code)
 }
 
-// TestRegisterExplorationRoutes_AppliesAuthMiddleware verifies Phase 110 it2:
-// exploration dashboard routes are wrapped with authMiddleware (no public
-// access) and return a non-404 when auth is provided.
+// TestRegisterExplorationRoutes_AppliesAuthMiddleware verifies the
+// exploration dashboard JSON endpoints are wrapped with authMiddleware (no
+// public access) and return a non-404 when auth is provided.
 func TestRegisterExplorationRoutes_AppliesAuthMiddleware(t *testing.T) {
 	r := chi.NewRouter()
 	authCalled := false
@@ -110,13 +111,13 @@ func TestRegisterExplorationRoutes_AppliesAuthMiddleware(t *testing.T) {
 	h := &stubExplorationHandler{}
 	RegisterExplorationRoutes(r, h, auth)
 
-	req := httptest.NewRequest(http.MethodGet, "/dashboard/exploration?campaign_id=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/exploration?campaign_id=abc", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
 	assert.True(t, authCalled, "auth middleware must wrap exploration routes")
 	assert.NotEqual(t, http.StatusNotFound, rec.Code)
-	assert.True(t, h.pageCalled, "GET /dashboard/exploration should hit ServePage")
+	assert.True(t, h.dataCalled, "GET /api/exploration should hit HandleGetData")
 }
 
 func TestRegisterExplorationRoutes_StartEndpointMounted(t *testing.T) {
@@ -179,27 +180,14 @@ func TestRegisterExplorationRoutes_TransitionRouteAuthWrapped(t *testing.T) {
 		"handler must NOT be called when auth middleware rejects the request")
 }
 
-// TestSidebarNav_IncludesExploration verifies the DM dashboard sidebar links
-// to the exploration page (clarification Q4a: reachable from DM dashboard).
-func TestSidebarNav_IncludesExploration(t *testing.T) {
-	found := false
-	for _, n := range SidebarNav {
-		if n.Path == "/dashboard/exploration" {
-			found = true
-			break
-		}
-	}
-	assert.True(t, found, "SidebarNav should include /dashboard/exploration")
-}
-
 type stubExplorationHandler struct {
-	pageCalled       bool
+	dataCalled       bool
 	startCalled      bool
 	transitionCalled bool
 }
 
-func (s *stubExplorationHandler) ServePage(w http.ResponseWriter, r *http.Request) {
-	s.pageCalled = true
+func (s *stubExplorationHandler) HandleGetData(w http.ResponseWriter, r *http.Request) {
+	s.dataCalled = true
 	w.WriteHeader(http.StatusOK)
 }
 func (s *stubExplorationHandler) HandleStart(w http.ResponseWriter, r *http.Request) {

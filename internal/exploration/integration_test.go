@@ -1,12 +1,12 @@
 package exploration_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -110,9 +110,10 @@ func TestIntegration_DashboardTransitionToCombatFlipsModeInDB(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	form := url.Values{}
-	form.Set("encounter_id", encounter.ID.String())
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/transition-to-combat", form)
+	reqBody, err := json.Marshal(map[string]any{"encounter_id": encounter.ID.String()})
+	require.NoError(t, err)
+	resp, err := http.Post(srv.URL+"/dashboard/exploration/transition-to-combat",
+		"application/json", bytes.NewReader(reqBody))
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)

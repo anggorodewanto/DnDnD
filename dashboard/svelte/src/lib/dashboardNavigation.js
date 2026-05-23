@@ -1,6 +1,7 @@
 export const dashboardNavItems = Object.freeze([
-  { id: 'dashboard', label: 'Dashboard', view: 'list', hash: '#maps', group: ['list', 'editor'] },
+  { id: 'home', label: 'Home', view: 'home', hash: '#home', group: ['home'] },
   { id: 'campaigns', label: 'Campaigns', view: 'campaigns', hash: '#campaigns', group: ['campaigns'] },
+  { id: 'dashboard', label: 'Maps', view: 'list', hash: '#maps', group: ['list', 'editor'] },
   { id: 'combat', label: 'Combat', view: 'combat', hash: '#combat', group: ['combat'] },
   {
     id: 'encounters',
@@ -45,12 +46,19 @@ export const dashboardNavItems = Object.freeze([
   { id: 'approvals', label: 'Approvals', view: 'approvals', hash: '#approvals', group: ['approvals'] },
   { id: 'loot', label: 'Loot', view: 'loot', hash: '#loot', group: ['loot'] },
   { id: 'levelup', label: 'Level Up', view: 'levelup', hash: '#levelup', group: ['levelup'] },
+  { id: 'characters-new', label: 'Create Character', view: 'characters-new', hash: '#characters-new', group: ['characters-new'] },
+  { id: 'exploration', label: 'Exploration', view: 'exploration', hash: '#exploration', group: ['exploration'] },
+  { id: 'errors', label: 'Errors', view: 'errors', hash: '#errors', group: ['errors'] },
 ]);
 
 const VIEW_TITLES = Object.freeze({
+  home: 'Campaign Home',
   combat: 'Combat Manager',
   campaigns: 'Campaigns',
-  list: 'Dashboard',
+  list: 'Maps',
+  errors: 'Errors',
+  exploration: 'Exploration',
+  'characters-new': 'Create Character',
   editor: 'Map Editor',
   'encounter-list': 'Encounter Builder',
   'encounter-editor': 'Encounter Builder',

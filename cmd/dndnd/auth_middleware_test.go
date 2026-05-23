@@ -162,7 +162,6 @@ func TestRun_AuthProtectedRoutesRejectUnauthenticated(t *testing.T) {
 		{"combat workspace", http.MethodGet, "/api/combat/workspace?campaign_id=00000000-0000-0000-0000-000000000001", ""},
 		// SR-063: levelup routes gated by dmAuthMw.
 		{"levelup post", http.MethodPost, "/api/levelup/", "{}"},
-		{"levelup page", http.MethodGet, "/dashboard/levelup", ""},
 	}
 
 	for _, tt := range tests {

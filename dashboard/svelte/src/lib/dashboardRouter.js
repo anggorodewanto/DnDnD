@@ -1,6 +1,10 @@
 const HASH_TO_VIEW = Object.freeze({
+  '#home': 'home',
   '#combat': 'combat',
   '#campaigns': 'campaigns',
+  '#errors': 'errors',
+  '#exploration': 'exploration',
+  '#characters-new': 'characters-new',
   '#encounters': 'encounter-list',
   '#encounter-new': 'encounter-editor',
   '#shops': 'shop-list',
@@ -28,7 +32,7 @@ const HASH_TO_VIEW = Object.freeze({
  * @returns {string}
  */
 export function resolveDashboardViewFromHash(hash) {
-  if (typeof hash !== 'string') return 'list';
+  if (typeof hash !== 'string') return 'home';
   if (hash.startsWith('#turn-builder')) return 'turn-builder';
-  return HASH_TO_VIEW[hash] || 'list';
+  return HASH_TO_VIEW[hash] || 'home';
 }

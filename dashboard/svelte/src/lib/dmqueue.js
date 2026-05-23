@@ -1,11 +1,11 @@
 /**
- * DM queue list helpers (F-12 dashboard aggregator).
+ * DM queue client helpers.
  *
- * Wraps `GET /dashboard/queue` so the DM dashboard panel can render every
- * pending dm-queue item (whisper, freeform, rest, etc.) in one place
- * instead of forcing the DM to scroll Discord #dm-queue. Keeping the URL
- * builder and kind-icon lookup in a pure JS module lets us unit-test
- * them under the project's node/vitest harness without a DOM.
+ * Wraps the dashboard's per-campaign queue list (`GET /dashboard/queue/`),
+ * per-item detail (`GET /dashboard/queue/{id}`), and JSON resolve/reply/narrate
+ * POSTs so the SPA can drive the whole resolver flow inline. Keeping URL
+ * construction, payload shape, and kind-icon lookup in a pure JS module lets
+ * us unit-test them under the project's node/vitest harness without a DOM.
  */
 
 export const DM_QUEUE_LIST_ENDPOINT = '/dashboard/queue/';
@@ -47,6 +47,45 @@ export function iconForKind(kind) {
 }
 
 /**
+ * Build the per-item detail URL. Same path the POST handlers live under,
+ * but issued as GET to fetch the JSON projection used by the Svelte
+ * detail view.
+ *
+ * @param {string} itemID
+ * @returns {string}
+ */
+export function buildItemEndpoint(itemID) {
+  return `/dashboard/queue/${encodeURIComponent(itemID)}`;
+}
+
+/**
+ * Build the JSON resolve endpoint URL for the generic outcome flow.
+ * @param {string} itemID
+ * @returns {string}
+ */
+export function buildResolveEndpoint(itemID) {
+  return `${buildItemEndpoint(itemID)}/resolve`;
+}
+
+/**
+ * Build the JSON whisper-reply endpoint URL.
+ * @param {string} itemID
+ * @returns {string}
+ */
+export function buildReplyEndpoint(itemID) {
+  return `${buildItemEndpoint(itemID)}/reply`;
+}
+
+/**
+ * Build the JSON skill-check-narration endpoint URL.
+ * @param {string} itemID
+ * @returns {string}
+ */
+export function buildNarrateEndpoint(itemID) {
+  return `${buildItemEndpoint(itemID)}/narrate`;
+}
+
+/**
  * Fetch the pending dm-queue list for the authenticated DM's active
  * campaign. Throws on non-OK responses with the response body as message.
  * The endpoint is gated by dmAuthMw (F-2) on the server, so this client
@@ -63,4 +102,77 @@ export async function fetchDMQueueList(fetchImpl = fetch) {
     throw new Error(text || `Request failed: ${res.status}`);
   }
   return res.json();
+}
+
+/**
+ * Fetch a single dm-queue item as JSON. Returns the projection used by the
+ * Svelte detail view (status flags, outcome, kind label, etc.).
+ *
+ * @param {string} itemID
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<object>}
+ */
+export async function fetchDMQueueItem(itemID, fetchImpl = fetch) {
+  const res = await fetchImpl(buildItemEndpoint(itemID), { credentials: 'same-origin' });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Internal: POST a JSON payload to the given endpoint and surface a useful
+ * error message on non-OK. Returns the parsed JSON response when the
+ * server provides one (handlers may return 204/empty body — caller decides).
+ *
+ * @param {string} url
+ * @param {object} payload
+ * @param {typeof fetch} fetchImpl
+ */
+async function postJSON(url, payload, fetchImpl) {
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res;
+}
+
+/**
+ * Resolve a generic pending item by submitting an outcome string.
+ *
+ * @param {string} itemID
+ * @param {string} outcome
+ * @param {typeof fetch} [fetchImpl]
+ */
+export async function resolveItem(itemID, outcome, fetchImpl = fetch) {
+  return postJSON(buildResolveEndpoint(itemID), { outcome }, fetchImpl);
+}
+
+/**
+ * Resolve a whisper item by submitting a DM reply for delivery.
+ *
+ * @param {string} itemID
+ * @param {string} reply
+ * @param {typeof fetch} [fetchImpl]
+ */
+export async function replyItem(itemID, reply, fetchImpl = fetch) {
+  return postJSON(buildReplyEndpoint(itemID), { reply }, fetchImpl);
+}
+
+/**
+ * Resolve a skill-check-narration item by submitting the channel narration.
+ *
+ * @param {string} itemID
+ * @param {string} narration
+ * @param {typeof fetch} [fetchImpl]
+ */
+export async function narrateItem(itemID, narration, fetchImpl = fetch) {
+  return postJSON(buildNarrateEndpoint(itemID), { narration }, fetchImpl);
 }

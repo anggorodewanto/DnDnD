@@ -27,8 +27,9 @@ func TestMountDashboard_IntegratesWithRouter(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "Campaign Home")
+	// /dashboard redirects to the Svelte SPA's Campaign Home view.
+	assert.Equal(t, http.StatusFound, rec.Code)
+	assert.Equal(t, "/dashboard/app/#home", rec.Header().Get("Location"))
 }
 
 func TestMountDashboard_AppRoute(t *testing.T) {

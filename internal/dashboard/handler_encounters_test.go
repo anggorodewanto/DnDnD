@@ -2,31 +2,10 @@ package dashboard
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 )
-
-func TestSidebarNav_LinksUseHashRouting(t *testing.T) {
-	// Verify that sidebar links that correspond to Svelte hash routes
-	// point to /dashboard/app/#section instead of /dashboard/section.
-	hashRouted := map[string]bool{
-		"Encounter Builder":  true,
-		"Stat Block Library": true,
-		"Character Overview": true,
-		"Character Approval": true,
-		"Map Editor":         true,
-		"Asset Library":      true,
-	}
-	for _, entry := range SidebarNav {
-		if hashRouted[entry.Label] {
-			if !strings.HasPrefix(entry.Path, "/dashboard/app/#") {
-				t.Errorf("sidebar entry %q should use hash routing, got path %q", entry.Label, entry.Path)
-			}
-		}
-	}
-}
 
 // mockEncounterLister implements EncounterLister for testing.
 type mockEncounterLister struct {

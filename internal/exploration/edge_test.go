@@ -1,12 +1,12 @@
 package exploration_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -17,6 +17,19 @@ import (
 	"github.com/ab/dndnd/internal/exploration"
 	"github.com/ab/dndnd/internal/refdata"
 )
+
+func edgePostJSON(t *testing.T, url string, body any) *http.Response {
+	t.Helper()
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	resp, err := http.Post(url, "application/json", bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return resp
+}
 
 // --- spawn.go edges ---
 
@@ -174,7 +187,7 @@ func TestCapturePositions_SkipsCreaturesWithoutCharacterID(t *testing.T) {
 
 // --- dashboard.go edges ---
 
-func TestDashboardHandler_InvalidCampaignUUID(t *testing.T) {
+func TestDashboardHandler_GetData_InvalidCampaignUUID(t *testing.T) {
 	store := newDashboardStore()
 	svc := exploration.NewService(store.fakeStore)
 	h := exploration.NewDashboardHandler(svc, store)
@@ -183,7 +196,7 @@ func TestDashboardHandler_InvalidCampaignUUID(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/dashboard/exploration?campaign_id=not-a-uuid")
+	resp, err := http.Get(srv.URL + "/api/exploration?campaign_id=not-a-uuid")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,13 +215,10 @@ func TestDashboardHandler_StartPost_InvalidCampaignID(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	form := url.Values{}
-	form.Set("campaign_id", "bad")
-	form.Set("map_id", uuid.New().String())
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := edgePostJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id": "bad",
+		"map_id":      uuid.New().String(),
+	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
@@ -224,13 +234,10 @@ func TestDashboardHandler_StartPost_InvalidMapID(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	form := url.Values{}
-	form.Set("campaign_id", uuid.New().String())
-	form.Set("map_id", "bad")
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := edgePostJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id": uuid.New().String(),
+		"map_id":      "bad",
+	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
@@ -249,14 +256,11 @@ func TestDashboardHandler_StartPost_InvalidCharacterID(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	form := url.Values{}
-	form.Set("campaign_id", campID.String())
-	form.Set("map_id", mapID.String())
-	form.Add("character_ids", "not-a-uuid")
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := edgePostJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id":   campID.String(),
+		"map_id":        mapID.String(),
+		"character_ids": []string{"not-a-uuid"},
+	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
@@ -282,14 +286,11 @@ func TestDashboardHandler_StartPost_ServiceError(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	form := url.Values{}
-	form.Set("campaign_id", campID.String())
-	form.Set("map_id", mapID.String())
-	form.Add("character_ids", charID.String())
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := edgePostJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id":   campID.String(),
+		"map_id":        mapID.String(),
+		"character_ids": []string{charID.String()},
+	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
@@ -308,13 +309,10 @@ func TestDashboardHandler_StartPost_DefaultName(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	form := url.Values{}
-	form.Set("campaign_id", campID.String())
-	form.Set("map_id", mapID.String())
-	resp, err := http.PostForm(srv.URL+"/dashboard/exploration/start", form)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := edgePostJSON(t, srv.URL+"/dashboard/exploration/start", map[string]any{
+		"campaign_id": campID.String(),
+		"map_id":      mapID.String(),
+	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)

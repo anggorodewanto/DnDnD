@@ -3,7 +3,6 @@ package exploration
 import (
 	"context"
 	"encoding/json"
-	"html/template"
 	"net/http"
 	"strings"
 
@@ -20,39 +19,38 @@ type MapLister interface {
 	ListMapsByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]refdata.Map, error)
 }
 
-// DashboardHandler serves the Phase 110 exploration dashboard page (Q4a).
-//   - GET  /dashboard/exploration?campaign_id=<id> lists maps and lets the DM
-//     pick one to start exploration.
-//   - POST /dashboard/exploration/start kicks off a new exploration encounter.
+// DashboardHandler serves the exploration dashboard JSON endpoints consumed
+// by the Svelte SPA panel.
+//   - GET  /api/exploration?campaign_id=<id>            lists maps the DM can pick.
+//   - POST /dashboard/exploration/start                 kicks off a new exploration encounter.
+//   - POST /dashboard/exploration/transition-to-combat  flips an encounter to combat.
 type DashboardHandler struct {
 	svc  *Service
 	maps MapLister
-	tmpl *template.Template
 }
 
 // NewDashboardHandler constructs a DashboardHandler.
 func NewDashboardHandler(svc *Service, maps MapLister) *DashboardHandler {
-	return &DashboardHandler{
-		svc:  svc,
-		maps: maps,
-		tmpl: template.Must(template.New("exploration_dashboard").Parse(dashboardTemplate)),
-	}
+	return &DashboardHandler{svc: svc, maps: maps}
 }
 
 // RegisterRoutes mounts the exploration dashboard routes on r.
 func (h *DashboardHandler) RegisterRoutes(r chi.Router) {
-	r.Get("/dashboard/exploration", h.ServePage)
+	r.Get("/api/exploration", h.HandleGetData)
 	r.Post("/dashboard/exploration/start", h.HandleStart)
 	r.Post("/dashboard/exploration/transition-to-combat", h.HandleTransitionToCombat)
 }
 
-type dashboardView struct {
-	CampaignID string
-	Maps       []refdata.Map
+// explorationDataResponse is the JSON shape returned by GET /api/exploration.
+type explorationDataResponse struct {
+	CampaignID string         `json:"campaign_id"`
+	Maps       []refdata.Map  `json:"maps"`
 }
 
-// ServePage renders the GET page.
-func (h *DashboardHandler) ServePage(w http.ResponseWriter, r *http.Request) {
+// HandleGetData returns the maps available to start an exploration encounter
+// for the supplied campaign. The Svelte panel calls this on mount to drive
+// the map selector dropdown.
+func (h *DashboardHandler) HandleGetData(w http.ResponseWriter, r *http.Request) {
 	campaignIDStr := r.URL.Query().Get("campaign_id")
 	if campaignIDStr == "" {
 		http.Error(w, "campaign_id is required", http.StatusBadRequest)
@@ -68,45 +66,49 @@ func (h *DashboardHandler) ServePage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to list maps", http.StatusInternalServerError)
 		return
 	}
-	view := dashboardView{
+	if maps == nil {
+		maps = []refdata.Map{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(explorationDataResponse{
 		CampaignID: campaignIDStr,
 		Maps:       maps,
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.Execute(w, view); err != nil {
-		http.Error(w, "template error", http.StatusInternalServerError)
-		return
-	}
+	})
 }
 
-// HandleStart processes the POST to start a new exploration encounter.
-// Form fields: campaign_id, map_id, name (optional).
-// character_ids may be repeated; each entry is a UUID string.
+// startExplorationRequest is the JSON body accepted by HandleStart.
+type startExplorationRequest struct {
+	CampaignID   string   `json:"campaign_id"`
+	MapID        string   `json:"map_id"`
+	Name         string   `json:"name"`
+	CharacterIDs []string `json:"character_ids"`
+}
+
+// HandleStart processes the POST to start a new exploration encounter from
+// a JSON body. Returns JSON: {"encounter_id":..., "mode":..., "pcs":...}.
 func (h *DashboardHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+	var req startExplorationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}
-	campIDStr := r.Form.Get("campaign_id")
-	mapIDStr := r.Form.Get("map_id")
-	name := strings.TrimSpace(r.Form.Get("name"))
-	if campIDStr == "" || mapIDStr == "" {
+	if req.CampaignID == "" || req.MapID == "" {
 		http.Error(w, "campaign_id and map_id are required", http.StatusBadRequest)
 		return
 	}
-	campID, err := uuid.Parse(campIDStr)
+	campID, err := uuid.Parse(req.CampaignID)
 	if err != nil {
 		http.Error(w, "invalid campaign_id", http.StatusBadRequest)
 		return
 	}
-	mapID, err := uuid.Parse(mapIDStr)
+	mapID, err := uuid.Parse(req.MapID)
 	if err != nil {
 		http.Error(w, "invalid map_id", http.StatusBadRequest)
 		return
 	}
 
-	var charIDs []uuid.UUID
-	for _, s := range r.Form["character_ids"] {
+	charIDs := make([]uuid.UUID, 0, len(req.CharacterIDs))
+	for _, s := range req.CharacterIDs {
 		id, err := uuid.Parse(s)
 		if err != nil {
 			http.Error(w, "invalid character_id "+s, http.StatusBadRequest)
@@ -115,6 +117,7 @@ func (h *DashboardHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		charIDs = append(charIDs, id)
 	}
 
+	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		name = "Exploration"
 	}
@@ -138,45 +141,47 @@ func (h *DashboardHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// transitionToCombatRequest is the JSON body accepted by
+// HandleTransitionToCombat. Overrides map character UUIDs to coordinates
+// like "D5".
+type transitionToCombatRequest struct {
+	EncounterID string            `json:"encounter_id"`
+	Overrides   map[string]string `json:"overrides"`
+}
+
 // HandleTransitionToCombat captures the current exploration encounter's PC
 // positions, flips the encounter to combat mode, and applies any per-PC
-// override_<characterID>=<coord> form fields supplied by the DM (Phase 110
-// Q3/Q4 clarification). Returns JSON:
+// overrides supplied in the JSON body. Returns JSON:
 //
 //	{"mode": "combat", "positions": {"<character_id>": {"col": "D", "row": 5}, ...}}
 //
 // The merged map is what a combat-transition flow would feed into
 // StartCombatInput.CharacterPositions.
 func (h *DashboardHandler) HandleTransitionToCombat(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+	var req transitionToCombatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}
-	encIDStr := r.Form.Get("encounter_id")
-	if encIDStr == "" {
+	if req.EncounterID == "" {
 		http.Error(w, "encounter_id is required", http.StatusBadRequest)
 		return
 	}
-	encID, err := uuid.Parse(encIDStr)
+	encID, err := uuid.Parse(req.EncounterID)
 	if err != nil {
 		http.Error(w, "invalid encounter_id", http.StatusBadRequest)
 		return
 	}
 
-	// Parse overrides: any form field starting with "override_" and whose
-	// suffix parses as a UUID is treated as a character override.
 	overrides := map[uuid.UUID]combat.Position{}
-	for key, vals := range r.Form {
-		if !strings.HasPrefix(key, "override_") || len(vals) == 0 {
-			continue
-		}
-		coord := strings.TrimSpace(vals[0])
+	for rawCharID, rawCoord := range req.Overrides {
+		coord := strings.TrimSpace(rawCoord)
 		if coord == "" {
 			continue
 		}
-		charID, err := uuid.Parse(strings.TrimPrefix(key, "override_"))
+		charID, err := uuid.Parse(rawCharID)
 		if err != nil {
-			http.Error(w, "invalid override character id "+key, http.StatusBadRequest)
+			http.Error(w, "invalid override character id "+rawCharID, http.StatusBadRequest)
 			return
 		}
 		col, row, err := renderer.ParseCoordinate(coord)
@@ -207,57 +212,3 @@ func (h *DashboardHandler) HandleTransitionToCombat(w http.ResponseWriter, r *ht
 		"positions": posMap,
 	})
 }
-
-// dashboardTemplate is a minimal HTML page: a table of maps with a
-// "Start Exploration" button per map, submitting a POST.
-const dashboardTemplate = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Exploration</title>
-<style>
- body { font-family: sans-serif; padding: 2em; }
- table { border-collapse: collapse; }
- td, th { border: 1px solid #ccc; padding: 0.5em 1em; }
- button { cursor: pointer; }
-</style>
-</head><body>
-<h1>Exploration Mode</h1>
-<p>Campaign: <code>{{.CampaignID}}</code></p>
-{{if .Maps}}
-<table>
-  <thead><tr><th>Name</th><th>Size</th><th>Action</th></tr></thead>
-  <tbody>
-  {{range .Maps}}
-    <tr>
-      <td>{{.Name}}</td>
-      <td>{{.WidthSquares}}x{{.HeightSquares}}</td>
-      <td>
-        <form method="POST" action="/dashboard/exploration/start">
-          <input type="hidden" name="campaign_id" value="{{$.CampaignID}}">
-          <input type="hidden" name="map_id" value="{{.ID}}">
-          <input type="text" name="name" placeholder="Encounter name" value="Exploring {{.Name}}">
-          <button type="submit">Start Exploration</button>
-        </form>
-      </td>
-    </tr>
-  {{end}}
-  </tbody>
-</table>
-{{else}}
-<p>No maps found for this campaign. Create one first.</p>
-{{end}}
-
-<h2>Transition to Combat</h2>
-<p>When a combat encounter begins, PC positions carry over from exploration.
-The DM may override any per-PC position by supplying an
-<code>override_&lt;character_id&gt;</code> field with a coordinate (e.g. <code>D5</code>).</p>
-<form method="POST" action="/dashboard/exploration/transition-to-combat">
-  <label>Encounter ID: <input type="text" name="encounter_id" required></label>
-  <br>
-  <label>Override character_id: <input type="text" name="override_char_id_placeholder" disabled placeholder="override_<character_id>"></label>
-  <label>Coord: <input type="text" name="override_coord_placeholder" disabled placeholder="D5"></label>
-  <br>
-  <small>Add <code>override_&lt;uuid&gt;=&lt;coord&gt;</code> fields via JS or a client tool to apply per-PC overrides. Omit overrides to carry over captured positions as-is.</small>
-  <br>
-  <button type="submit">Capture Positions &amp; Apply Overrides</button>
-</form>
-</body></html>
-`

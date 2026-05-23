@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -32,54 +31,34 @@ func newSkillCheckItem() dmqueue.Item {
 	}
 }
 
-func TestDMQueuePage_SkillCheckNarrationItemShowsNarrateForm(t *testing.T) {
+func TestDMQueueNarrate_AcceptsJSONAndMarksResolved(t *testing.T) {
 	n := newStubNotifier()
 	it := newSkillCheckItem()
 	n.items[it.ID] = it
 
 	r := newDMQueueTestRouter(n)
-	req := requestWithUser(http.MethodGet, "/dashboard/queue/sc1", "")
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/sc1/narrate", jsonBody(t, map[string]string{"narration": "You spot the trap."}))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, `action="/dashboard/queue/sc1/narrate"`)
-	assert.Contains(t, body, `name="narration"`)
-	// Generic resolve form should not be rendered for narration items.
-	assert.NotContains(t, body, `action="/dashboard/queue/sc1/resolve"`)
-}
-
-func TestDMQueuePage_HandleSkillCheckNarration_Success(t *testing.T) {
-	n := newStubNotifier()
-	it := newSkillCheckItem()
-	n.items[it.ID] = it
-
-	r := newDMQueueTestRouter(n)
-	form := url.Values{}
-	form.Set("narration", "You spot the trap.")
-	req := requestWithUser(http.MethodPost, "/dashboard/queue/sc1/narrate", form.Encode())
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusSeeOther, rec.Code)
+	require.Equal(t, http.StatusNoContent, rec.Code)
 	assert.Equal(t, "You spot the trap.", n.skillCheckNarrations["sc1"])
 	got, _ := n.Get("sc1")
 	assert.Equal(t, dmqueue.StatusResolved, got.Status)
 	assert.Equal(t, "You spot the trap.", got.Outcome)
 }
 
-func TestDMQueuePage_HandleSkillCheckNarration_RequiresAuth(t *testing.T) {
+func TestDMQueueNarrate_RequiresAuth(t *testing.T) {
 	n := newStubNotifier()
 	r := newDMQueueTestRouter(n)
-	req := httptest.NewRequest(http.MethodPost, "/dashboard/queue/sc1/narrate", strings.NewReader("narration=x"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/queue/sc1/narrate", strings.NewReader(`{"narration":"x"}`))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestDMQueuePage_HandleSkillCheckNarration_WrongKind(t *testing.T) {
+func TestDMQueueNarrate_WrongKind(t *testing.T) {
 	n := newStubNotifier()
 	n.items["a1"] = dmqueue.Item{
 		ID:     "a1",
@@ -87,36 +66,39 @@ func TestDMQueuePage_HandleSkillCheckNarration_WrongKind(t *testing.T) {
 		Status: dmqueue.StatusPending,
 	}
 	r := newDMQueueTestRouter(n)
-	form := url.Values{}
-	form.Set("narration", "x")
-	req := requestWithUser(http.MethodPost, "/dashboard/queue/a1/narrate", form.Encode())
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/a1/narrate", jsonBody(t, map[string]string{"narration": "x"}))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-func TestDMQueuePage_HandleSkillCheckNarration_NotFound(t *testing.T) {
+func TestDMQueueNarrate_NotFound(t *testing.T) {
 	n := newStubNotifier()
 	r := newDMQueueTestRouter(n)
-	form := url.Values{}
-	form.Set("narration", "x")
-	req := requestWithUser(http.MethodPost, "/dashboard/queue/missing/narrate", form.Encode())
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/missing/narrate", jsonBody(t, map[string]string{"narration": "x"}))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
-func TestDMQueuePage_HandleSkillCheckNarration_BackendError(t *testing.T) {
+func TestDMQueueNarrate_BackendError(t *testing.T) {
 	n := newStubNotifier()
 	it := newSkillCheckItem()
 	n.items[it.ID] = it
 	n.resolveSkillCheckNarrErr = errors.New("boom")
 
 	r := newDMQueueTestRouter(n)
-	form := url.Values{}
-	form.Set("narration", "x")
-	req := requestWithUser(http.MethodPost, "/dashboard/queue/sc1/narrate", form.Encode())
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/sc1/narrate", jsonBody(t, map[string]string{"narration": "x"}))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestDMQueueNarrate_RejectsInvalidJSON(t *testing.T) {
+	n := newStubNotifier()
+	r := newDMQueueTestRouter(n)
+	req := requestWithUser(http.MethodPost, "/dashboard/queue/sc1/narrate", "not json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
