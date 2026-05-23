@@ -42,6 +42,7 @@
   // instead of a hard-coded placeholder UUID. Falls back to '' (empty) when
   // the user has no active campaign yet so panels can render an empty state.
   let campaignId = $state('');
+  let drawerOpen = $state(false);
 
   async function refreshCurrentCampaign() {
     if (typeof window === 'undefined') return;
@@ -157,11 +158,13 @@
     if (typeof window !== 'undefined' && item.hash && window.location.hash !== item.hash) {
       window.location.hash = item.hash;
     }
+
+    drawerOpen = false;
   }
 </script>
 
 <div class="desktop-shell">
-  <aside class="sidebar" aria-label="Dashboard navigation">
+  <aside class="sidebar" class:open={drawerOpen} aria-label="Dashboard navigation">
     <a class="brand" href="#maps" onclick={(event) => { event.preventDefault(); navigateTo(dashboardNavItems[0]); }}>
       <span class="brand-mark">D</span>
       <span>DnDnD</span>
@@ -179,8 +182,13 @@
     </nav>
   </aside>
 
+  {#if drawerOpen}
+    <button class="drawer-backdrop" aria-label="Close menu" onclick={() => (drawerOpen = false)}></button>
+  {/if}
+
   <main>
     <header>
+      <button class="hamburger" aria-label="Open menu" onclick={() => (drawerOpen = !drawerOpen)}>☰</button>
       <h1>{dashboardViewTitle(currentView)}</h1>
 
       <div class="page-actions">
@@ -369,25 +377,62 @@
     background: #0f3460;
   }
 
+  .hamburger {
+    display: none;
+    background: transparent;
+    border: 1px solid #0f3460;
+    color: #e0e0e0;
+    padding: 0.4rem 0.7rem;
+    border-radius: 4px;
+    font-size: 1.25rem;
+    cursor: pointer;
+  }
+
+  .drawer-backdrop {
+    display: none;
+  }
+
   @media (max-width: 768px) {
     .desktop-shell {
       grid-template-columns: 1fr;
     }
+
     .sidebar {
-      position: static;
-      height: auto;
-      flex-direction: row;
-      flex-wrap: wrap;
-      overflow-x: auto;
-      border-right: none;
-      border-bottom: 1px solid #0f3460;
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 30;
+      width: 16rem;
+      height: 100vh;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+      border-right: 1px solid #0f3460;
     }
-    .sidebar-nav {
-      flex-direction: row;
-      flex-wrap: wrap;
+
+    .sidebar.open {
+      transform: translateX(0);
     }
+
+    .drawer-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      background: rgba(0, 0, 0, 0.5);
+      border: none;
+      padding: 0;
+    }
+
+    .hamburger {
+      display: inline-flex;
+    }
+
     header h1 {
       font-size: 1.25rem;
+    }
+
+    header {
+      gap: 0.5rem;
     }
   }
 </style>
