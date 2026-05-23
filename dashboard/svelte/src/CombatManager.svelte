@@ -280,6 +280,10 @@
   }
 
   async function loadWorkspace() {
+    if (!campaignId) {
+      loading = false;
+      return;
+    }
     try {
       const data = await getCombatWorkspace(campaignId);
       encounters = data.encounters || [];
@@ -942,6 +946,8 @@
 
   {#if loading}
     <p class="status-msg">Loading combat workspace...</p>
+  {:else if !campaignId}
+    <p class="status-msg">No active campaign selected.</p>
   {:else if error}
     <p class="error-msg">{error}</p>
   {:else if !activeEncounter}
