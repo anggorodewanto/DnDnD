@@ -37,10 +37,6 @@
   let turnBuilderEncounterId = $state(null);
   let turnBuilderCombatantId = $state(null);
   let turnBuilderCombatantName = $state(null);
-  // med-39 / Phase 21a: campaign id is fetched from /api/me on boot so the
-  // Svelte panels operate against the authenticated DM's actual campaign
-  // instead of a hard-coded placeholder UUID. Falls back to '' (empty) when
-  // the user has no active campaign yet so panels can render an empty state.
   let campaignId = $state('');
   let drawerOpen = $state(false);
 
@@ -50,27 +46,20 @@
       const data = await getCurrentUser();
       campaignId = data && typeof data.campaign_id === 'string' ? data.campaign_id : '';
     } catch {
-      /* swallow: campaignId stays empty so panels can render an empty state */
+      // Leave campaignId empty so panels render their empty state.
     }
   }
 
-  // Fetch the active campaign id on boot. Best-effort: any network /
-  // unauthenticated response leaves campaignId='' so the SPA still renders.
   $effect(() => {
     refreshCurrentCampaign();
   });
 
-  // Determine initial view from URL hash
-  function getInitialView() {
-    return resolveDashboardViewFromHash(window.location.hash);
-  }
-
-  currentView = getInitialView();
+  currentView = resolveDashboardViewFromHash(window.location.hash);
 
   $effect(() => {
     if (typeof window === 'undefined') return;
     const handler = () => {
-      currentView = getInitialView();
+      currentView = resolveDashboardViewFromHash(window.location.hash);
     };
     window.addEventListener('hashchange', handler);
     return () => window.removeEventListener('hashchange', handler);

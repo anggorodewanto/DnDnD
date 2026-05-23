@@ -21,7 +21,7 @@
   let busy = $state(false);
   let textareaRef;
 
-  // Template library state (Phase 100b)
+  // Template library state.
   let templates = $state([]);
   let templateSearch = $state('');
   let templateCategory = $state('');

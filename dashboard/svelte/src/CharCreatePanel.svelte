@@ -239,15 +239,14 @@
         const qty = qtyRaw ? parseInt(qtyRaw, 10) : 1;
         if (qty === 1) {
           if (!next.includes(id)) next.push(id);
-        } else {
-          for (let i = 0; i < qty; i += 1) next.push(id);
+          continue;
         }
+        for (let i = 0; i < qty; i += 1) next.push(id);
       }
       for (const choice of pack.choices || []) {
-        if (choice.options && choice.options.length > 0) {
-          const id = String(choice.options[0]).split(':')[0].split(',')[0];
-          if (!next.includes(id)) next.push(id);
-        }
+        if (!choice.options || choice.options.length === 0) continue;
+        const id = String(choice.options[0]).split(':')[0].split(',')[0];
+        if (!next.includes(id)) next.push(id);
       }
       selectedEquipment = next;
     } catch (err) {
@@ -341,6 +340,7 @@
     step = n;
     if (n === 5 && !spellClass && spellableClasses.length > 0) {
       onSpellClassSelected(spellableClasses[0]);
+      return;
     }
     if (n === 6) loadFeatures();
   }

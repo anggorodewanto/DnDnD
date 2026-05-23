@@ -1,15 +1,9 @@
 <script>
-  // med-37 / Phase 99 (G-99): Homebrew Editor — structured form per category.
-  //
-  // The legacy editor was a raw JSON textarea. This rewrite binds per-field
-  // form controls per category and serializes them through
-  // `lib/homebrewForm.js`, which produces the exact wire shape the backend
-  // expects (matching `refdata.Upsert*Params`).
-  //
-  // Adds a "class-features" sub-mode that emits a single-feature class
-  // skeleton through the existing `/api/homebrew/classes` route — the
-  // spec calls for a path separate from "whole-class" homebrew and the
-  // backend exposes only the unified classes endpoint today.
+  // Homebrew editor: per-category structured form. Bindings flow through
+  // lib/homebrewForm.js so the payload matches refdata.Upsert*Params on the
+  // backend. The "class-features" sub-mode emits a single-feature class
+  // skeleton through /api/homebrew/classes — the backend exposes only the
+  // unified classes endpoint today.
   import {
     HOMEBREW_CATEGORIES,
     emptyFormModel,
@@ -28,9 +22,8 @@
   let formError = $state(null);
   let editingId = $state(null);
 
-  // Map UI category → REST list endpoint. The class-features sub-mode lists
-  // homebrew classes (it is a view onto the same /api/classes data, just
-  // filtered to entries that look like single-feature skeletons).
+  // Map UI category to REST list endpoint. class-features lists homebrew
+  // classes filtered to single-feature skeletons.
   const LIST_ENDPOINTS = {
     creatures: '/api/creatures',
     spells: '/api/spells',
@@ -42,8 +35,8 @@
     'class-features': '/api/classes',
   };
 
-  // Resolve the upstream route used for write operations. class-features
-  // re-uses /api/homebrew/classes, matching the backend's actual mount.
+  // Upstream route for write operations. class-features reuses
+  // /api/homebrew/classes, matching the backend mount.
   function writePath() {
     const cat = HOMEBREW_CATEGORIES.find((c) => c.key === category);
     return cat ? cat.path : category;

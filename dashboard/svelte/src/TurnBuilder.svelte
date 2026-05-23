@@ -33,18 +33,17 @@
 
   function nextStep() {
     if (!plan) return;
-    if (currentStep < plan.steps.length - 1) {
-      currentStep++;
-    } else {
+    if (currentStep >= plan.steps.length - 1) {
       reviewMode = true;
+      return;
     }
+    currentStep++;
   }
 
   function prevStep() {
-    if (currentStep > 0) {
-      currentStep--;
-      reviewMode = false;
-    }
+    if (currentStep <= 0) return;
+    currentStep--;
+    reviewMode = false;
   }
 
   function skipStep() {
@@ -53,9 +52,7 @@
     if (currentStep >= plan.steps.length) {
       currentStep = Math.max(0, plan.steps.length - 1);
     }
-    if (plan.steps.length === 0) {
-      reviewMode = true;
-    }
+    if (plan.steps.length === 0) reviewMode = true;
   }
 
   function removeStep(index) {
@@ -66,9 +63,8 @@
   function updateRoll(stepIndex, field, value) {
     if (!plan) return;
     const step = plan.steps[stepIndex];
-    if (step.attack && step.attack.roll_result) {
-      step.attack.roll_result[field] = parseInt(value) || 0;
-    }
+    if (!step.attack?.roll_result) return;
+    step.attack.roll_result[field] = parseInt(value) || 0;
   }
 
   async function confirmAndPost() {

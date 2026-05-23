@@ -64,24 +64,20 @@
   // Polling interval
   let pollTimer = $state(null);
 
-  // Phase 105 — per-tab WebSocket state sync. One wsClient per active
-  // encounter, feeds snapshots through mergeSnapshot so the DM's in-progress
-  // form edits survive incoming player updates.
+  // Per-tab WebSocket state sync. One wsClient per active encounter; feeds
+  // snapshots through mergeSnapshot so the DM's in-progress form edits
+  // survive incoming player updates.
   let tabsWs = null;
-  // Map of encounter_id -> pending snapshot fields ("HP updated to 3 by
-  // player action" indicators). Re-keyed via setState on ws callbacks.
+  // Map of encounter_id -> pending snapshot fields surfaced as
+  // "HP updated to N by player action" banners.
   let pendingByEncounter = $state({});
-  // Dirty form field tracking — the form handlers call markDirtyField /
-  // clearDirtyField as the DM enters/leaves inputs.
   function markDirtyField(field) {
-    if (activeEncounter && tabsWs) {
-      tabsWs.markDirty(activeEncounter.id, field);
-    }
+    if (!activeEncounter || !tabsWs) return;
+    tabsWs.markDirty(activeEncounter.id, field);
   }
   function clearDirtyField(field) {
-    if (activeEncounter && tabsWs) {
-      tabsWs.clearDirty(activeEncounter.id, field);
-    }
+    if (!activeEncounter || !tabsWs) return;
+    tabsWs.clearDirty(activeEncounter.id, field);
   }
 
   // Drag-and-drop state
@@ -101,9 +97,8 @@
     loadWorkspace();
     pollTimer = setInterval(loadWorkspace, 5000);
 
-    // Phase 105 — open one WebSocket per active encounter tab. The
-    // setEncounters call inside loadWorkspace keeps the sockets in
-    // sync with the current encounter list.
+    // Open one WebSocket per active encounter tab. loadWorkspace keeps the
+    // sockets in sync with the current encounter list.
     const proto = window.location?.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location?.host || 'localhost';
     tabsWs = createEncounterTabsWs({ url: `${proto}//${host}/dashboard/ws` });
@@ -112,17 +107,16 @@
         ...pendingByEncounter,
         [encID]: state._pendingFromSnapshot || {},
       };
-      // Finding 14: merge snapshot into encounters so activeEncounter reflects
-      // WebSocket updates immediately without waiting for the next poll.
+      // Merge snapshot into encounters so activeEncounter reflects WebSocket
+      // updates immediately without waiting for the next poll.
       const idx = encounters.findIndex((e) => e.id === encID);
-      if (idx !== -1) {
-        const merged = { ...encounters[idx] };
-        for (const key of Object.keys(state)) {
-          if (key === '_pendingFromSnapshot' || key === 'dirty') continue;
-          merged[key] = state[key];
-        }
-        encounters[idx] = merged;
+      if (idx === -1) return;
+      const merged = { ...encounters[idx] };
+      for (const key of Object.keys(state)) {
+        if (key === '_pendingFromSnapshot' || key === 'dirty') continue;
+        merged[key] = state[key];
       }
+      encounters[idx] = merged;
     });
 
     return () => {
@@ -155,7 +149,7 @@
     activeEncounter?.combatants?.find(c => c.id === selectedCombatantId) || null
   );
 
-  // --- DM Dashboard: Undo & Manual Override (Phase 97b) ---
+  // DM dashboard: undo + manual override controls.
   let dmOverrideOpen = $state(false);
   let dmOverrideReason = $state('');
   let dmOverrideMessage = $state('');
@@ -170,10 +164,10 @@
   let dmOverrideSpellSlotsText = $state('{}');
   let dmUndoReason = $state('');
 
-  // Phase 105c — DM edits the player-facing display name for the active
-  // encounter. Persists via PATCH /api/combat/{id}/display-name, then patches
-  // local state so the header, tabs and overview refresh immediately without
-  // a full workspace reload. Empty string clears the override so the label
+  // DM edits the player-facing display name for the active encounter.
+  // Persists via PATCH /api/combat/{id}/display-name, then patches local
+  // state so the header, tabs and overview refresh immediately without a
+  // full workspace reload. Empty string clears the override so the label
   // falls back to the internal name.
   async function handleDisplayNameCommit(newName) {
     if (!activeEncounter) return;
@@ -291,9 +285,9 @@
         activeEncounterIndex = 0;
       }
 
-      // Phase 105 — sync the wsClient tabs to the current active-encounter
-      // set. Removed encounters close their socket; new ones open a fresh
-      // connection keyed on encounter_id.
+      // Sync the wsClient tabs to the current active-encounter set. Removed
+      // encounters close their socket; new ones open a fresh connection
+      // keyed on encounter_id.
       if (tabsWs) {
         tabsWs.setEncounters(encounters.map((e) => e.id));
         for (const enc of encounters) {
@@ -750,7 +744,7 @@
 
     if (action === 'plan-turn') {
       const comb = activeEncounter?.combatants?.find(c => c.id === combId);
-      if (comb && onopenturnbuilder) onopenturnbuilder(activeEncounter.id, combId, comb.display_name);
+      if (comb) onopenturnbuilder?.(activeEncounter.id, combId, comb.display_name);
       contextMenu = null;
       return;
     }
@@ -758,14 +752,19 @@
     selectedCombatantId = combId;
     contextMenu = null;
 
-    if (action === 'damage') {
-      damageInput = 0;
-    } else if (action === 'heal') {
-      healInput = 0;
-    } else if (action === 'conditions') {
-      conditionToAdd = '';
-    } else if (action === 'remove') {
-      handleRemoveCombatant(combId);
+    switch (action) {
+      case 'damage':
+        damageInput = 0;
+        return;
+      case 'heal':
+        healInput = 0;
+        return;
+      case 'conditions':
+        conditionToAdd = '';
+        return;
+      case 'remove':
+        handleRemoveCombatant(combId);
+        return;
     }
   }
 
@@ -889,8 +888,8 @@
 </script>
 
 <div class="combat-manager">
-  <!-- Encounter Overview Bar — Phase 105: one line per active encounter so
-       the DM has cross-encounter awareness without switching tabs. -->
+  <!-- Encounter overview bar: one row per active encounter for
+       cross-encounter awareness without switching tabs. -->
   <div class="encounter-overview" data-testid="encounter-overview">
     {#if encounters.length > 0}
       {#each encounters as enc (enc.id)}
@@ -909,8 +908,7 @@
     {/if}
   </div>
 
-  <!-- Encounter Tabs — Phase 105: show player-facing display_name with
-       pending dm-queue badge. -->
+  <!-- Encounter tabs: player-facing display_name with pending dm-queue badge. -->
   {#if encounters.length > 0}
     <div class="encounter-tabs" data-testid="encounter-tabs">
       {#each encounters as enc, i (enc.id)}
@@ -929,9 +927,9 @@
     </div>
   {/if}
 
-  <!-- Phase 105c — Inline display-name editor for the active encounter.
-       Shown directly below the tabs so the DM can rename the player-facing
-       label without leaving combat. Commits via PATCH /api/combat/{id}/display-name. -->
+  <!-- Inline display-name editor for the active encounter. Lets the DM
+       rename the player-facing label without leaving combat. Commits via
+       PATCH /api/combat/{id}/display-name. -->
   {#if activeEncounter}
     <div class="encounter-header" data-testid="encounter-header">
       <DisplayNameEditor
@@ -943,8 +941,8 @@
     </div>
   {/if}
 
-  <!-- Phase 105: "HP updated to N by player action" indicator fed by
-       wsClient snapshots through mergeSnapshot. -->
+  <!-- "HP updated to N by player action" indicator fed by wsClient
+       snapshots through mergeSnapshot. -->
   {#if activeEncounter && pendingByEncounter[activeEncounter.id] && Object.keys(pendingByEncounter[activeEncounter.id]).length > 0}
     <div class="pending-banner" data-testid="pending-banner">
       {#each Object.entries(pendingByEncounter[activeEncounter.id]) as [field, value]}
@@ -1009,7 +1007,7 @@
                   {#if comb.is_npc}
                     <button
                       class="plan-turn-btn"
-                      onclick={() => onopenturnbuilder && onopenturnbuilder(activeEncounter.id, comb.id, comb.display_name)}
+                      onclick={() => onopenturnbuilder?.(activeEncounter.id, comb.id, comb.display_name)}
                       data-testid="plan-turn-btn-{comb.id}"
                     >
                       Plan Turn
@@ -1062,7 +1060,7 @@
 
         <ActionLogViewer encounterId={activeEncounter.id} />
 
-        <!-- DM Dashboard: Undo & Manual Overrides (Phase 97b) -->
+        <!-- DM dashboard: undo + manual overrides. -->
         <div class="dm-override-panel" data-testid="dm-override-panel">
           <div class="dm-override-row">
             <input
