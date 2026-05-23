@@ -37,6 +37,7 @@
   );
 
   async function loadHistory() {
+    if (!campaignId) return;
     try {
       history = await listNarrationHistory(campaignId);
     } catch (e) {
@@ -45,6 +46,7 @@
   }
 
   async function loadTemplates() {
+    if (!campaignId) return;
     try {
       templates = await listNarrationTemplates(campaignId, {
         category: templateCategory,
@@ -186,7 +188,9 @@
 <div class="narrate-panel">
   <h2>Narrate Panel</h2>
 
-  {#if error}
+  {#if !campaignId}
+    <p class="empty">No active campaign selected.</p>
+  {:else if error}
     <div class="error">{error}</div>
   {/if}
 
