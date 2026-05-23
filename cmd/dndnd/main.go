@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/ab/dndnd/internal/ddbimport"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/discord"
+	"github.com/ab/dndnd/internal/discordcheck"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/encounter"
 	"github.com/ab/dndnd/internal/errorlog"
@@ -614,6 +616,35 @@ func buildDiscordSession(token string) (discord.Session, *discordgo.Session, err
 	return &discord.DiscordgoSession{S: dg}, dg, nil
 }
 
+// distinctCampaignGuildIDs returns the set of guild_ids referenced by the
+// campaigns table, with duplicates removed and a stable order. The Discord
+// startup self-check feeds this into discordcheck.Run so every campaign's
+// guild is verified for bot membership. A lookup failure is downgraded to a
+// warning + empty slice so a momentary DB hiccup never blocks boot.
+func distinctCampaignGuildIDs(ctx context.Context, queries *refdata.Queries, logger *slog.Logger) []string {
+	if queries == nil {
+		return nil
+	}
+	campaigns, err := queries.ListCampaigns(ctx)
+	if err != nil {
+		logger.Warn("discord-check campaign enumeration failed", "error", err)
+		return nil
+	}
+	seen := make(map[string]struct{}, len(campaigns))
+	out := make([]string, 0, len(campaigns))
+	for _, c := range campaigns {
+		if c.GuildID == "" {
+			continue
+		}
+		if _, dup := seen[c.GuildID]; dup {
+			continue
+		}
+		seen[c.GuildID] = struct{}{}
+		out = append(out, c.GuildID)
+	}
+	return out
+}
+
 // wsAllowedOriginsFromEnv derives the WebSocket allow-list host from BASE_URL.
 // SR-016 prod mode passes the resulting slice (plus insecureSkipVerify=false)
 // to Handler.SetWebSocketOriginPolicy so cross-origin upgrade attempts are
@@ -1128,6 +1159,19 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		dashboard.RegisterHomeRoute(router, dashboard.NewHomeHandler(logger, dashHandler), authMw)
 		dashboard.RegisterCampaignsRoutes(router, dashboard.NewCampaignsHandler(logger, queries), authMw)
 
+		// Discord startup self-check publication: the holder is populated
+		// from a single discordcheck.Run invocation immediately after the
+		// gateway opens (Step 4 below). Mount the read-only JSON endpoint
+		// up here so the route exists even when Discord is disabled in
+		// this deploy — the handler returns the "disabled" envelope so the
+		// Svelte banner stays hidden.
+		discordChecksHolder := &atomic.Pointer[discordcheck.Report]{}
+		dashboard.RegisterDiscordChecksRoute(
+			router,
+			dashboard.NewDiscordChecksHandler(logger, discordChecksHolder),
+			authMw,
+		)
+
 		// Phase 110: exploration dashboard (Q4a). Mount behind dmAuthMw
 		// (F-2) so non-DM authenticated users get 403 instead of an empty UI.
 		explorationSvc := exploration.NewService(queries)
@@ -1380,6 +1424,28 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// event and is the gateway-level liveness signal discordgo
 			// itself publishes.
 			health.Register("discord", server.NewDiscordChecker(func() bool { return rawDG.DataReady }))
+
+			// Discord configuration self-check: confirm the bot token is
+			// accepted, the env-supplied application id matches the bot
+			// identity, and every campaign's guild_id resolves to a guild
+			// the bot is currently a member of. Failures are logged as
+			// warnings (boot continues) and published to the dashboard
+			// banner via the holder pointer registered above.
+			guildIDs := distinctCampaignGuildIDs(ctx, queries, logger)
+			report := discordcheck.Run(
+				ctx,
+				discordcheck.From(rawDG),
+				os.Getenv("DISCORD_APPLICATION_ID"),
+				guildIDs,
+			)
+			for _, res := range report.Results {
+				if res.OK {
+					logger.Info("discord check passed", "name", res.Name, "detail", res.Detail)
+					continue
+				}
+				logger.Warn("discord check failed", "name", res.Name, "detail", res.Detail)
+			}
+			discordChecksHolder.Store(&report)
 		}
 
 		// Step 5 — Re-register slash commands for every guild the

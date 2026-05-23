@@ -22,6 +22,7 @@
   import ErrorsPanel from './ErrorsPanel.svelte';
   import ExplorationPanel from './ExplorationPanel.svelte';
   import CharCreatePanel from './CharCreatePanel.svelte';
+  import DiscordHealthBanner from './DiscordHealthBanner.svelte';
   import { resolveDashboardViewFromHash } from './lib/dashboardRouter.js';
   import { getCurrentUser } from './lib/api.js';
   import {
@@ -192,6 +193,8 @@
         {/if}
       </div>
     </header>
+
+    <DiscordHealthBanner />
 
     {#if currentView === 'home'}
       <HomePanel {campaignId} />
