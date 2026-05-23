@@ -207,7 +207,7 @@
     {#if currentView === 'home'}
       <HomePanel {campaignId} />
     {:else if currentView === 'combat'}
-      <CombatManager {campaignId} />
+      <CombatManager {campaignId} onopenturnbuilder={onOpenTurnBuilder} />
     {:else if currentView === 'campaigns'}
       <CampaignsPage activeCampaignId={campaignId} oncreated={refreshCurrentCampaign} />
     {:else if currentView === 'list'}

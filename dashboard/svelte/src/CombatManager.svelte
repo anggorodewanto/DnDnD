@@ -40,7 +40,7 @@
   import ActionLogViewer from './ActionLogViewer.svelte';
   import DisplayNameEditor from './DisplayNameEditor.svelte';
 
-  let { campaignId } = $props();
+  let { campaignId, onopenturnbuilder } = $props();
 
   // Data state
   let encounters = $state([]);
@@ -740,12 +740,21 @@
       x: e.clientX,
       y: e.clientY,
       combatantId: comb.id,
+      isNpc: comb.is_npc,
     };
   }
 
   function handleContextAction(action) {
     if (!contextMenu) return;
     const combId = contextMenu.combatantId;
+
+    if (action === 'plan-turn') {
+      const comb = activeEncounter?.combatants?.find(c => c.id === combId);
+      if (comb && onopenturnbuilder) onopenturnbuilder(activeEncounter.id, combId, comb.display_name);
+      contextMenu = null;
+      return;
+    }
+
     selectedCombatantId = combId;
     contextMenu = null;
 
@@ -997,6 +1006,15 @@
                     {comb.short_id} - {comb.display_name}
                     ({comb.hp_current}/{comb.hp_max} HP)
                   </button>
+                  {#if comb.is_npc}
+                    <button
+                      class="plan-turn-btn"
+                      onclick={() => onopenturnbuilder && onopenturnbuilder(activeEncounter.id, comb.id, comb.display_name)}
+                      data-testid="plan-turn-btn-{comb.id}"
+                    >
+                      Plan Turn
+                    </button>
+                  {/if}
                 </li>
               {/each}
             </ul>
@@ -1014,6 +1032,9 @@
           <button class="context-item" onclick={() => handleContextAction('damage')} data-testid="ctx-damage">Damage</button>
           <button class="context-item" onclick={() => handleContextAction('heal')} data-testid="ctx-heal">Heal</button>
           <button class="context-item" onclick={() => handleContextAction('conditions')} data-testid="ctx-conditions">Conditions</button>
+          {#if contextMenu.isNpc}
+            <button class="context-item" onclick={() => handleContextAction('plan-turn')} data-testid="ctx-plan-turn">Plan Turn</button>
+          {/if}
           <button class="context-item context-danger" onclick={() => handleContextAction('remove')} data-testid="ctx-remove">Remove from Encounter</button>
         </div>
       {/if}
@@ -1328,6 +1349,21 @@
   .combatant-btn.selected {
     border-color: #e94560;
     background: rgba(233, 69, 96, 0.15);
+  }
+
+  .plan-turn-btn {
+    margin-left: 0.5rem;
+    padding: 0.25rem 0.6rem;
+    background: #16213e;
+    color: #fbbf24;
+    border: 1px solid #fbbf24;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+  }
+  .plan-turn-btn:hover {
+    background: #fbbf24;
+    color: #0f1a2e;
   }
 
   .right-panel {
