@@ -55,7 +55,7 @@ func TestRegisterRoutes_SvelteAppStub(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "DnDnD Map Editor")
+	assert.Contains(t, rec.Body.String(), "DnDnD Dashboard")
 }
 
 func TestRegisterRoutes_WebSocketEndpoint(t *testing.T) {

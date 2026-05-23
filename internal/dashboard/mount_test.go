@@ -45,5 +45,5 @@ func TestMountDashboard_AppRoute(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "DnDnD Map Editor")
+	assert.Contains(t, rec.Body.String(), "DnDnD Dashboard")
 }
