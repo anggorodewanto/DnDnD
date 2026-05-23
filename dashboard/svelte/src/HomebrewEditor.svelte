@@ -606,4 +606,9 @@
     grid-column: 1 / -1;
     color: #ff6b6b;
   }
+  @media (max-width: 768px) {
+    .form {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>

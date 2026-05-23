@@ -439,4 +439,9 @@
   }
   .apply-preview { background: #0f1b2d; border-radius: 4px; padding: 0.5rem; margin: 0.5rem 0; }
   .apply-preview pre { white-space: pre-wrap; word-break: break-word; margin: 0.25rem 0 0; font-family: inherit; }
+  @media (max-width: 768px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>

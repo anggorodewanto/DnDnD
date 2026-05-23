@@ -980,4 +980,9 @@
   .review-summary p {
     margin: 0.25rem 0;
   }
+  @media (max-width: 768px) {
+    .ability-grid {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>

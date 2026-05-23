@@ -434,5 +434,9 @@
     header {
       gap: 0.5rem;
     }
+
+    .page-actions {
+      min-width: 0;
+    }
   }
 </style>
