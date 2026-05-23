@@ -68,7 +68,13 @@
         <input type="text" bind:value={name} placeholder="Local Playtest Campaign" />
       </label>
       <label>
-        <span>Guild ID</span>
+        <span class="label-row">
+          <span>Guild ID</span>
+          <span class="info-wrap">
+            <button type="button" class="info-btn" aria-label="What is a Guild ID?">?</button>
+            <span class="tooltip" role="tooltip">Your Discord server ID. To copy it: enable Developer Mode in Discord (User Settings &rarr; Advanced &rarr; Developer Mode), then right-click your server icon and choose 'Copy Server ID'.</span>
+          </span>
+        </span>
         <input type="text" bind:value={guildId} placeholder="local-guild" />
       </label>
       <button type="submit" disabled={saving}>{saving ? 'Creating...' : 'Create Campaign'}</button>
@@ -230,9 +236,66 @@
     background: #14351f;
   }
 
+  .label-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .info-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .info-btn {
+    width: 1.25rem;
+    height: 1.25rem;
+    min-height: 0;
+    padding: 0;
+    background: #0f3460;
+    color: #cbd5e1;
+    border: 1px solid #0f3460;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 0.75rem;
+    line-height: 1;
+    font-weight: 700;
+  }
+
+  .tooltip {
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    left: 0;
+    max-width: 18rem;
+    padding: 0.5rem 0.75rem;
+    background: #0f1a2e;
+    color: #cbd5e1;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    z-index: 5;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .info-btn:hover + .tooltip,
+  .info-btn:focus + .tooltip,
+  .tooltip:hover {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
   @media (max-width: 768px) {
     .campaign-grid {
       grid-template-columns: 1fr;
+    }
+
+    .tooltip {
+      max-width: min(18rem, calc(100vw - 2rem));
     }
   }
 </style>
