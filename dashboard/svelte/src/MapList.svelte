@@ -32,6 +32,10 @@
   $effect(() => {
     if (campaignId) {
       loadMaps();
+    } else {
+      maps = [];
+      loading = false;
+      error = null;
     }
   });
 </script>
@@ -45,6 +49,8 @@
     <p>Loading maps...</p>
   {:else if error}
     <p class="error">{error}</p>
+  {:else if !campaignId}
+    <p>No active campaign selected.</p>
   {:else if maps.length === 0}
     <p>No maps yet. Create one to get started.</p>
   {:else}

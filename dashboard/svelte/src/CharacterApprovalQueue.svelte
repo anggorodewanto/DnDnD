@@ -1,11 +1,10 @@
 <script>
-  let { campaignId } = $props();
   let entries = $state([]);
   let loading = $state(true);
   let error = $state(null);
 
   $effect(() => {
-    if (campaignId) loadApprovals();
+    loadApprovals();
   });
 
   async function loadApprovals() {

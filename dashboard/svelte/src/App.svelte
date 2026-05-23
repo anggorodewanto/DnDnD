@@ -18,7 +18,9 @@
   import DMQueuePanel from './DMQueuePanel.svelte';
   import LootPoolPanel from './LootPoolPanel.svelte';
   import LevelUpPanel from './LevelUpPanel.svelte';
+  import CharacterApprovalQueue from './CharacterApprovalQueue.svelte';
   import { isMobileViewport, isDesktopOnly } from './lib/layout.js';
+  import { resolveDashboardViewFromHash } from './lib/dashboardRouter.js';
 
   let innerWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1920);
   let currentView = $state('list');
@@ -52,23 +54,7 @@
 
   // Determine initial view from URL hash
   function getInitialView() {
-    const hash = window.location.hash;
-    if (hash === '#combat') return 'combat';
-    if (hash === '#encounters') return 'encounter-list';
-    if (hash === '#encounter-new') return 'encounter-editor';
-    if (hash.startsWith('#turn-builder')) return 'turn-builder';
-    if (hash === '#shops') return 'shop-list';
-    if (hash === '#shop-new') return 'shop-editor';
-    if (hash === '#narrate') return 'narrate';
-    if (hash === '#homebrew') return 'homebrew';
-    if (hash === '#party') return 'party';
-    if (hash === '#stat-block-library') return 'stat-block-library';
-    if (hash === '#message-player') return 'message-player';
-    if (hash === '#open5e-sources') return 'open5e-sources';
-    if (hash === '#dm-queue') return 'dm-queue';
-    if (hash === '#loot') return 'loot';
-    if (hash === '#levelup') return 'levelup';
-    return 'list';
+    return resolveDashboardViewFromHash(window.location.hash);
   }
 
   currentView = getInitialView();
@@ -81,6 +67,15 @@
     };
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
+  });
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => {
+      currentView = getInitialView();
+    };
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
   });
 
   // Map the internal desktop `currentView` tokens to the spec's desktop-only
@@ -203,6 +198,10 @@
   function onShowLevelUp() {
     currentView = 'levelup';
   }
+
+  function onShowApprovals() {
+    currentView = 'approvals';
+  }
 </script>
 
 {#if isMobileViewport(innerWidth)}
@@ -237,6 +236,8 @@
       <h1>Loot Pool</h1>
     {:else if currentView === 'levelup'}
       <h1>Level Up</h1>
+    {:else if currentView === 'approvals'}
+      <h1>Character Approvals</h1>
     {:else}
       <h1>Encounter Builder</h1>
     {/if}
@@ -254,6 +255,7 @@
       <button class:active={currentView === 'message-player'} onclick={onShowMessagePlayer}>Message Player</button>
       <button class:active={currentView === 'open5e-sources'} onclick={onShowOpen5eSources}>Open5e Sources</button>
       <button class:active={currentView === 'dm-queue'} onclick={onShowDMQueue}>DM Queue</button>
+      <button class:active={currentView === 'approvals'} onclick={onShowApprovals}>Approvals</button>
       <button class:active={currentView === 'loot'} onclick={onShowLoot}>Loot</button>
       <button class:active={currentView === 'levelup'} onclick={onShowLevelUp}>Level Up</button>
     </nav>
@@ -308,6 +310,8 @@
     <LootPoolPanel {campaignId} />
   {:else if currentView === 'levelup'}
     <LevelUpPanel />
+  {:else if currentView === 'approvals'}
+    <CharacterApprovalQueue {campaignId} />
   {/if}
 </main>
 {/if}
