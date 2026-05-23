@@ -46,6 +46,11 @@
   $effect(() => {
     if (campaignId) {
       load();
+    } else {
+      characters = [];
+      partyLanguages = [];
+      loading = false;
+      error = null;
     }
   });
 
@@ -68,6 +73,8 @@
     <p>Loading party...</p>
   {:else if error}
     <p class="error">Failed to load: {error}</p>
+  {:else if !campaignId}
+    <p>No active campaign selected.</p>
   {:else if characters.length === 0}
     <p>No approved characters in this campaign yet.</p>
   {:else}

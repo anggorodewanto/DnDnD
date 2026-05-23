@@ -1,5 +1,6 @@
 const HASH_TO_VIEW = Object.freeze({
   '#combat': 'combat',
+  '#campaigns': 'campaigns',
   '#encounters': 'encounter-list',
   '#encounter-new': 'encounter-editor',
   '#shops': 'shop-list',

@@ -19,8 +19,10 @@
   import LootPoolPanel from './LootPoolPanel.svelte';
   import LevelUpPanel from './LevelUpPanel.svelte';
   import CharacterApprovalQueue from './CharacterApprovalQueue.svelte';
+  import CampaignsPage from './CampaignsPage.svelte';
   import { isMobileViewport, isDesktopOnly } from './lib/layout.js';
   import { resolveDashboardViewFromHash } from './lib/dashboardRouter.js';
+  import { getCurrentUser } from './lib/api.js';
   import {
     dashboardNavItems,
     dashboardViewTitle,
@@ -41,20 +43,20 @@
   // the user has no active campaign yet so panels can render an empty state.
   let campaignId = $state('');
 
+  async function refreshCurrentCampaign() {
+    if (typeof window === 'undefined') return;
+    try {
+      const data = await getCurrentUser();
+      campaignId = data && typeof data.campaign_id === 'string' ? data.campaign_id : '';
+    } catch {
+      /* swallow: campaignId stays empty so panels can render an empty state */
+    }
+  }
+
   // Fetch the active campaign id on boot. Best-effort: any network /
   // unauthenticated response leaves campaignId='' so the SPA still renders.
   $effect(() => {
-    if (typeof window === 'undefined') return;
-    fetch('/api/me', { credentials: 'same-origin' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && typeof data.campaign_id === 'string' && data.campaign_id !== '') {
-          campaignId = data.campaign_id;
-        }
-      })
-      .catch(() => {
-        /* swallow: campaignId stays empty so panels can render an empty state */
-      });
+    refreshCurrentCampaign();
   });
 
   // Determine initial view from URL hash
@@ -222,6 +224,8 @@
 
     {#if currentView === 'combat'}
       <CombatManager {campaignId} />
+    {:else if currentView === 'campaigns'}
+      <CampaignsPage activeCampaignId={campaignId} oncreated={refreshCurrentCampaign} />
     {:else if currentView === 'list'}
       <MapList {campaignId} oncreate={onCreateNew} onedit={onEditMap} />
     {:else if currentView === 'editor'}

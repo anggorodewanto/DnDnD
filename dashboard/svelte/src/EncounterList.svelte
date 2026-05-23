@@ -41,6 +41,10 @@
   $effect(() => {
     if (campaignId) {
       loadEncounters();
+    } else {
+      encounters = [];
+      loading = false;
+      error = null;
     }
   });
 </script>
@@ -54,6 +58,8 @@
     <p>Loading encounters...</p>
   {:else if error}
     <p class="error">{error}</p>
+  {:else if !campaignId}
+    <p>No active campaign selected.</p>
   {:else if encounters.length === 0}
     <p>No saved encounters yet. Create one to get started.</p>
   {:else}

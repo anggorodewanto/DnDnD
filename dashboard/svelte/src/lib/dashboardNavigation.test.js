@@ -15,6 +15,15 @@ describe('dashboardNavItems', () => {
     });
   });
 
+  it('includes a campaigns destination near the top of the sidebar', () => {
+    expect(dashboardNavItems[1]).toMatchObject({
+      id: 'campaigns',
+      label: 'Campaigns',
+      view: 'campaigns',
+      hash: '#campaigns',
+    });
+  });
+
   it('keeps editor sub-pages active under their parent sidebar destination', () => {
     const dashboard = dashboardNavItems.find((item) => item.id === 'dashboard');
     const encounters = dashboardNavItems.find((item) => item.id === 'encounters');
@@ -29,6 +38,7 @@ describe('dashboardNavItems', () => {
 describe('dashboardViewTitle', () => {
   it('returns stable page titles for sidebar-routed views', () => {
     expect(dashboardViewTitle('list')).toBe('Dashboard');
+    expect(dashboardViewTitle('campaigns')).toBe('Campaigns');
     expect(dashboardViewTitle('approvals')).toBe('Character Approvals');
     expect(dashboardViewTitle('stat-block-library')).toBe('Stat Block Library');
   });

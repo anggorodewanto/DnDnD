@@ -20,6 +20,12 @@
   let error = $state('');
 
   async function fetchShops() {
+    if (!campaignId) {
+      shops = [];
+      loading = false;
+      error = '';
+      return;
+    }
     loading = true;
     error = '';
     try {
@@ -59,6 +65,8 @@
 
   {#if loading}
     <p class="loading">Loading shops...</p>
+  {:else if !campaignId}
+    <p class="empty">No active campaign selected.</p>
   {:else if shops.length === 0}
     <p class="empty">No shops yet. Create one to get started!</p>
   {:else}

@@ -1,5 +1,6 @@
 export const dashboardNavItems = Object.freeze([
   { id: 'dashboard', label: 'Dashboard', view: 'list', hash: '#maps', group: ['list', 'editor'] },
+  { id: 'campaigns', label: 'Campaigns', view: 'campaigns', hash: '#campaigns', group: ['campaigns'] },
   { id: 'combat', label: 'Combat', view: 'combat', hash: '#combat', group: ['combat'] },
   {
     id: 'encounters',
@@ -48,6 +49,7 @@ export const dashboardNavItems = Object.freeze([
 
 const VIEW_TITLES = Object.freeze({
   combat: 'Combat Manager',
+  campaigns: 'Campaigns',
   list: 'Dashboard',
   editor: 'Map Editor',
   'encounter-list': 'Encounter Builder',

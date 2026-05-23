@@ -20,6 +20,25 @@ async function apiFetch(url, options) {
   return res;
 }
 
+export async function getCurrentUser() {
+  const res = await apiFetch('/api/me');
+  return res.json();
+}
+
+export async function listCampaigns() {
+  const res = await apiFetch('/api/campaigns');
+  return res.json();
+}
+
+export async function createCampaign(params) {
+  const res = await apiFetch('/api/campaigns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  return res.json();
+}
+
 /**
  * Create a new map.
  * @param {object} params - { campaign_id, name, width, height, tiled_json? }

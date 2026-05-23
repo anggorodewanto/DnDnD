@@ -25,6 +25,9 @@ import {
   postLootAnnouncement,
   listEligibleLootEncounters,
   applyLevelUp,
+  getCurrentUser,
+  listCampaigns,
+  createCampaign,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -74,6 +77,48 @@ describe('uploadAsset', () => {
       type: 'bogus',
       file,
     })).rejects.toThrow('invalid asset type');
+  });
+});
+
+describe('campaign APIs', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('fetches the current dashboard user', async () => {
+    const mockResponse = { discord_user_id: 'dm-1', campaign_id: 'camp-1' };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    });
+
+    await expect(getCurrentUser()).resolves.toEqual(mockResponse);
+    expect(fetch).toHaveBeenCalledWith('/api/me', undefined);
+  });
+
+  it('lists campaigns for the authenticated DM', async () => {
+    const mockResponse = { campaigns: [{ id: 'camp-1', name: 'Local' }] };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    });
+
+    await expect(listCampaigns()).resolves.toEqual(mockResponse);
+    expect(fetch).toHaveBeenCalledWith('/api/campaigns', undefined);
+  });
+
+  it('creates a campaign', async () => {
+    const mockResponse = { id: 'camp-1', name: 'Local', guild_id: 'guild-1' };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    });
+
+    await expect(createCampaign({ name: 'Local', guild_id: 'guild-1' })).resolves.toEqual(mockResponse);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/campaigns');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual({ name: 'Local', guild_id: 'guild-1' });
   });
 });
 
