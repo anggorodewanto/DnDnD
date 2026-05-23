@@ -8,8 +8,6 @@
   import ShopBuilder from './ShopBuilder.svelte';
   import CombatManager from './CombatManager.svelte';
   import NarratePanel from './NarratePanel.svelte';
-  import MobileShell from './MobileShell.svelte';
-  import MobileRedirect from './MobileRedirect.svelte';
   import HomebrewEditor from './HomebrewEditor.svelte';
   import CharacterOverview from './CharacterOverview.svelte';
   import StatBlockLibrary from './StatBlockLibrary.svelte';
@@ -24,7 +22,6 @@
   import ErrorsPanel from './ErrorsPanel.svelte';
   import ExplorationPanel from './ExplorationPanel.svelte';
   import CharCreatePanel from './CharCreatePanel.svelte';
-  import { isMobileViewport, isDesktopOnly } from './lib/layout.js';
   import { resolveDashboardViewFromHash } from './lib/dashboardRouter.js';
   import { getCurrentUser } from './lib/api.js';
   import {
@@ -33,7 +30,6 @@
     isDashboardNavItemActive,
   } from './lib/dashboardNavigation.js';
 
-  let innerWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1920);
   let currentView = $state('home');
   let editingMapId = $state(null);
   let editingEncounterId = $state(null);
@@ -70,16 +66,6 @@
 
   currentView = getInitialView();
 
-  // Track viewport width so we can swap to the mobile-lite shell (Phase 102).
-  $effect(() => {
-    if (typeof window === 'undefined') return;
-    const handler = () => {
-      innerWidth = window.innerWidth;
-    };
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  });
-
   $effect(() => {
     if (typeof window === 'undefined') return;
     const handler = () => {
@@ -88,16 +74,6 @@
     window.addEventListener('hashchange', handler);
     return () => window.removeEventListener('hashchange', handler);
   });
-
-  // Map the internal desktop `currentView` tokens to the spec's desktop-only
-  // feature ids used by the layout helpers.
-  function currentDesktopOnlyID() {
-    if (currentView === 'list' || currentView === 'editor') return 'map-editor';
-    if (currentView === 'encounter-list' || currentView === 'encounter-editor') return 'encounter-builder';
-    if (currentView === 'combat') return 'combat-workspace';
-    if (currentView === 'stat-block-library') return 'stat-block-library';
-    return null;
-  }
 
   function onCreateNew() {
     editingMapId = null;
@@ -184,12 +160,6 @@
   }
 </script>
 
-{#if isMobileViewport(innerWidth)}
-  {#if isDesktopOnly(currentDesktopOnlyID())}
-    <MobileRedirect view={currentDesktopOnlyID()} />
-  {/if}
-  <MobileShell {campaignId} />
-{:else}
 <div class="desktop-shell">
   <aside class="sidebar" aria-label="Dashboard navigation">
     <a class="brand" href="#maps" onclick={(event) => { event.preventDefault(); navigateTo(dashboardNavItems[0]); }}>
@@ -280,7 +250,6 @@
     {/if}
   </main>
 </div>
-{/if}
 
 <style>
   :global(body) {
@@ -398,5 +367,27 @@
 
   .back-btn:hover {
     background: #0f3460;
+  }
+
+  @media (max-width: 768px) {
+    .desktop-shell {
+      grid-template-columns: 1fr;
+    }
+    .sidebar {
+      position: static;
+      height: auto;
+      flex-direction: row;
+      flex-wrap: wrap;
+      overflow-x: auto;
+      border-right: none;
+      border-bottom: 1px solid #0f3460;
+    }
+    .sidebar-nav {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    header h1 {
+      font-size: 1.25rem;
+    }
   }
 </style>
