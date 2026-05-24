@@ -35,7 +35,6 @@
   let abilityMethod = $state('point_buy');
   let abilityRolls = $state({});
   let selectedSkills = $state([]);
-  let equipment = $state([]);
   let selectedSpells = $state([]);
 
   // Reference data
