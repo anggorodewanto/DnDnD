@@ -48,6 +48,32 @@ func makeToppleMaul() refdata.Weapon {
 	}
 }
 
+// makeVexRapier returns a rapier whose mastery property is "vex".
+func makeVexRapier() refdata.Weapon {
+	return refdata.Weapon{
+		ID:         "rapier",
+		Name:       "Rapier",
+		Damage:     "1d8",
+		DamageType: "piercing",
+		WeaponType: "martial_melee",
+		Properties: []string{"finesse"},
+		Mastery:    "vex",
+	}
+}
+
+// makeSapMace returns a mace whose mastery property is "sap".
+func makeSapMace() refdata.Weapon {
+	return refdata.Weapon{
+		ID:         "mace",
+		Name:       "Mace",
+		Damage:     "1d6",
+		DamageType: "bludgeoning",
+		WeaponType: "simple_melee",
+		Properties: []string{},
+		Mastery:    "sap",
+	}
+}
+
 // --- masteryActive ---
 
 func TestMasteryActive(t *testing.T) {
@@ -270,6 +296,166 @@ func TestResolveAttack_ToppleHitUnknownMasteryNoSave(t *testing.T) {
 	assert.True(t, result.Hit)
 	assert.Equal(t, "", result.MasteryProperty)
 	assert.Equal(t, 0, result.MasteryToppleSaveDC)
+}
+
+// --- Vex (pure ResolveAttack) ---
+
+func TestResolveAttack_VexHitSetsMasteryProperty(t *testing.T) {
+	// d20 rolls 18 (+3 STR/DEX +2 prof = 23 >= AC 13) → hit.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        13,
+		Weapon:          makeVexRapier(),
+		Scores:          AbilityScores{Str: 10, Dex: 16},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		AbilityUsed:     "dex",
+		WeaponMasteries: []string{"rapier"},
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "vex", result.MasteryProperty)
+}
+
+func TestResolveAttack_VexHitUnknownMasteryNoProperty(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        13,
+		Weapon:          makeVexRapier(),
+		Scores:          AbilityScores{Str: 10, Dex: 16},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		AbilityUsed:     "dex",
+		WeaponMasteries: nil, // attacker does NOT know rapier mastery
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "", result.MasteryProperty)
+}
+
+func TestResolveAttack_VexMissNoProperty(t *testing.T) {
+	// d20 rolls 2 (+3 DEX +2 prof = 7 < AC 20) → miss.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 2
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        20,
+		Weapon:          makeVexRapier(),
+		Scores:          AbilityScores{Str: 10, Dex: 16},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		AbilityUsed:     "dex",
+		WeaponMasteries: []string{"rapier"},
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.False(t, result.Hit)
+	assert.Equal(t, "", result.MasteryProperty, "vex only fires on a hit")
+}
+
+// --- Sap (pure ResolveAttack) ---
+
+func TestResolveAttack_SapHitSetsMasteryProperty(t *testing.T) {
+	// d20 rolls 18 (+3 STR +2 prof = 23 >= AC 13) → hit.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        13,
+		Weapon:          makeSapMace(),
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		WeaponMasteries: []string{"mace"},
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "sap", result.MasteryProperty)
+}
+
+func TestResolveAttack_SapHitUnknownMasteryNoProperty(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        13,
+		Weapon:          makeSapMace(),
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		WeaponMasteries: nil,
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "", result.MasteryProperty)
+}
+
+func TestResolveAttack_SapMissNoProperty(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 2
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        20,
+		Weapon:          makeSapMace(),
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		WeaponMasteries: []string{"mace"},
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.False(t, result.Hit)
+	assert.Equal(t, "", result.MasteryProperty, "sap only fires on a hit")
 }
 
 // --- Graze (service-level) ---
@@ -624,4 +810,196 @@ func TestServiceAttack_ToppleUnknownMasteryNoSave(t *testing.T) {
 	assert.True(t, result.Hit)
 	assert.Equal(t, "", result.MasteryProperty)
 	assert.NotContains(t, appliedConditions, "prone")
+}
+
+// --- Vex (service-level) ---
+
+// TestServiceAttack_VexHitAppliesVexAdvantageToAttacker verifies a hit with a
+// known vex weapon applies a vex_advantage condition to the ATTACKER, scoped
+// to the target (mirrors help_advantage). The condition write lands on the
+// attacker's combatant ID.
+func TestServiceAttack_VexHitAppliesVexAdvantageToAttacker(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(10, 16, 2, "rapier")
+	char.ID = charID
+	char.CharacterData = charDataWithMasteries(`{"weapon_masteries":["rapier"]}`)
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeVexRapier(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	condWrites := make(map[uuid.UUID][]CombatCondition)
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		var conds []CombatCondition
+		_ = json.Unmarshal(arg.Conditions, &conds)
+		condWrites[arg.ID] = conds
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18 // hit
+		}
+		return 6
+	})
+
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin #1",
+		PositionCol: "B",
+		PositionRow: 1,
+		Ac:          13,
+		HpCurrent:   20,
+		HpMax:       20,
+		IsAlive:     true,
+		IsNpc:       true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1}
+
+	result, err := svc.Attack(ctx, AttackCommand{Attacker: attacker, Target: target, Turn: turn}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "vex", result.MasteryProperty)
+
+	attackerConds, ok := condWrites[attackerID]
+	require.True(t, ok, "expected a condition write on the attacker for vex_advantage")
+	var vex *CombatCondition
+	for i := range attackerConds {
+		if attackerConds[i].Condition == "vex_advantage" {
+			vex = &attackerConds[i]
+		}
+	}
+	require.NotNil(t, vex, "expected vex_advantage condition on attacker")
+	assert.Equal(t, targetID.String(), vex.TargetCombatantID, "vex_advantage must be scoped to the target")
+	// The vex_advantage condition must NOT be applied to the target.
+	if targetConds, ok := condWrites[targetID]; ok {
+		for _, c := range targetConds {
+			assert.NotEqual(t, "vex_advantage", c.Condition, "vex_advantage must not land on the target")
+		}
+	}
+}
+
+// --- Sap (service-level) ---
+
+// TestServiceAttack_SapHitAppliesSapDisadvantageToTarget verifies a hit with a
+// known sap weapon applies a sap_disadvantage condition to the TARGET, so the
+// target's next attack rolls at disadvantage.
+func TestServiceAttack_SapHitAppliesSapDisadvantageToTarget(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(16, 10, 2, "mace")
+	char.ID = charID
+	char.CharacterData = charDataWithMasteries(`{"weapon_masteries":["mace"]}`)
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeSapMace(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	condWrites := make(map[uuid.UUID][]CombatCondition)
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		var conds []CombatCondition
+		_ = json.Unmarshal(arg.Conditions, &conds)
+		condWrites[arg.ID] = conds
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18 // hit
+		}
+		return 6
+	})
+
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin #1",
+		PositionCol: "B",
+		PositionRow: 1,
+		Ac:          13,
+		HpCurrent:   20,
+		HpMax:       20,
+		IsAlive:     true,
+		IsNpc:       true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1}
+
+	result, err := svc.Attack(ctx, AttackCommand{Attacker: attacker, Target: target, Turn: turn}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "sap", result.MasteryProperty)
+
+	targetConds, ok := condWrites[targetID]
+	require.True(t, ok, "expected a condition write on the target for sap_disadvantage")
+	var found bool
+	for _, c := range targetConds {
+		if c.Condition == "sap_disadvantage" {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected sap_disadvantage condition on the target")
+	// sap_disadvantage must NOT land on the attacker.
+	if attackerConds, ok := condWrites[attackerID]; ok {
+		for _, c := range attackerConds {
+			assert.NotEqual(t, "sap_disadvantage", c.Condition, "sap_disadvantage must not land on the attacker")
+		}
+	}
 }

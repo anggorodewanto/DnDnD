@@ -601,3 +601,64 @@ func TestDetectAdvantage_TargetDodging_Disadvantage(t *testing.T) {
 	assert.Empty(t, advReasons)
 	assert.Contains(t, disadvReasons, "target dodging")
 }
+
+// 2024 Weapon Mastery — Vex: the attacker holds a vex_advantage condition
+// scoped to the same target it hit; the next attack vs that target rolls with
+// advantage. Mirrors help_advantage's target-scoped grant.
+
+func TestDetectAdvantage_VexAdvantage_MatchingTarget(t *testing.T) {
+	targetID := "goblin-uuid"
+	input := AdvantageInput{
+		AttackerConditions: []CombatCondition{{
+			Condition:         "vex_advantage",
+			TargetCombatantID: targetID,
+		}},
+		TargetCombatantID: targetID,
+	}
+	mode, advReasons, disadvReasons := DetectAdvantage(input)
+	assert.Equal(t, dice.Advantage, mode)
+	assert.Contains(t, advReasons, "vex")
+	assert.Empty(t, disadvReasons)
+}
+
+func TestDetectAdvantage_VexAdvantage_DifferentTarget(t *testing.T) {
+	input := AdvantageInput{
+		AttackerConditions: []CombatCondition{{
+			Condition:         "vex_advantage",
+			TargetCombatantID: "goblin-uuid",
+		}},
+		TargetCombatantID: "orc-uuid",
+	}
+	mode, advReasons, _ := DetectAdvantage(input)
+	assert.Equal(t, dice.Normal, mode, "vex advantage is target-scoped")
+	assert.Empty(t, advReasons)
+}
+
+func TestDetectAdvantage_VexAdvantage_EmptyTargetScope(t *testing.T) {
+	// Defensive: a vex_advantage with no target_combatant_id must not grant
+	// universal advantage.
+	input := AdvantageInput{
+		AttackerConditions: []CombatCondition{{
+			Condition:         "vex_advantage",
+			TargetCombatantID: "",
+		}},
+		TargetCombatantID: "goblin-uuid",
+	}
+	mode, advReasons, _ := DetectAdvantage(input)
+	assert.Equal(t, dice.Normal, mode)
+	assert.Empty(t, advReasons)
+}
+
+// 2024 Weapon Mastery — Sap: a creature hit by a sap weapon holds a
+// sap_disadvantage condition; its next attack (where it is the attacker) rolls
+// at disadvantage.
+
+func TestDetectAdvantage_SapDisadvantage_AttackerSapped(t *testing.T) {
+	input := AdvantageInput{
+		AttackerConditions: []CombatCondition{{Condition: "sap_disadvantage"}},
+	}
+	mode, advReasons, disadvReasons := DetectAdvantage(input)
+	assert.Equal(t, dice.Disadvantage, mode)
+	assert.Empty(t, advReasons)
+	assert.Contains(t, disadvReasons, "sapped")
+}

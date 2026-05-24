@@ -87,6 +87,19 @@ func DetectAdvantage(input AdvantageInput) (dice.RollMode, []string, []string) {
 			if c.TargetCombatantID != "" && c.TargetCombatantID == input.TargetCombatantID {
 				advReasons = append(advReasons, "help advantage")
 			}
+		case "vex_advantage":
+			// 2024 Weapon Mastery — Vex grants the attacker advantage on its
+			// next attack vs the SAME target it hit. Target-scoped exactly like
+			// help_advantage; empty TargetCombatantID is treated as no grant.
+			if c.TargetCombatantID != "" && c.TargetCombatantID == input.TargetCombatantID {
+				advReasons = append(advReasons, "vex")
+			}
+		case "sap_disadvantage":
+			// 2024 Weapon Mastery — Sap: a creature hit by a sap weapon has
+			// disadvantage on its NEXT attack. The condition lives on the
+			// sapped creature; when it later attacks (it is the attacker here)
+			// the roll is at disadvantage. Not target-scoped.
+			disadvReasons = append(disadvReasons, "sapped")
 		case "reckless":
 			// C-C02: Reckless Attack's attacker-side half — the transient
 			// condition grants advantage on melee STR attacks for the rest

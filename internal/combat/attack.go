@@ -624,6 +624,15 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 			result.MasteryProperty = "topple"
 			result.MasteryToppleSaveDC = 8 + profBonus + abilityModForWeapon(input.Scores, input.Weapon, input.MonkLevel)
 		}
+		// 2024 Weapon Mastery — Vex / Sap also fire on an auto-crit hit. The
+		// service layer applies the resulting condition; here we only record
+		// which mastery fired.
+		if masteryActive(input) && input.Weapon.Mastery == "vex" {
+			result.MasteryProperty = "vex"
+		}
+		if masteryActive(input) && input.Weapon.Mastery == "sap" {
+			result.MasteryProperty = "sap"
+		}
 		return result, nil
 	}
 
@@ -671,6 +680,18 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	if masteryActive(input) && input.Weapon.Mastery == "topple" {
 		result.MasteryProperty = "topple"
 		result.MasteryToppleSaveDC = 8 + profBonus + abilityModForWeapon(input.Scores, input.Weapon, input.MonkLevel)
+	}
+
+	// 2024 Weapon Mastery — Vex: on a hit, the attacker gains advantage on its
+	// next attack vs the SAME target (until the end of its next turn). Sap: on
+	// a hit, the target has disadvantage on its NEXT attack. Both are gated
+	// behind masteryActive so non-mastery hits are unchanged; the service layer
+	// applies the resulting condition.
+	if masteryActive(input) && input.Weapon.Mastery == "vex" {
+		result.MasteryProperty = "vex"
+	}
+	if masteryActive(input) && input.Weapon.Mastery == "sap" {
+		result.MasteryProperty = "sap"
 	}
 
 	return result, nil
@@ -1098,11 +1119,14 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 		s.applyRecklessMarker(ctx, cmd.Attacker)
 	}
 
-	// SR-018 — clear any help_advantage scoped to this target. The grant is
-	// single-shot: the next attack vs the named target spends it. Runs after
-	// resolveAndPersistAttack so a range/cover/charmed rejection does not
-	// burn the Help.
+	// SR-018 — clear any help_advantage / vex_advantage scoped to this target.
+	// The grant is single-shot: the next attack vs the named target spends it.
+	// Runs after resolveAndPersistAttack so a range/cover/charmed rejection
+	// does not burn the Help / Vex grant.
 	s.consumeHelpAdvantage(ctx, cmd.Attacker, cmd.Target)
+	// 2024 Weapon Mastery — Sap: a sapped attacker's next attack rolls at
+	// disadvantage; spend the grant once this attack has resolved (any target).
+	s.consumeSapDisadvantage(ctx, cmd.Attacker)
 
 	// C-37 — track ammunition spent for post-combat half-recovery (Phase 37).
 	if char != nil && HasProperty(weapon, "ammunition") {
@@ -1207,8 +1231,10 @@ func (s *Service) attackImprovised(ctx context.Context, cmd AttackCommand, rolle
 	s.markUsedEffects(cmd.Attacker.EncounterID, cmd.Attacker.ID, result.OncePerTurnEffectsFired)
 	s.markRageAttacked(ctx, cmd.Attacker)
 	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, charPtr)
-	// SR-018 — improvised attacks also consume help_advantage targeting cmd.Target.
+	// SR-018 — improvised attacks also consume help_advantage / vex_advantage
+	// targeting cmd.Target, and any sap_disadvantage on the attacker.
 	s.consumeHelpAdvantage(ctx, cmd.Attacker, cmd.Target)
+	s.consumeSapDisadvantage(ctx, cmd.Attacker)
 	return result, nil
 }
 
@@ -1331,8 +1357,10 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	s.markRageAttacked(ctx, cmd.Attacker)
 	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, &char)
 	// SR-018 — off-hand swings count as an attack vs the target and so spend
-	// any help_advantage scoped to that target.
+	// any help_advantage / vex_advantage scoped to that target, plus any
+	// sap_disadvantage on the attacker.
 	s.consumeHelpAdvantage(ctx, cmd.Attacker, cmd.Target)
+	s.consumeSapDisadvantage(ctx, cmd.Attacker)
 	return result, nil
 }
 
@@ -1504,13 +1532,16 @@ func (s *Service) applyRecklessMarker(ctx context.Context, attacker refdata.Comb
 	}
 }
 
-// consumeHelpAdvantage clears a help_advantage condition from the attacker
-// when its TargetCombatantID matches the combatant just attacked. SR-018:
-// Help grants advantage on the helped creature's next attack vs the named
-// target; once that attack has been resolved (hit or miss) the condition is
-// spent and must not carry over to subsequent attacks (same target or not).
-// Conditions scoped to a different target are left in place so a fresh
-// /attack vs the named target still triggers DetectAdvantage's help branch.
+// consumeHelpAdvantage clears single-shot target-scoped attacker advantage
+// grants when their TargetCombatantID matches the combatant just attacked:
+//   - help_advantage (SR-018: Help action), and
+//   - vex_advantage (2024 Weapon Mastery — Vex)
+//
+// Both grant advantage on the helped/attacking creature's next attack vs the
+// named target; once that attack has resolved (hit or miss) the condition is
+// spent and must not carry over to subsequent attacks. Conditions scoped to a
+// different target are left in place so a fresh /attack vs the named target
+// still triggers DetectAdvantage's matching branch.
 func (s *Service) consumeHelpAdvantage(ctx context.Context, attacker refdata.Combatant, target refdata.Combatant) {
 	conds, err := parseConditions(attacker.Conditions)
 	if err != nil {
@@ -1520,7 +1551,8 @@ func (s *Service) consumeHelpAdvantage(ctx context.Context, attacker refdata.Com
 	filtered := make([]CombatCondition, 0, len(conds))
 	consumed := false
 	for _, c := range conds {
-		if c.Condition == "help_advantage" && c.TargetCombatantID == targetID {
+		scopedGrant := c.Condition == "help_advantage" || c.Condition == "vex_advantage"
+		if scopedGrant && c.TargetCombatantID == targetID {
 			consumed = true
 			continue
 		}
@@ -1531,7 +1563,7 @@ func (s *Service) consumeHelpAdvantage(ctx context.Context, attacker refdata.Com
 	}
 	newConds, err := json.Marshal(filtered)
 	if err != nil {
-		log.Printf("marshaling conditions after help_advantage consume for %s: %v", attacker.ID, err)
+		log.Printf("marshaling conditions after scoped-advantage consume for %s: %v", attacker.ID, err)
 		return
 	}
 	if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
@@ -1539,7 +1571,43 @@ func (s *Service) consumeHelpAdvantage(ctx context.Context, attacker refdata.Com
 		Conditions:      newConds,
 		ExhaustionLevel: attacker.ExhaustionLevel,
 	}); err != nil {
-		log.Printf("clearing help_advantage on %s: %v", attacker.ID, err)
+		log.Printf("clearing scoped advantage on %s: %v", attacker.ID, err)
+	}
+}
+
+// consumeSapDisadvantage clears a sap_disadvantage condition from the attacker
+// after it makes an attack. 2024 Weapon Mastery — Sap imposes disadvantage on
+// the sapped creature's NEXT attack; once that attack resolves (hit or miss)
+// the grant is spent. Unlike help/vex this is not target-scoped: the next
+// attack against any target spends it.
+func (s *Service) consumeSapDisadvantage(ctx context.Context, attacker refdata.Combatant) {
+	conds, err := parseConditions(attacker.Conditions)
+	if err != nil {
+		return
+	}
+	filtered := make([]CombatCondition, 0, len(conds))
+	consumed := false
+	for _, c := range conds {
+		if c.Condition == "sap_disadvantage" {
+			consumed = true
+			continue
+		}
+		filtered = append(filtered, c)
+	}
+	if !consumed {
+		return
+	}
+	newConds, err := json.Marshal(filtered)
+	if err != nil {
+		log.Printf("marshaling conditions after sap_disadvantage consume for %s: %v", attacker.ID, err)
+		return
+	}
+	if _, err := s.store.UpdateCombatantConditions(ctx, refdata.UpdateCombatantConditionsParams{
+		ID:              attacker.ID,
+		Conditions:      newConds,
+		ExhaustionLevel: attacker.ExhaustionLevel,
+	}); err != nil {
+		log.Printf("clearing sap_disadvantage on %s: %v", attacker.ID, err)
 	}
 }
 
