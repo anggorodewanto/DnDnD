@@ -473,6 +473,40 @@ func masteryActive(input AttackInput) bool {
 	return false
 }
 
+// onHitMastery returns the mastery slug that fires on a HIT for this attack, or
+// "" when none applies. It is the single gate shared by the regular-hit and
+// auto-crit paths so they stay in lockstep. Graze is excluded here because it
+// fires on a MISS, not a hit; Cleave is melee-only. Everything stays gated
+// behind masteryActive so non-mastery hits are unaffected.
+func onHitMastery(input AttackInput, isMelee bool) string {
+	if !masteryActive(input) {
+		return ""
+	}
+	switch input.Weapon.Mastery {
+	case "topple", "vex", "sap", "slow", "push":
+		return input.Weapon.Mastery
+	case "cleave":
+		if isMelee {
+			return "cleave"
+		}
+	}
+	return ""
+}
+
+// recordOnHitMastery records the on-hit mastery slug on the result, plus the
+// Topple CON save DC when Topple fired. Shared by the auto-crit hit path and
+// the regular hit path so they cannot drift apart. toppleSaveDC is only read
+// when the slug is "topple". A "" slug is a no-op.
+func recordOnHitMastery(result *AttackResult, slug string, toppleSaveDC int) {
+	if slug == "" {
+		return
+	}
+	result.MasteryProperty = slug
+	if slug == "topple" {
+		result.MasteryToppleSaveDC = toppleSaveDC
+	}
+}
+
 // ResolveAttack resolves a single attack using pure inputs. Returns an error if the target
 // is out of range.
 func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error) {
@@ -627,34 +661,11 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		result.DamageTotal = dmg + gwmSharpshooterBonus + extra
 		result.DamageDice = damageDice
 		result.DamageRoll = dmgRoll
-		// 2024 Weapon Mastery — Topple also fires on an auto-crit hit.
-		if masteryActive(input) && input.Weapon.Mastery == "topple" {
-			result.MasteryProperty = "topple"
-			result.MasteryToppleSaveDC = 8 + profBonus + abilityModForWeapon(input.Scores, input.Weapon, input.MonkLevel)
-		}
-		// 2024 Weapon Mastery — Vex / Sap also fire on an auto-crit hit. The
-		// service layer applies the resulting condition; here we only record
-		// which mastery fired.
-		if masteryActive(input) && input.Weapon.Mastery == "vex" {
-			result.MasteryProperty = "vex"
-		}
-		if masteryActive(input) && input.Weapon.Mastery == "sap" {
-			result.MasteryProperty = "sap"
-		}
-		// 2024 Weapon Mastery — Slow / Push also fire on an auto-crit hit. The
-		// service layer applies the speed-reducing condition / forced movement;
-		// here we only record which mastery fired.
-		if masteryActive(input) && input.Weapon.Mastery == "slow" {
-			result.MasteryProperty = "slow"
-		}
-		if masteryActive(input) && input.Weapon.Mastery == "push" {
-			result.MasteryProperty = "push"
-		}
-		// 2024 Weapon Mastery — Cleave also fires on an auto-crit melee hit.
-		// The service layer auto-resolves the secondary attack.
-		if masteryActive(input) && input.Weapon.Mastery == "cleave" && isMelee {
-			result.MasteryProperty = "cleave"
-		}
+		// 2024 Weapon Mastery — an auto-crit is a hit, so the on-hit masteries
+		// (Topple / Vex / Sap / Slow / Push, plus melee-only Cleave) fire here
+		// just as they do on a rolled hit. Graze is miss-only and never reached.
+		recordOnHitMastery(&result, onHitMastery(input, isMelee),
+			8+profBonus+abilityModForWeapon(input.Scores, input.Weapon, input.MonkLevel))
 		return result, nil
 	}
 
@@ -694,47 +705,19 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	result.DamageDice = damageDice
 	result.DamageRoll = dmgRoll
 
-	// 2024 Weapon Mastery — Topple: on a hit, the target makes a CON save
-	// (DC = 8 + proficiency bonus + the attack ability modifier) or falls
-	// Prone. The service layer resolves the save and applies the condition.
-	// profBonus already reflects the improvised adjustment. Gated behind
-	// masteryActive so non-mastery hits are unchanged.
-	if masteryActive(input) && input.Weapon.Mastery == "topple" {
-		result.MasteryProperty = "topple"
-		result.MasteryToppleSaveDC = 8 + profBonus + abilityModForWeapon(input.Scores, input.Weapon, input.MonkLevel)
-	}
-
-	// 2024 Weapon Mastery — Vex: on a hit, the attacker gains advantage on its
-	// next attack vs the SAME target (until the end of its next turn). Sap: on
-	// a hit, the target has disadvantage on its NEXT attack. Both are gated
-	// behind masteryActive so non-mastery hits are unchanged; the service layer
-	// applies the resulting condition.
-	if masteryActive(input) && input.Weapon.Mastery == "vex" {
-		result.MasteryProperty = "vex"
-	}
-	if masteryActive(input) && input.Weapon.Mastery == "sap" {
-		result.MasteryProperty = "sap"
-	}
-
-	// 2024 Weapon Mastery — Slow: on a hit, the target's Speed drops by 10 ft
-	// until the start of the attacker's next turn. Push: on a hit, a Large-or-
-	// smaller target can be pushed 10 ft straight away from the attacker. Both
-	// are gated behind masteryActive so non-mastery hits are unchanged; the
-	// service layer applies the condition / forced movement.
-	if masteryActive(input) && input.Weapon.Mastery == "slow" {
-		result.MasteryProperty = "slow"
-	}
-	if masteryActive(input) && input.Weapon.Mastery == "push" {
-		result.MasteryProperty = "push"
-	}
-
-	// 2024 Weapon Mastery — Cleave: on a MELEE hit, the attacker can make one
-	// extra attack with the same weapon against a second creature within 5ft of
-	// the first that is within reach. Melee-only and gated behind masteryActive;
-	// the service layer auto-resolves the secondary attack (once per turn).
-	if masteryActive(input) && input.Weapon.Mastery == "cleave" && isMelee {
-		result.MasteryProperty = "cleave"
-	}
+	// 2024 Weapon Mastery — record the on-hit mastery that fired so the service
+	// layer can apply the target-side effect:
+	//   - Topple: CON save (DC 8 + proficiency + attack ability mod) or Prone.
+	//     profBonus already reflects the improvised adjustment.
+	//   - Vex: attacker gains advantage on its next attack vs the SAME target.
+	//   - Sap: target has disadvantage on its NEXT attack.
+	//   - Slow: target's Speed drops 10 ft until the attacker's next turn.
+	//   - Push: a Large-or-smaller target is pushed 10 ft away.
+	//   - Cleave (melee-only): one extra attack vs an adjacent creature.
+	// All gated behind masteryActive (via onHitMastery) so non-mastery hits are
+	// unchanged. Graze is handled separately on the miss path above.
+	recordOnHitMastery(&result, onHitMastery(input, isMelee),
+		8+profBonus+abilityModForWeapon(input.Scores, input.Weapon, input.MonkLevel))
 
 	return result, nil
 }
