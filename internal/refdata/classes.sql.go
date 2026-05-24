@@ -44,7 +44,7 @@ func (q *Queries) DeleteHomebrewClass(ctx context.Context, arg DeleteHomebrewCla
 }
 
 const getClass = `-- name: GetClass :one
-SELECT id, name, hit_die, primary_ability, save_proficiencies, armor_proficiencies, weapon_proficiencies, skill_choices, spellcasting, features_by_level, attacks_per_action, subclass_level, subclasses, multiclass_prereqs, multiclass_proficiencies, created_at, updated_at, campaign_id, homebrew, source FROM classes WHERE id = $1
+SELECT id, name, hit_die, primary_ability, save_proficiencies, armor_proficiencies, weapon_proficiencies, skill_choices, spellcasting, features_by_level, attacks_per_action, subclass_level, subclasses, multiclass_prereqs, multiclass_proficiencies, created_at, updated_at, campaign_id, homebrew, source, weapon_mastery_count FROM classes WHERE id = $1
 `
 
 func (q *Queries) GetClass(ctx context.Context, id string) (Class, error) {
@@ -71,12 +71,13 @@ func (q *Queries) GetClass(ctx context.Context, id string) (Class, error) {
 		&i.CampaignID,
 		&i.Homebrew,
 		&i.Source,
+		&i.WeaponMasteryCount,
 	)
 	return i, err
 }
 
 const listClasses = `-- name: ListClasses :many
-SELECT id, name, hit_die, primary_ability, save_proficiencies, armor_proficiencies, weapon_proficiencies, skill_choices, spellcasting, features_by_level, attacks_per_action, subclass_level, subclasses, multiclass_prereqs, multiclass_proficiencies, created_at, updated_at, campaign_id, homebrew, source FROM classes ORDER BY name
+SELECT id, name, hit_die, primary_ability, save_proficiencies, armor_proficiencies, weapon_proficiencies, skill_choices, spellcasting, features_by_level, attacks_per_action, subclass_level, subclasses, multiclass_prereqs, multiclass_proficiencies, created_at, updated_at, campaign_id, homebrew, source, weapon_mastery_count FROM classes ORDER BY name
 `
 
 func (q *Queries) ListClasses(ctx context.Context) ([]Class, error) {
@@ -109,6 +110,7 @@ func (q *Queries) ListClasses(ctx context.Context) ([]Class, error) {
 			&i.CampaignID,
 			&i.Homebrew,
 			&i.Source,
+			&i.WeaponMasteryCount,
 		); err != nil {
 			return nil, err
 		}
@@ -124,8 +126,8 @@ func (q *Queries) ListClasses(ctx context.Context) ([]Class, error) {
 }
 
 const upsertClass = `-- name: UpsertClass :exec
-INSERT INTO classes (id, name, hit_die, primary_ability, save_proficiencies, armor_proficiencies, weapon_proficiencies, skill_choices, spellcasting, features_by_level, attacks_per_action, subclass_level, subclasses, multiclass_prereqs, multiclass_proficiencies, campaign_id, homebrew, source)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+INSERT INTO classes (id, name, hit_die, primary_ability, save_proficiencies, armor_proficiencies, weapon_proficiencies, skill_choices, spellcasting, features_by_level, attacks_per_action, subclass_level, subclasses, multiclass_prereqs, multiclass_proficiencies, weapon_mastery_count, campaign_id, homebrew, source)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     hit_die = EXCLUDED.hit_die,
@@ -141,6 +143,7 @@ ON CONFLICT (id) DO UPDATE SET
     subclasses = EXCLUDED.subclasses,
     multiclass_prereqs = EXCLUDED.multiclass_prereqs,
     multiclass_proficiencies = EXCLUDED.multiclass_proficiencies,
+    weapon_mastery_count = EXCLUDED.weapon_mastery_count,
     campaign_id = EXCLUDED.campaign_id,
     homebrew = EXCLUDED.homebrew,
     source = EXCLUDED.source,
@@ -163,6 +166,7 @@ type UpsertClassParams struct {
 	Subclasses              json.RawMessage       `json:"subclasses"`
 	MulticlassPrereqs       pqtype.NullRawMessage `json:"multiclass_prereqs"`
 	MulticlassProficiencies pqtype.NullRawMessage `json:"multiclass_proficiencies"`
+	WeaponMasteryCount      int32                 `json:"weapon_mastery_count"`
 	CampaignID              uuid.NullUUID         `json:"campaign_id"`
 	Homebrew                sql.NullBool          `json:"homebrew"`
 	Source                  sql.NullString        `json:"source"`
@@ -185,6 +189,7 @@ func (q *Queries) UpsertClass(ctx context.Context, arg UpsertClassParams) error 
 		arg.Subclasses,
 		arg.MulticlassPrereqs,
 		arg.MulticlassProficiencies,
+		arg.WeaponMasteryCount,
 		arg.CampaignID,
 		arg.Homebrew,
 		arg.Source,

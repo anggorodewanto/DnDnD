@@ -66,11 +66,12 @@ func TestRefDataAdapter_ListClasses(t *testing.T) {
 	mq := &mockQueries{
 		classes: []refdata.Class{
 			{ID: "fighter", Name: "Fighter", HitDie: "d10", PrimaryAbility: "str",
-				SaveProficiencies:  []string{"str", "con"},
-				ArmorProficiencies: []string{"light", "medium", "heavy", "shields"},
+				SaveProficiencies:   []string{"str", "con"},
+				ArmorProficiencies:  []string{"light", "medium", "heavy", "shields"},
 				WeaponProficiencies: []string{"simple", "martial"},
-				SkillChoices:       skillChoices,
-				SubclassLevel:      3, Subclasses: json.RawMessage(`[]`)},
+				SkillChoices:        skillChoices,
+				WeaponMasteryCount:  3,
+				SubclassLevel:       3, Subclasses: json.RawMessage(`[]`)},
 		},
 	}
 	adapter := portal.NewRefDataAdapter(mq)
@@ -83,6 +84,7 @@ func TestRefDataAdapter_ListClasses(t *testing.T) {
 	assert.Equal(t, 3, classes[0].SubclassLevel)
 	assert.Equal(t, []string{"light", "medium", "heavy", "shields"}, classes[0].ArmorProficiencies)
 	assert.Equal(t, []string{"simple", "martial"}, classes[0].WeaponProficiencies)
+	assert.Equal(t, 3, classes[0].WeaponMasteryCount)
 }
 
 func TestRefDataAdapter_ListRaces_Error(t *testing.T) {
@@ -127,7 +129,7 @@ func (e *errorQueries) ListArmor(_ context.Context) ([]refdata.Armor, error) {
 func TestRefDataAdapter_ListEquipment(t *testing.T) {
 	mq := &mockQueries{
 		weapons: []refdata.Weapon{
-			{ID: "longsword", Name: "Longsword", Damage: "1d8", DamageType: "slashing", WeaponType: "martial-melee", Properties: []string{"versatile"}},
+			{ID: "longsword", Name: "Longsword", Damage: "1d8", DamageType: "slashing", WeaponType: "martial-melee", Properties: []string{"versatile"}, Mastery: "sap"},
 		},
 		armor: []refdata.Armor{
 			{ID: "chain-mail", Name: "Chain Mail", AcBase: 16, ArmorType: "heavy"},
@@ -142,6 +144,7 @@ func TestRefDataAdapter_ListEquipment(t *testing.T) {
 	assert.Equal(t, "weapon", items[0].Category)
 	assert.Equal(t, "1d8", items[0].Damage)
 	assert.Equal(t, []string{"versatile"}, items[0].Properties)
+	assert.Equal(t, "sap", items[0].Mastery)
 	assert.Equal(t, "chain-mail", items[1].ID)
 	assert.Equal(t, "armor", items[1].Category)
 	assert.Equal(t, 16, items[1].ACBase)

@@ -12,7 +12,7 @@ func seedRaces(ctx context.Context, q *Queries) error {
 			DarkvisionFt:   60,
 			Traits: mustJSON([]map[string]string{
 				{"name": "Dwarven Resilience", "description": "You have advantage on saving throws against poison, and you have resistance against poison damage.", "mechanical_effect": "advantage_saves_poison,resistance_poison"},
-				{"name": "Dwarven Combat Training", "description": "You have proficiency with the battleaxe, handaxe, light hammer, and warhammer.", "mechanical_effect": "proficiency_battleaxe_handaxe_light_hammer_warhammer"},
+				{"name": "Dwarven Combat Training", "description": "You have proficiency with the battleaxe, handaxe, light hammer, and warhammer.", "mechanical_effect": "proficiency_battleaxe,proficiency_handaxe,proficiency_light-hammer,proficiency_warhammer"},
 				{"name": "Tool Proficiency", "description": "You gain proficiency with the artisan's tools of your choice: smith's tools, brewer's supplies, or mason's tools.", "mechanical_effect": "choose_tool_proficiency_smiths_brewers_masons"},
 				{"name": "Stonecunning", "description": "Whenever you make an Intelligence (History) check related to the origin of stonework, you are considered proficient in the History skill and add double your proficiency bonus to the check.", "mechanical_effect": "double_proficiency_history_stonework"},
 			}),
@@ -42,7 +42,7 @@ func seedRaces(ctx context.Context, q *Queries) error {
 					"id": "high-elf", "name": "High Elf",
 					"ability_bonuses": map[string]int{"int": 1},
 					"traits": []map[string]string{
-						{"name": "Elf Weapon Training", "description": "You have proficiency with the longsword, shortsword, shortbow, and longbow.", "mechanical_effect": "proficiency_longsword_shortsword_shortbow_longbow"},
+						{"name": "Elf Weapon Training", "description": "You have proficiency with the longsword, shortsword, shortbow, and longbow.", "mechanical_effect": "proficiency_longsword,proficiency_shortsword,proficiency_shortbow,proficiency_longbow"},
 						{"name": "Cantrip", "description": "You know one cantrip of your choice from the wizard spell list.", "mechanical_effect": "learn_1_wizard_cantrip"},
 						{"name": "Extra Language", "description": "You can speak, read, and write one extra language of your choice.", "mechanical_effect": "learn_1_language"},
 					},

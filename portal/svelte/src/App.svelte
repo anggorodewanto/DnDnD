@@ -8,6 +8,7 @@
   import { filterSpells, groupSpellsBySchool, availableLevels } from './lib/spell-filter.js';
   import { formatProperties, armorACText } from './lib/equipment-perks.js';
   import { raceGrantedSkills, mergeGrantedSkills } from './lib/race-skills.js';
+  import { raceGrantedWeaponProficiencies, weaponProficiencyLabel } from './lib/race-weapon-proficiencies.js';
   import { formatSkillChoices } from './lib/class-perks.js';
   import {
     subraceOptions, subclassOptions, isSubclassEligible,
@@ -191,9 +192,10 @@
     writeDraftRaw(serializeDraft(snapshot));
   });
 
-  // Load full equipment list when entering equipment step
+  // Load the full equipment list up front: the Equipment step needs it, and
+  // the Basics-step race panel needs weapon ids to label race weapon proficiencies.
   $effect(() => {
-    if (currentStep === 4 && allEquipment.length === 0) {
+    if (allEquipment.length === 0) {
       loadEquipment();
     }
   });
@@ -346,6 +348,7 @@
   // Derived stats for review
   let selectedRaceData = $derived(races.find(r => r.id === race));
   let selectedClassData = $derived(classes.find(c => c.id === selectedClass));
+  let weaponIds = $derived(allEquipment.filter(e => e.category === 'weapon').map(e => e.id));
 
   let racialBonuses = $derived(() => {
     if (!selectedRaceData?.ability_bonuses) return {};
@@ -549,6 +552,7 @@
           {@const raceBonuses = formatAbilityBonuses(selectedRaceData.ability_bonuses)}
           {@const raceTraits = parseTraits(selectedRaceData.traits)}
           {@const darkvision = formatDarkvision(selectedRaceData.darkvision_ft)}
+          {@const raceWeapons = raceGrantedWeaponProficiencies(selectedRaceData?.traits, weaponIds)}
           <div class="race-info">
             {#if raceBonuses}
               <p><strong>Ability Score Increase:</strong> {raceBonuses}</p>
@@ -560,6 +564,9 @@
             {/if}
             {#if selectedRaceData.languages?.length > 0}
               <p><strong>Languages:</strong> {selectedRaceData.languages.join(', ')}</p>
+            {/if}
+            {#if raceWeapons.length > 0}
+              <p class="race-weapons"><strong>Weapon Training:</strong> {raceWeapons.map(weaponProficiencyLabel).join(', ')}</p>
             {/if}
             {#if raceTraits.length > 0}
               <p><strong>Traits:</strong></p>
@@ -841,6 +848,9 @@
                   {#if item.properties?.length > 0}
                     <span class="item-detail">{formatProperties(item.properties)}</span>
                   {/if}
+                  {#if item.mastery}
+                    <span class="item-mastery">{weaponProficiencyLabel(item.mastery)}</span>
+                  {/if}
                   {#if item.category === 'armor'}
                     <span class="item-detail">{armorACText(item.armor_type, item.ac_base)}</span>
                   {/if}
@@ -1114,6 +1124,8 @@
   .item-name { flex: 1; }
   .item-type { color: #888; font-size: 0.85rem; text-transform: capitalize; }
   .item-detail { color: #aaa; font-size: 0.85rem; }
+  .item-mastery { display: inline-block; padding: 0.05rem 0.4rem; border: 1px solid #e94560; color: #e94560; border-radius: 8px; font-size: 0.7rem; margin-left: 0.4rem; }
+  .race-weapons { color: #ccc; }
   .add-btn, .remove-btn {
     padding: 0.2rem 0.6rem; border: none; border-radius: 3px; cursor: pointer; font-size: 0.8rem;
   }

@@ -93,6 +93,7 @@ func (a *RefDataAdapter) ListClasses(ctx context.Context) ([]ClassInfo, error) {
 			Spellcasting:        nullRawToJSON(c.Spellcasting),
 			Subclasses:          c.Subclasses,
 			SubclassLevel:       int(c.SubclassLevel),
+			WeaponMasteryCount:  int(c.WeaponMasteryCount),
 		}
 	}
 	return result, nil
@@ -171,6 +172,7 @@ func (a *RefDataAdapter) ListEquipment(ctx context.Context, campaignID string) (
 			Damage:     w.Damage,
 			DamageType: w.DamageType,
 			Properties: w.Properties,
+			Mastery:    w.Mastery,
 		})
 	}
 	for _, ar := range armors {

@@ -121,6 +121,7 @@ type Class struct {
 	CampaignID              uuid.NullUUID         `json:"campaign_id"`
 	Homebrew                sql.NullBool          `json:"homebrew"`
 	Source                  sql.NullString        `json:"source"`
+	WeaponMasteryCount      int32                 `json:"weapon_mastery_count"`
 }
 
 type Combatant struct {
@@ -615,4 +616,5 @@ type Weapon struct {
 	CampaignID      uuid.NullUUID   `json:"campaign_id"`
 	Homebrew        sql.NullBool    `json:"homebrew"`
 	Source          sql.NullString  `json:"source"`
+	Mastery         string          `json:"mastery"`
 }

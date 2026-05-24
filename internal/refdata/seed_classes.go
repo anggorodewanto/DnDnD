@@ -14,10 +14,11 @@ func seedClasses(ctx context.Context, q *Queries) error {
 	classes := []UpsertClassParams{
 		{
 			ID: "barbarian", Name: "Barbarian", HitDie: "d12", PrimaryAbility: "str",
-			SaveProficiencies:  []string{"str", "con"},
-			ArmorProficiencies: []string{"light", "medium", "shields"},
+			WeaponMasteryCount:  2,
+			SaveProficiencies:   []string{"str", "con"},
+			ArmorProficiencies:  []string{"light", "medium", "shields"},
 			WeaponProficiencies: []string{"simple", "martial"},
-			SkillChoices: optJSON(map[string]any{"choose": 2, "from": []string{"animal-handling", "athletics", "intimidation", "nature", "perception", "survival"}}),
+			SkillChoices:        optJSON(map[string]any{"choose": 2, "from": []string{"animal-handling", "athletics", "intimidation", "nature", "perception", "survival"}}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Rage", "description": "In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action.", "mechanical_effect": "rage"},
@@ -32,7 +33,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1, "5": 2}),
-			SubclassLevel: 3,
+			SubclassLevel:    3,
 			Subclasses: mustJSON(map[string]any{
 				"berserker": map[string]any{
 					"name": "Path of the Berserker",
@@ -47,11 +48,11 @@ func seedClasses(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "bard", Name: "Bard", HitDie: "d8", PrimaryAbility: "cha",
-			SaveProficiencies:  []string{"dex", "cha"},
-			ArmorProficiencies: []string{"light"},
+			SaveProficiencies:   []string{"dex", "cha"},
+			ArmorProficiencies:  []string{"light"},
 			WeaponProficiencies: []string{"simple", "hand-crossbow", "longsword", "rapier", "shortsword"},
-			SkillChoices: optJSON(map[string]any{"choose": 3, "from": []string{"acrobatics", "animal-handling", "arcana", "athletics", "deception", "history", "insight", "intimidation", "investigation", "medicine", "nature", "perception", "performance", "persuasion", "religion", "sleight-of-hand", "stealth", "survival"}}),
-			Spellcasting: optJSON(map[string]string{"ability": "cha", "slot_progression": "full"}),
+			SkillChoices:        optJSON(map[string]any{"choose": 3, "from": []string{"acrobatics", "animal-handling", "arcana", "athletics", "deception", "history", "insight", "intimidation", "investigation", "medicine", "nature", "perception", "performance", "persuasion", "religion", "sleight-of-hand", "stealth", "survival"}}),
+			Spellcasting:        optJSON(map[string]string{"ability": "cha", "slot_progression": "full"}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Bardic Inspiration", "description": "You can inspire others through stirring words or music. A creature that has a Bardic Inspiration die can roll that die and add the number rolled to one ability check, attack roll, or saving throw it makes.", "mechanical_effect": "grant_bardic_inspiration_d6"},
@@ -67,7 +68,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1}),
-			SubclassLevel: 3,
+			SubclassLevel:    3,
 			Subclasses: mustJSON(map[string]any{
 				"lore": map[string]any{
 					"name": "College of Lore",
@@ -84,11 +85,11 @@ func seedClasses(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "cleric", Name: "Cleric", HitDie: "d8", PrimaryAbility: "wis",
-			SaveProficiencies:  []string{"wis", "cha"},
-			ArmorProficiencies: []string{"light", "medium", "shields"},
+			SaveProficiencies:   []string{"wis", "cha"},
+			ArmorProficiencies:  []string{"light", "medium", "shields"},
 			WeaponProficiencies: []string{"simple"},
-			SkillChoices: optJSON(map[string]any{"choose": 2, "from": []string{"history", "insight", "medicine", "persuasion", "religion"}}),
-			Spellcasting: optJSON(map[string]string{"ability": "wis", "slot_progression": "full"}),
+			SkillChoices:        optJSON(map[string]any{"choose": 2, "from": []string{"history", "insight", "medicine", "persuasion", "religion"}}),
+			Spellcasting:        optJSON(map[string]string{"ability": "wis", "slot_progression": "full"}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Spellcasting", "description": "As a conduit for divine power, you can cast cleric spells.", "mechanical_effect": "spellcasting_wis"},
@@ -101,7 +102,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				"3": []map[string]string{},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1}),
-			SubclassLevel: 1,
+			SubclassLevel:    1,
 			Subclasses: mustJSON(map[string]any{
 				"life": map[string]any{
 					"name": "Life Domain",
@@ -118,11 +119,11 @@ func seedClasses(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "druid", Name: "Druid", HitDie: "d8", PrimaryAbility: "wis",
-			SaveProficiencies:  []string{"int", "wis"},
-			ArmorProficiencies: []string{"light", "medium", "shields"},
+			SaveProficiencies:   []string{"int", "wis"},
+			ArmorProficiencies:  []string{"light", "medium", "shields"},
 			WeaponProficiencies: []string{"club", "dagger", "dart", "javelin", "mace", "quarterstaff", "scimitar", "sickle", "sling", "spear"},
-			SkillChoices: optJSON(map[string]any{"choose": 2, "from": []string{"arcana", "animal-handling", "insight", "medicine", "nature", "perception", "religion", "survival"}}),
-			Spellcasting: optJSON(map[string]string{"ability": "wis", "slot_progression": "full"}),
+			SkillChoices:        optJSON(map[string]any{"choose": 2, "from": []string{"arcana", "animal-handling", "insight", "medicine", "nature", "perception", "religion", "survival"}}),
+			Spellcasting:        optJSON(map[string]string{"ability": "wis", "slot_progression": "full"}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Druidic", "description": "You know Druidic, the secret language of druids.", "mechanical_effect": "language_druidic"},
@@ -135,7 +136,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				"3": []map[string]string{},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1}),
-			SubclassLevel: 2,
+			SubclassLevel:    2,
 			Subclasses: mustJSON(map[string]any{
 				"land": map[string]any{
 					"name": "Circle of the Land",
@@ -152,10 +153,11 @@ func seedClasses(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "fighter", Name: "Fighter", HitDie: "d10", PrimaryAbility: "str",
-			SaveProficiencies:  []string{"str", "con"},
-			ArmorProficiencies: []string{"light", "medium", "heavy", "shields"},
+			WeaponMasteryCount:  3,
+			SaveProficiencies:   []string{"str", "con"},
+			ArmorProficiencies:  []string{"light", "medium", "heavy", "shields"},
 			WeaponProficiencies: []string{"simple", "martial"},
-			SkillChoices: optJSON(map[string]any{"choose": 2, "from": []string{"acrobatics", "animal-handling", "athletics", "history", "insight", "intimidation", "perception", "survival"}}),
+			SkillChoices:        optJSON(map[string]any{"choose": 2, "from": []string{"acrobatics", "animal-handling", "athletics", "history", "insight", "intimidation", "perception", "survival"}}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Fighting Style", "description": "You adopt a particular style of fighting as your specialty.", "mechanical_effect": "choose_fighting_style"},
@@ -169,7 +171,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1, "5": 2, "11": 3, "20": 4}),
-			SubclassLevel: 3,
+			SubclassLevel:    3,
 			Subclasses: mustJSON(map[string]any{
 				"champion": map[string]any{
 					"name": "Champion",
@@ -185,10 +187,11 @@ func seedClasses(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "monk", Name: "Monk", HitDie: "d8", PrimaryAbility: "dex",
-			SaveProficiencies:  []string{"str", "dex"},
-			ArmorProficiencies: []string{},
+			WeaponMasteryCount:  1,
+			SaveProficiencies:   []string{"str", "dex"},
+			ArmorProficiencies:  []string{},
 			WeaponProficiencies: []string{"simple", "shortsword"},
-			SkillChoices: optJSON(map[string]any{"choose": 2, "from": []string{"acrobatics", "athletics", "history", "insight", "religion", "stealth"}}),
+			SkillChoices:        optJSON(map[string]any{"choose": 2, "from": []string{"acrobatics", "athletics", "history", "insight", "religion", "stealth"}}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Unarmored Defense", "description": "While you are wearing no armor and not wielding a shield, your AC equals 10 + your Dexterity modifier + your Wisdom modifier.", "mechanical_effect": "ac_10_plus_dex_plus_wis"},
@@ -204,7 +207,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1, "5": 2}),
-			SubclassLevel: 3,
+			SubclassLevel:    3,
 			Subclasses: mustJSON(map[string]any{
 				"open-hand": map[string]any{
 					"name": "Way of the Open Hand",
@@ -218,11 +221,12 @@ func seedClasses(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "paladin", Name: "Paladin", HitDie: "d10", PrimaryAbility: "str",
-			SaveProficiencies:  []string{"wis", "cha"},
-			ArmorProficiencies: []string{"light", "medium", "heavy", "shields"},
+			WeaponMasteryCount:  2,
+			SaveProficiencies:   []string{"wis", "cha"},
+			ArmorProficiencies:  []string{"light", "medium", "heavy", "shields"},
 			WeaponProficiencies: []string{"simple", "martial"},
-			SkillChoices: optJSON(map[string]any{"choose": 2, "from": []string{"athletics", "insight", "intimidation", "medicine", "persuasion", "religion"}}),
-			Spellcasting: optJSON(map[string]string{"ability": "cha", "slot_progression": "half"}),
+			SkillChoices:        optJSON(map[string]any{"choose": 2, "from": []string{"athletics", "insight", "intimidation", "medicine", "persuasion", "religion"}}),
+			Spellcasting:        optJSON(map[string]string{"ability": "cha", "slot_progression": "half"}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Divine Sense", "description": "The presence of strong evil registers on your senses like a noxious odor, and powerful good rings like heavenly music in your ears.", "mechanical_effect": "detect_celestial_fiend_undead"},
@@ -239,7 +243,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1, "5": 2}),
-			SubclassLevel: 3,
+			SubclassLevel:    3,
 			Subclasses: mustJSON(map[string]any{
 				"devotion": map[string]any{
 					"name": "Oath of Devotion",
@@ -256,11 +260,12 @@ func seedClasses(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "ranger", Name: "Ranger", HitDie: "d10", PrimaryAbility: "dex",
-			SaveProficiencies:  []string{"str", "dex"},
-			ArmorProficiencies: []string{"light", "medium", "shields"},
+			WeaponMasteryCount:  2,
+			SaveProficiencies:   []string{"str", "dex"},
+			ArmorProficiencies:  []string{"light", "medium", "shields"},
 			WeaponProficiencies: []string{"simple", "martial"},
-			SkillChoices: optJSON(map[string]any{"choose": 3, "from": []string{"animal-handling", "athletics", "insight", "investigation", "nature", "perception", "stealth", "survival"}}),
-			Spellcasting: optJSON(map[string]string{"ability": "wis", "slot_progression": "half"}),
+			SkillChoices:        optJSON(map[string]any{"choose": 3, "from": []string{"animal-handling", "athletics", "insight", "investigation", "nature", "perception", "stealth", "survival"}}),
+			Spellcasting:        optJSON(map[string]string{"ability": "wis", "slot_progression": "half"}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Favored Enemy", "description": "You have significant experience studying, tracking, hunting, and even talking to a certain type of enemy.", "mechanical_effect": "advantage_survival_tracking,advantage_int_checks_about_favored_enemy"},
@@ -276,7 +281,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1, "5": 2}),
-			SubclassLevel: 3,
+			SubclassLevel:    3,
 			Subclasses: mustJSON(map[string]any{
 				"hunter": map[string]any{
 					"name": "Hunter",
@@ -290,10 +295,11 @@ func seedClasses(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "rogue", Name: "Rogue", HitDie: "d8", PrimaryAbility: "dex",
-			SaveProficiencies:  []string{"dex", "int"},
-			ArmorProficiencies: []string{"light"},
+			WeaponMasteryCount:  2,
+			SaveProficiencies:   []string{"dex", "int"},
+			ArmorProficiencies:  []string{"light"},
 			WeaponProficiencies: []string{"simple", "hand-crossbow", "longsword", "rapier", "shortsword"},
-			SkillChoices: optJSON(map[string]any{"choose": 4, "from": []string{"acrobatics", "athletics", "deception", "insight", "intimidation", "investigation", "perception", "performance", "persuasion", "sleight-of-hand", "stealth"}}),
+			SkillChoices:        optJSON(map[string]any{"choose": 4, "from": []string{"acrobatics", "athletics", "deception", "insight", "intimidation", "investigation", "perception", "performance", "persuasion", "sleight-of-hand", "stealth"}}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Expertise", "description": "Choose two of your skill proficiencies. Your proficiency bonus is doubled for any ability check you make that uses either of the chosen proficiencies.", "mechanical_effect": "double_proficiency_2_skills"},
@@ -308,7 +314,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1}),
-			SubclassLevel: 3,
+			SubclassLevel:    3,
 			Subclasses: mustJSON(map[string]any{
 				"thief": map[string]any{
 					"name": "Thief",
@@ -325,11 +331,11 @@ func seedClasses(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "sorcerer", Name: "Sorcerer", HitDie: "d6", PrimaryAbility: "cha",
-			SaveProficiencies:  []string{"con", "cha"},
-			ArmorProficiencies: []string{},
+			SaveProficiencies:   []string{"con", "cha"},
+			ArmorProficiencies:  []string{},
 			WeaponProficiencies: []string{"dagger", "dart", "sling", "quarterstaff", "light-crossbow"},
-			SkillChoices: optJSON(map[string]any{"choose": 2, "from": []string{"arcana", "deception", "insight", "intimidation", "persuasion", "religion"}}),
-			Spellcasting: optJSON(map[string]string{"ability": "cha", "slot_progression": "full"}),
+			SkillChoices:        optJSON(map[string]any{"choose": 2, "from": []string{"arcana", "deception", "insight", "intimidation", "persuasion", "religion"}}),
+			Spellcasting:        optJSON(map[string]string{"ability": "cha", "slot_progression": "full"}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Spellcasting", "description": "An event in your past, or in the life of a parent or ancestor, left an indelible mark on you, infusing you with arcane magic.", "mechanical_effect": "spellcasting_cha"},
@@ -343,7 +349,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1}),
-			SubclassLevel: 1,
+			SubclassLevel:    1,
 			Subclasses: mustJSON(map[string]any{
 				"draconic": map[string]any{
 					"name": "Draconic Bloodline",
@@ -360,11 +366,11 @@ func seedClasses(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "warlock", Name: "Warlock", HitDie: "d8", PrimaryAbility: "cha",
-			SaveProficiencies:  []string{"wis", "cha"},
-			ArmorProficiencies: []string{"light"},
+			SaveProficiencies:   []string{"wis", "cha"},
+			ArmorProficiencies:  []string{"light"},
 			WeaponProficiencies: []string{"simple"},
-			SkillChoices: optJSON(map[string]any{"choose": 2, "from": []string{"arcana", "deception", "history", "intimidation", "investigation", "nature", "religion"}}),
-			Spellcasting: optJSON(map[string]string{"ability": "cha", "slot_progression": "pact"}),
+			SkillChoices:        optJSON(map[string]any{"choose": 2, "from": []string{"arcana", "deception", "history", "intimidation", "investigation", "nature", "religion"}}),
+			Spellcasting:        optJSON(map[string]string{"ability": "cha", "slot_progression": "pact"}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Otherworldly Patron", "description": "You have struck a bargain with an otherworldly being of your choice.", "mechanical_effect": "subclass_choice"},
@@ -378,7 +384,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1}),
-			SubclassLevel: 1,
+			SubclassLevel:    1,
 			Subclasses: mustJSON(map[string]any{
 				"fiend": map[string]any{
 					"name": "The Fiend",
@@ -392,11 +398,11 @@ func seedClasses(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "wizard", Name: "Wizard", HitDie: "d6", PrimaryAbility: "int",
-			SaveProficiencies:  []string{"int", "wis"},
-			ArmorProficiencies: []string{},
+			SaveProficiencies:   []string{"int", "wis"},
+			ArmorProficiencies:  []string{},
 			WeaponProficiencies: []string{"dagger", "dart", "sling", "quarterstaff", "light-crossbow"},
-			SkillChoices: optJSON(map[string]any{"choose": 2, "from": []string{"arcana", "history", "insight", "investigation", "medicine", "religion"}}),
-			Spellcasting: optJSON(map[string]string{"ability": "int", "slot_progression": "full"}),
+			SkillChoices:        optJSON(map[string]any{"choose": 2, "from": []string{"arcana", "history", "insight", "investigation", "medicine", "religion"}}),
+			Spellcasting:        optJSON(map[string]string{"ability": "int", "slot_progression": "full"}),
 			FeaturesByLevel: mustJSON(map[string]any{
 				"1": []map[string]string{
 					{"name": "Spellcasting", "description": "As a student of arcane magic, you have a spellbook containing spells that show the first glimmerings of your true power.", "mechanical_effect": "spellcasting_int"},
@@ -408,7 +414,7 @@ func seedClasses(ctx context.Context, q *Queries) error {
 				"3": []map[string]string{},
 			}),
 			AttacksPerAction: mustJSON(map[string]int{"1": 1}),
-			SubclassLevel: 2,
+			SubclassLevel:    2,
 			Subclasses: mustJSON(map[string]any{
 				"evocation": map[string]any{
 					"name": "School of Evocation",

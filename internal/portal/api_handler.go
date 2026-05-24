@@ -36,6 +36,7 @@ type ClassInfo struct {
 	Spellcasting        json.RawMessage `json:"spellcasting,omitempty"`
 	Subclasses          json.RawMessage `json:"subclasses,omitempty"`
 	SubclassLevel       int             `json:"subclass_level,omitempty"`
+	WeaponMasteryCount  int             `json:"weapon_mastery_count,omitempty"`
 }
 
 // EquipmentItem is the API response for a weapon or armor item.
@@ -47,6 +48,7 @@ type EquipmentItem struct {
 	Damage     string   `json:"damage,omitempty"`
 	DamageType string   `json:"damage_type,omitempty"`
 	Properties []string `json:"properties,omitempty"`
+	Mastery    string   `json:"mastery,omitempty"`
 	ArmorType  string   `json:"armor_type,omitempty"`
 	ACBase     int      `json:"ac_base,omitempty"`
 }
