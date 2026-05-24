@@ -13,6 +13,7 @@
     subraceOptions, subclassOptions, isSubclassEligible,
     emptyClassRow, addClassRow, removeClassRow, updateClassRow,
   } from './lib/builder-options.js';
+  import { draftKey, serializeDraft, parseDraft } from './lib/builder-draft.js';
 
   let { token = '', campaignId = '' } = $props();
 
@@ -87,10 +88,17 @@
   let subclass = $derived(classEntries[0]?.subclass || '');
 
   // Load spells and starting equipment when the primary class changes.
+  // Reset pack choices only when the user switches to a *different* class —
+  // never on the initial restore of a saved draft. lastClassForPacks starts
+  // '' so a fresh first selection doesn't wipe anything either.
+  let lastClassForPacks = '';
   $effect(() => {
-    if (selectedClass) {
-      loadSpells(selectedClass);
-      loadStartingEquipment(selectedClass);
+    if (!selectedClass) return;
+    loadSpells(selectedClass);
+    loadStartingEquipment(selectedClass);
+    if (selectedClass !== lastClassForPacks) {
+      if (lastClassForPacks !== '') packChoices = {};
+      lastClassForPacks = selectedClass;
     }
   });
 
@@ -115,6 +123,73 @@
       }
       lastRaceForSkills = race;
     }
+  });
+
+  // --- Draft persistence (localStorage) --------------------------------
+  // Survive an accidental reload: restore unsubmitted fields on init,
+  // re-save on every change, and clear once the character is submitted.
+  function readDraftRaw() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      return localStorage.getItem(draftKey(token));
+    } catch {
+      return null;
+    }
+  }
+
+  function writeDraftRaw(raw) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(draftKey(token), raw);
+    } catch {
+      /* quota exceeded or storage disabled — skip silently */
+    }
+  }
+
+  function clearDraft() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.removeItem(draftKey(token));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function applyDraft(d) {
+    if (d.currentStep !== undefined) currentStep = d.currentStep;
+    if (d.name !== undefined) name = d.name;
+    if (d.race !== undefined) race = d.race;
+    if (d.subrace !== undefined) subrace = d.subrace;
+    if (d.background !== undefined) background = d.background;
+    if (Array.isArray(d.classEntries) && d.classEntries.length > 0) classEntries = d.classEntries;
+    if (d.scores !== undefined) scores = d.scores;
+    if (d.abilityMethod !== undefined) abilityMethod = d.abilityMethod;
+    if (d.abilityRolls !== undefined) abilityRolls = d.abilityRolls;
+    if (Array.isArray(d.selectedSkills)) selectedSkills = d.selectedSkills;
+    if (Array.isArray(d.selectedSpells)) selectedSpells = d.selectedSpells;
+    if (d.packChoices !== undefined) packChoices = d.packChoices;
+    if (Array.isArray(d.manualEquipment)) manualEquipment = d.manualEquipment;
+    // Prime the merge/reset guards to the restored values so the auto-merge
+    // effects don't re-add deselected skills and the class effect doesn't wipe
+    // restored pack choices.
+    lastBackground = d.background || '';
+    lastRaceForSkills = d.race || '';
+    lastClassForPacks = d.classEntries?.[0]?.class || '';
+  }
+
+  // Restore once, synchronously during init (before any effect runs).
+  const restoredDraft = parseDraft(readDraftRaw());
+  if (restoredDraft) applyDraft(restoredDraft);
+
+  // Persist on every change to a tracked field; never write after submit.
+  $effect(() => {
+    const snapshot = $state.snapshot({
+      currentStep, name, race, subrace, background,
+      classEntries, scores, abilityMethod, abilityRolls,
+      selectedSkills, selectedSpells, packChoices, manualEquipment,
+    });
+    if (submitted) return;
+    writeDraftRaw(serializeDraft(snapshot));
   });
 
   // Load full equipment list when entering equipment step
@@ -143,7 +218,6 @@
   async function loadStartingEquipment(cls) {
     try {
       startingPacks = await getStartingEquipment(cls);
-      packChoices = {};
     } catch (e) {
       startingPacks = [];
     }
@@ -346,6 +420,7 @@
         spells: selectedSpells,
       });
       submitted = true;
+      clearDraft();
     } catch (e) {
       error = 'Submission failed: ' + e.message;
     } finally {
@@ -360,7 +435,10 @@
   let subraceList = $derived(subraceOptions(selectedRaceData));
 
   // Reset subrace when race changes if the current value is no longer valid.
+  // Skip while race data is still loading, otherwise a restored subrace gets
+  // wiped before its parent race's subrace options exist.
   $effect(() => {
+    if (races.length === 0) return;
     const opts = subraceList;
     if (subrace && !opts.some(o => o.id === subrace)) {
       subrace = '';
