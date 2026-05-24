@@ -758,17 +758,66 @@
       </div>
     </div>
   {:else}
-    <!-- Toolbar -->
-    <div class="toolbar">
-      <div class="toolbar-section">
-        <label>
-          Name:
-          <input type="text" bind:value={mapName} oninput={() => dirty = true} />
-        </label>
+    <!-- Top bar: document actions (row 1) + mode selection (row 2) -->
+    <div class="topbar">
+      <div class="topbar-row doc-actions">
+        <div class="toolbar-section">
+          <label>
+            Name:
+            <input type="text" bind:value={mapName} oninput={() => dirty = true} />
+          </label>
+        </div>
+
+        <div class="toolbar-section">
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            style="display:none"
+            bind:this={fileInputEl}
+            onchange={handleImageUpload}
+          />
+          <button
+            class="import-btn"
+            onclick={() => fileInputEl?.click()}
+            disabled={uploadingImage}
+          >{uploadingImage ? 'Uploading...' : 'Import Image'}</button>
+          {#if backgroundImage}
+            <label class="opacity-label">
+              Opacity:
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={backgroundOpacity}
+                oninput={handleOpacityChange}
+              />
+              <span>{Math.round(backgroundOpacity * 100)}%</span>
+            </label>
+          {/if}
+        </div>
+
+        <div class="toolbar-section doc-actions-right">
+          <button class="undo-btn" onclick={performUndo} disabled={!undoStack.canUndo()} title="Undo (Ctrl+Z)">Undo</button>
+          <button class="redo-btn" onclick={performRedo} disabled={!undoStack.canRedo()} title="Redo (Ctrl+Shift+Z)">Redo</button>
+          {#if clipboard}
+            <button onclick={startPaste} title="Paste (Ctrl+V)">Paste</button>
+          {/if}
+          <button class="duplicate-btn" onclick={performDuplicate} title="Duplicate Map">Duplicate Map</button>
+          <button class="save-btn" onclick={saveMap} disabled={saving || !dirty}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+          {#if statusMsg}
+            <span class="status">{statusMsg}</span>
+          {/if}
+          {#if dirty}
+            <span class="dirty-indicator">*unsaved</span>
+          {/if}
+        </div>
       </div>
 
-      <div class="toolbar-section">
-        <span class="section-label">Tool:</span>
+      <div class="topbar-row mode-bar">
+        <span class="section-label">Mode:</span>
         <button
           class:active={activeTool === 'terrain'}
           onclick={() => activeTool = 'terrain'}
@@ -802,143 +851,6 @@
           onclick={() => activeTool = 'select'}
         >Select</button>
       </div>
-
-      {#if activeTool === 'terrain'}
-        <div class="toolbar-section terrain-palette">
-          <span class="section-label">Terrain:</span>
-          {#each Object.entries(TERRAIN_TYPES) as [key, terrain]}
-            <button
-              class="terrain-btn"
-              class:active={selectedTerrain === key}
-              onclick={() => selectedTerrain = key}
-              style="background: {terrain.color}"
-              title={terrain.label}
-            >{terrain.label}</button>
-          {/each}
-        </div>
-      {/if}
-
-      {#if activeTool === 'lighting'}
-        <div class="toolbar-section lighting-palette">
-          <span class="section-label">Lighting:</span>
-          {#each Object.entries(LIGHTING_TYPES).filter(([k]) => k !== 'normal') as [key, lt]}
-            <button
-              class="lighting-btn"
-              class:active={selectedLighting === key}
-              onclick={() => selectedLighting = key}
-              style="background: {lt.color}"
-              title={lt.label}
-            >{lt.label}</button>
-          {/each}
-          <button
-            class="lighting-btn"
-            class:active={selectedLighting === 'normal'}
-            onclick={() => selectedLighting = 'normal'}
-            title="Erase lighting"
-          >Clear</button>
-        </div>
-      {/if}
-
-      {#if activeTool === 'elevation'}
-        <div class="toolbar-section">
-          <span class="section-label">Level:</span>
-          <input
-            type="number"
-            class="elevation-input"
-            min="0"
-            max={ELEVATION_MAX}
-            bind:value={selectedElevation}
-          />
-          <input
-            type="range"
-            min="0"
-            max={ELEVATION_MAX}
-            bind:value={selectedElevation}
-            class="elevation-slider"
-          />
-          <span class="elevation-label">{selectedElevation}</span>
-        </div>
-      {/if}
-
-      {#if activeTool === 'spawn'}
-        <div class="toolbar-section">
-          <span class="section-label">Type:</span>
-          <button
-            class="spawn-btn player"
-            class:active={selectedSpawnType === 'player'}
-            onclick={() => selectedSpawnType = 'player'}
-          >Player</button>
-          <button
-            class="spawn-btn enemy"
-            class:active={selectedSpawnType === 'enemy'}
-            onclick={() => selectedSpawnType = 'enemy'}
-          >Enemy</button>
-          <span class="section-label hint">Click & drag to draw zone</span>
-        </div>
-      {/if}
-
-      <div class="toolbar-section">
-        <input
-          type="file"
-          accept="image/png,image/jpeg"
-          style="display:none"
-          bind:this={fileInputEl}
-          onchange={handleImageUpload}
-        />
-        <button
-          class="import-btn"
-          onclick={() => fileInputEl?.click()}
-          disabled={uploadingImage}
-        >{uploadingImage ? 'Uploading...' : 'Import Image'}</button>
-        {#if backgroundImage}
-          <label class="opacity-label">
-            Opacity:
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={backgroundOpacity}
-              oninput={handleOpacityChange}
-            />
-            <span>{Math.round(backgroundOpacity * 100)}%</span>
-          </label>
-        {/if}
-      </div>
-
-      {#if activeTool === 'select' && selectionRect}
-        <div class="toolbar-section">
-          <span class="section-label">Selection:</span>
-          <button onclick={copySelection}>Copy (Ctrl+C)</button>
-        </div>
-      {/if}
-
-      {#if activeTool === 'paste'}
-        <div class="toolbar-section">
-          <span class="section-label hint">Click to place pasted region</span>
-        </div>
-      {/if}
-
-      <div class="toolbar-section">
-        <button class="undo-btn" onclick={performUndo} disabled={!undoStack.canUndo()} title="Undo (Ctrl+Z)">Undo</button>
-        <button class="redo-btn" onclick={performRedo} disabled={!undoStack.canRedo()} title="Redo (Ctrl+Shift+Z)">Redo</button>
-        {#if clipboard}
-          <button onclick={startPaste} title="Paste (Ctrl+V)">Paste</button>
-        {/if}
-        <button class="duplicate-btn" onclick={performDuplicate} title="Duplicate Map">Duplicate Map</button>
-      </div>
-
-      <div class="toolbar-section">
-        <button class="save-btn" onclick={saveMap} disabled={saving || !dirty}>
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-        {#if statusMsg}
-          <span class="status">{statusMsg}</span>
-        {/if}
-        {#if dirty}
-          <span class="dirty-indicator">*unsaved</span>
-        {/if}
-      </div>
     </div>
 
     {#if error}
@@ -957,15 +869,112 @@
       </div>
     {/if}
 
-    <!-- Canvas -->
-    <div class="canvas-container">
-      <canvas
-        bind:this={canvasEl}
-        onmousedown={handleCanvasMouseDown}
-        onmousemove={handleCanvasMouseMove}
-        onmouseup={handleCanvasMouseUp}
-        onmouseleave={handleCanvasMouseUp}
-      ></canvas>
+    <!-- Workspace: canvas on the left, active-mode tool palette on the right -->
+    <div class="workspace">
+      <div class="canvas-container">
+        <canvas
+          bind:this={canvasEl}
+          onmousedown={handleCanvasMouseDown}
+          onmousemove={handleCanvasMouseMove}
+          onmouseup={handleCanvasMouseUp}
+          onmouseleave={handleCanvasMouseUp}
+        ></canvas>
+      </div>
+
+      <aside class="tool-panel">
+        {#if activeTool === 'terrain'}
+          <div class="toolbar-section terrain-palette">
+            <span class="section-label">Terrain:</span>
+            {#each Object.entries(TERRAIN_TYPES) as [key, terrain]}
+              <button
+                class="terrain-btn"
+                class:active={selectedTerrain === key}
+                onclick={() => selectedTerrain = key}
+                style="background: {terrain.color}"
+                title={terrain.label}
+              >{terrain.label}</button>
+            {/each}
+          </div>
+        {/if}
+
+        {#if activeTool === 'lighting'}
+          <div class="toolbar-section lighting-palette">
+            <span class="section-label">Lighting:</span>
+            {#each Object.entries(LIGHTING_TYPES).filter(([k]) => k !== 'normal') as [key, lt]}
+              <button
+                class="lighting-btn"
+                class:active={selectedLighting === key}
+                onclick={() => selectedLighting = key}
+                style="background: {lt.color}"
+                title={lt.label}
+              >{lt.label}</button>
+            {/each}
+            <button
+              class="lighting-btn"
+              class:active={selectedLighting === 'normal'}
+              onclick={() => selectedLighting = 'normal'}
+              title="Erase lighting"
+            >Clear</button>
+          </div>
+        {/if}
+
+        {#if activeTool === 'elevation'}
+          <div class="toolbar-section">
+            <span class="section-label">Level:</span>
+            <input
+              type="number"
+              class="elevation-input"
+              min="0"
+              max={ELEVATION_MAX}
+              bind:value={selectedElevation}
+            />
+            <input
+              type="range"
+              min="0"
+              max={ELEVATION_MAX}
+              bind:value={selectedElevation}
+              class="elevation-slider"
+            />
+            <span class="elevation-label">{selectedElevation}</span>
+          </div>
+        {/if}
+
+        {#if activeTool === 'spawn'}
+          <div class="toolbar-section">
+            <span class="section-label">Type:</span>
+            <button
+              class="spawn-btn player"
+              class:active={selectedSpawnType === 'player'}
+              onclick={() => selectedSpawnType = 'player'}
+            >Player</button>
+            <button
+              class="spawn-btn enemy"
+              class:active={selectedSpawnType === 'enemy'}
+              onclick={() => selectedSpawnType = 'enemy'}
+            >Enemy</button>
+            <span class="section-label hint">Click & drag to draw zone</span>
+          </div>
+        {/if}
+
+        {#if activeTool === 'select' && selectionRect}
+          <div class="toolbar-section">
+            <span class="section-label">Selection:</span>
+            <button onclick={copySelection}>Copy (Ctrl+C)</button>
+          </div>
+        {/if}
+
+        {#if activeTool === 'paste'}
+          <div class="toolbar-section">
+            <span class="section-label hint">Click to place pasted region</span>
+          </div>
+        {/if}
+
+        {#if activeTool === 'wall' || activeTool === 'eraseWall' || activeTool === 'eraseSpawn' || (activeTool === 'select' && !selectionRect)}
+          <div class="toolbar-section">
+            <span class="section-label hint">Click & drag on the map.</span>
+          </div>
+        {/if}
+      </aside>
     </div>
 
     <div class="info-bar">
@@ -1016,16 +1025,67 @@
     border-radius: 4px;
   }
 
-  .toolbar {
+  .topbar {
     display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: center;
+    flex-direction: column;
+    gap: 0.5rem;
     padding: 0.75rem;
     background: #16213e;
     border: 1px solid #0f3460;
     border-radius: 8px;
     margin-bottom: 0.5rem;
+  }
+
+  .topbar-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  /* Mode selector sits below the document actions, set off by a divider. */
+  .mode-bar {
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #0f3460;
+  }
+
+  /* Push the undo/redo/save cluster to the right edge of the top row. */
+  .doc-actions-right {
+    margin-left: auto;
+  }
+
+  .workspace {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  /* Right-hand panel holds the options for the active mode. */
+  .tool-panel {
+    flex: 0 0 240px;
+    max-width: 240px;
+    align-self: stretch;
+    max-height: 70vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 0.75rem;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+  }
+
+  .tool-panel .toolbar-section {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+
+  /* Section label sits on its own line above its controls inside the panel. */
+  .tool-panel .section-label {
+    flex-basis: 100%;
   }
 
   .toolbar-section {
@@ -1044,7 +1104,8 @@
     font-size: 0.75rem;
   }
 
-  .toolbar button {
+  .topbar button,
+  .tool-panel button {
     padding: 0.4rem 0.8rem;
     background: #1a1a2e;
     color: #e0e0e0;
@@ -1053,11 +1114,13 @@
     cursor: pointer;
   }
 
-  .toolbar button:hover {
+  .topbar button:hover,
+  .tool-panel button:hover {
     background: #0f3460;
   }
 
-  .toolbar button.active {
+  .topbar button.active,
+  .tool-panel button.active {
     background: #e94560;
     border-color: #e94560;
     color: white;
@@ -1103,7 +1166,8 @@
     min-width: 1.5em;
   }
 
-  .toolbar input {
+  .topbar input,
+  .tool-panel input {
     padding: 0.4rem;
     background: #1a1a2e;
     border: 1px solid #0f3460;
@@ -1134,11 +1198,26 @@
   }
 
   .canvas-container {
+    flex: 1;
+    min-width: 0;
     overflow: auto;
     max-width: 100%;
     max-height: 70vh;
     border: 1px solid #0f3460;
     border-radius: 4px;
+  }
+
+  /* Stack the tool panel under the canvas on narrow screens. */
+  @media (max-width: 700px) {
+    .workspace {
+      flex-direction: column;
+    }
+
+    .tool-panel {
+      flex-basis: auto;
+      max-width: none;
+      align-self: stretch;
+    }
   }
 
   canvas {
