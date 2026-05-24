@@ -46,6 +46,124 @@ func (s *Service) applyMasteryEffects(ctx context.Context, attacker, target refd
 	}
 }
 
+// cleaveUsedEffect is the once-per-turn key recorded in the usedEffects tracker
+// when a Cleave secondary attack fires. It shares the Sneak Attack machinery so
+// a second attack the same turn (Extra Attack) does not re-trigger Cleave.
+const cleaveUsedEffect = "cleave"
+
+// applyCleaveAttack auto-resolves the 2024 Cleave mastery's secondary attack.
+// It is a no-op unless result.MasteryProperty == "cleave" (which ResolveAttack
+// only sets on a melee hit with a known Cleave weapon), so non-cleave and
+// non-mastery attacks are untouched.
+//
+// When eligible and not already used this turn, it picks a second creature
+// (different, alive, hostile, within 5ft of the primary target, and within the
+// attacker's reach) and resolves ONE extra ResolveAttack with the same weapon.
+// The extra attack adds no ability modifier to damage unless that modifier is
+// negative (OverrideDmgMod = min(0, abilityMod)). The secondary damage flows
+// through the same ApplyDamage pipeline the primary hit uses, the outcome is
+// carried on result.CleaveAttack, and Cleave is marked used for the turn.
+func (s *Service) applyCleaveAttack(ctx context.Context, attacker, primaryTarget refdata.Combatant, weapon refdata.Weapon, primaryInput AttackInput, result *AttackResult, roller *dice.Roller) error {
+	if result.MasteryProperty != "cleave" {
+		return nil
+	}
+
+	// Once per the attacker's turn window — reuse the Sneak Attack tracker.
+	used := s.usedEffectsSnapshot(attacker.EncounterID, attacker.ID)
+	if used[cleaveUsedEffect] {
+		return nil
+	}
+
+	second, ok, err := s.findCleaveTarget(ctx, attacker, primaryTarget, weapon)
+	if err != nil {
+		return fmt.Errorf("finding cleave target: %w", err)
+	}
+	if !ok {
+		return nil
+	}
+
+	// The Cleave extra attack adds no ability modifier to damage unless that
+	// modifier is negative (RAW). min(0, abilityMod).
+	abilityMod := DamageModifier(primaryInput.Scores, weapon, primaryInput.MonkLevel)
+	overrideDmg := min(0, abilityMod)
+
+	secondInput := primaryInput
+	secondInput.TargetName = second.DisplayName
+	secondInput.TargetAC = int(second.Ac)
+	secondInput.TargetCombatantID = second.ID.String()
+	secondInput.DistanceFt = combatantDistance(attacker, second)
+	secondInput.TargetHidden = !second.IsVisible
+	secondInput.OverrideDmgMod = &overrideDmg
+	secondTargetConds, _ := parseConditions(second.Conditions)
+	secondInput.TargetConditions = secondTargetConds
+	// The secondary attack is a fresh swing, not a once-per-turn FES carrier —
+	// it must not re-fire Sneak Attack etc. Strip FES so only the weapon die
+	// (and the negative-only ability mod) lands on the second creature.
+	secondInput.Features = nil
+
+	secondResult, err := ResolveAttack(secondInput, roller)
+	if err != nil {
+		// A range/validation hiccup on the secondary swing must not roll back
+		// the primary hit; silently skip the cleave.
+		return nil
+	}
+
+	// Apply the secondary damage through the same pipeline the primary hit uses.
+	if secondResult.Hit && secondResult.DamageTotal > 0 {
+		if _, err := s.ApplyDamage(ctx, ApplyDamageInput{
+			EncounterID: second.EncounterID,
+			Target:      second,
+			RawDamage:   secondResult.DamageTotal,
+			DamageType:  secondResult.DamageType,
+			IsCritical:  secondResult.CriticalHit,
+		}); err != nil {
+			return fmt.Errorf("applying cleave damage: %w", err)
+		}
+	}
+
+	result.CleaveAttack = &secondResult
+	s.markUsedEffects(attacker.EncounterID, attacker.ID, []string{cleaveUsedEffect})
+	return nil
+}
+
+// findCleaveTarget picks a valid second creature for the Cleave mastery: a
+// different, alive, hostile combatant within 5ft of the primary target and
+// within the attacker's weapon reach. Returns (combatant, true, nil) on a hit
+// or (_, false, nil) when no eligible creature exists. The first match in the
+// encounter list wins (deterministic for fixtures).
+func (s *Service) findCleaveTarget(ctx context.Context, attacker, primaryTarget refdata.Combatant, weapon refdata.Weapon) (refdata.Combatant, bool, error) {
+	if attacker.EncounterID == uuid.Nil {
+		return refdata.Combatant{}, false, nil
+	}
+	all, err := s.store.ListCombatantsByEncounterID(ctx, attacker.EncounterID)
+	if err != nil {
+		return refdata.Combatant{}, false, fmt.Errorf("listing combatants for cleave: %w", err)
+	}
+	reach := NormalRange(weapon)
+	for _, c := range all {
+		if c.ID == attacker.ID || c.ID == primaryTarget.ID {
+			continue
+		}
+		if !c.IsAlive {
+			continue
+		}
+		// Hostile to the attacker (PC vs NPC faction split, mirrors cover/OA).
+		if c.IsNpc == attacker.IsNpc {
+			continue
+		}
+		// Within 5ft of the primary target.
+		if combatantDistance(primaryTarget, c) > 5 {
+			continue
+		}
+		// Within the attacker's reach.
+		if combatantDistance(attacker, c) > reach {
+			continue
+		}
+		return c, true, nil
+	}
+	return refdata.Combatant{}, false, nil
+}
+
 // applySlowedCondition applies a "slowed" condition to the target it just hit.
 // The 2024 Slow mastery reduces the target's Speed by 10 ft until the start of
 // the attacker's next turn; the speed penalty itself is applied in

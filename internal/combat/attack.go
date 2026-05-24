@@ -407,6 +407,14 @@ type AttackResult struct {
 	// Prone condition from the Topple mastery (8 + prof + attack ability mod).
 	// Zero unless MasteryProperty == "topple".
 	MasteryToppleSaveDC int
+
+	// CleaveAttack carries the secondary attack resolution from the 2024
+	// Cleave mastery (nil when no cleave occurred). The service layer auto-
+	// resolves one extra attack with the same weapon against a second creature
+	// within 5ft of the primary target and within the attacker's reach; the
+	// extra attack adds no ability modifier to damage (unless it is negative).
+	// Surfaced so callers can report "Cleave hits <2nd target> for N".
+	CleaveAttack *AttackResult
 }
 
 // OffhandAttackCommand holds the service-level inputs for an off-hand attack (bonus action).
@@ -642,6 +650,11 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		if masteryActive(input) && input.Weapon.Mastery == "push" {
 			result.MasteryProperty = "push"
 		}
+		// 2024 Weapon Mastery — Cleave also fires on an auto-crit melee hit.
+		// The service layer auto-resolves the secondary attack.
+		if masteryActive(input) && input.Weapon.Mastery == "cleave" && isMelee {
+			result.MasteryProperty = "cleave"
+		}
 		return result, nil
 	}
 
@@ -713,6 +726,14 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 	if masteryActive(input) && input.Weapon.Mastery == "push" {
 		result.MasteryProperty = "push"
+	}
+
+	// 2024 Weapon Mastery — Cleave: on a MELEE hit, the attacker can make one
+	// extra attack with the same weapon against a second creature within 5ft of
+	// the first that is within reach. Melee-only and gated behind masteryActive;
+	// the service layer auto-resolves the secondary attack (once per turn).
+	if masteryActive(input) && input.Weapon.Mastery == "cleave" && isMelee {
+		result.MasteryProperty = "cleave"
 	}
 
 	return result, nil
@@ -903,6 +924,15 @@ func FormatAttackLog(result AttackResult) string {
 			diceLabel = "doubled dice: " + result.DamageDice
 		}
 		fmt.Fprintf(&b, "\n    \u2192 Damage: %d %s (%s)", result.DamageTotal, result.DamageType, diceLabel)
+	}
+
+	// 2024 Weapon Mastery \u2014 Cleave: surface the auto-resolved secondary hit so
+	// players see the extra attack against the adjacent creature.
+	if result.CleaveAttack != nil && result.CleaveAttack.Hit {
+		fmt.Fprintf(&b, "\n    \u2192 \u2694\ufe0f Cleave hits %s for %d %s",
+			result.CleaveAttack.TargetName, result.CleaveAttack.DamageTotal, result.CleaveAttack.DamageType)
+	} else if result.CleaveAttack != nil {
+		fmt.Fprintf(&b, "\n    \u2192 \u2694\ufe0f Cleave misses %s", result.CleaveAttack.TargetName)
 	}
 
 	if result.InvisibilityBroken {
@@ -1113,6 +1143,14 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	//   - Topple: a hit forces a CON save or the target falls Prone.
 	// Gated by result.MasteryProperty so only an active mastery touches state.
 	if err := s.applyMasteryEffects(ctx, cmd.Attacker, cmd.Target, &result, roller); err != nil {
+		return result, err
+	}
+
+	// 2024 Weapon Mastery — Cleave: a melee hit may auto-resolve one extra
+	// attack against a second creature within 5ft of the primary target and
+	// within the attacker's reach. Gated by result.MasteryProperty == "cleave"
+	// and limited to once per the attacker's turn window.
+	if err := s.applyCleaveAttack(ctx, cmd.Attacker, cmd.Target, weapon, input, &result, roller); err != nil {
 		return result, err
 	}
 
@@ -1344,9 +1382,23 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 		return AttackResult{}, err
 	}
 
-	updatedTurn, err := UseResource(cmd.Turn, ResourceBonusAction)
-	if err != nil {
-		return AttackResult{}, fmt.Errorf("using bonus action: %w", err)
+	// 2024 Weapon Mastery — Nick: the off-hand weapon has Nick AND the attacker
+	// knows its mastery → the Light-property extra attack is absorbed into the
+	// Attack action and does NOT cost the bonus action (once per turn). Thread
+	// the attacker's known masteries like the main Attack path does.
+	var offMasteries []string
+	if char.CharacterData.Valid {
+		offMasteries = parseWeaponMasteries(char.CharacterData.RawMessage)
+	}
+	nickFree := s.nickAbsorbsBonusAction(cmd.Attacker, offWeapon, offMasteries)
+
+	// Spend the bonus action unless Nick makes this off-hand attack free.
+	updatedTurn := cmd.Turn
+	if !nickFree {
+		updatedTurn, err = UseResource(cmd.Turn, ResourceBonusAction)
+		if err != nil {
+			return AttackResult{}, fmt.Errorf("using bonus action: %w", err)
+		}
 	}
 
 	distFt := combatantDistance(cmd.Attacker, cmd.Target)
@@ -1362,6 +1414,7 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	// C-35 — auto-populate attacker context (size, hostile-within-5ft).
 	s.populateAttackContext(ctx, &input, cmd.Attacker)
 	input.Cover = coverLevel
+	input.WeaponMasteries = offMasteries
 
 	// Obscurement from encounter zones
 	attackerObs, targetObs, err := s.resolveObscurement(ctx, cmd.Attacker.EncounterID, cmd.Attacker, cmd.Target, cmd.AttackerVision, cmd.TargetVision)
@@ -1375,6 +1428,12 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	if err != nil {
 		return result, err
 	}
+	// 2024 Weapon Mastery — Nick: mark the free off-hand spent for this turn so
+	// a SECOND Nick off-hand the same turn costs the bonus action. Recorded
+	// after the swing resolves so a rejected attack does not burn the slot.
+	if nickFree {
+		s.markUsedEffects(cmd.Attacker.EncounterID, cmd.Attacker.ID, []string{nickUsedEffect})
+	}
 	s.markRageAttacked(ctx, cmd.Attacker)
 	s.populatePostHitPrompts(ctx, &result, cmd.Attacker, &char)
 	// SR-018 — off-hand swings count as an attack vs the target and so spend
@@ -1383,6 +1442,25 @@ func (s *Service) OffhandAttack(ctx context.Context, cmd OffhandAttackCommand, r
 	s.consumeHelpAdvantage(ctx, cmd.Attacker, cmd.Target)
 	s.consumeSapDisadvantage(ctx, cmd.Attacker)
 	return result, nil
+}
+
+// nickUsedEffect is the once-per-turn key recorded when the Nick off-hand
+// attack is made free (absorbed into the Attack action). Shares the Sneak
+// Attack tracker so a second Nick off-hand the same turn costs the bonus action.
+const nickUsedEffect = "nick"
+
+// nickAbsorbsBonusAction reports whether the 2024 Nick mastery makes this
+// off-hand attack free this turn: the off-hand weapon has Nick, the attacker
+// knows that weapon's mastery, and Nick has not already been used this turn.
+func (s *Service) nickAbsorbsBonusAction(attacker refdata.Combatant, offWeapon refdata.Weapon, knownMasteries []string) bool {
+	if !masteryActive(AttackInput{Weapon: offWeapon, WeaponMasteries: knownMasteries}) {
+		return false
+	}
+	if offWeapon.Mastery != "nick" {
+		return false
+	}
+	used := s.usedEffectsSnapshot(attacker.EncounterID, attacker.ID)
+	return !used[nickUsedEffect]
 }
 
 // resolveAttackWeaponFull resolves weapon, scores, proficiency, and optionally the character.
