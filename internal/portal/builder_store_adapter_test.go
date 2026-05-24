@@ -50,7 +50,6 @@ func TestBuilderStoreAdapter_RedeemToken_NilTokenSvc(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-
 func TestBuilderStoreAdapter_EquipmentToInventory(t *testing.T) {
 	// Test that equipment strings are converted to inventory items
 	items := portal.EquipmentToInventory([]string{"longsword", "chain-mail", "shield"})
@@ -149,6 +148,42 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSpells(t *testing.T) 
 	err = json.Unmarshal(spellsRaw, &spells)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"fire-bolt", "mage-hand", "magic-missile", "shield"}, spells)
+}
+
+func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsWeaponMasteries(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	params := portal.CreateCharacterParams{
+		CampaignID:      uuid.New().String(),
+		Name:            "Aragorn",
+		Race:            "Human",
+		Class:           "Fighter",
+		AbilityScores:   character.AbilityScores{STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 12, CHA: 13},
+		HPMax:           12,
+		AC:              16,
+		SpeedFt:         30,
+		ProfBonus:       2,
+		WeaponMasteries: []string{"longsword", "shortbow", "greatsword"},
+	}
+
+	_, err := adapter.CreateCharacterRecord(context.Background(), params)
+	require.NoError(t, err)
+
+	// character_data should contain weapon_masteries
+	require.True(t, creator.capturedParams.CharacterData.Valid, "CharacterData should be valid")
+
+	var charData map[string]json.RawMessage
+	err = json.Unmarshal(creator.capturedParams.CharacterData.RawMessage, &charData)
+	require.NoError(t, err)
+
+	masteriesRaw, ok := charData["weapon_masteries"]
+	require.True(t, ok, "character_data should have 'weapon_masteries' key")
+
+	var masteries []string
+	err = json.Unmarshal(masteriesRaw, &masteries)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"longsword", "shortbow", "greatsword"}, masteries)
 }
 
 func TestBuilderStoreAdapter_CreateCharacterRecord_NoSpells(t *testing.T) {

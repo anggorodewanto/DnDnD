@@ -9,6 +9,7 @@
   import { formatProperties, armorACText } from './lib/equipment-perks.js';
   import { raceGrantedSkills, mergeGrantedSkills } from './lib/race-skills.js';
   import { raceGrantedWeaponProficiencies, weaponProficiencyLabel } from './lib/race-weapon-proficiencies.js';
+  import { proficientWeaponIds, masteryEligibleWeapons } from './lib/weapon-proficiency.js';
   import { formatSkillChoices } from './lib/class-perks.js';
   import {
     subraceOptions, subclassOptions, isSubclassEligible,
@@ -37,6 +38,7 @@
   let abilityRolls = $state({});
   let selectedSkills = $state([]);
   let selectedSpells = $state([]);
+  let selectedMasteries = $state([]); // weapon ids whose mastery the character knows
 
   // Reference data
   let races = $state([]);
@@ -167,6 +169,7 @@
     if (d.abilityRolls !== undefined) abilityRolls = d.abilityRolls;
     if (Array.isArray(d.selectedSkills)) selectedSkills = d.selectedSkills;
     if (Array.isArray(d.selectedSpells)) selectedSpells = d.selectedSpells;
+    if (Array.isArray(d.selectedMasteries)) selectedMasteries = d.selectedMasteries;
     if (d.packChoices !== undefined) packChoices = d.packChoices;
     if (Array.isArray(d.manualEquipment)) manualEquipment = d.manualEquipment;
     // Prime the merge/reset guards to the restored values so the auto-merge
@@ -186,7 +189,7 @@
     const snapshot = $state.snapshot({
       currentStep, name, race, subrace, background,
       classEntries, scores, abilityMethod, abilityRolls,
-      selectedSkills, selectedSpells, packChoices, manualEquipment,
+      selectedSkills, selectedSpells, selectedMasteries, packChoices, manualEquipment,
     });
     if (submitted) return;
     writeDraftRaw(serializeDraft(snapshot));
@@ -345,10 +348,24 @@
     }
   }
 
+  function toggleMastery(weaponId) {
+    if (selectedMasteries.includes(weaponId)) {
+      selectedMasteries = selectedMasteries.filter(id => id !== weaponId);
+      return;
+    }
+    if (selectedMasteries.length >= masteryCount) return;
+    selectedMasteries = [...selectedMasteries, weaponId];
+  }
+
   // Derived stats for review
   let selectedRaceData = $derived(races.find(r => r.id === race));
   let selectedClassData = $derived(classes.find(c => c.id === selectedClass));
   let weaponIds = $derived(allEquipment.filter(e => e.category === 'weapon').map(e => e.id));
+  let weaponList = $derived(allEquipment.filter(e => e.category === 'weapon'));
+  let raceWeaponIds = $derived(raceGrantedWeaponProficiencies(selectedRaceData?.traits, weaponIds));
+  let proficientIds = $derived(proficientWeaponIds(weaponList, selectedClassData?.weapon_proficiencies, raceWeaponIds));
+  let masteryWeapons = $derived(masteryEligibleWeapons(weaponList, proficientIds));
+  let masteryCount = $derived(selectedClassData?.weapon_mastery_count || 0);
 
   let racialBonuses = $derived(() => {
     if (!selectedRaceData?.ability_bonuses) return {};
@@ -420,6 +437,7 @@
         skills,
         equipment: selectedEquipment(),
         spells: selectedSpells,
+        weapon_masteries: selectedMasteries.filter(id => masteryWeapons.some(w => w.id === id)),
       });
       submitted = true;
       clearDraft();
@@ -879,6 +897,27 @@
             </ul>
           </div>
         {/if}
+
+        {#if masteryCount > 0}
+          <div class="equipment-section mastery-section">
+            <h4>Weapon Mastery</h4>
+            <p class="mastery-hint">Choose up to {masteryCount} weapon{masteryCount === 1 ? '' : 's'} you're proficient with to gain its mastery property. ({selectedMasteries.length}/{masteryCount})</p>
+            {#if masteryWeapons.length === 0}
+              <p class="muted">Select your class first — masteries come from weapons you're proficient with.</p>
+            {:else}
+              <div class="mastery-grid">
+                {#each masteryWeapons as w (w.id)}
+                  {@const chosen = selectedMasteries.includes(w.id)}
+                  <label class="mastery-option" class:selected={chosen}>
+                    <input type="checkbox" checked={chosen} disabled={!chosen && selectedMasteries.length >= masteryCount} onchange={() => toggleMastery(w.id)} />
+                    <span class="mastery-weapon-name">{w.name}</span>
+                    <span class="item-mastery">{weaponProficiencyLabel(w.mastery)}</span>
+                  </label>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
       </div>
 
     <!-- Step 5: Spells -->
@@ -995,6 +1034,13 @@
           <div class="review-section">
             <h4>Spells</h4>
             <p>{selectedSpells.join(', ')}</p>
+          </div>
+        {/if}
+
+        {#if selectedMasteries.length > 0}
+          <div class="review-section">
+            <h4>Weapon Masteries</h4>
+            <p>{masteryWeapons.filter(w => selectedMasteries.includes(w.id)).map(w => `${w.name} (${weaponProficiencyLabel(w.mastery)})`).join(', ')}</p>
           </div>
         {/if}
 
@@ -1125,6 +1171,12 @@
   .item-type { color: #888; font-size: 0.85rem; text-transform: capitalize; }
   .item-detail { color: #aaa; font-size: 0.85rem; }
   .item-mastery { display: inline-block; padding: 0.05rem 0.4rem; border: 1px solid #e94560; color: #e94560; border-radius: 8px; font-size: 0.7rem; margin-left: 0.4rem; }
+  .muted { color: #888; font-size: 0.85rem; }
+  .mastery-hint { color: #aaa; font-size: 0.85rem; margin-bottom: 0.5rem; }
+  .mastery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.4rem; }
+  .mastery-option { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.5rem; border: 1px solid #0f3460; border-radius: 6px; background: #16213e; cursor: pointer; }
+  .mastery-option.selected { border-color: #e94560; }
+  .mastery-weapon-name { font-weight: 600; }
   .race-weapons { color: #ccc; }
   .add-btn, .remove-btn {
     padding: 0.2rem 0.6rem; border: none; border-radius: 3px; cursor: pointer; font-size: 0.8rem;

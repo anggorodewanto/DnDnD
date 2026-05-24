@@ -26,19 +26,20 @@ var (
 // Class/Subclass for persistence. Class/Subclass remain on the payload
 // so older single-class submitters keep working.
 type CharacterSubmission struct {
-	Name          string                 `json:"name"`
-	Race          string                 `json:"race"`
-	Subrace       string                 `json:"subrace,omitempty"`
-	Background    string                 `json:"background"`
-	Class         string                 `json:"class"`
-	Subclass      string                 `json:"subclass,omitempty"`
-	Classes       []character.ClassEntry `json:"classes,omitempty"`
-	AbilityScores PointBuyScores         `json:"ability_scores"`
-	AbilityMethod AbilityScoreMethod     `json:"ability_method,omitempty"`
-	AbilityRolls  map[string][]int       `json:"ability_rolls,omitempty"`
-	Skills        []string               `json:"skills"`
-	Equipment     []string               `json:"equipment,omitempty"`
-	Spells        []string               `json:"spells,omitempty"`
+	Name            string                 `json:"name"`
+	Race            string                 `json:"race"`
+	Subrace         string                 `json:"subrace,omitempty"`
+	Background      string                 `json:"background"`
+	Class           string                 `json:"class"`
+	Subclass        string                 `json:"subclass,omitempty"`
+	Classes         []character.ClassEntry `json:"classes,omitempty"`
+	AbilityScores   PointBuyScores         `json:"ability_scores"`
+	AbilityMethod   AbilityScoreMethod     `json:"ability_method,omitempty"`
+	AbilityRolls    map[string][]int       `json:"ability_rolls,omitempty"`
+	Skills          []string               `json:"skills"`
+	Equipment       []string               `json:"equipment,omitempty"`
+	Spells          []string               `json:"spells,omitempty"`
+	WeaponMasteries []string               `json:"weapon_masteries,omitempty"`
 }
 
 // ValidateSubmission returns a list of validation error messages.
@@ -64,27 +65,28 @@ func ValidateSubmission(s CharacterSubmission) []string {
 // Classes drives the JSONB classes column when non-empty; otherwise the
 // adapter falls back to a single ClassEntry built from Class/Subclass.
 type CreateCharacterParams struct {
-	CampaignID     string
-	Name           string
-	Race           string
-	Subrace        string
-	Class          string
-	Subclass       string
-	Classes        []character.ClassEntry
-	Background     string
-	AbilityScores  character.AbilityScores
-	HPMax          int
-	AC             int
-	SpeedFt        int
-	ProfBonus      int
-	Skills         []string
-	Saves          []string
-	Equipment      []string
-	Spells         []string
-	Languages      []string
-	Features       []character.Feature
-	EquippedWeapon string
-	WornArmor      string
+	CampaignID      string
+	Name            string
+	Race            string
+	Subrace         string
+	Class           string
+	Subclass        string
+	Classes         []character.ClassEntry
+	Background      string
+	AbilityScores   character.AbilityScores
+	HPMax           int
+	AC              int
+	SpeedFt         int
+	ProfBonus       int
+	Skills          []string
+	Saves           []string
+	Equipment       []string
+	Spells          []string
+	WeaponMasteries []string
+	Languages       []string
+	Features        []character.Feature
+	EquippedWeapon  string
+	WornArmor       string
 }
 
 // CreatePlayerCharacterParams holds params for the player_characters record.
@@ -201,22 +203,23 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 	profBonus := character.ProficiencyBonus(totalLevel)
 
 	charParams := CreateCharacterParams{
-		CampaignID:    campaignID,
-		Name:          sub.Name,
-		Race:          sub.Race,
-		Subrace:       sub.Subrace,
-		Class:         sub.Class,
-		Subclass:      sub.Subclass,
-		Classes:       sub.Classes,
-		Background:    sub.Background,
-		AbilityScores: scores,
-		HPMax:         hp,
-		AC:            ac,
-		SpeedFt:       DeriveSpeed(sub.Race),
-		ProfBonus:     profBonus,
-		Skills:        sub.Skills,
-		Equipment:     sub.Equipment,
-		Spells:        sub.Spells,
+		CampaignID:      campaignID,
+		Name:            sub.Name,
+		Race:            sub.Race,
+		Subrace:         sub.Subrace,
+		Class:           sub.Class,
+		Subclass:        sub.Subclass,
+		Classes:         sub.Classes,
+		Background:      sub.Background,
+		AbilityScores:   scores,
+		HPMax:           hp,
+		AC:              ac,
+		SpeedFt:         DeriveSpeed(sub.Race),
+		ProfBonus:       profBonus,
+		Skills:          sub.Skills,
+		Equipment:       sub.Equipment,
+		Spells:          sub.Spells,
+		WeaponMasteries: sub.WeaponMasteries,
 	}
 
 	// Validate token ownership before creating character.

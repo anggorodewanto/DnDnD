@@ -126,6 +126,9 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 	if len(p.Spells) > 0 {
 		charData["spells"] = p.Spells
 	}
+	if len(p.WeaponMasteries) > 0 {
+		charData["weapon_masteries"] = p.WeaponMasteries
+	}
 	if p.Subrace != "" {
 		charData["subrace"] = p.Subrace
 	}
