@@ -346,6 +346,7 @@ type AttackInput struct {
 	AllyWithinFt        int                 // Distance to nearest ally relative to target (Pack Tactics, Sneak Attack)
 	AbilityUsed         string              // "str" or "dex" — which ability mod was chosen for this attack
 	UsedThisTurn        map[string]bool     // Per-turn feature usage tracking (Sneak Attack OncePerTurn)
+	WeaponMasteries     []string            // weapon ids whose mastery the attacker knows (2024 Weapon Mastery)
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -397,6 +398,15 @@ type AttackResult struct {
 	// turn or a reaction on another creature's turn — skip them until the
 	// combatant's own turn starts again.
 	OncePerTurnEffectsFired []string
+
+	// 2024 Weapon Mastery: the mastery slug that fired on this attack
+	// ("" if none). Only set when the attacker knows the weapon's mastery
+	// (masteryActive). Graze fires on a miss; Topple fires on a hit.
+	MasteryProperty string
+	// MasteryToppleSaveDC is the CON save DC the target must beat to avoid the
+	// Prone condition from the Topple mastery (8 + prof + attack ability mod).
+	// Zero unless MasteryProperty == "topple".
+	MasteryToppleSaveDC int
 }
 
 // OffhandAttackCommand holds the service-level inputs for an off-hand attack (bonus action).
@@ -439,6 +449,20 @@ type AttackCommand struct {
 	// cover (Phase 33 / C-33). A nil/empty slice degrades to "no wall cover";
 	// creature-granted cover still applies via the encounter's combatant list.
 	Walls []renderer.WallSegment
+}
+
+// masteryActive reports whether the attacker knows this weapon's mastery
+// property — the weapon has a mastery AND its id is in the attacker's known list.
+func masteryActive(input AttackInput) bool {
+	if input.Weapon.Mastery == "" {
+		return false
+	}
+	for _, id := range input.WeaponMasteries {
+		if id == input.Weapon.ID {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolveAttack resolves a single attack using pure inputs. Returns an error if the target
@@ -595,6 +619,11 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		result.DamageTotal = dmg + gwmSharpshooterBonus + extra
 		result.DamageDice = damageDice
 		result.DamageRoll = dmgRoll
+		// 2024 Weapon Mastery — Topple also fires on an auto-crit hit.
+		if masteryActive(input) && input.Weapon.Mastery == "topple" {
+			result.MasteryProperty = "topple"
+			result.MasteryToppleSaveDC = 8 + profBonus + abilityModForWeapon(input.Scores, input.Weapon, input.MonkLevel)
+		}
 		return result, nil
 	}
 
@@ -616,6 +645,14 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 
 	if !result.Hit {
+		// 2024 Weapon Mastery — Graze: on a miss, deal damage equal to the
+		// attack's ability modifier (no dice), of the weapon's damage type.
+		// Min 0. Gated entirely behind masteryActive so non-mastery misses are
+		// unchanged.
+		if masteryActive(input) && input.Weapon.Mastery == "graze" {
+			result.DamageTotal = max(0, DamageModifier(input.Scores, input.Weapon, input.MonkLevel))
+			result.MasteryProperty = "graze"
+		}
 		return result, nil
 	}
 
@@ -625,6 +662,16 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	result.DamageTotal = dmg + gwmSharpshooterBonus + extra
 	result.DamageDice = damageDice
 	result.DamageRoll = dmgRoll
+
+	// 2024 Weapon Mastery — Topple: on a hit, the target makes a CON save
+	// (DC = 8 + proficiency bonus + the attack ability modifier) or falls
+	// Prone. The service layer resolves the save and applies the condition.
+	// profBonus already reflects the improvised adjustment. Gated behind
+	// masteryActive so non-mastery hits are unchanged.
+	if masteryActive(input) && input.Weapon.Mastery == "topple" {
+		result.MasteryProperty = "topple"
+		result.MasteryToppleSaveDC = 8 + profBonus + abilityModForWeapon(input.Scores, input.Weapon, input.MonkLevel)
+	}
 
 	return result, nil
 }
@@ -986,6 +1033,13 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 	input.Reckless = cmd.Reckless
 	input.Cover = coverLevel
 
+	// 2024 Weapon Mastery: thread the attacker's known masteries (weapon ids)
+	// so masteryActive can gate Graze / Topple. Tolerant parse → empty slice on
+	// missing/invalid character_data.
+	if char != nil && char.CharacterData.Valid {
+		input.WeaponMasteries = parseWeaponMasteries(char.CharacterData.RawMessage)
+	}
+
 	// Monk martial arts: set monk level for DEX/STR auto-select and die upgrade
 	if char != nil {
 		input.MonkLevel = ClassLevelFromJSON(char.Classes, "Monk")
@@ -1009,6 +1063,14 @@ func (s *Service) Attack(ctx context.Context, cmd AttackCommand, roller *dice.Ro
 
 	result, err := s.resolveAndPersistAttack(ctx, input, updatedTurn, cmd.Attacker, roller)
 	if err != nil {
+		return result, err
+	}
+
+	// 2024 Weapon Mastery — apply the target-side effect that fired:
+	//   - Graze: a miss deals the ability-modifier damage to the target HP.
+	//   - Topple: a hit forces a CON save or the target falls Prone.
+	// Gated by result.MasteryProperty so only an active mastery touches state.
+	if err := s.applyMasteryEffects(ctx, cmd.Attacker, cmd.Target, &result, roller); err != nil {
 		return result, err
 	}
 

@@ -33,6 +33,30 @@ func ParsePreparedSpells(raw json.RawMessage) ([]string, error) {
 	return spells, nil
 }
 
+// parseWeaponMasteries extracts the attacker's known weapon-mastery list from
+// the character_data JSONB under the "weapon_masteries" key (an array of weapon
+// ids whose mastery property the attacker knows). It is intentionally tolerant:
+// a missing key, empty/invalid JSON, or a wrong value type all degrade to nil
+// rather than an error, so a malformed character_data never blocks an attack.
+func parseWeaponMasteries(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil
+	}
+	masteriesRaw, ok := m["weapon_masteries"]
+	if !ok {
+		return nil
+	}
+	var masteries []string
+	if err := json.Unmarshal(masteriesRaw, &masteries); err != nil {
+		return nil
+	}
+	return masteries
+}
+
 // BuildCharacterDataWithPreparedSpells merges prepared spells into existing character_data JSONB.
 // Preserves all other keys in the character_data object.
 func BuildCharacterDataWithPreparedSpells(existing json.RawMessage, spells []string) (json.RawMessage, error) {
