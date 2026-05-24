@@ -1129,8 +1129,14 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// page behind dmAuthMw (F-2) and (when a top-level Handler is
 		// present, via MountDashboard in future phases) wire the sidebar
 		// 24h badge off the same errorlog.Reader.
-		dashHandler := dashboard.MountDashboard(router, logger, hub, dmAuthMw)
-		dashboard.MountErrorsRoutes(router, dashHandler, errorStore, time.Now, dmAuthMw)
+		// These mounts serve server-rendered HTML / the Svelte SPA shell —
+		// exactly the top-level browser navigations we want bounced to the
+		// OAuth login page when there's no session, rather than a bare 401.
+		// Wrapping is transparent in local passthrough mode (authMw never
+		// emits 401) and leaves the DM XHR/API routes on plain dmAuthMw.
+		dashboardPageMw := auth.RedirectNavigationOnUnauth("/portal/auth/login", dmAuthMw)
+		dashHandler := dashboard.MountDashboard(router, logger, hub, dashboardPageMw)
+		dashboard.MountErrorsRoutes(router, dashHandler, errorStore, time.Now, dashboardPageMw)
 
 		// SR-016 / A-H03: configure WebSocket upgrade Origin check.
 		// Prod (COOKIE_SECURE=true): derive allowed Origin host from BASE_URL
