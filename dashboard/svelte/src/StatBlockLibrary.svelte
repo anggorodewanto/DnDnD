@@ -221,6 +221,8 @@
   .detail-col {
     position: sticky;
     top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
   }
   .entry-list {
     list-style: none;
@@ -294,6 +296,14 @@
   @media (max-width: 768px) {
     .body {
       grid-template-columns: 1fr;
+    }
+    /* Drop sticky on mobile: position:sticky creates a stacking context that
+       traps the fixed .detail (z-index 30) below the backdrop (z-index 20),
+       darkening the viewer. Static keeps .detail in the root stacking order. */
+    .detail-col {
+      position: static;
+      max-height: none;
+      overflow: visible;
     }
     .detail-placeholder {
       display: none;
