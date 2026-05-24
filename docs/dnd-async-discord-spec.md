@@ -155,6 +155,7 @@ The bot is designed so that a process crash and restart is a non-event. All dura
 - `Send Messages` — post to all bot-managed channels
 - `Attach Files` — upload map PNGs and text file attachments
 - `Manage Messages` — pin/edit the initiative tracker message
+- `Manage Channels` — create/configure the channel structure on `/setup`
 - `Use Application Commands` — register and respond to slash commands
 - `Mention Everyone` — ping players on turn start (or a configurable `@combat` role)
 

@@ -72,15 +72,15 @@ data (classes, races, spells, creatures, magic items) is seeded the same way.
 7. Build the invite URL by replacing `<APP_ID>`:
 
    ```
-   https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot+applications.commands&permissions=2416036880
+   https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot+applications.commands&permissions=2416176144
    ```
 
-   The `permissions=2416036880` bitfield grants the minimum the bot needs:
+   The `permissions=2416176144` bitfield grants the minimum the bot needs:
    `View Channels`, `Send Messages`, `Manage Channels` (required by
    `/setup` — see `internal/discord/commands.go`), `Manage Roles`,
-   `Embed Links`, `Attach Files`, `Read Message History`, `Use Slash
-   Commands`. Tighten or loosen later as you wish; this is a sane playtest
-   default.
+   `Manage Messages`, `Mention Everyone`, `Embed Links`, `Attach Files`,
+   `Read Message History`, `Use Slash Commands`. Tighten or loosen later as
+   you wish; this is a sane playtest default.
 8. Open the URL, pick a server you own (create a fresh one for the playtest
    if you don't have a throwaway), and authorize.
 
