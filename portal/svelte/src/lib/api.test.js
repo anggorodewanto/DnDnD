@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { listRaces, listClasses, listSpells, submitCharacter } from './api.js';
+import { listRaces, listClasses, listSpells, submitCharacter, getPreparation, savePreparation } from './api.js';
 
 describe('API client', () => {
   beforeEach(() => {
@@ -61,6 +61,35 @@ describe('API client', () => {
     expect(fetch).toHaveBeenCalledWith('/portal/api/characters', expect.objectContaining({
       method: 'POST',
     }));
+  });
+
+  it('getPreparation fetches the character preparation endpoint', async () => {
+    const mockInfo = { max_prepared: 4, current_prepared: [], spells: [] };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockInfo),
+    });
+
+    const result = await getPreparation('char-1');
+    expect(result).toEqual(mockInfo);
+    expect(fetch).toHaveBeenCalledWith('/portal/api/characters/char-1/preparation', undefined);
+  });
+
+  it('savePreparation posts the chosen spells', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ prepared_count: 2, max_prepared: 4, always_prepared: [] }),
+    });
+
+    const result = await savePreparation('char-1', ['bless', 'guidance']);
+    expect(result.prepared_count).toBe(2);
+    expect(fetch).toHaveBeenCalledWith(
+      '/portal/api/characters/char-1/preparation',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ spells: ['bless', 'guidance'] }),
+      }),
+    );
   });
 
   it('throws on non-OK response', async () => {

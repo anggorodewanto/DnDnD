@@ -598,3 +598,78 @@ func TestPointBuyCost(t *testing.T) {
 		assert.Equal(t, tt.cost, cost, "score %d", tt.score)
 	}
 }
+
+// casterSubmission returns a valid level-1 wizard with the given INT score.
+// Wizard uses INT for spellcasting, so the cap is AbilityModifier(INT)+1 (min 1).
+func casterSubmission() portal.CharacterSubmission {
+	return portal.CharacterSubmission{
+		Name:          "Gandalf",
+		Race:          "human",
+		Background:    "sage",
+		Class:         "wizard",
+		AbilityScores: portal.PointBuyScores{STR: 8, DEX: 14, CON: 13, INT: 15, WIS: 12, CHA: 10},
+	}
+}
+
+func TestValidateSubmission_CasterWithinSpellCapPasses(t *testing.T) {
+	// Level 1 wizard, INT 15 (+2): cap = 2 + 1 = 3. Three spells is at the cap.
+	sub := casterSubmission()
+	sub.Spells = []string{"magic-missile", "shield", "mage-armor"}
+	errs := portal.ValidateSubmission(sub)
+	assert.Empty(t, errs)
+}
+
+func TestValidateSubmission_CasterOverSpellCapFails(t *testing.T) {
+	// Level 1 wizard, INT 15 (+2): cap = 3. Four spells exceeds it.
+	sub := casterSubmission()
+	sub.Spells = []string{"magic-missile", "shield", "mage-armor", "sleep"}
+	errs := portal.ValidateSubmission(sub)
+	require.NotEmpty(t, errs)
+	assert.Contains(t, errs, "too many spells selected: 4 chosen, maximum 3")
+}
+
+func TestValidateSubmission_NonCasterWithSpellsPasses(t *testing.T) {
+	// Fighter is not a spellcaster, so no spell-count cap applies.
+	sub := validSubmission()
+	sub.Spells = []string{"a", "b", "c", "d", "e", "f", "g", "h"}
+	errs := portal.ValidateSubmission(sub)
+	assert.Empty(t, errs)
+}
+
+func TestValidateSubmission_SpellCapRespectsAbilityModAndLevel(t *testing.T) {
+	// Higher INT raises the cap: INT 16 (+3) at level 1 -> cap 4.
+	highInt := casterSubmission()
+	highInt.AbilityScores.INT = 16
+	highInt.Spells = []string{"magic-missile", "shield", "mage-armor", "sleep"}
+	assert.Empty(t, portal.ValidateSubmission(highInt))
+
+	// Higher level raises the cap: INT 15 (+2) at level 3 -> cap 5.
+	highLevel := casterSubmission()
+	highLevel.Class = ""
+	highLevel.Classes = []character.ClassEntry{{Class: "wizard", Level: 3, IsPrimary: true}}
+	highLevel.Spells = []string{"magic-missile", "shield", "mage-armor", "sleep", "fireball"}
+	assert.Empty(t, portal.ValidateSubmission(highLevel))
+}
+
+func TestValidateSubmission_SpellCapMinimumOne(t *testing.T) {
+	// Level 1 wizard with INT 8 (-1): raw cap = -1 + 1 = 0, floored to 1.
+	sub := casterSubmission()
+	sub.AbilityScores.INT = 8
+	sub.Spells = []string{"shield"}
+	assert.Empty(t, portal.ValidateSubmission(sub))
+
+	// Two spells exceeds the min-1 floor.
+	sub.Spells = []string{"shield", "magic-missile"}
+	errs := portal.ValidateSubmission(sub)
+	require.NotEmpty(t, errs)
+	assert.Contains(t, errs, "too many spells selected: 2 chosen, maximum 1")
+}
+
+func TestValidateSubmissionMode_SpellCapEnforcedInDMMode(t *testing.T) {
+	// The cap is a 5e rule, not mode-specific: DM mode enforces it too.
+	sub := casterSubmission()
+	sub.Spells = []string{"magic-missile", "shield", "mage-armor", "sleep"}
+	errs := portal.ValidateSubmissionMode(sub, portal.ModeDM)
+	require.NotEmpty(t, errs)
+	assert.Contains(t, errs, "too many spells selected: 4 chosen, maximum 3")
+}

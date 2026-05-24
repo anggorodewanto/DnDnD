@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/combat"
 )
 
 var (
@@ -88,7 +89,43 @@ func ValidateSubmissionMode(s CharacterSubmission, mode CreateMode) []string {
 	}
 	errs = append(errs, validateClassEntries(s.Classes)...)
 	errs = append(errs, validateAbilityForMode(s, mode)...)
+	errs = append(errs, validateSpellCount(s)...)
 	return errs
+}
+
+// validateSpellCount enforces the 5e prepared/known spell-count cap on a
+// caster submission. The cap is a rules constraint (not mode-specific), so it
+// applies to both player and DM submissions. Non-casters and submissions with
+// no spells pass unchanged.
+func validateSpellCount(s CharacterSubmission) []string {
+	maxSpells, ok := spellCountCap(s)
+	if !ok {
+		return nil
+	}
+	if len(s.Spells) <= maxSpells {
+		return nil
+	}
+	return []string{fmt.Sprintf("too many spells selected: %d chosen, maximum %d", len(s.Spells), maxSpells)}
+}
+
+// spellCountCap returns the maximum number of spells the submission's primary
+// class may have. The second return value is false when no cap applies: either
+// there is no primary class or the primary class is not a spellcaster.
+//
+// The cap mirrors combat.MaxPreparedSpells (spellcasting-ability modifier +
+// primary class level, minimum 1).
+func spellCountCap(s CharacterSubmission) (int, bool) {
+	primary := primaryClassEntry(SubmissionClasses(s))
+	if primary == nil {
+		return 0, false
+	}
+	sc := classSpellcasting(primary.Class)
+	if sc.SlotProgression == "none" {
+		return 0, false
+	}
+	score := s.AbilityScores.Character().Get(sc.SpellAbility)
+	abilityMod := character.AbilityModifier(score)
+	return combat.MaxPreparedSpells(abilityMod, primary.Level), true
 }
 
 // hasNonEmptyClass reports whether any multiclass entry names a class.

@@ -354,7 +354,7 @@
   - Done when: Integration tests verify pact slot usage, short rest recharge, multiclass pool selection, upcast validation.
 
 - [x] **Phase 65: Spell Preparation (`/prepare`)**
-  - Scope: `/prepare` for prepared casters (Cleric, Druid, Paladin): ephemeral message with current prepared spells, full class spell list, remaining slots. Select/deselect via Discord select menus (paginated by level). Confirm/cancel. Validate count <= max prepared. Domain/Oath/Circle spells always prepared, shown separately. Post long-rest reminder.
+  - Scope: `/prepare` for prepared casters (Cleric, Druid, Paladin). With no args the bot posts an ephemeral link to the web spell-prep page (`/portal/character/{id}/prepare`), which reuses the character builder's spell-selection component (browse full class list, select up to max prepared, slot-level gated). `/prepare spells:id1,id2,…` commits a list directly. Validate count <= max prepared, all on class list, slots available. Domain/Oath/Circle spells always prepared, shown separately. Post long-rest reminder.
   - Depends on: Phase 58
   - Done when: Integration tests verify prepare flow, count validation, always-prepared spells excluded from count, long-rest reminder.
 

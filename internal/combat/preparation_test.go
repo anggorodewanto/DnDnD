@@ -39,6 +39,95 @@ func TestIsPreparedCaster(t *testing.T) {
 	}
 }
 
+// ResolvePreparedClass picks the prepared-caster class entry from a
+// character's classes JSON, honoring an optional class override.
+func TestResolvePreparedClass(t *testing.T) {
+	const mixedClasses = `[{"class":"Fighter","subclass":"Champion","level":3},{"class":"Cleric","subclass":"Life","level":5}]`
+
+	tests := []struct {
+		name             string
+		classesJSON      string
+		classOverride    string
+		subclassOverride string
+		wantClass        string
+		wantSubclass     string
+		wantOK           bool
+	}{
+		{
+			name:          "override matches a class",
+			classesJSON:   mixedClasses,
+			classOverride: "cleric",
+			wantClass:     "cleric",
+			wantSubclass:  "life",
+			wantOK:        true,
+		},
+		{
+			name:          "override matches nothing",
+			classesJSON:   mixedClasses,
+			classOverride: "wizard",
+			wantOK:        false,
+		},
+		{
+			name:             "override plus subclass override",
+			classesJSON:      mixedClasses,
+			classOverride:    "cleric",
+			subclassOverride: "war",
+			wantClass:        "cleric",
+			wantSubclass:     "war",
+			wantOK:           true,
+		},
+		{
+			name:         "no override picks first prepared caster",
+			classesJSON:  mixedClasses,
+			wantClass:    "cleric",
+			wantSubclass: "life",
+			wantOK:       true,
+		},
+		{
+			name:         "no override picks druid",
+			classesJSON:  `[{"class":"Druid","subclass":"Land","level":4}]`,
+			wantClass:    "druid",
+			wantSubclass: "land",
+			wantOK:       true,
+		},
+		{
+			name:         "no override picks paladin",
+			classesJSON:  `[{"class":"Paladin","subclass":"Devotion","level":6}]`,
+			wantClass:    "paladin",
+			wantSubclass: "devotion",
+			wantOK:       true,
+		},
+		{
+			name:        "no override and only non-prepared-casters",
+			classesJSON: `[{"class":"Fighter","subclass":"Champion","level":3},{"class":"Wizard","subclass":"Evocation","level":2}]`,
+			wantOK:      false,
+		},
+		{
+			name:        "malformed JSON",
+			classesJSON: `not-json`,
+			wantOK:      false,
+		},
+		{
+			name:             "no override applies subclass override",
+			classesJSON:      `[{"class":"Cleric","subclass":"Life","level":5}]`,
+			subclassOverride: "tempest",
+			wantClass:        "cleric",
+			wantSubclass:     "tempest",
+			wantOK:           true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			class, subclass, ok := ResolvePreparedClass(
+				json.RawMessage(tc.classesJSON), tc.classOverride, tc.subclassOverride)
+			assert.Equal(t, tc.wantOK, ok)
+			assert.Equal(t, tc.wantClass, class)
+			assert.Equal(t, tc.wantSubclass, subclass)
+		})
+	}
+}
+
 // TDD Cycle 4: ParsePreparedSpells extracts prepared spells from character_data
 func TestParsePreparedSpells(t *testing.T) {
 	tests := []struct {
@@ -539,29 +628,6 @@ func TestService_GetPreparationInfo(t *testing.T) {
 	assert.Contains(t, info.AlwaysPrepared, "bless")
 	assert.Contains(t, info.AlwaysPrepared, "cure-wounds")
 	assert.Equal(t, map[int]bool{1: true, 2: true, 3: true}, info.AvailableSlotLevels)
-}
-
-// TDD Cycle 10: FormatPreparationMessage produces readable output
-func TestFormatPreparationMessage(t *testing.T) {
-	info := PreparationInfo{
-		MaxPrepared:     8,
-		CurrentPrepared: []string{"shield-of-faith", "aid"},
-		AlwaysPrepared:  []string{"bless", "cure-wounds"},
-		ClassSpells: []refdata.Spell{
-			{ID: "bless", Name: "Bless", Level: 1, School: "enchantment"},
-			{ID: "cure-wounds", Name: "Cure Wounds", Level: 1, School: "evocation"},
-			{ID: "shield-of-faith", Name: "Shield of Faith", Level: 1, School: "abjuration"},
-			{ID: "aid", Name: "Aid", Level: 2, School: "abjuration"},
-		},
-		AvailableSlotLevels: map[int]bool{1: true, 2: true, 3: true},
-	}
-
-	msg := FormatPreparationMessage("Brother Thomas", info)
-	assert.Contains(t, msg, "Brother Thomas")
-	assert.Contains(t, msg, "2 / 8")
-	assert.Contains(t, msg, "Always Prepared")
-	assert.Contains(t, msg, "bless")
-	assert.Contains(t, msg, "shield-of-faith")
 }
 
 // TDD Cycle 11: LongRestPrepareReminder returns hint for prepared casters

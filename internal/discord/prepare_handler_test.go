@@ -162,8 +162,12 @@ func TestPrepareHandler_PreviewListsSpellsWhenSpellsArgEmpty(t *testing.T) {
 	if len(svc.prepareCalls) != 0 {
 		t.Errorf("expected no PrepareSpells call in preview mode")
 	}
-	if !strings.Contains(sess.lastResponse.Data.Content, "Spell Preparation") {
-		t.Errorf("expected preparation message, got %q", sess.lastResponse.Data.Content)
+	content := sess.lastResponse.Data.Content
+	if !strings.Contains(content, "/portal/character/") || !strings.Contains(content, "/prepare") {
+		t.Errorf("expected a web prep link, got %q", content)
+	}
+	if !strings.Contains(content, "5") {
+		t.Errorf("expected the prepared-spell cap in the message, got %q", content)
 	}
 }
 
@@ -211,8 +215,8 @@ func TestPrepareHandler_NoEncounter_StillUsesCharacterFromCampaign(t *testing.T)
 	if len(svc.infoCalls) != 1 {
 		t.Fatalf("expected 1 GetPreparationInfo call even when no encounter, got %d", len(svc.infoCalls))
 	}
-	if !strings.Contains(sess.lastResponse.Data.Content, "Spell Preparation") {
-		t.Errorf("expected preparation message, got %q", sess.lastResponse.Data.Content)
+	if !strings.Contains(sess.lastResponse.Data.Content, "/portal/character/") {
+		t.Errorf("expected a web prep link, got %q", sess.lastResponse.Data.Content)
 	}
 }
 

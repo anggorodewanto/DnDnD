@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ab/dndnd/internal/auth"
+	"github.com/go-chi/chi/v5"
 )
 
 // TokenValidator validates portal tokens.
@@ -24,6 +25,7 @@ type Handler struct {
 	validator   TokenValidator
 	landingTmpl *template.Template
 	createTmpl  *template.Template
+	prepareTmpl *template.Template
 	errorTmpl   *template.Template
 }
 
@@ -35,11 +37,14 @@ func NewHandler(logger *slog.Logger, validator TokenValidator) *Handler {
 	jsFile, cssFile := resolvePortalAssets()
 	tmplStr := strings.ReplaceAll(createTemplate, "{{.JSFile}}", jsFile)
 	tmplStr = strings.ReplaceAll(tmplStr, "{{.CSSFile}}", cssFile)
+	prepStr := strings.ReplaceAll(prepareTemplate, "{{.JSFile}}", jsFile)
+	prepStr = strings.ReplaceAll(prepStr, "{{.CSSFile}}", cssFile)
 	return &Handler{
 		logger:      logger,
 		validator:   validator,
 		landingTmpl: template.Must(template.New("landing").Parse(landingTemplate)),
 		createTmpl:  template.Must(template.New("create").Parse(tmplStr)),
+		prepareTmpl: template.Must(template.New("prepare").Parse(prepStr)),
 		errorTmpl:   template.Must(template.New("error").Parse(errorTemplate)),
 	}
 }
@@ -73,6 +78,11 @@ func (h *Handler) SetLandingTemplate(t *template.Template) {
 // SetCreateTemplate overrides the create template (for testing).
 func (h *Handler) SetCreateTemplate(t *template.Template) {
 	h.createTmpl = t
+}
+
+// SetPrepareTemplate overrides the prepare template (for testing).
+func (h *Handler) SetPrepareTemplate(t *template.Template) {
+	h.prepareTmpl = t
 }
 
 // SetErrorTemplate overrides the error template (for testing).
@@ -132,6 +142,28 @@ func (h *Handler) ServeCreate(w http.ResponseWriter, r *http.Request) {
 		Token:      tok.Token,
 		CampaignID: tok.CampaignID.String(),
 		UserID:     tok.DiscordUserID,
+	})
+}
+
+// PrepareData holds data for the spell-preparation page shell.
+type PrepareData struct {
+	CharacterID string
+	UserID      string
+}
+
+// ServePrepare renders the logged-in spell-preparation page shell. Ownership
+// and data are enforced by the GET preparation API the page calls, so this
+// only requires the session auth applied by the route group.
+func (h *Handler) ServePrepare(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.DiscordUserIDFromContext(r.Context())
+	if !ok || userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	h.render(w, h.prepareTmpl, PrepareData{
+		CharacterID: chi.URLParam(r, "characterID"),
+		UserID:      userID,
 	})
 }
 
@@ -258,6 +290,48 @@ const createTemplate = `<!DOCTYPE html>
             <p>Loading character builder...</p>
             <input type="hidden" id="portal-token" value="{{.Token}}">
             <input type="hidden" id="campaign-id" value="{{.CampaignID}}">
+        </div>
+    </div>
+    <script type="module" crossorigin src="/portal/app/assets/{{.JSFile}}"></script>
+    <link rel="stylesheet" crossorigin href="/portal/app/assets/{{.CSSFile}}">
+</body>
+</html>`
+
+const prepareTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DnDnD — Prepare Spells</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; background: #1a1a2e; color: #e0e0e0; }
+        .header { background: #16213e; border-bottom: 1px solid #0f3460; padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; }
+        .header h1 { color: #e94560; font-size: 1.4rem; }
+        .header nav { display: flex; gap: 1.5rem; }
+        .header nav a { color: #e0e0e0; text-decoration: none; padding: 0.5rem 0; }
+        .header nav a:hover { color: #e94560; }
+        .main { max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        .main h2 { color: #e94560; margin-bottom: 1rem; }
+        .card { background: #16213e; border-radius: 8px; padding: 1.5rem; border: 1px solid #0f3460; margin-bottom: 1rem; }
+        @media (max-width: 600px) {
+            .header { flex-direction: column; gap: 0.5rem; text-align: center; }
+            .main { padding: 0 0.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>DnDnD Player Portal</h1>
+        <nav>
+            <a href="/portal/">Home</a>
+            <a href="/portal/auth/logout">Logout</a>
+        </nav>
+    </div>
+    <div class="main">
+        <h2>Prepare Spells</h2>
+        <div class="card" id="character-builder">Loading…
+            <input type="hidden" id="prep-character-id" value="{{.CharacterID}}">
         </div>
     </div>
     <script type="module" crossorigin src="/portal/app/assets/{{.JSFile}}"></script>

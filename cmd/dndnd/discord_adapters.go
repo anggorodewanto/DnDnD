@@ -1216,9 +1216,9 @@ func (n *firstTurnPingNotifier) NotifyFirstTurn(ctx context.Context, encounterID
 //
 // Finding 20: uses NewRefDataAdapterWithOpen5eLookup when a lookup is provided
 // so Open5e spell-list gating is active in production.
-func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.TokenService, open5eLookup portal.Open5eCampaignLookup, featureProvider portal.FeatureProvider) (*portal.APIHandler, *portal.CharacterSheetHandler) {
+func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.TokenService, open5eLookup portal.Open5eCampaignLookup, featureProvider portal.FeatureProvider, prepareSvc portal.PrepareService) (*portal.APIHandler, *portal.CharacterSheetHandler, *portal.PreparationHandler) {
 	if queries == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	var refDataAdapter *portal.RefDataAdapter
 	if open5eLookup != nil {
@@ -1254,5 +1254,13 @@ func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.T
 	sheetStore := portal.NewCharacterSheetStoreAdapter(queries)
 	sheetSvc := portal.NewCharacterSheetService(sheetStore)
 	sheetHandler := portal.NewCharacterSheetHandler(nil, sheetSvc)
-	return apiHandler, sheetHandler
+
+	// Web spell-preparation page: reuse the same refData adapter so its spell
+	// list matches the builder's /portal/api/spells (shape + Open5e gating).
+	var prepHandler *portal.PreparationHandler
+	if prepareSvc != nil {
+		prepStore := portal.NewPreparationStoreAdapter(queries)
+		prepHandler = portal.NewPreparationHandler(nil, prepareSvc, prepStore, refDataAdapter)
+	}
+	return apiHandler, sheetHandler, prepHandler
 }

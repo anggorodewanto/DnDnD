@@ -634,6 +634,7 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 	if deps.cardUpdater != nil {
 		handlers.prepare.SetCardUpdater(deps.cardUpdater)
 	}
+	handlers.prepare.SetPortalBaseURL(deps.portalBaseURL)
 
 	if deps.campaignSettings != nil {
 		handlers.attack.SetChannelIDProvider(deps.campaignSettings)

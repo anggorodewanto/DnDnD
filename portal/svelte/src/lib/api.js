@@ -89,6 +89,32 @@ export async function submitCharacter(data) {
 }
 
 /**
+ * Load a character's spell-preparation state (max, current, always-prepared,
+ * castable slot levels, and the full class spell list to browse).
+ * @param {string} characterId
+ * @returns {Promise<object>}
+ */
+export async function getPreparation(characterId) {
+  const res = await apiFetch(`${API_BASE}/characters/${encodeURIComponent(characterId)}/preparation`);
+  return res.json();
+}
+
+/**
+ * Save a character's prepared spells (the player's chosen non-always ids).
+ * @param {string} characterId
+ * @param {string[]} spells
+ * @returns {Promise<object>} { prepared_count, max_prepared, always_prepared }
+ */
+export async function savePreparation(characterId, spells) {
+  const res = await apiFetch(`${API_BASE}/characters/${encodeURIComponent(characterId)}/preparation`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ spells }),
+  });
+  return res.json();
+}
+
+/**
  * Build a mode-aware API client for the shared character builder.
  *
  * The portal and the DM dashboard expose the same conceptual endpoints under

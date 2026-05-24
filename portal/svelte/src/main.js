@@ -1,19 +1,28 @@
 import { mount } from 'svelte';
 import CharacterBuilder from './CharacterBuilder.svelte';
+import SpellPrep from './SpellPrep.svelte';
 
 const target = document.getElementById('character-builder');
 if (target) {
-  // Read token and campaign ID from the hidden inputs before clearing them.
-  const token = document.getElementById('portal-token')?.value || '';
-  const campaignId = document.getElementById('campaign-id')?.value || '';
+  // The prep page injects a hidden #prep-character-id; its presence selects the
+  // spell-prep app. Otherwise this is the character builder.
+  const prepCharacterId = document.getElementById('prep-character-id')?.value || '';
 
-  // svelte's mount() appends to the target without clearing it, so the
-  // server-rendered "Loading character builder..." placeholder would linger.
-  // Wipe it first, then mount into the empty container.
+  // svelte's mount() appends without clearing, so wipe the server-rendered
+  // placeholder first, then mount into the empty container.
   target.innerHTML = '';
 
-  mount(CharacterBuilder, {
-    target,
-    props: { mode: 'player', token, campaignId },
-  });
+  if (prepCharacterId) {
+    mount(SpellPrep, {
+      target,
+      props: { characterId: prepCharacterId },
+    });
+  } else {
+    const token = document.getElementById('portal-token')?.value || '';
+    const campaignId = document.getElementById('campaign-id')?.value || '';
+    mount(CharacterBuilder, {
+      target,
+      props: { mode: 'player', token, campaignId },
+    });
+  }
 }

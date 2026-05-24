@@ -940,9 +940,21 @@ func TestQueueingSession_PassesNonSendMethodsThrough(t *testing.T) {
 // and /portal/character/{id} is unreachable (high-17).
 func TestBuildPortalRouteOptions_AppendsAPIAndCharacterSheet(t *testing.T) {
 	q := refdata.New(nil)
-	apiH, sheetH := buildPortalAPIAndSheetHandlers(q, nil, nil, nil)
+	apiH, sheetH, prepH := buildPortalAPIAndSheetHandlers(q, nil, nil, nil, stubPrepareService{})
 	require.NotNil(t, apiH, "production wiring must construct portal.APIHandler from queries")
 	require.NotNil(t, sheetH, "production wiring must construct portal.CharacterSheetHandler from queries")
+	require.NotNil(t, prepH, "production wiring must construct portal.PreparationHandler when a prepare service is provided")
+}
+
+// stubPrepareService satisfies portal.PrepareService for wiring tests without a DB.
+type stubPrepareService struct{}
+
+func (stubPrepareService) GetPreparationInfo(context.Context, uuid.UUID, string, string) (combat.PreparationInfo, error) {
+	return combat.PreparationInfo{}, nil
+}
+
+func (stubPrepareService) PrepareSpells(context.Context, combat.PrepareSpellsInput) (combat.PrepareSpellsResult, error) {
+	return combat.PrepareSpellsResult{}, nil
 }
 
 // --- G-94a / G-95: combat workspace + DM dashboard routes mounted on router ---

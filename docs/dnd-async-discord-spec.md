@@ -1017,14 +1017,13 @@ Current SP: use /status to check    Recharge: long rest
 
 How `/prepare` works:
 1. Player types `/prepare` (only available out of combat, i.e., `encounter.status != 'active'`)
-2. Bot responds with an ephemeral message showing:
-   - Current prepared spells (checked)
-   - Full class spell list for available slot levels (unchecked), with spell school and brief description
-   - Remaining preparation slots: "**N / M** spells prepared"
-3. Player selects/deselects spells via Discord select menus (paginated by spell level)
-4. Player clicks **Confirm** to save, or **Cancel** to discard changes
-5. System validates: count ≤ max prepared, all spells are on the class spell list, character has slots of that level
-6. Updated list stored in character data; confirmation posted as ephemeral message
+2. The bot replies with an ephemeral message stating the preparation cap and a link to the web spell-prep page (`/portal/character/{characterID}/prepare`), gated by the player's logged-in portal session
+3. On the web page the player browses the full class spell list (search + level filter, grouped by school) with a live "**N / M** prepared" counter. Spells above the character's available slot levels are shown but not selectable; selection is blocked once the cap is reached
+4. The player clicks **Save Preparation**; the page POSTs the chosen list to the portal API
+5. The server validates: count ≤ max prepared (ability modifier + class level, minimum 1), all spells are on the class spell list, the character has slots of that level
+6. Updated list stored in character data
+
+Power users can still commit a list directly from Discord with `/prepare spells:id1,id2,…` (same server-side validation). The web page reuses the same spell-selection component as the character builder's spell step.
 
 After a long rest, the system reminds prepared casters: "You can change your prepared spells with `/prepare`." This is a hint, not a requirement — players keep their existing list if they don't act.
 
@@ -2389,7 +2388,7 @@ A web-based player portal provides character creation, viewing, and management. 
 3. **Ability scores** — point-buy calculator or manual entry (DM campaign setting controls which methods are available)
 4. **Skills & proficiencies** — select skill proficiencies based on class/background/race allowances
 5. **Equipment** — choose from starting equipment options by class/background, or select from full SRD item list
-6. **Spells** — for caster classes, select known/prepared spells from class spell list (filtered by available level). Cantrips selected separately
+6. **Spells** — for caster classes, browse the full class spell list (search, level filter, grouped by school) and prepare up to (spellcasting ability modifier + class level) spells. Spells above the character's available slot levels are shown but not selectable; selection is blocked once the cap is reached. The cap is enforced both in the UI and server-side on submit
 7. **Review** — summary page showing the complete character sheet with all derived stats (HP, AC, proficiency bonus, saving throws) auto-calculated
 
 On submit, the character enters the DM approval queue with status `pending`. The player is pinged in Discord when the DM approves or requests changes.
@@ -2402,14 +2401,14 @@ On submit, the character enters the DM approval queue with status `pending`. The
 
 ### Manual Character Creation (DM Dashboard)
 
-The DM creates characters through a guided workflow (same steps as the player portal builder):
+The DM creates characters through a guided workflow using the same builder component as the player portal (one shared UI, mode-parametrized):
 
 1. **Basics** — name, race, background
 2. **Classes** — add one or more class entries: class, subclass (if available at current level), and class level. Multiclass characters add multiple entries (e.g., Fighter 5 / Rogue 3)
 3. **Ability scores** — manual entry (rolled or point-buy, DM's choice — system doesn't enforce a generation method)
 4. **Derived stats** — HP, AC, proficiency bonus, saving throws, skill proficiencies auto-calculated from race + classes + ability scores + total level using SRD rules
 5. **Equipment** — select from SRD weapons/armor/items; set equipped weapon and worn armor
-6. **Spells** — for caster classes, select known/prepared spells from class spell list (filtered by level). Spell slots auto-calculated using 5e multiclass spellcasting table when applicable
+6. **Spells** — for caster classes, browse the full class spell list and prepare up to (spellcasting ability modifier + class level) spells; spells above the available slot levels are shown but not selectable. Spell slots auto-calculated using the 5e multiclass spellcasting table when applicable
 7. **Features** — racial traits, class features, and subclass features auto-populated from SRD data based on race + class/subclass + level
 
 DM-created characters are pre-approved. The player links via `/register <character_name>` in Discord.

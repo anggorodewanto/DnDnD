@@ -78,6 +78,49 @@ func BuildCharacterDataWithPreparedSpells(existing json.RawMessage, spells []str
 	return result, nil
 }
 
+// ResolvePreparedClass picks the prepared-caster class entry from a character's
+// classes JSON, optionally honoring an explicit class override. classOverride and
+// subclassOverride are expected to be already trimmed/lower-cased by the caller;
+// empty means "no override". Returns (className, subclass, true) on success and
+// ("", "", false) when no matching prepared-caster class is found or the JSON is
+// malformed. className and subclass are returned lower-cased.
+func ResolvePreparedClass(classesJSON json.RawMessage, classOverride, subclassOverride string) (string, string, bool) {
+	var entries []struct {
+		Class    string `json:"class"`
+		Subclass string `json:"subclass,omitempty"`
+		Level    int    `json:"level"`
+	}
+	if err := json.Unmarshal(classesJSON, &entries); err != nil {
+		return "", "", false
+	}
+
+	if classOverride != "" {
+		for _, c := range entries {
+			if !strings.EqualFold(c.Class, classOverride) {
+				continue
+			}
+			subclass := c.Subclass
+			if subclassOverride != "" {
+				subclass = subclassOverride
+			}
+			return strings.ToLower(c.Class), strings.ToLower(subclass), true
+		}
+		return "", "", false
+	}
+
+	for _, c := range entries {
+		if !IsPreparedCaster(c.Class) {
+			continue
+		}
+		subclass := c.Subclass
+		if subclassOverride != "" {
+			subclass = subclassOverride
+		}
+		return strings.ToLower(c.Class), strings.ToLower(subclass), true
+	}
+	return "", "", false
+}
+
 // IsPreparedCaster returns true if the class is a prepared caster (Cleric, Druid, Paladin).
 func IsPreparedCaster(className string) bool {
 	switch strings.ToLower(className) {
@@ -323,61 +366,6 @@ func LongRestPrepareReminder(classes []CharacterClass) string {
 		}
 	}
 	return ""
-}
-
-// FormatPreparationMessage produces the ephemeral message content for /prepare.
-func FormatPreparationMessage(charName string, info PreparationInfo) string {
-	var b strings.Builder
-
-	alwaysSet := toStringSet(info.AlwaysPrepared)
-	preparedSet := toStringSet(info.CurrentPrepared)
-	counted := countNonAlwaysPrepared(info.CurrentPrepared, alwaysSet)
-
-	fmt.Fprintf(&b, "**%s — Spell Preparation**\n", charName)
-	fmt.Fprintf(&b, "**%d / %d** spells prepared\n\n", counted, info.MaxPrepared)
-
-	if len(info.AlwaysPrepared) > 0 {
-		b.WriteString("**Always Prepared** (subclass, do not count against limit):\n")
-		for _, id := range info.AlwaysPrepared {
-			fmt.Fprintf(&b, "  - %s\n", id)
-		}
-		b.WriteString("\n")
-	}
-
-	if counted > 0 {
-		b.WriteString("**Currently Prepared:**\n")
-		for _, id := range info.CurrentPrepared {
-			if !alwaysSet[id] {
-				fmt.Fprintf(&b, "  - %s\n", id)
-			}
-		}
-		b.WriteString("\n")
-	}
-
-	byLevel := make(map[int32][]refdata.Spell)
-	for _, sp := range info.ClassSpells {
-		if sp.Level > 0 {
-			byLevel[sp.Level] = append(byLevel[sp.Level], sp)
-		}
-	}
-
-	for level := int32(1); level <= 9; level++ {
-		spells, ok := byLevel[level]
-		if !ok {
-			continue
-		}
-		fmt.Fprintf(&b, "**Level %d Spells:**\n", level)
-		for _, sp := range spells {
-			marker := " "
-			if preparedSet[sp.ID] || alwaysSet[sp.ID] {
-				marker = "x"
-			}
-			fmt.Fprintf(&b, "  [%s] %s (%s)\n", marker, sp.ID, sp.School)
-		}
-		b.WriteString("\n")
-	}
-
-	return b.String()
 }
 
 // PrepareSpellsInput holds the inputs for the PrepareSpells service method.

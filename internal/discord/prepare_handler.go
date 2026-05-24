@@ -2,7 +2,6 @@ package discord
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -40,13 +39,11 @@ type PrepareCharacterLookup interface {
 	GetCharacterByCampaignAndDiscord(ctx context.Context, campaignID uuid.UUID, discordUserID string) (refdata.Character, error)
 }
 
-// PrepareHandler handles the /prepare slash command. The MVP UX is text-
-// based: with no `--spells` arg, the handler posts the ephemeral text
-// preview produced by combat.FormatPreparationMessage. With `--spells`,
-// the handler commits the comma-separated list via PrepareSpells.
-//
-// The paginated select-menu UX (per spec lines 1018–1026) is deferred —
-// see chunk5_spells_reactions.md Phase 65.
+// PrepareHandler handles the /prepare slash command. With no `spells` arg the
+// handler posts an ephemeral link to the web spell-prep page (browsing the long
+// spell list in Discord is unwieldy). With `spells:id1,id2,…` it commits the
+// comma-separated list directly via PrepareSpells. Both paths share the same
+// server-side validation (count + slot-level limits).
 type PrepareHandler struct {
 	session         Session
 	prepareService  PrepareService
@@ -54,6 +51,7 @@ type PrepareHandler struct {
 	campaignProv    PrepareCampaignProvider
 	characterLookup PrepareCharacterLookup
 	cardUpdater     CardUpdater // SR-007
+	portalBaseURL   string
 }
 
 // SetCardUpdater wires the SR-007 character-card refresh callback fired
@@ -62,13 +60,10 @@ func (h *PrepareHandler) SetCardUpdater(u CardUpdater) {
 	h.cardUpdater = u
 }
 
-// preparedClassEntry is the local subset of character.ClassEntry the
-// handler reads from the character.Classes JSON column. We unmarshal into
-// this rather than depending on the character package directly.
-type preparedClassEntry struct {
-	Class    string `json:"class"`
-	Subclass string `json:"subclass,omitempty"`
-	Level    int    `json:"level"`
+// SetPortalBaseURL sets the base URL used to build the /prepare web-page link.
+// Empty falls back to defaultPortalBaseURL.
+func (h *PrepareHandler) SetPortalBaseURL(baseURL string) {
+	h.portalBaseURL = strings.TrimRight(baseURL, "/")
 }
 
 // NewPrepareHandler constructs a /prepare handler.
@@ -138,51 +133,30 @@ func (h *PrepareHandler) Handle(interaction *discordgo.Interaction) {
 }
 
 // resolveClass picks the prepared-caster class entry from the character's
-// classes JSON, optionally honoring an explicit override. Returns
-// (className, subclass, true) on success and ("", "", false) when the
-// character has no prepared-caster class.
+// classes JSON, optionally honoring an explicit override. It delegates to the
+// pure combat.ResolvePreparedClass so the web endpoint can share the logic.
 func (h *PrepareHandler) resolveClass(char refdata.Character, classOverride, subclassOverride string) (string, string, bool) {
-	var entries []preparedClassEntry
-	if err := json.Unmarshal(char.Classes, &entries); err != nil {
-		return "", "", false
-	}
-
-	if classOverride != "" {
-		for _, c := range entries {
-			if !strings.EqualFold(c.Class, classOverride) {
-				continue
-			}
-			subclass := c.Subclass
-			if subclassOverride != "" {
-				subclass = subclassOverride
-			}
-			return strings.ToLower(c.Class), strings.ToLower(subclass), true
-		}
-		return "", "", false
-	}
-
-	for _, c := range entries {
-		if !combat.IsPreparedCaster(c.Class) {
-			continue
-		}
-		subclass := c.Subclass
-		if subclassOverride != "" {
-			subclass = subclassOverride
-		}
-		return strings.ToLower(c.Class), strings.ToLower(subclass), true
-	}
-	return "", "", false
+	return combat.ResolvePreparedClass(char.Classes, classOverride, subclassOverride)
 }
 
-// preview builds the ephemeral text preview using FormatPreparationMessage.
+// preview posts the link to the web spell-preparation page (browsing the long
+// spell list in Discord is unwieldy). The prepared-spell cap is surfaced inline.
+// Committing a list directly via `/prepare spells:...` remains available.
 func (h *PrepareHandler) preview(ctx context.Context, interaction *discordgo.Interaction, char refdata.Character, className, subclass string) {
 	info, err := h.prepareService.GetPreparationInfo(ctx, char.ID, className, subclass)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Failed to load preparation info: %v", err))
 		return
 	}
-	msg := combat.FormatPreparationMessage(char.Name, info)
-	msg += "\n_To commit a list, run `/prepare spells:id1,id2,id3`._"
+	base := h.portalBaseURL
+	if base == "" {
+		base = defaultPortalBaseURL
+	}
+	link := fmt.Sprintf("%s/portal/character/%s/prepare", base, char.ID.String())
+	msg := fmt.Sprintf(
+		"**%s** — prepare up to **%d** spells in the browser:\n%s\n\n_Or commit a list directly: `/prepare spells:id1,id2,id3`._",
+		char.Name, info.MaxPrepared, link,
+	)
 	respondEphemeral(h.session, interaction, msg)
 }
 

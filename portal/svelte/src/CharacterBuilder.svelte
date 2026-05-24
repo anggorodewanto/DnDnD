@@ -4,8 +4,8 @@
   import { skillsForBackground, mergeBackgroundSkills, backgroundDetails, formatLanguages } from './lib/backgrounds.js';
   import { abilityLabel } from './lib/skills.js';
   import { formatAbilityBonuses, parseTraits, formatDarkvision, subracePerks } from './lib/race-perks.js';
-  import { isConcentration, formatCastingTime } from './lib/spell-perks.js';
-  import { filterSpells, groupSpellsBySchool, availableLevels } from './lib/spell-filter.js';
+  import SpellPicker from './SpellPicker.svelte';
+  import { spellcastingAbilityForClass, isSpellcaster, spellPrepCap, levelsUpTo } from './lib/spellcasting.js';
   import { formatProperties, armorACText } from './lib/equipment-perks.js';
   import { raceGrantedSkills, mergeGrantedSkills } from './lib/race-skills.js';
   import { raceGrantedWeaponProficiencies, weaponProficiencyLabel } from './lib/race-weapon-proficiencies.js';
@@ -54,8 +54,6 @@
   let races = $state([]);
   let classes = $state([]);
   let spells = $state([]);
-  let spellQuery = $state('');
-  let spellLevelFilter = $state('');
   let allEquipment = $state([]);
   let startingPacks = $state([]);
   let abilityMethods = $state(['point_buy', 'standard_array', 'roll']);
@@ -400,14 +398,6 @@
     if (equippedWeapon && !weapons.includes(equippedWeapon)) equippedWeapon = '';
   });
 
-  function toggleSpell(spellId) {
-    if (selectedSpells.includes(spellId)) {
-      selectedSpells = selectedSpells.filter(s => s !== spellId);
-    } else {
-      selectedSpells = [...selectedSpells, spellId];
-    }
-  }
-
   function toggleMastery(weaponId) {
     if (selectedMasteries.includes(weaponId)) {
       selectedMasteries = selectedMasteries.filter(id => id !== weaponId);
@@ -447,6 +437,22 @@
       cha: scores.cha + (bonuses.cha || 0),
     };
   });
+
+  // Spellcasting limits for the spell step. The prepared-spell cap (ability
+  // modifier + class level) is computed live for instant feedback; the castable
+  // spell level comes from the server preview (max_spell_level) so it never
+  // drifts from the authoritative slot math. While the preview is still loading
+  // we gate all leveled spells (cantrips stay selectable); if it errors we drop
+  // the level gate and lean on the server-side count cap.
+  let isCaster = $derived(isSpellcaster(selectedClass));
+  let spellAbility = $derived(spellcastingAbilityForClass(selectedClass));
+  let primaryLevel = $derived(Number(classEntries[0]?.level) || 1);
+  let spellCap = $derived(
+    isCaster ? spellPrepCap(abilityModifier(finalScores()[spellAbility]), primaryLevel) : Infinity
+  );
+  let spellSelectableLevels = $derived(
+    !isCaster ? null : preview ? levelsUpTo(preview.max_spell_level) : previewError ? null : []
+  );
 
   // Build the common snake_case submission object both modes POST. The API
   // factory layers on token / campaign_id per mode.
@@ -496,13 +502,16 @@
     }
   }
 
-  // Trigger the preview when the Review step (last step) becomes active.
+  // Load the server preview when entering the Spells step (step 5 — supplies
+  // the castable max spell level for the picker) and the Review step (the full
+  // stat block). Re-fire only on step change, not on in-step edits.
+  const PREVIEW_STEPS = [5, STEPS.length - 1];
   let lastPreviewedStep = -1;
   $effect(() => {
-    if (currentStep === STEPS.length - 1 && currentStep !== lastPreviewedStep) {
+    if (PREVIEW_STEPS.includes(currentStep) && currentStep !== lastPreviewedStep) {
       lastPreviewedStep = currentStep;
       loadPreview();
-    } else if (currentStep !== STEPS.length - 1) {
+    } else if (!PREVIEW_STEPS.includes(currentStep)) {
       lastPreviewedStep = -1;
     }
   });
@@ -1028,52 +1037,18 @@
         {#if spells.length === 0}
           <p>No spells available for your class, or your class is not a spellcaster.</p>
         {:else}
-          {@const filtered = filterSpells(spells, { query: spellQuery, level: spellLevelFilter })}
-          {@const groups = groupSpellsBySchool(filtered)}
-          {@const levels = availableLevels(spells)}
-          <div class="spell-toolbar">
-            <input class="spell-search" type="text" placeholder="Search spells…" bind:value={spellQuery} />
-            <select class="spell-level-filter" bind:value={spellLevelFilter}>
-              <option value="">All levels</option>
-              {#each levels as lvl}
-                <option value={lvl}>{lvl === 0 ? 'Cantrips' : `Level ${lvl}`}</option>
-              {/each}
-            </select>
-            <span class="spell-selected-count">{selectedSpells.length} selected</span>
-          </div>
-          {#if filtered.length === 0}
-            <p class="spell-empty">No spells match your search.</p>
+          {#if isCaster}
+            <p class="spell-cap-hint">
+              Prepare up to <strong>{spellCap}</strong> spells ({(spellAbility || '').toUpperCase()} modifier + level).
+              Browse every level — you can only prepare spells you have slots for.
+            </p>
           {/if}
-          {#each groups as group (group.school)}
-            <details class="spell-school-group" open>
-              <summary>
-                <span class="school-name">{group.label}</span>
-                <span class="school-count">{group.spells.length}</span>
-              </summary>
-              <div class="spell-grid">
-                {#each group.spells as spell (spell.id)}
-                  {@const castingTime = formatCastingTime(spell.casting_time)}
-                  {@const isSelected = selectedSpells.includes(spell.id)}
-                  <label class="spell-option" class:selected={isSelected}>
-                    <span class="spell-row">
-                      <input type="checkbox" checked={isSelected} onchange={() => toggleSpell(spell.id)} />
-                      <span class="spell-name">{spell.name}</span>
-                      <span class="spell-level">{spell.level === 0 ? 'Cantrip' : `Lvl ${spell.level}`}</span>
-                      {#if castingTime}
-                        <span class="spell-meta">{castingTime}</span>
-                      {/if}
-                      {#if isConcentration(spell.duration)}
-                        <span class="conc-tag">Concentration</span>
-                      {/if}
-                    </span>
-                    {#if spell.description}
-                      <span class="spell-desc" title={spell.description}>{spell.description}</span>
-                    {/if}
-                  </label>
-                {/each}
-              </div>
-            </details>
-          {/each}
+          <SpellPicker
+            {spells}
+            bind:selected={selectedSpells}
+            max={spellCap}
+            selectableLevels={spellSelectableLevels}
+          />
         {/if}
       </div>
 
@@ -1277,32 +1252,8 @@
   .skill-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem; }
   .skill-option { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
 
-  .spell-toolbar { position: sticky; top: 0; z-index: 2; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; padding: 0.5rem 0; margin-bottom: 0.5rem; background: #1a1a2e; }
-  .spell-search { flex: 1 1 220px; padding: 0.45rem 0.6rem; background: #16213e; border: 1px solid #0f3460; border-radius: 6px; color: #eee; font-size: 0.9rem; }
-  .spell-level-filter { padding: 0.45rem 0.5rem; background: #16213e; border: 1px solid #0f3460; border-radius: 6px; color: #eee; font-size: 0.9rem; }
-  .spell-selected-count { margin-left: auto; color: #e94560; font-weight: 600; font-size: 0.9rem; }
-  .spell-empty { color: #888; font-style: italic; }
-
-  .spell-school-group { margin-bottom: 0.6rem; border: 1px solid #0f3460; border-radius: 8px; overflow: hidden; }
-  .spell-school-group > summary { cursor: pointer; list-style: none; padding: 0.5rem 0.7rem; background: #16213e; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
-  .spell-school-group > summary::-webkit-details-marker { display: none; }
-  .spell-school-group > summary::before { content: '▸'; color: #888; }
-  .spell-school-group[open] > summary::before { content: '▾'; }
-  .spell-school-group[open] > summary { border-bottom: 1px solid #0f3460; }
-  .school-count { color: #888; font-weight: 400; font-size: 0.85rem; }
-
-  .spell-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0.5rem; padding: 0.6rem; }
-  .spell-option { display: flex; flex-direction: column; align-items: stretch; gap: 0.25rem; padding: 0.5rem 0.6rem; border: 1px solid #0f3460; border-radius: 6px; background: #16213e; cursor: pointer; }
-  .spell-option.selected { border-color: #e94560; background: #1f2a4d; }
-  .spell-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-  .spell-name { font-weight: 600; }
-  .spell-level { color: #888; font-size: 0.82rem; }
-  .spell-meta { color: #888; font-size: 0.78rem; }
-  .conc-tag {
-    padding: 0.05rem 0.4rem; border: 1px solid #e94560; color: #e94560;
-    border-radius: 8px; font-size: 0.7rem;
-  }
-  .spell-desc { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #aaa; font-size: 0.82rem; line-height: 1.3; margin-top: 0.1rem; }
+  .spell-cap-hint { color: #aaa; font-size: 0.85rem; margin: 0 0 0.6rem; }
+  .spell-cap-hint strong { color: #e94560; }
   .class-info { margin-top: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
   .race-info { margin-top: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
   .trait-list { margin: 0.25rem 0 0.5rem; padding-left: 1.25rem; list-style: disc; }

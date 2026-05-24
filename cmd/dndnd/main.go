@@ -1273,12 +1273,15 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// WithCharacterSheet the /character Discord embed link points to a
 		// 404. buildPortalAPIAndSheetHandlers is the single source of truth
 		// so both endpoints stay in sync with portalTokenSvc.
-		portalAPIHandler, portalSheetHandler := buildPortalAPIAndSheetHandlers(queries, portalTokenSvc, open5eCampaignLookup, portal.NewRefDataFeatureProvider(ctx, queries, logger))
+		portalAPIHandler, portalSheetHandler, portalPrepHandler := buildPortalAPIAndSheetHandlers(queries, portalTokenSvc, open5eCampaignLookup, portal.NewRefDataFeatureProvider(ctx, queries, logger), combatSvc)
 		if portalAPIHandler != nil {
 			portalOpts = append(portalOpts, portal.WithAPI(portalAPIHandler))
 		}
 		if portalSheetHandler != nil {
 			portalOpts = append(portalOpts, portal.WithCharacterSheet(portalSheetHandler))
+		}
+		if portalPrepHandler != nil {
+			portalOpts = append(portalOpts, portal.WithSpellPreparation(portalPrepHandler))
 		}
 		portal.RegisterRoutes(router, portalHandler, authMw, portalOpts...)
 
