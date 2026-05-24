@@ -216,6 +216,8 @@ func TestHandler_AllOtherTypes_CRUD(t *testing.T) {
 // bodyForType returns the minimal valid body for the given homebrew type.
 func bodyForType(name, label string) map[string]any {
 	switch name {
+	case "creatures":
+		return map[string]any{"name": label}
 	case "spells":
 		return map[string]any{"name": label, "level": 1, "school": "evocation",
 			"casting_time": "1 action", "range_type": "self", "components": []string{"V"},

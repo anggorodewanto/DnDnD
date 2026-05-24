@@ -41,36 +41,43 @@ var ErrInvalidInput = errors.New("invalid homebrew input")
 type Store interface {
 	// Creatures
 	GetCreature(ctx context.Context, id string) (refdata.Creature, error)
+	ListCreatures(ctx context.Context) ([]refdata.Creature, error)
 	UpsertCreature(ctx context.Context, arg refdata.UpsertCreatureParams) error
 	DeleteHomebrewCreature(ctx context.Context, arg refdata.DeleteHomebrewCreatureParams) (int64, error)
 
 	// Spells
 	GetSpell(ctx context.Context, id string) (refdata.Spell, error)
+	ListSpells(ctx context.Context) ([]refdata.Spell, error)
 	UpsertSpell(ctx context.Context, arg refdata.UpsertSpellParams) error
 	DeleteHomebrewSpell(ctx context.Context, arg refdata.DeleteHomebrewSpellParams) (int64, error)
 
 	// Weapons
 	GetWeapon(ctx context.Context, id string) (refdata.Weapon, error)
+	ListWeapons(ctx context.Context) ([]refdata.Weapon, error)
 	UpsertWeapon(ctx context.Context, arg refdata.UpsertWeaponParams) error
 	DeleteHomebrewWeapon(ctx context.Context, arg refdata.DeleteHomebrewWeaponParams) (int64, error)
 
 	// Magic items
 	GetMagicItem(ctx context.Context, id string) (refdata.MagicItem, error)
+	ListMagicItems(ctx context.Context) ([]refdata.MagicItem, error)
 	UpsertMagicItem(ctx context.Context, arg refdata.UpsertMagicItemParams) error
 	DeleteHomebrewMagicItem(ctx context.Context, arg refdata.DeleteHomebrewMagicItemParams) (int64, error)
 
 	// Races
 	GetRace(ctx context.Context, id string) (refdata.Race, error)
+	ListRaces(ctx context.Context) ([]refdata.Race, error)
 	UpsertRace(ctx context.Context, arg refdata.UpsertRaceParams) error
 	DeleteHomebrewRace(ctx context.Context, arg refdata.DeleteHomebrewRaceParams) (int64, error)
 
 	// Feats
 	GetFeat(ctx context.Context, id string) (refdata.Feat, error)
+	ListFeats(ctx context.Context) ([]refdata.Feat, error)
 	UpsertFeat(ctx context.Context, arg refdata.UpsertFeatParams) error
 	DeleteHomebrewFeat(ctx context.Context, arg refdata.DeleteHomebrewFeatParams) (int64, error)
 
 	// Classes
 	GetClass(ctx context.Context, id string) (refdata.Class, error)
+	ListClasses(ctx context.Context) ([]refdata.Class, error)
 	UpsertClass(ctx context.Context, arg refdata.UpsertClassParams) error
 	DeleteHomebrewClass(ctx context.Context, arg refdata.DeleteHomebrewClassParams) (int64, error)
 }

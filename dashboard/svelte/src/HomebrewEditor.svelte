@@ -22,22 +22,39 @@
   let formError = $state(null);
   let editingId = $state(null);
 
-  // Map UI category to REST list endpoint. class-features lists homebrew
-  // classes filtered to single-feature skeletons.
-  const LIST_ENDPOINTS = {
-    creatures: '/api/creatures',
-    spells: '/api/spells',
-    weapons: '/api/weapons',
-    'magic-items': '/api/magic-items',
-    races: '/api/races',
-    feats: '/api/feats',
-    classes: '/api/classes',
-    'class-features': '/api/classes',
-  };
+  // Turn a failed fetch Response into a human-readable message. Falls back to
+  // the server's JSON {error} field when present.
+  async function errorMessage(res, noun, verb) {
+    let detail = '';
+    try {
+      const data = await res.json();
+      if (data && typeof data.error === 'string') detail = data.error;
+    } catch {
+      // non-JSON body — ignore
+    }
+    if (res.status === 400) return detail || `That ${noun} request was invalid.`;
+    if (res.status === 401 || res.status === 403)
+      return `You don't have permission to ${verb} ${noun} for this campaign.`;
+    if (res.status === 404)
+      return `Couldn't ${verb} ${noun} — this feature is unavailable. The server may need updating.`;
+    if (res.status >= 500)
+      return `The server hit an error trying to ${verb} ${noun}. Please try again.`;
+    return detail || `Couldn't ${verb} ${noun} (HTTP ${res.status}).`;
+  }
 
-  // Upstream route for write operations. class-features reuses
-  // /api/homebrew/classes, matching the backend mount.
-  function writePath() {
+  // Network-level failures (fetch throws a TypeError) get a connectivity hint;
+  // anything else surfaces its own message.
+  function networkOrMessage(e, noun, verb) {
+    if (e instanceof TypeError) {
+      return `Couldn't reach the server to ${verb} ${noun}. Check your connection and try again.`;
+    }
+    return e.message;
+  }
+
+  // Upstream route segment for the active category. List, create, update, and
+  // delete all hit /api/homebrew/${categoryPath()}. class-features reuses the
+  // classes path, matching the backend mount.
+  function categoryPath() {
     const cat = HOMEBREW_CATEGORIES.find((c) => c.key === category);
     return cat ? cat.path : category;
   }
@@ -50,10 +67,11 @@
     loading = true;
     error = null;
     try {
-      const url = `${LIST_ENDPOINTS[category]}?campaign_id=${encodeURIComponent(campaignId)}&homebrew=true`;
+      const url = `/api/homebrew/${categoryPath()}?campaign_id=${encodeURIComponent(campaignId)}&homebrew=true`;
       const res = await fetch(url, { credentials: 'same-origin' });
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+        error = await errorMessage(res, category, 'load');
+        return;
       }
       const data = await res.json();
       let list = (Array.isArray(data) ? data : data.items || []).filter((e) => e.homebrew !== false);
@@ -65,7 +83,7 @@
       }
       entries = list;
     } catch (e) {
-      error = e.message;
+      error = networkOrMessage(e, category, 'load');
     } finally {
       loading = false;
     }
@@ -94,7 +112,7 @@
       formError = e.message;
       return;
     }
-    const baseURL = `/api/homebrew/${writePath()}`;
+    const baseURL = `/api/homebrew/${categoryPath()}`;
     const url = editingId
       ? `${baseURL}/${encodeURIComponent(editingId)}?campaign_id=${encodeURIComponent(campaignId)}`
       : `${baseURL}?campaign_id=${encodeURIComponent(campaignId)}`;
@@ -107,26 +125,28 @@
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        formError = await errorMessage(res, category, editingId ? 'update' : 'create');
+        return;
       }
       formOpen = false;
       await loadEntries();
     } catch (e) {
-      formError = e.message;
+      formError = networkOrMessage(e, category, editingId ? 'update' : 'create');
     }
   }
 
   async function handleDelete(entry) {
     if (!confirm(`Delete ${category} "${entry.name || entry.id}"?`)) return;
     try {
-      const url = `/api/homebrew/${writePath()}/${encodeURIComponent(entry.id)}?campaign_id=${encodeURIComponent(campaignId)}`;
+      const url = `/api/homebrew/${categoryPath()}/${encodeURIComponent(entry.id)}?campaign_id=${encodeURIComponent(campaignId)}`;
       const res = await fetch(url, { method: 'DELETE', credentials: 'same-origin' });
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+        error = await errorMessage(res, category, 'delete');
+        return;
       }
       await loadEntries();
     } catch (e) {
-      error = e.message;
+      error = networkOrMessage(e, category, 'delete');
     }
   }
 

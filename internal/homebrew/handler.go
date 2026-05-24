@@ -27,14 +27,16 @@ func NewHandler(svc *Service) *Handler {
 // serviceFuncs bundles the three Service methods (create/update/delete)
 // for a single refdata type so routes can be registered via a table.
 type serviceFuncs[P any, R any] struct {
+	list   func(ctx context.Context, campaignID uuid.UUID) ([]R, error)
 	create func(ctx context.Context, campaignID uuid.UUID, params P) (R, error)
 	update func(ctx context.Context, campaignID uuid.UUID, id string, params P) (R, error)
 	delete func(ctx context.Context, campaignID uuid.UUID, id string) error
 }
 
-// mount registers the create/update/delete routes for one homebrew type
-// under the given collection path.
+// mount registers the list/create/update/delete routes for one homebrew
+// type under the given collection path.
 func mount[P any, R any](r chi.Router, path string, fns serviceFuncs[P, R]) {
+	r.Get(path, makeList(fns.list))
 	r.Post(path, makeCreate(fns.create))
 	r.Put(path+"/{id}", makeUpdate(fns.update))
 	r.Delete(path+"/{id}", makeDelete(fns.delete))
@@ -44,41 +46,65 @@ func mount[P any, R any](r chi.Router, path string, fns serviceFuncs[P, R]) {
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/homebrew", func(r chi.Router) {
 		mount(r, "/creatures", serviceFuncs[refdata.UpsertCreatureParams, refdata.Creature]{
+			list:   h.svc.ListHomebrewCreatures,
 			create: h.svc.CreateHomebrewCreature,
 			update: h.svc.UpdateHomebrewCreature,
 			delete: h.svc.DeleteHomebrewCreature,
 		})
 		mount(r, "/spells", serviceFuncs[refdata.UpsertSpellParams, refdata.Spell]{
+			list:   h.svc.ListHomebrewSpells,
 			create: h.svc.CreateHomebrewSpell,
 			update: h.svc.UpdateHomebrewSpell,
 			delete: h.svc.DeleteHomebrewSpell,
 		})
 		mount(r, "/weapons", serviceFuncs[refdata.UpsertWeaponParams, refdata.Weapon]{
+			list:   h.svc.ListHomebrewWeapons,
 			create: h.svc.CreateHomebrewWeapon,
 			update: h.svc.UpdateHomebrewWeapon,
 			delete: h.svc.DeleteHomebrewWeapon,
 		})
 		mount(r, "/magic-items", serviceFuncs[refdata.UpsertMagicItemParams, refdata.MagicItem]{
+			list:   h.svc.ListHomebrewMagicItems,
 			create: h.svc.CreateHomebrewMagicItem,
 			update: h.svc.UpdateHomebrewMagicItem,
 			delete: h.svc.DeleteHomebrewMagicItem,
 		})
 		mount(r, "/races", serviceFuncs[refdata.UpsertRaceParams, refdata.Race]{
+			list:   h.svc.ListHomebrewRaces,
 			create: h.svc.CreateHomebrewRace,
 			update: h.svc.UpdateHomebrewRace,
 			delete: h.svc.DeleteHomebrewRace,
 		})
 		mount(r, "/feats", serviceFuncs[refdata.UpsertFeatParams, refdata.Feat]{
+			list:   h.svc.ListHomebrewFeats,
 			create: h.svc.CreateHomebrewFeat,
 			update: h.svc.UpdateHomebrewFeat,
 			delete: h.svc.DeleteHomebrewFeat,
 		})
 		mount(r, "/classes", serviceFuncs[refdata.UpsertClassParams, refdata.Class]{
+			list:   h.svc.ListHomebrewClasses,
 			create: h.svc.CreateHomebrewClass,
 			update: h.svc.UpdateHomebrewClass,
 			delete: h.svc.DeleteHomebrewClass,
 		})
 	})
+}
+
+// makeList returns a GET handler that lists the campaign's homebrew entries
+// of one type as a JSON array.
+func makeList[R any](list func(ctx context.Context, campaignID uuid.UUID) ([]R, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cid, ok := readCampaignOnly(w, r)
+		if !ok {
+			return
+		}
+		got, err := list(r.Context(), cid)
+		if err != nil {
+			translateServiceErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, got)
+	}
 }
 
 // makeCreate returns a POST handler that decodes a JSON body into P and

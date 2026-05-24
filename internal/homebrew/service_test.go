@@ -29,6 +29,86 @@ type fakeStore struct {
 	upsertErr error
 	getErr    error
 	deleteErr error
+	listErr   error
+}
+
+// --- list methods ---
+
+func (f *fakeStore) ListCreatures(_ context.Context) ([]refdata.Creature, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	out := make([]refdata.Creature, 0, len(f.creatures))
+	for _, v := range f.creatures {
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func (f *fakeStore) ListSpells(_ context.Context) ([]refdata.Spell, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	out := make([]refdata.Spell, 0, len(f.spells))
+	for _, v := range f.spells {
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func (f *fakeStore) ListWeapons(_ context.Context) ([]refdata.Weapon, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	out := make([]refdata.Weapon, 0, len(f.weapons))
+	for _, v := range f.weapons {
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func (f *fakeStore) ListMagicItems(_ context.Context) ([]refdata.MagicItem, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	out := make([]refdata.MagicItem, 0, len(f.magicItems))
+	for _, v := range f.magicItems {
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func (f *fakeStore) ListRaces(_ context.Context) ([]refdata.Race, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	out := make([]refdata.Race, 0, len(f.races))
+	for _, v := range f.races {
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func (f *fakeStore) ListFeats(_ context.Context) ([]refdata.Feat, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	out := make([]refdata.Feat, 0, len(f.feats))
+	for _, v := range f.feats {
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func (f *fakeStore) ListClasses(_ context.Context) ([]refdata.Class, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	out := make([]refdata.Class, 0, len(f.classes))
+	for _, v := range f.classes {
+		out = append(out, v)
+	}
+	return out, nil
 }
 
 func newFakeStore() *fakeStore {

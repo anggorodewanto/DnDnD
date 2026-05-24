@@ -388,15 +388,63 @@ function buildClassFeaturePayload(m) {
   };
 }
 
+// Value keys produced by Go's sql.NullX / uuid.NullUUID / pqtype.NullRawMessage
+// when marshaled to JSON: each becomes `{ <Key>: <value>, Valid: bool }`.
+const NULLABLE_VALUE_KEYS = new Set([
+  'String',
+  'Bool',
+  'Int16',
+  'Int32',
+  'Int64',
+  'Float64',
+  'Time',
+  'UUID',
+  'RawMessage',
+]);
+
+/**
+ * Unwrap a single sql.Null*-style wrapper object into its flat value, or
+ * `null` when the wrapper is not Valid. Non-wrapper values pass through
+ * unchanged. A wrapper is recognized as an object with exactly two keys, one
+ * of which is `Valid` and the other a known nullable value key.
+ * @param {*} value
+ */
+function unwrapNullable(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const keys = Object.keys(value);
+  if (keys.length !== 2 || !('Valid' in value)) return value;
+  const valueKey = keys.find((k) => k !== 'Valid');
+  if (!NULLABLE_VALUE_KEYS.has(valueKey)) return value;
+  return value.Valid ? value[valueKey] : null;
+}
+
+/**
+ * Shallow-normalize a backend entry so the per-category field mapping below
+ * sees flat scalars: every top-level nullable wrapper (sql.NullInt32 →
+ * `{ Int32, Valid }`, etc.) is unwrapped to its value or null.
+ * @param {object} entry
+ */
+function normalizeEntry(entry) {
+  const out = {};
+  for (const [k, v] of Object.entries(entry)) {
+    out[k] = unwrapNullable(v);
+  }
+  return out;
+}
+
 /**
  * Convert a backend entry (e.g. `refdata.Creature`) into the flat form
  * model for editing. Best-effort: unknown fields are left at the empty
- * defaults so the form still loads.
+ * defaults so the form still loads. Backend rows carry sql.Null* fields as
+ * `{ <Key>: value, Valid }` wrappers, which are unwrapped to flat scalars
+ * first so nullable fields (range_ft, weight_lb, concentration, …) edit
+ * correctly.
  * @param {string} category
  * @param {object} entry
  */
 export function entryToFormModel(category, entry) {
   if (!entry) return emptyFormModel(category);
+  entry = normalizeEntry(entry);
   const base = emptyFormModel(category);
   // Generic id/name fields exist on every category.
   if (entry.id) base.id = entry.id;

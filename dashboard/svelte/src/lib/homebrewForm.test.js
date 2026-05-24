@@ -242,3 +242,74 @@ describe('entryToFormModel — empty entry', () => {
     expect(entryToFormModel('feats', null)).toEqual(emptyFormModel('feats'));
   });
 });
+
+describe('entryToFormModel — sql.Null* wrapper unwrapping', () => {
+  it('unwraps wrapped spell fields into flat form values', () => {
+    const entry = {
+      id: 'sp1',
+      name: 'Firebolt',
+      level: 0,
+      school: 'evocation',
+      range_ft: { Int32: 120, Valid: true },
+      material_cost_gp: { Float64: 50.5, Valid: true },
+      material_description: { String: 'a ruby', Valid: true },
+      material_consumed: { Bool: true, Valid: true },
+      concentration: { Bool: true, Valid: true },
+      ritual: { Bool: false, Valid: true },
+      higher_levels: { String: 'more damage', Valid: true },
+    };
+    const m = entryToFormModel('spells', entry);
+    expect(m.range_ft).toBe('120');
+    expect(m.material_cost_gp).toBe('50.5');
+    expect(m.material_description).toBe('a ruby');
+    expect(m.material_consumed).toBe(true);
+    expect(m.concentration).toBe(true);
+    expect(m.ritual).toBe(false);
+    expect(m.higher_levels).toBe('more damage');
+  });
+
+  it('leaves defaults when a wrapped field is not Valid', () => {
+    const entry = {
+      id: 'sp2',
+      name: 'Mage Hand',
+      range_ft: { Int32: 0, Valid: false },
+      higher_levels: { String: '', Valid: false },
+      concentration: { Bool: false, Valid: false },
+    };
+    const empty = emptyFormModel('spells');
+    const m = entryToFormModel('spells', entry);
+    expect(m.range_ft).toBe(empty.range_ft);
+    expect(m.higher_levels).toBe(empty.higher_levels);
+    expect(m.concentration).toBe(empty.concentration);
+  });
+
+  it('unwraps wrapped weapon fields', () => {
+    const entry = {
+      id: 'w1',
+      name: 'Longsword',
+      damage: '1d8',
+      damage_type: 'slashing',
+      weight_lb: { Float64: 3, Valid: true },
+      range_normal_ft: { Int32: 20, Valid: true },
+      versatile_damage: { String: '1d10', Valid: true },
+    };
+    const m = entryToFormModel('weapons', entry);
+    expect(m.weight_lb).toBe('3');
+    expect(m.range_normal_ft).toBe('20');
+    expect(m.versatile_damage).toBe('1d10');
+  });
+
+  it('preserves plain (already-flat) values and arrays', () => {
+    const entry = {
+      id: 'sp3',
+      name: 'Bless',
+      range_ft: 30,
+      components: ['V', 'S'],
+      concentration: true,
+    };
+    const m = entryToFormModel('spells', entry);
+    expect(m.range_ft).toBe('30');
+    expect(m.components).toBe('V, S');
+    expect(m.concentration).toBe(true);
+  });
+});
