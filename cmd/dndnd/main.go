@@ -1281,6 +1281,11 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			portalOpts = append(portalOpts, portal.WithCharacterSheet(portalSheetHandler))
 		}
 		if portalPrepHandler != nil {
+			// SR-007: charactercard.Service satisfies portal.CardUpdater, so a
+			// web prep save refreshes #character-cards like the Discord path.
+			if cardSvc != nil {
+				portalPrepHandler.SetCardUpdater(cardSvc)
+			}
 			portalOpts = append(portalOpts, portal.WithSpellPreparation(portalPrepHandler))
 		}
 		portal.RegisterRoutes(router, portalHandler, authMw, portalOpts...)

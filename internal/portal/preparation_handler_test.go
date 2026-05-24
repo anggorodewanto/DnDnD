@@ -58,6 +58,18 @@ func (m *mockPrepStore) GetCharacter(_ context.Context, _ uuid.UUID) (refdata.Ch
 	return m.char, m.charErr
 }
 
+// mockCardUpdater implements portal.CardUpdater and records the characters it
+// was asked to refresh.
+type mockCardUpdater struct {
+	calls []uuid.UUID
+	err   error
+}
+
+func (m *mockCardUpdater) OnCharacterUpdated(_ context.Context, id uuid.UUID) error {
+	m.calls = append(m.calls, id)
+	return m.err
+}
+
 // errRefDataStore implements portal.RefDataStore and fails ListSpellsByClass.
 type errRefDataStore struct{ mockRefDataStore }
 
@@ -392,6 +404,52 @@ func TestPostPreparation_BadJSON(t *testing.T) {
 	h.PostPreparation(rec, newPrepRequest(http.MethodPost, testCharID, "user-1", []byte("{bad json")))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestPostPreparation_FiresCardUpdater(t *testing.T) {
+	svc := &mockPrepareService{result: combat.PrepareSpellsResult{PreparedCount: 1, MaxPrepared: 5}}
+	store := &mockPrepStore{ownerID: "user-1", char: clericCharacter()}
+	card := &mockCardUpdater{}
+	h := newPrepHandler(svc, store, &mockRefDataStore{})
+	h.SetCardUpdater(card)
+
+	body, _ := json.Marshal(map[string][]string{"spells": {"bless"}})
+	rec := httptest.NewRecorder()
+	h.PostPreparation(rec, newPrepRequest(http.MethodPost, testCharID, "user-1", body))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, card.calls, 1)
+	assert.Equal(t, uuid.MustParse(testCharID), card.calls[0])
+}
+
+func TestPostPreparation_CardUpdaterErrorDoesNotFailRequest(t *testing.T) {
+	svc := &mockPrepareService{result: combat.PrepareSpellsResult{PreparedCount: 1, MaxPrepared: 5}}
+	store := &mockPrepStore{ownerID: "user-1", char: clericCharacter()}
+	card := &mockCardUpdater{err: errors.New("discord down")}
+	h := newPrepHandler(svc, store, &mockRefDataStore{})
+	h.SetCardUpdater(card)
+
+	body, _ := json.Marshal(map[string][]string{"spells": {"bless"}})
+	rec := httptest.NewRecorder()
+	h.PostPreparation(rec, newPrepRequest(http.MethodPost, testCharID, "user-1", body))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, card.calls, 1)
+}
+
+func TestPostPreparation_NoCardUpdateOnValidationError(t *testing.T) {
+	svc := &mockPrepareService{prepErr: errors.New("too many spells prepared")}
+	store := &mockPrepStore{ownerID: "user-1", char: clericCharacter()}
+	card := &mockCardUpdater{}
+	h := newPrepHandler(svc, store, &mockRefDataStore{})
+	h.SetCardUpdater(card)
+
+	body, _ := json.Marshal(map[string][]string{"spells": {"a", "b"}})
+	rec := httptest.NewRecorder()
+	h.PostPreparation(rec, newPrepRequest(http.MethodPost, testCharID, "user-1", body))
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Empty(t, card.calls)
 }
 
 func TestPreparationStoreAdapter_GetCharacter(t *testing.T) {

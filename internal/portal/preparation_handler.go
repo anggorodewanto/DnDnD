@@ -23,6 +23,15 @@ type PrepareService interface {
 	PrepareSpells(ctx context.Context, input combat.PrepareSpellsInput) (combat.PrepareSpellsResult, error)
 }
 
+// CardUpdater refreshes the persistent #character-cards message after a
+// successful preparation save (SR-007), keeping it in sync with the new
+// prepared list. charactercard.Service.OnCharacterUpdated satisfies it; the
+// interface is declared locally to avoid an import cycle. Errors are
+// best-effort: a card-edit failure must never undo a committed save.
+type CardUpdater interface {
+	OnCharacterUpdated(ctx context.Context, characterID uuid.UUID) error
+}
+
 // PreparationStore provides owner-check and character lookup for the
 // preparation endpoints. *CharacterSheetStoreAdapter satisfies GetCharacterOwner;
 // the same adapter's querier exposes GetCharacter.
@@ -63,10 +72,17 @@ func (a *PreparationStoreAdapter) GetCharacter(ctx context.Context, id uuid.UUID
 
 // PreparationHandler serves the web spell-preparation JSON API endpoints.
 type PreparationHandler struct {
-	logger  *slog.Logger
-	svc     PrepareService
-	store   PreparationStore
-	refData RefDataStore
+	logger      *slog.Logger
+	svc         PrepareService
+	store       PreparationStore
+	refData     RefDataStore
+	cardUpdater CardUpdater
+}
+
+// SetCardUpdater wires the SR-007 #character-cards refresh fired after a
+// successful preparation save. Optional; nil is a no-op.
+func (h *PreparationHandler) SetCardUpdater(u CardUpdater) {
+	h.cardUpdater = u
 }
 
 // NewPreparationHandler creates a new PreparationHandler.
@@ -174,11 +190,25 @@ func (h *PreparationHandler) PostPreparation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	h.notifyCardUpdate(r.Context(), pctx.charID)
+
 	writeJSON(w, http.StatusOK, preparationPOSTResponse{
 		PreparedCount:  res.PreparedCount,
 		MaxPrepared:    res.MaxPrepared,
 		AlwaysPrepared: nonNilStrings(res.AlwaysPrepared),
 	})
+}
+
+// notifyCardUpdate fires the card refresh for the given character if one is
+// wired. Best-effort: a nil updater is a no-op, and errors are logged and
+// swallowed so a Discord hiccup cannot undo a committed save.
+func (h *PreparationHandler) notifyCardUpdate(ctx context.Context, characterID uuid.UUID) {
+	if h.cardUpdater == nil || characterID == uuid.Nil {
+		return
+	}
+	if err := h.cardUpdater.OnCharacterUpdated(ctx, characterID); err != nil {
+		h.logger.Error("character card auto-update failed", "character_id", characterID, "error", err)
+	}
 }
 
 // resolve performs the shared auth + ownership + caster resolution for both
