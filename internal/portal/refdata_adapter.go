@@ -63,6 +63,7 @@ func (a *RefDataAdapter) ListRaces(ctx context.Context) ([]RaceInfo, error) {
 			Name:           r.Name,
 			SpeedFt:        int(r.SpeedFt),
 			Size:           r.Size,
+			DarkvisionFt:   int(r.DarkvisionFt),
 			AbilityBonuses: r.AbilityBonuses,
 			Languages:      r.Languages,
 			Traits:         r.Traits,

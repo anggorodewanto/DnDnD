@@ -2,6 +2,7 @@
 
 ## Development Process
 
+- Always act as an orchestrator: divide work into independent sub-tasks and delegate them to subagents (run in parallel where there are no dependencies), reserving the main thread for planning, synthesis, and review.
 - Always use red/green TDD: write a failing test first, then write the minimal code to make it pass, then refactor
 - Aim for 90% code coverage (overall) and 85% per-package, enforced by `make cover-check`
 - Run /simplify after coding to review for reuse, quality, and efficiency

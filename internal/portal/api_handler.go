@@ -16,6 +16,7 @@ type RaceInfo struct {
 	Name           string          `json:"name"`
 	SpeedFt        int             `json:"speed_ft"`
 	Size           string          `json:"size,omitempty"`
+	DarkvisionFt   int             `json:"darkvision_ft,omitempty"`
 	AbilityBonuses json.RawMessage `json:"ability_bonuses,omitempty"`
 	Languages      []string        `json:"languages,omitempty"`
 	Traits         json.RawMessage `json:"traits,omitempty"`

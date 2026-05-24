@@ -47,7 +47,7 @@ func TestRefDataAdapter_ListRaces(t *testing.T) {
 	bonuses := json.RawMessage(`{"str": 2}`)
 	mq := &mockQueries{
 		races: []refdata.Race{
-			{ID: "dwarf", Name: "Dwarf", SpeedFt: 25, Size: "Medium", AbilityBonuses: bonuses, Languages: []string{"Common", "Dwarvish"}},
+			{ID: "dwarf", Name: "Dwarf", SpeedFt: 25, Size: "Medium", DarkvisionFt: 60, AbilityBonuses: bonuses, Languages: []string{"Common", "Dwarvish"}},
 		},
 	}
 	adapter := portal.NewRefDataAdapter(mq)
@@ -58,6 +58,7 @@ func TestRefDataAdapter_ListRaces(t *testing.T) {
 	assert.Equal(t, "dwarf", races[0].ID)
 	assert.Equal(t, "Dwarf", races[0].Name)
 	assert.Equal(t, 25, races[0].SpeedFt)
+	assert.Equal(t, 60, races[0].DarkvisionFt)
 }
 
 func TestRefDataAdapter_ListClasses(t *testing.T) {

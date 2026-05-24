@@ -2,6 +2,9 @@
   import { listRaces, listClasses, listSpells, listEquipment, getStartingEquipment, listAbilityMethods, submitCharacter } from './lib/api.js';
   import { remainingPoints, abilityModifier, canIncrement, canDecrement, scoreCost } from './lib/pointbuy.js';
   import { skillsForBackground, mergeBackgroundSkills } from './lib/backgrounds.js';
+  import { abilityLabel } from './lib/skills.js';
+  import { formatAbilityBonuses, parseTraits, formatDarkvision, subracePerks } from './lib/race-perks.js';
+  import { formatSkillChoices } from './lib/class-perks.js';
   import {
     subraceOptions, subclassOptions, isSubclassEligible,
     emptyClassRow, addClassRow, removeClassRow, updateClassRow,
@@ -437,6 +440,51 @@
             </select>
           </label>
         {/if}
+        {#snippet traitList(traits)}
+          <ul class="trait-list">
+            {#each traits as trait}
+              <li class="trait-item"><strong>{trait.name}</strong> — {trait.description}</li>
+            {/each}
+          </ul>
+        {/snippet}
+        {#if selectedRaceData}
+          {@const raceBonuses = formatAbilityBonuses(selectedRaceData.ability_bonuses)}
+          {@const raceTraits = parseTraits(selectedRaceData.traits)}
+          {@const darkvision = formatDarkvision(selectedRaceData.darkvision_ft)}
+          <div class="race-info">
+            {#if raceBonuses}
+              <p><strong>Ability Score Increase:</strong> {raceBonuses}</p>
+            {/if}
+            <p><strong>Speed:</strong> {selectedRaceData.speed_ft} ft</p>
+            <p><strong>Size:</strong> {selectedRaceData.size}</p>
+            {#if darkvision}
+              <p><strong>Darkvision:</strong> {darkvision}</p>
+            {/if}
+            {#if selectedRaceData.languages?.length > 0}
+              <p><strong>Languages:</strong> {selectedRaceData.languages.join(', ')}</p>
+            {/if}
+            {#if raceTraits.length > 0}
+              <p><strong>Traits:</strong></p>
+              {@render traitList(raceTraits)}
+            {/if}
+            {#if subrace}
+              {@const sp = subracePerks(selectedRaceData, subrace)}
+              {#if sp}
+                {@const subraceBonuses = formatAbilityBonuses(sp.abilityBonuses)}
+                {@const subraceTraits = parseTraits(sp.traits)}
+                <div class="subrace-info">
+                  <p><strong>Subrace: {subraceList.find(s => s.id === subrace)?.name || subrace}</strong></p>
+                  {#if subraceBonuses}
+                    <p><strong>Ability Score Increase:</strong> {subraceBonuses}</p>
+                  {/if}
+                  {#if subraceTraits.length > 0}
+                    {@render traitList(subraceTraits)}
+                  {/if}
+                </div>
+              {/if}
+            {/if}
+          </div>
+        {/if}
         <label>
           Background
           <select bind:value={background}>
@@ -509,8 +557,20 @@
         {#if selectedClassData}
           <div class="class-info">
             <p><strong>Primary Class Hit Die:</strong> {selectedClassData.hit_die}</p>
+            {#if selectedClassData.primary_ability}
+              <p><strong>Primary Ability:</strong> {selectedClassData.primary_ability.toUpperCase()}</p>
+            {/if}
             {#if selectedClassData.save_proficiencies}
               <p><strong>Save Proficiencies:</strong> {selectedClassData.save_proficiencies.join(', ').toUpperCase()}</p>
+            {/if}
+            {#if selectedClassData.armor_proficiencies?.length > 0}
+              <p><strong>Armor:</strong> {selectedClassData.armor_proficiencies.join(', ')}</p>
+            {/if}
+            {#if selectedClassData.weapon_proficiencies?.length > 0}
+              <p><strong>Weapons:</strong> {selectedClassData.weapon_proficiencies.join(', ')}</p>
+            {/if}
+            {#if formatSkillChoices(selectedClassData.skill_choices)}
+              <p><strong>Skills:</strong> {formatSkillChoices(selectedClassData.skill_choices)}</p>
             {/if}
           </div>
         {/if}
@@ -540,6 +600,7 @@
         {/if}
         <div class="ability-grid">
           {#each ABILITIES as ability}
+            {@const raceBonus = racialBonuses()[ability]}
             <div class="ability-row">
               <span class="ability-name">{ABILITY_NAMES[ability]}</span>
               {#if abilityMethod === 'point_buy'}
@@ -554,6 +615,9 @@
                 <span class="score-cost">{scoreCost(scores[ability])} pts</span>
               {:else if abilityMethod === 'roll' && abilityRolls[ability]}
                 <span class="score-cost">{abilityRolls[ability].join(', ')}</span>
+              {/if}
+              {#if typeof raceBonus === 'number' && raceBonus > 0}
+                <span class="race-bonus">+{raceBonus} race → {scores[ability] + raceBonus}</span>
               {/if}
             </div>
           {/each}
@@ -578,6 +642,9 @@
             <label class="skill-option" class:bg-granted={skillsForBackground(background).includes(skill)}>
               <input type="checkbox" checked={selectedSkills.includes(skill)} onchange={() => toggleSkill(skill)} />
               {skill.replace(/-/g, ' ')}
+              {#if abilityLabel(skill)}
+                <span class="skill-ability">({abilityLabel(skill)})</span>
+              {/if}
               {#if skillsForBackground(background).includes(skill)}
                 <span class="bg-skill-tag-inline">background</span>
               {/if}
@@ -820,6 +887,13 @@
   .skill-option, .spell-option { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
   .spell-level, .spell-school { color: #888; font-size: 0.85rem; }
   .class-info { margin-top: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
+  .race-info { margin-top: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
+  .trait-list { margin: 0.25rem 0 0.5rem; padding-left: 1.25rem; list-style: disc; }
+  .trait-item { color: #aaa; font-size: 0.85rem; margin-bottom: 0.25rem; }
+  .trait-item strong { color: #e0e0e0; }
+  .subrace-info { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #16213e; }
+  .race-bonus { color: #e94560; font-size: 0.8rem; }
+  .skill-ability { color: #888; font-size: 0.8rem; margin-left: 0.3rem; }
   .review-section { margin-bottom: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
   .review-section h4 { color: #e94560; margin-bottom: 0.5rem; }
   .review-scores { display: flex; gap: 1rem; flex-wrap: wrap; }

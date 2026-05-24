@@ -51,7 +51,7 @@ func (m *mockRefDataStore) ListEquipment(_ context.Context, _ string) ([]portal.
 func TestAPIHandler_ListRaces(t *testing.T) {
 	store := &mockRefDataStore{
 		races: []portal.RaceInfo{
-			{ID: "dwarf", Name: "Dwarf", SpeedFt: 25},
+			{ID: "dwarf", Name: "Dwarf", SpeedFt: 25, DarkvisionFt: 60},
 			{ID: "elf", Name: "Elf", SpeedFt: 30},
 		},
 	}
@@ -70,6 +70,7 @@ func TestAPIHandler_ListRaces(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, races, 2)
 	assert.Equal(t, "Dwarf", races[0].Name)
+	assert.Equal(t, 60, races[0].DarkvisionFt)
 }
 
 func TestAPIHandler_ListClasses(t *testing.T) {
