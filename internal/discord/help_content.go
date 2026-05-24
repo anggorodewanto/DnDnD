@@ -32,7 +32,7 @@ const generalHelp = "\U0001F4D6 **DnDnD Command Reference**\n" +
 	"`/prepare` \u2014 Prepare your spell list for the day\n" +
 	"`/rest [type]` \u2014 Take a short or long rest\n" +
 	"\n**Character Management**\n" +
-	"`/register [name]` \u2014 Link to a character your DM already created\n" +
+	"`/register` \u2014 Get a character: claim an existing one, build a new one, or import from D&D Beyond\n" +
 	"`/import [ddb-url]` \u2014 Import a character from D&D Beyond\n" +
 	"`/create-character` \u2014 Build a character in the web portal\n" +
 	"`/character` \u2014 Show your character sheet summary\n" +
@@ -350,10 +350,18 @@ Usage:
   /retire                             Retire your character from the campaign
   /retire --reason [text]             Provide a reason for retirement`
 
-const helpRegister = `/register — Link to a Character
+const helpRegister = `/register — Get a Character
 
 Usage:
-  /register [name]                    Link your Discord account to a character your DM created`
+  /register                           Open the onboarding menu — pick how to get a character
+  /register [name]                    Skip the menu and link directly to a character your DM created
+
+Three ways to get a character (the menu's buttons):
+  📋 Claim Existing          Link to a character your DM already made (you'll type its name)
+  🆕 Build New               Open the web character builder
+  📥 Import from D&D Beyond  Paste a D&D Beyond character URL
+
+All three submit for DM approval before you can play.`
 
 const helpImport = `/import — Import from D&D Beyond
 

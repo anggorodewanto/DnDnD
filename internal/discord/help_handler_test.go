@@ -59,6 +59,11 @@ func TestHelpHandler_NoArgs_ReturnsGeneralHelp(t *testing.T) {
 	if !strings.Contains(content, "/attack") {
 		t.Error("expected general help to contain /attack")
 	}
+	for _, want := range []string{"/register", "claim", "build", "import"} {
+		if !strings.Contains(strings.ToLower(content), want) {
+			t.Errorf("expected general help /register line to mention %q", want)
+		}
+	}
 }
 
 func TestHelpHandler_AttackTopic_ReturnsAttackHelp(t *testing.T) {
@@ -185,6 +190,7 @@ func TestHelpHandler_SpecTopics_MatchExactContent(t *testing.T) {
 		{"paladin", []string{"Paladin Abilities", "Divine Smite", "Lay on Hands", "Aura of Protection"}},
 		{"metamagic", []string{"Metamagic", "Sorcery Point", "--careful", "--subtle", "--twinned", "font-of-magic"}},
 		{"action", []string{"/action — Actions on Your Turn", "disengage", "dash", "dodge", "grapple", "Freeform actions"}},
+		{"register", []string{"Get a Character", "Claim Existing", "Build New", "Import from D&D Beyond"}},
 	}
 
 	for _, tc := range tests {
