@@ -1,9 +1,12 @@
 <script>
   import { listRaces, listClasses, listSpells, listEquipment, getStartingEquipment, listAbilityMethods, submitCharacter } from './lib/api.js';
   import { remainingPoints, abilityModifier, canIncrement, canDecrement, scoreCost } from './lib/pointbuy.js';
-  import { skillsForBackground, mergeBackgroundSkills } from './lib/backgrounds.js';
+  import { skillsForBackground, mergeBackgroundSkills, backgroundDetails, formatLanguages } from './lib/backgrounds.js';
   import { abilityLabel } from './lib/skills.js';
   import { formatAbilityBonuses, parseTraits, formatDarkvision, subracePerks } from './lib/race-perks.js';
+  import { isConcentration, formatCastingTime, shortDescription } from './lib/spell-perks.js';
+  import { formatProperties, armorACText } from './lib/equipment-perks.js';
+  import { raceGrantedSkills, mergeGrantedSkills } from './lib/race-skills.js';
   import { formatSkillChoices } from './lib/class-perks.js';
   import {
     subraceOptions, subclassOptions, isSubclassEligible,
@@ -95,6 +98,19 @@
     if (background && background !== lastBackground) {
       selectedSkills = mergeBackgroundSkills(selectedSkills, background);
       lastBackground = background;
+    }
+  });
+
+  // Auto-add race-granted skill proficiencies whenever the race changes,
+  // mirroring the background merge above. Add-only so manual deselect works.
+  let lastRaceForSkills = '';
+  $effect(() => {
+    if (race && race !== lastRaceForSkills) {
+      const granted = raceGrantedSkills(selectedRaceData?.traits);
+      if (granted.length > 0) {
+        selectedSkills = mergeGrantedSkills(selectedSkills, granted);
+      }
+      lastRaceForSkills = race;
     }
   });
 
@@ -301,7 +317,9 @@
     try {
       // Re-merge background skills at submit time as a safety net in case
       // the user toggled them off after picking a background.
-      const skills = mergeBackgroundSkills(selectedSkills, background);
+      let skills = mergeBackgroundSkills(selectedSkills, background);
+      // Same safety net for race-granted skill proficiencies.
+      skills = mergeGrantedSkills(skills, raceGrantedSkills(selectedRaceData?.traits));
       // Filter out incomplete class rows so the backend never sees a blank
       // class entry.
       const classes = classEntries
@@ -494,13 +512,23 @@
             {/each}
           </select>
         </label>
-        {#if background && skillsForBackground(background).length > 0}
-          <p class="bg-skill-hint">
-            Background grants:
-            {#each skillsForBackground(background) as sk, i}
-              <span class="bg-skill-tag">{sk.replace(/-/g, ' ')}</span>{i < skillsForBackground(background).length - 1 ? ' ' : ''}
-            {/each}
-          </p>
+        {#if backgroundDetails(background)}
+          {@const bd = backgroundDetails(background)}
+          <div class="bg-info">
+            <p>
+              <strong>Skills:</strong>
+              {#each bd.skills as sk}
+                <span class="bg-skill-tag">{sk.replace(/-/g, ' ')}</span>
+              {/each}
+            </p>
+            {#if bd.tools.length > 0}
+              <p><strong>Tools:</strong> {bd.tools.join(', ')}</p>
+            {/if}
+            {#if formatLanguages(bd.languages)}
+              <p><strong>Languages:</strong> {formatLanguages(bd.languages)}</p>
+            {/if}
+            <p class="bg-feature"><strong>{bd.feature.name}</strong> — {bd.feature.description}</p>
+          </div>
         {/if}
       </div>
 
@@ -626,27 +654,40 @@
 
     <!-- Step 3: Skills -->
     {:else if currentStep === 3}
+      {@const raceGranted = raceGrantedSkills(selectedRaceData?.traits)}
+      {@const bgSkills = skillsForBackground(background)}
       <div class="step-content">
         <h3>Skills & Proficiencies</h3>
         <p>Select your skill proficiencies:</p>
-        {#if background && skillsForBackground(background).length > 0}
+        {#if background && bgSkills.length > 0}
           <p class="bg-skill-hint">
             From <strong>{background.replace(/-/g, ' ')}</strong> background:
-            {#each skillsForBackground(background) as sk}
+            {#each bgSkills as sk}
+              <span class="bg-skill-tag">{sk.replace(/-/g, ' ')}</span>
+            {/each}
+          </p>
+        {/if}
+        {#if selectedRaceData && raceGranted.length > 0}
+          <p class="bg-skill-hint">
+            From <strong>{selectedRaceData.name}</strong> race:
+            {#each raceGranted as sk}
               <span class="bg-skill-tag">{sk.replace(/-/g, ' ')}</span>
             {/each}
           </p>
         {/if}
         <div class="skill-grid">
           {#each ALL_SKILLS as skill}
-            <label class="skill-option" class:bg-granted={skillsForBackground(background).includes(skill)}>
+            <label class="skill-option" class:bg-granted={bgSkills.includes(skill)}>
               <input type="checkbox" checked={selectedSkills.includes(skill)} onchange={() => toggleSkill(skill)} />
               {skill.replace(/-/g, ' ')}
               {#if abilityLabel(skill)}
                 <span class="skill-ability">({abilityLabel(skill)})</span>
               {/if}
-              {#if skillsForBackground(background).includes(skill)}
+              {#if bgSkills.includes(skill)}
                 <span class="bg-skill-tag-inline">background</span>
+              {/if}
+              {#if raceGranted.includes(skill)}
+                <span class="bg-skill-tag-inline">race</span>
               {/if}
             </label>
           {/each}
@@ -717,8 +758,11 @@
                   {#if item.damage}
                     <span class="item-detail">{item.damage} {item.damage_type}</span>
                   {/if}
-                  {#if item.ac_base}
-                    <span class="item-detail">AC {item.ac_base}</span>
+                  {#if item.properties?.length > 0}
+                    <span class="item-detail">{formatProperties(item.properties)}</span>
+                  {/if}
+                  {#if item.category === 'armor'}
+                    <span class="item-detail">{armorACText(item.armor_type, item.ac_base)}</span>
                   {/if}
                   {#if manualEquipment.includes(item.id)}
                     <button class="remove-btn" onclick={() => removeManualItem(item.id)}>Remove</button>
@@ -757,11 +801,24 @@
           <p>Select your known spells:</p>
           <div class="spell-grid">
             {#each spells as spell}
+              {@const castingTime = formatCastingTime(spell.casting_time)}
+              {@const desc = shortDescription(spell.description)}
               <label class="spell-option">
-                <input type="checkbox" checked={selectedSpells.includes(spell.id)} onchange={() => toggleSpell(spell.id)} />
-                <span class="spell-name">{spell.name}</span>
-                <span class="spell-level">Lvl {spell.level}</span>
-                <span class="spell-school">{spell.school}</span>
+                <span class="spell-row">
+                  <input type="checkbox" checked={selectedSpells.includes(spell.id)} onchange={() => toggleSpell(spell.id)} />
+                  <span class="spell-name">{spell.name}</span>
+                  <span class="spell-level">Lvl {spell.level}</span>
+                  <span class="spell-school">{spell.school}</span>
+                  {#if castingTime}
+                    <span class="spell-meta">{castingTime}</span>
+                  {/if}
+                  {#if isConcentration(spell.duration)}
+                    <span class="conc-tag">Concentration</span>
+                  {/if}
+                </span>
+                {#if desc}
+                  <span class="spell-desc">{desc}</span>
+                {/if}
               </label>
             {/each}
           </div>
@@ -885,7 +942,15 @@
   .score-cost { color: #888; font-size: 0.85rem; }
   .skill-grid, .spell-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem; }
   .skill-option, .spell-option { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
+  .spell-option { flex-direction: column; align-items: stretch; }
+  .spell-row { display: flex; align-items: center; gap: 0.5rem; }
   .spell-level, .spell-school { color: #888; font-size: 0.85rem; }
+  .spell-meta { color: #888; font-size: 0.8rem; }
+  .conc-tag {
+    padding: 0.05rem 0.4rem; border: 1px solid #e94560; color: #e94560;
+    border-radius: 8px; font-size: 0.7rem;
+  }
+  .spell-desc { display: block; color: #aaa; font-size: 0.82rem; margin-top: 0.15rem; }
   .class-info { margin-top: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
   .race-info { margin-top: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
   .trait-list { margin: 0.25rem 0 0.5rem; padding-left: 1.25rem; list-style: disc; }
@@ -995,4 +1060,6 @@
     font-size: 0.7rem;
   }
   .skill-option.bg-granted { color: #e0e0e0; }
+  .bg-info { margin-top: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
+  .bg-feature { color: #aaa; font-size: 0.85rem; margin-top: 0.5rem; }
 </style>
