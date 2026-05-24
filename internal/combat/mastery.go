@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/pathfinding"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
@@ -34,9 +37,142 @@ func (s *Service) applyMasteryEffects(ctx context.Context, attacker, target refd
 		return s.applyVexAdvantage(ctx, attacker, target)
 	case "sap":
 		return s.applySapDisadvantage(ctx, attacker, target)
+	case "slow":
+		return s.applySlowedCondition(ctx, attacker, target)
+	case "push":
+		return s.applyPushEffect(ctx, attacker, target)
 	default:
 		return nil
 	}
+}
+
+// applySlowedCondition applies a "slowed" condition to the target it just hit.
+// The 2024 Slow mastery reduces the target's Speed by 10 ft until the start of
+// the attacker's next turn; the speed penalty itself is applied in
+// EffectiveSpeed. The condition lives on the target with the attacker as source
+// so it self-expires at the start of the attacker's next turn, matching the
+// reckless/help/vex single-round convention.
+func (s *Service) applySlowedCondition(ctx context.Context, attacker, target refdata.Combatant) error {
+	cond := CombatCondition{
+		Condition:         "slowed",
+		DurationRounds:    1,
+		SourceCombatantID: attacker.ID.String(),
+		ExpiresOn:         "start_of_turn",
+	}
+	if _, _, err := s.ApplyCondition(ctx, target.ID, cond); err != nil {
+		return fmt.Errorf("applying slowed condition: %w", err)
+	}
+	return nil
+}
+
+// applyPushEffect moves a Large-or-smaller target 10 ft (2 squares) straight
+// away from the attacker. Huge/Gargantuan targets are not pushed. The target
+// is moved square-by-square along the away vector, clamped to the encounter
+// map bounds and stopping before the first occupied square (reusing the
+// UpdateCombatantPosition store method the /shove push path already uses).
+func (s *Service) applyPushEffect(ctx context.Context, attacker, target refdata.Combatant) error {
+	targetSize, err := s.resolveCombatantSize(ctx, target)
+	if err != nil {
+		return fmt.Errorf("resolving push target size: %w", err)
+	}
+	if targetSize >= pathfinding.SizeHuge {
+		return nil // Huge / Gargantuan targets are not pushed
+	}
+
+	width, height, err := s.resolveMapBounds(ctx, target.EncounterID)
+	if err != nil {
+		return fmt.Errorf("resolving map bounds for push: %w", err)
+	}
+
+	occupied, err := s.occupiedSquares(ctx, target.EncounterID, target.ID)
+	if err != nil {
+		return fmt.Errorf("resolving occupied squares for push: %w", err)
+	}
+
+	destCol, destRow := computePushSquares(
+		colToInt(attacker.PositionCol), int(attacker.PositionRow),
+		colToInt(target.PositionCol), int(target.PositionRow),
+		2, width, height, occupied,
+	)
+
+	// No movement possible (blocked immediately or already at the edge).
+	if destCol == colToInt(target.PositionCol) && destRow == int(target.PositionRow) {
+		return nil
+	}
+
+	if _, err := s.store.UpdateCombatantPosition(ctx, refdata.UpdateCombatantPositionParams{
+		ID:          target.ID,
+		PositionCol: colIntToLabel(destCol),
+		PositionRow: int32(destRow),
+		AltitudeFt:  target.AltitudeFt,
+	}); err != nil {
+		return fmt.Errorf("updating pushed target position: %w", err)
+	}
+	return nil
+}
+
+// resolveMapBounds returns the encounter map's width/height in squares. When
+// the encounter has no map (or it cannot be loaded), bounds of 0 are returned
+// and computePushSquares treats them as "unbounded".
+func (s *Service) resolveMapBounds(ctx context.Context, encounterID uuid.UUID) (width, height int, err error) {
+	enc, err := s.store.GetEncounter(ctx, encounterID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("getting encounter: %w", err)
+	}
+	if !enc.MapID.Valid {
+		return 0, 0, nil
+	}
+	m, err := s.store.GetMapByIDUnchecked(ctx, enc.MapID.UUID)
+	if err != nil {
+		return 0, 0, nil // graceful: treat as unbounded if the map can't be loaded
+	}
+	return int(m.WidthSquares), int(m.HeightSquares), nil
+}
+
+// occupiedSquares returns the set of grid squares occupied by other alive
+// combatants in the encounter (excluding the combatant being moved).
+func (s *Service) occupiedSquares(ctx context.Context, encounterID, excludeID uuid.UUID) (map[[2]int]bool, error) {
+	combatants, err := s.store.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		return nil, fmt.Errorf("listing combatants: %w", err)
+	}
+	occupied := make(map[[2]int]bool, len(combatants))
+	for _, c := range combatants {
+		if c.ID == excludeID || !c.IsAlive {
+			continue
+		}
+		occupied[[2]int{colToInt(c.PositionCol), int(c.PositionRow)}] = true
+	}
+	return occupied, nil
+}
+
+// computePushSquares walks the target away from the attacker by up to `squares`
+// 5ft steps along the (clamped) away vector. Each step is rejected if it leaves
+// the map (when width/height > 0) or lands on an occupied square; the walk stops
+// at the last valid square reached. Returns the final (col, row) — equal to the
+// target's start when no step was possible.
+func computePushSquares(attackerCol, attackerRow, targetCol, targetRow, squares, width, height int, occupied map[[2]int]bool) (int, int) {
+	dc := sign(targetCol - attackerCol)
+	dr := sign(targetRow - attackerRow)
+	if dc == 0 && dr == 0 {
+		return targetCol, targetRow // co-located: no defined away vector
+	}
+
+	col, row := targetCol, targetRow
+	for i := 0; i < squares; i++ {
+		nextCol, nextRow := col+dc, row+dr
+		if width > 0 && (nextCol < 1 || nextCol > width) {
+			break
+		}
+		if height > 0 && (nextRow < 1 || nextRow > height) {
+			break
+		}
+		if occupied != nil && occupied[[2]int{nextCol, nextRow}] {
+			break
+		}
+		col, row = nextCol, nextRow
+	}
+	return col, row
 }
 
 // applyVexAdvantage applies a vex_advantage condition to the attacker, scoped

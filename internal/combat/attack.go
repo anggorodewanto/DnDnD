@@ -633,6 +633,15 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 		if masteryActive(input) && input.Weapon.Mastery == "sap" {
 			result.MasteryProperty = "sap"
 		}
+		// 2024 Weapon Mastery — Slow / Push also fire on an auto-crit hit. The
+		// service layer applies the speed-reducing condition / forced movement;
+		// here we only record which mastery fired.
+		if masteryActive(input) && input.Weapon.Mastery == "slow" {
+			result.MasteryProperty = "slow"
+		}
+		if masteryActive(input) && input.Weapon.Mastery == "push" {
+			result.MasteryProperty = "push"
+		}
 		return result, nil
 	}
 
@@ -692,6 +701,18 @@ func ResolveAttack(input AttackInput, roller *dice.Roller) (AttackResult, error)
 	}
 	if masteryActive(input) && input.Weapon.Mastery == "sap" {
 		result.MasteryProperty = "sap"
+	}
+
+	// 2024 Weapon Mastery — Slow: on a hit, the target's Speed drops by 10 ft
+	// until the start of the attacker's next turn. Push: on a hit, a Large-or-
+	// smaller target can be pushed 10 ft straight away from the attacker. Both
+	// are gated behind masteryActive so non-mastery hits are unchanged; the
+	// service layer applies the condition / forced movement.
+	if masteryActive(input) && input.Weapon.Mastery == "slow" {
+		result.MasteryProperty = "slow"
+	}
+	if masteryActive(input) && input.Weapon.Mastery == "push" {
+		result.MasteryProperty = "push"
 	}
 
 	return result, nil

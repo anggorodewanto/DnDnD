@@ -98,14 +98,23 @@ func CheckAbilityCheckEffects(conditions []CombatCondition, ctx AbilityCheckCont
 }
 
 // EffectiveSpeed returns the effective speed after condition effects.
-// Grappled and restrained reduce speed to 0.
+// Grappled and restrained reduce speed to 0. The 2024 Slow weapon-mastery
+// condition ("slowed") reduces speed by 10 ft (floored at 0); it applies after
+// the grappled/restrained override so a grappled-and-slowed creature stays at 0.
 func EffectiveSpeed(baseSpeed int, conditions []CombatCondition) int {
+	slowed := false
 	for _, c := range conditions {
 		if c.Condition == "grappled" || c.Condition == "restrained" {
 			return 0
 		}
+		if c.Condition == "slowed" {
+			slowed = true
+		}
 	}
-	return baseSpeed
+	if !slowed {
+		return baseSpeed
+	}
+	return max(0, baseSpeed-10)
 }
 
 // incapacitatingConditions are conditions that block actions and reactions.

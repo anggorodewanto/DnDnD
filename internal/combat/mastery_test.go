@@ -74,6 +74,35 @@ func makeSapMace() refdata.Weapon {
 	}
 }
 
+// makeSlowClub returns a club whose mastery property is "slow". The 2024 Slow
+// mastery lives on light melee weapons (club, dagger, sickle, etc.) and the
+// sling; a melee club keeps the pure-resolve / service tests at 5ft so no
+// ranged-range or ammunition wiring is involved.
+func makeSlowClub() refdata.Weapon {
+	return refdata.Weapon{
+		ID:         "club",
+		Name:       "Club",
+		Damage:     "1d4",
+		DamageType: "bludgeoning",
+		WeaponType: "simple_melee",
+		Properties: []string{"light"},
+		Mastery:    "slow",
+	}
+}
+
+// makePushGreatclub returns a greatclub whose mastery property is "push".
+func makePushGreatclub() refdata.Weapon {
+	return refdata.Weapon{
+		ID:         "greatclub",
+		Name:       "Greatclub",
+		Damage:     "1d8",
+		DamageType: "bludgeoning",
+		WeaponType: "simple_melee",
+		Properties: []string{"two-handed"},
+		Mastery:    "push",
+	}
+}
+
 // --- masteryActive ---
 
 func TestMasteryActive(t *testing.T) {
@@ -456,6 +485,230 @@ func TestResolveAttack_SapMissNoProperty(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, result.Hit)
 	assert.Equal(t, "", result.MasteryProperty, "sap only fires on a hit")
+}
+
+// --- Slow (pure ResolveAttack) ---
+
+func TestResolveAttack_SlowHitSetsMasteryProperty(t *testing.T) {
+	// d20 rolls 18 (+3 STR +2 prof = 23 >= AC 13) → hit.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        13,
+		Weapon:          makeSlowClub(),
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		WeaponMasteries: []string{"club"},
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "slow", result.MasteryProperty)
+}
+
+func TestResolveAttack_SlowHitUnknownMasteryNoProperty(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        13,
+		Weapon:          makeSlowClub(),
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		WeaponMasteries: nil, // attacker does NOT know club mastery
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "", result.MasteryProperty)
+}
+
+func TestResolveAttack_SlowMissNoProperty(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 2
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        20,
+		Weapon:          makeSlowClub(),
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		WeaponMasteries: []string{"club"},
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.False(t, result.Hit)
+	assert.Equal(t, "", result.MasteryProperty, "slow only fires on a hit")
+}
+
+// --- Push (pure ResolveAttack) ---
+
+func TestResolveAttack_PushHitSetsMasteryProperty(t *testing.T) {
+	// d20 rolls 18 (+3 STR +2 prof = 23 >= AC 13) → hit.
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        13,
+		Weapon:          makePushGreatclub(),
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		WeaponMasteries: []string{"greatclub"},
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "push", result.MasteryProperty)
+}
+
+func TestResolveAttack_PushHitUnknownMasteryNoProperty(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        13,
+		Weapon:          makePushGreatclub(),
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		WeaponMasteries: nil,
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "", result.MasteryProperty)
+}
+
+func TestResolveAttack_PushMissNoProperty(t *testing.T) {
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 2
+		}
+		return 6
+	})
+
+	input := AttackInput{
+		AttackerName:    "Aria",
+		TargetName:      "Goblin #1",
+		TargetAC:        20,
+		Weapon:          makePushGreatclub(),
+		Scores:          AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:       2,
+		DistanceFt:      5,
+		WeaponMasteries: []string{"greatclub"},
+	}
+
+	result, err := ResolveAttack(input, roller)
+	require.NoError(t, err)
+	assert.False(t, result.Hit)
+	assert.Equal(t, "", result.MasteryProperty, "push only fires on a hit")
+}
+
+// --- Slow speed-reduction unit (EffectiveSpeed) ---
+
+func slowedCondition() []CombatCondition {
+	return []CombatCondition{{Condition: "slowed", DurationRounds: 1, ExpiresOn: "start_of_turn"}}
+}
+
+func TestEffectiveSpeed_SlowedReducesBy10(t *testing.T) {
+	assert.Equal(t, 20, EffectiveSpeed(30, slowedCondition()))
+}
+
+func TestEffectiveSpeed_SlowedFlooredAtZero(t *testing.T) {
+	assert.Equal(t, 0, EffectiveSpeed(5, slowedCondition()))
+}
+
+func TestEffectiveSpeed_NotSlowedUnchanged(t *testing.T) {
+	assert.Equal(t, 30, EffectiveSpeed(30, []CombatCondition{}))
+}
+
+func TestEffectiveSpeed_GrappledStillZeroWithSlow(t *testing.T) {
+	conds := []CombatCondition{
+		{Condition: "grappled"},
+		{Condition: "slowed"},
+	}
+	assert.Equal(t, 0, EffectiveSpeed(30, conds))
+}
+
+// --- Push forced-move helper unit (computePushSquares) ---
+
+func TestComputePushSquares_MovesTwoSquaresAway(t *testing.T) {
+	// Attacker at col 1 (A), target at col 2 (B), same row → away vector is +col.
+	col, row := computePushSquares(1, 3, 2, 3, 2, 10, 10, nil)
+	assert.Equal(t, 4, col) // 2 + 2 squares
+	assert.Equal(t, 3, row)
+}
+
+func TestComputePushSquares_DiagonalAway(t *testing.T) {
+	// Attacker at (1,1), target at (2,2) → away vector is (+1,+1).
+	col, row := computePushSquares(1, 1, 2, 2, 2, 10, 10, nil)
+	assert.Equal(t, 4, col)
+	assert.Equal(t, 4, row)
+}
+
+func TestComputePushSquares_ClampedAtMapEdge(t *testing.T) {
+	// Target one square from the right edge (width 5 → cols 1..5).
+	// Pushing +col would reach col 6 then 7; clamp keeps it at the last
+	// in-bounds square it could reach (col 5).
+	col, row := computePushSquares(3, 3, 4, 3, 2, 5, 5, nil)
+	assert.Equal(t, 5, col)
+	assert.Equal(t, 3, row)
+}
+
+func TestComputePushSquares_StopsBeforeOccupiedSquare(t *testing.T) {
+	// An occupant sits at col 4, the first square the push would enter.
+	// The target must stop in its current square (no movement possible).
+	occupied := map[[2]int]bool{{4, 3}: true}
+	col, row := computePushSquares(1, 3, 3, 3, 2, 10, 10, occupied)
+	assert.Equal(t, 3, col) // could not advance past the occupied square
+	assert.Equal(t, 3, row)
+}
+
+func TestComputePushSquares_StopsAtFirstSquareWhenSecondOccupied(t *testing.T) {
+	// First square (col 4) free, second square (col 5) occupied → stop at col 4.
+	occupied := map[[2]int]bool{{5, 3}: true}
+	col, row := computePushSquares(1, 3, 3, 3, 2, 10, 10, occupied)
+	assert.Equal(t, 4, col)
+	assert.Equal(t, 3, row)
 }
 
 // --- Graze (service-level) ---
@@ -1002,4 +1255,316 @@ func TestServiceAttack_SapHitAppliesSapDisadvantageToTarget(t *testing.T) {
 			assert.NotEqual(t, "sap_disadvantage", c.Condition, "sap_disadvantage must not land on the attacker")
 		}
 	}
+}
+
+// --- Slow (service-level) ---
+
+// TestServiceAttack_SlowHitAppliesSlowedToTarget verifies a hit with a known
+// slow weapon applies a "slowed" condition to the TARGET (single round, expires
+// at the start of the attacker's next turn).
+func TestServiceAttack_SlowHitAppliesSlowedToTarget(t *testing.T) {
+	ctx := context.Background()
+	charID := uuid.New()
+	attackerID := uuid.New()
+	targetID := uuid.New()
+	turnID := uuid.New()
+	encounterID := uuid.New()
+
+	char := makeCharacter(16, 10, 2, "club")
+	char.ID = charID
+	char.CharacterData = charDataWithMasteries(`{"weapon_masteries":["club"]}`)
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makeSlowClub(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	condWrites := make(map[uuid.UUID][]CombatCondition)
+	ms.updateCombatantConditionsFn = func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error) {
+		var conds []CombatCondition
+		_ = json.Unmarshal(arg.Conditions, &conds)
+		condWrites[arg.ID] = conds
+		return refdata.Combatant{ID: arg.ID, Conditions: arg.Conditions}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18 // hit
+		}
+		return 6
+	})
+
+	attacker := refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria",
+		PositionCol: "A",
+		PositionRow: 1,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	target := refdata.Combatant{
+		ID:          targetID,
+		EncounterID: encounterID,
+		DisplayName: "Goblin #1",
+		PositionCol: "B",
+		PositionRow: 1,
+		Ac:          13,
+		HpCurrent:   20,
+		HpMax:       20,
+		IsAlive:     true,
+		IsNpc:       true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1}
+
+	result, err := svc.Attack(ctx, AttackCommand{Attacker: attacker, Target: target, Turn: turn}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "slow", result.MasteryProperty)
+
+	targetConds, ok := condWrites[targetID]
+	require.True(t, ok, "expected a condition write on the target for slowed")
+	var slowed *CombatCondition
+	for i := range targetConds {
+		if targetConds[i].Condition == "slowed" {
+			slowed = &targetConds[i]
+		}
+	}
+	require.NotNil(t, slowed, "expected slowed condition on the target")
+	assert.Equal(t, 1, slowed.DurationRounds)
+	assert.Equal(t, "start_of_turn", slowed.ExpiresOn)
+	assert.Equal(t, attackerID.String(), slowed.SourceCombatantID, "slowed must expire on the attacker's turn")
+	// slowed must NOT land on the attacker.
+	if attackerConds, ok := condWrites[attackerID]; ok {
+		for _, c := range attackerConds {
+			assert.NotEqual(t, "slowed", c.Condition, "slowed must not land on the attacker")
+		}
+	}
+}
+
+// --- Push (service-level) ---
+
+// pushMockStore wires a mock store for a push-mastery service test on a 10x10
+// map with no other occupants. It returns the store plus a pointer to capture
+// the position write performed on the target.
+func pushMockStore(t *testing.T, charID, targetID uuid.UUID, mapID uuid.UUID, targetCreatureRef string, creatureSize string) (*mockStore, *[]refdata.UpdateCombatantPositionParams) {
+	t.Helper()
+	char := makeCharacter(16, 10, 2, "greatclub")
+	char.ID = charID
+	char.CharacterData = charDataWithMasteries(`{"weapon_masteries":["greatclub"]}`)
+
+	ms := defaultMockStore()
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.getWeaponFn = func(ctx context.Context, id string) (refdata.Weapon, error) {
+		return makePushGreatclub(), nil
+	}
+	ms.updateTurnActionsFn = func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: arg.ID, AttacksRemaining: arg.AttacksRemaining}, nil
+	}
+	ms.getCombatantFn = func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: id, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	ms.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, MapID: uuid.NullUUID{UUID: mapID, Valid: true}}, nil
+	}
+	ms.getMapByIDUncheckedFn = func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		return refdata.Map{ID: id, WidthSquares: 10, HeightSquares: 10}, nil
+	}
+	ms.getCreatureFn = func(ctx context.Context, id string) (refdata.Creature, error) {
+		return refdata.Creature{ID: id, Size: creatureSize}, nil
+	}
+	var posWrites []refdata.UpdateCombatantPositionParams
+	ms.updateCombatantPositionFn = func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error) {
+		posWrites = append(posWrites, arg)
+		return refdata.Combatant{ID: arg.ID, PositionCol: arg.PositionCol, PositionRow: arg.PositionRow, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	return ms, &posWrites
+}
+
+func pushAttacker(charID, attackerID, encounterID uuid.UUID) refdata.Combatant {
+	return refdata.Combatant{
+		ID:          attackerID,
+		EncounterID: encounterID,
+		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
+		DisplayName: "Aria",
+		PositionCol: "A", // col 1
+		PositionRow: 3,
+		IsAlive:     true,
+		IsVisible:   true,
+		Conditions:  json.RawMessage(`[]`),
+	}
+}
+
+func pushTarget(targetID, encounterID uuid.UUID, creatureRef string) refdata.Combatant {
+	return refdata.Combatant{
+		ID:            targetID,
+		EncounterID:   encounterID,
+		CreatureRefID: nullString(creatureRef),
+		DisplayName:   "Goblin #1",
+		PositionCol:   "B", // col 2, adjacent to attacker at col 1
+		PositionRow:   3,
+		Ac:            13,
+		HpCurrent:     20,
+		HpMax:         20,
+		IsAlive:       true,
+		IsNpc:         true,
+		IsVisible:     true,
+		Conditions:    json.RawMessage(`[]`),
+	}
+}
+
+func TestServiceAttack_PushHitMovesTargetTwoSquaresAway(t *testing.T) {
+	ctx := context.Background()
+	charID, attackerID, targetID := uuid.New(), uuid.New(), uuid.New()
+	turnID, encounterID, mapID := uuid.New(), uuid.New(), uuid.New()
+
+	ms, posWrites := pushMockStore(t, charID, targetID, mapID, "goblin", "Medium")
+	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{pushAttacker(charID, attackerID, encounterID), pushTarget(targetID, encounterID, "goblin")}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18 // hit
+		}
+		return 6
+	})
+
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1}
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: pushAttacker(charID, attackerID, encounterID),
+		Target:   pushTarget(targetID, encounterID, "goblin"),
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "push", result.MasteryProperty)
+
+	require.NotEmpty(t, *posWrites, "expected a position write for the pushed target")
+	last := (*posWrites)[len(*posWrites)-1]
+	assert.Equal(t, targetID, last.ID)
+	// Attacker col 1, target col 2 → away vector +col, 2 squares → col 4 ("D").
+	assert.Equal(t, "D", last.PositionCol)
+	assert.Equal(t, int32(3), last.PositionRow)
+}
+
+func TestServiceAttack_PushClampedAtMapEdge(t *testing.T) {
+	ctx := context.Background()
+	charID, attackerID, targetID := uuid.New(), uuid.New(), uuid.New()
+	turnID, encounterID, mapID := uuid.New(), uuid.New(), uuid.New()
+
+	ms, posWrites := pushMockStore(t, charID, targetID, mapID, "goblin", "Medium")
+	// 3x3 map: cols/rows 1..3. Attacker at col1, target at col2 → push would
+	// reach col4 (out of bounds) → clamp keeps it at col 3 ("C").
+	ms.getMapByIDUncheckedFn = func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		return refdata.Map{ID: id, WidthSquares: 3, HeightSquares: 3}, nil
+	}
+	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{pushAttacker(charID, attackerID, encounterID), pushTarget(targetID, encounterID, "goblin")}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18
+		}
+		return 6
+	})
+
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1}
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: pushAttacker(charID, attackerID, encounterID),
+		Target:   pushTarget(targetID, encounterID, "goblin"),
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+
+	require.NotEmpty(t, *posWrites, "expected a clamped position write")
+	last := (*posWrites)[len(*posWrites)-1]
+	assert.Equal(t, "C", last.PositionCol) // col 3, last in-bounds square
+	assert.Equal(t, int32(3), last.PositionRow)
+}
+
+func TestServiceAttack_PushHugeTargetNotMoved(t *testing.T) {
+	ctx := context.Background()
+	charID, attackerID, targetID := uuid.New(), uuid.New(), uuid.New()
+	turnID, encounterID, mapID := uuid.New(), uuid.New(), uuid.New()
+
+	ms, posWrites := pushMockStore(t, charID, targetID, mapID, "giant", "Huge")
+	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{pushAttacker(charID, attackerID, encounterID), pushTarget(targetID, encounterID, "giant")}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18
+		}
+		return 6
+	})
+
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1}
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: pushAttacker(charID, attackerID, encounterID),
+		Target:   pushTarget(targetID, encounterID, "giant"),
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "push", result.MasteryProperty)
+	assert.Empty(t, *posWrites, "Huge targets must not be pushed")
+}
+
+func TestServiceAttack_PushUnknownMasteryNotMoved(t *testing.T) {
+	ctx := context.Background()
+	charID, attackerID, targetID := uuid.New(), uuid.New(), uuid.New()
+	turnID, encounterID, mapID := uuid.New(), uuid.New(), uuid.New()
+
+	ms, posWrites := pushMockStore(t, charID, targetID, mapID, "goblin", "Medium")
+	// Attacker does NOT know the greatclub mastery.
+	char := makeCharacter(16, 10, 2, "greatclub")
+	char.ID = charID
+	char.CharacterData = charDataWithMasteries(`{}`)
+	ms.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return char, nil
+	}
+	ms.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{pushAttacker(charID, attackerID, encounterID), pushTarget(targetID, encounterID, "goblin")}, nil
+	}
+
+	svc := NewService(ms)
+	roller := dice.NewRoller(func(max int) int {
+		if max == 20 {
+			return 18
+		}
+		return 6
+	})
+
+	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1}
+	result, err := svc.Attack(ctx, AttackCommand{
+		Attacker: pushAttacker(charID, attackerID, encounterID),
+		Target:   pushTarget(targetID, encounterID, "goblin"),
+		Turn:     turn,
+	}, roller)
+	require.NoError(t, err)
+	assert.True(t, result.Hit)
+	assert.Equal(t, "", result.MasteryProperty)
+	assert.Empty(t, *posWrites, "no push without a known mastery")
 }
