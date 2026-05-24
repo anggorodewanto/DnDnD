@@ -40,6 +40,8 @@ const DRAFT_FIELDS = [
   'selectedMasteries',
   'packChoices',
   'manualEquipment',
+  'wornArmor',
+  'equippedWeapon',
 ];
 
 /**

@@ -1,91 +1,16 @@
-package dashboard
+package portal
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
-	"github.com/ab/dndnd/internal/portal"
 )
 
-// DMCharacterSubmission is the payload for DM-created characters.
-type DMCharacterSubmission struct {
-	Name           string                    `json:"name"`
-	Race           string                    `json:"race"`
-	Background     string                    `json:"background"`
-	Classes        []character.ClassEntry    `json:"classes"`
-	AbilityScores  character.AbilityScores   `json:"ability_scores"`
-	AbilityMethod  portal.AbilityScoreMethod `json:"ability_method,omitempty"`
-	AbilityRolls   map[string][]int          `json:"ability_rolls,omitempty"`
-	Equipment      []string                  `json:"equipment,omitempty"`
-	Spells         []string                  `json:"spells,omitempty"`
-	Languages      []string                  `json:"languages,omitempty"`
-	EquippedWeapon string                    `json:"equipped_weapon,omitempty"`
-	WornArmor      string                    `json:"worn_armor,omitempty"`
-}
-
-// ValidateDMSubmission returns a list of validation error messages.
-func ValidateDMSubmission(s DMCharacterSubmission) []string {
-	var errs []string
-
-	if s.Name == "" {
-		errs = append(errs, "name is required")
-	}
-	if s.Race == "" {
-		errs = append(errs, "race is required")
-	}
-	if len(s.Classes) == 0 {
-		errs = append(errs, "at least one class is required")
-	}
-
-	totalLevel := 0
-	seenClasses := make(map[string]bool)
-	for i, c := range s.Classes {
-		if c.Class == "" {
-			errs = append(errs, fmt.Sprintf("class entry %d: class name is required", i+1))
-		} else if seenClasses[strings.ToLower(c.Class)] {
-			errs = append(errs, fmt.Sprintf("class entry %d: duplicate class %q", i+1, c.Class))
-		} else {
-			seenClasses[strings.ToLower(c.Class)] = true
-		}
-		if c.Level < 1 {
-			errs = append(errs, fmt.Sprintf("class entry %d: level must be at least 1", i+1))
-		}
-		totalLevel += c.Level
-	}
-
-	if totalLevel > 20 {
-		errs = append(errs, "total level cannot exceed 20")
-	}
-
-	abilityNames := []struct {
-		name  string
-		value int
-	}{
-		{"STR", s.AbilityScores.STR},
-		{"DEX", s.AbilityScores.DEX},
-		{"CON", s.AbilityScores.CON},
-		{"INT", s.AbilityScores.INT},
-		{"WIS", s.AbilityScores.WIS},
-		{"CHA", s.AbilityScores.CHA},
-	}
-	for _, a := range abilityNames {
-		if a.value < 1 || a.value > 30 {
-			errs = append(errs, fmt.Sprintf("%s must be between 1 and 30", a.name))
-		}
-	}
-	if s.AbilityMethod != "" {
-		scores := portal.PointBuyScoresFromCharacter(s.AbilityScores)
-		if err := portal.ValidateAbilityScores(s.AbilityMethod, scores, s.AbilityRolls); err != nil {
-			errs = append(errs, err.Error())
-		}
-	}
-
-	return errs
-}
-
-// DMDerivedStats holds the derived statistics for a DM-created character.
-type DMDerivedStats struct {
+// DerivedStats holds the calculated statistics for a character submission.
+// It is used both for the live preview endpoint and to populate the stored
+// character record at creation time.
+type DerivedStats struct {
 	HPMax             int                 `json:"hp_max"`
 	AC                int                 `json:"ac"`
 	SpeedFt           int                 `json:"speed_ft"`
@@ -100,54 +25,76 @@ type DMDerivedStats struct {
 	Features          []character.Feature `json:"features,omitempty"`
 }
 
-// DeriveDMStats calculates derived stats from a DM character submission.
-// An optional raceSpeeds map (from DB) can be passed to override the hardcoded table.
-func DeriveDMStats(sub DMCharacterSubmission, raceSpeeds ...map[string]int) DMDerivedStats {
-	totalLevel := character.TotalLevel(sub.Classes)
+// FeatureProvider supplies class/subclass/racial feature data for creation.
+type FeatureProvider interface {
+	ClassFeatures() map[string]map[string][]character.Feature
+	SubclassFeatures() map[string]map[string]map[string][]character.Feature
+	RacialTraits(race string) []character.Feature
+}
+
+// SubmissionClasses returns the normalized multiclass list for a submission.
+// When the Classes slice is empty it falls back to a single level-1 entry
+// built from the legacy Class/Subclass fields.
+func SubmissionClasses(sub CharacterSubmission) []character.ClassEntry {
+	if hasNonEmptyClass(sub.Classes) {
+		return sub.Classes
+	}
+	if sub.Class == "" {
+		return nil
+	}
+	return []character.ClassEntry{{Class: sub.Class, Subclass: sub.Subclass, Level: 1, IsPrimary: true}}
+}
+
+// primaryClassEntry returns the entry flagged IsPrimary, or the first entry,
+// or nil when the list is empty.
+func primaryClassEntry(classes []character.ClassEntry) *character.ClassEntry {
+	if len(classes) == 0 {
+		return nil
+	}
+	for i := range classes {
+		if classes[i].IsPrimary {
+			return &classes[i]
+		}
+	}
+	return &classes[0]
+}
+
+// DeriveStats calculates derived statistics from a character submission. An
+// optional raceSpeeds map (from the DB) overrides the hardcoded speed table.
+func DeriveStats(sub CharacterSubmission, raceSpeeds map[string]int) DerivedStats {
+	classes := SubmissionClasses(sub)
+	scores := sub.AbilityScores.Character()
+	totalLevel := character.TotalLevel(classes)
 	profBonus := character.ProficiencyBonus(totalLevel)
 
-	// Build hit dice map for HP calculation
-	hitDice := make(map[string]string, len(sub.Classes))
-	for _, c := range sub.Classes {
-		hitDice[c.Class] = portal.ClassHitDie(c.Class)
+	hitDice := make(map[string]string, len(classes))
+	for _, c := range classes {
+		hitDice[c.Class] = ClassHitDie(c.Class)
 	}
+	hp := character.CalculateHP(classes, hitDice, scores)
 
-	hp := character.CalculateHP(sub.Classes, hitDice, sub.AbilityScores)
-
-	// Determine armor and shield for AC calculation
 	armor := lookupArmorInfo(sub.WornArmor)
 	hasShield := hasEquipmentItem(sub.Equipment, "shield")
-	ac := character.CalculateAC(sub.AbilityScores, armor, hasShield, "")
+	ac := character.CalculateAC(scores, armor, hasShield, "")
 
-	// Save proficiencies from primary class
-	saveProficiencies := classSaveProficiencies(sub.Classes)
-
-	// Calculate saving throw values
+	saveProficiencies := classSaveProficiencies(classes)
 	saves := make(map[string]int, 6)
-	abilities := []string{"str", "dex", "con", "int", "wis", "cha"}
-	for _, ab := range abilities {
-		saves[ab] = character.SavingThrowModifier(sub.AbilityScores, ab, saveProficiencies, profBonus)
+	for _, ab := range []string{"str", "dex", "con", "int", "wis", "cha"} {
+		saves[ab] = character.SavingThrowModifier(scores, ab, saveProficiencies, profBonus)
 	}
 
-	// Skill proficiencies from primary class and background
-	skillProfs := classSkillProficiencies(sub.Classes)
-	skillProfs = append(skillProfs, backgroundSkillProficiencies(sub.Background)...)
-
-	// Calculate skill modifiers for all 18 skills
+	skillProfs := append(classSkillProficiencies(classes), backgroundSkillProficiencies(sub.Background)...)
 	skills := make(map[string]int, len(character.SkillAbilityMap))
 	for skill := range character.SkillAbilityMap {
-		skills[skill] = character.SkillModifier(sub.AbilityScores, skill, skillProfs, nil, false, profBonus)
+		skills[skill] = character.SkillModifier(scores, skill, skillProfs, nil, false, profBonus)
 	}
 
-	// Hit dice remaining (starts full)
-	hitDiceRemaining := make(map[string]int, len(sub.Classes))
-	for _, c := range sub.Classes {
+	hitDiceRemaining := make(map[string]int, len(classes))
+	for _, c := range classes {
 		hitDiceRemaining[c.Class] = c.Level
 	}
 
-	// Calculate spell slots
-	spellSlots := character.CalculateSpellSlots(sub.Classes, classSpellcastingMap(sub.Classes))
-
+	spellSlots := character.CalculateSpellSlots(classes, classSpellcastingMap(classes))
 	maxSpellLevel := 0
 	for lvl := range spellSlots {
 		if lvl > maxSpellLevel {
@@ -155,15 +102,10 @@ func DeriveDMStats(sub DMCharacterSubmission, raceSpeeds ...map[string]int) DMDe
 		}
 	}
 
-	var dbSpeeds map[string]int
-	if len(raceSpeeds) > 0 {
-		dbSpeeds = raceSpeeds[0]
-	}
-
-	return DMDerivedStats{
+	return DerivedStats{
 		HPMax:             hp,
 		AC:                ac,
-		SpeedFt:           raceSpeedWithLookup(sub.Race, dbSpeeds),
+		SpeedFt:           raceSpeedWithLookup(sub.Race, raceSpeeds),
 		TotalLevel:        totalLevel,
 		ProficiencyBonus:  profBonus,
 		SaveProficiencies: saveProficiencies,
@@ -175,8 +117,9 @@ func DeriveDMStats(sub DMCharacterSubmission, raceSpeeds ...map[string]int) DMDe
 	}
 }
 
-// CollectFeatures gathers features from racial traits, class features, and subclass features
-// up to each class's current level. Racial traits appear first, then class features in order.
+// CollectFeatures gathers features from racial traits, class features, and
+// subclass features up to each class's current level. Racial traits appear
+// first, then class features in order.
 func CollectFeatures(
 	classes []character.ClassEntry,
 	classFeatures map[string]map[string][]character.Feature,
@@ -184,8 +127,6 @@ func CollectFeatures(
 	racialTraits []character.Feature,
 ) []character.Feature {
 	var result []character.Feature
-
-	// Racial traits first
 	result = append(result, racialTraits...)
 
 	for _, c := range classes {
@@ -214,14 +155,21 @@ func CollectFeatures(
 	return result
 }
 
-// raceSpeed returns the base walking speed in feet for a race name.
-// If a DB lookup map is provided, it takes precedence over the hardcoded table.
-// Defaults to 30 ft for unknown races.
-func raceSpeed(race string) int {
-	return raceSpeedWithLookup(race, nil)
+// MaxSpellLevelForClasses returns the highest spell slot level available to
+// the character, or 0 when the character has no spellcasting.
+func MaxSpellLevelForClasses(classes []character.ClassEntry) int {
+	slots := character.CalculateSpellSlots(classes, classSpellcastingMap(classes))
+	maxLvl := 0
+	for lvl := range slots {
+		if lvl > maxLvl {
+			maxLvl = lvl
+		}
+	}
+	return maxLvl
 }
 
-// raceSpeedWithLookup returns the base walking speed using an optional DB-sourced map.
+// raceSpeedWithLookup returns the base walking speed in feet for a race,
+// preferring a DB-sourced map when provided and falling back to the SRD table.
 func raceSpeedWithLookup(race string, dbSpeeds map[string]int) int {
 	lower := strings.ToLower(race)
 	if dbSpeeds != nil {
@@ -241,8 +189,8 @@ func raceSpeedWithLookup(race string, dbSpeeds map[string]int) int {
 	}
 }
 
-// classSkillProficiencies returns default skill proficiencies for the primary (first) class.
-// These are the SRD default skill proficiencies granted by each class.
+// classSkillProficiencies returns default skill proficiencies for the primary
+// (first) class — the SRD defaults granted by each class.
 func classSkillProficiencies(classes []character.ClassEntry) []string {
 	if len(classes) == 0 {
 		return nil
@@ -277,7 +225,7 @@ func classSkillProficiencies(classes []character.ClassEntry) []string {
 	}
 }
 
-// backgroundSkillProficiencies returns the skill proficiencies granted by a background.
+// backgroundSkillProficiencies returns the skills granted by a background.
 func backgroundSkillProficiencies(background string) []string {
 	switch strings.ToLower(background) {
 	case "acolyte":
@@ -309,20 +257,42 @@ func backgroundSkillProficiencies(background string) []string {
 	}
 }
 
-// MaxSpellLevelForClasses returns the highest spell slot level available to the character.
-// Returns 0 if the character has no spellcasting.
-func MaxSpellLevelForClasses(classes []character.ClassEntry) int {
-	slots := character.CalculateSpellSlots(classes, classSpellcastingMap(classes))
-	maxLvl := 0
-	for lvl := range slots {
-		if lvl > maxLvl {
-			maxLvl = lvl
-		}
+// classSaveProficiencies returns save proficiencies for the primary class.
+func classSaveProficiencies(classes []character.ClassEntry) []string {
+	if len(classes) == 0 {
+		return nil
 	}
-	return maxLvl
+	switch strings.ToLower(classes[0].Class) {
+	case "barbarian":
+		return []string{"str", "con"}
+	case "bard":
+		return []string{"dex", "cha"}
+	case "cleric":
+		return []string{"wis", "cha"}
+	case "druid":
+		return []string{"int", "wis"}
+	case "fighter":
+		return []string{"str", "con"}
+	case "monk":
+		return []string{"str", "dex"}
+	case "paladin":
+		return []string{"wis", "cha"}
+	case "ranger":
+		return []string{"str", "dex"}
+	case "rogue":
+		return []string{"dex", "int"}
+	case "sorcerer":
+		return []string{"con", "cha"}
+	case "warlock":
+		return []string{"wis", "cha"}
+	case "wizard":
+		return []string{"int", "wis"}
+	default:
+		return nil
+	}
 }
 
-// classSpellcastingMap returns the spellcasting data for each class in the character's class list.
+// classSpellcastingMap returns spellcasting data for each spellcasting class.
 func classSpellcastingMap(classes []character.ClassEntry) map[string]character.ClassSpellcasting {
 	m := make(map[string]character.ClassSpellcasting)
 	for _, c := range classes {
@@ -334,7 +304,7 @@ func classSpellcastingMap(classes []character.ClassEntry) map[string]character.C
 	return m
 }
 
-// classSpellcasting returns the spellcasting data for a given class name.
+// classSpellcasting returns the spellcasting data for a class name.
 func classSpellcasting(className string) character.ClassSpellcasting {
 	switch strings.ToLower(className) {
 	case "bard":
@@ -376,7 +346,7 @@ var armorTable = map[string]character.ArmorInfo{
 	"plate":           {ACBase: 18},
 }
 
-// lookupArmorInfo returns the ArmorInfo for an armor ID, or nil if not found/empty.
+// lookupArmorInfo returns the ArmorInfo for an armor ID, or nil when empty/unknown.
 func lookupArmorInfo(armorID string) *character.ArmorInfo {
 	if armorID == "" {
 		return nil
@@ -388,7 +358,7 @@ func lookupArmorInfo(armorID string) *character.ArmorInfo {
 	return &info
 }
 
-// hasEquipmentItem returns true if the equipment list contains the given item ID.
+// hasEquipmentItem reports whether the equipment list contains the given item ID.
 func hasEquipmentItem(equipment []string, itemID string) bool {
 	for _, e := range equipment {
 		if strings.EqualFold(e, itemID) {
@@ -396,39 +366,4 @@ func hasEquipmentItem(equipment []string, itemID string) bool {
 		}
 	}
 	return false
-}
-
-// classSaveProficiencies returns save proficiencies for the primary (first) class.
-func classSaveProficiencies(classes []character.ClassEntry) []string {
-	if len(classes) == 0 {
-		return nil
-	}
-	switch strings.ToLower(classes[0].Class) {
-	case "barbarian":
-		return []string{"str", "con"}
-	case "bard":
-		return []string{"dex", "cha"}
-	case "cleric":
-		return []string{"wis", "cha"}
-	case "druid":
-		return []string{"int", "wis"}
-	case "fighter":
-		return []string{"str", "con"}
-	case "monk":
-		return []string{"str", "dex"}
-	case "paladin":
-		return []string{"wis", "cha"}
-	case "ranger":
-		return []string{"str", "dex"}
-	case "rogue":
-		return []string{"dex", "int"}
-	case "sorcerer":
-		return []string{"con", "cha"}
-	case "warlock":
-		return []string{"wis", "cha"}
-	case "wizard":
-		return []string{"int", "wis"}
-	default:
-		return nil
-	}
 }

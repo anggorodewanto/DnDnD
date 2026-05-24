@@ -8,6 +8,9 @@ export default defineConfig({
   resolve: {
     alias: {
       $lib: fileURLToPath(new URL('./src/lib', import.meta.url)),
+      // Shared character builder lives in the portal Svelte source. Its own
+      // relative ./lib/... imports resolve against the portal tree.
+      '@builder': fileURLToPath(new URL('../../portal/svelte/src', import.meta.url)),
     },
   },
   build: {

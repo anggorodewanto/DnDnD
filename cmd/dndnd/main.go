@@ -1208,12 +1208,16 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// campaign-agnostic at construction time.
 		charCreateRefAdapter := portal.NewRefDataAdapter(queries)
 		charCreateStore := portal.NewBuilderStoreAdapter(queries, nil)
-		charCreateSvc := dashboard.NewDMCharCreateService(charCreateStore)
-		charCreateHandler := dashboard.NewCharCreateHandler(logger, charCreateSvc, charCreateRefData{a: charCreateRefAdapter})
 		// Finding 17: wire the feature provider so DM character creation
-		// populates class/race features from the database.
-		featureProvider := dashboard.NewRefDataFeatureProvider(ctx, queries, logger)
-		charCreateSvc.SetFeatureProvider(featureProvider)
+		// populates class/race features from the database. The DM dashboard
+		// and player portal share the same portal.BuilderService creation
+		// core; the dashboard handler drives it in DM mode.
+		featureProvider := portal.NewRefDataFeatureProvider(ctx, queries, logger)
+		charCreateSvc := portal.NewBuilderService(charCreateStore,
+			portal.WithFeatureProvider(featureProvider),
+			portal.WithLogger(logger),
+		)
+		charCreateHandler := dashboard.NewCharCreateHandler(logger, charCreateSvc, charCreateRefData{a: charCreateRefAdapter})
 		charCreateHandler.SetFeatureProvider(featureProvider)
 		charCreateHandler.SetDMVerifier(dmVerifier)
 		charCreateHandler.RegisterCharCreateRoutes(router.With(dmAuthMw))
@@ -1269,7 +1273,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// WithCharacterSheet the /character Discord embed link points to a
 		// 404. buildPortalAPIAndSheetHandlers is the single source of truth
 		// so both endpoints stay in sync with portalTokenSvc.
-		portalAPIHandler, portalSheetHandler := buildPortalAPIAndSheetHandlers(queries, portalTokenSvc, open5eCampaignLookup)
+		portalAPIHandler, portalSheetHandler := buildPortalAPIAndSheetHandlers(queries, portalTokenSvc, open5eCampaignLookup, portal.NewRefDataFeatureProvider(ctx, queries, logger))
 		if portalAPIHandler != nil {
 			portalOpts = append(portalOpts, portal.WithAPI(portalAPIHandler))
 		}

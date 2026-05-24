@@ -339,3 +339,52 @@ func TestAPIHandler_SubmitCharacter_ValidationError(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
+
+func TestAPIHandler_PreviewCharacter_RequiresAuth(t *testing.T) {
+	h := portal.NewAPIHandler(slog.Default(), nil, portal.NewBuilderService(nil))
+	req := httptest.NewRequest(http.MethodPost, "/portal/api/characters/preview", strings.NewReader("{}"))
+	rec := httptest.NewRecorder()
+
+	h.PreviewCharacter(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestAPIHandler_PreviewCharacter_NoBuilderService(t *testing.T) {
+	h := portal.NewAPIHandler(slog.Default(), nil, nil)
+	req := httptest.NewRequest(http.MethodPost, "/portal/api/characters/preview", strings.NewReader("{}"))
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "user-1"))
+	rec := httptest.NewRecorder()
+
+	h.PreviewCharacter(rec, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func TestAPIHandler_PreviewCharacter_InvalidJSON(t *testing.T) {
+	h := portal.NewAPIHandler(slog.Default(), nil, portal.NewBuilderService(nil))
+	req := httptest.NewRequest(http.MethodPost, "/portal/api/characters/preview", strings.NewReader("not json"))
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "user-1"))
+	rec := httptest.NewRecorder()
+
+	h.PreviewCharacter(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestAPIHandler_PreviewCharacter_Success(t *testing.T) {
+	h := portal.NewAPIHandler(slog.Default(), nil, portal.NewBuilderService(nil))
+	body := `{"name":"Thorin","race":"Dwarf","classes":[{"class":"Fighter","level":3}],` +
+		`"ability_scores":{"str":16,"dex":12,"con":14,"int":10,"wis":8,"cha":10}}`
+	req := httptest.NewRequest(http.MethodPost, "/portal/api/characters/preview", strings.NewReader(body))
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "user-1"))
+	rec := httptest.NewRecorder()
+
+	h.PreviewCharacter(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var stats portal.DerivedStats
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&stats))
+	assert.Equal(t, 3, stats.TotalLevel)
+	assert.Equal(t, 25, stats.SpeedFt)
+}

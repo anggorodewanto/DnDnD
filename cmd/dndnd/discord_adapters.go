@@ -1216,7 +1216,7 @@ func (n *firstTurnPingNotifier) NotifyFirstTurn(ctx context.Context, encounterID
 //
 // Finding 20: uses NewRefDataAdapterWithOpen5eLookup when a lookup is provided
 // so Open5e spell-list gating is active in production.
-func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.TokenService, open5eLookup portal.Open5eCampaignLookup) (*portal.APIHandler, *portal.CharacterSheetHandler) {
+func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.TokenService, open5eLookup portal.Open5eCampaignLookup, featureProvider portal.FeatureProvider) (*portal.APIHandler, *portal.CharacterSheetHandler) {
 	if queries == nil {
 		return nil, nil
 	}
@@ -1227,7 +1227,29 @@ func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.T
 		refDataAdapter = portal.NewRefDataAdapter(queries)
 	}
 	builderStore := portal.NewBuilderStoreAdapter(queries, tokenSvc)
-	builderSvc := portal.NewBuilderService(builderStore)
+	// Wire the same feature provider + race-speed lookup the DM dashboard uses
+	// so player-created characters (and the builder's live preview/features
+	// steps) carry class/subclass/racial features and DB-sourced speeds. The
+	// race-speed closure is invoked per-request, so it is safe to construct
+	// here even without a live DB (the feature provider is passed in by the
+	// caller, which has the live queries).
+	opts := []portal.BuilderServiceOption{
+		portal.WithRaceSpeedLookup(func(ctx context.Context) map[string]int {
+			races, err := refDataAdapter.ListRaces(ctx)
+			if err != nil {
+				return nil
+			}
+			m := make(map[string]int, len(races))
+			for _, race := range races {
+				m[strings.ToLower(race.Name)] = race.SpeedFt
+			}
+			return m
+		}),
+	}
+	if featureProvider != nil {
+		opts = append(opts, portal.WithFeatureProvider(featureProvider))
+	}
+	builderSvc := portal.NewBuilderService(builderStore, opts...)
 	apiHandler := portal.NewAPIHandler(nil, refDataAdapter, builderSvc)
 	sheetStore := portal.NewCharacterSheetStoreAdapter(queries)
 	sheetSvc := portal.NewCharacterSheetService(sheetStore)

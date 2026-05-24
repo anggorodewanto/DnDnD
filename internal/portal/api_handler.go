@@ -223,6 +223,27 @@ func (h *APIHandler) SubmitCharacter(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// PreviewCharacter returns derived stats for a draft submission without
+// persisting it, so the builder can show a live stat preview.
+func (h *APIHandler) PreviewCharacter(w http.ResponseWriter, r *http.Request) {
+	if userID, ok := auth.DiscordUserIDFromContext(r.Context()); !ok || userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if h.builderSvc == nil {
+		http.Error(w, "preview unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	var sub CharacterSubmission
+	if err := json.NewDecoder(r.Body).Decode(&sub); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, h.builderSvc.Preview(r.Context(), sub))
+}
+
 func isValidationError(err error) bool {
 	return err != nil && strings.HasPrefix(err.Error(), "validation")
 }

@@ -1,5 +1,5 @@
 import { mount } from 'svelte';
-import App from './App.svelte';
+import CharacterBuilder from './CharacterBuilder.svelte';
 
 const target = document.getElementById('character-builder');
 if (target) {
@@ -12,8 +12,8 @@ if (target) {
   // Wipe it first, then mount into the empty container.
   target.innerHTML = '';
 
-  mount(App, {
+  mount(CharacterBuilder, {
     target,
-    props: { token, campaignId },
+    props: { mode: 'player', token, campaignId },
   });
 }

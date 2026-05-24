@@ -1,5 +1,5 @@
 <script>
-  import { listRaces, listClasses, listSpells, listEquipment, getStartingEquipment, listAbilityMethods, submitCharacter } from './lib/api.js';
+  import { makeBuilderApi } from './lib/api.js';
   import { remainingPoints, abilityModifier, canIncrement, canDecrement, scoreCost } from './lib/pointbuy.js';
   import { skillsForBackground, mergeBackgroundSkills, backgroundDetails, formatLanguages } from './lib/backgrounds.js';
   import { abilityLabel } from './lib/skills.js';
@@ -17,7 +17,17 @@
   } from './lib/builder-options.js';
   import { draftKey, serializeDraft, parseDraft } from './lib/builder-draft.js';
 
-  let { token = '', campaignId = '' } = $props();
+  let { mode = 'player', token = '', campaignId = '' } = $props();
+
+  // Mode-aware API client. The portal and DM dashboard share this component
+  // but hit different URL prefixes / request shapes; the factory hides that.
+  // Derived so prop reads stay reactive (props are fixed at mount in practice,
+  // but this keeps the component warning-clean and correct either way).
+  let api = $derived(makeBuilderApi(mode, { campaignId, token }));
+
+  // localStorage draft is keyed off whichever identity the mode provides so
+  // DM drafts (campaignId only, no token) persist independently.
+  let draftIdentity = $derived(token || campaignId);
 
   // Steps
   const STEPS = ['Basics', 'Class', 'Ability Scores', 'Skills', 'Equipment', 'Spells', 'Review'];
@@ -54,6 +64,13 @@
   let packChoices = $state({});   // { choiceIndex: selectedOptionIndex }
   let manualEquipment = $state([]); // manually added item IDs
   let equipmentSearch = $state('');
+  let wornArmor = $state('');      // item id of equipped armor/shield
+  let equippedWeapon = $state(''); // item id of the actively-wielded weapon
+
+  // Server-computed authoritative review preview (DerivedStats + features).
+  let preview = $state(null);
+  let previewLoading = $state(false);
+  let previewError = $state('');
 
   // UI state
   let loading = $state(false);
@@ -69,7 +86,7 @@
   async function loadRefData() {
     try {
       loading = true;
-      const [r, c, methods] = await Promise.all([listRaces(), listClasses(), listAbilityMethods(campaignId)]);
+      const [r, c, methods] = await Promise.all([api.listRaces(), api.listClasses(), api.listAbilityMethods()]);
       races = r;
       classes = c;
       abilityMethods = methods.length > 0 ? methods : ['point_buy', 'standard_array', 'roll'];
@@ -133,7 +150,7 @@
   function readDraftRaw() {
     if (typeof localStorage === 'undefined') return null;
     try {
-      return localStorage.getItem(draftKey(token));
+      return localStorage.getItem(draftKey(draftIdentity));
     } catch {
       return null;
     }
@@ -142,7 +159,7 @@
   function writeDraftRaw(raw) {
     if (typeof localStorage === 'undefined') return;
     try {
-      localStorage.setItem(draftKey(token), raw);
+      localStorage.setItem(draftKey(draftIdentity), raw);
     } catch {
       /* quota exceeded or storage disabled — skip silently */
     }
@@ -151,7 +168,7 @@
   function clearDraft() {
     if (typeof localStorage === 'undefined') return;
     try {
-      localStorage.removeItem(draftKey(token));
+      localStorage.removeItem(draftKey(draftIdentity));
     } catch {
       /* ignore */
     }
@@ -172,6 +189,8 @@
     if (Array.isArray(d.selectedMasteries)) selectedMasteries = d.selectedMasteries;
     if (d.packChoices !== undefined) packChoices = d.packChoices;
     if (Array.isArray(d.manualEquipment)) manualEquipment = d.manualEquipment;
+    if (d.wornArmor !== undefined) wornArmor = d.wornArmor;
+    if (d.equippedWeapon !== undefined) equippedWeapon = d.equippedWeapon;
     // Prime the merge/reset guards to the restored values so the auto-merge
     // effects don't re-add deselected skills and the class effect doesn't wipe
     // restored pack choices.
@@ -190,6 +209,7 @@
       currentStep, name, race, subrace, background,
       classEntries, scores, abilityMethod, abilityRolls,
       selectedSkills, selectedSpells, selectedMasteries, packChoices, manualEquipment,
+      wornArmor, equippedWeapon,
     });
     if (submitted) return;
     writeDraftRaw(serializeDraft(snapshot));
@@ -205,7 +225,7 @@
 
   async function loadSpells(cls) {
     try {
-      spells = await listSpells(cls, campaignId);
+      spells = await api.listSpells(cls);
     } catch (e) {
       spells = [];
     }
@@ -213,7 +233,7 @@
 
   async function loadEquipment() {
     try {
-      allEquipment = await listEquipment();
+      allEquipment = await api.listEquipment();
     } catch (e) {
       allEquipment = [];
     }
@@ -221,7 +241,7 @@
 
   async function loadStartingEquipment(cls) {
     try {
-      startingPacks = await getStartingEquipment(cls);
+      startingPacks = await api.getStartingEquipment(cls);
     } catch (e) {
       startingPacks = [];
     }
@@ -340,6 +360,46 @@
     return allEquipment.filter(e => e.name.toLowerCase().includes(q));
   });
 
+  // Equipped-weapon / worn-armor pickers draw from whatever the character has
+  // actually selected. Mirrors CharCreatePanel's selectedArmor/WeaponOptions.
+  let equipmentById = $derived(() => {
+    const m = new Map();
+    for (const it of allEquipment) m.set(it.id, it);
+    return m;
+  });
+
+  function equipmentName(id) {
+    const item = equipmentById().get(id);
+    return item ? item.name : id.replace(/-/g, ' ');
+  }
+
+  let selectedArmorOptions = $derived(() => {
+    const byId = equipmentById();
+    return selectedEquipment().filter((id) => {
+      if (id === 'shield') return true;
+      const item = byId.get(id);
+      return item && item.category === 'armor';
+    });
+  });
+
+  let selectedWeaponOptions = $derived(() => {
+    const byId = equipmentById();
+    return selectedEquipment().filter((id) => {
+      const item = byId.get(id);
+      return item && item.category === 'weapon';
+    });
+  });
+
+  // Clear worn/equipped picks that fall out of the selected list.
+  $effect(() => {
+    const armor = selectedArmorOptions();
+    if (wornArmor && !armor.includes(wornArmor)) wornArmor = '';
+  });
+  $effect(() => {
+    const weapons = selectedWeaponOptions();
+    if (equippedWeapon && !weapons.includes(equippedWeapon)) equippedWeapon = '';
+  });
+
   function toggleSpell(spellId) {
     if (selectedSpells.includes(spellId)) {
       selectedSpells = selectedSpells.filter(s => s !== spellId);
@@ -388,57 +448,70 @@
     };
   });
 
-  function hitDieValue(hitDie) {
-    const m = hitDie?.match(/d(\d+)/);
-    return m ? parseInt(m[1]) : 8;
+  // Build the common snake_case submission object both modes POST. The API
+  // factory layers on token / campaign_id per mode.
+  function gatherSubmission() {
+    // Re-merge background skills at submit time as a safety net in case
+    // the user toggled them off after picking a background.
+    let skills = mergeBackgroundSkills(selectedSkills, background);
+    // Same safety net for race-granted skill proficiencies.
+    skills = mergeGrantedSkills(skills, raceGrantedSkills(selectedRaceData?.traits));
+    // Filter out incomplete class rows so the backend never sees a blank
+    // class entry.
+    const classes = classEntries
+      .filter(c => c.class)
+      .map(c => ({ class: c.class, level: Number(c.level) || 1, subclass: c.subclass || '' }));
+    return {
+      name,
+      race,
+      subrace,
+      background,
+      class: selectedClass,
+      subclass,
+      classes,
+      ability_scores: finalScores(),
+      ability_method: abilityMethod,
+      ability_rolls: abilityRolls,
+      skills,
+      equipment: selectedEquipment(),
+      spells: selectedSpells,
+      weapon_masteries: selectedMasteries.filter(id => masteryWeapons.some(w => w.id === id)),
+      equipped_weapon: equippedWeapon,
+      worn_armor: wornArmor,
+    };
   }
 
-  let derivedHP = $derived(() => {
-    const fs = finalScores();
-    const conMod = abilityModifier(fs.con);
-    const hd = hitDieValue(selectedClassData?.hit_die);
-    return hd + conMod;
-  });
+  // Server-authoritative preview for the Review step. Computes derived stats
+  // and the features list. Runs whenever the user enters the Review step.
+  async function loadPreview() {
+    previewLoading = true;
+    previewError = '';
+    try {
+      preview = await api.previewCharacter(gatherSubmission());
+    } catch (e) {
+      preview = null;
+      previewError = 'Preview failed: ' + e.message;
+    } finally {
+      previewLoading = false;
+    }
+  }
 
-  let derivedAC = $derived(() => {
-    const fs = finalScores();
-    return 10 + abilityModifier(fs.dex);
+  // Trigger the preview when the Review step (last step) becomes active.
+  let lastPreviewedStep = -1;
+  $effect(() => {
+    if (currentStep === STEPS.length - 1 && currentStep !== lastPreviewedStep) {
+      lastPreviewedStep = currentStep;
+      loadPreview();
+    } else if (currentStep !== STEPS.length - 1) {
+      lastPreviewedStep = -1;
+    }
   });
-
-  let derivedSpeed = $derived(() => selectedRaceData?.speed_ft || 30);
 
   async function handleSubmit() {
     submitting = true;
     error = '';
     try {
-      // Re-merge background skills at submit time as a safety net in case
-      // the user toggled them off after picking a background.
-      let skills = mergeBackgroundSkills(selectedSkills, background);
-      // Same safety net for race-granted skill proficiencies.
-      skills = mergeGrantedSkills(skills, raceGrantedSkills(selectedRaceData?.traits));
-      // Filter out incomplete class rows so the backend never sees a blank
-      // class entry.
-      const classes = classEntries
-        .filter(c => c.class)
-        .map(c => ({ class: c.class, level: Number(c.level) || 1, subclass: c.subclass || '' }));
-      await submitCharacter({
-        token,
-        campaign_id: campaignId,
-        name,
-        race,
-        subrace,
-        background,
-        class: selectedClass,
-        subclass,
-        classes,
-        ability_scores: finalScores(),
-        ability_method: abilityMethod,
-        ability_rolls: abilityRolls,
-        skills,
-        equipment: selectedEquipment(),
-        spells: selectedSpells,
-        weapon_masteries: selectedMasteries.filter(id => masteryWeapons.some(w => w.id === id)),
-      });
+      await api.submitCharacter(gatherSubmission());
       submitted = true;
       clearDraft();
     } catch (e) {
@@ -507,8 +580,13 @@
 <div class="builder">
   {#if submitted}
     <div class="success">
-      <h3>Character Submitted!</h3>
-      <p>Your character <strong>{name}</strong> has been submitted for DM approval. You'll be notified when it's reviewed.</p>
+      {#if mode === 'dm'}
+        <h3>Character Created!</h3>
+        <p>The character <strong>{name}</strong> has been created and added to the campaign.</p>
+      {:else}
+        <h3>Character Submitted!</h3>
+        <p>Your character <strong>{name}</strong> has been submitted for DM approval. You'll be notified when it's reviewed.</p>
+      {/if}
     </div>
   {:else if loading}
     <p>Loading reference data...</p>
@@ -898,6 +976,29 @@
           </div>
         {/if}
 
+        <!-- Worn armor + equipped weapon pickers -->
+        <div class="equipment-section">
+          <h4>Active Loadout</h4>
+          <label>
+            Worn Armor
+            <select bind:value={wornArmor}>
+              <option value="">None</option>
+              {#each selectedArmorOptions() as id}
+                <option value={id}>{equipmentName(id)}</option>
+              {/each}
+            </select>
+          </label>
+          <label>
+            Equipped Weapon
+            <select bind:value={equippedWeapon}>
+              <option value="">None</option>
+              {#each selectedWeaponOptions() as id}
+                <option value={id}>{equipmentName(id)}</option>
+              {/each}
+            </select>
+          </label>
+        </div>
+
         {#if masteryCount > 0}
           <div class="equipment-section mastery-section">
             <h4>Weapon Mastery</h4>
@@ -978,6 +1079,7 @@
 
     <!-- Step 6: Review -->
     {:else if currentStep === 6}
+      {@const submission = gatherSubmission()}
       <div class="step-content">
         <h3>Review & Submit</h3>
         <div class="review-section">
@@ -1008,12 +1110,70 @@
           </div>
         </div>
 
+        <!-- Server-authoritative derived stats. Supersedes the old
+             client-side estimates so the player/DM sees the same numbers the
+             backend will persist. -->
         <div class="review-section">
           <h4>Derived Stats</h4>
-          <p><strong>HP:</strong> {derivedHP()}</p>
-          <p><strong>AC:</strong> {derivedAC()}</p>
-          <p><strong>Speed:</strong> {derivedSpeed()} ft</p>
-          <p><strong>Proficiency Bonus:</strong> +2</p>
+          {#if previewLoading}
+            <p class="muted">Computing stats…</p>
+          {:else if previewError}
+            <p class="preview-error">{previewError}</p>
+          {:else if preview}
+            <div class="review-scores">
+              <div class="review-score"><span class="ability-label">HP</span><span class="ability-value">{preview.hp_max}</span></div>
+              <div class="review-score"><span class="ability-label">AC</span><span class="ability-value">{preview.ac}</span></div>
+              <div class="review-score"><span class="ability-label">Speed</span><span class="ability-value">{preview.speed_ft} ft</span></div>
+              <div class="review-score"><span class="ability-label">Prof</span><span class="ability-value">+{preview.proficiency_bonus}</span></div>
+              <div class="review-score"><span class="ability-label">Level</span><span class="ability-value">{preview.total_level}</span></div>
+            </div>
+            {#if preview.saves}
+              <h4 class="subhead">Saving Throws</h4>
+              <div class="review-scores">
+                {#each ABILITIES as ability}
+                  <div class="review-score">
+                    <span class="ability-label">{ability.toUpperCase()}</span>
+                    <span class="ability-value">{preview.saves[ability] >= 0 ? '+' : ''}{preview.saves[ability]}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+            {#if preview.spell_slots && Object.keys(preview.spell_slots).length > 0}
+              <h4 class="subhead">Spell Slots</h4>
+              <div class="review-scores">
+                {#each Object.keys(preview.spell_slots).sort() as lvl}
+                  <div class="review-score">
+                    <span class="ability-label">Lvl {lvl}</span>
+                    <span class="ability-value">{preview.spell_slots[lvl]}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          {:else}
+            <p class="muted">No stats available.</p>
+          {/if}
+        </div>
+
+        <!-- Class / subclass / racial features computed by the server. -->
+        <div class="review-section">
+          <h4>Features</h4>
+          {#if previewLoading}
+            <p class="muted">Loading features…</p>
+          {:else if preview && preview.features && preview.features.length > 0}
+            <div class="features-list">
+              {#each preview.features as f}
+                <div class="feature-card">
+                  <div class="feat-name">{f.name}</div>
+                  <div class="feat-source">{f.source}{#if f.level} (Level {f.level}){/if}</div>
+                  {#if f.description}
+                    <div class="feat-desc">{f.description}</div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <p class="muted">No features for the current selection.</p>
+          {/if}
         </div>
 
         {#if selectedSkills.length > 0}
@@ -1044,8 +1204,24 @@
           </div>
         {/if}
 
+        {#if submission.worn_armor || submission.equipped_weapon}
+          <div class="review-section">
+            <h4>Active Loadout</h4>
+            {#if submission.worn_armor}
+              <p><strong>Worn Armor:</strong> {equipmentName(submission.worn_armor)}</p>
+            {/if}
+            {#if submission.equipped_weapon}
+              <p><strong>Equipped Weapon:</strong> {equipmentName(submission.equipped_weapon)}</p>
+            {/if}
+          </div>
+        {/if}
+
         <button class="submit-btn" onclick={handleSubmit} disabled={submitting || !name || !race || !selectedClass}>
-          {submitting ? 'Submitting...' : 'Submit for DM Approval'}
+          {#if submitting}
+            {mode === 'dm' ? 'Creating...' : 'Submitting...'}
+          {:else}
+            {mode === 'dm' ? 'Create Character' : 'Submit for DM Approval'}
+          {/if}
         </button>
       </div>
     {/if}
@@ -1137,6 +1313,13 @@
   .skill-ability { color: #888; font-size: 0.8rem; margin-left: 0.3rem; }
   .review-section { margin-bottom: 1rem; padding: 1rem; background: #1a1a2e; border-radius: 4px; border: 1px solid #0f3460; }
   .review-section h4 { color: #e94560; margin-bottom: 0.5rem; }
+  .review-section h4.subhead { margin-top: 0.75rem; font-size: 0.95rem; }
+  .preview-error { color: #ff8888; font-size: 0.9rem; }
+  .features-list { display: flex; flex-direction: column; gap: 0.4rem; }
+  .feature-card { background: #16213e; border: 1px solid #0f3460; border-radius: 4px; padding: 0.5rem; }
+  .feature-card .feat-name { color: #e94560; font-weight: 700; }
+  .feature-card .feat-source { color: #999; font-size: 0.8rem; }
+  .feature-card .feat-desc { margin-top: 0.25rem; font-size: 0.9rem; color: #ccc; }
   .review-scores { display: flex; gap: 1rem; flex-wrap: wrap; }
   .review-score { text-align: center; padding: 0.5rem; }
   .ability-label { display: block; font-weight: bold; font-size: 0.85rem; }

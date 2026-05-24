@@ -18,16 +18,38 @@ import (
 
 // mockDMCharCreateService implements the service interface for testing.
 type mockDMCharCreateService struct {
-	result portal.CreateCharacterResult
-	err    error
-	called bool
-	lastSub DMCharacterSubmission
+	result  portal.CreateCharacterResult
+	err     error
+	called  bool
+	lastSub portal.CharacterSubmission
 }
 
-func (m *mockDMCharCreateService) CreateCharacter(ctx context.Context, campaignID string, sub DMCharacterSubmission) (portal.CreateCharacterResult, error) {
+func (m *mockDMCharCreateService) CreateCharacterDM(ctx context.Context, campaignID string, sub portal.CharacterSubmission) (portal.CreateCharacterResult, error) {
 	m.called = true
 	m.lastSub = sub
 	return m.result, m.err
+}
+
+// mockFeatureProvider implements portal.FeatureProvider for handler tests.
+type mockFeatureProvider struct {
+	classFeatures    map[string]map[string][]character.Feature
+	subclassFeatures map[string]map[string]map[string][]character.Feature
+	racialTraits     map[string][]character.Feature
+}
+
+func (m *mockFeatureProvider) ClassFeatures() map[string]map[string][]character.Feature {
+	return m.classFeatures
+}
+
+func (m *mockFeatureProvider) SubclassFeatures() map[string]map[string]map[string][]character.Feature {
+	return m.subclassFeatures
+}
+
+func (m *mockFeatureProvider) RacialTraits(race string) []character.Feature {
+	if m.racialTraits == nil {
+		return nil
+	}
+	return m.racialTraits[race]
 }
 
 func TestCharCreateHandler_HandleCreate_RequiresAuth(t *testing.T) {
@@ -62,13 +84,13 @@ func TestCharCreateHandler_HandleCreate_Success(t *testing.T) {
 
 	sub := dmCreateRequest{
 		CampaignID: "campaign-1",
-		DMCharacterSubmission: DMCharacterSubmission{
+		CharacterSubmission: portal.CharacterSubmission{
 			Name: "Thorin",
 			Race: "Dwarf",
 			Classes: []character.ClassEntry{
 				{Class: "Fighter", Level: 5},
 			},
-			AbilityScores: character.AbilityScores{
+			AbilityScores: portal.PointBuyScores{
 				STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10,
 			},
 		},
@@ -99,13 +121,13 @@ func TestCharCreateHandler_HandleCreate_WithEquipmentAndSpells(t *testing.T) {
 
 	sub := dmCreateRequest{
 		CampaignID: "campaign-1",
-		DMCharacterSubmission: DMCharacterSubmission{
+		CharacterSubmission: portal.CharacterSubmission{
 			Name: "Elara",
 			Race: "Elf",
 			Classes: []character.ClassEntry{
 				{Class: "Wizard", Level: 1},
 			},
-			AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 12, CHA: 10},
+			AbilityScores: portal.PointBuyScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 12, CHA: 10},
 			Equipment:     []string{"quarterstaff"},
 			Spells:        []string{"fire-bolt", "shield"},
 			Languages:     []string{"Common", "Elvish"},
@@ -133,13 +155,13 @@ func TestCharCreateHandler_HandleCreate_ValidationError(t *testing.T) {
 
 	sub := dmCreateRequest{
 		CampaignID: "campaign-1",
-		DMCharacterSubmission: DMCharacterSubmission{
+		CharacterSubmission: portal.CharacterSubmission{
 			Name: "Thorin",
 			Race: "Dwarf",
 			Classes: []character.ClassEntry{
 				{Class: "Fighter", Level: 1},
 			},
-			AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+			AbilityScores: portal.PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 		},
 	}
 	body, _ := json.Marshal(sub)
@@ -160,13 +182,13 @@ func TestCharCreateHandler_HandleCreate_InternalError(t *testing.T) {
 
 	sub := dmCreateRequest{
 		CampaignID: "campaign-1",
-		DMCharacterSubmission: DMCharacterSubmission{
+		CharacterSubmission: portal.CharacterSubmission{
 			Name: "Thorin",
 			Race: "Dwarf",
 			Classes: []character.ClassEntry{
 				{Class: "Fighter", Level: 1},
 			},
-			AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+			AbilityScores: portal.PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 		},
 	}
 	body, _ := json.Marshal(sub)
@@ -203,13 +225,13 @@ func TestCharCreateHandler_HandlePreview_InvalidJSON(t *testing.T) {
 func TestCharCreateHandler_HandlePreview_ReturnsDerivedStats(t *testing.T) {
 	h := NewCharCreateHandler(nil, nil, nil)
 
-	sub := DMCharacterSubmission{
+	sub := portal.CharacterSubmission{
 		Name: "Thorin",
 		Race: "Dwarf",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 5},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: portal.PointBuyScores{
 			STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10,
 		},
 	}
@@ -222,7 +244,7 @@ func TestCharCreateHandler_HandlePreview_ReturnsDerivedStats(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var stats DMDerivedStats
+	var stats portal.DerivedStats
 	err := json.NewDecoder(rec.Body).Decode(&stats)
 	require.NoError(t, err)
 	assert.Equal(t, 44, stats.HPMax)
@@ -234,11 +256,11 @@ func TestCharCreateHandler_HandlePreview_ReturnsDerivedStats(t *testing.T) {
 func TestCharCreateHandler_HandlePreview_IncludesSpellSlots(t *testing.T) {
 	h := NewCharCreateHandler(nil, nil, nil)
 
-	sub := DMCharacterSubmission{
+	sub := portal.CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Wizard", Level: 3},
 		},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 16, WIS: 10, CHA: 10},
+		AbilityScores: portal.PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 16, WIS: 10, CHA: 10},
 	}
 	body, _ := json.Marshal(sub)
 	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters/preview", bytes.NewBuffer(body))
@@ -249,7 +271,7 @@ func TestCharCreateHandler_HandlePreview_IncludesSpellSlots(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var stats DMDerivedStats
+	var stats portal.DerivedStats
 	err := json.NewDecoder(rec.Body).Decode(&stats)
 	require.NoError(t, err)
 	assert.NotNil(t, stats.SpellSlots)
@@ -349,9 +371,9 @@ func TestCharCreateHandler_RegisterRoutes_PreviewEndpoint(t *testing.T) {
 	RegisterRoutes(r, h, mockAuthMiddleware)
 	ch.RegisterCharCreateRoutes(r.With(mockAuthMiddleware))
 
-	sub := DMCharacterSubmission{
-		Classes: []character.ClassEntry{{Class: "Fighter", Level: 1}},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+	sub := portal.CharacterSubmission{
+		Classes:       []character.ClassEntry{{Class: "Fighter", Level: 1}},
+		AbilityScores: portal.PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 	}
 	body, _ := json.Marshal(sub)
 	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters/preview", bytes.NewBuffer(body))
@@ -652,12 +674,12 @@ func TestCharCreateHandler_HandlePreview_IncludesFeatures(t *testing.T) {
 	h := NewCharCreateHandler(nil, nil, nil)
 	h.SetFeatureProvider(featureProvider)
 
-	sub := DMCharacterSubmission{
+	sub := portal.CharacterSubmission{
 		Race: "Human",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 2},
 		},
-		AbilityScores: character.AbilityScores{STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10},
+		AbilityScores: portal.PointBuyScores{STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10},
 	}
 	body, _ := json.Marshal(sub)
 	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters/preview", bytes.NewBuffer(body))
@@ -687,11 +709,11 @@ func TestCharCreateHandler_HandlePreview_IncludesFeatures(t *testing.T) {
 func TestCharCreateHandler_HandlePreview_NoFeatureProvider(t *testing.T) {
 	h := NewCharCreateHandler(nil, nil, nil)
 
-	sub := DMCharacterSubmission{
+	sub := portal.CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: portal.PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 	}
 	body, _ := json.Marshal(sub)
 	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters/preview", bytes.NewBuffer(body))
@@ -793,11 +815,11 @@ func TestCharCreateHandler_HandleCreate_ForbiddenWhenNotCampaignDM(t *testing.T)
 
 	sub := dmCreateRequest{
 		CampaignID: "campaign-B",
-		DMCharacterSubmission: DMCharacterSubmission{
-			Name: "Evil",
-			Race: "Elf",
-			Classes: []character.ClassEntry{{Class: "Rogue", Level: 1}},
-			AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		CharacterSubmission: portal.CharacterSubmission{
+			Name:          "Evil",
+			Race:          "Elf",
+			Classes:       []character.ClassEntry{{Class: "Rogue", Level: 1}},
+			AbilityScores: portal.PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 		},
 	}
 	body, _ := json.Marshal(sub)
@@ -838,4 +860,121 @@ func TestCharCreateHandler_HandleListRefSpells_Error(t *testing.T) {
 	h.HandleListRefSpells(rec, req)
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// mockAbilityMethodSvc adds the AllowedAbilityScoreMethods lister to the base
+// create-service mock so the ability-methods endpoint can be exercised.
+type mockAbilityMethodSvc struct {
+	mockDMCharCreateService
+	methods []portal.AbilityScoreMethod
+	err     error
+}
+
+func (m *mockAbilityMethodSvc) AllowedAbilityScoreMethods(_ context.Context, _ string) ([]portal.AbilityScoreMethod, error) {
+	return m.methods, m.err
+}
+
+func TestCharCreateHandler_HandleAbilityMethods_RequiresAuth(t *testing.T) {
+	h := NewCharCreateHandler(nil, &mockDMCharCreateService{}, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ability-methods", nil)
+	rec := httptest.NewRecorder()
+
+	h.HandleAbilityMethods(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestCharCreateHandler_HandleAbilityMethods_DefaultWhenNoLister(t *testing.T) {
+	// The base mock service does not implement the ability-method lister, so
+	// the handler falls back to the default generation methods.
+	h := NewCharCreateHandler(nil, &mockDMCharCreateService{}, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ability-methods", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleAbilityMethods(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var methods []portal.AbilityScoreMethod
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&methods))
+	assert.ElementsMatch(t, portal.DefaultAbilityScoreMethods(), methods)
+}
+
+func TestCharCreateHandler_HandleAbilityMethods_FromLister(t *testing.T) {
+	svc := &mockAbilityMethodSvc{methods: []portal.AbilityScoreMethod{portal.AbilityMethodPointBuy}}
+	h := NewCharCreateHandler(nil, svc, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ability-methods?campaign_id=c1", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleAbilityMethods(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var methods []portal.AbilityScoreMethod
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&methods))
+	assert.Equal(t, []portal.AbilityScoreMethod{portal.AbilityMethodPointBuy}, methods)
+}
+
+func TestCharCreateHandler_HandleAbilityMethods_ListerError(t *testing.T) {
+	svc := &mockAbilityMethodSvc{err: errors.New("settings unavailable")}
+	h := NewCharCreateHandler(nil, svc, nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/characters/ability-methods", nil)
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandleAbilityMethods(rec, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestCharCreateHandler_HandlePreview_UsesDBRaceSpeed(t *testing.T) {
+	// A DB race-speed map (built from refData) overrides the hardcoded table,
+	// so a homebrew Dwarf with speed 40 reports 40, not the SRD default 25.
+	mockRef := &mockRefDataForCreate{
+		races: []portal.RaceInfo{{ID: "dwarf", Name: "Dwarf", SpeedFt: 40}},
+	}
+	h := NewCharCreateHandler(nil, nil, mockRef)
+
+	sub := portal.CharacterSubmission{
+		Name:          "Thorin",
+		Race:          "Dwarf",
+		Classes:       []character.ClassEntry{{Class: "Fighter", Level: 1}},
+		AbilityScores: portal.PointBuyScores{STR: 15, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10},
+	}
+	body, _ := json.Marshal(sub)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters/preview", bytes.NewBuffer(body))
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandlePreview(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var stats portal.DerivedStats
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&stats))
+	assert.Equal(t, 40, stats.SpeedFt)
+}
+
+func TestCharCreateHandler_HandlePreview_RaceSpeedLookupError(t *testing.T) {
+	// When the race lookup fails the map is nil and derivation falls back to
+	// the hardcoded SRD table (Dwarf = 25).
+	mockRef := &mockRefDataForCreate{raceErr: errors.New("db error")}
+	h := NewCharCreateHandler(nil, nil, mockRef)
+
+	sub := portal.CharacterSubmission{
+		Name:          "Thorin",
+		Race:          "Dwarf",
+		Classes:       []character.ClassEntry{{Class: "Fighter", Level: 1}},
+		AbilityScores: portal.PointBuyScores{STR: 15, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10},
+	}
+	body, _ := json.Marshal(sub)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/characters/preview", bytes.NewBuffer(body))
+	req = req.WithContext(contextWithUser(req.Context(), "dm-user"))
+	rec := httptest.NewRecorder()
+
+	h.HandlePreview(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var stats portal.DerivedStats
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&stats))
+	assert.Equal(t, 25, stats.SpeedFt)
 }

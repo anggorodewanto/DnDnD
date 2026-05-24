@@ -40,10 +40,42 @@ type CharacterSubmission struct {
 	Equipment       []string               `json:"equipment,omitempty"`
 	Spells          []string               `json:"spells,omitempty"`
 	WeaponMasteries []string               `json:"weapon_masteries,omitempty"`
+	Languages       []string               `json:"languages,omitempty"`
+	EquippedWeapon  string                 `json:"equipped_weapon,omitempty"`
+	WornArmor       string                 `json:"worn_armor,omitempty"`
 }
 
-// ValidateSubmission returns a list of validation error messages.
+// CreateMode selects the character-creation workflow.
+//
+// ModePlayer is the self-serve portal flow: a token is validated and
+// redeemed, the player_character row is created "pending" for DM approval,
+// and the DM queue is notified.
+//
+// ModeDM is the dashboard flow: the DM creates the character directly with
+// no token, the player_character row is "approved" with no linked player
+// (a player claims it later via /register), and no DM-queue notification.
+type CreateMode int
+
+const (
+	ModePlayer CreateMode = iota
+	ModeDM
+)
+
+// ValidateSubmission returns a list of validation error messages using the
+// player-mode rules (ability scores must satisfy the chosen generation method,
+// defaulting to point-buy).
 func ValidateSubmission(s CharacterSubmission) []string {
+	return ValidateSubmissionMode(s, ModePlayer)
+}
+
+// ValidateSubmissionMode validates a submission for the given creation mode.
+//
+// Structural checks (name, race, class, multiclass entries) are identical for
+// both modes. Ability-score checks differ: player mode always enforces the
+// generation method (point-buy by default), while DM mode only range-checks
+// scores (1-30) and validates the method when one is explicitly chosen — DMs
+// build arbitrary stat blocks that need not satisfy point-buy.
+func ValidateSubmissionMode(s CharacterSubmission, mode CreateMode) []string {
 	var errs []string
 	if s.Name == "" {
 		errs = append(errs, "name is required")
@@ -51,11 +83,79 @@ func ValidateSubmission(s CharacterSubmission) []string {
 	if s.Race == "" {
 		errs = append(errs, "race is required")
 	}
-	if s.Class == "" {
+	if s.Class == "" && !hasNonEmptyClass(s.Classes) {
 		errs = append(errs, "class is required")
 	}
-	if err := ValidateAbilityScoreGeneration(s); err != nil {
-		errs = append(errs, err.Error())
+	errs = append(errs, validateClassEntries(s.Classes)...)
+	errs = append(errs, validateAbilityForMode(s, mode)...)
+	return errs
+}
+
+// hasNonEmptyClass reports whether any multiclass entry names a class.
+func hasNonEmptyClass(classes []character.ClassEntry) bool {
+	for _, c := range classes {
+		if c.Class != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// validateClassEntries checks the multiclass list: each entry must name a
+// class, levels must be at least 1, classes must be unique, and the combined
+// level cannot exceed 20. An empty list is valid (legacy single-class path).
+func validateClassEntries(classes []character.ClassEntry) []string {
+	if len(classes) == 0 {
+		return nil
+	}
+	var errs []string
+	totalLevel := 0
+	seen := make(map[string]bool, len(classes))
+	for i, c := range classes {
+		if c.Class == "" {
+			errs = append(errs, fmt.Sprintf("class entry %d: class name is required", i+1))
+		} else if seen[strings.ToLower(c.Class)] {
+			errs = append(errs, fmt.Sprintf("class entry %d: duplicate class %q", i+1, c.Class))
+		} else {
+			seen[strings.ToLower(c.Class)] = true
+		}
+		if c.Level < 1 {
+			errs = append(errs, fmt.Sprintf("class entry %d: level must be at least 1", i+1))
+		}
+		totalLevel += c.Level
+	}
+	if totalLevel > 20 {
+		errs = append(errs, "total level cannot exceed 20")
+	}
+	return errs
+}
+
+// validateAbilityForMode applies the mode-specific ability-score rules.
+func validateAbilityForMode(s CharacterSubmission, mode CreateMode) []string {
+	if mode == ModePlayer {
+		if err := ValidateAbilityScoreGeneration(s); err != nil {
+			return []string{err.Error()}
+		}
+		return nil
+	}
+
+	var errs []string
+	abilities := []struct {
+		name  string
+		value int
+	}{
+		{"STR", s.AbilityScores.STR}, {"DEX", s.AbilityScores.DEX}, {"CON", s.AbilityScores.CON},
+		{"INT", s.AbilityScores.INT}, {"WIS", s.AbilityScores.WIS}, {"CHA", s.AbilityScores.CHA},
+	}
+	for _, a := range abilities {
+		if a.value < 1 || a.value > 30 {
+			errs = append(errs, fmt.Sprintf("%s must be between 1 and 30", a.name))
+		}
+	}
+	if s.AbilityMethod != "" {
+		if err := ValidateAbilityScores(s.AbilityMethod, s.AbilityScores, s.AbilityRolls); err != nil {
+			errs = append(errs, err.Error())
+		}
 	}
 	return errs
 }
@@ -154,12 +254,41 @@ func WithAbilityMethodProvider(p AbilityMethodProvider) BuilderServiceOption {
 	}
 }
 
-// BuilderService handles character creation from the portal form.
+// WithFeatureProvider supplies class/subclass/racial features so created
+// characters (and previews) carry their feature list.
+func WithFeatureProvider(fp FeatureProvider) BuilderServiceOption {
+	return func(svc *BuilderService) {
+		svc.featureProvider = fp
+	}
+}
+
+// WithRaceSpeedLookup supplies a DB-backed race→speed map used by stat
+// derivation, overriding the hardcoded table.
+func WithRaceSpeedLookup(fn func(ctx context.Context) map[string]int) BuilderServiceOption {
+	return func(svc *BuilderService) {
+		svc.raceSpeedFn = fn
+	}
+}
+
+// BuilderService handles character creation for both the player portal and
+// the DM dashboard. The workflow is selected per call via CreateMode.
 type BuilderService struct {
-	store          BuilderStore
-	notifier       DMQueueNotifier
-	logger         *slog.Logger
-	abilityMethods AbilityMethodProvider
+	store           BuilderStore
+	notifier        DMQueueNotifier
+	logger          *slog.Logger
+	abilityMethods  AbilityMethodProvider
+	featureProvider FeatureProvider
+	raceSpeedFn     func(ctx context.Context) map[string]int
+}
+
+// SetFeatureProvider wires the feature provider after construction.
+func (svc *BuilderService) SetFeatureProvider(fp FeatureProvider) {
+	svc.featureProvider = fp
+}
+
+// SetRaceSpeedLookup wires the race→speed lookup after construction.
+func (svc *BuilderService) SetRaceSpeedLookup(fn func(ctx context.Context) map[string]int) {
+	svc.raceSpeedFn = fn
 }
 
 // NewBuilderService creates a new BuilderService.
@@ -171,39 +300,84 @@ func NewBuilderService(store BuilderStore, opts ...BuilderServiceOption) *Builde
 	return svc
 }
 
-// CreateCharacter validates the submission, calculates derived stats,
-// creates the character + player_character records, and redeems the token.
+// CreateCharacter runs the player-portal creation flow: it validates token
+// ownership, creates a "pending" character for DM approval, redeems the token,
+// and notifies the DM queue.
 func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, discordUserID, token string, sub CharacterSubmission) (CreateCharacterResult, error) {
-	errs := ValidateSubmission(sub)
-	if err := svc.validateAllowedAbilityMethod(ctx, campaignID, sub.AbilityMethod); err != nil {
+	return svc.create(ctx, createInput{
+		campaignID:    campaignID,
+		discordUserID: discordUserID,
+		token:         token,
+		sub:           sub,
+		mode:          ModePlayer,
+	})
+}
+
+// CreateCharacterDM runs the dashboard creation flow: the DM creates the
+// character directly (no token), pre-approved, with no linked player.
+func (svc *BuilderService) CreateCharacterDM(ctx context.Context, campaignID string, sub CharacterSubmission) (CreateCharacterResult, error) {
+	return svc.create(ctx, createInput{
+		campaignID: campaignID,
+		sub:        sub,
+		mode:       ModeDM,
+	})
+}
+
+// createInput bundles the per-call parameters for the unified creation core.
+type createInput struct {
+	campaignID    string
+	discordUserID string
+	token         string
+	sub           CharacterSubmission
+	mode          CreateMode
+}
+
+// create is the unified creation core shared by the player and DM flows.
+func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCharacterResult, error) {
+	sub := in.sub
+	if in.mode == ModeDM && sub.AbilityMethod == "" && svc.hasAbilityMethodProvider() {
+		sub.AbilityMethod = AbilityMethodPointBuy
+	}
+	// Back-fill the legacy single-class fields from the primary multiclass
+	// entry so the stored record always names a primary class even when the
+	// builder only sent the Classes array (the DM dashboard does this).
+	if sub.Class == "" {
+		if primary := primaryClassEntry(SubmissionClasses(sub)); primary != nil {
+			sub.Class = primary.Class
+			sub.Subclass = primary.Subclass
+		}
+	}
+
+	errs := ValidateSubmissionMode(sub, in.mode)
+	if err := svc.validateAllowedAbilityMethod(ctx, in.campaignID, sub.AbilityMethod); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if len(errs) > 0 {
 		return CreateCharacterResult{}, fmt.Errorf("validation failed: %s", strings.Join(errs, "; "))
 	}
 
-	scores := character.AbilityScores{
-		STR: sub.AbilityScores.STR,
-		DEX: sub.AbilityScores.DEX,
-		CON: sub.AbilityScores.CON,
-		INT: sub.AbilityScores.INT,
-		WIS: sub.AbilityScores.WIS,
-		CHA: sub.AbilityScores.CHA,
+	stats := DeriveStats(sub, svc.lookupRaceSpeeds(ctx))
+
+	var features []character.Feature
+	if svc.featureProvider != nil {
+		features = CollectFeatures(
+			SubmissionClasses(sub),
+			svc.featureProvider.ClassFeatures(),
+			svc.featureProvider.SubclassFeatures(),
+			svc.featureProvider.RacialTraits(sub.Race),
+		)
 	}
 
-	hp := DeriveHP(sub.Class, scores)
-	if len(sub.Classes) > 0 {
-		hp = DeriveHPMulticlass(sub.Classes, scores)
+	// Honour explicitly chosen skills (the builder UI lets the player/DM
+	// pick them); fall back to the class+background defaults when none were
+	// submitted so DM-created characters still get sensible proficiencies.
+	skills := sub.Skills
+	if len(skills) == 0 {
+		skills = append(classSkillProficiencies(SubmissionClasses(sub)), backgroundSkillProficiencies(sub.Background)...)
 	}
-	ac := DeriveAC(scores)
-	totalLevel := 1
-	if len(sub.Classes) > 0 {
-		totalLevel = character.TotalLevel(sub.Classes)
-	}
-	profBonus := character.ProficiencyBonus(totalLevel)
 
 	charParams := CreateCharacterParams{
-		CampaignID:      campaignID,
+		CampaignID:      in.campaignID,
 		Name:            sub.Name,
 		Race:            sub.Race,
 		Subrace:         sub.Subrace,
@@ -211,24 +385,31 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 		Subclass:        sub.Subclass,
 		Classes:         sub.Classes,
 		Background:      sub.Background,
-		AbilityScores:   scores,
-		HPMax:           hp,
-		AC:              ac,
-		SpeedFt:         DeriveSpeed(sub.Race),
-		ProfBonus:       profBonus,
-		Skills:          sub.Skills,
+		AbilityScores:   sub.AbilityScores.Character(),
+		HPMax:           stats.HPMax,
+		AC:              stats.AC,
+		SpeedFt:         stats.SpeedFt,
+		ProfBonus:       stats.ProficiencyBonus,
+		Skills:          skills,
+		Saves:           stats.SaveProficiencies,
 		Equipment:       sub.Equipment,
 		Spells:          sub.Spells,
 		WeaponMasteries: sub.WeaponMasteries,
+		Languages:       sub.Languages,
+		Features:        features,
+		EquippedWeapon:  sub.EquippedWeapon,
+		WornArmor:       sub.WornArmor,
 	}
 
-	// Validate token ownership before creating character.
-	tok, err := svc.store.ValidateToken(ctx, token)
-	if err != nil {
-		return CreateCharacterResult{}, fmt.Errorf("validating token: %w", err)
-	}
-	if tok != nil && tok.DiscordUserID != discordUserID {
-		return CreateCharacterResult{}, ErrTokenOwnership
+	if in.mode == ModePlayer {
+		// Validate token ownership before creating character.
+		tok, err := svc.store.ValidateToken(ctx, in.token)
+		if err != nil {
+			return CreateCharacterResult{}, fmt.Errorf("validating token: %w", err)
+		}
+		if tok != nil && tok.DiscordUserID != in.discordUserID {
+			return CreateCharacterResult{}, ErrTokenOwnership
+		}
 	}
 
 	charID, err := svc.store.CreateCharacterRecord(ctx, charParams)
@@ -236,27 +417,22 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 		return CreateCharacterResult{}, fmt.Errorf("creating character: %w", err)
 	}
 
-	// Redeem token AFTER character creation succeeds to avoid consuming
-	// the token when creation fails (H-M06).
-	if err := svc.store.RedeemToken(ctx, token); err != nil {
-		return CreateCharacterResult{}, fmt.Errorf("redeeming token: %w", err)
+	if in.mode == ModePlayer {
+		// Redeem token AFTER character creation succeeds to avoid consuming
+		// the token when creation fails (H-M06).
+		if err := svc.store.RedeemToken(ctx, in.token); err != nil {
+			return CreateCharacterResult{}, fmt.Errorf("redeeming token: %w", err)
+		}
 	}
 
-	pcParams := CreatePlayerCharacterParams{
-		CampaignID:    campaignID,
-		CharacterID:   charID,
-		DiscordUserID: discordUserID,
-		Status:        "pending",
-		CreatedVia:    "create",
-	}
-
+	pcParams := playerCharacterParams(in, charID)
 	pcID, err := svc.store.CreatePlayerCharacterRecord(ctx, pcParams)
 	if err != nil {
 		return CreateCharacterResult{}, fmt.Errorf("creating player character: %w", err)
 	}
 
-	if svc.notifier != nil {
-		if err := svc.notifier.NotifyDMQueue(ctx, sub.Name, discordUserID, "portal-create"); err != nil && svc.logger != nil {
+	if in.mode == ModePlayer && svc.notifier != nil {
+		if err := svc.notifier.NotifyDMQueue(ctx, sub.Name, in.discordUserID, "portal-create"); err != nil && svc.logger != nil {
 			svc.logger.Warn("notifying dm queue", "error", err)
 		}
 	}
@@ -265,6 +441,60 @@ func (svc *BuilderService) CreateCharacter(ctx context.Context, campaignID, disc
 		CharacterID:       charID,
 		PlayerCharacterID: pcID,
 	}, nil
+}
+
+// playerCharacterParams builds the player_characters row for the given mode.
+// Player submissions are "pending" and linked to the submitter; DM creations
+// are "approved" with no linked player (claimed later via /register).
+func playerCharacterParams(in createInput, charID string) CreatePlayerCharacterParams {
+	if in.mode == ModeDM {
+		return CreatePlayerCharacterParams{
+			CampaignID:  in.campaignID,
+			CharacterID: charID,
+			Status:      "approved",
+			CreatedVia:  "dm_dashboard",
+		}
+	}
+	return CreatePlayerCharacterParams{
+		CampaignID:    in.campaignID,
+		CharacterID:   charID,
+		DiscordUserID: in.discordUserID,
+		Status:        "pending",
+		CreatedVia:    "create",
+	}
+}
+
+// Preview computes derived stats (and features, when a provider is wired)
+// for a submission without persisting anything. It is shared by the player
+// portal and DM dashboard preview endpoints.
+func (svc *BuilderService) Preview(ctx context.Context, sub CharacterSubmission) DerivedStats {
+	stats := DeriveStats(sub, svc.lookupRaceSpeeds(ctx))
+	if svc.featureProvider != nil {
+		stats.Features = CollectFeatures(
+			SubmissionClasses(sub),
+			svc.featureProvider.ClassFeatures(),
+			svc.featureProvider.SubclassFeatures(),
+			svc.featureProvider.RacialTraits(sub.Race),
+		)
+	}
+	return stats
+}
+
+// hasAbilityMethodProvider reports whether an ability-method provider is wired.
+func (svc *BuilderService) hasAbilityMethodProvider() bool {
+	if svc.abilityMethods != nil {
+		return true
+	}
+	_, ok := svc.store.(AbilityMethodProvider)
+	return ok
+}
+
+// lookupRaceSpeeds returns the DB race→speed map, or nil when unavailable.
+func (svc *BuilderService) lookupRaceSpeeds(ctx context.Context) map[string]int {
+	if svc.raceSpeedFn == nil {
+		return nil
+	}
+	return svc.raceSpeedFn(ctx)
 }
 
 func (svc *BuilderService) validateAllowedAbilityMethod(ctx context.Context, campaignID string, method AbilityScoreMethod) error {
@@ -349,6 +579,18 @@ func AbilityScoreMethodsFromSettings(raw json.RawMessage) []AbilityScoreMethod {
 		return DefaultAbilityScoreMethods()
 	}
 	return settings.AbilityScoreMethods
+}
+
+// Character converts the creation score shape to character.AbilityScores.
+func (s PointBuyScores) Character() character.AbilityScores {
+	return character.AbilityScores{
+		STR: s.STR,
+		DEX: s.DEX,
+		CON: s.CON,
+		INT: s.INT,
+		WIS: s.WIS,
+		CHA: s.CHA,
+	}
 }
 
 // PointBuyScoresFromCharacter converts character scores to the creation score shape.

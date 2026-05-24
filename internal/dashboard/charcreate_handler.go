@@ -13,9 +13,11 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// CharCreateServicer is the interface for character creation.
+// CharCreateServicer is the interface for DM character creation. It is
+// satisfied by *portal.BuilderService — the single creation core shared with
+// the player portal.
 type CharCreateServicer interface {
-	CreateCharacter(ctx context.Context, campaignID string, sub DMCharacterSubmission) (portal.CreateCharacterResult, error)
+	CreateCharacterDM(ctx context.Context, campaignID string, sub portal.CharacterSubmission) (portal.CreateCharacterResult, error)
 }
 
 type abilityMethodLister interface {
@@ -35,7 +37,7 @@ type CharCreateHandler struct {
 	logger          *slog.Logger
 	svc             CharCreateServicer
 	refData         RefDataForCreate
-	featureProvider FeatureProvider
+	featureProvider portal.FeatureProvider
 	dmVerifier      DMVerifier
 }
 
@@ -45,7 +47,7 @@ func (h *CharCreateHandler) SetDMVerifier(v DMVerifier) {
 }
 
 // SetFeatureProvider sets the feature provider for preview/features endpoints.
-func (h *CharCreateHandler) SetFeatureProvider(fp FeatureProvider) {
+func (h *CharCreateHandler) SetFeatureProvider(fp portal.FeatureProvider) {
 	h.featureProvider = fp
 }
 
@@ -80,7 +82,7 @@ func (h *CharCreateHandler) RegisterCharCreateRoutes(r chi.Router) {
 // dmCreateRequest is the JSON body for DM character creation.
 type dmCreateRequest struct {
 	CampaignID string `json:"campaign_id"`
-	DMCharacterSubmission
+	portal.CharacterSubmission
 }
 
 // HandleCreate creates a new DM character.
@@ -105,7 +107,7 @@ func (h *CharCreateHandler) HandleCreate(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	result, err := h.svc.CreateCharacter(r.Context(), req.CampaignID, req.DMCharacterSubmission)
+	result, err := h.svc.CreateCharacterDM(r.Context(), req.CampaignID, req.CharacterSubmission)
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "validation") {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -129,16 +131,16 @@ func (h *CharCreateHandler) HandlePreview(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var sub DMCharacterSubmission
+	var sub portal.CharacterSubmission
 	if err := json.NewDecoder(r.Body).Decode(&sub); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	stats := DeriveDMStats(sub, h.buildRaceSpeedMap(r.Context()))
+	stats := portal.DeriveStats(sub, h.buildRaceSpeedMap(r.Context()))
 	if h.featureProvider != nil {
-		stats.Features = CollectFeatures(
-			sub.Classes,
+		stats.Features = portal.CollectFeatures(
+			portal.SubmissionClasses(sub),
 			h.featureProvider.ClassFeatures(),
 			h.featureProvider.SubclassFeatures(),
 			h.featureProvider.RacialTraits(sub.Race),

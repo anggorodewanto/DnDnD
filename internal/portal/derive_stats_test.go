@@ -1,4 +1,4 @@
-package dashboard
+package portal
 
 import (
 	"encoding/json"
@@ -10,139 +10,139 @@ import (
 )
 
 func TestValidateDMSubmission_ValidInput(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Name:       "Thorin",
 		Race:       "Dwarf",
 		Background: "Soldier",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 5},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10,
 		},
 	}
-	errs := ValidateDMSubmission(sub)
+	errs := ValidateSubmissionMode(sub, ModeDM)
 	assert.Empty(t, errs)
 }
 
 func TestValidateDMSubmission_MissingName(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Race: "Dwarf",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 	}
-	errs := ValidateDMSubmission(sub)
+	errs := ValidateSubmissionMode(sub, ModeDM)
 	assert.Contains(t, errs, "name is required")
 }
 
 func TestValidateDMSubmission_MissingRace(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Name: "Thorin",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 	}
-	errs := ValidateDMSubmission(sub)
+	errs := ValidateSubmissionMode(sub, ModeDM)
 	assert.Contains(t, errs, "race is required")
 }
 
 func TestValidateDMSubmission_NoClasses(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Name:          "Thorin",
 		Race:          "Dwarf",
 		Classes:       []character.ClassEntry{},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 	}
-	errs := ValidateDMSubmission(sub)
-	assert.Contains(t, errs, "at least one class is required")
+	errs := ValidateSubmissionMode(sub, ModeDM)
+	assert.Contains(t, errs, "class is required")
 }
 
 func TestValidateDMSubmission_ClassLevelZero(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Name: "Thorin",
 		Race: "Dwarf",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 0},
 		},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 	}
-	errs := ValidateDMSubmission(sub)
+	errs := ValidateSubmissionMode(sub, ModeDM)
 	assert.Contains(t, errs, "class entry 1: level must be at least 1")
 }
 
 func TestValidateDMSubmission_ClassNameEmpty(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Name: "Thorin",
 		Race: "Dwarf",
 		Classes: []character.ClassEntry{
 			{Class: "", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 	}
-	errs := ValidateDMSubmission(sub)
+	errs := ValidateSubmissionMode(sub, ModeDM)
 	assert.Contains(t, errs, "class entry 1: class name is required")
 }
 
 func TestValidateDMSubmission_AbilityScoreTooLow(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Name: "Thorin",
 		Race: "Dwarf",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{STR: 0, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 0, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 	}
-	errs := ValidateDMSubmission(sub)
+	errs := ValidateSubmissionMode(sub, ModeDM)
 	assert.Contains(t, errs, "STR must be between 1 and 30")
 }
 
 func TestValidateDMSubmission_AbilityScoreTooHigh(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Name: "Thorin",
 		Race: "Dwarf",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 31, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 10, DEX: 31, CON: 10, INT: 10, WIS: 10, CHA: 10},
 	}
-	errs := ValidateDMSubmission(sub)
+	errs := ValidateSubmissionMode(sub, ModeDM)
 	assert.Contains(t, errs, "DEX must be between 1 and 30")
 }
 
 func TestValidateDMSubmission_TotalLevelOver20(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Name: "Thorin",
 		Race: "Dwarf",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 15},
 			{Class: "Rogue", Level: 10},
 		},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 	}
-	errs := ValidateDMSubmission(sub)
+	errs := ValidateSubmissionMode(sub, ModeDM)
 	assert.Contains(t, errs, "total level cannot exceed 20")
 }
 
 func TestValidateDMSubmission_MultipleErrors(t *testing.T) {
-	sub := DMCharacterSubmission{}
-	errs := ValidateDMSubmission(sub)
+	sub := CharacterSubmission{}
+	errs := ValidateSubmissionMode(sub, ModeDM)
 	assert.True(t, len(errs) >= 3, "should have multiple errors, got %d", len(errs))
 }
 
 func TestDeriveDMStats_SingleClassFighter(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Race: "Human",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 5},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	// Fighter d10: level 1 = 10, levels 2-5 = 4 * 6 = 24. Total = 34 + CON(+2)*5 = 44
 	assert.Equal(t, 44, stats.HPMax)
@@ -157,58 +157,58 @@ func TestDeriveDMStats_SingleClassFighter(t *testing.T) {
 }
 
 func TestDeriveDMStats_DwarfSpeed(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Race: "Dwarf",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 14, DEX: 10, CON: 14, INT: 10, WIS: 10, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 	assert.Equal(t, 25, stats.SpeedFt)
 }
 
 func TestDeriveDMStats_WoodElfSpeed(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Race: "Wood Elf",
 		Classes: []character.ClassEntry{
 			{Class: "Ranger", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 10, DEX: 16, CON: 10, INT: 10, WIS: 14, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 	assert.Equal(t, 35, stats.SpeedFt)
 }
 
 func TestDeriveDMStats_UnknownRaceDefaultsTo30(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Race: "Homebrew Race",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 	assert.Equal(t, 30, stats.SpeedFt)
 }
 
 func TestDeriveDMStats_MulticlassFighterRogue(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 5},
 			{Class: "Rogue", Level: 3},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 14, DEX: 16, CON: 12, INT: 10, WIS: 10, CHA: 8,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	// Fighter d10: level 1 = 10, levels 2-5 = 4*6 = 24
 	// Rogue d8: 3*5 = 15
@@ -220,15 +220,15 @@ func TestDeriveDMStats_MulticlassFighterRogue(t *testing.T) {
 }
 
 func TestDeriveDMStats_SavingThrows(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	// Fighter saves: STR and CON
 	assert.Contains(t, stats.SaveProficiencies, "str")
@@ -237,15 +237,15 @@ func TestDeriveDMStats_SavingThrows(t *testing.T) {
 }
 
 func TestDeriveDMStats_SavingThrowValues(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	// STR save: +3 mod + 2 prof = +5
 	assert.Equal(t, 5, stats.Saves["str"])
@@ -256,27 +256,27 @@ func TestDeriveDMStats_SavingThrowValues(t *testing.T) {
 }
 
 func TestDeriveDMStats_WizardSaves(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Wizard", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 12, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	assert.Contains(t, stats.SaveProficiencies, "int")
 	assert.Contains(t, stats.SaveProficiencies, "wis")
 }
 
 func TestDeriveDMStats_EmptyClasses(t *testing.T) {
-	sub := DMCharacterSubmission{
-		AbilityScores: character.AbilityScores{
+	sub := CharacterSubmission{
+		AbilityScores: PointBuyScores{
 			STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 	assert.Equal(t, 0, stats.HPMax)
 	assert.Equal(t, 10, stats.AC)
 	assert.Equal(t, 0, stats.TotalLevel)
@@ -365,7 +365,7 @@ func TestRaceSpeed(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.race, func(t *testing.T) {
-			assert.Equal(t, tc.speed, raceSpeed(tc.race))
+			assert.Equal(t, tc.speed, raceSpeedWithLookup(tc.race, nil))
 		})
 	}
 }
@@ -381,13 +381,13 @@ func TestClassSaveProficiencies_EmptyClasses(t *testing.T) {
 }
 
 func TestDMCharacterSubmission_HasEquipmentSpellsLanguages(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Name: "Thorin",
 		Race: "Dwarf",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 		Equipment:     []string{"longsword", "chain-mail", "shield"},
 		Spells:        []string{"fire-bolt", "shield"},
 		Languages:     []string{"Common", "Dwarvish"},
@@ -399,7 +399,7 @@ func TestDMCharacterSubmission_HasEquipmentSpellsLanguages(t *testing.T) {
 	// JSON round-trip
 	data, err := json.Marshal(sub)
 	require.NoError(t, err)
-	var decoded DMCharacterSubmission
+	var decoded CharacterSubmission
 	require.NoError(t, json.Unmarshal(data, &decoded))
 	assert.Equal(t, sub.Equipment, decoded.Equipment)
 	assert.Equal(t, sub.Spells, decoded.Spells)
@@ -470,7 +470,7 @@ func TestCollectFeatures_MulticlassWithRacialTraits(t *testing.T) {
 
 	features := CollectFeatures(classes, classFeatures, subclassFeatures, racialTraits)
 
-	assert.Len(t, features, 4) // Darkvision, Fighting Style, Action Surge, Arcane Recovery
+	assert.Len(t, features, 4)                      // Darkvision, Fighting Style, Action Surge, Arcane Recovery
 	assert.Equal(t, "Darkvision", features[0].Name) // racial traits first
 }
 
@@ -580,85 +580,85 @@ func TestClassSpellcasting_ArcaneTrickster(t *testing.T) {
 }
 
 func TestDeriveDMStats_WornArmorAffectsAC(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Race: "Human",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10,
 		},
 		WornArmor: "chain-mail",
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 	// Chain mail: AC 16, no DEX bonus
 	assert.Equal(t, 16, stats.AC)
 }
 
 func TestDeriveDMStats_WornArmorWithShieldAffectsAC(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Race: "Human",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10,
 		},
-		WornArmor:       "chain-mail",
-		EquippedWeapon:  "longsword",
+		WornArmor:      "chain-mail",
+		EquippedWeapon: "longsword",
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 	// Chain mail: AC 16, no shield
 	assert.Equal(t, 16, stats.AC)
 }
 
 func TestDeriveDMStats_LeatherArmorWithDex(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Race: "Human",
 		Classes: []character.ClassEntry{
 			{Class: "Rogue", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 10, DEX: 16, CON: 12, INT: 10, WIS: 10, CHA: 10,
 		},
 		WornArmor: "leather",
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 	// Leather: AC 11 + DEX(+3) = 14
 	assert.Equal(t, 14, stats.AC)
 }
 
 func TestDeriveDMStats_ShieldInEquipmentAddsAC(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Race: "Human",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 16, DEX: 14, CON: 14, INT: 10, WIS: 10, CHA: 10,
 		},
 		WornArmor: "chain-mail",
 		Equipment: []string{"chain-mail", "shield", "longsword"},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 	// Chain mail 16 + shield 2 = 18
 	assert.Equal(t, 18, stats.AC)
 }
 
 func TestDMCharacterSubmission_EquippedWeaponWornArmor_JSON(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Name: "Test",
 		Race: "Human",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores:  character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores:  PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10},
 		EquippedWeapon: "longsword",
 		WornArmor:      "chain-mail",
 	}
 	data, err := json.Marshal(sub)
 	require.NoError(t, err)
-	var decoded DMCharacterSubmission
+	var decoded CharacterSubmission
 	require.NoError(t, json.Unmarshal(data, &decoded))
 	assert.Equal(t, "longsword", decoded.EquippedWeapon)
 	assert.Equal(t, "chain-mail", decoded.WornArmor)
@@ -735,15 +735,15 @@ func TestMaxSpellLevelForClasses_Wizard5(t *testing.T) {
 }
 
 func TestDeriveDMStats_SkillModifiers_FighterProficiencies(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 8, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	// Skills field should be populated with all 18 skills
 	assert.Len(t, stats.Skills, 18)
@@ -763,15 +763,15 @@ func TestDeriveDMStats_SkillModifiers_FighterProficiencies(t *testing.T) {
 }
 
 func TestDeriveDMStats_SkillModifiers_AllSkillsPresent(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Wizard", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	expectedSkills := []string{
 		"acrobatics", "animal-handling", "arcana", "athletics",
@@ -787,15 +787,15 @@ func TestDeriveDMStats_SkillModifiers_AllSkillsPresent(t *testing.T) {
 }
 
 func TestDeriveDMStats_SkillModifiers_WithClassProficiency(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Rogue", Level: 5},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 10, DEX: 16, CON: 10, INT: 10, WIS: 10, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	// Rogue has proficiency in stealth (DEX-based)
 	// DEX mod(+3) + prof bonus(+3) = +6
@@ -807,35 +807,35 @@ func TestDeriveDMStats_SkillModifiers_WithClassProficiency(t *testing.T) {
 }
 
 func TestDeriveDMStats_MaxSpellLevel_Wizard3(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Wizard", Level: 3},
 		},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 16, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 16, WIS: 10, CHA: 10},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 	assert.Equal(t, 2, stats.MaxSpellLevel)
 }
 
 func TestDeriveDMStats_MaxSpellLevel_Fighter5(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 5},
 		},
-		AbilityScores: character.AbilityScores{STR: 16, DEX: 10, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 16, DEX: 10, CON: 14, INT: 10, WIS: 10, CHA: 10},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 	assert.Equal(t, 0, stats.MaxSpellLevel)
 }
 
 func TestDeriveDMStats_SpellSlots_FullCasterWizard(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Wizard", Level: 3},
 		},
-		AbilityScores: character.AbilityScores{STR: 10, DEX: 10, CON: 10, INT: 16, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 10, DEX: 10, CON: 10, INT: 16, WIS: 10, CHA: 10},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	// Wizard is a full caster, level 3 => caster level 3
 	// Spell slots: {1:4, 2:2}
@@ -845,25 +845,25 @@ func TestDeriveDMStats_SpellSlots_FullCasterWizard(t *testing.T) {
 }
 
 func TestDeriveDMStats_SpellSlots_NonCasterFighter(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 5},
 		},
-		AbilityScores: character.AbilityScores{STR: 16, DEX: 10, CON: 14, INT: 10, WIS: 10, CHA: 10},
+		AbilityScores: PointBuyScores{STR: 16, DEX: 10, CON: 14, INT: 10, WIS: 10, CHA: 10},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 	assert.Nil(t, stats.SpellSlots)
 }
 
 func TestDeriveDMStats_SpellSlots_MulticlassHalfCaster(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Paladin", Level: 4},
 			{Class: "Fighter", Level: 2},
 		},
-		AbilityScores: character.AbilityScores{STR: 16, DEX: 10, CON: 14, INT: 10, WIS: 10, CHA: 14},
+		AbilityScores: PointBuyScores{STR: 16, DEX: 10, CON: 14, INT: 10, WIS: 10, CHA: 14},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	// Paladin half-caster level 4 => caster level 2, Fighter none => total caster level 2
 	require.NotNil(t, stats.SpellSlots)
@@ -911,33 +911,33 @@ func TestClassSpellcastingMap_FiltersNonCasters(t *testing.T) {
 }
 
 func TestDeriveDMStats_HitDiceRemaining(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 5},
 			{Class: "Rogue", Level: 3},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	assert.Equal(t, 5, stats.HitDiceRemaining["Fighter"])
 	assert.Equal(t, 3, stats.HitDiceRemaining["Rogue"])
 }
 
 func TestDeriveDMStats_BackgroundSkillProficiencies_Acolyte(t *testing.T) {
-	sub := DMCharacterSubmission{
+	sub := CharacterSubmission{
 		Race:       "Human",
 		Background: "Acolyte",
 		Classes: []character.ClassEntry{
 			{Class: "Fighter", Level: 1},
 		},
-		AbilityScores: character.AbilityScores{
+		AbilityScores: PointBuyScores{
 			STR: 16, DEX: 12, CON: 14, INT: 10, WIS: 14, CHA: 10,
 		},
 	}
-	stats := DeriveDMStats(sub)
+	stats := DeriveStats(sub, nil)
 
 	// Fighter class skills: athletics, perception
 	// Acolyte background skills: insight, religion
