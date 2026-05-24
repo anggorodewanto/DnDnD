@@ -92,7 +92,7 @@ func (b *Bot) trackAndRegister(guildID string) error {
 // It registers commands for the guild and tracks it.
 func (b *Bot) HandleGuildCreate(_ *discordgo.Session, event *discordgo.GuildCreate) {
 	b.logger.Info("guild create event", "guild_id", event.Guild.ID)
-	b.ValidateGuildPermissions(event.Guild.ID, event.Guild.Permissions)
+	b.ValidateGuildPermissionsFromGuild(event.Guild)
 	b.trackAndRegister(event.Guild.ID)
 }
 
@@ -106,6 +106,17 @@ func (b *Bot) RegisterAllGuilds(guildIDs []string) []error {
 		}
 	}
 	return errs
+}
+
+// ValidateGuildPermissionsFromGuild computes the bot's effective permissions
+// from the guild's role data (the gateway/state Permissions field is not
+// populated for bots) and warns about any missing required permissions.
+func (b *Bot) ValidateGuildPermissionsFromGuild(guild *discordgo.Guild) {
+	perms, ok := guildPermissionsFor(guild, b.appID)
+	if !ok {
+		return
+	}
+	b.ValidateGuildPermissions(guild.ID, perms)
 }
 
 // ValidateGuildPermissions checks whether the bot has all required permissions

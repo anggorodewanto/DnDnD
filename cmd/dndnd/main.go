@@ -1646,7 +1646,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 					guildIDs := make([]string, 0, len(state.Guilds))
 					for _, g := range state.Guilds {
 						guildIDs = append(guildIDs, g.ID)
-						bot.ValidateGuildPermissions(g.ID, g.Permissions)
+						bot.ValidateGuildPermissionsFromGuild(g)
 					}
 					if errs := bot.RegisterAllGuilds(guildIDs); len(errs) > 0 {
 						logger.Warn("some guild command registrations failed", "count", len(errs))
