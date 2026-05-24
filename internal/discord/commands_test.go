@@ -89,7 +89,7 @@ func TestCommandDefinitions_ParameterHints(t *testing.T) {
 		{"attune", "item", discordgo.ApplicationCommandOptionString, true},
 		{"unattune", "item", discordgo.ApplicationCommandOptionString, true},
 		{"retire", "reason", discordgo.ApplicationCommandOptionString, false},
-		{"register", "name", discordgo.ApplicationCommandOptionString, true},
+		{"register", "name", discordgo.ApplicationCommandOptionString, false},
 		{"import", "ddb-url", discordgo.ApplicationCommandOptionString, true},
 		{"recap", "rounds", discordgo.ApplicationCommandOptionInteger, false},
 		{"distance", "target", discordgo.ApplicationCommandOptionString, true},

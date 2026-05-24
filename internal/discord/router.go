@@ -43,6 +43,11 @@ type CommandRouter struct {
 	lootHandler *LootHandler
 	asiHandler  *ASIHandler
 	promptStore *ReactionPromptStore
+	// Registration handlers, wired only when regDeps is provided. They back
+	// the /register onboarding chooser's button and modal-submit routing.
+	registerHandler   *RegisterHandler
+	importHandler     *ImportHandler
+	createCharHandler *CreateCharacterHandler
 	// recorder persists panics and other surfaced errors for the DM
 	// dashboard badge / error panel. nil == log-only (still safe).
 	recorder errorlog.Recorder
@@ -295,13 +300,17 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 			r.handlers[name] = NewStatusAwareStubHandler(bot.session, name, deps.RegService, deps.CampaignProv, deps.NameResolver)
 		}
 
-		// Wire registration commands to real handlers.
-		r.handlers["register"] = NewRegisterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.DMQueueFunc, deps.DMUserFunc)
+		// Wire registration commands to real handlers. Typed references are
+		// retained so component (button) and modal-submit interactions from
+		// the /register chooser route back to the same handlers.
+		r.registerHandler = NewRegisterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.DMQueueFunc, deps.DMUserFunc)
+		r.handlers["register"] = r.registerHandler
 		var importOpts []ImportHandlerOption
 		if deps.DDBImporter != nil {
 			importOpts = append(importOpts, WithDDBImporter(deps.DDBImporter))
 		}
-		r.handlers["import"] = NewImportHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc, importOpts...)
+		r.importHandler = NewImportHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc, importOpts...)
+		r.handlers["import"] = r.importHandler
 		if deps.TokenFunc == nil {
 			panic("RegistrationDeps.TokenFunc is required")
 		}
@@ -309,7 +318,8 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 		if deps.PortalBaseURL != "" {
 			createOpts = append(createOpts, WithCreateCharacterPortalBaseURL(deps.PortalBaseURL))
 		}
-		r.handlers["create-character"] = NewCreateCharacterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc, deps.TokenFunc, createOpts...)
+		r.createCharHandler = NewCreateCharacterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc, deps.TokenFunc, createOpts...)
+		r.handlers["create-character"] = r.createCharHandler
 	} else {
 		// Fallback: all stubs.
 		for _, name := range gameCommands {
@@ -339,6 +349,11 @@ func (r *CommandRouter) Handle(interaction *discordgo.Interaction) {
 
 	if interaction.Type == discordgo.InteractionMessageComponent {
 		r.handleComponent(interaction)
+		return
+	}
+
+	if interaction.Type == discordgo.InteractionModalSubmit {
+		r.handleModalSubmit(interaction)
 		return
 	}
 
@@ -376,6 +391,8 @@ func (r *CommandRouter) commandNameFor(interaction *discordgo.Interaction) strin
 	case discordgo.ApplicationCommandInteractionData:
 		return data.Name
 	case discordgo.MessageComponentInteractionData:
+		return componentCommandName(data.CustomID)
+	case discordgo.ModalSubmitInteractionData:
 		return componentCommandName(data.CustomID)
 	}
 	return ""
@@ -451,6 +468,27 @@ func (r *CommandRouter) recordHandlerError(interaction *discordgo.Interaction, c
 func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 	data := interaction.Data.(discordgo.MessageComponentInteractionData)
 	customID := data.CustomID
+
+	// Registration chooser buttons (/register with no name). Build runs the
+	// create-character flow directly; claim/import open a modal to collect
+	// the name / URL before running their flow.
+	switch customID {
+	case regChoiceClaim:
+		if r.registerHandler != nil {
+			r.registerHandler.ShowClaimModal(interaction)
+		}
+		return
+	case regChoiceBuild:
+		if r.createCharHandler != nil {
+			r.createCharHandler.Handle(interaction)
+		}
+		return
+	case regChoiceImport:
+		if r.importHandler != nil {
+			r.importHandler.ShowImportModal(interaction)
+		}
+		return
+	}
 
 	// Reaction-prompt store callbacks (counterspell, metamagic, stunning
 	// strike, smite, uncanny dodge, bardic inspiration usage). Owns the
@@ -605,6 +643,25 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 		if strings.HasPrefix(customID, "fly_cancel:") {
 			r.flyHandler.HandleFlyCancel(interaction)
 			return
+		}
+	}
+}
+
+// handleModalSubmit routes modal-submit interactions from the /register
+// chooser back to the registration handlers.
+func (r *CommandRouter) handleModalSubmit(interaction *discordgo.Interaction) {
+	data, ok := interaction.Data.(discordgo.ModalSubmitInteractionData)
+	if !ok {
+		return
+	}
+	switch data.CustomID {
+	case regModalClaim:
+		if r.registerHandler != nil {
+			r.registerHandler.HandleClaimSubmit(interaction)
+		}
+	case regModalImport:
+		if r.importHandler != nil {
+			r.importHandler.HandleImportSubmit(interaction)
 		}
 	}
 }

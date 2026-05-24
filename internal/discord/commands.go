@@ -551,13 +551,12 @@ func CommandDefinitions() []*discordgo.ApplicationCommand {
 		// --- Character Management (existing) ---
 		{
 			Name:        "register",
-			Description: "Link to a character your DM already created",
+			Description: "Get a character — claim, build, or import (run with no name to choose)",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "name",
-					Description: "Character name",
-					Required:    true,
+					Description: "Name of a character your DM already created (leave blank to choose how)",
 				},
 			},
 		},

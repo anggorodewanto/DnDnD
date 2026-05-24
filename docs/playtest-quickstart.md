@@ -123,22 +123,29 @@ The bot creates the campaign channel structure (`#the-story`, `#combat-log`,
 `#dm-private`, etc.). This requires `Manage Channels` on the bot — the invite
 URL above already grants it.
 
-Then, as the DM, create the character record. Open
-http://localhost:8080/dashboard/app/#characters-new in a browser and fill
-in name (e.g. `Aria`), class, race, and background. Save.
-
-Now, as a player on the server, claim the character:
+A player gets a character in one of three ways, and `/register` now
+surfaces all of them. As a player on the server, run it with no argument:
 
 ```
-/register name:Aria
+/register
 ```
 
-`/register` only takes `name` — it links the invoking Discord user to a
-character the DM has already created. (`/create-character` is the
-alternative path that opens the web character builder, but that flow needs
-a public portal URL — out of scope for a localhost playtest.) The bot
-posts an approval request to `#dm-private` and the player gets an
-ephemeral "pending DM approval" confirmation.
+The bot replies with three buttons:
+
+- **📋 Claim Existing** — opens a modal to type the name of a character the
+  DM pre-created on the dashboard
+  (http://localhost:8080/dashboard/app/#characters-new). Same as
+  `/register name:<name>`.
+- **🆕 Build New** — runs `/create-character`: mints a one-time link to the
+  web character builder at `http://localhost:8080/portal/create?token=…`.
+  The portal is served from the same host as the dashboard, so a localhost
+  playtest needs no public tunnel.
+- **📥 Import from D&D Beyond** — opens a modal to paste a D&D Beyond
+  character URL. Same as `/import ddb-url:<url>`.
+
+All three submit a registration with status `pending`: the bot posts an
+approval request to `#dm-private` and the player gets an ephemeral
+"pending DM approval" confirmation.
 
 ## 6. Approve the character on the dashboard (≈ 3 min)
 

@@ -294,18 +294,6 @@ func TestRegisterHandler_NoCampaign_ShowsError(t *testing.T) {
 	}
 }
 
-func TestRegisterHandler_EmptyName_ShowsError(t *testing.T) {
-	mock := newTestMock()
-	rc := captureResponse(mock)
-
-	handler := NewRegisterHandler(mock, newMockRegService(), newMockCampaignProvider(), staticDMQueueFunc(""), staticDMUserFunc(""))
-	handler.Handle(makeInteraction("register", "player-1", "guild-1"))
-
-	if !strings.Contains(rc.Content, "character name") {
-		t.Errorf("expected name required error, got: %s", rc.Content)
-	}
-}
-
 // --- /import tests ---
 
 func TestImportHandler_CreatesPlaceholderAndPendingRecord(t *testing.T) {
@@ -434,17 +422,17 @@ func TestCreateCharacterHandler_PortalURL_UsesConfiguredBaseURL(t *testing.T) {
 	)
 	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
 
-	if !strings.Contains(rc.Content, "https://staging.example.test/create?token=tkn-A14") {
+	if !strings.Contains(rc.Content, "https://staging.example.test/portal/create?token=tkn-A14") {
 		t.Errorf("expected portal URL rooted at configured BASE_URL, got: %s", rc.Content)
 	}
 	if strings.Contains(rc.Content, "portal.dndnd.app") {
-		t.Errorf("expected configured BASE_URL to override production host, got: %s", rc.Content)
+		t.Errorf("expected configured BASE_URL to override default host, got: %s", rc.Content)
 	}
 }
 
-// A-14 default: empty BASE_URL falls back to the production portal host so
-// existing tests and zero-config local dev keep working.
-func TestCreateCharacterHandler_PortalURL_DefaultsToProductionHost(t *testing.T) {
+// Empty BASE_URL falls back to the co-located dashboard origin so zero-config
+// local dev (single host serving dashboard + portal) works without wiring.
+func TestCreateCharacterHandler_PortalURL_DefaultsToColocatedHost(t *testing.T) {
 	mock := newTestMock()
 	rc := captureResponse(mock)
 
@@ -465,8 +453,8 @@ func TestCreateCharacterHandler_PortalURL_DefaultsToProductionHost(t *testing.T)
 	)
 	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
 
-	if !strings.Contains(rc.Content, "https://portal.dndnd.app/create?token=tkn-default") {
-		t.Errorf("expected fallback to production host, got: %s", rc.Content)
+	if !strings.Contains(rc.Content, "http://localhost:8080/portal/create?token=tkn-default") {
+		t.Errorf("expected fallback to co-located dashboard origin, got: %s", rc.Content)
 	}
 }
 

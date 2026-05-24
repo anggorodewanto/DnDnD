@@ -67,14 +67,58 @@ func NewRegisterHandler(session Session, regService RegistrationService, campaig
 	}
 }
 
-// Handle processes a /register interaction.
+// Handle processes a /register interaction. With a name it claims an existing
+// character by that name; without a name it surfaces the onboarding chooser so
+// the player can claim, build, or import.
 func (h *RegisterHandler) Handle(interaction *discordgo.Interaction) {
 	characterName := optionString(interaction, "name")
 	if characterName == "" {
-		respondEphemeral(h.session, interaction, "Please provide a character name.")
+		h.PromptChoice(interaction)
 		return
 	}
+	h.registerByName(interaction, characterName)
+}
 
+// PromptChoice shows the onboarding chooser: three buttons (claim / build /
+// import) plus hint text covering the equivalent slash commands.
+func (h *RegisterHandler) PromptChoice(interaction *discordgo.Interaction) {
+	_ = h.session.InteractionRespond(interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags:   discordgo.MessageFlagsEphemeral,
+			Content: registerChoicePrompt,
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+					discordgo.Button{Label: "Claim Existing", Style: discordgo.PrimaryButton, CustomID: regChoiceClaim, Emoji: &discordgo.ComponentEmoji{Name: "📋"}},
+					discordgo.Button{Label: "Build New", Style: discordgo.SuccessButton, CustomID: regChoiceBuild, Emoji: &discordgo.ComponentEmoji{Name: "🆕"}},
+					discordgo.Button{Label: "Import from D&D Beyond", Style: discordgo.SecondaryButton, CustomID: regChoiceImport, Emoji: &discordgo.ComponentEmoji{Name: "📥"}},
+				}},
+			},
+		},
+	})
+}
+
+// ShowClaimModal opens a modal asking for the character name to claim.
+func (h *RegisterHandler) ShowClaimModal(interaction *discordgo.Interaction) {
+	_ = h.session.InteractionRespond(interaction, textInputModal(
+		regModalClaim, "Claim a Character",
+		regModalNameInput, "Character name", "The name your DM gave the character",
+	))
+}
+
+// HandleClaimSubmit processes the claim modal submission, registering by the
+// name the player typed.
+func (h *RegisterHandler) HandleClaimSubmit(interaction *discordgo.Interaction) {
+	name := modalTextValue(interaction, regModalNameInput)
+	if name == "" {
+		respondEphemeral(h.session, interaction, "Please enter a character name.")
+		return
+	}
+	h.registerByName(interaction, name)
+}
+
+// registerByName claims an existing character for the invoking player by name.
+func (h *RegisterHandler) registerByName(interaction *discordgo.Interaction, characterName string) {
 	campaign, err := h.campaignProv.GetCampaignByGuildID(context.Background(), interaction.GuildID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "No campaign found for this server.")
@@ -150,7 +194,30 @@ func (h *ImportHandler) Handle(interaction *discordgo.Interaction) {
 		respondEphemeral(h.session, interaction, "Please provide a D&D Beyond URL.")
 		return
 	}
+	h.processImport(interaction, ddbURL)
+}
 
+// ShowImportModal opens a modal asking for the D&D Beyond character URL.
+func (h *ImportHandler) ShowImportModal(interaction *discordgo.Interaction) {
+	_ = h.session.InteractionRespond(interaction, textInputModal(
+		regModalImport, "Import from D&D Beyond",
+		regModalURLInput, "D&D Beyond character URL", "https://www.dndbeyond.com/characters/12345678",
+	))
+}
+
+// HandleImportSubmit processes the import modal submission.
+func (h *ImportHandler) HandleImportSubmit(interaction *discordgo.Interaction) {
+	ddbURL := modalTextValue(interaction, regModalURLInput)
+	if ddbURL == "" {
+		respondEphemeral(h.session, interaction, "Please enter a D&D Beyond URL.")
+		return
+	}
+	h.processImport(interaction, ddbURL)
+}
+
+// processImport runs the import flow for a resolved URL, branching to the real
+// DDB importer when wired or the placeholder path otherwise.
+func (h *ImportHandler) processImport(interaction *discordgo.Interaction, ddbURL string) {
 	campaign, err := h.campaignProv.GetCampaignByGuildID(context.Background(), interaction.GuildID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "No campaign found for this server.")
@@ -159,7 +226,6 @@ func (h *ImportHandler) Handle(interaction *discordgo.Interaction) {
 
 	userID := interactionUserID(interaction)
 
-	// Use DDB importer if available (real import), otherwise fall back to placeholder
 	if h.ddbImporter != nil {
 		h.handleDDBImport(interaction, campaign, userID, ddbURL)
 		return
@@ -229,10 +295,32 @@ func (h *ImportHandler) handlePlaceholderImport(interaction *discordgo.Interacti
 	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, charName, userID, "import", nil)
 }
 
-// defaultPortalBaseURL is the production portal host used when no BASE_URL is
-// configured. CreateCharacterHandler falls back to this so unit tests and
-// local dev keep working without explicit wiring.
-const defaultPortalBaseURL = "https://portal.dndnd.app"
+// defaultPortalBaseURL is the co-located dashboard origin used when no BASE_URL
+// is configured. The portal is served from the same host as the dashboard, so
+// this default keeps zero-config local dev working without explicit wiring.
+const defaultPortalBaseURL = "http://localhost:8080"
+
+// Registration chooser component identifiers. regChoice* are the buttons shown
+// by /register with no name; regModal* are the modals the claim/import buttons
+// open; regModal*Input are the text-input fields inside those modals.
+const (
+	regChoiceClaim  = "regchoice:claim"
+	regChoiceBuild  = "regchoice:build"
+	regChoiceImport = "regchoice:import"
+
+	regModalClaim  = "regmodal:claim"
+	regModalImport = "regmodal:import"
+
+	regModalNameInput = "name"
+	regModalURLInput  = "ddb-url"
+)
+
+// registerChoicePrompt is the hint text shown above the onboarding buttons.
+const registerChoicePrompt = "**How do you want your character?**\n" +
+	"📋 **Claim Existing** — link to a character your DM already created (you'll type the name).\n" +
+	"🆕 **Build New** — open the web character builder.\n" +
+	"📥 **Import** — pull a character from D&D Beyond (you'll paste the URL).\n\n" +
+	"_Tip: you can also run `/register name:<name>`, `/import ddb-url:<url>`, or `/create-character` directly._"
 
 // CreateCharacterHandler handles the /create-character slash command.
 type CreateCharacterHandler struct {
@@ -304,7 +392,7 @@ func (h *CreateCharacterHandler) Handle(interaction *discordgo.Interaction) {
 	if base == "" {
 		base = defaultPortalBaseURL
 	}
-	portalURL := fmt.Sprintf("%s/create?token=%s", base, token)
+	portalURL := fmt.Sprintf("%s/portal/create?token=%s", base, token)
 
 	respondEphemeral(h.session, interaction,
 		fmt.Sprintf("✅ Registration submitted — your character is pending DM approval. You'll be pinged when approved.\n\n🔗 **Character Builder:** %s\n_(Link expires in 24 hours)_", portalURL))
@@ -375,6 +463,55 @@ func StatusCheckResponse(pc *refdata.PlayerCharacter, characterName string) stri
 
 // NoRegistrationMessage is returned when a player runs a game command without registering.
 const NoRegistrationMessage = "❌ No character found. Use `/create-character`, `/import`, or `/register` to get started."
+
+// textInputModal builds a modal response with a single required short text
+// input. customID identifies the modal on submit; inputID identifies the field.
+func textInputModal(customID, title, inputID, label, placeholder string) *discordgo.InteractionResponse {
+	return &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseModal,
+		Data: &discordgo.InteractionResponseData{
+			CustomID: customID,
+			Title:    title,
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{Components: []discordgo.MessageComponent{
+					discordgo.TextInput{
+						CustomID:    inputID,
+						Label:       label,
+						Style:       discordgo.TextInputShort,
+						Placeholder: placeholder,
+						Required:    true,
+						MaxLength:   200,
+					},
+				}},
+			},
+		},
+	}
+}
+
+// modalTextValue extracts the value of a named text input from a modal-submit
+// interaction. discordgo unmarshals received components as pointers, so rows
+// arrive as *ActionsRow and inputs as *TextInput.
+func modalTextValue(interaction *discordgo.Interaction, inputID string) string {
+	if interaction == nil {
+		return ""
+	}
+	data, ok := interaction.Data.(discordgo.ModalSubmitInteractionData)
+	if !ok {
+		return ""
+	}
+	for _, comp := range data.Components {
+		row, ok := comp.(*discordgo.ActionsRow)
+		if !ok {
+			continue
+		}
+		for _, c := range row.Components {
+			if ti, ok := c.(*discordgo.TextInput); ok && ti.CustomID == inputID {
+				return ti.Value
+			}
+		}
+	}
+	return ""
+}
 
 // optionString extracts a named string option from an interaction's command data.
 func optionString(interaction *discordgo.Interaction, name string) string {
