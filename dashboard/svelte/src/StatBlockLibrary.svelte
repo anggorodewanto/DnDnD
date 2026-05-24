@@ -1,5 +1,6 @@
 <script>
   import { listStatBlocks } from './lib/statblockLibrary.js';
+  import StatBlockView from './StatBlockView.svelte';
 
   let { campaignId } = $props();
 
@@ -159,11 +160,7 @@
             <h3>{selected.name}</h3>
             <button class="close" onclick={closeDetail}>x</button>
           </header>
-          <p class="meta">
-            {selected.size || ''} {selected.type || ''}
-            {#if selected.cr !== undefined && selected.cr !== ''} · CR {selected.cr}{/if}
-          </p>
-          <pre>{JSON.stringify(selected, null, 2)}</pre>
+          <StatBlockView block={selected} />
         </div>
       {:else}
         <p class="empty detail-placeholder">Select a stat block to view its details.</p>
@@ -277,14 +274,6 @@
     border-radius: 4px;
     padding: 0.25rem 0.5rem;
     cursor: pointer;
-  }
-  .detail pre {
-    background: #0f1626;
-    color: #e0e0e0;
-    padding: 0.5rem;
-    border-radius: 4px;
-    overflow-x: auto;
-    font-size: 0.8rem;
   }
   .error {
     color: #ff6b6b;

@@ -15,6 +15,54 @@
 
 export const STATBLOCK_LIBRARY_ENDPOINT = '/api/statblocks';
 
+// --- Response normalization -------------------------------------------------
+// The backend returns refdata.Creature verbatim, so Go's database/sql and
+// pqtype null-wrapper types leak into the JSON: sql.NullString becomes
+// {String, Valid}, sql.NullBool becomes {Bool, Valid}, and
+// pqtype.NullRawMessage becomes {RawMessage, Valid}. Plain json.RawMessage
+// fields (speed, ability_scores, attacks) arrive already unwrapped. We flatten
+// the wrappers here so the UI consumes clean values. All unwrap helpers are
+// idempotent, so feeding already-clean data through them is safe.
+
+function unwrapNullString(v) {
+  if (v && typeof v === 'object' && 'Valid' in v) return v.Valid ? v.String : null;
+  return v ?? null;
+}
+
+function unwrapNullBool(v) {
+  if (v && typeof v === 'object' && 'Valid' in v) return v.Valid ? v.Bool : false;
+  return Boolean(v);
+}
+
+function unwrapNullRaw(v) {
+  if (v && typeof v === 'object' && !Array.isArray(v) && 'Valid' in v && 'RawMessage' in v) {
+    return v.Valid ? v.RawMessage : null;
+  }
+  return v ?? null;
+}
+
+/**
+ * Flatten the Go null-wrapper types in a raw stat block into plain values.
+ * Returns the input unchanged when it is not an object.
+ * @param {object} raw
+ * @returns {object}
+ */
+export function normalizeStatBlock(raw) {
+  if (!raw || typeof raw !== 'object') return raw;
+  return {
+    ...raw,
+    alignment: unwrapNullString(raw.alignment),
+    ac_type: unwrapNullString(raw.ac_type),
+    source: unwrapNullString(raw.source),
+    homebrew: unwrapNullBool(raw.homebrew),
+    saving_throws: unwrapNullRaw(raw.saving_throws),
+    skills: unwrapNullRaw(raw.skills),
+    senses: unwrapNullRaw(raw.senses),
+    abilities: unwrapNullRaw(raw.abilities),
+    bonus_actions: unwrapNullRaw(raw.bonus_actions),
+  };
+}
+
 /**
  * Build a URL with query params for the Stat Block Library list endpoint.
  * Pure function so the tests can assert URL shape without a fetch mock.
@@ -60,7 +108,8 @@ export async function listStatBlocks(filters = {}) {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
   }
-  return res.json();
+  const data = await res.json();
+  return (data || []).map(normalizeStatBlock);
 }
 
 /**
@@ -81,5 +130,5 @@ export async function getStatBlock(id, campaignId) {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
   }
-  return res.json();
+  return normalizeStatBlock(await res.json());
 }
