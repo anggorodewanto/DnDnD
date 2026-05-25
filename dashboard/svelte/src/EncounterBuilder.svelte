@@ -151,7 +151,7 @@
 
   async function loadMapData(mapId) {
     try {
-      const data = await getMap(mapId);
+      const data = await getMap(mapId, campaignId);
       loadedMap = typeof data.tiled_json === 'string' ? JSON.parse(data.tiled_json) : data.tiled_json;
       drawMap();
     } catch (e) {
