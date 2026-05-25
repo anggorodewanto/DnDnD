@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Building Battle Maps with Tiled — DnDnD</title>
+<style>
+  :root {
+    --ink: #1f2330;
+    --muted: #5b6478;
+    --accent: #e94560;
+    --accent-dark: #c2304a;
+    --bg: #f6f7fb;
+    --card: #ffffff;
+    --line: #e3e6ef;
+    --code-bg: #eef0f6;
+    --warn-bg: #fff4e5;
+    --warn-line: #f0a020;
+    --ok-bg: #e9f7ef;
+    --ok-line: #28a745;
+    --bad-bg: #fdeced;
+    --bad-line: #e94560;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
+
+  header.hero {
+    background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+    color: #fff;
+    border-radius: 14px;
+    padding: 2.2rem 2rem;
+    margin-bottom: 2rem;
+  }
+  header.hero h1 { margin: 0 0 .6rem; font-size: 2rem; line-height: 1.2; }
+  header.hero p { margin: .4rem 0 0; color: #d4dbef; font-size: 1.02rem; }
+  header.hero .tag {
+    display: inline-block; font-size: .72rem; letter-spacing: .12em;
+    text-transform: uppercase; color: #ffb3c0; font-weight: 700; margin-bottom: .8rem;
+  }
+
+  nav.toc {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1rem 1.4rem; margin-bottom: 2rem;
+  }
+  nav.toc strong { display: block; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: .5rem; }
+  nav.toc ol { margin: 0; padding-left: 1.2rem; columns: 2; column-gap: 2rem; }
+  nav.toc li { margin: .15rem 0; break-inside: avoid; }
+  nav.toc a { color: var(--accent-dark); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  h2 {
+    font-size: 1.45rem; margin: 2.6rem 0 .9rem; padding-bottom: .35rem;
+    border-bottom: 2px solid var(--line); scroll-margin-top: 1rem;
+  }
+  h3 {
+    font-size: 1.12rem; margin: 1.8rem 0 .5rem; scroll-margin-top: 1rem;
+    display: flex; align-items: baseline; gap: .55rem;
+  }
+  .step-num {
+    flex: none; display: inline-grid; place-items: center;
+    width: 1.7rem; height: 1.7rem; border-radius: 50%;
+    background: var(--accent); color: #fff; font-size: .9rem; font-weight: 700;
+  }
+  p, li { color: var(--ink); }
+  a { color: var(--accent-dark); }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .3rem 0; }
+  li ul { margin-top: .3rem; }
+
+  code {
+    background: var(--code-bg); padding: .12em .4em; border-radius: 5px;
+    font: .9em/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: #b4314c;
+  }
+
+  .callout {
+    border-radius: 10px; padding: 1rem 1.2rem; margin: 1.2rem 0;
+    border-left: 5px solid var(--line); background: var(--card);
+  }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout.warn { background: var(--warn-bg); border-left-color: var(--warn-line); }
+  .callout.warn .ic { color: #b9740a; }
+  .callout.note { background: #eef1fb; border-left-color: #5566cc; }
+  .callout .ic { font-weight: 700; margin-right: .4rem; }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 1.2rem 0; font-size: .94rem;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  }
+  th, td { text-align: left; padding: .7rem .85rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #f0f2f9; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+
+  .pills { display: flex; flex-wrap: wrap; gap: .4rem; margin: 1rem 0; }
+  .pill { background: var(--code-bg); border: 1px solid var(--line); border-radius: 999px; padding: .2rem .7rem; font-size: .85rem; }
+  .pill.reject { background: var(--bad-bg); border-color: var(--bad-line); color: var(--accent-dark); }
+  .pill.strip { background: var(--warn-bg); border-color: var(--warn-line); color: #97600a; }
+
+  .faq { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: .5rem 1.2rem; margin: 1rem 0; }
+  .faq details { border-bottom: 1px solid var(--line); padding: .25rem 0; }
+  .faq details:last-child { border-bottom: none; }
+  .faq summary { cursor: pointer; font-weight: 600; padding: .55rem 0; list-style: none; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::before { content: "▸"; color: var(--accent); margin-right: .55rem; display: inline-block; transition: transform .15s; }
+  .faq details[open] summary::before { transform: rotate(90deg); }
+  .faq .answer { padding: 0 0 .7rem 1.5rem; color: var(--muted); }
+  .faq .answer code { color: #b4314c; }
+
+  footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
+
+  @media (max-width: 560px) {
+    body { font-size: 16px; }
+    nav.toc ol { columns: 1; }
+    header.hero { padding: 1.6rem 1.3rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="tag">DnDnD · DM Guide</span>
+    <h1>Building Battle Maps with Tiled</h1>
+    <p>Build a full battle map in the free <a href="https://www.mapeditor.org/" style="color:#ffd0d8">Tiled editor</a>
+       using real game tilesets, then import it so your encounters render with actual tile art —
+       stone floors, walls, water, lava, foliage — in both the web map preview and the Discord
+       <code style="background:#ffffff22;color:#fff">#combat-map</code> posts.</p>
+    <p>You build the <em>art</em> in Tiled with ordinary tilesets, then add a few specially
+       <strong>named layers</strong> that DnDnD reads to drive game mechanics (terrain costs,
+       line-of-sight walls, lighting, elevation, spawn zones). Art and mechanics live in the same
+       <code style="background:#ffffff22;color:#fff">.tmj</code> file.</p>
+  </header>
+
+  <nav class="toc">
+    <strong>On this page</strong>
+    <ol>
+      <li><a href="#prereq">Prerequisites</a></li>
+      <li><a href="#steps">Step-by-step</a></li>
+      <li><a href="#layers">Game-mechanic layers</a></li>
+      <li><a href="#strip">Stripped / rejected</a></li>
+      <li><a href="#trouble">Troubleshooting</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="prereq">Prerequisites</h2>
+  <ul>
+    <li><a href="https://www.mapeditor.org/">Tiled</a> (any recent version).</li>
+    <li>One or more <strong>tileset images</strong> (PNG, etc.) — orthogonal, grid-based tilesets.</li>
+    <li>A DnDnD campaign and access to the web dashboard's map editor.</li>
+  </ul>
+
+  <h2 id="steps">Step-by-step</h2>
+
+  <h3><span class="step-num">1</span> Create an orthogonal, finite map</h3>
+  <p>In Tiled, choose <strong>File &gt; New &gt; New Map</strong> and set:</p>
+  <ul>
+    <li><strong>Orientation:</strong> <code>Orthogonal</code> — the only supported orientation.
+        Isometric, staggered, and hexagonal maps are rejected on import.</li>
+    <li><strong>Map size:</strong> <code>Fixed</code> (not <em>Infinite</em>). Infinite maps are rejected.</li>
+    <li><strong>Map width / height:</strong> between <strong>1 and 200</strong> tiles per side.
+      <ul>
+        <li>Up to <strong>100</strong> per side → renders at <strong>48&nbsp;px</strong> per tile (standard).</li>
+        <li><strong>101–200</strong> per side → auto-<strong>downscaled to 32&nbsp;px</strong> so it stays readable on Discord.</li>
+        <li><strong>0 or below</strong>, or <strong>above 200</strong> → rejected.</li>
+      </ul>
+    </li>
+    <li><strong>Tile size:</strong> match your tileset's native tile size (e.g. 32×32). Pick a square tile.</li>
+  </ul>
+
+  <h3><span class="step-num">2</span> Add your tilesets and paint the art</h3>
+  <p>Add tilesets via the <strong>Tilesets</strong> panel (<strong>New Tileset…</strong>) and paint floors,
+     walls, props, and scenery across one or more tile layers. Use as many tilesets and decorative tile
+     layers as you like — DnDnD renders them all.</p>
+  <div class="callout note">
+    <p><span class="ic">🖼</span><strong>Image layers</strong> are also supported: add an <strong>Image Layer</strong>
+       to drop a single pre-made image (e.g. a painted backdrop) onto the map. Its image file must be included
+       in the import selection (Step&nbsp;6), just like a tileset image.</p>
+  </div>
+
+  <h3><span class="step-num">3</span> EMBED every tileset <em>(critical)</em></h3>
+  <div class="callout warn">
+    <p><span class="ic">⚠</span><strong>This is the step people miss.</strong> DnDnD v1 rejects maps that
+       reference <strong>external</strong> <code>.tsx</code> tileset files. Every tileset must be
+       <strong>embedded</strong> in the map itself.</p>
+  </div>
+  <p>To embed a tileset:</p>
+  <ol>
+    <li>Select the tileset in the <strong>Tilesets</strong> panel.</li>
+    <li>Click the <strong>Embed Tileset</strong> button on the tileset toolbar.</li>
+  </ol>
+  <p>Alternatively, set <strong>Map &gt; Map Properties</strong> (or the New Map dialog) to embed tilesets so
+     new ones embed automatically. When embedded, a tileset's definition is written inline in the
+     <code>.tmj</code> instead of pointing at a separate <code>.tsx</code> file.</p>
+  <p>The tileset <strong>image</strong> files are still separate PNGs — that's expected. You select those
+     images alongside the <code>.tmj</code> during import (Step&nbsp;6). Embedding only removes the external
+     <code>.tsx</code> <em>definition</em> reference, not the image.</p>
+
+  <h3><span class="step-num">4</span> Add the game-mechanic layers <em>(optional but recommended)</em></h3>
+  <p>On top of the art, add layers with these exact <strong>names</strong> and <strong>types</strong> to give
+     the map D&amp;D mechanics — see the <a href="#layers">reference table</a> below. Layers with any other
+     name are treated as pure decoration and rendered as-is.</p>
+
+  <h3><span class="step-num">5</span> Export as <code>.tmj</code></h3>
+  <p>Save or export the map in the <strong>Tiled JSON</strong> format:</p>
+  <ul>
+    <li><strong>File &gt; Save As…</strong> and choose <code>.tmj</code>, <strong>or</strong></li>
+    <li><strong>File &gt; Export As…</strong> and choose <code>.tmj</code> / <code>.json</code>.</li>
+  </ul>
+  <div class="callout warn">
+    <p><span class="ic">📛</span>Keep all <strong>image filenames intact</strong> — don't rename tileset (or
+       image-layer) images after export. The importer matches images to the map by <strong>filename
+       (basename)</strong>, so the names in the <code>.tmj</code> must match the files you upload.</p>
+  </div>
+
+  <h3><span class="step-num">6</span> Import into DnDnD</h3>
+  <p>In the DnDnD web map editor, click <strong>Import Tiled Project</strong> and, <strong>in one
+     selection</strong>, choose:</p>
+  <ul>
+    <li>the <code>.tmj</code> map file, <strong>and</strong></li>
+    <li><strong>every image file it references</strong> — all tileset images (and any image-layer images).</li>
+  </ul>
+  <p>On import, DnDnD validates and sanitizes the map, uploads the images, links them by filename, and
+     persists the map. From then on it renders with real tile sprites in the web preview and in
+     <code>#combat-map</code> posts. The import result also reports any features that were
+     <a href="#strip">stripped</a>.</p>
+
+  <h2 id="layers">Game-mechanic layers</h2>
+  <p>These layers are recognized <strong>by name and by layer type</strong>. Names are case-sensitive and must
+     match exactly. Tile-layer mechanics are keyed off each tile's <strong>Type</strong> field (set in the
+     tileset via <strong>Tile &gt; Custom Properties / Type</strong>). Object-layer mechanics use
+     <strong>rectangle</strong> objects.</p>
+  <table>
+    <thead>
+      <tr><th>Layer name</th><th>Type</th><th>What it does</th><th>How to author it</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>terrain</code></td><td>Tile layer</td>
+        <td>Assigns terrain type per tile (movement cost, hazards).</td>
+        <td>Paint tiles whose tile <strong>Type</strong> is one of <code>open_ground</code>,
+            <code>difficult_terrain</code>, <code>water</code>, <code>lava</code>, <code>pit</code>.
+            Untyped = open ground.</td>
+      </tr>
+      <tr>
+        <td><code>walls</code></td><td>Object layer</td>
+        <td>Line-of-sight / movement blockers.</td>
+        <td>Draw <strong>rectangle</strong> objects along walls. Each becomes a wall segment (in tile units).</td>
+      </tr>
+      <tr>
+        <td><code>lighting</code></td><td>Tile layer</td>
+        <td>Lighting / obscurement overlay.</td>
+        <td>Paint tiles whose <strong>Type</strong> is one of <code>dim_light</code>, <code>darkness</code>,
+            <code>magical_darkness</code>, <code>fog</code>, <code>light_obscurement</code>.</td>
+      </tr>
+      <tr>
+        <td><code>elevation</code></td><td>Tile layer</td>
+        <td>Per-tile elevation, in <strong>feet</strong>.</td>
+        <td>The tile's raw value is read as feet, row-major across the grid.</td>
+      </tr>
+      <tr>
+        <td><code>spawn_zones</code></td><td>Object layer</td>
+        <td>Where players / enemies start.</td>
+        <td>Draw <strong>rectangle</strong> objects and set each object's <strong>Type</strong> to
+            <code>player</code> or <code>enemy</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="callout note">
+    <p><strong>Notes</strong></p>
+    <ul>
+      <li>A <code>terrain</code> tile with no recognized <code>type</code> (or no <code>terrain</code> layer)
+          defaults to <strong>open ground</strong>.</li>
+      <li>For <code>walls</code> and <code>spawn_zones</code>, object coordinates are converted from pixels to
+          tile units using the map's tile size — align objects to the grid.</li>
+      <li>These layers are <em>additive</em>: ship art-only and add mechanics later, or vice-versa.</li>
+    </ul>
+  </div>
+
+  <h2 id="strip">What gets stripped / rejected</h2>
+
+  <h3>Hard-rejected <em>(import fails)</em></h3>
+  <p>If your <code>.tmj</code> contains any of these, the import is refused with an error and nothing is saved —
+     fix the map and re-export:</p>
+  <div class="pills">
+    <span class="pill reject">Infinite maps</span>
+    <span class="pill reject">Non-orthogonal orientation</span>
+    <span class="pill reject">Dimensions &lt; 1 or &gt; 200</span>
+    <span class="pill reject">External (non-embedded) tilesets</span>
+  </div>
+
+  <h3>Stripped on import <em>(import succeeds, feature removed)</em></h3>
+  <p>These are silently removed during sanitization; the import result lists each class that was stripped so
+     you know what changed:</p>
+  <div class="pills">
+    <span class="pill strip">Tile animations → base tile</span>
+    <span class="pill strip">Parallax scrolling</span>
+    <span class="pill strip">Group layers (flattened)</span>
+    <span class="pill strip">Text objects</span>
+    <span class="pill strip">Point objects</span>
+    <span class="pill strip">Wang sets</span>
+  </div>
+  <p>(Group layers are flattened into the top-level list — their child layers are kept. Wang sets are removed
+     from tilesets, but already-painted tiles are unaffected.) If you relied on a stripped feature for
+     <em>art</em>, bake it into a normal tile layer before exporting.</p>
+
+  <h2 id="trouble">Troubleshooting</h2>
+  <div class="faq">
+    <details>
+      <summary>"Import says it's missing image X" / a tile renders blank</summary>
+      <div class="answer">You didn't include every referenced image in the selection, or a filename changed.
+        Re-run <strong>Import Tiled Project</strong> and select the <code>.tmj</code> <em>plus</em> all of its
+        tileset/image-layer images at once. Filenames must match the names recorded in the <code>.tmj</code>
+        (matched by basename).</div>
+    </details>
+    <details>
+      <summary>"Tileset is external" / import rejects the tileset</summary>
+      <div class="answer">One or more tilesets are still <code>.tsx</code> references. In Tiled, select each
+        tileset in the <strong>Tilesets</strong> panel and click <strong>Embed Tileset</strong>, then
+        re-export. See Step&nbsp;3.</div>
+    </details>
+    <details>
+      <summary>"Only orthogonal orientation is supported."</summary>
+      <div class="answer">Your map is isometric / staggered / hexagonal. Recreate it as an
+        <strong>Orthogonal</strong> map.</div>
+    </details>
+    <details>
+      <summary>"Infinite maps are not supported."</summary>
+      <div class="answer">The map was created as <em>Infinite</em>. In <strong>Map &gt; Map Properties</strong>
+        switch it to a fixed size (or recreate it), then re-export.</div>
+    </details>
+    <details>
+      <summary>"Map dimensions …" errors</summary>
+      <div class="answer">Width or height is below 1 or above 200. Resize the map to within 1–200 tiles per
+        side.</div>
+    </details>
+    <details>
+      <summary>My map looks lower-resolution / smaller tiles than expected</summary>
+      <div class="answer">A map larger than 100 tiles on a side is auto-downscaled to 32&nbsp;px tiles. Shrink
+        the map to 100 or fewer per side to keep the 48&nbsp;px standard tile size.</div>
+    </details>
+    <details>
+      <summary>A terrain / lighting tile has no effect</summary>
+      <div class="answer">The tile's <strong>Type</strong> isn't one of the recognized values, or it's on a
+        layer whose name/type doesn't match the table. Check the layer name (exact, case-sensitive) and the
+        tile's <code>type</code>.</div>
+    </details>
+  </div>
+
+  <footer>
+    Source: <code>docs/tiled-maps.md</code>. Part of the DnDnD project — referenced from the README.
+  </footer>
+
+</div>
+</body>
+</html>

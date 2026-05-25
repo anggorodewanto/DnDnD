@@ -6,10 +6,18 @@ DMs.
 
 ## Documentation
 
-- **[Building Battle Maps with Tiled](docs/tiled-maps.md)** — author full battle
-  maps in the [Tiled](https://www.mapeditor.org/) editor with real game tilesets
-  and import them so encounters render with actual tile art in the web preview
-  and Discord `#combat-map` posts.
+> Browsable HTML guides: **[Setup](docs/setup.html)** · **[How to use](docs/usage.html)** ·
+> **[Tiled maps](docs/tiled-maps.html)**
+
+- **[Setting up Discord & DnDnD](docs/setup.html)** — create the Discord app, configure
+  the service, and bring it online with Docker Compose.
+- **[Using DnDnD](docs/usage.html)** — the DM dashboard tour, a typical session, and the
+  full player slash-command reference.
+- **[Building Battle Maps with Tiled](docs/tiled-maps.md)**
+  ([HTML version](docs/tiled-maps.html)) — author full battle maps in the
+  [Tiled](https://www.mapeditor.org/) editor with real game tilesets and import
+  them so encounters render with actual tile art in the web preview and Discord
+  `#combat-map` posts.
 - [Running locally](docs/local-run.md) — environment setup and how to start the
   service.
 - [Playtest quickstart](docs/playtest-quickstart.md) — fresh checkout to a live

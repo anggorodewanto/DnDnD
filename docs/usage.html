@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Using DnDnD — DM dashboard &amp; player commands</title>
+<style>
+  :root {
+    --ink: #1f2330; --muted: #5b6478; --accent: #e94560; --accent-dark: #c2304a;
+    --bg: #f6f7fb; --card: #ffffff; --line: #e3e6ef; --code-bg: #eef0f6;
+    --warn-bg: #fff4e5; --warn-line: #f0a020;
+    --ok-bg: #e9f7ef; --ok-line: #28a745;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
+  header.hero { background: linear-gradient(135deg, #16213e 0%, #0f3460 100%); color: #fff;
+    border-radius: 14px; padding: 2.2rem 2rem; margin-bottom: 2rem; }
+  header.hero h1 { margin: 0 0 .6rem; font-size: 2rem; line-height: 1.2; }
+  header.hero p { margin: .4rem 0 0; color: #d4dbef; font-size: 1.02rem; }
+  header.hero .tag { display: inline-block; font-size: .72rem; letter-spacing: .12em;
+    text-transform: uppercase; color: #ffb3c0; font-weight: 700; margin-bottom: .8rem; }
+  header.hero code { background:#ffffff22; color:#fff; }
+  .docnav { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem; font-size:.9rem; }
+  .docnav a { color: var(--accent-dark); text-decoration:none; border:1px solid var(--line);
+    background:var(--card); border-radius:999px; padding:.3rem .9rem; }
+  .docnav a:hover { background: var(--code-bg); }
+  nav.toc { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1rem 1.4rem; margin-bottom: 2rem; }
+  nav.toc strong { display: block; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: .5rem; }
+  nav.toc ol { margin: 0; padding-left: 1.2rem; columns: 2; column-gap: 2rem; }
+  nav.toc li { margin: .15rem 0; break-inside: avoid; }
+  nav.toc a { color: var(--accent-dark); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  h2 { font-size: 1.45rem; margin: 2.6rem 0 .9rem; padding-bottom: .35rem;
+    border-bottom: 2px solid var(--line); scroll-margin-top: 1rem; }
+  h3 { font-size: 1.08rem; margin: 1.6rem 0 .4rem; color: var(--accent-dark); scroll-margin-top: 1rem; }
+  a { color: var(--accent-dark); }
+  ul, ol { padding-left: 1.4rem; } li { margin: .3rem 0; }
+  code { background: var(--code-bg); padding: .12em .4em; border-radius: 5px;
+    font: .9em/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #b4314c; }
+  ol.flow { counter-reset: step; list-style: none; padding-left: 0; }
+  ol.flow li { position: relative; padding: .25rem 0 .6rem 2.6rem; margin: 0; }
+  ol.flow li::before { counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: .1rem; width: 1.8rem; height: 1.8rem; border-radius: 50%;
+    background: var(--accent); color: #fff; font-weight: 700; font-size: .9rem; display: grid; place-items: center; }
+  .callout { border-radius: 10px; padding: 1rem 1.2rem; margin: 1.2rem 0; border-left: 5px solid var(--line); background: var(--card); }
+  .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+  .callout.note { background: #eef1fb; border-left-color: #5566cc; }
+  .callout .ic { font-weight: 700; margin-right: .4rem; }
+  table { width: 100%; border-collapse: collapse; margin: .8rem 0 1.4rem; font-size: .93rem;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #f0f2f9; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  td.cmd { white-space: nowrap; }
+  td.cmd code { color: #b4314c; font-weight: 600; }
+  .arg { display:inline-block; background: var(--code-bg); border:1px solid var(--line); border-radius:5px;
+    padding:0 .35em; font: .8em/1.5 ui-monospace, Menlo, monospace; color: var(--muted); margin:0 .15em .15em 0; }
+  .arg.req { background:#fdeced; border-color:#f3b6bf; color:#c2304a; }
+  .dm-badge { display:inline-block; background:#6f42c1; color:#fff; font-size:.68rem; font-weight:700;
+    padding:.1em .5em; border-radius:4px; letter-spacing:.04em; vertical-align:middle; }
+  footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
+  @media (max-width: 560px) { body { font-size: 16px; } nav.toc ol { columns: 1; } header.hero { padding: 1.6rem 1.3rem; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="tag">DnDnD · How to use</span>
+    <h1>Using DnDnD</h1>
+    <p>DnDnD has two surfaces: the <strong>DM web dashboard</strong> for running the campaign, and
+       <strong>player slash commands</strong> in Discord for taking actions. This guide tours the
+       dashboard, walks a typical session, and lists every player command.</p>
+  </header>
+
+  <div class="docnav">
+    <a href="setup.html">① Setup</a>
+    <a href="usage.html">② How to use (this page)</a>
+    <a href="tiled-maps.html">③ Tiled maps</a>
+  </div>
+
+  <nav class="toc">
+    <strong>On this page</strong>
+    <ol>
+      <li><a href="#dm-flow">A typical session (DM)</a></li>
+      <li><a href="#dashboard">The DM dashboard</a></li>
+      <li><a href="#players">Getting started (players)</a></li>
+      <li><a href="#commands">Player command reference</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="dm-flow">A typical session (DM)</h2>
+  <ol class="flow">
+    <li>In Discord, run <code>/setup</code> once to create the campaign's channel structure
+        (needs <strong>Manage Channels</strong>).</li>
+    <li>In the dashboard, create or select a <strong>Campaign</strong> (Campaigns).</li>
+    <li>Have players join with <code>/register</code>, then approve them in <strong>Character Approvals</strong>.</li>
+    <li>Build a battle map in the <strong>Map Editor</strong>, or import a full-art map from Tiled
+        (see the <a href="tiled-maps.html">Tiled guide</a>).</li>
+    <li>Assemble the fight in the <strong>Encounter Builder</strong> — pick the map, place PCs and SRD
+        monsters.</li>
+    <li>Go live and run the fight from the <strong>Combat Manager</strong> (initiative, HP, conditions),
+        using the <strong>Turn Builder</strong> to compose turns.</li>
+    <li>Resolve player whispers, skill-check narration, and undo requests from the <strong>DM Queue</strong>;
+        post story beats from <strong>Narrate</strong>.</li>
+  </ol>
+
+  <h2 id="dashboard">The DM dashboard</h2>
+  <p>Open <a href="http://localhost:8080">the dashboard</a> (it redirects to <code>/dashboard/</code>).
+     Sections are reachable from the left nav:</p>
+  <table>
+    <thead><tr><th>Section</th><th>What it's for</th></tr></thead>
+    <tbody>
+      <tr><td>Home</td><td>Campaign landing / overview.</td></tr>
+      <tr><td>Campaigns</td><td>List, create, and select campaigns.</td></tr>
+      <tr><td>Maps / Map Editor</td><td>Build grid maps, or import Tiled <code>.tmj</code> projects with real tilesets.</td></tr>
+      <tr><td>Encounter Builder</td><td>Compose an encounter: choose a map, place PCs and SRD monsters, then go live.</td></tr>
+      <tr><td>Combat Manager</td><td>Run live combat — turn order, HP, conditions; opens the Turn Builder.</td></tr>
+      <tr><td>Exploration</td><td>Run exploration mode and transition the party into combat.</td></tr>
+      <tr><td>Party Overview</td><td>See all party characters at a glance.</td></tr>
+      <tr><td>DM Queue</td><td>Resolve pending DM actions — whispers, skill-check narration, undo requests.</td></tr>
+      <tr><td>Character Approvals</td><td>Approve or reject pending character registrations.</td></tr>
+      <tr><td>Create Character / Level Up</td><td>Pre-create characters for players to claim; drive level-ups.</td></tr>
+      <tr><td>Shops &amp; Merchants</td><td>Create and manage shop inventories.</td></tr>
+      <tr><td>Loot Pool</td><td>Manage loot for the party to claim.</td></tr>
+      <tr><td>Narrate</td><td>Post narration / story text to channels.</td></tr>
+      <tr><td>Message Player</td><td>Send a direct message to a player.</td></tr>
+      <tr><td>Homebrew Editor</td><td>Create and edit homebrew content (stat blocks, etc.).</td></tr>
+      <tr><td>Stat Block Library</td><td>Browse and view 5e stat blocks.</td></tr>
+      <tr><td>Open5e Sources</td><td>Toggle which Open5e content sources are enabled.</td></tr>
+      <tr><td>Errors</td><td>Inspect recorded application errors.</td></tr>
+    </tbody>
+  </table>
+  <p>A health banner at the top always shows the bot's Discord connection status.</p>
+
+  <h2 id="players">Getting started (players)</h2>
+  <p>Players act entirely from Discord slash commands. To get a character:</p>
+  <ul>
+    <li><code>/register</code> — claim a DM-made character, build one, or import (run with no name to choose).</li>
+    <li><code>/import</code> <span class="arg req">ddb-url</span> — import a character from D&amp;D Beyond.</li>
+    <li><code>/create-character</code> — build a character in the web portal.</li>
+    <li><code>/character</code> / <code>/status</code> — view your sheet summary and current status.</li>
+  </ul>
+  <div class="callout note">
+    <p><span class="ic">💡</span>Run <code>/help</code> any time for the full in-Discord command list, or
+       <code>/help</code> <span class="arg">topic</span> for a specific area.</p>
+  </div>
+
+  <h2 id="commands">Player command reference</h2>
+  <p>Arguments are shown as <span class="arg req">required</span> and <span class="arg">optional</span>.
+     All commands below are player-facing; only <code>/setup</code>
+     <span class="dm-badge">DM</span> is permission-gated (Manage Channels).</p>
+
+  <h3>Movement</h3>
+  <table><tbody>
+    <tr><td class="cmd"><code>/move</code></td><td>Move to a coordinate on the battle map. <span class="arg req">coordinate</span></td></tr>
+    <tr><td class="cmd"><code>/fly</code></td><td>Fly to a given altitude in feet. <span class="arg req">altitude</span></td></tr>
+    <tr><td class="cmd"><code>/distance</code></td><td>Measure distance between targets. <span class="arg req">target</span> <span class="arg">target2</span></td></tr>
+  </tbody></table>
+
+  <h3>Combat</h3>
+  <table><tbody>
+    <tr><td class="cmd"><code>/attack</code></td><td>Attack a target with a weapon. <span class="arg req">target</span> <span class="arg">weapon</span> <span class="arg">gwm</span> <span class="arg">sharpshooter</span> <span class="arg">reckless</span> <span class="arg">offhand</span> <span class="arg">thrown</span> …</td></tr>
+    <tr><td class="cmd"><code>/cast</code></td><td>Cast a spell, with metamagic &amp; slot options. <span class="arg req">spell</span> <span class="arg">target</span> <span class="arg">level</span> <span class="arg">ritual</span> …</td></tr>
+    <tr><td class="cmd"><code>/bonus</code></td><td>Use a bonus action. <span class="arg req">action</span> <span class="arg">args</span></td></tr>
+    <tr><td class="cmd"><code>/action</code></td><td>Use an action on your turn. <span class="arg req">action</span> <span class="arg">spell</span> <span class="arg">slot</span></td></tr>
+    <tr><td class="cmd"><code>/shove</code></td><td>Shove a target (push, prone, or grapple). <span class="arg req">target</span> <span class="arg">mode</span></td></tr>
+    <tr><td class="cmd"><code>/interact</code></td><td>Interact with an object. <span class="arg req">description</span></td></tr>
+    <tr><td class="cmd"><code>/reaction</code></td><td>Declare, cancel, or clear reactions for the round.</td></tr>
+    <tr><td class="cmd"><code>/command</code></td><td>Command a companion creature. <span class="arg req">creature_id</span> <span class="arg req">action</span> <span class="arg">target</span></td></tr>
+    <tr><td class="cmd"><code>/deathsave</code></td><td>Roll a death saving throw.</td></tr>
+    <tr><td class="cmd"><code>/done</code></td><td>End your turn.</td></tr>
+  </tbody></table>
+
+  <h3>Checks, saves &amp; rest</h3>
+  <table><tbody>
+    <tr><td class="cmd"><code>/check</code></td><td>Make an ability or skill check. <span class="arg req">skill</span> <span class="arg">adv</span> <span class="arg">disadv</span> <span class="arg">dc</span></td></tr>
+    <tr><td class="cmd"><code>/save</code></td><td>Make a saving throw. <span class="arg req">ability</span></td></tr>
+    <tr><td class="cmd"><code>/rest</code></td><td>Take a short or long rest. <span class="arg req">type</span></td></tr>
+  </tbody></table>
+
+  <h3>Status &amp; inventory</h3>
+  <table><tbody>
+    <tr><td class="cmd"><code>/status</code></td><td>Show your character's current status.</td></tr>
+    <tr><td class="cmd"><code>/inventory</code></td><td>Show your inventory.</td></tr>
+    <tr><td class="cmd"><code>/equip</code></td><td>Equip an item. <span class="arg req">item</span> <span class="arg">offhand</span> <span class="arg">armor</span></td></tr>
+    <tr><td class="cmd"><code>/use</code></td><td>Use a consumable item. <span class="arg req">item</span></td></tr>
+    <tr><td class="cmd"><code>/give</code></td><td>Give an item to another creature. <span class="arg req">item</span> <span class="arg req">target</span></td></tr>
+    <tr><td class="cmd"><code>/loot</code></td><td>Loot the area or a defeated creature.</td></tr>
+    <tr><td class="cmd"><code>/attune</code> / <code>/unattune</code></td><td>Begin or end attunement with a magic item. <span class="arg req">item</span></td></tr>
+    <tr><td class="cmd"><code>/prepare</code></td><td>Prepare your spell list for the day. <span class="arg">spells</span> <span class="arg">class</span></td></tr>
+    <tr><td class="cmd"><code>/undo</code></td><td>Request to undo your last action. <span class="arg">reason</span></td></tr>
+  </tbody></table>
+
+  <h3>Communication</h3>
+  <table><tbody>
+    <tr><td class="cmd"><code>/whisper</code></td><td>Send a private message to the DM. <span class="arg req">message</span></td></tr>
+  </tbody></table>
+
+  <h3>Character management</h3>
+  <table><tbody>
+    <tr><td class="cmd"><code>/register</code></td><td>Get a character — claim, build, or import. <span class="arg">name</span></td></tr>
+    <tr><td class="cmd"><code>/import</code></td><td>Import a character from D&amp;D Beyond. <span class="arg req">ddb-url</span></td></tr>
+    <tr><td class="cmd"><code>/create-character</code></td><td>Build a character in the web portal.</td></tr>
+    <tr><td class="cmd"><code>/character</code></td><td>Show your character sheet summary.</td></tr>
+    <tr><td class="cmd"><code>/recap</code></td><td>Show a recap of recent combat rounds. <span class="arg">rounds</span></td></tr>
+    <tr><td class="cmd"><code>/retire</code></td><td>Retire your character from the campaign. <span class="arg">reason</span></td></tr>
+  </tbody></table>
+
+  <h3>Utility</h3>
+  <table><tbody>
+    <tr><td class="cmd"><code>/help</code></td><td>Show the full command list. <span class="arg">topic</span></td></tr>
+    <tr><td class="cmd"><code>/setup</code> <span class="dm-badge">DM</span></td><td>Create the full channel structure for this campaign (Manage Channels).</td></tr>
+  </tbody></table>
+
+  <footer>
+    See also: <a href="setup.html">Setup guide</a> · <a href="tiled-maps.html">Building maps with Tiled</a>.
+    Command reference generated from <code>internal/discord/commands.go</code>.
+  </footer>
+
+</div>
+</body>
+</html>

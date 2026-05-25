@@ -40,6 +40,10 @@ Add tilesets via the **Tilesets** panel (**New Tileset...**) and paint your
 floors, walls, props, and scenery across one or more tile layers. Use as many
 tilesets and decorative tile layers as you like — DnDnD renders them all.
 
+**Image layers** are also supported: add an **Image Layer** to drop a single
+pre-made image (e.g. a painted backdrop) onto the map. Its image file must be
+included in the import selection (Step 6), just like a tileset image.
+
 ### 3. EMBED every tileset (critical)
 
 > **This is the step people miss.** DnDnD v1 rejects maps that reference
@@ -136,7 +140,6 @@ These are silently removed during sanitization; the import result lists each
 class that was stripped so you know what changed:
 
 - **Tile animations** — animated tiles render as their base tile.
-- **Image layers** — full-layer background images are dropped.
 - **Parallax scrolling** — parallax factors are removed; layers render flat.
 - **Group layers** — flattened into the top-level layer list (their child
   layers are kept).
