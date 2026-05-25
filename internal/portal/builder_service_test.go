@@ -218,6 +218,7 @@ func TestBuilderService_CreateCharacter_NotifiesDMQueue(t *testing.T) {
 	_, err := svc.CreateCharacter(context.Background(), "campaign-uuid", "discord-user-1", "tok-abc", sub)
 	assert.NoError(t, err)
 	assert.True(t, notifier.called)
+	assert.Equal(t, "campaign-uuid", notifier.campaignID)
 	assert.Equal(t, "Thorin", notifier.charName)
 	assert.Equal(t, "discord-user-1", notifier.playerID)
 	assert.Equal(t, "portal-create", notifier.via)
@@ -517,15 +518,17 @@ func (m *mockBuilderStore) ValidateToken(_ context.Context, _ string) (*portal.P
 
 // mockDMQueueNotifier implements portal.DMQueueNotifier for testing.
 type mockDMQueueNotifier struct {
-	called   bool
-	charName string
-	playerID string
-	via      string
-	err      error
+	called     bool
+	campaignID string
+	charName   string
+	playerID   string
+	via        string
+	err        error
 }
 
-func (m *mockDMQueueNotifier) NotifyDMQueue(ctx context.Context, charName, playerDiscordID, via string) error {
+func (m *mockDMQueueNotifier) NotifyDMQueue(ctx context.Context, campaignID, charName, playerDiscordID, via string) error {
 	m.called = true
+	m.campaignID = campaignID
 	m.charName = charName
 	m.playerID = playerDiscordID
 	m.via = via

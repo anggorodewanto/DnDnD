@@ -267,9 +267,11 @@ type BuilderStore interface {
 	RedeemToken(ctx context.Context, token string) error
 }
 
-// DMQueueNotifier sends notifications to the DM queue channel.
+// DMQueueNotifier sends notifications to the DM queue channel. campaignID is
+// included so a multi-guild deployment can resolve which guild's #dm-queue to
+// post to (the builder only knows the campaign, not the Discord guild).
 type DMQueueNotifier interface {
-	NotifyDMQueue(ctx context.Context, characterName, playerDiscordID, via string) error
+	NotifyDMQueue(ctx context.Context, campaignID, characterName, playerDiscordID, via string) error
 }
 
 // AbilityMethodProvider returns the generation methods enabled for a campaign.
@@ -486,7 +488,7 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 	}
 
 	if in.mode == ModePlayer && svc.notifier != nil {
-		if err := svc.notifier.NotifyDMQueue(ctx, sub.Name, in.discordUserID, "portal-create"); err != nil && svc.logger != nil {
+		if err := svc.notifier.NotifyDMQueue(ctx, in.campaignID, sub.Name, in.discordUserID, "portal-create"); err != nil && svc.logger != nil {
 			svc.logger.Warn("notifying dm queue", "error", err)
 		}
 	}

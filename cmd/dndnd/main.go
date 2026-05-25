@@ -1303,7 +1303,16 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// WithCharacterSheet the /character Discord embed link points to a
 		// 404. buildPortalAPIAndSheetHandlers is the single source of truth
 		// so both endpoints stay in sync with portalTokenSvc.
-		portalAPIHandler, portalSheetHandler, portalPrepHandler := buildPortalAPIAndSheetHandlers(queries, portalTokenSvc, open5eCampaignLookup, portal.NewRefDataFeatureProvider(ctx, queries, logger), combatSvc)
+		// SR-013 follow-up: notify #dm-queue when a player submits a built
+		// character. Reuses the same sender + channel/DM-user resolvers as the
+		// combat dm-queue notifier; no-ops when the bot is offline.
+		portalDMNotifier := &portalDMQueueNotifier{
+			sender:          dmQueueSender,
+			queries:         queries,
+			channelForGuild: dmQueueChannel,
+			dmUserForGuild:  dmUserFunc,
+		}
+		portalAPIHandler, portalSheetHandler, portalPrepHandler := buildPortalAPIAndSheetHandlers(queries, portalTokenSvc, open5eCampaignLookup, portal.NewRefDataFeatureProvider(ctx, queries, logger), combatSvc, portalDMNotifier)
 		if portalAPIHandler != nil {
 			portalOpts = append(portalOpts, portal.WithAPI(portalAPIHandler))
 		}

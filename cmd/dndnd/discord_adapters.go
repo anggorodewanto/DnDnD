@@ -1298,7 +1298,7 @@ func (n *firstTurnPingNotifier) NotifyFirstTurn(ctx context.Context, encounterID
 //
 // Finding 20: uses NewRefDataAdapterWithOpen5eLookup when a lookup is provided
 // so Open5e spell-list gating is active in production.
-func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.TokenService, open5eLookup portal.Open5eCampaignLookup, featureProvider portal.FeatureProvider, prepareSvc portal.PrepareService) (*portal.APIHandler, *portal.CharacterSheetHandler, *portal.PreparationHandler) {
+func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.TokenService, open5eLookup portal.Open5eCampaignLookup, featureProvider portal.FeatureProvider, prepareSvc portal.PrepareService, dmNotifier portal.DMQueueNotifier) (*portal.APIHandler, *portal.CharacterSheetHandler, *portal.PreparationHandler) {
 	if queries == nil {
 		return nil, nil, nil
 	}
@@ -1330,6 +1330,11 @@ func buildPortalAPIAndSheetHandlers(queries *refdata.Queries, tokenSvc *portal.T
 	}
 	if featureProvider != nil {
 		opts = append(opts, portal.WithFeatureProvider(featureProvider))
+	}
+	// SR-013 follow-up: post a #dm-queue notice when a player submits a built
+	// character (the /create-character command no longer notifies up front).
+	if dmNotifier != nil {
+		opts = append(opts, portal.WithNotifier(dmNotifier))
 	}
 	builderSvc := portal.NewBuilderService(builderStore, opts...)
 	apiHandler := portal.NewAPIHandler(nil, refDataAdapter, builderSvc)
