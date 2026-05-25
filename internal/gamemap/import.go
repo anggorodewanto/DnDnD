@@ -413,7 +413,6 @@ func intFrom(m map[string]any, key string) int {
 	return int(v)
 }
 
-
 // skippedTracker collects unique skipped features in insertion order.
 type skippedTracker struct {
 	seen  map[SkippedFeatureType]struct{}
@@ -469,6 +468,57 @@ func (s *Service) ImportMap(ctx context.Context, input ImportMapInput) (refdata.
 		TiledJSON:         tiledJSON,
 		BackgroundImageID: input.BackgroundImageID,
 		TilesetRefs:       input.TilesetRefs,
+	})
+	if err != nil {
+		return refdata.Map{}, "", nil, err
+	}
+	return m, cat, result.Skipped, nil
+}
+
+// ReimportMapInput holds parameters for reimporting a Tiled project into an
+// existing map.
+type ReimportMapInput struct {
+	ID         uuid.UUID
+	CampaignID uuid.UUID
+	Name       string // when empty, the existing map's name is preserved
+	TiledJSON  json.RawMessage
+	Images     []ImportImage
+}
+
+// ReimportMap validates and sanitizes a `.tmj` payload, uploads any referenced
+// images, and OVERWRITES an existing map's content in place (same ID), so
+// encounters referencing the map stay valid. It preserves the existing map's
+// background image, and its name when input.Name is empty. Returns the updated
+// map, its size category, and the list of stripped features.
+func (s *Service) ReimportMap(ctx context.Context, input ReimportMapInput) (refdata.Map, SizeCategory, []SkippedFeature, error) {
+	existing, err := s.GetByID(ctx, input.ID, input.CampaignID)
+	if err != nil {
+		return refdata.Map{}, "", nil, err
+	}
+
+	result, err := ImportTiledJSON(input.TiledJSON)
+	if err != nil {
+		return refdata.Map{}, "", nil, err
+	}
+
+	tiledJSON, err := s.resolveImages(ctx, input.CampaignID, result, input.Images)
+	if err != nil {
+		return refdata.Map{}, "", nil, err
+	}
+
+	name := input.Name
+	if name == "" {
+		name = existing.Name
+	}
+
+	m, cat, err := s.UpdateMap(ctx, UpdateMapInput{
+		ID:                input.ID,
+		CampaignID:        input.CampaignID,
+		Name:              name,
+		Width:             result.Width,
+		Height:            result.Height,
+		TiledJSON:         tiledJSON,
+		BackgroundImageID: existing.BackgroundImageID,
 	})
 	if err != nil {
 		return refdata.Map{}, "", nil, err

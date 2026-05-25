@@ -522,6 +522,177 @@ func TestApplyImageAssets_RewritesTilesetAndImageLayerImages(t *testing.T) {
 	assert.Equal(t, "/api/assets/bbbb", parsed["layers"].([]any)[1].(map[string]any)["image"])
 }
 
+// --- Service.ReimportMap wires importer + UpdateMap in place ---
+
+func TestService_ReimportMap_Success(t *testing.T) {
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	bgID := uuid.New()
+	var captured refdata.UpdateMapParams
+	store := &mockStore{
+		getMapByIDFn: func(_ context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
+			return refdata.Map{
+				ID:                arg.ID,
+				CampaignID:        arg.CampaignID,
+				Name:              "Old Name",
+				WidthSquares:      10,
+				HeightSquares:     10,
+				TiledJson:         minimalTiledJSON(),
+				BackgroundImageID: uuid.NullUUID{UUID: bgID, Valid: true},
+			}, nil
+		},
+		updateMapFn: func(_ context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
+			captured = arg
+			return refdata.Map{
+				ID:                arg.ID,
+				CampaignID:        arg.CampaignID,
+				Name:              arg.Name,
+				WidthSquares:      arg.WidthSquares,
+				HeightSquares:     arg.HeightSquares,
+				TiledJson:         arg.TiledJson,
+				BackgroundImageID: arg.BackgroundImageID,
+			}, nil
+		},
+	}
+	svc := NewService(store)
+
+	m, cat, skipped, err := svc.ReimportMap(context.Background(), ReimportMapInput{
+		ID:         mapID,
+		CampaignID: campaignID,
+		Name:       "New Name",
+		TiledJSON:  validTmj(20, 18),
+	})
+	require.NoError(t, err)
+	// Same ID -> encounters stay linked.
+	assert.Equal(t, mapID, captured.ID)
+	assert.Equal(t, mapID, m.ID)
+	// New dimensions taken from the reimported tmj.
+	assert.Equal(t, int32(20), captured.WidthSquares)
+	assert.Equal(t, int32(18), captured.HeightSquares)
+	assert.Equal(t, int32(20), m.WidthSquares)
+	assert.Equal(t, int32(18), m.HeightSquares)
+	assert.Equal(t, SizeCategoryStandard, cat)
+	// Background image preserved from the existing map.
+	assert.True(t, captured.BackgroundImageID.Valid)
+	assert.Equal(t, bgID, captured.BackgroundImageID.UUID)
+	// Provided name overrides the old one.
+	assert.Equal(t, "New Name", captured.Name)
+	assert.Equal(t, "New Name", m.Name)
+	assert.Empty(t, skipped)
+}
+
+func TestService_ReimportMap_PreservesNameWhenEmpty(t *testing.T) {
+	campaignID := uuid.New()
+	var captured refdata.UpdateMapParams
+	store := &mockStore{
+		getMapByIDFn: func(_ context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
+			return refdata.Map{
+				ID:            arg.ID,
+				CampaignID:    arg.CampaignID,
+				Name:          "Existing Name",
+				WidthSquares:  10,
+				HeightSquares: 10,
+				TiledJson:     minimalTiledJSON(),
+			}, nil
+		},
+		updateMapFn: func(_ context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
+			captured = arg
+			return refdata.Map{ID: arg.ID, CampaignID: arg.CampaignID, Name: arg.Name}, nil
+		},
+	}
+	svc := NewService(store)
+
+	_, _, _, err := svc.ReimportMap(context.Background(), ReimportMapInput{
+		ID:         uuid.New(),
+		CampaignID: campaignID,
+		Name:       "",
+		TiledJSON:  validTmj(10, 10),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "Existing Name", captured.Name, "empty name preserves the existing map's name")
+}
+
+func TestService_ReimportMap_PassesSkippedThrough(t *testing.T) {
+	campaignID := uuid.New()
+	store := &mockStore{
+		getMapByIDFn: func(_ context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
+			return refdata.Map{ID: arg.ID, CampaignID: arg.CampaignID, Name: "Old", WidthSquares: 10, HeightSquares: 10, TiledJson: minimalTiledJSON()}, nil
+		},
+		updateMapFn: func(_ context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
+			return refdata.Map{ID: arg.ID, CampaignID: arg.CampaignID, Name: arg.Name, WidthSquares: arg.WidthSquares, HeightSquares: arg.HeightSquares, TiledJson: arg.TiledJson}, nil
+		},
+	}
+	svc := NewService(store)
+
+	raw := json.RawMessage(`{
+		"orientation":"orthogonal",
+		"width":10,"height":10,"tilewidth":48,"tileheight":48,
+		"infinite":false,
+		"layers":[
+			{"type":"tilelayer","name":"terrain","width":10,"height":10,"data":[1]}
+		],
+		"tilesets":[
+			{"firstgid":1,"name":"t","wangsets":[{"name":"corners","type":"corner"}]}
+		]
+	}`)
+	_, _, skipped, err := svc.ReimportMap(context.Background(), ReimportMapInput{
+		ID:         uuid.New(),
+		CampaignID: campaignID,
+		TiledJSON:  raw,
+	})
+	require.NoError(t, err)
+	assert.True(t, hasSkipped(skipped, SkippedWangSet))
+}
+
+func TestService_ReimportMap_GetByIDError(t *testing.T) {
+	updateCalled := false
+	store := &mockStore{
+		getMapByIDFn: func(_ context.Context, _ refdata.GetMapByIDParams) (refdata.Map, error) {
+			return refdata.Map{}, errors.New("not found")
+		},
+		updateMapFn: func(_ context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
+			updateCalled = true
+			return refdata.Map{ID: arg.ID}, nil
+		},
+	}
+	svc := NewService(store)
+
+	_, _, _, err := svc.ReimportMap(context.Background(), ReimportMapInput{
+		ID:         uuid.New(),
+		CampaignID: uuid.New(),
+		TiledJSON:  validTmj(10, 10),
+	})
+	require.Error(t, err)
+	assert.False(t, updateCalled, "UpdateMap must not run when the map can't be fetched")
+}
+
+func TestService_ReimportMap_HardRejection(t *testing.T) {
+	getCalled := false
+	updateCalled := false
+	store := &mockStore{
+		getMapByIDFn: func(_ context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
+			getCalled = true
+			return refdata.Map{ID: arg.ID, CampaignID: arg.CampaignID, Name: "Old", WidthSquares: 10, HeightSquares: 10, TiledJson: minimalTiledJSON()}, nil
+		},
+		updateMapFn: func(_ context.Context, arg refdata.UpdateMapParams) (refdata.Map, error) {
+			updateCalled = true
+			return refdata.Map{ID: arg.ID}, nil
+		},
+	}
+	svc := NewService(store)
+
+	raw := json.RawMessage(`{"orientation":"orthogonal","width":10,"height":10,"tilewidth":48,"tileheight":48,"infinite":true,"layers":[]}`)
+	_, _, _, err := svc.ReimportMap(context.Background(), ReimportMapInput{
+		ID:         uuid.New(),
+		CampaignID: uuid.New(),
+		TiledJSON:  raw,
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInfiniteMap))
+	assert.True(t, getCalled, "the existing map is fetched before parsing")
+	assert.False(t, updateCalled, "no update on a hard-rejected payload")
+}
+
 // hasSkipped checks if a feature appears in the skipped list.
 func hasSkipped(skipped []SkippedFeature, feature SkippedFeatureType) bool {
 	for _, s := range skipped {

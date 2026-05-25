@@ -156,6 +156,56 @@ export function generateBlankMap(width, height) {
 }
 
 /**
+ * Backfill any missing semantic layers the editor needs to paint.
+ *
+ * Maps imported from Tiled often lack the named "terrain"/"lighting"/"elevation"
+ * tile layers and "walls"/"spawn_zones" object groups, so the setters silently
+ * no-op. This appends any that are absent, shaped like generateBlankMap, while
+ * leaving existing layers (and their data) untouched.
+ * @param {object} tiledMap - The Tiled-compatible map object.
+ * @returns {object} The same map, mutated in place.
+ */
+export function ensureSemanticLayers(tiledMap) {
+  if (!tiledMap) return tiledMap;
+  if (!Array.isArray(tiledMap.layers)) tiledMap.layers = [];
+
+  const width = tiledMap.width || 0;
+  const height = tiledMap.height || 0;
+  const tileCount = width * height;
+
+  const tileLayers = [
+    { name: 'terrain', fill: 1 },
+    { name: 'lighting', fill: 0 },
+    { name: 'elevation', fill: 0 },
+  ];
+  for (const { name, fill } of tileLayers) {
+    if (findLayer(tiledMap, name, 'tilelayer')) continue;
+    tiledMap.layers.push({
+      name,
+      type: 'tilelayer',
+      width,
+      height,
+      data: new Array(tileCount).fill(fill),
+      visible: true,
+      opacity: 1,
+    });
+  }
+
+  for (const name of ['walls', 'spawn_zones']) {
+    if (findLayer(tiledMap, name, 'objectgroup')) continue;
+    tiledMap.layers.push({
+      name,
+      type: 'objectgroup',
+      objects: [],
+      visible: true,
+      opacity: 1,
+    });
+  }
+
+  return tiledMap;
+}
+
+/**
  * Get the terrain layer data array from a Tiled map.
  * @param {object} tiledMap - The Tiled-compatible map object.
  * @returns {number[]} The terrain data array (GIDs).

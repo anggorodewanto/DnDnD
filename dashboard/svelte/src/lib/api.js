@@ -128,6 +128,36 @@ export async function importTiledMap({ campaignId, name, tmjFile, imageFiles = [
 }
 
 /**
+ * Reimport a multi-file Tiled project into an EXISTING map, overwriting its
+ * content in place (same map ID, so encounters that reference it stay valid).
+ * Same multipart shape as importTiledMap but PUTs to /api/maps/{id}/import. The
+ * backend preserves the map's background image, and its name when `name` is
+ * empty. Returns { map: {...}, skipped: [...] }.
+ *
+ * @param {object} params
+ * @param {string} params.mapId - Map UUID to overwrite.
+ * @param {string} params.campaignId - Campaign UUID.
+ * @param {string} params.name - Map name (kept if empty server-side).
+ * @param {File}   params.tmjFile - The .tmj file selected by the user.
+ * @param {File[]} [params.imageFiles] - Tileset + image-layer image files.
+ * @returns {Promise<{map: object, skipped: object[]}>}
+ */
+export async function reimportTiledMap({ mapId, campaignId, name, tmjFile, imageFiles = [] }) {
+  const formData = new FormData();
+  formData.append('campaign_id', campaignId);
+  formData.append('name', name);
+  formData.append('tmj', tmjFile);
+  for (const img of imageFiles) {
+    formData.append('images', img);
+  }
+  const res = await apiFetch(`${API_BASE}/${mapId}/import`, {
+    method: 'PUT',
+    body: formData,
+  });
+  return res.json();
+}
+
+/**
  * Upload an asset file.
  * @param {object} params - { campaignId, type, file }
  * @returns {Promise<object>} The uploaded asset { id, url }.

@@ -30,6 +30,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/", h.ListMaps)
 		r.Get("/{id}", h.GetMap)
 		r.Put("/{id}", h.UpdateMap)
+		r.Put("/{id}/import", h.ReimportMap)
 		r.Delete("/{id}", h.DeleteMap)
 	})
 }

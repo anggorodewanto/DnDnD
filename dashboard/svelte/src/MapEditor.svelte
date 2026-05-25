@@ -1,5 +1,5 @@
 <script>
-  import { createMap, getMap, updateMap, uploadAsset, importTiledMap } from './lib/api.js';
+  import { createMap, getMap, updateMap, uploadAsset, importTiledMap, reimportTiledMap } from './lib/api.js';
   import { decodeGID, tilesetForGID, tileSrcRect } from './lib/tiledSprites.js';
   import {
     TERRAIN_TYPES,
@@ -8,6 +8,7 @@
     lightingByGid,
     ELEVATION_MAX,
     generateBlankMap,
+    ensureSemanticLayers,
     setTerrain,
     setLighting,
     getLightingData,
@@ -75,6 +76,13 @@
   let importingTmj = $state(false);
   let skippedFeatures = $state(null);
 
+  // Reimport state: replace an existing map's content from a fresh Tiled export
+  // (same map ID). confirmingReimport gates the destructive replace behind an
+  // inline confirmation before the file picker opens.
+  let reimportFileInputEl = $state(null);
+  let reimportingTmj = $state(false);
+  let confirmingReimport = $state(false);
+
   // Mouse state for painting
   let isPainting = $state(false);
 
@@ -118,6 +126,11 @@
       mapWidth = data.width;
       mapHeight = data.height;
       tiledMap = typeof data.tiled_json === 'string' ? JSON.parse(data.tiled_json) : data.tiled_json;
+      // Backfill the editor's semantic layers (terrain/lighting/elevation/walls/
+      // spawn_zones) when a loaded map lacks them — e.g. a Tiled-imported map
+      // that never had them. Without these named layers the paint setters
+      // silently no-op. They persist on the next save.
+      ensureSemanticLayers(tiledMap);
       // F-18: Restore backgroundOpacity from tiled_json.
       if (tiledMap.backgroundOpacity != null) {
         backgroundOpacity = tiledMap.backgroundOpacity;
@@ -261,6 +274,9 @@
       mapWidth = m.width;
       mapHeight = m.height;
       tiledMap = typeof m.tiled_json === 'string' ? JSON.parse(m.tiled_json) : m.tiled_json;
+      // Give the imported map the editor's semantic layers so the DM can paint
+      // terrain/lighting/elevation and place walls/spawn zones on top of the art.
+      ensureSemanticLayers(tiledMap);
       savedMapId = m.id;
       if (m.background_image_id) {
         backgroundImageId = m.background_image_id;
@@ -279,6 +295,63 @@
       importingTmj = false;
       // Reset the input so selecting the same files again re-triggers change.
       if (tmjFileInputEl) tmjFileInputEl.value = '';
+    }
+  }
+
+  // Reimport a Tiled project into the CURRENT map, overwriting its content in
+  // place. Same multi-file selection as handleTmjImport (.tmj + its images),
+  // but PUTs to /api/maps/{id}/import so the map keeps its ID — encounters that
+  // reference it stay valid. The previously painted semantic overlays and undo
+  // history are replaced, so we clear both. Gated behind confirmingReimport.
+  async function handleTmjReimport(e) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const tmjFile = files.find((f) => /\.(tmj|json)$/i.test(f.name));
+    if (!tmjFile) {
+      error = 'Select a .tmj (or .json) file along with its images.';
+      if (reimportFileInputEl) reimportFileInputEl.value = '';
+      return;
+    }
+    const imageFiles = files.filter((f) => f !== tmjFile);
+
+    reimportingTmj = true;
+    error = null;
+    skippedFeatures = null;
+    statusMsg = '';
+    try {
+      const result = await reimportTiledMap({
+        mapId: savedMapId,
+        campaignId,
+        name: mapName,
+        tmjFile,
+        imageFiles,
+      });
+      const m = result.map;
+      mapName = m.name;
+      mapWidth = m.width;
+      mapHeight = m.height;
+      tiledMap = typeof m.tiled_json === 'string' ? JSON.parse(m.tiled_json) : m.tiled_json;
+      ensureSemanticLayers(tiledMap);
+      savedMapId = m.id;
+      if (m.background_image_id) {
+        backgroundImageId = m.background_image_id;
+        backgroundImageUrl = `/api/assets/${m.background_image_id}`;
+        loadBackgroundImage(backgroundImageUrl);
+      }
+      // The reimport replaced map content server-side; clear stale editor state.
+      undoStack.clear();
+      selectionRect = null;
+      clipboard = null;
+      dirty = false;
+      skippedFeatures = Array.isArray(result.skipped) ? result.skipped : [];
+      statusMsg = `Reimported "${m.name}".`;
+    } catch (err) {
+      error = err.message;
+    } finally {
+      reimportingTmj = false;
+      confirmingReimport = false;
+      if (reimportFileInputEl) reimportFileInputEl.value = '';
     }
   }
 
@@ -932,6 +1005,38 @@
           {/if}
         </div>
 
+        {#if savedMapId}
+          <!-- Reimport replaces this map's content from an updated Tiled export
+               while keeping the same map ID, so linked encounters stay valid.
+               It's destructive (drops painted overlays), so it's gated behind
+               an inline confirmation. -->
+          <div class="toolbar-section reimport-section">
+            <input
+              type="file"
+              multiple
+              accept=".tmj,.json,application/json,image/png,image/jpeg,image/webp"
+              style="display:none"
+              bind:this={reimportFileInputEl}
+              onchange={handleTmjReimport}
+            />
+            {#if confirmingReimport}
+              <span class="reimport-warn">Replace map content from a Tiled export? Painted overlays are lost.</span>
+              <button
+                class="reimport-confirm-btn"
+                onclick={() => reimportFileInputEl?.click()}
+                disabled={reimportingTmj}
+              >{reimportingTmj ? 'Reimporting…' : 'Choose .tmj & replace'}</button>
+              <button onclick={() => confirmingReimport = false} disabled={reimportingTmj}>Cancel</button>
+            {:else}
+              <button
+                class="reimport-btn"
+                onclick={() => confirmingReimport = true}
+                title="Replace this map's content from an updated Tiled export (.tmj + images). Keeps the same map so encounters stay linked."
+              >Reimport Tiled</button>
+            {/if}
+          </div>
+        {/if}
+
         <div class="toolbar-section doc-actions-right">
           <button class="undo-btn" onclick={performUndo} disabled={!undoStack.canUndo()} title="Undo (Ctrl+Z)">Undo</button>
           <button class="redo-btn" onclick={performRedo} disabled={!undoStack.canRedo()} title="Redo (Ctrl+Shift+Z)">Redo</button>
@@ -1451,6 +1556,34 @@
   .import-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed !important;
+  }
+
+  /* Reimport: neutral amber affordance; the confirm step turns destructive-red. */
+  .reimport-btn {
+    background: #1a1a2e !important;
+    border-color: #d39e00 !important;
+    color: #ffc107 !important;
+  }
+
+  .reimport-btn:hover {
+    background: #2a2410 !important;
+  }
+
+  .reimport-confirm-btn {
+    background: #c9302c !important;
+    border-color: #c9302c !important;
+    color: white !important;
+  }
+
+  .reimport-confirm-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+  }
+
+  .reimport-warn {
+    font-size: 0.8rem;
+    color: #ffc107;
+    max-width: 18rem;
   }
 
   .opacity-label {

@@ -14,6 +14,7 @@ import {
   updateEncounterDisplayName,
   startCombat,
   importTiledMap,
+  reimportTiledMap,
   listOpen5eSources,
   getCampaignOpen5eSources,
   updateCampaignOpen5eSources,
@@ -708,6 +709,77 @@ describe('importTiledMap', () => {
     await expect(
       importTiledMap({ campaignId: 'c1', name: 'Big', tmjFile, imageFiles: [] }),
     ).rejects.toThrow('missing images: tiles.png, bg.png');
+  });
+});
+
+// reimportTiledMap overwrites an existing map in place: PUT multipart to
+// /api/maps/{id}/import. Like importTiledMap, the browser sets the multipart
+// boundary, so no manual Content-Type header.
+describe('reimportTiledMap', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('PUTs multipart form-data to /api/maps/{id}/import with the tmj and images', async () => {
+    const responseBody = {
+      map: { id: 'map-123', name: 'Dungeon', width: 12, height: 9, tiled_json: {} },
+      skipped: [],
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(responseBody),
+    });
+
+    const tmjFile = new File(['{"layers":[]}'], 'dungeon-v2.tmj', { type: 'application/json' });
+    const img1 = new File(['png-a'], 'tiles.png', { type: 'image/png' });
+
+    const result = await reimportTiledMap({
+      mapId: 'map-123',
+      campaignId: 'campaign-uuid',
+      name: 'Dungeon',
+      tmjFile,
+      imageFiles: [img1],
+    });
+
+    expect(result).toEqual(responseBody);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/maps/map-123/import');
+    expect(options.method).toBe('PUT');
+    expect(options.headers).toBeUndefined();
+    expect(options.body).toBeInstanceOf(FormData);
+
+    const fd = options.body;
+    expect(fd.get('campaign_id')).toBe('campaign-uuid');
+    expect(fd.get('name')).toBe('Dungeon');
+    expect(fd.get('tmj').name).toBe('dungeon-v2.tmj');
+    expect(fd.getAll('images').map((f) => f.name)).toEqual(['tiles.png']);
+  });
+
+  it('defaults imageFiles to an empty list when omitted', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ map: {}, skipped: [] }),
+    });
+    const tmjFile = new File(['{"layers":[]}'], 'm.tmj', { type: 'application/json' });
+
+    await reimportTiledMap({ mapId: 'm1', campaignId: 'c1', name: 'M', tmjFile });
+
+    const fd = fetch.mock.calls[0][1].body;
+    expect(fd.getAll('images')).toEqual([]);
+  });
+
+  it('surfaces a backend error body from a non-ok response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: () => Promise.resolve('map not found'),
+    });
+    const tmjFile = new File(['{"layers":[]}'], 'x.tmj', { type: 'application/json' });
+    await expect(
+      reimportTiledMap({ mapId: 'gone', campaignId: 'c1', name: 'X', tmjFile }),
+    ).rejects.toThrow('map not found');
   });
 });
 

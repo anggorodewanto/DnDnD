@@ -28,6 +28,7 @@ import {
   pasteRegion,
   duplicateMap,
   UndoStack,
+  ensureSemanticLayers,
 } from './mapdata.js';
 
 describe('TERRAIN_TYPES', () => {
@@ -771,6 +772,132 @@ describe('UndoStack', () => {
       count++;
     }
     expect(count).toBe(50);
+  });
+});
+
+// Local helper mirroring the module's private findLayer for assertions.
+const findByName = (map, name, type) =>
+  map.layers.find(l => l.name === name && l.type === type);
+
+describe('ensureSemanticLayers', () => {
+  it('returns falsy maps unchanged', () => {
+    expect(ensureSemanticLayers(null)).toBeNull();
+    expect(ensureSemanticLayers(undefined)).toBeUndefined();
+  });
+
+  it('adds all five semantic layers to an imported map lacking them', () => {
+    const map = {
+      width: 4,
+      height: 3,
+      layers: [
+        { name: 'ground', type: 'tilelayer', width: 4, height: 3, data: new Array(12).fill(7), visible: true, opacity: 1 },
+      ],
+    };
+    ensureSemanticLayers(map);
+
+    const terrain = findByName(map, 'terrain', 'tilelayer');
+    const lighting = findByName(map, 'lighting', 'tilelayer');
+    const elevation = findByName(map, 'elevation', 'tilelayer');
+    const walls = findByName(map, 'walls', 'objectgroup');
+    const spawnZones = findByName(map, 'spawn_zones', 'objectgroup');
+
+    expect(terrain).toBeTruthy();
+    expect(lighting).toBeTruthy();
+    expect(elevation).toBeTruthy();
+    expect(walls).toBeTruthy();
+    expect(spawnZones).toBeTruthy();
+
+    // The unrelated layer is preserved.
+    expect(findByName(map, 'ground', 'tilelayer')).toBeTruthy();
+    expect(map.layers).toHaveLength(6);
+  });
+
+  it('shapes the appended tile layers to match generateBlankMap', () => {
+    const map = { width: 4, height: 3, layers: [] };
+    ensureSemanticLayers(map);
+
+    const terrain = findByName(map, 'terrain', 'tilelayer');
+    expect(terrain).toEqual({
+      name: 'terrain',
+      type: 'tilelayer',
+      width: 4,
+      height: 3,
+      data: new Array(12).fill(1),
+      visible: true,
+      opacity: 1,
+    });
+
+    const lighting = findByName(map, 'lighting', 'tilelayer');
+    expect(lighting.data).toEqual(new Array(12).fill(0));
+    const elevation = findByName(map, 'elevation', 'tilelayer');
+    expect(elevation.data).toEqual(new Array(12).fill(0));
+  });
+
+  it('shapes the appended object layers as empty objectgroups', () => {
+    const map = { width: 2, height: 2, layers: [] };
+    ensureSemanticLayers(map);
+
+    const walls = findByName(map, 'walls', 'objectgroup');
+    expect(walls).toEqual({ name: 'walls', type: 'objectgroup', objects: [], visible: true, opacity: 1 });
+    const spawnZones = findByName(map, 'spawn_zones', 'objectgroup');
+    expect(spawnZones).toEqual({ name: 'spawn_zones', type: 'objectgroup', objects: [], visible: true, opacity: 1 });
+  });
+
+  it('gives tile-layer data arrays the right length and fill values', () => {
+    const map = { width: 5, height: 4, layers: [] };
+    ensureSemanticLayers(map);
+
+    expect(getTerrainData(map)).toHaveLength(20);
+    expect(getTerrainData(map).every(v => v === 1)).toBe(true);
+    expect(getLightingData(map)).toHaveLength(20);
+    expect(getLightingData(map).every(v => v === 0)).toBe(true);
+    expect(getElevationData(map)).toHaveLength(20);
+    expect(getElevationData(map).every(v => v === 0)).toBe(true);
+  });
+
+  it('initialises layers to [] when missing or not an array', () => {
+    const noLayers = { width: 2, height: 2 };
+    ensureSemanticLayers(noLayers);
+    expect(Array.isArray(noLayers.layers)).toBe(true);
+    expect(noLayers.layers).toHaveLength(5);
+
+    const badLayers = { width: 2, height: 2, layers: 'oops' };
+    ensureSemanticLayers(badLayers);
+    expect(Array.isArray(badLayers.layers)).toBe(true);
+    expect(badLayers.layers).toHaveLength(5);
+  });
+
+  it('defaults dimensions to 0 when width/height are missing', () => {
+    const map = { layers: [] };
+    ensureSemanticLayers(map);
+    expect(getTerrainData(map)).toHaveLength(0);
+    expect(findByName(map, 'walls', 'objectgroup')).toBeTruthy();
+  });
+
+  it('is idempotent: a second call adds no duplicate layers', () => {
+    const map = { width: 3, height: 3, layers: [] };
+    ensureSemanticLayers(map);
+    expect(map.layers).toHaveLength(5);
+    ensureSemanticLayers(map);
+    expect(map.layers).toHaveLength(5);
+  });
+
+  it('preserves pre-existing terrain data unchanged', () => {
+    const map = generateBlankMap(3, 3);
+    setTerrain(map, 1, 1, 4); // lava at center
+    const before = [...getTerrainData(map)];
+    const lengthBefore = map.layers.length;
+
+    ensureSemanticLayers(map);
+
+    expect(map.layers).toHaveLength(lengthBefore);
+    expect(getTerrainData(map)).toEqual(before);
+    expect(getTerrainData(map)[4]).toBe(4);
+  });
+
+  it('mutates in place and returns the same object', () => {
+    const map = { width: 2, height: 2, layers: [] };
+    expect(ensureSemanticLayers(map)).toBe(map);
   });
 });
 

@@ -43,6 +43,25 @@ func newImportRequest(fields map[string]string, parts ...importPart) *http.Reque
 	return req
 }
 
+// newReimportRequest builds a multipart/form-data PUT /api/maps/{id}/import
+// request carrying the given text fields and file parts.
+func newReimportRequest(id string, fields map[string]string, parts ...importPart) *http.Request {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		_ = mw.WriteField(k, v)
+	}
+	for _, p := range parts {
+		fw, _ := mw.CreatePart(newPartHeader(p.field, p.filename, p.mime))
+		_, _ = fw.Write(p.content)
+	}
+	_ = mw.Close()
+
+	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+id+"/import", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return req
+}
+
 // newPartHeader builds a MIME header for a form-data file part.
 func newPartHeader(field, filename, mime string) map[string][]string {
 	cd := `form-data; name="` + field + `"; filename="` + filename + `"`
@@ -327,4 +346,107 @@ func TestHandler_ImportMap_MissingImage(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Contains(t, rec.Body.String(), "dungeon.png")
+}
+
+// --- PUT /api/maps/{id}/import overwrites an existing map in place ---
+
+func TestHandler_ReimportMap_Success(t *testing.T) {
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	_, r := newTestRouter(successStore(campaignID))
+
+	req := newReimportRequest(
+		mapID.String(),
+		map[string]string{"campaign_id": campaignID.String(), "name": "Reimported Map"},
+		tmjPart(validTmj(15, 12)),
+	)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp importMapResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, mapID.String(), resp.Map.ID, "same map ID is preserved")
+	assert.Equal(t, "Reimported Map", resp.Map.Name)
+	assert.Equal(t, 15, resp.Map.Width)
+	assert.Equal(t, 12, resp.Map.Height)
+	assert.NotNil(t, resp.Skipped)
+	assert.Empty(t, resp.Skipped)
+}
+
+// --- PUT /api/maps/{id}/import invalid map id -> 400 ---
+
+func TestHandler_ReimportMap_InvalidMapID(t *testing.T) {
+	campaignID := uuid.New()
+	_, r := newTestRouter(successStore(campaignID))
+
+	req := newReimportRequest(
+		"not-a-uuid",
+		map[string]string{"campaign_id": campaignID.String(), "name": "X"},
+		tmjPart(validTmj(10, 10)),
+	)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "map id")
+}
+
+// --- PUT /api/maps/{id}/import missing tmj file -> 400 ---
+
+func TestHandler_ReimportMap_MissingTmj(t *testing.T) {
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	_, r := newTestRouter(successStore(campaignID))
+
+	req := newReimportRequest(
+		mapID.String(),
+		map[string]string{"campaign_id": campaignID.String(), "name": "X"},
+	)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "tmj")
+}
+
+// --- PUT /api/maps/{id}/import for a missing map -> 404 ---
+
+func TestHandler_ReimportMap_NotFound(t *testing.T) {
+	campaignID := uuid.New()
+	store := successStore(campaignID)
+	store.getMapByIDFn = func(ctx context.Context, arg refdata.GetMapByIDParams) (refdata.Map, error) {
+		return refdata.Map{}, errNotFound
+	}
+	_, r := newTestRouter(store)
+
+	req := newReimportRequest(
+		uuid.New().String(),
+		map[string]string{"campaign_id": campaignID.String(), "name": "X"},
+		tmjPart(validTmj(10, 10)),
+	)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+	assert.Contains(t, rec.Body.String(), "not found")
+}
+
+// --- PUT /api/maps/{id}/import with a bad campaign_id -> 400 ---
+
+func TestHandler_ReimportMap_InvalidCampaignID(t *testing.T) {
+	campaignID := uuid.New()
+	_, r := newTestRouter(successStore(campaignID))
+
+	req := newReimportRequest(
+		uuid.New().String(),
+		map[string]string{"campaign_id": "not-a-uuid", "name": "X"},
+		tmjPart(validTmj(10, 10)),
+	)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "campaign_id")
 }
