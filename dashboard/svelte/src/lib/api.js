@@ -54,12 +54,14 @@ export async function createMap(params) {
 }
 
 /**
- * Get a map by ID.
+ * Get a map by ID. The backend scopes map access per campaign, so the
+ * campaign UUID is required as a query parameter.
  * @param {string} id - Map UUID.
+ * @param {string} campaignId - Campaign UUID.
  * @returns {Promise<object>} The map.
  */
-export async function getMap(id) {
-  const res = await apiFetch(`${API_BASE}/${id}`);
+export async function getMap(id, campaignId) {
+  const res = await apiFetch(`${API_BASE}/${id}?campaign_id=${campaignId}`);
   return res.json();
 }
 
@@ -74,13 +76,15 @@ export async function listMaps(campaignId) {
 }
 
 /**
- * Update a map.
+ * Update a map. The backend scopes map access per campaign, so the campaign
+ * UUID is required as a query parameter.
  * @param {string} id - Map UUID.
+ * @param {string} campaignId - Campaign UUID.
  * @param {object} params - { name, width, height, tiled_json }
  * @returns {Promise<object>} The updated map.
  */
-export async function updateMap(id, params) {
-  const res = await apiFetch(`${API_BASE}/${id}`, {
+export async function updateMap(id, campaignId, params) {
+  const res = await apiFetch(`${API_BASE}/${id}?campaign_id=${campaignId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),

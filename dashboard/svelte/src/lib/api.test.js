@@ -28,6 +28,8 @@ import {
   getCurrentUser,
   listCampaigns,
   createCampaign,
+  getMap,
+  updateMap,
 } from './api.js';
 
 describe('uploadAsset', () => {
@@ -941,5 +943,47 @@ describe('applyLevelUp', () => {
     await expect(
       applyLevelUp({ character_id: '', class_id: '', new_level: 0 }),
     ).rejects.toThrow('character_id is required');
+  });
+});
+
+describe('getMap', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('scopes the request with the campaign_id query parameter', async () => {
+    const mockMap = { id: 'map-uuid', name: 'Cave' };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockMap),
+    });
+
+    const result = await getMap('map-uuid', 'campaign-uuid');
+
+    expect(result).toEqual(mockMap);
+    const [url] = fetch.mock.calls[0];
+    expect(url).toBe('/api/maps/map-uuid?campaign_id=campaign-uuid');
+  });
+});
+
+describe('updateMap', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('scopes the PUT with the campaign_id query parameter and sends the payload', async () => {
+    const mockMap = { id: 'map-uuid', name: 'Cave' };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockMap),
+    });
+
+    const result = await updateMap('map-uuid', 'campaign-uuid', { name: 'Cave' });
+
+    expect(result).toEqual(mockMap);
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/maps/map-uuid?campaign_id=campaign-uuid');
+    expect(options.method).toBe('PUT');
+    expect(JSON.parse(options.body)).toEqual({ name: 'Cave' });
   });
 });

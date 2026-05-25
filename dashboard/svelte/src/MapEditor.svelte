@@ -106,7 +106,7 @@
     loading = true;
     error = null;
     try {
-      const data = await getMap(id);
+      const data = await getMap(id, campaignId);
       mapName = data.name;
       mapWidth = data.width;
       mapHeight = data.height;
@@ -162,7 +162,7 @@
       }
 
       if (savedMapId) {
-        await updateMap(savedMapId, payload);
+        await updateMap(savedMapId, campaignId, payload);
         statusMsg = 'Map saved.';
       } else {
         payload.campaign_id = campaignId;
