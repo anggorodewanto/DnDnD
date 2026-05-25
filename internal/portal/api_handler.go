@@ -3,6 +3,7 @@ package portal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -210,6 +211,10 @@ func (h *APIHandler) SubmitCharacter(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if isValidationError(err) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, ErrAlreadyActive) {
+			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
 		h.logger.Error("creating character", "error", err)

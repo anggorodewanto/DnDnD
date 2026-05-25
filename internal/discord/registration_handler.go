@@ -325,7 +325,6 @@ const registerChoicePrompt = "**How do you want your character?**\n" +
 // CreateCharacterHandler handles the /create-character slash command.
 type CreateCharacterHandler struct {
 	registrationBase
-	charCreator   CharacterCreator
 	tokenFunc     func(campaignID uuid.UUID, discordUserID string) (string, error)
 	portalBaseURL string
 }
@@ -342,7 +341,7 @@ func WithCreateCharacterPortalBaseURL(baseURL string) CreateCharacterOption {
 }
 
 // NewCreateCharacterHandler creates a new CreateCharacterHandler.
-func NewCreateCharacterHandler(session Session, regService RegistrationService, campaignProv CampaignProvider, charCreator CharacterCreator, dmQueueFunc func(string) string, dmUserFunc func(string) string, tokenFunc func(uuid.UUID, string) (string, error), opts ...CreateCharacterOption) *CreateCharacterHandler {
+func NewCreateCharacterHandler(session Session, regService RegistrationService, campaignProv CampaignProvider, dmQueueFunc func(string) string, dmUserFunc func(string) string, tokenFunc func(uuid.UUID, string) (string, error), opts ...CreateCharacterOption) *CreateCharacterHandler {
 	h := &CreateCharacterHandler{
 		registrationBase: registrationBase{
 			session:      session,
@@ -351,8 +350,7 @@ func NewCreateCharacterHandler(session Session, regService RegistrationService, 
 			dmQueueFunc:  dmQueueFunc,
 			dmUserFunc:   dmUserFunc,
 		},
-		charCreator: charCreator,
-		tokenFunc:   tokenFunc,
+		tokenFunc: tokenFunc,
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -361,6 +359,13 @@ func NewCreateCharacterHandler(session Session, regService RegistrationService, 
 }
 
 // Handle processes a /create-character interaction.
+//
+// SR-013: this no longer creates a placeholder character or a player_characters
+// row up front. The row is written once, when the player submits the web
+// builder — so re-running /create-character (e.g. after the link expires) just
+// hands out a fresh link instead of colliding on the unique index. The only
+// thing we refuse here is starting a build when an *approved* character already
+// exists; that player must /retire first.
 func (h *CreateCharacterHandler) Handle(interaction *discordgo.Interaction) {
 	campaign, err := h.campaignProv.GetCampaignByGuildID(context.Background(), interaction.GuildID)
 	if err != nil {
@@ -369,17 +374,12 @@ func (h *CreateCharacterHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	userID := interactionUserID(interaction)
-	charName := fmt.Sprintf("New Character (by <@%s>)", userID)
 
-	char, err := h.charCreator.CreatePlaceholder(context.Background(), campaign.ID, charName, "")
-	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Error creating character: %s", err))
-		return
-	}
-
-	_, err = h.regService.Create(context.Background(), campaign.ID, userID, char.ID)
-	if err != nil {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Error: %s", err))
+	// GetStatus errors (including "no active character") are non-fatal: only an
+	// existing *approved* character blocks a new build.
+	if existing, statusErr := h.regService.GetStatus(context.Background(), campaign.ID, userID); statusErr == nil && existing != nil && existing.Status == "approved" {
+		respondEphemeral(h.session, interaction,
+			"You already have an active character in this campaign. Use /retire first if you want to build a new one.")
 		return
 	}
 
@@ -395,8 +395,7 @@ func (h *CreateCharacterHandler) Handle(interaction *discordgo.Interaction) {
 	portalURL := fmt.Sprintf("%s/portal/create?token=%s", base, token)
 
 	respondEphemeral(h.session, interaction,
-		fmt.Sprintf("✅ Registration submitted — your character is pending DM approval. You'll be pinged when approved.\n\n🔗 **Character Builder:** %s\n_(Link expires in 24 hours)_", portalURL))
-	postDMQueueNotification(h.session, h.dmQueueFunc, h.dmUserFunc, interaction.GuildID, charName, userID, "create-character", nil)
+		fmt.Sprintf("🔗 **Character Builder:** %s\n\nBuild your character there — it's submitted for DM approval when you finish.\n_(Link expires in 24 hours)_", portalURL))
 }
 
 // postDMQueueNotification sends a registration notification to the DM queue channel.

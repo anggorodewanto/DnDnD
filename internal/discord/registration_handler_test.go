@@ -19,9 +19,9 @@ import (
 // --- Mock implementations ---
 
 type mockRegistrationService struct {
-	RegisterFunc func(ctx context.Context, campaignID uuid.UUID, discordUserID, characterName string) (*registration.RegisterResult, error)
-	ImportFunc   func(ctx context.Context, campaignID uuid.UUID, discordUserID string, characterID uuid.UUID) (*refdata.PlayerCharacter, error)
-	CreateFunc   func(ctx context.Context, campaignID uuid.UUID, discordUserID string, characterID uuid.UUID) (*refdata.PlayerCharacter, error)
+	RegisterFunc  func(ctx context.Context, campaignID uuid.UUID, discordUserID, characterName string) (*registration.RegisterResult, error)
+	ImportFunc    func(ctx context.Context, campaignID uuid.UUID, discordUserID string, characterID uuid.UUID) (*refdata.PlayerCharacter, error)
+	CreateFunc    func(ctx context.Context, campaignID uuid.UUID, discordUserID string, characterID uuid.UUID) (*refdata.PlayerCharacter, error)
 	GetStatusFunc func(ctx context.Context, campaignID uuid.UUID, discordUserID string) (*refdata.PlayerCharacter, error)
 }
 
@@ -349,50 +349,98 @@ func TestImportHandler_NoURL_ShowsError(t *testing.T) {
 
 // --- /create-character tests ---
 
-func TestCreateCharacterHandler_CreatesRecordAndReturnsPortalLink(t *testing.T) {
+// SR-013: /create-character no longer writes a placeholder character or a
+// player_characters row — it only hands out the builder link. The row is
+// created when the player submits the builder, so re-running the command is
+// safe and idempotent.
+func TestCreateCharacterHandler_ReturnsPortalLink_WithoutCreatingRecord(t *testing.T) {
 	mock := newTestMock()
 	rc := captureResponse(mock)
 
-	var dmQueueMessage string
+	var dmQueueSent bool
 	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
-		dmQueueMessage = content
+		dmQueueSent = true
 		return &discordgo.Message{}, nil
 	}
 
-	charCreator := &mockCharacterCreator{
-		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
-			return refdata.Character{ID: testCharacterID(), Name: "New Character"}, nil
-		},
-	}
-
 	regService := newMockRegService()
+	createCalled := false
 	regService.CreateFunc = func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*refdata.PlayerCharacter, error) {
-		return &refdata.PlayerCharacter{
-			ID:         testPCID(),
-			Status:     "pending",
-			CreatedVia: "create",
-		}, nil
+		createCalled = true
+		return &refdata.PlayerCharacter{ID: testPCID()}, nil
 	}
 
 	tokenFunc := func(_ uuid.UUID, _ string) (string, error) { return "test-token-123", nil }
 
-	handler := NewCreateCharacterHandler(mock, regService, newMockCampaignProvider(), charCreator, staticDMQueueFunc("dm-queue-chan-1"), staticDMUserFunc("dm-user-1"), tokenFunc)
+	handler := NewCreateCharacterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc("dm-queue-chan-1"), staticDMUserFunc("dm-user-1"), tokenFunc)
 	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
 
-	if !strings.Contains(rc.Content, "Registration submitted") {
-		t.Errorf("expected confirmation, got: %s", rc.Content)
+	if createCalled {
+		t.Error("expected NO player_characters row to be created by /create-character")
+	}
+	if dmQueueSent {
+		t.Error("expected NO premature dm-queue notification (the character is not submitted yet)")
 	}
 	if !strings.Contains(rc.Content, "test-token-123") {
 		t.Errorf("expected portal token in response, got: %s", rc.Content)
 	}
+	if !strings.Contains(rc.Content, "Character Builder") {
+		t.Errorf("expected builder link, got: %s", rc.Content)
+	}
 	if !strings.Contains(rc.Content, "24 hours") {
 		t.Errorf("expected expiry notice, got: %s", rc.Content)
+	}
+	if strings.Contains(rc.Content, "Registration submitted") {
+		t.Errorf("response must not claim a pending registration before the build is submitted, got: %s", rc.Content)
 	}
 	if rc.Flags != discordgo.MessageFlagsEphemeral {
 		t.Errorf("expected ephemeral, got %d", rc.Flags)
 	}
-	if !strings.Contains(dmQueueMessage, "/create-character") {
-		t.Errorf("expected create-character via in dm-queue, got: %s", dmQueueMessage)
+}
+
+// An approved (active) character blocks a new build — the player must /retire.
+func TestCreateCharacterHandler_RefusesWhenAlreadyApproved(t *testing.T) {
+	mock := newTestMock()
+	rc := captureResponse(mock)
+
+	regService := newMockRegService()
+	regService.GetStatusFunc = func(_ context.Context, _ uuid.UUID, _ string) (*refdata.PlayerCharacter, error) {
+		return &refdata.PlayerCharacter{ID: testPCID(), Status: "approved"}, nil
+	}
+	tokenIssued := false
+	tokenFunc := func(_ uuid.UUID, _ string) (string, error) {
+		tokenIssued = true
+		return "tok", nil
+	}
+
+	handler := NewCreateCharacterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc(""), staticDMUserFunc(""), tokenFunc)
+	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
+
+	if tokenIssued {
+		t.Error("expected no builder link to be issued when an approved character exists")
+	}
+	if !strings.Contains(rc.Content, "/retire") {
+		t.Errorf("expected a retire-first message, got: %s", rc.Content)
+	}
+}
+
+// A pending build is resumable: /create-character still issues a fresh link
+// (the portal submit reuses the existing row).
+func TestCreateCharacterHandler_AllowsResumeWhenPending(t *testing.T) {
+	mock := newTestMock()
+	rc := captureResponse(mock)
+
+	regService := newMockRegService()
+	regService.GetStatusFunc = func(_ context.Context, _ uuid.UUID, _ string) (*refdata.PlayerCharacter, error) {
+		return &refdata.PlayerCharacter{ID: testPCID(), Status: "pending"}, nil
+	}
+	tokenFunc := func(_ uuid.UUID, _ string) (string, error) { return "resume-tok", nil }
+
+	handler := NewCreateCharacterHandler(mock, regService, newMockCampaignProvider(), staticDMQueueFunc(""), staticDMUserFunc(""), tokenFunc)
+	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
+
+	if !strings.Contains(rc.Content, "resume-tok") {
+		t.Errorf("expected a fresh builder link for the pending build, got: %s", rc.Content)
 	}
 }
 
@@ -404,19 +452,11 @@ func TestCreateCharacterHandler_PortalURL_UsesConfiguredBaseURL(t *testing.T) {
 	mock := newTestMock()
 	rc := captureResponse(mock)
 
-	charCreator := &mockCharacterCreator{
-		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
-			return refdata.Character{ID: testCharacterID(), Name: "New Character"}, nil
-		},
-	}
 	regService := newMockRegService()
-	regService.CreateFunc = func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*refdata.PlayerCharacter, error) {
-		return &refdata.PlayerCharacter{ID: testPCID(), Status: "pending"}, nil
-	}
 	tokenFunc := func(_ uuid.UUID, _ string) (string, error) { return "tkn-A14", nil }
 
 	handler := NewCreateCharacterHandler(
-		mock, regService, newMockCampaignProvider(), charCreator,
+		mock, regService, newMockCampaignProvider(),
 		staticDMQueueFunc(""), staticDMUserFunc(""), tokenFunc,
 		WithCreateCharacterPortalBaseURL("https://staging.example.test"),
 	)
@@ -436,19 +476,11 @@ func TestCreateCharacterHandler_PortalURL_DefaultsToColocatedHost(t *testing.T) 
 	mock := newTestMock()
 	rc := captureResponse(mock)
 
-	charCreator := &mockCharacterCreator{
-		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
-			return refdata.Character{ID: testCharacterID()}, nil
-		},
-	}
 	regService := newMockRegService()
-	regService.CreateFunc = func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*refdata.PlayerCharacter, error) {
-		return &refdata.PlayerCharacter{ID: testPCID(), Status: "pending"}, nil
-	}
 	tokenFunc := func(_ uuid.UUID, _ string) (string, error) { return "tkn-default", nil }
 
 	handler := NewCreateCharacterHandler(
-		mock, regService, newMockCampaignProvider(), charCreator,
+		mock, regService, newMockCampaignProvider(),
 		staticDMQueueFunc(""), staticDMUserFunc(""), tokenFunc,
 	)
 	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
@@ -638,7 +670,6 @@ func TestTruncateURL(t *testing.T) {
 	}
 }
 
-
 func TestInteractionUserID_FromMember(t *testing.T) {
 	interaction := &discordgo.Interaction{
 		Member: &discordgo.Member{
@@ -742,7 +773,7 @@ func TestCreateCharacterHandler_NoCampaign_ShowsError(t *testing.T) {
 		},
 	}
 
-	handler := NewCreateCharacterHandler(mock, newMockRegService(), campProv, nil, staticDMQueueFunc(""), staticDMUserFunc(""), nil)
+	handler := NewCreateCharacterHandler(mock, newMockRegService(), campProv, staticDMQueueFunc(""), staticDMUserFunc(""), nil)
 	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
 
 	if !strings.Contains(rc.Content, "No campaign found") {
@@ -765,24 +796,6 @@ func TestImportHandler_CharCreatorError_ShowsError(t *testing.T) {
 
 	if !strings.Contains(rc.Content, "Import error") {
 		t.Errorf("expected import error, got: %s", rc.Content)
-	}
-}
-
-func TestCreateCharacterHandler_CharCreatorError_ShowsError(t *testing.T) {
-	mock := newTestMock()
-	rc := captureResponse(mock)
-
-	charCreator := &mockCharacterCreator{
-		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
-			return refdata.Character{}, fmt.Errorf("db error")
-		},
-	}
-
-	handler := NewCreateCharacterHandler(mock, newMockRegService(), newMockCampaignProvider(), charCreator, staticDMQueueFunc(""), staticDMUserFunc(""), nil)
-	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
-
-	if !strings.Contains(rc.Content, "Error creating character") {
-		t.Errorf("expected char creation error, got: %s", rc.Content)
 	}
 }
 
@@ -809,26 +822,18 @@ func TestImportHandler_RegServiceError_ShowsError(t *testing.T) {
 	}
 }
 
-func TestCreateCharacterHandler_RegServiceError_ShowsError(t *testing.T) {
+// SR-013: a token-issuance failure surfaces a clear error.
+func TestCreateCharacterHandler_TokenError_ShowsError(t *testing.T) {
 	mock := newTestMock()
 	rc := captureResponse(mock)
 
-	charCreator := &mockCharacterCreator{
-		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
-			return refdata.Character{ID: testCharacterID()}, nil
-		},
-	}
+	tokenFunc := func(_ uuid.UUID, _ string) (string, error) { return "", fmt.Errorf("token store down") }
 
-	regService := newMockRegService()
-	regService.CreateFunc = func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*refdata.PlayerCharacter, error) {
-		return nil, fmt.Errorf("duplicate")
-	}
-
-	handler := NewCreateCharacterHandler(mock, regService, newMockCampaignProvider(), charCreator, staticDMQueueFunc(""), staticDMUserFunc(""), nil)
+	handler := NewCreateCharacterHandler(mock, newMockRegService(), newMockCampaignProvider(), staticDMQueueFunc(""), staticDMUserFunc(""), tokenFunc)
 	handler.Handle(makeInteraction("create-character", "player-1", "guild-1"))
 
-	if !strings.Contains(rc.Content, "Error") {
-		t.Errorf("expected error, got: %s", rc.Content)
+	if !strings.Contains(rc.Content, "Error generating portal link") {
+		t.Errorf("expected portal link error, got: %s", rc.Content)
 	}
 }
 
@@ -855,36 +860,6 @@ func TestImportHandler_DMQueueNotSent_WhenChannelIDEmpty(t *testing.T) {
 
 	handler := NewImportHandler(mock, regService, newMockCampaignProvider(), charCreator, staticDMQueueFunc(""), staticDMUserFunc(""))
 	interaction := makeInteraction("import", "player-1", "guild-1", stringOption("ddb-url", "https://dndbeyond.com/characters/123"))
-	handler.Handle(interaction)
-
-	if channelMessageSent {
-		t.Error("should not send to dm-queue when channel ID is empty")
-	}
-}
-
-func TestCreateCharacterHandler_DMQueueNotSent_WhenChannelIDEmpty(t *testing.T) {
-	mock := newTestMock()
-	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		return nil
-	}
-	var channelMessageSent bool
-	mock.ChannelMessageSendFunc = func(channelID, content string) (*discordgo.Message, error) {
-		channelMessageSent = true
-		return &discordgo.Message{}, nil
-	}
-
-	charCreator := &mockCharacterCreator{
-		CreatePlaceholderFunc: func(_ context.Context, _ uuid.UUID, _ string, _ string) (refdata.Character, error) {
-			return refdata.Character{ID: testCharacterID()}, nil
-		},
-	}
-	regService := newMockRegService()
-	regService.CreateFunc = func(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID) (*refdata.PlayerCharacter, error) {
-		return &refdata.PlayerCharacter{ID: testPCID(), Status: "pending"}, nil
-	}
-
-	handler := NewCreateCharacterHandler(mock, regService, newMockCampaignProvider(), charCreator, staticDMQueueFunc(""), staticDMUserFunc(""), func(_ uuid.UUID, _ string) (string, error) { return "token", nil })
-	interaction := makeInteraction("create-character", "player-1", "guild-1")
 	handler.Handle(interaction)
 
 	if channelMessageSent {

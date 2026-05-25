@@ -569,3 +569,62 @@ func TestIntegration_InvalidStatusTransition(t *testing.T) {
 		t.Fatal("expected error for invalid status transition (approved -> approved)")
 	}
 }
+
+// SR-013: the portal builder re-links an existing non-retired row instead of
+// INSERTing a second one. This proves (a) the naive second insert really does
+// collide on the partial unique index, and (b) RelinkPlayerCharacter reuses
+// the row in place so the player ends up with exactly one active character.
+func TestIntegration_RelinkPlayerCharacter_ReusesRowInsteadOfColliding(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx, db, queries := setupTestDB(t)
+	campaignID := createTestCampaign(t, db, "guild-relink")
+	char1 := createTestCharacter(t, db, campaignID, "FirstBuild")
+	char2 := createTestCharacter(t, db, campaignID, "SecondBuild")
+	user := "player-relink"
+
+	// An existing pending row — e.g. a stuck placeholder or a prior submit.
+	pc1, err := queries.CreatePlayerCharacter(ctx, refdata.CreatePlayerCharacterParams{
+		CampaignID: campaignID, CharacterID: char1, DiscordUserID: user, Status: "pending", CreatedVia: "create",
+	})
+	if err != nil {
+		t.Fatalf("seed pending row: %v", err)
+	}
+
+	// The old behavior — a naive second INSERT — must collide.
+	_, err = queries.CreatePlayerCharacter(ctx, refdata.CreatePlayerCharacterParams{
+		CampaignID: campaignID, CharacterID: char2, DiscordUserID: user, Status: "pending", CreatedVia: "create",
+	})
+	if err == nil {
+		t.Fatal("expected unique-violation on a second non-retired insert for the same player")
+	}
+
+	// The new behavior — relink — reuses the existing row.
+	pc2, err := queries.RelinkPlayerCharacter(ctx, refdata.RelinkPlayerCharacterParams{
+		ID: pc1.ID, CharacterID: char2, CreatedVia: "create",
+	})
+	if err != nil {
+		t.Fatalf("RelinkPlayerCharacter: %v", err)
+	}
+	if pc2.ID != pc1.ID {
+		t.Errorf("expected the same row to be reused: was %s, got %s", pc1.ID, pc2.ID)
+	}
+	if pc2.CharacterID != char2 {
+		t.Errorf("expected character_id repointed to %s, got %s", char2, pc2.CharacterID)
+	}
+	if pc2.Status != "pending" {
+		t.Errorf("expected status pending after relink, got %s", pc2.Status)
+	}
+
+	// Exactly one active row exists, and it is the reused one.
+	got, err := queries.GetPlayerCharacterByDiscordUser(ctx, refdata.GetPlayerCharacterByDiscordUserParams{
+		CampaignID: campaignID, DiscordUserID: user,
+	})
+	if err != nil {
+		t.Fatalf("GetPlayerCharacterByDiscordUser: %v", err)
+	}
+	if got.ID != pc1.ID {
+		t.Errorf("expected the single active row to be %s, got %s", pc1.ID, got.ID)
+	}
+}

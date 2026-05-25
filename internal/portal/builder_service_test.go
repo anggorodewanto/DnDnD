@@ -361,14 +361,79 @@ func TestBuilderService_CreateCharacter_RejectsDisallowedAbilityMethod(t *testin
 	assert.Contains(t, err.Error(), "ability score method standard_array is not allowed")
 }
 
+// SR-013: when a player submits the builder and a non-retired row already
+// exists for them (a stuck placeholder, a resubmit, or a DM "changes
+// requested"), the submit must RE-LINK that row to the freshly built
+// character instead of INSERTing a second one (which the partial unique index
+// idx_player_characters_unique_active_discord_user forbids).
+func TestBuilderService_CreateCharacter_RelinksExistingNonRetiredRow(t *testing.T) {
+	for _, status := range []string{"pending", "changes_requested", "rejected"} {
+		t.Run(status, func(t *testing.T) {
+			store := &mockBuilderStore{
+				charID:   "new-char-1",
+				pcID:     "existing-pc-1",
+				activePC: &portal.ActivePlayerCharacter{ID: "existing-pc-1", Status: status},
+			}
+			svc := portal.NewBuilderService(store)
+
+			result, err := svc.CreateCharacter(context.Background(), "camp", "user-1", "tok", validSubmission())
+			require.NoError(t, err)
+			assert.True(t, store.relinkCalled, "expected relink, not insert")
+			assert.Equal(t, "existing-pc-1", store.lastRelinkPCID)
+			assert.Equal(t, "new-char-1", store.lastRelinkCharID)
+			assert.Equal(t, "create", store.lastRelinkVia)
+			assert.Equal(t, "existing-pc-1", result.PlayerCharacterID)
+			// The insert path must NOT have run.
+			assert.Empty(t, store.lastPCStatus, "CreatePlayerCharacterRecord should not be called on relink")
+		})
+	}
+}
+
+// An already-approved (active) character is never clobbered: the player must
+// /retire first.
+func TestBuilderService_CreateCharacter_RejectsWhenAlreadyApproved(t *testing.T) {
+	store := &mockBuilderStore{
+		charID:   "new-char-1",
+		activePC: &portal.ActivePlayerCharacter{ID: "approved-pc", Status: "approved"},
+	}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.CreateCharacter(context.Background(), "camp", "user-1", "tok", validSubmission())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, portal.ErrAlreadyActive)
+	assert.False(t, store.relinkCalled)
+	assert.Empty(t, store.lastPCStatus)
+}
+
+// No existing row → the normal insert path runs (regression guard).
+func TestBuilderService_CreateCharacter_InsertsWhenNoExistingRow(t *testing.T) {
+	store := &mockBuilderStore{charID: "c-1", pcID: "pc-1"} // activePC nil
+	svc := portal.NewBuilderService(store)
+
+	result, err := svc.CreateCharacter(context.Background(), "camp", "user-1", "tok", validSubmission())
+	require.NoError(t, err)
+	assert.False(t, store.relinkCalled)
+	assert.Equal(t, "pending", store.lastPCStatus)
+	assert.Equal(t, "pc-1", result.PlayerCharacterID)
+}
+
+func TestBuilderService_CreateCharacter_ActiveLookupError(t *testing.T) {
+	store := &mockBuilderStore{charID: "c-1", activePCErr: errors.New("db down")}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.CreateCharacter(context.Background(), "camp", "user-1", "tok", validSubmission())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db down")
+}
+
 // mockBuilderStore implements portal.BuilderStore for testing.
 type mockBuilderStore struct {
-	charID         string
-	pcID           string
-	createCharErr  error
-	createPCErr    error
-	redeemTokenErr error
-	validateToken  *portal.PortalToken
+	charID           string
+	pcID             string
+	createCharErr    error
+	createPCErr      error
+	redeemTokenErr   error
+	validateToken    *portal.PortalToken
 	validateTokenErr error
 
 	lastCharName        string
@@ -381,6 +446,17 @@ type mockBuilderStore struct {
 	lastPCCreatedVia    string
 	lastPCDiscordUserID string
 	lastRedeemedToken   string
+
+	// activePC / activePCErr drive ActivePlayerCharacter; nil activePC means
+	// "no existing row" so the insert path runs (default for most tests).
+	activePC    *portal.ActivePlayerCharacter
+	activePCErr error
+	relinkErr   error
+	// relink call capture.
+	relinkCalled     bool
+	lastRelinkPCID   string
+	lastRelinkCharID string
+	lastRelinkVia    string
 }
 
 func (m *mockBuilderStore) CreateCharacterRecord(_ context.Context, p portal.CreateCharacterParams) (string, error) {
@@ -404,6 +480,27 @@ func (m *mockBuilderStore) CreatePlayerCharacterRecord(_ context.Context, p port
 		return "", m.createPCErr
 	}
 	return m.pcID, nil
+}
+
+func (m *mockBuilderStore) ActivePlayerCharacter(_ context.Context, _, _ string) (*portal.ActivePlayerCharacter, error) {
+	if m.activePCErr != nil {
+		return nil, m.activePCErr
+	}
+	return m.activePC, nil
+}
+
+func (m *mockBuilderStore) RelinkPlayerCharacterRecord(_ context.Context, pcID, characterID, createdVia string) (string, error) {
+	m.relinkCalled = true
+	m.lastRelinkPCID = pcID
+	m.lastRelinkCharID = characterID
+	m.lastRelinkVia = createdVia
+	if m.relinkErr != nil {
+		return "", m.relinkErr
+	}
+	if m.pcID != "" {
+		return m.pcID, nil
+	}
+	return pcID, nil
 }
 
 func (m *mockBuilderStore) RedeemToken(_ context.Context, token string) error {

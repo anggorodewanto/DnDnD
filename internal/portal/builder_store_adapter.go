@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -16,6 +17,8 @@ import (
 type CharacterCreator interface {
 	CreateCharacter(ctx context.Context, arg refdata.CreateCharacterParams) (refdata.Character, error)
 	CreatePlayerCharacter(ctx context.Context, arg refdata.CreatePlayerCharacterParams) (refdata.PlayerCharacter, error)
+	GetPlayerCharacterByDiscordUser(ctx context.Context, arg refdata.GetPlayerCharacterByDiscordUserParams) (refdata.PlayerCharacter, error)
+	RelinkPlayerCharacter(ctx context.Context, arg refdata.RelinkPlayerCharacterParams) (refdata.PlayerCharacter, error)
 }
 
 type campaignGetter interface {
@@ -194,6 +197,48 @@ func (a *BuilderStoreAdapter) CreatePlayerCharacterRecord(ctx context.Context, p
 		DiscordUserID: p.DiscordUserID,
 		Status:        p.Status,
 		CreatedVia:    p.CreatedVia,
+	})
+	if err != nil {
+		return "", err
+	}
+	return pc.ID.String(), nil
+}
+
+// ActivePlayerCharacter returns the non-retired player_characters row for the
+// (campaign, player), or (nil, nil) when none exists.
+func (a *BuilderStoreAdapter) ActivePlayerCharacter(ctx context.Context, campaignID, discordUserID string) (*ActivePlayerCharacter, error) {
+	campID, err := uuid.Parse(campaignID)
+	if err != nil {
+		return nil, err
+	}
+	pc, err := a.q.GetPlayerCharacterByDiscordUser(ctx, refdata.GetPlayerCharacterByDiscordUserParams{
+		CampaignID:    campID,
+		DiscordUserID: discordUserID,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &ActivePlayerCharacter{ID: pc.ID.String(), Status: pc.Status}, nil
+}
+
+// RelinkPlayerCharacterRecord re-points an existing row at a freshly built
+// character and resets it to pending.
+func (a *BuilderStoreAdapter) RelinkPlayerCharacterRecord(ctx context.Context, pcID, characterID, createdVia string) (string, error) {
+	id, err := uuid.Parse(pcID)
+	if err != nil {
+		return "", err
+	}
+	charID, err := uuid.Parse(characterID)
+	if err != nil {
+		return "", err
+	}
+	pc, err := a.q.RelinkPlayerCharacter(ctx, refdata.RelinkPlayerCharacterParams{
+		ID:          id,
+		CharacterID: charID,
+		CreatedVia:  createdVia,
 	})
 	if err != nil {
 		return "", err

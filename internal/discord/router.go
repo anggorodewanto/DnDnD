@@ -318,7 +318,7 @@ func NewCommandRouter(bot *Bot, setupHandler *SetupHandler, regDeps ...*Registra
 		if deps.PortalBaseURL != "" {
 			createOpts = append(createOpts, WithCreateCharacterPortalBaseURL(deps.PortalBaseURL))
 		}
-		r.createCharHandler = NewCreateCharacterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.CharCreator, deps.DMQueueFunc, deps.DMUserFunc, deps.TokenFunc, createOpts...)
+		r.createCharHandler = NewCreateCharacterHandler(bot.session, deps.RegService, deps.CampaignProv, deps.DMQueueFunc, deps.DMUserFunc, deps.TokenFunc, createOpts...)
 		r.handlers["create-character"] = r.createCharHandler
 	} else {
 		// Fallback: all stubs.

@@ -78,3 +78,14 @@ JOIN characters c ON c.id = pc.character_id
 WHERE pc.campaign_id = $1
   AND (pc.status = 'pending' OR pc.created_via = 'retire')
 ORDER BY pc.created_at;
+
+-- name: RelinkPlayerCharacter :one
+-- Re-points an existing non-retired player_characters row at a freshly built
+-- character and resets it to 'pending' for DM approval. Used by the portal
+-- builder so a re-submit or resumed build reuses the existing row instead of
+-- INSERTing a second one — which the partial unique index
+-- idx_player_characters_unique_active_discord_user forbids.
+UPDATE player_characters
+SET character_id = $2, status = 'pending', dm_feedback = NULL, created_via = $3, updated_at = now()
+WHERE id = $1
+RETURNING *;

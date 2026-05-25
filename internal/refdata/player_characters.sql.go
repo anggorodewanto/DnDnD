@@ -517,6 +517,41 @@ func (q *Queries) MarkPlayerCharacterRetireRequested(ctx context.Context, arg Ma
 	return i, err
 }
 
+const relinkPlayerCharacter = `-- name: RelinkPlayerCharacter :one
+UPDATE player_characters
+SET character_id = $2, status = 'pending', dm_feedback = NULL, created_via = $3, updated_at = now()
+WHERE id = $1
+RETURNING id, campaign_id, character_id, discord_user_id, status, dm_feedback, created_via, created_at, updated_at
+`
+
+type RelinkPlayerCharacterParams struct {
+	ID          uuid.UUID `json:"id"`
+	CharacterID uuid.UUID `json:"character_id"`
+	CreatedVia  string    `json:"created_via"`
+}
+
+// Re-points an existing non-retired player_characters row at a freshly built
+// character and resets it to 'pending' for DM approval. Used by the portal
+// builder so a re-submit or resumed build reuses the existing row instead of
+// INSERTing a second one — which the partial unique index
+// idx_player_characters_unique_active_discord_user forbids.
+func (q *Queries) RelinkPlayerCharacter(ctx context.Context, arg RelinkPlayerCharacterParams) (PlayerCharacter, error) {
+	row := q.db.QueryRowContext(ctx, relinkPlayerCharacter, arg.ID, arg.CharacterID, arg.CreatedVia)
+	var i PlayerCharacter
+	err := row.Scan(
+		&i.ID,
+		&i.CampaignID,
+		&i.CharacterID,
+		&i.DiscordUserID,
+		&i.Status,
+		&i.DmFeedback,
+		&i.CreatedVia,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updatePlayerCharacterStatus = `-- name: UpdatePlayerCharacterStatus :one
 UPDATE player_characters
 SET status = $2, dm_feedback = $3, updated_at = now()

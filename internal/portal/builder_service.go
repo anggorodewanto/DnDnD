@@ -19,6 +19,10 @@ var (
 	ErrScoreOutOfRange = errors.New("point buy: score out of range (must be 8-15)")
 	// ErrTokenOwnership is returned when the token does not belong to the user.
 	ErrTokenOwnership = errors.New("token does not belong to this user")
+	// ErrAlreadyActive is returned when a player submits a built character but
+	// already has an approved (active) character in the campaign. They must
+	// /retire it first; we never clobber an approved character.
+	ErrAlreadyActive = errors.New("you already have an active character in this campaign — retire it first")
 )
 
 // CharacterSubmission is the payload sent by the character builder form.
@@ -241,10 +245,24 @@ type CreateCharacterResult struct {
 	PlayerCharacterID string
 }
 
+// ActivePlayerCharacter is the minimal view of an existing non-retired
+// player_characters row used to decide whether a submission inserts a new row
+// or re-links the existing one.
+type ActivePlayerCharacter struct {
+	ID     string
+	Status string
+}
+
 // BuilderStore abstracts the persistence layer for character creation.
 type BuilderStore interface {
 	CreateCharacterRecord(ctx context.Context, p CreateCharacterParams) (string, error)
 	CreatePlayerCharacterRecord(ctx context.Context, p CreatePlayerCharacterParams) (string, error)
+	// ActivePlayerCharacter returns the non-retired player_characters row for
+	// the (campaign, player), or (nil, nil) when none exists.
+	ActivePlayerCharacter(ctx context.Context, campaignID, discordUserID string) (*ActivePlayerCharacter, error)
+	// RelinkPlayerCharacterRecord re-points an existing row at a freshly built
+	// character and resets it to pending. Returns the row's ID.
+	RelinkPlayerCharacterRecord(ctx context.Context, pcID, characterID, createdVia string) (string, error)
 	ValidateToken(ctx context.Context, token string) (*PortalToken, error)
 	RedeemToken(ctx context.Context, token string) error
 }
@@ -462,10 +480,9 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 		}
 	}
 
-	pcParams := playerCharacterParams(in, charID)
-	pcID, err := svc.store.CreatePlayerCharacterRecord(ctx, pcParams)
+	pcID, err := svc.persistPlayerCharacter(ctx, in, charID)
 	if err != nil {
-		return CreateCharacterResult{}, fmt.Errorf("creating player character: %w", err)
+		return CreateCharacterResult{}, err
 	}
 
 	if in.mode == ModePlayer && svc.notifier != nil {
@@ -499,6 +516,39 @@ func playerCharacterParams(in createInput, charID string) CreatePlayerCharacterP
 		Status:        "pending",
 		CreatedVia:    "create",
 	}
+}
+
+// persistPlayerCharacter writes the player_characters row for a submission.
+//
+// For player-portal submissions it first looks for an existing non-retired row
+// for the (campaign, player): an approved one is never overwritten (returns
+// ErrAlreadyActive — the player must /retire first), while a pending /
+// changes_requested / rejected row is re-linked to the freshly built character
+// and reset to pending. This makes resubmits and resumed builds reuse the row
+// instead of INSERTing a second one, which the partial unique index forbids.
+// DM-mode creations always insert (they carry no discord_user_id).
+func (svc *BuilderService) persistPlayerCharacter(ctx context.Context, in createInput, charID string) (string, error) {
+	if in.mode == ModePlayer {
+		existing, err := svc.store.ActivePlayerCharacter(ctx, in.campaignID, in.discordUserID)
+		if err != nil {
+			return "", fmt.Errorf("checking existing player character: %w", err)
+		}
+		if existing != nil {
+			if existing.Status == "approved" {
+				return "", ErrAlreadyActive
+			}
+			pcID, err := svc.store.RelinkPlayerCharacterRecord(ctx, existing.ID, charID, "create")
+			if err != nil {
+				return "", fmt.Errorf("relinking player character: %w", err)
+			}
+			return pcID, nil
+		}
+	}
+	pcID, err := svc.store.CreatePlayerCharacterRecord(ctx, playerCharacterParams(in, charID))
+	if err != nil {
+		return "", fmt.Errorf("creating player character: %w", err)
+	}
+	return pcID, nil
 }
 
 // Preview computes derived stats (and features, when a provider is wired)

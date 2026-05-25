@@ -2,6 +2,7 @@ package portal_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 
@@ -18,6 +19,14 @@ type captureCharacterCreator struct {
 	capturedParams refdata.CreateCharacterParams
 	returnChar     refdata.Character
 	returnErr      error
+
+	// getByUserResult / getByUserErr drive GetPlayerCharacterByDiscordUser.
+	getByUserResult refdata.PlayerCharacter
+	getByUserErr    error
+	// capturedRelink records the last RelinkPlayerCharacter call.
+	capturedRelink refdata.RelinkPlayerCharacterParams
+	relinkResult   refdata.PlayerCharacter
+	relinkErr      error
 }
 
 func (c *captureCharacterCreator) CreateCharacter(_ context.Context, arg refdata.CreateCharacterParams) (refdata.Character, error) {
@@ -31,6 +40,70 @@ func (c *captureCharacterCreator) CreateCharacter(_ context.Context, arg refdata
 
 func (c *captureCharacterCreator) CreatePlayerCharacter(_ context.Context, arg refdata.CreatePlayerCharacterParams) (refdata.PlayerCharacter, error) {
 	return refdata.PlayerCharacter{ID: uuid.New()}, nil
+}
+
+func (c *captureCharacterCreator) GetPlayerCharacterByDiscordUser(_ context.Context, _ refdata.GetPlayerCharacterByDiscordUserParams) (refdata.PlayerCharacter, error) {
+	return c.getByUserResult, c.getByUserErr
+}
+
+func (c *captureCharacterCreator) RelinkPlayerCharacter(_ context.Context, arg refdata.RelinkPlayerCharacterParams) (refdata.PlayerCharacter, error) {
+	c.capturedRelink = arg
+	return c.relinkResult, c.relinkErr
+}
+
+func TestBuilderStoreAdapter_ActivePlayerCharacter_Found(t *testing.T) {
+	pcID := uuid.New()
+	creator := &captureCharacterCreator{
+		getByUserResult: refdata.PlayerCharacter{ID: pcID, Status: "pending"},
+	}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	got, err := adapter.ActivePlayerCharacter(context.Background(), uuid.New().String(), "user-1")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, pcID.String(), got.ID)
+	assert.Equal(t, "pending", got.Status)
+}
+
+func TestBuilderStoreAdapter_ActivePlayerCharacter_NoRow(t *testing.T) {
+	creator := &captureCharacterCreator{getByUserErr: sql.ErrNoRows}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	got, err := adapter.ActivePlayerCharacter(context.Background(), uuid.New().String(), "user-1")
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
+
+func TestBuilderStoreAdapter_ActivePlayerCharacter_BadCampaignID(t *testing.T) {
+	adapter := portal.NewBuilderStoreAdapter(&captureCharacterCreator{}, nil)
+
+	_, err := adapter.ActivePlayerCharacter(context.Background(), "not-a-uuid", "user-1")
+	require.Error(t, err)
+}
+
+func TestBuilderStoreAdapter_RelinkPlayerCharacterRecord(t *testing.T) {
+	newPCID := uuid.New()
+	creator := &captureCharacterCreator{relinkResult: refdata.PlayerCharacter{ID: newPCID}}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+	pcID := uuid.New()
+	charID := uuid.New()
+
+	got, err := adapter.RelinkPlayerCharacterRecord(context.Background(), pcID.String(), charID.String(), "create")
+	require.NoError(t, err)
+	assert.Equal(t, newPCID.String(), got)
+	assert.Equal(t, pcID, creator.capturedRelink.ID)
+	assert.Equal(t, charID, creator.capturedRelink.CharacterID)
+	assert.Equal(t, "create", creator.capturedRelink.CreatedVia)
+}
+
+func TestBuilderStoreAdapter_RelinkPlayerCharacterRecord_BadIDs(t *testing.T) {
+	adapter := portal.NewBuilderStoreAdapter(&captureCharacterCreator{}, nil)
+
+	_, err := adapter.RelinkPlayerCharacterRecord(context.Background(), "bad-pc-id", uuid.New().String(), "create")
+	require.Error(t, err)
+
+	_, err = adapter.RelinkPlayerCharacterRecord(context.Background(), uuid.New().String(), "bad-char-id", "create")
+	require.Error(t, err)
 }
 
 func TestBuilderStoreAdapter_Implements_BuilderStore(t *testing.T) {

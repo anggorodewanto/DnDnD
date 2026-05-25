@@ -30,6 +30,14 @@ func (m *dmMockStore) CreatePlayerCharacterRecord(ctx context.Context, p CreateP
 	return m.pcID, m.createPCErr
 }
 
+func (m *dmMockStore) ActivePlayerCharacter(ctx context.Context, campaignID, discordUserID string) (*ActivePlayerCharacter, error) {
+	return nil, nil
+}
+
+func (m *dmMockStore) RelinkPlayerCharacterRecord(ctx context.Context, pcID, characterID, createdVia string) (string, error) {
+	return m.pcID, nil
+}
+
 func (m *dmMockStore) ValidateToken(ctx context.Context, token string) (*PortalToken, error) {
 	return nil, nil
 }

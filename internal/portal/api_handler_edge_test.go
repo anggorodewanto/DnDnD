@@ -90,6 +90,27 @@ func TestAPIHandler_SubmitCharacter_StoreError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
+// SR-013: a submission from a player who already has an approved character
+// returns 409 Conflict (not 500), so the builder can surface a clear "retire
+// first" message instead of a generic error.
+func TestAPIHandler_SubmitCharacter_AlreadyActive_Returns409(t *testing.T) {
+	builderStore := &mockBuilderStore{
+		charID:   "c-1",
+		activePC: &portal.ActivePlayerCharacter{ID: "approved-pc", Status: "approved"},
+	}
+	builderSvc := portal.NewBuilderService(builderStore)
+	h := portal.NewAPIHandler(slog.Default(), &mockRefDataStore{}, builderSvc)
+
+	body := `{"token":"t","campaign_id":"c","name":"Test","race":"elf","background":"sage","class":"wizard","ability_scores":{"str":8,"dex":8,"con":8,"int":8,"wis":8,"cha":8},"skills":[]}`
+	req := httptest.NewRequest(http.MethodPost, "/portal/api/characters", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	ctx := auth.ContextWithDiscordUserID(req.Context(), "u1")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	h.SubmitCharacter(rec, req)
+	assert.Equal(t, http.StatusConflict, rec.Code)
+}
+
 func TestAPIHandler_SubmitCharacter_ShortStoreError(t *testing.T) {
 	// Regression: isValidationError must not panic on short error messages.
 	builderStore := &mockBuilderStore{createCharErr: errors.New("fail")}
