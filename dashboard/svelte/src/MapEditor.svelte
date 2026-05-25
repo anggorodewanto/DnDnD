@@ -1,5 +1,6 @@
 <script>
   import { createMap, getMap, updateMap, uploadAsset, importTiledMap } from './lib/api.js';
+  import { decodeGID, tilesetForGID, tileSrcRect } from './lib/tiledSprites.js';
   import {
     TERRAIN_TYPES,
     terrainByGid,
@@ -59,6 +60,12 @@
 
   // Canvas ref
   let canvasEl = $state(null);
+
+  // F-7: cache of HTMLImageElements keyed by asset URL, shared by sprite
+  // tilesets and image layers so we never reload an image per frame. Loading
+  // is async; each load triggers a single redraw once decoded. Not reactive
+  // state — it's a render-side cache the canvas reads directly.
+  const spriteImageCache = new Map();
 
   // File input ref
   let fileInputEl = $state(null);
@@ -219,11 +226,22 @@
     }
   }
 
-  // F-7: handle a user-selected .tmj file. Posts to /api/maps/import, then
-  // loads the persisted map into the editor so the DM can review/save it.
+  // F-7: handle a multi-file Tiled-project selection. The user picks the .tmj
+  // together with every tileset/image-layer image it references. We split the
+  // selection into the single .tmj (extension .tmj or .json) and the image
+  // files, POST them as multipart/form-data, then load the persisted map into
+  // the editor so the DM can review/save it.
   async function handleTmjImport(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const tmjFile = files.find((f) => /\.(tmj|json)$/i.test(f.name));
+    if (!tmjFile) {
+      error = 'Select a .tmj (or .json) file along with its images.';
+      if (tmjFileInputEl) tmjFileInputEl.value = '';
+      return;
+    }
+    const imageFiles = files.filter((f) => f !== tmjFile);
 
     importingTmj = true;
     error = null;
@@ -232,8 +250,9 @@
     try {
       const result = await importTiledMap({
         campaignId,
-        name: mapName || file.name.replace(/\.tmj$/i, ''),
-        file,
+        name: mapName || tmjFile.name.replace(/\.(tmj|json)$/i, ''),
+        tmjFile,
+        imageFiles,
       });
       // Backend returns { map, skipped }. Load the persisted map into the
       // editor view by reusing the same flow GetMap uses.
@@ -253,10 +272,12 @@
       skippedFeatures = Array.isArray(result.skipped) ? result.skipped : [];
       statusMsg = `Imported "${m.name}".`;
     } catch (err) {
+      // The backend's missing-image 400 is a plain-text body; apiFetch
+      // surfaces it as err.message.
       error = err.message;
     } finally {
       importingTmj = false;
-      // Reset the input so selecting the same file again re-triggers change.
+      // Reset the input so selecting the same files again re-triggers change.
       if (tmjFileInputEl) tmjFileInputEl.value = '';
     }
   }
@@ -352,6 +373,110 @@
     return tiledMap?.tilewidth || 48;
   }
 
+  // F-7: report whether the loaded map carries real tileset/image art. When it
+  // does, the terrain tint paints translucent so the art shows through (mirrors
+  // the Go renderer's MapData.HasSpriteArt). Abstract color-terrain maps return
+  // false and keep rendering opaque fills as before.
+  function drawnSpriteArt() {
+    if (!tiledMap) return false;
+    const tilesets = tiledMap.tilesets;
+    const hasImageTileset =
+      Array.isArray(tilesets) && tilesets.some((ts) => typeof ts?.image === 'string' && ts.image);
+    const layers = tiledMap.layers || [];
+    const hasImageLayer = layers.some((l) => l.type === 'imagelayer' && l.image);
+    return hasImageTileset || hasImageLayer;
+  }
+
+  // F-7: get a cached HTMLImageElement for an asset URL, kicking off an async
+  // load on first request. Returns the element only once it has decoded
+  // (img.complete && naturalWidth > 0); otherwise null so the caller skips it
+  // this frame. A redraw is triggered on load so the tiles appear.
+  function getSpriteImage(url) {
+    if (!url) return null;
+    let img = spriteImageCache.get(url);
+    if (!img) {
+      img = new Image();
+      img.onload = () => drawMap();
+      img.src = url;
+      spriteImageCache.set(url, img);
+    }
+    return img.complete && img.naturalWidth > 0 ? img : null;
+  }
+
+  // F-7: blit one tile, applying Tiled's H/V/diagonal flip flags. The diagonal
+  // flag rotates the tile in combination with H/V (Tiled's anti-diagonal
+  // transform). We translate to the destination cell center, apply the
+  // transform, then draw the source rect centered.
+  function drawTile(ctx, img, src, dx, dy, dw, dh, flip) {
+    const noFlip = !flip.flipH && !flip.flipV && !flip.flipD;
+    if (noFlip) {
+      ctx.drawImage(img, src.sx, src.sy, src.sw, src.sh, dx, dy, dw, dh);
+      return;
+    }
+    ctx.save();
+    // Move origin to the cell center so scale/rotate pivot there.
+    ctx.translate(dx + dw / 2, dy + dh / 2);
+    if (flip.flipD) {
+      // Anti-diagonal flip = transpose. Compose with H/V per Tiled's scheme.
+      ctx.rotate(Math.PI / 2);
+      ctx.scale(flip.flipV ? -1 : 1, flip.flipH ? -1 : 1);
+    } else {
+      ctx.scale(flip.flipH ? -1 : 1, flip.flipV ? -1 : 1);
+    }
+    ctx.drawImage(img, src.sx, src.sy, src.sw, src.sh, -dw / 2, -dh / 2, dw, dh);
+    ctx.restore();
+  }
+
+  // F-7: render imported visual tile layers (real tileset art) beneath the
+  // editor's semantic overlays. Each `tilelayer` whose GIDs resolve to an
+  // image-backed tileset is blitted cell-by-cell. Abstract (color-terrain)
+  // maps have no image-backed tilesets, so this is a no-op for them.
+  function drawSpriteLayers(ctx, tileSize) {
+    const tilesets = tiledMap.tilesets;
+    if (!Array.isArray(tilesets) || tilesets.length === 0) return;
+    const imageTilesets = tilesets.filter((ts) => typeof ts?.image === 'string' && ts.image);
+    if (imageTilesets.length === 0) return;
+
+    const layers = tiledMap.layers || [];
+    for (const layer of layers) {
+      if (layer.type !== 'tilelayer' || !Array.isArray(layer.data)) continue;
+      // Skip the editor's own semantic layers — they carry small terrain/
+      // lighting/elevation GIDs, not tileset art.
+      if (layer.name === 'terrain' || layer.name === 'lighting' || layer.name === 'elevation') {
+        continue;
+      }
+      const lw = layer.width || tiledMap.width;
+      for (let i = 0; i < layer.data.length; i++) {
+        const flip = decodeGID(layer.data[i]);
+        if (flip.id === 0) continue; // empty cell
+        const ts = tilesetForGID(imageTilesets, flip.id);
+        if (!ts) continue;
+        const img = getSpriteImage(ts.image);
+        if (!img) continue; // still loading — redraw fires when decoded
+        const src = tileSrcRect(ts, flip.id);
+        const cx = (i % lw) * tileSize;
+        const cy = Math.floor(i / lw) * tileSize;
+        drawTile(ctx, img, src, cx, cy, tileSize, tileSize, flip);
+      }
+    }
+  }
+
+  // F-7: render Tiled image layers at their pixel offset, scaled from the map's
+  // original tile-pixel space into the active tile size.
+  function drawImageLayers(ctx, tileSize) {
+    const layers = tiledMap.layers || [];
+    const baseTile = tiledMap.tilewidth || tileSize;
+    const scale = tileSize / baseTile;
+    for (const layer of layers) {
+      if (layer.type !== 'imagelayer' || !layer.image) continue;
+      const img = getSpriteImage(layer.image);
+      if (!img) continue;
+      const ox = (layer.offsetx || 0) * scale;
+      const oy = (layer.offsety || 0) * scale;
+      ctx.drawImage(img, ox, oy, img.naturalWidth * scale, img.naturalHeight * scale);
+    }
+  }
+
   function drawMap() {
     if (!canvasEl || !tiledMap) return;
 
@@ -367,10 +492,17 @@
       ctx.globalAlpha = 1.0;
     }
 
-    // Draw terrain (semi-transparent if background image present)
+    // F-7: blit imported tileset/image art beneath the semantic overlays.
+    // No-op for abstract color-terrain maps (no image-backed tilesets).
+    drawSpriteLayers(ctx, tileSize);
+    drawImageLayers(ctx, tileSize);
+    const hasSpriteArt = drawnSpriteArt();
+
+    // Draw terrain (semi-transparent if background image or sprite art present
+    // so the underlying art shows through).
     const terrainLayer = tiledMap.layers?.find(l => l.name === 'terrain');
     if (terrainLayer?.data) {
-      if (backgroundImage) {
+      if (backgroundImage || hasSpriteArt) {
         ctx.globalAlpha = 0.4;
       }
       for (let y = 0; y < tiledMap.height; y++) {
@@ -741,10 +873,13 @@
       {/if}
       <div class="form-row">
         <button class="primary-btn" onclick={createNewMap}>Create Map</button>
-        <!-- F-7: import a Tiled `.tmj` instead of authoring blank. -->
+        <!-- F-7: import a Tiled project (.tmj + its tileset/image-layer images)
+             instead of authoring blank. Select the .tmj together with every
+             image it references in one go. -->
         <input
           type="file"
-          accept=".tmj,application/json"
+          multiple
+          accept=".tmj,.json,application/json,image/png,image/jpeg,image/webp"
           style="display:none"
           bind:this={tmjFileInputEl}
           onchange={handleTmjImport}
@@ -753,8 +888,8 @@
           class="import-tmj-btn"
           onclick={() => tmjFileInputEl?.click()}
           disabled={importingTmj}
-          title="Import a Tiled .tmj file as a new map"
-        >{importingTmj ? 'Importing...' : 'Import Tiled (.tmj)'}</button>
+          title="Import a Tiled project: select the .tmj plus every tileset/image-layer image it references"
+        >{importingTmj ? 'Importing...' : 'Import Tiled (.tmj + images)'}</button>
       </div>
     </div>
   {:else}

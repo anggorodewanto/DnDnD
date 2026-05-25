@@ -266,4 +266,68 @@ type MapData struct {
 	// (0.0 = fully transparent, 1.0 = fully opaque). Only used when
 	// BackgroundImage is non-nil.
 	BackgroundOpacity float64
+
+	// SpriteLayers are visual tile layers (real tileset art) for full-tileset
+	// imported maps. They are blitted bottom-to-top beneath the semantic
+	// overlays (terrain tint, grid, walls, tokens). Empty for abstract maps.
+	SpriteLayers []SpriteLayer
+
+	// ImageLayers are Tiled image layers composited beneath the grid, after the
+	// sprite layers. Empty for maps with no image layers.
+	ImageLayers []RenderImageLayer
+
+	// Tilesets resolve sprite-layer GIDs to source sprites. Sorted or unsorted
+	// by FirstGID; the renderer picks the tileset with the greatest FirstGID
+	// that is <= the (flip-masked) GID. Abstract tilesets (nil ImagePNG)
+	// contribute no sprites.
+	Tilesets []RenderTileset
+}
+
+// RenderTileset is a single-image tileset the renderer blits sprites from.
+// ImagePNG holds the raw encoded image bytes (PNG/JPEG/WebP); the renderer
+// decodes it once per render. A nil ImagePNG marks an abstract (semantic)
+// tileset that contributes no sprites.
+type RenderTileset struct {
+	FirstGID    int
+	Columns     int
+	TileWidth   int
+	TileHeight  int
+	Margin      int
+	Spacing     int
+	ImageWidth  int
+	ImageHeight int
+	TileCount   int
+	// ImageRef is the asset reference parsed from the tiled_json (e.g.
+	// "/api/assets/{id}"). The render caller resolves it to ImagePNG bytes;
+	// the renderer itself only reads ImagePNG.
+	ImageRef string
+	ImagePNG []byte
+}
+
+// SpriteLayer is a visual tile layer: row-major GIDs (len = Width*Height) with
+// Tiled flip flags in the high bits (0x80000000 H, 0x40000000 V, 0x20000000
+// diagonal). The low 29 bits are the global tile id.
+type SpriteLayer struct {
+	Name string
+	Data []uint32
+}
+
+// RenderImageLayer is a Tiled image layer composited as-is at a pixel offset
+// (in the map's original tile-pixel space; the renderer scales to the active
+// tile size). ImagePNG holds the raw encoded image bytes.
+type RenderImageLayer struct {
+	Name string
+	// ImageRef is the asset reference parsed from the tiled_json; the render
+	// caller resolves it to ImagePNG bytes.
+	ImageRef string
+	ImagePNG []byte
+	OffsetX  int
+	OffsetY  int
+}
+
+// HasSpriteArt reports whether the map carries real tileset/image art. When
+// true, DrawTerrain paints translucent tints instead of opaque fills so the
+// art shows through.
+func (md *MapData) HasSpriteArt() bool {
+	return len(md.SpriteLayers) > 0 || len(md.ImageLayers) > 0
 }

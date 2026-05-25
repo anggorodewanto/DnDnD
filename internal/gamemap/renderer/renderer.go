@@ -70,6 +70,13 @@ func RenderMap(md *MapData) ([]byte, error) {
 	// 0.5. Background image layer (beneath terrain)
 	drawBackgroundImage(dc, md)
 
+	// 0.7. Sprite + image art layers (real tileset art), beneath the
+	// semantic overlays. scale converts design-tile pixels to render-tile
+	// pixels (1.0 unless the tile size was auto-reduced for large maps).
+	scale := float64(tileSize) / float64(origTileSize)
+	DrawSpriteLayers(dc, md)
+	DrawImageLayers(dc, md, scale)
+
 	// 1. Terrain layer
 	DrawTerrain(dc, md)
 

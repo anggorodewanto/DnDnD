@@ -22,6 +22,9 @@ type tiledLayer struct {
 	Height  int           `json:"height"`
 	Data    []int         `json:"data"`
 	Objects []tiledObject `json:"objects"`
+	Image   string        `json:"image"`
+	OffsetX float64       `json:"offsetx"`
+	OffsetY float64       `json:"offsety"`
 }
 
 type tiledObject struct {
@@ -33,9 +36,18 @@ type tiledObject struct {
 }
 
 type tiledTileset struct {
-	FirstGID int         `json:"firstgid"`
-	Name     string      `json:"name"`
-	Tiles    []tiledTile `json:"tiles"`
+	FirstGID    int         `json:"firstgid"`
+	Name        string      `json:"name"`
+	Tiles       []tiledTile `json:"tiles"`
+	Image       string      `json:"image"`
+	ImageWidth  int         `json:"imagewidth"`
+	ImageHeight int         `json:"imageheight"`
+	TileWidth   int         `json:"tilewidth"`
+	TileHeight  int         `json:"tileheight"`
+	Columns     int         `json:"columns"`
+	Margin      int         `json:"margin"`
+	Spacing     int         `json:"spacing"`
+	TileCount   int         `json:"tilecount"`
 }
 
 type tiledTile struct {
@@ -73,7 +85,84 @@ func ParseTiledJSON(raw json.RawMessage, combatants []Combatant, effects []Activ
 	md.ElevationByTile = parseElevationLayer(tm)
 	md.SpawnZones = parseSpawnZonesLayer(tm)
 
+	// Visual-rendering fields (real tileset art / image layers). ImagePNG is
+	// left nil; a later caller resolves each ImageRef to bytes.
+	md.Tilesets = parseRenderTilesets(tm.Tilesets)
+	md.SpriteLayers = parseSpriteLayers(tm)
+	md.ImageLayers = parseImageLayers(tm)
+
 	return md, nil
+}
+
+// semanticTileLayerNames are the reserved tile-layer names whose data carries
+// semantic values (terrain GIDs, lighting GIDs, elevation feet) rather than
+// sprite GIDs. They must never be blitted as visual tiles.
+var semanticTileLayerNames = map[string]bool{
+	"terrain":   true,
+	"lighting":  true,
+	"elevation": true,
+}
+
+// parseRenderTilesets converts every image-backed tileset into a RenderTileset.
+// Abstract semantic tilesets (no image) are skipped. ImagePNG stays nil.
+func parseRenderTilesets(tilesets []tiledTileset) []RenderTileset {
+	var out []RenderTileset
+	for _, ts := range tilesets {
+		if ts.Image == "" {
+			continue
+		}
+		out = append(out, RenderTileset{
+			FirstGID:    ts.FirstGID,
+			Columns:     ts.Columns,
+			TileWidth:   ts.TileWidth,
+			TileHeight:  ts.TileHeight,
+			Margin:      ts.Margin,
+			Spacing:     ts.Spacing,
+			ImageWidth:  ts.ImageWidth,
+			ImageHeight: ts.ImageHeight,
+			TileCount:   ts.TileCount,
+			ImageRef:    ts.Image,
+		})
+	}
+	return out
+}
+
+// parseSpriteLayers collects every non-semantic tilelayer as a SpriteLayer,
+// preserving the raw GID values (including Tiled flip flags) as uint32.
+func parseSpriteLayers(tm tiledMap) []SpriteLayer {
+	var out []SpriteLayer
+	for _, layer := range tm.Layers {
+		if layer.Type != "tilelayer" {
+			continue
+		}
+		if semanticTileLayerNames[layer.Name] {
+			continue
+		}
+		data := make([]uint32, len(layer.Data))
+		for i, v := range layer.Data {
+			data[i] = uint32(v)
+		}
+		out = append(out, SpriteLayer{Name: layer.Name, Data: data})
+	}
+	return out
+}
+
+// parseImageLayers collects every imagelayer that references an image into a
+// RenderImageLayer. ImagePNG stays nil.
+func parseImageLayers(tm tiledMap) []RenderImageLayer {
+	var out []RenderImageLayer
+	for _, layer := range tm.Layers {
+		if layer.Type != "imagelayer" || layer.Image == "" {
+			continue
+		}
+		out = append(out, RenderImageLayer{
+			Name:     layer.Name,
+			ImageRef: layer.Image,
+			OffsetX:  int(layer.OffsetX),
+			OffsetY:  int(layer.OffsetY),
+		})
+	}
+	return out
 }
 
 // buildGIDMap builds a mapping from GID to TerrainType using tileset definitions.

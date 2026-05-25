@@ -22,8 +22,13 @@ import (
 
 // newTestRouter creates a chi router with map API routes registered and returns it along with the handler.
 func newTestRouter(store Store) (*Handler, chi.Router) {
-	svc := NewService(store)
-	h := NewHandler(svc)
+	return newRouterFromHandler(NewHandler(NewService(store)))
+}
+
+// newRouterFromHandler mounts the map API routes onto a fresh chi router for an
+// already-constructed handler (used when the service needs custom wiring such
+// as an image uploader).
+func newRouterFromHandler(h *Handler) (*Handler, chi.Router) {
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 	return h, r

@@ -198,6 +198,32 @@ func (l dashboardCampaignLookup) IsCampaignDM(ctx context.Context, dmUserID, cam
 	return c.DmUserID == dmUserID, nil
 }
 
+// mapImageUploader adapts the asset service to gamemap.ImageUploader so the map
+// importer can persist tileset/image-layer files without gamemap importing the
+// asset package. Tileset backing images use TypeTilesetImage; image-layer
+// backgrounds use TypeMapBackground.
+type mapImageUploader struct {
+	assets *asset.Service
+}
+
+func (u mapImageUploader) UploadMapImage(ctx context.Context, campaignID uuid.UUID, isTileset bool, filename, mimeType string, content io.Reader) (string, error) {
+	assetType := asset.TypeMapBackground
+	if isTileset {
+		assetType = asset.TypeTilesetImage
+	}
+	a, err := u.assets.Upload(ctx, asset.UploadInput{
+		CampaignID:   campaignID,
+		Type:         assetType,
+		OriginalName: filename,
+		MimeType:     mimeType,
+		Content:      content,
+	})
+	if err != nil {
+		return "", err
+	}
+	return u.assets.URL(a.ID), nil
+}
+
 // approvalsCounter adapts dashboard.ApprovalStore.ListPendingApprovals to
 // dashboard.PendingApprovalsCounter for the Campaign Home pending-approvals
 // card (med-40 / Phase 15).
@@ -880,6 +906,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		}
 		assetStore := asset.NewLocalStore(assetDataDir)
 		assetSvc := asset.NewService(queries, assetStore)
+		// Wire the multipart Tiled-import image uploader: tileset/image-layer
+		// files uploaded with a `.tmj` are persisted as assets and the stored
+		// map is rewritten to reference them.
+		mapSvc.SetImageUploader(mapImageUploader{assets: assetSvc})
 		assetHandler := asset.NewHandler(assetSvc, asset.WithCampaignChecker(dashboardCampaignLookup{queries: queries}))
 		// Finding 2 fix: upload is DM-only (registered via mountDMOnlyAPIs
 		// below behind dmAuthMw). Serve remains public so players can view
@@ -1109,7 +1139,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			workspaceStore:           workspaceStoreAdapter{queries, db},
 			db:                       db,
 			combatLogPoster:          combatLogPoster,
-			mapRegenerator:           newMapRegeneratorAdapter(queries),
+			mapRegenerator:           newMapRegeneratorAdapter(queries).withImageFetcher(assetSvc),
 			encounterHandler:         encounterHandler,
 			assetUploadHandler:       assetHandler.UploadAsset,
 			dmVerifier:               dmVerifier,
@@ -1508,7 +1538,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// wiring the field on discordHandlerDeps stayed nil and
 			// Phase 22's "PNG generated from map JSON + combatant
 			// positions" never reached production.
-			mapRegen := newMapRegeneratorAdapter(queries)
+			mapRegen := newMapRegeneratorAdapter(queries).withImageFetcher(assetSvc)
 
 			// AOE-CAST + D-48b/49/51 follow-up: build a single shared
 			// reaction-prompt store so the cast handler's gold-fallback

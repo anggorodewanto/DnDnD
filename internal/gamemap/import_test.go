@@ -154,29 +154,35 @@ func TestImportTiledJSON_StripTileAnimations(t *testing.T) {
 	}
 }
 
-// --- TDD Cycle 8: Skip — image layers ---
+// --- TDD Cycle 8: Image layers are kept and their image refs collected ---
 
-func TestImportTiledJSON_StripImageLayers(t *testing.T) {
+func TestImportTiledJSON_KeepImageLayers(t *testing.T) {
 	raw := json.RawMessage(`{
 		"orientation":"orthogonal",
 		"width":10,"height":10,"tilewidth":48,"tileheight":48,
 		"infinite":false,
 		"layers":[
 			{"type":"tilelayer","name":"terrain","width":10,"height":10,"data":[1]},
-			{"type":"imagelayer","name":"bg","image":"bg.png"}
+			{"type":"imagelayer","name":"bg","image":"art/bg.png"}
 		]
 	}`)
 	result, err := ImportTiledJSON(raw)
 	require.NoError(t, err)
-	assert.True(t, hasSkipped(result.Skipped, SkippedImageLayer))
+	assert.False(t, hasSkipped(result.Skipped, SkippedImageLayer), "image layers are no longer stripped")
 
+	// Image layer is retained in the output JSON, image normalized to basename.
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(result.TiledJSON, &parsed))
 	layers := parsed["layers"].([]any)
-	for _, l := range layers {
-		assert.NotEqual(t, "imagelayer", l.(map[string]any)["type"])
-	}
-	assert.Len(t, layers, 1)
+	require.Len(t, layers, 2)
+	imgLayer := layers[1].(map[string]any)
+	assert.Equal(t, "imagelayer", imgLayer["type"])
+	assert.Equal(t, "bg.png", imgLayer["image"], "image path normalized to basename")
+
+	// The required image is reported so the importer's caller can match an upload.
+	require.Len(t, result.ImageLayers, 1)
+	assert.Equal(t, "bg.png", result.ImageLayers[0].Image)
+	assert.Contains(t, result.RequiredImages(), "bg.png")
 }
 
 // --- TDD Cycle 9: Skip — parallax scrolling factors ---
@@ -295,16 +301,20 @@ func TestImportTiledJSON_MultipleSkippedDeduplicated(t *testing.T) {
 		"infinite":false,
 		"layers":[
 			{"type":"tilelayer","name":"a","width":10,"height":10,"data":[1],"parallaxx":0.5},
-			{"type":"tilelayer","name":"b","width":10,"height":10,"data":[1],"parallaxy":0.5},
-			{"type":"imagelayer","name":"i1","image":"a.png"},
-			{"type":"imagelayer","name":"i2","image":"b.png"}
+			{"type":"tilelayer","name":"b","width":10,"height":10,"data":[1],"parallaxy":0.5}
+		],
+		"tilesets":[
+			{"firstgid":1,"name":"t","tiles":[
+				{"id":0,"type":"open_ground","animation":[{"tileid":0,"duration":100}]},
+				{"id":1,"type":"water","animation":[{"tileid":1,"duration":100}]}
+			]}
 		]
 	}`)
 	result, err := ImportTiledJSON(raw)
 	require.NoError(t, err)
 	count := 0
 	for _, s := range result.Skipped {
-		if s.Feature == SkippedParallax || s.Feature == SkippedImageLayer {
+		if s.Feature == SkippedParallax || s.Feature == SkippedTileAnimation {
 			count++
 		}
 	}
@@ -356,17 +366,19 @@ func TestService_ImportMap_PassesSkippedThrough(t *testing.T) {
 		"width":10,"height":10,"tilewidth":48,"tileheight":48,
 		"infinite":false,
 		"layers":[
-			{"type":"tilelayer","name":"terrain","width":10,"height":10,"data":[1]},
-			{"type":"imagelayer","name":"bg","image":"bg.png"}
+			{"type":"tilelayer","name":"terrain","width":10,"height":10,"data":[1]}
+		],
+		"tilesets":[
+			{"firstgid":1,"name":"t","wangsets":[{"name":"corners","type":"corner"}]}
 		]
 	}`)
 	_, _, skipped, err := svc.ImportMap(context.Background(), ImportMapInput{
 		CampaignID: campaignID,
-		Name:       "Has Image",
+		Name:       "Has WangSet",
 		TiledJSON:  raw,
 	})
 	require.NoError(t, err)
-	assert.True(t, hasSkipped(skipped, SkippedImageLayer))
+	assert.True(t, hasSkipped(skipped, SkippedWangSet))
 }
 
 func TestService_ImportMap_EmptyName(t *testing.T) {
@@ -394,6 +406,120 @@ func TestService_ImportMap_StoreError(t *testing.T) {
 		TiledJSON:  validTmj(10, 10),
 	})
 	require.Error(t, err)
+}
+
+// --- Tileset image parsing (full-tileset import) ---
+
+func TestImportTiledJSON_ParseEmbeddedTileset(t *testing.T) {
+	raw := json.RawMessage(`{
+		"orientation":"orthogonal",
+		"width":10,"height":10,"tilewidth":48,"tileheight":48,
+		"infinite":false,
+		"layers":[
+			{"type":"tilelayer","name":"floor","width":10,"height":10,"data":[1]}
+		],
+		"tilesets":[
+			{"firstgid":1,"name":"dungeon","image":"tiles/dungeon.png",
+			 "imagewidth":256,"imageheight":512,"tilewidth":48,"tileheight":48,
+			 "columns":5,"margin":1,"spacing":2,"tilecount":50}
+		]
+	}`)
+	result, err := ImportTiledJSON(raw)
+	require.NoError(t, err)
+	require.Len(t, result.Tilesets, 1)
+	ts := result.Tilesets[0]
+	assert.Equal(t, "dungeon", ts.Name)
+	assert.Equal(t, 1, ts.FirstGID)
+	assert.Equal(t, "dungeon.png", ts.Image, "image normalized to basename")
+	assert.Equal(t, 256, ts.ImageWidth)
+	assert.Equal(t, 512, ts.ImageHeight)
+	assert.Equal(t, 48, ts.TileWidth)
+	assert.Equal(t, 48, ts.TileHeight)
+	assert.Equal(t, 5, ts.Columns)
+	assert.Equal(t, 1, ts.Margin)
+	assert.Equal(t, 2, ts.Spacing)
+	assert.Equal(t, 50, ts.TileCount)
+	assert.Contains(t, result.RequiredImages(), "dungeon.png")
+
+	// The basename is written back into the stored JSON.
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(result.TiledJSON, &parsed))
+	stored := parsed["tilesets"].([]any)[0].(map[string]any)
+	assert.Equal(t, "dungeon.png", stored["image"])
+}
+
+func TestImportTiledJSON_RejectExternalTileset(t *testing.T) {
+	raw := json.RawMessage(`{
+		"orientation":"orthogonal",
+		"width":10,"height":10,"tilewidth":48,"tileheight":48,
+		"infinite":false,
+		"layers":[{"type":"tilelayer","name":"floor","width":10,"height":10,"data":[1]}],
+		"tilesets":[{"firstgid":1,"source":"dungeon.tsx"}]
+	}`)
+	_, err := ImportTiledJSON(raw)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrExternalTileset), "expected ErrExternalTileset, got %v", err)
+}
+
+func TestImportTiledJSON_RejectImageCollectionTileset(t *testing.T) {
+	// A "collection of images" tileset has no top-level image; each tile carries its own.
+	raw := json.RawMessage(`{
+		"orientation":"orthogonal",
+		"width":10,"height":10,"tilewidth":48,"tileheight":48,
+		"infinite":false,
+		"layers":[{"type":"tilelayer","name":"floor","width":10,"height":10,"data":[1]}],
+		"tilesets":[{"firstgid":1,"name":"props","tiles":[{"id":0,"image":"chair.png"}]}]
+	}`)
+	_, err := ImportTiledJSON(raw)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrImageCollectionTileset), "expected ErrImageCollectionTileset, got %v", err)
+}
+
+func TestImportTiledJSON_AbstractTilesetKept(t *testing.T) {
+	// The semantic terrain tileset (tiles carry a type but no image) must still
+	// import cleanly and produce no image requirement.
+	raw := json.RawMessage(`{
+		"orientation":"orthogonal",
+		"width":10,"height":10,"tilewidth":48,"tileheight":48,
+		"infinite":false,
+		"layers":[{"type":"tilelayer","name":"terrain","width":10,"height":10,"data":[1]}],
+		"tilesets":[{"firstgid":1,"name":"semantic","tiles":[
+			{"id":0,"type":"open_ground"},
+			{"id":1,"type":"water"}
+		]}]
+	}`)
+	result, err := ImportTiledJSON(raw)
+	require.NoError(t, err)
+	assert.Empty(t, result.Tilesets, "abstract tileset needs no image")
+	assert.Empty(t, result.RequiredImages())
+}
+
+func TestApplyImageAssets_RewritesTilesetAndImageLayerImages(t *testing.T) {
+	raw := json.RawMessage(`{
+		"orientation":"orthogonal",
+		"width":10,"height":10,"tilewidth":48,"tileheight":48,
+		"infinite":false,
+		"layers":[
+			{"type":"tilelayer","name":"floor","width":10,"height":10,"data":[1]},
+			{"type":"imagelayer","name":"bg","image":"backdrop.png"}
+		],
+		"tilesets":[
+			{"firstgid":1,"name":"dungeon","image":"dungeon.png","imagewidth":48,"imageheight":48,"tilewidth":48,"tileheight":48,"columns":1}
+		]
+	}`)
+	result, err := ImportTiledJSON(raw)
+	require.NoError(t, err)
+
+	rewritten, err := ApplyImageAssets(result.TiledJSON, map[string]string{
+		"dungeon.png":  "/api/assets/aaaa",
+		"backdrop.png": "/api/assets/bbbb",
+	})
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(rewritten, &parsed))
+	assert.Equal(t, "/api/assets/aaaa", parsed["tilesets"].([]any)[0].(map[string]any)["image"])
+	assert.Equal(t, "/api/assets/bbbb", parsed["layers"].([]any)[1].(map[string]any)["image"])
 }
 
 // hasSkipped checks if a feature appears in the skipped list.

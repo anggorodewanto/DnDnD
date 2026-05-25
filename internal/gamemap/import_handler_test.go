@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,30 +16,66 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-// --- TDD Cycle 15: POST /api/maps/import success ---
+// importPart is one named file part for a multipart import request.
+type importPart struct {
+	field    string // form field name: "tmj" or "images"
+	filename string
+	mime     string // optional explicit Content-Type
+	content  []byte
+}
+
+// newImportRequest builds a multipart/form-data POST /api/maps/import request
+// carrying the given text fields and file parts.
+func newImportRequest(fields map[string]string, parts ...importPart) *http.Request {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		_ = mw.WriteField(k, v)
+	}
+	for _, p := range parts {
+		fw, _ := mw.CreatePart(newPartHeader(p.field, p.filename, p.mime))
+		_, _ = fw.Write(p.content)
+	}
+	_ = mw.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return req
+}
+
+// newPartHeader builds a MIME header for a form-data file part.
+func newPartHeader(field, filename, mime string) map[string][]string {
+	cd := `form-data; name="` + field + `"; filename="` + filename + `"`
+	h := map[string][]string{"Content-Disposition": {cd}}
+	if mime != "" {
+		h["Content-Type"] = []string{mime}
+	}
+	return h
+}
+
+// tmjPart wraps raw .tmj bytes as a file part.
+func tmjPart(raw []byte) importPart {
+	return importPart{field: "tmj", filename: "map.tmj", mime: "application/json", content: raw}
+}
+
+// --- POST /api/maps/import success (abstract map, no images) ---
 
 func TestHandler_ImportMap_Success(t *testing.T) {
 	campaignID := uuid.New()
 	store := successStore(campaignID)
 	_, r := newTestRouter(store)
 
-	body := map[string]any{
-		"campaign_id": campaignID.String(),
-		"name":        "Imported Map",
-		"tmj":         json.RawMessage(validTmj(15, 12)),
-	}
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader(b))
-	req.Header.Set("Content-Type", "application/json")
+	req := newImportRequest(
+		map[string]string{"campaign_id": campaignID.String(), "name": "Imported Map"},
+		tmjPart(validTmj(15, 12)),
+	)
 	rec := httptest.NewRecorder()
-
 	r.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusCreated, rec.Code)
 
 	var resp importMapResponse
-	err := json.Unmarshal(rec.Body.Bytes(), &resp)
-	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, "Imported Map", resp.Map.Name)
 	assert.Equal(t, 15, resp.Map.Width)
 	assert.Equal(t, 12, resp.Map.Height)
@@ -46,28 +83,27 @@ func TestHandler_ImportMap_Success(t *testing.T) {
 	assert.Empty(t, resp.Skipped)
 }
 
-// --- TDD Cycle 16: POST /api/maps/import returns skipped features ---
+// --- POST /api/maps/import returns skipped features ---
 
 func TestHandler_ImportMap_ReturnsSkippedFeatures(t *testing.T) {
 	campaignID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
 
-	tmj := json.RawMessage(`{
+	tmj := []byte(`{
 		"orientation":"orthogonal",
 		"width":10,"height":10,"tilewidth":48,"tileheight":48,
 		"infinite":false,
 		"layers":[
-			{"type":"tilelayer","name":"terrain","width":10,"height":10,"data":[1]},
-			{"type":"imagelayer","name":"bg","image":"bg.png"}
+			{"type":"tilelayer","name":"terrain","width":10,"height":10,"data":[1]}
+		],
+		"tilesets":[
+			{"firstgid":1,"name":"t","wangsets":[{"name":"corners","type":"corner"}]}
 		]
 	}`)
-	body := map[string]any{
-		"campaign_id": campaignID.String(),
-		"name":        "Has Image",
-		"tmj":         tmj,
-	}
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader(b))
+	req := newImportRequest(
+		map[string]string{"campaign_id": campaignID.String(), "name": "Has WangSet"},
+		tmjPart(tmj),
+	)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -76,10 +112,10 @@ func TestHandler_ImportMap_ReturnsSkippedFeatures(t *testing.T) {
 	var resp importMapResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp.Skipped, 1)
-	assert.Equal(t, SkippedImageLayer, resp.Skipped[0].Feature)
+	assert.Equal(t, SkippedWangSet, resp.Skipped[0].Feature)
 }
 
-// --- TDD Cycle 17: POST /api/maps/import hard rejection ---
+// --- POST /api/maps/import hard rejection ---
 
 func TestHandler_ImportMap_HardRejection(t *testing.T) {
 	campaignID := uuid.New()
@@ -108,13 +144,10 @@ func TestHandler_ImportMap_HardRejection(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			body := map[string]any{
-				"campaign_id": campaignID.String(),
-				"name":        "X",
-				"tmj":         json.RawMessage(tc.tmj),
-			}
-			b, _ := json.Marshal(body)
-			req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader(b))
+			req := newImportRequest(
+				map[string]string{"campaign_id": campaignID.String(), "name": "X"},
+				tmjPart([]byte(tc.tmj)),
+			)
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, req)
 			assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -123,65 +156,59 @@ func TestHandler_ImportMap_HardRejection(t *testing.T) {
 	}
 }
 
-// --- TDD Cycle 18: POST /api/maps/import invalid JSON body ---
+// --- POST /api/maps/import not multipart -> 400 ---
 
-func TestHandler_ImportMap_InvalidBody(t *testing.T) {
+func TestHandler_ImportMap_NotMultipart(t *testing.T) {
 	_, r := newTestRouter(&mockStore{})
-	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader([]byte("not json")))
+	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader([]byte("not multipart")))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-// --- TDD Cycle 19: POST /api/maps/import invalid campaign_id ---
+// --- POST /api/maps/import invalid campaign_id ---
 
 func TestHandler_ImportMap_InvalidCampaignID(t *testing.T) {
 	_, r := newTestRouter(&mockStore{})
-	body := map[string]any{
-		"campaign_id": "not-a-uuid",
-		"name":        "X",
-		"tmj":         json.RawMessage(validTmj(10, 10)),
-	}
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader(b))
+	req := newImportRequest(
+		map[string]string{"campaign_id": "not-a-uuid", "name": "X"},
+		tmjPart(validTmj(10, 10)),
+	)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "campaign_id")
 }
+
+// --- POST /api/maps/import missing tmj file ---
 
 func TestHandler_ImportMap_MissingTmj(t *testing.T) {
 	campaignID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
-	body := map[string]any{
-		"campaign_id": campaignID.String(),
-		"name":        "X",
-	}
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader(b))
+	req := newImportRequest(map[string]string{"campaign_id": campaignID.String(), "name": "X"})
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Contains(t, rec.Body.String(), "tmj")
 }
 
-func TestHandler_ImportMap_InvalidBackgroundImageID(t *testing.T) {
+// --- POST /api/maps/import empty tmj file ---
+
+func TestHandler_ImportMap_EmptyTmj(t *testing.T) {
 	campaignID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
-	body := map[string]any{
-		"campaign_id":         campaignID.String(),
-		"name":                "X",
-		"tmj":                 json.RawMessage(validTmj(10, 10)),
-		"background_image_id": "not-a-uuid",
-	}
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader(b))
+	req := newImportRequest(
+		map[string]string{"campaign_id": campaignID.String(), "name": "X"},
+		tmjPart([]byte{}),
+	)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
-	assert.Contains(t, rec.Body.String(), "background_image_id")
+	assert.Contains(t, rec.Body.String(), "tmj")
 }
 
-// --- TDD Cycle 22: ImportMap surfaces store errors as 500 ---
+// --- ImportMap surfaces store errors as 500 ---
 
 func TestHandler_ImportMap_StoreError(t *testing.T) {
 	campaignID := uuid.New()
@@ -191,89 +218,113 @@ func TestHandler_ImportMap_StoreError(t *testing.T) {
 		},
 	}
 	_, r := newTestRouter(store)
-	body := map[string]any{
-		"campaign_id": campaignID.String(),
-		"name":        "X",
-		"tmj":         json.RawMessage(validTmj(10, 10)),
-	}
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader(b))
+	req := newImportRequest(
+		map[string]string{"campaign_id": campaignID.String(), "name": "X"},
+		tmjPart(validTmj(10, 10)),
+	)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
-// --- TDD Cycle 23: ImportMap rejects validation failures (e.g. empty name) ---
+// --- ImportMap rejects validation failures (empty name) ---
 
 func TestHandler_ImportMap_EmptyName(t *testing.T) {
 	campaignID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
-	body := map[string]any{
-		"campaign_id": campaignID.String(),
-		"name":        "",
-		"tmj":         json.RawMessage(validTmj(10, 10)),
-	}
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader(b))
+	req := newImportRequest(
+		map[string]string{"campaign_id": campaignID.String(), "name": ""},
+		tmjPart(validTmj(10, 10)),
+	)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Contains(t, rec.Body.String(), "name must not be empty")
 }
 
+// --- ImportMap rejects a tmj payload the importer can't accept ---
+
 func TestHandler_ImportMap_InvalidTmjPayload(t *testing.T) {
 	campaignID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
-	// Outer body parses, but `tmj` is a valid JSON value the importer can't accept (a string, not a map).
-	body := map[string]any{
-		"campaign_id": campaignID.String(),
-		"name":        "X",
-		"tmj":         json.RawMessage(`"not a tmj"`),
-	}
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader(b))
+	req := newImportRequest(
+		map[string]string{"campaign_id": campaignID.String(), "name": "X"},
+		tmjPart([]byte(`"not a tmj"`)),
+	)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Contains(t, rec.Body.String(), "invalid Tiled JSON")
 }
 
-func TestHandler_ImportMap_WithBackgroundImageID(t *testing.T) {
+// --- Multipart import of a map with an embedded tileset image succeeds and
+// rewrites the stored tileset image to an asset URL ---
+
+func TestHandler_ImportMap_WithTilesetImage(t *testing.T) {
 	campaignID := uuid.New()
-	bgID := uuid.New()
-	var capturedBgID uuid.NullUUID
-	store := &mockStore{
-		createMapFn: func(_ context.Context, arg refdata.CreateMapParams) (refdata.Map, error) {
-			capturedBgID = arg.BackgroundImageID
-			return refdata.Map{
-				ID:                uuid.New(),
-				CampaignID:        arg.CampaignID,
-				Name:              arg.Name,
-				WidthSquares:      arg.WidthSquares,
-				HeightSquares:     arg.HeightSquares,
-				TiledJson:         arg.TiledJson,
-				BackgroundImageID: arg.BackgroundImageID,
-			}, nil
-		},
-	}
-	_, r := newTestRouter(store)
-	body := map[string]any{
-		"campaign_id":         campaignID.String(),
-		"name":                "X",
-		"tmj":                 json.RawMessage(validTmj(10, 10)),
-		"background_image_id": bgID.String(),
-	}
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/maps/import", bytes.NewReader(b))
+	var captured json.RawMessage
+	svc := NewService(captureStore(campaignID, &captured)).SetImageUploader(&fakeUploader{})
+	h := NewHandler(svc)
+	_, r := newRouterFromHandler(h)
+
+	req := newImportRequest(
+		map[string]string{"campaign_id": campaignID.String(), "name": "Tileset Map"},
+		tmjPart(tmjWithTileset("dungeon.png")),
+		importPart{field: "images", filename: "dungeon.png", mime: "image/png", content: []byte("PNGDATA")},
+	)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
+
 	require.Equal(t, http.StatusCreated, rec.Code)
 
-	assert.True(t, capturedBgID.Valid)
-	assert.Equal(t, bgID, capturedBgID.UUID)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(captured, &parsed))
+	tilesets := parsed["tilesets"].([]any)
+	ts := tilesets[0].(map[string]any)
+	assert.Equal(t, "/api/assets/dungeon.png", ts["image"])
+}
 
-	var resp importMapResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.NotNil(t, resp.Map.BackgroundImageID)
-	assert.Equal(t, bgID.String(), *resp.Map.BackgroundImageID)
+// --- Multipart import detects the MIME type when the part omits Content-Type ---
+
+func TestHandler_ImportMap_TilesetImage_SniffsMime(t *testing.T) {
+	campaignID := uuid.New()
+	var captured json.RawMessage
+	up := &fakeUploader{}
+	svc := NewService(captureStore(campaignID, &captured)).SetImageUploader(up)
+	h := NewHandler(svc)
+	_, r := newRouterFromHandler(h)
+
+	// PNG magic bytes so http.DetectContentType returns image/png.
+	pngMagic := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	req := newImportRequest(
+		map[string]string{"campaign_id": campaignID.String(), "name": "Sniff Map"},
+		tmjPart(tmjWithTileset("dungeon.png")),
+		importPart{field: "images", filename: "dungeon.png", content: pngMagic},
+	)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	require.Len(t, up.calls, 1)
+	assert.Equal(t, "image/png", up.calls[0].mimeType)
+}
+
+// --- Multipart import with a missing image returns 400 ---
+
+func TestHandler_ImportMap_MissingImage(t *testing.T) {
+	campaignID := uuid.New()
+	svc := NewService(successStore(campaignID)).SetImageUploader(&fakeUploader{})
+	h := NewHandler(svc)
+	_, r := newRouterFromHandler(h)
+
+	req := newImportRequest(
+		map[string]string{"campaign_id": campaignID.String(), "name": "Missing Img"},
+		tmjPart(tmjWithTileset("dungeon.png")),
+		// no images part
+	)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "dungeon.png")
 }

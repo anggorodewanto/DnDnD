@@ -330,6 +330,82 @@ func TestParseTiledJSON_MagicalDarkness_DemotesFoW(t *testing.T) {
 	}
 }
 
+// Visual-rendering fields: a map with one image tileset + one abstract tileset,
+// a non-semantic "floor" tilelayer (with a flip-flagged GID), the reserved
+// semantic layers, and an imagelayer. Asserts Tilesets/SpriteLayers/ImageLayers
+// are populated and the semantic layers + abstract tileset are excluded.
+func TestParseTiledJSON_VisualRenderingFields(t *testing.T) {
+	// 0x80000001 = 2147483649: GID 1 with the horizontal flip flag set. Must
+	// round-trip unchanged through SpriteLayer.Data as a raw uint32.
+	const flippedGID = 0x80000001
+	tiledJSON := `{
+		"width": 2, "height": 2, "tilewidth": 32, "tileheight": 32,
+		"layers": [
+			{"name": "terrain", "type": "tilelayer", "width": 2, "height": 2, "data": [1,1,1,1]},
+			{"name": "lighting", "type": "tilelayer", "width": 2, "height": 2, "data": [0,0,0,0]},
+			{"name": "elevation", "type": "tilelayer", "width": 2, "height": 2, "data": [0,0,0,5]},
+			{"name": "floor", "type": "tilelayer", "width": 2, "height": 2, "data": [10, 11, 12, 2147483649]},
+			{"name": "decor", "type": "imagelayer", "image": "/api/assets/img-7", "offsetx": 16, "offsety": -8}
+		],
+		"tilesets": [
+			{"firstgid": 1, "name": "floor_art", "image": "/api/assets/img-3",
+			 "columns": 8, "tilewidth": 32, "tileheight": 32, "margin": 1, "spacing": 2,
+			 "imagewidth": 266, "imageheight": 130, "tilecount": 32},
+			{"firstgid": 200, "name": "terrain", "tiles": [{"id":0,"type":"open_ground"}]}
+		]
+	}`
+
+	md, err := ParseTiledJSON(json.RawMessage(tiledJSON), nil, nil)
+	if err != nil {
+		t.Fatalf("ParseTiledJSON error: %v", err)
+	}
+
+	// Tilesets: only the image tileset is kept; the abstract one is excluded.
+	if len(md.Tilesets) != 1 {
+		t.Fatalf("Tilesets len = %d, want 1 (abstract tileset must be excluded); got %+v", len(md.Tilesets), md.Tilesets)
+	}
+	ts := md.Tilesets[0]
+	if ts.FirstGID != 1 || ts.Columns != 8 || ts.TileWidth != 32 || ts.TileHeight != 32 ||
+		ts.Margin != 1 || ts.Spacing != 2 || ts.ImageWidth != 266 || ts.ImageHeight != 130 ||
+		ts.TileCount != 32 || ts.ImageRef != "/api/assets/img-3" || ts.ImagePNG != nil {
+		t.Errorf("Tilesets[0] = %+v, want FirstGID:1 Columns:8 TileWidth:32 TileHeight:32 "+
+			"Margin:1 Spacing:2 ImageWidth:266 ImageHeight:130 TileCount:32 "+
+			"ImageRef:/api/assets/img-3 ImagePNG:nil", ts)
+	}
+
+	// SpriteLayers: only "floor" (terrain/lighting/elevation excluded).
+	if len(md.SpriteLayers) != 1 {
+		t.Fatalf("SpriteLayers len = %d, want 1 (semantic layers must be excluded); got %+v", len(md.SpriteLayers), md.SpriteLayers)
+	}
+	sl := md.SpriteLayers[0]
+	if sl.Name != "floor" {
+		t.Errorf("SpriteLayers[0].Name = %q, want %q", sl.Name, "floor")
+	}
+	wantData := []uint32{10, 11, 12, flippedGID}
+	if len(sl.Data) != len(wantData) {
+		t.Fatalf("SpriteLayers[0].Data len = %d, want %d", len(sl.Data), len(wantData))
+	}
+	for i, w := range wantData {
+		if sl.Data[i] != w {
+			t.Errorf("SpriteLayers[0].Data[%d] = %#x, want %#x", i, sl.Data[i], w)
+		}
+	}
+
+	// ImageLayers: the imagelayer with its ImageRef + offsets.
+	if len(md.ImageLayers) != 1 {
+		t.Fatalf("ImageLayers len = %d, want 1; got %+v", len(md.ImageLayers), md.ImageLayers)
+	}
+	il := md.ImageLayers[0]
+	if il.Name != "decor" || il.ImageRef != "/api/assets/img-7" || il.OffsetX != 16 || il.OffsetY != -8 || il.ImagePNG != nil {
+		t.Errorf("ImageLayers[0] = %+v, want {Name:decor ImageRef:/api/assets/img-7 OffsetX:16 OffsetY:-8 ImagePNG:nil}", il)
+	}
+
+	// Existing behavior preserved: elevation/terrain still parsed from semantic layers.
+	if len(md.ElevationByTile) != 4 || md.ElevationByTile[3] != 5 {
+		t.Errorf("ElevationByTile = %v, want [0 0 0 5]", md.ElevationByTile)
+	}
+}
+
 func TestParseTiledJSON_WithActiveEffects(t *testing.T) {
 	tiledJSON := `{
 		"width": 3, "height": 3, "tilewidth": 48, "tileheight": 48,

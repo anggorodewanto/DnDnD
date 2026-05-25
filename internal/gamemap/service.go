@@ -60,12 +60,21 @@ type Store interface {
 
 // Service manages map CRUD and validation.
 type Service struct {
-	store Store
+	store    Store
+	uploader ImageUploader
 }
 
 // NewService creates a new map Service.
 func NewService(store Store) *Service {
 	return &Service{store: store}
+}
+
+// SetImageUploader wires the image uploader used by multipart Tiled imports to
+// persist tileset/image-layer backing files. It returns the receiver so calls
+// can be chained. Passing nil disables uploads (abstract-map imports still work).
+func (s *Service) SetImageUploader(u ImageUploader) *Service {
+	s.uploader = u
+	return s
 }
 
 // CreateMap validates input and creates a new map.

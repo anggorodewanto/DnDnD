@@ -93,38 +93,36 @@ export async function updateMap(id, campaignId, params) {
 }
 
 /**
- * Import a Tiled `.tmj` file as a new map. Reads the file as text, parses it
- * as JSON, and POSTs the payload to /api/maps/import. The backend validates
- * the .tmj, strips unsupported features, and returns
- * { map: {...}, skipped: [...] }.
+ * Import a multi-file Tiled project (.tmj + every tileset / image-layer image
+ * the map references) as a new map. POSTs multipart/form-data to
+ * /api/maps/import with `campaign_id`, `name`, the `tmj` file, and one
+ * `images` entry per image file (matched server-side by filename basename).
  *
- * @param {object} params - { campaignId, name, file, backgroundImageId? }
+ * The browser sets the multipart boundary, so we deliberately omit the
+ * Content-Type header. The backend validates the .tmj, uploads the images,
+ * rewrites tileset/image-layer paths to asset URLs, strips unsupported
+ * features, and returns { map: {...}, skipped: [...] }. When images are
+ * missing it returns 400 with a plain-text body listing them, which
+ * apiFetch surfaces as the thrown Error's message.
+ *
+ * @param {object} params
  * @param {string} params.campaignId - Campaign UUID.
  * @param {string} params.name - Map name (required by the backend).
- * @param {File}   params.file - The .tmj file selected by the user.
- * @param {string} [params.backgroundImageId] - Optional asset UUID.
+ * @param {File}   params.tmjFile - The .tmj file selected by the user.
+ * @param {File[]} [params.imageFiles] - Tileset + image-layer image files.
  * @returns {Promise<{map: object, skipped: object[]}>}
  */
-export async function importTiledMap({ campaignId, name, file, backgroundImageId }) {
-  const text = await file.text();
-  let tmj;
-  try {
-    tmj = JSON.parse(text);
-  } catch (e) {
-    throw new Error('Selected file is not valid JSON');
-  }
-  const body = {
-    campaign_id: campaignId,
-    name,
-    tmj,
-  };
-  if (backgroundImageId) {
-    body.background_image_id = backgroundImageId;
+export async function importTiledMap({ campaignId, name, tmjFile, imageFiles = [] }) {
+  const formData = new FormData();
+  formData.append('campaign_id', campaignId);
+  formData.append('name', name);
+  formData.append('tmj', tmjFile);
+  for (const img of imageFiles) {
+    formData.append('images', img);
   }
   const res = await apiFetch(`${API_BASE}/import`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: formData,
   });
   return res.json();
 }

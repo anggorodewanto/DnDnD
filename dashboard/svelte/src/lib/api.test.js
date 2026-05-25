@@ -619,13 +619,17 @@ describe('startCombat', () => {
   });
 });
 
-// F-7: Tiled .tmj import — wired by MapEditor.svelte's new "Import Tiled" button.
+// F-7: multi-file Tiled project import (.tmj + tileset/image-layer images).
+// MapEditor.svelte's import control now POSTs multipart/form-data to
+// /api/maps/import with campaign_id, name, the tmj file, and one `images`
+// entry per referenced image file. The browser sets the multipart boundary,
+// so importTiledMap must NOT set a Content-Type header.
 describe('importTiledMap', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('reads the file as text, parses it as JSON, and POSTs to /api/maps/import', async () => {
+  it('POSTs multipart form-data with campaign_id, name, the tmj, and every image', async () => {
     const responseBody = {
       map: { id: 'map-123', name: 'Dungeon', width: 10, height: 8, tiled_json: {} },
       skipped: [],
@@ -635,67 +639,75 @@ describe('importTiledMap', () => {
       json: () => Promise.resolve(responseBody),
     });
 
-    const tmj = { width: 10, height: 8, orientation: 'orthogonal', layers: [] };
-    const file = new File([JSON.stringify(tmj)], 'dungeon.tmj', { type: 'application/json' });
+    const tmjFile = new File(['{"layers":[]}'], 'dungeon.tmj', { type: 'application/json' });
+    const img1 = new File(['png-a'], 'tiles.png', { type: 'image/png' });
+    const img2 = new File(['png-b'], 'bg.png', { type: 'image/png' });
 
     const result = await importTiledMap({
       campaignId: 'campaign-uuid',
       name: 'Dungeon',
-      file,
+      tmjFile,
+      imageFiles: [img1, img2],
     });
 
     expect(result).toEqual(responseBody);
     expect(fetch).toHaveBeenCalledTimes(1);
+
     const [url, options] = fetch.mock.calls[0];
     expect(url).toBe('/api/maps/import');
     expect(options.method).toBe('POST');
-    expect(options.headers['Content-Type']).toBe('application/json');
-    const body = JSON.parse(options.body);
-    expect(body.campaign_id).toBe('campaign-uuid');
-    expect(body.name).toBe('Dungeon');
-    expect(body.tmj).toEqual(tmj);
-    expect(body.background_image_id).toBeUndefined();
+    // The browser must set the multipart boundary — no manual Content-Type.
+    expect(options.headers).toBeUndefined();
+    expect(options.body).toBeInstanceOf(FormData);
+
+    const fd = options.body;
+    expect(fd.get('campaign_id')).toBe('campaign-uuid');
+    expect(fd.get('name')).toBe('Dungeon');
+    expect(fd.get('tmj')).toBeInstanceOf(File);
+    expect(fd.get('tmj').name).toBe('dungeon.tmj');
+
+    const images = fd.getAll('images');
+    expect(images).toHaveLength(2);
+    expect(images.map((f) => f.name)).toEqual(['tiles.png', 'bg.png']);
   });
 
-  it('includes background_image_id when provided', async () => {
+  it('handles a tmj with no referenced images (no images entries)', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ map: {}, skipped: [] }),
     });
-    const file = new File(['{"layers":[]}'], 'm.tmj', { type: 'application/json' });
-    await importTiledMap({
-      campaignId: 'c1',
-      name: 'M',
-      file,
-      backgroundImageId: 'asset-9',
+    const tmjFile = new File(['{"layers":[]}'], 'abstract.tmj', { type: 'application/json' });
+
+    await importTiledMap({ campaignId: 'c1', name: 'M', tmjFile, imageFiles: [] });
+
+    const fd = fetch.mock.calls[0][1].body;
+    expect(fd.getAll('images')).toEqual([]);
+    expect(fd.get('tmj').name).toBe('abstract.tmj');
+  });
+
+  it('defaults imageFiles to an empty list when omitted', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ map: {}, skipped: [] }),
     });
-    const body = JSON.parse(fetch.mock.calls[0][1].body);
-    expect(body.background_image_id).toBe('asset-9');
+    const tmjFile = new File(['{"layers":[]}'], 'm.tmj', { type: 'application/json' });
+
+    await importTiledMap({ campaignId: 'c1', name: 'M', tmjFile });
+
+    const fd = fetch.mock.calls[0][1].body;
+    expect(fd.getAll('images')).toEqual([]);
   });
 
-  it('rejects when the file is not valid JSON', async () => {
-    globalThis.fetch = vi.fn();
-    const file = new File(['not json {{'], 'bad.tmj', { type: 'application/json' });
-    await expect(importTiledMap({
-      campaignId: 'c1',
-      name: 'Bad',
-      file,
-    })).rejects.toThrow(/not valid JSON/);
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it('surfaces backend error text from a non-ok response', async () => {
+  it('surfaces the backend 400 missing-image text from a non-ok response', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 400,
-      text: () => Promise.resolve('infinite maps are not supported'),
+      text: () => Promise.resolve('missing images: tiles.png, bg.png'),
     });
-    const file = new File(['{"infinite":true}'], 'big.tmj', { type: 'application/json' });
-    await expect(importTiledMap({
-      campaignId: 'c1',
-      name: 'Big',
-      file,
-    })).rejects.toThrow('infinite maps are not supported');
+    const tmjFile = new File(['{"layers":[]}'], 'big.tmj', { type: 'application/json' });
+    await expect(
+      importTiledMap({ campaignId: 'c1', name: 'Big', tmjFile, imageFiles: [] }),
+    ).rejects.toThrow('missing images: tiles.png, bg.png');
   });
 });
 

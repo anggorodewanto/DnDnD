@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"io"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -418,9 +420,15 @@ type mapRegeneratorQueries interface {
 // is the source of truth.
 type mapRegeneratorAdapter struct {
 	queries mapRegeneratorQueries
+	images  mapImageFetcher // optional; resolves tileset/image-layer/background bytes
 
 	exploredMu sync.Mutex
 	exploredKM map[uuid.UUID]*sync.Mutex // encounterID → per-encounter R-M-W lock
+}
+
+// mapImageFetcher opens an asset's bytes by id. Satisfied by *asset.Service.
+type mapImageFetcher interface {
+	OpenFile(ctx context.Context, id uuid.UUID) (refdata.Asset, io.ReadCloser, error)
 }
 
 func newMapRegeneratorAdapter(q mapRegeneratorQueries) *mapRegeneratorAdapter {
@@ -431,6 +439,17 @@ func newMapRegeneratorAdapter(q mapRegeneratorQueries) *mapRegeneratorAdapter {
 		queries:    q,
 		exploredKM: make(map[uuid.UUID]*sync.Mutex),
 	}
+}
+
+// withImageFetcher wires the asset byte source used to resolve full-tileset
+// sprite images, image layers, and the background image into render bytes.
+// Returns the adapter for chaining; nil fetcher leaves resolution disabled
+// (abstract maps render unchanged).
+func (a *mapRegeneratorAdapter) withImageFetcher(f mapImageFetcher) *mapRegeneratorAdapter {
+	if a != nil {
+		a.images = f
+	}
+	return a
 }
 
 // lockForEncounter returns (and lazily creates) a per-encounter mutex used to
@@ -493,6 +512,11 @@ func (a *mapRegeneratorAdapter) renderInternal(ctx context.Context, encounterID 
 	if err != nil {
 		return nil, fmt.Errorf("parse tiled json: %w", err)
 	}
+
+	// Resolve full-tileset sprite images, image layers, and the background
+	// image from the asset store into render bytes. Best-effort: a missing or
+	// unreadable asset just renders without that art rather than failing.
+	a.resolveMapImages(ctx, md, m.BackgroundImageID)
 
 	// E-67-zone-render-on-map: project the active encounter_zones rows into
 	// MapData.ZoneOverlays so DrawZoneOverlays paints Fog Cloud / Wall of
@@ -559,6 +583,64 @@ func (a *mapRegeneratorAdapter) renderInternal(ctx context.Context, encounterID 
 	}
 
 	return png, nil
+}
+
+// resolveMapImages fills the render byte slices for full-tileset sprite
+// images, image layers, and the background from the asset store. ImageRefs
+// parsed from the tiled_json are "/api/assets/{id}" URLs; the background is a
+// direct asset id on the map row. All lookups are best-effort.
+func (a *mapRegeneratorAdapter) resolveMapImages(ctx context.Context, md *renderer.MapData, bg uuid.NullUUID) {
+	if a.images == nil {
+		return
+	}
+	for i := range md.Tilesets {
+		if b := a.fetchAssetBytes(ctx, assetIDFromRef(md.Tilesets[i].ImageRef)); b != nil {
+			md.Tilesets[i].ImagePNG = b
+		}
+	}
+	for i := range md.ImageLayers {
+		if b := a.fetchAssetBytes(ctx, assetIDFromRef(md.ImageLayers[i].ImageRef)); b != nil {
+			md.ImageLayers[i].ImagePNG = b
+		}
+	}
+	if bg.Valid {
+		if b := a.fetchAssetBytes(ctx, bg.UUID); b != nil {
+			md.BackgroundImage = b
+			if md.BackgroundOpacity == 0 {
+				md.BackgroundOpacity = 1.0
+			}
+		}
+	}
+}
+
+// assetIDFromRef parses the asset UUID out of a "/api/assets/{id}" reference.
+// Returns uuid.Nil for an empty or unparseable ref.
+func assetIDFromRef(ref string) uuid.UUID {
+	if ref == "" {
+		return uuid.Nil
+	}
+	id, err := uuid.Parse(path.Base(ref))
+	if err != nil {
+		return uuid.Nil
+	}
+	return id
+}
+
+// fetchAssetBytes reads an asset's bytes by id, returning nil on any failure.
+func (a *mapRegeneratorAdapter) fetchAssetBytes(ctx context.Context, id uuid.UUID) []byte {
+	if id == uuid.Nil || a.images == nil {
+		return nil
+	}
+	_, rc, err := a.images.OpenFile(ctx, id)
+	if err != nil {
+		return nil
+	}
+	defer rc.Close()
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // decodeExploredCells unpacks the JSONB array stored in

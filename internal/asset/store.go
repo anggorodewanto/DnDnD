@@ -15,12 +15,15 @@ const (
 	TypeToken         AssetType = "token"
 	TypeTileset       AssetType = "tileset"
 	TypeNarration     AssetType = "narration"
+	// TypeTilesetImage is the backing image for a single-image tileset or an
+	// image layer, supplied alongside a .tmj during a multipart Tiled import.
+	TypeTilesetImage AssetType = "tileset_image"
 )
 
 // Valid reports whether t is a recognized asset type.
 func (t AssetType) Valid() bool {
 	switch t {
-	case TypeMapBackground, TypeToken, TypeTileset, TypeNarration:
+	case TypeMapBackground, TypeToken, TypeTileset, TypeNarration, TypeTilesetImage:
 		return true
 	default:
 		return false

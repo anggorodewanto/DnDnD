@@ -15,6 +15,7 @@ var typeToDir = map[AssetType]string{
 	TypeMapBackground: "maps",
 	TypeToken:         "tokens",
 	TypeTileset:       "tilesets",
+	TypeTilesetImage:  "tilesets",
 	TypeNarration:     "narration",
 }
 

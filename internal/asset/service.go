@@ -123,6 +123,7 @@ var allowedMIMETypes = map[AssetType][]string{
 	TypeMapBackground: {"image/png", "image/jpeg", "image/webp"},
 	TypeToken:         {"image/png", "image/jpeg", "image/webp"},
 	TypeTileset:       {"application/json"},
+	TypeTilesetImage:  {"image/png", "image/jpeg", "image/webp"},
 }
 
 // validateUpload checks upload input for validity.
