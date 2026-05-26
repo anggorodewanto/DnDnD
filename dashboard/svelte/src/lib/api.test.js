@@ -13,6 +13,7 @@ import {
   overrideCharacterSpellSlots,
   updateEncounterDisplayName,
   startCombat,
+  combatMapUrl,
   importTiledMap,
   reimportTiledMap,
   listOpen5eSources,
@@ -122,6 +123,18 @@ describe('campaign APIs', () => {
     expect(url).toBe('/api/campaigns');
     expect(options.method).toBe('POST');
     expect(JSON.parse(options.body)).toEqual({ name: 'Local', guild_id: 'guild-1' });
+  });
+});
+
+describe('combatMapUrl', () => {
+  it('returns the unfogged DM map URL by default', () => {
+    expect(combatMapUrl('enc-uuid')).toBe('/api/combat/enc-uuid/map.png');
+  });
+
+  it('appends ?view=player for the fogged player preview', () => {
+    expect(combatMapUrl('enc-uuid', { playerView: true })).toBe(
+      '/api/combat/enc-uuid/map.png?view=player',
+    );
   });
 });
 

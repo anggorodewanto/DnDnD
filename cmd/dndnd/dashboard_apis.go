@@ -466,9 +466,12 @@ func (l *campaignChannelLookup) GetChannelIDsForCampaign(ctx context.Context, ca
 	return settings.ChannelIDs, nil
 }
 
-// handleDMMapPNG returns an http.HandlerFunc that renders the encounter map
-// with DMSeesAll=true (unfogged) and serves it as image/png. SR-068: gives
-// the DM dashboard a production caller for RegenerateMapForDM.
+// handleDMMapPNG returns an http.HandlerFunc that renders the encounter map and
+// serves it as image/png. By default it renders the unfogged DM view
+// (DMSeesAll=true). With ?view=player it renders the fogged, player-perspective
+// view instead, so the DM can preview exactly what players see through fog of
+// war and lighting. SR-068: gives the DM dashboard a production caller for
+// RegenerateMapForDM (and RegenerateMap for the preview).
 func handleDMMapPNG(regen *mapRegeneratorAdapter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		idStr := chi.URLParam(r, "encounterID")
@@ -477,7 +480,11 @@ func handleDMMapPNG(regen *mapRegeneratorAdapter) http.HandlerFunc {
 			http.Error(w, "invalid encounter id", http.StatusBadRequest)
 			return
 		}
-		png, err := regen.RegenerateMapForDM(r.Context(), id)
+		render := regen.RegenerateMapForDM
+		if r.URL.Query().Get("view") == "player" {
+			render = regen.RegenerateMap
+		}
+		png, err := render(r.Context(), id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

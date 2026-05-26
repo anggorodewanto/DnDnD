@@ -12,6 +12,7 @@
     overrideCombatantInitiative,
     overrideCharacterSpellSlots,
     updateEncounterDisplayName,
+    combatMapUrl,
   } from './lib/api.js';
   import {
     applyDamage,
@@ -789,6 +790,15 @@
     }
   }
 
+  // Opens the server-rendered, fog-of-war/lighting-applied player view of the
+  // current encounter in a new tab so the DM can preview exactly what players
+  // see. The dashboard canvas always renders the full (DM) map, so this PNG is
+  // the only place the fogged view is visible.
+  function previewPlayerView() {
+    if (!activeEncounter) return;
+    window.open(combatMapUrl(activeEncounter.id, { playerView: true }), '_blank');
+  }
+
   function handleCanvasClick(e) {
     if (contextMenu) {
       contextMenu = null;
@@ -976,6 +986,16 @@
             <span class="measure-result" data-testid="measure-result">
               {gridDistance(measureStart.col, measureStart.row, measureEnd.col, measureEnd.row)}ft
             </span>
+          {/if}
+          {#if activeEncounter.map}
+            <button
+              class="tool-btn"
+              onclick={previewPlayerView}
+              title="Open the fog-of-war / lighting view players see, in a new tab"
+              data-testid="preview-player-view-btn"
+            >
+              Preview as Player
+            </button>
           {/if}
         </div>
         {#if activeEncounter.map}

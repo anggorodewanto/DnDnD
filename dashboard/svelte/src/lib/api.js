@@ -298,6 +298,24 @@ export async function startCombat(payload) {
 }
 
 /**
+ * Build the URL of the server-rendered combat map PNG for an encounter.
+ * Defaults to the unfogged DM view; pass `{ playerView: true }` to get the
+ * fogged, player-perspective render (`?view=player`) so the DM can preview
+ * exactly what players see through fog of war and lighting. Backed by
+ * handleDMMapPNG in cmd/dndnd/dashboard_apis.go.
+ *
+ * @param {string} encounterId - Encounter UUID.
+ * @param {object} [opts]
+ * @param {boolean} [opts.playerView=false] - Render the fogged player view.
+ * @returns {string} The map PNG URL.
+ */
+export function combatMapUrl(encounterId, { playerView = false } = {}) {
+  const base = `${COMBAT_BASE}/${encounterId}/map.png`;
+  if (!playerView) return base;
+  return `${base}?view=player`;
+}
+
+/**
  * Get a suggested turn plan for an NPC combatant.
  * @param {string} encounterId - Encounter UUID.
  * @param {string} combatantId - Combatant UUID.

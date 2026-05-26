@@ -1312,8 +1312,8 @@ func TestBuildLightSources_LitTorch(t *testing.T) {
 
 	lights := buildLightSources(context.Background(), q, combatants, nil)
 	require.Len(t, lights, 1)
-	assert.Equal(t, 2, lights[0].Col) // C = index 2
-	assert.Equal(t, 2, lights[0].Row) // row 3 = index 2
+	assert.Equal(t, 2, lights[0].Col)        // C = index 2
+	assert.Equal(t, 2, lights[0].Row)        // row 3 = index 2
 	assert.Equal(t, 4, lights[0].RangeTiles) // torch = 20ft = 4 tiles
 }
 
@@ -1334,8 +1334,8 @@ func TestBuildLightSources_LightZone(t *testing.T) {
 
 	lights := buildLightSources(context.Background(), nil, nil, zones)
 	require.Len(t, lights, 1)
-	assert.Equal(t, 3, lights[0].Col) // D = index 3
-	assert.Equal(t, 3, lights[0].Row) // row 4 = index 3
+	assert.Equal(t, 3, lights[0].Col)        // D = index 3
+	assert.Equal(t, 3, lights[0].Row)        // row 4 = index 3
 	assert.Equal(t, 4, lights[0].RangeTiles) // Light = 20ft = 4 tiles
 }
 
@@ -1411,8 +1411,8 @@ func TestRegenerateMap_NonDarkvisionPC_LitTorch_DarkOutsideRadius(t *testing.T) 
 		},
 		characters: map[uuid.UUID]refdata.Character{
 			charID: {
-				ID:   charID,
-				Race: "human",
+				ID:        charID,
+				Race:      "human",
 				Inventory: pqtype.NullRawMessage{RawMessage: []byte(inv), Valid: true},
 			},
 		},
@@ -1566,6 +1566,50 @@ func TestHandleDMMapPNG_InvalidID(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// TestHandleDMMapPNG_PlayerView asserts ?view=player serves the fogged
+// player-perspective render (RegenerateMap) rather than the unfogged DM view
+// (RegenerateMapForDM). The two PNGs must differ because the player view
+// paints a fog overlay on unseen tiles.
+func TestHandleDMMapPNG_PlayerView(t *testing.T) {
+	tiledJSON := mapJSON10x10()
+	charID := uuid.New()
+	encID := uuid.New()
+	mapID := uuid.New()
+	q := &fakeMapRegenQueries{
+		encs:       map[uuid.UUID]refdata.Encounter{encID: {ID: encID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}}},
+		maps:       map[uuid.UUID]refdata.Map{mapID: {ID: mapID, TiledJson: tiledJSON}},
+		combatants: map[uuid.UUID][]refdata.Combatant{},
+		characters: map[uuid.UUID]refdata.Character{charID: {ID: charID, Race: "elf"}},
+		races:      map[string]refdata.Race{"elf": {ID: "elf", DarkvisionFt: 60}},
+	}
+	q.combatants[encID] = []refdata.Combatant{
+		{ID: uuid.New(), CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, PositionCol: "A", PositionRow: 1, IsAlive: true, IsVisible: true},
+	}
+
+	a := newMapRegeneratorAdapter(q)
+	handler := handleDMMapPNG(a)
+	r := chi.NewRouter()
+	r.Get("/api/combat/{encounterID}/map.png", handler)
+
+	get := func(url string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("GET", url, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	playerW := get("/api/combat/" + encID.String() + "/map.png?view=player")
+	assert.Equal(t, http.StatusOK, playerW.Code)
+	assert.Equal(t, "image/png", playerW.Header().Get("Content-Type"))
+	assert.NotEmpty(t, playerW.Body.Bytes())
+
+	dmW := get("/api/combat/" + encID.String() + "/map.png")
+	assert.Equal(t, http.StatusOK, dmW.Code)
+
+	assert.NotEqual(t, dmW.Body.Bytes(), playerW.Body.Bytes(),
+		"?view=player must serve the fogged render, differing from the DM view")
 }
 
 // --- J-H01: encounterListerAdapter must return Name, not DisplayName ---
