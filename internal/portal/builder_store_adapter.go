@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -146,7 +147,7 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 
 	campID, err := uuid.Parse(p.CampaignID)
 	if err != nil {
-		campID = uuid.New()
+		return "", fmt.Errorf("invalid campaign_id %q: %w", p.CampaignID, err)
 	}
 
 	ch, err := a.q.CreateCharacter(ctx, refdata.CreateCharacterParams{
@@ -184,11 +185,11 @@ func (a *BuilderStoreAdapter) CreateCharacterRecord(ctx context.Context, p Creat
 func (a *BuilderStoreAdapter) CreatePlayerCharacterRecord(ctx context.Context, p CreatePlayerCharacterParams) (string, error) {
 	campID, err := uuid.Parse(p.CampaignID)
 	if err != nil {
-		campID = uuid.New()
+		return "", fmt.Errorf("invalid campaign_id %q: %w", p.CampaignID, err)
 	}
 	charID, err := uuid.Parse(p.CharacterID)
 	if err != nil {
-		charID = uuid.New()
+		return "", fmt.Errorf("invalid character_id %q: %w", p.CharacterID, err)
 	}
 
 	pc, err := a.q.CreatePlayerCharacter(ctx, refdata.CreatePlayerCharacterParams{

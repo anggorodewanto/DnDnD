@@ -323,6 +323,31 @@ func TestBuilderService_CreateCharacter_InvalidSubmission(t *testing.T) {
 	assert.Contains(t, err.Error(), "validation failed")
 }
 
+func TestBuilderService_CreateCharacter_RejectsEmptyTokenOrCampaign(t *testing.T) {
+	// Empty token/campaign_id must surface as a 400-class validation error
+	// (prefix "validation"), not a generic 500 from a token lookup miss or a
+	// rejected campaign_id insert.
+	tests := []struct {
+		name       string
+		campaignID string
+		token      string
+	}{
+		{"empty token", "campaign-uuid", ""},
+		{"empty campaign", "", "tok-abc"},
+		{"both empty", "", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &mockBuilderStore{charID: "char-1", pcID: "pc-1"}
+			svc := portal.NewBuilderService(store)
+
+			_, err := svc.CreateCharacter(context.Background(), tc.campaignID, "discord-user-1", tc.token, validSubmission())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "validation failed")
+		})
+	}
+}
+
 func TestBuilderService_CreateCharacter_StoreError(t *testing.T) {
 	store := &mockBuilderStore{
 		createCharErr: errors.New("db down"),

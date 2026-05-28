@@ -409,6 +409,16 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 	if err := svc.validateAllowedAbilityMethod(ctx, in.campaignID, sub.AbilityMethod); err != nil {
 		errs = append(errs, err.Error())
 	}
+	// A missing campaign_id (both modes) or token (player flow) is a bad
+	// request, not a server error: reject it here so the handler returns 400
+	// instead of letting a token lookup miss or campaign_id parse failure
+	// surface as a generic 500.
+	if in.campaignID == "" {
+		errs = append(errs, "campaign_id is required")
+	}
+	if in.mode == ModePlayer && in.token == "" {
+		errs = append(errs, "token is required")
+	}
 	if len(errs) > 0 {
 		return CreateCharacterResult{}, fmt.Errorf("validation failed: %s", strings.Join(errs, "; "))
 	}

@@ -223,6 +223,26 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsSpells(t *testing.T) 
 	assert.Equal(t, []string{"fire-bolt", "mage-hand", "magic-missile", "shield"}, spells)
 }
 
+func TestBuilderStoreAdapter_CreateCharacterRecord_RejectsBadCampaignID(t *testing.T) {
+	for _, campaignID := range []string{"", "not-a-uuid"} {
+		creator := &captureCharacterCreator{}
+		adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+		params := portal.CreateCharacterParams{
+			CampaignID:    campaignID,
+			Name:          "Gandalf",
+			Race:          "Elf",
+			Class:         "Wizard",
+			AbilityScores: character.AbilityScores{STR: 8, DEX: 14, CON: 12, INT: 18, WIS: 13, CHA: 10},
+			HPMax:         8,
+		}
+
+		_, err := adapter.CreateCharacterRecord(context.Background(), params)
+		require.Error(t, err, "campaign_id %q should be rejected, not silently replaced", campaignID)
+		assert.Empty(t, creator.capturedParams.Name, "should not attempt insert for campaign_id %q", campaignID)
+	}
+}
+
 func TestBuilderStoreAdapter_CreateCharacterRecord_PersistsWeaponMasteries(t *testing.T) {
 	creator := &captureCharacterCreator{}
 	adapter := portal.NewBuilderStoreAdapter(creator, nil)
