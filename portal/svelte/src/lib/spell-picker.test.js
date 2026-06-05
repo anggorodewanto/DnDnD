@@ -5,6 +5,8 @@ import {
   isSpellDisabled,
   disabledReason,
   toggleSelected,
+  isSpellHidden,
+  visibleSpells,
 } from './spell-picker.js';
 
 function spell(overrides = {}) {
@@ -111,6 +113,63 @@ describe('disabledReason', () => {
   });
   it('returns empty for an already-selected spell', () => {
     expect(disabledReason(spell({ id: 'x', level: 9 }), { selected: ['x'], max: 1, selectableLevels: [1] })).toBe('');
+  });
+});
+
+describe('isSpellHidden', () => {
+  it('hides a spell that is disabled and not already on (uncastable level)', () => {
+    expect(
+      isSpellHidden(spell({ id: 'fireball', level: 3 }), { selected: [], max: 5, selectableLevels: [1] }),
+    ).toBe(true);
+  });
+
+  it('hides a spell when the cap is reached and it is not selected', () => {
+    expect(
+      isSpellHidden(spell({ id: 'new', level: 1 }), { selected: ['a', 'b'], max: 2, selectableLevels: [1] }),
+    ).toBe(true);
+  });
+
+  it('keeps a selectable spell visible', () => {
+    expect(
+      isSpellHidden(spell({ id: 'new', level: 1 }), { selected: ['a'], max: 5, selectableLevels: [1] }),
+    ).toBe(false);
+  });
+
+  it('keeps an already-selected spell visible even when its level is uncastable', () => {
+    expect(
+      isSpellHidden(spell({ id: 'a', level: 9 }), { selected: ['a'], max: 1, selectableLevels: [1] }),
+    ).toBe(false);
+  });
+
+  it('keeps always-prepared spells visible', () => {
+    expect(
+      isSpellHidden(spell({ id: 'bless' }), { selected: ['bless'], alwaysPrepared: ['bless'] }),
+    ).toBe(false);
+  });
+});
+
+describe('visibleSpells', () => {
+  const fireball = spell({ id: 'fireball', level: 3 });
+  const magicMissile = spell({ id: 'mm', level: 1 });
+  const list = [magicMissile, fireball];
+
+  it('returns the list unchanged when the toggle is off', () => {
+    expect(visibleSpells(list, false, { selectableLevels: [1] })).toEqual(list);
+  });
+
+  it('drops unselectable spells when the toggle is on', () => {
+    expect(visibleSpells(list, true, { selected: [], max: 5, selectableLevels: [1] })).toEqual([magicMissile]);
+  });
+
+  it('does not mutate the input list', () => {
+    const input = [...list];
+    visibleSpells(input, true, { selectableLevels: [1] });
+    expect(input).toEqual(list);
+  });
+
+  it('handles null/undefined input', () => {
+    expect(visibleSpells(null, true)).toEqual([]);
+    expect(visibleSpells(undefined, false)).toEqual([]);
   });
 });
 

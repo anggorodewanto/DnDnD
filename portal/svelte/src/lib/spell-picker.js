@@ -74,6 +74,38 @@ export function disabledReason(spell, opts = {}) {
 }
 
 /**
+ * Whether a spell should be hidden when the "hide unselectable" toggle is on.
+ * Hidden spells are exactly the ones the picker greys out: disabled and not
+ * already on. Selected and always-prepared spells stay visible so the player
+ * can still see and remove their picks.
+ * @param {object} spell
+ * @param {{selected?: string[], alwaysPrepared?: string[], max?: number, selectableLevels?: (number[]|Set<number>|null)}} [opts]
+ * @returns {boolean}
+ */
+export function isSpellHidden(spell, opts = {}) {
+  const { selected = [], alwaysPrepared = [] } = opts || {};
+  const id = spell?.id;
+  if ((selected || []).includes(id)) return false;
+  if ((alwaysPrepared || []).includes(id)) return false;
+  return isSpellDisabled(spell, opts);
+}
+
+/**
+ * Filters a spell list for display. With `hide` false the list is returned as
+ * is; with `hide` true every unselectable spell (see isSpellHidden) is dropped.
+ * Non-mutating.
+ * @param {object[]} spells
+ * @param {boolean} hide
+ * @param {{selected?: string[], alwaysPrepared?: string[], max?: number, selectableLevels?: (number[]|Set<number>|null)}} [opts]
+ * @returns {object[]}
+ */
+export function visibleSpells(spells, hide, opts = {}) {
+  const list = spells || [];
+  if (!hide) return list;
+  return list.filter((spell) => !isSpellHidden(spell, opts));
+}
+
+/**
  * Toggles a spell id in the selected list, returning a NEW array. Always-
  * prepared ids are immutable (no-op).
  * @param {string[]} selected

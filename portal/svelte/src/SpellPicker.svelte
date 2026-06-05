@@ -1,7 +1,7 @@
 <script>
   import { isConcentration, formatCastingTime } from './lib/spell-perks.js';
   import { filterSpells, groupSpellsBySchool, availableLevels } from './lib/spell-filter.js';
-  import { countAgainstCap, isSpellDisabled, disabledReason, toggleSelected } from './lib/spell-picker.js';
+  import { countAgainstCap, isSpellDisabled, disabledReason, toggleSelected, visibleSpells } from './lib/spell-picker.js';
 
   // Shared spell-selection UI for both the character builder's spell step and
   // the standalone spell-prep page. `selected` is the two-way bound list of
@@ -20,10 +20,14 @@
 
   let query = $state('');
   let levelFilter = $state('');
+  let hideUnselectable = $state(false);
 
   let counted = $derived(countAgainstCap(selected, alwaysPrepared));
   let filtered = $derived(filterSpells(spells, { query, level: levelFilter }));
-  let groups = $derived(groupSpellsBySchool(filtered));
+  let visible = $derived(
+    visibleSpells(filtered, hideUnselectable, { selected, alwaysPrepared, max, selectableLevels }),
+  );
+  let groups = $derived(groupSpellsBySchool(visible));
   let levels = $derived(availableLevels(spells));
   let atCap = $derived(max !== Infinity && counted >= max);
 
@@ -41,14 +45,20 @@
         <option value={lvl}>{lvl === 0 ? 'Cantrips' : `Level ${lvl}`}</option>
       {/each}
     </select>
+    <label class="spell-hide-toggle" title="Hide spells you can't pick right now">
+      <input type="checkbox" bind:checked={hideUnselectable} />
+      Hide unselectable
+    </label>
     <span class="spell-selected-count" class:at-cap={atCap}>
       {#if max === Infinity}{counted} selected{:else}{counted} / {max} prepared{/if}
       {#if alwaysPrepared.length > 0}<span class="always-note"> · +{alwaysPrepared.length} always</span>{/if}
     </span>
   </div>
 
-  {#if filtered.length === 0}
-    <p class="spell-empty">No spells match your search.</p>
+  {#if visible.length === 0}
+    <p class="spell-empty">
+      {#if hideUnselectable && filtered.length > 0}No selectable spells — uncheck "Hide unselectable" to see the rest.{:else}No spells match your search.{/if}
+    </p>
   {/if}
 
   {#each groups as group (group.school)}
@@ -101,6 +111,7 @@
   .spell-toolbar { position: sticky; top: 0; z-index: 2; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; padding: 0.5rem 0; margin-bottom: 0.5rem; background: #1a1a2e; }
   .spell-search { flex: 1 1 220px; padding: 0.45rem 0.6rem; background: #16213e; border: 1px solid #0f3460; border-radius: 6px; color: #eee; font-size: 0.9rem; }
   .spell-level-filter { padding: 0.45rem 0.5rem; background: #16213e; border: 1px solid #0f3460; border-radius: 6px; color: #eee; font-size: 0.9rem; }
+  .spell-hide-toggle { display: flex; align-items: center; gap: 0.35rem; color: #ccc; font-size: 0.85rem; cursor: pointer; user-select: none; }
   .spell-selected-count { margin-left: auto; color: #e94560; font-weight: 600; font-size: 0.9rem; }
   .spell-selected-count.at-cap { color: #f5a623; }
   .always-note { color: #888; font-weight: 400; }
