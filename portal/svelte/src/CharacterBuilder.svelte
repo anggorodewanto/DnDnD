@@ -1,16 +1,17 @@
 <script>
   import { makeBuilderApi } from './lib/api.js';
   import { remainingPoints, abilityModifier, canIncrement, canDecrement, scoreCost } from './lib/pointbuy.js';
-  import { skillsForBackground, mergeBackgroundSkills, backgroundDetails, formatLanguages } from './lib/backgrounds.js';
+  import { skillsForBackground, backgroundDetails, formatLanguages } from './lib/backgrounds.js';
   import { abilityLabel } from './lib/skills.js';
   import { formatAbilityBonuses, parseTraits, formatDarkvision, subracePerks } from './lib/race-perks.js';
   import SpellPicker from './SpellPicker.svelte';
   import { spellcastingAbilityForClass, isSpellcaster, spellPrepCap, levelsUpTo } from './lib/spellcasting.js';
   import { formatProperties, armorACText } from './lib/equipment-perks.js';
-  import { raceGrantedSkills, mergeGrantedSkills } from './lib/race-skills.js';
+  import { raceGrantedSkills } from './lib/race-skills.js';
   import { raceGrantedWeaponProficiencies, weaponProficiencyLabel } from './lib/race-weapon-proficiencies.js';
   import { proficientWeaponIds, masteryEligibleWeapons } from './lib/weapon-proficiency.js';
   import { formatSkillChoices } from './lib/class-perks.js';
+  import { computeSkillState, reconcileSkills, isSkillSelectionComplete } from './lib/skill-selection.js';
   import {
     subraceOptions, subclassOptions, isSubclassEligible,
     emptyClassRow, addClassRow, removeClassRow, updateClassRow,
@@ -119,27 +120,21 @@
     }
   });
 
-  // Auto-add background skills whenever the user changes background. We
-  // only ever add (never remove) so manual deselection still works after.
-  let lastBackground = '';
+  // Keep the skill selection legal as inputs change: re-add the locked
+  // (background + race-fixed) skills and prune any discretionary picks that
+  // exceed the class/race budgets or fall off the class list. Guarded so it
+  // never runs before the race/class catalog has loaded — otherwise the class
+  // pool would look empty and valid restored picks would be wrongly dropped.
   $effect(() => {
-    if (background && background !== lastBackground) {
-      selectedSkills = mergeBackgroundSkills(selectedSkills, background);
-      lastBackground = background;
-    }
-  });
-
-  // Auto-add race-granted skill proficiencies whenever the race changes,
-  // mirroring the background merge above. Add-only so manual deselect works.
-  let lastRaceForSkills = '';
-  $effect(() => {
-    if (race && race !== lastRaceForSkills) {
-      const granted = raceGrantedSkills(selectedRaceData?.traits);
-      if (granted.length > 0) {
-        selectedSkills = mergeGrantedSkills(selectedSkills, granted);
-      }
-      lastRaceForSkills = race;
-    }
+    if (race && !selectedRaceData) return;
+    if (selectedClass && !selectedClassData) return;
+    const next = reconcileSkills({
+      background,
+      raceTraits: selectedRaceData?.traits ?? null,
+      classChoices: selectedClassData?.skill_choices ?? null,
+      selected: selectedSkills,
+    });
+    if (!sameSkillSet(next, selectedSkills)) selectedSkills = next;
   });
 
   // --- Draft persistence (localStorage) --------------------------------
@@ -189,11 +184,9 @@
     if (Array.isArray(d.manualEquipment)) manualEquipment = d.manualEquipment;
     if (d.wornArmor !== undefined) wornArmor = d.wornArmor;
     if (d.equippedWeapon !== undefined) equippedWeapon = d.equippedWeapon;
-    // Prime the merge/reset guards to the restored values so the auto-merge
-    // effects don't re-add deselected skills and the class effect doesn't wipe
-    // restored pack choices.
-    lastBackground = d.background || '';
-    lastRaceForSkills = d.race || '';
+    // Prime the pack-reset guard to the restored class so the class effect
+    // doesn't wipe restored pack choices. (Skills are reconciled, not guarded:
+    // the reconcile effect prunes any now-illegal restored picks on load.)
     lastClassForPacks = d.classEntries?.[0]?.class || '';
   }
 
@@ -300,6 +293,15 @@
     } else {
       selectedSkills = [...selectedSkills, skill];
     }
+  }
+
+  // Membership-only comparison (order-insensitive) so the reconcile effect
+  // only writes selectedSkills when the set actually changed — avoids a
+  // write/re-run loop on every reconcile pass.
+  function sameSkillSet(a, b) {
+    if (a.length !== b.length) return false;
+    const set = new Set(b);
+    return a.every(s => set.has(s));
   }
 
   function selectPackChoice(choiceIdx, optionIdx) {
@@ -457,11 +459,15 @@
   // Build the common snake_case submission object both modes POST. The API
   // factory layers on token / campaign_id per mode.
   function gatherSubmission() {
-    // Re-merge background skills at submit time as a safety net in case
-    // the user toggled them off after picking a background.
-    let skills = mergeBackgroundSkills(selectedSkills, background);
-    // Same safety net for race-granted skill proficiencies.
-    skills = mergeGrantedSkills(skills, raceGrantedSkills(selectedRaceData?.traits));
+    // Reconcile to a legal set at submit time as a safety net: locked skills
+    // present, nothing beyond the class/race budgets or off the class list.
+    // Mirrors the server-side validation so a valid build never gets rejected.
+    const skills = reconcileSkills({
+      background,
+      raceTraits: selectedRaceData?.traits ?? null,
+      classChoices: selectedClassData?.skill_choices ?? null,
+      selected: selectedSkills,
+    });
     // Filter out incomplete class rows so the backend never sees a blank
     // class entry.
     const classes = classEntries
@@ -848,38 +854,58 @@
     {:else if currentStep === 3}
       {@const raceGranted = raceGrantedSkills(selectedRaceData?.traits)}
       {@const bgSkills = skillsForBackground(background)}
+      {@const skillState = computeSkillState({
+        allSkills: ALL_SKILLS,
+        background,
+        raceTraits: selectedRaceData?.traits ?? null,
+        classChoices: selectedClassData?.skill_choices ?? null,
+        selected: selectedSkills,
+      })}
+      {@const sk = skillState.summary}
       <div class="step-content">
         <h3>Skills & Proficiencies</h3>
-        <p>Select your skill proficiencies:</p>
+        {#if !selectedClass}
+          <p class="skill-warn">Pick a class on the Class step to choose your class skills.</p>
+        {/if}
+        <p class="skill-budget">
+          <strong>Class skills:</strong> {sk.classChosen}/{sk.classMax}
+          {#if sk.raceMax > 0}
+            &nbsp;·&nbsp; <strong>{selectedRaceData?.name} bonus skills:</strong> {sk.raceChosen}/{sk.raceMax}
+          {/if}
+          {#if !isSkillSelectionComplete({ background, raceTraits: selectedRaceData?.traits ?? null, classChoices: selectedClassData?.skill_choices ?? null, selected: selectedSkills })}
+            <span class="skill-incomplete">— choose the remaining skill{sk.classMax + sk.raceMax - sk.classChosen - sk.raceChosen === 1 ? '' : 's'}</span>
+          {/if}
+        </p>
         {#if background && bgSkills.length > 0}
           <p class="bg-skill-hint">
             From <strong>{background.replace(/-/g, ' ')}</strong> background:
-            {#each bgSkills as sk}
-              <span class="bg-skill-tag">{sk.replace(/-/g, ' ')}</span>
+            {#each bgSkills as s}
+              <span class="bg-skill-tag">{s.replace(/-/g, ' ')}</span>
             {/each}
           </p>
         {/if}
         {#if selectedRaceData && raceGranted.length > 0}
           <p class="bg-skill-hint">
             From <strong>{selectedRaceData.name}</strong> race:
-            {#each raceGranted as sk}
-              <span class="bg-skill-tag">{sk.replace(/-/g, ' ')}</span>
+            {#each raceGranted as s}
+              <span class="bg-skill-tag">{s.replace(/-/g, ' ')}</span>
             {/each}
           </p>
         {/if}
         <div class="skill-grid">
-          {#each ALL_SKILLS as skill}
-            <label class="skill-option" class:bg-granted={bgSkills.includes(skill)}>
-              <input type="checkbox" checked={selectedSkills.includes(skill)} onchange={() => toggleSkill(skill)} />
-              {skill.replace(/-/g, ' ')}
-              {#if abilityLabel(skill)}
-                <span class="skill-ability">({abilityLabel(skill)})</span>
+          {#each skillState.skills as s}
+            <label
+              class="skill-option"
+              class:bg-granted={s.locked}
+              class:skill-disabled={s.disabled && !s.locked}
+            >
+              <input type="checkbox" checked={s.checked} disabled={s.disabled} onchange={() => toggleSkill(s.skill)} />
+              {s.skill.replace(/-/g, ' ')}
+              {#if abilityLabel(s.skill)}
+                <span class="skill-ability">({abilityLabel(s.skill)})</span>
               {/if}
-              {#if bgSkills.includes(skill)}
-                <span class="bg-skill-tag-inline">background</span>
-              {/if}
-              {#if raceGranted.includes(skill)}
-                <span class="bg-skill-tag-inline">race</span>
+              {#if s.locked}
+                <span class="bg-skill-tag-inline">{s.source}</span>
               {/if}
             </label>
           {/each}
@@ -1251,6 +1277,12 @@
   .score-cost { color: #888; font-size: 0.85rem; }
   .skill-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem; }
   .skill-option { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
+  .skill-option.skill-disabled { color: #666; }
+  .skill-option.skill-disabled input { cursor: not-allowed; }
+  .skill-budget { color: #ccc; font-size: 0.9rem; margin: 0 0 0.6rem; }
+  .skill-budget strong { color: #e94560; }
+  .skill-incomplete { color: #e9a045; font-size: 0.85rem; margin-left: 0.25rem; }
+  .skill-warn { color: #e9a045; font-size: 0.85rem; margin: 0 0 0.5rem; }
 
   .spell-cap-hint { color: #aaa; font-size: 0.85rem; margin: 0 0 0.6rem; }
   .spell-cap-hint strong { color: #e94560; }

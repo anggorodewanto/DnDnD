@@ -129,7 +129,7 @@ func TestAPIRoutes_SubmitCharacter(t *testing.T) {
 		"token":"t","campaign_id":"c",
 		"name":"Test","race":"elf","background":"sage","class":"wizard",
 		"ability_scores":{"str":8,"dex":14,"con":13,"int":15,"wis":12,"cha":10},
-		"skills":["arcana"]
+		"skills":["arcana","history"]
 	}`
 	req := httptest.NewRequest(http.MethodPost, "/portal/api/characters", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

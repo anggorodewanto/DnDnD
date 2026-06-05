@@ -241,7 +241,7 @@ func TestAPIHandler_SubmitCharacter_Valid(t *testing.T) {
 		"background": "soldier",
 		"class": "fighter",
 		"ability_scores": {"str":15,"dex":14,"con":13,"int":12,"wis":10,"cha":8},
-		"skills": ["athletics","perception"]
+		"skills": ["athletics","intimidation"]
 	}`
 	req := httptest.NewRequest(http.MethodPost, "/portal/api/characters", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -307,7 +307,7 @@ func TestAPIHandler_SubmitCharacter_AcceptsClassesAndSubrace(t *testing.T) {
 			{"class":"wizard","subclass":"evocation","level":3}
 		],
 		"ability_scores": {"str":15,"dex":14,"con":13,"int":12,"wis":10,"cha":8},
-		"skills": ["athletics","perception"]
+		"skills": ["arcana","history"]
 	}`
 	req := httptest.NewRequest(http.MethodPost, "/portal/api/characters", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

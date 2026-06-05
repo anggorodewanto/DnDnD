@@ -184,7 +184,10 @@ func validSubmission() portal.CharacterSubmission {
 		Background:    "soldier",
 		Class:         "fighter",
 		AbilityScores: portal.PointBuyScores{STR: 15, DEX: 14, CON: 13, INT: 12, WIS: 10, CHA: 8},
-		Skills:        []string{"athletics", "perception"},
+		// soldier background grants athletics + intimidation (both locked).
+		// Submitting only the locked skills (zero extra class picks) keeps this
+		// fixture valid for every class it is reused with.
+		Skills: []string{"athletics", "intimidation"},
 	}
 }
 

@@ -343,6 +343,16 @@ func (svc *BuilderService) SetFeatureProvider(fp FeatureProvider) {
 	svc.featureProvider = fp
 }
 
+// racialTraits returns the parsed trait list for a race, or nil when no
+// feature provider is wired. Used by skill-proficiency validation to resolve
+// race fixed/choose skill grants.
+func (svc *BuilderService) racialTraits(race string) []character.Feature {
+	if svc.featureProvider == nil {
+		return nil
+	}
+	return svc.featureProvider.RacialTraits(race)
+}
+
 // SetRaceSpeedLookup wires the race→speed lookup after construction.
 func (svc *BuilderService) SetRaceSpeedLookup(fn func(ctx context.Context) map[string]int) {
 	svc.raceSpeedFn = fn
@@ -407,6 +417,12 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 
 	errs := ValidateSubmissionMode(sub, in.mode)
 	if err := svc.validateAllowedAbilityMethod(ctx, in.campaignID, sub.AbilityMethod); err != nil {
+		errs = append(errs, err.Error())
+	}
+	// Reject illegal client-submitted skill sets (e.g. a crafted POST claiming
+	// all 18 skills). Race grants come from the feature provider when wired;
+	// when it is absent race fixed/choose budgets resolve to ∅/0.
+	if err := validateSubmittedSkills(sub, svc.racialTraits(sub.Race)); err != nil {
 		errs = append(errs, err.Error())
 	}
 	// A missing campaign_id (both modes) or token (player flow) is a bad
