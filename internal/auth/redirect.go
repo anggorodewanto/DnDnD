@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -40,11 +41,23 @@ type redirectInterceptor struct {
 
 func (w *redirectInterceptor) WriteHeader(code int) {
 	if code == http.StatusUnauthorized && isNavigationRequest(w.req) {
-		http.Redirect(w.ResponseWriter, w.req, w.loginPath, http.StatusFound)
+		http.Redirect(w.ResponseWriter, w.req, w.loginURL(), http.StatusFound)
 		w.intercepted = true
 		return
 	}
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// loginURL returns loginPath with the original request URI attached as a
+// ?next= parameter, so the post-login OAuth callback can return the browser to
+// the page it was trying to reach (e.g. /portal/create?token=…). The root path
+// is skipped — it is not behind auth and carries no useful return target.
+func (w *redirectInterceptor) loginURL() string {
+	next := w.req.URL.RequestURI()
+	if next == "" || next == "/" {
+		return w.loginPath
+	}
+	return w.loginPath + "?next=" + url.QueryEscape(next)
 }
 
 func (w *redirectInterceptor) Write(b []byte) (int, error) {
@@ -90,4 +103,25 @@ func isNavigationRequest(r *http.Request) bool {
 	// Fallback for browsers/proxies that strip the Sec-Fetch-* headers: a
 	// document navigation advertises text/html in its Accept header.
 	return strings.Contains(r.Header.Get("Accept"), "text/html")
+}
+
+// safeReturnPath validates a post-login return target. It returns the path
+// unchanged when it is a local, same-origin absolute path, or "" when it is
+// empty or could redirect off-site. Only values that pass this check are ever
+// used as a redirect Location — an open-redirect guard for the ?next=/next
+// cookie carried through the OAuth flow.
+func safeReturnPath(next string) string {
+	if next == "" {
+		return ""
+	}
+	// Reject anything not rooted at "/", plus protocol-relative ("//host")
+	// and backslash ("/\host") forms that browsers may treat as a host.
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, `/\`) {
+		return ""
+	}
+	u, err := url.Parse(next)
+	if err != nil || u.IsAbs() || u.Host != "" {
+		return ""
+	}
+	return u.RequestURI()
 }

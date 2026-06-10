@@ -20,6 +20,10 @@ const (
 	CookieName = "dndnd_session"
 	// StateCookieName is the name of the OAuth2 state cookie.
 	StateCookieName = "dndnd_oauth_state"
+	// NextCookieName holds the post-login return-to path across the OAuth
+	// round-trip so the callback can land the browser back on the deep link
+	// the player originally clicked (e.g. /portal/create?token=…).
+	NextCookieName = "dndnd_oauth_next"
 	// SessionTTL is the default session duration.
 	SessionTTL = 30 * 24 * time.Hour
 )
@@ -130,6 +134,11 @@ func (s *OAuthService) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, s.cookie(StateCookieName, state, 300))
+	// Persist a safe ?next= deep link alongside the state so HandleCallback
+	// can return the player to it after Discord authorizes them.
+	if next := safeReturnPath(r.URL.Query().Get("next")); next != "" {
+		http.SetCookie(w, s.cookie(NextCookieName, next, 300))
+	}
 	http.Redirect(w, r, s.oauth.AuthCodeURL(state), http.StatusTemporaryRedirect)
 }
 
@@ -188,7 +197,21 @@ func (s *OAuthService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, s.cookie(CookieName, sess.ID.String(), int(SessionTTL.Seconds())))
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, s.consumeNextCookie(w, r), http.StatusTemporaryRedirect)
+}
+
+// consumeNextCookie returns the validated post-login return path from the next
+// cookie (clearing it), or "/" when the cookie is absent or unsafe.
+func (s *OAuthService) consumeNextCookie(w http.ResponseWriter, r *http.Request) string {
+	cookie, err := r.Cookie(NextCookieName)
+	if err != nil {
+		return "/"
+	}
+	http.SetCookie(w, s.cookie(NextCookieName, "", -1))
+	if next := safeReturnPath(cookie.Value); next != "" {
+		return next
+	}
+	return "/"
 }
 
 // HandleLogout deletes the session and clears the cookie.

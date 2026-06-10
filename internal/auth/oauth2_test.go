@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -182,6 +183,85 @@ func TestHandleCallback_Success(t *testing.T) {
 	sess, err := repo.GetByID(context.Background(), sessID)
 	require.NoError(t, err)
 	assert.Equal(t, "12345", sess.DiscordUserID)
+}
+
+// findCookie returns the cookie with the given name, or nil.
+func findCookie(cookies []*http.Cookie, name string) *http.Cookie {
+	for _, c := range cookies {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
+
+// HandleLogin persists a safe ?next= deep link as a short-lived cookie so the
+// callback can return the player to /portal/create?token=… after OAuth.
+func TestHandleLogin_StoresNextCookie(t *testing.T) {
+	tr := &mockTokenRefresher{authCodeURL: "https://discord.com/oauth2/authorize"}
+	svc := auth.NewOAuthService(tr, newMockSessionRepo(), &mockUserInfoFetcher{}, slog.Default(), false)
+
+	req := httptest.NewRequest(http.MethodGet, "/portal/auth/login?next="+url.QueryEscape("/portal/create?token=abc"), nil)
+	rec := httptest.NewRecorder()
+
+	svc.HandleLogin(rec, req)
+
+	next := findCookie(rec.Result().Cookies(), auth.NextCookieName)
+	require.NotNil(t, next)
+	assert.Equal(t, "/portal/create?token=abc", next.Value)
+	assert.True(t, next.HttpOnly)
+}
+
+// An off-site ?next= must never become a redirect cookie (open-redirect guard).
+func TestHandleLogin_RejectsUnsafeNext(t *testing.T) {
+	tr := &mockTokenRefresher{authCodeURL: "https://discord.com/oauth2/authorize"}
+	svc := auth.NewOAuthService(tr, newMockSessionRepo(), &mockUserInfoFetcher{}, slog.Default(), false)
+
+	for _, bad := range []string{"//evil.com", "https://evil.com"} {
+		req := httptest.NewRequest(http.MethodGet, "/portal/auth/login?next="+url.QueryEscape(bad), nil)
+		rec := httptest.NewRecorder()
+		svc.HandleLogin(rec, req)
+		assert.Nil(t, findCookie(rec.Result().Cookies(), auth.NextCookieName), "next=%q must not set a cookie", bad)
+	}
+}
+
+// With a next cookie present the callback returns the player to that path and
+// clears the cookie.
+func TestHandleCallback_RedirectsToNext(t *testing.T) {
+	tr := &mockTokenRefresher{token: &oauth2.Token{AccessToken: "at", RefreshToken: "rt", Expiry: time.Now().Add(time.Hour)}}
+	fetcher := &mockUserInfoFetcher{user: &auth.DiscordUser{ID: "12345", Username: "u"}}
+	svc := auth.NewOAuthService(tr, newMockSessionRepo(), fetcher, slog.Default(), false)
+
+	state := "s"
+	req := httptest.NewRequest(http.MethodGet, "/portal/auth/callback?code=c&state="+state, nil)
+	req.AddCookie(&http.Cookie{Name: auth.StateCookieName, Value: state})
+	req.AddCookie(&http.Cookie{Name: auth.NextCookieName, Value: "/portal/create?token=abc"})
+	rec := httptest.NewRecorder()
+
+	svc.HandleCallback(rec, req)
+
+	assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
+	assert.Equal(t, "/portal/create?token=abc", rec.Header().Get("Location"))
+	cleared := findCookie(rec.Result().Cookies(), auth.NextCookieName)
+	require.NotNil(t, cleared)
+	assert.True(t, cleared.MaxAge < 0, "next cookie should be cleared")
+}
+
+// Without a next cookie the callback falls back to the site root.
+func TestHandleCallback_DefaultRedirectRoot(t *testing.T) {
+	tr := &mockTokenRefresher{token: &oauth2.Token{AccessToken: "at", RefreshToken: "rt", Expiry: time.Now().Add(time.Hour)}}
+	fetcher := &mockUserInfoFetcher{user: &auth.DiscordUser{ID: "12345", Username: "u"}}
+	svc := auth.NewOAuthService(tr, newMockSessionRepo(), fetcher, slog.Default(), false)
+
+	state := "s"
+	req := httptest.NewRequest(http.MethodGet, "/portal/auth/callback?code=c&state="+state, nil)
+	req.AddCookie(&http.Cookie{Name: auth.StateCookieName, Value: state})
+	rec := httptest.NewRecorder()
+
+	svc.HandleCallback(rec, req)
+
+	assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
+	assert.Equal(t, "/", rec.Header().Get("Location"))
 }
 
 func TestHandleCallback_MissingState(t *testing.T) {

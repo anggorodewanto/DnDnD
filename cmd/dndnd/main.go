@@ -1327,7 +1327,14 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			}
 			portalOpts = append(portalOpts, portal.WithSpellPreparation(portalPrepHandler))
 		}
-		portal.RegisterRoutes(router, portalHandler, authMw, portalOpts...)
+		// T02 / Finding 2: portal pages are top-level browser navigations. Wrap
+		// them so an unauthenticated player who clicks a /create-character link
+		// is bounced to the OAuth login (carrying ?next=) instead of a bare 401,
+		// and lands back on /portal/create?token=… after authenticating. XHR/API
+		// calls and non-DM 403s pass through unchanged (same wrapper as the
+		// dashboard mount above); transparent in local passthrough mode.
+		portalPageMw := auth.RedirectNavigationOnUnauth("/portal/auth/login", authMw)
+		portal.RegisterRoutes(router, portalHandler, portalPageMw, portalOpts...)
 
 		// Phase 104b: Publisher fan-out to non-combat services that can
 		// mutate an active encounter's combatant state mid-combat. The

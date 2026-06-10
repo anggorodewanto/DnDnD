@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -51,8 +52,9 @@ func TestRedirectNavigationOnUnauth_SecFetchNavigate(t *testing.T) {
 	if rec.Code != http.StatusFound {
 		t.Fatalf("expected 302, got %d", rec.Code)
 	}
-	if got := rec.Header().Get("Location"); got != testLoginPath {
-		t.Fatalf("expected Location %q, got %q", testLoginPath, got)
+	want := testLoginPath + "?next=" + url.QueryEscape("/dashboard/")
+	if got := rec.Header().Get("Location"); got != want {
+		t.Fatalf("expected Location %q, got %q", want, got)
 	}
 	if strings.Contains(rec.Body.String(), "unauthorized") {
 		t.Fatalf("body should not contain inner 401 text, got %q", rec.Body.String())
@@ -70,8 +72,62 @@ func TestRedirectNavigationOnUnauth_AcceptHTMLFallback(t *testing.T) {
 	if rec.Code != http.StatusFound {
 		t.Fatalf("expected 302, got %d", rec.Code)
 	}
+	want := testLoginPath + "?next=" + url.QueryEscape("/dashboard/")
+	if got := rec.Header().Get("Location"); got != want {
+		t.Fatalf("expected Location %q, got %q", want, got)
+	}
+}
+
+// A deep link with a query string (the /create-character portal link) is
+// carried through to the login page as a ?next= parameter so the OAuth
+// callback can return the player to it.
+func TestRedirectNavigationOnUnauth_CarriesNextDeepLink(t *testing.T) {
+	mw := RedirectNavigationOnUnauth(testLoginPath, unauthMw)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/portal/create?token=abc", nil)
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+
+	mw(okHandler()).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", rec.Code)
+	}
+	want := testLoginPath + "?next=" + url.QueryEscape("/portal/create?token=abc")
+	if got := rec.Header().Get("Location"); got != want {
+		t.Fatalf("expected Location %q, got %q", want, got)
+	}
+}
+
+// The root path carries no return target (it is not behind auth and only
+// redirects onward), so no ?next= is appended.
+func TestRedirectNavigationOnUnauth_RootNoNext(t *testing.T) {
+	mw := RedirectNavigationOnUnauth(testLoginPath, unauthMw)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+
+	mw(okHandler()).ServeHTTP(rec, req)
+
 	if got := rec.Header().Get("Location"); got != testLoginPath {
-		t.Fatalf("expected Location %q, got %q", testLoginPath, got)
+		t.Fatalf("expected bare Location %q, got %q", testLoginPath, got)
+	}
+}
+
+func TestSafeReturnPath(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"", ""},
+		{"/portal/create?token=abc", "/portal/create?token=abc"},
+		{"/dashboard/", "/dashboard/"},
+		{"//evil.com", ""},
+		{"https://evil.com", ""},
+		{"http://evil.com/path", ""},
+		{`/\evil.com`, ""},
+		{"relative/path", ""},
+	}
+	for _, c := range cases {
+		if got := safeReturnPath(c.in); got != c.want {
+			t.Errorf("safeReturnPath(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }
 
