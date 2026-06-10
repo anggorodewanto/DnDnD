@@ -578,12 +578,12 @@ type authBundle struct {
 // defaults to BASE_URL + /portal/auth/callback (BASE_URL itself defaults to
 // http://localhost:8080) so a localhost playtest works without extra config.
 // Override OAUTH_REDIRECT_URL directly if a reverse proxy fronts the bot.
-func buildAuth(db *sql.DB, logger *slog.Logger) authBundle {
+func buildAuth(db *sql.DB, logger *slog.Logger) (authBundle, error) {
 	clientID := os.Getenv("DISCORD_CLIENT_ID")
 	clientSecret := os.Getenv("DISCORD_CLIENT_SECRET")
 	if clientID == "" || clientSecret == "" {
 		logger.Warn("DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET not set; dashboard auth disabled (passthrough)")
-		return authBundle{middleware: passthroughMiddleware}
+		return authBundle{middleware: passthroughMiddleware}, nil
 	}
 
 	redirectURL := os.Getenv("OAUTH_REDIRECT_URL")
@@ -599,6 +599,15 @@ func buildAuth(db *sql.DB, logger *slog.Logger) authBundle {
 	if tokenKey := os.Getenv("TOKEN_ENCRYPTION_KEY"); tokenKey != "" {
 		enc, err := auth.NewTokenEncryptor([]byte(tokenKey))
 		if err != nil {
+			// T08 / finding 6·e: a set-but-invalid key silently downgrades
+			// OAuth tokens to plaintext-at-rest. When the operator has
+			// declared production intent via COOKIE_SECURE=true, refuse to
+			// boot rather than serve a TLS deploy with unencrypted tokens.
+			// Local dev (COOKIE_SECURE unset/false) keeps the soft path so a
+			// fat-fingered key never blocks a playtest.
+			if os.Getenv("COOKIE_SECURE") == "true" {
+				return authBundle{}, fmt.Errorf("invalid TOKEN_ENCRYPTION_KEY with COOKIE_SECURE=true: %w (OAuth tokens would be stored unencrypted; provide a 32-byte key or unset COOKIE_SECURE for local dev)", err)
+			}
 			logger.Error("invalid TOKEN_ENCRYPTION_KEY, tokens will be stored unencrypted", "error", err)
 		} else {
 			sessionOpts = append(sessionOpts, auth.WithTokenEncryptor(enc))
@@ -623,7 +632,7 @@ func buildAuth(db *sql.DB, logger *slog.Logger) authBundle {
 	return authBundle{
 		middleware: auth.SessionMiddleware(sessionStore, oauthCfg, logger, secure),
 		oauthSvc:   oauthSvc,
-	}
+	}, nil
 }
 
 // buildDiscordSession constructs (but does NOT open) a Discord session using
@@ -1117,7 +1126,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// vars are available; otherwise fall back to passthrough for local
 		// dev without OAuth. The bundle also exposes the OAuthService for
 		// /portal/auth/* mounting below; oauthSvc is nil in passthrough mode.
-		authBundle := buildAuth(db, logger)
+		authBundle, err := buildAuth(db, logger)
+		if err != nil {
+			return err
+		}
 		authMw := authBundle.middleware
 
 		// F-2: per-request DM verification (docs/dnd-async-discord-spec.md
@@ -1531,6 +1543,12 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// package stays free of the DB / campaign-settings dependency.
 			report.Results = append(report.Results,
 				discordcheck.RunChannelBindings(guildIDs, newChannelBindingLookup(ctx, queries))...)
+			// T08 / finding 6·e: flag a wrong-length TOKEN_ENCRYPTION_KEY,
+			// which otherwise silently downgrades OAuth token storage to
+			// plaintext. Pure config check (no Discord API), appended here for
+			// the same reason as RunChannelBindings.
+			report.Results = append(report.Results,
+				discordcheck.RunTokenEncryption(os.Getenv("TOKEN_ENCRYPTION_KEY")))
 			for _, res := range report.Results {
 				if res.OK {
 					logger.Info("discord check passed", "name", res.Name, "detail", res.Detail)

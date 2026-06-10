@@ -6,7 +6,10 @@
 // guild_id stored in the campaigns table belongs to a guild the bot is
 // currently a member of. RunChannelBindings additionally flags guilds whose
 // channel bindings were never persisted by /setup (without which combat /
-// turn / dm-queue posts silently no-op).
+// turn / dm-queue posts silently no-op), and RunTokenEncryption flags a
+// wrong-length TOKEN_ENCRYPTION_KEY (which silently downgrades OAuth token
+// storage to plaintext). The latter two take plain config inputs rather than a
+// Session so the command layer appends their Results to the same Report.
 //
 // The Session interface keeps the check functions decoupled from
 // *discordgo.Session so unit tests can drive them with a hand-rolled fake.
@@ -271,5 +274,43 @@ func runChannelBinding(guildID string, lookup ChannelBindingLookup) Result {
 		Name:   name,
 		OK:     true,
 		Detail: fmt.Sprintf("channels bound for guild %s", guildID),
+	}
+}
+
+// tokenEncryptionKeyBytes is the AES-256 key length auth.NewTokenEncryptor
+// requires. Mirrored here (rather than importing internal/auth) to keep this
+// package free of crypto dependencies; the two must stay in sync.
+const tokenEncryptionKeyBytes = 32
+
+// RunTokenEncryption validates the TOKEN_ENCRYPTION_KEY config so a misconfig
+// surfaces on the dashboard banner instead of silently downgrading OAuth tokens
+// to plaintext-at-rest (finding 6·e / T08). An empty key is OK — plaintext
+// storage is the deliberate local-dev default. A non-empty key of the wrong
+// length is a failure: auth.NewTokenEncryptor rejects it and buildAuth then
+// falls back to storing tokens unencrypted. It takes the raw key string (not a
+// Session) so callers append its Result to the report alongside RunChannelBindings.
+func RunTokenEncryption(key string) Result {
+	const name = "token-encryption-key"
+	if key == "" {
+		return Result{
+			Name:   name,
+			OK:     true,
+			Detail: "TOKEN_ENCRYPTION_KEY not set — OAuth tokens stored unencrypted at rest; set a 32-byte key to enable encryption",
+		}
+	}
+	if len(key) != tokenEncryptionKeyBytes {
+		return Result{
+			Name: name,
+			OK:   false,
+			Detail: fmt.Sprintf(
+				"TOKEN_ENCRYPTION_KEY must be %d bytes, got %d — OAuth tokens fall back to plaintext-at-rest; note `openssl rand -hex 32` yields 64 chars, use a 32-byte key such as `openssl rand -hex 16`",
+				tokenEncryptionKeyBytes, len(key),
+			),
+		}
+	}
+	return Result{
+		Name:   name,
+		OK:     true,
+		Detail: "TOKEN_ENCRYPTION_KEY valid (32 bytes)",
 	}
 }

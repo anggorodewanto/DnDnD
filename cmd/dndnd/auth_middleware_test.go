@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -74,7 +75,9 @@ func TestBuildAuthMiddleware_FallsBackWithoutEnvVars(t *testing.T) {
 			var logBuf bytes.Buffer
 			logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-			mw := buildAuth(nil, logger).middleware
+			bundle, err := buildAuth(nil, logger)
+			require.NoError(t, err)
+			mw := bundle.middleware
 
 			called := false
 			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +96,42 @@ func TestBuildAuthMiddleware_FallsBackWithoutEnvVars(t *testing.T) {
 	}
 }
 
+// T08 / finding 6·e: a set-but-invalid TOKEN_ENCRYPTION_KEY silently
+// downgrades OAuth tokens to plaintext-at-rest. When the operator has declared
+// production intent via COOKIE_SECURE=true, that is a security regression, so
+// buildAuth must refuse to boot rather than log-and-continue.
+func TestBuildAuth_RefusesBootOnInvalidKeyWhenCookieSecure(t *testing.T) {
+	t.Setenv("DISCORD_CLIENT_ID", "test-client-id")
+	t.Setenv("DISCORD_CLIENT_SECRET", "test-client-secret")
+	t.Setenv("COOKIE_SECURE", "true")
+	// openssl rand -hex 32 yields 64 chars — the canonical wrong-length key.
+	t.Setenv("TOKEN_ENCRYPTION_KEY", strings.Repeat("a", 64))
+
+	logger := slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
+	_, err := buildAuth(nil, logger)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "TOKEN_ENCRYPTION_KEY")
+}
+
+// Outside production (COOKIE_SECURE not "true") the same bad key keeps the soft
+// path: log an error and continue with plaintext tokens so a fat-fingered key
+// never blocks a local playtest.
+func TestBuildAuth_InvalidKeyWithoutCookieSecure_SoftFallback(t *testing.T) {
+	t.Setenv("DISCORD_CLIENT_ID", "test-client-id")
+	t.Setenv("DISCORD_CLIENT_SECRET", "test-client-secret")
+	t.Setenv("COOKIE_SECURE", "false")
+	t.Setenv("TOKEN_ENCRYPTION_KEY", strings.Repeat("a", 64))
+
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+	bundle, err := buildAuth(nil, logger)
+
+	require.NoError(t, err)
+	require.NotNil(t, bundle.middleware)
+	assert.Contains(t, logBuf.String(), "invalid TOKEN_ENCRYPTION_KEY")
+}
+
 func TestBuildAuthMiddleware_RejectsWithoutCookie(t *testing.T) {
 	t.Setenv("DISCORD_CLIENT_ID", "test-client-id")
 	t.Setenv("DISCORD_CLIENT_SECRET", "test-client-secret")
@@ -100,7 +139,9 @@ func TestBuildAuthMiddleware_RejectsWithoutCookie(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	mw := buildAuth(nil, logger).middleware
+	bundle, err := buildAuth(nil, logger)
+	require.NoError(t, err)
+	mw := bundle.middleware
 
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

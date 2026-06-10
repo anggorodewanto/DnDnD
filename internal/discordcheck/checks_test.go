@@ -339,6 +339,36 @@ func TestRunChannelBindings_EmptyGuilds(t *testing.T) {
 	assert.Empty(t, RunChannelBindings(nil, func(string) bool { return true }))
 }
 
+func TestRunTokenEncryption(t *testing.T) {
+	tests := []struct {
+		name           string
+		key            string
+		wantOK         bool
+		detailContains string
+	}{
+		{"empty key is OK (plaintext by design)", "", true, "unencrypted"},
+		{"valid 32-byte key", strings.Repeat("k", 32), true, "valid"},
+		{"openssl rand -hex 32 is 64 chars and fails", strings.Repeat("a", 64), false, "got 64"},
+		{"short key fails", "tooshort", false, "32 bytes"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := RunTokenEncryption(tt.key)
+			assert.Equal(t, "token-encryption-key", res.Name)
+			assert.Equal(t, tt.wantOK, res.OK)
+			assert.Contains(t, res.Detail, tt.detailContains)
+		})
+	}
+}
+
+func TestRunTokenEncryption_WrongLengthHintsHexGotcha(t *testing.T) {
+	// The most common misconfig is `openssl rand -hex 32` (64 hex chars), so
+	// the failure detail must call out the hex gotcha, not just the byte count.
+	res := RunTokenEncryption(strings.Repeat("a", 64))
+	require.False(t, res.OK)
+	assert.Contains(t, res.Detail, "hex")
+}
+
 func TestReport_AllOK(t *testing.T) {
 	allPass := Report{Results: []Result{{OK: true}, {OK: true}}}
 	assert.True(t, allPass.AllOK())
