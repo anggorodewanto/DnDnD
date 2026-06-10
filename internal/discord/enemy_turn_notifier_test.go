@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -222,4 +223,35 @@ func TestDiscordEnemyTurnNotifier_NilMapRegeneratorSkipsMap(t *testing.T) {
 	notifier.NotifyEnemyTurnExecuted(context.Background(), uuid.New(), "log msg")
 
 	assert.Equal(t, "log msg", sentContent)
+}
+
+// T09 / Finding 6f: a combat-map render failure after an enemy turn must
+// notify the wired CombatMapRenderFailureNotifier so the DM learns the map is
+// stale, rather than being silently swallowed.
+func TestDiscordEnemyTurnNotifier_MapRenderFailureNotifies(t *testing.T) {
+	encounterID := uuid.New()
+	session := &MockSession{
+		ChannelMessageSendFunc: func(string, string) (*discordgo.Message, error) {
+			return &discordgo.Message{}, nil
+		},
+	}
+	csp := &mockCampaignSettingsProvider{
+		getSettings: func(context.Context, uuid.UUID) (map[string]string, error) {
+			return map[string]string{"combat-log": "ch-cl", "combat-map": "ch-cm"}, nil
+		},
+	}
+	mr := &mockMapRegenerator{
+		regenerateMap: func(context.Context, uuid.UUID) ([]byte, error) {
+			return nil, errors.New("render boom")
+		},
+	}
+
+	rec := &recordingMapRenderFailNotifier{}
+	notifier := NewDiscordEnemyTurnNotifier(session, csp, mr)
+	notifier.SetMapRenderFailureNotifier(rec)
+	notifier.NotifyEnemyTurnExecuted(context.Background(), encounterID, "log msg")
+
+	if assert.Len(t, rec.encounterIDs, 1) {
+		assert.Equal(t, encounterID, rec.encounterIDs[0])
+	}
 }

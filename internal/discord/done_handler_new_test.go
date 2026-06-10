@@ -1252,6 +1252,17 @@ func (m *mockMapRegenerator) RegenerateMap(ctx context.Context, encounterID uuid
 	return m.regenerateMap(ctx, encounterID)
 }
 
+// recordingMapRenderFailNotifier records NotifyCombatMapRenderFailed calls so
+// tests can assert the DM-queue notice fires on a combat-map render failure
+// (T09 / Finding 6f).
+type recordingMapRenderFailNotifier struct {
+	encounterIDs []uuid.UUID
+}
+
+func (r *recordingMapRenderFailNotifier) NotifyCombatMapRenderFailed(_ context.Context, encounterID uuid.UUID) {
+	r.encounterIDs = append(r.encounterIDs, encounterID)
+}
+
 // --- TDD Cycle: Map regeneration on turn end ---
 
 func TestDoneHandler_RegeneratesMapOnTurnEnd(t *testing.T) {
@@ -1376,7 +1387,7 @@ func TestDoneHandler_MapRegeneration_RegeneratorNotSet(t *testing.T) {
 	}
 }
 
-func TestDoneHandler_MapRegeneration_ErrorSilentlyIgnored(t *testing.T) {
+func TestDoneHandler_MapRegeneration_ErrorDoesNotFailTurn(t *testing.T) {
 	sess := &mockMoveSession{}
 	handler, _, _, _, _ := setupFullDoneHandler(sess)
 
@@ -1408,6 +1419,75 @@ func TestDoneHandler_MapRegeneration_ErrorSilentlyIgnored(t *testing.T) {
 	content := sess.lastResponse.Data.Content
 	if !strings.Contains(content, "Turn ended") {
 		t.Errorf("expected turn ended despite map error, got: %s", content)
+	}
+}
+
+// T09 / Finding 6f: a combat-map render failure must no longer be swallowed —
+// the wired CombatMapRenderFailureNotifier is told so the DM learns players
+// may be acting on a stale map.
+func TestDoneHandler_MapRegeneration_ErrorNotifiesFailureNotifier(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, encounterID, _, _, _ := setupFullDoneHandler(sess)
+
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {},
+		notifyAutoSkip:  func(s Session, channelID string, content string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt", "combat-map": "chan-cm"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+	handler.SetMapRegenerator(&mockMapRegenerator{
+		regenerateMap: func(_ context.Context, _ uuid.UUID) ([]byte, error) {
+			return nil, errors.New("render error")
+		},
+	})
+	rec := &recordingMapRenderFailNotifier{}
+	handler.SetMapRenderFailureNotifier(rec)
+
+	handler.Handle(makeDoneInteraction())
+
+	if len(rec.encounterIDs) != 1 {
+		t.Fatalf("expected 1 render-failure notice, got %d", len(rec.encounterIDs))
+	}
+	if rec.encounterIDs[0] != encounterID {
+		t.Errorf("expected notice for encounter %s, got %s", encounterID, rec.encounterIDs[0])
+	}
+}
+
+// T09 / Finding 6f: a successful render must NOT post a failure notice.
+func TestDoneHandler_MapRegeneration_SuccessDoesNotNotifyFailure(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, _ := setupFullDoneHandler(sess)
+
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(s Session, channelID string, content string) {},
+		notifyAutoSkip:  func(s Session, channelID string, content string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt", "combat-map": "chan-cm"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+	handler.SetMapRegenerator(&mockMapRegenerator{
+		regenerateMap: func(_ context.Context, _ uuid.UUID) ([]byte, error) {
+			return []byte("png"), nil
+		},
+	})
+	rec := &recordingMapRenderFailNotifier{}
+	handler.SetMapRenderFailureNotifier(rec)
+
+	handler.Handle(makeDoneInteraction())
+
+	if len(rec.encounterIDs) != 0 {
+		t.Fatalf("expected no render-failure notice on success, got %d", len(rec.encounterIDs))
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -93,6 +94,14 @@ type MapRegenerator interface {
 	RegenerateMap(ctx context.Context, encounterID uuid.UUID) ([]byte, error)
 }
 
+// CombatMapRenderFailureNotifier is told when a combat-map PNG render fails so
+// the DM can be alerted that players may be acting on a stale map. It is
+// optional (nil-safe): without one wired, PostCombatMap still logs the failure
+// but posts no DM-queue notice. (T09 / Finding 6f)
+type CombatMapRenderFailureNotifier interface {
+	NotifyCombatMapRenderFailed(ctx context.Context, encounterID uuid.UUID)
+}
+
 // DoneHandler handles the /done slash command.
 type DoneHandler struct {
 	session                  Session
@@ -106,6 +115,7 @@ type DoneHandler struct {
 	campaignSettingsProvider CampaignSettingsProvider
 	impactSummaryProvider    ImpactSummaryProvider
 	mapRegenerator           MapRegenerator
+	mapRenderFailNotifier    CombatMapRenderFailureNotifier
 }
 
 // NewDoneHandler creates a new DoneHandler.
@@ -156,6 +166,13 @@ func (h *DoneHandler) SetImpactSummaryProvider(isp ImpactSummaryProvider) {
 // SetMapRegenerator sets the map regenerator for posting combat maps on turn end.
 func (h *DoneHandler) SetMapRegenerator(mr MapRegenerator) {
 	h.mapRegenerator = mr
+}
+
+// SetMapRenderFailureNotifier wires the optional notifier told when a
+// combat-map PNG render fails, so the DM learns players may be acting on a
+// stale map. (T09 / Finding 6f)
+func (h *DoneHandler) SetMapRenderFailureNotifier(n CombatMapRenderFailureNotifier) {
+	h.mapRenderFailNotifier = n
 }
 
 // HasMapRegenerator reports whether a non-nil MapRegenerator has been wired
@@ -468,7 +485,7 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 
 	// Regenerate and post combat map with the Phase 105 encounter label so
 	// simultaneous encounters sharing #combat-map are distinguishable.
-	PostCombatMap(ctx, h.session, h.mapRegenerator, encounterID, channelIDs, label)
+	PostCombatMap(ctx, h.session, h.mapRegenerator, encounterID, channelIDs, label, h.mapRenderFailNotifier)
 }
 
 // resolveTurnMention returns the next combatant's Discord user ID so the
@@ -493,13 +510,17 @@ func (h *DoneHandler) resolveTurnMention(ctx context.Context, campaignID uuid.UU
 }
 
 // PostCombatMap regenerates the combat map and posts it to #combat-map.
-// Best-effort: failures are silently ignored.
+// Best-effort: a missing regenerator or #combat-map channel is a silent no-op.
+//
+// T09 / Finding 6f: a render *failure* is no longer swallowed — it is logged
+// at ERROR and, when a CombatMapRenderFailureNotifier is wired, surfaced to the
+// DM (so players acting off a now-stale map are not left silently stranded).
 //
 // Phase 105: the label (e.g. "⚔️ Rooftop Ambush — Round 3") is required
 // and included as the message content so players in a shared channel can
 // tell which simultaneous encounter the map belongs to. Pass "" when no
 // label is available (e.g. encounter lookup failed).
-func PostCombatMap(ctx context.Context, session Session, mr MapRegenerator, encounterID uuid.UUID, channelIDs map[string]string, label string) {
+func PostCombatMap(ctx context.Context, session Session, mr MapRegenerator, encounterID uuid.UUID, channelIDs map[string]string, label string, failNotifier CombatMapRenderFailureNotifier) {
 	if mr == nil {
 		return
 	}
@@ -511,6 +532,11 @@ func PostCombatMap(ctx context.Context, session Session, mr MapRegenerator, enco
 
 	pngData, err := mr.RegenerateMap(ctx, encounterID)
 	if err != nil {
+		slog.Error("combat map render failed; players may be acting on a stale map",
+			"error", err, "encounter_id", encounterID)
+		if failNotifier != nil {
+			failNotifier.NotifyCombatMapRenderFailed(ctx, encounterID)
+		}
 		return
 	}
 

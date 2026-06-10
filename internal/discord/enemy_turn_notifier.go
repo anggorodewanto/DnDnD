@@ -23,6 +23,7 @@ type DiscordEnemyTurnNotifier struct {
 	campaignSettingsProvider CampaignSettingsProvider
 	mapRegenerator           MapRegenerator
 	encounterLookup          EnemyTurnEncounterLookup
+	mapRenderFailNotifier    CombatMapRenderFailureNotifier
 }
 
 // NewDiscordEnemyTurnNotifier creates a DiscordEnemyTurnNotifier.
@@ -39,6 +40,13 @@ func NewDiscordEnemyTurnNotifier(session Session, csp CampaignSettingsProvider, 
 // a label (matching pre-Phase-105 behavior).
 func (n *DiscordEnemyTurnNotifier) SetEncounterLookup(lookup EnemyTurnEncounterLookup) {
 	n.encounterLookup = lookup
+}
+
+// SetMapRenderFailureNotifier wires the optional notifier told when a
+// combat-map PNG render fails after an enemy turn, so the DM learns players
+// may be acting on a stale map. (T09 / Finding 6f)
+func (n *DiscordEnemyTurnNotifier) SetMapRenderFailureNotifier(fn CombatMapRenderFailureNotifier) {
+	n.mapRenderFailNotifier = fn
 }
 
 // NotifyEnemyTurnExecuted posts the combat log to #combat-log and regenerates
@@ -66,7 +74,7 @@ func (n *DiscordEnemyTurnNotifier) NotifyEnemyTurnExecuted(ctx context.Context, 
 
 	// Regenerate and post map to #combat-map with the same label so
 	// simultaneous encounters sharing the channel are distinguishable.
-	PostCombatMap(ctx, n.session, n.mapRegenerator, encounterID, channelIDs, label)
+	PostCombatMap(ctx, n.session, n.mapRegenerator, encounterID, channelIDs, label, n.mapRenderFailNotifier)
 }
 
 // encounterLabel returns the "⚔️ <name> — Round N" prefix for the encounter,

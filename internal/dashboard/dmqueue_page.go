@@ -320,6 +320,8 @@ func kindLabelFor(k dmqueue.EventKind) string {
 		return "Narrative Teleport"
 	case dmqueue.KindPlayerWhisper:
 		return "Player Whisper"
+	case dmqueue.KindMapRenderFailure:
+		return "Map Render Failed"
 	default:
 		return "Notification"
 	}

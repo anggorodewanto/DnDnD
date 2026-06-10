@@ -1715,6 +1715,14 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// combat.Handler.ExecuteEnemyTurn posts the "⚔️ <display_name>
 			// — Round N" label instead of silently no-oping in production.
 			wireEnemyTurnNotifier(combatHandler, discordHandlerSet.enemyTurnNotifier)
+			// T09 / Finding 6f: surface combat-map render failures to the DM
+			// via #dm-queue instead of swallowing them, so players acting off
+			// a now-stale map are not silently stranded. Wired onto both
+			// map-posting paths (/done and the dashboard enemy-turn notifier).
+			if mapFailNotifier := newCombatMapRenderFailureNotifierAdapter(dmQueueNotifier, queries.GetCampaignByEncounterID); mapFailNotifier != nil {
+				discordHandlerSet.done.SetMapRenderFailureNotifier(mapFailNotifier)
+				discordHandlerSet.enemyTurnNotifier.SetMapRenderFailureNotifier(mapFailNotifier)
+			}
 			// Phase 106a: route /rest dm-queue posts through the notifier so
 			// rest requests are persisted and resolvable from the dashboard.
 			discordHandlerSet.rest.SetNotifier(dmQueueNotifier)

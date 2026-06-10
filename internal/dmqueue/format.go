@@ -39,6 +39,12 @@ const (
 	// KindChannelDivinity is a DM-resolved Channel Divinity subclass
 	// option (narrative/conditional) that requires manual adjudication.
 	KindChannelDivinity EventKind = "channel_divinity"
+	// KindMapRenderFailure is a DM-side operational alert that a combat-map
+	// PNG failed to render after a turn advanced. Unlike the other kinds it
+	// is not a player action: it surfaces so the DM knows players may be
+	// acting on a stale map and can re-post / investigate, then resolve the
+	// item. (T09 / Finding 6f)
+	KindMapRenderFailure EventKind = "map_render_failure"
 )
 
 // WhisperTargetDiscordUserIDKey is the ExtraMetadata key under which the
@@ -97,6 +103,7 @@ var kindLabels = map[EventKind]kindLabel{
 	KindRetireRequest:       {emoji: "🪦", label: "Retire Request", useColon: false},
 	KindOpportunityAttack:   {emoji: "⚔️", label: "Opportunity Attack", useColon: true},
 	KindChannelDivinity:     {emoji: "✝️", label: "Channel Divinity", useColon: true},
+	KindMapRenderFailure:    {emoji: "🗺️", label: "Map Render Failed", useColon: true},
 }
 
 var defaultLabel = kindLabel{emoji: "📨", label: "Notification", useColon: true}

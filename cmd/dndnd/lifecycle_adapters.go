@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 
@@ -120,6 +121,52 @@ func (a *hostilesDefeatedNotifierAdapter) NotifyHostilesDefeated(ctx context.Con
 	})
 }
 
+// combatMapRenderFailureNotifierAdapter satisfies
+// discord.CombatMapRenderFailureNotifier by posting a DM-facing alert to
+// #dm-queue when a combat-map PNG render fails, so the DM learns players may
+// be acting on a stale map (T09 / Finding 6f). It resolves the encounter's
+// campaign to scope the item to the right guild + dashboard queue. A nil
+// dmqueue.Notifier (headless deploy) yields a nil adapter and degrades to a
+// silent no-op.
+type combatMapRenderFailureNotifierAdapter struct {
+	notifier    dmqueue.Notifier
+	getCampaign func(ctx context.Context, encounterID uuid.UUID) (refdata.Campaign, error)
+}
+
+func newCombatMapRenderFailureNotifierAdapter(n dmqueue.Notifier, getCampaign func(ctx context.Context, encounterID uuid.UUID) (refdata.Campaign, error)) *combatMapRenderFailureNotifierAdapter {
+	if n == nil || getCampaign == nil {
+		return nil
+	}
+	return &combatMapRenderFailureNotifierAdapter{notifier: n, getCampaign: getCampaign}
+}
+
+func (a *combatMapRenderFailureNotifierAdapter) NotifyCombatMapRenderFailed(ctx context.Context, encounterID uuid.UUID) {
+	if a == nil || a.notifier == nil || a.getCampaign == nil {
+		return
+	}
+	camp, err := a.getCampaign(ctx, encounterID)
+	if err != nil {
+		// The render error itself is already logged at ERROR in
+		// discord.PostCombatMap. Surface this campaign-lookup failure at WARN
+		// so the omitted #dm-queue alert doesn't become a second silent
+		// failure: without a resolvable campaign we cannot scope a queue item
+		// to the right DM/guild, so we skip the post rather than orphan it.
+		slog.Warn("combat-map render-failure alert omitted: campaign lookup failed",
+			"error", err, "encounter_id", encounterID)
+		return
+	}
+	_, _ = a.notifier.Post(ctx, dmqueue.Event{
+		Kind:       dmqueue.KindMapRenderFailure,
+		PlayerName: "Combat map",
+		Summary:    "could not be rendered — players may be acting on a stale map. Re-run the turn to retry.",
+		GuildID:    camp.GuildID,
+		CampaignID: camp.ID.String(),
+		ExtraMetadata: map[string]string{
+			"encounter_id": encounterID.String(),
+		},
+	})
+}
+
 // levelUpStoryQueries is the subset of refdata.Queries the level-up
 // StoryPoster adapter needs: character lookup (to find the campaign) and
 // campaign lookup (to find the Discord guild). Declared as an interface
@@ -177,8 +224,9 @@ func (a *levelUpStoryPosterAdapter) PostPublicLevelUp(ctx context.Context, chara
 // Compile-time satisfies-assertions so a future refactor of the combat
 // service interfaces breaks the build instead of going stale at runtime.
 var (
-	_ combat.CombatLogNotifier        = (*combatLogNotifierAdapter)(nil)
-	_ combat.LootPoolCreator          = (*lootPoolCreatorAdapter)(nil)
-	_ combat.HostilesDefeatedNotifier = (*hostilesDefeatedNotifierAdapter)(nil)
-	_ levelup.StoryPoster             = (*levelUpStoryPosterAdapter)(nil)
+	_ combat.CombatLogNotifier               = (*combatLogNotifierAdapter)(nil)
+	_ combat.LootPoolCreator                 = (*lootPoolCreatorAdapter)(nil)
+	_ combat.HostilesDefeatedNotifier        = (*hostilesDefeatedNotifierAdapter)(nil)
+	_ levelup.StoryPoster                    = (*levelUpStoryPosterAdapter)(nil)
+	_ discord.CombatMapRenderFailureNotifier = (*combatMapRenderFailureNotifierAdapter)(nil)
 )
