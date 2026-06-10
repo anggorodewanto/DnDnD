@@ -217,6 +217,10 @@ func (h *APIHandler) SubmitCharacter(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
+		if status, msg, ok := tokenErrorResponse(err); ok {
+			http.Error(w, msg, status)
+			return
+		}
 		h.logger.Error("creating character", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -251,6 +255,28 @@ func (h *APIHandler) PreviewCharacter(w http.ResponseWriter, r *http.Request) {
 
 func isValidationError(err error) bool {
 	return err != nil && strings.HasPrefix(err.Error(), "validation")
+}
+
+// tokenErrorResponse maps a portal-token failure to an HTTP status and a
+// player-facing message that tells them how to recover. Token errors reach the
+// handler wrapped ("validating token: ..." or "redeeming token: ..."), so
+// errors.Is is used to see through the chain. The bool is false when err is not
+// a recognized token error, leaving the caller on the generic 500 path. Status
+// codes mirror the page route's handleTokenError so both surfaces agree:
+// expired/used are 410 Gone, unknown is 404, wrong-account is 403.
+func tokenErrorResponse(err error) (status int, msg string, ok bool) {
+	const reissue = "Please request a new link from Discord with /create-character."
+	switch {
+	case errors.Is(err, ErrTokenExpired):
+		return http.StatusGone, "This link has expired. " + reissue, true
+	case errors.Is(err, ErrTokenUsed):
+		return http.StatusGone, "This link has already been used. " + reissue, true
+	case errors.Is(err, ErrTokenNotFound):
+		return http.StatusNotFound, "This link is invalid or was not found. " + reissue, true
+	case errors.Is(err, ErrTokenOwnership):
+		return http.StatusForbidden, "This link belongs to a different Discord account. " + reissue, true
+	}
+	return 0, "", false
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

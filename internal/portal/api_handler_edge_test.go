@@ -129,6 +129,46 @@ func TestAPIHandler_SubmitCharacter_EmptyTokenAndCampaign_Returns400(t *testing.
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// A submit whose token has expired / been used / is unknown / belongs to
+// another account must map to a client-error status with a "request a new
+// link" message — never a bare 500 that loses the build with no next step
+// (usability T10 / Finding 4·a). The error arrives wrapped ("validating
+// token: ..." or "redeeming token: ..."), so the mapping must see through the
+// chain with errors.Is.
+func TestAPIHandler_SubmitCharacter_TokenErrors(t *testing.T) {
+	const validBody = `{"token":"t","campaign_id":"c","name":"Test","race":"elf","background":"sage","class":"wizard","ability_scores":{"str":8,"dex":8,"con":8,"int":8,"wis":8,"cha":8},"skills":[]}`
+
+	cases := []struct {
+		name       string
+		store      *mockBuilderStore
+		wantStatus int
+	}{
+		{"expired", &mockBuilderStore{charID: "c-1", validateTokenErr: portal.ErrTokenExpired}, http.StatusGone},
+		{"used at validate", &mockBuilderStore{charID: "c-1", validateTokenErr: portal.ErrTokenUsed}, http.StatusGone},
+		{"used at redeem", &mockBuilderStore{charID: "c-1", redeemTokenErr: portal.ErrTokenUsed}, http.StatusGone},
+		{"not found", &mockBuilderStore{charID: "c-1", validateTokenErr: portal.ErrTokenNotFound}, http.StatusNotFound},
+		{"ownership mismatch", &mockBuilderStore{charID: "c-1", validateToken: &portal.PortalToken{DiscordUserID: "someone-else"}}, http.StatusForbidden},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			builderSvc := portal.NewBuilderService(tc.store)
+			h := portal.NewAPIHandler(slog.Default(), &mockRefDataStore{}, builderSvc)
+
+			req := httptest.NewRequest(http.MethodPost, "/portal/api/characters", strings.NewReader(validBody))
+			req.Header.Set("Content-Type", "application/json")
+			ctx := auth.ContextWithDiscordUserID(req.Context(), "u1")
+			req = req.WithContext(ctx)
+			rec := httptest.NewRecorder()
+
+			h.SubmitCharacter(rec, req)
+
+			assert.Equal(t, tc.wantStatus, rec.Code, rec.Body.String())
+			assert.NotContains(t, rec.Body.String(), "internal server error")
+			assert.Contains(t, rec.Body.String(), "/create-character")
+		})
+	}
+}
+
 func TestAPIHandler_SubmitCharacter_ShortStoreError(t *testing.T) {
 	// Regression: isValidationError must not panic on short error messages.
 	builderStore := &mockBuilderStore{createCharErr: errors.New("fail")}

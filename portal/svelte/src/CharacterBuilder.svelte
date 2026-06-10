@@ -16,7 +16,7 @@
     subraceOptions, subclassOptions, isSubclassEligible,
     emptyClassRow, addClassRow, removeClassRow, updateClassRow,
   } from './lib/builder-options.js';
-  import { draftKey, serializeDraft, parseDraft } from './lib/builder-draft.js';
+  import { draftKey, draftScope, serializeDraft, parseDraft } from './lib/builder-draft.js';
 
   let { mode = 'player', token = '', campaignId = '' } = $props();
 
@@ -26,9 +26,11 @@
   // but this keeps the component warning-clean and correct either way).
   let api = $derived(makeBuilderApi(mode, { campaignId, token }));
 
-  // localStorage draft is keyed off whichever identity the mode provides so
-  // DM drafts (campaignId only, no token) persist independently.
-  let draftIdentity = $derived(token || campaignId);
+  // localStorage draft is keyed by campaign (not the single-use token) so a
+  // reissued /create-character link restores the in-progress draft instead of a
+  // blank form; the mode prefix keeps player and DM drafts for the same
+  // campaign from colliding in shared localStorage. See draftScope().
+  let draftIdentity = $derived(draftScope(mode, campaignId, token));
 
   // Steps
   const STEPS = ['Basics', 'Class', 'Ability Scores', 'Skills', 'Equipment', 'Spells', 'Review'];

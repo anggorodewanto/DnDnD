@@ -56,6 +56,32 @@ export function draftKey(token) {
 }
 
 /**
+ * Computes the stable draft scope (the string handed to `draftKey`) for a
+ * builder session. A player's draft is keyed by *campaign*, not by the
+ * single-use portal token: a token is consumed/expired on submit and a
+ * reissued `/create-character` link mints a fresh one, so token-keying orphaned
+ * the in-progress draft and the new page came up blank (usability T10 /
+ * Finding 4·a). Campaign-keying survives that rotation. The token is only a
+ * fallback for the (rare) case where no campaign id is known.
+ *
+ * The `mode` prefix matters: the player portal and the DM dashboard mount this
+ * same builder from one localStorage origin, so without it a player's PC draft
+ * and a DM's NPC draft for the same campaign would clobber each other.
+ *
+ * Returns '' when nothing identifies the draft, so `draftKey('')` collapses to
+ * the shared `:default` namespace exactly as before.
+ * @param {string} mode - 'player' | 'dm'
+ * @param {string} [campaignId] - active campaign id (preferred, stable key)
+ * @param {string} [token] - portal token (fallback only)
+ * @returns {string} scope string for draftKey()
+ */
+export function draftScope(mode, campaignId, token) {
+  const id = campaignId || token || '';
+  if (!id) return '';
+  return `${mode || 'player'}:${id}`;
+}
+
+/**
  * Serializes `state` to a versioned JSON string. The result always carries
  * `v: DRAFT_VERSION`, plus every DRAFT_FIELDS entry that is present
  * (`!== undefined`) on `state`. Fields that are absent/undefined are omitted,

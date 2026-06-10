@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DRAFT_VERSION, draftKey, serializeDraft, parseDraft } from './builder-draft.js';
+import { DRAFT_VERSION, draftKey, draftScope, serializeDraft, parseDraft } from './builder-draft.js';
 
 describe('DRAFT_VERSION', () => {
   it('is 1', () => {
@@ -22,6 +22,39 @@ describe('draftKey', () => {
 
   it('falls back to :default for undefined', () => {
     expect(draftKey(undefined)).toBe('dndnd-builder-draft:default');
+  });
+});
+
+describe('draftScope', () => {
+  it('keys a player draft by campaign, not the single-use token', () => {
+    expect(draftScope('player', 'camp-1', 'tok-abc')).toBe('player:camp-1');
+  });
+
+  it('is stable across token rotation for the same campaign', () => {
+    // The whole point of T10: a reissued /create-character link (new token)
+    // must restore the same in-progress draft, not a blank form.
+    expect(draftScope('player', 'camp-1', 'tok-OLD'))
+      .toBe(draftScope('player', 'camp-1', 'tok-NEW'));
+  });
+
+  it('falls back to the token when no campaign is known', () => {
+    expect(draftScope('player', '', 'tok-abc')).toBe('player:tok-abc');
+  });
+
+  it('keys a DM draft by campaign', () => {
+    expect(draftScope('dm', 'camp-1', '')).toBe('dm:camp-1');
+  });
+
+  it('does not collide a player PC draft with a DM NPC draft for the same campaign', () => {
+    // Portal and dashboard share one localStorage origin, so the mode must
+    // namespace the scope.
+    expect(draftScope('player', 'camp-1', 't')).not.toBe(draftScope('dm', 'camp-1', ''));
+  });
+
+  it('collapses to an empty scope when nothing identifies the draft', () => {
+    // Empty scope -> draftKey() -> the shared :default namespace.
+    expect(draftScope('player', '', '')).toBe('');
+    expect(draftKey(draftScope('player', '', ''))).toBe('dndnd-builder-draft:default');
   });
 });
 
