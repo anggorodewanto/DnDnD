@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **3 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **4 / 52**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -25,7 +25,7 @@ single PR when each is trivial (noted per group).
 - [x] **T03** · 🟠 · Real `<@id>` turn mentions in `sendTurnNotifications` (NPC turns keep plain name) · _Finding 3_ → `cff16af`
 
 #### Tier 3 — Silent-failure cluster (_Finding 6_)
-- [ ] **T04** · 🟠 · Add channel-binding check to `discordcheck` ("run /setup") + persist dm-queue items even when channel unresolved · _Finding 6 ·a_
+- [x] **T04** · 🟠 · Add channel-binding check to `discordcheck` ("run /setup") + persist dm-queue items even when channel unresolved · _Finding 6 ·a_ → `a349d6d`
 - [ ] **T05** · 🟠 · ERROR / refuse boot when `DISCORD_BOT_TOKEN` set but `DATABASE_URL` unset · _Finding 6 ·b_
 - [ ] **T06** · 🟠 · Fail (not skip) the app-id check when a bot token is configured · _Finding 6 ·c_
 - [ ] **T07** · 🟠 · Set `Identify.Intents` (GuildMembers) **before** `Open()` + add intent check to `discordcheck` · _Finding 6 ·d_
