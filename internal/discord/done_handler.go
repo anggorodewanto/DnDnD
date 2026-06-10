@@ -451,6 +451,10 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 		impactSummary = h.impactSummaryProvider.GetImpactSummary(ctx, encounterID, nextCombatant.ID)
 	}
 
+	// Resolve the next combatant's Discord user ID so the ping is a real
+	// <@id> mention that actually notifies the player (NPCs keep plain name).
+	mention := h.resolveTurnMention(ctx, encounter.CampaignID, nextCombatant)
+
 	content := combat.FormatTurnStartPromptWithImpact(
 		encounterName,
 		turnInfo.RoundNumber,
@@ -458,12 +462,34 @@ func (h *DoneHandler) sendTurnNotifications(ctx context.Context, encounterID uui
 		turnInfo.Turn,
 		&nextCombatant,
 		impactSummary,
+		mention,
 	)
 	h.turnNotifier.NotifyTurnStart(h.session, yourTurnCh, content)
 
 	// Regenerate and post combat map with the Phase 105 encounter label so
 	// simultaneous encounters sharing #combat-map are distinguishable.
 	PostCombatMap(ctx, h.session, h.mapRegenerator, encounterID, channelIDs, label)
+}
+
+// resolveTurnMention returns the next combatant's Discord user ID so the
+// turn-start ping can fire a real <@id> notification. It returns "" for NPCs,
+// unlinked characters, an unresolvable lookup, or when no player lookup is
+// wired — callers then fall back to the plain-name ping.
+func (h *DoneHandler) resolveTurnMention(ctx context.Context, campaignID uuid.UUID, c refdata.Combatant) string {
+	if h.playerLookup == nil {
+		return ""
+	}
+	if c.IsNpc || !c.CharacterID.Valid {
+		return ""
+	}
+	pc, err := h.playerLookup.GetPlayerCharacterByCharacter(ctx, refdata.GetPlayerCharacterByCharacterParams{
+		CampaignID:  campaignID,
+		CharacterID: c.CharacterID.UUID,
+	})
+	if err != nil {
+		return ""
+	}
+	return pc.DiscordUserID
 }
 
 // PostCombatMap regenerates the combat map and posts it to #combat-map.

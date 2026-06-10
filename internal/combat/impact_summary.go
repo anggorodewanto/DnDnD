@@ -41,10 +41,10 @@ func (s *Service) GetImpactSummary(ctx context.Context, encounterID uuid.UUID, c
 
 // FormatTurnStartPromptWithImpact produces the turn start notification
 // with an optional impact summary line inserted between the ping and resources.
-func FormatTurnStartPromptWithImpact(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn, combatant *refdata.Combatant, impactSummary string) string {
+func FormatTurnStartPromptWithImpact(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn, combatant *refdata.Combatant, impactSummary string, discordUserID ...string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", encounterName, roundNumber)
-	fmt.Fprintf(&b, "\U0001f514 @%s \u2014 it's your turn!\n", combatantName)
+	fmt.Fprintf(&b, "\U0001f514 %s \u2014 it's your turn!\n", turnPing(combatantName, discordUserID))
 
 	if impactSummary != "" {
 		fmt.Fprintf(&b, "%s\n", impactSummary)

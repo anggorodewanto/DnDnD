@@ -238,6 +238,23 @@ func TestFormatTurnStartPrompt_SingleAttack(t *testing.T) {
 	assert.NotContains(t, result, "attacks") // singular
 }
 
+func TestFormatTurnStartPrompt_RealMention(t *testing.T) {
+	turn := refdata.Turn{MovementRemainingFt: 30, AttacksRemaining: 1}
+	// A linked player's Discord user ID yields a real <@id> mention that fires
+	// a Discord notification, replacing the plain-text "@name" ping.
+	result := FormatTurnStartPrompt("Arena", 1, "Aria", turn, nil, "123456789012345678")
+	assert.Contains(t, result, "<@123456789012345678>")
+	assert.NotContains(t, result, "@Aria")
+}
+
+func TestFormatTurnStartPrompt_EmptyDiscordIDKeepsPlainName(t *testing.T) {
+	turn := refdata.Turn{MovementRemainingFt: 30, AttacksRemaining: 1}
+	// NPCs and unlinked players (empty id) keep the plain-text ping.
+	result := FormatTurnStartPrompt("Arena", 1, "Goblin", turn, nil, "")
+	assert.Contains(t, result, "@Goblin")
+	assert.NotContains(t, result, "<@")
+}
+
 func TestFormatRemainingResources_SomeSpent(t *testing.T) {
 	turn := refdata.Turn{
 		MovementRemainingFt: 5,

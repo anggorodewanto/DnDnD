@@ -182,3 +182,11 @@ func TestFormatTurnStartPromptWithImpact_WithImpact(t *testing.T) {
 	assert.Contains(t, result, "@Aria")
 	assert.Contains(t, result, "Available:")
 }
+
+func TestFormatTurnStartPromptWithImpact_RealMention(t *testing.T) {
+	turn := refdata.Turn{MovementRemainingFt: 30, AttacksRemaining: 2}
+	// A linked player's Discord user ID yields a real <@id> mention.
+	result := FormatTurnStartPromptWithImpact("Rooftop Ambush", 3, "Aria", turn, nil, "", "987654321098765432")
+	assert.Contains(t, result, "<@987654321098765432>")
+	assert.NotContains(t, result, "@Aria")
+}

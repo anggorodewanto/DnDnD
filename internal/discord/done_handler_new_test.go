@@ -715,6 +715,169 @@ func TestDoneHandler_SendsTurnStartNotification(t *testing.T) {
 	}
 }
 
+// --- T03: turn-start ping is a real <@id> mention for the next PC ---
+
+func TestDoneHandler_TurnStartNotification_RealMentionForPC(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, combatantID, nextCombatantID := setupFullDoneHandler(sess)
+	characterID := uuid.New()
+
+	// Next combatant is a player character — the ping must fire a real
+	// Discord notification via a <@id> mention, not plain "@name" text.
+	handler.combatService = &mockMoveService{
+		getEncounter: handler.combatService.(*mockMoveService).getEncounter,
+		getCombatant: func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			if id == nextCombatantID {
+				return refdata.Combatant{
+					ID:          nextCombatantID,
+					CharacterID: uuid.NullUUID{UUID: characterID, Valid: true},
+					PositionCol: "B", PositionRow: 2,
+					IsAlive: true, HpCurrent: 10,
+					IsNpc:       false,
+					DisplayName: "Aria",
+				}, nil
+			}
+			return refdata.Combatant{
+				ID:          combatantID,
+				CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+				PositionCol: "A", PositionRow: 1,
+				IsAlive: true, HpCurrent: 10,
+				IsNpc:       false,
+				DisplayName: "Bob",
+			}, nil
+		},
+		listCombatants:     handler.combatService.(*mockMoveService).listCombatants,
+		updateCombatantPos: handler.combatService.(*mockMoveService).updateCombatantPos,
+	}
+
+	var sentContent string
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(_ Session, _ string, content string) { sentContent = content },
+		notifyAutoSkip:  func(_ Session, _ string, _ string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+
+	handler.Handle(makeDoneInteraction())
+
+	// playerLookup resolves any character to DiscordUserID "user1".
+	if !strings.Contains(sentContent, "<@user1>") {
+		t.Errorf("expected real <@user1> mention in turn-start ping, got: %s", sentContent)
+	}
+}
+
+func TestDoneHandler_TurnStartNotification_NPCKeepsPlainName(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, _ := setupFullDoneHandler(sess)
+	// Default next combatant is the NPC "Goblin #1".
+
+	var sentContent string
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(_ Session, _ string, content string) { sentContent = content },
+		notifyAutoSkip:  func(_ Session, _ string, _ string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+
+	handler.Handle(makeDoneInteraction())
+
+	if strings.Contains(sentContent, "<@") {
+		t.Errorf("expected NPC turn to keep a plain-name ping (no real mention), got: %s", sentContent)
+	}
+	if !strings.Contains(sentContent, "@Goblin #1") {
+		t.Errorf("expected plain-text @name ping for NPC, got: %s", sentContent)
+	}
+}
+
+func TestDoneHandler_TurnStartNotification_LookupErrorKeepsPlainName(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, combatantID, nextCombatantID := setupFullDoneHandler(sess)
+	characterID := uuid.New()
+
+	// Current combatant is an NPC (so the DM-actor auth path skips the player
+	// lookup); the next combatant is a PC whose lookup fails.
+	handler.combatService = &mockMoveService{
+		getEncounter: handler.combatService.(*mockMoveService).getEncounter,
+		getCombatant: func(_ context.Context, id uuid.UUID) (refdata.Combatant, error) {
+			if id == nextCombatantID {
+				return refdata.Combatant{
+					ID:          nextCombatantID,
+					CharacterID: uuid.NullUUID{UUID: characterID, Valid: true},
+					PositionCol: "B", PositionRow: 2,
+					IsAlive: true, HpCurrent: 10,
+					IsNpc:       false,
+					DisplayName: "Aria",
+				}, nil
+			}
+			return refdata.Combatant{
+				ID:          combatantID,
+				PositionCol: "A", PositionRow: 1,
+				IsAlive: true, HpCurrent: 10,
+				IsNpc:       true,
+				DisplayName: "Goblin",
+			}, nil
+		},
+		listCombatants:     handler.combatService.(*mockMoveService).listCombatants,
+		updateCombatantPos: handler.combatService.(*mockMoveService).updateCombatantPos,
+	}
+	handler.SetPlayerLookup(&mockDonePlayerLookup{
+		getPC: func(_ context.Context, _ refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error) {
+			return refdata.PlayerCharacter{}, errors.New("db error")
+		},
+	})
+
+	var sentContent string
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(_ Session, _ string, content string) { sentContent = content },
+		notifyAutoSkip:  func(_ Session, _ string, _ string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+
+	// DM ends the NPC's turn (DM auth skips the lookup), advancing to Aria.
+	handler.Handle(&discordgo.Interaction{
+		Type:    discordgo.InteractionApplicationCommand,
+		GuildID: "guild1",
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "dm-user"}},
+		Data:    discordgo.ApplicationCommandInteractionData{Name: "done"},
+	})
+
+	if strings.Contains(sentContent, "<@") {
+		t.Errorf("expected plain-name fallback when lookup fails, got: %s", sentContent)
+	}
+	if !strings.Contains(sentContent, "@Aria") {
+		t.Errorf("expected plain @Aria fallback, got: %s", sentContent)
+	}
+}
+
+func TestDoneHandler_ResolveTurnMention_NoPlayerLookup(t *testing.T) {
+	h := &DoneHandler{} // no player lookup wired
+	got := h.resolveTurnMention(context.Background(), uuid.New(), refdata.Combatant{
+		CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+	})
+	if got != "" {
+		t.Errorf("expected empty mention with no player lookup, got: %q", got)
+	}
+}
+
 // --- No notification when providers not set ---
 
 func TestDoneHandler_NoNotificationWithoutProviders(t *testing.T) {

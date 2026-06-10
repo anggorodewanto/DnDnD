@@ -1280,8 +1280,27 @@ func (n *firstTurnPingNotifier) NotifyFirstTurn(ctx context.Context, encounterID
 	if err != nil {
 		return
 	}
-	content := combat.FormatTurnStartPrompt(enc.Name, ti.RoundNumber, combatant.DisplayName, ti.Turn, &combatant)
+	// Real <@id> mention so the first PC in initiative is actually notified
+	// when combat starts (NPCs / unlinked characters keep the plain name).
+	mention := n.resolveMention(ctx, enc.CampaignID, combatant)
+	content := combat.FormatTurnStartPrompt(enc.Name, ti.RoundNumber, combatant.DisplayName, ti.Turn, &combatant, mention)
 	_, _ = n.session.ChannelMessageSend(yourTurnCh, content)
+}
+
+// resolveMention returns the combatant's Discord user ID for a real <@id> turn
+// ping, or "" for NPCs, unlinked characters, or lookup failures.
+func (n *firstTurnPingNotifier) resolveMention(ctx context.Context, campaignID uuid.UUID, c refdata.Combatant) string {
+	if c.IsNpc || !c.CharacterID.Valid {
+		return ""
+	}
+	pc, err := n.queries.GetPlayerCharacterByCharacter(ctx, refdata.GetPlayerCharacterByCharacterParams{
+		CampaignID:  campaignID,
+		CharacterID: c.CharacterID.UUID,
+	})
+	if err != nil {
+		return ""
+	}
+	return pc.DiscordUserID
 }
 
 // buildPortalAPIAndSheetHandlers constructs the portal HTTP handlers that

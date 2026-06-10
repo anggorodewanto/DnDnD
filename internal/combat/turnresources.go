@@ -318,12 +318,24 @@ func (s *Service) resolveAttacksPerAction(ctx context.Context, char refdata.Char
 	return bestAttacks
 }
 
+// turnPing returns the ping target for the "it's your turn!" line. When a
+// non-empty Discord user ID is supplied it renders a real "<@id>" mention,
+// which fires a Discord notification for the player; otherwise it falls back to
+// the plain-text "@name" used for NPCs and players with no linked account.
+func turnPing(combatantName string, discordUserID []string) string {
+	if len(discordUserID) > 0 && discordUserID[0] != "" {
+		return fmt.Sprintf("<@%s>", discordUserID[0])
+	}
+	return "@" + combatantName
+}
+
 // FormatTurnStartPrompt produces the turn start notification shown in #your-turn.
 // An optional combatant may be passed to include Bardic Inspiration status.
-func FormatTurnStartPrompt(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn, combatant *refdata.Combatant) string {
+// An optional discordUserID turns the "@name" ping into a real "<@id>" mention.
+func FormatTurnStartPrompt(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn, combatant *refdata.Combatant, discordUserID ...string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\u2694\ufe0f %s \u2014 Round %d\n", encounterName, roundNumber)
-	fmt.Fprintf(&b, "\U0001f514 @%s \u2014 it's your turn!\n", combatantName)
+	fmt.Fprintf(&b, "\U0001f514 %s \u2014 it's your turn!\n", turnPing(combatantName, discordUserID))
 
 	var parts []string
 	if combatant != nil {
@@ -341,8 +353,8 @@ func FormatTurnStartPrompt(encounterName string, roundNumber int32, combatantNam
 
 // FormatTurnStartPromptWithExpiry produces the turn start notification with optional
 // readied action expiry notices prepended.
-func FormatTurnStartPromptWithExpiry(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn, combatant *refdata.Combatant, expiryNotices []string) string {
-	prompt := FormatTurnStartPrompt(encounterName, roundNumber, combatantName, turn, combatant)
+func FormatTurnStartPromptWithExpiry(encounterName string, roundNumber int32, combatantName string, turn refdata.Turn, combatant *refdata.Combatant, expiryNotices []string, discordUserID ...string) string {
+	prompt := FormatTurnStartPrompt(encounterName, roundNumber, combatantName, turn, combatant, discordUserID...)
 	if len(expiryNotices) == 0 {
 		return prompt
 	}
