@@ -382,6 +382,39 @@ func TestRun_DiscordTokenUnset_DoesNotError(t *testing.T) {
 	}
 }
 
+// TestRun_DiscordTokenSetWithoutDatabaseURL_RefusesBoot covers usability
+// finding 6·b: a configured DISCORD_BOT_TOKEN is useless without DATABASE_URL
+// because the gateway Open() lives inside the DB block, so the bot would be
+// constructed yet never connect and stay silently offline. run() must refuse
+// to boot with a clear ERROR rather than appear healthy.
+func TestRun_DiscordTokenSetWithoutDatabaseURL_RefusesBoot(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var logBuf bytes.Buffer
+
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("DISCORD_BOT_TOKEN", "Bot fake-token-for-unit-tests")
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- run(ctx, &logBuf, ":0")
+	}()
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Fatal("expected run() to refuse boot when DISCORD_BOT_TOKEN is set but DATABASE_URL is empty, got nil")
+		}
+		if !bytes.Contains(logBuf.Bytes(), []byte("DATABASE_URL")) {
+			t.Fatalf("expected an ERROR log mentioning DATABASE_URL, got: %s", logBuf.String())
+		}
+	case <-time.After(2 * time.Second):
+		cancel()
+		t.Fatal("run() did not return; expected it to refuse boot quickly when token is set without DATABASE_URL")
+	}
+}
+
 func TestRun_DefaultAddr(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 

@@ -837,6 +837,19 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 	//   5. Re-register slash commands for every guild
 	//   6. Start the periodic timer ticker
 	databaseURL := os.Getenv("DATABASE_URL")
+
+	// Finding 6·b: a configured bot token is useless without a database. The
+	// gateway Open() below lives inside the DATABASE_URL block, so with a token
+	// but no DB the session is constructed yet never connects — the bot stays
+	// silently offline forever while the process looks healthy. Refuse to boot
+	// with an actionable error instead. The e2e harness injects its own session
+	// (cfg.session) and drives the gateway itself, so it is exempt.
+	if cfg.session == nil && discordToken != "" && databaseURL == "" {
+		err := errors.New("DISCORD_BOT_TOKEN is set but DATABASE_URL is empty: the bot cannot open its gateway without a database and would stay silently offline. Set DATABASE_URL (see .env.example) or unset DISCORD_BOT_TOKEN")
+		logger.Error("refusing to boot: DISCORD_BOT_TOKEN set without DATABASE_URL", "error", err)
+		return err
+	}
+
 	if databaseURL != "" {
 		db, err := database.Connect(databaseURL)
 		if err != nil {
