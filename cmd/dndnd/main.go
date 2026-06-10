@@ -639,6 +639,16 @@ func buildDiscordSession(token string) (discord.Session, *discordgo.Session, err
 	if err != nil {
 		return nil, nil, fmt.Errorf("discordgo.New: %w", err)
 	}
+	// finding 6·d / T07: request the privileged Server Members (GuildMembers)
+	// intent HERE, before run() ever calls dg.Open(). discordgo sends
+	// Identify.Intents in the IDENTIFY payload at Open() time, so the OR-in
+	// done later by wireBotHandlers (which runs after Open) is too late to take
+	// effect on the first session — member-join events (welcome DMs) would
+	// silently never arrive. discordgo.New defaults Intents to
+	// IntentsAllWithoutPrivileged, which excludes GuildMembers; OR it in so the
+	// privileged event is delivered. (discordcheck.runServerMembersIntent
+	// separately verifies the matching developer-portal toggle is enabled.)
+	dg.Identify.Intents |= discordgo.IntentsGuildMembers
 	return &discord.DiscordgoSession{S: dg}, dg, nil
 }
 

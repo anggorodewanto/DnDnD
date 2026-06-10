@@ -78,9 +78,14 @@ func (a *sessionIntentSetter) OrIntent(i discordgo.Intent) {
 // HandleGuildCreate (dynamic guild-join command registration, spec line 179),
 // HandleGuildMemberAdd (welcome DMs, spec lines 183-200), and the
 // InteractionCreate router shim that dispatches slash commands through
-// CommandRouter. It also OR-s IntentsGuildMembers into Identify.Intents —
-// without that bit discordgo's default IntentsAllWithoutPrivileged excludes
-// the GuildMembers privileged intent and member-join events never arrive.
+// CommandRouter. It also OR-s IntentsGuildMembers into Identify.Intents.
+//
+// NOTE: this OR is a redundant re-assert. The authoritative request happens
+// earlier, in buildDiscordSession, BEFORE dg.Open() — discordgo only sends
+// Identify.Intents in the IDENTIFY payload at Open() time, and wireBotHandlers
+// runs after Open(), so this call alone would be too late for the first
+// session (finding 6·d / T07). It is kept so the privileged intent is also set
+// on the wiring seam, which keeps this function independently testable.
 //
 // The adder + intents seam is what makes this unit-testable; in production
 // the same *discordgo.Session satisfies both adder (via its AddHandler

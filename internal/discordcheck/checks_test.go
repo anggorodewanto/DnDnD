@@ -40,7 +40,7 @@ func TestRun_AllChecksPass(t *testing.T) {
 		},
 		applicationFn: func(appID string) (*discordgo.Application, error) {
 			require.Equal(t, "@me", appID)
-			return &discordgo.Application{ID: "app-123", Name: "DnDnD App"}, nil
+			return &discordgo.Application{ID: "app-123", Name: "DnDnD App", Flags: appFlagGatewayGuildMembersLimited}, nil
 		},
 		guildFn: func(guildID string) (*discordgo.Guild, error) {
 			return &discordgo.Guild{ID: guildID, Name: "Guild-" + guildID}, nil
@@ -50,7 +50,7 @@ func TestRun_AllChecksPass(t *testing.T) {
 	report := Run(context.Background(), sess, "app-123", []string{"g-1", "g-2"})
 
 	require.True(t, report.AllOK(), "expected all checks to pass: %+v", report.Results)
-	require.Len(t, report.Results, 4)
+	require.Len(t, report.Results, 5)
 
 	assert.Equal(t, "token-identity", report.Results[0].Name)
 	assert.True(t, report.Results[0].OK)
@@ -60,12 +60,15 @@ func TestRun_AllChecksPass(t *testing.T) {
 	assert.Equal(t, "application-id-match", report.Results[1].Name)
 	assert.True(t, report.Results[1].OK)
 
-	assert.Equal(t, "guild-membership-g-1", report.Results[2].Name)
+	assert.Equal(t, "server-members-intent", report.Results[2].Name)
 	assert.True(t, report.Results[2].OK)
-	assert.Contains(t, report.Results[2].Detail, "Guild-g-1")
 
-	assert.Equal(t, "guild-membership-g-2", report.Results[3].Name)
+	assert.Equal(t, "guild-membership-g-1", report.Results[3].Name)
 	assert.True(t, report.Results[3].OK)
+	assert.Contains(t, report.Results[3].Detail, "Guild-g-1")
+
+	assert.Equal(t, "guild-membership-g-2", report.Results[4].Name)
+	assert.True(t, report.Results[4].OK)
 
 	assert.False(t, report.RanAt.IsZero(), "RanAt must be populated")
 }
@@ -86,14 +89,14 @@ func TestRun_TokenRejected(t *testing.T) {
 	report := Run(context.Background(), sess, "app-123", []string{"g-1"})
 
 	require.False(t, report.AllOK())
-	require.Len(t, report.Results, 3)
+	require.Len(t, report.Results, 4)
 	assert.Equal(t, "token-identity", report.Results[0].Name)
 	assert.False(t, report.Results[0].OK)
 	assert.Contains(t, strings.ToLower(report.Results[0].Detail), "token rejected by discord")
 	assert.Contains(t, report.Results[0].Detail, "401 Unauthorized")
 
 	assert.True(t, report.Results[1].OK || !report.Results[1].OK, "subsequent checks still recorded")
-	assert.Equal(t, "guild-membership-g-1", report.Results[2].Name)
+	assert.Equal(t, "guild-membership-g-1", report.Results[3].Name)
 }
 
 func TestRun_AppIDMismatch(t *testing.T) {
@@ -112,7 +115,7 @@ func TestRun_AppIDMismatch(t *testing.T) {
 	report := Run(context.Background(), sess, "env-id", nil)
 
 	require.False(t, report.AllOK())
-	require.Len(t, report.Results, 2)
+	require.Len(t, report.Results, 3)
 	assert.Equal(t, "application-id-match", report.Results[1].Name)
 	assert.False(t, report.Results[1].OK)
 	assert.Contains(t, report.Results[1].Detail, "DISCORD_APPLICATION_ID mismatch")
@@ -123,18 +126,18 @@ func TestRun_AppIDMismatch(t *testing.T) {
 // T06 / finding 6·c: Run is only ever invoked when a bot token is configured
 // (in production it lives behind `if rawDG != nil`). An empty
 // DISCORD_APPLICATION_ID therefore means per-guild command registration and
-// permission validation will silently no-op, so the check must FAIL (not skip)
-// rather than report a green banner over a bot with no slash commands. We
-// short-circuit before the Application() lookup since there is nothing to
-// compare against.
+// permission validation will silently no-op, so the app-id check must FAIL (not
+// skip) rather than report a green banner over a bot with no slash commands.
+// The app-id check short-circuits before its own Application() lookup, but the
+// Server Members intent check (T07) still calls Application() independently, so
+// the fake returns a valid application here.
 func TestRun_AppIDEnvEmpty_Fails(t *testing.T) {
 	sess := &fakeSession{
 		userFn: func(_ string) (*discordgo.User, error) {
 			return &discordgo.User{ID: "actual-id", Username: "bot"}, nil
 		},
 		applicationFn: func(_ string) (*discordgo.Application, error) {
-			t.Fatal("Application() must NOT be called when env is empty")
-			return nil, nil
+			return &discordgo.Application{ID: "actual-id", Flags: appFlagGatewayGuildMembersLimited}, nil
 		},
 		guildFn: func(_ string) (*discordgo.Guild, error) {
 			return &discordgo.Guild{ID: "g", Name: "n"}, nil
@@ -144,7 +147,7 @@ func TestRun_AppIDEnvEmpty_Fails(t *testing.T) {
 	report := Run(context.Background(), sess, "", nil)
 
 	require.False(t, report.AllOK())
-	require.Len(t, report.Results, 2)
+	require.Len(t, report.Results, 3)
 	assert.Equal(t, "application-id-match", report.Results[1].Name)
 	assert.False(t, report.Results[1].OK)
 	assert.Contains(t, report.Results[1].Detail, "DISCORD_APPLICATION_ID")
@@ -166,7 +169,7 @@ func TestRun_AppIDLookupFailure(t *testing.T) {
 	report := Run(context.Background(), sess, "env-id", nil)
 
 	require.False(t, report.AllOK())
-	require.Len(t, report.Results, 2)
+	require.Len(t, report.Results, 3)
 	assert.Equal(t, "application-id-match", report.Results[1].Name)
 	assert.False(t, report.Results[1].OK)
 	assert.Contains(t, report.Results[1].Detail, "500 server error")
@@ -178,7 +181,7 @@ func TestRun_GuildMembershipMix(t *testing.T) {
 			return &discordgo.User{ID: "app-123", Username: "bot"}, nil
 		},
 		applicationFn: func(_ string) (*discordgo.Application, error) {
-			return &discordgo.Application{ID: "app-123"}, nil
+			return &discordgo.Application{ID: "app-123", Flags: appFlagGatewayGuildMembersLimited}, nil
 		},
 		guildFn: func(guildID string) (*discordgo.Guild, error) {
 			if guildID == "good" {
@@ -191,14 +194,14 @@ func TestRun_GuildMembershipMix(t *testing.T) {
 	report := Run(context.Background(), sess, "app-123", []string{"good", "bad"})
 
 	require.False(t, report.AllOK())
-	require.Len(t, report.Results, 4)
+	require.Len(t, report.Results, 5)
 
-	good := report.Results[2]
+	good := report.Results[3]
 	assert.Equal(t, "guild-membership-good", good.Name)
 	assert.True(t, good.OK)
 	assert.Contains(t, good.Detail, "Good Guild")
 
-	bad := report.Results[3]
+	bad := report.Results[4]
 	assert.Equal(t, "guild-membership-bad", bad.Name)
 	assert.False(t, bad.OK)
 	assert.Contains(t, bad.Detail, "bot is not a member of guild bad")
@@ -211,7 +214,7 @@ func TestRun_EmptyGuildList_NoGuildChecks(t *testing.T) {
 			return &discordgo.User{ID: "app-123", Username: "bot"}, nil
 		},
 		applicationFn: func(_ string) (*discordgo.Application, error) {
-			return &discordgo.Application{ID: "app-123"}, nil
+			return &discordgo.Application{ID: "app-123", Flags: appFlagGatewayGuildMembersLimited}, nil
 		},
 		guildFn: func(_ string) (*discordgo.Guild, error) {
 			t.Fatal("Guild() must NOT be called when guildIDs is empty")
@@ -222,7 +225,79 @@ func TestRun_EmptyGuildList_NoGuildChecks(t *testing.T) {
 	report := Run(context.Background(), sess, "app-123", nil)
 
 	require.True(t, report.AllOK())
-	require.Len(t, report.Results, 2)
+	require.Len(t, report.Results, 3)
+}
+
+// okSessionWithFlags returns a fakeSession whose token/app/guild lookups all
+// succeed, with the application's privileged-intent flags set to flags. Used by
+// the Server Members intent checks below.
+func okSessionWithFlags(flags int) *fakeSession {
+	return &fakeSession{
+		userFn: func(_ string) (*discordgo.User, error) {
+			return &discordgo.User{ID: "app-123", Username: "bot"}, nil
+		},
+		applicationFn: func(_ string) (*discordgo.Application, error) {
+			return &discordgo.Application{ID: "app-123", Flags: flags}, nil
+		},
+		guildFn: func(g string) (*discordgo.Guild, error) {
+			return &discordgo.Guild{ID: g, Name: "n"}, nil
+		},
+	}
+}
+
+// findResult locates a Result by name so the intent assertions are independent
+// of where runServerMembersIntent is appended within the report.
+func findResult(t *testing.T, r Report, name string) Result {
+	t.Helper()
+	for _, res := range r.Results {
+		if res.Name == name {
+			return res
+		}
+	}
+	t.Fatalf("result %q not found in %+v", name, r.Results)
+	return Result{}
+}
+
+// T07 / finding 6·d: the privileged Server Members (GuildMembers) intent must be
+// enabled in the developer portal. Discord reflects the toggle in
+// Application.Flags — GATEWAY_GUILD_MEMBERS (verified apps) or
+// GATEWAY_GUILD_MEMBERS_LIMITED (unverified, <100 guilds). Either bit means ON.
+func TestRun_ServerMembersIntent_EnabledLimited(t *testing.T) {
+	report := Run(context.Background(), okSessionWithFlags(appFlagGatewayGuildMembersLimited), "app-123", nil)
+	res := findResult(t, report, "server-members-intent")
+	assert.True(t, res.OK, "limited flag must count as enabled: %s", res.Detail)
+}
+
+func TestRun_ServerMembersIntent_EnabledVerified(t *testing.T) {
+	report := Run(context.Background(), okSessionWithFlags(appFlagGatewayGuildMembers), "app-123", nil)
+	res := findResult(t, report, "server-members-intent")
+	assert.True(t, res.OK, "verified flag must count as enabled: %s", res.Detail)
+}
+
+func TestRun_ServerMembersIntent_Disabled(t *testing.T) {
+	report := Run(context.Background(), okSessionWithFlags(0), "app-123", nil)
+	res := findResult(t, report, "server-members-intent")
+	assert.False(t, res.OK, "no privileged-intent flag must fail")
+	assert.Contains(t, res.Detail, "Server Members Intent")
+	assert.False(t, report.AllOK(), "a disabled intent must turn the banner red")
+}
+
+func TestRun_ServerMembersIntent_LookupFailure(t *testing.T) {
+	sess := &fakeSession{
+		userFn: func(_ string) (*discordgo.User, error) {
+			return &discordgo.User{ID: "app-123"}, nil
+		},
+		applicationFn: func(_ string) (*discordgo.Application, error) {
+			return nil, errors.New("boom")
+		},
+		guildFn: func(_ string) (*discordgo.Guild, error) {
+			return &discordgo.Guild{}, nil
+		},
+	}
+	report := Run(context.Background(), sess, "app-123", nil)
+	res := findResult(t, report, "server-members-intent")
+	assert.False(t, res.OK)
+	assert.Contains(t, res.Detail, "boom")
 }
 
 func TestRunChannelBindings_AllBound(t *testing.T) {

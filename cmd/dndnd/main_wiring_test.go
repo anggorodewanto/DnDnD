@@ -1273,6 +1273,22 @@ func TestWireBotHandlers_RegistersGuildAndInteractionHandlers(t *testing.T) {
 		"wireBotHandlers must OR-in IntentsGuildMembers so the privileged member-join gateway event is actually delivered")
 }
 
+// TestBuildDiscordSession_RequestsGuildMembersIntentBeforeOpen covers T07 /
+// finding 6·d: buildDiscordSession must request the privileged Server Members
+// (GuildMembers) intent on the raw *discordgo.Session it returns, so the bit is
+// present in the IDENTIFY payload run() sends at dg.Open(). discordgo defaults
+// Identify.Intents to IntentsAllWithoutPrivileged (which excludes GuildMembers);
+// ORing it in later via wireBotHandlers — which runs AFTER Open() in run() — is
+// too late for the first session, so member-join welcome DMs silently never
+// arrive.
+func TestBuildDiscordSession_RequestsGuildMembersIntentBeforeOpen(t *testing.T) {
+	_, raw, err := buildDiscordSession("fake-token")
+	require.NoError(t, err)
+	require.NotNil(t, raw)
+	assert.NotZero(t, raw.Identify.Intents&discordgo.IntentsGuildMembers,
+		"buildDiscordSession must OR-in IntentsGuildMembers before Open() so the privileged Server Members intent is actually requested")
+}
+
 // --- SR-068 tests ---
 
 // TestBuildLightSources_LitTorch verifies that a PC with a lit torch in

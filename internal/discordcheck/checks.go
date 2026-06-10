@@ -1,7 +1,8 @@
 // Package discordcheck performs startup self-checks against the Discord API
 // so misconfigured deploys fail loudly at boot instead of at the first user
 // interaction. It verifies the bot token is accepted, the configured
-// DISCORD_APPLICATION_ID matches the actual bot identity, and that every
+// DISCORD_APPLICATION_ID matches the actual bot identity, that the privileged
+// Server Members (GuildMembers) gateway intent is enabled, and that every
 // guild_id stored in the campaigns table belongs to a guild the bot is
 // currently a member of. RunChannelBindings additionally flags guilds whose
 // channel bindings were never persisted by /setup (without which combat /
@@ -98,6 +99,8 @@ func Run(ctx context.Context, sess Session, expectedAppID string, guildIDs []str
 
 	report.Results = append(report.Results, runAppIDMatch(sess, expectedAppID, identity))
 
+	report.Results = append(report.Results, runServerMembersIntent(sess))
+
 	for _, gid := range guildIDs {
 		report.Results = append(report.Results, runGuildMembership(sess, gid))
 	}
@@ -165,6 +168,48 @@ func runAppIDMatch(sess Session, expectedAppID string, identity *discordgo.User)
 		Name:   "application-id-match",
 		OK:     true,
 		Detail: fmt.Sprintf("application id matches (id=%s)", actualID),
+	}
+}
+
+// Discord application flags that reflect whether the privileged Server Members
+// (GuildMembers) gateway intent is enabled in the developer portal. discordgo
+// v0.29.0 exposes Application.Flags as a raw int with no named constants, so the
+// two relevant bits are defined here. GATEWAY_GUILD_MEMBERS is set once the app
+// is verified; GATEWAY_GUILD_MEMBERS_LIMITED is set for unverified apps (under
+// 100 guilds — the self-host case). Either bit means the toggle is ON.
+const (
+	appFlagGatewayGuildMembers        = 1 << 14
+	appFlagGatewayGuildMembersLimited = 1 << 15
+)
+
+// runServerMembersIntent verifies the privileged Server Members (GuildMembers)
+// gateway intent is enabled for the bot's application. docs/setup.html step 2
+// tells operators to flip this toggle; without it the welcome-DM member-join
+// handler never fires and the gateway eventually drops with an opaque close
+// 4014. Reading Application.Flags surfaces the misconfiguration at boot with an
+// actionable message instead of leaving it to manifest as that close code
+// later (finding 6·d / T07).
+func runServerMembersIntent(sess Session) Result {
+	const name = "server-members-intent"
+	app, err := sess.Application("@me")
+	if err != nil {
+		return Result{
+			Name:   name,
+			OK:     false,
+			Detail: fmt.Sprintf("application lookup failed: %v", err),
+		}
+	}
+	if app.Flags&(appFlagGatewayGuildMembers|appFlagGatewayGuildMembersLimited) == 0 {
+		return Result{
+			Name:   name,
+			OK:     false,
+			Detail: "Server Members Intent is disabled — welcome DMs and member-join handling will not fire and the gateway will eventually close 4014; enable it in the Discord Developer Portal (Bot → Privileged Gateway Intents → Server Members Intent)",
+		}
+	}
+	return Result{
+		Name:   name,
+		OK:     true,
+		Detail: "Server Members Intent enabled",
 	}
 }
 
