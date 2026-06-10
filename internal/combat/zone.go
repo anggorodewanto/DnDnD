@@ -60,7 +60,7 @@ type ZoneTriggerResult struct {
 	ZoneType    string
 	Effect      string
 	Trigger     string
-	Details     map[string]interface{}
+	Details     map[string]any
 }
 
 // parseTriggers extracts zone triggers from a nullable JSON field.
@@ -117,18 +117,18 @@ func (s *Service) CreateZone(ctx context.Context, input CreateZoneInput) (ZoneIn
 	}
 
 	zone, err := s.store.CreateEncounterZone(ctx, refdata.CreateEncounterZoneParams{
-		EncounterID:       input.EncounterID,
-		SourceCombatantID: input.SourceCombatantID,
-		SourceSpell:       input.SourceSpell,
-		Shape:             input.Shape,
-		OriginCol:         input.OriginCol,
-		OriginRow:         input.OriginRow,
-		Dimensions:        input.Dimensions,
-		AnchorMode:        input.AnchorMode,
-		AnchorCombatantID: input.AnchorCombatantID,
-		ZoneType:          input.ZoneType,
-		OverlayColor:      input.OverlayColor,
-		MarkerIcon:        sql.NullString{String: input.MarkerIcon, Valid: input.MarkerIcon != ""},
+		EncounterID:           input.EncounterID,
+		SourceCombatantID:     input.SourceCombatantID,
+		SourceSpell:           input.SourceSpell,
+		Shape:                 input.Shape,
+		OriginCol:             input.OriginCol,
+		OriginRow:             input.OriginRow,
+		Dimensions:            input.Dimensions,
+		AnchorMode:            input.AnchorMode,
+		AnchorCombatantID:     input.AnchorCombatantID,
+		ZoneType:              input.ZoneType,
+		OverlayColor:          input.OverlayColor,
+		MarkerIcon:            sql.NullString{String: input.MarkerIcon, Valid: input.MarkerIcon != ""},
 		RequiresConcentration: input.RequiresConcentration,
 		ExpiresAtRound:        input.ExpiresAtRound,
 		ZoneTriggers: pqtype.NullRawMessage{

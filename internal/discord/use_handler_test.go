@@ -81,7 +81,7 @@ func TestUseHandler_HealingPotion(t *testing.T) {
 		}},
 		store,
 		func(max int) int { return 3 }, // deterministic roller
-		nil, // no combat provider
+		nil,                            // no combat provider
 	)
 
 	interaction := makeUseInteraction("guild1", "user1", "healing-potion")
@@ -279,14 +279,14 @@ func (r *recordingNotifier) Post(_ context.Context, e dmqueue.Event) (string, er
 	r.posted = append(r.posted, e)
 	return "item-1", nil
 }
-func (r *recordingNotifier) Cancel(_ context.Context, _, _ string) error { return nil }
-func (r *recordingNotifier) Resolve(_ context.Context, _, _ string) error { return nil }
+func (r *recordingNotifier) Cancel(_ context.Context, _, _ string) error         { return nil }
+func (r *recordingNotifier) Resolve(_ context.Context, _, _ string) error        { return nil }
 func (r *recordingNotifier) ResolveWhisper(_ context.Context, _, _ string) error { return nil }
 func (r *recordingNotifier) ResolveSkillCheckNarration(_ context.Context, _, _ string) error {
 	return nil
 }
-func (r *recordingNotifier) Get(string) (dmqueue.Item, bool)              { return dmqueue.Item{}, false }
-func (r *recordingNotifier) ListPending() []dmqueue.Item                  { return nil }
+func (r *recordingNotifier) Get(string) (dmqueue.Item, bool) { return dmqueue.Item{}, false }
+func (r *recordingNotifier) ListPending() []dmqueue.Item     { return nil }
 
 func TestUseHandler_PostsViaNotifier(t *testing.T) {
 	sess := &mockInventorySession{}
@@ -440,11 +440,11 @@ func TestUseHandler_DMQueueItem(t *testing.T) {
 
 // mockUseCombatProvider implements UseCombatProvider for med-35 tests.
 type mockUseCombatProvider struct {
-	turn       refdata.Turn
-	inCombat   bool
-	lookupErr  error
-	updates    []refdata.UpdateTurnActionsParams
-	updateErr  error
+	turn      refdata.Turn
+	inCombat  bool
+	lookupErr error
+	updates   []refdata.UpdateTurnActionsParams
+	updateErr error
 }
 
 func (m *mockUseCombatProvider) GetActiveTurnForCharacter(_ context.Context, _ string, _ uuid.UUID) (refdata.Turn, bool, error) {

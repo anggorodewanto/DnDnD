@@ -752,7 +752,7 @@ func TestCharacterToParseResult_FeaturesAndSpells(t *testing.T) {
 	features := []character.Feature{{Name: "Action Surge", Source: "Fighter", Level: 2}}
 	featuresJSON, _ := json.Marshal(features)
 	spells := []SpellEntry{{Name: "Fire Bolt", Level: 0, Source: "class"}}
-	charData := map[string]interface{}{"spells": spells}
+	charData := map[string]any{"spells": spells}
 	charDataJSON, _ := json.Marshal(charData)
 
 	c := &refdata.Character{

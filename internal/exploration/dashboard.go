@@ -43,8 +43,8 @@ func (h *DashboardHandler) RegisterRoutes(r chi.Router) {
 
 // explorationDataResponse is the JSON shape returned by GET /api/exploration.
 type explorationDataResponse struct {
-	CampaignID string         `json:"campaign_id"`
-	Maps       []refdata.Map  `json:"maps"`
+	CampaignID string        `json:"campaign_id"`
+	Maps       []refdata.Map `json:"maps"`
 }
 
 // HandleGetData returns the maps available to start an exploration encounter

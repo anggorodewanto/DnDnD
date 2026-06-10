@@ -211,7 +211,7 @@ func (h *ReactionHandler) postReactionDeclaration(ctx context.Context, decl refd
 	// J-H02: persist to DB so the mapping survives bot restarts.
 	if h.dmQueueStore != nil {
 		_ = h.dmQueueStore.SetReactionDeclarationDMQueueItemID(ctx, refdata.SetReactionDeclarationDMQueueItemIDParams{
-			ID:             decl.ID,
+			ID:            decl.ID,
 			DmQueueItemID: sql.NullString{String: itemID, Valid: true},
 		})
 	}

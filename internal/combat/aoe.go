@@ -134,8 +134,8 @@ func SquareAffectedTiles(originCol, originRow, sideFt int) []GridPos {
 		return nil
 	}
 	tiles := make([]GridPos, 0, sideSquares*sideSquares)
-	for dc := 0; dc < sideSquares; dc++ {
-		for dr := 0; dr < sideSquares; dr++ {
+	for dc := range sideSquares {
+		for dr := range sideSquares {
 			tiles = append(tiles, GridPos{originCol + dc, originRow + dr})
 		}
 	}
@@ -274,21 +274,21 @@ func GetAffectedTiles(aoe AreaOfEffect, casterCol, casterRow, targetCol, targetR
 
 // AoECastResult holds the outcome of an AoE spell cast.
 type AoECastResult struct {
-	CasterName     string
-	SpellName      string
-	SpellLevel     int
-	IsBonusAction  bool
-	SaveDC         int
-	SaveAbility    string
-	AffectedNames  []string
-	PendingSaves   []PendingSave
-	Concentration  ConcentrationResult
-	SlotUsed       int
-	SlotsRemaining int
+	CasterName         string
+	SpellName          string
+	SpellLevel         int
+	IsBonusAction      bool
+	SaveDC             int
+	SaveAbility        string
+	AffectedNames      []string
+	PendingSaves       []PendingSave
+	Concentration      ConcentrationResult
+	SlotUsed           int
+	SlotsRemaining     int
 	UsedPactSlot       bool
 	PactSlotsRemaining int
-	OriginCol      int
-	OriginRow      int
+	OriginCol          int
+	OriginRow          int
 	// SR-013: AoE pipeline now consumes Metamagic. Mirrors CastResult's fields.
 	CarefulSpellCreatures  int    // CHA mod cap on auto-success allies (Careful Spell)
 	IsEmpowered            bool   // Empowered Spell active — may reroll damage dice
@@ -865,11 +865,11 @@ func SlotLevelFromAoEPendingSaveSource(source string) int {
 		return 0
 	}
 	seg := rest[idx+2:] // e.g. "5c10"
-	cIdx := strings.Index(seg, "c")
-	if cIdx < 0 {
+	before, _, ok := strings.Cut(seg, "c")
+	if !ok {
 		return 0
 	}
-	n, err := strconv.Atoi(seg[:cIdx])
+	n, err := strconv.Atoi(before)
 	if err != nil {
 		return 0
 	}
@@ -893,11 +893,11 @@ func CharLevelFromAoEPendingSaveSource(source string) int {
 		return 0
 	}
 	seg := rest[idx+2:] // e.g. "5c10"
-	cIdx := strings.Index(seg, "c")
-	if cIdx < 0 {
+	_, after, ok := strings.Cut(seg, "c")
+	if !ok {
 		return 0
 	}
-	n, err := strconv.Atoi(seg[cIdx+1:])
+	n, err := strconv.Atoi(after)
 	if err != nil {
 		return 0
 	}
@@ -1041,7 +1041,6 @@ func (s *Service) RecordAoEPendingSaveRoll(ctx context.Context, combatantID uuid
 	return "", false, nil
 }
 
-
 // AoEDamageInput holds the inputs for resolving AoE save results and applying damage.
 type AoEDamageInput struct {
 	EncounterID uuid.UUID
@@ -1062,7 +1061,7 @@ type AoEDamageInput struct {
 
 // AoEDamageResult holds the outcomes of resolving AoE saves and applying damage.
 type AoEDamageResult struct {
-	Targets    []AoETargetOutcome
+	Targets     []AoETargetOutcome
 	TotalDamage int
 }
 
@@ -1115,10 +1114,7 @@ func (s *Service) ResolveAoESaves(ctx context.Context, input AoEDamageInput, rol
 			// Burn the rerolls used in this group against the remaining
 			// budget. RerollLowestDice clamps count to len internally so
 			// `min(remaining, len(g.Results))` is what was spent.
-			used := remaining
-			if used > len(g.Results) {
-				used = len(g.Results)
-			}
+			used := min(remaining, len(g.Results))
 			remaining -= used
 		}
 		baseDamage = newTotal + rollResult.Modifier
@@ -1136,10 +1132,9 @@ func (s *Service) ResolveAoESaves(ctx context.Context, input AoEDamageInput, rol
 
 		// 3. Apply save multiplier
 		multiplier := ApplySaveResult(sr.Success, input.SaveEffect)
-		damage := int(float64(baseDamage) * multiplier)
-		if damage < 0 {
-			damage = 0 // special case: DM resolution needed
-		}
+		damage := max(int(float64(baseDamage)*multiplier),
+			// special case: DM resolution needed
+			0)
 
 		// 4. Route through ApplyDamage so Phase 42 (R/I/V, temp HP,
 		// exhaustion HP-halving / level-6 death) applies before the

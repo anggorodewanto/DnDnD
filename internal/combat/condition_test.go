@@ -887,7 +887,7 @@ func TestSurprisedCondition_BackwardCompatible(t *testing.T) {
 	assert.Equal(t, 1, sc.DurationRounds)
 	assert.Equal(t, 0, sc.StartedRound)
 	assert.Equal(t, "", sc.SourceCombatantID) // empty is fine
-	assert.Equal(t, "", sc.ExpiresOn)          // empty defaults to start_of_turn
+	assert.Equal(t, "", sc.ExpiresOn)         // empty defaults to start_of_turn
 
 	// JSON round-trip should work with old-format data
 	raw := json.RawMessage(`[{"condition":"surprised","duration_rounds":1,"started_round":0}]`)

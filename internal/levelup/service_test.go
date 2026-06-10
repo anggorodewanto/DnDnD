@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -203,13 +204,7 @@ func TestService_ApplyLevelUp_ASILevel(t *testing.T) {
 	}
 
 	// Level 4 is ASI level, should send ASI prompt
-	hasASIPrompt := false
-	for _, msg := range notifier.privateMessages {
-		if msg == "ASI prompt for Brom" {
-			hasASIPrompt = true
-			break
-		}
-	}
+	hasASIPrompt := slices.Contains(notifier.privateMessages, "ASI prompt for Brom")
 	if !hasASIPrompt {
 		t.Errorf("expected ASI prompt in private messages, got: %v", notifier.privateMessages)
 	}

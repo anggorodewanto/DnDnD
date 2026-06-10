@@ -22,9 +22,9 @@ type CharacterLookup interface {
 
 // CharacterHandler handles the /character slash command.
 type CharacterHandler struct {
-	session      Session
-	campaignProv CampaignProvider
-	lookup       CharacterLookup
+	session       Session
+	campaignProv  CampaignProvider
+	lookup        CharacterLookup
 	portalBaseURL string
 }
 

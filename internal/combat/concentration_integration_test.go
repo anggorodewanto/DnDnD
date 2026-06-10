@@ -94,12 +94,12 @@ func readConcentration(t *testing.T, db *sql.DB, id uuid.UUID) string {
 // conditions across ALL affected targets. ---
 //
 // This test drives the PRODUCTION damage path end-to-end:
-//   1. AoE damage through `ResolveAoESaves` → `applyDamageHP` enqueues a
-//      pending CON save with `source = "concentration"`.
-//   2. `TurnTimer.AutoResolveTurn` rolls the save with a deterministic
-//      failure roll, calls the registered `Service.ResolveConcentrationSave`
-//      hook, which fires the cleanup pipeline.
-//   3. Spell-sourced conditions are stripped from every target.
+//  1. AoE damage through `ResolveAoESaves` → `applyDamageHP` enqueues a
+//     pending CON save with `source = "concentration"`.
+//  2. `TurnTimer.AutoResolveTurn` rolls the save with a deterministic
+//     failure roll, calls the registered `Service.ResolveConcentrationSave`
+//     hook, which fires the cleanup pipeline.
+//  3. Spell-sourced conditions are stripped from every target.
 func TestIntegration_Phase118_DamageSaveFailureCleansEffects(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -620,4 +620,3 @@ func TestIntegration_Phase118_ConsolidatedLogLine(t *testing.T) {
 		cleanup.ConsolidatedMessage,
 	)
 }
-

@@ -320,10 +320,10 @@ func TestFormatReadiedActionsStatus_NonSpell(t *testing.T) {
 func TestFormatReadiedActionsStatus_WithSpell(t *testing.T) {
 	readied := []refdata.ReactionDeclaration{
 		{
-			Description:    "Cast Fireball when clustered",
+			Description:     "Cast Fireball when clustered",
 			IsReadiedAction: true,
-			SpellName:      sql.NullString{String: "Fireball", Valid: true},
-			SpellSlotLevel: sql.NullInt32{Int32: 3, Valid: true},
+			SpellName:       sql.NullString{String: "Fireball", Valid: true},
+			SpellSlotLevel:  sql.NullInt32{Int32: 3, Valid: true},
 		},
 	}
 	result := FormatReadiedActionsStatus(readied)

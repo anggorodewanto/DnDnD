@@ -15,9 +15,9 @@ import (
 
 // Handler serves combat API endpoints over HTTP.
 type Handler struct {
-	svc                *Service
-	roller             *dice.Roller
-	enemyTurnNotifier  EnemyTurnNotifier
+	svc               *Service
+	roller            *dice.Roller
+	enemyTurnNotifier EnemyTurnNotifier
 }
 
 // NewHandler creates a new combat Handler.

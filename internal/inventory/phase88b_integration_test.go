@@ -19,7 +19,7 @@ func TestIntegration_AttuneLimitAndUnattune(t *testing.T) {
 
 	// Attune to 3 items
 	var slots []character.AttunementSlot
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		result, err := Attune(AttuneInput{Items: items, Slots: slots, ItemID: items[i].ItemID})
 		require.NoError(t, err)
 		slots = result.UpdatedSlots

@@ -9,8 +9,8 @@ import (
 
 func TestEffectType_IsValid(t *testing.T) {
 	tests := []struct {
-		name     string
-		et       EffectType
+		name      string
+		et        EffectType
 		wantValid bool
 	}{
 		{"modify_attack_roll", EffectModifyAttackRoll, true},
@@ -90,7 +90,7 @@ func TestEffect_MatchesTrigger(t *testing.T) {
 
 func TestEvaluateConditions(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		effect Effect
 		ctx    EffectContext
 		want   bool
@@ -267,9 +267,9 @@ func TestEvaluateConditions(t *testing.T) {
 
 func TestEffectPriority(t *testing.T) {
 	tests := []struct {
-		name     string
-		et       EffectType
-		wantPri  ResolutionPriority
+		name    string
+		et      EffectType
+		wantPri ResolutionPriority
 	}{
 		{"immunity is priority 1", EffectGrantImmunity, PriorityImmunity},
 		{"resistance is priority 2", EffectGrantResistance, PriorityResistance},
@@ -868,7 +868,7 @@ func TestProcessEffects_MultipleSimultaneousEffects(t *testing.T) {
 					Trigger:  TriggerOnDamageRoll,
 					Modifier: 10,
 					Conditions: EffectConditions{
-						AttackType:  "melee",
+						AttackType: "melee",
 					},
 				},
 			},

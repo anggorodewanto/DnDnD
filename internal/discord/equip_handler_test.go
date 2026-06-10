@@ -327,10 +327,10 @@ func TestEquipHandler_StoreError(t *testing.T) {
 // mockEquipCombatService captures EquipCommand invocations and returns a
 // canned EquipResult/err. Implements EquipCombatService.
 type mockEquipCombatService struct {
-	lastCmd    combat.EquipCommand
-	result     combat.EquipResult
-	err        error
-	callCount  int
+	lastCmd   combat.EquipCommand
+	result    combat.EquipResult
+	err       error
+	callCount int
 }
 
 func (m *mockEquipCombatService) Equip(ctx context.Context, cmd combat.EquipCommand) (combat.EquipResult, error) {

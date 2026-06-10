@@ -12,7 +12,7 @@ func TestNewLogger_ProducesJSONOutput(t *testing.T) {
 
 	logger.Info("test message", "key", "value")
 
-	var entry map[string]interface{}
+	var entry map[string]any
 	if err := json.NewDecoder(&buf).Decode(&entry); err != nil {
 		t.Fatalf("log output is not valid JSON: %v", err)
 	}

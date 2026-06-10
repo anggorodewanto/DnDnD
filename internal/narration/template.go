@@ -59,4 +59,3 @@ func SubstitutePlaceholders(body string, values map[string]string) string {
 		return v
 	})
 }
-

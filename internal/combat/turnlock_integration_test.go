@@ -128,7 +128,7 @@ func TestIntegration_TurnLock_Serialization(t *testing.T) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -168,15 +168,13 @@ func TestIntegration_TurnLock_RapidQueueing(t *testing.T) {
 
 	var secondAcquired atomic.Bool
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		tx2, err := combat.AcquireTurnLock(ctx, td.DB, td.TurnID)
 		require.NoError(t, err)
 		secondAcquired.Store(true)
 		tx2.Commit()
-	}()
+	})
 
 	// Give goroutine time to start blocking
 	time.Sleep(100 * time.Millisecond)
@@ -356,7 +354,7 @@ func TestIntegration_TurnLock_DifferentEncountersDontBlock(t *testing.T) {
 
 	// Create two encounters with separate turns
 	var turnIDs [2]uuid.UUID
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		enc, err := queries.CreateEncounter(ctx, refdata.CreateEncounterParams{
 			CampaignID: campaignID,
 			Name:       "Encounter",
@@ -680,10 +678,8 @@ func TestIntegration_TurnLock_DMConcurrentAccess(t *testing.T) {
 
 	var dmAcquired atomic.Bool
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		// DM validates (should pass) and then acquires lock (should block)
 		tx2, info, err := combat.AcquireTurnLockWithValidation(ctx, td.DB, td.Queries, td.EncounterID, td.DMUserID)
 		if err != nil {
@@ -692,7 +688,7 @@ func TestIntegration_TurnLock_DMConcurrentAccess(t *testing.T) {
 		assert.Equal(t, td.DMUserID, info.DMUserID)
 		dmAcquired.Store(true)
 		tx2.Commit()
-	}()
+	})
 
 	time.Sleep(100 * time.Millisecond)
 	assert.False(t, dmAcquired.Load(), "DM should be blocked by player's lock")

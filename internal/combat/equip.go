@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/ab/dndnd/internal/refdata"
@@ -437,7 +438,7 @@ func hasDefenseFightingStyle(char refdata.Character) bool {
 		return false
 	}
 	for _, f := range feats {
-		for _, effect := range strings.Split(f.MechanicalEffect, ",") {
+		for effect := range strings.SplitSeq(f.MechanicalEffect, ",") {
 			if strings.TrimSpace(effect) == "defense" {
 				return true
 			}
@@ -449,8 +450,8 @@ func hasDefenseFightingStyle(char refdata.Character) bool {
 // evaluateACFormula parses formulas like "10 + DEX + WIS" against combat ability scores.
 func evaluateACFormula(scores AbilityScores, formula string) int32 {
 	var result int32
-	parts := strings.Fields(strings.ReplaceAll(formula, "+", " "))
-	for _, part := range parts {
+	parts := strings.FieldsSeq(strings.ReplaceAll(formula, "+", " "))
+	for part := range parts {
 		switch strings.ToUpper(part) {
 		case "STR":
 			result += int32(AbilityModifier(scores.Str))
@@ -491,13 +492,7 @@ func CheckHeavyArmorPenalty(char refdata.Character, armor refdata.Armor) int32 {
 // spell has no somatic component. The War Caster feat allows somatic components
 // even with both hands occupied.
 func CheckSomaticComponent(char refdata.Character, spell refdata.Spell, hasWarCaster bool) error {
-	hasSomatic := false
-	for _, c := range spell.Components {
-		if c == "S" {
-			hasSomatic = true
-			break
-		}
-	}
+	hasSomatic := slices.Contains(spell.Components, "S")
 	if !hasSomatic {
 		return nil
 	}

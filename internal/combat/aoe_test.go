@@ -129,9 +129,9 @@ func TestConeAffectedTiles(t *testing.T) {
 	t.Run("15ft cone north", func(t *testing.T) {
 		// Caster at (5,5), targeting north toward (5,2).
 		tiles := ConeAffectedTiles(5, 5, 5, 2, 15)
-		assert.Contains(t, tiles, GridPos{5, 4}) // 1 square north
-		assert.Contains(t, tiles, GridPos{5, 3}) // 2 squares north
-		assert.Contains(t, tiles, GridPos{5, 2}) // 3 squares north
+		assert.Contains(t, tiles, GridPos{5, 4})    // 1 square north
+		assert.Contains(t, tiles, GridPos{5, 3})    // 2 squares north
+		assert.Contains(t, tiles, GridPos{5, 2})    // 3 squares north
 		assert.NotContains(t, tiles, GridPos{5, 5}) // caster excluded
 	})
 
@@ -366,12 +366,12 @@ func TestGetAffectedTiles(t *testing.T) {
 func TestFormatAoECastLog(t *testing.T) {
 	t.Run("basic AoE cast", func(t *testing.T) {
 		result := AoECastResult{
-			CasterName: "Gandalf",
-			SpellName:  "Fireball",
-			SpellLevel: 3,
-			SaveDC:     15,
-			SaveAbility: "dex",
-			AffectedNames: []string{"Goblin A", "Goblin B", "Fighter"},
+			CasterName:     "Gandalf",
+			SpellName:      "Fireball",
+			SpellLevel:     3,
+			SaveDC:         15,
+			SaveAbility:    "dex",
+			AffectedNames:  []string{"Goblin A", "Goblin B", "Fighter"},
 			SlotUsed:       3,
 			SlotsRemaining: 1,
 		}
@@ -601,7 +601,7 @@ func TestCastAoE_OutOfRange(t *testing.T) {
 		SpellID:     "fireball",
 		CasterID:    caster.ID,
 		EncounterID: uuid.New(),
-		TargetCol:   "Z",  // Very far
+		TargetCol:   "Z", // Very far
 		TargetRow:   26,
 		Turn:        refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
 	}
@@ -1484,7 +1484,7 @@ func TestResolveAoESaves_NoEffectOnSave(t *testing.T) {
 	require.Len(t, result.Targets, 1)
 	assert.True(t, result.Targets[0].SaveSuccess)
 	assert.Equal(t, 0, result.Targets[0].DamageDealt) // no damage on save
-	assert.Equal(t, 30, result.Targets[0].HPAfter)     // unchanged
+	assert.Equal(t, 30, result.Targets[0].HPAfter)    // unchanged
 }
 
 // TDD Cycle 5 (iter2): ResolveAoESaves with multiple targets, mixed saves
@@ -2049,8 +2049,8 @@ func TestResolveAoESaves_SpecialSaveEffect(t *testing.T) {
 	svc := NewService(store)
 
 	input := AoEDamageInput{
-		DamageDice:  "4d6",
-		SaveEffect:  "special",
+		DamageDice: "4d6",
+		SaveEffect: "special",
 		SaveResults: []SaveResult{
 			{CombatantID: goblinID, Success: false},
 		},
@@ -2103,8 +2103,8 @@ func TestResolveAoESaves_HalfDamageRoundsDown(t *testing.T) {
 	svc := NewService(store)
 
 	input := AoEDamageInput{
-		DamageDice:  "7d6",
-		SaveEffect:  "half_damage",
+		DamageDice: "7d6",
+		SaveEffect: "half_damage",
 		SaveResults: []SaveResult{
 			{CombatantID: goblinID, Success: true},
 		},
@@ -2155,7 +2155,7 @@ func TestResolveAoESaves_NPCResistanceHalvesAoEDamage(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Targets, 1)
 	assert.Equal(t, 16, result.Targets[0].DamageDealt, "resistance halves 32 -> 16")
-	assert.Equal(t, 14, result.Targets[0].HPAfter)    // 30 - 16
+	assert.Equal(t, 14, result.Targets[0].HPAfter) // 30 - 16
 	assert.Equal(t, int32(14), capturedHP.HpCurrent)
 	assert.True(t, capturedHP.IsAlive)
 }
@@ -2543,11 +2543,11 @@ func TestCastAoE_Cylinder_Moonbeam(t *testing.T) {
 
 // sr013SorcererFixture is a focused mock setup for AoE metamagic tests.
 type sr013SorcererFixture struct {
-	svc      *Service
-	store    *mockStore
-	caster   refdata.Combatant
-	ally     refdata.Combatant
-	enemy    refdata.Combatant
+	svc    *Service
+	store  *mockStore
+	caster refdata.Combatant
+	ally   refdata.Combatant
+	enemy  refdata.Combatant
 }
 
 func newSR013SorcererFixture(t *testing.T, spell refdata.Spell) sr013SorcererFixture {

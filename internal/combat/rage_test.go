@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
-	"github.com/ab/dndnd/internal/refdata"
 )
 
 func TestRageEffects_DamageOnlyMeleeSTR(t *testing.T) {

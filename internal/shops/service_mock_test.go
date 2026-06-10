@@ -13,17 +13,17 @@ var errDB = errors.New("db error")
 
 // mockStore implements shops.Store for unit testing error branches.
 type mockStore struct {
-	createShopFn          func(ctx context.Context, arg refdata.CreateShopParams) (refdata.Shop, error)
-	getShopFn             func(ctx context.Context, id uuid.UUID) (refdata.Shop, error)
-	listShopsByCampaignFn func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Shop, error)
-	updateShopFn          func(ctx context.Context, arg refdata.UpdateShopParams) (refdata.Shop, error)
-	deleteShopFn          func(ctx context.Context, id uuid.UUID) error
-	createShopItemFn      func(ctx context.Context, arg refdata.CreateShopItemParams) (refdata.ShopItem, error)
-	listShopItemsFn       func(ctx context.Context, shopID uuid.UUID) ([]refdata.ShopItem, error)
-	updateShopItemFn      func(ctx context.Context, arg refdata.UpdateShopItemParams) (refdata.ShopItem, error)
-	deleteShopItemFn      func(ctx context.Context, id uuid.UUID) error
+	createShopFn            func(ctx context.Context, arg refdata.CreateShopParams) (refdata.Shop, error)
+	getShopFn               func(ctx context.Context, id uuid.UUID) (refdata.Shop, error)
+	listShopsByCampaignFn   func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Shop, error)
+	updateShopFn            func(ctx context.Context, arg refdata.UpdateShopParams) (refdata.Shop, error)
+	deleteShopFn            func(ctx context.Context, id uuid.UUID) error
+	createShopItemFn        func(ctx context.Context, arg refdata.CreateShopItemParams) (refdata.ShopItem, error)
+	listShopItemsFn         func(ctx context.Context, shopID uuid.UUID) ([]refdata.ShopItem, error)
+	updateShopItemFn        func(ctx context.Context, arg refdata.UpdateShopItemParams) (refdata.ShopItem, error)
+	deleteShopItemFn        func(ctx context.Context, id uuid.UUID) error
 	deleteShopItemsByShopFn func(ctx context.Context, shopID uuid.UUID) error
-	getCampaignByIDFn     func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
+	getCampaignByIDFn       func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
 }
 
 func (m *mockStore) CreateShop(ctx context.Context, arg refdata.CreateShopParams) (refdata.Shop, error) {

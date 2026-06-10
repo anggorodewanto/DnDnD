@@ -204,11 +204,11 @@ func TestRedirectNavigationOnUnauth_Forbidden403NotRedirected(t *testing.T) {
 
 func TestIsNavigationRequest(t *testing.T) {
 	tests := []struct {
-		name      string
-		method    string
-		secFetch  string
-		accept    string
-		want      bool
+		name     string
+		method   string
+		secFetch string
+		accept   string
+		want     bool
 	}{
 		{name: "GET with navigate", method: http.MethodGet, secFetch: "navigate", want: true},
 		{name: "GET with cors", method: http.MethodGet, secFetch: "cors", accept: "application/json", want: false},

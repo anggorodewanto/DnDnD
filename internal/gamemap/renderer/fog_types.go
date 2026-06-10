@@ -79,10 +79,7 @@ func ComputeVisibilityWithZones(sources []VisionSource, lights []LightSource, wa
 	}
 
 	for _, light := range lights {
-		effectiveRange := light.RangeTiles
-		if light.DimRangeTiles > effectiveRange {
-			effectiveRange = light.DimRangeTiles
-		}
+		effectiveRange := max(light.DimRangeTiles, light.RangeTiles)
 		visible := shadowcast(light.Col, light.Row, effectiveRange, walls, width, height)
 		for pos := range visible {
 			idx := pos.Row*width + pos.Col
@@ -105,16 +102,7 @@ func ComputeVisibilityWithZones(sources []VisionSource, lights []LightSource, wa
 // respecting magical-darkness demotion of ordinary vision (Devil's Sight,
 // blindsight, and truesight still penetrate within their ranges).
 func applyVisionSource(fow *FogOfWar, src VisionSource, walls []WallSegment, magicalDark map[GridPos]bool, width, height int) {
-	effectiveRange := src.RangeTiles
-	if src.DarkvisionTiles > effectiveRange {
-		effectiveRange = src.DarkvisionTiles
-	}
-	if src.BlindsightTiles > effectiveRange {
-		effectiveRange = src.BlindsightTiles
-	}
-	if src.TruesightTiles > effectiveRange {
-		effectiveRange = src.TruesightTiles
-	}
+	effectiveRange := max(src.TruesightTiles, max(src.BlindsightTiles, max(src.DarkvisionTiles, src.RangeTiles)))
 	if effectiveRange <= 0 {
 		// Origin tile is always visible if the source exists at all.
 		idx := src.Row*width + src.Col

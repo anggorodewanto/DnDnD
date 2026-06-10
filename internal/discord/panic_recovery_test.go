@@ -38,8 +38,8 @@ func TestCommandRouter_PanicRecovery_RepliesFriendly(t *testing.T) {
 	router.handlers["attack"] = &panicHandler{msg: "boom"}
 
 	interaction := &discordgo.Interaction{
-		Type: discordgo.InteractionApplicationCommand,
-		Data: discordgo.ApplicationCommandInteractionData{Name: "attack"},
+		Type:   discordgo.InteractionApplicationCommand,
+		Data:   discordgo.ApplicationCommandInteractionData{Name: "attack"},
 		Member: &discordgo.Member{User: &discordgo.User{ID: "user-99"}},
 	}
 
@@ -75,8 +75,8 @@ func TestCommandRouter_PanicRecovery_RecordsError(t *testing.T) {
 	router.handlers["cast"] = &panicHandler{msg: "db timeout"}
 
 	interaction := &discordgo.Interaction{
-		Type: discordgo.InteractionApplicationCommand,
-		Data: discordgo.ApplicationCommandInteractionData{Name: "cast"},
+		Type:   discordgo.InteractionApplicationCommand,
+		Data:   discordgo.ApplicationCommandInteractionData{Name: "cast"},
 		Member: &discordgo.Member{User: &discordgo.User{ID: "player-7"}},
 	}
 
@@ -152,8 +152,8 @@ func TestCommandRouter_ErrorReportingHandler_RecordsError(t *testing.T) {
 	router.handlers["cast"] = &errorReturningHandler{err: handlerErr}
 
 	interaction := &discordgo.Interaction{
-		Type: discordgo.InteractionApplicationCommand,
-		Data: discordgo.ApplicationCommandInteractionData{Name: "cast"},
+		Type:   discordgo.InteractionApplicationCommand,
+		Data:   discordgo.ApplicationCommandInteractionData{Name: "cast"},
 		Member: &discordgo.Member{User: &discordgo.User{ID: "player-42"}},
 	}
 
@@ -198,8 +198,8 @@ func TestCommandRouter_ErrorReportingHandler_NilError_NoRecord(t *testing.T) {
 	router.handlers["cast"] = &errorReturningHandler{err: nil}
 
 	interaction := &discordgo.Interaction{
-		Type: discordgo.InteractionApplicationCommand,
-		Data: discordgo.ApplicationCommandInteractionData{Name: "cast"},
+		Type:   discordgo.InteractionApplicationCommand,
+		Data:   discordgo.ApplicationCommandInteractionData{Name: "cast"},
 		Member: &discordgo.Member{User: &discordgo.User{ID: "player-42"}},
 	}
 

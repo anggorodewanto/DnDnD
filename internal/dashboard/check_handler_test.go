@@ -19,13 +19,13 @@ import (
 )
 
 type stubCheckStore struct {
-	combatants     []refdata.Combatant
-	combatantErr   error
-	characters     map[uuid.UUID]refdata.Character
-	upsertCalls    []refdata.UpsertPendingCheckParams
-	upsertReturn   refdata.PendingCheck
-	upsertErr      error
-	characterErr   error
+	combatants   []refdata.Combatant
+	combatantErr error
+	characters   map[uuid.UUID]refdata.Character
+	upsertCalls  []refdata.UpsertPendingCheckParams
+	upsertReturn refdata.PendingCheck
+	upsertErr    error
+	characterErr error
 }
 
 func (s *stubCheckStore) ListCombatantsByEncounterID(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
@@ -70,7 +70,7 @@ func chiCheckCtx(r *http.Request, params map[string]string) *http.Request {
 
 func makeCheckTestCharacter(name string) refdata.Character {
 	scores, _ := json.Marshal(character.AbilityScores{STR: 14, DEX: 16, CON: 12, INT: 10, WIS: 16, CHA: 8})
-	profs, _ := json.Marshal(map[string]interface{}{
+	profs, _ := json.Marshal(map[string]any{
 		"skills": []string{"medicine", "stealth"},
 	})
 	return refdata.Character{

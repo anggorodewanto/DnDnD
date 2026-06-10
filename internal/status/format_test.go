@@ -79,8 +79,8 @@ func TestFormatStatus_TempHP(t *testing.T) {
 
 func TestFormatStatus_Exhaustion(t *testing.T) {
 	info := Info{
-		CharacterName: "Aria",
-		ShortID:       "AR",
+		CharacterName:   "Aria",
+		ShortID:         "AR",
 		ExhaustionLevel: 2,
 	}
 	got := FormatStatus(info)

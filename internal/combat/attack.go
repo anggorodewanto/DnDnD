@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -319,34 +320,34 @@ type AttackInput struct {
 	AttackerSize        string
 	DMAdvantage         bool
 	DMDisadvantage      bool
-	OverrideDmgMod      *int                // If set, overrides the normal ability modifier for damage
-	TwoHanded           bool                // Use versatile damage die (requires free off-hand)
-	OffHandOccupied     bool                // True if off-hand is occupied (blocks two-handed)
-	Thrown              bool                // Melee weapon thrown at range
-	IsImprovised        bool                // Improvised weapon (no proficiency unless Tavern Brawler)
-	ImprovisedThrown    bool                // Improvised weapon thrown (range 20/60)
-	HasCrossbowExpert   bool                // Character has Crossbow Expert feat
-	HasTavernBrawler    bool                // Character has Tavern Brawler feat
-	GWM                 bool                // Great Weapon Master: -5 hit, +10 damage (heavy melee)
-	Sharpshooter        bool                // Sharpshooter: -5 hit, +10 damage (ranged)
-	Reckless            bool                // Reckless Attack: advantage on melee STR attacks (Barbarian)
-	MonkLevel           int                 // Monk level (0 = not a monk)
-	AttackerHidden      bool                // Attacker is hidden (not visible)
-	TargetHidden        bool                // Target is hidden (not visible)
-	AttackerObscurement ObscurementLevel    // Effective obscurement for attacker
-	TargetObscurement   ObscurementLevel    // Effective obscurement for target
+	OverrideDmgMod      *int             // If set, overrides the normal ability modifier for damage
+	TwoHanded           bool             // Use versatile damage die (requires free off-hand)
+	OffHandOccupied     bool             // True if off-hand is occupied (blocks two-handed)
+	Thrown              bool             // Melee weapon thrown at range
+	IsImprovised        bool             // Improvised weapon (no proficiency unless Tavern Brawler)
+	ImprovisedThrown    bool             // Improvised weapon thrown (range 20/60)
+	HasCrossbowExpert   bool             // Character has Crossbow Expert feat
+	HasTavernBrawler    bool             // Character has Tavern Brawler feat
+	GWM                 bool             // Great Weapon Master: -5 hit, +10 damage (heavy melee)
+	Sharpshooter        bool             // Sharpshooter: -5 hit, +10 damage (ranged)
+	Reckless            bool             // Reckless Attack: advantage on melee STR attacks (Barbarian)
+	MonkLevel           int              // Monk level (0 = not a monk)
+	AttackerHidden      bool             // Attacker is hidden (not visible)
+	TargetHidden        bool             // Target is hidden (not visible)
+	AttackerObscurement ObscurementLevel // Effective obscurement for attacker
+	TargetObscurement   ObscurementLevel // Effective obscurement for target
 	// TargetCombatantID is the ID of the combatant currently being attacked.
 	// SR-018: piped into DetectAdvantage so target-scoped attacker conditions
 	// (help_advantage) only fire when the named target is the one under attack.
-	TargetCombatantID string
-	Features            []FeatureDefinition // Feature Effect System definitions (magic items, etc.)
-	IsRaging            bool                // Attacker is currently raging (Phase 46)
-	WearingArmor        bool                // Attacker is wearing armor (Defense fighting style)
-	OneHandedMeleeOnly  bool                // Wielding a one-handed melee weapon with no off-hand weapon (Dueling)
-	AllyWithinFt        int                 // Distance to nearest ally relative to target (Pack Tactics, Sneak Attack)
-	AbilityUsed         string              // "str" or "dex" — which ability mod was chosen for this attack
-	UsedThisTurn        map[string]bool     // Per-turn feature usage tracking (Sneak Attack OncePerTurn)
-	WeaponMasteries     []string            // weapon ids whose mastery the attacker knows (2024 Weapon Mastery)
+	TargetCombatantID  string
+	Features           []FeatureDefinition // Feature Effect System definitions (magic items, etc.)
+	IsRaging           bool                // Attacker is currently raging (Phase 46)
+	WearingArmor       bool                // Attacker is wearing armor (Defense fighting style)
+	OneHandedMeleeOnly bool                // Wielding a one-handed melee weapon with no off-hand weapon (Dueling)
+	AllyWithinFt       int                 // Distance to nearest ally relative to target (Pack Tactics, Sneak Attack)
+	AbilityUsed        string              // "str" or "dex" — which ability mod was chosen for this attack
+	UsedThisTurn       map[string]bool     // Per-turn feature usage tracking (Sneak Attack OncePerTurn)
+	WeaponMasteries    []string            // weapon ids whose mastery the attacker knows (2024 Weapon Mastery)
 }
 
 // AttackResult holds the full result of an attack resolution.
@@ -465,12 +466,7 @@ func masteryActive(input AttackInput) bool {
 	if input.Weapon.Mastery == "" {
 		return false
 	}
-	for _, id := range input.WeaponMasteries {
-		if id == input.Weapon.ID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(input.WeaponMasteries, input.Weapon.ID)
 }
 
 // onHitMastery returns the mastery slug that fires on a HIT for this attack, or
@@ -1894,10 +1890,7 @@ func nearestAllyDistanceFt(attacker, target refdata.Combatant, all []refdata.Com
 		if dr < 0 {
 			dr = -dr
 		}
-		d := dc
-		if dr > dc {
-			d = dr
-		}
+		d := max(dr, dc)
 		d *= 5
 		if d < best {
 			best = d

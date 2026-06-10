@@ -46,10 +46,10 @@ func (m *mockInteractProvider) GetCombatant(_ context.Context, _ uuid.UUID) (ref
 }
 
 type mockInteractTurnStore struct {
-	turn        refdata.Turn
-	updated     *refdata.UpdateTurnActionsParams
-	getTurnErr  error
-	updateErr   error
+	turn       refdata.Turn
+	updated    *refdata.UpdateTurnActionsParams
+	getTurnErr error
+	updateErr  error
 }
 
 func (m *mockInteractTurnStore) GetTurn(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {

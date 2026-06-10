@@ -295,7 +295,7 @@ func (s *Service) fetchCombatantState(ctx context.Context, characterID uuid.UUID
 // renderer's ConditionInfo slice, dropping the standalone "exhaustion" entry
 // (it is rendered as its own line via Exhaustion) while preserving every
 // other named condition along with its remaining-rounds count.
-func buildConditionInfos(raw json.RawMessage, exhaustionLevel int) []ConditionInfo {
+func buildConditionInfos(raw json.RawMessage, _ int) []ConditionInfo {
 	if len(raw) == 0 {
 		return nil
 	}

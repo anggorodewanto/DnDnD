@@ -373,7 +373,7 @@ func DragMovementCost(baseCost int) int {
 
 // ReleaseDragResult holds the outputs of releasing grappled targets.
 type ReleaseDragResult struct {
-	Released  []refdata.Combatant
+	Released   []refdata.Combatant
 	CombatLogs []string
 }
 

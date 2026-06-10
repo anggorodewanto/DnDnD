@@ -129,10 +129,7 @@ func (h *LootHandler) Handle(interaction *discordgo.Interaction) {
 	components := []discordgo.MessageComponent{}
 	// Discord allows max 5 buttons per action row
 	for i := 0; i < len(buttons); i += 5 {
-		end := i + 5
-		if end > len(buttons) {
-			end = len(buttons)
-		}
+		end := min(i+5, len(buttons))
 		components = append(components, discordgo.ActionsRow{
 			Components: buttons[i:end],
 		})

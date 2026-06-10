@@ -43,7 +43,7 @@ func (m *mockRecapSession) ApplicationCommands(string, string) ([]*discordgo.App
 	return nil, nil
 }
 func (m *mockRecapSession) ApplicationCommandDelete(string, string, string) error { return nil }
-func (m *mockRecapSession) GuildChannels(string) ([]*discordgo.Channel, error)   { return nil, nil }
+func (m *mockRecapSession) GuildChannels(string) ([]*discordgo.Channel, error)    { return nil, nil }
 func (m *mockRecapSession) GuildChannelCreateComplex(string, discordgo.GuildChannelCreateData) (*discordgo.Channel, error) {
 	return nil, nil
 }
@@ -686,7 +686,7 @@ func TestRecapHandler_Truncation(t *testing.T) {
 
 	// Generate a very long log to trigger truncation
 	var logs []refdata.ListActionLogWithRoundsRow
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		logs = append(logs, refdata.ListActionLogWithRoundsRow{
 			RoundNumber: 1,
 			Description: sql.NullString{String: "A very long action description that takes up space in the message", Valid: true},

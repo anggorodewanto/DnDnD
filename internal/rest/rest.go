@@ -193,16 +193,13 @@ func (s *Service) ShortRest(input ShortRestInput) (ShortRestResult, error) {
 			return ShortRestResult{}, fmt.Errorf("invalid hit die type: %s", dieType)
 		}
 
-		for i := 0; i < count; i++ {
+		for range count {
 			roll, err := s.roller.Roll(fmt.Sprintf("1%s", dieType))
 			if err != nil {
 				return ShortRestResult{}, fmt.Errorf("rolling hit die: %w", err)
 			}
 
-			healing := roll.Total + input.CONModifier
-			if healing < 0 {
-				healing = 0
-			}
+			healing := max(roll.Total+input.CONModifier, 0)
 
 			actualHealed := healing
 			if hp+actualHealed > input.HPMax {
@@ -364,7 +361,7 @@ func CharacterDataWithExhaustion(raw []byte, level int) []byte {
 	data[characterDataExhaustionKey] = level
 	out, err := json.Marshal(data)
 	if err != nil {
-		return []byte(fmt.Sprintf(`{"%s":%d}`, characterDataExhaustionKey, level))
+		return fmt.Appendf(nil, `{"%s":%d}`, characterDataExhaustionKey, level)
 	}
 	return out
 }
@@ -412,10 +409,7 @@ func (s *Service) LongRest(input LongRestInput) LongRestResult {
 
 	// Restore hit dice: regain half total level (minimum 1)
 	totalLevel := character.TotalLevel(input.Classes)
-	toRestore := totalLevel / 2
-	if toRestore < 1 {
-		toRestore = 1
-	}
+	toRestore := max(totalLevel/2, 1)
 
 	// Build max hit dice from classes
 	maxHitDice := make(map[string]int)

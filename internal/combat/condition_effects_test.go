@@ -14,7 +14,7 @@ import (
 	"github.com/ab/dndnd/internal/refdata"
 )
 
-func mustMarshal(v interface{}) json.RawMessage {
+func mustMarshal(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b
 }
@@ -586,12 +586,12 @@ func TestAdvanceTurn_SkipsIncapacitatedCombatant(t *testing.T) {
 	stunned := refdata.Combatant{
 		ID: stunnedID, DisplayName: "Stunned Fighter",
 		Conditions: mustMarshal([]CombatCondition{{Condition: "stunned"}}),
-		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
+		IsAlive:    true, InitiativeOrder: 1, IsNpc: true,
 	}
 	active := refdata.Combatant{
 		ID: activeID, DisplayName: "Rogue",
 		Conditions: json.RawMessage(`[]`),
-		IsAlive: true, InitiativeOrder: 2, IsNpc: true,
+		IsAlive:    true, InitiativeOrder: 2, IsNpc: true,
 	}
 
 	ms := newAdvanceTurnMock([]refdata.Combatant{stunned, active})
@@ -619,12 +619,12 @@ func TestAdvanceTurn_ParalyzedCombatantSkipped(t *testing.T) {
 	paralyzed := refdata.Combatant{
 		ID: paralyzedID, DisplayName: "Paralyzed Wizard",
 		Conditions: mustMarshal([]CombatCondition{{Condition: "paralyzed"}}),
-		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
+		IsAlive:    true, InitiativeOrder: 1, IsNpc: true,
 	}
 	active := refdata.Combatant{
 		ID: activeID, DisplayName: "Rogue",
 		Conditions: json.RawMessage(`[]`),
-		IsAlive: true, InitiativeOrder: 2, IsNpc: true,
+		IsAlive:    true, InitiativeOrder: 2, IsNpc: true,
 	}
 
 	ms := newAdvanceTurnMock([]refdata.Combatant{paralyzed, active})
@@ -638,7 +638,7 @@ func TestSkipCombatantTurn_CreateTurnError(t *testing.T) {
 	stunned := refdata.Combatant{
 		ID: uuid.New(), DisplayName: "Stunned Fighter",
 		Conditions: mustMarshal([]CombatCondition{{Condition: "stunned"}}),
-		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
+		IsAlive:    true, InitiativeOrder: 1, IsNpc: true,
 	}
 
 	ms := newAdvanceTurnMock([]refdata.Combatant{stunned})
@@ -656,7 +656,7 @@ func TestSkipCombatantTurn_SkipTurnError(t *testing.T) {
 	stunned := refdata.Combatant{
 		ID: uuid.New(), DisplayName: "Stunned Fighter",
 		Conditions: mustMarshal([]CombatCondition{{Condition: "stunned"}}),
-		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
+		IsAlive:    true, InitiativeOrder: 1, IsNpc: true,
 	}
 
 	ms := newAdvanceTurnMock([]refdata.Combatant{stunned})
@@ -676,7 +676,7 @@ func TestAdvanceTurn_AllIncapacitatedAdvancesRound(t *testing.T) {
 	stunned := refdata.Combatant{
 		ID: uuid.New(), DisplayName: "Stunned Fighter",
 		Conditions: mustMarshal([]CombatCondition{{Condition: "stunned", DurationRounds: 2, StartedRound: 2}}),
-		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
+		IsAlive:    true, InitiativeOrder: 1, IsNpc: true,
 	}
 
 	roundAdvanced := false
@@ -704,12 +704,12 @@ func TestAdvanceTurn_PopulatesSkippedCombatants(t *testing.T) {
 	stunned := refdata.Combatant{
 		ID: stunnedID, DisplayName: "Stunned Fighter",
 		Conditions: mustMarshal([]CombatCondition{{Condition: "stunned"}}),
-		IsAlive: true, InitiativeOrder: 1, IsNpc: true,
+		IsAlive:    true, InitiativeOrder: 1, IsNpc: true,
 	}
 	active := refdata.Combatant{
 		ID: activeID, DisplayName: "Rogue",
 		Conditions: json.RawMessage(`[]`),
-		IsAlive: true, InitiativeOrder: 2, IsNpc: true,
+		IsAlive:    true, InitiativeOrder: 2, IsNpc: true,
 	}
 
 	ms := newAdvanceTurnMock([]refdata.Combatant{stunned, active})

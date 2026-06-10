@@ -35,10 +35,10 @@ func TestCommandDefinitions_ParameterHints(t *testing.T) {
 	cmdMap := commandMap()
 
 	tests := []struct {
-		name        string
-		optionName  string
-		optionType  discordgo.ApplicationCommandOptionType
-		required    bool
+		name       string
+		optionName string
+		optionType discordgo.ApplicationCommandOptionType
+		required   bool
 	}{
 		{"move", "coordinate", discordgo.ApplicationCommandOptionString, true},
 		{"fly", "altitude", discordgo.ApplicationCommandOptionInteger, true},
@@ -263,5 +263,3 @@ func TestCommandDefinitions_AllHaveDescriptions(t *testing.T) {
 		}
 	}
 }
-
-

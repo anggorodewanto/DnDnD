@@ -19,52 +19,52 @@ import (
 
 // mockStore implements Store for unit tests.
 type mockStore struct {
-	createEncounterFn             func(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error)
-	getEncounterFn                func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
-	listEncountersByCampaignIDFn  func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
-	updateEncounterStatusFn       func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error)
-	updateEncounterCurrentTurnFn  func(ctx context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error)
-	updateEncounterRoundFn        func(ctx context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error)
-	deleteEncounterFn             func(ctx context.Context, id uuid.UUID) error
-	createCombatantFn             func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error)
-	getCombatantFn                func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
-	listCombatantsByEncounterIDFn func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
-	updateCombatantHPFn           func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error)
-	updateCombatantConditionsFn   func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
-	updateCombatantPositionFn     func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error)
-	updateCombatantDeathSavesFn   func(ctx context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error)
-	updateCombatantVisibilityFn   func(ctx context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error)
-	deleteCombatantFn             func(ctx context.Context, id uuid.UUID) error
-	createTurnFn                  func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error)
-	getTurnFn                     func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
-	getActiveTurnByEncounterIDFn  func(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
-	completeTurnFn                func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
-	createActionLogFn             func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error)
-	listActionLogByEncounterIDFn  func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ActionLog, error)
-	listActionLogByTurnIDFn       func(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error)
-	getEncounterTemplateFn            func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error)
-	getCreatureFn                     func(ctx context.Context, id string) (refdata.Creature, error)
-	updateCombatantInitiativeFn       func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error)
-	skipTurnFn                        func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
-	listTurnsByEncounterAndRoundFn    func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error)
-	getCharacterFn                    func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
-	getClassFn                        func(ctx context.Context, id string) (refdata.Class, error)
-	listCharactersByCampaignFn        func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
-	updateTurnActionsFn               func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
-	getWeaponFn                       func(ctx context.Context, id string) (refdata.Weapon, error)
-	updateCharacterInventoryFn        func(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error
-	updateCombatantRageFn             func(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error)
-	updateCombatantWildShapeFn             func(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error)
-	updateCombatantBardicInspirationFn     func(ctx context.Context, arg refdata.UpdateCombatantBardicInspirationParams) (refdata.Combatant, error)
-	getArmorFn                             func(ctx context.Context, id string) (refdata.Armor, error)
-	updateCharacterFeatureUsesFn      func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
-	updateCharacterSpellSlotsFn       func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
-	updateCharacterPactMagicSlotsFn   func(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error)
-	getSpellFn                        func(ctx context.Context, id string) (refdata.Spell, error)
-	updateCharacterGoldFn             func(ctx context.Context, id uuid.UUID, gold int32) error
-	listSpellsByClassFn               func(ctx context.Context, class string) ([]refdata.Spell, error)
-	updateCharacterEquipmentFn        func(ctx context.Context, arg refdata.UpdateCharacterEquipmentParams) (refdata.Character, error)
-	updateCharacterDataFn             func(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error)
+	createEncounterFn                  func(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error)
+	getEncounterFn                     func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
+	listEncountersByCampaignIDFn       func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
+	updateEncounterStatusFn            func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error)
+	updateEncounterCurrentTurnFn       func(ctx context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error)
+	updateEncounterRoundFn             func(ctx context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error)
+	deleteEncounterFn                  func(ctx context.Context, id uuid.UUID) error
+	createCombatantFn                  func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error)
+	getCombatantFn                     func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
+	listCombatantsByEncounterIDFn      func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
+	updateCombatantHPFn                func(ctx context.Context, arg refdata.UpdateCombatantHPParams) (refdata.Combatant, error)
+	updateCombatantConditionsFn        func(ctx context.Context, arg refdata.UpdateCombatantConditionsParams) (refdata.Combatant, error)
+	updateCombatantPositionFn          func(ctx context.Context, arg refdata.UpdateCombatantPositionParams) (refdata.Combatant, error)
+	updateCombatantDeathSavesFn        func(ctx context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error)
+	updateCombatantVisibilityFn        func(ctx context.Context, arg refdata.UpdateCombatantVisibilityParams) (refdata.Combatant, error)
+	deleteCombatantFn                  func(ctx context.Context, id uuid.UUID) error
+	createTurnFn                       func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error)
+	getTurnFn                          func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	getActiveTurnByEncounterIDFn       func(ctx context.Context, encounterID uuid.UUID) (refdata.Turn, error)
+	completeTurnFn                     func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	createActionLogFn                  func(ctx context.Context, arg refdata.CreateActionLogParams) (refdata.ActionLog, error)
+	listActionLogByEncounterIDFn       func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ActionLog, error)
+	listActionLogByTurnIDFn            func(ctx context.Context, turnID uuid.UUID) ([]refdata.ActionLog, error)
+	getEncounterTemplateFn             func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error)
+	getCreatureFn                      func(ctx context.Context, id string) (refdata.Creature, error)
+	updateCombatantInitiativeFn        func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error)
+	skipTurnFn                         func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	listTurnsByEncounterAndRoundFn     func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error)
+	getCharacterFn                     func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	getClassFn                         func(ctx context.Context, id string) (refdata.Class, error)
+	listCharactersByCampaignFn         func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Character, error)
+	updateTurnActionsFn                func(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error)
+	getWeaponFn                        func(ctx context.Context, id string) (refdata.Weapon, error)
+	updateCharacterInventoryFn         func(ctx context.Context, id uuid.UUID, inventory pqtype.NullRawMessage) error
+	updateCombatantRageFn              func(ctx context.Context, arg refdata.UpdateCombatantRageParams) (refdata.Combatant, error)
+	updateCombatantWildShapeFn         func(ctx context.Context, arg refdata.UpdateCombatantWildShapeParams) (refdata.Combatant, error)
+	updateCombatantBardicInspirationFn func(ctx context.Context, arg refdata.UpdateCombatantBardicInspirationParams) (refdata.Combatant, error)
+	getArmorFn                         func(ctx context.Context, id string) (refdata.Armor, error)
+	updateCharacterFeatureUsesFn       func(ctx context.Context, arg refdata.UpdateCharacterFeatureUsesParams) (refdata.Character, error)
+	updateCharacterSpellSlotsFn        func(ctx context.Context, arg refdata.UpdateCharacterSpellSlotsParams) (refdata.Character, error)
+	updateCharacterPactMagicSlotsFn    func(ctx context.Context, arg refdata.UpdateCharacterPactMagicSlotsParams) (refdata.Character, error)
+	getSpellFn                         func(ctx context.Context, id string) (refdata.Spell, error)
+	updateCharacterGoldFn              func(ctx context.Context, id uuid.UUID, gold int32) error
+	listSpellsByClassFn                func(ctx context.Context, class string) ([]refdata.Spell, error)
+	updateCharacterEquipmentFn         func(ctx context.Context, arg refdata.UpdateCharacterEquipmentParams) (refdata.Character, error)
+	updateCharacterDataFn              func(ctx context.Context, arg refdata.UpdateCharacterDataParams) (refdata.Character, error)
 
 	// Encounter Zones
 	createEncounterZoneFn                   func(ctx context.Context, arg refdata.CreateEncounterZoneParams) (refdata.EncounterZone, error)
@@ -80,59 +80,59 @@ type mockStore struct {
 	resetAllTriggeredThisRoundFn            func(ctx context.Context, encounterID uuid.UUID) error
 
 	// Reaction Declarations
-	createReactionDeclarationFn                func(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error)
-	createReadiedActionDeclarationFn           func(ctx context.Context, arg refdata.CreateReadiedActionDeclarationParams) (refdata.ReactionDeclaration, error)
-	getReactionDeclarationFn                   func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
+	createReactionDeclarationFn                 func(ctx context.Context, arg refdata.CreateReactionDeclarationParams) (refdata.ReactionDeclaration, error)
+	createReadiedActionDeclarationFn            func(ctx context.Context, arg refdata.CreateReadiedActionDeclarationParams) (refdata.ReactionDeclaration, error)
+	getReactionDeclarationFn                    func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
 	listActiveReactionDeclarationsByEncounterFn func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error)
 	listReactionDeclarationsByEncounterFn       func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ReactionDeclaration, error)
-	listReactionDeclarationsByCombatantFn      func(ctx context.Context, arg refdata.ListReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
+	listReactionDeclarationsByCombatantFn       func(ctx context.Context, arg refdata.ListReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
 	listActiveReactionDeclarationsByCombatantFn func(ctx context.Context, arg refdata.ListActiveReactionDeclarationsByCombatantParams) ([]refdata.ReactionDeclaration, error)
-	updateReactionDeclarationStatusUsedFn      func(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error)
-	cancelReactionDeclarationFn                func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
-	cancelAllReactionDeclarationsByCombatantFn func(ctx context.Context, arg refdata.CancelAllReactionDeclarationsByCombatantParams) error
-	deleteReactionDeclarationsByEncounterFn    func(ctx context.Context, encounterID uuid.UUID) error
+	updateReactionDeclarationStatusUsedFn       func(ctx context.Context, arg refdata.UpdateReactionDeclarationStatusUsedParams) (refdata.ReactionDeclaration, error)
+	cancelReactionDeclarationFn                 func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error)
+	cancelAllReactionDeclarationsByCombatantFn  func(ctx context.Context, arg refdata.CancelAllReactionDeclarationsByCombatantParams) error
+	deleteReactionDeclarationsByEncounterFn     func(ctx context.Context, encounterID uuid.UUID) error
 
 	// Counterspell
 	updateReactionDeclarationCounterspellPromptFn   func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellPromptParams) (refdata.ReactionDeclaration, error)
 	updateReactionDeclarationCounterspellResolvedFn func(ctx context.Context, arg refdata.UpdateReactionDeclarationCounterspellResolvedParams) (refdata.ReactionDeclaration, error)
 
 	// Pending Actions
-	createPendingActionFn                  func(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error)
-	getPendingActionFn                     func(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error)
-	listPendingActionsByEncounterIDFn      func(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingAction, error)
-	cancelAllPendingActionsByCombatantFn   func(ctx context.Context, arg refdata.CancelAllPendingActionsByCombatantParams) error
+	createPendingActionFn                func(ctx context.Context, arg refdata.CreatePendingActionParams) (refdata.PendingAction, error)
+	getPendingActionFn                   func(ctx context.Context, id uuid.UUID) (refdata.PendingAction, error)
+	listPendingActionsByEncounterIDFn    func(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingAction, error)
+	cancelAllPendingActionsByCombatantFn func(ctx context.Context, arg refdata.CancelAllPendingActionsByCombatantParams) error
 
 	// Pending Saves
-	createPendingSaveFn                    func(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error)
-	getPendingSaveFn                       func(ctx context.Context, id uuid.UUID) (refdata.PendingSafe, error)
-	listPendingSavesByCombatantFn          func(ctx context.Context, combatantID uuid.UUID) ([]refdata.PendingSafe, error)
-	listPendingSavesByEncounterFn          func(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingSafe, error)
-	updatePendingSaveResultFn              func(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error)
-	cancelAllPendingSavesByCombatantFn     func(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error
+	createPendingSaveFn                func(ctx context.Context, arg refdata.CreatePendingSaveParams) (refdata.PendingSafe, error)
+	getPendingSaveFn                   func(ctx context.Context, id uuid.UUID) (refdata.PendingSafe, error)
+	listPendingSavesByCombatantFn      func(ctx context.Context, combatantID uuid.UUID) ([]refdata.PendingSafe, error)
+	listPendingSavesByEncounterFn      func(ctx context.Context, encounterID uuid.UUID) ([]refdata.PendingSafe, error)
+	updatePendingSaveResultFn          func(ctx context.Context, arg refdata.UpdatePendingSaveResultParams) (refdata.PendingSafe, error)
+	cancelAllPendingSavesByCombatantFn func(ctx context.Context, arg refdata.CancelAllPendingSavesByCombatantParams) error
 
 	// Turn Timer
-	listTurnsNeedingNudgeFn          func(ctx context.Context) ([]refdata.Turn, error)
-	listTurnsNeedingWarningFn        func(ctx context.Context) ([]refdata.Turn, error)
-	updateTurnNudgeSentFn            func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
-	updateTurnWarningSentFn          func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
-	updateTurnTimeoutFn              func(ctx context.Context, arg refdata.UpdateTurnTimeoutParams) (refdata.Turn, error)
-	listActiveTurnsByEncounterIDFn   func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Turn, error)
-	clearTurnTimeoutFn               func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
-	setTurnTimeoutFn                 func(ctx context.Context, arg refdata.SetTurnTimeoutParams) (refdata.Turn, error)
-	getCampaignByEncounterIDFn       func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
-	getPendingActionByCombatantFn     func(ctx context.Context, combatantID uuid.UUID) (refdata.PendingAction, error)
-	updatePendingActionStatusFn       func(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error)
+	listTurnsNeedingNudgeFn             func(ctx context.Context) ([]refdata.Turn, error)
+	listTurnsNeedingWarningFn           func(ctx context.Context) ([]refdata.Turn, error)
+	updateTurnNudgeSentFn               func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	updateTurnWarningSentFn             func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	updateTurnTimeoutFn                 func(ctx context.Context, arg refdata.UpdateTurnTimeoutParams) (refdata.Turn, error)
+	listActiveTurnsByEncounterIDFn      func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Turn, error)
+	clearTurnTimeoutFn                  func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	setTurnTimeoutFn                    func(ctx context.Context, arg refdata.SetTurnTimeoutParams) (refdata.Turn, error)
+	getCampaignByEncounterIDFn          func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
+	getPendingActionByCombatantFn       func(ctx context.Context, combatantID uuid.UUID) (refdata.PendingAction, error)
+	updatePendingActionStatusFn         func(ctx context.Context, arg refdata.UpdatePendingActionStatusParams) (refdata.PendingAction, error)
 	updatePendingActionDMQueueMessageFn func(ctx context.Context, arg refdata.UpdatePendingActionDMQueueMessageParams) (refdata.PendingAction, error)
 
 	// Turn Timeout Resolution (Phase 76b)
-	listTurnsTimedOutFn                func(ctx context.Context) ([]refdata.Turn, error)
-	updateTurnDMDecisionSentFn         func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
-	listTurnsNeedingDMAutoResolveFn    func(ctx context.Context) ([]refdata.Turn, error)
-	updateTurnAutoResolvedFn           func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
-	updateTurnWaitExtendedFn           func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
-	resetTurnNudgeAndWarningFn         func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
-	updateCombatantAutoResolveCountFn  func(ctx context.Context, arg refdata.UpdateCombatantAutoResolveCountParams) (refdata.Combatant, error)
-	resetCombatantAutoResolveCountFn   func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
+	listTurnsTimedOutFn               func(ctx context.Context) ([]refdata.Turn, error)
+	updateTurnDMDecisionSentFn        func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	listTurnsNeedingDMAutoResolveFn   func(ctx context.Context) ([]refdata.Turn, error)
+	updateTurnAutoResolvedFn          func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	updateTurnWaitExtendedFn          func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	resetTurnNudgeAndWarningFn        func(ctx context.Context, id uuid.UUID) (refdata.Turn, error)
+	updateCombatantAutoResolveCountFn func(ctx context.Context, arg refdata.UpdateCombatantAutoResolveCountParams) (refdata.Combatant, error)
+	resetCombatantAutoResolveCountFn  func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error)
 
 	// Impact Summary (Phase 77)
 	getLastCompletedTurnByCombatantFn func(ctx context.Context, arg refdata.GetLastCompletedTurnByCombatantParams) (refdata.Turn, error)
@@ -140,8 +140,8 @@ type mockStore struct {
 	getPlayerCharacterByCharacterFn   func(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
 
 	// Recap
-	listActionLogWithRoundsFn          func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error)
-	getMostRecentCompletedEncounterFn  func(ctx context.Context, campaignID uuid.UUID) (refdata.Encounter, error)
+	listActionLogWithRoundsFn         func(ctx context.Context, encounterID uuid.UUID) ([]refdata.ListActionLogWithRoundsRow, error)
+	getMostRecentCompletedEncounterFn func(ctx context.Context, campaignID uuid.UUID) (refdata.Encounter, error)
 
 	// Phase 105 — Active encounter lookup for one-encounter-per-character check
 	getActiveEncounterIDByCharacterIDFn func(ctx context.Context, characterID uuid.NullUUID) (uuid.UUID, error)
@@ -169,7 +169,7 @@ type mockStore struct {
 	getLastLairActionFn func(ctx context.Context, encounterID uuid.UUID) (string, error)
 
 	// F-H06 — Server-side legendary action budget
-	getLegendaryBudgetFn      func(ctx context.Context, combatantID uuid.UUID) (int, error)
+	getLegendaryBudgetFn       func(ctx context.Context, combatantID uuid.UUID) (int, error)
 	decrementLegendaryBudgetFn func(ctx context.Context, combatantID uuid.UUID) error
 }
 
@@ -1074,10 +1074,10 @@ func TestService_CreateEncounterFromTemplate_Success(t *testing.T) {
 	store := defaultMockStore()
 	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
 		return refdata.EncounterTemplate{
-			ID:         templateID,
-			CampaignID: campaignID,
-			MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
-			Name:       "Goblin Ambush",
+			ID:          templateID,
+			CampaignID:  campaignID,
+			MapID:       uuid.NullUUID{UUID: mapID, Valid: true},
+			Name:        "Goblin Ambush",
 			DisplayName: sql.NullString{String: "The Dark Forest", Valid: true},
 			Creatures: json.RawMessage(`[
 				{"creature_ref_id":"goblin","short_id":"G1","display_name":"Goblin 1","position_col":"A","position_row":1,"quantity":1}
@@ -1651,8 +1651,8 @@ func TestService_StartCombat_CharacterNotFound(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 10 })
 	svc := NewService(store)
 	_, err := svc.StartCombat(context.Background(), StartCombatInput{
-		TemplateID:   templateID,
-		CharacterIDs: []uuid.UUID{uuid.New()},
+		TemplateID:         templateID,
+		CharacterIDs:       []uuid.UUID{uuid.New()},
 		CharacterPositions: map[uuid.UUID]Position{},
 	}, roller)
 	require.Error(t, err)
@@ -2518,7 +2518,6 @@ func TestService_AddCombatant_SkipsActiveEncounterCheckForNPCs(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
-
 
 // --- med-19 / Phase 26b: EndCombat cleanup (concentration end + timer pause) ---
 

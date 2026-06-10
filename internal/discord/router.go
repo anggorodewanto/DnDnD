@@ -558,8 +558,8 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 
 	// Done button callbacks
 	if r.doneHandler != nil {
-		if strings.HasPrefix(customID, "done_confirm:") {
-			encounterIDStr := strings.TrimPrefix(customID, "done_confirm:")
+		if after, ok := strings.CutPrefix(customID, "done_confirm:"); ok {
+			encounterIDStr := after
 			encounterID, err := uuid.Parse(encounterIDStr)
 			if err != nil {
 				respondEphemeral(r.bot.session, interaction, "Invalid encounter ID.")

@@ -762,11 +762,11 @@ func TestCreateMap_ComplexTiledJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the JSON was passed through untouched
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	err = json.Unmarshal(capturedJSON, &parsed)
 	require.NoError(t, err)
 	assert.Equal(t, "orthogonal", parsed["orientation"])
-	layers, ok := parsed["layers"].([]interface{})
+	layers, ok := parsed["layers"].([]any)
 	require.True(t, ok)
 	assert.Len(t, layers, 2)
 }
@@ -787,9 +787,6 @@ func TestTilesetRef_JSONRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ref, parsed)
 }
-
-
-
 
 func TestUpdateMap_RejectDimensionMismatchWithTiledJSON(t *testing.T) {
 	// tiled_json says 10x10 but declared dimensions are 30x30

@@ -17,12 +17,12 @@ import (
 // --- Mocks for /attack ---
 
 type mockAttackCombatService struct {
-	attackCalls  []combat.AttackCommand
-	offhandCalls []combat.OffhandAttackCommand
-	attackResult combat.AttackResult
+	attackCalls   []combat.AttackCommand
+	offhandCalls  []combat.OffhandAttackCommand
+	attackResult  combat.AttackResult
 	offhandResult combat.AttackResult
-	attackErr    error
-	offhandErr   error
+	attackErr     error
+	offhandErr    error
 }
 
 func (m *mockAttackCombatService) Attack(_ context.Context, cmd combat.AttackCommand, _ *dice.Roller) (combat.AttackResult, error) {

@@ -43,10 +43,7 @@ func resolveClassEntries(p CreateCharacterParams) []character.ClassEntry {
 			if c.Class == "" {
 				continue
 			}
-			lvl := c.Level
-			if lvl < 1 {
-				lvl = 1
-			}
+			lvl := max(c.Level, 1)
 			out = append(out, character.ClassEntry{Class: c.Class, Subclass: c.Subclass, Level: lvl, IsPrimary: c.IsPrimary})
 		}
 		if len(out) > 0 {

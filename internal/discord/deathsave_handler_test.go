@@ -26,10 +26,10 @@ func (m *mockEncounterResolver) ActiveEncounterForUser(ctx context.Context, guil
 }
 
 type mockDeathSaveStore struct {
-	updatedDS  *refdata.UpdateCombatantDeathSavesParams
-	updatedHP  *refdata.UpdateCombatantHPParams
-	dsError    error
-	hpError    error
+	updatedDS *refdata.UpdateCombatantDeathSavesParams
+	updatedHP *refdata.UpdateCombatantHPParams
+	dsError   error
+	hpError   error
 }
 
 func (m *mockDeathSaveStore) UpdateCombatantDeathSaves(_ context.Context, arg refdata.UpdateCombatantDeathSavesParams) (refdata.Combatant, error) {
@@ -49,7 +49,7 @@ func (m *mockDeathSaveStore) UpdateCombatantHP(_ context.Context, arg refdata.Up
 }
 
 type mockDeathSaveCSP struct {
-	fn         func(ctx context.Context, encounterID uuid.UUID) (map[string]string, error)
+	fn func(ctx context.Context, encounterID uuid.UUID) (map[string]string, error)
 }
 
 func (m *mockDeathSaveCSP) GetChannelIDs(ctx context.Context, encounterID uuid.UUID) (map[string]string, error) {

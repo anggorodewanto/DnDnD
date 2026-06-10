@@ -27,12 +27,12 @@ type ConcentrationResolverFn func(ctx context.Context, ps refdata.PendingSafe) e
 
 // TurnTimer polls for turn timeouts and sends nudge/warning messages.
 type TurnTimer struct {
-	store                  Store
-	notifier               Notifier
-	interval               time.Duration
-	stopCh                 chan struct{}
-	stopOnce               sync.Once
-	concentrationResolver  ConcentrationResolverFn
+	store                 Store
+	notifier              Notifier
+	interval              time.Duration
+	stopCh                chan struct{}
+	stopOnce              sync.Once
+	concentrationResolver ConcentrationResolverFn
 }
 
 // NewTurnTimer creates a new TurnTimer.
@@ -228,4 +228,3 @@ func findAdjacentEnemies(target refdata.Combatant, allCombatants []refdata.Comba
 	}
 	return adjacent
 }
-

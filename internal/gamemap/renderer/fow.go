@@ -36,8 +36,8 @@ func shadowcast(originCol, originRow, visionRange int, walls []WallSegment, widt
 	ox := float64(originCol) + 0.5
 	oy := float64(originRow) + 0.5
 
-	for row := 0; row < height; row++ {
-		for col := 0; col < width; col++ {
+	for row := range height {
+		for col := range width {
 			if col == originCol && row == originRow {
 				continue
 			}

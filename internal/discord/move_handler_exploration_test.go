@@ -41,8 +41,8 @@ func TestMoveHandler_ExplorationMode_SkipsTurnEconomy(t *testing.T) {
 				CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
 				PositionCol: "A",
 				PositionRow: 1,
-				IsAlive: true, HpCurrent: 10,
-				IsNpc:       false,
+				IsAlive:     true, HpCurrent: 10,
+				IsNpc: false,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
@@ -52,8 +52,8 @@ func TestMoveHandler_ExplorationMode_SkipsTurnEconomy(t *testing.T) {
 					CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
 					PositionCol: "A",
 					PositionRow: 1,
-					IsAlive: true, HpCurrent: 10,
-					IsNpc:       false,
+					IsAlive:     true, HpCurrent: 10,
+					IsNpc: false,
 				},
 			}, nil
 		},
@@ -250,7 +250,6 @@ func TestMoveHandler_ExplorationMode_MultiPC_ResolvesInvokerCorrectly(t *testing
 		t.Errorf("expected move to D1, got %s%d", moved.col, moved.row)
 	}
 }
-
 
 // TestMoveHandler_ExplorationMode_MultiPC_FallsBackWhenLookupMissing verifies
 // resolveExplorationMover gracefully falls back to the first PC when the

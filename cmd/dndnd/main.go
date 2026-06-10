@@ -674,9 +674,9 @@ func distinctCampaignGuildIDs(ctx context.Context, queries *refdata.Queries, log
 // wsAllowedOriginsFromEnv derives the WebSocket allow-list host from BASE_URL.
 // SR-016 prod mode passes the resulting slice (plus insecureSkipVerify=false)
 // to Handler.SetWebSocketOriginPolicy so cross-origin upgrade attempts are
-// rejected with HTTP 403 by nhooyr/websocket's authenticateOrigin.
+// rejected with HTTP 403 by coder/websocket's authenticateOrigin.
 //
-// Returns nil when baseURL is empty or unparsable. nhooyr/websocket still
+// Returns nil when baseURL is empty or unparsable. coder/websocket still
 // authorises same-host requests regardless, so a nil allow-list in prod
 // means "only same-host upgrades are accepted" — strictly stricter than
 // the old InsecureSkipVerify=true default.

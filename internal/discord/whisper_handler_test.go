@@ -32,13 +32,13 @@ func (m *mockWhisperCharacterLookup) GetCharacterByCampaignAndDiscord(_ context.
 }
 
 type mockWhisperPoster struct {
-	calledPlayer    string
-	calledMessage   string
-	calledDiscordID string
-	calledGuildID   string
+	calledPlayer     string
+	calledMessage    string
+	calledDiscordID  string
+	calledGuildID    string
 	calledCampaignID string
-	returnID        string
-	returnErr       error
+	returnID         string
+	returnErr        error
 }
 
 func (m *mockWhisperPoster) PostWhisper(_ context.Context, player, message, discordUserID, guildID, campaignID string) (string, error) {

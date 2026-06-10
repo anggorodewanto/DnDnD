@@ -331,7 +331,7 @@ type phase43DeathSaveResult struct {
 // The helper persists death save tallies on the damage-at-0 path; the caller
 // is responsible for applying the unconscious / prone bundle via
 // applyDamageHP after the HP write.
-func (s *Service) routePhase43DeathSave(ctx context.Context, target refdata.Combatant, adjusted, rawNewHP, newHP int, isWildShaped, isCrit bool) (phase43DeathSaveResult, error) {
+func (s *Service) routePhase43DeathSave(ctx context.Context, target refdata.Combatant, adjusted, _, newHP int, isWildShaped, isCrit bool) (phase43DeathSaveResult, error) {
 	if target.IsNpc || isWildShaped || adjusted <= 0 {
 		return phase43DeathSaveResult{}, nil
 	}
@@ -339,10 +339,7 @@ func (s *Service) routePhase43DeathSave(ctx context.Context, target refdata.Comb
 
 	// Drop-to-0: overflow is damage remaining after HP drops to 0 (PHB p.197).
 	if target.HpCurrent > 0 && newHP <= 0 {
-		overflow := adjusted - int(target.HpCurrent)
-		if overflow < 0 {
-			overflow = 0
-		}
+		overflow := max(adjusted-int(target.HpCurrent), 0)
 		outcome := ProcessDropToZeroHP(target.DisplayName, overflow, maxHP)
 		return phase43DeathSaveResult{
 			outcome:      &outcome,

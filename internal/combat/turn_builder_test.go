@@ -149,9 +149,9 @@ func TestBuildTurnPlan_MultiattackCreature(t *testing.T) {
 	}
 
 	creature := refdata.Creature{
-		ID:   "bandit-captain",
-		Name: "Bandit Captain",
-		Size: "Medium",
+		ID:    "bandit-captain",
+		Name:  "Bandit Captain",
+		Size:  "Medium",
 		Speed: json.RawMessage(`{"walk":30}`),
 		Attacks: json.RawMessage(`[
 			{"name":"Scimitar","to_hit":5,"damage":"1d6+3","damage_type":"slashing","reach_ft":5},
@@ -225,10 +225,10 @@ func TestBuildTurnPlan_RechargeAbility(t *testing.T) {
 	}
 
 	creature := refdata.Creature{
-		ID:   "young-blue-dragon",
-		Name: "Young Blue Dragon",
-		Size: "Large",
-		Speed: json.RawMessage(`{"walk":40}`),
+		ID:      "young-blue-dragon",
+		Name:    "Young Blue Dragon",
+		Size:    "Large",
+		Speed:   json.RawMessage(`{"walk":40}`),
 		Attacks: json.RawMessage(`[{"name":"Bite","to_hit":9,"damage":"2d10+5","damage_type":"piercing","reach_ft":10}]`),
 		Abilities: toNullRawMessage(json.RawMessage(`[
 			{"name":"Lightning Breath (Recharge 5-6)","description":"The dragon exhales lightning in a 60-foot line that is 5 feet wide."}

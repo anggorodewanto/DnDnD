@@ -47,7 +47,7 @@ func setupDispatchActionFixture(t *testing.T) dispatchActionFixture {
 		DisplayName: "Aria",
 		ShortID:     "AR",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 		IsNpc:       false,
 		PositionCol: "B",
 		PositionRow: 2,
@@ -109,7 +109,7 @@ func setupDispatchActionFixture(t *testing.T) dispatchActionFixture {
 
 // dispatchInvoke runs the handler with a recorded response and returns the
 // last response body.
-func dispatchInvoke(t *testing.T, h *ActionHandler, sess *MockSession, sub, args string) string {
+func dispatchInvoke(t *testing.T, h *ActionHandler, _ *MockSession, sub, args string) string {
 	t.Helper()
 	return runActionHandler(t, h, makeActionInteraction("g1", "u1", sub, args))
 }

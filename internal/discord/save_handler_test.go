@@ -45,7 +45,7 @@ func makeSaveInteraction(ability string, adv, disadv bool) *discordgo.Interactio
 
 func makeTestCharacterWithSaves() refdata.Character {
 	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 18, CHA: 8})
-	profs, _ := json.Marshal(map[string]interface{}{
+	profs, _ := json.Marshal(map[string]any{
 		"saves":  []string{"wis", "cha"},
 		"skills": []string{"perception"},
 	})
@@ -410,7 +410,7 @@ func TestSaveHandler_WithCombatConditions(t *testing.T) {
 	char.ID = charID
 	char.CampaignID = campaignID
 
-	condJSON, _ := json.Marshal([]map[string]interface{}{
+	condJSON, _ := json.Marshal([]map[string]any{
 		{"condition": "paralyzed"},
 	})
 
@@ -729,11 +729,11 @@ func TestSaveHandler_RagingCombatantGetsAdvantageOnSTRSave(t *testing.T) {
 	char := makeTestCharacterWithSaves()
 	char.ID = charID
 	char.CampaignID = campaignID
-	classes, _ := json.Marshal([]map[string]interface{}{
+	classes, _ := json.Marshal([]map[string]any{
 		{"class": "Barbarian", "level": 5},
 	})
 	char.Classes = classes
-	feats, _ := json.Marshal([]map[string]interface{}{
+	feats, _ := json.Marshal([]map[string]any{
 		{"name": "Rage", "mechanical_effect": "rage"},
 	})
 	char.Features = pqtype.NullRawMessage{RawMessage: feats, Valid: true}

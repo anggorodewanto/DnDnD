@@ -36,7 +36,7 @@ func createTestCampaign(t *testing.T, db *sql.DB, guildID string) uuid.UUID {
 // createTestCharacter inserts a minimal character and returns its UUID.
 func createTestCharacter(t *testing.T, db *sql.DB, campaignID uuid.UUID, name string) uuid.UUID {
 	t.Helper()
-	classes, _ := json.Marshal([]map[string]interface{}{{"name": "Fighter", "level": 1}})
+	classes, _ := json.Marshal([]map[string]any{{"name": "Fighter", "level": 1}})
 	abilities, _ := json.Marshal(map[string]int{"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10})
 	hitDice, _ := json.Marshal(map[string]int{"d10": 1})
 

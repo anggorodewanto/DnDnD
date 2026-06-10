@@ -16,24 +16,24 @@ import (
 
 // mockStore implements loot.Store for unit testing error branches.
 type mockStore struct {
-	getEncounterFn                          func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
-	listEncountersByCampaignIDFn            func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
-	listCombatantsByEncounterIDFn           func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
-	getCharacterFn                          func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
-	createLootPoolFn                        func(ctx context.Context, arg refdata.CreateLootPoolParams) (refdata.LootPool, error)
-	createLootPoolItemFn                    func(ctx context.Context, arg refdata.CreateLootPoolItemParams) (refdata.LootPoolItem, error)
-	getLootPoolByEncounterFn                func(ctx context.Context, encounterID uuid.UUID) (refdata.LootPool, error)
-	getLootPoolFn                           func(ctx context.Context, id uuid.UUID) (refdata.LootPool, error)
-	listLootPoolItemsFn                     func(ctx context.Context, lootPoolID uuid.UUID) ([]refdata.LootPoolItem, error)
-	claimLootPoolItemFn                     func(ctx context.Context, arg refdata.ClaimLootPoolItemParams) (refdata.LootPoolItem, error)
-	updateLootPoolGoldFn                    func(ctx context.Context, arg refdata.UpdateLootPoolGoldParams) (refdata.LootPool, error)
-	updateLootPoolStatusFn                  func(ctx context.Context, arg refdata.UpdateLootPoolStatusParams) (refdata.LootPool, error)
-	deleteLootPoolItemFn                    func(ctx context.Context, id uuid.UUID) error
-	deleteUnclaimedLootPoolItemsFn          func(ctx context.Context, lootPoolID uuid.UUID) error
-	deleteLootPoolFn                        func(ctx context.Context, id uuid.UUID) error
+	getEncounterFn                           func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error)
+	listEncountersByCampaignIDFn             func(ctx context.Context, campaignID uuid.UUID) ([]refdata.Encounter, error)
+	listCombatantsByEncounterIDFn            func(ctx context.Context, encounterID uuid.UUID) ([]refdata.Combatant, error)
+	getCharacterFn                           func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	createLootPoolFn                         func(ctx context.Context, arg refdata.CreateLootPoolParams) (refdata.LootPool, error)
+	createLootPoolItemFn                     func(ctx context.Context, arg refdata.CreateLootPoolItemParams) (refdata.LootPoolItem, error)
+	getLootPoolByEncounterFn                 func(ctx context.Context, encounterID uuid.UUID) (refdata.LootPool, error)
+	getLootPoolFn                            func(ctx context.Context, id uuid.UUID) (refdata.LootPool, error)
+	listLootPoolItemsFn                      func(ctx context.Context, lootPoolID uuid.UUID) ([]refdata.LootPoolItem, error)
+	claimLootPoolItemFn                      func(ctx context.Context, arg refdata.ClaimLootPoolItemParams) (refdata.LootPoolItem, error)
+	updateLootPoolGoldFn                     func(ctx context.Context, arg refdata.UpdateLootPoolGoldParams) (refdata.LootPool, error)
+	updateLootPoolStatusFn                   func(ctx context.Context, arg refdata.UpdateLootPoolStatusParams) (refdata.LootPool, error)
+	deleteLootPoolItemFn                     func(ctx context.Context, id uuid.UUID) error
+	deleteUnclaimedLootPoolItemsFn           func(ctx context.Context, lootPoolID uuid.UUID) error
+	deleteLootPoolFn                         func(ctx context.Context, id uuid.UUID) error
 	listPlayerCharactersByCampaignApprovedFn func(ctx context.Context, campaignID uuid.UUID) ([]refdata.ListPlayerCharactersByCampaignApprovedRow, error)
-	updateCharacterGoldFn                   func(ctx context.Context, arg refdata.UpdateCharacterGoldParams) (refdata.Character, error)
-	updateCharacterInventoryFn              func(ctx context.Context, arg refdata.UpdateCharacterInventoryParams) (refdata.Character, error)
+	updateCharacterGoldFn                    func(ctx context.Context, arg refdata.UpdateCharacterGoldParams) (refdata.Character, error)
+	updateCharacterInventoryFn               func(ctx context.Context, arg refdata.UpdateCharacterInventoryParams) (refdata.Character, error)
 }
 
 func (m *mockStore) GetEncounter(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
@@ -98,9 +98,9 @@ func (m *mockStore) UpdateCharacterInventory(ctx context.Context, arg refdata.Up
 }
 
 var (
-	errDB     = errors.New("db error")
-	testPool  = refdata.LootPool{ID: uuid.New(), Status: "open", CampaignID: uuid.New()}
-	testItem  = refdata.LootPoolItem{ID: uuid.New(), Name: "Sword", Quantity: 1, Type: "weapon"}
+	errDB    = errors.New("db error")
+	testPool = refdata.LootPool{ID: uuid.New(), Status: "open", CampaignID: uuid.New()}
+	testItem = refdata.LootPoolItem{ID: uuid.New(), Name: "Sword", Quantity: 1, Type: "weapon"}
 )
 
 // --- ClaimItem error branch tests ---
@@ -389,8 +389,8 @@ func TestCreateLootPool_SkipsAliveAndNonNPCs(t *testing.T) {
 		},
 		listCombatantsByEncounterIDFn: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
 			return []refdata.Combatant{
-				{IsNpc: false, IsAlive: false}, // non-NPC, skip
-				{IsNpc: true, IsAlive: true},   // alive NPC, skip
+				{IsNpc: false, IsAlive: false},                                          // non-NPC, skip
+				{IsNpc: true, IsAlive: true},                                            // alive NPC, skip
 				{IsNpc: true, IsAlive: false, CharacterID: uuid.NullUUID{Valid: false}}, // no char ID, skip
 			}, nil
 		},

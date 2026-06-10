@@ -140,7 +140,7 @@ func meetsPrereq(scores map[string]int, prereq string) bool {
 	if !strings.Contains(prereq, ",") {
 		return scores[prereq] >= 13
 	}
-	for _, p := range strings.Split(prereq, ",") {
+	for p := range strings.SplitSeq(prereq, ",") {
 		if scores[p] >= 13 {
 			return true
 		}

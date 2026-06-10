@@ -194,13 +194,7 @@ func ParseDDBJSON(data []byte) (*ParsedCharacter, error) {
 	if d.OverrideHitPoints != nil {
 		pc.HPMax = *d.OverrideHitPoints
 	}
-	pc.HPCurrent = pc.HPMax - d.RemovedHitPoints
-	if pc.HPCurrent < 0 {
-		pc.HPCurrent = 0
-	}
-	if pc.HPCurrent > pc.HPMax {
-		pc.HPCurrent = pc.HPMax
-	}
+	pc.HPCurrent = min(max(pc.HPMax-d.RemovedHitPoints, 0), pc.HPMax)
 	pc.TempHP = d.TemporaryHitPoints
 
 	// Parse inventory and compute AC

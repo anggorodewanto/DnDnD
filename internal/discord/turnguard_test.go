@@ -174,9 +174,11 @@ func TestMoveHandler_TurnGate_NotInvokedInExploration(t *testing.T) {
 				MapID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
 			}, nil
 		},
-		getCombatant:       func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
-		listCombatants:     func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
-		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		getCombatant:   func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
 	}
 	handler.mapProvider = &mockMoveMapProvider{
 		getByID: func(_ context.Context, _ uuid.UUID) (refdata.Map, error) {

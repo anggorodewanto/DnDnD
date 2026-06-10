@@ -7,6 +7,7 @@ package statblocklibrary
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -178,12 +179,7 @@ func open5eVisible(c refdata.Creature, enabled []string) bool {
 		return true
 	}
 	slug := strings.TrimPrefix(c.Source.String, "open5e:")
-	for _, s := range enabled {
-		if s == slug {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(enabled, slug)
 }
 
 // homebrewVisibleTo returns true when a creature is visible to the given campaign.
@@ -224,9 +220,9 @@ func parseCR(s string) float64 {
 	if s == "" {
 		return 0
 	}
-	if idx := strings.Index(s, "/"); idx >= 0 {
-		num, err1 := strconv.ParseFloat(s[:idx], 64)
-		den, err2 := strconv.ParseFloat(s[idx+1:], 64)
+	if before, after, ok := strings.Cut(s, "/"); ok {
+		num, err1 := strconv.ParseFloat(before, 64)
+		den, err2 := strconv.ParseFloat(after, 64)
 		if err1 != nil || err2 != nil || den == 0 {
 			return 0
 		}

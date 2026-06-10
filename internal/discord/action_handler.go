@@ -1253,4 +1253,3 @@ func filterHostiles(all []refdata.Combatant, actor refdata.Combatant) []refdata.
 	}
 	return out
 }
-

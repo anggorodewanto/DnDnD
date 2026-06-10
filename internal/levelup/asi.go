@@ -10,9 +10,9 @@ import (
 type ASIType string
 
 const (
-	ASIPlus2     ASIType = "plus2"
+	ASIPlus2      ASIType = "plus2"
 	ASIPlus1Plus1 ASIType = "plus1plus1"
-	ASIFeat      ASIType = "feat"
+	ASIFeat       ASIType = "feat"
 )
 
 // ASIChoice represents a player's ASI/Feat selection.
@@ -21,7 +21,7 @@ type ASIChoice struct {
 	Ability  string   `json:"ability,omitempty"`
 	Ability2 string   `json:"ability2,omitempty"`
 	FeatID   string   `json:"feat_id,omitempty"`
-	Feat     FeatInfo `json:"feat,omitempty"`
+	Feat     FeatInfo `json:"feat"`
 }
 
 const maxAbilityScore = 20

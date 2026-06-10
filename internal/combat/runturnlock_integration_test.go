@@ -35,11 +35,11 @@ func TestRunUnderTurnLock_Success_FnRunsAndCommits(t *testing.T) {
 	td := setupTurnLockTest(t)
 	ctx := context.Background()
 
-	var fnCalls int32
+	var fnCalls atomic.Int32
 	var fnSawTx bool
 
 	info, err := combat.RunUnderTurnLock(ctx, td.DB, td.Queries, td.EncounterID, td.PlayerUID, func(fnCtx context.Context) error {
-		atomic.AddInt32(&fnCalls, 1)
+		fnCalls.Add(1)
 		// fn MUST receive the lock-holding tx via context so it can opt
 		// into running its writes on the same tx — this is the contract
 		// that lets callers persist inside the lock window.
@@ -55,7 +55,7 @@ func TestRunUnderTurnLock_Success_FnRunsAndCommits(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, int32(1), atomic.LoadInt32(&fnCalls), "fn must run exactly once on success")
+	assert.Equal(t, int32(1), fnCalls.Load(), "fn must run exactly once on success")
 	assert.True(t, fnSawTx, "fn must see the lock-holding tx via context")
 	assert.Equal(t, td.TurnID, info.TurnID)
 }
@@ -113,15 +113,15 @@ func TestRunUnderTurnLock_ValidationError_FnNotCalled(t *testing.T) {
 	td := setupTurnLockTest(t)
 	ctx := context.Background()
 
-	var fnCalls int32
+	var fnCalls atomic.Int32
 	_, err := combat.RunUnderTurnLock(ctx, td.DB, td.Queries, td.EncounterID, "wrong-user", func(_ context.Context) error {
-		atomic.AddInt32(&fnCalls, 1)
+		fnCalls.Add(1)
 		return nil
 	})
 	require.Error(t, err)
 	var notYourTurn *combat.ErrNotYourTurn
 	assert.True(t, errors.As(err, &notYourTurn), "expected ErrNotYourTurn, got %T %v", err, err)
-	assert.Equal(t, int32(0), atomic.LoadInt32(&fnCalls), "fn must NOT run when validation fails")
+	assert.Equal(t, int32(0), fnCalls.Load(), "fn must NOT run when validation fails")
 }
 
 // TestRunUnderTurnLock_LockHeldUntilFnReturns: a concurrent peer's
@@ -145,9 +145,7 @@ func TestRunUnderTurnLock_LockHeldUntilFnReturns(t *testing.T) {
 	var peerStartedAt atomic.Int64
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, err := combat.RunUnderTurnLock(ctx, td.DB, td.Queries, td.EncounterID, td.PlayerUID, func(_ context.Context) error {
 			close(aStarted)
 			<-aRelease
@@ -156,7 +154,7 @@ func TestRunUnderTurnLock_LockHeldUntilFnReturns(t *testing.T) {
 		if err != nil {
 			t.Errorf("handler A returned err: %v", err)
 		}
-	}()
+	})
 
 	<-aStarted
 
@@ -226,7 +224,7 @@ func TestContextWithTx_RoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	assert.Nil(t, combat.TxFromContext(ctx), "empty context returns nil")
-	assert.Nil(t, combat.TxFromContext(nil), "nil context returns nil safely")
+	assert.Nil(t, combat.TxFromContext(context.TODO()), "nil context returns nil safely")
 
 	// Round-trip a non-nil tx pointer. We can't construct a real *sql.Tx
 	// without a DB; pass a sentinel pointer to prove ctx carries it.
@@ -307,11 +305,11 @@ func TestRunUnderTurnLock_ZeroEncounterID_FailsValidation(t *testing.T) {
 	td := setupTurnLockTest(t)
 	ctx := context.Background()
 
-	var fnCalls int32
+	var fnCalls atomic.Int32
 	_, err := combat.RunUnderTurnLock(ctx, td.DB, td.Queries, uuid.Nil, td.PlayerUID, func(_ context.Context) error {
-		atomic.AddInt32(&fnCalls, 1)
+		fnCalls.Add(1)
 		return nil
 	})
 	require.Error(t, err)
-	assert.Equal(t, int32(0), atomic.LoadInt32(&fnCalls))
+	assert.Equal(t, int32(0), fnCalls.Load())
 }

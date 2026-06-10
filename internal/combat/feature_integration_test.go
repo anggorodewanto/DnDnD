@@ -476,8 +476,8 @@ func TestAuraOfProtectionFeature_BuildsModifySaveEffect(t *testing.T) {
 // Below L6 the radius is 0 (aura inactive).
 func TestPaladinAuraRadiusFt(t *testing.T) {
 	cases := []struct {
-		level    int
-		wantFt   int
+		level  int
+		wantFt int
 	}{
 		{1, 0},
 		{5, 0},
@@ -563,7 +563,7 @@ func TestBuildAttackEffectContext(t *testing.T) {
 			WeaponType: "martial_melee",
 		},
 		HasAdvantage:       true,
-		AllyWithinFt:      5,
+		AllyWithinFt:       5,
 		WearingArmor:       true,
 		OneHandedMeleeOnly: true,
 	})

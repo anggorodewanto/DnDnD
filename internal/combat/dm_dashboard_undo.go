@@ -112,13 +112,13 @@ func mostRecentUndoable(logs []refdata.ActionLog) *refdata.ActionLog {
 
 // undoBeforeState describes the recognized fields in action_log.before_state.
 type undoBeforeState struct {
-	HpCurrent   *int32           `json:"hp_current"`
-	TempHp      *int32           `json:"temp_hp"`
-	IsAlive     *bool            `json:"is_alive"`
-	PositionCol *string          `json:"position_col"`
-	PositionRow *int32           `json:"position_row"`
-	AltitudeFt  *int32           `json:"altitude_ft"`
-	Conditions  json.RawMessage  `json:"conditions"`
+	HpCurrent   *int32          `json:"hp_current"`
+	TempHp      *int32          `json:"temp_hp"`
+	IsAlive     *bool           `json:"is_alive"`
+	PositionCol *string         `json:"position_col"`
+	PositionRow *int32          `json:"position_row"`
+	AltitudeFt  *int32          `json:"altitude_ft"`
+	Conditions  json.RawMessage `json:"conditions"`
 }
 
 // applyUndo restores the recognized fields from log.BeforeState and writes a dm_override_undo entry.

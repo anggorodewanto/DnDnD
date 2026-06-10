@@ -34,18 +34,18 @@ func (h *Handler) RegisterEnemyTurnRoutes(r chi.Router) {
 
 // enemyTurnPlanResponse is the JSON response for a turn plan.
 type enemyTurnPlanResponse struct {
-	CombatantID string                  `json:"combatant_id"`
-	DisplayName string                  `json:"display_name"`
-	Steps       []turnStepResponse      `json:"steps"`
+	CombatantID string                        `json:"combatant_id"`
+	DisplayName string                        `json:"display_name"`
+	Steps       []turnStepResponse            `json:"steps"`
 	Reactions   []reactionDeclarationResponse `json:"reactions"`
 }
 
 type turnStepResponse struct {
-	Type      string             `json:"type"`
-	Suggested bool               `json:"suggested"`
-	Movement  *MovementStep      `json:"movement,omitempty"`
-	Attack    *AttackStep        `json:"attack,omitempty"`
-	Ability   *AbilityStep       `json:"ability,omitempty"`
+	Type      string        `json:"type"`
+	Suggested bool          `json:"suggested"`
+	Movement  *MovementStep `json:"movement,omitempty"`
+	Attack    *AttackStep   `json:"attack,omitempty"`
+	Ability   *AbilityStep  `json:"ability,omitempty"`
 }
 
 func toTurnPlanResponse(plan *TurnPlan) enemyTurnPlanResponse {
@@ -98,12 +98,12 @@ func (h *Handler) GetEnemyTurnPlan(w http.ResponseWriter, r *http.Request) {
 
 // executeEnemyTurnRequest is the JSON request body for executing an enemy turn.
 type executeEnemyTurnRequest struct {
-	CombatantID string            `json:"combatant_id"`
-	Steps       []executeStepReq  `json:"steps"`
+	CombatantID string           `json:"combatant_id"`
+	Steps       []executeStepReq `json:"steps"`
 }
 
 type executeStepReq struct {
-	Type     string       `json:"type"`
+	Type     string        `json:"type"`
 	Movement *MovementStep `json:"movement,omitempty"`
 	Attack   *AttackStep   `json:"attack,omitempty"`
 	Ability  *AbilityStep  `json:"ability,omitempty"`

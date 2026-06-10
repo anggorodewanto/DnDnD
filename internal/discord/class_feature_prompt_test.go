@@ -190,10 +190,10 @@ func TestClassFeaturePromptPoster_BardicInspiration_30sTimeout(t *testing.T) {
 
 	forfeited := atomic.Bool{}
 	if err := poster.PromptBardicInspiration(BardicInspirationPromptArgs{
-		ChannelID:   "ch-1",
-		HolderName:  "Fighter",
-		Die:         "d8",
-		Context:     "attack roll",
+		ChannelID:  "ch-1",
+		HolderName: "Fighter",
+		Die:        "d8",
+		Context:    "attack roll",
 	}, func(res BardicInspirationPromptResult) {
 		if res.Forfeited {
 			forfeited.Store(true)
@@ -221,10 +221,10 @@ func TestClassFeaturePromptPoster_BardicInspiration_Use(t *testing.T) {
 
 	used := atomic.Bool{}
 	if err := poster.PromptBardicInspiration(BardicInspirationPromptArgs{
-		ChannelID:   "ch-1",
-		HolderName:  "Fighter",
-		Die:         "d8",
-		Context:     "attack roll",
+		ChannelID:  "ch-1",
+		HolderName: "Fighter",
+		Die:        "d8",
+		Context:    "attack roll",
 	}, func(res BardicInspirationPromptResult) {
 		if res.UseDie {
 			used.Store(true)

@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // Handler handles shop HTTP endpoints.
 type Handler struct {
-	svc       *Service
-	postToFn  func(channelID, content string)
+	svc      *Service
+	postToFn func(channelID, content string)
 }
 
 // NewHandler creates a new Handler.
@@ -333,4 +333,3 @@ func jsonOK(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
 }
-

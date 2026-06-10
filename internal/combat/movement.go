@@ -159,10 +159,10 @@ func ValidateProneMoveStandAndMove(req MoveRequest, maxSpeed int) (*MoveResult, 
 	if int(req.Turn.MovementRemainingFt) < standCost {
 		destLabel := renderer.ColumnLabel(req.DestCol) + fmt.Sprintf("%d", req.DestRow+1)
 		return &MoveResult{
-			Valid:    false,
-			Reason:   fmt.Sprintf("Not enough movement to stand (%dft needed, %dft remaining)", standCost, req.Turn.MovementRemainingFt),
+			Valid:     false,
+			Reason:    fmt.Sprintf("Not enough movement to stand (%dft needed, %dft remaining)", standCost, req.Turn.MovementRemainingFt),
 			DestLabel: destLabel,
-			MoveMode: MoveModeStandAndMove,
+			MoveMode:  MoveModeStandAndMove,
 		}, nil
 	}
 

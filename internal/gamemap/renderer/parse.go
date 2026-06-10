@@ -7,11 +7,11 @@ import (
 
 // tiledMap is the top-level Tiled JSON structure.
 type tiledMap struct {
-	Width      int           `json:"width"`
-	Height     int           `json:"height"`
-	TileWidth  int           `json:"tilewidth"`
-	TileHeight int           `json:"tileheight"`
-	Layers     []tiledLayer  `json:"layers"`
+	Width      int            `json:"width"`
+	Height     int            `json:"height"`
+	TileWidth  int            `json:"tilewidth"`
+	TileHeight int            `json:"tileheight"`
+	Layers     []tiledLayer   `json:"layers"`
 	Tilesets   []tiledTileset `json:"tilesets"`
 }
 

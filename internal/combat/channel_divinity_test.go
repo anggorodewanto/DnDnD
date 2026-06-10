@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ab/dndnd/internal/dice"
+	"github.com/ab/dndnd/internal/dmqueue"
+	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/ab/dndnd/internal/dice"
-	"github.com/ab/dndnd/internal/dmqueue"
-	"github.com/ab/dndnd/internal/refdata"
 )
 
 var ctx = context.Background()

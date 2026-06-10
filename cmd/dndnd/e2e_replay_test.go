@@ -8,11 +8,14 @@
 // against the next outbound transcript entry the harness records.
 //
 // Round-trip test:    record a synthesized session against the harness,
-//                     replay through a fresh harness, assert green.
+//
+//	replay through a fresh harness, assert green.
+//
 // Drift test:         mutate one expected line, assert replay fails loudly.
 // File-driven test:   `make playtest-replay TRANSCRIPT=path` reads a
-//                     transcript file off disk and replays it. Default is
-//                     internal/playtest/testdata/sample.jsonl.
+//
+//	transcript file off disk and replays it. Default is
+//	internal/playtest/testdata/sample.jsonl.
 package main
 
 import (

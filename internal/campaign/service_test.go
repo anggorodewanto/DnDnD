@@ -15,13 +15,13 @@ import (
 
 // mockStore implements Store for unit tests.
 type mockStore struct {
-	createCampaignFn       func(ctx context.Context, arg refdata.CreateCampaignParams) (refdata.Campaign, error)
-	getCampaignByGuildIDFn func(ctx context.Context, guildID string) (refdata.Campaign, error)
-	getCampaignByIDFn      func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
-	updateCampaignStatusFn func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error)
+	createCampaignFn         func(ctx context.Context, arg refdata.CreateCampaignParams) (refdata.Campaign, error)
+	getCampaignByGuildIDFn   func(ctx context.Context, guildID string) (refdata.Campaign, error)
+	getCampaignByIDFn        func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
+	updateCampaignStatusFn   func(ctx context.Context, arg refdata.UpdateCampaignStatusParams) (refdata.Campaign, error)
 	updateCampaignSettingsFn func(ctx context.Context, arg refdata.UpdateCampaignSettingsParams) (refdata.Campaign, error)
-	updateCampaignNameFn   func(ctx context.Context, arg refdata.UpdateCampaignNameParams) (refdata.Campaign, error)
-	listCampaignsFn        func(ctx context.Context) ([]refdata.Campaign, error)
+	updateCampaignNameFn     func(ctx context.Context, arg refdata.UpdateCampaignNameParams) (refdata.Campaign, error)
+	listCampaignsFn          func(ctx context.Context) ([]refdata.Campaign, error)
 }
 
 func (m *mockStore) CreateCampaign(ctx context.Context, arg refdata.CreateCampaignParams) (refdata.Campaign, error) {
@@ -784,8 +784,8 @@ func TestSettings_ChannelIDs_RoundTrip(t *testing.T) {
 		TurnTimeoutHours: 24,
 		DiagonalRule:     "standard",
 		ChannelIDs: map[string]string{
-			"the-story":   "chan-1",
-			"combat-map":  "chan-2",
+			"the-story":    "chan-1",
+			"combat-map":   "chan-2",
 			"in-character": "chan-3",
 		},
 	}
@@ -796,8 +796,8 @@ func TestSettings_ChannelIDs_RoundTrip(t *testing.T) {
 	err = json.Unmarshal(msg.RawMessage, &parsed)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{
-		"the-story":   "chan-1",
-		"combat-map":  "chan-2",
+		"the-story":    "chan-1",
+		"combat-map":   "chan-2",
 		"in-character": "chan-3",
 	}, parsed.ChannelIDs)
 }

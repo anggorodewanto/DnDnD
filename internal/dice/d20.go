@@ -9,10 +9,10 @@ import (
 type RollMode int
 
 const (
-	Normal                  RollMode = iota
-	Advantage                        // Roll 2d20, take higher
-	Disadvantage                     // Roll 2d20, take lower
-	AdvantageAndDisadvantage         // Both apply, cancel out to normal
+	Normal                   RollMode = iota
+	Advantage                         // Roll 2d20, take higher
+	Disadvantage                      // Roll 2d20, take lower
+	AdvantageAndDisadvantage          // Both apply, cancel out to normal
 )
 
 // String returns a human-readable label for the roll mode.
@@ -31,14 +31,14 @@ func (m RollMode) String() string {
 
 // D20Result holds the result of a d20 roll with full breakdown.
 type D20Result struct {
-	Rolls        []int    `json:"rolls"`
-	Chosen       int      `json:"chosen"`
-	Modifier     int      `json:"modifier"`
-	Total        int      `json:"total"`
-	Mode         RollMode `json:"mode"`
-	CriticalHit  bool     `json:"critical_hit"`
-	CriticalFail bool     `json:"critical_fail"`
-	Breakdown    string   `json:"breakdown"`
+	Rolls        []int     `json:"rolls"`
+	Chosen       int       `json:"chosen"`
+	Modifier     int       `json:"modifier"`
+	Total        int       `json:"total"`
+	Mode         RollMode  `json:"mode"`
+	CriticalHit  bool      `json:"critical_hit"`
+	CriticalFail bool      `json:"critical_fail"`
+	Breakdown    string    `json:"breakdown"`
 	Timestamp    time.Time `json:"timestamp"`
 }
 

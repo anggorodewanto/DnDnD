@@ -453,4 +453,3 @@ func (t *TurnTimer) resetDyingStateAfterNat20(ctx context.Context, combatant ref
 	}
 	return nil
 }
-

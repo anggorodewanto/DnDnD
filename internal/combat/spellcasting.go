@@ -468,12 +468,12 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 	// 6d. Material component check (validation only — deduction deferred until
 	// all later validations pass, see step 12b).
 	type materialDeduction struct {
-		deductGold       bool
-		newGold          int32
-		addItem          bool
-		removeItem       bool
-		inventory        []InventoryItem
-		componentName    string
+		deductGold    bool
+		newGold       int32
+		addItem       bool
+		removeItem    bool
+		inventory     []InventoryItem
+		componentName string
 	}
 	var matDeduction *materialDeduction
 	if spell.MaterialCostGp.Valid && spell.MaterialCostGp.Float64 > 0 {
@@ -677,10 +677,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 			return CastResult{}, fmt.Errorf("rolling spell healing: %w", err)
 		}
 		result.HealingTotal = rollResult.Total
-		newHP := target.HpCurrent + int32(rollResult.Total)
-		if newHP > target.HpMax {
-			newHP = target.HpMax
-		}
+		newHP := min(target.HpCurrent+int32(rollResult.Total), target.HpMax)
 		if _, err := s.store.UpdateCombatantHP(ctx, refdata.UpdateCombatantHPParams{
 			ID:        target.ID,
 			HpCurrent: newHP,
@@ -830,7 +827,7 @@ func (s *Service) Cast(ctx context.Context, cmd CastCommand, roller *dice.Roller
 // is the wiring that makes Spirit Guardians, Wall of Fire, Darkness, Silence,
 // Fog Cloud, Cloud of Daggers, Moonbeam, and Stinking Cloud actually appear
 // on the encounter map. (med-26 / Phase 67)
-func (s *Service) maybeCreateSpellZone(ctx context.Context, spell refdata.Spell, caster refdata.Combatant, cmd CastCommand) error {
+func (s *Service) maybeCreateSpellZone(ctx context.Context, spell refdata.Spell, caster refdata.Combatant, _ CastCommand) error {
 	def, ok := LookupZoneDefinition(spell.Name)
 	if !ok {
 		return nil

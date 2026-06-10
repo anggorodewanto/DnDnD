@@ -36,13 +36,13 @@ type TurnValidationQuerier interface {
 
 // TurnOwnerInfo holds information about the current turn owner for validation.
 type TurnOwnerInfo struct {
-	TurnID       uuid.UUID
-	CombatantID  uuid.UUID
-	CharacterID  uuid.NullUUID
-	DisplayName  string
-	OwnerUserID  string // discord_user_id of the character owner, empty for NPCs
-	DMUserID     string // dm_user_id of the campaign
-	IsNPC        bool
+	TurnID      uuid.UUID
+	CombatantID uuid.UUID
+	CharacterID uuid.NullUUID
+	DisplayName string
+	OwnerUserID string // discord_user_id of the character owner, empty for NPCs
+	DMUserID    string // dm_user_id of the campaign
+	IsNPC       bool
 }
 
 // ValidateTurnOwnership checks if the given discord user is allowed to act on the current turn.

@@ -18,10 +18,10 @@ import (
 // methods levelUpStoryPosterAdapter touches. Keeps the unit test free of a
 // real DB while exercising the character → campaign → guild chain.
 type fakeLevelUpStoryQueries struct {
-	chars     map[uuid.UUID]refdata.Character
-	camps     map[uuid.UUID]refdata.Campaign
-	charErr   error
-	campErr   error
+	chars   map[uuid.UUID]refdata.Character
+	camps   map[uuid.UUID]refdata.Campaign
+	charErr error
+	campErr error
 }
 
 func (f *fakeLevelUpStoryQueries) GetCharacter(_ context.Context, id uuid.UUID) (refdata.Character, error) {

@@ -196,7 +196,7 @@ func TestService_EndCombat_PublishesSnapshot(t *testing.T) {
 		getEncounterFn: func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
 			return refdata.Encounter{ID: id, Status: "active", RoundNumber: 3}, nil
 		},
-		deleteEncounterZonesByEncounterIDFn: func(ctx context.Context, encounterID uuid.UUID) error { return nil },
+		deleteEncounterZonesByEncounterIDFn:     func(ctx context.Context, encounterID uuid.UUID) error { return nil },
 		deleteReactionDeclarationsByEncounterFn: func(ctx context.Context, encounterID uuid.UUID) error { return nil },
 		updateEncounterStatusFn: func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
 			return refdata.Encounter{ID: arg.ID, Status: arg.Status, RoundNumber: 3}, nil

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
@@ -234,11 +235,7 @@ func (s *Service) TransitionToCombat(ctx context.Context, encounterID uuid.UUID)
 // take precedence). Nil/empty overrides yields base unchanged.
 func ApplyPositionOverrides(base, overrides map[uuid.UUID]combat.Position) map[uuid.UUID]combat.Position {
 	out := make(map[uuid.UUID]combat.Position, len(base))
-	for k, v := range base {
-		out[k] = v
-	}
-	for k, v := range overrides {
-		out[k] = v
-	}
+	maps.Copy(out, base)
+	maps.Copy(out, overrides)
 	return out
 }

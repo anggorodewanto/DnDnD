@@ -16,24 +16,34 @@ import (
 )
 
 type mockCounterspellService struct {
-	mu                 sync.Mutex
-	triggerPrompt      combat.CounterspellPrompt
-	triggerErr         error
-	triggerCalledWith  *struct{ DeclarationID uuid.UUID; EnemySpellName string; EnemyCastLevel int; IsSubtle bool }
-	resolveResult      combat.CounterspellResult
-	resolveErr         error
-	resolveCalledLvl   int
-	passResult         combat.CounterspellResult
-	passErr            error
-	passCalls          int32
-	forfeitResult      combat.CounterspellResult
-	forfeitErr         error
-	forfeitCalls       int32
+	mu                sync.Mutex
+	triggerPrompt     combat.CounterspellPrompt
+	triggerErr        error
+	triggerCalledWith *struct {
+		DeclarationID  uuid.UUID
+		EnemySpellName string
+		EnemyCastLevel int
+		IsSubtle       bool
+	}
+	resolveResult    combat.CounterspellResult
+	resolveErr       error
+	resolveCalledLvl int
+	passResult       combat.CounterspellResult
+	passErr          error
+	passCalls        atomic.Int32
+	forfeitResult    combat.CounterspellResult
+	forfeitErr       error
+	forfeitCalls     atomic.Int32
 }
 
 func (m *mockCounterspellService) TriggerCounterspell(ctx context.Context, declID uuid.UUID, name string, lvl int, subtle bool, enemyCasterID uuid.UUID, distanceFt int) (combat.CounterspellPrompt, error) {
 	m.mu.Lock()
-	m.triggerCalledWith = &struct{ DeclarationID uuid.UUID; EnemySpellName string; EnemyCastLevel int; IsSubtle bool }{declID, name, lvl, subtle}
+	m.triggerCalledWith = &struct {
+		DeclarationID  uuid.UUID
+		EnemySpellName string
+		EnemyCastLevel int
+		IsSubtle       bool
+	}{declID, name, lvl, subtle}
 	m.mu.Unlock()
 	return m.triggerPrompt, m.triggerErr
 }
@@ -44,11 +54,11 @@ func (m *mockCounterspellService) ResolveCounterspell(ctx context.Context, declI
 	return m.resolveResult, m.resolveErr
 }
 func (m *mockCounterspellService) PassCounterspell(ctx context.Context, declID uuid.UUID) (combat.CounterspellResult, error) {
-	atomic.AddInt32(&m.passCalls, 1)
+	m.passCalls.Add(1)
 	return m.passResult, m.passErr
 }
 func (m *mockCounterspellService) ForfeitCounterspell(ctx context.Context, declID uuid.UUID) (combat.CounterspellResult, error) {
-	atomic.AddInt32(&m.forfeitCalls, 1)
+	m.forfeitCalls.Add(1)
 	return m.forfeitResult, m.forfeitErr
 }
 
@@ -179,8 +189,8 @@ func TestCounterspellPromptPoster_OnChoice_RoutesSlotAndPass(t *testing.T) {
 		Type: discordgo.InteractionMessageComponent,
 		Data: discordgo.MessageComponentInteractionData{CustomID: passBtn.CustomID},
 	})
-	if atomic.LoadInt32(&svc.passCalls) != 1 {
-		t.Errorf("PassCounterspell calls = %d, want 1", atomic.LoadInt32(&svc.passCalls))
+	if svc.passCalls.Load() != 1 {
+		t.Errorf("PassCounterspell calls = %d, want 1", svc.passCalls.Load())
 	}
 }
 
@@ -207,7 +217,7 @@ func TestCounterspellPromptPoster_Forfeit_CallsForfeitOnTimeout(t *testing.T) {
 
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
-		if atomic.LoadInt32(&svc.forfeitCalls) == 1 {
+		if svc.forfeitCalls.Load() == 1 {
 			return
 		}
 		time.Sleep(5 * time.Millisecond)

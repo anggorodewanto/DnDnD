@@ -49,20 +49,20 @@ func (s *Service) SummonCreature(ctx context.Context, input SummonCreatureInput)
 	}
 
 	combatant, err := s.store.CreateCombatant(ctx, refdata.CreateCombatantParams{
-		EncounterID: input.EncounterID,
+		EncounterID:   input.EncounterID,
 		CreatureRefID: sql.NullString{String: input.CreatureRefID, Valid: true},
-		ShortID:     input.ShortID,
-		DisplayName: input.DisplayName,
-		PositionCol: input.PositionCol,
-		PositionRow: input.PositionRow,
-		HpMax:       creature.HpAverage,
-		HpCurrent:   creature.HpAverage,
-		Ac:          creature.Ac,
-		Conditions:  json.RawMessage(`[]`),
-		IsNpc:       true,
-		IsAlive:     true,
-		IsVisible:   true,
-		SummonerID:  uuid.NullUUID{UUID: input.SummonerID, Valid: true},
+		ShortID:       input.ShortID,
+		DisplayName:   input.DisplayName,
+		PositionCol:   input.PositionCol,
+		PositionRow:   input.PositionRow,
+		HpMax:         creature.HpAverage,
+		HpCurrent:     creature.HpAverage,
+		Ac:            creature.Ac,
+		Conditions:    json.RawMessage(`[]`),
+		IsNpc:         true,
+		IsAlive:       true,
+		IsVisible:     true,
+		SummonerID:    uuid.NullUUID{UUID: input.SummonerID, Valid: true},
 	})
 	if err != nil {
 		return refdata.Combatant{}, fmt.Errorf("creating summoned combatant: %w", err)
@@ -578,10 +578,10 @@ func FormatSummonedCreaturesPrompt(creatures []refdata.Combatant, resources *Sum
 
 // commandCreatureRequest is the JSON request body for /command.
 type commandCreatureRequest struct {
-	SummonerID      string `json:"summoner_id"`
-	SummonerName    string `json:"summoner_name"`
-	CreatureShortID string `json:"creature_short_id"`
-	Action          string `json:"action"`
+	SummonerID      string   `json:"summoner_id"`
+	SummonerName    string   `json:"summoner_name"`
+	CreatureShortID string   `json:"creature_short_id"`
+	Action          string   `json:"action"`
 	Args            []string `json:"args,omitempty"`
 }
 

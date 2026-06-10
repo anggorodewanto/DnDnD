@@ -51,7 +51,7 @@ func (f *fakeUploader) UploadMapImage(_ context.Context, campaignID uuid.UUID, i
 
 // captureStore records the TiledJson handed to CreateMap so tests can assert on
 // the rewritten image references.
-func captureStore(campaignID uuid.UUID, captured *json.RawMessage) *mockStore {
+func captureStore(_ uuid.UUID, captured *json.RawMessage) *mockStore {
 	return &mockStore{
 		createMapFn: func(_ context.Context, arg refdata.CreateMapParams) (refdata.Map, error) {
 			*captured = arg.TiledJson

@@ -3,6 +3,7 @@ package combat
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -101,13 +102,7 @@ func TestFeatureUses_RoundTrip_RageRechargesOnLongRest(t *testing.T) {
 	})
 
 	rechargedRage := restResult.FeaturesRecharged
-	foundRageRecharge := false
-	for _, name := range rechargedRage {
-		if name == FeatureKeyRage {
-			foundRageRecharge = true
-			break
-		}
-	}
+	foundRageRecharge := slices.Contains(rechargedRage, FeatureKeyRage)
 	if !foundRageRecharge {
 		t.Fatalf("long rest did not recharge rage; recharged=%v", rechargedRage)
 	}

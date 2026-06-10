@@ -78,14 +78,14 @@ func testWizardCharacter() refdata.Character {
 	scoresJSON, _ := json.Marshal(AbilityScores{Str: 10, Dex: 14, Con: 12, Int: 18, Wis: 13, Cha: 8})
 
 	return refdata.Character{
-		ID:              uuid.New(),
-		Name:            "Gandalf",
-		Level:           9,
+		ID:               uuid.New(),
+		Name:             "Gandalf",
+		Level:            9,
 		ProficiencyBonus: 4,
-		Classes:         classesJSON,
-		AbilityScores:   scoresJSON,
-		SpellSlots:      pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
-		PactMagicSlots:  pqtype.NullRawMessage{},
+		Classes:          classesJSON,
+		AbilityScores:    scoresJSON,
+		SpellSlots:       pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
+		PactMagicSlots:   pqtype.NullRawMessage{},
 	}
 }
 
@@ -628,7 +628,7 @@ func TestHandler_TriggerCounterspell_Success(t *testing.T) {
 
 	_, r := newTestCombatRouter(store)
 
-	body, _ := json.Marshal(map[string]interface{}{
+	body, _ := json.Marshal(map[string]any{
 		"enemy_spell_name": "Fireball",
 		"enemy_cast_level": 5,
 		"distance_ft":      30,
@@ -700,7 +700,7 @@ func TestHandler_ResolveCounterspell_Success(t *testing.T) {
 
 	_, r := newTestCombatRouter(store)
 
-	body, _ := json.Marshal(map[string]interface{}{
+	body, _ := json.Marshal(map[string]any{
 		"slot_level": 3,
 	})
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/reactions/"+declID.String()+"/counterspell/resolve", bytes.NewReader(body))
@@ -741,7 +741,7 @@ func TestHandler_ResolveCounterspellCheck_Success(t *testing.T) {
 
 	_, r := newTestCombatRouter(store)
 
-	body, _ := json.Marshal(map[string]interface{}{
+	body, _ := json.Marshal(map[string]any{
 		"check_total": 16,
 	})
 	req := httptest.NewRequest("POST", "/api/combat/"+encounterID.String()+"/reactions/"+declID.String()+"/counterspell/check", bytes.NewReader(body))
@@ -1526,8 +1526,8 @@ func TestResolveCounterspell_DeductSlotError(t *testing.T) {
 	store := defaultMockStore()
 	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
 		return refdata.ReactionDeclaration{
-			CombatantID:        uuid.New(),
-			CounterspellStatus: sql.NullString{String: "prompted", Valid: true},
+			CombatantID:            uuid.New(),
+			CounterspellStatus:     sql.NullString{String: "prompted", Valid: true},
 			CounterspellEnemyLevel: sql.NullInt32{Int32: 3, Valid: true},
 		}, nil
 	}
@@ -1557,8 +1557,8 @@ func TestResolveCounterspell_DeductPactSlotError(t *testing.T) {
 	store := defaultMockStore()
 	store.getReactionDeclarationFn = func(ctx context.Context, id uuid.UUID) (refdata.ReactionDeclaration, error) {
 		return refdata.ReactionDeclaration{
-			CombatantID:        uuid.New(),
-			CounterspellStatus: sql.NullString{String: "prompted", Valid: true},
+			CombatantID:            uuid.New(),
+			CounterspellStatus:     sql.NullString{String: "prompted", Valid: true},
 			CounterspellEnemyLevel: sql.NullInt32{Int32: 3, Valid: true},
 		}, nil
 	}
@@ -1688,7 +1688,7 @@ func TestHandler_TriggerCounterspell_ServiceError(t *testing.T) {
 	}
 
 	_, r := newTestCombatRouter(store)
-	body, _ := json.Marshal(map[string]interface{}{"enemy_spell_name": "Fireball", "enemy_cast_level": 5, "distance_ft": 30})
+	body, _ := json.Marshal(map[string]any{"enemy_spell_name": "Fireball", "enemy_cast_level": 5, "distance_ft": 30})
 	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/reactions/"+uuid.New().String()+"/counterspell/trigger", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
@@ -1702,7 +1702,7 @@ func TestHandler_ResolveCounterspell_ServiceError(t *testing.T) {
 	}
 
 	_, r := newTestCombatRouter(store)
-	body, _ := json.Marshal(map[string]interface{}{"slot_level": 3})
+	body, _ := json.Marshal(map[string]any{"slot_level": 3})
 	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/reactions/"+uuid.New().String()+"/counterspell/resolve", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
@@ -1716,7 +1716,7 @@ func TestHandler_ResolveCounterspellCheck_ServiceError(t *testing.T) {
 	}
 
 	_, r := newTestCombatRouter(store)
-	body, _ := json.Marshal(map[string]interface{}{"check_total": 15})
+	body, _ := json.Marshal(map[string]any{"check_total": 15})
 	req := httptest.NewRequest("POST", "/api/combat/"+uuid.New().String()+"/reactions/"+uuid.New().String()+"/counterspell/check", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)

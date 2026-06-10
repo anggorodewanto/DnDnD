@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 )
 
 // fixedRoller returns a roller whose d20 always rolls the given value.

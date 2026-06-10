@@ -91,7 +91,7 @@ func buildCountSinceQuery(since time.Time) (string, []any) {
 }
 
 // buildListRecentQuery returns the SELECT SQL for the most-recent errors.
-// user_id is COALESCEd to '' so the Go side can scan into a plain string.
+// user_id is COALESCEd to ” so the Go side can scan into a plain string.
 func buildListRecentQuery(limit int) (string, []any) {
 	q := `SELECT command, COALESCE(user_id, '') AS user_id, summary, error_detail, created_at
 FROM error_log

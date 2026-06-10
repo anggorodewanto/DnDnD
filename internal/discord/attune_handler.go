@@ -30,13 +30,13 @@ type AttunePublisher interface {
 
 // AttuneHandler handles the /attune slash command.
 type AttuneHandler struct {
-	session            Session
-	campaignProv       InventoryCampaignProvider
-	characterLookup    InventoryCharacterLookup
-	store              AttuneCharacterStore
-	publisher          AttunePublisher
-	cardUpdater        CardUpdater // SR-007
-	encounterProvider  CheckEncounterProvider
+	session           Session
+	campaignProv      InventoryCampaignProvider
+	characterLookup   InventoryCharacterLookup
+	store             AttuneCharacterStore
+	publisher         AttunePublisher
+	cardUpdater       CardUpdater // SR-007
+	encounterProvider CheckEncounterProvider
 }
 
 // NewAttuneHandler creates a new AttuneHandler.

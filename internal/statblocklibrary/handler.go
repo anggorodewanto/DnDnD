@@ -191,7 +191,7 @@ func flattenMulti(values []string) []string {
 	}
 	out := make([]string, 0, len(values))
 	for _, v := range values {
-		for _, part := range strings.Split(v, ",") {
+		for part := range strings.SplitSeq(v, ",") {
 			p := strings.TrimSpace(part)
 			if p == "" {
 				continue

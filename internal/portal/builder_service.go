@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
@@ -623,10 +624,8 @@ func (svc *BuilderService) validateAllowedAbilityMethod(ctx context.Context, cam
 	if method == "" {
 		method = AbilityMethodPointBuy
 	}
-	for _, allowedMethod := range allowed {
-		if method == allowedMethod {
-			return nil
-		}
+	if slices.Contains(allowed, method) {
+		return nil
 	}
 	return fmt.Errorf("ability score method %s is not allowed", method)
 }
@@ -824,10 +823,7 @@ func ValidatePointBuy(scores PointBuyScores) error {
 			return fmt.Errorf("%w: %d", ErrScoreOutOfRange, v)
 		}
 		// Cap at 15 for cost calculation (racial bonus is free).
-		base := v
-		if base > 15 {
-			base = 15
-		}
+		base := min(v, 15)
 		cost, err := PointBuyCost(base)
 		if err != nil {
 			return fmt.Errorf("%w: %d", err, v)

@@ -3,8 +3,8 @@ package renderer
 import (
 	"bytes"
 	"image"
-	"image/png"
 	_ "image/jpeg"
+	"image/png"
 
 	"github.com/fogleman/gg"
 )

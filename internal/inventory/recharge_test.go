@@ -30,7 +30,7 @@ func TestDawnRecharge_RestoresCharges(t *testing.T) {
 	}
 
 	result, err := svc.DawnRecharge(DawnRechargeInput{
-		Items:        items,
+		Items: items,
 		RechargeInfo: map[string]RechargeInfo{
 			"wand-of-fireballs": {Dice: "1d6+1", DestroyOnZero: true},
 		},
@@ -54,7 +54,7 @@ func TestDawnRecharge_CapsAtMax(t *testing.T) {
 	}
 
 	result, err := svc.DawnRecharge(DawnRechargeInput{
-		Items:        items,
+		Items: items,
 		RechargeInfo: map[string]RechargeInfo{
 			"staff-of-healing": {Dice: "1d6+1"},
 		},
@@ -74,7 +74,7 @@ func TestDawnRecharge_DestroyOnZero(t *testing.T) {
 	}
 
 	result, err := svc.DawnRecharge(DawnRechargeInput{
-		Items:        items,
+		Items: items,
 		RechargeInfo: map[string]RechargeInfo{
 			"wand-of-fireballs": {Dice: "1d6+1", DestroyOnZero: true},
 		},
@@ -96,7 +96,7 @@ func TestDawnRecharge_ZeroChargesNotDestroyed(t *testing.T) {
 	}
 
 	result, err := svc.DawnRecharge(DawnRechargeInput{
-		Items:        items,
+		Items: items,
 		RechargeInfo: map[string]RechargeInfo{
 			"wand-of-fireballs": {Dice: "1d6+1", DestroyOnZero: true},
 		},
@@ -117,7 +117,7 @@ func TestDawnRecharge_DestroyOnZero_ItemNotAtZero(t *testing.T) {
 	}
 
 	result, err := svc.DawnRecharge(DawnRechargeInput{
-		Items:        items,
+		Items: items,
 		RechargeInfo: map[string]RechargeInfo{
 			"wand-of-fireballs": {Dice: "1d6+1", DestroyOnZero: true},
 		},

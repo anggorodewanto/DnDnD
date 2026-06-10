@@ -74,9 +74,9 @@ func TestAvailableSmiteSlots(t *testing.T) {
 // TDD Cycle 4: IsSmiteEligible checks melee hit
 func TestIsSmiteEligible(t *testing.T) {
 	tests := []struct {
-		name    string
-		result  AttackResult
-		want    bool
+		name   string
+		result AttackResult
+		want   bool
 	}{
 		{"melee weapon hit", AttackResult{Hit: true, IsMelee: true, IsWeaponAttack: true}, true},
 		{"melee weapon miss", AttackResult{Hit: false, IsMelee: true, IsWeaponAttack: true}, false},
@@ -161,6 +161,7 @@ func TestDivineSmiteStructs(t *testing.T) {
 		IsCritical: false,
 	}
 	assert.Equal(t, 1, cmd.SlotLevel)
+	assert.False(t, cmd.IsCritical)
 
 	result := DivineSmiteResult{
 		SmiteDamage:    14,
@@ -172,6 +173,12 @@ func TestDivineSmiteStructs(t *testing.T) {
 		CombatLog:      "test",
 	}
 	assert.Equal(t, 14, result.SmiteDamage)
+	assert.Equal(t, "2d8", result.SmiteDice)
+	assert.Equal(t, 1, result.SlotLevel)
+	assert.False(t, result.IsUndead)
+	assert.False(t, result.IsCritical)
+	assert.Equal(t, 2, result.SlotsRemaining["1"].Current)
+	assert.Equal(t, "test", result.CombatLog)
 }
 
 // Edge case: DivineSmite with NPC attacker

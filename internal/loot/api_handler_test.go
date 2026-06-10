@@ -604,7 +604,7 @@ func TestAPI_UpdateItem(t *testing.T) {
 	handler.HandleAddItem(rec, req)
 	require.Equal(t, http.StatusCreated, rec.Code)
 
-	var addResp map[string]interface{}
+	var addResp map[string]any
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&addResp))
 	itemID := addResp["id"].(string)
 
@@ -621,7 +621,7 @@ func TestAPI_UpdateItem(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify the update
-	var updated map[string]interface{}
+	var updated map[string]any
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&updated))
 	assert.Equal(t, "Enchanted Sword", updated["name"])
 	assert.Equal(t, "Etched with dwarven runes", updated["description"])

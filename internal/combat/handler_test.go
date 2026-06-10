@@ -38,11 +38,11 @@ func TestHandler_StartCombat_Success(t *testing.T) {
 	store := startCombatMockStore(templateID, encounterID, charID)
 	_, r := newTestCombatRouter(store)
 
-	body := map[string]interface{}{
-		"template_id":    templateID.String(),
-		"character_ids":  []string{charID.String()},
-		"character_positions": map[string]interface{}{
-			charID.String(): map[string]interface{}{"col": "D", "row": 5},
+	body := map[string]any{
+		"template_id":   templateID.String(),
+		"character_ids": []string{charID.String()},
+		"character_positions": map[string]any{
+			charID.String(): map[string]any{"col": "D", "row": 5},
 		},
 	}
 	b, _ := json.Marshal(body)
@@ -80,7 +80,7 @@ func TestHandler_StartCombat_InvalidJSON(t *testing.T) {
 func TestHandler_StartCombat_InvalidTemplateID(t *testing.T) {
 	_, r := newTestCombatRouter(defaultMockStore())
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"template_id": "not-a-uuid",
 	}
 	b, _ := json.Marshal(body)
@@ -97,7 +97,7 @@ func TestHandler_StartCombat_InvalidTemplateID(t *testing.T) {
 func TestHandler_StartCombat_InvalidCharacterID(t *testing.T) {
 	_, r := newTestCombatRouter(defaultMockStore())
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"template_id":   uuid.New().String(),
 		"character_ids": []string{"not-uuid"},
 	}
@@ -115,11 +115,11 @@ func TestHandler_StartCombat_InvalidCharacterID(t *testing.T) {
 func TestHandler_StartCombat_InvalidPositionKey(t *testing.T) {
 	_, r := newTestCombatRouter(defaultMockStore())
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"template_id":   uuid.New().String(),
 		"character_ids": []string{},
-		"character_positions": map[string]interface{}{
-			"not-uuid": map[string]interface{}{"col": "A", "row": 1},
+		"character_positions": map[string]any{
+			"not-uuid": map[string]any{"col": "A", "row": 1},
 		},
 	}
 	b, _ := json.Marshal(body)
@@ -138,7 +138,7 @@ func TestHandler_StartCombat_ServiceError(t *testing.T) {
 	// Template not found will cause service error
 	_, r := newTestCombatRouter(store)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"template_id":   uuid.New().String(),
 		"character_ids": []string{},
 	}
@@ -513,7 +513,7 @@ func TestHandler_DeclareReaction_Success(t *testing.T) {
 
 	_, r := newTestCombatRouter(store)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"combatant_id": combatantID.String(),
 		"description":  "Shield if I get hit",
 	}
@@ -535,7 +535,7 @@ func TestHandler_DeclareReaction_Success(t *testing.T) {
 func TestHandler_DeclareReaction_InvalidEncounterID(t *testing.T) {
 	_, r := newTestCombatRouter(defaultMockStore())
 
-	body := map[string]interface{}{"combatant_id": uuid.New().String(), "description": "Shield"}
+	body := map[string]any{"combatant_id": uuid.New().String(), "description": "Shield"}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/api/combat/not-uuid/reactions", bytes.NewReader(b))
 	rec := httptest.NewRecorder()
@@ -557,7 +557,7 @@ func TestHandler_DeclareReaction_InvalidJSON(t *testing.T) {
 func TestHandler_DeclareReaction_InvalidCombatantID(t *testing.T) {
 	_, r := newTestCombatRouter(defaultMockStore())
 
-	body := map[string]interface{}{"combatant_id": "not-uuid", "description": "Shield"}
+	body := map[string]any{"combatant_id": "not-uuid", "description": "Shield"}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions", bytes.NewReader(b))
 	rec := httptest.NewRecorder()
@@ -893,7 +893,7 @@ func TestHandler_DeclareReaction_ServiceError(t *testing.T) {
 	}
 	_, r := newTestCombatRouter(store)
 
-	body := map[string]interface{}{"combatant_id": uuid.New().String(), "description": "Shield"}
+	body := map[string]any{"combatant_id": uuid.New().String(), "description": "Shield"}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/api/combat/"+uuid.New().String()+"/reactions", bytes.NewReader(b))
 	rec := httptest.NewRecorder()
@@ -901,4 +901,3 @@ func TestHandler_DeclareReaction_ServiceError(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
-

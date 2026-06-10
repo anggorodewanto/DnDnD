@@ -161,6 +161,9 @@ func TestCastResult_TeleportFields(t *testing.T) {
 	assert.True(t, result.Teleport.CasterMoved)
 	assert.Equal(t, "D", result.Teleport.CasterDestCol)
 	assert.Equal(t, int32(5), result.Teleport.CasterDestRow)
+	assert.Equal(t, "Gandalf", result.CasterName)
+	assert.Equal(t, "Misty Step", result.SpellName)
+	assert.Equal(t, 2, result.SpellLevel)
 }
 
 func TestCastResult_TeleportDMQueue(t *testing.T) {
@@ -174,6 +177,9 @@ func TestCastResult_TeleportDMQueue(t *testing.T) {
 	}
 	assert.True(t, result.Teleport.DMQueueRouted)
 	assert.False(t, result.Teleport.CasterMoved)
+	assert.Equal(t, "Gandalf", result.CasterName)
+	assert.Equal(t, "Teleport", result.SpellName)
+	assert.Equal(t, 7, result.SpellLevel)
 }
 
 func TestCastResult_TeleportWithCompanion(t *testing.T) {
@@ -193,6 +199,9 @@ func TestCastResult_TeleportWithCompanion(t *testing.T) {
 	}
 	assert.True(t, result.Teleport.CompanionMoved)
 	assert.Equal(t, "Frodo", result.Teleport.CompanionName)
+	assert.Equal(t, "Gandalf", result.CasterName)
+	assert.Equal(t, "Dimension Door", result.SpellName)
+	assert.Equal(t, 4, result.SpellLevel)
 }
 
 // TDD Cycle 8: FormatCastLog includes teleportation for self teleport
@@ -736,7 +745,7 @@ func TestCast_TeleportRequiresSightAllowsDestinationWithLineOfSight(t *testing.T
 	// Caster at A3 (col=0, row=2), destination D3 (col=3, row=2).
 	// Wall at col 5 does not block the path.
 	fow := &renderer.FogOfWar{Width: 10, Height: 10, States: make([]renderer.VisibilityState, 100)}
-	fow.States[2*10+3] = renderer.Visible // D3 (col=3, row=2) is visible
+	fow.States[2*10+3] = renderer.Visible                         // D3 (col=3, row=2) is visible
 	walls := []renderer.WallSegment{{X1: 5, Y1: 0, X2: 5, Y2: 5}} // wall far to the right
 
 	svc := NewService(store)

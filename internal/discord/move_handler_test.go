@@ -945,7 +945,7 @@ func setupProneMoveHandler(sess *mockMoveSession) (*MoveHandler, uuid.UUID, uuid
 	handler, encounterID, turnID, combatantID := setupMoveHandler(sess)
 
 	// Override combatant to be prone
-	proneConditions, _ := json.Marshal([]map[string]interface{}{
+	proneConditions, _ := json.Marshal([]map[string]any{
 		{"condition": "prone"},
 	})
 
@@ -1292,7 +1292,7 @@ func TestMoveHandler_HandleMoveConfirmWithMode_StandAndMove_RemovesProneConditio
 			return refdata.Encounter{}, nil
 		},
 		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
-			proneConditions, _ := json.Marshal([]map[string]interface{}{
+			proneConditions, _ := json.Marshal([]map[string]any{
 				{"condition": "prone"},
 			})
 			return refdata.Combatant{
@@ -1959,7 +1959,7 @@ func TestMoveHandler_HandleMoveConfirmWithMode_PassivePerceptionRevealsNearbyHid
 			mapID := uuid.New()
 			revealed := false
 
-			proneConditions, _ := json.Marshal([]map[string]interface{}{{"condition": "prone"}})
+			proneConditions, _ := json.Marshal([]map[string]any{{"condition": "prone"}})
 			mover := refdata.Combatant{
 				ID:          moverID,
 				EncounterID: encounterID,
@@ -2391,7 +2391,7 @@ func TestMoveHandler_HandleMoveConfirm_PublishesSnapshot(t *testing.T) {
 			return refdata.Turn{
 				ID:                  turnID,
 				CombatantID:         combatantID,
-				EncounterID:        encounterID,
+				EncounterID:         encounterID,
 				MovementRemainingFt: 30,
 			}, nil
 		},

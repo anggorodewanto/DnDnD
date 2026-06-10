@@ -15,10 +15,10 @@ import (
 
 func TestDetectAdvantage_AttackerConditions(t *testing.T) {
 	tests := []struct {
-		name          string
-		condition     string
-		expectMode    dice.RollMode
-		expectAdvReason   string
+		name               string
+		condition          string
+		expectMode         dice.RollMode
+		expectAdvReason    string
 		expectDisadvReason string
 	}{
 		{"blinded", "blinded", dice.Disadvantage, "", "attacker blinded"},
@@ -51,11 +51,11 @@ func TestDetectAdvantage_AttackerConditions(t *testing.T) {
 
 func TestDetectAdvantage_TargetConditions(t *testing.T) {
 	tests := []struct {
-		name          string
-		condition     string
-		distFt        int
-		expectMode    dice.RollMode
-		expectAdvReason   string
+		name               string
+		condition          string
+		distFt             int
+		expectMode         dice.RollMode
+		expectAdvReason    string
 		expectDisadvReason string
 	}{
 		{"blinded target", "blinded", 5, dice.Advantage, "target blinded", ""},
@@ -171,9 +171,9 @@ func TestDetectAdvantage_Cancellation(t *testing.T) {
 func TestDetectAdvantage_MultipleCancellation(t *testing.T) {
 	// Multiple advantage + multiple disadvantage still cancel
 	input := AdvantageInput{
-		AttackerConditions: []CombatCondition{{Condition: "invisible"}},
-		TargetConditions:   []CombatCondition{{Condition: "blinded"}, {Condition: "restrained"}},
-		Weapon:             makeLongbow(),
+		AttackerConditions:  []CombatCondition{{Condition: "invisible"}},
+		TargetConditions:    []CombatCondition{{Condition: "blinded"}, {Condition: "restrained"}},
+		Weapon:              makeLongbow(),
 		HostileNearAttacker: true,
 	}
 	mode, advReasons, disadvReasons := DetectAdvantage(input)
@@ -233,14 +233,14 @@ func TestResolveAttack_WithAdvantage(t *testing.T) {
 	})
 
 	input := AttackInput{
-		AttackerName:       "Aria",
-		TargetName:         "Goblin #1",
-		TargetAC:           13,
-		Weapon:             makeLongsword(),
-		Scores:             AbilityScores{Str: 16, Dex: 14},
-		ProfBonus:          2,
-		DistanceFt:         5,
-		TargetConditions:   []CombatCondition{{Condition: "blinded"}},
+		AttackerName:     "Aria",
+		TargetName:       "Goblin #1",
+		TargetAC:         13,
+		Weapon:           makeLongsword(),
+		Scores:           AbilityScores{Str: 16, Dex: 14},
+		ProfBonus:        2,
+		DistanceFt:       5,
+		TargetConditions: []CombatCondition{{Condition: "blinded"}},
 	}
 
 	result, err := ResolveAttack(input, roller)
@@ -265,14 +265,14 @@ func TestResolveAttack_WithDisadvantage(t *testing.T) {
 	})
 
 	input := AttackInput{
-		AttackerName:         "Aria",
-		TargetName:           "Goblin #1",
-		TargetAC:             13,
-		Weapon:               makeLongsword(),
-		Scores:               AbilityScores{Str: 16, Dex: 14},
-		ProfBonus:            2,
-		DistanceFt:           5,
-		AttackerConditions:   []CombatCondition{{Condition: "poisoned"}},
+		AttackerName:       "Aria",
+		TargetName:         "Goblin #1",
+		TargetAC:           13,
+		Weapon:             makeLongsword(),
+		Scores:             AbilityScores{Str: 16, Dex: 14},
+		ProfBonus:          2,
+		DistanceFt:         5,
+		AttackerConditions: []CombatCondition{{Condition: "poisoned"}},
 	}
 
 	result, err := ResolveAttack(input, roller)
@@ -293,15 +293,15 @@ func TestResolveAttack_AdvDisadvCancel(t *testing.T) {
 	})
 
 	input := AttackInput{
-		AttackerName:         "Aria",
-		TargetName:           "Goblin #1",
-		TargetAC:             13,
-		Weapon:               makeLongsword(),
-		Scores:               AbilityScores{Str: 16, Dex: 14},
-		ProfBonus:            2,
-		DistanceFt:           5,
-		AttackerConditions:   []CombatCondition{{Condition: "poisoned"}},
-		TargetConditions:     []CombatCondition{{Condition: "stunned"}},
+		AttackerName:       "Aria",
+		TargetName:         "Goblin #1",
+		TargetAC:           13,
+		Weapon:             makeLongsword(),
+		Scores:             AbilityScores{Str: 16, Dex: 14},
+		ProfBonus:          2,
+		DistanceFt:         5,
+		AttackerConditions: []CombatCondition{{Condition: "poisoned"}},
+		TargetConditions:   []CombatCondition{{Condition: "stunned"}},
 	}
 
 	result, err := ResolveAttack(input, roller)
@@ -497,7 +497,7 @@ func TestDetectAdvantage_TargetHidden(t *testing.T) {
 
 func TestDetectAdvantage_AttackerHidden_CancelsWithDisadvantage(t *testing.T) {
 	input := AdvantageInput{
-		AttackerHidden: true,
+		AttackerHidden:     true,
 		AttackerConditions: []CombatCondition{{Condition: "poisoned"}},
 	}
 	mode, advReasons, disadvReasons := DetectAdvantage(input)

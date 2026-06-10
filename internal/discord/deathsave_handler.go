@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -192,9 +193,11 @@ func joinMessages(msgs []string) string {
 	if len(msgs) == 1 {
 		return msgs[0]
 	}
-	out := msgs[0]
+	var out strings.Builder
+	out.WriteString(msgs[0])
 	for _, m := range msgs[1:] {
-		out += "\n" + m
+		out.WriteString("\n")
+		out.WriteString(m)
 	}
-	return out
+	return out.String()
 }

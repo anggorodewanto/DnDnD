@@ -86,7 +86,7 @@ func (f *fakeHostilesNotifier) all() []uuid.UUID {
 	return out
 }
 
-func endCombatStoreWithCombatants(t *testing.T, encID uuid.UUID, combatants []refdata.Combatant) *mockStore {
+func endCombatStoreWithCombatants(t *testing.T, _ uuid.UUID, combatants []refdata.Combatant) *mockStore {
 	t.Helper()
 	store := defaultMockStore()
 	store.getEncounterFn = func(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {

@@ -89,8 +89,8 @@ func TestDrawLegend(t *testing.T) {
 	// Check some pixels are non-white (legend was drawn)
 	img := dc.Image()
 	foundNonWhite := false
-	for y := 0; y < legendH; y++ {
-		for x := 0; x < mapW; x++ {
+	for y := range legendH {
+		for x := range mapW {
 			r, g, b, _ := img.At(x, y).RGBA()
 			wr, wg, wb, _ := color.White.RGBA()
 			if r != wr || g != wg || b != wb {

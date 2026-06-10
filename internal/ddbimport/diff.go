@@ -28,9 +28,9 @@ func GenerateDiff(old, new *ParsedCharacter) []string {
 
 	// Ability scores
 	for _, s := range []struct {
-		name     string
-		oldVal   int
-		newVal   int
+		name   string
+		oldVal int
+		newVal int
 	}{
 		{"STR", old.AbilityScores.STR, new.AbilityScores.STR},
 		{"DEX", old.AbilityScores.DEX, new.AbilityScores.DEX},
@@ -84,7 +84,7 @@ func FormatDiff(changes []string) string {
 	var b strings.Builder
 	b.WriteString("**Changes detected:**\n")
 	for _, c := range changes {
-		b.WriteString(fmt.Sprintf("- %s\n", c))
+		fmt.Fprintf(&b, "- %s\n", c)
 	}
 	return b.String()
 }

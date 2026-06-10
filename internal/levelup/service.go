@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -447,9 +449,7 @@ func specializeFeatASIBonus(asiBonus map[string]any, choices FeatChoices) map[st
 		return asiBonus
 	}
 	out := make(map[string]any, len(asiBonus)+1)
-	for key, val := range asiBonus {
-		out[key] = val
-	}
+	maps.Copy(out, asiBonus)
 	out[choices.Ability] = bonus
 	return out
 }
@@ -475,9 +475,7 @@ func specializeFeatEffects(effects []map[string]string, choices FeatChoices) []m
 	out := make([]map[string]string, 0, len(effects))
 	for _, effect := range effects {
 		next := make(map[string]string, len(effect)+1)
-		for k, v := range effect {
-			next[k] = v
-		}
+		maps.Copy(next, effect)
 		if choices.Ability != "" && strings.Contains(next["effect_type"], "chosen_ability") {
 			next["ability"] = choices.Ability
 		}
@@ -534,10 +532,8 @@ func parseStoredProficiencies(raw json.RawMessage) (character.Proficiencies, err
 }
 
 func appendUnique(values []string, value string) []string {
-	for _, existing := range values {
-		if existing == value {
-			return values
-		}
+	if slices.Contains(values, value) {
+		return values
 	}
 	return append(values, value)
 }

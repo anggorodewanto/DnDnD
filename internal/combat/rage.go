@@ -374,4 +374,3 @@ func (s *Service) persistRageState(ctx context.Context, c refdata.Combatant) (re
 		RageTookDamageThisRound: c.RageTookDamageThisRound,
 	})
 }
-

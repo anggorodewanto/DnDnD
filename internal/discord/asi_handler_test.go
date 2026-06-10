@@ -572,7 +572,6 @@ func TestASIHandler_HandleDMDeny_RejectsNonDM(t *testing.T) {
 	}
 }
 
-
 func TestRouter_RoutesASISelectToHandler(t *testing.T) {
 	mock := newTestMock()
 	var responded bool
@@ -1419,7 +1418,7 @@ func TestASIHandler_HandleDMApprove_PropagatesFeatSubChoices(t *testing.T) {
 		CharID:      charID,
 		ASIType:     "feat",
 		FeatID:      "elemental-adept",
-		FeatChoices: map[string][]string{"damage_type": []string{"fire"}},
+		FeatChoices: map[string][]string{"damage_type": {"fire"}},
 		PlayerID:    "user123",
 		Description: "Feat: Elemental Adept (fire)",
 	})

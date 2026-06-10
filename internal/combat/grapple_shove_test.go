@@ -657,19 +657,19 @@ func TestReleaseDrag_MultipleTargets(t *testing.T) {
 
 func TestCalculatePushDestination(t *testing.T) {
 	tests := []struct {
-		name           string
-		attackerCol    string
-		attackerRow    int
-		targetCol      string
-		targetRow      int
-		expectedCol    int
-		expectedRow    int
+		name        string
+		attackerCol string
+		attackerRow int
+		targetCol   string
+		targetRow   int
+		expectedCol int
+		expectedRow int
 	}{
-		{"push east", "C", 3, "D", 3, 5, 3},         // D=4 + 1 = 5 (E), row stays
-		{"push north", "C", 3, "C", 2, 3, 1},         // col stays, row 2-1=1
-		{"push south", "C", 3, "C", 4, 3, 5},         // col stays, row 4+1=5
-		{"push west", "D", 3, "C", 3, 2, 3},          // C=3 - 1 = 2 (B), row stays
-		{"push northeast", "C", 4, "D", 3, 5, 2},     // D=4+1=5, 3-1=2
+		{"push east", "C", 3, "D", 3, 5, 3},      // D=4 + 1 = 5 (E), row stays
+		{"push north", "C", 3, "C", 2, 3, 1},     // col stays, row 2-1=1
+		{"push south", "C", 3, "C", 4, 3, 5},     // col stays, row 4+1=5
+		{"push west", "D", 3, "C", 3, 2, 3},      // C=3 - 1 = 2 (B), row stays
+		{"push northeast", "C", 4, "D", 3, 5, 2}, // D=4+1=5, 3-1=2
 		{"push same col diff row", "C", 3, "C", 4, 3, 5},
 	}
 	for _, tt := range tests {

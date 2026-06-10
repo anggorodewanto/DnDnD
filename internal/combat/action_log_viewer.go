@@ -17,12 +17,12 @@ import (
 
 // ActionLogFilter defines optional filters for the Action Log viewer.
 type ActionLogFilter struct {
-	ActionTypes []string    // include only entries whose action_type is in this set (empty = all)
-	ActorID     uuid.UUID   // zero = no filter
-	TargetID    uuid.UUID   // zero = no filter
-	Round       int32       // 0 = no filter
-	TurnID      uuid.UUID   // zero = no filter
-	SortAsc     bool        // default false = newest-first
+	ActionTypes []string  // include only entries whose action_type is in this set (empty = all)
+	ActorID     uuid.UUID // zero = no filter
+	TargetID    uuid.UUID // zero = no filter
+	Round       int32     // 0 = no filter
+	TurnID      uuid.UUID // zero = no filter
+	SortAsc     bool      // default false = newest-first
 }
 
 // ActionLogViewerEntry is an enriched action log row for the DM dashboard viewer.
@@ -239,7 +239,7 @@ func parseActionTypes(values []string) []string {
 	}
 	out := make([]string, 0, len(values))
 	for _, v := range values {
-		for _, part := range strings.Split(v, ",") {
+		for part := range strings.SplitSeq(v, ",") {
 			p := strings.TrimSpace(part)
 			if p == "" {
 				continue
@@ -249,4 +249,3 @@ func parseActionTypes(values []string) []string {
 	}
 	return out
 }
-

@@ -275,18 +275,18 @@ type GroupCheckInput struct {
 
 // GroupParticipantResult holds the result for one participant in a group check.
 type GroupParticipantResult struct {
-	Name    string
-	D20     dice.D20Result
-	Passed  bool
+	Name   string
+	D20    dice.D20Result
+	Passed bool
 }
 
 // GroupCheckResult holds the result of a group check.
 type GroupCheckResult struct {
-	DC           int
-	Results      []GroupParticipantResult
-	Passed       int
-	Failed       int
-	Success      bool
+	DC      int
+	Results []GroupParticipantResult
+	Passed  int
+	Failed  int
+	Success bool
 }
 
 // GroupCheck performs a group check. Succeeds if at least half the participants pass.
@@ -361,4 +361,3 @@ func (s *Service) ContestedCheck(input ContestedCheckInput) ContestedCheckResult
 
 	return result
 }
-

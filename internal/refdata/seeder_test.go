@@ -3,6 +3,7 @@ package refdata_test
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/ab/dndnd/internal/refdata"
@@ -72,13 +73,7 @@ func TestIntegration_SeedAll_LongswordHasVersatile(t *testing.T) {
 		t.Fatalf("expected weapon_type martial_melee, got %q", weapon.WeaponType)
 	}
 
-	hasVersatile := false
-	for _, p := range weapon.Properties {
-		if p == "versatile" {
-			hasVersatile = true
-			break
-		}
-	}
+	hasVersatile := slices.Contains(weapon.Properties, "versatile")
 	if !hasVersatile {
 		t.Fatalf("expected longsword to have versatile property, got %v", weapon.Properties)
 	}
@@ -631,13 +626,7 @@ func TestIntegration_SeedAll_ListSpellsByClass(t *testing.T) {
 	}
 	// All returned spells should have wizard in their classes
 	for _, s := range spells {
-		hasWizard := false
-		for _, c := range s.Classes {
-			if c == "wizard" {
-				hasWizard = true
-				break
-			}
-		}
+		hasWizard := slices.Contains(s.Classes, "wizard")
 		if !hasWizard {
 			t.Fatalf("spell %q does not have wizard in classes: %v", s.ID, s.Classes)
 		}
@@ -724,13 +713,7 @@ func TestIntegration_SeedAll_HoldPersonConditions(t *testing.T) {
 		t.Fatalf("GetSpell failed: %v", err)
 	}
 
-	hasParalyzed := false
-	for _, c := range spell.ConditionsApplied {
-		if c == "paralyzed" {
-			hasParalyzed = true
-			break
-		}
-	}
+	hasParalyzed := slices.Contains(spell.ConditionsApplied, "paralyzed")
 	if !hasParalyzed {
 		t.Fatalf("expected hold-person to apply paralyzed condition, got %v", spell.ConditionsApplied)
 	}

@@ -478,13 +478,13 @@ func TestCheckZoneTriggers_UpdateTriggeredError(t *testing.T) {
 		triggers, _ := json.Marshal([]ZoneTrigger{{Trigger: "enter", Effect: "damage"}})
 		return []refdata.EncounterZone{
 			{
-				ID:          uuid.New(),
-				SourceSpell: "Moonbeam",
-				Shape:       "circle",
-				OriginCol:   "A",
-				OriginRow:   1,
-				Dimensions:  json.RawMessage(`{"radius_ft":5}`),
-				ZoneTriggers: pqtype.NullRawMessage{RawMessage: triggers, Valid: true},
+				ID:                 uuid.New(),
+				SourceSpell:        "Moonbeam",
+				Shape:              "circle",
+				OriginCol:          "A",
+				OriginRow:          1,
+				Dimensions:         json.RawMessage(`{"radius_ft":5}`),
+				ZoneTriggers:       pqtype.NullRawMessage{RawMessage: triggers, Valid: true},
 				TriggeredThisRound: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{}`), Valid: true},
 			},
 		}, nil
@@ -560,13 +560,13 @@ func TestCheckZoneTriggers_InvalidTriggersJSON(t *testing.T) {
 	ms.listEncounterZonesByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.EncounterZone, error) {
 		return []refdata.EncounterZone{
 			{
-				ID:          uuid.New(),
-				SourceSpell: "Bad Zone",
-				Shape:       "circle",
-				OriginCol:   "A",
-				OriginRow:   1,
-				Dimensions:  json.RawMessage(`{"radius_ft":5}`),
-				ZoneTriggers: pqtype.NullRawMessage{RawMessage: json.RawMessage(`invalid`), Valid: true},
+				ID:                 uuid.New(),
+				SourceSpell:        "Bad Zone",
+				Shape:              "circle",
+				OriginCol:          "A",
+				OriginRow:          1,
+				Dimensions:         json.RawMessage(`{"radius_ft":5}`),
+				ZoneTriggers:       pqtype.NullRawMessage{RawMessage: json.RawMessage(`invalid`), Valid: true},
 				TriggeredThisRound: pqtype.NullRawMessage{RawMessage: json.RawMessage(`{}`), Valid: true},
 			},
 		}, nil

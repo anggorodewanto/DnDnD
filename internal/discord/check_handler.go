@@ -501,7 +501,7 @@ func parseCombatantCoord(c refdata.Combatant) (int, int, bool) {
 	if c.PositionCol == "" {
 		return 0, 0, false
 	}
-	col := int(c.PositionCol[0]-'A')
+	col := int(c.PositionCol[0] - 'A')
 	if col < 0 || col > 25 {
 		return 0, 0, false
 	}

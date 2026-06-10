@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1186,13 +1187,7 @@ func TestShortRest_ChannelDivinity_RechargesOnShortRest(t *testing.T) {
 	}
 
 	// Channel Divinity MUST recharge on short rest per PHB p.59
-	found := false
-	for _, name := range result.FeaturesRecharged {
-		if name == "channel-divinity" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(result.FeaturesRecharged, "channel-divinity")
 	if !found {
 		t.Errorf("channel-divinity was NOT recharged on short rest; FeaturesRecharged = %v", result.FeaturesRecharged)
 	}
@@ -1206,7 +1201,7 @@ func TestLongRest_HitDiceRestore_MulticlassDeterministic(t *testing.T) {
 	// Fighter 3 / Wizard 2: total level 5, half = 2 budget.
 	// All hit dice spent. Should always restore d10 first (2 of them),
 	// leaving d6 untouched.
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		input := LongRestInput{
 			HPCurrent:        30,
 			HPMax:            30,

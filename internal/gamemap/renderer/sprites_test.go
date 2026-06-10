@@ -23,8 +23,8 @@ func makeTilesheetPNG(t *testing.T, tilePx, margin, spacing int, colors []color.
 	for i, c := range colors {
 		ox := margin + i*(tilePx+spacing)
 		oy := margin
-		for y := 0; y < tilePx; y++ {
-			for x := 0; x < tilePx; x++ {
+		for y := range tilePx {
+			for x := range tilePx {
 				img.SetNRGBA(ox+x, oy+y, color.NRGBA{R: c.R, G: c.G, B: c.B, A: 0xFF})
 			}
 		}
@@ -60,8 +60,8 @@ func makeQuadrantTilePNG(t *testing.T, tilePx int, tl, tr, bl, br color.RGBA) []
 	t.Helper()
 	img := image.NewNRGBA(image.Rect(0, 0, tilePx, tilePx))
 	half := tilePx / 2
-	for y := 0; y < tilePx; y++ {
-		for x := 0; x < tilePx; x++ {
+	for y := range tilePx {
+		for x := range tilePx {
 			c := tl
 			if x >= half && y < half {
 				c = tr
@@ -149,9 +149,9 @@ func TestDrawSpriteLayers_FlipDirections(t *testing.T) {
 	)
 	// Source quadrants: TL=red TR=green BL=blue BR=yellow.
 	tests := []struct {
-		name               string
-		flags              uint32
-		tl, tr, bl, br     string
+		name           string
+		flags          uint32
+		tl, tr, bl, br string
 	}{
 		{"none", 0, "red", "green", "blue", "yellow"},
 		{"horizontal", flipH, "green", "red", "yellow", "blue"},

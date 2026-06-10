@@ -20,11 +20,11 @@ func isUndeadOrConstruct(creatureType string) bool {
 
 // LayOnHandsCommand holds the inputs for a Lay on Hands action.
 type LayOnHandsCommand struct {
-	Paladin    refdata.Combatant
-	Target     refdata.Combatant
-	Turn       refdata.Turn
-	HP         int  // HP to restore from the pool
-	CurePoison bool // spend 5 HP to cure poison
+	Paladin     refdata.Combatant
+	Target      refdata.Combatant
+	Turn        refdata.Turn
+	HP          int  // HP to restore from the pool
+	CurePoison  bool // spend 5 HP to cure poison
 	CureDisease bool // spend 5 HP to cure disease
 }
 

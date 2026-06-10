@@ -236,7 +236,7 @@ func TestAttackHandler_OffhandPopulatesWallsFromMap(t *testing.T) {
 
 func frightenedConditionsRaw(t *testing.T, sourceID uuid.UUID) json.RawMessage {
 	t.Helper()
-	raw, err := json.Marshal([]map[string]interface{}{
+	raw, err := json.Marshal([]map[string]any{
 		{
 			"condition":           "frightened",
 			"source_combatant_id": sourceID.String(),
@@ -390,7 +390,7 @@ func dyingCombatant(id uuid.UUID) refdata.Combatant {
 }
 
 func unconsciousCombatant(id uuid.UUID) refdata.Combatant {
-	condsRaw, _ := json.Marshal([]map[string]interface{}{{"condition": "unconscious"}})
+	condsRaw, _ := json.Marshal([]map[string]any{{"condition": "unconscious"}})
 	return refdata.Combatant{
 		ID:          id,
 		PositionCol: "A",
@@ -406,9 +406,11 @@ func TestMoveHandler_DyingCombatant_Blocked(t *testing.T) {
 	handler, _, _, combatantID := setupMoveHandler(sess)
 	dying := dyingCombatant(combatantID)
 	handler.combatService = &mockMoveService{
-		getEncounter:   handler.combatService.(*mockMoveService).getEncounter,
-		getCombatant:   func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return dying, nil },
-		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return []refdata.Combatant{dying}, nil },
+		getEncounter: handler.combatService.(*mockMoveService).getEncounter,
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return dying, nil },
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{dying}, nil
+		},
 		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
 			return refdata.Combatant{}, nil
 		},
@@ -424,9 +426,11 @@ func TestMoveHandler_UnconsciousCombatant_Blocked(t *testing.T) {
 	handler, _, _, combatantID := setupMoveHandler(sess)
 	uncon := unconsciousCombatant(combatantID)
 	handler.combatService = &mockMoveService{
-		getEncounter:   handler.combatService.(*mockMoveService).getEncounter,
-		getCombatant:   func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return uncon, nil },
-		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return []refdata.Combatant{uncon}, nil },
+		getEncounter: handler.combatService.(*mockMoveService).getEncounter,
+		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return uncon, nil },
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
+			return []refdata.Combatant{uncon}, nil
+		},
 		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
 			return refdata.Combatant{}, nil
 		},

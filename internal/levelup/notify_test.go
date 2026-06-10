@@ -102,4 +102,3 @@ func TestFormatASIApprovedMessage(t *testing.T) {
 		t.Error("expected approval indicator")
 	}
 }
-

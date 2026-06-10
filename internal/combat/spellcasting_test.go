@@ -894,11 +894,11 @@ func TestCast_PersistsConcentrationAndCleansUpPrevious(t *testing.T) {
 	}
 
 	var (
-		setConcArg            refdata.SetCombatantConcentrationParams
-		setConcCalled         bool
-		clearConcCalled       bool
-		zoneCleanupCombatID   uuid.UUID
-		zoneCleanupCalled     bool
+		setConcArg          refdata.SetCombatantConcentrationParams
+		setConcCalled       bool
+		clearConcCalled     bool
+		zoneCleanupCombatID uuid.UUID
+		zoneCleanupCalled   bool
 	)
 	store.setCombatantConcentrationFn = func(_ context.Context, arg refdata.SetCombatantConcentrationParams) error {
 		setConcArg = arg
@@ -1465,10 +1465,10 @@ func TestCast_UpcastHealingScaling(t *testing.T) {
 
 	// Upcast cure wounds to 3rd level
 	cmd := CastCommand{
-		SpellID:  "cure-wounds",
-		CasterID: caster.ID,
-		TargetID: target.ID,
-		Turn:     refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		SpellID:   "cure-wounds",
+		CasterID:  caster.ID,
+		TargetID:  target.ID,
+		Turn:      refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
 		SlotLevel: 3,
 	}
 
@@ -1537,13 +1537,13 @@ func TestFormatCastLog_Ritual(t *testing.T) {
 // Edge case: FormatCastLog with upcast
 func TestFormatCastLog_Upcast(t *testing.T) {
 	result := CastResult{
-		CasterName:      "Gandalf",
-		SpellName:       "Fireball",
-		SpellLevel:      3,
-		SlotUsed:        5,
-		SlotsRemaining:  0,
+		CasterName:       "Gandalf",
+		SpellName:        "Fireball",
+		SpellLevel:       3,
+		SlotUsed:         5,
+		SlotsRemaining:   0,
 		ScaledDamageDice: "10d6",
-		DamageType:      "fire",
+		DamageType:       "fire",
 	}
 	log := FormatCastLog(result)
 	assert.Contains(t, log, "5th-level slot")
@@ -1694,9 +1694,9 @@ func TestScaleSpellDice(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			d := SpellDamageInfo{
-				Dice:           tc.baseDice,
+				Dice:            tc.baseDice,
 				HigherLevelDice: tc.higherDice,
-				CantripScaling: tc.cantrip,
+				CantripScaling:  tc.cantrip,
 			}
 			result := ScaleSpellDice(d, tc.spellLevel, tc.slotLevel, tc.charLevel)
 			assert.Equal(t, tc.want, result)
@@ -2137,7 +2137,7 @@ func TestSelectSpellSlot(t *testing.T) {
 func TestValidateMaterialComponent_NoCostlyComponent(t *testing.T) {
 	spell := refdata.Spell{
 		Name:                "Fire Bolt",
-		MaterialDescription: sql.NullString{}, // no material cost
+		MaterialDescription: sql.NullString{},  // no material cost
 		MaterialCostGp:      sql.NullFloat64{}, // null = no costly component
 	}
 	items := []InventoryItem{}
@@ -2678,7 +2678,7 @@ func TestCast_F09_MaterialNotConsumedOnRangeFailure(t *testing.T) {
 // helper to make a warlock character with pact magic slots
 func makeWarlockCharacter(id uuid.UUID) refdata.Character {
 	slotsJSON, _ := json.Marshal(map[string]SlotInfo{}) // warlocks have no regular slots (pure warlock)
-	pactJSON, _ := json.Marshal(map[string]interface{}{
+	pactJSON, _ := json.Marshal(map[string]any{
 		"slot_level": 3,
 		"current":    2,
 		"max":        2,
@@ -2706,7 +2706,7 @@ func makeWarlockWizardCharacter(id uuid.UUID) refdata.Character {
 		"2": {Current: 3, Max: 3},
 		"3": {Current: 2, Max: 2},
 	})
-	pactJSON, _ := json.Marshal(map[string]interface{}{
+	pactJSON, _ := json.Marshal(map[string]any{
 		"slot_level": 2,
 		"current":    2,
 		"max":        2,
@@ -2727,20 +2727,6 @@ func makeWarlockWizardCharacter(id uuid.UUID) refdata.Character {
 		SpellSlots:       pqtype.NullRawMessage{RawMessage: slotsJSON, Valid: true},
 		PactMagicSlots:   pqtype.NullRawMessage{RawMessage: pactJSON, Valid: true},
 		Level:            8,
-	}
-}
-
-func makeEldritchBlast() refdata.Spell {
-	return refdata.Spell{
-		ID:             "eldritch-blast",
-		Name:           "Eldritch Blast",
-		Level:          0,
-		CastingTime:    "1 action",
-		RangeType:      "ranged",
-		RangeFt:        sql.NullInt32{Int32: 120, Valid: true},
-		AttackType:     sql.NullString{String: "ranged", Valid: true},
-		ResolutionMode: "auto",
-		Concentration:  sql.NullBool{Bool: false, Valid: true},
 	}
 }
 
@@ -2907,7 +2893,7 @@ func TestCast_PactSlot_Empty_FallsBackToRegular(t *testing.T) {
 	charID := uuid.New()
 	char := makeWarlockWizardCharacter(charID)
 	// Deplete pact slots
-	pactJSON, _ := json.Marshal(map[string]interface{}{
+	pactJSON, _ := json.Marshal(map[string]any{
 		"slot_level": 2,
 		"current":    0,
 		"max":        2,
@@ -3446,7 +3432,7 @@ func TestCast_AppliesDamageOnHit(t *testing.T) {
 
 	// Fire Bolt with damage data
 	spell := makeFireBolt()
-	dmgJSON, _ := json.Marshal(map[string]interface{}{
+	dmgJSON, _ := json.Marshal(map[string]any{
 		"dice": "1d10", "type": "fire", "cantrip_scaling": true,
 	})
 	spell.Damage = pqtype.NullRawMessage{RawMessage: dmgJSON, Valid: true}
@@ -3498,7 +3484,7 @@ func TestCast_AppliesHealingOnCast(t *testing.T) {
 	target.HpCurrent = 10
 	target.EncounterID = uuid.New()
 
-	healJSON, _ := json.Marshal(map[string]interface{}{
+	healJSON, _ := json.Marshal(map[string]any{
 		"dice": "1d8+4", "higher_level_dice": "1d8",
 	})
 	spell := refdata.Spell{
@@ -3575,10 +3561,10 @@ func TestCast_SpellAttackRollMode_Advantage(t *testing.T) {
 
 	svc := NewService(store)
 	cmd := CastCommand{
-		SpellID:            "fire-bolt",
-		CasterID:           caster.ID,
-		TargetID:           target.ID,
-		Turn:               refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
+		SpellID:             "fire-bolt",
+		CasterID:            caster.ID,
+		TargetID:            target.ID,
+		Turn:                refdata.Turn{ID: uuid.New(), CombatantID: caster.ID},
 		SpellAttackRollMode: dice.Advantage,
 	}
 

@@ -82,8 +82,8 @@ func TestHandleAddItem(t *testing.T) {
 	existingJSON, _ := json.Marshal(existingItems)
 
 	store.chars[charID] = refdata.Character{
-		ID:   charID,
-		Name: "Aria",
+		ID:        charID,
+		Name:      "Aria",
 		Inventory: pqtype.NullRawMessage{RawMessage: existingJSON, Valid: true},
 	}
 
@@ -122,7 +122,7 @@ func TestHandleAddItem_ExistingItem(t *testing.T) {
 	existingJSON, _ := json.Marshal(existingItems)
 
 	store.chars[charID] = refdata.Character{
-		ID:   charID,
+		ID:        charID,
 		Inventory: pqtype.NullRawMessage{RawMessage: existingJSON, Valid: true},
 	}
 
@@ -160,7 +160,7 @@ func TestHandleRemoveItem(t *testing.T) {
 	existingJSON, _ := json.Marshal(existingItems)
 
 	store.chars[charID] = refdata.Character{
-		ID:   charID,
+		ID:        charID,
 		Inventory: pqtype.NullRawMessage{RawMessage: existingJSON, Valid: true},
 	}
 
@@ -193,7 +193,7 @@ func TestHandleRemoveItem_AllQuantity(t *testing.T) {
 	existingJSON, _ := json.Marshal(existingItems)
 
 	store.chars[charID] = refdata.Character{
-		ID:   charID,
+		ID:        charID,
 		Inventory: pqtype.NullRawMessage{RawMessage: existingJSON, Valid: true},
 	}
 
@@ -301,7 +301,7 @@ func TestHandleRemoveItem_NotEnough(t *testing.T) {
 	existingJSON, _ := json.Marshal(existingItems)
 
 	store.chars[charID] = refdata.Character{
-		ID:   charID,
+		ID:        charID,
 		Inventory: pqtype.NullRawMessage{RawMessage: existingJSON, Valid: true},
 	}
 
@@ -805,4 +805,3 @@ func TestHandleSetGold_CombatLog(t *testing.T) {
 	assert.Contains(t, logged, "Aria")
 	assert.Contains(t, logged, "150")
 }
-

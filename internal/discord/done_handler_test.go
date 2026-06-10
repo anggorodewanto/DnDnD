@@ -43,8 +43,8 @@ func setupDoneHandler(sess *mockMoveSession) (*DoneHandler, uuid.UUID, uuid.UUID
 				ID:          combatantID,
 				PositionCol: "A",
 				PositionRow: 1,
-				IsAlive: true, HpCurrent: 10,
-				IsNpc:       false,
+				IsAlive:     true, HpCurrent: 10,
+				IsNpc: false,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
@@ -60,10 +60,10 @@ func setupDoneHandler(sess *mockMoveSession) (*DoneHandler, uuid.UUID, uuid.UUID
 	turnProv := &mockMoveTurnProvider{
 		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{
-				ID:              turnID,
-				CombatantID:     combatantID,
-				ActionUsed:      true,
-				BonusActionUsed: true,
+				ID:               turnID,
+				CombatantID:      combatantID,
+				ActionUsed:       true,
+				BonusActionUsed:  true,
 				AttacksRemaining: 0,
 			}, nil
 		},
@@ -91,7 +91,7 @@ func TestDoneHandler_RejectsSharingTile(t *testing.T) {
 				ID:          combatantID,
 				PositionCol: "A",
 				PositionRow: 1,
-				IsAlive: true, HpCurrent: 10,
+				IsAlive:     true, HpCurrent: 10,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {

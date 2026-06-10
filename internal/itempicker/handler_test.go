@@ -23,20 +23,20 @@ import (
 
 // stubStore implements itempicker.Store for unit tests.
 type stubStore struct {
-	weapons      []refdata.Weapon
-	armor        []refdata.Armor
-	magicItems   []refdata.MagicItem
-	gear         []itempicker.GearItem
-	consumables  []itempicker.ConsumableItem
-	combatants   []refdata.Combatant
-	characters   map[uuid.UUID]refdata.Character
-	weaponErr    error
-	armorErr     error
-	magicErr     error
-	gearErr      error
+	weapons       []refdata.Weapon
+	armor         []refdata.Armor
+	magicItems    []refdata.MagicItem
+	gear          []itempicker.GearItem
+	consumables   []itempicker.ConsumableItem
+	combatants    []refdata.Combatant
+	characters    map[uuid.UUID]refdata.Character
+	weaponErr     error
+	armorErr      error
+	magicErr      error
+	gearErr       error
 	consumableErr error
-	combatantErr error
-	characterErr error
+	combatantErr  error
+	characterErr  error
 }
 
 func (s *stubStore) ListWeapons(ctx context.Context) ([]refdata.Weapon, error) {
@@ -664,7 +664,6 @@ func TestHandleSearch_UnknownCategory_ReturnsEmpty(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&results))
 	assert.Len(t, results, 0)
 }
-
 
 func TestHandleSearch_CampaignScopedHomebrew(t *testing.T) {
 	campA := uuid.New()

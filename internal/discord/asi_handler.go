@@ -105,10 +105,7 @@ func BuildAbilitySelectMenu(charID uuid.UUID, asiType string, scores character.A
 		if current >= 20 {
 			continue
 		}
-		newVal := current + bonus
-		if newVal > 20 {
-			newVal = 20
-		}
+		newVal := min(current+bonus, 20)
 		options = append(options, discordgo.SelectMenuOption{
 			Label: fmt.Sprintf("%s (%d -> %d)", ab.Label, current, newVal),
 			Value: ab.Key,
@@ -952,10 +949,7 @@ func buildASIDescription(asiType string, abilities []string, scores character.Ab
 	if asiType == "plus2" && len(abilities) >= 1 {
 		ab := abilities[0]
 		current := scores.Get(ab)
-		newVal := current + 2
-		if newVal > 20 {
-			newVal = 20
-		}
+		newVal := min(current+2, 20)
 		return fmt.Sprintf("+2 %s (%d -> %d)", strings.ToUpper(ab), current, newVal)
 	}
 	if asiType == "plus1plus1" && len(abilities) >= 2 {

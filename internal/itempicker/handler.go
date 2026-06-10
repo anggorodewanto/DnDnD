@@ -42,15 +42,15 @@ type ConsumableItem struct {
 
 // SearchResult is a unified item representation returned by the search endpoint.
 type SearchResult struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Type        string                 `json:"type"`
-	Description string                 `json:"description,omitempty"`
-	CostGP      int                    `json:"cost_gp"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Description string `json:"description,omitempty"`
+	CostGP      int    `json:"cost_gp"`
 	// F-86: surface the refdata homebrew flag so DM consumers can render a
 	// "homebrew" pill and let the picker filter on it server-side.
-	Homebrew bool                   `json:"homebrew"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Homebrew bool           `json:"homebrew"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // Handler handles item picker HTTP endpoints.
@@ -102,7 +102,7 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 				Name:     wp.Name,
 				Type:     "weapon",
 				Homebrew: homebrew,
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"damage":      wp.Damage,
 					"damage_type": wp.DamageType,
 					"weapon_type": wp.WeaponType,
@@ -132,7 +132,7 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 				Name:     a.Name,
 				Type:     "armor",
 				Homebrew: homebrew,
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"ac_base":    a.AcBase,
 					"armor_type": a.ArmorType,
 				},
@@ -163,7 +163,7 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 				Type:        "magic_item",
 				Description: mi.Description,
 				Homebrew:    homebrew,
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"rarity":              mi.Rarity,
 					"requires_attunement": mi.RequiresAttunement.Bool,
 				},
@@ -306,8 +306,8 @@ func (h *Handler) HandleCustomEntry(w http.ResponseWriter, r *http.Request) {
 
 // CreatureInventory holds a single defeated creature's items and gold.
 type CreatureInventory struct {
-	Name  string                   `json:"name"`
-	Gold  int32                    `json:"gold"`
+	Name  string                    `json:"name"`
+	Gold  int32                     `json:"gold"`
 	Items []character.InventoryItem `json:"items"`
 }
 
@@ -361,7 +361,7 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-func jsonOK(w http.ResponseWriter, v interface{}) {
+func jsonOK(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
 }

@@ -13,8 +13,8 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "athlete", Name: "Athlete",
-			Description: "You have undergone extensive physical training to gain the following benefits: Increase your Strength or Dexterity by 1. When you are prone, standing up uses only 5 feet of your movement. Climbing doesn't cost you extra movement. You can make a running long jump or high jump after moving only 5 feet on foot.",
-			AsiBonus:    optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "dex"}}),
+			Description:      "You have undergone extensive physical training to gain the following benefits: Increase your Strength or Dexterity by 1. When you are prone, standing up uses only 5 feet of your movement. Climbing doesn't cost you extra movement. You can make a running long jump or high jump after moving only 5 feet on foot.",
+			AsiBonus:         optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "dex"}}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "stand_up_5ft"}, {"effect_type": "climbing_no_extra_cost"}, {"effect_type": "running_jump_5ft"}}),
 		},
 		{
@@ -45,8 +45,8 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "durable", Name: "Durable",
-			Description: "Hardy and resilient, you gain the following benefits: Increase your Constitution by 1. When you roll a Hit Die to regain hit points, the minimum number of hit points you regain equals twice your Constitution modifier.",
-			AsiBonus:    optJSON(map[string]any{"con": 1}),
+			Description:      "Hardy and resilient, you gain the following benefits: Increase your Constitution by 1. When you roll a Hit Die to regain hit points, the minimum number of hit points you regain equals twice your Constitution modifier.",
+			AsiBonus:         optJSON(map[string]any{"con": 1}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "min_hit_die_healing_2x_con_mod"}}),
 		},
 		{
@@ -73,16 +73,16 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "heavily-armored", Name: "Heavily Armored",
-			Description:   "You have trained to master the use of heavy armor, gaining the following benefits: Increase your Strength by 1. You gain proficiency with heavy armor.",
-			Prerequisites: optJSON(map[string]any{"proficiency": "medium_armor"}),
-			AsiBonus:      optJSON(map[string]any{"str": 1}),
+			Description:      "You have trained to master the use of heavy armor, gaining the following benefits: Increase your Strength by 1. You gain proficiency with heavy armor.",
+			Prerequisites:    optJSON(map[string]any{"proficiency": "medium_armor"}),
+			AsiBonus:         optJSON(map[string]any{"str": 1}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "proficiency_heavy_armor"}}),
 		},
 		{
 			ID: "heavy-armor-master", Name: "Heavy Armor Master",
-			Description:   "You can use your armor to deflect strikes that would kill others. Increase your Strength by 1. While you are wearing heavy armor, bludgeoning, piercing, and slashing damage that you take from nonmagical weapons is reduced by 3.",
-			Prerequisites: optJSON(map[string]any{"proficiency": "heavy_armor"}),
-			AsiBonus:      optJSON(map[string]any{"str": 1}),
+			Description:      "You can use your armor to deflect strikes that would kill others. Increase your Strength by 1. While you are wearing heavy armor, bludgeoning, piercing, and slashing damage that you take from nonmagical weapons is reduced by 3.",
+			Prerequisites:    optJSON(map[string]any{"proficiency": "heavy_armor"}),
+			AsiBonus:         optJSON(map[string]any{"str": 1}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "reduce_bps_damage_3_heavy_armor"}}),
 		},
 		{
@@ -93,20 +93,20 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "keen-mind", Name: "Keen Mind",
-			Description: "You have a mind that can track time, direction, and detail with uncanny precision. Increase your Intelligence by 1. You always know which way is north. You always know the number of hours left before the next sunrise or sunset. You can accurately recall anything you have seen or heard within the past month.",
-			AsiBonus:    optJSON(map[string]any{"int": 1}),
+			Description:      "You have a mind that can track time, direction, and detail with uncanny precision. Increase your Intelligence by 1. You always know which way is north. You always know the number of hours left before the next sunrise or sunset. You can accurately recall anything you have seen or heard within the past month.",
+			AsiBonus:         optJSON(map[string]any{"int": 1}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "always_know_north"}, {"effect_type": "always_know_time"}, {"effect_type": "perfect_recall_1_month"}}),
 		},
 		{
 			ID: "lightly-armored", Name: "Lightly Armored",
-			Description: "You have trained to master the use of light armor, gaining the following benefits: Increase your Strength or Dexterity by 1. You gain proficiency with light armor.",
-			AsiBonus:    optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "dex"}}),
+			Description:      "You have trained to master the use of light armor, gaining the following benefits: Increase your Strength or Dexterity by 1. You gain proficiency with light armor.",
+			AsiBonus:         optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "dex"}}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "proficiency_light_armor"}}),
 		},
 		{
 			ID: "linguist", Name: "Linguist",
-			Description: "You have studied languages and codes, gaining the following benefits: Increase your Intelligence by 1. You learn three languages of your choice. You can ably create written ciphers.",
-			AsiBonus:    optJSON(map[string]any{"int": 1}),
+			Description:      "You have studied languages and codes, gaining the following benefits: Increase your Intelligence by 1. You learn three languages of your choice. You can ably create written ciphers.",
+			AsiBonus:         optJSON(map[string]any{"int": 1}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "learn_3_languages"}, {"effect_type": "create_written_ciphers"}}),
 		},
 		{
@@ -131,8 +131,8 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "medium-armor-master", Name: "Medium Armor Master",
-			Description:   "You have practiced moving in medium armor to gain the following benefits: Wearing medium armor doesn't impose disadvantage on your Dexterity (Stealth) checks. When you wear medium armor, you can add 3, rather than 2, to your AC if you have a Dexterity of 16 or higher.",
-			Prerequisites: optJSON(map[string]any{"proficiency": "medium_armor"}),
+			Description:      "You have practiced moving in medium armor to gain the following benefits: Wearing medium armor doesn't impose disadvantage on your Dexterity (Stealth) checks. When you wear medium armor, you can add 3, rather than 2, to your AC if you have a Dexterity of 16 or higher.",
+			Prerequisites:    optJSON(map[string]any{"proficiency": "medium_armor"}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "no_stealth_disadvantage_medium_armor"}, {"effect_type": "medium_armor_max_dex_3"}}),
 		},
 		{
@@ -142,9 +142,9 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "moderately-armored", Name: "Moderately Armored",
-			Description:   "You have trained to master the use of medium armor and shields, gaining the following benefits: Increase your Strength or Dexterity by 1. You gain proficiency with medium armor and shields.",
-			Prerequisites: optJSON(map[string]any{"proficiency": "light_armor"}),
-			AsiBonus:      optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "dex"}}),
+			Description:      "You have trained to master the use of medium armor and shields, gaining the following benefits: Increase your Strength or Dexterity by 1. You gain proficiency with medium armor and shields.",
+			Prerequisites:    optJSON(map[string]any{"proficiency": "light_armor"}),
+			AsiBonus:         optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "dex"}}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "proficiency_medium_armor_shields"}}),
 		},
 		{
@@ -154,8 +154,8 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "observant", Name: "Observant",
-			Description: "Quick to notice details of your environment, you gain the following benefits: Increase your Intelligence or Wisdom by 1. If you can see a creature's mouth while it is speaking a language you understand, you can interpret what it's saying by reading its lips. You have a +5 bonus to your passive Wisdom (Perception) and passive Intelligence (Investigation) scores.",
-			AsiBonus:    optJSON(map[string]any{"choose_ability": 1, "from": []string{"int", "wis"}}),
+			Description:      "Quick to notice details of your environment, you gain the following benefits: Increase your Intelligence or Wisdom by 1. If you can see a creature's mouth while it is speaking a language you understand, you can interpret what it's saying by reading its lips. You have a +5 bonus to your passive Wisdom (Perception) and passive Intelligence (Investigation) scores.",
+			AsiBonus:         optJSON(map[string]any{"choose_ability": 1, "from": []string{"int", "wis"}}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "lip_reading"}, {"effect_type": "passive_perception_plus_5"}, {"effect_type": "passive_investigation_plus_5"}}),
 		},
 		{
@@ -165,8 +165,8 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "resilient", Name: "Resilient",
-			Description: "Choose one ability score. You gain proficiency in saving throws using the chosen ability. Increase the chosen ability score by 1.",
-			AsiBonus:    optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "dex", "con", "int", "wis", "cha"}}),
+			Description:      "Choose one ability score. You gain proficiency in saving throws using the chosen ability. Increase the chosen ability score by 1.",
+			AsiBonus:         optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "dex", "con", "int", "wis", "cha"}}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "proficiency_saving_throw_chosen_ability"}}),
 		},
 		{
@@ -202,8 +202,8 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "skulker", Name: "Skulker",
-			Description:   "You are expert at slinking through shadows. You can try to hide when you are lightly obscured from the creature from which you are hiding. When you are hidden from a creature and miss it with a ranged weapon attack, making the attack doesn't reveal your position. You have darkvision out to a range of 60 feet.",
-			Prerequisites: optJSON(map[string]any{"ability": map[string]int{"dex": 13}}),
+			Description:      "You are expert at slinking through shadows. You can try to hide when you are lightly obscured from the creature from which you are hiding. When you are hidden from a creature and miss it with a ranged weapon attack, making the attack doesn't reveal your position. You have darkvision out to a range of 60 feet.",
+			Prerequisites:    optJSON(map[string]any{"ability": map[string]int{"dex": 13}}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "hide_lightly_obscured"}, {"effect_type": "missed_ranged_no_reveal"}, {"effect_type": "darkvision_60"}}),
 		},
 		{
@@ -214,8 +214,8 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "tavern-brawler", Name: "Tavern Brawler",
-			Description: "Accustomed to rough-and-tumble fighting using whatever is at hand. Increase your Strength or Constitution by 1. You are proficient with improvised weapons. Your unarmed strike uses a d4 for damage. When you hit a creature with an unarmed strike or an improvised weapon on your turn, you can use a bonus action to attempt to grapple the target.",
-			AsiBonus:    optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "con"}}),
+			Description:      "Accustomed to rough-and-tumble fighting using whatever is at hand. Increase your Strength or Constitution by 1. You are proficient with improvised weapons. Your unarmed strike uses a d4 for damage. When you hit a creature with an unarmed strike or an improvised weapon on your turn, you can use a bonus action to attempt to grapple the target.",
+			AsiBonus:         optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "con"}}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "proficiency_improvised_weapons"}, {"effect_type": "unarmed_strike_d4"}, {"effect_type": "bonus_action_grapple_on_hit"}}),
 		},
 		{
@@ -231,8 +231,8 @@ func seedFeats(ctx context.Context, q *Queries) error {
 		},
 		{
 			ID: "weapon-master", Name: "Weapon Master",
-			Description: "You have practiced extensively with a variety of weapons. Increase your Strength or Dexterity by 1. You gain proficiency with four weapons of your choice. Each one must be a simple or a martial weapon.",
-			AsiBonus:    optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "dex"}}),
+			Description:      "You have practiced extensively with a variety of weapons. Increase your Strength or Dexterity by 1. You gain proficiency with four weapons of your choice. Each one must be a simple or a martial weapon.",
+			AsiBonus:         optJSON(map[string]any{"choose_ability": 1, "from": []string{"str", "dex"}}),
 			MechanicalEffect: optJSON([]map[string]string{{"effect_type": "proficiency_4_weapons"}}),
 		},
 	}

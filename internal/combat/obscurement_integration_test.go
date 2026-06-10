@@ -87,18 +87,18 @@ func TestServiceAttack_ObscurementFromZones_AttackerInDarkness(t *testing.T) {
 	roller := dice.NewRoller(func(n int) int { return n - 1 }) // always max
 
 	turn := refdata.Turn{
-		ID:                uuid.New(),
-		EncounterID:       encounterID,
-		Status:            "active",
-		AttacksRemaining:  1,
-		BonusActionUsed:   false,
+		ID:               uuid.New(),
+		EncounterID:      encounterID,
+		Status:           "active",
+		AttacksRemaining: 1,
+		BonusActionUsed:  false,
 	}
 
 	result, err := svc.Attack(context.Background(), AttackCommand{
-		Attacker:       attacker,
-		Target:         target,
-		Turn:           turn,
-		AttackerSize:   "Medium",
+		Attacker:     attacker,
+		Target:       target,
+		Turn:         turn,
+		AttackerSize: "Medium",
 	}, roller)
 
 	require.NoError(t, err)
@@ -160,11 +160,11 @@ func TestServiceAttack_ObscurementFromZones_TargetInDarkness(t *testing.T) {
 	roller := dice.NewRoller(func(n int) int { return n - 1 })
 
 	turn := refdata.Turn{
-		ID:                uuid.New(),
-		EncounterID:       encounterID,
-		Status:            "active",
-		AttacksRemaining:  1,
-		BonusActionUsed:   false,
+		ID:               uuid.New(),
+		EncounterID:      encounterID,
+		Status:           "active",
+		AttacksRemaining: 1,
+		BonusActionUsed:  false,
 	}
 
 	result, err := svc.Attack(context.Background(), AttackCommand{
@@ -233,11 +233,11 @@ func TestServiceAttack_ObscurementFromZones_DarkvisionNegates(t *testing.T) {
 	roller := dice.NewRoller(func(n int) int { return n - 1 })
 
 	turn := refdata.Turn{
-		ID:                uuid.New(),
-		EncounterID:       encounterID,
-		Status:            "active",
-		AttacksRemaining:  1,
-		BonusActionUsed:   false,
+		ID:               uuid.New(),
+		EncounterID:      encounterID,
+		Status:           "active",
+		AttacksRemaining: 1,
+		BonusActionUsed:  false,
 	}
 
 	result, err := svc.Attack(context.Background(), AttackCommand{
@@ -308,11 +308,11 @@ func TestServiceAttack_ObscurementFromZones_MagicalDarknessIgnoresDarkvision(t *
 	roller := dice.NewRoller(func(n int) int { return n - 1 })
 
 	turn := refdata.Turn{
-		ID:                uuid.New(),
-		EncounterID:       encounterID,
-		Status:            "active",
-		AttacksRemaining:  1,
-		BonusActionUsed:   false,
+		ID:               uuid.New(),
+		EncounterID:      encounterID,
+		Status:           "active",
+		AttacksRemaining: 1,
+		BonusActionUsed:  false,
 	}
 
 	result, err := svc.Attack(context.Background(), AttackCommand{
@@ -375,11 +375,11 @@ func TestServiceAttack_ObscurementFromZones_NoZones(t *testing.T) {
 	roller := dice.NewRoller(func(n int) int { return n - 1 })
 
 	turn := refdata.Turn{
-		ID:                uuid.New(),
-		EncounterID:       encounterID,
-		Status:            "active",
-		AttacksRemaining:  1,
-		BonusActionUsed:   false,
+		ID:               uuid.New(),
+		EncounterID:      encounterID,
+		Status:           "active",
+		AttacksRemaining: 1,
+		BonusActionUsed:  false,
 	}
 
 	result, err := svc.Attack(context.Background(), AttackCommand{

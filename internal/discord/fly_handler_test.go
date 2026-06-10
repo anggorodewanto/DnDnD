@@ -49,8 +49,8 @@ func setupFlyHandler(sess *mockMoveSession) (*FlyHandler, uuid.UUID, uuid.UUID, 
 				PositionRow: 1,
 				AltitudeFt:  0,
 				Conditions:  json.RawMessage(`[{"condition":"fly_speed"}]`),
-				IsAlive: true, HpCurrent: 10,
-				IsNpc:       false,
+				IsAlive:     true, HpCurrent: 10,
+				IsNpc: false,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
@@ -185,9 +185,11 @@ func TestFlyHandler_NoActiveTurn(t *testing.T) {
 				CurrentTurnID: uuid.NullUUID{Valid: false},
 			}, nil
 		},
-		getCombatant:       func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
-		listCombatants:     func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
-		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		getCombatant:   func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
 	}
 
 	interaction := makeFlyInteraction(30)
@@ -389,9 +391,11 @@ func TestFlyHandler_GetEncounterError(t *testing.T) {
 		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
 			return refdata.Encounter{}, errors.New("db error")
 		},
-		getCombatant:       func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
-		listCombatants:     func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
-		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		getCombatant:   func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
 	}
 
 	interaction := makeFlyInteraction(30)
@@ -430,8 +434,10 @@ func TestFlyHandler_GetCombatantError(t *testing.T) {
 		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
 			return refdata.Combatant{}, errors.New("combatant error")
 		},
-		listCombatants:     func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
-		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
 	}
 
 	interaction := makeFlyInteraction(30)
@@ -479,8 +485,10 @@ func TestFlyHandler_HandleFlyConfirm_GetCombatantError(t *testing.T) {
 		getCombatant: func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) {
 			return refdata.Combatant{}, errors.New("combatant gone")
 		},
-		listCombatants:     func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
-		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
 	}
 
 	interaction := &discordgo.Interaction{
@@ -564,7 +572,7 @@ func TestFlyHandler_Descend(t *testing.T) {
 				PositionRow: 1,
 				AltitudeFt:  30,
 				Conditions:  json.RawMessage(`[{"condition":"fly_speed"}]`),
-				IsAlive: true, HpCurrent: 10,
+				IsAlive:     true, HpCurrent: 10,
 			}, nil
 		},
 		listCombatants:     origSvc.listCombatants,

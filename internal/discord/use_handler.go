@@ -300,10 +300,7 @@ func (h *UseHandler) handleMagicItemCharge(
 
 	// Finding 8: detect spell-casting active abilities.
 	spellID, chargesCost := h.resolveSpellAbility(ctx, itemID)
-	amount := chargesCost
-	if amount < 1 {
-		amount = 1
-	}
+	amount := max(chargesCost, 1)
 
 	result, err := h.invService.UseCharges(inventory.UseChargesInput{
 		Items:      items,
@@ -381,10 +378,7 @@ func (h *UseHandler) resolveSpellAbility(ctx context.Context, itemID string) (st
 	}
 	for _, a := range abilities {
 		if a.SpellID != "" {
-			cost := a.ChargesCost
-			if cost < 1 {
-				cost = 1
-			}
+			cost := max(a.ChargesCost, 1)
 			return a.SpellID, cost
 		}
 	}

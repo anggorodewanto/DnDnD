@@ -17,12 +17,12 @@ import (
 // --- Mocks for /shove ---
 
 type mockShoveCombatService struct {
-	shoveCalls   []combat.ShoveCommand
-	grappleCalls []combat.GrappleCommand
-	shoveResult  combat.ShoveResult
+	shoveCalls    []combat.ShoveCommand
+	grappleCalls  []combat.GrappleCommand
+	shoveResult   combat.ShoveResult
 	grappleResult combat.GrappleResult
-	shoveErr     error
-	grappleErr   error
+	shoveErr      error
+	grappleErr    error
 }
 
 func (m *mockShoveCombatService) Shove(_ context.Context, cmd combat.ShoveCommand, _ *dice.Roller) (combat.ShoveResult, error) {
@@ -36,16 +36,16 @@ func (m *mockShoveCombatService) Grapple(_ context.Context, cmd combat.GrappleCo
 }
 
 type mockShoveProvider struct {
-	encID       uuid.UUID
-	turn        refdata.Turn
-	shover      refdata.Combatant
-	target      refdata.Combatant
-	enc         refdata.Encounter
-	resolveErr  error
-	getEncErr   error
-	getTurnErr  error
-	getCombErr  error
-	listErr     error
+	encID      uuid.UUID
+	turn       refdata.Turn
+	shover     refdata.Combatant
+	target     refdata.Combatant
+	enc        refdata.Encounter
+	resolveErr error
+	getEncErr  error
+	getTurnErr error
+	getCombErr error
+	listErr    error
 }
 
 func (m *mockShoveProvider) ActiveEncounterForUser(_ context.Context, _, _ string) (uuid.UUID, error) {

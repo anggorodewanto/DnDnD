@@ -88,11 +88,11 @@ func TestProcessTimeouts_SendsDMDecisionPrompt(t *testing.T) {
 	store := defaultMockStore()
 	store.listTurnsTimedOutFn = func(ctx context.Context) ([]refdata.Turn, error) {
 		return []refdata.Turn{{
-			ID:          turnID,
-			EncounterID: encounterID,
-			CombatantID: combatantID,
-			StartedAt:   sql.NullTime{Time: now.Add(-25 * time.Hour), Valid: true},
-			TimeoutAt:   sql.NullTime{Time: now.Add(-1 * time.Hour), Valid: true},
+			ID:                  turnID,
+			EncounterID:         encounterID,
+			CombatantID:         combatantID,
+			StartedAt:           sql.NullTime{Time: now.Add(-25 * time.Hour), Valid: true},
+			TimeoutAt:           sql.NullTime{Time: now.Add(-1 * time.Hour), Valid: true},
 			MovementRemainingFt: 30,
 			AttacksRemaining:    2,
 		}}, nil
@@ -1459,7 +1459,6 @@ func TestAutoResolveTurn_DyingCombatant_Nat20_ResetsDeathSavesAndDyingConditions
 	assert.False(t, HasCondition(capturedConds, "unconscious"), "unconscious must be removed")
 	assert.True(t, HasCondition(capturedConds, "prone"), "prone must remain after Nat-20 heal (spec rule)")
 }
-
 
 // SR-050: auto-resolve explicitly declines Divine Smite when paladin has
 // available slots, and the slot is preserved (not consumed).

@@ -383,9 +383,9 @@ func TestParseExpression_InvalidModifier(t *testing.T) {
 
 func TestParseExpression_MultipleModifiers(t *testing.T) {
 	tests := []struct {
-		input    string
-		wantMod  int
-		wantErr  bool
+		input   string
+		wantMod int
+		wantErr bool
 	}{
 		{"1d20+5+5", 10, false},
 		{"1d20-2+3", 1, false},

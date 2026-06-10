@@ -15,10 +15,10 @@ func TestAttune_Success(t *testing.T) {
 	slots := []character.AttunementSlot{}
 
 	result, err := Attune(AttuneInput{
-		Items:    items,
-		Slots:    slots,
-		ItemID:   "cloak-of-protection",
-		Classes:  nil,
+		Items:   items,
+		Slots:   slots,
+		ItemID:  "cloak-of-protection",
+		Classes: nil,
 	})
 
 	require.NoError(t, err)

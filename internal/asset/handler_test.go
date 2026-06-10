@@ -192,7 +192,7 @@ func TestHandler_UploadAsset_Success(t *testing.T) {
 
 	require.Equal(t, http.StatusCreated, rec.Code)
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &resp)
 	require.NoError(t, err)
 	assert.Equal(t, assetID.String(), resp["id"])

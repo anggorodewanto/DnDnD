@@ -133,9 +133,11 @@ func TestDistanceHandler_GetEncounterError(t *testing.T) {
 		getEncounter: func(_ context.Context, _ uuid.UUID) (refdata.Encounter, error) {
 			return refdata.Encounter{}, errors.New("db error")
 		},
-		getCombatant:       func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
-		listCombatants:     func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
-		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		getCombatant:   func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
 	}
 
 	interaction := makeDistanceInteraction("G1")
@@ -178,9 +180,11 @@ func TestDistanceHandler_NoActiveTurn(t *testing.T) {
 				CurrentTurnID: uuid.NullUUID{Valid: false},
 			}, nil
 		},
-		getCombatant:       func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
-		listCombatants:     func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
-		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		getCombatant:   func(_ context.Context, _ uuid.UUID) (refdata.Combatant, error) { return refdata.Combatant{}, nil },
+		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) { return nil, nil },
+		updateCombatantPos: func(_ context.Context, _ uuid.UUID, _ string, _, _ int32) (refdata.Combatant, error) {
+			return refdata.Combatant{}, nil
+		},
 	}
 
 	interaction := makeDistanceInteraction("G1")

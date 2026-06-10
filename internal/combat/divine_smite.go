@@ -141,13 +141,13 @@ type DivineSmiteCommand struct {
 
 // DivineSmiteResult holds the output of a Divine Smite.
 type DivineSmiteResult struct {
-	SmiteDamage    int                `json:"smite_damage"`
-	SmiteDice      string             `json:"smite_dice"`
-	SlotLevel      int                `json:"slot_level"`
-	IsUndead       bool               `json:"is_undead"`
-	IsCritical     bool               `json:"is_critical"`
+	SmiteDamage    int                 `json:"smite_damage"`
+	SmiteDice      string              `json:"smite_dice"`
+	SlotLevel      int                 `json:"slot_level"`
+	IsUndead       bool                `json:"is_undead"`
+	IsCritical     bool                `json:"is_critical"`
 	SlotsRemaining map[string]SlotInfo `json:"slots_remaining"`
-	CombatLog      string             `json:"combat_log"`
+	CombatLog      string              `json:"combat_log"`
 }
 
 // isUndeadOrFiend checks if a creature is undead or fiend by type.

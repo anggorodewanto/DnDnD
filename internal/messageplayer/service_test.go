@@ -67,9 +67,9 @@ func (f *fakeLookup) LookupPlayer(ctx context.Context, playerCharacterID uuid.UU
 }
 
 type fakeMessenger struct {
-	calls  []messengerCall
-	ids    []string
-	err    error
+	calls []messengerCall
+	ids   []string
+	err   error
 }
 
 type messengerCall struct {

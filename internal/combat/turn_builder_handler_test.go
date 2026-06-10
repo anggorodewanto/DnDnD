@@ -154,12 +154,12 @@ func TestExecuteEnemyTurn_Success(t *testing.T) {
 				}, nil
 			}
 			return refdata.Combatant{
-				ID:        targetID,
+				ID:          targetID,
 				DisplayName: "Aragorn",
-				IsNpc:     false,
-				IsAlive:   true,
-				HpCurrent: 45,
-				Ac:        16,
+				IsNpc:       false,
+				IsAlive:     true,
+				HpCurrent:   45,
+				Ac:          16,
 			}, nil
 		},
 		getActiveTurnByEncounterIDFn: func(ctx context.Context, eid uuid.UUID) (refdata.Turn, error) {

@@ -1,6 +1,7 @@
 package combat
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/ab/dndnd/internal/dice"
@@ -10,25 +11,25 @@ import (
 type EffectType string
 
 const (
-	EffectModifyAttackRoll    EffectType = "modify_attack_roll"
-	EffectModifyDamageRoll    EffectType = "modify_damage_roll"
-	EffectExtraDamageDice     EffectType = "extra_damage_dice"
-	EffectModifyAC            EffectType = "modify_ac"
-	EffectModifySave          EffectType = "modify_save"
-	EffectModifyCheck         EffectType = "modify_check"
-	EffectModifySpeed         EffectType = "modify_speed"
-	EffectGrantResistance     EffectType = "grant_resistance"
-	EffectGrantImmunity       EffectType = "grant_immunity"
-	EffectExtraAttack         EffectType = "extra_attack"
-	EffectModifyHP            EffectType = "modify_hp"
+	EffectModifyAttackRoll     EffectType = "modify_attack_roll"
+	EffectModifyDamageRoll     EffectType = "modify_damage_roll"
+	EffectExtraDamageDice      EffectType = "extra_damage_dice"
+	EffectModifyAC             EffectType = "modify_ac"
+	EffectModifySave           EffectType = "modify_save"
+	EffectModifyCheck          EffectType = "modify_check"
+	EffectModifySpeed          EffectType = "modify_speed"
+	EffectGrantResistance      EffectType = "grant_resistance"
+	EffectGrantImmunity        EffectType = "grant_immunity"
+	EffectExtraAttack          EffectType = "extra_attack"
+	EffectModifyHP             EffectType = "modify_hp"
 	EffectConditionalAdvantage EffectType = "conditional_advantage"
-	EffectResourceOnHit       EffectType = "resource_on_hit"
-	EffectReactionTrigger     EffectType = "reaction_trigger"
-	EffectAura                EffectType = "aura"
-	EffectReplaceRoll         EffectType = "replace_roll"
-	EffectGrantProficiency    EffectType = "grant_proficiency"
-	EffectModifyRange         EffectType = "modify_range"
-	EffectDMResolution        EffectType = "dm_resolution"
+	EffectResourceOnHit        EffectType = "resource_on_hit"
+	EffectReactionTrigger      EffectType = "reaction_trigger"
+	EffectAura                 EffectType = "aura"
+	EffectReplaceRoll          EffectType = "replace_roll"
+	EffectGrantProficiency     EffectType = "grant_proficiency"
+	EffectModifyRange          EffectType = "modify_range"
+	EffectDMResolution         EffectType = "dm_resolution"
 )
 
 // IsValid returns true if the effect type is a recognized value.
@@ -74,24 +75,24 @@ func (tp TriggerPoint) IsValid() bool {
 
 // EffectConditions holds the filters that must be true for an effect to apply.
 type EffectConditions struct {
-	WhenRaging             bool     `json:"when_raging,omitempty"`
-	WhenConcentrating      bool     `json:"when_concentrating,omitempty"`
-	WeaponProperty         string   `json:"weapon_property,omitempty"`
-	WeaponProperties       []string `json:"weapon_properties,omitempty"`
-	AttackType             string   `json:"attack_type,omitempty"`
-	AbilityUsed            string   `json:"ability_used,omitempty"`
-	TargetCondition        string   `json:"target_condition,omitempty"`
-	AllyWithin             int      `json:"ally_within,omitempty"`
-	UsesRemaining          bool     `json:"uses_remaining,omitempty"`
-	OncePerTurn            bool     `json:"once_per_turn,omitempty"`
-	HasAdvantage           bool     `json:"has_advantage,omitempty"`
-	AdvantageOrAllyWithin  int      `json:"advantage_or_ally_within,omitempty"`
-	WearingArmor           bool     `json:"wearing_armor,omitempty"`
-	NotWearingArmor        bool     `json:"not_wearing_armor,omitempty"`
-	NotUsingShield         bool     `json:"not_using_shield,omitempty"`
-	OneHandedMeleeOnly     bool     `json:"one_handed_melee_only,omitempty"`
-	AuraRadius             int      `json:"aura_radius,omitempty"`
-	Target                 string   `json:"target,omitempty"`
+	WhenRaging            bool     `json:"when_raging,omitempty"`
+	WhenConcentrating     bool     `json:"when_concentrating,omitempty"`
+	WeaponProperty        string   `json:"weapon_property,omitempty"`
+	WeaponProperties      []string `json:"weapon_properties,omitempty"`
+	AttackType            string   `json:"attack_type,omitempty"`
+	AbilityUsed           string   `json:"ability_used,omitempty"`
+	TargetCondition       string   `json:"target_condition,omitempty"`
+	AllyWithin            int      `json:"ally_within,omitempty"`
+	UsesRemaining         bool     `json:"uses_remaining,omitempty"`
+	OncePerTurn           bool     `json:"once_per_turn,omitempty"`
+	HasAdvantage          bool     `json:"has_advantage,omitempty"`
+	AdvantageOrAllyWithin int      `json:"advantage_or_ally_within,omitempty"`
+	WearingArmor          bool     `json:"wearing_armor,omitempty"`
+	NotWearingArmor       bool     `json:"not_wearing_armor,omitempty"`
+	NotUsingShield        bool     `json:"not_using_shield,omitempty"`
+	OneHandedMeleeOnly    bool     `json:"one_handed_melee_only,omitempty"`
+	AuraRadius            int      `json:"aura_radius,omitempty"`
+	Target                string   `json:"target,omitempty"`
 }
 
 // Effect represents a single mechanical effect declared by a feature.
@@ -178,10 +179,8 @@ func matchesAnyProperty(required []string, ctx EffectContext) bool {
 		if p == ctx.WeaponProperty {
 			return true
 		}
-		for _, wp := range ctx.WeaponProperties {
-			if p == wp {
-				return true
-			}
+		if slices.Contains(ctx.WeaponProperties, p) {
+			return true
 		}
 	}
 	return false

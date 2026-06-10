@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/google/uuid"
-	"nhooyr.io/websocket"
 
 	"github.com/ab/dndnd/internal/auth"
 )
@@ -31,12 +31,12 @@ type encounterBroadcast struct {
 
 // Hub manages WebSocket client connections and message broadcasting.
 type Hub struct {
-	Register      chan *Client
-	Unregister    chan *Client
-	Broadcast     chan []byte
-	encBroadcast  chan encounterBroadcast
-	clients       map[*Client]bool
-	stop          chan struct{}
+	Register     chan *Client
+	Unregister   chan *Client
+	Broadcast    chan []byte
+	encBroadcast chan encounterBroadcast
+	clients      map[*Client]bool
+	stop         chan struct{}
 }
 
 // NewHub creates a new Hub.
@@ -142,7 +142,7 @@ func (h *Handler) ServeWebSocket(w http.ResponseWriter, r *http.Request) {
 	// runs keep working without explicit wiring). Production wires the
 	// strict path with insecureSkipVerify=false plus an OriginPatterns
 	// allowlist sourced from BASE_URL so cross-origin upgrade attempts
-	// are rejected by nhooyr/websocket's authenticateOrigin with HTTP 403.
+	// are rejected by coder/websocket's authenticateOrigin with HTTP 403.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: h.wsInsecureSkipVerify,
 		OriginPatterns:     h.wsAllowedOrigins,

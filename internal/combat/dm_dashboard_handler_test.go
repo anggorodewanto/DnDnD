@@ -1104,7 +1104,7 @@ func TestDropConcentration_Success(t *testing.T) {
 	combatantID := uuid.New()
 
 	var (
-		clearCalled   bool
+		clearCalled     bool
 		zoneCleanCalled bool
 	)
 	store := &mockStore{

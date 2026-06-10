@@ -41,7 +41,7 @@ func TestRenderQueue_DebounceCoalescesMultipleRequests(t *testing.T) {
 	md := &MapData{Width: 3, Height: 3, TileSize: 48}
 
 	// Rapid-fire enqueue within debounce window
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		q.Enqueue("enc1", md)
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -62,9 +62,10 @@ func TestRenderQueue_DifferentEncountersRenderedSeparately(t *testing.T) {
 		mu.Lock()
 		// Use width as identifier since we control test data
 		key := "unknown"
-		if md.Width == 3 {
+		switch md.Width {
+		case 3:
 			key = "enc1"
-		} else if md.Width == 5 {
+		case 5:
 			key = "enc2"
 		}
 		renderCalls[key]++

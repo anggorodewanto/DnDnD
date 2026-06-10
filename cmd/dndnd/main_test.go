@@ -74,8 +74,7 @@ func TestRun_ServerStartsAndStops(t *testing.T) {
 }
 
 func TestRun_ListenError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	var logBuf bytes.Buffer
 
@@ -139,8 +138,7 @@ func TestRegisterRootRoutes_RedirectsToDashboard(t *testing.T) {
 }
 
 func TestRun_InvalidDatabaseURL(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	var logBuf bytes.Buffer
 
@@ -430,7 +428,6 @@ func TestWsAllowedOriginsFromEnv(t *testing.T) {
 		{"http_host_with_port", "http://localhost:8080", []string{"localhost:8080"}},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := wsAllowedOriginsFromEnv(tc.baseURL)
 			if len(got) != len(tc.want) {

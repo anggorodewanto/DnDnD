@@ -64,11 +64,11 @@ type Grid struct {
 
 // PathRequest holds everything needed to compute a path.
 type PathRequest struct {
-	Start          Point
-	End            Point
-	IsProne        bool
-	SizeCategory   int
-	Grid           *Grid
+	Start           Point
+	End             Point
+	IsProne         bool
+	SizeCategory    int
+	Grid            *Grid
 	MoverAltitudeFt int // mover's altitude; occupants at different altitudes don't block
 }
 
@@ -329,8 +329,8 @@ type pqItem struct {
 
 type priorityQueue []*pqItem
 
-func (pq priorityQueue) Len() int            { return len(pq) }
-func (pq priorityQueue) Less(i, j int) bool  { return pq[i].fCost < pq[j].fCost }
+func (pq priorityQueue) Len() int           { return len(pq) }
+func (pq priorityQueue) Less(i, j int) bool { return pq[i].fCost < pq[j].fCost }
 func (pq priorityQueue) Swap(i, j int) {
 	pq[i], pq[j] = pq[j], pq[i]
 	pq[i].index = i

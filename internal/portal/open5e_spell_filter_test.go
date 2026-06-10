@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/ab/dndnd/internal/auth"
@@ -47,11 +48,8 @@ func (f *fakeSpellQuerier) ListClasses(_ context.Context) ([]refdata.Class, erro
 func (f *fakeSpellQuerier) ListSpellsByClass(_ context.Context, class string) ([]refdata.Spell, error) {
 	var out []refdata.Spell
 	for _, s := range f.spells {
-		for _, c := range s.Classes {
-			if c == class {
-				out = append(out, s)
-				break
-			}
+		if slices.Contains(s.Classes, class) {
+			out = append(out, s)
 		}
 	}
 	return out, nil

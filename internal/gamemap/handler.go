@@ -102,14 +102,14 @@ func generateDefaultTiledJSON(width, height, tileSize int) json.RawMessage {
 	lightingData := make([]int, tileCount)
 	elevationData := make([]int, tileCount)
 
-	tiledMap := map[string]interface{}{
+	tiledMap := map[string]any{
 		"width":       width,
 		"height":      height,
 		"tilewidth":   tileSize,
 		"tileheight":  tileSize,
 		"orientation": "orthogonal",
 		"renderorder": "right-down",
-		"layers": []map[string]interface{}{
+		"layers": []map[string]any{
 			{
 				"name":    "terrain",
 				"type":    "tilelayer",
@@ -122,7 +122,7 @@ func generateDefaultTiledJSON(width, height, tileSize int) json.RawMessage {
 			{
 				"name":    "walls",
 				"type":    "objectgroup",
-				"objects": []interface{}{},
+				"objects": []any{},
 				"visible": true,
 				"opacity": 1,
 			},
@@ -147,17 +147,17 @@ func generateDefaultTiledJSON(width, height, tileSize int) json.RawMessage {
 			{
 				"name":    "spawn_zones",
 				"type":    "objectgroup",
-				"objects": []interface{}{},
+				"objects": []any{},
 				"visible": true,
 				"opacity": 1,
 			},
 		},
-		"tilesets": []map[string]interface{}{
+		"tilesets": []map[string]any{
 			{
 				"firstgid":  1,
 				"name":      "terrain",
 				"tilecount": 6,
-				"tiles": []map[string]interface{}{
+				"tiles": []map[string]any{
 					{"id": 0, "type": "open_ground"},
 					{"id": 1, "type": "difficult_terrain"},
 					{"id": 2, "type": "water"},
@@ -169,7 +169,7 @@ func generateDefaultTiledJSON(width, height, tileSize int) json.RawMessage {
 				"firstgid":  7,
 				"name":      "lighting",
 				"tilecount": 6,
-				"tiles": []map[string]interface{}{
+				"tiles": []map[string]any{
 					{"id": 0, "type": "dim_light"},
 					{"id": 1, "type": "darkness"},
 					{"id": 2, "type": "magical_darkness"},

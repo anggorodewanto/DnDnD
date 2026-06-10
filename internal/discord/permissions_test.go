@@ -15,7 +15,7 @@ func TestRequiredPermissions_Value(t *testing.T) {
 		discordgo.PermissionAttachFiles |
 		discordgo.PermissionManageMessages |
 		discordgo.PermissionManageChannels |
-		discordgo.PermissionUseSlashCommands |
+		discordgo.PermissionUseApplicationCommands |
 		discordgo.PermissionMentionEveryone
 
 	if perms != int64(expected) {

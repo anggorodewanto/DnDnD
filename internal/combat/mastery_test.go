@@ -1360,7 +1360,7 @@ func TestServiceAttack_SlowHitAppliesSlowedToTarget(t *testing.T) {
 // pushMockStore wires a mock store for a push-mastery service test on a 10x10
 // map with no other occupants. It returns the store plus a pointer to capture
 // the position write performed on the target.
-func pushMockStore(t *testing.T, charID, targetID uuid.UUID, mapID uuid.UUID, targetCreatureRef string, creatureSize string) (*mockStore, *[]refdata.UpdateCombatantPositionParams) {
+func pushMockStore(t *testing.T, charID, _ uuid.UUID, mapID uuid.UUID, _ string, creatureSize string) (*mockStore, *[]refdata.UpdateCombatantPositionParams) {
 	t.Helper()
 	char := makeCharacter(16, 10, 2, "greatclub")
 	char.ID = charID

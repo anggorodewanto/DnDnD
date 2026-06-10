@@ -101,7 +101,7 @@ func TestNarrationPoster_PostToStory_SplitsLongBody(t *testing.T) {
 	}
 	// Build a 2500-char body with newlines so splitting works cleanly.
 	var b strings.Builder
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		b.WriteString(strings.Repeat("A", 49))
 		b.WriteString("\n")
 	}

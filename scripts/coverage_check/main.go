@@ -117,7 +117,7 @@ func parseProfile(body string, exclude *regexp.Regexp) (*profileStats, error) {
 		if len(fields) != 3 {
 			return nil, fmt.Errorf("malformed profile line %d: %q", i+1, line)
 		}
-		filename := strings.SplitN(fields[0], ":", 2)[0]
+		filename, _, _ := strings.Cut(fields[0], ":")
 		if exclude != nil && exclude.MatchString(filename) {
 			continue
 		}

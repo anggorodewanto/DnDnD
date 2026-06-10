@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -25,14 +26,14 @@ import (
 // --- Mocks for /cast ---
 
 type mockCastCombatService struct {
-	castCalls    []combat.CastCommand
-	castResult   combat.CastResult
-	castErr      error
-	aoeCalls     []combat.AoECastCommand
-	aoeResult    combat.AoECastResult
-	aoeErr       error
-	concID       string
-	concErr      error
+	castCalls  []combat.CastCommand
+	castResult combat.CastResult
+	castErr    error
+	aoeCalls   []combat.AoECastCommand
+	aoeResult  combat.AoECastResult
+	aoeErr     error
+	concID     string
+	concErr    error
 }
 
 func (m *mockCastCombatService) Cast(_ context.Context, cmd combat.CastCommand, _ *dice.Roller) (combat.CastResult, error) {
@@ -50,20 +51,20 @@ func (m *mockCastCombatService) GetCasterConcentrationName(_ context.Context, _ 
 }
 
 type mockCastProvider struct {
-	encID      uuid.UUID
-	turn       refdata.Turn
-	caster     refdata.Combatant
-	target     refdata.Combatant
-	enc        refdata.Encounter
-	spells     map[string]refdata.Spell
-	mapData    refdata.Map
-	resolveErr error
-	getEncErr  error
-	getTurnErr error
-	getCombErr error
+	encID       uuid.UUID
+	turn        refdata.Turn
+	caster      refdata.Combatant
+	target      refdata.Combatant
+	enc         refdata.Encounter
+	spells      map[string]refdata.Spell
+	mapData     refdata.Map
+	resolveErr  error
+	getEncErr   error
+	getTurnErr  error
+	getCombErr  error
 	getSpellErr error
-	listErr    error
-	getMapErr  error
+	listErr     error
+	getMapErr   error
 	// listCombatantsOverride, when non-nil, replaces the default
 	// `[caster, target]` slice ListCombatantsByEncounterID returns. SR-025
 	// tests use this to seed extra combatants (twin target, AoE protectees).
@@ -709,12 +710,7 @@ func TestCastHandler_DetectMagic_NoSelfNoNearby_ReportsEmpty(t *testing.T) {
 
 // containsString reports whether needle is in haystack.
 func containsString(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(haystack, needle)
 }
 
 // --- E-59 AoE save-prompt tests ---
@@ -1271,7 +1267,7 @@ func (r *recordingCastNotifier) ResolveSkillCheckNarration(_ context.Context, _,
 	return nil
 }
 func (r *recordingCastNotifier) Get(string) (dmqueue.Item, bool) { return dmqueue.Item{}, false }
-func (r *recordingCastNotifier) ListPending() []dmqueue.Item    { return nil }
+func (r *recordingCastNotifier) ListPending() []dmqueue.Item     { return nil }
 
 // setupCastHandlerWithDMQueue extends setupCastHandler with a wired Notifier
 // and CampaignProvider, plus seeds an extra dm_required spell ("charm-person")
@@ -1549,4 +1545,3 @@ func stripResolveSuffixSR027(s string) string {
 	}
 	return s[:idx]
 }
-

@@ -1,6 +1,7 @@
 package registration
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -18,13 +19,7 @@ func TestFindFuzzyMatches(t *testing.T) {
 			names[i] = m.Name
 		}
 		for _, want := range []string{"Thorn", "Thorin", "Thora"} {
-			found := false
-			for _, n := range names {
-				if n == want {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(names, want)
 			if !found {
 				t.Errorf("expected %q in matches, got %v", want, names)
 			}

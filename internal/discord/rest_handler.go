@@ -40,18 +40,18 @@ type RestMagicItemLookup interface {
 // The dmQueueFunc field is reserved for posting rest requests to #dm-queue and
 // waiting for DM approval before applying rest benefits.
 type RestHandler struct {
-	session           Session
-	restService       *rest.Service
-	campaignProvider  CheckCampaignProvider
-	characterLookup   CheckCharacterLookup
-	encounterProvider CheckEncounterProvider
+	session                  Session
+	restService              *rest.Service
+	campaignProvider         CheckCampaignProvider
+	characterLookup          CheckCharacterLookup
+	encounterProvider        CheckEncounterProvider
 	charUpdater              RestCharacterUpdater
 	magicItemLookup          RestMagicItemLookup // Finding 9: dawn recharge
 	rollLogger               dice.RollHistoryLogger
 	dmQueueFunc              func(guildID string) string // reserved for future DM approval flow
 	notifier                 dmqueue.Notifier
-	cardUpdater              CardUpdater // SR-007
-	campaignEncounterChecker rest.PartyEncounterChecker  // G-H09
+	cardUpdater              CardUpdater                // SR-007
+	campaignEncounterChecker rest.PartyEncounterChecker // G-H09
 }
 
 // SetMagicItemLookup wires the magic-item reference lookup used to build
@@ -197,7 +197,7 @@ func (h *RestHandler) Handle(interaction *discordgo.Interaction) {
 	if !restAutoApproved(campaign) {
 		respondEphemeral(h.session, interaction, fmt.Sprintf(
 			"⏳ %s rest request sent to the DM. Your rest will apply once they approve it.",
-			strings.Title(restType),
+			strings.ToUpper(restType[:1])+restType[1:],
 		))
 		return
 	}
@@ -558,10 +558,7 @@ func BuildHitDiceButtons(charID uuid.UUID, hitDiceRemaining map[string]int) []di
 		var buttons []discordgo.MessageComponent
 
 		// Cap at 5 buttons per row (Discord limit)
-		maxButtons := remaining
-		if maxButtons > 4 {
-			maxButtons = 4
-		}
+		maxButtons := min(remaining, 4)
 
 		for i := 0; i <= maxButtons; i++ {
 			label := fmt.Sprintf("%d", i)

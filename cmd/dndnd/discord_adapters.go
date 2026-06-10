@@ -372,11 +372,7 @@ func formatRollLogEntry(e dice.RollLogEntry) string {
 	if len(parts) == 0 {
 		return "(empty roll)"
 	}
-	out := parts[0]
-	for _, p := range parts[1:] {
-		out += " " + p
-	}
-	return out
+	return strings.Join(parts, " ")
 }
 
 // mapRegeneratorQueries is the narrow subset of refdata.Queries that the
@@ -1276,9 +1272,9 @@ func (n *initiativeTrackerNotifier) PostCompletedTracker(ctx context.Context, en
 // swallowed so the notifier can never roll back the encounter creation
 // path. (StartCombat persists the encounter before it fires this hook.)
 type firstTurnPingNotifier struct {
-	session  discord.Session
-	csp      discord.CampaignSettingsProvider
-	queries  *refdata.Queries
+	session discord.Session
+	csp     discord.CampaignSettingsProvider
+	queries *refdata.Queries
 }
 
 func newFirstTurnPingNotifier(session discord.Session, csp discord.CampaignSettingsProvider, queries *refdata.Queries) *firstTurnPingNotifier {

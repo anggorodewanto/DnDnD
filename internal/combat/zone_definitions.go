@@ -22,9 +22,9 @@ type ZoneDefinition struct {
 
 // ZoneTrigger describes when a zone effect fires and what it does.
 type ZoneTrigger struct {
-	Trigger string                 `json:"trigger"` // "enter", "start_of_turn"
-	Effect  string                 `json:"effect"`  // "damage", "save"
-	Details map[string]interface{} `json:"details,omitempty"`
+	Trigger string         `json:"trigger"` // "enter", "start_of_turn"
+	Effect  string         `json:"effect"`  // "damage", "save"
+	Details map[string]any `json:"details,omitempty"`
 }
 
 // KnownZoneDefinitions maps spell names (lowercase) to their zone definitions.

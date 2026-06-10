@@ -336,10 +336,10 @@ func TestCombatantObscurement_NoZones(t *testing.T) {
 func TestCombatantObscurement_NotInAnyZone(t *testing.T) {
 	zones := []ZoneInfo{
 		{
-			ZoneType:  "darkness",
-			Shape:     "circle",
-			OriginCol: "F",
-			OriginRow: 6,
+			ZoneType:   "darkness",
+			Shape:      "circle",
+			OriginCol:  "F",
+			OriginRow:  6,
 			Dimensions: json.RawMessage(`{"radius_ft":10}`),
 		},
 	}
@@ -350,10 +350,10 @@ func TestCombatantObscurement_NotInAnyZone(t *testing.T) {
 func TestCombatantObscurement_InDarknessZone_NoDarkvision(t *testing.T) {
 	zones := []ZoneInfo{
 		{
-			ZoneType:  "darkness",
-			Shape:     "circle",
-			OriginCol: "C",
-			OriginRow: 3,
+			ZoneType:   "darkness",
+			Shape:      "circle",
+			OriginCol:  "C",
+			OriginRow:  3,
 			Dimensions: json.RawMessage(`{"radius_ft":15}`),
 		},
 	}
@@ -365,10 +365,10 @@ func TestCombatantObscurement_InDarknessZone_NoDarkvision(t *testing.T) {
 func TestCombatantObscurement_InDarknessZone_WithDarkvision(t *testing.T) {
 	zones := []ZoneInfo{
 		{
-			ZoneType:  "darkness",
-			Shape:     "circle",
-			OriginCol: "C",
-			OriginRow: 3,
+			ZoneType:   "darkness",
+			Shape:      "circle",
+			OriginCol:  "C",
+			OriginRow:  3,
 			Dimensions: json.RawMessage(`{"radius_ft":15}`),
 		},
 	}
@@ -380,10 +380,10 @@ func TestCombatantObscurement_InDarknessZone_WithDarkvision(t *testing.T) {
 func TestCombatantObscurement_InMagicalDarkness_WithDarkvision(t *testing.T) {
 	zones := []ZoneInfo{
 		{
-			ZoneType:  "magical_darkness",
-			Shape:     "circle",
-			OriginCol: "C",
-			OriginRow: 3,
+			ZoneType:   "magical_darkness",
+			Shape:      "circle",
+			OriginCol:  "C",
+			OriginRow:  3,
 			Dimensions: json.RawMessage(`{"radius_ft":15}`),
 		},
 	}
@@ -396,17 +396,17 @@ func TestCombatantObscurement_WorstZoneWins(t *testing.T) {
 	// Combatant in both dim_light and darkness zone — darkness wins
 	zones := []ZoneInfo{
 		{
-			ZoneType:  "dim_light",
-			Shape:     "circle",
-			OriginCol: "C",
-			OriginRow: 3,
+			ZoneType:   "dim_light",
+			Shape:      "circle",
+			OriginCol:  "C",
+			OriginRow:  3,
 			Dimensions: json.RawMessage(`{"radius_ft":15}`),
 		},
 		{
-			ZoneType:  "darkness",
-			Shape:     "circle",
-			OriginCol: "C",
-			OriginRow: 3,
+			ZoneType:   "darkness",
+			Shape:      "circle",
+			OriginCol:  "C",
+			OriginRow:  3,
 			Dimensions: json.RawMessage(`{"radius_ft":15}`),
 		},
 	}
@@ -417,10 +417,10 @@ func TestCombatantObscurement_WorstZoneWins(t *testing.T) {
 func TestCombatantObscurement_DamageZoneIgnored(t *testing.T) {
 	zones := []ZoneInfo{
 		{
-			ZoneType:  "damage",
-			Shape:     "circle",
-			OriginCol: "C",
-			OriginRow: 3,
+			ZoneType:   "damage",
+			Shape:      "circle",
+			OriginCol:  "C",
+			OriginRow:  3,
 			Dimensions: json.RawMessage(`{"radius_ft":15}`),
 		},
 	}
@@ -451,14 +451,14 @@ func TestResolveAttack_AttackerInHeavyObscurement_GetsDisadvantage(t *testing.T)
 func TestResolveAttack_TargetInHeavyObscurement_GetsAdvantage(t *testing.T) {
 	roller := dice.NewRoller(func(n int) int { return n - 1 })
 	input := AttackInput{
-		AttackerName:       "Aria",
-		TargetName:         "Goblin",
-		TargetAC:           12,
-		Weapon:             refdata.Weapon{ID: "longsword", Name: "Longsword", Damage: "1d8", DamageType: "slashing", WeaponType: "martial_melee"},
-		Scores:             AbilityScores{Str: 16, Dex: 12, Con: 14, Int: 10, Wis: 12, Cha: 8},
-		ProfBonus:          2,
-		DistanceFt:         5,
-		TargetObscurement:  HeavilyObscured,
+		AttackerName:      "Aria",
+		TargetName:        "Goblin",
+		TargetAC:          12,
+		Weapon:            refdata.Weapon{ID: "longsword", Name: "Longsword", Damage: "1d8", DamageType: "slashing", WeaponType: "martial_melee"},
+		Scores:            AbilityScores{Str: 16, Dex: 12, Con: 14, Int: 10, Wis: 12, Cha: 8},
+		ProfBonus:         2,
+		DistanceFt:        5,
+		TargetObscurement: HeavilyObscured,
 	}
 	result, err := ResolveAttack(input, roller)
 	require.NoError(t, err)

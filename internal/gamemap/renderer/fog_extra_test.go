@@ -22,11 +22,11 @@ func TestShadowcast_SymmetryInvariant_Documented(t *testing.T) {
 		{X1: 2, Y1: 4, X2: 5, Y2: 4}, // horizontal
 	}
 	const dim = 6
-	for r := 0; r < dim; r++ {
-		for c := 0; c < dim; c++ {
+	for r := range dim {
+		for c := range dim {
 			vis1 := shadowcast(c, r, 20, walls, dim, dim)
-			for r2 := 0; r2 < dim; r2++ {
-				for c2 := 0; c2 < dim; c2++ {
+			for r2 := range dim {
+				for c2 := range dim {
 					if !vis1[GridPos{c2, r2}] {
 						continue
 					}

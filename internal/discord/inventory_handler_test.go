@@ -17,9 +17,9 @@ import (
 
 // mockInventorySession captures the ephemeral response.
 type mockInventorySession struct {
-	lastResponse    string
-	sentChannelID   string
-	sentChannelMsg  string
+	lastResponse   string
+	sentChannelID  string
+	sentChannelMsg string
 }
 
 func (m *mockInventorySession) UserChannelCreate(recipientID string) (*discordgo.Channel, error) {

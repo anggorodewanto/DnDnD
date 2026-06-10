@@ -80,12 +80,12 @@ func TestValidateAbilityScores_MethodRules(t *testing.T) {
 				sub.AbilityMethod = portal.AbilityMethodRoll
 				sub.AbilityScores = portal.PointBuyScores{STR: 15, DEX: 13, CON: 12, INT: 12, WIS: 9, CHA: 6}
 				sub.AbilityRolls = map[string][]int{
-					"str": []int{6, 5, 4, 1},
-					"dex": []int{6, 4, 3, 1},
-					"con": []int{4, 4, 4, 1},
-					"int": []int{6, 3, 2, 3},
-					"wis": []int{2, 2, 5, 2},
-					"cha": []int{1, 2, 3, 1},
+					"str": {6, 5, 4, 1},
+					"dex": {6, 4, 3, 1},
+					"con": {4, 4, 4, 1},
+					"int": {6, 3, 2, 3},
+					"wis": {2, 2, 5, 2},
+					"cha": {1, 2, 3, 1},
 				}
 				return sub
 			}(),
@@ -97,12 +97,12 @@ func TestValidateAbilityScores_MethodRules(t *testing.T) {
 				sub.AbilityMethod = portal.AbilityMethodRoll
 				sub.AbilityScores = portal.PointBuyScores{STR: 10, DEX: 13, CON: 12, INT: 12, WIS: 9, CHA: 6}
 				sub.AbilityRolls = map[string][]int{
-					"str": []int{6, 5, 4, 1},
-					"dex": []int{6, 4, 3, 1},
-					"con": []int{4, 4, 4, 1},
-					"int": []int{6, 3, 2, 3},
-					"wis": []int{2, 2, 5, 2},
-					"cha": []int{1, 2, 3, 1},
+					"str": {6, 5, 4, 1},
+					"dex": {6, 4, 3, 1},
+					"con": {4, 4, 4, 1},
+					"int": {6, 3, 2, 3},
+					"wis": {2, 2, 5, 2},
+					"cha": {1, 2, 3, 1},
 				}
 				return sub
 			}(),

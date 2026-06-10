@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -324,11 +325,11 @@ type HideCommand struct {
 
 // HideResult holds the outputs of a Hide action.
 type HideResult struct {
-	Turn             refdata.Turn
-	Combatant        refdata.Combatant
-	CombatLog        string
-	Success          bool
-	StealthRoll      int
+	Turn              refdata.Turn
+	Combatant         refdata.Combatant
+	CombatLog         string
+	Success           bool
+	StealthRoll       int
 	HighestPerception int
 }
 
@@ -701,14 +702,16 @@ func (s *Service) DropProne(ctx context.Context, cmd DropProneCommand) (DropPron
 		return DropProneResult{}, fmt.Errorf("applying prone condition: %w", err)
 	}
 
-	log := fmt.Sprintf("\u2B07\ufe0f %s drops prone", cmd.Combatant.DisplayName)
+	var log strings.Builder
+	fmt.Fprintf(&log, "\u2B07\ufe0f %s drops prone", cmd.Combatant.DisplayName)
 	for _, m := range msgs {
-		log += "\n" + m
+		log.WriteString("\n")
+		log.WriteString(m)
 	}
 
 	return DropProneResult{
 		Combatant: updatedCombatant,
-		CombatLog: log,
+		CombatLog: log.String(),
 	}, nil
 }
 
@@ -849,7 +852,7 @@ type CunningActionCommand struct {
 	Combatant refdata.Combatant
 	Turn      refdata.Turn
 	Encounter refdata.Encounter
-	Action    string // "dash", "disengage", or "hide"
+	Action    string              // "dash", "disengage", or "hide"
 	Hostiles  []refdata.Combatant // only for hide
 }
 

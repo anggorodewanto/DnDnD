@@ -1024,12 +1024,12 @@ func TestNormalRange(t *testing.T) {
 }
 
 func TestIsInLongRange(t *testing.T) {
-	bow := makeLongbow() // normal 150, long 600
-	assert.False(t, IsInLongRange(bow, 100))  // within normal
-	assert.False(t, IsInLongRange(bow, 150))  // at normal
-	assert.True(t, IsInLongRange(bow, 200))   // in long
-	assert.True(t, IsInLongRange(bow, 600))   // at max long
-	assert.False(t, IsInLongRange(bow, 601))  // beyond long
+	bow := makeLongbow()                     // normal 150, long 600
+	assert.False(t, IsInLongRange(bow, 100)) // within normal
+	assert.False(t, IsInLongRange(bow, 150)) // at normal
+	assert.True(t, IsInLongRange(bow, 200))  // in long
+	assert.True(t, IsInLongRange(bow, 600))  // at max long
+	assert.False(t, IsInLongRange(bow, 601)) // beyond long
 
 	melee := makeLongsword()
 	assert.False(t, IsInLongRange(melee, 5))
@@ -1141,7 +1141,7 @@ func TestResolveAttack_NatOneAlwaysMisses(t *testing.T) {
 		TargetAC:     5, // very low AC
 		Weapon:       makeLongsword(),
 		Scores:       AbilityScores{Str: 20, Dex: 14}, // +5 STR mod
-		ProfBonus:    6,                                 // high prof
+		ProfBonus:    6,                               // high prof
 		DistanceFt:   5,
 	}
 
@@ -2192,7 +2192,7 @@ func TestResolveAttack_ThrownWeaponAtRange(t *testing.T) {
 		Scores:       AbilityScores{Str: 16, Dex: 10},
 		ProfBonus:    2,
 		DistanceFt:   20,
-		Thrown:        true,
+		Thrown:       true,
 	}, roller)
 	require.NoError(t, err)
 	assert.True(t, result.Hit)
@@ -2210,7 +2210,7 @@ func TestResolveAttack_ThrownWeaponBeyondLongRange(t *testing.T) {
 		Scores:       AbilityScores{Str: 16, Dex: 10},
 		ProfBonus:    2,
 		DistanceFt:   130,
-		Thrown:        true,
+		Thrown:       true,
 	}, roller)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "out of range")
@@ -2233,7 +2233,7 @@ func TestResolveAttack_ThrownWeaponInLongRangeDisadvantage(t *testing.T) {
 		Scores:       AbilityScores{Str: 16, Dex: 10},
 		ProfBonus:    2,
 		DistanceFt:   50, // beyond normal 30, within long 120
-		Thrown:        true,
+		Thrown:       true,
 	}, roller)
 	require.NoError(t, err)
 	// Should have disadvantage from long range
@@ -2259,14 +2259,14 @@ func TestResolveAttack_ImprovisedNoProficiency(t *testing.T) {
 	})
 
 	result, err := ResolveAttack(AttackInput{
-		AttackerName:    "Aria",
-		TargetName:      "Goblin",
-		TargetAC:        12,
-		Weapon:          weapon,
-		Scores:          AbilityScores{Str: 16, Dex: 10},
-		ProfBonus:       2,
-		DistanceFt:      5,
-		IsImprovised:    true,
+		AttackerName:     "Aria",
+		TargetName:       "Goblin",
+		TargetAC:         12,
+		Weapon:           weapon,
+		Scores:           AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:        2,
+		DistanceFt:       5,
+		IsImprovised:     true,
 		HasTavernBrawler: false,
 	}, roller)
 	require.NoError(t, err)
@@ -2285,14 +2285,14 @@ func TestResolveAttack_ImprovisedWithTavernBrawlerGetsProficiency(t *testing.T) 
 	})
 
 	result, err := ResolveAttack(AttackInput{
-		AttackerName:    "Aria",
-		TargetName:      "Goblin",
-		TargetAC:        12,
-		Weapon:          weapon,
-		Scores:          AbilityScores{Str: 16, Dex: 10},
-		ProfBonus:       2,
-		DistanceFt:      5,
-		IsImprovised:    true,
+		AttackerName:     "Aria",
+		TargetName:       "Goblin",
+		TargetAC:         12,
+		Weapon:           weapon,
+		Scores:           AbilityScores{Str: 16, Dex: 10},
+		ProfBonus:        2,
+		DistanceFt:       5,
+		IsImprovised:     true,
 		HasTavernBrawler: true,
 	}, roller)
 	require.NoError(t, err)
@@ -2449,7 +2449,7 @@ func TestResolveWeaponDamage_VersatileTwoHanded(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 8 })
 	weapon := makeVersatileLongsword()
 	dmg, damageDice, rollResult := resolveWeaponDamage(weapon, 3, false, true, roller)
-	assert.Equal(t, 11, dmg)         // 8 + 3
+	assert.Equal(t, 11, dmg) // 8 + 3
 	assert.Equal(t, "1d10+3", damageDice)
 	assert.NotNil(t, rollResult)
 }
@@ -2882,7 +2882,7 @@ func TestServiceAttack_ThrownWeapon(t *testing.T) {
 		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Aria", PositionCol: "A", PositionRow: 1, Conditions: json.RawMessage(`[]`)},
 		Target:   refdata.Combatant{ID: targetID, DisplayName: "Goblin", PositionCol: "E", PositionRow: 1, Ac: 12, Conditions: json.RawMessage(`[]`)},
 		Turn:     refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: attackerID, AttacksRemaining: 1},
-		Thrown:    true,
+		Thrown:   true,
 	}, roller)
 	require.NoError(t, err)
 	assert.True(t, result.Hit)

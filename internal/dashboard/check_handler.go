@@ -234,7 +234,7 @@ func writeCheckError(w http.ResponseWriter, msg string, code int) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-func writeCheckJSON(w http.ResponseWriter, v interface{}) {
+func writeCheckJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
 }

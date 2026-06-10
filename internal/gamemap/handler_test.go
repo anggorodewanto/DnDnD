@@ -41,7 +41,7 @@ func TestHandler_CreateMap_Success(t *testing.T) {
 	store := successStore(campaignID)
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "Test Map",
 		"width":       10,
@@ -87,7 +87,7 @@ func TestHandler_CreateMap_InvalidJSON(t *testing.T) {
 func TestHandler_CreateMap_InvalidCampaignID(t *testing.T) {
 	_, r := newTestRouter(&mockStore{})
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": "not-a-uuid",
 		"name":        "Test Map",
 		"width":       10,
@@ -109,7 +109,7 @@ func TestHandler_CreateMap_ValidationError(t *testing.T) {
 	campaignID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "Test Map",
 		"width":       201,
@@ -147,7 +147,7 @@ func TestHandler_CreateMap_CustomTiledJSON(t *testing.T) {
 	_, r := newTestRouter(store)
 
 	customJSON := json.RawMessage(`{"width":10,"height":10,"layers":[]}`)
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "Custom Map",
 		"width":       10,
@@ -163,10 +163,10 @@ func TestHandler_CreateMap_CustomTiledJSON(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, rec.Code)
 	// Verify custom JSON was passed through (not default)
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	err := json.Unmarshal(capturedTiledJSON, &parsed)
 	require.NoError(t, err)
-	layers, ok := parsed["layers"].([]interface{})
+	layers, ok := parsed["layers"].([]any)
 	require.True(t, ok)
 	assert.Empty(t, layers)
 }
@@ -342,7 +342,7 @@ func TestHandler_UpdateMap_Success(t *testing.T) {
 	mapID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"name":       "Updated Map",
 		"width":      15,
 		"height":     15,
@@ -398,7 +398,7 @@ func TestHandler_UpdateMap_ValidationError(t *testing.T) {
 	_, r := newTestRouter(successStore(campaignID))
 	mapID := uuid.New()
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"name":       "",
 		"width":      10,
 		"height":     10,
@@ -484,7 +484,7 @@ func TestHandler_CreateMap_DefaultTiledJSON_Structure(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "Auto Map",
 		"width":       5,
@@ -499,7 +499,7 @@ func TestHandler_CreateMap_DefaultTiledJSON_Structure(t *testing.T) {
 
 	require.Equal(t, http.StatusCreated, rec.Code)
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	err := json.Unmarshal(capturedTiledJSON, &parsed)
 	require.NoError(t, err)
 
@@ -514,33 +514,33 @@ func TestHandler_CreateMap_DefaultTiledJSON_Structure(t *testing.T) {
 	// editor's generateBlankMap. Detailed shape is asserted in
 	// TestGenerateDefaultTiledJSON_FiveLayers; here we only verify the handler
 	// forwards the canonical 5-layer JSON unchanged.
-	layers, ok := parsed["layers"].([]interface{})
+	layers, ok := parsed["layers"].([]any)
 	require.True(t, ok)
 	require.Len(t, layers, 5)
 
 	// Terrain layer
-	terrainLayer := layers[0].(map[string]interface{})
+	terrainLayer := layers[0].(map[string]any)
 	assert.Equal(t, "terrain", terrainLayer["name"])
 	assert.Equal(t, "tilelayer", terrainLayer["type"])
-	data := terrainLayer["data"].([]interface{})
+	data := terrainLayer["data"].([]any)
 	assert.Len(t, data, 15) // 5*3
 	for _, v := range data {
 		assert.Equal(t, float64(1), v) // all open ground
 	}
 
 	// Walls layer
-	wallsLayer := layers[1].(map[string]interface{})
+	wallsLayer := layers[1].(map[string]any)
 	assert.Equal(t, "walls", wallsLayer["name"])
 	assert.Equal(t, "objectgroup", wallsLayer["type"])
-	objects := wallsLayer["objects"].([]interface{})
+	objects := wallsLayer["objects"].([]any)
 	assert.Empty(t, objects)
 
 	// Check tilesets — terrain + lighting (firstgid 7) after SR-030
-	tilesets := parsed["tilesets"].([]interface{})
+	tilesets := parsed["tilesets"].([]any)
 	require.Len(t, tilesets, 2)
-	tileset := tilesets[0].(map[string]interface{})
+	tileset := tilesets[0].(map[string]any)
 	assert.Equal(t, float64(1), tileset["firstgid"])
-	tiles := tileset["tiles"].([]interface{})
+	tiles := tileset["tiles"].([]any)
 	assert.Len(t, tiles, 5)
 }
 
@@ -555,7 +555,7 @@ func TestHandler_CreateMap_StoreError(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "Test",
 		"width":       10,
@@ -601,7 +601,7 @@ func TestHandler_UpdateMap_StoreError(t *testing.T) {
 	_, r := newTestRouter(store)
 	mapID := uuid.New()
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"name":       "Updated",
 		"width":      10,
 		"height":     10,
@@ -622,7 +622,7 @@ func TestHandler_UpdateMap_StoreError(t *testing.T) {
 func TestGenerateDefaultTiledJSON(t *testing.T) {
 	result := generateDefaultTiledJSON(3, 2, 48)
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	err := json.Unmarshal(result, &parsed)
 	require.NoError(t, err)
 
@@ -633,9 +633,9 @@ func TestGenerateDefaultTiledJSON(t *testing.T) {
 	assert.Equal(t, "orthogonal", parsed["orientation"])
 	assert.Equal(t, "right-down", parsed["renderorder"])
 
-	layers := parsed["layers"].([]interface{})
-	terrainLayer := layers[0].(map[string]interface{})
-	data := terrainLayer["data"].([]interface{})
+	layers := parsed["layers"].([]any)
+	terrainLayer := layers[0].(map[string]any)
+	data := terrainLayer["data"].([]any)
 	assert.Len(t, data, 6) // 3*2
 }
 
@@ -644,7 +644,7 @@ func TestGenerateDefaultTiledJSON(t *testing.T) {
 func TestGenerateDefaultTiledJSON_LargeTileSize(t *testing.T) {
 	result := generateDefaultTiledJSON(10, 10, 32)
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	err := json.Unmarshal(result, &parsed)
 	require.NoError(t, err)
 
@@ -710,7 +710,7 @@ func TestHandler_RegisterRoutes_AllEndpoints(t *testing.T) {
 	_, r := newTestRouter(store)
 
 	// POST
-	body := map[string]interface{}{"campaign_id": campaignID.String(), "name": "Test", "width": 10, "height": 10}
+	body := map[string]any{"campaign_id": campaignID.String(), "name": "Test", "width": 10, "height": 10}
 	b, _ := json.Marshal(body)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/maps", bytes.NewReader(b)))
@@ -727,7 +727,7 @@ func TestHandler_RegisterRoutes_AllEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// PUT
-	updateBody := map[string]interface{}{"name": "Updated", "width": 10, "height": 10, "tiled_json": minimalTiledJSON()}
+	updateBody := map[string]any{"name": "Updated", "width": 10, "height": 10, "tiled_json": minimalTiledJSON()}
 	ub, _ := json.Marshal(updateBody)
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String()+"?campaign_id="+campaignID.String(), bytes.NewReader(ub)))
@@ -775,7 +775,7 @@ func TestHandler_GetMap_IncludesBackgroundImageID(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &resp)
 	require.NoError(t, err)
 	assert.Equal(t, bgID.String(), resp["background_image_id"])
@@ -804,7 +804,7 @@ func TestHandler_GetMap_NullBackgroundImageID(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &resp)
 	require.NoError(t, err)
 	// Null should be omitted or null
@@ -836,7 +836,7 @@ func TestHandler_CreateMap_WithBackgroundImageID(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id":         campaignID.String(),
 		"name":                "BG Map",
 		"width":               10,
@@ -858,7 +858,7 @@ func TestHandler_CreateMap_InvalidBackgroundImageID(t *testing.T) {
 	campaignID := uuid.New()
 	_, r := newTestRouter(successStore(campaignID))
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id":         campaignID.String(),
 		"name":                "Bad BG",
 		"width":               10,
@@ -898,7 +898,7 @@ func TestHandler_UpdateMap_WithBackgroundImageID(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"name":                "Updated BG",
 		"width":               10,
 		"height":              10,
@@ -920,7 +920,7 @@ func TestHandler_UpdateMap_InvalidBackgroundImageID(t *testing.T) {
 	_, r := newTestRouter(successStore(uuid.New()))
 	mapID := uuid.New()
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"name":                "Bad BG Update",
 		"width":               10,
 		"height":              10,
@@ -949,10 +949,10 @@ func TestGenerateDefaultTiledJSON_FiveLayers(t *testing.T) {
 	const w, h, ts = 4, 3, 48
 	raw := generateDefaultTiledJSON(w, h, ts)
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(raw, &parsed))
 
-	layers, ok := parsed["layers"].([]interface{})
+	layers, ok := parsed["layers"].([]any)
 	require.True(t, ok, "layers must be an array")
 	require.Len(t, layers, 5, "default map must have 5 layers like the editor")
 
@@ -969,19 +969,19 @@ func TestGenerateDefaultTiledJSON_FiveLayers(t *testing.T) {
 	}
 	tileCount := w * h
 	for i, want := range expectedOrder {
-		layer := layers[i].(map[string]interface{})
+		layer := layers[i].(map[string]any)
 		assert.Equal(t, want.name, layer["name"], "layer[%d] name", i)
 		assert.Equal(t, want.layerType, layer["type"], "layer[%d] type", i)
 		assert.Equal(t, true, layer["visible"], "layer[%d] visible", i)
 		if !want.tile {
-			objects, ok := layer["objects"].([]interface{})
+			objects, ok := layer["objects"].([]any)
 			require.True(t, ok, "layer[%d] objects must be array", i)
 			assert.Empty(t, objects, "layer[%d] objects should be empty by default", i)
 			continue
 		}
 		assert.Equal(t, float64(w), layer["width"], "layer[%d] width", i)
 		assert.Equal(t, float64(h), layer["height"], "layer[%d] height", i)
-		data, ok := layer["data"].([]interface{})
+		data, ok := layer["data"].([]any)
 		require.True(t, ok, "layer[%d] data must be array", i)
 		require.Len(t, data, tileCount, "layer[%d] data length", i)
 		// terrain defaults to open_ground (GID 1); lighting & elevation default to 0.
@@ -996,16 +996,16 @@ func TestGenerateDefaultTiledJSON_FiveLayers(t *testing.T) {
 
 	// Lighting tileset must be present so the renderer can resolve lighting GIDs
 	// via the tileset path (firstgid + tile.id) — mirrors mapdata.js LIGHTING_TYPES.
-	tilesets, ok := parsed["tilesets"].([]interface{})
+	tilesets, ok := parsed["tilesets"].([]any)
 	require.True(t, ok)
 	require.Len(t, tilesets, 2, "expect terrain + lighting tilesets")
-	lighting := tilesets[1].(map[string]interface{})
+	lighting := tilesets[1].(map[string]any)
 	assert.Equal(t, "lighting", lighting["name"])
 	assert.Equal(t, float64(7), lighting["firstgid"], "lighting firstgid follows the editor (terrain firstgid 1 + tilecount 6)")
-	tiles := lighting["tiles"].([]interface{})
+	tiles := lighting["tiles"].([]any)
 	gotTypes := make([]string, 0, len(tiles))
 	for _, tl := range tiles {
-		gotTypes = append(gotTypes, tl.(map[string]interface{})["type"].(string))
+		gotTypes = append(gotTypes, tl.(map[string]any)["type"].(string))
 	}
 	assert.Equal(t, []string{"dim_light", "darkness", "magical_darkness", "fog", "light_obscurement"}, gotTypes)
 }
@@ -1083,7 +1083,7 @@ func TestHandler_UpdateMap_WrongCampaignID(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{"name": "Hacked", "width": 10, "height": 10, "tiled_json": minimalTiledJSON()}
+	body := map[string]any{"name": "Hacked", "width": 10, "height": 10, "tiled_json": minimalTiledJSON()}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPut, "/api/maps/"+mapID.String()+"?campaign_id="+attackerCampaign.String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()
@@ -1143,12 +1143,12 @@ func TestHandler_CreateMap_TilesetRefs(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": campaignID.String(),
 		"name":        "Tileset Map",
 		"width":       10,
 		"height":      10,
-		"tileset_refs": []map[string]interface{}{
+		"tileset_refs": []map[string]any{
 			{"name": "terrain", "source_url": "https://example.com/terrain.tsx", "first_gid": 1},
 		},
 	}
@@ -1188,12 +1188,12 @@ func TestHandler_UpdateMap_TilesetRefs(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"name":       "Updated Map",
 		"width":      10,
 		"height":     10,
 		"tiled_json": minimalTiledJSON(),
-		"tileset_refs": []map[string]interface{}{
+		"tileset_refs": []map[string]any{
 			{"name": "walls", "source_url": "https://example.com/walls.tsx", "first_gid": 100},
 		},
 	}

@@ -31,12 +31,12 @@ func newTestRouter(store Store) (*Handler, chi.Router) {
 func TestHandler_Create_Success(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id":  uuid.New().String(),
 		"map_id":       uuid.New().String(),
 		"name":         "Goblin Ambush",
 		"display_name": "The Dark Forest",
-		"creatures":    []map[string]interface{}{{"creature_ref_id": "goblin", "short_id": "G1", "quantity": 3}},
+		"creatures":    []map[string]any{{"creature_ref_id": "goblin", "short_id": "G1", "quantity": 3}},
 	}
 	b, _ := json.Marshal(body)
 
@@ -74,7 +74,7 @@ func TestHandler_Create_InvalidJSON(t *testing.T) {
 func TestHandler_Create_InvalidCampaignID(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": "not-uuid",
 		"name":        "Test",
 	}
@@ -93,7 +93,7 @@ func TestHandler_Create_InvalidCampaignID(t *testing.T) {
 func TestHandler_Create_EmptyName(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": uuid.New().String(),
 		"name":        "",
 	}
@@ -126,7 +126,7 @@ func TestHandler_Create_WithMapID(t *testing.T) {
 	_, r := newTestRouter(store)
 
 	mapID := uuid.New()
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": uuid.New().String(),
 		"name":        "With Map",
 		"map_id":      mapID.String(),
@@ -148,7 +148,7 @@ func TestHandler_Create_WithMapID(t *testing.T) {
 func TestHandler_Create_InvalidMapID(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": uuid.New().String(),
 		"name":        "Test",
 		"map_id":      "not-uuid",
@@ -174,7 +174,7 @@ func TestHandler_Create_StoreError(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"campaign_id": uuid.New().String(),
 		"name":        "Test",
 	}
@@ -338,9 +338,9 @@ func TestHandler_Update_Success(t *testing.T) {
 	_, r := newTestRouter(successStore())
 	id := uuid.New()
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"name":      "Updated Encounter",
-		"creatures": []map[string]interface{}{{"creature_ref_id": "ogre", "short_id": "O1", "quantity": 1}},
+		"creatures": []map[string]any{{"creature_ref_id": "ogre", "short_id": "O1", "quantity": 1}},
 	}
 	b, _ := json.Marshal(body)
 
@@ -382,7 +382,7 @@ func TestHandler_Update_InvalidJSON(t *testing.T) {
 func TestHandler_Update_EmptyName(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	body := map[string]interface{}{"name": ""}
+	body := map[string]any{"name": ""}
 	b, _ := json.Marshal(body)
 
 	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), bytes.NewReader(b))
@@ -401,7 +401,7 @@ func TestHandler_Update_StoreError(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{"name": "Test", "creatures": json.RawMessage(`[]`)}
+	body := map[string]any{"name": "Test", "creatures": json.RawMessage(`[]`)}
 	b, _ := json.Marshal(body)
 
 	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), bytes.NewReader(b))
@@ -415,7 +415,7 @@ func TestHandler_Update_StoreError(t *testing.T) {
 func TestHandler_Update_InvalidMapID(t *testing.T) {
 	_, r := newTestRouter(successStore())
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"name":   "Test",
 		"map_id": "not-uuid",
 	}
@@ -548,7 +548,7 @@ func TestHandler_Get_ResponseIncludesMapID(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &resp)
 	require.NoError(t, err)
 	assert.Equal(t, mapID.String(), resp["map_id"])
@@ -574,7 +574,7 @@ func TestHandler_Get_NullMapID(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &resp)
 	require.NoError(t, err)
 	assert.Nil(t, resp["map_id"])
@@ -608,7 +608,7 @@ func TestHandler_ListCreatures_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var resp []map[string]interface{}
+	var resp []map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &resp)
 	require.NoError(t, err)
 	assert.Len(t, resp, 2)
@@ -661,7 +661,7 @@ func TestHandler_List_IncludesCreatureCount(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var resp []map[string]interface{}
+	var resp []map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &resp)
 	require.NoError(t, err)
 	require.Len(t, resp, 1)
@@ -701,7 +701,7 @@ func TestHandler_UpdateEncounter_WrongCampaignID(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]interface{}{"name": "Hacked", "creatures": json.RawMessage(`[]`)}
+	body := map[string]any{"name": "Hacked", "creatures": json.RawMessage(`[]`)}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+templateID.String()+"?campaign_id="+attackerCampaign.String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()

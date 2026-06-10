@@ -18,10 +18,10 @@ func TestSingleCheck_ProficientSkill(t *testing.T) {
 	svc := NewService(fixedRoller(10))
 
 	result, err := svc.SingleCheck(SingleCheckInput{
-		Scores:          character.AbilityScores{WIS: 16}, // +3 mod
-		Skill:           "perception",
+		Scores:           character.AbilityScores{WIS: 16}, // +3 mod
+		Skill:            "perception",
 		ProficientSkills: []string{"perception"},
-		ProfBonus:       2,
+		ProfBonus:        2,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -382,10 +382,10 @@ func TestFormatSingleCheckResult(t *testing.T) {
 		Modifier: 5,
 		Total:    15,
 		D20Result: dice.D20Result{
-			Rolls:   []int{10},
-			Chosen:  10,
-			Total:   15,
-			Mode:    dice.Normal,
+			Rolls:  []int{10},
+			Chosen: 10,
+			Total:  15,
+			Mode:   dice.Normal,
 		},
 	}
 	msg := FormatSingleCheckResult("Aria", result)

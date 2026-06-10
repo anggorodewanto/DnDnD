@@ -123,7 +123,7 @@ func (h *APIHandler) logCombat(msg string) {
 
 // AddItemRequest is the request body for adding an item to a character.
 type AddItemRequest struct {
-	CharacterID string                 `json:"character_id"`
+	CharacterID string                  `json:"character_id"`
 	Item        character.InventoryItem `json:"item"`
 }
 

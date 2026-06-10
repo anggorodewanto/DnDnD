@@ -190,4 +190,3 @@ func TestPublisher_NilHub_NoPanic(t *testing.T) {
 		_ = pub.PublishEncounterSnapshot(context.Background(), uuid.New())
 	})
 }
-

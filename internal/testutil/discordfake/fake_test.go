@@ -106,13 +106,11 @@ func TestFake_TranscriptIsGoroutineSafe(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range writers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range perWriter {
 				_, _ = f.ChannelMessageSend("chan", "msg")
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

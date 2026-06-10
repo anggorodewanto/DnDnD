@@ -107,11 +107,11 @@ type TurnUndeadTargetResult struct {
 
 // TurnUndeadResult holds the full result of Turn Undead.
 type TurnUndeadResult struct {
-	Targets      []TurnUndeadTargetResult
-	DC           int
-	UsesLeft     int
-	CombatLog    string
-	Turn         refdata.Turn
+	Targets   []TurnUndeadTargetResult
+	DC        int
+	UsesLeft  int
+	CombatLog string
+	Turn      refdata.Turn
 }
 
 // resolveTargetWisSave resolves a creature's WIS save bonus.
@@ -318,8 +318,8 @@ func (s *Service) TurnUndead(ctx context.Context, cmd TurnUndeadCommand, roller 
 
 // PreserveLifeCommand holds inputs for the Preserve Life Channel Divinity option.
 type PreserveLifeCommand struct {
-	Cleric       refdata.Combatant
-	Turn         refdata.Turn
+	Cleric refdata.Combatant
+	Turn   refdata.Turn
 	// TargetHealing maps combatant ID string to HP to restore.
 	TargetHealing map[string]int32
 }

@@ -128,7 +128,7 @@ func (m *portalMockSessionRepo) Create(_ context.Context, _, _, _ string, _ *tim
 func (m *portalMockSessionRepo) GetByID(_ context.Context, _ uuid.UUID) (*auth.Session, error) {
 	return nil, auth.ErrSessionNotFound
 }
-func (m *portalMockSessionRepo) Delete(_ context.Context, _ uuid.UUID) error { return nil }
+func (m *portalMockSessionRepo) Delete(_ context.Context, _ uuid.UUID) error   { return nil }
 func (m *portalMockSessionRepo) SlideTTL(_ context.Context, _ uuid.UUID) error { return nil }
 func (m *portalMockSessionRepo) UpdateTokens(_ context.Context, _ uuid.UUID, _, _ string, _ *time.Time) error {
 	return nil

@@ -277,7 +277,7 @@ func computePushSquares(attackerCol, attackerRow, targetCol, targetRow, squares,
 	}
 
 	col, row := targetCol, targetRow
-	for i := 0; i < squares; i++ {
+	for range squares {
 		nextCol, nextRow := col+dc, row+dr
 		if width > 0 && (nextCol < 1 || nextCol > width) {
 			break

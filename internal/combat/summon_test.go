@@ -29,31 +29,31 @@ func TestSummonCreature_CreatesWithSummonerID(t *testing.T) {
 	ms := &mockStore{
 		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
 			return refdata.Creature{
-				ID:        "owl",
-				Name:      "Owl",
-				Ac:        11,
-				HpAverage: 1,
-				Speed:     json.RawMessage(`{"walk": 5, "fly": 60}`),
+				ID:            "owl",
+				Name:          "Owl",
+				Ac:            11,
+				HpAverage:     1,
+				Speed:         json.RawMessage(`{"walk": 5, "fly": 60}`),
 				AbilityScores: json.RawMessage(`{"str":3,"dex":13,"con":8,"int":2,"wis":12,"cha":7}`),
-				Attacks:   json.RawMessage(`[{"name":"Talons","to_hit":3,"damage":"1","damage_type":"slashing"}]`),
+				Attacks:       json.RawMessage(`[{"name":"Talons","to_hit":3,"damage":"1","damage_type":"slashing"}]`),
 			}, nil
 		},
 		createCombatantFn: func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
 			capturedParams = arg
 			return refdata.Combatant{
-				ID:          uuid.New(),
-				EncounterID: arg.EncounterID,
-				ShortID:     arg.ShortID,
-				DisplayName: arg.DisplayName,
-				HpMax:       arg.HpMax,
-				HpCurrent:   arg.HpCurrent,
-				Ac:          arg.Ac,
-				IsNpc:       arg.IsNpc,
-				IsAlive:     arg.IsAlive,
-				IsVisible:   arg.IsVisible,
-				SummonerID:  arg.SummonerID,
+				ID:            uuid.New(),
+				EncounterID:   arg.EncounterID,
+				ShortID:       arg.ShortID,
+				DisplayName:   arg.DisplayName,
+				HpMax:         arg.HpMax,
+				HpCurrent:     arg.HpCurrent,
+				Ac:            arg.Ac,
+				IsNpc:         arg.IsNpc,
+				IsAlive:       arg.IsAlive,
+				IsVisible:     arg.IsVisible,
+				SummonerID:    arg.SummonerID,
 				CreatureRefID: arg.CreatureRefID,
-				Conditions:  json.RawMessage(`[]`),
+				Conditions:    json.RawMessage(`[]`),
 			}, nil
 		},
 	}
@@ -279,11 +279,11 @@ func TestFormatSummonLog(t *testing.T) {
 
 func TestParseCommandArgs_ValidActions(t *testing.T) {
 	tests := []struct {
-		name     string
-		args     string
-		wantID   string
+		name       string
+		args       string
+		wantID     string
 		wantAction string
-		wantArgs []string
+		wantArgs   []string
 	}{
 		{"attack", "FAM attack G1", "FAM", "attack", []string{"G1"}},
 		{"move", "SW move C5", "SW", "move", []string{"C5"}},
@@ -478,13 +478,13 @@ func TestSummonMultipleCreatures(t *testing.T) {
 	ms := &mockStore{
 		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
 			return refdata.Creature{
-				ID:        "wolf",
-				Name:      "Wolf",
-				Ac:        13,
-				HpAverage: 11,
-				Speed:     json.RawMessage(`{"walk": 40}`),
+				ID:            "wolf",
+				Name:          "Wolf",
+				Ac:            13,
+				HpAverage:     11,
+				Speed:         json.RawMessage(`{"walk": 40}`),
 				AbilityScores: json.RawMessage(`{"str":12,"dex":15,"con":12,"int":3,"wis":12,"cha":6}`),
-				Attacks:   json.RawMessage(`[{"name":"Bite","to_hit":4,"damage":"2d4+2","damage_type":"piercing"}]`),
+				Attacks:       json.RawMessage(`[{"name":"Bite","to_hit":4,"damage":"2d4+2","damage_type":"piercing"}]`),
 			}, nil
 		},
 		createCombatantFn: func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
@@ -500,14 +500,14 @@ func TestSummonMultipleCreatures(t *testing.T) {
 
 	svc := NewService(ms)
 	results, err := svc.SummonMultipleCreatures(context.Background(), SummonMultipleInput{
-		EncounterID:   encounterID,
-		SummonerID:    summonerID,
-		CreatureRefID: "wolf",
-		BaseShortID:   "WF",
+		EncounterID:     encounterID,
+		SummonerID:      summonerID,
+		CreatureRefID:   "wolf",
+		BaseShortID:     "WF",
 		BaseDisplayName: "Wolf",
-		Quantity:      3,
-		PositionCol:   "D",
-		PositionRow:   5,
+		Quantity:        3,
+		PositionCol:     "D",
+		PositionRow:     5,
 	})
 	require.NoError(t, err)
 	assert.Len(t, results, 3)
@@ -881,9 +881,9 @@ func TestSummonCreatureHandler(t *testing.T) {
 		getCreatureFn: func(ctx context.Context, id string) (refdata.Creature, error) {
 			return refdata.Creature{
 				ID: "owl", Name: "Owl", Ac: 11, HpAverage: 1,
-				Speed: json.RawMessage(`{"walk": 5, "fly": 60}`),
+				Speed:         json.RawMessage(`{"walk": 5, "fly": 60}`),
 				AbilityScores: json.RawMessage(`{"str":3,"dex":13,"con":8,"int":2,"wis":12,"cha":7}`),
-				Attacks: json.RawMessage(`[]`),
+				Attacks:       json.RawMessage(`[]`),
 			}, nil
 		},
 		createCombatantFn: func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
@@ -1184,12 +1184,12 @@ func TestInsertSummonIntoInitiative(t *testing.T) {
 		},
 		getCombatantFn: func(ctx context.Context, id uuid.UUID) (refdata.Combatant, error) {
 			return refdata.Combatant{
-				ID:          creatureID,
-				ShortID:     "WF1",
-				DisplayName: "Wolf #1",
-				SummonerID:  uuid.NullUUID{UUID: summonerID, Valid: true},
-				IsAlive:     true,
-				Conditions:  json.RawMessage(`[]`),
+				ID:            creatureID,
+				ShortID:       "WF1",
+				DisplayName:   "Wolf #1",
+				SummonerID:    uuid.NullUUID{UUID: summonerID, Valid: true},
+				IsAlive:       true,
+				Conditions:    json.RawMessage(`[]`),
 				CreatureRefID: sql.NullString{String: "wolf", Valid: true},
 			}, nil
 		},

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -173,13 +174,7 @@ func TestBuildResourceListWithBardicInspiration(t *testing.T) {
 	}
 
 	parts := BuildResourceListWithInspiration(turn, combatant)
-	found := false
-	for _, p := range parts {
-		if p == "\U0001f3b5 Bardic Inspiration (d6)" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(parts, "\U0001f3b5 Bardic Inspiration (d6)")
 	assert.True(t, found, "expected bardic inspiration in resource list, got: %v", parts)
 }
 

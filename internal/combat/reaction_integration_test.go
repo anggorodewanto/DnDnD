@@ -20,10 +20,10 @@ func createTestEncounterAndCombatant(t *testing.T, db *sql.DB, queries *refdata.
 	mapID := createTestMap(t, db, campaignID)
 
 	enc, err := queries.CreateEncounter(ctx, refdata.CreateEncounterParams{
-		CampaignID: campaignID,
-		MapID:      uuid.NullUUID{UUID: mapID, Valid: true},
-		Name:       "Test Encounter",
-		Status:     "active",
+		CampaignID:  campaignID,
+		MapID:       uuid.NullUUID{UUID: mapID, Valid: true},
+		Name:        "Test Encounter",
+		Status:      "active",
 		RoundNumber: 1,
 	})
 	require.NoError(t, err)

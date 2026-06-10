@@ -65,11 +65,11 @@ func (h HealthTier) TierColor() color.RGBA {
 type TerrainType int
 
 const (
-	TerrainOpenGround      TerrainType = 0
+	TerrainOpenGround       TerrainType = 0
 	TerrainDifficultTerrain TerrainType = 1
-	TerrainWater           TerrainType = 2
-	TerrainLava            TerrainType = 3
-	TerrainPit             TerrainType = 4
+	TerrainWater            TerrainType = 2
+	TerrainLava             TerrainType = 3
+	TerrainPit              TerrainType = 4
 )
 
 // String returns the display name of a terrain type.

@@ -102,7 +102,7 @@ func makeCheckInteraction(skill string, adv, disadv bool, target ...string) *dis
 
 func makeTestCharacter() refdata.Character {
 	scores, _ := json.Marshal(character.AbilityScores{STR: 16, DEX: 14, CON: 12, INT: 10, WIS: 18, CHA: 8})
-	profs, _ := json.Marshal(map[string]interface{}{
+	profs, _ := json.Marshal(map[string]any{
 		"skills": []string{"perception", "insight", "medicine"},
 	})
 	return refdata.Character{
@@ -179,7 +179,7 @@ func TestCheckHandler_ExpertiseAndJackOfAllTrades(t *testing.T) {
 
 	campaignID := uuid.New()
 	scores, _ := json.Marshal(character.AbilityScores{DEX: 14, CHA: 12}) // DEX +2, CHA +1
-	profs, _ := json.Marshal(map[string]interface{}{
+	profs, _ := json.Marshal(map[string]any{
 		"skills":             []string{"stealth", "perception"},
 		"expertise":          []string{"stealth"},
 		"jack_of_all_trades": true,
@@ -377,7 +377,7 @@ func TestCheckHandler_WithCombatConditions(t *testing.T) {
 	char.ID = charID
 	char.CampaignID = campaignID
 
-	condJSON, _ := json.Marshal([]map[string]interface{}{
+	condJSON, _ := json.Marshal([]map[string]any{
 		{"condition": "poisoned"},
 	})
 
@@ -890,10 +890,10 @@ func TestCheckHandler_Stealth_ArmorWithoutDisadv_NoEffect(t *testing.T) {
 // --- F-81: targeted (non-contested) /check adjacency + action cost ---
 
 type stubCheckTargetResolver struct {
-	caster   refdata.Combatant
-	target   refdata.Combatant
-	ok       bool
-	seenID   string
+	caster refdata.Combatant
+	target refdata.Combatant
+	ok     bool
+	seenID string
 }
 
 func (s *stubCheckTargetResolver) ResolveTargetCombatant(_ context.Context, _ uuid.UUID, _, targetShortID string) (refdata.Combatant, refdata.Combatant, bool) {
@@ -902,11 +902,11 @@ func (s *stubCheckTargetResolver) ResolveTargetCombatant(_ context.Context, _ uu
 }
 
 type stubCheckTurnProvider struct {
-	turn       refdata.Turn
-	inCombat   bool
-	updated    refdata.Turn
-	updateErr  error
-	getErr     error
+	turn        refdata.Turn
+	inCombat    bool
+	updated     refdata.Turn
+	updateErr   error
+	getErr      error
 	updateCalls int
 }
 

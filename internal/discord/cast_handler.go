@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -966,12 +967,7 @@ func normalizeMetamagicName(name string) string {
 // hasMetamagicFlag reports whether the normalized metamagic slice contains
 // the given option. SR-025.
 func hasMetamagicFlag(metamagic []string, option string) bool {
-	for _, m := range metamagic {
-		if m == option {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(metamagic, option)
 }
 
 // indexToCol converts a 0-based column index to its A-Z letter form. Used

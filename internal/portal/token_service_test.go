@@ -139,7 +139,7 @@ func TestTokenService_RedeemToken_ConcurrentDoubleRedeem(t *testing.T) {
 
 	// Run two concurrent redemptions — exactly one must fail with ErrTokenUsed.
 	errs := make(chan error, 2)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		go func() {
 			errs <- svc.RedeemToken(ctx, token)
 		}()

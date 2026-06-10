@@ -23,18 +23,18 @@ type Info struct {
 	ExhaustionLevel int
 
 	// Class-specific state
-	IsRaging             bool
-	RageRoundsRemaining  int
-	IsWildShaped         bool
-	WildShapeCreature    string
-	BardicInspirationDie string
-	BardicInspirationSrc string
-	KiCurrent            int
-	KiMax                int
-	HasKi                bool
-	SorceryCurrent       int
-	SorceryMax           int
-	HasSorcery           bool
+	IsRaging               bool
+	RageRoundsRemaining    int
+	IsWildShaped           bool
+	WildShapeCreature      string
+	BardicInspirationDie   string
+	BardicInspirationSrc   string
+	KiCurrent              int
+	KiMax                  int
+	HasKi                  bool
+	SorceryCurrent         int
+	SorceryMax             int
+	HasSorcery             bool
 	ChannelDivinityCurrent int
 	ChannelDivinityMax     int
 	HasChannelDivinity     bool

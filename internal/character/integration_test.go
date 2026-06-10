@@ -20,7 +20,7 @@ func setupTestDB(t *testing.T) (*sql.DB, *refdata.Queries, uuid.UUID) {
 	return db, queries, camp.ID
 }
 
-func mustJSON(t *testing.T, v interface{}) json.RawMessage {
+func mustJSON(t *testing.T, v any) json.RawMessage {
 	t.Helper()
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -29,7 +29,7 @@ func mustJSON(t *testing.T, v interface{}) json.RawMessage {
 	return b
 }
 
-func nullJSON(t *testing.T, v interface{}) pqtype.NullRawMessage {
+func nullJSON(t *testing.T, v any) pqtype.NullRawMessage {
 	t.Helper()
 	b := mustJSON(t, v)
 	return pqtype.NullRawMessage{RawMessage: b, Valid: true}
@@ -44,38 +44,38 @@ func TestIntegration_CharacterJSONBRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	// Define complex JSONB data
-	classes := []map[string]interface{}{
+	classes := []map[string]any{
 		{"class": "fighter", "subclass": "champion", "level": 5},
 		{"class": "wizard", "subclass": "", "level": 3},
 	}
 	abilityScores := map[string]int{"str": 16, "dex": 14, "con": 12, "int": 18, "wis": 10, "cha": 8}
-	proficiencies := map[string]interface{}{
+	proficiencies := map[string]any{
 		"saves":   []string{"str", "con"},
 		"skills":  []string{"athletics", "perception", "arcana"},
 		"weapons": []string{"simple", "martial"},
 		"armor":   []string{"light", "medium", "heavy", "shield"},
 	}
-	featureUses := map[string]interface{}{
-		"action-surge":  map[string]interface{}{"current": 1, "max": 1, "recharge": "short"},
-		"second-wind":   map[string]interface{}{"current": 0, "max": 1, "recharge": "short"},
-		"arcane-recovery": map[string]interface{}{"current": 1, "max": 1, "recharge": "long"},
+	featureUses := map[string]any{
+		"action-surge":    map[string]any{"current": 1, "max": 1, "recharge": "short"},
+		"second-wind":     map[string]any{"current": 0, "max": 1, "recharge": "short"},
+		"arcane-recovery": map[string]any{"current": 1, "max": 1, "recharge": "long"},
 	}
-	inventory := []map[string]interface{}{
+	inventory := []map[string]any{
 		{"item_id": "longsword", "quantity": 1, "equipped": true, "type": "weapon", "is_magic": false},
 		{"item_id": "shield", "quantity": 1, "equipped": true, "type": "armor", "is_magic": false},
 		{"item_id": "health-potion", "quantity": 3, "equipped": false, "type": "consumable", "is_magic": true},
 	}
-	spellSlots := map[string]interface{}{
-		"1": map[string]interface{}{"current": 2, "max": 4},
-		"2": map[string]interface{}{"current": 3, "max": 3},
-		"3": map[string]interface{}{"current": 1, "max": 2},
+	spellSlots := map[string]any{
+		"1": map[string]any{"current": 2, "max": 4},
+		"2": map[string]any{"current": 3, "max": 3},
+		"3": map[string]any{"current": 1, "max": 2},
 	}
 	hitDiceRemaining := map[string]int{"d10": 5, "d6": 3}
-	features := []map[string]interface{}{
+	features := []map[string]any{
 		{"name": "Second Wind", "source": "fighter", "level": 1, "description": "Heal 1d10+fighter level"},
 		{"name": "Action Surge", "source": "fighter", "level": 2, "description": "Extra action"},
 	}
-	attunementSlots := []map[string]interface{}{
+	attunementSlots := []map[string]any{
 		{"item_id": "ring-of-protection", "name": "Ring of Protection"},
 	}
 
@@ -132,7 +132,7 @@ func TestIntegration_CharacterJSONBRoundTrip(t *testing.T) {
 	}
 
 	// Verify JSONB round-trip: classes
-	var gotClasses []map[string]interface{}
+	var gotClasses []map[string]any
 	if err := json.Unmarshal(got.Classes, &gotClasses); err != nil {
 		t.Fatalf("unmarshal classes: %v", err)
 	}
@@ -144,17 +144,17 @@ func TestIntegration_CharacterJSONBRoundTrip(t *testing.T) {
 	}
 
 	// Verify JSONB round-trip: proficiencies
-	var gotProf map[string]interface{}
+	var gotProf map[string]any
 	if err := json.Unmarshal(got.Proficiencies.RawMessage, &gotProf); err != nil {
 		t.Fatalf("unmarshal proficiencies: %v", err)
 	}
-	saves, ok := gotProf["saves"].([]interface{})
+	saves, ok := gotProf["saves"].([]any)
 	if !ok || len(saves) != 2 {
 		t.Errorf("proficiencies.saves = %v, want [str, con]", gotProf["saves"])
 	}
 
 	// Verify JSONB round-trip: feature_uses
-	var gotFeatureUses map[string]interface{}
+	var gotFeatureUses map[string]any
 	if err := json.Unmarshal(got.FeatureUses.RawMessage, &gotFeatureUses); err != nil {
 		t.Fatalf("unmarshal feature_uses: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestIntegration_CharacterJSONBRoundTrip(t *testing.T) {
 	}
 
 	// Verify JSONB round-trip: inventory
-	var gotInventory []map[string]interface{}
+	var gotInventory []map[string]any
 	if err := json.Unmarshal(got.Inventory.RawMessage, &gotInventory); err != nil {
 		t.Fatalf("unmarshal inventory: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestIntegration_CharacterJSONBRoundTrip(t *testing.T) {
 	}
 
 	// Verify JSONB round-trip: spell_slots
-	var gotSlots map[string]interface{}
+	var gotSlots map[string]any
 	if err := json.Unmarshal(got.SpellSlots.RawMessage, &gotSlots); err != nil {
 		t.Fatalf("unmarshal spell_slots: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestIntegration_CharacterJSONBRoundTrip(t *testing.T) {
 	}
 
 	// Verify attunement_slots
-	var gotAttune []map[string]interface{}
+	var gotAttune []map[string]any
 	if err := json.Unmarshal(got.AttunementSlots.RawMessage, &gotAttune); err != nil {
 		t.Fatalf("unmarshal attunement_slots: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestIntegration_CharacterJSONBRoundTrip(t *testing.T) {
 	}
 
 	// Verify features
-	var gotFeatures []map[string]interface{}
+	var gotFeatures []map[string]any
 	if err := json.Unmarshal(got.Features.RawMessage, &gotFeatures); err != nil {
 		t.Fatalf("unmarshal features: %v", err)
 	}

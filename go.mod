@@ -4,6 +4,7 @@ go 1.25.7
 
 require (
 	github.com/bwmarrin/discordgo v0.29.0
+	github.com/coder/websocket v1.8.14
 	github.com/fogleman/gg v1.3.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/google/uuid v1.6.0
@@ -16,7 +17,6 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.35.0
-	nhooyr.io/websocket v1.8.17
 )
 
 require (

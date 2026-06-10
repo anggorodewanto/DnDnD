@@ -59,7 +59,7 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 }
 
 // jsonOK writes a JSON success response.
-func jsonOK(w http.ResponseWriter, v interface{}) {
+func jsonOK(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
 }
@@ -79,7 +79,7 @@ func (h *APIHandler) HandleListEligibleEncounters(w http.ResponseWriter, r *http
 		jsonError(w, "failed to list encounters", http.StatusInternalServerError)
 		return
 	}
-	jsonOK(w, map[string]interface{}{"encounters": encs})
+	jsonOK(w, map[string]any{"encounters": encs})
 }
 
 // HandleGetLootPool handles GET /api/campaigns/:id/encounters/:eid/loot.
@@ -265,7 +265,7 @@ func (h *APIHandler) HandleSplitGold(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logCombat(fmt.Sprintf("\U0001f4b0 Gold split: %d gp each", share))
-	jsonOK(w, map[string]interface{}{"share": share})
+	jsonOK(w, map[string]any{"share": share})
 }
 
 // HandlePostAnnouncement handles POST /api/campaigns/:id/encounters/:eid/loot/post.

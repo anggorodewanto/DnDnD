@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"nhooyr.io/websocket"
 )
 
 func TestHub_RegisterAndBroadcast(t *testing.T) {
@@ -168,7 +168,7 @@ func TestHub_BroadcastAfterUnregister_NoPanic(t *testing.T) {
 func TestHub_ConcurrentUnregisterAndBroadcast_NoPanic(t *testing.T) {
 	// Stress test: concurrent broadcast and unregister should not cause a panic
 	// from sending on a closed channel. Run with -race to verify.
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		hub := NewHub()
 		go hub.Run()
 
@@ -325,7 +325,7 @@ func TestHub_BroadcastGlobal_StillDeliversToEncounterClients(t *testing.T) {
 // We can't drive the WS upgrade via httptest because httptest's loopback host
 // changes per run; we instead exercise ServeWebSocket directly with a crafted
 // http.Request carrying the Sec-WebSocket-* handshake headers + a deliberate
-// Origin. nhooyr/websocket's Accept writes HTTP 403 on origin failure, so we
+// Origin. coder/websocket's Accept writes HTTP 403 on origin failure, so we
 // can assert on the recorded response status code without completing a full
 // upgrade.
 func newWSHandshakeRequest(t *testing.T, originHeader, hostHeader string) *http.Request {
@@ -344,7 +344,7 @@ func newWSHandshakeRequest(t *testing.T, originHeader, hostHeader string) *http.
 }
 
 // hijackableRecorder is a httptest.ResponseRecorder that implements
-// http.Hijacker so nhooyr/websocket's Accept doesn't bail out with 501.
+// http.Hijacker so coder/websocket's Accept doesn't bail out with 501.
 type hijackableRecorder struct {
 	*httptest.ResponseRecorder
 }
@@ -412,7 +412,6 @@ func TestWebSocketEndpoint_SameOriginAccepted_BothModes(t *testing.T) {
 		{"dev", nil, true},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			hub := NewHub()
 			go hub.Run()

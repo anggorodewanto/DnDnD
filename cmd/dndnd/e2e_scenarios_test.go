@@ -34,13 +34,13 @@ import (
 )
 
 // TestE2E_RegistrationScenario covers the spec-named /register flow:
-// 1. DM has seeded a character placeholder ("Aria"). Player runs /register
-//    name:"Aria" — the bot responds with a "Registration submitted" ephemeral
-//    and persists a pending player_character row.
-// 2. The harness then stands in for the DM dashboard and calls
-//    registration.Service.Approve directly, then sends the approval DM.
-//    Re-reading the row asserts the status flipped to "approved".
-// 3. Assert the approval DM was sent to the player.
+//  1. DM has seeded a character placeholder ("Aria"). Player runs /register
+//     name:"Aria" — the bot responds with a "Registration submitted" ephemeral
+//     and persists a pending player_character row.
+//  2. The harness then stands in for the DM dashboard and calls
+//     registration.Service.Approve directly, then sends the approval DM.
+//     Re-reading the row asserts the status flipped to "approved".
+//  3. Assert the approval DM was sent to the player.
 func TestE2E_RegistrationScenario(t *testing.T) {
 	h := startE2EHarness(t)
 	defer h.Stop()
@@ -114,12 +114,12 @@ func TestE2E_RegistrationScenario(t *testing.T) {
 }
 
 // TestE2E_MovementScenario covers /move <coord> end-to-end:
-// 1. Player runs /move coordinate:B1. The bot responds with a confirmation
-//    ephemeral that includes a "Confirm" button (custom_id move_confirm:...).
-// 2. Harness extracts the custom_id and injects a button-click interaction.
-// 3. The handler edits the original message to "Moved to B1." and persists the
-//    new combatant position + decremented turn movement.
-// 4. Assert #combat-log received the move line.
+//  1. Player runs /move coordinate:B1. The bot responds with a confirmation
+//     ephemeral that includes a "Confirm" button (custom_id move_confirm:...).
+//  2. Harness extracts the custom_id and injects a button-click interaction.
+//  3. The handler edits the original message to "Moved to B1." and persists the
+//     new combatant position + decremented turn movement.
+//  4. Assert #combat-log received the move line.
 func TestE2E_MovementScenario(t *testing.T) {
 	h := startE2EHarness(t)
 	defer h.Stop()
@@ -196,12 +196,12 @@ func TestE2E_MovementScenario(t *testing.T) {
 }
 
 // TestE2E_LootScenario covers DM-places-loot → /loot → claim flow:
-// 1. Harness completes an encounter and seeds a loot pool with one item.
-// 2. Player runs /loot. The bot responds with an embed + a Claim button per
-//    unclaimed item. Custom ID is loot_claim:<pool>:<item>:<char>.
-// 3. Harness injects a click on that Claim button. The handler persists the
-//    claim and updates characters.inventory JSONB.
-// 4. Assert #the-story received the loot claim announcement.
+//  1. Harness completes an encounter and seeds a loot pool with one item.
+//  2. Player runs /loot. The bot responds with an embed + a Claim button per
+//     unclaimed item. Custom ID is loot_claim:<pool>:<item>:<char>.
+//  3. Harness injects a click on that Claim button. The handler persists the
+//     claim and updates characters.inventory JSONB.
+//  4. Assert #the-story received the loot claim announcement.
 func TestE2E_LootScenario(t *testing.T) {
 	h := startE2EHarness(t)
 	defer h.Stop()

@@ -116,11 +116,11 @@ func TestPollOnce_SendsWarning(t *testing.T) {
 	}
 	store.listTurnsNeedingWarningFn = func(ctx context.Context) ([]refdata.Turn, error) {
 		return []refdata.Turn{{
-			ID:          turnID,
-			EncounterID: encounterID,
-			CombatantID: combatantID,
-			StartedAt:   sql.NullTime{Time: startedAt, Valid: true},
-			TimeoutAt:   sql.NullTime{Time: timeoutAt, Valid: true},
+			ID:                  turnID,
+			EncounterID:         encounterID,
+			CombatantID:         combatantID,
+			StartedAt:           sql.NullTime{Time: startedAt, Valid: true},
+			TimeoutAt:           sql.NullTime{Time: timeoutAt, Valid: true},
 			MovementRemainingFt: 30,
 			AttacksRemaining:    1,
 		}}, nil
@@ -260,10 +260,10 @@ func TestCreateActiveTurn_SetsStartedAtAndTimeoutAt(t *testing.T) {
 	}
 
 	combatant := refdata.Combatant{
-		ID:          combatantID,
-		IsNpc:       false,
-		IsAlive:     true,
-		Conditions:  json.RawMessage(`[]`),
+		ID:         combatantID,
+		IsNpc:      false,
+		IsAlive:    true,
+		Conditions: json.RawMessage(`[]`),
 	}
 
 	svc := NewService(store)
@@ -296,10 +296,10 @@ func TestCreateActiveTurn_NPC_NoTimeout(t *testing.T) {
 	}
 
 	combatant := refdata.Combatant{
-		ID:          combatantID,
-		IsNpc:       true,
-		IsAlive:     true,
-		Conditions:  json.RawMessage(`[]`),
+		ID:         combatantID,
+		IsNpc:      true,
+		IsAlive:    true,
+		Conditions: json.RawMessage(`[]`),
 	}
 
 	svc := NewService(store)

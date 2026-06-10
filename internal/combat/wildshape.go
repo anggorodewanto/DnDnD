@@ -191,10 +191,7 @@ func RevertWildShape(c refdata.Combatant, overflowDamage int32) (refdata.Combata
 	}
 
 	c.HpMax = snap.HpMax
-	c.HpCurrent = snap.HpCurrent - overflowDamage
-	if c.HpCurrent < 0 {
-		c.HpCurrent = 0
-	}
+	c.HpCurrent = max(snap.HpCurrent-overflowDamage, 0)
 	c.Ac = snap.Ac
 	c.IsWildShaped = false
 	c.WildShapeCreatureRef = sql.NullString{}
@@ -303,7 +300,6 @@ func HasDruidClass(classesJSON json.RawMessage) bool {
 func isCircleOfMoon(features pqtype.NullRawMessage) bool {
 	return hasFeatureEffect(features, "circle_of_the_moon")
 }
-
 
 // getBeastWalkSpeed extracts the walk speed from a beast's speed JSON.
 func getBeastWalkSpeed(speed json.RawMessage) int32 {

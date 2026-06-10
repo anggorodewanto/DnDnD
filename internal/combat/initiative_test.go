@@ -287,12 +287,12 @@ func TestService_RollInitiative_TiebreakByDex(t *testing.T) {
 	combatant1 := refdata.Combatant{
 		ID: uuid.New(), EncounterID: encounterID, DisplayName: "Slow",
 		CreatureRefID: sql.NullString{String: "slow", Valid: true},
-		IsNpc: true, Conditions: json.RawMessage(`[]`),
+		IsNpc:         true, Conditions: json.RawMessage(`[]`),
 	}
 	combatant2 := refdata.Combatant{
 		ID: uuid.New(), EncounterID: encounterID, DisplayName: "Fast",
 		CreatureRefID: sql.NullString{String: "fast", Valid: true},
-		IsNpc: true, Conditions: json.RawMessage(`[]`),
+		IsNpc:         true, Conditions: json.RawMessage(`[]`),
 	}
 
 	store := defaultMockStore()
@@ -332,12 +332,12 @@ func TestService_RollInitiative_TiebreakAlphabetical(t *testing.T) {
 	combatant1 := refdata.Combatant{
 		ID: uuid.New(), EncounterID: encounterID, DisplayName: "Zara",
 		CreatureRefID: sql.NullString{String: "elf", Valid: true},
-		IsNpc: true, Conditions: json.RawMessage(`[]`),
+		IsNpc:         true, Conditions: json.RawMessage(`[]`),
 	}
 	combatant2 := refdata.Combatant{
 		ID: uuid.New(), EncounterID: encounterID, DisplayName: "Aria",
 		CreatureRefID: sql.NullString{String: "elf", Valid: true},
-		IsNpc: true, Conditions: json.RawMessage(`[]`),
+		IsNpc:         true, Conditions: json.RawMessage(`[]`),
 	}
 
 	store := defaultMockStore()
@@ -997,9 +997,9 @@ func TestService_AdvanceTurn_FirstTurn(t *testing.T) {
 	store := defaultMockStore()
 	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
 		return refdata.Encounter{
-			ID:          id,
-			Status:      "active",
-			RoundNumber: 1,
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
 			CurrentTurnID: uuid.NullUUID{},
 		}, nil
 	}
@@ -1079,9 +1079,9 @@ func TestService_AdvanceTurn_SkipsSurprisedInRound1(t *testing.T) {
 	store := defaultMockStore()
 	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
 		return refdata.Encounter{
-			ID:          id,
-			Status:      "active",
-			RoundNumber: 1,
+			ID:            id,
+			Status:        "active",
+			RoundNumber:   1,
 			CurrentTurnID: uuid.NullUUID{},
 		}, nil
 	}

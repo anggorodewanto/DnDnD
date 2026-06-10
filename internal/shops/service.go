@@ -134,9 +134,9 @@ func FormatShopAnnouncement(shop refdata.Shop, items []refdata.ShopItem) string 
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("**%s**", shop.Name))
+	fmt.Fprintf(&b, "**%s**", shop.Name)
 	if shop.Description != "" {
-		b.WriteString(fmt.Sprintf("\n_%s_", shop.Description))
+		fmt.Fprintf(&b, "\n_%s_", shop.Description)
 	}
 	b.WriteString("\n\n")
 
@@ -148,7 +148,8 @@ func FormatShopAnnouncement(shop refdata.Shop, items []refdata.ShopItem) string 
 		if item.Description != "" {
 			line += fmt.Sprintf(" _%s_", item.Description)
 		}
-		b.WriteString(line + "\n")
+		b.WriteString(line)
+		b.WriteString("\n")
 	}
 
 	return b.String()

@@ -22,12 +22,12 @@ import (
 // UseBardicInspiration commands the handler dispatches when a prompt's
 // "Use" button is clicked.
 type mockClassFeatureService struct {
-	mu          sync.Mutex
-	stunCmds    []combat.StunningStrikeCommand
-	smiteCmds   []combat.DivineSmiteCommand
-	bardicCmds  []combat.UseBardicInspirationCommand
-	stunResult  combat.StunningStrikeResult
-	smiteResult combat.DivineSmiteResult
+	mu           sync.Mutex
+	stunCmds     []combat.StunningStrikeCommand
+	smiteCmds    []combat.DivineSmiteCommand
+	bardicCmds   []combat.UseBardicInspirationCommand
+	stunResult   combat.StunningStrikeResult
+	smiteResult  combat.DivineSmiteResult
 	bardicResult combat.UseBardicInspirationResult
 }
 
@@ -233,4 +233,3 @@ func waitForStunCmd(cfs *mockClassFeatureService, within time.Duration) bool {
 	}
 	return delivered.Load()
 }
-

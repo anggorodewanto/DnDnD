@@ -429,8 +429,8 @@ func postDMQueueResyncNotification(session Session, dmQueueFunc, dmUserFunc func
 	}
 	dmUserID := dmUserFunc(guildID)
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("🔄 <@%s> — **%s** re-sync by <@%s> requires approval.\n", dmUserID, characterName, playerUserID))
-	b.WriteString(fmt.Sprintf("**Pending Import ID:** `%s`\n", pendingImportID))
+	fmt.Fprintf(&b, "🔄 <@%s> — **%s** re-sync by <@%s> requires approval.\n", dmUserID, characterName, playerUserID)
+	fmt.Fprintf(&b, "**Pending Import ID:** `%s`\n", pendingImportID)
 	if len(changes) > 0 {
 		b.WriteString("\n**Changes:**")
 		for _, c := range changes {

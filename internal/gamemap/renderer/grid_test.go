@@ -64,8 +64,8 @@ func TestDrawCoordinateLabels(t *testing.T) {
 	// and that some pixels in the label margin area are non-white.
 	img := dc.Image()
 	foundNonWhite := false
-	for x := 0; x < gridLabelMargin; x++ {
-		for y := 0; y < totalH; y++ {
+	for x := range gridLabelMargin {
+		for y := range totalH {
 			r, g, b, _ := img.At(x, y).RGBA()
 			wr, wg, wb, _ := color.White.RGBA()
 			if r != wr || g != wg || b != wb {
@@ -102,16 +102,16 @@ func TestParseCoordinate(t *testing.T) {
 		{"AB12", 27, 11, false},
 		{"AZ1", 51, 0, false},
 		{"BA1", 52, 0, false},
-		{"a1", 0, 0, false},    // case insensitive
-		{"d4", 3, 3, false},    // case insensitive
+		{"a1", 0, 0, false},     // case insensitive
+		{"d4", 3, 3, false},     // case insensitive
 		{"aa12", 26, 11, false}, // case insensitive
-		{"", 0, 0, true},       // empty
-		{"1", 0, 0, true},      // no column
-		{"A", 0, 0, true},      // no row
-		{"A0", 0, 0, true},     // row 0 invalid (1-based)
-		{"1A", 0, 0, true},     // wrong order
-		{"A-1", 0, 0, true},    // negative row
-		{"A1B", 0, 0, true},    // trailing letters
+		{"", 0, 0, true},        // empty
+		{"1", 0, 0, true},       // no column
+		{"A", 0, 0, true},       // no row
+		{"A0", 0, 0, true},      // row 0 invalid (1-based)
+		{"1A", 0, 0, true},      // wrong order
+		{"A-1", 0, 0, true},     // negative row
+		{"A1B", 0, 0, true},     // trailing letters
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {

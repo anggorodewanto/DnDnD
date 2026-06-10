@@ -46,16 +46,15 @@ func TestPhase105_MoveRoutesByCombatantMembership(t *testing.T) {
 	routing := phase105Routing{encounterX: uuid.New(), encounterY: uuid.New()}
 
 	cases := []struct {
-		name           string
-		userID         string
-		wantEncounter  uuid.UUID
+		name          string
+		userID        string
+		wantEncounter uuid.UUID
 	}{
 		{"player A", "user-a", routing.encounterX},
 		{"player B", "user-b", routing.encounterY},
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			sess := &mockMoveSession{}
 			handler, _, _, _ := setupMoveHandler(sess)
@@ -127,7 +126,6 @@ func TestPhase105_FlyRoutesByCombatantMembership(t *testing.T) {
 		{"player A", "user-a", routing.encounterX},
 		{"player B", "user-b", routing.encounterY},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			sess := &mockMoveSession{}
 
@@ -192,7 +190,6 @@ func TestPhase105_DistanceRoutesByCombatantMembership(t *testing.T) {
 		{"player A", "user-a", routing.encounterX},
 		{"player B", "user-b", routing.encounterY},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			sess := &mockMoveSession{}
 
@@ -253,7 +250,6 @@ func TestPhase105_DoneRoutesByCombatantMembership(t *testing.T) {
 		{"player A", "user-a", routing.encounterX},
 		{"player B", "user-b", routing.encounterY},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			sess := &mockMoveSession{}
 			handler, _, _, _, _ := setupFullDoneHandler(sess)
@@ -275,7 +271,7 @@ func TestPhase105_DoneRoutesByCombatantMembership(t *testing.T) {
 				Type:    discordgo.InteractionApplicationCommand,
 				GuildID: "guild1",
 				Member:  &discordgo.Member{User: &discordgo.User{ID: tc.userID}},
-				Data: discordgo.ApplicationCommandInteractionData{Name: "done"},
+				Data:    discordgo.ApplicationCommandInteractionData{Name: "done"},
 			}
 			// Only the player who owns the combatant in the returned encounter is
 			// allowed to end the turn; for this routing test the setupFullDoneHandler
@@ -307,7 +303,6 @@ func TestPhase105_SummonCommandRoutesByCombatantMembership(t *testing.T) {
 		{"player A", "user-a", routing.encounterX},
 		{"player B", "user-b", routing.encounterY},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			var seenEncounter uuid.UUID
 			svc := &mockSummonCommandService{
@@ -405,7 +400,6 @@ func TestPhase105_RecapRoutesByCombatantMembership(t *testing.T) {
 		{"player A", "user-a", routing.encounterX},
 		{"player B", "user-b", routing.encounterY},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			sess := &mockRecapSession{}
 

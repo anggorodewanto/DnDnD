@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -138,13 +139,7 @@ func validateUpload(input UploadInput) error {
 		return errors.New("mime_type must not be empty")
 	}
 	if allowed, ok := allowedMIMETypes[input.Type]; ok {
-		found := false
-		for _, m := range allowed {
-			if m == input.MimeType {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(allowed, input.MimeType)
 		if !found {
 			return errors.New("mime type not allowed for asset type " + string(input.Type))
 		}

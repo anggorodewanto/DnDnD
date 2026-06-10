@@ -139,7 +139,7 @@ func TestFormatConditionNames(t *testing.T) {
 
 func TestFormatTacticalSummary_WithBardicInspiration(t *testing.T) {
 	combatant := refdata.Combatant{
-		DisplayName:              "Bard",
+		DisplayName:             "Bard",
 		HpCurrent:               40,
 		HpMax:                   40,
 		Ac:                      14,

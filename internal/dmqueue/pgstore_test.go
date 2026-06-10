@@ -16,12 +16,12 @@ import (
 // fakePgQueries is a unit-test double for pgQueries that exercises pgstore.go
 // error branches without spinning up PostgreSQL.
 type fakePgQueries struct {
-	insertErr error
-	getErr    error
-	getRow    refdata.DmQueueItem
-	resolveErr error
-	cancelErr  error
-	listErr    error
+	insertErr    error
+	getErr       error
+	getRow       refdata.DmQueueItem
+	resolveErr   error
+	cancelErr    error
+	listErr      error
 	updateMsgErr error
 }
 

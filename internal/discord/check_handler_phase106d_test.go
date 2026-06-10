@@ -41,7 +41,7 @@ func (n *checkRecordingNotifier) ResolveSkillCheckNarration(context.Context, str
 	return nil
 }
 func (n *checkRecordingNotifier) Get(string) (dmqueue.Item, bool) { return dmqueue.Item{}, false }
-func (n *checkRecordingNotifier) ListPending() []dmqueue.Item    { return nil }
+func (n *checkRecordingNotifier) ListPending() []dmqueue.Item     { return nil }
 
 // --- Helpers ---
 

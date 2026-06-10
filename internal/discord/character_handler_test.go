@@ -98,7 +98,7 @@ func TestCharacterHandler_Success(t *testing.T) {
 	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
 
 	// Should respond with an embed
-	if rc.Embeds == nil || len(rc.Embeds) == 0 {
+	if len(rc.Embeds) == 0 {
 		t.Fatal("expected embeds in response")
 	}
 
@@ -176,7 +176,7 @@ func TestCharacterHandler_WithSpells(t *testing.T) {
 	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
 	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
 
-	if rc.Embeds == nil || len(rc.Embeds) == 0 {
+	if len(rc.Embeds) == 0 {
 		t.Fatal("expected embeds in response")
 	}
 
@@ -237,7 +237,7 @@ func TestCharacterHandler_WithPortalSpells(t *testing.T) {
 	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.test")
 	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
 
-	if rc.Embeds == nil || len(rc.Embeds) == 0 {
+	if len(rc.Embeds) == 0 {
 		t.Fatal("expected embeds in response")
 	}
 
@@ -287,7 +287,7 @@ func TestCharacterHandler_WithPortalSpells_EnrichmentError(t *testing.T) {
 	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.test")
 	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
 
-	if rc.Embeds == nil || len(rc.Embeds) == 0 {
+	if len(rc.Embeds) == 0 {
 		t.Fatal("expected embeds in response")
 	}
 
@@ -440,7 +440,7 @@ func TestCommandRouter_SetCharacterHandler(t *testing.T) {
 	router.Handle(makeInteraction("character", "player-1", "guild-1"))
 
 	// Should have used the real handler, not stub
-	if rc.Embeds == nil || len(rc.Embeds) == 0 {
+	if len(rc.Embeds) == 0 {
 		t.Fatal("expected embeds from character handler, got stub response")
 	}
 }

@@ -26,8 +26,8 @@ func TestShadowcast_OpenArea_AllInRange(t *testing.T) {
 	visible := shadowcast(2, 2, 10, nil, 5, 5)
 
 	// All tiles should be visible with large range and no walls
-	for row := 0; row < 5; row++ {
-		for col := 0; col < 5; col++ {
+	for row := range 5 {
+		for col := range 5 {
 			assert.True(t, visible[GridPos{col, row}], "tile (%d,%d) should be visible", col, row)
 		}
 	}
@@ -43,10 +43,10 @@ func TestShadowcast_WallBlocksLOS(t *testing.T) {
 	visible := shadowcast(3, 3, 10, walls, 7, 7)
 
 	// Tiles south of wall (and on wall boundary row 2) should be visible
-	assert.True(t, visible[GridPos{3, 3}])  // origin
-	assert.True(t, visible[GridPos{3, 2}])  // row 2 — south side of wall
-	assert.True(t, visible[GridPos{0, 3}])  // same row
-	assert.True(t, visible[GridPos{6, 6}])  // far south-east
+	assert.True(t, visible[GridPos{3, 3}]) // origin
+	assert.True(t, visible[GridPos{3, 2}]) // row 2 — south side of wall
+	assert.True(t, visible[GridPos{0, 3}]) // same row
+	assert.True(t, visible[GridPos{6, 6}]) // far south-east
 
 	// Tiles north of wall should NOT be visible (row 0 and row 1)
 	assert.False(t, visible[GridPos{3, 1}], "tile behind wall should not be visible")
@@ -60,11 +60,11 @@ func TestShadowcast_Symmetry(t *testing.T) {
 		{X1: 3, Y1: 2, X2: 3, Y2: 4}, // vertical wall from y=2 to y=4 at x=3
 	}
 
-	for r := 0; r < 7; r++ {
-		for c := 0; c < 7; c++ {
+	for r := range 7 {
+		for c := range 7 {
 			vis1 := shadowcast(c, r, 10, walls, 7, 7)
-			for r2 := 0; r2 < 7; r2++ {
-				for c2 := 0; c2 < 7; c2++ {
+			for r2 := range 7 {
+				for c2 := range 7 {
 					if vis1[GridPos{c2, r2}] {
 						vis2 := shadowcast(c2, r2, 10, walls, 7, 7)
 						assert.True(t, vis2[GridPos{c, r}],
@@ -103,8 +103,8 @@ func TestComputeVisibility_NoSources(t *testing.T) {
 	fow := ComputeVisibility(nil, nil, 5, 5)
 	require.NotNil(t, fow)
 
-	for row := 0; row < 5; row++ {
-		for col := 0; col < 5; col++ {
+	for row := range 5 {
+		for col := range 5 {
 			assert.Equal(t, Unexplored, fow.StateAt(col, row))
 		}
 	}
@@ -229,8 +229,8 @@ func TestFilterCombatantsForFog(t *testing.T) {
 	fow.States[3*5+3] = Explored // (3,3) explored
 
 	combatants := []Combatant{
-		{ShortID: "P1", Col: 2, Row: 2, IsPlayer: true},  // player in visible
-		{ShortID: "P2", Col: 4, Row: 4, IsPlayer: true},  // player in fog
+		{ShortID: "P1", Col: 2, Row: 2, IsPlayer: true},                   // player in visible
+		{ShortID: "P2", Col: 4, Row: 4, IsPlayer: true},                   // player in fog
 		{ShortID: "E1", Col: 2, Row: 2, IsPlayer: false, IsVisible: true}, // enemy in visible
 		{ShortID: "E2", Col: 4, Row: 4, IsPlayer: false, IsVisible: true}, // enemy in unexplored fog
 		{ShortID: "E3", Col: 3, Row: 3, IsPlayer: false, IsVisible: true}, // enemy in explored tile
@@ -243,11 +243,11 @@ func TestFilterCombatantsForFog(t *testing.T) {
 	for _, c := range filtered {
 		byID[c.ShortID] = c
 	}
-	assert.Contains(t, byID, "P1")  // player always shown
-	assert.Contains(t, byID, "P2")  // player always shown even in fog
-	assert.Contains(t, byID, "E1")  // enemy in visible tile shown
+	assert.Contains(t, byID, "P1")    // player always shown
+	assert.Contains(t, byID, "P2")    // player always shown even in fog
+	assert.Contains(t, byID, "E1")    // enemy in visible tile shown
 	assert.NotContains(t, byID, "E2") // enemy in unexplored hidden
-	assert.Contains(t, byID, "E3")  // enemy in explored tile shown
+	assert.Contains(t, byID, "E3")    // enemy in explored tile shown
 
 	// E3 should be marked as in fog (greyed)
 	assert.True(t, byID["E3"].InFog, "enemy on explored tile should have InFog=true")
@@ -494,7 +494,6 @@ func TestDrawTokens_InFogEnemyGreyed(t *testing.T) {
 	// Should render without error — greyed token
 	DrawTokens(dc, md)
 }
-
 
 // F-H01: Light sources with DimRangeTiles mark outer ring as Explored (dim).
 func TestComputeVisibility_LightDimRadius(t *testing.T) {

@@ -11,16 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func seedCampaign(t *testing.T) uuid.UUID {
-	t.Helper()
-	db := sharedDB.AcquireDB(t)
-	var id uuid.UUID
-	err := db.QueryRow(`INSERT INTO campaigns (guild_id, dm_user_id, name) VALUES ($1, $2, $3) RETURNING id`,
-		"guild-"+uuid.NewString()[:8], "dm-user", "Test Campaign").Scan(&id)
-	require.NoError(t, err)
-	return id
-}
-
 func newTestTokenStore(t *testing.T) *portal.TokenStore {
 	t.Helper()
 	db := sharedDB.AcquireDB(t)

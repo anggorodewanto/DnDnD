@@ -680,7 +680,7 @@ func TestWorkspaceHandler_UpdateCombatantConditions_PreservesExhaustionLevel(t *
 
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	err := json.NewDecoder(rec.Body).Decode(&resp)
 	require.NoError(t, err)
 	assert.Equal(t, float64(3), resp["exhaustion_level"])

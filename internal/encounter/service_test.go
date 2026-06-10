@@ -16,11 +16,11 @@ import (
 
 // mockStore implements Store for unit tests.
 type mockStore struct {
-	createFn       func(ctx context.Context, arg refdata.CreateEncounterTemplateParams) (refdata.EncounterTemplate, error)
-	getFn          func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error)
-	listFn         func(ctx context.Context, campaignID uuid.UUID) ([]refdata.EncounterTemplate, error)
-	updateFn       func(ctx context.Context, arg refdata.UpdateEncounterTemplateParams) (refdata.EncounterTemplate, error)
-	deleteFn       func(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error
+	createFn        func(ctx context.Context, arg refdata.CreateEncounterTemplateParams) (refdata.EncounterTemplate, error)
+	getFn           func(ctx context.Context, arg refdata.GetEncounterTemplateParams) (refdata.EncounterTemplate, error)
+	listFn          func(ctx context.Context, campaignID uuid.UUID) ([]refdata.EncounterTemplate, error)
+	updateFn        func(ctx context.Context, arg refdata.UpdateEncounterTemplateParams) (refdata.EncounterTemplate, error)
+	deleteFn        func(ctx context.Context, arg refdata.DeleteEncounterTemplateParams) error
 	listCreaturesFn func(ctx context.Context) ([]refdata.Creature, error)
 }
 

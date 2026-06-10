@@ -33,16 +33,16 @@ func makeFireballWithAoE() refdata.Spell {
 // helper: a single-target ranged spell with a save
 func makeSingleTargetSaveSpell() refdata.Spell {
 	return refdata.Spell{
-		ID:          "hold-person",
-		Name:        "Hold Person",
-		Level:       2,
-		CastingTime: "1 action",
-		RangeType:   "ranged",
-		RangeFt:     sql.NullInt32{Int32: 60, Valid: true},
-		SaveAbility: sql.NullString{String: "wis", Valid: true},
-		Duration:    "Up to 1 minute",
-		Components:  []string{"V", "S", "M"},
-		Concentration: sql.NullBool{Bool: true, Valid: true},
+		ID:             "hold-person",
+		Name:           "Hold Person",
+		Level:          2,
+		CastingTime:    "1 action",
+		RangeType:      "ranged",
+		RangeFt:        sql.NullInt32{Int32: 60, Valid: true},
+		SaveAbility:    sql.NullString{String: "wis", Valid: true},
+		Duration:       "Up to 1 minute",
+		Components:     []string{"V", "S", "M"},
+		Concentration:  sql.NullBool{Bool: true, Valid: true},
 		ResolutionMode: "auto",
 	}
 }
@@ -68,13 +68,13 @@ func makeCureWounds() refdata.Spell {
 // helper: a self-range spell
 func makeShield() refdata.Spell {
 	return refdata.Spell{
-		ID:          "shield",
-		Name:        "Shield",
-		Level:       1,
-		CastingTime: "1 reaction",
-		RangeType:   "self",
-		Duration:    "1 round",
-		Components:  []string{"V", "S"},
+		ID:             "shield",
+		Name:           "Shield",
+		Level:          1,
+		CastingTime:    "1 reaction",
+		RangeType:      "self",
+		Duration:       "1 round",
+		Components:     []string{"V", "S"},
 		ResolutionMode: "auto",
 	}
 }
@@ -279,12 +279,12 @@ func TestCastResult_MetamagicFields(t *testing.T) {
 	r := CastResult{
 		CarefulSpellCreatures: 3,
 		DistantRange:          "300 ft.",
-		IsEmpowered:          true,
-		EmpoweredRerolls:     4,
-		ExtendedDuration:     "2 hours",
-		IsHeightened:         true,
-		IsSubtle:             true,
-		TwinTargetName:       "Orc",
+		IsEmpowered:           true,
+		EmpoweredRerolls:      4,
+		ExtendedDuration:      "2 hours",
+		IsHeightened:          true,
+		IsSubtle:              true,
+		TwinTargetName:        "Orc",
 	}
 	assert.Equal(t, 3, r.CarefulSpellCreatures)
 	assert.Equal(t, "300 ft.", r.DistantRange)

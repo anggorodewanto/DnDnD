@@ -1217,12 +1217,12 @@ func TestGridDistanceFt(t *testing.T) {
 		row1, row2 int
 		expected   int
 	}{
-		{"A", "A", 1, 1, 0},     // same spot
-		{"A", "B", 1, 1, 5},     // 1 square = 5ft
-		{"A", "A", 1, 2, 5},     // 1 square vertical
-		{"A", "B", 1, 2, 5},     // diagonal = 5ft (Chebyshev)
-		{"A", "C", 1, 3, 10},    // 2 diagonal
-		{"A", "D", 1, 5, 20},    // max of col diff (3) and row diff (4) = 4 * 5 = 20
+		{"A", "A", 1, 1, 0},  // same spot
+		{"A", "B", 1, 1, 5},  // 1 square = 5ft
+		{"A", "A", 1, 2, 5},  // 1 square vertical
+		{"A", "B", 1, 2, 5},  // diagonal = 5ft (Chebyshev)
+		{"A", "C", 1, 3, 10}, // 2 diagonal
+		{"A", "D", 1, 5, 20}, // max of col diff (3) and row diff (4) = 4 * 5 = 20
 	}
 	for _, tc := range tests {
 		got := GridDistanceFt(tc.col1, tc.row1, tc.col2, tc.row2)

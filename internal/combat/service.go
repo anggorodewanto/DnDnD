@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -367,9 +368,7 @@ func (s *Service) usedEffectsSnapshot(encounterID, combatantID uuid.UUID) map[st
 	defer s.usedEffectsMu.Unlock()
 	src := s.usedEffects[encounterID][combatantID]
 	out := make(map[string]bool, len(src))
-	for k, v := range src {
-		out[k] = v
-	}
+	maps.Copy(out, src)
 	return out
 }
 

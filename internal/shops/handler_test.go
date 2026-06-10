@@ -494,7 +494,7 @@ func TestAPI_UpdateItem_BadID(t *testing.T) {
 
 	_, handler, camp := setupAPITest(t)
 
-	body, _ := json.Marshal(map[string]interface{}{"name": "New", "price_gp": 10, "quantity": 1})
+	body, _ := json.Marshal(map[string]any{"name": "New", "price_gp": 10, "quantity": 1})
 	req := httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body))
 	req = chiCtx(req, map[string]string{
 		"campaignID": camp.ID.String(),
@@ -696,7 +696,7 @@ func TestAPI_UpdateItem_Success(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&item))
 
 	// Update item
-	updateBody, _ := json.Marshal(map[string]interface{}{
+	updateBody, _ := json.Marshal(map[string]any{
 		"name": "Longsword +1", "description": "Magical!", "price_gp": 500, "quantity": 1,
 	})
 	req = httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(updateBody))

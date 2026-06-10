@@ -43,41 +43,41 @@ type fakeActionCombatService struct {
 	readyErr             error
 
 	// D-47..D-57 dispatch recordings + canned results.
-	surgeCalls           []combat.ActionSurgeCommand
-	surgeResult          combat.ActionSurgeResult
-	surgeErr             error
-	dashCalls            []combat.DashCommand
-	dashResult           combat.DashResult
-	dashErr              error
-	disengageCalls       []combat.DisengageCommand
-	disengageResult      combat.DisengageResult
-	dodgeCalls           []combat.DodgeCommand
-	dodgeResult          combat.DodgeResult
-	helpCalls            []combat.HelpCommand
-	helpResult           combat.HelpResult
-	hideCalls            []combat.HideCommand
-	hideResult           combat.HideResult
-	standCalls           []combat.StandCommand
-	standResult          combat.StandResult
-	dropProneCalls       []combat.DropProneCommand
-	dropProneResult      combat.DropProneResult
-	escapeCalls          []combat.EscapeCommand
-	escapeResult         combat.EscapeResult
-	turnUndeadCalls      []combat.TurnUndeadCommand
-	turnUndeadResult     combat.TurnUndeadResult
-	preserveLifeCalls    []combat.PreserveLifeCommand
-	preserveLifeResult   combat.PreserveLifeResult
-	sacredWeaponCalls    []combat.SacredWeaponCommand
-	sacredWeaponResult   combat.SacredWeaponResult
-	vowCalls             []combat.VowOfEnmityCommand
-	vowResult            combat.VowOfEnmityResult
-	cdDMQueueCalls       []combat.ChannelDivinityDMQueueCommand
-	cdDMQueueResult      combat.DMQueueResult
-	layCalls             []combat.LayOnHandsCommand
-	layResult            combat.LayOnHandsResult
-	grappleCalls         []combat.GrappleCommand
-	grappleResult        combat.GrappleResult
-	grappleErr           error
+	surgeCalls         []combat.ActionSurgeCommand
+	surgeResult        combat.ActionSurgeResult
+	surgeErr           error
+	dashCalls          []combat.DashCommand
+	dashResult         combat.DashResult
+	dashErr            error
+	disengageCalls     []combat.DisengageCommand
+	disengageResult    combat.DisengageResult
+	dodgeCalls         []combat.DodgeCommand
+	dodgeResult        combat.DodgeResult
+	helpCalls          []combat.HelpCommand
+	helpResult         combat.HelpResult
+	hideCalls          []combat.HideCommand
+	hideResult         combat.HideResult
+	standCalls         []combat.StandCommand
+	standResult        combat.StandResult
+	dropProneCalls     []combat.DropProneCommand
+	dropProneResult    combat.DropProneResult
+	escapeCalls        []combat.EscapeCommand
+	escapeResult       combat.EscapeResult
+	turnUndeadCalls    []combat.TurnUndeadCommand
+	turnUndeadResult   combat.TurnUndeadResult
+	preserveLifeCalls  []combat.PreserveLifeCommand
+	preserveLifeResult combat.PreserveLifeResult
+	sacredWeaponCalls  []combat.SacredWeaponCommand
+	sacredWeaponResult combat.SacredWeaponResult
+	vowCalls           []combat.VowOfEnmityCommand
+	vowResult          combat.VowOfEnmityResult
+	cdDMQueueCalls     []combat.ChannelDivinityDMQueueCommand
+	cdDMQueueResult    combat.DMQueueResult
+	layCalls           []combat.LayOnHandsCommand
+	layResult          combat.LayOnHandsResult
+	grappleCalls       []combat.GrappleCommand
+	grappleResult      combat.GrappleResult
+	grappleErr         error
 }
 
 func (f *fakeActionCombatService) GetEncounter(_ context.Context, id uuid.UUID) (refdata.Encounter, error) {
@@ -360,7 +360,7 @@ func TestActionHandler_CombatMode_CallsFreeformAction(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{
 		ID:          turnID,
@@ -432,7 +432,7 @@ func TestActionHandler_CombatMode_CombinesActionAndArgs(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -481,7 +481,7 @@ func TestActionHandler_CombatMode_RejectsNonOwner(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: otherCharID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -532,7 +532,7 @@ func TestActionHandler_ExplorationMode_PostsToNotifier(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{
 		ID:         encounterID,
@@ -601,7 +601,7 @@ func TestActionHandler_ExplorationMode_PersistsPendingAction(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{
 		ID:         encounterID,
@@ -662,7 +662,7 @@ func TestActionHandler_CombatMode_Cancel_Success(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -725,7 +725,7 @@ func TestActionHandler_CombatMode_Cancel_NoPending(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -773,7 +773,7 @@ func TestActionHandler_CombatMode_Cancel_AlreadyResolved(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -823,7 +823,7 @@ func TestActionHandler_ExplorationMode_Cancel_Success(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{
 		ID:         encounterID,
@@ -878,7 +878,7 @@ func TestActionHandler_ExplorationMode_Cancel_NoPending(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{ID: encounterID, CampaignID: campID, Mode: "exploration"}
 
@@ -923,7 +923,7 @@ func TestSetActionHandler_RoutesCommand(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{ID: encounterID, CampaignID: campID, Mode: "exploration"}
 
@@ -1112,7 +1112,7 @@ func TestActionHandler_CombatMode_FreeformActionError(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -1157,7 +1157,7 @@ func TestActionHandler_CombatMode_Cancel_OtherError(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -1201,8 +1201,8 @@ func TestActionHandler_ExplorationMode_NoPCCombatant(t *testing.T) {
 		ID:          uuid.New(),
 		EncounterID: encounterID,
 		DisplayName: "Bandit",
-		IsAlive: true, HpCurrent: 10,
-		IsNpc:       true,
+		IsAlive:     true, HpCurrent: 10,
+		IsNpc: true,
 	}
 	svc := &fakeActionCombatService{
 		encounters:  map[uuid.UUID]refdata.Encounter{encounterID: encounter},
@@ -1236,7 +1236,7 @@ func TestActionHandler_ExplorationMode_PendingStoreFails(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{ID: encounterID, CampaignID: campID, Mode: "exploration"}
 	svc := &fakeActionCombatService{
@@ -1272,7 +1272,7 @@ func TestActionHandler_ExplorationMode_Cancel_AlreadyResolved(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{ID: encounterID, CampaignID: campID, Mode: "exploration"}
 	svc := &fakeActionCombatService{
@@ -1309,7 +1309,7 @@ func TestActionHandler_ExplorationMode_Cancel_OtherError(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{ID: encounterID, CampaignID: campID, Mode: "exploration"}
 	svc := &fakeActionCombatService{
@@ -1347,7 +1347,7 @@ func TestActionHandler_ExplorationMode_NoNotifier(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{ID: encounterID, CampaignID: campID, Mode: "exploration"}
 	svc := &fakeActionCombatService{
@@ -1391,7 +1391,7 @@ func TestActionHandler_ExplorationMode_NotifierPostError(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{ID: encounterID, CampaignID: campID, Mode: "exploration"}
 	svc := &fakeActionCombatService{
@@ -1435,14 +1435,14 @@ func TestActionHandler_ExplorationMode_MultiplePCs_PicksInvoker(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: char1ID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	pc2 := refdata.Combatant{
 		ID:          combatant2ID,
 		EncounterID: encounterID,
 		DisplayName: "Bran",
 		CharacterID: uuid.NullUUID{UUID: char2ID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{ID: encounterID, CampaignID: campID, Mode: "exploration"}
 	svc := &fakeActionCombatService{
@@ -1486,8 +1486,8 @@ func TestActionHandler_CombatMode_RejectsNPCCombatantTurn(t *testing.T) {
 		ID:          combatantID,
 		EncounterID: encounterID,
 		DisplayName: "Bandit",
-		IsAlive: true, HpCurrent: 10,
-		IsNpc:       true,
+		IsAlive:     true, HpCurrent: 10,
+		IsNpc: true,
 		// CharacterID left invalid
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
@@ -1531,7 +1531,7 @@ func TestActionHandler_CombatMode_CampaignLookupFailsRejects(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -1574,7 +1574,7 @@ func TestActionHandler_CombatMode_CharLookupFailsRejects(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -1618,14 +1618,14 @@ func TestActionHandler_ExplorationMode_MultiplePCs_CampaignLookupFailsFallsBack(
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: char1ID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	pc2 := refdata.Combatant{
 		ID:          combatant2ID,
 		EncounterID: encounterID,
 		DisplayName: "Bran",
 		CharacterID: uuid.NullUUID{UUID: char2ID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{ID: encounterID, CampaignID: campID, Mode: "exploration"}
 	svc := &fakeActionCombatService{
@@ -1666,14 +1666,14 @@ func TestActionHandler_ExplorationMode_MultiplePCs_CharLookupFailsFallsBack(t *t
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: char1ID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	pc2 := refdata.Combatant{
 		ID:          combatant2ID,
 		EncounterID: encounterID,
 		DisplayName: "Bran",
 		CharacterID: uuid.NullUUID{UUID: char2ID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{ID: encounterID, CampaignID: campID, Mode: "exploration"}
 	svc := &fakeActionCombatService{
@@ -1712,14 +1712,14 @@ func TestActionHandler_ExplorationMode_MultiplePCs_NoMatchNotFound(t *testing.T)
 		EncounterID: encounterID,
 		DisplayName: "Aria",
 		CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	pc2 := refdata.Combatant{
 		ID:          uuid.New(),
 		EncounterID: encounterID,
 		DisplayName: "Bran",
 		CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	encounter := refdata.Encounter{ID: encounterID, CampaignID: campID, Mode: "exploration"}
 	svc := &fakeActionCombatService{
@@ -1768,7 +1768,7 @@ func TestActionHandler_Ready_CallsReadyAction(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -1827,7 +1827,7 @@ func TestActionHandler_Ready_RequiresDescription(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -1878,7 +1878,7 @@ func TestActionHandler_Ready_RejectsNonOwner(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: otherCharID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -1928,7 +1928,7 @@ func TestActionHandler_Ready_ServiceError(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -1981,7 +1981,7 @@ func TestActionHandler_Ready_WiresSpellAndSlot(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Mira",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{
@@ -2042,7 +2042,7 @@ func TestActionHandler_Ready_NoSpellLeavesFieldsEmpty(t *testing.T) {
 		EncounterID: encounterID,
 		DisplayName: "Thorn",
 		CharacterID: uuid.NullUUID{UUID: charID, Valid: true},
-		IsAlive: true, HpCurrent: 10,
+		IsAlive:     true, HpCurrent: 10,
 	}
 	turn := refdata.Turn{ID: turnID, EncounterID: encounterID, CombatantID: combatantID}
 	encounter := refdata.Encounter{

@@ -21,13 +21,13 @@ import (
 // discordUserEncounterResolver so we can unit test the guild->character->
 // encounter chain without spinning up Postgres.
 type fakeResolverQueries struct {
-	campaignsByGuild    map[string]refdata.Campaign
-	campaignErr         error
-	playerByCampUser    map[string]refdata.PlayerCharacter
-	playerErr           error
-	activeEncByChar     map[uuid.UUID]uuid.UUID
-	activeEncErr        error
-	activeEncNotFound   bool
+	campaignsByGuild     map[string]refdata.Campaign
+	campaignErr          error
+	playerByCampUser     map[string]refdata.PlayerCharacter
+	playerErr            error
+	activeEncByChar      map[uuid.UUID]uuid.UUID
+	activeEncErr         error
+	activeEncNotFound    bool
 	activeEncCountByChar map[uuid.UUID]int64
 }
 
@@ -337,9 +337,9 @@ func TestSetupCampaignLookup_SaveChannelIDs_MergesIntoSettings(t *testing.T) {
 	lookup := newSetupCampaignLookup(q)
 
 	channelIDs := map[string]string{
-		"the-story":   "chan-1",
-		"combat-map":  "chan-2",
-		"combat-log":  "chan-3",
+		"the-story":    "chan-1",
+		"combat-map":   "chan-2",
+		"combat-log":   "chan-3",
 		"roll-history": "chan-4",
 	}
 	require.NoError(t, lookup.SaveChannelIDs("guild-1", channelIDs))

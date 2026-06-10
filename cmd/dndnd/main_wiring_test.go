@@ -872,7 +872,7 @@ func mapJSON30x30() []byte {
 func mapJSONNxN(n int) []byte {
 	count := n * n
 	data := strings.Repeat("0,", count-1) + "0"
-	return []byte(fmt.Sprintf(`{"width":%d,"height":%d,"tilewidth":48,"tileheight":48,"layers":[{"name":"terrain","type":"tilelayer","data":[%s]}],"tilesets":[]}`, n, n, data))
+	return fmt.Appendf(nil, `{"width":%d,"height":%d,"tilewidth":48,"tileheight":48,"layers":[{"name":"terrain","type":"tilelayer","data":[%s]}],"tilesets":[]}`, n, n, data)
 }
 
 // --- high-13: dashboard API handlers (loot, item picker, shops, party rest) ---
@@ -1130,16 +1130,6 @@ func TestBuildRegistrationDeps_CarriesDDBImporter(t *testing.T) {
 	assert.Same(t, importer, deps.DDBImporter)
 }
 
-// newTestHTTPRequest builds a chi-mountable request without DB / TLS noise.
-func newTestHTTPRequest(t *testing.T, method, path string) *http.Request {
-	t.Helper()
-	req, err := http.NewRequest(method, path, strings.NewReader(""))
-	require.NoError(t, err)
-	return req
-}
-
-func newTestHTTPRecorder() *httptest.ResponseRecorder { return httptest.NewRecorder() }
-
 // recordingDDBImporter counts Import calls so we can assert /import flows
 // through the real path when DDBImporter is wired into RegistrationDeps.
 type recordingDDBImporter struct {
@@ -1251,7 +1241,7 @@ func (f *fakeGatewayWirer) hasHandlerOfType(eventPtr any) bool {
 		if ht.NumIn() != 2 || ht.NumOut() != 0 {
 			continue
 		}
-		if ht.In(0) != reflect.TypeOf((*discordgo.Session)(nil)) {
+		if ht.In(0) != reflect.TypeFor[*discordgo.Session]() {
 			continue
 		}
 		if ht.In(1) == want {

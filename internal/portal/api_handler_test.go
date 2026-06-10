@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -34,11 +35,8 @@ func (m *mockRefDataStore) ListClasses(_ context.Context) ([]portal.ClassInfo, e
 func (m *mockRefDataStore) ListSpellsByClass(_ context.Context, class, _ string) ([]portal.SpellInfo, error) {
 	var result []portal.SpellInfo
 	for _, s := range m.spells {
-		for _, c := range s.Classes {
-			if c == class {
-				result = append(result, s)
-				break
-			}
+		if slices.Contains(s.Classes, class) {
+			result = append(result, s)
 		}
 	}
 	return result, nil

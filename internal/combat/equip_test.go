@@ -266,10 +266,10 @@ func TestEquip_Armor_OutOfCombat(t *testing.T) {
 	ms.getArmorFn = func(ctx context.Context, id string) (refdata.Armor, error) {
 		if id == "chain-mail" {
 			return refdata.Armor{
-				ID:        "chain-mail",
-				Name:      "Chain Mail",
-				ArmorType: "heavy",
-				AcBase:    16,
+				ID:         "chain-mail",
+				Name:       "Chain Mail",
+				ArmorType:  "heavy",
+				AcBase:     16,
 				AcDexBonus: sql.NullBool{Bool: false, Valid: true},
 			}, nil
 		}

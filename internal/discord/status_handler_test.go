@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ab/dndnd/internal/refdata"
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
-	"github.com/ab/dndnd/internal/refdata"
 )
 
 func pqtypeNull(raw json.RawMessage) pqtype.NullRawMessage {

@@ -24,12 +24,12 @@ type SnapshotStore interface {
 // every encounter mutation. Phase 103 is "snapshot-always": no deltas, no
 // sequence numbers — every push is a complete view of the encounter.
 type EncounterSnapshot struct {
-	Type        string             `json:"type"`
-	EncounterID string             `json:"encounter_id"`
-	Encounter   refdata.Encounter  `json:"encounter"`
+	Type        string              `json:"type"`
+	EncounterID string              `json:"encounter_id"`
+	Encounter   refdata.Encounter   `json:"encounter"`
 	Combatants  []refdata.Combatant `json:"combatants"`
-	CurrentTurn *refdata.Turn      `json:"current_turn"`
-	ServerTime  time.Time          `json:"server_time"`
+	CurrentTurn *refdata.Turn       `json:"current_turn"`
+	ServerTime  time.Time           `json:"server_time"`
 }
 
 // SnapshotBuilder assembles EncounterSnapshot values from the database.

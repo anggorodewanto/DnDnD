@@ -1,9 +1,9 @@
 package renderer
 
 import (
+	"bytes"
 	"image/color"
 	"image/png"
-	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

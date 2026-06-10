@@ -55,8 +55,8 @@ func abilityLabel(ability string) string {
 
 // AbilityCheckContext provides context for ability check condition effects.
 type AbilityCheckContext struct {
-	RequiresSight    bool
-	RequiresHearing  bool
+	RequiresSight     bool
+	RequiresHearing   bool
 	FearSourceVisible bool
 }
 

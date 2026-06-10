@@ -414,8 +414,8 @@ func TestResolveReaction_ListTurnsError(t *testing.T) {
 func TestResolveReaction_MarksDeclaringCombatantTurn(t *testing.T) {
 	declID := uuid.New()
 	encounterID := uuid.New()
-	aragornID := uuid.New()  // declaring combatant
-	goblinID := uuid.New()   // active turn combatant (different!)
+	aragornID := uuid.New() // declaring combatant
+	goblinID := uuid.New()  // active turn combatant (different!)
 	aragornTurnID := uuid.New()
 	goblinTurnID := uuid.New()
 

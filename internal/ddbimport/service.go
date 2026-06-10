@@ -290,7 +290,7 @@ func (s *Service) loadPendingImport(ctx context.Context, importID uuid.UUID) (pe
 	return pendingImport{params: params, created: row.CreatedAt}, true, nil
 }
 
-func marshalField(name string, v interface{}) ([]byte, error) {
+func marshalField(name string, v any) ([]byte, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling %s: %w", name, err)
@@ -324,7 +324,7 @@ func buildCreateParams(campaignID uuid.UUID, ddbURL string, pc *ParsedCharacter)
 		return refdata.CreateCharacterParams{}, err
 	}
 
-	charDataJSON, err := marshalField("character data", map[string]interface{}{"spells": pc.Spells})
+	charDataJSON, err := marshalField("character data", map[string]any{"spells": pc.Spells})
 	if err != nil {
 		return refdata.CreateCharacterParams{}, err
 	}

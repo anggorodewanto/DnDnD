@@ -13,11 +13,11 @@ type RandSource func(max int) int
 
 // GroupResult holds the results for one dice group in a roll.
 type GroupResult struct {
-	Die      int   `json:"die"`
-	Count    int   `json:"count"`
-	Results  []int `json:"results"`
-	Modifier int   `json:"modifier"`
-	Total    int   `json:"total"`
+	Die      int    `json:"die"`
+	Count    int    `json:"count"`
+	Results  []int  `json:"results"`
+	Modifier int    `json:"modifier"`
+	Total    int    `json:"total"`
 	Purpose  string `json:"purpose,omitempty"`
 }
 

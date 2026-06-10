@@ -96,7 +96,7 @@ func TestMemoryStore_ListRecentMostRecentFirst(t *testing.T) {
 
 func TestMemoryStore_ListRecentRespectsLimit(t *testing.T) {
 	store := NewMemoryStore(time.Now)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_ = store.Record(context.Background(), Entry{Command: "cmd"})
 	}
 	entries, err := store.ListRecent(context.Background(), 3)

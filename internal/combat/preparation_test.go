@@ -29,8 +29,8 @@ func TestIsPreparedCaster(t *testing.T) {
 		{"warlock", false},
 		{"ranger", false},
 		{"fighter", false},
-		{"Cleric", true},   // case insensitive
-		{"PALADIN", true},  // case insensitive
+		{"Cleric", true},  // case insensitive
+		{"PALADIN", true}, // case insensitive
 	}
 	for _, tc := range tests {
 		t.Run(tc.class, func(t *testing.T) {
@@ -233,62 +233,62 @@ func TestAlwaysPreparedSpells(t *testing.T) {
 		wantIDs    []string
 	}{
 		{
-			name: "Life Domain cleric level 1",
+			name:      "Life Domain cleric level 1",
 			className: "cleric", subclass: "life", classLevel: 1,
 			wantIDs: []string{"bless", "cure-wounds"},
 		},
 		{
-			name: "Life Domain cleric level 3",
+			name:      "Life Domain cleric level 3",
 			className: "cleric", subclass: "life", classLevel: 3,
 			wantIDs: []string{"bless", "cure-wounds", "lesser-restoration", "spiritual-weapon"},
 		},
 		{
-			name: "Life Domain cleric level 5",
+			name:      "Life Domain cleric level 5",
 			className: "cleric", subclass: "life", classLevel: 5,
 			wantIDs: []string{"bless", "cure-wounds", "lesser-restoration", "spiritual-weapon", "beacon-of-hope", "revivify"},
 		},
 		{
-			name: "Life Domain cleric level 9",
+			name:      "Life Domain cleric level 9",
 			className: "cleric", subclass: "life", classLevel: 9,
 			wantIDs: []string{"bless", "cure-wounds", "lesser-restoration", "spiritual-weapon", "beacon-of-hope", "revivify", "death-ward", "guardian-of-faith", "mass-cure-wounds", "raise-dead"},
 		},
 		{
-			name: "Oath of Devotion paladin level 3",
+			name:      "Oath of Devotion paladin level 3",
 			className: "paladin", subclass: "devotion", classLevel: 3,
 			wantIDs: []string{"protection-from-evil-and-good", "sanctuary"},
 		},
 		{
-			name: "Oath of Devotion paladin level 5",
+			name:      "Oath of Devotion paladin level 5",
 			className: "paladin", subclass: "devotion", classLevel: 5,
 			wantIDs: []string{"protection-from-evil-and-good", "sanctuary", "lesser-restoration", "zone-of-truth"},
 		},
 		{
-			name: "Oath of Devotion paladin level 9",
+			name:      "Oath of Devotion paladin level 9",
 			className: "paladin", subclass: "devotion", classLevel: 9,
 			wantIDs: []string{"protection-from-evil-and-good", "sanctuary", "lesser-restoration", "zone-of-truth", "beacon-of-hope", "dispel-magic"},
 		},
 		{
-			name: "Circle of the Land druid level 3",
+			name:      "Circle of the Land druid level 3",
 			className: "druid", subclass: "land", classLevel: 3,
 			wantIDs: []string{"hold-person", "spike-growth"},
 		},
 		{
-			name: "Circle of the Land druid level 5",
+			name:      "Circle of the Land druid level 5",
 			className: "druid", subclass: "land", classLevel: 5,
 			wantIDs: []string{"hold-person", "spike-growth", "sleet-storm", "slow"},
 		},
 		{
-			name: "unknown subclass",
+			name:      "unknown subclass",
 			className: "cleric", subclass: "unknown", classLevel: 5,
 			wantIDs: nil,
 		},
 		{
-			name: "non-prepared caster",
+			name:      "non-prepared caster",
 			className: "wizard", subclass: "evocation", classLevel: 5,
 			wantIDs: nil,
 		},
 		{
-			name: "paladin level 2 no subclass spells yet",
+			name:      "paladin level 2 no subclass spells yet",
 			className: "paladin", subclass: "devotion", classLevel: 2,
 			wantIDs: nil,
 		},
@@ -300,7 +300,6 @@ func TestAlwaysPreparedSpells(t *testing.T) {
 		})
 	}
 }
-
 
 // TDD Cycle 6: ValidateSpellPreparation validates the preparation list
 func TestValidateSpellPreparation(t *testing.T) {
@@ -314,13 +313,13 @@ func TestValidateSpellPreparation(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		selected     []string
-		maxPrepared  int
-		slotLevels   map[int]bool // available slot levels
-		classSpells  []refdata.Spell
-		alwaysIDs    []string // always-prepared (excluded from count)
-		wantErr      string
+		name        string
+		selected    []string
+		maxPrepared int
+		slotLevels  map[int]bool // available slot levels
+		classSpells []refdata.Spell
+		alwaysIDs   []string // always-prepared (excluded from count)
+		wantErr     string
 	}{
 		{
 			name:        "valid preparation",
@@ -511,7 +510,7 @@ func TestService_PrepareSpells(t *testing.T) {
 			listSpellsByClassFn: func(_ context.Context, class string) ([]refdata.Spell, error) {
 				// Return enough spells to fill more than max
 				spells := make([]refdata.Spell, 20)
-				for i := 0; i < 20; i++ {
+				for i := range 20 {
 					spells[i] = refdata.Spell{ID: fmt.Sprintf("spell-%d", i), Name: fmt.Sprintf("Spell %d", i), Level: 1}
 				}
 				return spells, nil
@@ -521,7 +520,7 @@ func TestService_PrepareSpells(t *testing.T) {
 
 		// Try to prepare 9 spells (max is 8 = WIS mod 3 + level 5)
 		selected := make([]string, 9)
-		for i := 0; i < 9; i++ {
+		for i := range 9 {
 			selected[i] = fmt.Sprintf("spell-%d", i)
 		}
 		_, err := svc.PrepareSpells(context.Background(), PrepareSpellsInput{
@@ -555,7 +554,7 @@ func TestService_PrepareSpells(t *testing.T) {
 		// Include always-prepared "bless" plus 8 regular spells — should still fit
 		// because bless doesn't count against the limit
 		spellsForLevel1 := make([]refdata.Spell, 10)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			spellsForLevel1[i] = refdata.Spell{ID: fmt.Sprintf("spell-%d", i), Name: fmt.Sprintf("Spell %d", i), Level: 1}
 		}
 		// Override listSpellsByClassFn to return all needed spells
@@ -565,7 +564,7 @@ func TestService_PrepareSpells(t *testing.T) {
 		}
 
 		selected := []string{"bless"} // always-prepared, doesn't count
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			selected = append(selected, fmt.Sprintf("spell-%d", i))
 		}
 		result, err := svc.PrepareSpells(context.Background(), PrepareSpellsInput{

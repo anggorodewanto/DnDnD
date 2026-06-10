@@ -100,4 +100,3 @@ func TestRenderDiscord_UnclosedReadAloudIsLiteral(t *testing.T) {
 		t.Fatalf("body lost content: %q", got.Body)
 	}
 }
-

@@ -30,7 +30,6 @@ func FormatMartialArtsBonusAttack(name string) string {
 	return fmt.Sprintf("\U0001f44a  %s makes a Martial Arts bonus unarmed strike!", name)
 }
 
-
 // MartialArtsBonusAttackCommand holds the inputs for a martial arts bonus unarmed strike.
 type MartialArtsBonusAttackCommand struct {
 	Attacker            refdata.Combatant
@@ -152,7 +151,7 @@ func (s *Service) FlurryOfBlows(ctx context.Context, cmd FlurryOfBlowsCommand, r
 	dmAdv, dmDisadv := s.consumeDMAdvOverride(ctx, cmd.Attacker, cmd.DMAdvantage, cmd.DMDisadvantage)
 
 	var attacks []AttackResult
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		input := buildAttackInput(
 			cmd.Attacker, cmd.Target, weapon, scores, int(char.ProficiencyBonus), distFt,
 			cmd.HostileNearAttacker, cmd.AttackerSize,
@@ -561,7 +560,6 @@ func ValidateKiAbility(monkLevel int, kiRemaining int, abilityName string) error
 	}
 	return nil
 }
-
 
 // IsMonkWeapon returns true if the weapon qualifies as a monk weapon:
 // unarmed strikes, shortswords, or any simple melee weapon without the

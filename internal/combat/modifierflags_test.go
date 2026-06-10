@@ -176,7 +176,7 @@ func TestResolveAttack_Reckless_FinesseUsingDEX_Error(t *testing.T) {
 		AttackerName: "Grog",
 		TargetName:   "Ogre",
 		TargetAC:     15,
-		Weapon:       makeRapier(), // finesse
+		Weapon:       makeRapier(),                    // finesse
 		Scores:       AbilityScores{Str: 10, Dex: 18}, // DEX > STR => uses DEX
 		ProfBonus:    3,
 		DistanceFt:   5,
@@ -200,7 +200,7 @@ func TestResolveAttack_Reckless_FinesseUsingSTR_OK(t *testing.T) {
 		AttackerName: "Grog",
 		TargetName:   "Ogre",
 		TargetAC:     15,
-		Weapon:       makeRapier(),                     // finesse
+		Weapon:       makeRapier(),                    // finesse
 		Scores:       AbilityScores{Str: 18, Dex: 10}, // STR > DEX => uses STR
 		ProfBonus:    3,
 		DistanceFt:   5,
@@ -452,9 +452,9 @@ func TestServiceAttack_Sharpshooter_RequiresFeat(t *testing.T) {
 	roller := dice.NewRoller(func(max int) int { return 10 })
 
 	_, err := svc.Attack(ctx, AttackCommand{
-		Attacker: refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Legolas", PositionCol: "A", PositionRow: 1, IsAlive: true, Conditions: json.RawMessage(`[]`)},
-		Target:   refdata.Combatant{ID: targetID, DisplayName: "Orc", PositionCol: "B", PositionRow: 1, Ac: 14, IsAlive: true, Conditions: json.RawMessage(`[]`)},
-		Turn:     refdata.Turn{ID: turnID, CombatantID: attackerID, AttacksRemaining: 1},
+		Attacker:     refdata.Combatant{ID: attackerID, CharacterID: uuid.NullUUID{UUID: charID, Valid: true}, DisplayName: "Legolas", PositionCol: "A", PositionRow: 1, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+		Target:       refdata.Combatant{ID: targetID, DisplayName: "Orc", PositionCol: "B", PositionRow: 1, Ac: 14, IsAlive: true, Conditions: json.RawMessage(`[]`)},
+		Turn:         refdata.Turn{ID: turnID, CombatantID: attackerID, AttacksRemaining: 1},
 		Sharpshooter: true,
 	}, roller)
 	require.Error(t, err)

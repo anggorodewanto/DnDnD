@@ -62,11 +62,11 @@ func IdentifyItem(input IdentifyInput) (IdentifyResult, error) {
 type CastIdentifyInput struct {
 	Items      []character.InventoryItem
 	ItemID     string
-	KnowsSpell bool              // whether the caster knows/has Identify prepared
-	SpellSlots map[int]int       // slot level -> remaining slots
-	SlotLevel  int               // which slot level to use (ignored if ritual)
-	IsRitual   bool              // cast as ritual (no slot consumed, extra 10 min)
-	InCombat   bool              // whether the caster is in an active encounter
+	KnowsSpell bool        // whether the caster knows/has Identify prepared
+	SpellSlots map[int]int // slot level -> remaining slots
+	SlotLevel  int         // which slot level to use (ignored if ritual)
+	IsRitual   bool        // cast as ritual (no slot consumed, extra 10 min)
+	InCombat   bool        // whether the caster is in an active encounter
 }
 
 // CastIdentifyResult holds the result of casting Identify.

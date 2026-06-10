@@ -100,7 +100,7 @@ func setupFullDoneHandler(sess *mockMoveSession) (*DoneHandler, uuid.UUID, uuid.
 					CharacterID: uuid.NullUUID{UUID: characterID, Valid: true},
 					PositionCol: "A",
 					PositionRow: 1,
-					IsAlive: true, HpCurrent: 10,
+					IsAlive:     true, HpCurrent: 10,
 					IsNpc:       false,
 					DisplayName: "Aria",
 				}, nil
@@ -109,7 +109,7 @@ func setupFullDoneHandler(sess *mockMoveSession) (*DoneHandler, uuid.UUID, uuid.
 				ID:          nextCombatantID,
 				PositionCol: "B",
 				PositionRow: 2,
-				IsAlive: true, HpCurrent: 10,
+				IsAlive:     true, HpCurrent: 10,
 				IsNpc:       true,
 				DisplayName: "Goblin #1",
 			}, nil
@@ -127,10 +127,10 @@ func setupFullDoneHandler(sess *mockMoveSession) (*DoneHandler, uuid.UUID, uuid.
 	turnProv := &mockMoveTurnProvider{
 		getTurn: func(_ context.Context, _ uuid.UUID) (refdata.Turn, error) {
 			return refdata.Turn{
-				ID:              turnID,
-				CombatantID:     combatantID,
-				ActionUsed:      true,
-				BonusActionUsed: true,
+				ID:               turnID,
+				CombatantID:      combatantID,
+				ActionUsed:       true,
+				BonusActionUsed:  true,
 				AttacksRemaining: 0,
 			}, nil
 		},
@@ -275,8 +275,8 @@ func TestDoneHandler_UnusedResourcesShowConfirmation(t *testing.T) {
 				CharacterID: uuid.NullUUID{UUID: characterID, Valid: true},
 				PositionCol: "A",
 				PositionRow: 1,
-				IsAlive: true, HpCurrent: 10,
-				IsNpc:       false,
+				IsAlive:     true, HpCurrent: 10,
+				IsNpc: false,
 			}, nil
 		},
 		listCombatants: func(_ context.Context, _ uuid.UUID) ([]refdata.Combatant, error) {
@@ -420,12 +420,12 @@ func TestDoneHandler_NPCTurn_NonDMRejected(t *testing.T) {
 				ID:          combatantID,
 				PositionCol: "A",
 				PositionRow: 1,
-				IsAlive: true, HpCurrent: 10,
+				IsAlive:     true, HpCurrent: 10,
 				IsNpc:       true,
 				DisplayName: "Goblin",
 			}, nil
 		},
-		listCombatants: handler.combatService.(*mockMoveService).listCombatants,
+		listCombatants:     handler.combatService.(*mockMoveService).listCombatants,
 		updateCombatantPos: handler.combatService.(*mockMoveService).updateCombatantPos,
 	}
 
@@ -599,7 +599,7 @@ func TestDoneHandler_HandleDoneConfirm_CombatantError(t *testing.T) {
 			}
 			return refdata.Combatant{ID: id, IsAlive: true, HpCurrent: 10, PositionCol: "A", PositionRow: 1}, nil
 		},
-		listCombatants: handler.combatService.(*mockMoveService).listCombatants,
+		listCombatants:     handler.combatService.(*mockMoveService).listCombatants,
 		updateCombatantPos: handler.combatService.(*mockMoveService).updateCombatantPos,
 	}
 
@@ -1223,13 +1223,13 @@ func TestDoneHandler_AdvanceTurn_GetNextCombatantError(t *testing.T) {
 				ID:          id,
 				PositionCol: "A",
 				PositionRow: 1,
-				IsAlive: true, HpCurrent: 10,
+				IsAlive:     true, HpCurrent: 10,
 				IsNpc:       false,
 				DisplayName: "Aria",
 				CharacterID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
 			}, nil
 		},
-		listCombatants: handler.combatService.(*mockMoveService).listCombatants,
+		listCombatants:     handler.combatService.(*mockMoveService).listCombatants,
 		updateCombatantPos: handler.combatService.(*mockMoveService).updateCombatantPos,
 	}
 

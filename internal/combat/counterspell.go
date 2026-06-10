@@ -36,13 +36,13 @@ type CounterspellPrompt struct {
 
 // CounterspellResult holds the outcome of a Counterspell resolution step.
 type CounterspellResult struct {
-	Outcome          CounterspellOutcome
-	CasterName       string
-	EnemySpellName   string
-	EnemyCastLevel   int
-	SlotUsed         int
-	DC               int // DC for ability check (10 + enemy spell level), set when needs_check
-	DeclarationID    uuid.UUID
+	Outcome           CounterspellOutcome
+	CasterName        string
+	EnemySpellName    string
+	EnemyCastLevel    int
+	SlotUsed          int
+	DC                int // DC for ability check (10 + enemy spell level), set when needs_check
+	DeclarationID     uuid.UUID
 	EnemySlotRefunded bool // true when the countered caster's slot was automatically refunded (SR-046)
 }
 
@@ -280,7 +280,7 @@ func (s *Service) PassCounterspell(ctx context.Context, declarationID uuid.UUID)
 	}
 
 	if _, err := s.store.UpdateReactionDeclarationCounterspellResolved(ctx, refdata.UpdateReactionDeclarationCounterspellResolvedParams{
-		ID:               declarationID,
+		ID:                 declarationID,
 		CounterspellStatus: sql.NullString{String: "passed", Valid: true},
 	}); err != nil {
 		return CounterspellResult{}, fmt.Errorf("updating counterspell passed: %w", err)
@@ -315,7 +315,7 @@ func (s *Service) ForfeitCounterspell(ctx context.Context, declarationID uuid.UU
 	}
 
 	if _, err := s.store.UpdateReactionDeclarationCounterspellResolved(ctx, refdata.UpdateReactionDeclarationCounterspellResolvedParams{
-		ID:               declarationID,
+		ID:                 declarationID,
 		CounterspellStatus: sql.NullString{String: "forfeited", Valid: true},
 	}); err != nil {
 		return CounterspellResult{}, fmt.Errorf("updating counterspell forfeited: %w", err)

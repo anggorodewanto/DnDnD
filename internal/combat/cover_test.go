@@ -321,11 +321,11 @@ func TestCreatureCover_DiagonalLine(t *testing.T) {
 
 func TestLinePassesThroughTile(t *testing.T) {
 	tests := []struct {
-		name        string
-		ax, ay      float64
-		bx, by      float64
-		col, row    int
-		want        bool
+		name     string
+		ax, ay   float64
+		bx, by   float64
+		col, row int
+		want     bool
 	}{
 		{"through center", 0, 0.5, 4, 0.5, 2, 0, true},
 		{"misses tile", 0, 0.5, 4, 0.5, 2, 3, false},

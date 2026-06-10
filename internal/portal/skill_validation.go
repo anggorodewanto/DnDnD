@@ -112,10 +112,7 @@ func validateChoiceBudgets(submittedSet map[string]struct{}, locked, classFrom [
 		return fmt.Errorf("skill %q is not selectable for this class", outExample)
 	}
 
-	overClassCap := inPool - classChoose
-	if overClassCap < 0 {
-		overClassCap = 0
-	}
+	overClassCap := max(inPool-classChoose, 0)
 	if overClassCap+outPool <= raceChoose {
 		return nil
 	}
@@ -173,7 +170,7 @@ func parseRaceFixedSkills(traits []character.Feature) []string {
 	var fixed []string
 	seen := make(map[string]struct{})
 	for _, t := range traits {
-		for _, code := range strings.Split(t.MechanicalEffect, ",") {
+		for code := range strings.SplitSeq(t.MechanicalEffect, ",") {
 			skill, ok := fixedSkillFromCode(code)
 			if !ok {
 				continue
@@ -208,7 +205,7 @@ func fixedSkillFromCode(code string) (string, bool) {
 func parseRaceChooseCount(traits []character.Feature) int {
 	total := 0
 	for _, t := range traits {
-		for _, code := range strings.Split(t.MechanicalEffect, ",") {
+		for code := range strings.SplitSeq(t.MechanicalEffect, ",") {
 			total += chooseCountFromCode(code)
 		}
 	}

@@ -13,10 +13,10 @@ import (
 // --- fakes ---
 
 type fakeStore struct {
-	inserted []InsertPostParams
-	list     []Post
+	inserted  []InsertPostParams
+	list      []Post
 	insertErr error
-	listErr  error
+	listErr   error
 }
 
 func (f *fakeStore) InsertNarrationPost(ctx context.Context, p InsertPostParams) (Post, error) {
@@ -256,4 +256,3 @@ func TestService_History_Delegates(t *testing.T) {
 		t.Fatalf("history = %+v", got)
 	}
 }
-

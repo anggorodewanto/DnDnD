@@ -111,10 +111,7 @@ type FallDamageResult struct {
 // FallDamage calculates fall damage: 1d6 per 10ft fallen (truncated).
 // Returns zero damage for falls < 10ft.
 func FallDamage(altitudeFt int32, roller *dice.Roller) (*FallDamageResult, error) {
-	numDice := int(altitudeFt) / 10
-	if numDice > 20 {
-		numDice = 20
-	}
+	numDice := min(int(altitudeFt)/10, 20)
 	if numDice <= 0 {
 		return &FallDamageResult{
 			AltitudeFt:  altitudeFt,

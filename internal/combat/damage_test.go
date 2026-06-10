@@ -1221,4 +1221,3 @@ func TestApplyDamage_DoesNotClearTurnedWhenFullyAbsorbedByTempHP(t *testing.T) {
 		assert.True(t, HasCondition(raw, "turned"), "turned must persist when damage is fully absorbed by temp HP; got %s", string(raw))
 	}
 }
-

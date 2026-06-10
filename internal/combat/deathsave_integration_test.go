@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/ab/dndnd/internal/refdata"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/ab/dndnd/internal/refdata"
 )
 
 // nullRaw is a tiny helper for building pqtype.NullRawMessage values from a JSON string.
@@ -383,7 +383,6 @@ func TestApplyDamage_AtZeroHP_TempHPAbsorbedStillInstantDeath(t *testing.T) {
 	assert.True(t, res.InstantDeath)
 	assert.Empty(t, store.deathSaveWrites, "instant death must skip death save tally")
 }
-
 
 // C-H01: Instant death must trigger when massive damage drops PC from low HP.
 // PC at 1 HP, maxHP 10, takes 15 damage → overflow = 14 >= 10 → instant death.
