@@ -15,11 +15,11 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **1 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **2 / 52**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
-- [ ] **T02** · 🔴 · Wrap portal routes with `RedirectNavigationOnUnauth` + carry return-to state back to `/portal/create?token=…` · _Finding 2_
+- [x] **T02** · 🔴 · Wrap portal routes with `RedirectNavigationOnUnauth` + carry return-to state back to `/portal/create?token=…` · _Finding 2_ → `c8e453d`
 
 #### Tier 2 — Async-play premise
 - [ ] **T03** · 🟠 · Real `<@id>` turn mentions in `sendTurnNotifications` (NPC turns keep plain name) · _Finding 3_
