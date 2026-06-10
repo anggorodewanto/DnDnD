@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **5 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **6 / 52**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -27,7 +27,7 @@ single PR when each is trivial (noted per group).
 #### Tier 3 — Silent-failure cluster (_Finding 6_)
 - [x] **T04** · 🟠 · Add channel-binding check to `discordcheck` ("run /setup") + persist dm-queue items even when channel unresolved · _Finding 6 ·a_ → `a349d6d`
 - [x] **T05** · 🟠 · ERROR / refuse boot when `DISCORD_BOT_TOKEN` set but `DATABASE_URL` unset · _Finding 6 ·b_ → `f910f17`
-- [ ] **T06** · 🟠 · Fail (not skip) the app-id check when a bot token is configured · _Finding 6 ·c_
+- [x] **T06** · 🟠 · Fail (not skip) the app-id check when a bot token is configured · _Finding 6 ·c_ → `72d4e4e`
 - [ ] **T07** · 🟠 · Set `Identify.Intents` (GuildMembers) **before** `Open()` + add intent check to `discordcheck` · _Finding 6 ·d_
 - [ ] **T08** · 🟠 · Surface wrong-length `TOKEN_ENCRYPTION_KEY` in checks / refuse boot when `COOKIE_SECURE=true` · _Finding 6 ·e_
 - [ ] **T09** · 🟠 · Log + dm-queue notice on combat-map render failure · _Finding 6 ·f_
