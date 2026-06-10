@@ -97,18 +97,86 @@ func TestNotifier_Post_SendsFormattedMessage(t *testing.T) {
 	}
 }
 
-func TestNotifier_Post_NoChannelIsNoOp(t *testing.T) {
+func TestNotifier_Post_NoChannelPersistsItem(t *testing.T) {
+	// T04 / finding 6·a: when no #dm-queue channel resolves for the guild
+	// (e.g. /setup never ran, or the channel was deleted) the item must still
+	// be persisted so it surfaces in the dashboard queue instead of vanishing
+	// silently. No Discord message is sent.
 	f := &fakeSender{}
 	n := NewNotifier(f, staticChannelResolver(""), func(id string) string { return "/x/" + id })
-	itemID, err := n.Post(context.Background(), Event{Kind: KindRestRequest, PlayerName: "K", Summary: "rests"})
+
+	itemID, err := n.Post(context.Background(), Event{
+		Kind: KindRestRequest, PlayerName: "K", Summary: "rests",
+		GuildID: "g1", CampaignID: "camp-1",
+	})
 	if err != nil {
 		t.Fatalf("Post: %v", err)
 	}
-	if itemID != "" {
-		t.Errorf("expected empty itemID, got %q", itemID)
+	if itemID == "" {
+		t.Fatalf("expected non-empty itemID (item must be persisted)")
 	}
 	if len(f.sendCalls) != 0 {
-		t.Errorf("expected 0 sends, got %d", len(f.sendCalls))
+		t.Errorf("expected 0 sends when no channel resolves, got %d", len(f.sendCalls))
+	}
+
+	pending := n.ListPending()
+	if len(pending) != 1 {
+		t.Fatalf("expected 1 pending row, got %d", len(pending))
+	}
+	if pending[0].ID != itemID {
+		t.Errorf("pending item id = %q want %q", pending[0].ID, itemID)
+	}
+	if pending[0].ChannelID != "" {
+		t.Errorf("expected empty ChannelID for unresolved-channel item, got %q", pending[0].ChannelID)
+	}
+	if pending[0].Status != StatusPending {
+		t.Errorf("status = %q want pending", pending[0].Status)
+	}
+}
+
+func TestNotifier_Cancel_NoChannelItemSkipsEdit(t *testing.T) {
+	// A persisted-but-unsent item (no #dm-queue channel) has no Discord
+	// message, so Cancel must mark it cancelled without calling Sender.Edit.
+	f := &fakeSender{}
+	n := NewNotifier(f, staticChannelResolver(""), func(id string) string { return "/x/" + id })
+	itemID, err := n.Post(context.Background(), Event{
+		Kind: KindRestRequest, PlayerName: "K", Summary: "rests", GuildID: "g1", CampaignID: "camp-1",
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+
+	if err := n.Cancel(context.Background(), itemID, "Cancelled by player"); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if len(f.editCalls) != 0 {
+		t.Errorf("expected 0 edits for unresolved-channel item, got %d", len(f.editCalls))
+	}
+	item, _ := n.Get(itemID)
+	if item.Status != StatusCancelled {
+		t.Errorf("status = %q want cancelled", item.Status)
+	}
+}
+
+func TestNotifier_Resolve_NoChannelItemSkipsEdit(t *testing.T) {
+	f := &fakeSender{}
+	n := NewNotifier(f, staticChannelResolver(""), func(id string) string { return "/x/" + id })
+	itemID, err := n.Post(context.Background(), Event{
+		Kind: KindSkillCheckNarration, PlayerName: "K", Summary: "Athletics 18", GuildID: "g1", CampaignID: "camp-1",
+	})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+
+	if err := n.Resolve(context.Background(), itemID, "climbs"); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(f.editCalls) != 0 {
+		t.Errorf("expected 0 edits for unresolved-channel item, got %d", len(f.editCalls))
+	}
+	item, _ := n.Get(itemID)
+	if item.Status != StatusResolved {
+		t.Errorf("status = %q want resolved", item.Status)
 	}
 }
 

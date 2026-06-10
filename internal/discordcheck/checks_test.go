@@ -218,6 +218,45 @@ func TestRun_EmptyGuildList_NoGuildChecks(t *testing.T) {
 	require.Len(t, report.Results, 2)
 }
 
+func TestRunChannelBindings_AllBound(t *testing.T) {
+	results := RunChannelBindings([]string{"g-1", "g-2"}, func(string) bool { return true })
+
+	require.Len(t, results, 2)
+	for i, gid := range []string{"g-1", "g-2"} {
+		assert.Equal(t, "channel-bindings-"+gid, results[i].Name)
+		assert.True(t, results[i].OK)
+		assert.Contains(t, results[i].Detail, gid)
+	}
+}
+
+func TestRunChannelBindings_Unbound(t *testing.T) {
+	results := RunChannelBindings([]string{"g-1"}, func(string) bool { return false })
+
+	require.Len(t, results, 1)
+	assert.Equal(t, "channel-bindings-g-1", results[0].Name)
+	assert.False(t, results[0].OK)
+	assert.Contains(t, results[0].Detail, "/setup")
+	assert.Contains(t, results[0].Detail, "g-1")
+}
+
+func TestRunChannelBindings_Mix(t *testing.T) {
+	results := RunChannelBindings([]string{"bound", "unbound"}, func(g string) bool { return g == "bound" })
+
+	require.Len(t, results, 2)
+	assert.True(t, results[0].OK)
+	assert.False(t, results[1].OK)
+	assert.Contains(t, results[1].Detail, "/setup")
+}
+
+func TestRunChannelBindings_NilLookup(t *testing.T) {
+	// A nil lookup must skip the check entirely rather than emit failures.
+	assert.Empty(t, RunChannelBindings([]string{"g-1"}, nil))
+}
+
+func TestRunChannelBindings_EmptyGuilds(t *testing.T) {
+	assert.Empty(t, RunChannelBindings(nil, func(string) bool { return true }))
+}
+
 func TestReport_AllOK(t *testing.T) {
 	allPass := Report{Results: []Result{{OK: true}, {OK: true}}}
 	assert.True(t, allPass.AllOK())

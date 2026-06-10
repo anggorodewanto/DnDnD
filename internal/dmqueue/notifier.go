@@ -64,7 +64,9 @@ type Sender interface {
 }
 
 // ChannelResolver maps a guild ID to the #dm-queue channel ID for that guild.
-// Return "" if the guild has no configured dm-queue (posts become no-ops).
+// Return "" if the guild has no configured dm-queue; Post then still persists
+// the item (so it surfaces on the dashboard queue) but sends no Discord
+// message.
 type ChannelResolver func(guildID string) string
 
 // ResolvePathBuilder builds the dashboard URL path for a given item ID.
@@ -150,25 +152,40 @@ func NewNotifierWithStore(sender Sender, resolver ChannelResolver, pathBldr Reso
 }
 
 // Post formats an Event, persists an Item record, then sends the message to
-// the guild's #dm-queue. If no channel is configured for the guild, returns
-// ("", nil) — treat as a silent no-op.
+// the guild's #dm-queue.
 //
-// SR-002: ordering is insert-then-send so a failed persistence step never
-// leaves an orphan Discord message that the dashboard cannot resolve.
-// The placeholder message_id stored at Insert time is the itemID itself,
-// which is globally unique and satisfies the (channel_id, message_id)
-// unique constraint; it is overwritten by SetMessageID after a successful
-// Sender.Send. If Send fails after a successful Insert, the row stays
-// pending so the DM can see + cancel the entry from the dashboard.
+// When no #dm-queue channel resolves for the guild (e.g. /setup never ran, or
+// the channel was deleted) the item is STILL persisted — with an empty
+// ChannelID and the itemID as a placeholder message_id — and no Discord
+// message is sent. The dashboard queue is keyed by campaign + status (not
+// channel), so the item surfaces there instead of vanishing silently; the
+// empty ChannelID is what makes Cancel/Resolve skip the (nonexistent) Discord
+// edit. The itemID placeholder (a globally-unique UUID) keeps the
+// (channel_id, message_id) unique index satisfied across multiple
+// unresolved-channel items.
+//
+// SR-002: on the normal path, ordering is insert-then-send so a failed
+// persistence step never leaves an orphan Discord message that the dashboard
+// cannot resolve. The row is inserted with an empty placeholder message_id,
+// overwritten by SetMessageID after a successful Sender.Send. If Send fails
+// after a successful Insert, the row stays pending (with an empty MessageID)
+// so the DM can see + cancel the entry from the dashboard.
 func (n *DefaultNotifier) Post(ctx context.Context, e Event) (string, error) {
 	channelID := n.resolver(e.GuildID)
-	if channelID == "" {
-		return "", nil
-	}
 
 	itemID := NewItemID()
 	e.ResolvePath = n.pathBldr(itemID)
 	content := FormatEvent(e)
+
+	// No #dm-queue channel for this guild: persist the item so it still
+	// reaches the dashboard queue, but skip the Discord send. The itemID
+	// doubles as the message_id placeholder to satisfy the unique index.
+	if channelID == "" {
+		if _, err := n.store.Insert(ctx, itemID, e, "", itemID, content); err != nil {
+			return "", err
+		}
+		return itemID, nil
+	}
 
 	if _, err := n.store.Insert(ctx, itemID, e, channelID, "", content); err != nil {
 		return "", err
@@ -198,8 +215,8 @@ func (n *DefaultNotifier) Cancel(ctx context.Context, itemID, reason string) err
 	if _, err := n.store.MarkCancelled(ctx, itemID, reason); err != nil {
 		return err
 	}
-	if item.MessageID == "" {
-		return nil // Send failed; no Discord message to edit
+	if item.ChannelID == "" || item.MessageID == "" {
+		return nil // no channel, or Send failed: no Discord message to edit
 	}
 	return n.sender.Edit(item.ChannelID, item.MessageID, FormatCancelled(item.PostedText))
 }
@@ -217,8 +234,8 @@ func (n *DefaultNotifier) Resolve(ctx context.Context, itemID, outcome string) e
 	if _, err := n.store.MarkResolved(ctx, itemID, outcome); err != nil {
 		return err
 	}
-	if item.MessageID == "" {
-		return nil // Send failed; no Discord message to edit
+	if item.ChannelID == "" || item.MessageID == "" {
+		return nil // no channel, or Send failed: no Discord message to edit
 	}
 	return n.sender.Edit(item.ChannelID, item.MessageID, FormatResolved(item.PostedText, outcome))
 }

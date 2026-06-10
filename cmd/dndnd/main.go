@@ -1502,6 +1502,12 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				os.Getenv("DISCORD_APPLICATION_ID"),
 				guildIDs,
 			)
+			// T04 / finding 6·a: also flag guilds whose channel bindings were
+			// never persisted by /setup — without them combat / turn / dm-queue
+			// posts silently no-op. Kept out of discordcheck.Run so that
+			// package stays free of the DB / campaign-settings dependency.
+			report.Results = append(report.Results,
+				discordcheck.RunChannelBindings(guildIDs, newChannelBindingLookup(ctx, queries))...)
 			for _, res := range report.Results {
 				if res.OK {
 					logger.Info("discord check passed", "name", res.Name, "detail", res.Detail)

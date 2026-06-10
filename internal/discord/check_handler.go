@@ -585,8 +585,10 @@ func (h *CheckHandler) postSkillCheckNarration(ctx context.Context, interaction 
 	if err != nil {
 		return false
 	}
-	// itemID may be "" if no #dm-queue is configured for this guild — treat
-	// as "not gated" so the player still gets their result.
+	// A wired notifier always persists the item (when no #dm-queue channel
+	// resolves it still lands on the dashboard queue), so itemID is non-empty
+	// and the check is gated. itemID is "" only when no notifier is wired —
+	// then fall through so the player still gets their result.
 	return itemID != ""
 }
 

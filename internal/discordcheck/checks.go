@@ -3,7 +3,9 @@
 // interaction. It verifies the bot token is accepted, the configured
 // DISCORD_APPLICATION_ID matches the actual bot identity, and that every
 // guild_id stored in the campaigns table belongs to a guild the bot is
-// currently a member of.
+// currently a member of. RunChannelBindings additionally flags guilds whose
+// channel bindings were never persisted by /setup (without which combat /
+// turn / dm-queue posts silently no-op).
 //
 // The Session interface keeps the check functions decoupled from
 // *discordgo.Session so unit tests can drive them with a hand-rolled fake.
@@ -180,5 +182,46 @@ func runGuildMembership(sess Session, guildID string) Result {
 		Name:   name,
 		OK:     true,
 		Detail: fmt.Sprintf("guild %s", guild.Name),
+	}
+}
+
+// ChannelBindingLookup reports whether a guild has channel bindings persisted
+// by /setup. It returns false when no campaign settings exist for the guild or
+// the persisted channel map is empty — the signal that /setup never ran (or the
+// channels were cleared), in which case combat-log / combat-map / turn posts
+// and dm-queue notices silently no-op.
+type ChannelBindingLookup func(guildID string) bool
+
+// RunChannelBindings returns one Result per guild, failing with a "run /setup"
+// hint when a guild has no persisted channel bindings. It is exposed
+// separately from Run (rather than folded into it) so the DB-backed lookup
+// stays in the command layer and Run keeps its Discord-API-only dependency
+// surface. A nil lookup yields no Results so callers that cannot build one skip
+// the check rather than emit misleading failures.
+func RunChannelBindings(guildIDs []string, lookup ChannelBindingLookup) []Result {
+	if lookup == nil {
+		return nil
+	}
+	results := make([]Result, 0, len(guildIDs))
+	for _, gid := range guildIDs {
+		results = append(results, runChannelBinding(gid, lookup))
+	}
+	return results
+}
+
+// runChannelBinding produces the channel-binding Result for a single guild.
+func runChannelBinding(guildID string, lookup ChannelBindingLookup) Result {
+	name := "channel-bindings-" + guildID
+	if !lookup(guildID) {
+		return Result{
+			Name:   name,
+			OK:     false,
+			Detail: fmt.Sprintf("no channel bindings for guild %s — run /setup in this server", guildID),
+		}
+	}
+	return Result{
+		Name:   name,
+		OK:     true,
+		Detail: fmt.Sprintf("channels bound for guild %s", guildID),
 	}
 }

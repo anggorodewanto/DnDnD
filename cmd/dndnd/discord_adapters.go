@@ -1162,6 +1162,31 @@ func (l *setupCampaignLookup) SaveChannelIDs(guildID string, channelIDs map[stri
 	return nil
 }
 
+// newChannelBindingLookup returns a closure (assignable to
+// discordcheck.ChannelBindingLookup) that reports whether a guild has channel
+// bindings persisted by /setup. It returns false when the campaign is missing,
+// has no settings, or its channel_ids map is empty — the signal the discord-
+// checks banner turns into a "run /setup" warning. (T04 / usability finding 6·a.)
+func newChannelBindingLookup(ctx context.Context, queries *refdata.Queries) func(string) bool {
+	return func(guildID string) bool {
+		if queries == nil {
+			return false
+		}
+		c, err := queries.GetCampaignByGuildID(ctx, guildID)
+		if err != nil {
+			return false
+		}
+		if !c.Settings.Valid {
+			return false
+		}
+		var settings campaign.Settings
+		if err := json.Unmarshal(c.Settings.RawMessage, &settings); err != nil {
+			return false
+		}
+		return len(settings.ChannelIDs) > 0
+	}
+}
+
 // initiativeTrackerNotifier satisfies combat.InitiativeTrackerNotifier by
 // posting / editing a persistent #initiative-tracker message per encounter.
 // The mapping from encounter ID to Discord message ID lives in an

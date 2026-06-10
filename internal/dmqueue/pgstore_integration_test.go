@@ -210,6 +210,43 @@ func TestPgStore_NotifierEndToEnd(t *testing.T) {
 	assert.Equal(t, "table flipped", item.Outcome)
 }
 
+func TestPgStore_NotifierPersistsWithoutChannel(t *testing.T) {
+	// T04 / finding 6·a: with no #dm-queue channel resolved, two items must
+	// both persist without colliding on the (channel_id, message_id) unique
+	// index, and Resolve must not attempt a Discord edit.
+	store, db := newPgStore(t)
+	campaignID := seedCampaign(t, db)
+
+	sender := &recordingSender{}
+	notifier := dmqueue.NewNotifierWithStore(
+		sender,
+		func(string) string { return "" }, // no channel resolves
+		func(id string) string { return "/dashboard/queue/" + id },
+		store,
+	)
+	ev := func() dmqueue.Event {
+		return dmqueue.Event{
+			Kind: dmqueue.KindRestRequest, PlayerName: "Aria", Summary: "long rest",
+			GuildID: "g1", CampaignID: campaignID.String(),
+		}
+	}
+
+	id1, err := notifier.Post(context.Background(), ev())
+	require.NoError(t, err)
+	require.NotEmpty(t, id1)
+	id2, err := notifier.Post(context.Background(), ev())
+	require.NoError(t, err, "second empty-channel insert must not violate the unique index")
+	require.NotEmpty(t, id2)
+	require.Empty(t, sender.sends, "no Discord send when no channel resolves")
+
+	pending, err := store.ListPendingForCampaign(context.Background(), campaignID)
+	require.NoError(t, err)
+	assert.Len(t, pending, 2)
+
+	require.NoError(t, notifier.Resolve(context.Background(), id1, "rested"))
+	assert.Empty(t, sender.edits, "no Discord edit for an unresolved-channel item")
+}
+
 type recordingSender struct {
 	sends []sendCall
 	edits []editCall
