@@ -144,3 +144,42 @@ func TestParseTemplateCreatures_Nil(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, creatures)
 }
+
+// --- Finding 1 / T01: the dashboard encounter builder writes position_col as a
+// 0-based integer (canvasTileCoords), not a letter. Parsing must normalize
+// number→letter so Start Combat doesn't 500. ---
+
+func TestParseTemplateCreatures_NumericPositionCol(t *testing.T) {
+	raw := json.RawMessage(`[
+		{"creature_ref_id":"goblin","short_id":"G1","display_name":"Goblin 1","position_col":0,"position_row":0,"quantity":1},
+		{"creature_ref_id":"ogre","short_id":"O1","display_name":"Ogre Boss","position_col":3,"position_row":2,"quantity":1}
+	]`)
+
+	creatures, err := ParseTemplateCreatures(raw)
+	require.NoError(t, err)
+	require.Len(t, creatures, 2)
+	assert.Equal(t, "A", creatures[0].PositionCol, "0 should normalize to A")
+	assert.Equal(t, 0, creatures[0].PositionRow)
+	assert.Equal(t, "D", creatures[1].PositionCol, "3 should normalize to D")
+	assert.Equal(t, 2, creatures[1].PositionRow)
+}
+
+func TestParseTemplateCreatures_MixedAndNullPositionCol(t *testing.T) {
+	// Seeded letter strings and unplaced (null) creatures still parse.
+	raw := json.RawMessage(`[
+		{"creature_ref_id":"goblin","short_id":"G1","position_col":"C","position_row":1,"quantity":1},
+		{"creature_ref_id":"ogre","short_id":"O1","position_col":null,"position_row":0,"quantity":1}
+	]`)
+
+	creatures, err := ParseTemplateCreatures(raw)
+	require.NoError(t, err)
+	require.Len(t, creatures, 2)
+	assert.Equal(t, "C", creatures[0].PositionCol)
+	assert.Equal(t, "", creatures[1].PositionCol)
+}
+
+func TestParseTemplateCreatures_NegativePositionCol(t *testing.T) {
+	raw := json.RawMessage(`[{"creature_ref_id":"goblin","short_id":"G1","position_col":-1,"position_row":0,"quantity":1}]`)
+	_, err := ParseTemplateCreatures(raw)
+	require.Error(t, err)
+}

@@ -2,6 +2,7 @@ package combat
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
 
@@ -44,6 +45,57 @@ type TemplateCreature struct {
 	PositionCol   string `json:"position_col"`
 	PositionRow   int    `json:"position_row"`
 	Quantity      int    `json:"quantity"`
+}
+
+// UnmarshalJSON accepts position_col as either a letter string ("A", seeded
+// templates) or a 0-based integer (the dashboard encounter builder emits a
+// numeric column index from canvasTileCoords). Numbers are normalized to the
+// letter label so StartCombat's colToIndex round-trips; without this, a placed
+// creature makes Start Combat fail with "cannot unmarshal number into ...
+// position_col of type string".
+func (tc *TemplateCreature) UnmarshalJSON(data []byte) error {
+	// alias drops TemplateCreature's methods, avoiding recursion; the outer
+	// position_col (RawMessage) shadows the embedded string field.
+	type alias TemplateCreature
+	aux := &struct {
+		PositionCol json.RawMessage `json:"position_col"`
+		*alias
+	}{alias: (*alias)(tc)}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	col, err := normalizeTemplateCol(aux.PositionCol)
+	if err != nil {
+		return err
+	}
+	tc.PositionCol = col
+	return nil
+}
+
+// normalizeTemplateCol converts a position_col JSON value to a letter label.
+// Strings pass through; non-negative numbers map via the 0-based index→label
+// convention (0→"A"); null/missing yields "".
+func normalizeTemplateCol(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 {
+		return "", nil
+	}
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return "", err
+	}
+	switch val := v.(type) {
+	case nil:
+		return "", nil
+	case string:
+		return val, nil
+	case float64:
+		if val < 0 {
+			return "", fmt.Errorf("position_col index must be non-negative, got %v", val)
+		}
+		return indexToColLabel(int(val)), nil
+	default:
+		return "", fmt.Errorf("position_col must be a string or integer, got %T", val)
+	}
 }
 
 // CombatantFromCreature builds CombatantParams from a creature stat block.
