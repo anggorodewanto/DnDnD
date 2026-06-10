@@ -120,7 +120,14 @@ func TestRun_AppIDMismatch(t *testing.T) {
 	assert.Contains(t, report.Results[1].Detail, "actual=actual-id")
 }
 
-func TestRun_AppIDEnvEmpty_SkipsCheck(t *testing.T) {
+// T06 / finding 6·c: Run is only ever invoked when a bot token is configured
+// (in production it lives behind `if rawDG != nil`). An empty
+// DISCORD_APPLICATION_ID therefore means per-guild command registration and
+// permission validation will silently no-op, so the check must FAIL (not skip)
+// rather than report a green banner over a bot with no slash commands. We
+// short-circuit before the Application() lookup since there is nothing to
+// compare against.
+func TestRun_AppIDEnvEmpty_Fails(t *testing.T) {
 	sess := &fakeSession{
 		userFn: func(_ string) (*discordgo.User, error) {
 			return &discordgo.User{ID: "actual-id", Username: "bot"}, nil
@@ -136,11 +143,11 @@ func TestRun_AppIDEnvEmpty_SkipsCheck(t *testing.T) {
 
 	report := Run(context.Background(), sess, "", nil)
 
-	require.True(t, report.AllOK())
+	require.False(t, report.AllOK())
 	require.Len(t, report.Results, 2)
 	assert.Equal(t, "application-id-match", report.Results[1].Name)
-	assert.True(t, report.Results[1].OK)
-	assert.Contains(t, report.Results[1].Detail, "skipped (env not set)")
+	assert.False(t, report.Results[1].OK)
+	assert.Contains(t, report.Results[1].Detail, "DISCORD_APPLICATION_ID")
 }
 
 func TestRun_AppIDLookupFailure(t *testing.T) {

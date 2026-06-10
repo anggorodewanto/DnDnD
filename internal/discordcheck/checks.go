@@ -125,14 +125,17 @@ func runTokenIdentity(sess Session) (*discordgo.User, Result) {
 }
 
 // runAppIDMatch compares the configured DISCORD_APPLICATION_ID against the
-// actual bot application. The check is skipped (recorded as OK) when the
-// env var is empty so optional deploys can omit it.
+// actual bot application. An empty env var is a failure, not a skip: Run is
+// only invoked when a bot token is configured (see cmd/dndnd/main.go, behind
+// `if rawDG != nil`), and without DISCORD_APPLICATION_ID per-guild slash-command
+// registration and permission validation silently no-op — the bot comes online
+// with a green banner but no usable commands (finding 6·c).
 func runAppIDMatch(sess Session, expectedAppID string, identity *discordgo.User) Result {
 	if expectedAppID == "" {
 		return Result{
 			Name:   "application-id-match",
-			OK:     true,
-			Detail: "skipped (env not set)",
+			OK:     false,
+			Detail: "DISCORD_APPLICATION_ID not set — slash-command registration and permission checks will silently no-op; set it to the bot's application id",
 		}
 	}
 
