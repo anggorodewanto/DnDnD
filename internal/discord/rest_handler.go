@@ -363,7 +363,7 @@ func (h *RestHandler) finalizeShortRest(ctx context.Context, interaction *discor
 	msg := rest.FormatShortRestResult(char.Name, result)
 	h.editInteraction(interaction, msg)
 
-	h.logRestToHistory(char.Name, "Short Rest", msg)
+	h.logRestToHistory(char.Name, "Short Rest")
 }
 
 // finalizeShortRestPartial applies one die type's spending and shows buttons for remaining types.
@@ -651,7 +651,7 @@ func (h *RestHandler) handleLongRest(ctx context.Context, interaction *discordgo
 
 	respondEphemeral(h.session, interaction, msg)
 
-	h.logRestToHistory(char.Name, "Long Rest", msg)
+	h.logRestToHistory(char.Name, "Long Rest")
 }
 
 // longRestPrepareClasses adapts the rest handler's character.ClassEntry
@@ -669,7 +669,7 @@ func (h *RestHandler) persistLongRest(ctx context.Context, char refdata.Characte
 	h.persistLongRestChanges(ctx, char, charData, result)
 }
 
-func (h *RestHandler) logRestToHistory(charName, restType, msg string) {
+func (h *RestHandler) logRestToHistory(charName, restType string) {
 	if h.rollLogger == nil {
 		return
 	}

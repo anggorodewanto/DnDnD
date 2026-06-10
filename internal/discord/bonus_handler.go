@@ -214,13 +214,6 @@ func (h *BonusHandler) Handle(interaction *discordgo.Interaction) {
 	}
 }
 
-// resolveContext loads the encounter / current turn / acting combatant
-// and runs the turn-ownership gate. Sends an ephemeral and returns
-// (zero, false) on any failure so callers can early-return.
-func (h *BonusHandler) resolveContext(ctx context.Context, interaction *discordgo.Interaction) (bonusContext, bool) {
-	return h.resolveContextInner(ctx, interaction)
-}
-
 // resolveContextInner loads the encounter / current turn / acting combatant
 // without running the turn-gate (the caller is responsible for gating).
 func (h *BonusHandler) resolveContextInner(ctx context.Context, interaction *discordgo.Interaction) (bonusContext, bool) {

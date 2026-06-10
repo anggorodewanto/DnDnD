@@ -392,7 +392,7 @@ func (h *CastHandler) dispatchSingleTarget(
 		info, parseErr := combat.ParseTeleportInfo(spell.Teleport.RawMessage)
 		if parseErr == nil && info.RequiresSight {
 			cmd.Walls = h.loadWalls(ctx, encounter)
-			cmd.FogOfWar = h.loadCasterFogOfWar(ctx, encounter, caster, combatants)
+			cmd.FogOfWar = h.loadCasterFogOfWar(ctx, encounter, caster)
 		}
 	}
 
@@ -408,16 +408,15 @@ func (h *CastHandler) dispatchSingleTarget(
 		}
 	}
 
-	h.runSingleTargetCast(ctx, interaction, encounterID, spell, cmd)
+	h.runSingleTargetCast(ctx, interaction, encounterID, cmd)
 }
 
 // runSingleTargetCast is the post-prompt continuation of dispatchSingleTarget:
 // invokes Cast and renders the result. Extracted so the SR-025 Empowered
 // prompt can resume the flow on click/forfeit without duplicating the
-// material-prompt fallback logic. SR-026: `spell` is threaded so the post-
-// cast dm-queue branch can read ResolutionMode + Teleport without an
-// additional service lookup.
-func (h *CastHandler) runSingleTargetCast(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, spell refdata.Spell, cmd combat.CastCommand) {
+// material-prompt fallback logic. SR-026: the post-cast dm-queue branch reads
+// ResolutionMode + Teleport off the CastResult, so no spell is threaded here.
+func (h *CastHandler) runSingleTargetCast(ctx context.Context, interaction *discordgo.Interaction, encounterID uuid.UUID, cmd combat.CastCommand) {
 	result, err := h.combatService.Cast(ctx, cmd, h.roller)
 	if err != nil {
 		respondEphemeral(h.session, interaction, fmt.Sprintf("Cast failed: %v", err))
@@ -462,10 +461,10 @@ func (h *CastHandler) postEmpoweredPromptThenRun(ctx context.Context, interactio
 		MaxRerolls: 1,
 	}
 	err := h.metamagicPoster.PromptEmpowered(args, func(EmpoweredPromptResult) {
-		h.runSingleTargetCast(ctx, interaction, encounterID, spell, cmd)
+		h.runSingleTargetCast(ctx, interaction, encounterID, cmd)
 	})
 	if err != nil {
-		h.runSingleTargetCast(ctx, interaction, encounterID, spell, cmd)
+		h.runSingleTargetCast(ctx, interaction, encounterID, cmd)
 		return
 	}
 	respondEphemeral(h.session, interaction, "✨ Empowered Spell: pick a die to reroll in the combat channel.")
@@ -810,7 +809,7 @@ func (h *CastHandler) loadWalls(ctx context.Context, encounter refdata.Encounter
 // perspective. Returns nil when the encounter has no map or parsing fails —
 // the teleport validator will fail closed when requires_sight is true and
 // FoW is nil (SR-044).
-func (h *CastHandler) loadCasterFogOfWar(ctx context.Context, encounter refdata.Encounter, caster refdata.Combatant, combatants []refdata.Combatant) *renderer.FogOfWar {
+func (h *CastHandler) loadCasterFogOfWar(ctx context.Context, encounter refdata.Encounter, caster refdata.Combatant) *renderer.FogOfWar {
 	if !encounter.MapID.Valid {
 		return nil
 	}
