@@ -19,11 +19,15 @@ type mockStore struct {
 	updateShopFn            func(ctx context.Context, arg refdata.UpdateShopParams) (refdata.Shop, error)
 	deleteShopFn            func(ctx context.Context, id uuid.UUID) error
 	createShopItemFn        func(ctx context.Context, arg refdata.CreateShopItemParams) (refdata.ShopItem, error)
+	getShopItemFn           func(ctx context.Context, id uuid.UUID) (refdata.ShopItem, error)
 	listShopItemsFn         func(ctx context.Context, shopID uuid.UUID) ([]refdata.ShopItem, error)
 	updateShopItemFn        func(ctx context.Context, arg refdata.UpdateShopItemParams) (refdata.ShopItem, error)
 	deleteShopItemFn        func(ctx context.Context, id uuid.UUID) error
 	deleteShopItemsByShopFn func(ctx context.Context, shopID uuid.UUID) error
 	getCampaignByIDFn       func(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
+
+	getCharacterFn                    func(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	updateCharacterInventoryAndGoldFn func(ctx context.Context, arg refdata.UpdateCharacterInventoryAndGoldParams) (refdata.Character, error)
 }
 
 func (m *mockStore) CreateShop(ctx context.Context, arg refdata.CreateShopParams) (refdata.Shop, error) {
@@ -44,6 +48,9 @@ func (m *mockStore) DeleteShop(ctx context.Context, id uuid.UUID) error {
 func (m *mockStore) CreateShopItem(ctx context.Context, arg refdata.CreateShopItemParams) (refdata.ShopItem, error) {
 	return m.createShopItemFn(ctx, arg)
 }
+func (m *mockStore) GetShopItem(ctx context.Context, id uuid.UUID) (refdata.ShopItem, error) {
+	return m.getShopItemFn(ctx, id)
+}
 func (m *mockStore) ListShopItems(ctx context.Context, shopID uuid.UUID) ([]refdata.ShopItem, error) {
 	return m.listShopItemsFn(ctx, shopID)
 }
@@ -58,4 +65,10 @@ func (m *mockStore) DeleteShopItemsByShop(ctx context.Context, shopID uuid.UUID)
 }
 func (m *mockStore) GetCampaignByID(ctx context.Context, id uuid.UUID) (refdata.Campaign, error) {
 	return m.getCampaignByIDFn(ctx, id)
+}
+func (m *mockStore) GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+	return m.getCharacterFn(ctx, id)
+}
+func (m *mockStore) UpdateCharacterInventoryAndGold(ctx context.Context, arg refdata.UpdateCharacterInventoryAndGoldParams) (refdata.Character, error) {
+	return m.updateCharacterInventoryAndGoldFn(ctx, arg)
 }

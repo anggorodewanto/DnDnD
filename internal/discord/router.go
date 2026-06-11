@@ -41,6 +41,7 @@ type CommandRouter struct {
 	doneHandler *DoneHandler
 	restHandler *RestHandler
 	lootHandler *LootHandler
+	shopHandler *ShopHandler
 	asiHandler  *ASIHandler
 	promptStore *ReactionPromptStore
 	// Registration handlers, wired only when regDeps is provided. They back
@@ -140,6 +141,12 @@ func (r *CommandRouter) SetRestHandler(h *RestHandler) {
 func (r *CommandRouter) SetLootHandler(h *LootHandler) {
 	r.handlers["loot"] = h
 	r.lootHandler = h
+}
+
+// SetShopHandler registers the ShopHandler for the shop_buy button component
+// callbacks. There is no shop slash command, so it is wired for components only.
+func (r *CommandRouter) SetShopHandler(h *ShopHandler) {
+	r.shopHandler = h
 }
 
 // SetAttuneHandler registers the AttuneHandler for the /attune command.
@@ -592,6 +599,14 @@ func (r *CommandRouter) handleComponent(interaction *discordgo.Interaction) {
 				return
 			}
 			r.lootHandler.HandleLootClaim(interaction, poolID, itemID, characterID)
+			return
+		}
+	}
+
+	// Shop buy button callbacks
+	if r.shopHandler != nil {
+		if strings.HasPrefix(customID, "shop_buy:") {
+			r.shopHandler.HandleShopBuy(interaction)
 			return
 		}
 	}

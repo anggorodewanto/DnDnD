@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
@@ -544,7 +546,7 @@ func TestAPI_PostToDiscord_Success(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&shop))
 
 	var postedChannel, postedContent string
-	handler.SetPostFunc(func(channelID, content string) {
+	handler.SetPostFunc(func(channelID, content string, _ []discordgo.MessageComponent) {
 		postedChannel = channelID
 		postedContent = content
 	})
@@ -556,6 +558,51 @@ func TestAPI_PostToDiscord_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "chan-story", postedChannel)
 	assert.Contains(t, postedContent, "Test Shop")
+}
+
+func TestAPI_PostToDiscord_IncludesBuyButtons(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	q, handler, camp := setupAPITest(t)
+
+	svc := shops.NewService(q)
+	shop, err := svc.CreateShop(context.Background(), camp.ID, "Button Shop", "")
+	require.NoError(t, err)
+
+	inStock, err := svc.AddItem(context.Background(), shop.ID, refdata.CreateShopItemParams{
+		Name: "Longsword", PriceGp: 15, Quantity: 3, Type: "weapon",
+	})
+	require.NoError(t, err)
+	// Out-of-stock item must NOT get a button.
+	_, err = svc.AddItem(context.Background(), shop.ID, refdata.CreateShopItemParams{
+		Name: "Sold Out", PriceGp: 5, Quantity: 0, Type: "other",
+	})
+	require.NoError(t, err)
+
+	var postedComponents []discordgo.MessageComponent
+	handler.SetPostFunc(func(_, _ string, components []discordgo.MessageComponent) {
+		postedComponents = components
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req = chiCtx(req, map[string]string{"campaignID": camp.ID.String(), "shopID": shop.ID.String()})
+	rec := httptest.NewRecorder()
+	handler.HandlePostToDiscord(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	require.Len(t, postedComponents, 1) // one action row
+	row, ok := postedComponents[0].(discordgo.ActionsRow)
+	require.True(t, ok)
+	require.Len(t, row.Components, 1) // only the in-stock item gets a button
+
+	btn, ok := row.Components[0].(discordgo.Button)
+	require.True(t, ok)
+	assert.Equal(t, discordgo.PrimaryButton, btn.Style)
+	assert.Contains(t, btn.Label, "Longsword")
+	assert.Contains(t, btn.Label, "15 gp")
+	assert.Equal(t, fmt.Sprintf("shop_buy:%s:%s", shop.ID, inStock.ID), btn.CustomID)
 }
 
 func TestAPI_PostToDiscord_BadCampaignID(t *testing.T) {

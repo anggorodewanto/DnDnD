@@ -21,6 +21,7 @@ import (
 	"github.com/ab/dndnd/internal/loot"
 	"github.com/ab/dndnd/internal/pathfinding"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/shops"
 )
 
 // userEncounterResolver is the shared per-user encounter-lookup interface
@@ -121,6 +122,7 @@ type discordHandlerDeps struct {
 	mapRegenerator           discord.MapRegenerator
 	rollHistoryLogger        dice.RollHistoryLogger
 	lootService              *loot.Service
+	shopService              *shops.Service
 	// crit-01c: optional collaborators for the inventory + ASI + character
 	// + undo + retire wiring. Each field is nil-safe in buildDiscordHandlers.
 	levelUpService *levelup.Service
@@ -160,6 +162,7 @@ type discordHandlers struct {
 	whisper           *discord.WhisperHandler
 	action            *discord.ActionHandler
 	loot              *discord.LootHandler
+	shop              *discord.ShopHandler
 	attack            *discord.AttackHandler
 	bonus             *discord.BonusHandler
 	shove             *discord.ShoveHandler
@@ -318,6 +321,19 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		if deps.cardUpdater != nil {
 			handlers.loot.SetCardUpdater(deps.cardUpdater)
 		}
+	}
+
+	// T24: wire the shop_buy button handler. *shops.Service satisfies the
+	// discord.ShopBuyer interface; checkCampProv + characterLookup resolve the
+	// clicker's campaign and character (same providers as /loot, /give). Skip
+	// when either dependency is nil so test deploys stay safe.
+	if deps.shopService != nil && deps.queries != nil {
+		handlers.shop = discord.NewShopHandler(
+			deps.session,
+			checkCampProv,
+			characterLookup,
+			deps.shopService,
+		)
 	}
 
 	// Setter-based wiring for handlers that don't accept these via constructor.
@@ -740,6 +756,9 @@ func attachPhase105Handlers(r *discord.CommandRouter, set discordHandlers) {
 	r.SetActionHandler(set.action)
 	if set.loot != nil {
 		r.SetLootHandler(set.loot)
+	}
+	if set.shop != nil {
+		r.SetShopHandler(set.shop)
 	}
 	if set.attack != nil {
 		r.SetAttackHandler(set.attack)

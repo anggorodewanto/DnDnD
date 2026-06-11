@@ -124,6 +124,28 @@ func (q *Queries) GetShop(ctx context.Context, id uuid.UUID) (Shop, error) {
 	return i, err
 }
 
+const getShopItem = `-- name: GetShopItem :one
+SELECT id, shop_id, item_id, name, description, price_gp, quantity, type, created_at, updated_at FROM shop_items WHERE id = $1
+`
+
+func (q *Queries) GetShopItem(ctx context.Context, id uuid.UUID) (ShopItem, error) {
+	row := q.db.QueryRowContext(ctx, getShopItem, id)
+	var i ShopItem
+	err := row.Scan(
+		&i.ID,
+		&i.ShopID,
+		&i.ItemID,
+		&i.Name,
+		&i.Description,
+		&i.PriceGp,
+		&i.Quantity,
+		&i.Type,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listShopItems = `-- name: ListShopItems :many
 SELECT id, shop_id, item_id, name, description, price_gp, quantity, type, created_at, updated_at FROM shop_items WHERE shop_id = $1 ORDER BY name
 `

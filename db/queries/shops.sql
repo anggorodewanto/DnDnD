@@ -22,6 +22,9 @@ INSERT INTO shop_items (shop_id, item_id, name, description, price_gp, quantity,
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
+-- name: GetShopItem :one
+SELECT * FROM shop_items WHERE id = $1;
+
 -- name: ListShopItems :many
 SELECT * FROM shop_items WHERE shop_id = $1 ORDER BY name;
 

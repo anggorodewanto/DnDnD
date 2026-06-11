@@ -53,6 +53,7 @@ import (
 	"github.com/ab/dndnd/internal/registration"
 	"github.com/ab/dndnd/internal/rest"
 	"github.com/ab/dndnd/internal/server"
+	"github.com/ab/dndnd/internal/shops"
 	"github.com/ab/dndnd/internal/statblocklibrary"
 )
 
@@ -1582,6 +1583,10 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 			// and the dashboard loot endpoints in future phases.
 			lootSvc := loot.NewService(queries)
 
+			// T24: shop service backs the shop_buy button handler (gold
+			// deduction + inventory grant on purchase).
+			shopSvc := shops.NewService(queries)
+
 			// Phase 22 wiring (high-10): campaignSettingsProvider is
 			// constructed above (shared with the DM combat-log poster) so
 			// /done, the rollHistoryLogger, and the discord slash-command
@@ -1644,6 +1649,7 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 				// populate Roller before calling LogRoll.
 				rollHistoryLogger: newRollHistoryLoggerByRoller(discordSession, queries),
 				lootService:       lootSvc,
+				shopService:       shopSvc,
 				// crit-01c: plumb optional collaborators for /help, /inventory,
 				// /equip, /give, /attune, /unattune, /character, ASI components,
 				// /undo, /retire. Each handler is nil-safe; missing deps mean the

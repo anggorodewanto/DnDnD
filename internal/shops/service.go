@@ -7,14 +7,20 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 
+	"github.com/ab/dndnd/internal/character"
+	"github.com/ab/dndnd/internal/inventory"
 	"github.com/ab/dndnd/internal/refdata"
 )
 
 // Errors returned by the shop service.
 var (
-	ErrShopNotFound = errors.New("shop not found")
-	ErrNameRequired = errors.New("shop name is required")
+	ErrShopNotFound     = errors.New("shop not found")
+	ErrNameRequired     = errors.New("shop name is required")
+	ErrShopItemNotFound = errors.New("shop item not found")
+	ErrOutOfStock       = errors.New("shop item is out of stock")
+	ErrInsufficientGold = errors.New("insufficient gold")
 )
 
 // Store defines the database operations needed by the shop service.
@@ -25,11 +31,22 @@ type Store interface {
 	UpdateShop(ctx context.Context, arg refdata.UpdateShopParams) (refdata.Shop, error)
 	DeleteShop(ctx context.Context, id uuid.UUID) error
 	CreateShopItem(ctx context.Context, arg refdata.CreateShopItemParams) (refdata.ShopItem, error)
+	GetShopItem(ctx context.Context, id uuid.UUID) (refdata.ShopItem, error)
 	ListShopItems(ctx context.Context, shopID uuid.UUID) ([]refdata.ShopItem, error)
 	UpdateShopItem(ctx context.Context, arg refdata.UpdateShopItemParams) (refdata.ShopItem, error)
 	DeleteShopItem(ctx context.Context, id uuid.UUID) error
 	DeleteShopItemsByShop(ctx context.Context, shopID uuid.UUID) error
 	GetCampaignByID(ctx context.Context, id uuid.UUID) (refdata.Campaign, error)
+	GetCharacter(ctx context.Context, id uuid.UUID) (refdata.Character, error)
+	UpdateCharacterInventoryAndGold(ctx context.Context, arg refdata.UpdateCharacterInventoryAndGoldParams) (refdata.Character, error)
+}
+
+// BuyResult summarizes a successful purchase.
+type BuyResult struct {
+	ItemName       string
+	PricePaid      int32
+	GoldRemaining  int32
+	StockRemaining int32
 }
 
 // ShopResult holds a shop and its items.
@@ -125,6 +142,82 @@ func (s *Service) RemoveItem(ctx context.Context, itemID uuid.UUID) error {
 // GetCampaign returns a campaign by ID (used by the handler for Discord posting).
 func (s *Service) GetCampaign(ctx context.Context, campaignID uuid.UUID) (refdata.Campaign, error) {
 	return s.store.GetCampaignByID(ctx, campaignID)
+}
+
+// Buy purchases one unit of a shop item for a character: it deducts the price
+// from the character's gold, adds the item to their inventory, and decrements
+// the shop's stock. The gold deduction and inventory grant are persisted
+// atomically; the stock decrement follows. Mirrors loot.ClaimItem's inventory
+// grant pattern.
+func (s *Service) Buy(ctx context.Context, shopItemID uuid.UUID, characterID uuid.UUID) (BuyResult, error) {
+	item, err := s.store.GetShopItem(ctx, shopItemID)
+	if err != nil {
+		return BuyResult{}, ErrShopItemNotFound
+	}
+	if item.Quantity <= 0 {
+		return BuyResult{}, ErrOutOfStock
+	}
+
+	char, err := s.store.GetCharacter(ctx, characterID)
+	if err != nil {
+		return BuyResult{}, fmt.Errorf("getting character: %w", err)
+	}
+	if char.Gold < item.PriceGp {
+		return BuyResult{}, ErrInsufficientGold
+	}
+
+	newGold := char.Gold - item.PriceGp
+
+	items, err := character.ParseInventoryItems(char.Inventory.RawMessage, char.Inventory.Valid)
+	if err != nil {
+		return BuyResult{}, fmt.Errorf("parsing inventory: %w", err)
+	}
+
+	itemIDStr := item.ItemID
+	if itemIDStr == "" {
+		itemIDStr = "custom-" + shopItemID.String()
+	}
+	bought := character.InventoryItem{
+		ItemID:   itemIDStr,
+		Name:     item.Name,
+		Quantity: 1,
+		Type:     item.Type,
+	}
+	items = inventory.AddItemQuantity(items, bought, 1)
+
+	invJSON, err := character.MarshalInventory(items)
+	if err != nil {
+		return BuyResult{}, fmt.Errorf("marshaling inventory: %w", err)
+	}
+
+	if _, err := s.store.UpdateCharacterInventoryAndGold(ctx, refdata.UpdateCharacterInventoryAndGoldParams{
+		ID:        characterID,
+		Inventory: pqtype.NullRawMessage{RawMessage: invJSON, Valid: true},
+		Gold:      newGold,
+	}); err != nil {
+		return BuyResult{}, fmt.Errorf("updating character: %w", err)
+	}
+
+	// Stock decrement is best-effort: the buyer has already been charged and
+	// granted the item atomically above, so the purchase is committed. A
+	// stock-update failure must NOT surface as an error here — returning one
+	// would prompt a retry that double-charges the buyer. Worst case the shop
+	// oversells by one unit until the next successful update.
+	newStock := item.Quantity - 1
+	_, _ = s.store.UpdateShopItem(ctx, refdata.UpdateShopItemParams{
+		ID:          item.ID,
+		Name:        item.Name,
+		Description: item.Description,
+		PriceGp:     item.PriceGp,
+		Quantity:    newStock,
+	})
+
+	return BuyResult{
+		ItemName:       item.Name,
+		PricePaid:      item.PriceGp,
+		GoldRemaining:  newGold,
+		StockRemaining: newStock,
+	}, nil
 }
 
 // FormatShopAnnouncement formats a shop as a Discord message.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ab/dndnd/internal/campaign"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/bwmarrin/discordgo"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -15,7 +16,7 @@ import (
 // Handler handles shop HTTP endpoints.
 type Handler struct {
 	svc      *Service
-	postToFn func(channelID, content string)
+	postToFn func(channelID, content string, components []discordgo.MessageComponent)
 }
 
 // NewHandler creates a new Handler.
@@ -23,14 +24,15 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// SetPostFunc sets the callback for posting messages to Discord channels.
-func (h *Handler) SetPostFunc(fn func(channelID, content string)) {
+// SetPostFunc sets the callback for posting messages (with optional Buy-button
+// components) to Discord channels.
+func (h *Handler) SetPostFunc(fn func(channelID, content string, components []discordgo.MessageComponent)) {
 	h.postToFn = fn
 }
 
-func (h *Handler) postTo(channelID, content string) {
+func (h *Handler) postTo(channelID, content string, components []discordgo.MessageComponent) {
 	if h.postToFn != nil {
-		h.postToFn(channelID, content)
+		h.postToFn(channelID, content, components)
 	}
 }
 
@@ -267,7 +269,8 @@ func (h *Handler) HandlePostToDiscord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	msg := FormatShopAnnouncement(result.Shop, result.Items)
-	h.postTo(channelID, msg)
+	buttons := BuildShopButtons(result.Shop.ID, result.Items)
+	h.postTo(channelID, msg, buttons)
 
 	jsonOK(w, map[string]string{"status": "ok", "message": msg})
 }
