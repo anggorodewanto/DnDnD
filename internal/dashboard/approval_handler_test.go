@@ -70,13 +70,14 @@ type mockNotifier struct {
 	lastDiscordUserID string
 	lastCharacterName string
 	lastFeedback      string
+	err               error // when non-nil, every Notify* call returns it
 }
 
 func (m *mockNotifier) NotifyApproval(_ context.Context, discordUserID, characterName string) error {
 	m.approvalCalls++
 	m.lastDiscordUserID = discordUserID
 	m.lastCharacterName = characterName
-	return nil
+	return m.err
 }
 
 func (m *mockNotifier) NotifyChangesRequested(_ context.Context, discordUserID, characterName, feedback string) error {
@@ -84,7 +85,7 @@ func (m *mockNotifier) NotifyChangesRequested(_ context.Context, discordUserID, 
 	m.lastDiscordUserID = discordUserID
 	m.lastCharacterName = characterName
 	m.lastFeedback = feedback
-	return nil
+	return m.err
 }
 
 func (m *mockNotifier) NotifyRejection(_ context.Context, discordUserID, characterName, feedback string) error {
@@ -92,7 +93,7 @@ func (m *mockNotifier) NotifyRejection(_ context.Context, discordUserID, charact
 	m.lastDiscordUserID = discordUserID
 	m.lastCharacterName = characterName
 	m.lastFeedback = feedback
-	return nil
+	return m.err
 }
 
 func setupApprovalTest(store ApprovalStore, notifier PlayerNotifier) (*ApprovalHandler, chi.Router) {
@@ -295,6 +296,73 @@ func TestRequestChanges_Success(t *testing.T) {
 	assert.Equal(t, "Please fix your HP", store.requestedFB)
 	assert.Equal(t, 1, notifier.changesCalls)
 	assert.Equal(t, "Please fix your HP", notifier.lastFeedback)
+}
+
+// When the player DM fails (e.g. DM closed), the status change must still
+// persist and the handler must surface the notify failure in its response
+// body so the dashboard can tell the DM the player was not pinged.
+func TestRequestChanges_NotifyFailure_PersistsAndReportsError(t *testing.T) {
+	id := uuid.MustParse("00000000-0000-0000-0000-000000000010")
+	store := &mockApprovalStore{
+		detail: &ApprovalDetail{
+			ApprovalEntry: ApprovalEntry{
+				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+				CharacterName: "Gandalf",
+				DiscordUserID: "player1",
+			},
+		},
+	}
+	notifier := &mockNotifier{err: fmt.Errorf("dm channel closed")}
+	_, r := setupApprovalTest(store, notifier)
+
+	body := `{"feedback":"Please fix your HP"}`
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/approvals/"+id.String()+"/request-changes", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	// Status change still persists with a 2xx.
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, id, store.requestedID)
+	assert.Equal(t, "Please fix your HP", store.requestedFB)
+
+	// Response body signals the notify failure.
+	var result map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	assert.Equal(t, "changes_requested", result["status"])
+	assert.NotEmpty(t, result["notify_error"], "notify failure must be surfaced in the response body")
+}
+
+func TestRejectCharacter_NotifyFailure_PersistsAndReportsError(t *testing.T) {
+	id := uuid.MustParse("00000000-0000-0000-0000-000000000010")
+	store := &mockApprovalStore{
+		detail: &ApprovalDetail{
+			ApprovalEntry: ApprovalEntry{
+				ID:            id,
+				CampaignID:    uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+				CharacterName: "Gandalf",
+				DiscordUserID: "player1",
+			},
+		},
+	}
+	notifier := &mockNotifier{err: fmt.Errorf("dm channel closed")}
+	_, r := setupApprovalTest(store, notifier)
+
+	body := `{"feedback":"Character not allowed"}`
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/approvals/"+id.String()+"/reject", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, id, store.rejectedID)
+	assert.Equal(t, "Character not allowed", store.rejectedFB)
+
+	var result map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	assert.Equal(t, "rejected", result["status"])
+	assert.NotEmpty(t, result["notify_error"], "notify failure must be surfaced in the response body")
 }
 
 func TestRequestChanges_MissingFeedback(t *testing.T) {

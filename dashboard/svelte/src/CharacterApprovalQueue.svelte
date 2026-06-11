@@ -2,6 +2,9 @@
   let entries = $state([]);
   let loading = $state(true);
   let error = $state(null);
+  // Surfaced when the player DM could not be delivered (T22) — the status
+  // change is still saved, but the DM needs to know the player wasn't pinged.
+  let notice = $state(null);
 
   $effect(() => {
     loadApprovals();
@@ -27,33 +30,50 @@
     await loadApprovals();
   }
 
+  // surfaceNotify reads the action response and shows a notice when the
+  // player DM failed (notify_error), so feedback is never silently dropped.
+  async function surfaceNotify(res) {
+    notice = null;
+    try {
+      const data = await res.json();
+      if (data && data.notify_error) notice = data.notify_error;
+    } catch (_) {
+      // No JSON body / parse failure — nothing extra to surface.
+    }
+  }
+
   async function reject(id) {
     const feedback = prompt('Rejection reason:');
     if (!feedback) return;
-    await fetch(`/dashboard/api/approvals/${id}/reject`, {
+    const res = await fetch(`/dashboard/api/approvals/${id}/reject`, {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ feedback }),
     });
+    await surfaceNotify(res);
     await loadApprovals();
   }
 
   async function requestChanges(id) {
     const feedback = prompt('What changes are needed?');
     if (!feedback) return;
-    await fetch(`/dashboard/api/approvals/${id}/request-changes`, {
+    const res = await fetch(`/dashboard/api/approvals/${id}/request-changes`, {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ feedback }),
     });
+    await surfaceNotify(res);
     await loadApprovals();
   }
 </script>
 
 <div class="approval-queue" data-testid="character-approval-queue">
   <h2>Character Approval Queue</h2>
+  {#if notice}
+    <p class="notice" role="status">{notice}</p>
+  {/if}
   {#if loading}
     <p class="placeholder">Loading…</p>
   {:else if error}
@@ -94,4 +114,8 @@
   }
   .placeholder { color: #a0aec0; font-style: italic; }
   .error { color: #e94560; }
+  .notice {
+    color: #f0c040; background: #2a2418; border: 1px solid #5a4a20;
+    border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.85rem;
+  }
 </style>

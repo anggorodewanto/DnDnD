@@ -207,7 +207,7 @@ func (a *playerNotifierAdapter) NotifyApproval(_ context.Context, discordUserID,
 // NotifyChangesRequested pings the player that the DM requested changes,
 // including the DM's feedback verbatim.
 func (a *playerNotifierAdapter) NotifyChangesRequested(_ context.Context, discordUserID, characterName, feedback string) error {
-	body := fmt.Sprintf("📝 **%s** needs changes before approval.\n\n**DM feedback:** %s", characterName, feedback)
+	body := fmt.Sprintf("📝 **%s** needs changes before approval.\n\n**DM feedback:** %s\n\nRun `/create-character` to get a fresh link and resubmit.", characterName, feedback)
 	if _, err := a.dm.SendDirectMessage(discordUserID, body); err != nil {
 		return fmt.Errorf("notifying changes-requested to %s: %w", discordUserID, err)
 	}
@@ -217,7 +217,7 @@ func (a *playerNotifierAdapter) NotifyChangesRequested(_ context.Context, discor
 // NotifyRejection pings the player that their character was rejected,
 // including the DM's reason verbatim.
 func (a *playerNotifierAdapter) NotifyRejection(_ context.Context, discordUserID, characterName, feedback string) error {
-	body := fmt.Sprintf("❌ **%s** was rejected.\n\n**DM feedback:** %s", characterName, feedback)
+	body := fmt.Sprintf("❌ **%s** was rejected.\n\n**DM feedback:** %s\n\nRun `/create-character` to get a fresh link and resubmit.", characterName, feedback)
 	if _, err := a.dm.SendDirectMessage(discordUserID, body); err != nil {
 		return fmt.Errorf("notifying rejection to %s: %w", discordUserID, err)
 	}

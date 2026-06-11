@@ -449,6 +449,7 @@ func TestPlayerNotifierAdapter_NotifyChangesRequested_IncludesFeedback(t *testin
 	assert.Equal(t, "user-7", dm.calls[0].UserID)
 	assert.Contains(t, dm.calls[0].Body, "Tordek")
 	assert.Contains(t, dm.calls[0].Body, "please pick a subclass")
+	assert.Contains(t, dm.calls[0].Body, "/create-character", "should tell the player how to resubmit")
 }
 
 func TestPlayerNotifierAdapter_NotifyRejection_IncludesFeedback(t *testing.T) {
@@ -461,6 +462,7 @@ func TestPlayerNotifierAdapter_NotifyRejection_IncludesFeedback(t *testing.T) {
 	assert.Equal(t, "user-7", dm.calls[0].UserID)
 	assert.Contains(t, dm.calls[0].Body, "Tordek")
 	assert.Contains(t, dm.calls[0].Body, "no homebrew classes")
+	assert.Contains(t, dm.calls[0].Body, "/create-character", "should tell the player how to resubmit")
 }
 
 func TestPlayerNotifierAdapter_NotifyApproval_PropagatesDMError(t *testing.T) {

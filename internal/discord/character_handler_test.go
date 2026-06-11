@@ -388,6 +388,60 @@ func TestCharacterHandler_NotApproved(t *testing.T) {
 	}
 }
 
+func TestCharacterHandler_ChangesRequested_ShowsFeedbackAndResubmitHint(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			Status:        "changes_requested",
+			CharacterID:   uuid.New(),
+			DiscordUserID: "player-1",
+			DmFeedback:    sql.NullString{String: "Please pick a subclass", Valid: true},
+		},
+	}
+
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if !strings.Contains(rc.Content, "changes_requested") {
+		t.Errorf("expected status in message, got: %s", rc.Content)
+	}
+	if !strings.Contains(rc.Content, "Please pick a subclass") {
+		t.Errorf("expected DM feedback in message, got: %s", rc.Content)
+	}
+	if !strings.Contains(rc.Content, "DM feedback") {
+		t.Errorf("expected 'DM feedback' label in message, got: %s", rc.Content)
+	}
+	if !strings.Contains(rc.Content, "/create-character") {
+		t.Errorf("expected resubmit hint mentioning /create-character, got: %s", rc.Content)
+	}
+}
+
+func TestCharacterHandler_NotApproved_NoFeedback_OmitsFeedbackSection(t *testing.T) {
+	mock := newTestMock()
+	rc := captureFullResponse(mock)
+
+	lookup := &mockCharacterLookup{
+		pc: refdata.PlayerCharacter{
+			Status:        "pending",
+			CharacterID:   uuid.New(),
+			DiscordUserID: "player-1",
+			// DmFeedback deliberately unset.
+		},
+	}
+
+	handler := NewCharacterHandler(mock, newMockCampaignProvider(), lookup, "https://portal.dndnd.app")
+	handler.Handle(makeInteraction("character", "player-1", "guild-1"))
+
+	if !strings.Contains(rc.Content, "pending") {
+		t.Errorf("expected pending message, got: %s", rc.Content)
+	}
+	if strings.Contains(rc.Content, "DM feedback") {
+		t.Errorf("expected no DM feedback section when none set, got: %s", rc.Content)
+	}
+}
+
 func TestCharacterHandler_CharacterLoadError(t *testing.T) {
 	mock := newTestMock()
 	rc := captureFullResponse(mock)

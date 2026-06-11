@@ -58,7 +58,7 @@ func (h *CharacterHandler) Handle(interaction *discordgo.Interaction) {
 	}
 
 	if pc.Status != "approved" {
-		respondEphemeral(h.session, interaction, fmt.Sprintf("Your character is currently **%s**. It must be approved by the DM before you can view the full sheet.", pc.Status))
+		respondEphemeral(h.session, interaction, buildNotApprovedMessage(pc))
 		return
 	}
 
@@ -79,6 +79,19 @@ func (h *CharacterHandler) Handle(interaction *discordgo.Interaction) {
 			Flags:   discordgo.MessageFlagsEphemeral,
 		},
 	})
+}
+
+// buildNotApprovedMessage produces the ephemeral text shown when a player runs
+// /character on a non-approved submission. When the DM left feedback (i.e. the
+// status is changes_requested or rejected with a reason), the feedback is shown
+// verbatim along with a "how to resubmit" next step so the player isn't left
+// guessing — the feedback used to be DM-only and silently droppable (T22).
+func buildNotApprovedMessage(pc refdata.PlayerCharacter) string {
+	base := fmt.Sprintf("Your character is currently **%s**. It must be approved by the DM before you can view the full sheet.", pc.Status)
+	if !pc.DmFeedback.Valid || pc.DmFeedback.String == "" {
+		return base
+	}
+	return base + fmt.Sprintf("\n\n**DM feedback:** %s\n\nRun `/create-character` to get a fresh link and resubmit.", pc.DmFeedback.String)
 }
 
 func (h *CharacterHandler) buildCharacterEmbed(ch refdata.Character) *discordgo.MessageEmbed {

@@ -18,3 +18,15 @@ describe('CharacterApprovalQueue loading state', () => {
     expect(queueSrc).toContain('loading = false;');
   });
 });
+
+describe('CharacterApprovalQueue DM-notify failure surfacing (T22)', () => {
+  it('reads the action response and surfaces a notify_error notice', () => {
+    expect(queueSrc).toContain('data.notify_error');
+    expect(queueSrc).toContain('await surfaceNotify(res)');
+  });
+
+  it('renders the notice when the player DM could not be delivered', () => {
+    expect(queueSrc).toMatch(/\{#if notice\}/);
+    expect(queueSrc).toContain('class="notice"');
+  });
+});

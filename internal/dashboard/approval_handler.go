@@ -295,14 +295,16 @@ func (ah *ApprovalHandler) RequestChangesHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
+	var notifyErr string
 	if ah.notifier != nil {
 		if err := ah.notifier.NotifyChangesRequested(r.Context(), detail.DiscordUserID, detail.CharacterName, feedback); err != nil {
 			ah.logger.Error("failed to notify player of changes requested", "error", err, "discord_user_id", detail.DiscordUserID)
+			notifyErr = playerNotifyFailureMessage
 		}
 	}
 
 	ah.broadcastUpdate("approval_updated", detail.ID)
-	ah.writeJSON(w, http.StatusOK, map[string]string{"status": "changes_requested"})
+	ah.writeStatusWithNotify(w, "changes_requested", notifyErr)
 }
 
 // Reject rejects a pending character.
@@ -318,14 +320,34 @@ func (ah *ApprovalHandler) Reject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var notifyErr string
 	if ah.notifier != nil {
 		if err := ah.notifier.NotifyRejection(r.Context(), detail.DiscordUserID, detail.CharacterName, feedback); err != nil {
 			ah.logger.Error("failed to notify player of rejection", "error", err, "discord_user_id", detail.DiscordUserID)
+			notifyErr = playerNotifyFailureMessage
 		}
 	}
 
 	ah.broadcastUpdate("approval_updated", detail.ID)
-	ah.writeJSON(w, http.StatusOK, map[string]string{"status": "rejected"})
+	ah.writeStatusWithNotify(w, "rejected", notifyErr)
+}
+
+// playerNotifyFailureMessage is surfaced to the DM dashboard (in the JSON
+// response body) when the player DM could not be delivered — e.g. the player
+// has DMs closed. The status change is still persisted; this tells the DM to
+// ask the player to check /character so the feedback isn't silently dropped.
+const playerNotifyFailureMessage = "Player could not be notified (DM closed) — feedback saved; ask them to run /character."
+
+// writeStatusWithNotify writes the standard {"status": ...} 200 response,
+// adding a "notify_error" field only when the player DM failed so the
+// dashboard can warn the DM without changing the HTTP status (the status
+// transition has already been persisted).
+func (ah *ApprovalHandler) writeStatusWithNotify(w http.ResponseWriter, status, notifyErr string) {
+	body := map[string]string{"status": status}
+	if notifyErr != "" {
+		body["notify_error"] = notifyErr
+	}
+	ah.writeJSON(w, http.StatusOK, body)
 }
 
 func (ah *ApprovalHandler) broadcastUpdate(eventType string, id uuid.UUID) {
