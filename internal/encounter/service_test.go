@@ -239,6 +239,7 @@ func TestService_Update_Success(t *testing.T) {
 	et, err := svc.Update(context.Background(), UpdateInput{
 		ID:          uuid.New(),
 		CampaignID:  uuid.New(),
+		MapID:       uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		Name:        "Updated Name",
 		DisplayName: "Updated Display",
 		Creatures:   json.RawMessage(`[{"creature_ref_id":"ogre","short_id":"O1","quantity":1}]`),
@@ -257,6 +258,7 @@ func TestService_Update_StoreError(t *testing.T) {
 	_, err := svc.Update(context.Background(), UpdateInput{
 		ID:         uuid.New(),
 		CampaignID: uuid.New(),
+		MapID:      uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		Name:       "Test",
 	})
 	require.Error(t, err)
@@ -374,6 +376,18 @@ func TestService_ListCreatures(t *testing.T) {
 func TestService_Create_RejectsNullMapID(t *testing.T) {
 	svc := NewService(successStore())
 	_, err := svc.Create(context.Background(), CreateInput{
+		CampaignID: uuid.New(),
+		Name:       "No Map Encounter",
+		MapID:      uuid.NullUUID{}, // null map_id
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "map_id is required")
+}
+
+func TestService_Update_RejectsNullMapID(t *testing.T) {
+	svc := NewService(successStore())
+	_, err := svc.Update(context.Background(), UpdateInput{
+		ID:         uuid.New(),
 		CampaignID: uuid.New(),
 		Name:       "No Map Encounter",
 		MapID:      uuid.NullUUID{}, // null map_id

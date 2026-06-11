@@ -95,6 +95,9 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (refdata.Encoun
 	if input.Name == "" {
 		return refdata.EncounterTemplate{}, errors.New("name must not be empty")
 	}
+	if !input.MapID.Valid {
+		return refdata.EncounterTemplate{}, errors.New("map_id is required for encounter templates")
+	}
 
 	et, err := s.store.UpdateEncounterTemplate(ctx, refdata.UpdateEncounterTemplateParams{
 		ID:          input.ID,

@@ -341,5 +341,9 @@ func handleServiceError(w http.ResponseWriter, err error) {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
+	if strings.Contains(msg, "map_id is required") {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
 	http.Error(w, "internal error", http.StatusInternalServerError)
 }

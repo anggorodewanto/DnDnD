@@ -20,3 +20,18 @@ describe('EncounterBuilder.svelte unsaved-changes guard', () => {
     expect(src).toMatch(/registerDirtyCheck\(\(\)\s*=>\s*dirty\)/);
   });
 });
+
+describe('EncounterBuilder.svelte map-required guard (T21)', () => {
+  it('derives a needsMap flag for new encounters without a map', () => {
+    expect(src).toMatch(/needsMap\s*=\s*\$derived\(!savedEncounterId\s*&&\s*!mapSelected\)/);
+  });
+
+  it('blocks saving a new encounter without a map', () => {
+    expect(src).toMatch(/if\s*\(needsMap\)\s*{/);
+    expect(src).toContain('Select a map before saving');
+  });
+
+  it('disables the save button when a map is required', () => {
+    expect(src).toMatch(/disabled=\{saving\s*\|\|\s*!dirty\s*\|\|\s*needsMap\}/);
+  });
+});

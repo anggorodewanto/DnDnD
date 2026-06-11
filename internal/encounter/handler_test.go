@@ -143,6 +143,26 @@ func TestHandler_Create_WithMapID(t *testing.T) {
 	assert.Equal(t, mapID, capturedMapID.UUID)
 }
 
+// --- T21: POST /api/encounters with no map_id returns 400 (not 500) ---
+
+func TestHandler_Create_MissingMapID(t *testing.T) {
+	_, r := newTestRouter(successStore())
+
+	body := map[string]any{
+		"campaign_id": uuid.New().String(),
+		"name":        "No Map",
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/encounters", bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "map_id is required")
+}
+
 // --- TDD Cycle 17: POST /api/encounters with invalid map_id ---
 
 func TestHandler_Create_InvalidMapID(t *testing.T) {
@@ -177,6 +197,7 @@ func TestHandler_Create_StoreError(t *testing.T) {
 	body := map[string]any{
 		"campaign_id": uuid.New().String(),
 		"name":        "Test",
+		"map_id":      uuid.New().String(),
 	}
 	b, _ := json.Marshal(body)
 
@@ -340,6 +361,7 @@ func TestHandler_Update_Success(t *testing.T) {
 
 	body := map[string]any{
 		"name":      "Updated Encounter",
+		"map_id":    uuid.New().String(),
 		"creatures": []map[string]any{{"creature_ref_id": "ogre", "short_id": "O1", "quantity": 1}},
 	}
 	b, _ := json.Marshal(body)
@@ -401,7 +423,7 @@ func TestHandler_Update_StoreError(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]any{"name": "Test", "creatures": json.RawMessage(`[]`)}
+	body := map[string]any{"name": "Test", "map_id": uuid.New().String(), "creatures": json.RawMessage(`[]`)}
 	b, _ := json.Marshal(body)
 
 	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+uuid.New().String()+"?campaign_id="+uuid.New().String(), bytes.NewReader(b))
@@ -701,7 +723,7 @@ func TestHandler_UpdateEncounter_WrongCampaignID(t *testing.T) {
 	}
 	_, r := newTestRouter(store)
 
-	body := map[string]any{"name": "Hacked", "creatures": json.RawMessage(`[]`)}
+	body := map[string]any{"name": "Hacked", "map_id": uuid.New().String(), "creatures": json.RawMessage(`[]`)}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPut, "/api/encounters/"+templateID.String()+"?campaign_id="+attackerCampaign.String(), bytes.NewReader(b))
 	rec := httptest.NewRecorder()

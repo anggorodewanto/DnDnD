@@ -28,6 +28,11 @@
   let savedEncounterId = $state(null);
   let dirty = $state(false);
 
+  // T21 — encounters require a map. Block creating a brand-new encounter
+  // without one; existing encounters always have a map already loaded.
+  let mapSelected = $derived(!!selectedMapId);
+  let needsMap = $derived(!savedEncounterId && !mapSelected);
+
   // Let the shell warn before navigation/tab-close discards unsaved edits.
   $effect(() => registerDirtyCheck(() => dirty));
 
@@ -406,6 +411,10 @@
   }
 
   async function saveEncounter() {
+    if (needsMap) {
+      error = 'Select a map before saving — encounters require a map.';
+      return;
+    }
     saving = true;
     error = null;
     statusMsg = '';
@@ -567,7 +576,10 @@
       <!-- Right panel: Map with creature placement -->
       <div class="right-panel">
         <div class="toolbar">
-          <button class="save-btn" onclick={saveEncounter} disabled={saving || !dirty}>
+          <button class="save-btn"
+                  onclick={saveEncounter}
+                  disabled={saving || !dirty || needsMap}
+                  title={needsMap ? 'Select a map before saving' : ''}>
             {saving ? 'Saving...' : 'Save'}
           </button>
           <button class="start-btn"
