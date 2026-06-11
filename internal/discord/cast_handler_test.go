@@ -378,6 +378,114 @@ func TestCastHandler_NoActiveEncounter(t *testing.T) {
 	}
 }
 
+// T23: /cast must work out of combat. In exploration mode the encounter has
+// no CurrentTurnID, so the combat-mode "No active turn." gate must be skipped
+// and the spell dispatched via the exploration branch (mirroring /move).
+func TestCastHandler_ExplorationCast(t *testing.T) {
+	h, sess, svc, provider := setupCastHandler()
+
+	// Make the caster a real PC so resolveExplorationPC picks it, and put the
+	// encounter into exploration mode with no active turn.
+	provider.caster.CharacterID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	provider.caster.IsAlive = true
+	provider.enc.Mode = "exploration"
+	provider.enc.Status = "preparing"
+	provider.enc.CurrentTurnID = uuid.NullUUID{Valid: false}
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell": "fire-bolt",
+	}))
+
+	if strings.Contains(sess.lastResponse.Data.Content, "No active turn") {
+		t.Fatalf("exploration cast must not hit the 'No active turn.' gate, got %q", sess.lastResponse.Data.Content)
+	}
+	if len(svc.castCalls) != 1 {
+		t.Fatalf("expected 1 cast call from exploration branch, got %d", len(svc.castCalls))
+	}
+	got := svc.castCalls[0]
+	if got.SpellID != "fire-bolt" {
+		t.Errorf("SpellID = %q want fire-bolt", got.SpellID)
+	}
+	if got.CasterID != provider.caster.ID {
+		t.Errorf("CasterID = %v want resolved PC %v", got.CasterID, provider.caster.ID)
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "Aria") {
+		t.Errorf("expected cast log content, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+// T23: an exploration cast invoked by a user with no PC combatant in the
+// encounter must surface a clear "could not find your character" message
+// rather than crashing or dispatching against an empty combatant.
+func TestCastHandler_ExplorationCast_NoCharacter(t *testing.T) {
+	h, sess, svc, provider := setupCastHandler()
+
+	provider.enc.Mode = "exploration"
+	provider.enc.Status = "preparing"
+	provider.enc.CurrentTurnID = uuid.NullUUID{Valid: false}
+	// No PC combatants in the roster (caster/target have no CharacterID).
+	provider.listCombatantsOverride = []refdata.Combatant{provider.target}
+
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell": "fire-bolt",
+	}))
+
+	if len(svc.castCalls) != 0 {
+		t.Errorf("expected no cast call when caster PC cannot be resolved")
+	}
+	if !strings.Contains(sess.lastResponse.Data.Content, "character") {
+		t.Errorf("expected character-not-found rejection, got %q", sess.lastResponse.Data.Content)
+	}
+}
+
+// TestCastHandler_ExplorationCast_MultiPC_PicksInvokerPC pins T23's caster
+// disambiguation: with two alive PCs, the cast must be attributed to the
+// invoking player's PC (via the character lookup), not blindly to the first
+// PC in the roster.
+func TestCastHandler_ExplorationCast_MultiPC_PicksInvokerPC(t *testing.T) {
+	h, _, svc, provider := setupCastHandler()
+
+	provider.enc.Mode = "exploration"
+	provider.enc.Status = "preparing"
+	provider.enc.CurrentTurnID = uuid.NullUUID{Valid: false}
+
+	// First PC in the roster belongs to someone else; the invoker (u1) owns
+	// the second PC. Resolution must pick the second, not pcs[0].
+	charA := uuid.New()
+	charB := uuid.New()
+	provider.caster.CharacterID = uuid.NullUUID{UUID: charA, Valid: true}
+	provider.caster.IsAlive = true
+	invokerPC := refdata.Combatant{
+		ID: uuid.New(), ShortID: "BR", DisplayName: "Borin",
+		PositionCol: "C", PositionRow: 3,
+		CharacterID: uuid.NullUUID{UUID: charB, Valid: true}, IsAlive: true,
+	}
+	provider.listCombatantsOverride = []refdata.Combatant{provider.caster, invokerPC}
+
+	h.SetCampaignProvider(&mockCheckCampaignProvider{
+		fn: func(_ context.Context, _ string) (refdata.Campaign, error) {
+			return refdata.Campaign{ID: uuid.New()}, nil
+		},
+	})
+	h.SetCharacterLookup(&mockCheckCharacterLookup{
+		fn: func(_ context.Context, _ uuid.UUID, discordUserID string) (refdata.Character, error) {
+			if discordUserID != "u1" {
+				t.Errorf("character lookup got discordUserID %q, want u1", discordUserID)
+			}
+			return refdata.Character{ID: charB}, nil
+		},
+	})
+
+	h.Handle(makeCastInteraction(map[string]any{"spell": "fire-bolt"}))
+
+	if len(svc.castCalls) != 1 {
+		t.Fatalf("expected 1 cast call, got %d", len(svc.castCalls))
+	}
+	if got := svc.castCalls[0].CasterID; got != invokerPC.ID {
+		t.Errorf("CasterID = %v, want invoker PC %v (must disambiguate, not pcs[0]=%v)", got, invokerPC.ID, provider.caster.ID)
+	}
+}
+
 func TestCastHandler_TurnGate_RejectsWrongOwner(t *testing.T) {
 	h, sess, svc, _ := setupCastHandler()
 	h.SetTurnGate(&stubTurnGate{err: &combat.ErrNotYourTurn{

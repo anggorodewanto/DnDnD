@@ -124,6 +124,17 @@ type CastHandler struct {
 	// strictly no worse than pre-SR-026).
 	notifier     dmqueue.Notifier
 	campaignProv CheckCampaignProvider
+	// T23: resolves the invoking player's character so an exploration-mode
+	// /cast attributes the cast to the right PC among multiple party members
+	// (the same disambiguation /move and /action use). Nil falls back to the
+	// first alive PC.
+	characterLookup CastCharacterLookup
+}
+
+// CastCharacterLookup resolves a Discord user's character within a campaign so
+// /cast can attribute an exploration-mode cast to the correct PC.
+type CastCharacterLookup interface {
+	GetCharacterByCampaignAndDiscord(ctx context.Context, campaignID uuid.UUID, discordUserID string) (refdata.Character, error)
 }
 
 // SetNearbyScanner wires the Detect Magic environmental scanner. When
@@ -212,6 +223,11 @@ func (h *CastHandler) SetNotifier(n dmqueue.Notifier) { h.notifier = n }
 // SR-002 invariant the other handlers honour.
 func (h *CastHandler) SetCampaignProvider(p CheckCampaignProvider) { h.campaignProv = p }
 
+// SetCharacterLookup wires the per-user character resolver so an
+// exploration-mode /cast picks the invoking player's PC in a multi-PC party
+// (T23). Without it, casting falls back to the first alive PC.
+func (h *CastHandler) SetCharacterLookup(l CastCharacterLookup) { h.characterLookup = l }
+
 // HandleComponent dispatches button clicks owned by /cast (material-component
 // prompt, etc.). Returns true when the click was claimed so the router can
 // stop fan-out. Delegates to the prompt store's routing.
@@ -252,6 +268,17 @@ func (h *CastHandler) Handle(interaction *discordgo.Interaction) {
 	encounter, err := h.encounterProvider.GetEncounter(ctx, encounterID)
 	if err != nil {
 		respondEphemeral(h.session, interaction, "Failed to load encounter.")
+		return
+	}
+
+	// T23: exploration mode has no active turn. Skip the turn/action-economy
+	// gate and dispatch the spell directly against the invoking player's PC,
+	// mirroring how /move handles exploration. Utility / ritual / cantrip
+	// casts that don't require combat targeting work here; the combat layer
+	// already permits non-active casts (ValidateRitual rejects rituals only
+	// when the encounter status is "active").
+	if encounter.Mode == "exploration" {
+		h.handleExplorationCast(ctx, interaction, encounter, encounterID, spellID, targetStr)
 		return
 	}
 
@@ -320,6 +347,63 @@ func (h *CastHandler) Handle(interaction *discordgo.Interaction) {
 
 		h.dispatchSingleTarget(ctx, interaction, encounter, encounterID, caster, turn, spell, targetStr)
 	}
+}
+
+// handleExplorationCast dispatches /cast for an exploration-mode encounter
+// (T23). There is no active turn, so the action-economy / turn-ownership gate
+// is skipped entirely. The caster is the invoking player's PC combatant,
+// resolved the same way exploration /move and /action resolve their actor
+// (via resolveExplorationPC with the campaign + character lookups so a
+// multi-PC party disambiguates by the invoker). The spell is dispatched
+// through the existing single-target / AoE helpers with a synthetic zero-value
+// turn whose resources all read as available — the combat service validates
+// against that turn but, with no resources spent, the cast proceeds. Rituals
+// and utility casts pass because the encounter status is non-"active" (see
+// combat.ValidateRitual).
+func (h *CastHandler) handleExplorationCast(
+	ctx context.Context,
+	interaction *discordgo.Interaction,
+	encounter refdata.Encounter,
+	encounterID uuid.UUID,
+	spellID, targetStr string,
+) {
+	combatants, err := h.encounterProvider.ListCombatantsByEncounterID(ctx, encounterID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, "Failed to list combatants.")
+		return
+	}
+
+	var getCampaign func(ctx context.Context, guildID string) (refdata.Campaign, error)
+	if h.campaignProv != nil {
+		getCampaign = h.campaignProv.GetCampaignByGuildID
+	}
+	var getCharacter func(ctx context.Context, campaignID uuid.UUID, discordUserID string) (refdata.Character, error)
+	if h.characterLookup != nil {
+		getCharacter = h.characterLookup.GetCharacterByCampaignAndDiscord
+	}
+
+	caster, ok := resolveExplorationPC(ctx, combatants, interaction.GuildID, discordUserID(interaction), getCampaign, getCharacter)
+	if !ok {
+		respondEphemeral(h.session, interaction, "Could not find your character in this encounter.")
+		return
+	}
+
+	spell, err := h.resolveSpell(ctx, spellID)
+	if err != nil {
+		respondEphemeral(h.session, interaction, fmt.Sprintf("Spell %q not found.", spellID))
+		return
+	}
+
+	// Synthetic empty turn: no action/bonus-action/movement spent, so the
+	// combat service's resource validation passes without an active turn.
+	var noTurn refdata.Turn
+
+	if spell.AreaOfEffect.Valid && len(spell.AreaOfEffect.RawMessage) > 0 {
+		h.dispatchAoE(ctx, interaction, encounter, encounterID, caster, noTurn, spell, targetStr)
+		return
+	}
+
+	h.dispatchSingleTarget(ctx, interaction, encounter, encounterID, caster, noTurn, spell, targetStr)
 }
 
 // resolveSpell looks up a spell by the user-provided identifier, retrying with

@@ -698,6 +698,10 @@ func attachCombatActionHandlers(handlers *discordHandlers, deps discordHandlerDe
 		handlers.cast.SetNotifier(deps.notifier)
 	}
 	handlers.cast.SetCampaignProvider(checkCampProv)
+	// T23: exploration-mode /cast resolves the invoking player's PC the same
+	// way /move and /action do, so a multi-PC party attributes the cast to the
+	// right caster instead of always the first alive PC.
+	handlers.cast.SetCharacterLookup(characterLookup)
 	handlers.attack.SetClassFeaturePromptPoster(discord.NewClassFeaturePromptPoster(prompts))
 	handlers.attack.SetClassFeatureService(deps.combatService)
 
