@@ -3,7 +3,7 @@
   import { remainingPoints, abilityModifier, canIncrement, canDecrement, scoreCost } from './lib/pointbuy.js';
   import { skillsForBackground, backgroundDetails, formatLanguages } from './lib/backgrounds.js';
   import { abilityLabel } from './lib/skills.js';
-  import { formatAbilityBonuses, parseTraits, formatDarkvision, subracePerks } from './lib/race-perks.js';
+  import { formatAbilityBonuses, parseTraits, formatDarkvision, subracePerks, applyAbilityBonuses } from './lib/race-perks.js';
   import SpellPicker from './SpellPicker.svelte';
   import { spellcastingAbilityForClass, isSpellcaster, cantripsKnown, leveledSpellCap, levelsUpTo } from './lib/spellcasting.js';
   import { formatProperties, armorACText } from './lib/equipment-perks.js';
@@ -458,17 +458,12 @@
     } catch { return {}; }
   });
 
-  let finalScores = $derived(() => {
-    const bonuses = racialBonuses();
-    return {
-      str: scores.str + (bonuses.str || 0),
-      dex: scores.dex + (bonuses.dex || 0),
-      con: scores.con + (bonuses.con || 0),
-      int: scores.int + (bonuses.int || 0),
-      wis: scores.wis + (bonuses.wis || 0),
-      cha: scores.cha + (bonuses.cha || 0),
-    };
-  });
+  // Subrace ability bonuses (e.g. High Elf's +1 INT) are advertised in the race
+  // step but must also feed the final scores, not just the display. subracePerks
+  // returns null when no/invalid subrace is chosen, so fall back to {}.
+  let subraceBonuses = $derived(() => subracePerks(selectedRaceData, subrace)?.abilityBonuses || {});
+
+  let finalScores = $derived(() => applyAbilityBonuses(scores, racialBonuses(), subraceBonuses()));
 
   // Spellcasting limits for the spell step. The prepared-spell cap (ability
   // modifier + class level) is computed live for instant feedback; the castable

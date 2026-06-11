@@ -5,6 +5,7 @@ import {
   parseTraits,
   formatDarkvision,
   subracePerks,
+  applyAbilityBonuses,
 } from './race-perks.js';
 
 describe('parseJSONField', () => {
@@ -176,5 +177,33 @@ describe('subracePerks', () => {
   it('returns null abilityBonuses when subrace omits them', () => {
     const r = { id: 'x', subraces: [{ id: 'plain', name: 'Plain' }] };
     expect(subracePerks(r, 'plain')).toEqual({ abilityBonuses: null, traits: [] });
+  });
+});
+
+describe('applyAbilityBonuses', () => {
+  const base = { str: 8, dex: 15, con: 13, int: 14, wis: 12, cha: 10 };
+
+  it('adds a single race bonus set', () => {
+    expect(applyAbilityBonuses(base, { dex: 2 })).toEqual({
+      str: 8, dex: 17, con: 13, int: 14, wis: 12, cha: 10,
+    });
+  });
+
+  it('stacks race and subrace bonuses (High Elf: +2 DEX, +1 INT)', () => {
+    expect(applyAbilityBonuses(base, { dex: 2 }, { int: 1 })).toEqual({
+      str: 8, dex: 17, con: 13, int: 15, wis: 12, cha: 10,
+    });
+  });
+
+  it('ignores null/non-object bonus sets and non-ability keys', () => {
+    expect(applyAbilityBonuses(base, null, undefined, { choose: { count: 2 }, con: 1 })).toEqual({
+      str: 8, dex: 15, con: 14, int: 14, wis: 12, cha: 10,
+    });
+  });
+
+  it('coerces missing/NaN base scores to 0 and returns only the six abilities', () => {
+    expect(applyAbilityBonuses({ str: 10 }, { str: 2 })).toEqual({
+      str: 12, dex: 0, con: 0, int: 0, wis: 0, cha: 0,
+    });
   });
 });

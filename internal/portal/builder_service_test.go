@@ -51,6 +51,17 @@ func TestValidatePointBuy_Exact27(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestValidatePointBuy_TreatsRacialBonusesAsFree(t *testing.T) {
+	// The builder folds race + subrace ability bonuses into the submitted
+	// (post-racial) scores. A legal 27-point base (STR15/DEX14/CON13/INT12/
+	// WIS10/CHA8) with +2 DEX (race) and +1 INT (subrace) becomes DEX16/INT13.
+	// Billed naively this stat line costs 30 and would be wrongly rejected; the
+	// racial allowance makes those bonuses free so it validates.
+	scores := portal.PointBuyScores{STR: 15, DEX: 16, CON: 13, INT: 13, WIS: 10, CHA: 8}
+	err := portal.ValidatePointBuy(scores)
+	assert.NoError(t, err)
+}
+
 func TestValidateAbilityScores_MethodRules(t *testing.T) {
 	tests := []struct {
 		name    string

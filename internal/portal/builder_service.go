@@ -853,8 +853,20 @@ func PointBuyCost(score int) (int, error) {
 	return 5 + (score-13)*2, nil
 }
 
-// ValidatePointBuy checks that the given scores are valid under 5e point-buy rules.
-// Scores may include racial bonuses (up to +2), so the valid range is 8-17.
+// racialPointBuyAllowance is the maximum ability-score bonus a single ability
+// can receive from its race plus subrace under the SRD (e.g. Mountain Dwarf's
+// +2 STR, or an Elf's +2 DEX). The builder submits post-racial scores, so this
+// much of each score is attributable to racial bonuses and is free.
+const racialPointBuyAllowance = 2
+
+// ValidatePointBuy checks that the given scores are valid under 5e point-buy
+// rules. The builder submits post-racial scores — base point-buy plus the race
+// and subrace ability bonuses — so up to racialPointBuyAllowance per ability is
+// free. Cost is charged on the cheapest base consistent with each score (the
+// score minus that allowance, floored at 8 and capped at the 15 point-buy max),
+// which mirrors the client's base-only point-buy budget. Without this, a +1
+// subrace bonus that pushes a 13 to 14 would be wrongly billed at the higher
+// cost and reject a legal build; the cap still catches grossly overspent lines.
 func ValidatePointBuy(scores PointBuyScores) error {
 	vals := []int{scores.STR, scores.DEX, scores.CON, scores.INT, scores.WIS, scores.CHA}
 	total := 0
@@ -863,8 +875,7 @@ func ValidatePointBuy(scores PointBuyScores) error {
 		if v < 8 || v > 17 {
 			return fmt.Errorf("%w: %d", ErrScoreOutOfRange, v)
 		}
-		// Cap at 15 for cost calculation (racial bonus is free).
-		base := min(v, 15)
+		base := min(max(v-racialPointBuyAllowance, 8), 15)
 		cost, err := PointBuyCost(base)
 		if err != nil {
 			return fmt.Errorf("%w: %d", err, v)

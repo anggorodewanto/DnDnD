@@ -90,6 +90,28 @@ export function formatDarkvision(ft) {
 }
 
 /**
+ * Adds one or more ability-bonus sets to a base score map, returning a fresh
+ * object with exactly the six abilities. Used to fold both the race's and the
+ * chosen subrace's ability_bonuses into the character's final scores — picking
+ * a subrace (e.g. High Elf's +1 INT) must actually raise the stat, not just be
+ * advertised. Null/non-object sets are skipped and non-ability keys (e.g. a
+ * `choose` blob) are ignored. Base scores that are missing or non-numeric
+ * coerce to 0.
+ * @param {object} scores - base scores keyed str/dex/con/int/wis/cha
+ * @param {...(object|null|undefined)} bonusSets - ability_bonuses blobs to add
+ * @returns {{str:number,dex:number,con:number,int:number,wis:number,cha:number}}
+ */
+export function applyAbilityBonuses(scores = {}, ...bonusSets) {
+  const out = {};
+  for (const ability of ABILITY_ORDER) out[ability] = Number(scores?.[ability]) || 0;
+  for (const bonuses of bonusSets) {
+    if (!bonuses || typeof bonuses !== 'object') continue;
+    for (const ability of ABILITY_ORDER) out[ability] += Number(bonuses[ability]) || 0;
+  }
+  return out;
+}
+
+/**
  * Looks up a subrace within a race and returns its perks.
  * @param {object} race - race with `subraces` (array or JSON string)
  * @param {string} subraceId
