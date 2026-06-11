@@ -18,7 +18,7 @@ that it still feels playable.
 
 | Tool | Version | Notes |
 | --- | --- | --- |
-| Go | 1.22+ | `go version` — matches `go.mod` |
+| Go | 1.26+ | `go version` — matches `go.mod` (`go 1.26.3`) |
 | PostgreSQL | 14+ | Local install or `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16` |
 | `git` | any | for the checkout |
 | Discord account | — | with permission to create a server you control |
@@ -111,7 +111,7 @@ You should see:
 
 ```
 discord session constructed (open deferred until after recovery)
-http server listening addr=:8080
+server starting addr=:8080
 ```
 
 If `DISCORD_*` env vars are missing, the dashboard falls back to a passthrough
