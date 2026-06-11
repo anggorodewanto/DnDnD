@@ -186,11 +186,28 @@ func (h *APIHandler) ListAbilityMethods(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, methods)
 }
 
-// submitRequest is the JSON body for character submission.
+// draftModePlayer is the draft-namespace mode for the player portal. It mirrors
+// the client's draftScope() prefix so a player PC draft and a DM NPC draft for
+// the same campaign never collide. The portal endpoints only ever serve the
+// player surface, so the mode is fixed server-side rather than trusted from the
+// request.
+const draftModePlayer = "player"
+
+// submitRequest is the JSON body for character submission. BuilderDraft is the
+// optional raw builder-state blob (serializeDraft output) the client sends so
+// the server can persist it for the "request changes" / cross-device resume
+// flow (T11 / Finding 4·b); it is stored opaquely and never interpreted here.
 type submitRequest struct {
-	Token      string `json:"token"`
-	CampaignID string `json:"campaign_id"`
+	Token        string          `json:"token"`
+	CampaignID   string          `json:"campaign_id"`
+	BuilderDraft json.RawMessage `json:"builder_draft,omitempty"`
 	CharacterSubmission
+}
+
+// draftResponse is the JSON body returned by GetCharacterDraft. Draft is null
+// when no draft is stored for the player.
+type draftResponse struct {
+	Draft json.RawMessage `json:"draft"`
 }
 
 // SubmitCharacter creates a new character from the builder form.
@@ -205,6 +222,14 @@ func (h *APIHandler) SubmitCharacter(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
+	}
+
+	// Persist the builder draft first and unconditionally (best-effort): a
+	// submit that fails the token check — expired / already-used — must still
+	// leave the work recoverable so the reissued /create-character link
+	// rehydrates the form instead of a blank one (T11 / Finding 4·b).
+	if err := h.builderSvc.SaveDraft(r.Context(), req.CampaignID, userID, draftModePlayer, req.BuilderDraft); err != nil {
+		h.logger.Warn("saving builder draft", "error", err)
 	}
 
 	result, err := h.builderSvc.CreateCharacter(r.Context(), req.CampaignID, userID, req.Token, req.CharacterSubmission)
@@ -251,6 +276,32 @@ func (h *APIHandler) PreviewCharacter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, h.builderSvc.Preview(r.Context(), sub))
+}
+
+// GetCharacterDraft returns the player's stored in-progress builder draft for
+// the given campaign so the builder can rehydrate after a "request changes"
+// cycle or on another device (T11 / Finding 4·b). The body is {"draft": null}
+// when nothing is stored; the draft blob is whatever the client previously
+// submitted and is returned verbatim.
+func (h *APIHandler) GetCharacterDraft(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.DiscordUserIDFromContext(r.Context())
+	if !ok || userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	campaignID := r.URL.Query().Get("campaign_id")
+	if campaignID == "" {
+		http.Error(w, "campaign_id is required", http.StatusBadRequest)
+		return
+	}
+
+	draft, err := h.builderSvc.LoadDraft(r.Context(), campaignID, userID, draftModePlayer)
+	if err != nil {
+		h.logger.Error("loading builder draft", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, draftResponse{Draft: draft})
 }
 
 func isValidationError(err error) bool {

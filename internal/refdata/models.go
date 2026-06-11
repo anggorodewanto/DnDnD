@@ -100,6 +100,14 @@ type Character struct {
 	CardMessageID    sql.NullString        `json:"card_message_id"`
 }
 
+type CharacterDraft struct {
+	CampaignID    uuid.UUID       `json:"campaign_id"`
+	DiscordUserID string          `json:"discord_user_id"`
+	Mode          string          `json:"mode"`
+	Draft         json.RawMessage `json:"draft"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
 type Class struct {
 	ID                      string                `json:"id"`
 	Name                    string                `json:"name"`

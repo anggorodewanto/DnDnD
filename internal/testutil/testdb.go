@@ -129,6 +129,7 @@ var MutableTables = []string{
 	"dm_player_messages",
 	"dm_queue_items",
 	"error_log",
+	"character_drafts",
 }
 
 // ReferenceTables are seeded with ON CONFLICT DO NOTHING and preserved across tests.
@@ -165,6 +166,7 @@ var homebrewRefdataTables = []string{
 // we still issue explicit DELETEs for them to keep behaviour deterministic.
 var orderedDeleteTables = []string{
 	"dm_player_messages",
+	"character_drafts",
 	"portal_tokens",
 	"shop_items",
 	"shops",

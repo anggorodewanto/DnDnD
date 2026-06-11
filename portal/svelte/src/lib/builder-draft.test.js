@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DRAFT_VERSION, draftKey, draftScope, serializeDraft, parseDraft } from './builder-draft.js';
+import { DRAFT_VERSION, draftKey, draftScope, serializeDraft, parseDraft, draftHasContent } from './builder-draft.js';
 
 describe('DRAFT_VERSION', () => {
   it('is 1', () => {
@@ -136,6 +136,92 @@ describe('parseDraft', () => {
   it('drops fields that are explicitly undefined-equivalent (absent)', () => {
     const result = parseDraft('{"v":1,"currentStep":3}');
     expect(result).toEqual({ currentStep: 3 });
+  });
+});
+
+describe('draftHasContent', () => {
+  it('returns false for null', () => {
+    expect(draftHasContent(null)).toBe(false);
+  });
+
+  it('returns false for undefined', () => {
+    expect(draftHasContent(undefined)).toBe(false);
+  });
+
+  it('returns false for an empty object', () => {
+    expect(draftHasContent({})).toBe(false);
+  });
+
+  it('treats a bare version envelope as no content', () => {
+    // An empty {v:1} draft (parseDraft strips v, leaving {}) must be "no draft"
+    // so the hydration logic still reaches out to the server.
+    expect(draftHasContent(parseDraft('{"v":1}'))).toBe(false);
+  });
+
+  it('returns true when a name is present', () => {
+    expect(draftHasContent({ name: 'Gimli' })).toBe(true);
+  });
+
+  it('returns true when a race is present', () => {
+    expect(draftHasContent({ race: 'dwarf' })).toBe(true);
+  });
+
+  it('returns true when a subrace is present', () => {
+    expect(draftHasContent({ subrace: 'hill-dwarf' })).toBe(true);
+  });
+
+  it('returns true when a background is present', () => {
+    expect(draftHasContent({ background: 'soldier' })).toBe(true);
+  });
+
+  it('returns true when currentStep is a non-zero step', () => {
+    expect(draftHasContent({ currentStep: 2 })).toBe(true);
+  });
+
+  it('treats currentStep 0 (the first/Basics step) as no content', () => {
+    // Step 0 is the default landing step; on its own it is not "started".
+    expect(draftHasContent({ currentStep: 0 })).toBe(false);
+  });
+
+  it('returns true when the first class entry has a class', () => {
+    expect(draftHasContent({ classEntries: [{ class: 'wizard' }] })).toBe(true);
+  });
+
+  it('treats class entries with no chosen class as no content', () => {
+    expect(draftHasContent({ classEntries: [{ class: '' }] })).toBe(false);
+  });
+
+  it('treats an empty classEntries array as no content', () => {
+    expect(draftHasContent({ classEntries: [] })).toBe(false);
+  });
+
+  it('returns true when at least one skill is selected', () => {
+    expect(draftHasContent({ selectedSkills: ['arcana'] })).toBe(true);
+  });
+
+  it('treats an empty selectedSkills array as no content', () => {
+    expect(draftHasContent({ selectedSkills: [] })).toBe(false);
+  });
+
+  it('returns true when at least one spell is selected', () => {
+    expect(draftHasContent({ selectedSpells: ['fireball'] })).toBe(true);
+  });
+
+  it('treats an empty selectedSpells array as no content', () => {
+    expect(draftHasContent({ selectedSpells: [] })).toBe(false);
+  });
+
+  it('returns true when manual equipment was added', () => {
+    expect(draftHasContent({ manualEquipment: ['rope-hempen'] })).toBe(true);
+  });
+
+  it('treats an empty manualEquipment array as no content', () => {
+    expect(draftHasContent({ manualEquipment: [] })).toBe(false);
+  });
+
+  it('returns true for a full parsed draft', () => {
+    const parsed = parseDraft(serializeDraft({ name: 'Gandalf', currentStep: 3 }));
+    expect(draftHasContent(parsed)).toBe(true);
   });
 });
 

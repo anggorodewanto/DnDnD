@@ -2,6 +2,7 @@ package portal_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"testing"
@@ -486,6 +487,16 @@ type mockBuilderStore struct {
 	lastRelinkPCID   string
 	lastRelinkCharID string
 	lastRelinkVia    string
+
+	// draft persistence capture (T11 / Finding 4·b).
+	saveDraftCalled bool
+	lastDraftCamp   string
+	lastDraftUser   string
+	lastDraftMode   string
+	lastDraftBlob   json.RawMessage
+	saveDraftErr    error
+	loadDraftResult json.RawMessage
+	loadDraftErr    error
 }
 
 func (m *mockBuilderStore) CreateCharacterRecord(_ context.Context, p portal.CreateCharacterParams) (string, error) {
@@ -542,6 +553,19 @@ func (m *mockBuilderStore) ValidateToken(_ context.Context, _ string) (*portal.P
 		return nil, m.validateTokenErr
 	}
 	return m.validateToken, nil
+}
+
+func (m *mockBuilderStore) SaveCharacterDraft(_ context.Context, campaignID, discordUserID, mode string, draft json.RawMessage) error {
+	m.saveDraftCalled = true
+	m.lastDraftCamp = campaignID
+	m.lastDraftUser = discordUserID
+	m.lastDraftMode = mode
+	m.lastDraftBlob = draft
+	return m.saveDraftErr
+}
+
+func (m *mockBuilderStore) LoadCharacterDraft(_ context.Context, _, _, _ string) (json.RawMessage, error) {
+	return m.loadDraftResult, m.loadDraftErr
 }
 
 // mockDMQueueNotifier implements portal.DMQueueNotifier for testing.
@@ -800,4 +824,63 @@ func TestValidateSubmissionMode_SpellCapEnforcedInDMMode(t *testing.T) {
 	errs := portal.ValidateSubmissionMode(sub, portal.ModeDM)
 	require.NotEmpty(t, errs)
 	assert.Contains(t, errs, "too many spells selected: 4 chosen, maximum 3")
+}
+
+// --- Draft persistence (T11 / Finding 4·b) ---------------------------------
+
+func TestBuilderService_SaveDraft_Delegates(t *testing.T) {
+	store := &mockBuilderStore{}
+	svc := portal.NewBuilderService(store)
+	blob := json.RawMessage(`{"v":1,"name":"Gimli"}`)
+
+	err := svc.SaveDraft(context.Background(), "camp-1", "user-1", "player", blob)
+	require.NoError(t, err)
+	assert.True(t, store.saveDraftCalled)
+	assert.Equal(t, "camp-1", store.lastDraftCamp)
+	assert.Equal(t, "user-1", store.lastDraftUser)
+	assert.Equal(t, "player", store.lastDraftMode)
+	assert.JSONEq(t, string(blob), string(store.lastDraftBlob))
+}
+
+func TestBuilderService_SaveDraft_EmptyBlobIsNoOp(t *testing.T) {
+	store := &mockBuilderStore{}
+	svc := portal.NewBuilderService(store)
+
+	require.NoError(t, svc.SaveDraft(context.Background(), "camp-1", "user-1", "player", nil))
+	assert.False(t, store.saveDraftCalled, "no draft to persist should not hit the store")
+}
+
+func TestBuilderService_SaveDraft_PropagatesError(t *testing.T) {
+	store := &mockBuilderStore{saveDraftErr: errors.New("db down")}
+	svc := portal.NewBuilderService(store)
+
+	err := svc.SaveDraft(context.Background(), "camp-1", "user-1", "player", json.RawMessage(`{"v":1}`))
+	require.Error(t, err)
+}
+
+func TestBuilderService_LoadDraft_ReturnsStored(t *testing.T) {
+	stored := json.RawMessage(`{"v":1,"race":"dwarf"}`)
+	store := &mockBuilderStore{loadDraftResult: stored}
+	svc := portal.NewBuilderService(store)
+
+	got, err := svc.LoadDraft(context.Background(), "camp-1", "user-1", "player")
+	require.NoError(t, err)
+	assert.JSONEq(t, string(stored), string(got))
+}
+
+func TestBuilderService_LoadDraft_EmptyCampaignReturnsNil(t *testing.T) {
+	store := &mockBuilderStore{loadDraftResult: json.RawMessage(`{"v":1}`)}
+	svc := portal.NewBuilderService(store)
+
+	got, err := svc.LoadDraft(context.Background(), "", "user-1", "player")
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
+
+func TestBuilderService_LoadDraft_PropagatesError(t *testing.T) {
+	store := &mockBuilderStore{loadDraftErr: errors.New("db down")}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.LoadDraft(context.Background(), "camp-1", "user-1", "player")
+	require.Error(t, err)
 }

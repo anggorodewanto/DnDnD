@@ -134,3 +134,32 @@ export function parseDraft(raw) {
   }
   return result;
 }
+
+/**
+ * Reports whether a parsed draft object represents a build the player actually
+ * started, as opposed to the bare version envelope a fresh form serializes to.
+ * The server-hydration logic uses this to decide whether a usable local draft
+ * already exists: an empty `{v:1}` draft (which `parseDraft` reduces to `{}`)
+ * must read as "no draft" so a returning player still pulls their saved
+ * server-side draft instead of being stuck on a blank form.
+ *
+ * Returns true when any tracked entry point is truthy/non-empty: a typed
+ * `name`, a chosen `race`/`subrace`/`background`, having advanced past the
+ * first step (`currentStep`), a selected first-row `class`, or any selected
+ * skill / spell / manual equipment item.
+ * @param {object|null|undefined} d - parsed builder draft
+ * @returns {boolean} true iff the draft has player-entered content
+ */
+export function draftHasContent(d) {
+  if (d == null) return false;
+  if (d.name) return true;
+  if (d.race) return true;
+  if (d.subrace) return true;
+  if (d.background) return true;
+  if (d.currentStep) return true;
+  if (d.classEntries?.[0]?.class) return true;
+  if (d.selectedSkills?.length > 0) return true;
+  if (d.selectedSpells?.length > 0) return true;
+  if (d.manualEquipment?.length > 0) return true;
+  return false;
+}

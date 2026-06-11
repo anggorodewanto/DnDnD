@@ -2,6 +2,7 @@ package portal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -44,6 +45,14 @@ func (m *dmMockStore) ValidateToken(ctx context.Context, token string) (*PortalT
 
 func (m *dmMockStore) RedeemToken(ctx context.Context, token string) error {
 	return nil
+}
+
+func (m *dmMockStore) SaveCharacterDraft(ctx context.Context, campaignID, discordUserID, mode string, draft json.RawMessage) error {
+	return nil
+}
+
+func (m *dmMockStore) LoadCharacterDraft(ctx context.Context, campaignID, discordUserID, mode string) (json.RawMessage, error) {
+	return nil, nil
 }
 
 // dmMockFeatureProvider implements FeatureProvider for the DM-flow tests.

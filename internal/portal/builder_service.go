@@ -266,6 +266,12 @@ type BuilderStore interface {
 	RelinkPlayerCharacterRecord(ctx context.Context, pcID, characterID, createdVia string) (string, error)
 	ValidateToken(ctx context.Context, token string) (*PortalToken, error)
 	RedeemToken(ctx context.Context, token string) error
+	// SaveCharacterDraft upserts the in-progress builder draft blob for
+	// (campaign, player, mode). The draft is opaque JSON owned by the client.
+	SaveCharacterDraft(ctx context.Context, campaignID, discordUserID, mode string, draft json.RawMessage) error
+	// LoadCharacterDraft returns the stored draft blob for (campaign, player,
+	// mode), or (nil, nil) when none exists.
+	LoadCharacterDraft(ctx context.Context, campaignID, discordUserID, mode string) (json.RawMessage, error)
 }
 
 // DMQueueNotifier sends notifications to the DM queue channel. campaignID is
@@ -389,6 +395,28 @@ func (svc *BuilderService) CreateCharacterDM(ctx context.Context, campaignID str
 		sub:        sub,
 		mode:       ModeDM,
 	})
+}
+
+// SaveDraft persists the player's in-progress builder draft so the "request
+// changes" cycle and a cross-device resume can rehydrate the form instead of
+// starting blank (T11 / Finding 4·b). An empty blob is a no-op: there is
+// nothing to preserve and we avoid writing an empty row. Callers treat this as
+// best-effort — a save failure must never block the submit it piggybacks on.
+func (svc *BuilderService) SaveDraft(ctx context.Context, campaignID, discordUserID, mode string, draft json.RawMessage) error {
+	if len(draft) == 0 {
+		return nil
+	}
+	return svc.store.SaveCharacterDraft(ctx, campaignID, discordUserID, mode, draft)
+}
+
+// LoadDraft returns the stored builder draft blob for (campaign, player, mode),
+// or (nil, nil) when none exists. An empty campaignID yields no draft rather
+// than an error, so a malformed request degrades to a blank form.
+func (svc *BuilderService) LoadDraft(ctx context.Context, campaignID, discordUserID, mode string) (json.RawMessage, error) {
+	if campaignID == "" {
+		return nil, nil
+	}
+	return svc.store.LoadCharacterDraft(ctx, campaignID, discordUserID, mode)
 }
 
 // createInput bundles the per-call parameters for the unified creation core.

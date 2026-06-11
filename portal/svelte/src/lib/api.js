@@ -132,7 +132,8 @@ export async function savePreparation(characterId, spells) {
  *   getStartingEquipment: (className: string) => Promise<object[]>,
  *   listAbilityMethods: () => Promise<string[]>,
  *   previewCharacter: (submission: object) => Promise<object>,
- *   submitCharacter: (submission: object) => Promise<object>,
+ *   getCharacterDraft: () => Promise<object|null>,
+ *   submitCharacter: (submission: object, builderDraft?: object) => Promise<object>,
  * }}
  */
 export function makeBuilderApi(mode, { campaignId = '', token = '' } = {}) {
@@ -170,7 +171,14 @@ export function makeBuilderApi(mode, { campaignId = '', token = '' } = {}) {
         });
         return res.json();
       },
-      async submitCharacter(submission) {
+      // The DM dashboard has no server-side draft endpoint; the builder treats
+      // a null result as "no draft to rehydrate from" and leaves the form blank.
+      async getCharacterDraft() {
+        return null;
+      },
+      // `builderDraft` is accepted for signature parity with the player client
+      // but never sent: the dashboard submit endpoint does not persist drafts.
+      async submitCharacter(submission, _builderDraft) {
         const res = await apiFetch(`${CHARS}/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -213,11 +221,24 @@ export function makeBuilderApi(mode, { campaignId = '', token = '' } = {}) {
       });
       return res.json();
     },
-    async submitCharacter(submission) {
+    // Fetch any server-persisted in-progress draft for this campaign so a
+    // player who reopens /create-character on a fresh page (or another device)
+    // rehydrates the wizard instead of starting over. Returns null — without
+    // hitting the network — when no campaign id is known, since the endpoint
+    // would 400 on a missing campaign_id anyway.
+    async getCharacterDraft() {
+      if (!campaignId) return null;
+      const res = await apiFetch(`${API_BASE}/characters/draft?campaign_id=${encodeURIComponent(campaignId)}`);
+      const body = await res.json();
+      return body?.draft ?? null;
+    },
+    async submitCharacter(submission, builderDraft) {
+      const payload = { token, campaign_id: campaignId, ...submission };
+      if (builderDraft) payload.builder_draft = builderDraft;
       const res = await apiFetch(`${API_BASE}/characters`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, campaign_id: campaignId, ...submission }),
+        body: JSON.stringify(payload),
       });
       return res.json();
     },

@@ -20,6 +20,8 @@ type CharacterCreator interface {
 	CreatePlayerCharacter(ctx context.Context, arg refdata.CreatePlayerCharacterParams) (refdata.PlayerCharacter, error)
 	GetPlayerCharacterByDiscordUser(ctx context.Context, arg refdata.GetPlayerCharacterByDiscordUserParams) (refdata.PlayerCharacter, error)
 	RelinkPlayerCharacter(ctx context.Context, arg refdata.RelinkPlayerCharacterParams) (refdata.PlayerCharacter, error)
+	UpsertCharacterDraft(ctx context.Context, arg refdata.UpsertCharacterDraftParams) error
+	GetCharacterDraft(ctx context.Context, arg refdata.GetCharacterDraftParams) (json.RawMessage, error)
 }
 
 type campaignGetter interface {
@@ -258,6 +260,42 @@ func (a *BuilderStoreAdapter) RedeemToken(ctx context.Context, token string) err
 		return nil
 	}
 	return a.tokenSvc.RedeemToken(ctx, token)
+}
+
+// SaveCharacterDraft upserts the in-progress builder draft for the
+// (campaign, player, mode) key (T11 / Finding 4·b).
+func (a *BuilderStoreAdapter) SaveCharacterDraft(ctx context.Context, campaignID, discordUserID, mode string, draft json.RawMessage) error {
+	campID, err := uuid.Parse(campaignID)
+	if err != nil {
+		return fmt.Errorf("invalid campaign_id %q: %w", campaignID, err)
+	}
+	return a.q.UpsertCharacterDraft(ctx, refdata.UpsertCharacterDraftParams{
+		CampaignID:    campID,
+		DiscordUserID: discordUserID,
+		Mode:          mode,
+		Draft:         draft,
+	})
+}
+
+// LoadCharacterDraft returns the stored builder draft for (campaign, player,
+// mode), or (nil, nil) when no draft row exists.
+func (a *BuilderStoreAdapter) LoadCharacterDraft(ctx context.Context, campaignID, discordUserID, mode string) (json.RawMessage, error) {
+	campID, err := uuid.Parse(campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid campaign_id %q: %w", campaignID, err)
+	}
+	draft, err := a.q.GetCharacterDraft(ctx, refdata.GetCharacterDraftParams{
+		CampaignID:    campID,
+		DiscordUserID: discordUserID,
+		Mode:          mode,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return draft, nil
 }
 
 // AllowedAbilityScoreMethods reads campaign settings for creation method gating.

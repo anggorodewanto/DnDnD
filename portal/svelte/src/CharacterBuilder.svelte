@@ -16,7 +16,7 @@
     subraceOptions, subclassOptions, isSubclassEligible,
     emptyClassRow, addClassRow, removeClassRow, updateClassRow,
   } from './lib/builder-options.js';
-  import { draftKey, draftScope, serializeDraft, parseDraft } from './lib/builder-draft.js';
+  import { draftKey, draftScope, serializeDraft, parseDraft, draftHasContent } from './lib/builder-draft.js';
 
   let { mode = 'player', token = '', campaignId = '' } = $props();
 
@@ -192,18 +192,46 @@
     lastClassForPacks = d.classEntries?.[0]?.class || '';
   }
 
-  // Restore once, synchronously during init (before any effect runs).
-  const restoredDraft = parseDraft(readDraftRaw());
-  if (restoredDraft) applyDraft(restoredDraft);
-
-  // Persist on every change to a tracked field; never write after submit.
-  $effect(() => {
-    const snapshot = $state.snapshot({
+  // Plain snapshot of every persisted field — shared by the persistence effect
+  // and the submit/hydration paths so they can never drift apart.
+  function currentDraftSnapshot() {
+    return $state.snapshot({
       currentStep, name, race, subrace, background,
       classEntries, scores, abilityMethod, abilityRolls,
       selectedSkills, selectedSpells, selectedMasteries, packChoices, manualEquipment,
       wornArmor, equippedWeapon,
     });
+  }
+
+  // Restore once, synchronously during init (before any effect runs).
+  const restoredDraft = parseDraft(readDraftRaw());
+  if (restoredDraft) applyDraft(restoredDraft);
+  // No usable local draft (blank page / different device / cleared on submit)?
+  // Fall back to the server-persisted draft so a player who re-ran
+  // /create-character after a "request changes" lands on their work, not a
+  // blank form (usability T11 / Finding 4·b).
+  if (!draftHasContent(restoredDraft)) hydrateFromServerDraft();
+
+  async function hydrateFromServerDraft() {
+    let serverDraft;
+    try {
+      serverDraft = await api.getCharacterDraft();
+    } catch {
+      return; // a blank form is an acceptable fallback
+    }
+    if (!serverDraft) return;
+    // getCharacterDraft already deserialized the blob; re-stringify so parseDraft
+    // applies the same version check + field allow-list it uses for local drafts.
+    const parsed = parseDraft(JSON.stringify(serverDraft));
+    if (!parsed) return;
+    // Don't clobber input the player began typing before the fetch resolved.
+    if (draftHasContent(currentDraftSnapshot())) return;
+    applyDraft(parsed);
+  }
+
+  // Persist on every change to a tracked field; never write after submit.
+  $effect(() => {
+    const snapshot = currentDraftSnapshot();
     if (submitted) return;
     writeDraftRaw(serializeDraft(snapshot));
   });
@@ -528,8 +556,11 @@
     submitting = true;
     error = '';
     try {
-      await api.submitCharacter(gatherSubmission());
+      await api.submitCharacter(gatherSubmission(), JSON.parse(serializeDraft(currentDraftSnapshot())));
       submitted = true;
+      // Clear only the local draft. The server-side draft is intentionally left
+      // in place — it is overwritten on the next submit and cascade-deleted with
+      // the campaign — so a later "request changes" can still rehydrate the form.
       clearDraft();
     } catch (e) {
       error = 'Submission failed: ' + e.message;

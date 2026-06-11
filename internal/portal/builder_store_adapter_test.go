@@ -27,6 +27,12 @@ type captureCharacterCreator struct {
 	capturedRelink refdata.RelinkPlayerCharacterParams
 	relinkResult   refdata.PlayerCharacter
 	relinkErr      error
+
+	// draft persistence capture (T11 / Finding 4·b).
+	capturedUpsertDraft refdata.UpsertCharacterDraftParams
+	upsertDraftErr      error
+	getDraftResult      json.RawMessage
+	getDraftErr         error
 }
 
 func (c *captureCharacterCreator) CreateCharacter(_ context.Context, arg refdata.CreateCharacterParams) (refdata.Character, error) {
@@ -49,6 +55,15 @@ func (c *captureCharacterCreator) GetPlayerCharacterByDiscordUser(_ context.Cont
 func (c *captureCharacterCreator) RelinkPlayerCharacter(_ context.Context, arg refdata.RelinkPlayerCharacterParams) (refdata.PlayerCharacter, error) {
 	c.capturedRelink = arg
 	return c.relinkResult, c.relinkErr
+}
+
+func (c *captureCharacterCreator) UpsertCharacterDraft(_ context.Context, arg refdata.UpsertCharacterDraftParams) error {
+	c.capturedUpsertDraft = arg
+	return c.upsertDraftErr
+}
+
+func (c *captureCharacterCreator) GetCharacterDraft(_ context.Context, _ refdata.GetCharacterDraftParams) (json.RawMessage, error) {
+	return c.getDraftResult, c.getDraftErr
 }
 
 func TestBuilderStoreAdapter_ActivePlayerCharacter_Found(t *testing.T) {
@@ -648,4 +663,53 @@ func TestBuilderStoreAdapter_CreateCharacterRecord_InitializesFeatureUses_Fighte
 	assert.Equal(t, 1, sw.Current)
 	assert.Equal(t, 1, sw.Max)
 	assert.Equal(t, "short", sw.Recharge)
+}
+
+// --- Draft persistence (T11 / Finding 4·b) ---------------------------------
+
+func TestBuilderStoreAdapter_SaveCharacterDraft(t *testing.T) {
+	creator := &captureCharacterCreator{}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+	campID := uuid.New()
+	draft := json.RawMessage(`{"v":1,"name":"Gimli"}`)
+
+	err := adapter.SaveCharacterDraft(context.Background(), campID.String(), "user-1", "player", draft)
+	require.NoError(t, err)
+	assert.Equal(t, campID, creator.capturedUpsertDraft.CampaignID)
+	assert.Equal(t, "user-1", creator.capturedUpsertDraft.DiscordUserID)
+	assert.Equal(t, "player", creator.capturedUpsertDraft.Mode)
+	assert.JSONEq(t, string(draft), string(creator.capturedUpsertDraft.Draft))
+}
+
+func TestBuilderStoreAdapter_SaveCharacterDraft_BadCampaignID(t *testing.T) {
+	adapter := portal.NewBuilderStoreAdapter(&captureCharacterCreator{}, nil)
+
+	err := adapter.SaveCharacterDraft(context.Background(), "not-a-uuid", "user-1", "player", json.RawMessage(`{}`))
+	require.Error(t, err)
+}
+
+func TestBuilderStoreAdapter_LoadCharacterDraft(t *testing.T) {
+	stored := json.RawMessage(`{"v":1,"race":"dwarf"}`)
+	creator := &captureCharacterCreator{getDraftResult: stored}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	got, err := adapter.LoadCharacterDraft(context.Background(), uuid.New().String(), "user-1", "player")
+	require.NoError(t, err)
+	assert.JSONEq(t, string(stored), string(got))
+}
+
+func TestBuilderStoreAdapter_LoadCharacterDraft_NoRow(t *testing.T) {
+	creator := &captureCharacterCreator{getDraftErr: sql.ErrNoRows}
+	adapter := portal.NewBuilderStoreAdapter(creator, nil)
+
+	got, err := adapter.LoadCharacterDraft(context.Background(), uuid.New().String(), "user-1", "player")
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
+
+func TestBuilderStoreAdapter_LoadCharacterDraft_BadCampaignID(t *testing.T) {
+	adapter := portal.NewBuilderStoreAdapter(&captureCharacterCreator{}, nil)
+
+	_, err := adapter.LoadCharacterDraft(context.Background(), "not-a-uuid", "user-1", "player")
+	require.Error(t, err)
 }
