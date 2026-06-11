@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **13 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **14 / 52**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -39,7 +39,7 @@ single PR when each is trivial (noted per group).
 - [x] **T13** · 🟠 · Run `ActivePlayerCharacter` check **before** creating the record / redeeming the token · _Finding 4 ·d_ → `cf3b1e7`
 
 #### Tier 5 — Rules correctness
-- [ ] **T14** · 🟠 · Spell budget: exclude cantrips from cap + per-class cantrips-known + known-spells tables; merge subrace ASI into `finalScores()` w/ server validation · _Finding 5_
+- [x] **T14** · 🟠 · Spell budget: exclude cantrips from cap + per-class cantrips-known + known-spells tables; merge subrace ASI into `finalScores()` w/ server validation · _Finding 5_ → `35931b9` (spell budget) + `58fbcd4` (subrace ASI)
 
 #### Tier 6 — Ergonomics (_Findings 7–12_)
 - [ ] **T15** · 🟠 · Discord option autocomplete / case-insensitive name→slug + "did you mean" for items & spells · _Finding 7_
