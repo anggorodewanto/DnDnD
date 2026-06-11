@@ -1522,7 +1522,15 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// wiring below run unchanged.
 		if rawDG != nil {
 			if err := rawDG.Open(); err != nil {
-				logger.Error("discord session open failed", "error", err)
+				// T28: surface the likely cause for the close codes that have
+				// an obvious config fix (4004 → bad token, 4014 → intent not
+				// enabled) instead of leaving the operator to decode the raw
+				// websocket close frame.
+				if hint := discordCloseHint(err); hint != "" {
+					logger.Error("discord session open failed", "error", err, "hint", hint)
+				} else {
+					logger.Error("discord session open failed", "error", err)
+				}
 				return fmt.Errorf("discord session open: %w", err)
 			}
 			defer rawDG.Close()

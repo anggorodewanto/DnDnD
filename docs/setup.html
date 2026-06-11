@@ -211,7 +211,7 @@ $EDITOR .env</code></pre>
   <table>
     <thead><tr><th>Symptom</th><th>Fix</th></tr></thead>
     <tbody>
-      <tr><td>Bot won't connect / session fails</td><td>Enable <strong>Server Members Intent</strong> (Bot tab) and check <code>DISCORD_BOT_TOKEN</code>.</td></tr>
+      <tr><td>Bot won't connect / session fails (gateway close <code>4004</code>)</td><td>A bad or expired token fails with close <code>4004 Authentication failed</code> — check <code>DISCORD_BOT_TOKEN</code> first. If the log shows close <code>4014</code> instead, enable the <strong>Server Members Intent</strong> (Bot tab).</td></tr>
       <tr><td>Slash commands don't appear</td><td>Set <code>DISCORD_APPLICATION_ID</code>; commands register per guild on startup once the bot has joined the server. Re-invite with the <code>applications.commands</code> scope.</td></tr>
       <tr><td>Login does nothing / everyone is "local-dev"</td><td>Passthrough mode — <code>DISCORD_CLIENT_ID</code> or <code>DISCORD_CLIENT_SECRET</code> is blank. Set both for real OAuth.</td></tr>
       <tr><td>OAuth redirect mismatch error</td><td>The redirect in the Developer Portal must exactly match <code>BASE_URL + /portal/auth/callback</code> (or <code>OAUTH_REDIRECT_URL</code>).</td></tr>
