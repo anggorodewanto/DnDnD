@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **26 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **27 / 52**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -58,7 +58,7 @@ single PR when each is trivial (noted per group).
 - [x] **T26** · 🟠 · Markdown setup doc (or publish HTML via Pages) mirroring `setup.html` · _Onboarding_ → `1ee5072`
 
 #### Tier 8 — Minors (stage detail) — _batchable per stage_
-- [ ] **T27** · 🟡 · Quickstart DB step: `createdb -h localhost -U postgres dndnd_playtest` + password note · _Onboarding_
+- [x] **T27** · 🟡 · Quickstart DB step: `createdb -h localhost -U postgres dndnd_playtest` + password note · _Onboarding_
 - [ ] **T28** · 🟡 · Map close code 4004 → "check DISCORD_BOT_TOKEN"; reorder troubleshooting row · _Onboarding_
 - [ ] **T29** · 🟡 · Resolve privileged-intents contradiction (quickstart vs setup.html vs code) · _Onboarding_
 - [ ] **T30** · 🟡 · Quickstart drift: Go `1.25.7`, real boot line ("server starting") · _Onboarding_

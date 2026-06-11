@@ -48,9 +48,15 @@ Start a local Postgres if you don't already have one running, then create a
 database for the playtest:
 
 ```sh
-createdb dndnd_playtest
+createdb -h localhost -U postgres dndnd_playtest   # prompts for the postgres password
 export DATABASE_URL='postgres://postgres:postgres@localhost:5432/dndnd_playtest?sslmode=disable'
 ```
+
+The `-h localhost -U postgres` forces a TCP connection as the `postgres` role.
+Without it, `createdb` uses a unix socket with peer auth and fails
+(`role "<your-OS-user>" does not exist`) against the dockerized Postgres
+suggested above. The password is whatever you set in `POSTGRES_PASSWORD`
+(`postgres` in the `docker run` line in step 0).
 
 Migrations run automatically on `cmd/dndnd` boot the first time it sees a
 `DATABASE_URL` — no separate `make migrate` step is required. SRD reference
