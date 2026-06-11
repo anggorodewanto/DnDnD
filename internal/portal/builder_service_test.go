@@ -435,6 +435,23 @@ func TestBuilderService_CreateCharacter_RejectsWhenAlreadyApproved(t *testing.T)
 	assert.Empty(t, store.lastPCStatus)
 }
 
+// T13 / Finding 4·d: a player approved mid-build must be rejected BEFORE the
+// character record is created or the token is redeemed. Otherwise the player
+// retries the 409, the token is already consumed, and the retry 500s with
+// "token already used". The active-character guard must run first.
+func TestBuilderService_CreateCharacter_AlreadyApprovedSparesTokenAndRecord(t *testing.T) {
+	store := &mockBuilderStore{
+		charID:   "new-char-1",
+		activePC: &portal.ActivePlayerCharacter{ID: "approved-pc", Status: "approved"},
+	}
+	svc := portal.NewBuilderService(store)
+
+	_, err := svc.CreateCharacter(context.Background(), "camp", "user-1", "tok", validSubmission())
+	require.ErrorIs(t, err, portal.ErrAlreadyActive)
+	assert.Empty(t, store.lastRedeemedToken, "token must not be redeemed when already approved")
+	assert.Empty(t, store.lastCharName, "character record must not be created when already approved")
+}
+
 // No existing row → the normal insert path runs (regression guard).
 func TestBuilderService_CreateCharacter_InsertsWhenNoExistingRow(t *testing.T) {
 	store := &mockBuilderStore{charID: "c-1", pcID: "pc-1"} // activePC nil

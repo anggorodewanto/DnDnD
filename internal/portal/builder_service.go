@@ -522,6 +522,19 @@ func (svc *BuilderService) create(ctx context.Context, in createInput) (CreateCh
 		if tok != nil && tok.DiscordUserID != in.discordUserID {
 			return CreateCharacterResult{}, ErrTokenOwnership
 		}
+		// Reject an already-approved player BEFORE creating the character
+		// record or redeeming the token (Finding 4·d). A player approved
+		// mid-build would otherwise burn their token on the 409, and the
+		// retry would 500 with "token already used". persistPlayerCharacter
+		// re-checks (and relinks pending rows), so this only short-circuits
+		// the approved case.
+		existing, err := svc.store.ActivePlayerCharacter(ctx, in.campaignID, in.discordUserID)
+		if err != nil {
+			return CreateCharacterResult{}, fmt.Errorf("checking existing player character: %w", err)
+		}
+		if existing != nil && existing.Status == "approved" {
+			return CreateCharacterResult{}, ErrAlreadyActive
+		}
 	}
 
 	charID, err := svc.store.CreateCharacterRecord(ctx, charParams)
