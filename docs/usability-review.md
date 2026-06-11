@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **23 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **26 / 52**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -53,9 +53,9 @@ single PR when each is trivial (noted per group).
 - [x] **T21** · 🟠 · Encounter no-map dead-end: disable/validate the "-- No map --" option inline before save · _Campaign setup_ → `28bc880`
 - [x] **T22** · 🟠 · Rejection feedback in `/character` + channel/ephemeral fallback when DM send fails · _Player onboarding_ → `08d2b74`
 - [x] **T23** · 🟠 · Add an out-of-combat branch to `CastHandler.Handle` (skip turn lookup, permit rituals/utility) · _Live play_ → `d6680dd`
-- [ ] **T24** · 🟠 · Shop buy/claim buttons + gold deduction (mirror `loot_claim:` flow) · _Live play_
-- [ ] **T25** · 🟠 · `/give` posts publicly + DMs the receiver + adjacency/range check · _Live play_
-- [ ] **T26** · 🟠 · Markdown setup doc (or publish HTML via Pages) mirroring `setup.html` · _Onboarding_
+- [x] **T24** · 🟠 · Shop buy/claim buttons + gold deduction (mirror `loot_claim:` flow) · _Live play_ → `b896b40`
+- [x] **T25** · 🟠 · `/give` posts publicly + DMs the receiver + adjacency/range check · _Live play_ → `4f795ac`
+- [x] **T26** · 🟠 · Markdown setup doc (or publish HTML via Pages) mirroring `setup.html` · _Onboarding_ → `1ee5072`
 
 #### Tier 8 — Minors (stage detail) — _batchable per stage_
 - [ ] **T27** · 🟡 · Quickstart DB step: `createdb -h localhost -U postgres dndnd_playtest` + password note · _Onboarding_
