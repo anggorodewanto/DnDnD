@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -38,7 +39,7 @@ func (h *HelpHandler) Handle(interaction *discordgo.Interaction) {
 
 	if topic == "" {
 		text := generalHelp + h.contextTips(interaction)
-		respondEphemeral(h.session, interaction, text)
+		respondEphemeralLong(h.session, interaction, text)
 		return
 	}
 
@@ -48,7 +49,41 @@ func (h *HelpHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
-	respondEphemeral(h.session, interaction, text)
+	respondEphemeralLong(h.session, interaction, text)
+}
+
+// respondEphemeralLong sends an ephemeral interaction reply, splitting content
+// that exceeds Discord's per-message limit across followup messages so long
+// replies (notably /help with context tips, which run over 2000 chars) are not
+// silently dropped. Unlike respondEphemeral it does not discard send errors —
+// they are logged so a failed /help is diagnosable rather than surfacing as a
+// bare "The application did not respond".
+func respondEphemeralLong(s Session, interaction *discordgo.Interaction, msg string) {
+	parts := SplitMessage(msg)
+	if len(parts) == 0 { // SplitMessage returns nil only for >6000-byte content.
+		parts = splitHardCut(msg)
+	}
+
+	if err := s.InteractionRespond(interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: parts[0],
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	}); err != nil {
+		slog.Error("help interaction respond failed", "error", err)
+		return
+	}
+
+	for _, part := range parts[1:] {
+		if _, err := s.FollowupMessageCreate(interaction, false, &discordgo.WebhookParams{
+			Content: part,
+			Flags:   discordgo.MessageFlagsEphemeral,
+		}); err != nil {
+			slog.Error("help followup message failed", "error", err)
+			return
+		}
+	}
 }
 
 // contextTips returns context-specific tips based on the user's current encounter mode.

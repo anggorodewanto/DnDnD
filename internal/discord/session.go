@@ -14,6 +14,7 @@ type Session interface {
 	GuildChannelCreateComplex(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error)
 	InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error
 	InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error)
+	FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams) (*discordgo.Message, error)
 	ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error)
 	GetState() *discordgo.State
 }

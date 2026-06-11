@@ -1118,6 +1118,10 @@ func (q *queueingSession) InteractionResponseEdit(interaction *discordgo.Interac
 	return q.inner.InteractionResponseEdit(interaction, newresp)
 }
 
+func (q *queueingSession) FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams) (*discordgo.Message, error) {
+	return q.inner.FollowupMessageCreate(interaction, wait, data)
+}
+
 func (q *queueingSession) ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error) {
 	return q.inner.ChannelMessageEdit(channelID, messageID, content)
 }

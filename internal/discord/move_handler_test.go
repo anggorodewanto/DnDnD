@@ -133,6 +133,9 @@ func (m *mockMoveSession) InteractionRespond(i *discordgo.Interaction, resp *dis
 func (m *mockMoveSession) InteractionResponseEdit(*discordgo.Interaction, *discordgo.WebhookEdit) (*discordgo.Message, error) {
 	return nil, nil
 }
+func (m *mockMoveSession) FollowupMessageCreate(*discordgo.Interaction, bool, *discordgo.WebhookParams) (*discordgo.Message, error) {
+	return &discordgo.Message{}, nil
+}
 func (m *mockMoveSession) UserChannelCreate(string) (*discordgo.Channel, error) { return nil, nil }
 func (m *mockMoveSession) ChannelMessageSend(channelID, content string) (*discordgo.Message, error) {
 	m.channelSends = append(m.channelSends, moveSessionChannelSend{ChannelID: channelID, Content: content})

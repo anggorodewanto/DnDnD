@@ -57,6 +57,9 @@ func (m *mockInventorySession) InteractionRespond(interaction *discordgo.Interac
 func (m *mockInventorySession) InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error) {
 	return nil, nil
 }
+func (m *mockInventorySession) FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams) (*discordgo.Message, error) {
+	return &discordgo.Message{}, nil
+}
 func (m *mockInventorySession) ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error) {
 	return nil, nil
 }

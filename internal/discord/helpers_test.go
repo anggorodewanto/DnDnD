@@ -19,6 +19,7 @@ type MockSession struct {
 	GuildChannelCreateComplexFunc       func(guildID string, data discordgo.GuildChannelCreateData) (*discordgo.Channel, error)
 	InteractionRespondFunc              func(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse) error
 	InteractionResponseEditFunc         func(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error)
+	FollowupMessageCreateFunc           func(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams) (*discordgo.Message, error)
 	ChannelMessageEditFunc              func(channelID, messageID, content string) (*discordgo.Message, error)
 	StateValue                          *discordgo.State
 }
@@ -86,6 +87,13 @@ func (m *MockSession) ChannelMessageEdit(channelID, messageID, content string) (
 		return m.ChannelMessageEditFunc(channelID, messageID, content)
 	}
 	return &discordgo.Message{ID: messageID}, nil
+}
+
+func (m *MockSession) FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams) (*discordgo.Message, error) {
+	if m.FollowupMessageCreateFunc != nil {
+		return m.FollowupMessageCreateFunc(interaction, wait, data)
+	}
+	return &discordgo.Message{}, nil
 }
 
 func (m *MockSession) GetState() *discordgo.State {

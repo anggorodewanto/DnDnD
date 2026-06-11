@@ -29,6 +29,9 @@ func (m *mockRecapSession) InteractionRespond(_ *discordgo.Interaction, resp *di
 func (m *mockRecapSession) InteractionResponseEdit(*discordgo.Interaction, *discordgo.WebhookEdit) (*discordgo.Message, error) {
 	return nil, nil
 }
+func (m *mockRecapSession) FollowupMessageCreate(*discordgo.Interaction, bool, *discordgo.WebhookParams) (*discordgo.Message, error) {
+	return &discordgo.Message{}, nil
+}
 func (m *mockRecapSession) UserChannelCreate(string) (*discordgo.Channel, error) { return nil, nil }
 func (m *mockRecapSession) ChannelMessageSend(string, string) (*discordgo.Message, error) {
 	return nil, nil

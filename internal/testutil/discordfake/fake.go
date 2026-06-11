@@ -345,6 +345,29 @@ func (f *Fake) InteractionResponseEdit(interaction *discordgo.Interaction, newre
 	return &discordgo.Message{}, nil
 }
 
+// FollowupMessageCreate records a followup message. Split ephemeral replies
+// (e.g. /help with context tips) send their overflow parts this way, so it is
+// recorded like an interaction response to keep transcripts complete.
+func (f *Fake) FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams) (*discordgo.Message, error) {
+	entry := Entry{
+		Kind: KindInteractionResponse,
+	}
+	if interaction != nil {
+		entry.InteractionID = interaction.ID
+		entry.ChannelID = interaction.ChannelID
+	}
+	if data != nil {
+		entry.Content = data.Content
+		entry.Embeds = data.Embeds
+		entry.Components = data.Components
+		if data.Flags&discordgo.MessageFlagsEphemeral != 0 {
+			entry.Ephemeral = true
+		}
+	}
+	f.appendEntry(entry)
+	return &discordgo.Message{}, nil
+}
+
 // ChannelMessageEdit records the edit.
 func (f *Fake) ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error) {
 	f.appendEntry(Entry{

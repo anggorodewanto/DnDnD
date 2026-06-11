@@ -47,6 +47,10 @@ func (d *DiscordgoSession) InteractionResponseEdit(interaction *discordgo.Intera
 	return d.S.InteractionResponseEdit(interaction, newresp)
 }
 
+func (d *DiscordgoSession) FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams) (*discordgo.Message, error) {
+	return d.S.FollowupMessageCreate(interaction, wait, data)
+}
+
 func (d *DiscordgoSession) ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error) {
 	return d.S.ChannelMessageEdit(channelID, messageID, content)
 }

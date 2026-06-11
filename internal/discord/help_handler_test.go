@@ -224,9 +224,15 @@ func (m *mockHelpEncounterProvider) GetEncounter(_ context.Context, _ uuid.UUID)
 func TestHelpHandler_CombatContext_ShowsCombatTips(t *testing.T) {
 	mock := newTestMock()
 	var content string
+	// The combat reply exceeds Discord's limit, so it is split across an
+	// interaction response plus followup(s); accumulate every part.
 	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		content = resp.Data.Content
+		content += resp.Data.Content
 		return nil
+	}
+	mock.FollowupMessageCreateFunc = func(_ *discordgo.Interaction, _ bool, data *discordgo.WebhookParams) (*discordgo.Message, error) {
+		content += data.Content
+		return &discordgo.Message{}, nil
 	}
 
 	encID := uuid.New()
@@ -262,8 +268,12 @@ func TestHelpHandler_ExplorationContext_ShowsExplorationTips(t *testing.T) {
 	mock := newTestMock()
 	var content string
 	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
-		content = resp.Data.Content
+		content += resp.Data.Content
 		return nil
+	}
+	mock.FollowupMessageCreateFunc = func(_ *discordgo.Interaction, _ bool, data *discordgo.WebhookParams) (*discordgo.Message, error) {
+		content += data.Content
+		return &discordgo.Message{}, nil
 	}
 
 	encID := uuid.New()
@@ -289,6 +299,56 @@ func TestHelpHandler_ExplorationContext_ShowsExplorationTips(t *testing.T) {
 	}
 	if !strings.Contains(content, "/action") {
 		t.Error("expected exploration tips to mention /action")
+	}
+}
+
+func TestHelpHandler_CombatContext_SplitsWithinLimit(t *testing.T) {
+	mock := newTestMock()
+	var parts []string
+	mock.InteractionRespondFunc = func(_ *discordgo.Interaction, resp *discordgo.InteractionResponse) error {
+		parts = append(parts, resp.Data.Content)
+		if resp.Data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+			t.Error("expected ephemeral response flag")
+		}
+		return nil
+	}
+	mock.FollowupMessageCreateFunc = func(_ *discordgo.Interaction, _ bool, data *discordgo.WebhookParams) (*discordgo.Message, error) {
+		parts = append(parts, data.Content)
+		if data.Flags&discordgo.MessageFlagsEphemeral == 0 {
+			t.Error("expected ephemeral followup flag")
+		}
+		return &discordgo.Message{}, nil
+	}
+
+	encID := uuid.New()
+	provider := &mockHelpEncounterProvider{
+		encounterID: encID,
+		encounter:   refdata.Encounter{ID: encID, Mode: "combat"},
+	}
+
+	handler := NewHelpHandler(mock)
+	handler.SetEncounterProvider(provider)
+	handler.Handle(&discordgo.Interaction{
+		GuildID: "guild-1",
+		Type:    discordgo.InteractionApplicationCommand,
+		Member:  &discordgo.Member{User: &discordgo.User{ID: "user-1"}},
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name:    "help",
+			Options: []*discordgo.ApplicationCommandInteractionDataOption{},
+		},
+	})
+
+	if len(parts) < 2 {
+		t.Fatalf("expected over-limit help reply to split into >=2 messages, got %d", len(parts))
+	}
+	for i, p := range parts {
+		if len(p) > MaxMessageLen {
+			t.Errorf("part %d exceeds Discord limit: %d bytes", i, len(p))
+		}
+	}
+	combined := strings.Join(parts, "")
+	if !strings.Contains(combined, "Context Tips (Combat)") {
+		t.Error("combined reply missing combat context tips")
 	}
 }
 

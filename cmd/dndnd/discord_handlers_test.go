@@ -65,6 +65,9 @@ func (t *testSession) InteractionRespond(interaction *discordgo.Interaction, res
 func (t *testSession) InteractionResponseEdit(interaction *discordgo.Interaction, newresp *discordgo.WebhookEdit) (*discordgo.Message, error) {
 	return &discordgo.Message{}, nil
 }
+func (t *testSession) FollowupMessageCreate(interaction *discordgo.Interaction, wait bool, data *discordgo.WebhookParams) (*discordgo.Message, error) {
+	return &discordgo.Message{}, nil
+}
 func (t *testSession) ChannelMessageEdit(channelID, messageID, content string) (*discordgo.Message, error) {
 	return &discordgo.Message{}, nil
 }
