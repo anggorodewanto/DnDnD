@@ -450,6 +450,11 @@ func buildDiscordHandlers(deps discordHandlerDeps) discordHandlers {
 		handlers.done.SetPlayerLookup(deps.queries)
 	}
 	handlers.done.SetTurnNotifier(&discord.DefaultTurnNotifier{})
+	// T18 / Finding 10: post turn notifications + the combat-map PNG render off
+	// the interaction path so /done acknowledges within Discord's 3-second
+	// window. The notification work uses context.Background() and the
+	// goroutine-safe discordgo session, so it is safe to run detached.
+	handlers.done.SetNotifyDispatcher(func(f func()) { go f() })
 
 	// Phase 27 turn-gate: wire the advisory-lock + ownership-validation
 	// gate into the state-mutating /move and /fly handlers. /distance is

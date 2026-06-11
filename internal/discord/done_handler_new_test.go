@@ -1592,3 +1592,53 @@ func TestDoneHandler_SendTurnNotifications_GetEncounterError(t *testing.T) {
 		t.Error("expected turn start NOT to be called when GetEncounter fails")
 	}
 }
+
+// TestDoneHandler_AcknowledgesBeforeMapRender asserts the /done interaction is
+// acknowledged BEFORE the slow combat-map render/upload runs (T18 / Finding 10).
+// Previously sendTurnNotifications (PNG render + ChannelMessageSendComplex
+// upload) ran before respond(), so on large/Tiled-asset maps the response blew
+// Discord's 3-second interaction window ("The application did not respond").
+func TestDoneHandler_AcknowledgesBeforeMapRender(t *testing.T) {
+	sess := &mockMoveSession{}
+	handler, _, _, _, _ := setupFullDoneHandler(sess)
+
+	responded := false
+	respondedBeforeRender := false
+	renderRan := false
+
+	capSess := &captureComplexSession{}
+	capSess.InteractionRespondFunc = func(_ *discordgo.Interaction, _ *discordgo.InteractionResponse) error {
+		responded = true
+		return nil
+	}
+	handler.session = capSess
+
+	handler.SetTurnNotifier(&mockTurnNotifier{
+		notifyTurnStart: func(_ Session, _ string, _ string) {},
+		notifyAutoSkip:  func(_ Session, _ string, _ string) {},
+	})
+	handler.SetCampaignSettingsProvider(&mockCampaignSettingsProvider{
+		getSettings: func(_ context.Context, _ uuid.UUID) (map[string]string, error) {
+			return map[string]string{"your-turn": "chan-yt", "combat-map": "chan-combat-map"}, nil
+		},
+	})
+	handler.SetImpactSummaryProvider(&mockImpactSummaryProvider{
+		getImpactSummary: func(_ context.Context, _, _ uuid.UUID) string { return "" },
+	})
+	handler.SetMapRegenerator(&mockMapRegenerator{
+		regenerateMap: func(_ context.Context, _ uuid.UUID) ([]byte, error) {
+			renderRan = true
+			respondedBeforeRender = responded
+			return []byte("png"), nil
+		},
+	})
+
+	handler.Handle(makeDoneInteraction())
+
+	if !renderRan {
+		t.Fatal("expected combat-map render to run")
+	}
+	if !respondedBeforeRender {
+		t.Error("expected /done interaction acknowledged before the slow map render (T18)")
+	}
+}

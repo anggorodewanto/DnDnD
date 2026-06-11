@@ -116,6 +116,7 @@ type DoneHandler struct {
 	impactSummaryProvider    ImpactSummaryProvider
 	mapRegenerator           MapRegenerator
 	mapRenderFailNotifier    CombatMapRenderFailureNotifier
+	notifyAsync              func(func())
 }
 
 // NewDoneHandler creates a new DoneHandler.
@@ -173,6 +174,27 @@ func (h *DoneHandler) SetMapRegenerator(mr MapRegenerator) {
 // stale map. (T09 / Finding 6f)
 func (h *DoneHandler) SetMapRenderFailureNotifier(n CombatMapRenderFailureNotifier) {
 	h.mapRenderFailNotifier = n
+}
+
+// SetNotifyDispatcher wires the dispatcher used to run the post-turn
+// notifications (combat-log posts, turn-start ping, and the slow combat-map
+// PNG render + upload). In production this is set to `go f()` so /done
+// acknowledges the interaction within Discord's 3-second window and the map
+// render happens off the interaction path (T18 / Finding 10). When nil
+// (the default, used by tests) the work runs inline/synchronously, keeping
+// channel-post assertions deterministic.
+func (h *DoneHandler) SetNotifyDispatcher(dispatch func(func())) {
+	h.notifyAsync = dispatch
+}
+
+// dispatchNotify runs the post-turn notification work either asynchronously
+// (production) or inline (tests / default), per SetNotifyDispatcher.
+func (h *DoneHandler) dispatchNotify(f func()) {
+	if h.notifyAsync != nil {
+		h.notifyAsync(f)
+		return
+	}
+	f()
 }
 
 // HasMapRegenerator reports whether a non-nil MapRegenerator has been wired
@@ -406,8 +428,6 @@ func (h *DoneHandler) advanceAndRespond(ctx context.Context, encounterID uuid.UU
 		return
 	}
 
-	h.sendTurnNotifications(ctx, encounterID, nextTurnInfo, nextCombatant)
-
 	msg := fmt.Sprintf("\u2705 Turn ended. Next up: **%s** (Round %d)", nextCombatant.DisplayName, nextTurnInfo.RoundNumber)
 
 	if includeSkipInfo && nextTurnInfo.Skipped {
@@ -415,7 +435,16 @@ func (h *DoneHandler) advanceAndRespond(ctx context.Context, encounterID uuid.UU
 		msg = skipMsg + "\n" + msg
 	}
 
+	// T18 / Finding 10: acknowledge the interaction BEFORE posting turn
+	// notifications. sendTurnNotifications renders + uploads the combat-map
+	// PNG, which on large/Tiled-asset maps exceeds Discord's 3-second
+	// interaction window; responding first (then dispatching the notifications,
+	// asynchronously in production) avoids "The application did not respond".
 	respond(msg)
+
+	h.dispatchNotify(func() {
+		h.sendTurnNotifications(ctx, encounterID, nextTurnInfo, nextCombatant)
+	})
 }
 
 // sendTurnNotifications posts auto-skip messages to #combat-log and
