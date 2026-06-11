@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **10 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **11 / 52**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -34,7 +34,7 @@ single PR when each is trivial (noted per group).
 
 #### Tier 4 — Lost-work cluster (_Finding 4_)
 - [x] **T10** · 🟠 · Map token errors → 400/409/410 with "request a new link"; key localStorage draft by user+campaign · _Finding 4 ·a_ → `c401587`
-- [ ] **T11** · 🟠 · Hydrate builder from the player's pending / changes_requested character (or persist draft server-side) · _Finding 4 ·b_
+- [x] **T11** · 🟠 · Hydrate builder from the player's pending / changes_requested character (or persist draft server-side) · _Finding 4 ·b_ → `e82b4b2`
 - [ ] **T12** · 🟠 · Confirm-on-navigate when dirty + `beforeunload` handler (map editor & encounter builder) · _Finding 4 ·c_
 - [ ] **T13** · 🟠 · Run `ActivePlayerCharacter` check **before** creating the record / redeeming the token · _Finding 4 ·d_
 
