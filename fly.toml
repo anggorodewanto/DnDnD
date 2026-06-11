@@ -1,3 +1,5 @@
+# Rename to a globally-unique app name before `fly deploy` — "dndnd" is already
+# taken on Fly. e.g. app = "dndnd-<yourname>". See docs/local-run.md.
 app = "dndnd"
 primary_region = "ord"
 

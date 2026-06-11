@@ -63,7 +63,9 @@ Local Compose deliberately uses the same runtime contract as Fly:
 - OAuth and portal links come from `BASE_URL`
 - secure cookies are controlled by `COOKIE_SECURE`
 
-For Fly, use the same values with production-safe differences:
+For Fly, first rename the app in `fly.toml` — `app = "dndnd"` is already taken,
+so pick a globally-unique name (e.g. `dndnd-<yourname>`). Then use the same
+values with production-safe differences:
 
 ```sh
 fly secrets set \

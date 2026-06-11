@@ -43,6 +43,13 @@ See [CLAUDE.md](CLAUDE.md) for the development process (orchestrated subagents,
 red/green TDD, coverage gates). Common commands:
 
 ```sh
-make run          # run the service
+make local-up     # docker compose: app + Postgres (the production-shaped path)
+make run          # run the bare binary — needs DATABASE_URL + DISCORD_* exported
 make cover-check  # run tests with coverage gates
 ```
+
+`make run` just calls `go run ./cmd/dndnd/`; with no `DATABASE_URL` exported it
+boots into a half-dead dashboard-only mode (DB features skipped) and the bot
+never opens its gateway. For a full local stack use `make local-up` — see
+[docs/local-run.md](docs/local-run.md) and
+[docs/playtest-quickstart.md](docs/playtest-quickstart.md) for the env setup.
