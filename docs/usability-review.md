@@ -15,7 +15,7 @@ bump the Progress count, and stop for review. IDs (`T01`…) are stable — the 
 may also say "fix T17" to jump. Items within one group may be batched into a
 single PR when each is trivial (noted per group).
 
-**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **17 / 52**
+**Legend:** 🔴 blocker · 🟠 major · 🟡 minor · 🔵 validation · Progress: **18 / 52**
 
 #### Tier 1 — Blockers (unblock the documented happy path)
 - [x] **T01** · 🔴 · Accept number→letter `position_col` in `ParseTemplateCreatures` + dashboard-shaped JSON test · _Finding 1_ → `d26ba13`
@@ -45,7 +45,7 @@ single PR when each is trivial (noted per group).
 - [x] **T15** · 🟠 · Discord option autocomplete / case-insensitive name→slug + "did you mean" for items & spells · _Finding 7_ → `34f551d`
 - [x] **T16** · 🟠 · Split `/help` reply via `SplitMessage`; stop discarding the `InteractionRespond` error · _Finding 8_ → `c6c2b11`
 - [x] **T17** · 🟠 · Seat PCs into `player` spawn zones at StartCombat (reuse `AssignPCsToSpawnZones`) · _Finding 9_ → `6748335`
-- [ ] **T18** · 🟠 · `/done`: respond/defer immediately after `AdvanceTurn`, post notifications + map async · _Finding 10_
+- [x] **T18** · 🟠 · `/done`: respond/defer immediately after `AdvanceTurn`, post notifications + map async · _Finding 10_ → `876009e`
 - [ ] **T19** · 🟠 · Post a debounced fogged map render after exploration moves (or mirror to `#the-story`) · _Finding 11_
 - [ ] **T20** · 🟠 · Explicit per-DM active-campaign selector + guild dropdown (or make `/setup` the single creation path) · _Finding 12_
 
