@@ -1,19 +1,22 @@
 <script>
   import { isConcentration, formatCastingTime } from './lib/spell-perks.js';
   import { filterSpells, groupSpellsBySchool, availableLevels } from './lib/spell-filter.js';
-  import { countAgainstCap, isSpellDisabled, disabledReason, toggleSelected, visibleSpells } from './lib/spell-picker.js';
+  import { countAgainstCap, countByBucket, isSpellDisabled, disabledReason, toggleSelected, visibleSpells } from './lib/spell-picker.js';
 
   // Shared spell-selection UI for both the character builder's spell step and
   // the standalone spell-prep page. `selected` is the two-way bound list of
-  // chosen spell ids. `max` caps how many count against the limit; `Infinity`
-  // means uncapped. `selectableLevels` (null = no gate) restricts which leveled
-  // spells can be picked while still letting every level be browsed.
-  // `alwaysPrepared` are subclass-granted ids that stay locked-on and never
-  // count against the cap.
+  // chosen spell ids. `max` caps how many *leveled* spells count against the
+  // limit; `Infinity` means uncapped. `cantripMax` (default `Infinity`) caps
+  // cantrips separately — when finite the picker enforces two budgets, otherwise
+  // cantrips share `max` (single-cap mode, used by the prep page).
+  // `selectableLevels` (null = no gate) restricts which leveled spells can be
+  // picked while still letting every level be browsed. `alwaysPrepared` are
+  // subclass-granted ids that stay locked-on and never count against a cap.
   let {
     spells = [],
     selected = $bindable([]),
     max = Infinity,
+    cantripMax = Infinity,
     selectableLevels = null,
     alwaysPrepared = [],
   } = $props();
@@ -22,14 +25,19 @@
   let levelFilter = $state('');
   let hideUnselectable = $state(false);
 
+  let dualBudget = $derived(Number.isFinite(cantripMax));
+  let buckets = $derived(countByBucket(selected, { spells, alwaysPrepared, cantripMax }));
   let counted = $derived(countAgainstCap(selected, alwaysPrepared));
+  let pickerOpts = $derived({ selected, alwaysPrepared, max, cantripMax, selectableLevels, spells });
   let filtered = $derived(filterSpells(spells, { query, level: levelFilter }));
-  let visible = $derived(
-    visibleSpells(filtered, hideUnselectable, { selected, alwaysPrepared, max, selectableLevels }),
-  );
+  let visible = $derived(visibleSpells(filtered, hideUnselectable, pickerOpts));
   let groups = $derived(groupSpellsBySchool(visible));
   let levels = $derived(availableLevels(spells));
-  let atCap = $derived(max !== Infinity && counted >= max);
+  let atCap = $derived(
+    dualBudget
+      ? buckets.cantrips >= cantripMax && (max === Infinity || buckets.leveled >= max)
+      : max !== Infinity && counted >= max,
+  );
 
   function toggle(id) {
     selected = toggleSelected(selected, id, alwaysPrepared);
@@ -50,7 +58,7 @@
       Hide unselectable
     </label>
     <span class="spell-selected-count" class:at-cap={atCap}>
-      {#if max === Infinity}{counted} selected{:else}{counted} / {max} prepared{/if}
+      {#if dualBudget}{buckets.cantrips} / {cantripMax} cantrips · {buckets.leveled}{#if max !== Infinity} / {max}{/if} spells{:else if max === Infinity}{counted} selected{:else}{counted} / {max} prepared{/if}
       {#if alwaysPrepared.length > 0}<span class="always-note"> · +{alwaysPrepared.length} always</span>{/if}
     </span>
   </div>
@@ -72,8 +80,8 @@
           {@const castingTime = formatCastingTime(spell.casting_time)}
           {@const isAlways = alwaysPrepared.includes(spell.id)}
           {@const isSelected = selected.includes(spell.id) || isAlways}
-          {@const disabled = isSpellDisabled(spell, { selected, alwaysPrepared, max, selectableLevels })}
-          {@const reason = disabledReason(spell, { selected, alwaysPrepared, max, selectableLevels })}
+          {@const disabled = isSpellDisabled(spell, pickerOpts)}
+          {@const reason = disabledReason(spell, pickerOpts)}
           <label
             class="spell-option"
             class:selected={isSelected}

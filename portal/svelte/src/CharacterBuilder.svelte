@@ -5,7 +5,7 @@
   import { abilityLabel } from './lib/skills.js';
   import { formatAbilityBonuses, parseTraits, formatDarkvision, subracePerks } from './lib/race-perks.js';
   import SpellPicker from './SpellPicker.svelte';
-  import { spellcastingAbilityForClass, isSpellcaster, spellPrepCap, levelsUpTo } from './lib/spellcasting.js';
+  import { spellcastingAbilityForClass, isSpellcaster, cantripsKnown, leveledSpellCap, levelsUpTo } from './lib/spellcasting.js';
   import { formatProperties, armorACText } from './lib/equipment-perks.js';
   import { raceGrantedSkills } from './lib/race-skills.js';
   import { raceGrantedWeaponProficiencies, weaponProficiencyLabel } from './lib/race-weapon-proficiencies.js';
@@ -479,9 +479,13 @@
   let isCaster = $derived(isSpellcaster(selectedClass));
   let spellAbility = $derived(spellcastingAbilityForClass(selectedClass));
   let primaryLevel = $derived(Number(classEntries[0]?.level) || 1);
-  let spellCap = $derived(
-    isCaster ? spellPrepCap(abilityModifier(finalScores()[spellAbility]), primaryLevel) : Infinity
-  );
+  // Cantrips and leveled spells have separate budgets: cantrips known is a flat
+  // per-class/level count, while leveled spells use the class's prepared cap
+  // (ability mod + level) or Spells Known table. Counting cantrips against the
+  // leveled cap blocked legal builds (Finding 5), so they are tracked apart.
+  let spellMod = $derived(isCaster ? abilityModifier(finalScores()[spellAbility]) : 0);
+  let cantripCap = $derived(isCaster ? cantripsKnown(selectedClass, primaryLevel) : Infinity);
+  let leveledCap = $derived(isCaster ? leveledSpellCap(selectedClass, primaryLevel, spellMod) : Infinity);
   let spellSelectableLevels = $derived(
     !isCaster ? null : preview ? levelsUpTo(preview.max_spell_level) : previewError ? null : []
   );
@@ -1098,14 +1102,20 @@
         {:else}
           {#if isCaster}
             <p class="spell-cap-hint">
-              Prepare up to <strong>{spellCap}</strong> spells ({(spellAbility || '').toUpperCase()} modifier + level).
-              Browse every level — you can only prepare spells you have slots for.
+              {#if cantripCap > 0}
+                Choose up to <strong>{cantripCap}</strong> cantrip{cantripCap === 1 ? '' : 's'} and
+                <strong>{leveledCap}</strong> leveled spell{leveledCap === 1 ? '' : 's'}.
+              {:else}
+                Choose up to <strong>{leveledCap}</strong> leveled spell{leveledCap === 1 ? '' : 's'}.
+              {/if}
+              Browse every level — you can only pick spells you have slots for.
             </p>
           {/if}
           <SpellPicker
             {spells}
             bind:selected={selectedSpells}
-            max={spellCap}
+            max={leveledCap}
+            cantripMax={cantripCap}
             selectableLevels={spellSelectableLevels}
           />
         {/if}

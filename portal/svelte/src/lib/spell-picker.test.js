@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   countAgainstCap,
+  countByBucket,
   isLevelSelectable,
   isSpellDisabled,
   disabledReason,
@@ -30,6 +31,69 @@ describe('countAgainstCap', () => {
   it('handles null/undefined inputs', () => {
     expect(countAgainstCap(null)).toBe(0);
     expect(countAgainstCap(undefined, undefined)).toBe(0);
+  });
+});
+
+describe('countByBucket', () => {
+  const catalog = [
+    spell({ id: 'cantrip-a', level: 0 }),
+    spell({ id: 'cantrip-b', level: 0 }),
+    spell({ id: 'lvl1', level: 1 }),
+    spell({ id: 'lvl3', level: 3 }),
+  ];
+
+  it('splits selected ids into cantrip and leveled buckets when cantripMax is finite', () => {
+    const counts = countByBucket(['cantrip-a', 'cantrip-b', 'lvl1', 'lvl3'], {
+      spells: catalog,
+      cantripMax: 3,
+    });
+    expect(counts).toEqual({ cantrips: 2, leveled: 2 });
+  });
+
+  it('excludes always-prepared ids from both buckets', () => {
+    const counts = countByBucket(['cantrip-a', 'lvl1'], {
+      spells: catalog,
+      cantripMax: 3,
+      alwaysPrepared: ['lvl1'],
+    });
+    expect(counts).toEqual({ cantrips: 1, leveled: 0 });
+  });
+
+  it('counts cantrips as leveled in single-cap mode (cantripMax Infinity)', () => {
+    const counts = countByBucket(['cantrip-a', 'lvl1'], { spells: catalog });
+    expect(counts).toEqual({ cantrips: 0, leveled: 2 });
+  });
+
+  it('treats unknown ids as leveled', () => {
+    const counts = countByBucket(['mystery'], { spells: catalog, cantripMax: 2 });
+    expect(counts).toEqual({ cantrips: 0, leveled: 1 });
+  });
+});
+
+describe('dual-budget isSpellDisabled', () => {
+  const catalog = [
+    spell({ id: 'c1', level: 0 }),
+    spell({ id: 'c2', level: 0 }),
+    spell({ id: 's1', level: 1 }),
+    spell({ id: 's2', level: 1 }),
+  ];
+
+  it('disables a fresh cantrip once the cantrip budget is full, leveled room remaining', () => {
+    const opts = { selected: ['c1', 'c2'], spells: catalog, cantripMax: 2, max: 5, selectableLevels: [1] };
+    expect(isSpellDisabled(spell({ id: 'c3', level: 0 }), opts)).toBe(true);
+    // A leveled spell is still selectable because its own budget is untouched.
+    expect(isSpellDisabled(spell({ id: 's3', level: 1 }), opts)).toBe(false);
+  });
+
+  it('cantrips do not consume the leveled budget', () => {
+    const opts = { selected: ['c1', 'c2'], spells: catalog, cantripMax: 3, max: 1, selectableLevels: [1] };
+    // Two cantrips selected, leveled cap is 1 and still open.
+    expect(isSpellDisabled(spell({ id: 's1', level: 1 }), opts)).toBe(false);
+  });
+
+  it('reports a cantrip-specific reason when the cantrip budget is full', () => {
+    const opts = { selected: ['c1', 'c2'], spells: catalog, cantripMax: 2, max: 5, selectableLevels: [1] };
+    expect(disabledReason(spell({ id: 'c3', level: 0 }), opts)).toMatch(/cantrip/i);
   });
 });
 

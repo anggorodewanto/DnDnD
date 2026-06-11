@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/ab/dndnd/internal/character"
-	"github.com/ab/dndnd/internal/combat"
 )
 
 var (
@@ -117,8 +116,10 @@ func validateSpellCount(s CharacterSubmission) []string {
 // class may have. The second return value is false when no cap applies: either
 // there is no primary class or the primary class is not a spellcaster.
 //
-// The cap mirrors combat.MaxPreparedSpells (spellcasting-ability modifier +
-// primary class level, minimum 1).
+// The cap is the class's full spell budget — cantrips known plus the leveled
+// allowance (prepared = ability modifier + level, or the class's Spells Known
+// table) — so cantrips are no longer counted against the leveled cap. See
+// spellBudget for the precision trade-off this combined ceiling makes.
 func spellCountCap(s CharacterSubmission) (int, bool) {
 	primary := primaryClassEntry(SubmissionClasses(s))
 	if primary == nil {
@@ -128,9 +129,8 @@ func spellCountCap(s CharacterSubmission) (int, bool) {
 	if sc.SlotProgression == "none" {
 		return 0, false
 	}
-	score := s.AbilityScores.Character().Get(sc.SpellAbility)
-	abilityMod := character.AbilityModifier(score)
-	return combat.MaxPreparedSpells(abilityMod, primary.Level), true
+	abilityMod := abilityModForCaster(primary.Class, s.AbilityScores.Character())
+	return spellBudget(primary.Class, primary.Level, abilityMod), true
 }
 
 // hasNonEmptyClass reports whether any multiclass entry names a class.

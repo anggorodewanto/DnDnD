@@ -24,6 +24,43 @@ export function countAgainstCap(selected, alwaysPrepared = []) {
 }
 
 /**
+ * Whether a spell of the given level is counted against the separate cantrip
+ * budget. Cantrips only get their own bucket when a finite `cantripMax` is in
+ * play; otherwise (the standalone prep page, which has one combined cap) they
+ * fall into the leveled bucket so single-cap behaviour is preserved.
+ * @param {number|string} level
+ * @param {number} cantripMax
+ * @returns {boolean}
+ */
+function isCantripBucket(level, cantripMax) {
+  return Number(level) === 0 && Number.isFinite(cantripMax);
+}
+
+/**
+ * Splits the selected (non-always-prepared) spells into cantrip and leveled
+ * counts, resolving each id's level from the `spells` catalog. Ids missing from
+ * the catalog are counted as leveled. With no finite `cantripMax` every spell
+ * lands in the leveled bucket (single-cap mode).
+ * @param {string[]} selected
+ * @param {{spells?: object[], alwaysPrepared?: string[], cantripMax?: number}} [opts]
+ * @returns {{cantrips: number, leveled: number}}
+ */
+export function countByBucket(selected, opts = {}) {
+  const { spells = [], alwaysPrepared = [], cantripMax = Infinity } = opts || {};
+  const always = new Set(alwaysPrepared || []);
+  const levelById = new Map((spells || []).map((s) => [s?.id, Number(s?.level) || 0]));
+  let cantrips = 0;
+  let leveled = 0;
+  for (const id of selected || []) {
+    if (always.has(id)) continue;
+    const level = levelById.has(id) ? levelById.get(id) : 1;
+    if (isCantripBucket(level, cantripMax)) cantrips += 1;
+    else leveled += 1;
+  }
+  return { cantrips, leveled };
+}
+
+/**
  * Whether a spell of `level` may be selected given the slot-level gate.
  * Cantrips (level 0) are always selectable. A null/undefined `selectableLevels`
  * means no gate (every level selectable).
@@ -42,35 +79,42 @@ export function isLevelSelectable(level, selectableLevels) {
  * Whether a spell's checkbox should be disabled.
  * Always-prepared spells are locked. Already-selected spells are never disabled
  * (so they can be removed). Otherwise a spell is disabled when its level is not
- * selectable or the cap is already reached.
+ * selectable or its budget is already full. Cantrips are checked against
+ * `cantripMax` (when finite) and leveled spells against `max`; in single-cap
+ * mode every spell shares `max`.
  * @param {object} spell
- * @param {{selected?: string[], alwaysPrepared?: string[], max?: number, selectableLevels?: (number[]|Set<number>|null)}} [opts]
+ * @param {{selected?: string[], alwaysPrepared?: string[], max?: number, cantripMax?: number, selectableLevels?: (number[]|Set<number>|null), spells?: object[]}} [opts]
  * @returns {boolean}
  */
 export function isSpellDisabled(spell, opts = {}) {
-  const { selected = [], alwaysPrepared = [], max = Infinity, selectableLevels = null } = opts || {};
+  const { selected = [], alwaysPrepared = [], max = Infinity, cantripMax = Infinity, selectableLevels = null } = opts || {};
   const id = spell?.id;
   if ((alwaysPrepared || []).includes(id)) return true;
   if ((selected || []).includes(id)) return false;
   if (!isLevelSelectable(spell?.level, selectableLevels)) return true;
-  return countAgainstCap(selected, alwaysPrepared) >= max;
+  const { cantrips, leveled } = countByBucket(selected, opts);
+  if (isCantripBucket(spell?.level, cantripMax)) return cantrips >= cantripMax;
+  return leveled >= max;
 }
 
 /**
  * A short human reason a spell can't currently be selected, or '' when it is
  * selectable or already selected. Used for the checkbox title/tooltip.
  * @param {object} spell
- * @param {{selected?: string[], alwaysPrepared?: string[], max?: number, selectableLevels?: (number[]|Set<number>|null)}} [opts]
+ * @param {{selected?: string[], alwaysPrepared?: string[], max?: number, cantripMax?: number, selectableLevels?: (number[]|Set<number>|null), spells?: object[]}} [opts]
  * @returns {string}
  */
 export function disabledReason(spell, opts = {}) {
-  const { selected = [], alwaysPrepared = [], max = Infinity, selectableLevels = null } = opts || {};
+  const { selected = [], alwaysPrepared = [], max = Infinity, cantripMax = Infinity, selectableLevels = null } = opts || {};
   const id = spell?.id;
   if ((alwaysPrepared || []).includes(id)) return 'Always prepared (subclass)';
   if ((selected || []).includes(id)) return '';
   if (!isLevelSelectable(spell?.level, selectableLevels)) return 'No spell slots of this level yet';
-  if (countAgainstCap(selected, alwaysPrepared) >= max) return 'Preparation limit reached';
-  return '';
+  const { cantrips, leveled } = countByBucket(selected, opts);
+  if (isCantripBucket(spell?.level, cantripMax)) {
+    return cantrips >= cantripMax ? 'Cantrip limit reached' : '';
+  }
+  return leveled >= max ? 'Preparation limit reached' : '';
 }
 
 /**
