@@ -58,12 +58,12 @@ single PR when each is trivial (noted per group).
 - [x] **T26** · 🟠 · Markdown setup doc (or publish HTML via Pages) mirroring `setup.html` · _Onboarding_ → `1ee5072`
 
 #### Tier 8 — Minors (stage detail) — _batchable per stage_
-- [x] **T27** · 🟡 · Quickstart DB step: `createdb -h localhost -U postgres dndnd_playtest` + password note · _Onboarding_
-- [x] **T28** · 🟡 · Map close code 4004 → "check DISCORD_BOT_TOKEN"; reorder troubleshooting row · _Onboarding_
-- [x] **T29** · 🟡 · Resolve privileged-intents contradiction (quickstart vs setup.html vs code) · _Onboarding_
-- [x] **T30** · 🟡 · Quickstart drift: Go `1.25.7`, real boot line ("server starting") · _Onboarding_
-- [x] **T31** · 🟡 · Passthrough-ownership callout + warning log when passthrough creates campaign rows · _Onboarding_
-- [x] **T32** · 🟡 · README/fly polish: `make run` env prereqs, mention `make local-up`, rename `fly.toml` app · _Onboarding_
+- [x] **T27** · 🟡 · Quickstart DB step: `createdb -h localhost -U postgres dndnd_playtest` + password note · _Onboarding_ → `7813dfd`
+- [x] **T28** · 🟡 · Map close code 4004 → "check DISCORD_BOT_TOKEN"; reorder troubleshooting row · _Onboarding_ → `e8a7f83`
+- [x] **T29** · 🟡 · Resolve privileged-intents contradiction (quickstart vs setup.html vs code) · _Onboarding_ → `5c6a077`
+- [x] **T30** · 🟡 · Quickstart drift: Go `1.25.7`, real boot line ("server starting") · _Onboarding_ → `ab8db8d`
+- [x] **T31** · 🟡 · Passthrough-ownership callout + warning log when passthrough creates campaign rows · _Onboarding_ → `e44a754`
+- [x] **T32** · 🟡 · README/fly polish: `make run` env prereqs, mention `make local-up`, rename `fly.toml` app · _Onboarding_ → `a7d60ab`
 - [ ] **T33** · 🟡 · Map editor: disable creation without a campaign + map the 400 to "create/select a campaign first" · _Campaign setup_
 - [ ] **T34** · 🟡 · Next-step links in `/setup` success + dashboard Home (dashboard URL, "next: build a map") · _Campaign setup_
 - [ ] **T35** · 🟡 · Align `/setup` gate (Manage Channels exposure vs Administrator requirement) · _Campaign setup_
