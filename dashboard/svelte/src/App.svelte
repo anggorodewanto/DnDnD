@@ -24,6 +24,7 @@
   import CharCreatePanel from './CharCreatePanel.svelte';
   import DiscordHealthBanner from './DiscordHealthBanner.svelte';
   import { resolveDashboardViewFromHash } from './lib/dashboardRouter.js';
+  import { confirmDiscard, beforeUnloadHandler } from './lib/navigationGuard.js';
   import { getCurrentUser } from './lib/api.js';
   import {
     dashboardNavItems,
@@ -66,6 +67,19 @@
     return () => window.removeEventListener('hashchange', handler);
   });
 
+  // Warn before a tab close/refresh discards an editor's unsaved changes.
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+    return () => window.removeEventListener('beforeunload', beforeUnloadHandler);
+  });
+
+  // True when it is safe to leave the current editor (clean, or the user
+  // confirmed discarding unsaved work).
+  function mayDiscardChanges() {
+    return confirmDiscard((message) => window.confirm(message));
+  }
+
   function onCreateNew() {
     editingMapId = null;
     currentView = 'editor';
@@ -77,6 +91,7 @@
   }
 
   function onBack() {
+    if (!mayDiscardChanges()) return;
     currentView = 'list';
     editingMapId = null;
   }
@@ -92,6 +107,7 @@
   }
 
   function onBackFromEncounter() {
+    if (!mayDiscardChanges()) return;
     currentView = 'encounter-list';
     editingEncounterId = null;
   }
@@ -134,6 +150,10 @@
   }
 
   function navigateTo(item) {
+    if (item.view !== currentView && !mayDiscardChanges()) {
+      drawerOpen = false;
+      return;
+    }
     currentView = item.view;
 
     if (item.view !== 'editor') editingMapId = null;

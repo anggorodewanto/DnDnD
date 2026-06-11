@@ -14,6 +14,7 @@
     getWalls,
   } from './lib/mapdata.js';
   import { fetchPartyCharacters } from './lib/messageplayer.js';
+  import { registerDirtyCheck } from './lib/navigationGuard.js';
   import ItemPicker from './ItemPicker.svelte';
   import DisplayNameEditor from './DisplayNameEditor.svelte';
 
@@ -26,6 +27,9 @@
   let creatures = $state([]);
   let savedEncounterId = $state(null);
   let dirty = $state(false);
+
+  // Let the shell warn before navigation/tab-close discards unsaved edits.
+  $effect(() => registerDirtyCheck(() => dirty));
 
   // Map state
   let maps = $state([]);

@@ -1,6 +1,7 @@
 <script>
   import { createMap, getMap, updateMap, uploadAsset, importTiledMap, reimportTiledMap } from './lib/api.js';
   import { decodeGID, tilesetForGID, tileSrcRect } from './lib/tiledSprites.js';
+  import { registerDirtyCheck } from './lib/navigationGuard.js';
   import {
     TERRAIN_TYPES,
     terrainByGid,
@@ -37,6 +38,9 @@
   let tiledMap = $state(null);
   let savedMapId = $state(null);
   let dirty = $state(false);
+
+  // Let the shell warn before navigation/tab-close discards unsaved edits.
+  $effect(() => registerDirtyCheck(() => dirty));
 
   // Background image state
   let backgroundImageId = $state(null);
