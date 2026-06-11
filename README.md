@@ -9,7 +9,8 @@ DMs.
 > Browsable HTML guides: **[Setup](docs/setup.html)** · **[How to use](docs/usage.html)** ·
 > **[Tiled maps](docs/tiled-maps.html)**
 
-- **[Setting up Discord & DnDnD](docs/setup.html)** — create the Discord app, configure
+- **[Setting up Discord & DnDnD](docs/setup.md)**
+  ([styled HTML version](docs/setup.html)) — create the Discord app, configure
   the service, and bring it online with Docker Compose.
 - **[Using DnDnD](docs/usage.html)** — the DM dashboard tour, a typical session, and the
   full player slash-command reference.
