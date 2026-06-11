@@ -35,9 +35,9 @@ func Attune(input AttuneInput) (AttuneResult, error) {
 		return AttuneResult{}, fmt.Errorf("❌ You already have %d attuned items. Use `/unattune [item]` to free a slot.", maxAttunementSlots)
 	}
 
-	idx := findItemIndex(input.Items, input.ItemID)
+	idx := resolveItemIndex(input.Items, input.ItemID)
 	if idx == -1 {
-		return AttuneResult{}, fmt.Errorf("item %q not found in inventory", input.ItemID)
+		return AttuneResult{}, itemNotFoundError(input.ItemID, input.Items)
 	}
 
 	item := input.Items[idx]
@@ -45,7 +45,7 @@ func Attune(input AttuneInput) (AttuneResult, error) {
 		return AttuneResult{}, fmt.Errorf("%q does not require attunement", item.Name)
 	}
 
-	if isAttuned(input.Slots, input.ItemID) {
+	if isAttuned(input.Slots, item.ItemID) {
 		return AttuneResult{}, fmt.Errorf("already attuned to %q", item.Name)
 	}
 

@@ -265,6 +265,20 @@ func TestCastHandler_DispatchesSingleTargetCast(t *testing.T) {
 	}
 }
 
+func TestCastHandler_ResolvesSpellByDisplayName(t *testing.T) {
+	h, _, svc, _ := setupCastHandler()
+
+	// Player types the display name "Fire Bolt" rather than the "fire-bolt" slug.
+	h.Handle(makeCastInteraction(map[string]any{
+		"spell":  "Fire Bolt",
+		"target": "OS",
+	}))
+
+	if len(svc.castCalls) != 1 {
+		t.Fatalf("expected 1 cast call after slug normalization, got %d", len(svc.castCalls))
+	}
+}
+
 func TestCastHandler_DispatchesAoECastForAreaSpell(t *testing.T) {
 	h, sess, svc, _ := setupCastHandler()
 

@@ -88,6 +88,36 @@ func TestUseConsumable_ItemNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+func TestUseConsumable_ByDisplayName(t *testing.T) {
+	svc := NewService(func(int) int { return 3 })
+	items := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 1, Type: "consumable"},
+	}
+
+	// Player types the display name instead of the "healing-potion" slug.
+	result, err := svc.UseConsumable(UseInput{
+		Items:     items,
+		ItemID:    "Healing Potion",
+		HPCurrent: 10,
+		HPMax:     30,
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, result.AutoResolved)
+}
+
+func TestUseConsumable_NotFound_ListsValidItems(t *testing.T) {
+	svc := NewService(nil)
+	items := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 1, Type: "consumable"},
+	}
+
+	_, err := svc.UseConsumable(UseInput{Items: items, ItemID: "nope"})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "healing-potion")
+}
+
 func TestUseConsumable_NotConsumable(t *testing.T) {
 	svc := NewService(nil)
 

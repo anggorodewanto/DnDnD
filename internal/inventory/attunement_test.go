@@ -59,6 +59,19 @@ func TestAttune_ItemNotInInventory(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+func TestAttune_ByDisplayNameCaseInsensitive(t *testing.T) {
+	items := []character.InventoryItem{
+		{ItemID: "cloak-of-protection", Name: "Cloak of Protection", Quantity: 1, Type: "magic_item", IsMagic: true, RequiresAttunement: true},
+	}
+
+	// Player types the display name (spaces + caps) instead of the slug.
+	result, err := Attune(AttuneInput{Items: items, Slots: nil, ItemID: "Cloak of Protection"})
+
+	require.NoError(t, err)
+	require.Len(t, result.UpdatedSlots, 1)
+	assert.Equal(t, "cloak-of-protection", result.UpdatedSlots[0].ItemID)
+}
+
 func TestAttune_ItemDoesNotRequireAttunement(t *testing.T) {
 	items := []character.InventoryItem{
 		{ItemID: "longsword", Name: "Longsword", Quantity: 1, Type: "weapon"},

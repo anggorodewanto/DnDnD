@@ -68,6 +68,30 @@ func TestEquip_ItemNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+func TestEquip_ByDisplayName(t *testing.T) {
+	items := []character.InventoryItem{
+		{ItemID: "longsword", Name: "Longsword", Quantity: 1, Type: "weapon"},
+	}
+
+	// Player types the display name shown by /inventory, not the slug.
+	result, err := Equip(EquipInput{Items: items, ItemID: "Longsword"})
+
+	require.NoError(t, err)
+	assert.True(t, result.UpdatedItems[0].Equipped)
+}
+
+func TestEquip_NotFound_ListsValidItems(t *testing.T) {
+	items := []character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 1, Type: "consumable"},
+	}
+
+	_, err := Equip(EquipInput{Items: items, ItemID: "longsword"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "healing-potion")
+	assert.Contains(t, err.Error(), "Healing Potion")
+}
+
 func TestEquip_AlreadyEquipped(t *testing.T) {
 	items := []character.InventoryItem{
 		{ItemID: "longsword", Name: "Longsword", Quantity: 1, Type: "weapon", Equipped: true, EquipSlot: "main_hand"},

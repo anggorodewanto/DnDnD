@@ -32,7 +32,7 @@ var categoryOrder = []struct {
 	{TypeOther, "\U0001f4e6", "Other"},
 }
 
-// findItemIndex returns the index of the item with the given ID, or -1.
+// findItemIndex returns the index of the item with the given exact ID, or -1.
 func findItemIndex(items []character.InventoryItem, itemID string) int {
 	for i, item := range items {
 		if item.ItemID == itemID {
@@ -40,6 +40,46 @@ func findItemIndex(items []character.InventoryItem, itemID string) int {
 		}
 	}
 	return -1
+}
+
+// resolveItemIndex finds an item by ID or display name, forgiving case and
+// slug/display-name differences so a player can type what /inventory shows.
+// Precedence: exact ItemID, then case-insensitive ItemID, then
+// case-insensitive display Name, then the slugified display Name. Returns -1
+// when nothing matches. Mirrors the forgiving match in combat.ResolveTarget.
+func resolveItemIndex(items []character.InventoryItem, query string) int {
+	if idx := findItemIndex(items, query); idx >= 0 {
+		return idx
+	}
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return -1
+	}
+	qSlug := character.Slugify(query)
+	for i, item := range items {
+		switch {
+		case strings.ToLower(item.ItemID) == q,
+			strings.ToLower(item.Name) == q,
+			item.ItemID == qSlug,
+			character.Slugify(item.Name) == qSlug:
+			return i
+		}
+	}
+	return -1
+}
+
+// itemNotFoundError builds a not-found error that lists the valid item IDs in
+// the character's inventory, so a player who typed a display name learns the
+// slug to use.
+func itemNotFoundError(query string, items []character.InventoryItem) error {
+	if len(items) == 0 {
+		return fmt.Errorf("item %q not found: your inventory is empty", query)
+	}
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, fmt.Sprintf("%s (%s)", item.ItemID, item.Name))
+	}
+	return fmt.Errorf("item %q not found in inventory. Valid items: %s", query, strings.Join(ids, ", "))
 }
 
 // decrementItem removes qty units of the item at idx, removing the entry if quantity reaches 0.
@@ -121,9 +161,9 @@ func IsPotion(itemID string) bool {
 
 // UseConsumable consumes an item and applies its effect if auto-resolvable.
 func (s *Service) UseConsumable(input UseInput) (UseResult, error) {
-	idx := findItemIndex(input.Items, input.ItemID)
+	idx := resolveItemIndex(input.Items, input.ItemID)
 	if idx == -1 {
-		return UseResult{}, fmt.Errorf("item %q not found in inventory", input.ItemID)
+		return UseResult{}, itemNotFoundError(input.ItemID, input.Items)
 	}
 
 	item := input.Items[idx]
@@ -193,9 +233,9 @@ type GiveResult struct {
 
 // GiveItem transfers one unit of an item from giver to receiver.
 func GiveItem(input GiveInput) (GiveResult, error) {
-	idx := findItemIndex(input.GiverItems, input.ItemID)
+	idx := resolveItemIndex(input.GiverItems, input.ItemID)
 	if idx == -1 {
-		return GiveResult{}, fmt.Errorf("item %q not found in inventory", input.ItemID)
+		return GiveResult{}, itemNotFoundError(input.ItemID, input.GiverItems)
 	}
 
 	item := input.GiverItems[idx]

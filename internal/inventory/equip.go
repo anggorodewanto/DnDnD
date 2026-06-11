@@ -25,9 +25,9 @@ type EquipResult struct {
 
 // Equip equips an item from the character's inventory.
 func Equip(input EquipInput) (EquipResult, error) {
-	idx := findItemIndex(input.Items, input.ItemID)
+	idx := resolveItemIndex(input.Items, input.ItemID)
 	if idx == -1 {
-		return EquipResult{}, fmt.Errorf("item %q not found in inventory", input.ItemID)
+		return EquipResult{}, itemNotFoundError(input.ItemID, input.Items)
 	}
 
 	item := input.Items[idx]
@@ -58,7 +58,7 @@ func Equip(input EquipInput) (EquipResult, error) {
 	updated[idx].EquipSlot = slot
 
 	var warning string
-	if item.RequiresAttunement && !isAttuned(input.AttunementSlots, input.ItemID) {
+	if item.RequiresAttunement && !isAttuned(input.AttunementSlots, item.ItemID) {
 		warning = fmt.Sprintf("⚠️ This item requires attunement. Use `/attune %s` during a short rest to activate its properties.", item.Name)
 	}
 

@@ -274,7 +274,7 @@ func (h *CastHandler) Handle(interaction *discordgo.Interaction) {
 				return errAlreadyResponded
 			}
 
-			spell, err := h.encounterProvider.GetSpell(ctx, spellID)
+			spell, err := h.resolveSpell(ctx, spellID)
 			if err != nil {
 				respondEphemeral(h.session, interaction, fmt.Sprintf("Spell %q not found.", spellID))
 				return errAlreadyResponded
@@ -307,7 +307,7 @@ func (h *CastHandler) Handle(interaction *discordgo.Interaction) {
 			return
 		}
 
-		spell, err := h.encounterProvider.GetSpell(ctx, spellID)
+		spell, err := h.resolveSpell(ctx, spellID)
 		if err != nil {
 			respondEphemeral(h.session, interaction, fmt.Sprintf("Spell %q not found.", spellID))
 			return
@@ -320,6 +320,21 @@ func (h *CastHandler) Handle(interaction *discordgo.Interaction) {
 
 		h.dispatchSingleTarget(ctx, interaction, encounter, encounterID, caster, turn, spell, targetStr)
 	}
+}
+
+// resolveSpell looks up a spell by the user-provided identifier, retrying with
+// a slugified form (e.g. "Fire Bolt" -> "fire-bolt") so players can type the
+// display name shown by /spells instead of the exact catalog slug.
+func (h *CastHandler) resolveSpell(ctx context.Context, spellID string) (refdata.Spell, error) {
+	spell, err := h.encounterProvider.GetSpell(ctx, spellID)
+	if err == nil {
+		return spell, nil
+	}
+	slug := character.Slugify(spellID)
+	if slug == spellID {
+		return refdata.Spell{}, err
+	}
+	return h.encounterProvider.GetSpell(ctx, slug)
 }
 
 // dispatchSingleTarget runs the single-target /cast path: resolves the named
