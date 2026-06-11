@@ -1,10 +1,10 @@
-package exploration_test
+package spawnzone_test
 
 import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ab/dndnd/internal/exploration"
+	"github.com/ab/dndnd/internal/spawnzone"
 )
 
 // buildTiledWithSpawnZones produces a Tiled-format map JSON with a spawn_zones
@@ -54,7 +54,7 @@ type spawnZone struct {
 
 func TestParseSpawnZones_Empty(t *testing.T) {
 	raw := json.RawMessage(`{"width":10,"height":10,"tilewidth":48,"tileheight":48,"layers":[]}`)
-	zones, err := exploration.ParseSpawnZones(raw)
+	zones, err := spawnzone.ParseSpawnZones(raw)
 	if err != nil {
 		t.Fatalf("ParseSpawnZones: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestParseSpawnZones_PlayerZoneTiles(t *testing.T) {
 	raw := buildTiledWithSpawnZones(t, 48, 10, 10, []spawnZone{
 		{X: 2, Y: 3, W: 2, H: 2, ZoneType: "player"},
 	})
-	zones, err := exploration.ParseSpawnZones(raw)
+	zones, err := spawnzone.ParseSpawnZones(raw)
 	if err != nil {
 		t.Fatalf("ParseSpawnZones: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestParseSpawnZones_IgnoresNonSpawnLayers(t *testing.T) {
 			{"name":"terrain","type":"tilelayer","data":[]}
 		]
 	}`)
-	zones, err := exploration.ParseSpawnZones(raw)
+	zones, err := spawnzone.ParseSpawnZones(raw)
 	if err != nil {
 		t.Fatalf("ParseSpawnZones: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestParseSpawnZones_IgnoresNonSpawnLayers(t *testing.T) {
 }
 
 func TestParseSpawnZones_InvalidJSON(t *testing.T) {
-	_, err := exploration.ParseSpawnZones(json.RawMessage(`not-json`))
+	_, err := spawnzone.ParseSpawnZones(json.RawMessage(`not-json`))
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
@@ -115,12 +115,12 @@ func TestAssignPCsToSpawnZones_DeterministicOrder(t *testing.T) {
 	raw := buildTiledWithSpawnZones(t, 48, 10, 10, []spawnZone{
 		{X: 2, Y: 3, W: 2, H: 2, ZoneType: "player"}, // 4 tiles
 	})
-	zones, err := exploration.ParseSpawnZones(raw)
+	zones, err := spawnzone.ParseSpawnZones(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pcIDs := []string{"alpha", "bravo", "charlie"}
-	positions, err := exploration.AssignPCsToSpawnZones(zones, pcIDs)
+	positions, err := spawnzone.AssignPCsToSpawnZones(zones, pcIDs)
 	if err != nil {
 		t.Fatalf("AssignPCsToSpawnZones: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestAssignPCsToSpawnZones_DeterministicOrder(t *testing.T) {
 	}
 	// Deterministic: tiles are iterated row-major within each zone:
 	// (2,3), (3,3), (2,4)
-	want := map[string]exploration.TilePos{
+	want := map[string]spawnzone.TilePos{
 		"alpha":   {Col: 2, Row: 3},
 		"bravo":   {Col: 3, Row: 3},
 		"charlie": {Col: 2, Row: 4},
@@ -150,8 +150,8 @@ func TestAssignPCsToSpawnZones_NoPlayerZones(t *testing.T) {
 	raw := buildTiledWithSpawnZones(t, 48, 10, 10, []spawnZone{
 		{X: 1, Y: 1, W: 1, H: 1, ZoneType: "enemy"},
 	})
-	zones, _ := exploration.ParseSpawnZones(raw)
-	_, err := exploration.AssignPCsToSpawnZones(zones, []string{"alpha"})
+	zones, _ := spawnzone.ParseSpawnZones(raw)
+	_, err := spawnzone.AssignPCsToSpawnZones(zones, []string{"alpha"})
 	if err == nil {
 		t.Fatal("expected error when no player zones available")
 	}
@@ -161,8 +161,8 @@ func TestAssignPCsToSpawnZones_NotEnoughTiles(t *testing.T) {
 	raw := buildTiledWithSpawnZones(t, 48, 10, 10, []spawnZone{
 		{X: 1, Y: 1, W: 1, H: 1, ZoneType: "player"}, // 1 tile
 	})
-	zones, _ := exploration.ParseSpawnZones(raw)
-	_, err := exploration.AssignPCsToSpawnZones(zones, []string{"a", "b"})
+	zones, _ := spawnzone.ParseSpawnZones(raw)
+	_, err := spawnzone.AssignPCsToSpawnZones(zones, []string{"a", "b"})
 	if err == nil {
 		t.Fatal("expected error when not enough spawn tiles")
 	}
@@ -172,8 +172,8 @@ func TestAssignPCsToSpawnZones_NoPCs(t *testing.T) {
 	raw := buildTiledWithSpawnZones(t, 48, 10, 10, []spawnZone{
 		{X: 1, Y: 1, W: 2, H: 2, ZoneType: "player"},
 	})
-	zones, _ := exploration.ParseSpawnZones(raw)
-	positions, err := exploration.AssignPCsToSpawnZones(zones, nil)
+	zones, _ := spawnzone.ParseSpawnZones(raw)
+	positions, err := spawnzone.AssignPCsToSpawnZones(zones, nil)
 	if err != nil {
 		t.Fatalf("AssignPCsToSpawnZones with no PCs: %v", err)
 	}

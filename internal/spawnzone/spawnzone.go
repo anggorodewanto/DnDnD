@@ -1,12 +1,23 @@
-// Package exploration implements Phase 110 map-based exploration mode.
-// Exploration encounters reuse the encounters table with mode='exploration'
-// and intentionally omit initiative, rounds, and per-turn action economy.
-package exploration
+// Package spawnzone parses player/enemy spawn rectangles from a Tiled map and
+// deterministically seats player characters into them. It is shared by
+// exploration mode (StartExploration) and combat mode (StartCombat) so both
+// place PCs the same way; it depends on neither package, avoiding an import
+// cycle between them.
+package spawnzone
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 )
+
+// ErrNoPlayerSpawnZones is returned when a map has no "player" spawn zones
+// but the caller asked to place PCs.
+var ErrNoPlayerSpawnZones = errors.New("map has no player spawn zones")
+
+// ErrNotEnoughSpawnTiles is returned when the player spawn zones do not have
+// enough tiles to seat every PC.
+var ErrNotEnoughSpawnTiles = errors.New("not enough player spawn tiles")
 
 // TilePos is a 0-indexed tile coordinate on the map grid.
 // Col is the X tile index; Row is the Y tile index.

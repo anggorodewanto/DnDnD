@@ -1615,6 +1615,100 @@ func TestService_StartCombat_Success(t *testing.T) {
 	assert.NotEqual(t, uuid.Nil, result.FirstTurn.Turn.ID)
 }
 
+func TestService_StartCombat_SeatsPCsIntoPlayerSpawnZones(t *testing.T) {
+	templateID := uuid.New()
+	campaignID := uuid.New()
+	mapID := uuid.New()
+	encounterID := uuid.New()
+	pc1 := uuid.New()
+	pc2 := uuid.New()
+
+	store := defaultMockStore()
+	store.getEncounterTemplateFn = func(ctx context.Context, id uuid.UUID) (refdata.EncounterTemplate, error) {
+		return refdata.EncounterTemplate{
+			ID: templateID, CampaignID: campaignID,
+			MapID:     uuid.NullUUID{UUID: mapID, Valid: true},
+			Name:      "Empty Room",
+			Creatures: json.RawMessage(`[]`),
+		}, nil
+	}
+	// Player spawn zone at tile (1,1), 2x2 (tilewidth 48 -> px 48,48,96,96).
+	store.getMapByIDUncheckedFn = func(ctx context.Context, id uuid.UUID) (refdata.Map, error) {
+		return refdata.Map{
+			ID: mapID, WidthSquares: 10, HeightSquares: 10,
+			TiledJson: json.RawMessage(`{"width":10,"height":10,"tilewidth":48,"tileheight":48,"layers":[{"name":"spawn_zones","type":"objectgroup","objects":[{"x":48,"y":48,"width":96,"height":96,"type":"player"}]}]}`),
+		}, nil
+	}
+	names := map[uuid.UUID]string{pc1: "Aria", pc2: "Borin"}
+	store.getCharacterFn = func(ctx context.Context, id uuid.UUID) (refdata.Character, error) {
+		return refdata.Character{ID: id, Name: names[id], HpMax: 30, HpCurrent: 30, Ac: 15, SpeedFt: 30, AbilityScores: json.RawMessage(`{"str":12,"dex":14,"con":12,"int":10,"wis":10,"cha":10}`)}, nil
+	}
+
+	type seat struct {
+		col string
+		row int32
+	}
+	seats := map[uuid.UUID]seat{}
+	createdIDs := []uuid.UUID{}
+	store.createEncounterFn = func(ctx context.Context, arg refdata.CreateEncounterParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: encounterID, CampaignID: campaignID, MapID: uuid.NullUUID{UUID: mapID, Valid: true}, Name: arg.Name, Status: arg.Status}, nil
+	}
+	store.createCombatantFn = func(ctx context.Context, arg refdata.CreateCombatantParams) (refdata.Combatant, error) {
+		cID := uuid.New()
+		createdIDs = append(createdIDs, cID)
+		if arg.CharacterID.Valid {
+			seats[arg.CharacterID.UUID] = seat{arg.PositionCol, arg.PositionRow}
+		}
+		return refdata.Combatant{ID: cID, EncounterID: arg.EncounterID, CharacterID: arg.CharacterID, ShortID: arg.ShortID, DisplayName: arg.DisplayName, HpMax: arg.HpMax, HpCurrent: arg.HpCurrent, Ac: arg.Ac, IsAlive: true, IsNpc: arg.IsNpc, PositionCol: arg.PositionCol, PositionRow: arg.PositionRow, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.listCombatantsByEncounterIDFn = func(ctx context.Context, eid uuid.UUID) ([]refdata.Combatant, error) {
+		return []refdata.Combatant{
+			{ID: createdIDs[0], EncounterID: encounterID, DisplayName: "Aria", ShortID: "AR", IsAlive: true, HpMax: 30, HpCurrent: 30, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: pc1, Valid: true}},
+			{ID: createdIDs[1], EncounterID: encounterID, DisplayName: "Borin", ShortID: "BO", IsAlive: true, HpMax: 30, HpCurrent: 30, Conditions: json.RawMessage(`[]`), CharacterID: uuid.NullUUID{UUID: pc2, Valid: true}},
+		}, nil
+	}
+	store.updateCombatantInitiativeFn = func(ctx context.Context, arg refdata.UpdateCombatantInitiativeParams) (refdata.Combatant, error) {
+		return refdata.Combatant{ID: arg.ID, EncounterID: encounterID, IsAlive: true, Conditions: json.RawMessage(`[]`)}, nil
+	}
+	store.updateEncounterRoundFn = func(ctx context.Context, arg refdata.UpdateEncounterRoundParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, RoundNumber: arg.RoundNumber, Status: "active"}, nil
+	}
+	store.updateEncounterStatusFn = func(ctx context.Context, arg refdata.UpdateEncounterStatusParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, Status: arg.Status, RoundNumber: 1}, nil
+	}
+	store.getEncounterFn = func(ctx context.Context, id uuid.UUID) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: id, Status: "active", RoundNumber: 1}, nil
+	}
+	store.listTurnsByEncounterAndRoundFn = func(ctx context.Context, arg refdata.ListTurnsByEncounterAndRoundParams) ([]refdata.Turn, error) {
+		return []refdata.Turn{}, nil
+	}
+	turnID := uuid.New()
+	store.createTurnFn = func(ctx context.Context, arg refdata.CreateTurnParams) (refdata.Turn, error) {
+		return refdata.Turn{ID: turnID, EncounterID: arg.EncounterID, CombatantID: arg.CombatantID, RoundNumber: arg.RoundNumber, Status: arg.Status}, nil
+	}
+	store.updateEncounterCurrentTurnFn = func(ctx context.Context, arg refdata.UpdateEncounterCurrentTurnParams) (refdata.Encounter, error) {
+		return refdata.Encounter{ID: arg.ID, CurrentTurnID: arg.CurrentTurnID, RoundNumber: 1}, nil
+	}
+
+	roller := dice.NewRoller(func(max int) int { return 12 })
+	svc := NewService(store)
+
+	_, err := svc.StartCombat(context.Background(), StartCombatInput{
+		TemplateID:   templateID,
+		CharacterIDs: []uuid.UUID{pc1, pc2},
+		// No explicit positions: PCs must be seated from the map's player zones.
+		CharacterPositions: map[uuid.UUID]Position{},
+	}, roller)
+	require.NoError(t, err)
+
+	// Zone tiles iterate row-major: (1,1),(2,1),... col 1 -> "B", col 2 -> "C";
+	// tile rows are 0-indexed, combatant rows are 1-indexed.
+	assert.Equal(t, "B", seats[pc1].col)
+	assert.Equal(t, int32(2), seats[pc1].row)
+	assert.Equal(t, "C", seats[pc2].col)
+	assert.Equal(t, int32(2), seats[pc2].row)
+}
+
 // --- TDD Cycle 30: StartCombat template error ---
 
 func TestService_StartCombat_TemplateError(t *testing.T) {

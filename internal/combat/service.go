@@ -18,6 +18,7 @@ import (
 	"github.com/ab/dndnd/internal/dice"
 	"github.com/ab/dndnd/internal/dmqueue"
 	"github.com/ab/dndnd/internal/refdata"
+	"github.com/ab/dndnd/internal/spawnzone"
 )
 
 // ErrEncounterNotActive is returned when EndCombat is called on a non-active encounter.
@@ -988,6 +989,50 @@ func ShortIDFromName(name string) string {
 	return strings.ToUpper(name[:2])
 }
 
+// seatPCsInSpawnZones returns map-grid positions for the given PCs. Any PC with
+// an explicit (non-empty) position in explicit is kept as-is; the rest are
+// assigned, in input order, to the map's "player" spawn-zone tiles (row-major,
+// deterministic — matching exploration.StartExploration). Best-effort: if the
+// map can't be loaded, has no player zones, or has too few tiles, the unseated
+// PCs fall back to their zero-value position.
+func (s *Service) seatPCsInSpawnZones(ctx context.Context, enc refdata.Encounter, charIDs []uuid.UUID, explicit map[uuid.UUID]Position) map[uuid.UUID]Position {
+	positions := make(map[uuid.UUID]Position, len(charIDs))
+	var needSeat []uuid.UUID
+	for _, id := range charIDs {
+		if p, ok := explicit[id]; ok && p.Col != "" {
+			positions[id] = p
+			continue
+		}
+		needSeat = append(needSeat, id)
+	}
+	if len(needSeat) == 0 || !enc.MapID.Valid {
+		return positions
+	}
+
+	m, err := s.store.GetMapByIDUnchecked(ctx, enc.MapID.UUID)
+	if err != nil {
+		return positions
+	}
+	zones, err := spawnzone.ParseSpawnZones(m.TiledJson)
+	if err != nil {
+		return positions
+	}
+
+	keys := make([]string, len(needSeat))
+	for i, id := range needSeat {
+		keys[i] = id.String()
+	}
+	assigned, err := spawnzone.AssignPCsToSpawnZones(zones, keys)
+	if err != nil {
+		return positions // no player zones / not enough tiles: leave unseated
+	}
+	for i, id := range needSeat {
+		tile := assigned[keys[i]]
+		positions[id] = Position{Col: indexToColLabel(tile.Col), Row: int32(tile.Row + 1)}
+	}
+	return positions
+}
+
 // StartCombat orchestrates the full start-combat flow:
 // create encounter from template, add PCs, mark surprised, roll initiative, advance to first turn.
 func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, roller *dice.Roller) (StartCombatResult, error) {
@@ -997,14 +1042,17 @@ func (s *Service) StartCombat(ctx context.Context, input StartCombatInput, rolle
 		return StartCombatResult{}, fmt.Errorf("creating encounter from template: %w", err)
 	}
 
-	// Step 2: Add PC combatants
+	// Step 2: Add PC combatants. PCs without an explicit position are seated
+	// into the map's "player" spawn zones (the same zones exploration mode
+	// uses) so they don't all stack on the zero-value tile (col "", row 0).
+	positions := s.seatPCsInSpawnZones(ctx, enc, input.CharacterIDs, input.CharacterPositions)
 	for _, charID := range input.CharacterIDs {
 		char, err := s.store.GetCharacter(ctx, charID)
 		if err != nil {
 			return StartCombatResult{}, fmt.Errorf("getting character %s: %w", charID, err)
 		}
 
-		pos := input.CharacterPositions[charID]
+		pos := positions[charID]
 		shortID := ShortIDFromName(char.Name)
 		params := CombatantFromCharacter(char, shortID, pos.Col, pos.Row)
 
