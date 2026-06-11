@@ -107,6 +107,16 @@
     <li><strong>Full bot</strong> — set the four <code>DISCORD_*</code> values. The bot connects to the
         gateway, registers slash commands per guild, and players interact from Discord.</li>
   </ul>
+  <div class="callout warn">
+    <p><span class="ic">⚠</span><strong>Passthrough campaigns don't survive enabling OAuth.</strong>
+       In passthrough mode every dashboard user is <code>DEV_DISCORD_USER_ID</code> (default
+       <code>local-dev</code>), so any campaign you create is owned by that id. Once you set
+       <code>DISCORD_CLIENT_ID</code>/<code>DISCORD_CLIENT_SECRET</code> and log in as your real
+       Discord account, the ownership (<code>IsDM</code>) check fails and those campaigns return
+       403. Either set <code>DEV_DISCORD_USER_ID</code> to your real Discord user ID <em>before</em>
+       creating them, or recreate the campaign after enabling OAuth. The bot logs a warning each
+       time a campaign is created in passthrough mode.</p>
+  </div>
 
   <h2 id="prereq">Prerequisites</h2>
   <ul>

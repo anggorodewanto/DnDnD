@@ -27,6 +27,12 @@ type CampaignStore interface {
 type CampaignsHandler struct {
 	logger *slog.Logger
 	store  CampaignStore
+	// Passthrough is true when dashboard OAuth is disabled and every request is
+	// authenticated as the local-dev passthrough user. Campaigns created in
+	// this mode are owned by DEV_DISCORD_USER_ID (default "local-dev"), so once
+	// real OAuth is enabled the DM fails the IsDM ownership check and the
+	// campaign 403s. Create logs a warning so the trap is visible in the logs.
+	Passthrough bool
 }
 
 type campaignDTO struct {
@@ -128,6 +134,11 @@ func (h *CampaignsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("create campaign failed", "error", err)
 		http.Error(w, fmt.Sprintf("failed to create campaign: %s", err), http.StatusConflict)
 		return
+	}
+
+	if h.Passthrough {
+		h.logger.Warn("campaign created in passthrough auth mode; it is owned by the local-dev passthrough user and will be inaccessible (403) once real OAuth is enabled — recreate it after configuring DISCORD_CLIENT_ID/SECRET",
+			"campaign_id", created.ID, "dm_user_id", userID)
 	}
 
 	writeCampaignJSON(w, http.StatusCreated, campaignToDTO(created))

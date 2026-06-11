@@ -1234,7 +1234,12 @@ func runWithOptions(ctx context.Context, logOutput io.Writer, addr string, opts 
 		// the "not a DM" state.
 		dashboard.RegisterMeRoute(router, dashboard.NewMeHandler(logger, dashboardCampaignLookup{queries: queries}), authMw)
 		dashboard.RegisterHomeRoute(router, dashboard.NewHomeHandler(logger, dashHandler), authMw)
-		dashboard.RegisterCampaignsRoutes(router, dashboard.NewCampaignsHandler(logger, queries), authMw)
+		campaignsHandler := dashboard.NewCampaignsHandler(logger, queries)
+		// T31: oauthSvc is nil only in passthrough (no-OAuth) mode. Campaigns
+		// created then are owned by the local-dev passthrough user and 403 once
+		// real OAuth is enabled, so flag the handler to warn on create.
+		campaignsHandler.Passthrough = authBundle.oauthSvc == nil
+		dashboard.RegisterCampaignsRoutes(router, campaignsHandler, authMw)
 		// T20 / Finding 12: expose the guilds the bot is in so the campaign
 		// form can replace its free-text Guild ID field with a dropdown,
 		// preventing typo'd-guild orphan campaigns.

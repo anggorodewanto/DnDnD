@@ -1,8 +1,10 @@
 package dashboard
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -115,6 +117,47 @@ func TestCampaignsHandler_CreateUsesAuthenticatedDM(t *testing.T) {
 	}
 	if settings["diagonal_rule"] != "standard" {
 		t.Fatalf("diagonal_rule = %v, want standard", settings["diagonal_rule"])
+	}
+}
+
+func TestCampaignsHandler_CreateWarnsInPassthroughMode(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	store := &stubCampaignStore{}
+	handler := NewCampaignsHandler(logger, store)
+	handler.Passthrough = true
+
+	req := httptest.NewRequest(http.MethodPost, "/api/campaigns", strings.NewReader(`{"guild_id":"guild-local","name":"Local Campaign"}`))
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "local-dev"))
+	rec := httptest.NewRecorder()
+
+	handler.Create(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(strings.ToLower(buf.String()), "passthrough") {
+		t.Fatalf("expected a passthrough ownership warning, got logs: %q", buf.String())
+	}
+}
+
+func TestCampaignsHandler_CreateNoWarnWithOAuth(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	store := &stubCampaignStore{}
+	handler := NewCampaignsHandler(logger, store) // Passthrough defaults to false
+
+	req := httptest.NewRequest(http.MethodPost, "/api/campaigns", strings.NewReader(`{"guild_id":"guild-1","name":"Real Campaign"}`))
+	req = req.WithContext(auth.ContextWithDiscordUserID(req.Context(), "dm-1"))
+	rec := httptest.NewRecorder()
+
+	handler.Create(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(strings.ToLower(buf.String()), "passthrough") {
+		t.Fatalf("did not expect a passthrough warning with OAuth, got: %q", buf.String())
 	}
 }
 
