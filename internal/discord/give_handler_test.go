@@ -344,6 +344,286 @@ func TestGiveHandler_InCombat_FreeInteractionAlreadySpent_Rejected(t *testing.T)
 	assert.Empty(t, turnProv.updates, "rejection must not persist a turn update")
 }
 
+// --- T25: adjacency/range check, public #the-story post, receiver DM ---
+
+// recordingGiveSession captures every public channel send and every DM-channel
+// creation so the T25 tests can assert the story post and receiver DM fired.
+// GuildChannels returns a #the-story channel so resolveStoryChannel succeeds.
+type recordingGiveSession struct {
+	mockInventorySession
+	storyChannelID  string
+	dmChannelID     string
+	channelSends    []channelSend
+	dmCreatedFor    []string
+	failChannelSend bool
+	failDMCreate    bool
+}
+
+type channelSend struct {
+	channelID string
+	content   string
+}
+
+func (m *recordingGiveSession) GuildChannels(string) ([]*discordgo.Channel, error) {
+	if m.storyChannelID == "" {
+		return nil, nil
+	}
+	return []*discordgo.Channel{
+		{ID: m.storyChannelID, Name: theStoryChannelName, Type: discordgo.ChannelTypeGuildText},
+	}, nil
+}
+
+func (m *recordingGiveSession) UserChannelCreate(recipientID string) (*discordgo.Channel, error) {
+	m.dmCreatedFor = append(m.dmCreatedFor, recipientID)
+	if m.failDMCreate {
+		return nil, assert.AnError
+	}
+	return &discordgo.Channel{ID: m.dmChannelID}, nil
+}
+
+func (m *recordingGiveSession) ChannelMessageSend(channelID, content string) (*discordgo.Message, error) {
+	if m.failChannelSend {
+		return nil, assert.AnError
+	}
+	m.channelSends = append(m.channelSends, channelSend{channelID: channelID, content: content})
+	return &discordgo.Message{}, nil
+}
+
+// mockGivePlayerLookup maps a character to its player-character row (for the
+// receiver's Discord user ID used by the DM).
+type mockGivePlayerLookup struct {
+	pcByChar map[uuid.UUID]refdata.PlayerCharacter
+	err      error
+}
+
+func (m *mockGivePlayerLookup) GetPlayerCharacterByCharacter(_ context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error) {
+	if m.err != nil {
+		return refdata.PlayerCharacter{}, m.err
+	}
+	pc, ok := m.pcByChar[arg.CharacterID]
+	if !ok {
+		return refdata.PlayerCharacter{}, assert.AnError
+	}
+	return pc, nil
+}
+
+// giveItemsJSON marshals a single healing-potion stack for the giver.
+func giveItemsJSON() []byte {
+	b, _ := json.Marshal([]character.InventoryItem{
+		{ItemID: "healing-potion", Name: "Healing Potion", Quantity: 2, Type: "consumable"},
+	})
+	return b
+}
+
+func emptyItemsJSON() []byte {
+	b, _ := json.Marshal([]character.InventoryItem{})
+	return b
+}
+
+// newT25GiveHandler builds a GiveHandler wired with the combat provider so the
+// range check is exercised, plus the recording session and player lookup.
+func newT25GiveHandler(sess Session, campID, giverID, receiverID uuid.UUID, combatProv GiveCombatProvider) *GiveHandler {
+	return NewGiveHandler(sess,
+		&mockInventoryCampaignProvider{campaign: refdata.Campaign{ID: campID}},
+		&mockInventoryCharacterLookup{char: refdata.Character{
+			ID:         giverID,
+			CampaignID: campID,
+			Name:       "Aria",
+			Inventory:  pqtype.NullRawMessage{RawMessage: giveItemsJSON(), Valid: true},
+		}},
+		&mockGiveTargetResolver{chars: map[string]refdata.Character{
+			"GK": {
+				ID:         receiverID,
+				CampaignID: campID,
+				Name:       "Gorak",
+				Inventory:  pqtype.NullRawMessage{RawMessage: emptyItemsJSON(), Valid: true},
+			},
+		}},
+		&mockGiveCharacterStore{},
+		combatProv,
+	)
+}
+
+func TestGiveHandler_RangeTooFar_RejectsAndDoesNotTransfer(t *testing.T) {
+	sess := &recordingGiveSession{storyChannelID: "story1"}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+
+	// Giver at A1, receiver at A4: 3 tiles = 15ft > 5ft.
+	combatProv := &mockGiveCombatProvider{
+		inCombat: true,
+		combatants: []refdata.Combatant{
+			{CharacterID: uuid.NullUUID{UUID: giverID, Valid: true}, PositionCol: "A", PositionRow: 1},
+			{CharacterID: uuid.NullUUID{UUID: receiverID, Valid: true}, PositionCol: "A", PositionRow: 4},
+		},
+	}
+
+	handler := newT25GiveHandler(sess, campID, giverID, receiverID, combatProv)
+	store := handler.store.(*mockGiveCharacterStore)
+
+	handler.Handle(makeGiveInteraction("guild1", "user1", "healing-potion", "GK"))
+
+	assert.Contains(t, sess.lastResponse, "too far away")
+	assert.Contains(t, sess.lastResponse, "15ft")
+	assert.Empty(t, store.updates, "out-of-range give must not transfer items")
+	assert.Empty(t, sess.channelSends, "rejected give must not post to #the-story")
+}
+
+func TestGiveHandler_Adjacent_Allows(t *testing.T) {
+	sess := &recordingGiveSession{storyChannelID: "story1"}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+
+	// Giver at A1, receiver at B2: Chebyshev 1 tile = 5ft (adjacent).
+	combatProv := &mockGiveCombatProvider{
+		inCombat: true,
+		combatants: []refdata.Combatant{
+			{CharacterID: uuid.NullUUID{UUID: giverID, Valid: true}, PositionCol: "A", PositionRow: 1},
+			{CharacterID: uuid.NullUUID{UUID: receiverID, Valid: true}, PositionCol: "B", PositionRow: 2},
+		},
+	}
+
+	handler := newT25GiveHandler(sess, campID, giverID, receiverID, combatProv)
+	store := handler.store.(*mockGiveCharacterStore)
+
+	handler.Handle(makeGiveInteraction("guild1", "user1", "healing-potion", "GK"))
+
+	assert.Contains(t, sess.lastResponse, "Healing Potion")
+	assert.Len(t, store.updates, 2, "adjacent give must transfer items")
+}
+
+func TestGiveHandler_OutOfCombatNoPositions_SkipsRangeCheck(t *testing.T) {
+	sess := &recordingGiveSession{storyChannelID: "story1"}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+
+	// No combatants for the guild: pure out-of-combat trade. Range cannot be
+	// enforced, so the give must succeed.
+	combatProv := &mockGiveCombatProvider{inCombat: false}
+
+	handler := newT25GiveHandler(sess, campID, giverID, receiverID, combatProv)
+	store := handler.store.(*mockGiveCharacterStore)
+
+	handler.Handle(makeGiveInteraction("guild1", "user1", "healing-potion", "GK"))
+
+	assert.Contains(t, sess.lastResponse, "Healing Potion")
+	assert.Len(t, store.updates, 2, "out-of-combat give must transfer items")
+}
+
+// errGiveCombatProvider returns an error from GetCombatantsForGuild so the
+// range check's defensive error path is exercised.
+type errGiveCombatProvider struct{}
+
+func (errGiveCombatProvider) GetCombatantsForGuild(context.Context, string) ([]refdata.Combatant, bool, error) {
+	return nil, false, assert.AnError
+}
+
+func TestGiveHandler_CombatProviderError_SkipsRangeCheck(t *testing.T) {
+	sess := &recordingGiveSession{storyChannelID: "story1"}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+
+	handler := newT25GiveHandler(sess, campID, giverID, receiverID, errGiveCombatProvider{})
+	store := handler.store.(*mockGiveCharacterStore)
+
+	handler.Handle(makeGiveInteraction("guild1", "user1", "healing-potion", "GK"))
+
+	assert.Contains(t, sess.lastResponse, "Healing Potion")
+	assert.Len(t, store.updates, 2, "combat lookup error must not block the give")
+}
+
+func TestGiveHandler_OneCombatantUnpositioned_SkipsRangeCheck(t *testing.T) {
+	sess := &recordingGiveSession{storyChannelID: "story1"}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+
+	// Giver positioned, receiver in the encounter but without a position.
+	combatProv := &mockGiveCombatProvider{
+		inCombat: true,
+		combatants: []refdata.Combatant{
+			{CharacterID: uuid.NullUUID{UUID: giverID, Valid: true}, PositionCol: "A", PositionRow: 1},
+			{CharacterID: uuid.NullUUID{UUID: receiverID, Valid: true}, PositionCol: "", PositionRow: 0},
+		},
+	}
+
+	handler := newT25GiveHandler(sess, campID, giverID, receiverID, combatProv)
+	store := handler.store.(*mockGiveCharacterStore)
+
+	handler.Handle(makeGiveInteraction("guild1", "user1", "healing-potion", "GK"))
+
+	assert.Contains(t, sess.lastResponse, "Healing Potion")
+	assert.Len(t, store.updates, 2, "unpositioned party must not be range-blocked")
+}
+
+func TestGiveHandler_PostsToStoryChannel(t *testing.T) {
+	sess := &recordingGiveSession{storyChannelID: "story1"}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+
+	handler := newT25GiveHandler(sess, campID, giverID, receiverID, &mockGiveCombatProvider{})
+	handler.Handle(makeGiveInteraction("guild1", "user1", "healing-potion", "GK"))
+
+	if assert.Len(t, sess.channelSends, 1, "give must post once to #the-story") {
+		got := sess.channelSends[0]
+		assert.Equal(t, "story1", got.channelID)
+		assert.Contains(t, got.content, "Aria")
+		assert.Contains(t, got.content, "Gorak")
+		assert.Contains(t, got.content, "Healing Potion")
+	}
+}
+
+func TestGiveHandler_DMsReceiver(t *testing.T) {
+	sess := &recordingGiveSession{storyChannelID: "story1", dmChannelID: "dm1"}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+
+	handler := newT25GiveHandler(sess, campID, giverID, receiverID, &mockGiveCombatProvider{})
+	handler.SetPlayerLookup(&mockGivePlayerLookup{pcByChar: map[uuid.UUID]refdata.PlayerCharacter{
+		receiverID: {CharacterID: receiverID, DiscordUserID: "receiver-discord"},
+	}})
+
+	handler.Handle(makeGiveInteraction("guild1", "user1", "healing-potion", "GK"))
+
+	assert.Equal(t, []string{"receiver-discord"}, sess.dmCreatedFor, "receiver must be DMed")
+	// One send to #the-story (story1) plus one DM (dm1).
+	var dmSent bool
+	for _, s := range sess.channelSends {
+		if s.channelID != "dm1" {
+			continue
+		}
+		dmSent = true
+		assert.Contains(t, s.content, "Healing Potion")
+		assert.Contains(t, s.content, "Aria")
+	}
+	assert.True(t, dmSent, "receiver DM body must be sent")
+}
+
+func TestGiveHandler_PostAndDMFailures_AreSwallowed(t *testing.T) {
+	sess := &recordingGiveSession{storyChannelID: "story1", dmChannelID: "dm1", failChannelSend: true, failDMCreate: true}
+	campID := uuid.New()
+	giverID := uuid.New()
+	receiverID := uuid.New()
+
+	handler := newT25GiveHandler(sess, campID, giverID, receiverID, &mockGiveCombatProvider{})
+	handler.SetPlayerLookup(&mockGivePlayerLookup{pcByChar: map[uuid.UUID]refdata.PlayerCharacter{
+		receiverID: {CharacterID: receiverID, DiscordUserID: "receiver-discord"},
+	}})
+	store := handler.store.(*mockGiveCharacterStore)
+
+	handler.Handle(makeGiveInteraction("guild1", "user1", "healing-potion", "GK"))
+
+	// Give still succeeds despite story/DM send failures.
+	assert.Contains(t, sess.lastResponse, "Healing Potion")
+	assert.Len(t, store.updates, 2, "give must succeed even when notifications fail")
+}
+
 func TestGiveHandler_OutOfCombat_NoCost(t *testing.T) {
 	sess := &mockInventorySession{}
 	campID := uuid.New()

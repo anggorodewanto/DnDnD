@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -29,6 +30,12 @@ type GiveCombatProvider interface {
 	GetCombatantsForGuild(ctx context.Context, guildID string) ([]refdata.Combatant, bool, error)
 }
 
+// GivePlayerLookup resolves a character to its player-character row so the
+// receiver's Discord user ID can be used to DM them after a transfer (T25).
+type GivePlayerLookup interface {
+	GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error)
+}
+
 // GiveTurnProvider resolves the active turn for the invoking character and
 // persists the per-turn resource flags after a successful /give. med-35:
 // /give in combat costs the per-turn free object interaction. When no turn
@@ -47,7 +54,8 @@ type GiveHandler struct {
 	store           GiveCharacterStore
 	combatProv      GiveCombatProvider
 	turnProv        GiveTurnProvider
-	cardUpdater     CardUpdater // SR-007
+	cardUpdater     CardUpdater      // SR-007
+	playerLookup    GivePlayerLookup // T25: receiver DM
 }
 
 // NewGiveHandler creates a new GiveHandler.
@@ -81,6 +89,13 @@ func (h *GiveHandler) SetTurnProvider(p GiveTurnProvider) {
 // write because both characters' inventory state may surface on the card.
 func (h *GiveHandler) SetCardUpdater(u CardUpdater) {
 	h.cardUpdater = u
+}
+
+// SetPlayerLookup wires the optional player-character lookup used by T25 to
+// resolve the receiver's Discord user ID for the post-transfer DM. When unset,
+// the receiver DM is skipped (nil-safe, crit-01c).
+func (h *GiveHandler) SetPlayerLookup(p GivePlayerLookup) {
+	h.playerLookup = p
 }
 
 // Handle processes the /give command interaction.
@@ -145,6 +160,16 @@ func (h *GiveHandler) Handle(interaction *discordgo.Interaction) {
 		return
 	}
 
+	// T25: enforce adjacency when both parties are positioned combatants. Out
+	// of combat (no positions) the range cannot be enforced, so the give is
+	// allowed. Returns an ephemeral error and does NOT transfer when too far.
+	if dist, tooFar := h.rangeCheck(ctx, interaction.GuildID, giver.ID, receiver.ID); tooFar {
+		respondEphemeral(h.session, interaction, fmt.Sprintf(
+			"❌ %s is too far away — %dft away (you must be adjacent to hand over an item).",
+			receiver.Name, dist))
+		return
+	}
+
 	result, err := inventory.GiveItem(inventory.GiveInput{
 		GiverItems:    giverItems,
 		ReceiverItems: receiverItems,
@@ -182,6 +207,12 @@ func (h *GiveHandler) Handle(interaction *discordgo.Interaction) {
 	notifyCardUpdate(ctx, h.cardUpdater, giver.ID)
 	notifyCardUpdate(ctx, h.cardUpdater, receiver.ID)
 
+	// T25: announce the transfer publicly and DM the receiver. Both are
+	// best-effort — a failure here must never undo the committed transfer.
+	itemName := giveItemName(giverItems, itemID)
+	h.postTransferToStory(interaction.GuildID, giver.Name, receiver.Name, itemName)
+	h.dmReceiver(ctx, campaign.ID, receiver.ID, giver.Name, itemName)
+
 	// med-35: persist the free-interaction deduction. Best-effort: a
 	// save failure does not undo the committed inventory transfer.
 	if inCombat {
@@ -213,4 +244,90 @@ func (h *GiveHandler) spendFreeInteract(ctx context.Context, turn refdata.Turn) 
 		return
 	}
 	_, _ = h.turnProv.UpdateTurnActions(ctx, combat.TurnToUpdateParams(updated))
+}
+
+// rangeCheck returns the distance in feet and whether the receiver is out of
+// reach (>5ft). T25: the check is only enforced when BOTH parties are
+// positioned combatants in the same encounter. When either has no combatant or
+// no position (pure out-of-combat trade), tooFar is false so the give proceeds.
+func (h *GiveHandler) rangeCheck(ctx context.Context, guildID string, giverID, receiverID uuid.UUID) (int, bool) {
+	if h.combatProv == nil {
+		return 0, false
+	}
+	combatants, _, err := h.combatProv.GetCombatantsForGuild(ctx, guildID)
+	if err != nil {
+		return 0, false
+	}
+	giverC, okG := findCombatant(combatants, giverID)
+	receiverC, okR := findCombatant(combatants, receiverID)
+	if !okG || !okR {
+		return 0, false
+	}
+	if giverC.PositionCol == "" || receiverC.PositionCol == "" {
+		return 0, false
+	}
+	dist := combat.GridDistanceFt(
+		giverC.PositionCol, int(giverC.PositionRow),
+		receiverC.PositionCol, int(receiverC.PositionRow),
+	)
+	return dist, dist > 5
+}
+
+// findCombatant returns the combatant for the given character ID.
+func findCombatant(combatants []refdata.Combatant, charID uuid.UUID) (refdata.Combatant, bool) {
+	for _, c := range combatants {
+		if c.CharacterID.Valid && c.CharacterID.UUID == charID {
+			return c, true
+		}
+	}
+	return refdata.Combatant{}, false
+}
+
+// postTransferToStory announces a transfer in #the-story (T25). Best-effort:
+// an unresolvable channel or a send failure is silently ignored so the give
+// still succeeds.
+func (h *GiveHandler) postTransferToStory(guildID, giverName, receiverName, itemName string) {
+	if guildID == "" {
+		return
+	}
+	chID, err := resolveStoryChannel(h.session, guildID)
+	if err != nil {
+		return
+	}
+	msg := fmt.Sprintf("\U0001f381 **%s** gave **%s** to **%s**.", giverName, itemName, receiverName)
+	_, _ = h.session.ChannelMessageSend(chID, msg)
+}
+
+// dmReceiver DMs the receiver that they got an item (T25). Best-effort: a
+// missing player lookup, no Discord ID, or a send failure (DMs closed) is
+// silently ignored so the give still succeeds.
+func (h *GiveHandler) dmReceiver(ctx context.Context, campaignID, receiverID uuid.UUID, giverName, itemName string) {
+	if h.playerLookup == nil {
+		return
+	}
+	pc, err := h.playerLookup.GetPlayerCharacterByCharacter(ctx, refdata.GetPlayerCharacterByCharacterParams{
+		CampaignID:  campaignID,
+		CharacterID: receiverID,
+	})
+	if err != nil || pc.DiscordUserID == "" {
+		return
+	}
+	ch, err := h.session.UserChannelCreate(pc.DiscordUserID)
+	if err != nil {
+		return
+	}
+	msg := fmt.Sprintf("\U0001f381 You received **%s** from **%s**.", itemName, giverName)
+	_, _ = h.session.ChannelMessageSend(ch.ID, msg)
+}
+
+// giveItemName resolves the display name of the given item from the giver's
+// inventory, matching by ID or display name (case-insensitive). Falls back to
+// the raw query when no match is found so messages always have a name.
+func giveItemName(items []character.InventoryItem, query string) string {
+	for _, item := range items {
+		if item.ItemID == query || strings.EqualFold(item.Name, query) {
+			return item.Name
+		}
+	}
+	return query
 }

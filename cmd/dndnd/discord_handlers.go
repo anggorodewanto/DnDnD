@@ -570,11 +570,15 @@ func attachInventoryAndCharacterHandlers(
 		characterLookup,
 		newGiveTargetResolverAdapter(deps.queries),
 		deps.queries,
-		nil, // GiveCombatProvider is currently unused by the handler.
+		// T25: enforce the adjacency/range check using the guild's active
+		// encounter combatants. nil-safe — out-of-combat trades skip the check.
+		newGiveCombatProviderAdapter(deps.queries),
 	)
 	// med-35: wire turn provider so /give in combat costs the per-turn
 	// free object interaction. Out-of-combat /give carries no cost.
 	handlers.give.SetTurnProvider(newUseGiveTurnAdapter(deps.queries))
+	// T25: wire receiver DM lookup so /give DMs the receiver.
+	handlers.give.SetPlayerLookup(newGivePlayerLookupAdapter(deps.queries))
 	if deps.cardUpdater != nil {
 		handlers.give.SetCardUpdater(deps.cardUpdater)
 	}
@@ -1179,6 +1183,72 @@ func (a *useGiveTurnAdapter) GetActiveTurnForCharacter(ctx context.Context, _ st
 
 func (a *useGiveTurnAdapter) UpdateTurnActions(ctx context.Context, arg refdata.UpdateTurnActionsParams) (refdata.Turn, error) {
 	return a.queries.UpdateTurnActions(ctx, arg)
+}
+
+// giveCombatProviderAdapter satisfies discord.GiveCombatProvider (T25). It
+// resolves the guild's active encounter (campaign -> active encounter) and
+// returns its combatants so /give can enforce the adjacency/range check. When
+// no active encounter exists it returns an empty list with inCombat=false so
+// the handler skips the range check (pure out-of-combat trade).
+type giveCombatProviderAdapter struct {
+	queries *refdata.Queries
+}
+
+func newGiveCombatProviderAdapter(q *refdata.Queries) *giveCombatProviderAdapter {
+	if q == nil {
+		return nil
+	}
+	return &giveCombatProviderAdapter{queries: q}
+}
+
+func (a *giveCombatProviderAdapter) GetCombatantsForGuild(ctx context.Context, guildID string) ([]refdata.Combatant, bool, error) {
+	camp, err := a.queries.GetCampaignByGuildID(ctx, guildID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	encounters, err := a.queries.ListEncountersByCampaignID(ctx, camp.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	encID, ok := activeEncounterID(encounters)
+	if !ok {
+		return nil, false, nil
+	}
+	combatants, err := a.queries.ListCombatantsByEncounterID(ctx, encID)
+	if err != nil {
+		return nil, false, err
+	}
+	return combatants, true, nil
+}
+
+// activeEncounterID returns the ID of the first active encounter, if any.
+func activeEncounterID(encounters []refdata.Encounter) (uuid.UUID, bool) {
+	for _, e := range encounters {
+		if e.Status == "active" {
+			return e.ID, true
+		}
+	}
+	return uuid.Nil, false
+}
+
+// givePlayerLookupAdapter satisfies discord.GivePlayerLookup (T25): it maps the
+// receiver character to its player-character row so /give can DM the receiver.
+type givePlayerLookupAdapter struct {
+	queries *refdata.Queries
+}
+
+func newGivePlayerLookupAdapter(q *refdata.Queries) *givePlayerLookupAdapter {
+	if q == nil {
+		return nil
+	}
+	return &givePlayerLookupAdapter{queries: q}
+}
+
+func (a *givePlayerLookupAdapter) GetPlayerCharacterByCharacter(ctx context.Context, arg refdata.GetPlayerCharacterByCharacterParams) (refdata.PlayerCharacter, error) {
+	return a.queries.GetPlayerCharacterByCharacter(ctx, arg)
 }
 
 // asiFeatLister satisfies discord.FeatLister by enumerating eligible feats
